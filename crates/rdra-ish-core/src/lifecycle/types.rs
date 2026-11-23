@@ -1,37 +1,76 @@
 //! The transition system's data. Everything here is plain data that `build` fills in and that
 //! the explorer and a printer read; no item here reads the `SemanticModel`.
 
+use std::collections::BTreeMap;
 use std::num::NonZeroU8;
 
 use crate::location::LocatedSpan;
 use crate::model::{ApiKey, BucKey, ConditionKey, EntityKey, EventKey, FkId, UseCaseKey};
 
 /// Bounds are an input to the semantics, not a printer option. Every report states them.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Bounds {
-    /// Slots per entity.
+    /// Slots of every entity `per_entity` does not name.
     pub instances: NonZeroU8,
     /// Int domain is `0..=int_max`; `now` ticks inside it.
     pub int_max: u8,
+    /// Slots of one entity, by entity id (`--instances Loan=4`). The build resolves them
+    /// into `EntityDecl::slots`; an id no entity has is the caller's error to report.
+    pub per_entity: BTreeMap<String, NonZeroU8>,
 }
 
 impl Bounds {
     /// One abstract instance per entity, as `states` has always reported.
-    pub const STATES: Bounds = Bounds {
-        instances: NonZeroU8::MIN,
-        int_max: 5,
-    };
+    pub const STATES: Bounds = Bounds::uniform(NonZeroU8::MIN, 5);
     /// Two instances per entity, the TLA export default.
-    pub const VERIFY: Bounds = Bounds {
-        instances: match NonZeroU8::new(2) {
+    pub const VERIFY: Bounds = Bounds::uniform(
+        match NonZeroU8::new(2) {
             Some(n) => n,
             None => unreachable!(),
         },
-        int_max: 5,
-    };
+        5,
+    );
 
-    pub fn slots(self) -> usize {
-        usize::from(self.instances.get())
+    /// `instances` slots of every entity.
+    pub const fn uniform(instances: NonZeroU8, int_max: u8) -> Bounds {
+        Bounds {
+            instances,
+            int_max,
+            per_entity: BTreeMap::new(),
+        }
+    }
+
+    /// The slots of the entity with id `id`.
+    pub fn of(&self, id: &str) -> NonZeroU8 {
+        self.per_entity.get(id).copied().unwrap_or(self.instances)
+    }
+
+    /// The largest slot count of any entity.
+    pub fn most(&self) -> NonZeroU8 {
+        self.per_entity
+            .values()
+            .copied()
+            .fold(self.instances, std::cmp::max)
+    }
+
+    /// The same bounds at `instances` slots for every entity, without the per-entity counts.
+    pub fn at(&self, instances: NonZeroU8) -> Bounds {
+        Bounds::uniform(instances, self.int_max)
+    }
+
+    /// ` (Loan=4, Member=1)` after a bounds line, or nothing without per-entity counts.
+    pub fn per_entity_note(&self) -> String {
+        match self.per_entity.is_empty() {
+            true => String::new(),
+            false => format!(
+                " ({})",
+                self.per_entity
+                    .iter()
+                    .map(|(id, n)| format!("{id}={n}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        }
     }
 }
 
@@ -76,6 +115,8 @@ pub struct EntityDecl {
     pub id: String,
     pub label: String,
     pub birth: Birth,
+    /// The entity's slots under the system's bounds (`Bounds::of`).
+    pub slots: NonZeroU8,
     pub exists: VarId,
     /// View axes: state columns in declaration order, then proposition vars.
     pub columns: Vec<VarId>,
@@ -152,6 +193,21 @@ pub enum VarKind {
     Now,
 }
 
+impl VarKind {
+    /// The entity whose slots the var has one byte per; `None` for `now`.
+    pub fn entity(&self) -> Option<EntId> {
+        match *self {
+            VarKind::Exists(e) => Some(e),
+            VarKind::Column { entity, .. }
+            | VarKind::Prop { entity, .. }
+            | VarKind::Run { entity, .. }
+            | VarKind::Raised { entity, .. } => Some(entity),
+            VarKind::Owner { child, .. } => Some(child),
+            VarKind::Now => None,
+        }
+    }
+}
+
 /// Finite by construction: every domain has a size under `Bounds`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Domain {
@@ -174,15 +230,16 @@ pub enum Domain {
 }
 
 impl Domain {
-    pub fn size(&self, bounds: Bounds) -> usize {
-        let ints = usize::from(bounds.int_max) + 1;
+    /// How many values the domain has in `ts`: an owner's domain is its parent's slots.
+    pub fn size(&self, ts: &super::TransitionSystem) -> usize {
+        let ints = usize::from(ts.bounds.int_max) + 1;
         match self {
             Domain::Existence => 3,
             Domain::Enum(values) => values.len(),
             Domain::Bool | Domain::Nullable => 2,
             Domain::Int => ints,
             Domain::NullableInt => ints + 1,
-            Domain::Instance { optional, .. } => bounds.slots() + usize::from(*optional),
+            Domain::Instance { parent, optional } => ts.slots(*parent) + usize::from(*optional),
         }
     }
 
@@ -196,7 +253,7 @@ impl Domain {
     }
 
     /// The value standing for an integer, when the domain holds it under `bounds`.
-    pub fn of_number(&self, n: i64, bounds: Bounds) -> Option<Value> {
+    pub fn of_number(&self, n: i64, bounds: &Bounds) -> Option<Value> {
         let max = i64::from(bounds.int_max);
         if !(0..=max).contains(&n) {
             return None;

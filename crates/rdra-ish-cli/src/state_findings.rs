@@ -93,7 +93,7 @@ pub(crate) fn findings_of(
     });
     let violations = report.diags.iter().filter_map(|d| {
         let mut text = render_violation(program, model, &d.diag, TraceSource::Bfs)?;
-        if report.bounds.instances.get() == 1 {
+        if ts.most_slots() == 1 {
             text.push_str(&one_instance_note(&d.diag, ts));
         }
         Some(Finding::new(&d.diag, &[], text))
@@ -916,6 +916,7 @@ violation_message(text, pattern_desc)
         | StateDiag::AmbiguousOwnerLink { .. }
         | StateDiag::UnwrittenConstrainedVar { .. }
         | StateDiag::PreExistingChildOfCreatedParent { .. }
+        | StateDiag::IdentityStartSlots { .. }
         | StateDiag::MinCardOfPreExistingParent { .. }
         | StateDiag::MinCardNeedsCreate { .. }
         | StateDiag::UnsupportedComparison { .. }

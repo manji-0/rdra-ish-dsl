@@ -12,15 +12,7 @@ use super::TransitionSystem;
 
 impl TransitionSystem {
     pub(crate) fn var_entity(&self, var: VarId) -> Option<EntId> {
-        match self.var(var).kind {
-            VarKind::Exists(e) => Some(e),
-            VarKind::Column { entity, .. }
-            | VarKind::Prop { entity, .. }
-            | VarKind::Run { entity, .. }
-            | VarKind::Raised { entity, .. } => Some(entity),
-            VarKind::Owner { child, .. } => Some(child),
-            VarKind::Now => None,
-        }
+        self.var(var).kind.entity()
     }
 
     /// The system over `vars` only. An action stays when it writes a var in `vars` or is in
@@ -72,7 +64,7 @@ impl TransitionSystem {
                 }
             }
         }
-        let mut out = TransitionSystem::empty(self.bounds);
+        let mut out = TransitionSystem::empty(self.bounds.clone());
         out.api_ids = self.api_ids.clone();
         for &v in vars {
             map.var[v.index()] = Some(VarId::at(out.vars.len()));

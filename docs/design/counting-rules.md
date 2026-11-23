@@ -234,7 +234,7 @@ present row with no link or condition. When no reachable state meets it, the rul
 premise text names the bound and the flag that lifts it:
 
 ```text
-warning[Vacuous_Quantifier_0]: Quantifier_0 holds vacuously: no reachable state has a row of Member with 4 rows of Loan (Loan has 2 slots; --instances Loan=4 gives it 4)
+warning[Vacuous_Quantifier_Member_0]: Quantifier_Member_0 holds vacuously: no reachable state has a row of Member with 4 rows of Loan (Loan has 2 slots; --instances Loan=4 gives it 4)
 ```
 
 `at_least(n)` with fewer than `n` slots of the counted entity is the opposite: the rule

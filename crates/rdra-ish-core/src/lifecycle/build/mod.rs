@@ -63,7 +63,7 @@ impl<'m> Builder<'m> {
     fn new(model: &'m SemanticModel, bounds: Bounds) -> Self {
         Builder {
             model,
-            bounds,
+            bounds: bounds.clone(),
             named: Named::collect(model),
             ts: TransitionSystem::empty(bounds),
             ent_of: HashMap::new(),

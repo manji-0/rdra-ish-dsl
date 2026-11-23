@@ -4,10 +4,10 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use rdra_ish_core::format_location;
-use rdra_ish_core::lifecycle::{derive_states_built, Bounds, Caps, Site};
+use rdra_ish_core::lifecycle::{derive_states_built, Site};
 use rdra_ish_emit::state_pattern::{render_csv, render_json, render_table};
 
-use crate::cli::{ScopeArgs, StatesFormat};
+use crate::cli::{BoundsArgs, ScopeArgs, StatesFormat};
 use crate::load::load_clean;
 use crate::memory::{charged, Budgeted};
 use crate::state_findings::{state_diag_message, Finding};
@@ -16,11 +16,13 @@ use rdra_ish_core::memory::MemorySize;
 pub fn run_states(
     inputs: &[PathBuf],
     format: StatesFormat,
-    bounds: Bounds,
-    (caps, memory): (Caps, Option<MemorySize>),
+    bounds: &BoundsArgs,
+    (max_patterns, max_states, memory): (Option<usize>, Option<usize>, Option<MemorySize>),
     scope: &ScopeArgs,
 ) -> Result<()> {
     let (program, model, manifest) = load_clean(inputs)?;
+    let bounds = bounds.bounds(&model, manifest.as_ref())?;
+    let caps = BoundsArgs::caps(&bounds, max_patterns, max_states);
     let caps = charged(caps, memory, manifest.as_ref(), Budgeted::Check);
     let scope = scope.resolve(&model)?;
 

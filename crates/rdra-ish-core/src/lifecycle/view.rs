@@ -119,7 +119,7 @@ pub(crate) fn pattern_bound(ts: &TransitionSystem, e: EntId) -> usize {
     ts.entity(e)
         .columns
         .iter()
-        .map(|v| ts.var(*v).domain.size(ts.bounds))
+        .map(|v| ts.var(*v).domain.size(ts))
         .fold(1usize, usize::saturating_mul)
 }
 
@@ -155,7 +155,7 @@ pub(crate) fn describe_slot(
         .collect::<Vec<_>>()
         .join(", ");
     let id = &ts.entity(e).id;
-    match (qualified, ts.bounds.slots() > 1) {
+    match (qualified, ts.slots(e) > 1) {
         (false, _) => body,
         (true, false) => format!("{id}({body})"),
         (true, true) => format!("{id}[{}]({body})", slot + 1),
@@ -188,7 +188,7 @@ fn first_states(run: &ComponentRun, e: EntId) -> Vec<Option<u32>> {
     let view = &run.views[e.index()];
     let mut first = vec![None; view.patterns.len()];
     for (at, s) in run.states.iter().enumerate() {
-        for slot in 0..ts.bounds.slots() {
+        for slot in 0..ts.slots(e) {
             if !s.is_present(ts, e, slot) {
                 continue;
             }

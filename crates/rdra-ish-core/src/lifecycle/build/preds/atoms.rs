@@ -259,10 +259,10 @@ impl<'m> Builder<'m> {
             .iter()
             .filter_map(|v| match v {
                 Term::Lit(v) => Some(*v),
-                Term::Int(n) => domain.of_number(*n, self.bounds),
+                Term::Int(n) => domain.of_number(*n, &self.bounds),
                 _ => None,
             })
             .collect();
-        listed.len() == domain.size(self.bounds)
+        listed.len() == domain.size(&self.ts)
     }
 }

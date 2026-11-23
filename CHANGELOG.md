@@ -83,6 +83,18 @@
 
 ### Added
 
+- Per-entity instance counts (#216). `--instances <Entity>=<n>`, repeatable, gives one
+  entity its own slots in place of `--instance-count` on `check`, `states`, `verify`, and
+  `export --kind tla`: `verify --instances Loan=4` explores four loans and two rows of every
+  other entity. `instances = { Loan = 4 }` under `[check]` or `[verify]` in `rdra.toml` sets
+  it for those commands (`[verify]` also for `export --kind tla`), and a flag replaces the
+  table's count of its entity. The `bounds:` line, the `OK:` line, and the TLA+ header name
+  each count (`2 instances per entity (Loan=4)`), and the TLA+ module's id set of the entity
+  is `Loan_Ids == 1..4`. An id that names no entity is an error. A pre-existing child that
+  starts linked one to one to its parent's slots needs the parent's count, else
+  `IdentityStartSlots`. Without the flag and the tables every output is unchanged. The
+  corpus case `presence_per_entity_slots` checks a child with more slots than its parent and
+  a parent with more than its child, with the native checker and TLC.
 - A `MemoryCapReached` error of `check` and `states` says what the cone held and what
   finishing needs: the bytes each held state took, and an estimate of the states the cone
   reaches from its BFS layers. Once the frontier has shrunk for two depths past its peak,

@@ -39,13 +39,13 @@ impl TransitionSystem {
         let mut free: Vec<(VarId, usize, usize)> = Vec::new();
         for decl in &self.entities {
             if decl.birth == crate::lifecycle::types::Birth::PreExisting {
-                for slot in 0..self.bounds.slots() {
+                for slot in 0..usize::from(decl.slots.get()) {
                     base.set(self, decl.exists, slot, Value::PRESENT);
                     for &var in decl.columns.iter().chain(&decl.owners) {
                         let d = self.var(var);
                         match d.start {
                             Start::Base => {}
-                            Start::Any => free.push((var, slot, d.domain.size(self.bounds))),
+                            Start::Any => free.push((var, slot, d.domain.size(self))),
                             Start::Identity => {
                                 base.set(self, var, slot, d.domain.of_slot(slot as u8));
                             }
@@ -99,22 +99,21 @@ impl TransitionSystem {
         let mut out: Vec<Vec<u8>> = vec![Vec::new()];
         for p in &action.params {
             let exists = self.entity(p.entity).exists;
+            let n = self.slots(p.entity);
             let slots: Vec<u8> = match p.role {
-                ParamRole::New => match (0..self.bounds.slots())
-                    .find(|&s| state.get(self, exists, s) == Value::ABSENT)
-                {
-                    Some(s) => vec![s as u8],
-                    None if crowd => (0..self.bounds.slots() as u8).collect(),
-                    None => Vec::new(),
-                },
-                ParamRole::Existing | ParamRole::Parent { .. } | ParamRole::Triggered => {
-                    (0..self.bounds.slots())
-                        .filter(|&s| state.get(self, exists, s) == Value::PRESENT)
-                        .map(|s| s as u8)
-                        .collect()
+                ParamRole::New => {
+                    match (0..n).find(|&s| state.get(self, exists, s) == Value::ABSENT) {
+                        Some(s) => vec![s as u8],
+                        None if crowd => (0..n as u8).collect(),
+                        None => Vec::new(),
+                    }
                 }
+                ParamRole::Existing | ParamRole::Parent { .. } | ParamRole::Triggered => (0..n)
+                    .filter(|&s| state.get(self, exists, s) == Value::PRESENT)
+                    .map(|s| s as u8)
+                    .collect(),
                 // Matched by its run mark, a guard, whether or not the slot is present.
-                ParamRole::Earlier { .. } => (0..self.bounds.slots() as u8).collect(),
+                ParamRole::Earlier { .. } => (0..n as u8).collect(),
             };
             out = out
                 .into_iter()
@@ -146,9 +145,8 @@ impl TransitionSystem {
     /// the action cannot run costs no allocation.
     fn each_enabled(&self, action: &Action, state: &StateSlice, mut found: impl FnMut(&[u8])) {
         const MAX: usize = 16;
-        let slots = self.bounds.slots();
         let count = action.params.len();
-        if slots > MAX || count > MAX {
+        if self.most_slots() > MAX || count > MAX {
             for params in self.bindings(action, state) {
                 if self.pre_guards_hold(action, state, &params) {
                     found(&params);
@@ -160,6 +158,7 @@ impl TransitionSystem {
         let mut choices = [(0usize, [0u8; MAX]); MAX];
         for (p, (n, list)) in action.params.iter().zip(&mut choices) {
             let exists = self.entity(p.entity).exists;
+            let slots = self.slots(p.entity);
             match p.role {
                 ParamRole::New => {
                     if let Some(s) =

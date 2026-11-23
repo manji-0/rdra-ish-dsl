@@ -94,10 +94,7 @@ fn bounded_verdicts(ts: &TransitionSystem) -> (Vec<String>, Vec<String>) {
 }
 
 fn instances(n: u8) -> Bounds {
-    Bounds {
-        instances: NonZeroU8::new(n).unwrap(),
-        int_max: Bounds::VERIFY.int_max,
-    }
+    Bounds::uniform(NonZeroU8::new(n).unwrap(), Bounds::VERIFY.int_max)
 }
 
 /// Also: every rule of a domain sample is proved at `verify`'s default two instances, as at

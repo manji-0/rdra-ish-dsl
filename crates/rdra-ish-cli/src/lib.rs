@@ -19,7 +19,7 @@ pub mod tlc_env;
 pub mod tlc_output;
 pub mod tlc_replay;
 mod verify;
-use cli::{Cli, Commands, ListFormat, ListKind};
+use cli::{BoundsArgs, Cli, Commands, ListFormat, ListKind};
 use csv_cmd::run_csv;
 use diagram::run_diagram;
 use export::run_export;
@@ -89,13 +89,14 @@ pub fn run() -> Result<()> {
 
             let scope = scope.resolve(&model)?;
             // Same severity as `states` (fail-closed on caps and violated constraints).
+            let bounds = bounds.bounds(&model, manifest.as_ref())?;
             let caps = charged(
-                bounds.caps(max_patterns, max_states),
+                BoundsArgs::caps(&bounds, max_patterns, max_states),
                 memory,
                 manifest.as_ref(),
                 Budgeted::Check,
             );
-            let lifecycle = state_findings(&program, &model, &scope, bounds.bounds()?, caps);
+            let lifecycle = state_findings(&program, &model, &scope, bounds, caps);
             eprintln!("{}", lifecycle.bounds);
             for diag in rdra_ish_core::consistency_diagnostics(&model) {
                 let as_error = strict && is_strict_access_gap(&diag.error);
@@ -221,9 +222,16 @@ pub fn run() -> Result<()> {
             kind,
             out,
             instance_count,
+            instances,
             int_range_max,
             dialect,
-        } => run_export(&inputs, &kind, &out, instance_count, int_range_max, dialect)?,
+        } => run_export(
+            &inputs,
+            &kind,
+            &out,
+            (instance_count, &instances, int_range_max),
+            dialect,
+        )?,
 
         Commands::States {
             inputs,
@@ -236,8 +244,8 @@ pub fn run() -> Result<()> {
         } => run_states(
             &inputs,
             format,
-            bounds.bounds()?,
-            (bounds.caps(max_patterns, max_states), memory),
+            &bounds,
+            (max_patterns, max_states, memory),
             &scope,
         )?,
 
@@ -247,6 +255,7 @@ pub fn run() -> Result<()> {
             backend,
             out,
             instance_count,
+            instances,
             int_range_max,
             max_patterns,
             max_states,
@@ -274,11 +283,16 @@ pub fn run() -> Result<()> {
             let memory = memory_limit(memory, manifest.as_ref(), Budgeted::Verify);
             let memory = memory::VerifySplit::of(memory, with_tlc)?;
             let scope = scope.resolve(&model)?;
+            let bounds = export::verify_bounds(
+                (instance_count, &instances, int_range_max),
+                manifest.as_ref(),
+                &model,
+            )?;
             verify::run(
                 &program,
                 &model,
                 out,
-                (instance_count, int_range_max),
+                bounds,
                 &scope,
                 verify::Budget {
                     temporal: std::time::Duration::from_secs(temporal_budget),

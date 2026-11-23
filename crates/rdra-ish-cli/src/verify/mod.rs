@@ -44,7 +44,7 @@ use self::specs::{out_names, spec_dir, write_specs_and_index, write_whole_specs}
 use self::tlc::{run_cones, run_tlc_wholes, tlc_failures, Ran};
 pub(crate) use self::tlc_tool::find_on_path;
 use self::tlc_tool::Tlc;
-use crate::export::{checked_system, tla_bounds, Modules};
+use crate::export::{checked_system, Modules};
 use crate::memory::{Budgeted, VerifySplit};
 use crate::prove::{find_z3, run_proof, Marks};
 use crate::state_findings::{render_violation, Finding, TraceSource};
@@ -114,13 +114,13 @@ pub struct Prove {
     pub deny_unproved: bool,
 }
 
-/// Runs `verify`. `bounds` is `(--instance-count, --int-range-max)`; `with_tlc` is
+/// Runs `verify` at `bounds` (`export::verify_bounds`); `with_tlc` is
 /// `--with-tlc` and its `--tlc-jar`.
 pub fn run(
     program: &ResolvedProgram,
     model: &SemanticModel,
     out: Option<PathBuf>,
-    (instance_count, int_range_max): (u32, u32),
+    bounds: rdra_ish_core::lifecycle::Bounds,
     scope: &Scope,
     Budget {
         temporal: whole_time,
@@ -132,8 +132,7 @@ pub fn run(
     }: Budget,
     with_tlc: Option<WithTlc>,
 ) -> Result<()> {
-    let bounds = tla_bounds(instance_count, int_range_max)?;
-    let built = checked_system(model, bounds, scope)?;
+    let built = checked_system(model, bounds.clone(), scope)?;
     let (ts, selection) = (built.ts, built.selection);
     let (out, whole_name) = out_names(out);
     let keep = out.is_some();
