@@ -1,0 +1,90 @@
+// The model of tests/codegen_contract.rs: one line for each sentence of "The TypeScript
+// types of codegen" in docs/compatibility.md, so a change to the covered types shows up
+// as a diff of tests/snapshots/codegen_contract__covered_types.snap.
+
+variation PaymentMethod "Payment method" {
+  credit_card "Credit card"
+  bank_transfer
+}
+
+// A String primary key: a string-branded id.
+entity Customer "Customer" {
+  code: String @pk
+  email: String @unique
+}
+
+// The state type: tag `status`, one interface per value. `on_hold` is reached by no
+// transition and still gets one; `onHold` gives the same name and takes the suffix `2`;
+// `_2day` gives a name that starts with a digit and takes the prefix `V`.
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(pending "Pending", paid, shipped, on_hold, onHold, _2day) @default(pending)
+  total: Money
+  rate: Decimal
+  due_on: Date
+  gift: Bool
+  qty: Int
+  method: PaymentMethod
+  channel: Enum(web, shop)
+  // Present in `paid` by an invariant.
+  paid_at: DateTime @null
+  // Null in `pending` and `paid` by a forbidden with `status in (..)`.
+  shipped_at: DateTime @null
+  // Present in every state by `required`.
+  receipt: String @null
+  // A forbidden with another atom, or with a `.when(Cond)` guard, narrows nothing.
+  note: String @null
+  // Null in every state by a forbidden with no tag atom, except `on_hold`, where an
+  // invariant says present: the two cancel out.
+  memo: String @null
+  // Null in every state by `required(.. == null)` beside another conjunct.
+  legacy_ref: String @null
+}
+
+// The tag is the `*_status` column, though `phase` sorts first.
+entity Shipment "Shipment" {
+  id: Int @pk
+  phase: Enum(packing, sealed) @default(packing)
+  delivery_status: Enum(waiting, delivered) @default(waiting)
+}
+
+// A two-column primary key: no id type.
+entity Allocation "Allocation" {
+  slot: Int @pk
+  lane: Int @pk
+  qty: Int
+}
+
+relate(Order, Customer, N:1)
+relate(Shipment, Order, N:1)
+
+usecase Place "Place"
+usecase Pay "Pay"
+usecase Ship "Ship"
+usecase Seal "Seal"
+usecase Deliver "Deliver"
+creates(Place, Order)
+sets(Place, Order.receipt == present)
+transitions(Pay, Order.status, pending -> paid)
+sets(Pay, Order.paid_at == present)
+transitions(Ship, Order.status, paid -> shipped)
+sets(Ship, Order.shipped_at == present)
+creates(Ship, Shipment)
+transitions(Seal, Shipment.phase, packing -> sealed)
+transitions(Deliver, Shipment.delivery_status, waiting -> delivered)
+
+invariant(Order).when(status == paid).then(paid_at == present)
+forbidden(Order, status in (pending, paid), shipped_at == present)
+required(Order, receipt == present)
+forbidden(Order, status == pending, gift == true, note == present)
+// `== null` turns each around: present in `shipped`, null in `on_hold`.
+forbidden(Order, status == shipped, paid_at == null)
+invariant(Order).when(status == on_hold).then(note == null)
+forbidden(Order, memo == present)
+invariant(Order).when(status == on_hold).then(memo == present)
+required(Order, legacy_ref == null, qty >= 0)
+// Another atom in `then` does not stop `shipped_at == present` from narrowing.
+invariant(Order).when(status == shipped).then(shipped_at == present, qty >= 0)
+condition Gifted "A gift order"
+holds(Gifted, Order.gift == true)
+forbidden(Order, status == paid, note == present).when(Gifted)

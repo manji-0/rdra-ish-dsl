@@ -1,0 +1,67 @@
+warning[UnjoinedWrite_S_E2_E3]: E2: S writes E2 and E3, and no row it writes joins them, so one run may write E2 and E3 rows that belong to different E1 and E0 rows; write E1 and E0 in S (`updates(S, E1)`, `updates(S, E0)`) to write joined rows, or mark a write meant as a row of its own with `.apart()`
+bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); no state cap per BFS cone, memory 12GiB; entities a check does not read are unbounded
+cones: 2 for 2 invariant(s) and 0 after-assert(s)
+temporal properties: 1, each checked on its cone, and on the whole model only when the cone does not decide it (budget 300 s)
+tlc: runs the same cones beside the native checker (--with-tlc); a check the two decide differently fails the run
+not checked: 4 findings not decided
+  state E4.status = s3 is not decided: the E4 cone stopped at the memory limit (12GiB; raise it with --memory or `memory` under [verify] in rdra.toml; BFS has 6GiB of it)
+  whether some E4 can get stuck at status = s0 is not decided: the E4 cone stopped at the memory limit (12GiB; raise it with --memory or `memory` under [verify] in rdra.toml; BFS has 6GiB of it)
+  whether some E4 can get stuck at status = s1 is not decided: the E4 cone stopped at the memory limit (12GiB; raise it with --memory or `memory` under [verify] in rdra.toml; BFS has 6GiB of it)
+  whether some E4 can get stuck at status = s2 is not decided: the E4 cone stopped at the memory limit (12GiB; raise it with --memory or `memory` under [verify] in rdra.toml; BFS has 6GiB of it)
+error[Deadlock_E3_status_s1]: deadlock: E3#1 stays at status = s1 forever, and s1 is not an end state
+  leaves s1: T3_0 (s1 -> s0)                                                    m.rdra:105:1
+    guard: an arm of E3.status whose guard holds (s0 -> s1, s1 -> s0 when C6)   m.rdra:105:1
+  leaves s1: S_1 (s1 -> s0)                                                     m.rdra:121:1
+    guard: the bound rows are in no run of S (a run is its steps in order)      m.rdra:114:1
+  reached by (17 steps):
+    1. New0 [E0#1]                                       m.rdra:34:1
+         + E0#1 (status=s0)
+    2. T0_1 [E0#1]                                       m.rdra:46:1
+         E0#1.status: s0 -> s1                           m.rdra:68:1
+    3. T0_0 [E0#1]                                       m.rdra:44:1
+         E0#1.status: s1 -> s2                           m.rdra:67:1
+    4. S_2 [E0#1]                                        m.rdra:123:1
+         E0#1.status: s2 -> s1                           m.rdra:125:1
+    5. New1 [E1#1]                                       m.rdra:36:1
+         + E1#1 (status=s0, due=0, owner E0=null)
+    6. T1_2 [E1#1]                                       m.rdra:54:1
+         E1#1.status: s0 -> s1                           m.rdra:78:1
+    7. New2 [E2#1, E1#1]                                 m.rdra:38:1
+         + E2#1 (status=s0, owner E1=E1#1)
+    8. T2_2 [E2#1]                                       m.rdra:60:1
+         E2#1.status: s0 -> s1                           m.rdra:101:1
+    9. T2_0 [E2#1]                                       m.rdra:56:1
+         E2#1.status: s1 -> s2                           m.rdra:93:1
+    10. New2 [E2#2, E1#1]                                m.rdra:38:1
+         + E2#2 (status=s0, owner E1=E1#1)
+    11. T2_2 [E2#2]                                      m.rdra:60:1
+         E2#2.status: s0 -> s1                           m.rdra:101:1
+    12. T2_0 [E2#2]                                      m.rdra:56:1
+         E2#2.status: s1 -> s2                           m.rdra:93:1
+    13. New3 [E3#1, E0#1]                                m.rdra:40:1
+         + E3#1 (status=s0, flag=false, owner E0=E0#1)
+    14. T0_2 [E0#1]                                      m.rdra:48:1
+         E0#1.status: s1 -> s3                           m.rdra:70:1
+    15. T3_0 [E3#1]                                      m.rdra:62:1
+         E3#1.status: s0 -> s1                           m.rdra:102:1
+    16. S_1, transaction 1 of S [E3#1]                   m.rdra:114:1
+         E3#1.status: s1 -> s0                           m.rdra:121:1
+    17. T3_0 [E3#1]                                      m.rdra:62:1
+         E3#1.status: s0 -> s1                           m.rdra:102:1
+warning[Runs_T1_1]: use case T1_1 can never run: in no reachable state do its guards hold
+  declared: use case T1_1                                           m.rdra:52:1
+  guard: condition C1                                               m.rdra:76:1
+  guard: an arm of E1.status whose guard holds (s0 -> s1 when C0)   m.rdra:74:1
+state models (BFS on 5 entity cones): 5 state models, 15 states witnessed, 1 deadlock, 1 use case that never runs
+warning[Vacuous_Forbidden_E1_0]: Forbidden_E1_0 holds vacuously: no reachable state has a row of E1 with due > now
+  rule:   m.rdra:92:1
+wrote 4 specs and plain/cones.txt
+Cone_Forbidden_E1_0 [Forbidden_E1_0]: ok (checked in Cone_MultiForbidden_E1_0)
+Cone_MultiForbidden_E1_0 [Forbidden_E1_0, MultiForbidden_E1_0]: ok (1686498 states)
+Cone_P0 [P0]: ok (1686498 states)
+tlc: Cone_Forbidden_E1_0 [Forbidden_E1_0]: ok (checked in Cone_MultiForbidden_E1_0)
+tlc: Cone_MultiForbidden_E1_0 [Forbidden_E1_0, MultiForbidden_E1_0]: ok (1686498 states)
+tlc: Cone_P0 [P0]: ok (1686498 states)
+result: counterexample
+tlc_result: ok
+Error: verification failed: 1 state-model error(s) from BFS on the entity cones

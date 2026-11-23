@@ -251,7 +251,7 @@ fn store_bytes_saturates_and_scales_the_edges_by_the_states_expanded() {
     use super::store::{store_bytes, Held};
 
     assert_eq!(store_bytes(u64::MAX, 16, u64::MAX), u64::MAX);
-    assert_eq!(store_bytes(0, 0, 0), 32 * 4 + 25 * 4 + 12 * 4);
+    assert_eq!(store_bytes(0, 0, 0), 12 * 4 + 5 * 4 + 12 * 4);
     // 10 states reached, 5 of them expanded: 4 edges per expanded state.
     let held = Held {
         bytes: 1000,

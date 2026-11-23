@@ -43,7 +43,6 @@ reads, and `crates/rdra-ish-cli/tests/export_gate.rs` runs every kind against th
 | `csv`, every kind | declared facts and the data layer | writes, with a note |
 | `diagram --kind state` | each state model's start states and reachable states | refuses, unless every error is a deadlock, which it colours |
 | `diagram`, every other kind | declared facts, `sequence` included | writes, with a note |
-| `export --kind typescript-states` | the reachable states | refuses |
 | `export --kind tla` | the transition system, built at `--instance-count` / `--int-range-max` | writes, with a note that the whole-model `.cfg` checks the rules only and names the `StateModel_` specs, which check the deadlocks and witnesses with TLC, and `verify`; a build error of the system refuses |
 | `export`, every other kind | the data layer | writes, with a note |
 | `states` | the derivation, which is its output | prints the report with its `[error]` rows and exits 1 |
@@ -563,8 +562,8 @@ number, `0`, and a fraction are refused.
 What the limit counts:
 
 - **BFS.** The states a cone has reached are counted in bytes as they are stored: each
-  state twice (in the list and in the index of seen states), its parent, every edge, and the
-  bindings, by the length and capacity of each collection. The count is the same on every
+  state once (in one buffer, with its number in the index of seen states), its parent, every
+  edge, and the bindings, by the length and capacity of each collection. The count is the same on every
   machine and with any number of threads, so a cone stops at the same state wherever it
   runs. A finished cone keeps its states and edges until its findings are read, so they
   stay counted, and the next cone has the rest of the limit. The cones run side by side,
@@ -638,16 +637,17 @@ Without an estimate from the layers, the message falls back on the cone's variab
 most states the cone can have is the product of their domains, and if finishing at that
 many takes no more than `1TiB` the message names that size as what finishing needs at the
 least, if all of them are reachable. The bound is loose: most of the product is never
-reached. A size is computed with `32·p2(n) + 2·n·blk(w) + 25·buckets(n) + 12·p2(e)` bytes
-for `n` states of `w` bytes and `e` edges (`p2` rounds up to a power of two, `blk` to 16
-bytes, `buckets` to a power of two of at least `n·8/7`); on the sample cones of a thousand
-states and more it stood 2.4% to 6.7% over what the run counts. `e` is the edges per
+reached. A size is computed with `(w + 12)·p2(n) + 5·buckets(n) + 12·p2(e)` bytes for `n`
+states of `w` bytes and `e` edges (`p2` rounds up to a power of two, `buckets` to a power of
+two of at least `n·8/7`): the run keeps each state once, in one buffer, and indexes it by
+number. On the sample cones of a thousand states and more, at `check` and `verify` bounds, it
+stood 0.9% to 5.2% over what the run counts. `e` is the edges per
 expanded state seen so far times `n`; early depths have fewer, so that part is low. Every
 figure is for the one cone; the cones share the limit, so allow more than it says.
 
 ```text
-error[MemoryCapReached_Task]: state derivation for entity 'Task': memory limit 56KiB reached at 256 states; results are incomplete: the cone has 9 variables, 9 of them vary (...); new states first reached by: Flip7 127, Flip6 64, Flip5 32, Flip4 16, Flip3 8, Flip2 4, Flip1 2, Close 1; held at 231 B per state; the frontier peaked at depth 5 and has shrunk for 3 layers since, so the cone probably holds about 258 states (its falling side taken to mirror its rising side: an estimate, not a bound); with a quarter to spare, this cone alone probably needs about 1MiB: try 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
-error[MemoryCapReached_Order]: state derivation for entity 'Order': memory limit 1KiB reached at 5 states; results are incomplete: the cone has 3 variables, 2 of them vary (values reached/domain: Order.status 4/5, Order._exists 2/3); new states first reached by: CancelOrder 1, CapturePay 1, PlaceOrder 1, ShipOrder 1; held at 177 B per state; the frontier peaked at depth 2, but by depth 3 it has not fallen far enough to estimate the states left; the cone's variables allow at most 30 states, so if all are reachable this cone alone needs at least about 1MiB; raise it to 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
+error[MemoryCapReached_Task]: state derivation for entity 'Task': memory limit 36KiB reached at 256 states; results are incomplete: the cone has 9 variables, 9 of them vary (...); new states first reached by: Flip7 127, Flip6 64, Flip5 32, Flip4 16, Flip3 8, Flip2 4, Flip1 2, Close 1; held at 145 B per state; the frontier peaked at depth 5 and has shrunk for 3 layers since, so the cone probably holds about 258 states (its falling side taken to mirror its rising side: an estimate, not a bound); with a quarter to spare, this cone alone probably needs about 1MiB: try 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
+error[MemoryCapReached_Order]: state derivation for entity 'Order': memory limit 1KiB reached at 3 states; results are incomplete: the cone has 3 variables, 2 of them vary (values reached/domain: Order._exists 2/3, Order.status 2/5); new states first reached by: CapturePay 1, PlaceOrder 1; held at 101 B per state; the frontier peaked at depth 0, but by depth 1 it has not fallen far enough to estimate the states left; the cone's variables allow at most 30 states, so if all are reachable this cone alone needs at least about 1MiB; raise it to 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
 ```
 
 The `Task` cone (`crates/rdra-ish-cli/tests/fixtures/memory/flags.rdra`) holds 257 states.
@@ -1212,8 +1212,8 @@ rdra-ish export <INPUTS...> [--kind <KIND>] [-o <OUT>] [--dialect <DIALECT>] [--
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `openapi` \| `asyncapi` \| `dbml` \| `sql` \| `json-schema` \| `typescript-states` \| `mermaid-er` \| `tla` | `openapi` | Export kind. `openapi` emits an OpenAPI 3.0 JSON document from API `method`/`path` metadata and DTO `request` / `response` / `error_response` relations. `asyncapi` emits an AsyncAPI 3.1 event catalog from `event`, `raises`, `triggers`, `transitions`, and `outbox`. `dbml` emits a DBML schema from logical `entity` declarations, indexes, unique constraints, generated FK columns, and `relate` options. `sql` emits SQL DDL from the same model, with `CHECK` constraints from the entity-local rules (see [SQL export](#sql-export)). `json-schema` emits JSON Schema Draft 2020-12 definitions for DTO and Entity structures. `mermaid-er` emits a textual ER review artifact from the same logical data model projection used by `diagram --kind er`. `tla` emits a TLA+ module plus TLC config from entity lifecycles and state constraints (see [formal-verification.md](./formal-verification.md)). |
-| `-o`, `--out` | path | `out` | Output file path. For every kind except `tla`, a path with an extension is used as is. Otherwise the kind's suffix is appended to the path: `-o out` (the default) writes `out.openapi.json`, `out.asyncapi.json`, `out.schema.dbml`, `out.schema.sql`, `out.json-schema.json`, `out.entity-states.ts` (`typescript-states`), or `out.er.mmd`, and `-o foo` writes `foo.openapi.json`. For `--kind tla`, a path ending in `.tla` is the TLA+ file, uses its file stem as the module name, and gets a sibling `.cfg` (`-o m.tla` writes `m.tla` and `m.cfg`). Any other path is a directory (created if missing) that receives `RdraSpec.tla` and `RdraSpec.cfg`: `-o out` (the default) writes `out/RdraSpec.tla`. A path with a non-`.tla` extension writes them into its parent directory. Beside the pair, `tla` writes `StateModel_<E>.tla`, `StateModel_<E>.cfg`, and `StateModel_<E>_witnesses.cfg` for each entity cone with a state model, which check its deadlocks and witnesses with TLC ([formal-verification.md](./formal-verification.md#state-models-with-tlc-alone)). |
+| `--kind` | `openapi` \| `asyncapi` \| `dbml` \| `sql` \| `json-schema` \| `mermaid-er` \| `tla` | `openapi` | Export kind. `openapi` emits an OpenAPI 3.0 JSON document from API `method`/`path` metadata and DTO `request` / `response` / `error_response` relations. `asyncapi` emits an AsyncAPI 3.1 event catalog from `event`, `raises`, `triggers`, `transitions`, and `outbox`. `dbml` emits a DBML schema from logical `entity` declarations, indexes, unique constraints, generated FK columns, and `relate` options. `sql` emits SQL DDL from the same model, with `CHECK` constraints from the entity-local rules (see [SQL export](#sql-export)). `json-schema` emits JSON Schema Draft 2020-12 definitions for DTO and Entity structures. `mermaid-er` emits a textual ER review artifact from the same logical data model projection used by `diagram --kind er`. `tla` emits a TLA+ module plus TLC config from entity lifecycles and state constraints (see [formal-verification.md](./formal-verification.md)). |
+| `-o`, `--out` | path | `out` | Output file path. For every kind except `tla`, a path with an extension is used as is. Otherwise the kind's suffix is appended to the path: `-o out` (the default) writes `out.openapi.json`, `out.asyncapi.json`, `out.schema.dbml`, `out.schema.sql`, `out.json-schema.json`, or `out.er.mmd`, and `-o foo` writes `foo.openapi.json`. For `--kind tla`, a path ending in `.tla` is the TLA+ file, uses its file stem as the module name, and gets a sibling `.cfg` (`-o m.tla` writes `m.tla` and `m.cfg`). Any other path is a directory (created if missing) that receives `RdraSpec.tla` and `RdraSpec.cfg`: `-o out` (the default) writes `out/RdraSpec.tla`. A path with a non-`.tla` extension writes them into its parent directory. Beside the pair, `tla` writes `StateModel_<E>.tla`, `StateModel_<E>.cfg`, and `StateModel_<E>_witnesses.cfg` for each entity cone with a state model, which check its deadlocks and witnesses with TLC ([formal-verification.md](./formal-verification.md#state-models-with-tlc-alone)). |
 | `--dialect` | `postgres` \| `sqlite` | `postgres` | SQL only: the dialect `--kind sql` writes. |
 | `--instance-count` | unsigned integer | `2` | TLA+ only: multi-instance `InstanceCount` (`1..=255`). Value `1` is accepted with a warning (singleton ids cannot distinguish multi-entity instances). |
 | `--int-range-max` | unsigned integer | `5` | TLA+ only: upper bound for `IntRange == 0..N` (`1..=255`; `0` is rejected). |
@@ -1643,7 +1643,7 @@ rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--format` | `table` \| `csv` \| `json` \| `typescript` | `table` | Output format. `typescript` (alias `type-script`) emits entity state unions. |
+| `--format` | `table` \| `csv` \| `json` | `table` | Output format. For TypeScript state types, use [`codegen --lang ts`](#codegen). |
 | `--buc <id>` | string (repeatable) | — (whole model) | Keep only the use cases reachable from the named BUCs. See [Partial runs](#partial-runs). |
 | `--max-patterns` | unsigned integer | 2^(10 + 8 * (n - 1)) for `n` = `--instance-count`: `1024`, `262144`, ... | Cap on each entity's distinct patterns within one target cone (an entity view, invariant, or after-assert is explored on the variables it reads). Only entities the target reads are bounded to one instance: a use case that also creates an entity outside the cone (an audit row, say) never runs out of slots for it. When the cap is hit, the result is marked `truncated` and a fail-closed `PatternCapReached` **error** is recorded (exit non-zero for all formats). |
 | `--max-states` | unsigned integer | none | Cap on the joint states of one target cone, printed in the `bounds:` line (`no state cap per cone, memory 4GiB` without it). When the cap is hit, the result is marked `truncated` and a fail-closed `StateCapReached` **error** is recorded (exit non-zero for all formats). The message names what the reached states vary in, so you can see which entity's columns a guard pulled into the cone (see the example below). |
@@ -1669,13 +1669,17 @@ carries a `witness`: a shortest path to the first state that holds it, as `start
 
 ---
 
-## `codegen` (experimental)
+## `codegen`
 
 Print the model's domain types as TypeScript, Rust, or Go code for an agent to finish.
-This subcommand is an experimental extra: neither it, its flags, its exit status, nor the
-code it prints is covered by [compatibility](./compatibility.md), and any release may
-change or remove them. [The design](./design/algebraic-codegen.md) describes where it is
-going.
+Most of this subcommand is experimental. One part is covered by
+[compatibility](./compatibility.md#the-typescript-types-of-codegen): the TypeScript types
+that `codegen <INPUTS...> --lang ts [-o <FILE>]` prints for a model that `check` passes.
+These types are the scalars, the id types, the value sets, the state types, and the
+`<Entity>Row` row types. Everything else may change or be removed in any release: the
+transition functions, the rule checks, the dispatchers, the header and its obligations,
+`--allow-failing`, and the Rust and Go output. [The design](./design/algebraic-codegen.md)
+describes where `codegen` is going.
 
 ```
 rdra-ish codegen <INPUTS...> --lang <LANG> [-o <FILE>] [--package <NAME>] [--allow-failing]
@@ -1699,7 +1703,7 @@ key column takes its parent's id type, and a `@null` column is `T | null`, `Opti
 `*T`.
 
 An entity with a lifecycle column is a **state type**: one variant per value of its tag
-column (the column `typescript-states` tags by), and the entity's type is their union, a
+column (`status`, else a `*_status` column, else the first lifecycle column by name, when that column is an inline `Enum`), and the entity's type is their union, a
 TypeScript union of interfaces, a Rust enum of structs with a `status()` method, or a Go
 interface that only the generated variants implement. A variant narrows a nullable column
 only where a rule says so: `invariant(E).when(status == v).then(x == present)` makes `x`

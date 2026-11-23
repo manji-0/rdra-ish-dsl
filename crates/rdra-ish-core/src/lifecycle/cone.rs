@@ -9,7 +9,7 @@
 
 use std::collections::BTreeSet;
 
-use super::expr::State;
+use super::expr::{State, StateSlice};
 use super::types::{
     ActId, Action, At, Effect, EntId, Guard, GuardWhy, ParamRole, Pred, Property, Term, VarId,
     VarKind,
@@ -497,7 +497,7 @@ impl TransitionSystem {
     }
 
     /// A state of this system projected onto `vars`, in the layout of `restrict_to(vars, ..)`.
-    pub fn project(&self, state: &State, vars: &VarSet) -> State {
+    pub fn project(&self, state: &StateSlice, vars: &VarSet) -> State {
         let mut out = Vec::new();
         for &v in vars {
             let width = self.slots_of(&self.var(v).kind);

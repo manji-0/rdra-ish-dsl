@@ -7,7 +7,7 @@ use std::fmt;
 use super::cone::{Cone, Target};
 use super::diag::{Diag, StateDiag, UnmetPremise};
 use super::explore::{Caps, ComponentRun};
-use super::expr::State;
+use super::expr::StateSlice;
 use super::findings::{Progress, Runs, Taken, Witness};
 use super::types::{
     ActionOrigin, AfterAssert, AfterStep, EntId, GuardWhy, Invariant, Ltl, Pred, Premise, Site,
@@ -829,7 +829,7 @@ impl TransitionSystem {
                 .map(|edge| &run.states[edge.to as usize])
                 .collect::<Vec<_>>()
         };
-        let ran: Vec<(&AfterStep, Vec<&State>)> = local
+        let ran: Vec<(&AfterStep, Vec<&StateSlice>)> = local
             .steps
             .iter()
             .map(|step| (step, steps(step)))

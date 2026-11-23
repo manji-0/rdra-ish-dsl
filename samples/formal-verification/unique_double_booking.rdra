@@ -1,0 +1,30 @@
+// `@unique(room_id, slot)` adds the invariant Unique_Booking_room_id_slot: no two Bookings
+// hold one room at one slot. `room_id` is the key of relate(Booking, Room, N:1), so the rule
+// reads the Booking's owner Room. TLC intent: expected FAIL at InstanceCount == 2. BookAm
+// books any Room for the morning without asking whether it is free, so two Bookings take one
+// room at `am`. At one instance per entity the invariant holds vacuously, so `check` passes.
+// unique_booking_guarded.rdra is the same model with the guard that keeps the slot free.
+// expect check: ok
+// expect verify: fail Unique_Booking_room_id_slot
+entity Room "会議室" {
+  id: Int @pk
+  open: Bool @default(true)
+}
+
+entity Booking "予約" {
+  id: Int @pk
+  slot: Enum(am, pm) @default(pm) @unique(room_id, slot)
+}
+
+usecase BookAm "午前予約"
+usecase BookPm "午後予約"
+
+buc BucBooking "Booking"
+contains(BucBooking, BookAm)
+contains(BucBooking, BookPm)
+
+creates(BookAm, Booking)
+creates(BookPm, Booking)
+sets(BookAm, Booking.slot == am)
+
+relate(Booking, Room, N:1)

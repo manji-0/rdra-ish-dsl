@@ -6,8 +6,8 @@ State derivation answers the question: *for each entity, which combinations of i
 state columns are reachable, and does any reachable state break a declared rule?*
 
 The tool builds one transition system from the model and explores it by breadth-first
-search (BFS). `states`, `check`, `diagram`, `csv`, `list`, `export`, and the
-TypeScript unions read the explored states. `export --kind tla` and `verify` print the
+search (BFS). `states`, `check`, `diagram`, `csv`, `list`, `export`, and
+`codegen` read the explored states. `export --kind tla` and `verify` print the
 same transition system as TLA+ for TLC (see [formal-verification.md](./formal-verification.md)),
 and `verify --prove` encodes it for z3, for any number of rows
 ([Proofs for any number of rows](./formal-verification.md#proofs-for-any-number-of-rows)).
@@ -409,6 +409,7 @@ clock has ticked past it. A deadline that depends on the row is one guarded `set
 | Multi-entity `forbidden`, `invariant` | An invariant over every combination of present slots. `.along(A, B)` restricts it to combinations that the `relate` owners link. |
 | `invariant(E).when(...).has/none(R.col == v)` | An invariant over the present slots of `E` and the related slots of `R`. A `relate` links them through its owner; without one, `R` is independent. |
 | `relate(Child, Parent, 1:1)` | `Unique_<Child>_<role>`: no two present children belong to one parent slot. An unlinked optional child belongs to none. It holds vacuously at one instance. |
+| `@unique`, `@unique(a, b)`, `relate(A, B, N:M).via(J)` | `Unique_<Entity>_<columns>`: no two present rows agree on every column of the set. See [Unique column sets](#unique-column-sets). |
 | `relate(Child, Parent, 1..*:1)` | `MinCard_<Child>_<role>`: every present parent slot is owned by a present child, in every state. Info `MinCardNeedsCreate` names each use case that creates the parent and no child in the same transaction group. A pre-existing parent of a created child fails at the start and draws a warning; a pre-existing child of a pre-existing parent starts linked slot for slot. |
 | `col: T @check(expr)` | `Check_<Entity>_<column>_<n>`: every present slot satisfies `expr`, read as every rule reads a comparison (see [Null](./language-reference.md#null) in the language reference): a null operand satisfies no comparison but `!=`, so `qty: Int @null @check(qty >= 1)` fails while `qty` is null, and `@check(qty == null or qty >= 1)` admits it. A comparison with a value reads the column's slot: `@check(status == open or closed_at == present)` is `status = open \/ closed_at = present`. A created slot starts at the base value: `@check(qty >= 1)` without `@default(1)` or a creating `sets` fails at creation, and so does a `@null` column with no default. A logical `@derived` column keeps SQL semantics: its value is neither `true` nor `false` while an operand is null. |
 | `after(UC).assert(...)` | A predicate on the state each run of `UC` leaves, checked on every step of the last action of `UC`. An entity an earlier step wrote is read on the run's row; an entity no step binds is read on every present row, with the `UnboundAfterRead` warning. |
@@ -416,6 +417,38 @@ clock has ticked past it. A deadline that depends on the row is one guarded `set
 
 Every check reads the instances that exist. A rule over an entity with no instance
 holds vacuously in that state.
+
+### Unique column sets
+
+<!-- constrained-by ./language-reference.md#column-annotations -->
+
+Each unique set whose every column the lifecycle holds by value becomes the invariant
+`Unique_<Entity>_<columns>`, the columns joined by `_`: a single `@unique` column, a
+`@unique(a, b)`, and the two keys of an N:M junction (`Unique_Enrollment_course_id_student_id`).
+Two present rows of the entity break it when they agree on every column of the set.
+
+- **Which columns count.** An `Enum` or `Bool` column, a variation column a rule names, and an `Int`, `Money`,
+  `Decimal`, `Date`, or `DateTime` column that a rule compares, so it has a value var. A
+  key column reads as the owner of its key: `@unique(room_id, slot)` compares the Room each
+  Booking belongs to, and the set must hold every column of a composite key. A column with
+  no var, such as a `String`, or a `@null` one held only as null or present, leaves the set
+  to the database, with no finding. So does most of `samples/`: its `@unique` columns are
+  `String`.
+- **Null.** A row whose column is null agrees with no row, as SQL counts NULLs as
+  distinct: two tickets with no seat share nothing. That covers a `@null` Int and an
+  `.optional()` key left unlinked. A `@null` `Enum` or `Bool` has no null value in the
+  lifecycle; it starts at its default or first value, which counts as a value.
+- **Left to other rules.** A set that is a 1:1 key is `Unique_<Child>_<role>` already.
+  A declared set on an entity with a `@soft_delete` column is not checked, because its
+  index covers only live rows and the lifecycle does not read the marker. A junction's
+  pair is checked there, as its index covers every row.
+
+A use case that writes the set needs a guard that keeps it free, such as
+`holds(AmFree, Room.open == true).none(Booking.slot == am)` on the use case that books a
+room for the morning: a guard that compares the Room links the created Booking to it (see
+`samples/formal-verification/unique_booking_guarded.rdra`). At one instance per entity
+there are no two rows, so the rule holds and, like the 1:1 `Unique_*`, draws no
+`Vacuous_` warning.
 
 ### Rules that hold vacuously
 
@@ -909,7 +942,7 @@ these names, and the `// expect` headers of the samples list the names of the er
 
 ## Output formats
 
-`rdra-ish states` renders the views in one of four formats (`--format`).
+`rdra-ish states` renders the views in one of three formats (`--format`).
 
 - `table` (default). One table per entity with an axis legend, one column per axis, and
   the `INITIAL`, `TERMINAL`, and `VIA` columns. `VIA` is the least set of use cases on some
@@ -927,7 +960,6 @@ these names, and the `// expect` headers of the samples list the names of the er
   `usecase` that ran without its `event` having been raised, see **Raised marks** under
   [Exploration by cone of influence](#exploration-by-cone-of-influence)). A change is
   `create`, `delete`, `set` (with the `site` of the arm or `sets` that wrote it), or `tick`.
-- `typescript`. One union per entity. The union reads the same views.
 
 All formats honor `--entity <id>`, `--buc <id>`, `--max-patterns <n>`, and `--max-states <n>`. `--buc`
 keeps the use cases reachable from the named BUCs. It does not change how an entity

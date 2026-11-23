@@ -1,0 +1,65 @@
+// trap: a unique column set is a two-row invariant over column vars and owner vars, nulls apart.
+// Badge's `color` is one Enum column: two Issue runs give two red badges. Enrollment's
+// junction key is its two owners: Enroll links any student to any course, so one pair
+// enrolls twice. Booking's `@unique(room_id, slot)` reads the owner Room beside `slot`, and
+// the guard keeps each room's slot free, so no two bookings agree and z3 proves it. Pass's
+// `seat` is a nullable Int nothing sets: two passes without a seat agree on null, which SQL
+// counts as distinct, so an engine that compared nulls as values would find a violation. At
+// one instance per entity no rule has two rows to compare, so BFS passes all of them there.
+// expect Unique_Badge_color: native=counterexample tlc=counterexample z3=unproved bfs=ok,counterexample,counterexample
+// expect Unique_Enrollment_course_id_student_id: native=counterexample tlc=counterexample z3=unproved bfs=ok,counterexample,counterexample
+// expect Unique_Booking_room_id_slot: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+// expect Unique_Pass_seat: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+// expect Forbidden_Pass_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+entity Badge "名札" {
+  id: Int @pk
+  color: Enum(red, blue) @default(blue) @unique
+}
+
+entity Student "学生" {
+  id: Int @pk
+}
+
+entity Course "科目" {
+  id: Int @pk
+}
+
+entity Enrollment "履修" {
+  id: Int @pk
+}
+
+entity Room "会議室" {
+  id: Int @pk
+  open: Bool @default(true)
+}
+
+entity Booking "予約" {
+  id: Int @pk
+  slot: Enum(am, pm) @default(pm) @unique(room_id, slot)
+}
+
+entity Pass "入館証" {
+  id: Int @pk
+  seat: Int @null @unique
+}
+
+usecase Issue "名札発行"
+usecase Enroll "履修登録"
+usecase BookAm "午前予約"
+usecase Admit "入館"
+
+creates(Issue, Badge)
+sets(Issue, Badge.color == red)
+creates(Enroll, Enrollment)
+creates(BookAm, Booking)
+sets(BookAm, Booking.slot == am)
+creates(Admit, Pass)
+
+relate(Student, Course, N:M).via(Enrollment)
+relate(Booking, Room, N:1)
+
+condition AmFree "午前が空いている会議室"
+holds(AmFree, Room.open == true).none(Booking.slot == am)
+applies_to(AmFree, BookAm)
+
+forbidden(Pass, seat > 3)

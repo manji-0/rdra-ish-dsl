@@ -83,8 +83,19 @@ const REMOVED_DIAGRAM_KINDS: &[(&str, &str)] = &[
     ),
 ];
 
-const REMOVED_EXPORT_KINDS: &[(&str, &str)] =
-    &[("plantuml-er", "use `--kind mermaid-er` (writes `er.mmd`)")];
+/// What replaced the TypeScript state unions of `export` and `states`.
+const TS_STATE_TYPES: &str = "use `rdra-ish codegen <INPUTS> --lang ts -o <FILE>.ts`: its state types give one interface per value of the lifecycle column, narrowed by the model's rules";
+
+const REMOVED_EXPORT_KINDS: &[(&str, &str)] = &[
+    ("plantuml-er", "use `--kind mermaid-er` (writes `er.mmd`)"),
+    ("typescript-states", TS_STATE_TYPES),
+    ("type-script-states", TS_STATE_TYPES),
+];
+
+const REMOVED_STATES_FORMATS: &[(&str, &str)] = &[
+    ("typescript", TS_STATE_TYPES),
+    ("type-script", TS_STATE_TYPES),
+];
 
 #[derive(ValueEnum, Clone)]
 pub(crate) enum ListKind {
@@ -251,7 +262,7 @@ pub(crate) enum Commands {
     Export {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Export kind: openapi, asyncapi, dbml, sql, json-schema, typescript-states, mermaid-er, or tla
+        /// Export kind: openapi, asyncapi, dbml, sql, json-schema, mermaid-er, or tla
         #[arg(long, default_value = "openapi", value_parser = WithRemoved::<ExportKind>::new(REMOVED_EXPORT_KINDS))]
         kind: ExportKind,
         #[arg(short, long, default_value = "out")]
@@ -266,9 +277,9 @@ pub(crate) enum Commands {
         #[arg(long, default_value = "postgres")]
         dialect: SqlDialect,
     },
-    /// [experimental] Print the model's domain types as TypeScript, Rust, or Go code for an
-    /// agent to finish. Outside the compatibility contract: may change or go away in any
-    /// release
+    /// Print the model's domain types as TypeScript, Rust, or Go code for an agent to finish.
+    /// The TypeScript state, row, and id types, value sets, and scalars are covered by the
+    /// compatibility contract; the rest is experimental and may change in any release
     Codegen {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
@@ -290,8 +301,8 @@ pub(crate) enum Commands {
     States {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Output format: table, csv, json, or typescript
-        #[arg(long, default_value = "table")]
+        /// Output format: table, csv, or json
+        #[arg(long, default_value = "table", value_parser = WithRemoved::<StatesFormat>::new(REMOVED_STATES_FORMATS))]
         format: StatesFormat,
         /// Cap on each entity's distinct patterns within one target cone; past it is a
         /// `PatternCapReached` error. Default: 2^(10 + 8 * (n - 1)) for n = --instance-count
@@ -568,8 +579,6 @@ pub(crate) enum StatesFormat {
     Table,
     Csv,
     Json,
-    #[value(name = "typescript", alias = "type-script")]
-    TypeScript,
 }
 
 #[derive(ValueEnum, Clone, Copy)]
@@ -588,8 +597,6 @@ pub(crate) enum ExportKind {
     /// SQL DDL: tables, keys, indexes, and CHECK constraints from entity-local rules
     Sql,
     JsonSchema,
-    #[value(alias = "typescript-states")]
-    TypeScriptStates,
     MermaidEr,
     /// TLA+ / TLC specification (writes companion `.cfg` next to `.tla`)
     Tla,
@@ -1015,36 +1022,6 @@ mod tests {
             }
             _ => panic!("expected verify command"),
         }
-
-        let cli = Cli::try_parse_from([
-            "rdra-ish",
-            "states",
-            "sample.rdra",
-            "--format",
-            "type-script",
-        ])
-        .unwrap();
-        match cli.command {
-            Commands::States { format, .. } => {
-                assert!(matches!(format, StatesFormat::TypeScript));
-            }
-            _ => panic!("expected states command"),
-        }
-
-        let cli = Cli::try_parse_from([
-            "rdra-ish",
-            "states",
-            "sample.rdra",
-            "--format",
-            "typescript",
-        ])
-        .unwrap();
-        match cli.command {
-            Commands::States { format, .. } => {
-                assert!(matches!(format, StatesFormat::TypeScript));
-            }
-            _ => panic!("expected states command"),
-        }
     }
 
     fn parse_error(args: &[&str]) -> String {
@@ -1094,6 +1071,35 @@ mod tests {
                 && message.contains("`--kind mermaid-er`"),
             "{message}"
         );
+    }
+
+    #[test]
+    fn removed_typescript_state_unions_name_codegen() {
+        for args in [
+            [
+                "rdra-ish",
+                "export",
+                "m.rdra",
+                "--kind",
+                "typescript-states",
+            ],
+            [
+                "rdra-ish",
+                "export",
+                "m.rdra",
+                "--kind",
+                "type-script-states",
+            ],
+            ["rdra-ish", "states", "m.rdra", "--format", "typescript"],
+            ["rdra-ish", "states", "m.rdra", "--format", "type-script"],
+        ] {
+            let message = parse_error(&args);
+            assert!(
+                message.contains(&format!("`{} {}` is no longer supported", args[3], args[4]))
+                    && message.contains("`rdra-ish codegen <INPUTS> --lang ts -o <FILE>.ts`"),
+                "{message}"
+            );
+        }
     }
 
     #[test]

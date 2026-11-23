@@ -6,7 +6,7 @@ use crate::lifecycle::trace::Trace;
 use crate::lifecycle::types::ActId;
 use crate::lifecycle::TransitionSystem;
 
-use super::{ComponentRun, Edge, Graph, Reach};
+use super::{ComponentRun, Edge, Graph, Reach, States};
 
 impl Graph<'_> {
     /// Every move as `(from, to, action)`, self-loops and repeats included.
@@ -178,7 +178,7 @@ impl LabelledEdges {
         }
     }
 
-    pub fn graph<'a>(&'a self, states: &'a [State], complete: bool) -> Graph<'a> {
+    pub fn graph<'a>(&'a self, states: &'a States, complete: bool) -> Graph<'a> {
         Graph {
             states,
             complete,
@@ -263,7 +263,7 @@ impl ComponentRun {
             .iter()
             .map(|e| {
                 let (act, params) = self.step(e);
-                (act, params.into(), self.states[e.to as usize].clone())
+                (act, params.into(), self.states[e.to as usize].to_owned())
             })
             .collect();
         steps.extend(extra);

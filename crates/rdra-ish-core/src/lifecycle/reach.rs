@@ -9,7 +9,7 @@ use std::collections::VecDeque;
 use super::cone::VarSet;
 use super::diag::StateDiag;
 use super::explore::{Adjacency, Graph};
-use super::expr::{Env, State};
+use super::expr::{Env, StateSlice};
 use super::trace::Trace;
 use super::types::{EntId, Pred, VarKind};
 use super::TransitionSystem;
@@ -98,14 +98,14 @@ impl TransitionSystem {
         all
     }
 
-    fn all_present(&self, binders: &[EntId], binding: &[u8], s: &State) -> bool {
+    fn all_present(&self, binders: &[EntId], binding: &[u8], s: &StateSlice) -> bool {
         binders
             .iter()
             .zip(binding)
             .all(|(e, slot)| s.is_present(self, *e, usize::from(*slot)))
     }
 
-    fn holds_for(&self, pred: &Pred, binding: &[u8], s: &State) -> bool {
+    fn holds_for(&self, pred: &Pred, binding: &[u8], s: &StateSlice) -> bool {
         let mut env = Env::new(&[]);
         env.bound = binding.to_vec();
         self.eval(pred, s, &mut env)
@@ -118,7 +118,7 @@ impl TransitionSystem {
         &self,
         r: &super::types::Reach,
         binding: &[u8],
-        states: impl Iterator<Item = &'s State>,
+        states: impl Iterator<Item = &'s StateSlice>,
     ) -> Vec<String> {
         let mut reads = VarSet::new();
         self.pred_reads(&r.goal, &mut reads);

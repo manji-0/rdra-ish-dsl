@@ -12,7 +12,6 @@ pub mod openapi;
 pub mod sql;
 pub mod state_pattern;
 pub mod tla;
-pub mod typescript;
 
 /// The flowchart encoding a reader of the `.mmd` needs: each kind's node shape, and the
 /// relation an unlabelled edge stands for.
