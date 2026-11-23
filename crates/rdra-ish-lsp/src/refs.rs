@@ -204,7 +204,10 @@ fn collect_arg_references<'a>(arg: &'a PredicateArg, refs: &mut Vec<&'a QRef>) {
     match arg {
         PredicateArg::Ref(qref) => refs.push(qref),
         PredicateArg::Expr(expr) => collect_expr_references(expr, refs),
-        PredicateArg::Transition { .. } | PredicateArg::Card(_) | PredicateArg::Lit(_) => {}
+        PredicateArg::Transition { .. }
+        | PredicateArg::Card(_)
+        | PredicateArg::Lit(_)
+        | PredicateArg::Int(_) => {}
     }
 }
 

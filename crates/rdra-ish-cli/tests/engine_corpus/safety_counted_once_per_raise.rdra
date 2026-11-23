@@ -1,0 +1,49 @@
+// trap: a counted handler runs once per raise, where the latch lets one raise drive two runs.
+// Ship sends a box twice (none -> one -> two) and raises EvShipped each time; Receive, which
+// the event triggers, counts the box in twice (none -> one -> two). With
+// `.counted(2)` Receive runs only while a raise is pending, so a box is never counted in
+// twice after one shipment (Forbidden_Box_0 ok), and with Receive fair both shipments are
+// counted in (BoxBothIn ok). The crate is the same model under the latch: after its first
+// shipment Receipt may run twice, so Forbidden_Crate_1 fails. A checker that read the
+// counter as a latch, or dropped its decrement, fails Forbidden_Box_0. Two raises never
+// pass k = 2, so the overflow rule holds. z3 proves both Box rules with the reached-pattern
+// lemmas over (sent, got, pending); the latch's rule is not inductive.
+// expect Forbidden_Box_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+// expect Forbidden_Crate_1: native=counterexample tlc=counterexample z3=unproved
+// expect EventOverflow_Box_EvShipped_Receive: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+// expect BoxBothIn: native=ok tlc=ok
+entity Box "箱" {
+  id: Int @pk
+  sent: Enum(none, one, two) @default(none)
+  got: Enum(none, one, two) @default(none)
+}
+entity Crate "木箱" {
+  id: Int @pk
+  sent: Enum(none, one, two) @default(none)
+  got: Enum(none, one, two) @default(none)
+}
+usecase PackBox "箱詰め"
+usecase Ship "発送"
+usecase Receive "入庫"
+usecase PackCrate "木箱詰め"
+usecase ShipCrate "木箱発送"
+usecase Receipt "木箱入庫"
+event EvShipped "発送済"
+event EvCrateShipped "木箱発送済"
+creates(PackBox, Box)
+transitions(Ship, Box.sent, none -> one)
+transitions(Ship, Box.sent, one -> two)
+raises(Ship, EvShipped)
+triggers(EvShipped, Receive).counted(2)
+transitions(Receive, Box.got, none -> one)
+transitions(Receive, Box.got, one -> two)
+creates(PackCrate, Crate)
+transitions(ShipCrate, Crate.sent, none -> one)
+transitions(ShipCrate, Crate.sent, one -> two)
+raises(ShipCrate, EvCrateShipped)
+triggers(EvCrateShipped, Receipt)
+transitions(Receipt, Crate.got, none -> one)
+transitions(Receipt, Crate.got, one -> two)
+forbidden(Box, sent == one, got == two)
+forbidden(Crate, sent == one, got == two)
+property BoxBothIn leads_to(Box.sent == two, Box.got == two).fair(Receive)

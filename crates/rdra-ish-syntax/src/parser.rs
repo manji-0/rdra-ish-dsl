@@ -926,6 +926,8 @@ fn chain_call() -> impl Parser<Token, ChainCall, Error = Simple<Token>> + Clone 
             predicate_arg()
                 .map(|arg| (arg, false))
                 .or(kind_word_arg().map(|arg| (arg, true)))
+                // A bare integer (`.counted(2)`); a predicate's own arguments take none.
+                .or(select! { Token::IntLit(s) => PredicateArg::Int(s) }.map(|arg| (arg, false)))
                 .separated_by(just(Token::Comma))
                 .allow_trailing(),
         )
