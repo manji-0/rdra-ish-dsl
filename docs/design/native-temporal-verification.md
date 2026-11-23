@@ -893,6 +893,28 @@ The owner decided four more on 2026-11-23, closing the questions this plan left 
   corpus cases whose only counterexample loops inside one class, and then measures how many
   of the samples' runs with `WF_vars(Next)` it decides. A divergence-sensitive partition,
   which splits classes by whether they loop, is considered only if the trial falls short.
+- **How the trial's numbers choose between C, B, and A.** All numbers compare with the
+  `main` commit the trial branched from. "Undecided for memory" counts the runs with
+  `WF_vars(Next)` that are `not decided` because the unreduced cone hit the memory limit.
+  - **Before any choice, C must be sound.** C is dropped if the argument fails or needs a
+    condition that keeps it off the three large domain samples, if C says `ok` where TLC
+    finds a counterexample on a sample or a sweep seed (a fixable bug is fixed with a
+    fixture and the trial is measured again), or if native, TLC, and z3 disagree on the
+    corpus cases the trial adds. A spurious counterexample is not a soundness failure: the
+    lift and the checks reject it and the run falls back.
+  - **C is chosen when all three hold.** On patent-ops, food-permit-ops, and
+    insurance-claim-ops, C decides at least half of the runs undecided for memory. At most
+    one in five of the runs C enters falls back on a spurious counterexample. No sample's
+    wall time or peak memory grows by more than 10% over `main`.
+  - **B is considered when C misses one of those** and most of what C leaves undecided is
+    fallbacks, or when C's argument needs a condition that keeps it off the large samples;
+    and a divergence-sensitive split would keep the reduction: at most twice today's
+    classes, estimated from the classes that mix states that can loop inside the class
+    with states that cannot, and a reduced cone that fits the memory limit.
+  - **A is chosen otherwise:** when neither C nor B qualifies, when the three large samples
+    have two or fewer runs undecided for memory in all, or when what stays undecided comes
+    from the whole-model step that phase 4 replaces, in which case phase 4 goes first and
+    the trial is measured again after it.
 - **The samples run with `--with-tlc` on `main` until the release gate passes, and then
   only at release.** While phases 4 and 5 and the divergence trial change native verdicts,
   that step is the only one that compares the samples' temporal verdicts with TLC. Once the
