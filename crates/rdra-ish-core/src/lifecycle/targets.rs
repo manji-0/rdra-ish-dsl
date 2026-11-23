@@ -638,7 +638,7 @@ impl TransitionSystem {
     }
 
     /// The diagnostic is a violation of this invariant or assert.
-    fn reports(&self, target: Target, d: &StateDiag) -> bool {
+    pub(super) fn reports(&self, target: Target, d: &StateDiag) -> bool {
         match (target, d) {
             (Target::Invariant(i), StateDiag::ConstraintViolated { name, .. }) => {
                 *name == self.invariants[i].name
