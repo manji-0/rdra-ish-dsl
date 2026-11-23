@@ -72,7 +72,9 @@ state BFS reaches is a state of the z3 encoding, and a z3 proof covers every bou
 The direction that is allowed to differ is the other one. A rule can fail only past the top
 (`expires_at < now` with `expires_at` at 5), so BFS at `0..5` finds nothing and z3 leaves it
 unproved. That is no disagreement. `z3_int_and_now_boundary.rdra` and
-`z3_now_past_the_top.rdra` pin both sides.
+`z3_now_past_the_top.rdra` pin both sides, and a Date column no use case writes starts at
+0 beside `now` in both encodings, so z3 proves `issued_on > now` impossible where BFS finds
+nothing.
 
 ## The corpus
 
