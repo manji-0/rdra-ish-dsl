@@ -17,29 +17,142 @@ impl Graph<'_> {
     }
 
     /// The distinct successors and predecessors of every state, self-loops left out, for the
-    /// passes that walk the graph rather than replay a run (`can_reach`).
+    /// passes that walk the graph rather than replay a run (`can_reach`, deadlock).
     pub fn adjacency(&self) -> Adjacency {
-        let n = self.states.len();
-        let mut out = vec![Vec::new(); n];
-        let mut into = vec![Vec::new(); n];
-        for e in self.edges.iter().filter(|e| e.from != e.to) {
-            out[e.from as usize].push(e.to);
-            into[e.to as usize].push(e.from);
-        }
-        for list in out.iter_mut().chain(into.iter_mut()) {
-            list.sort_unstable();
-            list.dedup();
-        }
-        Adjacency { out, into }
+        Adjacency::new(self.states.len(), || {
+            self.edges.iter().map(|e| (e.from, e.to))
+        })
     }
 }
 
-/// A graph's moves as adjacency lists, indexed by state.
+/// A graph's moves by state, in both directions, self-loops and repeats left out. Compressed:
+/// 4 bytes per move for each direction.
 pub struct Adjacency {
-    /// Per state, the states one move reaches.
-    pub out: Vec<Vec<u32>>,
-    /// Per state, the states one move comes from.
-    pub into: Vec<Vec<u32>>,
+    succs: Csr,
+    preds: Csr,
+}
+
+impl Adjacency {
+    /// From `n` states and the `(from, to)` moves `moves` yields, each time it is called.
+    fn new<I: Iterator<Item = (u32, u32)>>(n: usize, moves: impl Fn() -> I) -> Self {
+        let moves = || moves().filter(|(from, to)| from != to);
+        Adjacency {
+            succs: Csr::new(n, moves),
+            preds: Csr::new(n, || moves().map(|(from, to)| (to, from))),
+        }
+    }
+
+    /// The states one move from `at` reaches, in ascending order.
+    pub fn succs(&self, at: u32) -> &[u32] {
+        self.succs.of(at)
+    }
+
+    /// The states one move from which `at` is reached, in ascending order.
+    pub fn preds(&self, at: u32) -> &[u32] {
+        self.preds.of(at)
+    }
+
+    /// The strongly connected components of the forward graph by iterative Tarjan: each
+    /// state's component, numbered in the order the components close (a component comes
+    /// before every component that reaches it), and the number of components.
+    pub fn components(&self) -> (Vec<u32>, usize) {
+        const UNSEEN: u32 = u32::MAX;
+        let n = self.succs.start.len() - 1;
+        let mut index = vec![UNSEEN; n];
+        let mut low = vec![0u32; n];
+        let mut comp = vec![UNSEEN; n];
+        let mut stack: Vec<u32> = Vec::new();
+        let mut call: Vec<(u32, usize)> = Vec::new();
+        let (mut counter, mut count) = (0u32, 0u32);
+        for root in 0..n as u32 {
+            if index[root as usize] != UNSEEN {
+                continue;
+            }
+            call.push((root, 0));
+            while let Some(&(at, next)) = call.last() {
+                let a = at as usize;
+                if next == 0 {
+                    index[a] = counter;
+                    low[a] = counter;
+                    counter += 1;
+                    stack.push(at);
+                }
+                if let Some(&to) = self.succs.of(at).get(next) {
+                    call.last_mut().expect("just read").1 += 1;
+                    let t = to as usize;
+                    if index[t] == UNSEEN {
+                        call.push((to, 0));
+                    } else if comp[t] == UNSEEN {
+                        low[a] = low[a].min(index[t]);
+                    }
+                    continue;
+                }
+                call.pop();
+                if let Some(&(parent, _)) = call.last() {
+                    low[parent as usize] = low[parent as usize].min(low[a]);
+                }
+                if low[a] == index[a] {
+                    while let Some(member) = stack.pop() {
+                        comp[member as usize] = count;
+                        if member == at {
+                            break;
+                        }
+                    }
+                    count += 1;
+                }
+            }
+        }
+        (comp, count as usize)
+    }
+}
+
+/// One direction of the moves: `next[start[at]..start[at + 1]]` are the targets of `at`.
+struct Csr {
+    start: Vec<u32>,
+    next: Vec<u32>,
+}
+
+impl Csr {
+    /// From `n` states and the `(from, to)` pairs `pairs` yields, each time it is called.
+    fn new<I: Iterator<Item = (u32, u32)>>(n: usize, pairs: impl Fn() -> I) -> Self {
+        let mut start = vec![0u32; n + 1];
+        for (from, _) in pairs() {
+            start[from as usize + 1] += 1;
+        }
+        for i in 0..n {
+            start[i + 1] += start[i];
+        }
+        let mut fill = start.clone();
+        let mut next = vec![0u32; start[n] as usize];
+        for (from, to) in pairs() {
+            next[fill[from as usize] as usize] = to;
+            fill[from as usize] += 1;
+        }
+        // Sort each row and drop repeats, closing the gaps in place.
+        let mut kept = 0usize;
+        let mut from = 0usize;
+        for at in 0..n {
+            let row = from..start[at + 1] as usize;
+            from = row.end;
+            next[row.clone()].sort_unstable();
+            start[at] = kept as u32;
+            let mut last = None;
+            for i in row {
+                if last != Some(next[i]) {
+                    last = Some(next[i]);
+                    next[kept] = next[i];
+                    kept += 1;
+                }
+            }
+        }
+        start[n] = kept as u32;
+        next.truncate(kept);
+        Csr { start, next }
+    }
+
+    fn of(&self, at: u32) -> &[u32] {
+        &self.next[self.start[at as usize] as usize..self.start[at as usize + 1] as usize]
+    }
 }
 
 /// Moves another engine found, each naming its action but not its params, so that its graph
@@ -160,5 +273,47 @@ impl ComponentRun {
             ts.trace_from(&start, &steps),
             steps.last().map_or(start, |s| s.2.clone()),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Adjacency;
+
+    fn adjacency(n: usize, moves: &[(u32, u32)]) -> Adjacency {
+        Adjacency::new(n, || moves.iter().copied())
+    }
+
+    #[test]
+    fn both_directions_drop_self_loops_and_repeats() {
+        let a = adjacency(3, &[(0, 2), (0, 1), (0, 2), (1, 1), (2, 0)]);
+        assert_eq!(a.succs(0), [1, 2]);
+        assert_eq!(a.succs(1), [] as [u32; 0]);
+        assert_eq!(a.preds(0), [2]);
+        assert_eq!(a.preds(2), [0]);
+        assert_eq!(a.preds(1), [0]);
+    }
+
+    #[test]
+    fn components_group_cycles_and_close_sinks_first() {
+        // 0 <-> 1 -> 2 <-> 3 -> 4, and 5 on its own with a self-loop.
+        let a = adjacency(6, &[(0, 1), (1, 0), (1, 2), (2, 3), (3, 2), (3, 4), (5, 5)]);
+        let (comp, count) = a.components();
+        assert_eq!(count, 4);
+        assert_eq!(comp[0], comp[1]);
+        assert_eq!(comp[2], comp[3]);
+        let mut distinct = vec![comp[0], comp[2], comp[4], comp[5]];
+        distinct.sort_unstable();
+        distinct.dedup();
+        assert_eq!(distinct.len(), 4);
+        assert!(comp[4] < comp[2] && comp[2] < comp[0]);
+    }
+
+    #[test]
+    fn a_long_chain_does_not_recurse() {
+        let n = 200_000u32;
+        let moves: Vec<_> = (0..n - 1).map(|i| (i, i + 1)).collect();
+        let (_, count) = adjacency(n as usize, &moves).components();
+        assert_eq!(count, n as usize);
     }
 }

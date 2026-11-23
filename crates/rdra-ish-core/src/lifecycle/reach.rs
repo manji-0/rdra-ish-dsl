@@ -23,7 +23,7 @@ impl TransitionSystem {
         debug_assert!(graph.complete, "a capped graph decides no can_reach");
         let r = &self.reach[i];
         let n = graph.states.len();
-        let Adjacency { out, into } = graph.adjacency();
+        let adjacency = graph.adjacency();
         let mut worst: Option<(u32, Vec<u8>, Vec<bool>)> = None;
         for binding in self.slot_tuples(r.binders.len()) {
             let present: Vec<bool> = graph
@@ -47,7 +47,7 @@ impl TransitionSystem {
                 }
             }
             while let Some(at) = queue.pop_front() {
-                for &from in &into[at as usize] {
+                for &from in adjacency.preds(at) {
                     if present[from as usize] && !can[from as usize] {
                         can[from as usize] = true;
                         queue.push_back(from);
@@ -62,7 +62,7 @@ impl TransitionSystem {
             }
         }
         let (at, binding, present) = worst?;
-        let confined = confined_from(at, &out, &present);
+        let confined = confined_from(at, &adjacency, &present);
         let diag = StateDiag::GoalUnreachable {
             name: r.name.clone(),
             instance: r
@@ -162,14 +162,14 @@ impl TransitionSystem {
 
 /// The states reachable from `at` through states where the instance is present, `at` first,
 /// in the order a forward search finds them.
-fn confined_from(at: u32, out: &[Vec<u32>], present: &[bool]) -> Vec<usize> {
+fn confined_from(at: u32, adjacency: &Adjacency, present: &[bool]) -> Vec<usize> {
     let mut seen = vec![false; present.len()];
     let mut order = vec![at as usize];
     seen[at as usize] = true;
     let mut next = 0;
     while let Some(&s) = order.get(next) {
         next += 1;
-        for &to in &out[s] {
+        for &to in adjacency.succs(s as u32) {
             let to = to as usize;
             if present[to] && !seen[to] {
                 seen[to] = true;

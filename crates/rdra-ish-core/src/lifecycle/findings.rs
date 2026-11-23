@@ -2,7 +2,7 @@
 //! the graph, so any engine that produces the graph gets the same findings.
 
 use super::diag::{Blocked, Entry, Exit, StateDiag};
-use super::explore::{Graph, Scan};
+use super::explore::{Adjacency, Graph, Scan};
 use super::expr::State;
 use super::trace::Trace;
 use super::types::{
@@ -108,36 +108,6 @@ struct ExitArm {
     param: usize,
     to: Option<Value>,
     site: Site,
-}
-
-/// The moves of a graph by state, one direction, self-loops left out.
-struct Adjacency {
-    start: Vec<u32>,
-    next: Vec<u32>,
-}
-
-impl Adjacency {
-    /// From `n` states and the `(from, to)` pairs `pairs` yields, each time it is called.
-    fn new<I: Iterator<Item = (u32, u32)>>(n: usize, pairs: impl Fn() -> I) -> Self {
-        let mut start = vec![0u32; n + 1];
-        for (from, _) in pairs() {
-            start[from as usize + 1] += 1;
-        }
-        for i in 0..n {
-            start[i + 1] += start[i];
-        }
-        let mut fill = start.clone();
-        let mut next = vec![0u32; start[n] as usize];
-        for (from, to) in pairs() {
-            next[fill[from as usize] as usize] = to;
-            fill[from as usize] += 1;
-        }
-        Adjacency { start, next }
-    }
-
-    fn of(&self, at: u32) -> &[u32] {
-        &self.next[self.start[at as usize] as usize..self.start[at as usize + 1] as usize]
-    }
 }
 
 /// One state of a state model, with the names of the findings `state_model_findings` gives it.
@@ -352,16 +322,14 @@ impl TransitionSystem {
             return Vec::new();
         }
         let n = g.states.len();
-        let moves = || g.edges().filter(|(f, t, _)| f != t).map(|(f, t, _)| (f, t));
-        let preds = Adjacency::new(n, || moves().map(|(f, t)| (t, f)));
-        let mut succs: Option<Adjacency> = None;
+        let adjacency = g.adjacency();
         let present = |at: usize, k: usize| g.states[at].is_present(self, e, k);
         let mut out = Vec::new();
         let mut columns: Vec<(VarId, Vec<Vec<bool>>)> = Vec::new();
         for (var, value, exits) in open {
             if !columns.iter().any(|(v, _)| *v == var) {
                 let leave = (0..self.bounds.slots())
-                    .map(|k| self.can_leave(e, var, k, g, &preds))
+                    .map(|k| self.can_leave(e, var, k, g, &adjacency))
                     .collect();
                 columns.push((var, leave));
             }
@@ -375,8 +343,7 @@ impl TransitionSystem {
             let progress = match first {
                 None => Progress::Leaves,
                 Some((at, k)) => {
-                    let succs = succs.get_or_insert_with(|| Adjacency::new(n, moves));
-                    let held = Self::forward(succs, at as u32);
+                    let held = Self::forward(&adjacency, at as u32);
                     let held: Vec<&State> = held.iter().map(|&i| &g.states[i as usize]).collect();
                     Progress::Stuck {
                         at: at as u32,
@@ -395,7 +362,14 @@ impl TransitionSystem {
 
     /// Which states have a path that changes `var` at slot `k` of `e` or deletes `k`: the
     /// sources of such edges, and, backwards, every state with `k` present that steps into one.
-    fn can_leave(&self, e: EntId, var: VarId, k: usize, g: &Graph, preds: &Adjacency) -> Vec<bool> {
+    fn can_leave(
+        &self,
+        e: EntId,
+        var: VarId,
+        k: usize,
+        g: &Graph,
+        adjacency: &Adjacency,
+    ) -> Vec<bool> {
         let mut leave = vec![false; g.states.len()];
         let mut stack = Vec::new();
         for (from, to, _) in g.edges() {
@@ -409,7 +383,7 @@ impl TransitionSystem {
             }
         }
         while let Some(at) = stack.pop() {
-            for &p in preds.of(at) {
+            for &p in adjacency.preds(at) {
                 if !leave[p as usize] && g.states[p as usize].is_present(self, e, k) {
                     leave[p as usize] = true;
                     stack.push(p);
@@ -420,12 +394,12 @@ impl TransitionSystem {
     }
 
     /// `at` and every state a path from it reaches.
-    fn forward(succs: &Adjacency, at: u32) -> Vec<u32> {
+    fn forward(adjacency: &Adjacency, at: u32) -> Vec<u32> {
         let mut seen = std::collections::HashSet::from([at]);
         let mut out = vec![at];
         let mut next = 0;
         while next < out.len() {
-            for &to in succs.of(out[next]) {
+            for &to in adjacency.succs(out[next]) {
                 if seen.insert(to) {
                     out.push(to);
                 }
