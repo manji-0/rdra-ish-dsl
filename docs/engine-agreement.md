@@ -253,4 +253,8 @@ is an artifact with each mutant's diff and log. A missed mutant is a change to t
 that the corpus did not notice. Kill it with a new corpus case that the mutant gets wrong,
 or record why it is equivalent to the original code. A timeout is a mutant whose corpus
 ran past 60 seconds. Unmutated, the corpus takes about a second, so a timeout means the
-mutant made the checker hang. A hang is noticed, so a timeout needs no new case.
+mutant made the checker hang. A hang is noticed, so a timeout needs no new case. Each
+test process runs under a 2 GiB address-space cap. A mutant that makes the checker
+allocate without end fails its test at the cap and counts as caught; without the cap it
+fills the runner and the whole shard is cancelled. A shard that uploads no results is
+named at the top of the summary, and its mutants are in none of the counts.
