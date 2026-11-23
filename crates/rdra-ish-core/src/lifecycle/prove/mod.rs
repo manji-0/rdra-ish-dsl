@@ -97,18 +97,25 @@ pub struct Cti {
 /// Per-query solver settings.
 #[derive(Clone, Copy, Debug)]
 pub struct ProveOptions {
-    /// Milliseconds a check of a rule may take before it counts as unknown.
-    pub timeout_ms: u32,
-    /// The same for a lemma. A lemma that times out leaves the set, which only costs proofs;
-    /// a check that breaks a candidate is the slow kind, so a short one saves the most.
-    pub lemma_timeout_ms: u32,
+    /// z3 resource units (`rlimit`) a check of a rule may spend before it counts as unknown.
+    /// A unit counts solver work, not time, so the answer does not depend on the machine or
+    /// its load; it does depend on the z3 version.
+    pub rlimit: u32,
+    /// The same for a lemma. A lemma that gives up leaves the set, which only costs proofs;
+    /// a check that breaks a candidate is the slow kind, so a low limit saves the most.
+    pub lemma_rlimit: u32,
 }
 
+/// The limits are set from `examples/prove_rlimit.rs` on every sample and engine-corpus case
+/// under z3 5.1.0, on 1, 2, 3, and 8 solvers: no check that keeps a candidate spent more
+/// than 42,000 units for a rule or 102,000 for a lemma, so the limits leave about 480 and 20
+/// times that. Only such a check must fit: a lemma check past its limit drops the lemma, as
+/// a step that breaks it does.
 impl Default for ProveOptions {
     fn default() -> Self {
         ProveOptions {
-            timeout_ms: 10_000,
-            lemma_timeout_ms: 500,
+            rlimit: 20_000_000,
+            lemma_rlimit: 2_000_000,
         }
     }
 }
@@ -125,8 +132,8 @@ struct Candidate {
     reads: VarSet,
     /// The formula over the pre-state.
     pre: String,
-    /// Milliseconds a check of it may take.
-    timeout_ms: u32,
+    /// z3 resource units a check of it may spend.
+    rlimit: u32,
 }
 
 /// Why a candidate left the set, and the step that showed it.
@@ -220,16 +227,16 @@ pub fn prove<S: Solver + Send>(
                 let mut reads = VarSet::new();
                 ts.pred_reads(&formula.body, &mut reads);
                 reads.extend(formula.binders.iter().map(|e| ts.entity(*e).exists));
-                let timeout_ms = match origin {
-                    Origin::Rule(_) => options.timeout_ms,
-                    Origin::Lemma(_) => options.lemma_timeout_ms,
+                let rlimit = match origin {
+                    Origin::Rule(_) => options.rlimit,
+                    Origin::Lemma(_) => options.lemma_rlimit,
                 };
                 cands.push(Candidate {
                     origin,
                     formula,
                     reads,
                     pre,
-                    timeout_ms,
+                    rlimit,
                 });
             }
             Err(Unsupported(why)) => {
@@ -352,7 +359,7 @@ pub fn prove<S: Solver + Send>(
                         c.pre,
                         violation(&enc, c, Frame::Post)
                     ))?;
-                    if solver.check_sat()? == Sat::Sat {
+                    if solver.check_sat(c.rlimit)? == Sat::Sat {
                         cti = Some(read_cti(solver, ts, ActId::at_index(a), &c.formula)?);
                     }
                     solver.exec("(pop)\n(pop)")?;
@@ -403,12 +410,10 @@ fn assume(cands: &[Candidate], set: &Set) -> String {
         .collect()
 }
 
-/// The commands that assert some rows violate `c` in `frame`, and the candidate's timeout.
+/// The commands that assert some rows violate `c` in `frame`.
 fn violation(enc: &Enc, c: &Candidate, frame: Frame) -> String {
-    let rows = enc
-        .violation(&c.formula, frame)
-        .expect("a candidate that encodes has a violation that encodes");
-    format!("{rows}(set-option :timeout {})\n", c.timeout_ms)
+    enc.violation(&c.formula, frame)
+        .expect("a candidate that encodes has a violation that encodes")
 }
 
 /// Whether some state of `scope` violates each of `cands[ks]` in `frame`: one answer per
@@ -469,7 +474,7 @@ fn violated(
     frame: Frame,
 ) -> Result<Sat, SolverError> {
     solver.exec(&format!("(push)\n{}", violation(enc, c, frame)))?;
-    let sat = solver.check_sat()?;
+    let sat = solver.check_sat(c.rlimit)?;
     solver.exec("(pop)")?;
     Ok(sat)
 }

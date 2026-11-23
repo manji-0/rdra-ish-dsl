@@ -134,16 +134,20 @@ fn no_proved_rule_has_a_bounded_counterexample() {
 
 /// The proof does not depend on how many solvers share its checks: the same verdicts, the
 /// same counterexamples to induction, and the same kept lemmas on one solver and on three.
-/// The formal-verification samples cover proved rules, rules that fail in an initial state,
-/// and rules with a CTI.
+/// A check's resource units depend on what its solver checked before, so this also holds
+/// each check that keeps a candidate within its limit (`ProveOptions`). The
+/// formal-verification samples cover proved rules, rules that fail in an initial state, and
+/// rules with a CTI; insurance-claim-ops has the costliest lemma checks, and oidc-auth the
+/// costliest rule checks.
 #[test]
 fn a_proof_is_the_same_on_any_number_of_solvers() {
     let Some(z3) = find_z3() else { return };
     let mut with_cti = 0;
-    for sample in samples()
-        .into_iter()
-        .filter(|s| s.contains("formal-verification"))
-    {
+    for sample in samples().into_iter().filter(|s| {
+        s.contains("formal-verification")
+            || s.ends_with("insurance-claim-ops")
+            || s.ends_with("oidc-auth")
+    }) {
         let Some(ts) = system(&sample, Bounds::VERIFY) else {
             continue;
         };

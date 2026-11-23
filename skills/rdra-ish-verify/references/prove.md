@@ -17,7 +17,9 @@ Each rule prints one line before TLC runs:
 - `unproved: <rule>: not inductive; ...` — a counterexample to induction (CTI) follows.
 - `unproved: <rule>: an initial state violates it` — a real violation. `check` and
   `verify` report it with a trace.
-- `unproved: <rule>: z3 gave up on <action>` — the check timed out.
+- `unproved: <rule>: z3 gave up on <action>` — the check ran out of its budget of z3
+  resource units. The budget counts solver work, not time, so the same model gives the
+  same answer on any machine.
 - `out of scope: <rule>: <why>` — the encoding cannot state the rule.
 - `[not enforced by the SQL schema: <why>]` after a name — `export --kind sql` writes no
   `CHECK` for the rule, so the application keeps it. Proved, it is an obligation the use
@@ -28,6 +30,11 @@ Each rule prints one line before TLC runs:
 The `OK:` line ends with `; <n> of <m> rules proved for any number of rows and any Int
 value`. An unproved
 rule fails the run only with `--deny-unproved`.
+
+An invariant cone that BFS stopped at the memory limit is decided by the proof when z3
+proves every rule in it: its line reads `ok (<n> states, BFS stopped at the memory limit,
+decided by proof: ...)` instead of `not decided`. A cone with an after-assert or an
+unproved rule stays `not decided`.
 
 ```text
 $ rdra-ish verify --prove samples/one_to_one_shared.rdra
