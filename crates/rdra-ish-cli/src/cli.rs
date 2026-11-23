@@ -192,6 +192,11 @@ pub(crate) enum Commands {
         /// needs. Default: `memory` under [check] in rdra.toml, else 4GiB
         #[arg(long, value_name = "SIZE")]
         memory: Option<MemorySize>,
+        /// After a clean check, drop each guard (a condition applied to a use case, or the
+        /// `.when` conditions of one column's arms) in turn, explore again the rules whose cone
+        /// keeps the use case, and print on stdout which rules each guard protects
+        #[arg(long)]
+        guards: bool,
         #[command(flatten)]
         bounds: BoundsArgs,
         #[command(flatten)]

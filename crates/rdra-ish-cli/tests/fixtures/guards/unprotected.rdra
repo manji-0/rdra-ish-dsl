@@ -1,0 +1,35 @@
+// `check --guards` on two guards of one use case. PaidOnly keeps the one rule: without it Ship
+// takes an unpaid order. No rule reads whether the stock was checked, so no rule depends on
+// StockChecked: it is a business rule nobody wrote as a rule, or not needed.
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(open, shipped) @default(open)
+  paid: Bool @default(false)
+  stock_checked: Bool @default(false)
+}
+
+usecase Place "注文確定"
+usecase Pay "支払い"
+usecase CheckStock "在庫確認"
+usecase Ship "発送"
+
+buc BucOrder "Order"
+contains(BucOrder, Place)
+contains(BucOrder, Pay)
+contains(BucOrder, CheckStock)
+contains(BucOrder, Ship)
+
+creates(Place, Order)
+sets(Pay, Order.paid == true)
+sets(CheckStock, Order.stock_checked == true)
+transitions(Ship, Order.status, open -> shipped)
+
+condition PaidOnly "支払済み"
+holds(PaidOnly, Order.paid == true)
+applies_to(PaidOnly, Ship)
+
+condition StockChecked "在庫確認済み"
+holds(StockChecked, Order.stock_checked == true)
+applies_to(StockChecked, Ship)
+
+forbidden(Order, status == shipped, paid == false).label("A shipped order was paid")

@@ -12,6 +12,7 @@ mod diag;
 mod explore;
 mod expr;
 mod findings;
+mod guards;
 mod lasso;
 pub mod prove;
 mod reach;
@@ -42,6 +43,7 @@ pub use findings::{
     ActionRuns, ArmTaken, ModelState, Progress, Runs, StateModelFindings, Taken, ValueProgress,
     ValueWitness, Witness,
 };
+pub use guards::{GuardDeps, GuardKind, GuardSubject};
 pub use lasso::{Fairness, LassoReplay, Loop, Unfair};
 pub use reduce::{ClassMove, Divergence, Fold, FoldKey, Reduction, Step};
 pub use select::{NotChecked, Scope, Selection, UnknownId, Without};

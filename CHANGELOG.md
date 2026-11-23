@@ -83,6 +83,19 @@
 
 ### Added
 
+- `check --guards` reports which rules each guard protects (#198). A guard is a `holds`
+  condition applied to a use case, or the `.when` conditions of one column's arms or
+  values. For each guard, after a clean `check`, the run removes it from every action of
+  the use case, explores again the cones of the rules that keep the use case, under the
+  same caps and `--memory`, and prints on stdout the rules that now fail (`protects:`), a
+  `rules:` block with the guards each rule depends on, and, for a guard no rule depends
+  on, `no rule depends on this guard; it is either a business rule nobody wrote as a rule,
+  or not needed`. A rule whose cone stops at a cap without the guard is `not decided`. The
+  report adds no finding and leaves the exit status to `check`. On `samples/oidc-auth` it
+  takes about 3 s (34 guards, 131 cones), and `tests/guards_cli.rs` checks the sample
+  README's table of rules and guards against it. The table now also names
+  `AccountChoiceAsked` on `SelectAccount` for the `prompt=login` rule, and no longer
+  names `ConsentOnRecord`, whose removal alone fails no rule.
 - A `MemoryCapReached` error of `check` and `states` says what the cone held and what
   finishing needs: the bytes each held state took, and an estimate of the states the cone
   reaches from its BFS layers. Once the frontier has shrunk for two depths past its peak,

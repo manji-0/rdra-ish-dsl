@@ -99,15 +99,19 @@ self-issued OPs, and the encodings of a request (request objects, `request_uri`,
 
 `shared/rules.rdra` holds 13 labelled rules. Each fails `check` when what protects it is
 removed; the Logout Token rule needs both its guard and its trigger removed, since either
-alone keeps it:
+alone keeps it. Where a row names several guards, removing any one of them fails a rule of
+the row. `rdra-ish check samples/oidc-auth --guards` drops each guard in turn and lists the
+rules that then fail; `crates/rdra-ish-cli/tests/guards_cli.rs` checks this table against
+that report. A rule protected by effects, a use case, a `links`, or a guard and a trigger
+together depends on no single guard, so the report lists no guard for it.
 
 | Rule | Protected by |
 |---|---|
 | A public client gets no code without an S256 code challenge | the arms of `ValidateRequest` |
 | An ID Token from the authorization endpoint always answers a nonce | `sets(RequestAuthentication, nonce == present).when(FrontChannelIdToken)` |
 | prompt=none never shows the login page | `RequestValidated` on `AuthenticateEndUser` |
-| prompt=login never reuses the session without a login | `SessionMayServe` on `ReuseSession` |
-| A request is authorized only after the End-User is authenticated | `EndUserAuthenticated`, `ConsentOnRecord` |
+| prompt=login never reuses the session without a login | `SessionMayServe` on `ReuseSession`, `AccountChoiceAsked` on `SelectAccount` |
+| A request is authorized only after the End-User is authenticated | `EndUserAuthenticated` on `GrantConsent` |
 | A request asking for a second factor is served only by a multi-factor session | the arms of `AuthenticateEndUser`, `ReuseSession`, `SelectAccount` |
 | The Implicit Flow issues no refresh token | the token sets of the implicit responses |
 | A replayed code leaves its grant revoked | `RejectCodeReplay` |

@@ -57,7 +57,7 @@ other finding itself.
 Parse, type-check, and run whole-model consistency checks; produce no artifact output.
 
 ```
-rdra-ish check <INPUTS...> [--strict] [--deny-deprecated] [--max-patterns <N>] [--max-states <N>] [--memory <SIZE>] [--instance-count <N>] [--int-range-max <N>] [--buc <ID>]... [--entity <ID>]... [--without-usecase <ID>]... [--without-buc <ID>]... [--actor <ID>]...
+rdra-ish check <INPUTS...> [--strict] [--deny-deprecated] [--max-patterns <N>] [--max-states <N>] [--memory <SIZE>] [--guards] [--instance-count <N>] [--int-range-max <N>] [--buc <ID>]... [--entity <ID>]... [--without-usecase <ID>]... [--without-buc <ID>]... [--actor <ID>]...
 ```
 
 Prints each diagnostic to stderr. If any error (non-warning) is present, exits with
@@ -153,6 +153,7 @@ E can get stuck at col = v is not decided: ...`. See [Deadlocks](./state-derivat
 | `--max-patterns <n>` | Cap on each entity's distinct patterns within one target cone. Default: 2^(10 + 8 * (n - 1)) for `n` = `--instance-count` (`1024` at one instance, `262144` at two). Past it, the run records a `PatternCapReached` **error**. Same as [`states`](#states). |
 | `--max-states <n>` | Cap on the joint states of one target cone, printed in the `bounds:` line. Default: none; `--memory` stops a run that outgrows the machine, and the `bounds:` line says `no state cap per cone, memory 4GiB`. Past a cap you give, the run records a `StateCapReached` **error** that names what the cone's states vary in. A larger `--int-range-max` or `--instance-count` makes more states per cone, so it reaches the cap sooner. Same as [`states`](#states). |
 | `--memory <size>` | What the run may hold in memory: the states of the cones it explores at once. Default: `memory` under `[check]` in [`rdra.toml`](#project-manifest), else `4GiB`. A cone whose states pass it stops: the run records a `MemoryCapReached` **error** that names the limit, says how many states it held and what each took, and estimates what finishing needs; the findings the cone leaves are listed under `not checked:`. See [Memory limit](#memory-limit). Same as [`states`](#states). |
+| `--guards` | After a clean run, print on stdout which rules each guard protects. See [Guard dependencies](#guard-dependencies). It adds no finding and does not change the exit status. |
 | `--instance-count <n>` | Instances (slots) per entity, `1..=255` (default `1`). A violation that needs two rows of an entity (a uniqueness or a quantifier across rows) shows only from `2`. The `bounds:` line and the final `OK:` line print the value used. Same name and validation as [`verify`](#verify); the default differs (`verify` runs `2`). A larger value also raises the default `--max-patterns`. |
 | `--int-range-max <n>` | The Int domain is `0..=n`, `1..=255` (default `5`). Printed in the `bounds:` line. Same as [`verify`](#verify). |
 | `--buc <id>` | Keep only the use cases reachable from the BUC; repeatable. See [Partial runs](#partial-runs). |
@@ -235,6 +236,51 @@ the temporal properties, `can_reach` ones included: a scoped run checks none.
 | Argument | Type | Description |
 |---|---|---|
 | `<INPUTS...>` | paths (required) | Files and/or directories to load. |
+
+### Guard dependencies
+
+`check --guards` reports which rules each guard protects. A guard here is a condition the
+model applies to a use case: a `holds` condition that `applies_to` it, or the `.when`
+conditions on one column's `transitions` arms, `chooses` values, or `sets` values. For each
+guard, the run removes it from every action of the use case (each transaction group and
+each `<UC>_by_<Ev>` copy), explores again the cone of each rule (`forbidden`, `invariant`,
+the other constraints, and `after` assertions) that keeps the use case, and lists the rules
+that now fail. Triggers, `transitions` sources, keys, and links are not removed.
+
+```
+$ rdra-ish check crates/rdra-ish-cli/tests/fixtures/guards/unprotected.rdra --guards
+bounds: 1 instance per entity, Int 0..5; no state cap per cone, memory 4GiB; entities a check does not read are unbounded
+guards: 2 guards: 1 protect a rule, 1 no rule depends on; 2 cones explored again
+guard: condition PaidOnly on Ship   unprotected.rdra:28:1
+  protects: 「A shipped order was paid」
+guard: condition StockChecked on Ship   unprotected.rdra:32:1
+  no rule depends on this guard; it is either a business rule nobody wrote as a rule, or not needed
+rules:
+  「A shipped order was paid」 depends on condition PaidOnly on Ship
+OK: no errors within 1 instance per entity, Int 0..5
+```
+
+The report is on stdout, before the final `OK:` line. Each `guard:` line names the guard
+and its site (the `holds` body, or the first guarded arm or value), then one line per rule
+it protects, named by its `.label` or else by its check name. The `rules:` block turns the
+table around: each rule with the guards it depends on, or `no guard`.
+
+A guard no rule depends on is not wrong. Either it states a business rule that nobody
+wrote as a `forbidden` or `invariant`, so `check` cannot tell when it is lost, or the
+model does not need it. A guard that backs up another guard or a trigger lands here too:
+removing one of the two keeps the rule.
+
+The rule is `not decided` without a guard when, without the guard, its cone stops at
+`--max-states`, `--max-patterns`, or `--memory` before a counterexample. Such a guard is
+neither protecting nor unprotected, and the `rules:` line names it after `not decided
+without`.
+
+The run explores one set of cones per guard, one guard after another, under the same
+caps and memory limit as `check`. Only the rule cones that keep the use case run again,
+and rules that share a cone share a run. Under a scope (`--entity`, `--buc`, ...) only the
+selected rules are explored. A model that fails `check` gets no report, only a `note:`: a
+rule that already fails depends on no guard. The order is the build's order of the use
+cases and their guards, so two runs print the same report.
 
 ---
 
