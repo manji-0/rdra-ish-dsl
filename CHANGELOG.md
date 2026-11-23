@@ -359,6 +359,15 @@
   permissions, actor inputs and the `TriggeredUseCaseUnreachable` warning too, as it
   already was for `next` and the BUC hand-offs. `performs(Actor, Buc)` now lends the actor
   to it, so its required permissions find the actor (#161).
+- `verify` no longer passes a `can_reach` whose cone stops at `--max-states`, the pattern
+  cap, or the `--memory` limit. Such a property is `not decided`: it is listed under
+  `not checked:` as `can_reach <P> is not decided: the <P> cone stopped at the state cap
+  (<n> states)` (or at the memory limit), the `can_reach (BFS on ...)` line adds
+  `, <n> not decided`, the `result:` line says `not decided`, and `--deny-undecided` fails
+  the run. The stop was dropped, so a run whose entity cones finished printed
+  `result: ok` and passed `--deny-undecided`, even where the full cone breaks the property.
+  `stable`, `unchanged`, `precedes`, `always`, `eventually`, and `leads_to` already counted
+  a stopped cone as undecided (#246).
 
 ## v2.3.0 - 2026-11-18
 
