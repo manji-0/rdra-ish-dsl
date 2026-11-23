@@ -1,4 +1,4 @@
-use super::{whole_job, Job, JobKind};
+use super::jobs::{whole_job, Job, JobKind};
 use crate::export::tla_file;
 use anyhow::{Context, Result};
 use rdra_ish_core::lifecycle::TransitionSystem;
