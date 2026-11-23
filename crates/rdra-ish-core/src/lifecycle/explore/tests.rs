@@ -401,8 +401,10 @@ fn the_estimate_on_a_sample_cone_comes_within_a_third_of_its_states() {
     );
 }
 
-/// Rules SHOP breaks: a closed customer within two steps, a shipped order within four.
-const BROKEN: &str = "forbidden(Customer, status == closed)\nforbidden(Order, status == shipped)\n";
+/// Rules SHOP breaks: a closed customer within two steps, and a shipped order with a line
+/// beside a closed customer within six (Join, Place, AddLine, Pay, Ship, Close).
+const BROKEN: &str = "forbidden(Customer, status == closed)\n\
+    forbidden(Order, Customer, Order.status == shipped, Order.qty == 2, Customer.status == closed)\n";
 
 /// A run told to stop once every check has failed stops right after the step that breaks
 /// the last one: a prefix of the run to the end, with the same violations and traces, the
@@ -424,8 +426,9 @@ fn a_run_stops_once_every_check_has_failed() {
     assert_eq!(stopped.end(), RunEnd::ChecksFailed);
     assert!(!stopped.complete);
     let n = stopped.states.len();
+    // Past two chunks of 128 states, so the runs on threads below hand chunks to workers.
     assert!(
-        n * 10 < whole.states.len(),
+        n >= 256 && n * 10 < whole.states.len(),
         "{n} of {} states",
         whole.states.len()
     );

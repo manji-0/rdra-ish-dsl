@@ -1,6 +1,7 @@
 // tests/fixtures/memory/flags.rdra with a rule that reads every flag, broken two steps in
-// (Open, then Close with every flag off). The rule's cone is the whole Task: 16,000-odd joint
-// states at two instances and far more at three, against a counterexample of two steps.
+// (Open, then Close with every flag off). The rule's cone is the whole Task: 65,793 joint
+// states at verify's two instances and 16,843,009 at three, against a counterexample of two
+// steps.
 // BFS stops the cone once its one check has failed (#213).
 entity Task "Task" {
   id: Int @pk
