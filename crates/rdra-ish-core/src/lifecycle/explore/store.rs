@@ -9,7 +9,7 @@ use std::mem::size_of;
 use crate::lifecycle::expr::State;
 use crate::lifecycle::types::ActId;
 
-use super::{Bfs, Edge};
+use super::{Bfs, ComponentRun, Edge};
 
 /// A heap block for `n` bytes: the allocator rounds up to 16.
 fn block(n: usize) -> u64 {
@@ -68,5 +68,17 @@ impl Bfs<'_> {
             + vec_bytes::<Option<u32>>(&self.parents, more)
             + vec_bytes::<Edge>(&self.edges, 0)
             + self.bindings.bytes
+    }
+}
+
+impl ComponentRun {
+    /// What the result keeps, in the bytes `Caps::memory` counts.
+    pub fn kept_bytes(&self) -> u64 {
+        self.kept
+    }
+
+    /// Bytes in one state.
+    pub fn state_width(&self) -> usize {
+        self.states.first().map_or(0, |s| s.0.len())
     }
 }

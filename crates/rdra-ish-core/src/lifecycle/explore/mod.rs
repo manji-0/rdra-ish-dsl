@@ -106,6 +106,12 @@ pub struct ComponentRun {
     bindings: Vec<(ActId, Box<[u8]>)>,
     /// What the run's result holds, in the bytes `Caps::memory` counts.
     pub(crate) kept: u64,
+    /// The largest store the run asked `Caps::memory` to cover: the last admitted state's
+    /// `bytes_with_one_more`, with `seen` in it.
+    pub peak_admitted: u64,
+    /// The store once every edge is counted, with `seen`: `peak_admitted` leaves the edges of
+    /// the last expanded states out.
+    pub peak: u64,
     /// `kept`, charged to `Caps::memory` while the result is alive.
     _charge: Option<Charge>,
 }
@@ -275,6 +281,7 @@ struct Bfs<'t> {
     /// What the store is charged to `Caps::memory`, when the caps name a pool; the result
     /// keeps what it holds of it.
     charge: Option<Charge>,
+    peak_admitted: u64,
 }
 
 impl TransitionSystem {
@@ -289,6 +296,8 @@ impl TransitionSystem {
         let mut bfs = Bfs::new(&self, caps);
         bfs.go(threads);
         let kept = bfs.kept();
+        let peak_admitted = bfs.peak_admitted;
+        let peak = bfs.bytes_with_one_more().max(peak_admitted);
         if let Some(charge) = &mut bfs.charge {
             charge.shrink_to(kept);
         }
@@ -314,6 +323,8 @@ impl TransitionSystem {
             edges,
             bindings: bindings.list,
             kept,
+            peak_admitted,
+            peak,
             _charge: charge,
         };
         for (at, reach) in &violations {
