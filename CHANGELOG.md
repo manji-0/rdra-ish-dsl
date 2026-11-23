@@ -319,6 +319,29 @@
   to 1.32 times the limit before and 0.92 to 1.17 times after. A single run still takes
   more than its count while it grows (#242), and passes over a finished cone stay
   uncounted (#243) (#237).
+- `--memory` now bounds what a `check`, `states`, or `verify` process holds on macOS, not
+  only what its state stores are counted. The system allocator there keeps a freed block of
+  a megabyte or more in the process's footprint and hands it out again only for a request of
+  about its size, so the stores of finished cones, and the buffers a stopped cone sorted
+  to describe its variables, stayed in memory beside the cones after them: `verify
+  --instance-count 2 --memory 2GiB` on `oidc-auth` peaked at 3795MiB with 2047MiB counted.
+  The `rdra-ish` and `rdra-ish-lsp` binaries now map each block of 1MiB and more from the
+  kernel and give it back when it is freed; a stopped cone describes its variables in one
+  pass that allocates nothing per state; and a store's buffer of edges is counted at its
+  next size before it grows, as its states already were, rather than at the next state.
+  The same run now peaks at 1956MiB, 0.96 times the limit, with the same output. `check
+  --instance-count 2` at `4GiB` on `clinic-ops`, `patent-ops`, `food-permit-ops`,
+  `insurance-claim-ops`, and `oidc-auth` peaked at 0.96 to 1.16 times the limit and now at
+  0.80 to 0.96 (one run each, macOS).
+  Those `check` runs stop fewer cones. A cone whose buffer of edges filled after its last
+  state used to double it uncounted, stop at the next state, and keep the doubled buffer:
+  the largest cone of `food-permit-ops` kept 5120MiB under the 4GiB limit, so the cones
+  after it got no room and stopped at 0 states. That cone now stops at that edge with the
+  same states and keeps 3584MiB, and the cones after it run in the room left. Capped cones
+  go from 35 to 30 on `clinic-ops`, 14 to 9 on `patent-ops`, 22 to 4 on `food-permit-ops`,
+  29 to 28 on `insurance-claim-ops`, and 29 to 21 on `oidc-auth`; six
+  `UnreachableEnumVariant` warnings that `clinic-ops` and `patent-ops` printed for cones
+  stopped at 0 states are gone (#242).
 - An integer `@default` outside `0..--int-range-max` on an Int, Money, Decimal, Date, or
   DateTime column that a rule reads is `error[IntLiteralOutOfBounds_<E>_<value>]`, as a
   literal there is: `@default(7) of stock is outside the bounded domain 0..5`. The column

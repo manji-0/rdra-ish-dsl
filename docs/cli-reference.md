@@ -563,7 +563,10 @@ What the limit counts:
 
 - **BFS.** The states a cone has reached are counted in bytes as they are stored: each
   state once (in one buffer, with its number in the index of seen states), its parent, every
-  edge, and the bindings, by the length and capacity of each collection. The count is the same on every
+  edge, and the bindings, by the length and capacity of each collection. A buffer that is
+  full is counted at its next size before it grows, so the count covers the old buffer and
+  the new one while the store moves from one to the other; a cone whose buffer of edges
+  cannot grow stops at that edge. The count is the same on every
   machine and with any number of threads, so a cone stops at the same state wherever it
   runs. A finished cone keeps its states and edges until its findings are read, so they
   stay counted, and the next cone has the rest of the limit. The cones run side by side,
@@ -574,15 +577,23 @@ What the limit counts:
   turn. The stores held at once never pass the limit.
 - **What the count leaves out.** The transition system and the reductions `verify` builds
   for its cones, the per-entity views, the states a worker holds while it expands them,
-  what a store's buffers take while they grow, and the passes that read a finished cone:
+  the old table of the index of seen states while the index doubles (about 6 bytes a
+  state), and the passes that read a finished cone:
   its findings, `can_reach`, the reduction of a cone to its classes, and the liveness search
   of `eventually` and `leads_to`. Each pass takes memory in proportion to the cone's states
-  and moves, beside the cone it reads. Measured once each on macOS, where the peak resident
-  set size and the peak footprint agreed within 2%: `check --instance-count 2` on
-  `clinic-ops`, `patent-ops`, `food-permit-ops`, `insurance-claim-ops`, and `oidc-auth`
-  peaked at 0.92 to 1.17 times the default `4GiB`, the findings adding under 3%.
-  `verify --instance-count 2` on `oidc-auth` with `--memory 2GiB` peaked at 1.85 times the
-  limit, while single BFS runs took more than their count. Not measured on Linux.
+  and moves, beside the cone it reads.
+- **Memory a cone frees.** On macOS, `rdra-ish` and `rdra-ish-lsp` map each block of
+  `1MiB` or more from the system on its own and unmap it when it is freed, so a store
+  leaves the process's memory once its cone's findings are read. The system allocator
+  keeps a freed large block in the footprint until a request of about its size takes it,
+  and a store that grows by doubling asks for every other size: without this, `verify
+  --instance-count 2 --memory 2GiB` on `oidc-auth` held the stores of finished cones beside
+  the running one and peaked at 1.85 times the limit. Elsewhere the binaries use the system
+  allocator. Measured once each on macOS, where the peak resident set size and the peak
+  footprint agree within 1%: `check --instance-count 2` on `clinic-ops`, `patent-ops`,
+  `food-permit-ops`, `insurance-claim-ops`, and `oidc-auth` peaked at 0.80 to 0.96 times
+  the default `4GiB`, and `verify --instance-count 2 --memory 2GiB` on `oidc-auth` at 0.96
+  times the limit. Not measured on Linux.
   The default limits stop no cone of the samples at the bounds their `// expect` headers
   name. `RDRA_ISH_MEMORY_STATS=1` prints a `memory:` line on stderr at each phase, with the
   bytes the stores hold then (`held=`) and have held at most (`peak=`).
@@ -607,7 +618,8 @@ checked:`, ends with a warning, and exits `0`, or `1` under `--deny-undecided`; 
 `result:` line says `not decided` either way:
 
 What `check` and `states` say when a cone stops at the limit: the states it held, the bytes
-each took (the store counted above, with the state that did not fit), and what the cone's
+each took (the store counted above, with the state or the larger buffer of edges that did
+not fit), and what the cone's
 BFS layers say about the states it reaches. BFS reaches the cone depth by depth, and the
 run counts the new states of each depth (one number per depth, counted in the store). On
 the sample cones that number rises to a peak and falls about as it rose, so:
