@@ -475,7 +475,7 @@ The bounds are inputs of the system, and every result states them.
 `states` prints its bounds on stderr first:
 
 ```
-bounds: 1 instance per entity, Int 0..5; 65536 states per cone; entities a check does not read are unbounded
+bounds: 1 instance per entity, Int 0..5; no state cap per cone, memory 4GiB; entities a check does not read are unbounded
 ```
 
 With one slot, an entity is created once, and deleting it does not free the slot.
@@ -533,19 +533,21 @@ cone of influence:
 BFS starts from every initial state, applies every enabled action, and stops when
 no new state appears or a cap is hit.
 
-Two caps stop a cone, and `check` and `states` take both:
+Two caps and the memory limit stop a cone, and `check` and `states` take all three:
 
 - `--max-patterns` caps the distinct patterns of one entity view within a cone. Default:
   2^(10 + 8 * (n - 1)) for `n` = `--instance-count`: 1,024 at one instance, 2^18 at two,
   2^26 at three.
 - `--max-states` caps the joint states of one cone. The `bounds:` line prints it. Default:
-  four times the default `--max-patterns`, at least 65,536: 65,536 at one instance, 2^20
-  at two, 2^28 at three.
+  none, and the line says `no state cap per cone, memory 4GiB`.
+- `--memory` (4GiB by default) stops a cone whose stored states pass the limit. It is what
+  stops a run without `--max-states`, and the cone it stops is reported as not decided.
 
-The defaults grow with `--instance-count` because each added instance multiplies a cone's
-states. A shift past the machine's word size saturates, so a very large count has no cap
-of its own; `--memory` (4GiB by default) stops such a run, and the cone it stops is
-reported as not decided. A flag you pass always replaces its default.
+The default pattern cap grows with `--instance-count` because each added instance
+multiplies a cone's states. A shift past the machine's word size saturates, so a very large
+count has no pattern cap of its own. A flag you pass always replaces its default. The
+generators (the outputs that read the explored states) charge their runs to no memory
+pool, so they keep a state cap of 65,536 per cone.
 
 When a cap is hit, the view is marked `truncated` and `PatternCapReached` or
 `StateCapReached` is an error: a rule checked on a partial set is not sound. The
@@ -559,7 +561,7 @@ that reads it.
 error[StateCapReached_OfficeAction]: state derivation for entity 'OfficeAction': state cap 1000 reached; results are incomplete: the cone has 11 variables, 10 of them vary (values reached/domain: PatentApplication.status 12/12, OfficeAction.status 6/6, ...); new states first reached by: CloseOfficeActionDocket 105, ExpireResponseTerm 87, ...; raise --max-states, or narrow with --entity or --buc
 ```
 
-A capped run costs time and memory up to the cap. Measured on a release build, a cone
+A run costs time and memory up to its cap or the memory limit. Measured on a release build, a cone
 of 65,536 states takes about 0.1 s and 24 MB; on a debug build, about 1.4 s. A cone
 that reaches 262,144 states takes about 0.7 s and 80 MB on a release build. The
 example `crates/rdra-ish-core/examples/lifecycle_measure.rs` prints the size of each
@@ -603,7 +605,7 @@ warning, as do Enum columns without a state model. For example, `untriggered_set
 
 ```
 $ rdra-ish check samples/formal-verification/unwitnessed_state.rdra
-bounds: 1 instance per entity, Int 0..5; 65536 states per cone; entities a check does not read are unbounded
+bounds: 1 instance per entity, Int 0..5; no state cap per cone, memory 4GiB; entities a check does not read are unbounded
 error[Witness_Order_status_refunded]: state Order.status = refunded has no reachability witness: no sequence of use cases from the start reaches it
   state model: Order.status, entered by Refund (shipped -> refunded)   skills/rdra-ish-verify/samples/unwitnessed_state.rdra:31:1
 ```
@@ -692,7 +694,7 @@ instance stays stuck in, as `NeverRuns` reads them (see
 
 ```
 $ rdra-ish check samples/formal-verification/deadlock.rdra
-bounds: 1 instance per entity, Int 0..5; 65536 states per cone; entities a check does not read are unbounded
+bounds: 1 instance per entity, Int 0..5; no state cap per cone, memory 4GiB; entities a check does not read are unbounded
 error[Deadlock_Order_status_paid]: deadlock: Order#1 stays at status = paid forever, and paid is not an end state
   leaves paid: Ship (paid -> shipped)   skills/rdra-ish-verify/samples/deadlock.rdra:29:1
     guard: condition Packed             skills/rdra-ish-verify/samples/deadlock.rdra:33:1
@@ -759,7 +761,7 @@ Entity: Order (注文)
 
 `states` and `check` print the `bounds:` line on stderr, and `verify` prints it on stdout. One
 type, `BoundsLine`, renders all three. The pattern cap shows in the `PatternCapReached` message;
-the line shows the state cap (`--max-states`).
+the line shows the state cap (`--max-states`) or `no state cap` and the memory limit.
 
 ---
 
@@ -897,7 +899,7 @@ these names, and the `// expect` headers of the samples list the names of the er
 | `FairOnInertUseCase { property, usecase }` | `FairOnInertUseCase_<E>_<property>_<usecase>` | error | A property's `.fair(...)` names a use case with no action, so its fairness constrains no step. |
 | `PatternCapReached { cap, bound }` | `PatternCapReached_<E>` | error | An entity view exceeded `--max-patterns`. Raise the flag or narrow `--buc`. |
 | `StateCapReached { cap, growth }` | `StateCapReached_<E>` | error | A cone exceeded `--max-states`. The message names the variables the reached states vary in and the use cases that reached the most of them. Raise the flag, narrow `--entity` or `--buc`, or drop the guard that pulls another entity into the cone. |
-| `MemoryCapReached { limit, states, growth, .. }` | `MemoryCapReached_<E>` | error | A cone's states outgrew the [memory limit](./cli-reference.md#memory-limit) (`--memory`, default `4GiB`). The message names the limit, the states reached, what they vary in, and how to raise the limit. Raise it, or narrow the cone as for `StateCapReached`. |
+| `MemoryCapReached { limit, states, growth, held, .. }` | `MemoryCapReached_<E>` | error | A cone's states outgrew the [memory limit](./cli-reference.md#memory-limit) (`--memory`, default `4GiB`). The message names the limit, the states reached, what they vary in, the bytes each state took, and, when the cone's variables bound its states, an estimate of the memory to finish the cone (`at least about 12GiB`, for the cone alone) and the size to give `--memory`. Raise it, or narrow the cone as for `StateCapReached`. |
 
 ---
 

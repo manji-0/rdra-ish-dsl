@@ -2,6 +2,7 @@
 
 use std::fmt;
 
+use super::explore::Held;
 use super::lasso::Loop;
 use super::trace::{Inst, Trace};
 use super::types::{ActionOrigin, GuardWhy, InvText, LtlKind, ModelRef, ParamRole, Site};
@@ -196,12 +197,13 @@ pub enum StateDiag {
     /// names what the reached states vary in.
     StateCapReached { cap: usize, growth: CapGrowth },
     /// The run's state store reached the memory limit at `states` states; exploration
-    /// stopped. `raise` says how to raise the limit.
+    /// stopped. `raise` says how to raise the limit; `held` says what the store took.
     MemoryCapReached {
         limit: MemorySize,
         raise: &'static str,
         states: usize,
         growth: CapGrowth,
+        held: Held,
     },
     /// The run passed its deadline (`Caps::deadline`) at `states` states; exploration stopped.
     TimeBudgetReached { states: usize },

@@ -330,6 +330,7 @@ impl<'t> Bfs<'t> {
                         raise: pool.raise(),
                         states: self.states.len(),
                         growth: self.growth(),
+                        held: self.held(bytes),
                     },
                 });
                 return false;

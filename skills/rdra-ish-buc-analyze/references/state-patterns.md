@@ -52,7 +52,7 @@ From the bundled sample of skill `rdra-ish-verify`:
 
 ```text
 $ rdra-ish states ../rdra-ish-verify/samples/order.rdra
-bounds: 1 instance per entity, Int 0..5; 65536 states per cone; entities a check does not read are unbounded
+bounds: 1 instance per entity, Int 0..5; no state cap per cone, memory 4GiB; entities a check does not read are unbounded
 Entity: Order (注文)
   axes: status[pending|paid|shipped|delivered|cancelled], delivered_at[null|present]
 
@@ -83,7 +83,7 @@ sites of the model elements involved:
 
 ```text
 $ rdra-ish check ../rdra-ish-verify/samples/unwitnessed_state.rdra
-bounds: 1 instance per entity, Int 0..5; 65536 states per cone; entities a check does not read are unbounded
+bounds: 1 instance per entity, Int 0..5; no state cap per cone, memory 4GiB; entities a check does not read are unbounded
 error[Witness_Order_status_refunded]: state Order.status = refunded has no reachability witness: no sequence of use cases from the start reaches it
   state model: Order.status, entered by Refund (shipped -> refunded)   ../rdra-ish-verify/samples/unwitnessed_state.rdra:31:1
 error[Deadlock_Order_status_shipped]: deadlock: Order#1 stays at status = shipped forever, and shipped is not an end state
@@ -114,7 +114,7 @@ under it the values that step changed.
 | Enum variants reported unreachable that an actor simply chooses (payment method, channel) | The column is an attribute, not a lifecycle | Type it by a `variation`; `lint` `enum-attribute` finds these |
 | Unexpected terminal pattern | Missing exit use case | Add a transition or effect, or mark the end state as intentional with `@end(<v>)` on the column |
 | Too many combinations | Effects are too broad | Make `sets` more precise or add rules |
-| `PatternCapReached` / `StateCapReached` error | The exploration stopped at a cap, so no rule verdict is sound | Raise `--max-patterns` or `--max-states` on `check` or `states`, or narrow with `--entity` or `--buc`. The `StateCapReached` message names the columns the cone varies in and the use cases that reached the most states; a column of another entity there came in through a guard |
+| `PatternCapReached` / `StateCapReached` / `MemoryCapReached` error | The exploration stopped at a cap or the memory limit (`check` has no state cap unless `--max-states` is given), so no rule verdict is sound | Raise `--max-patterns`, `--max-states`, or `--memory` (a `MemoryCapReached` message estimates what the cone needs) on `check` or `states`, or narrow with `--entity` or `--buc`. The `StateCapReached` message names the columns the cone varies in and the use cases that reached the most states; a column of another entity there came in through a guard |
 | `not checked:` block | A scope or a cap left targets or findings undecided | Report them as not checked, never as passed |
 | `UnbindableScope` | `.along(...)` names entities that no `relate` binds | Error. Declare the `relate`, or drop `.along` for a rule over every pair |
 | `AmbiguousOwnerLink` | Two keys join a pair that a `.along`, a `.has/.none`, a `holds` body, or a copy joins | Error. Name one with `.role(role)` after that call |

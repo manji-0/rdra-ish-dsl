@@ -1130,16 +1130,19 @@ gaps.
   `--memory`; `verify --max-states <N>` caps every BFS run, to bound the time. The
   whole-model run of TLC under `--with-tlc` keeps its own cap of 2,097,152 distinct states
   unless `--max-states` is given.
-- **`check` stops at 65,536 states per cone at one instance, and at 2^20 at two.** A cone past the cap is the
-  `StateCapReached_<E>` error, so `check` fails rather than passing on part of the cone.
-  See it: the error, whose message names the variables the reached states vary in. What
-  you can do: raise the cap with `--max-states`, or narrow the cone by moving a guard that
-  reads another entity.
-- **A cone stops at the memory limit too.** `check` and `states` hold at most `4GiB` of
-  states, `verify`'s BFS half of `16GiB`; `--memory` or `memory` in `rdra.toml` changes
-  either. A cone that reaches it stops as at the state cap: `MemoryCapReached_<E>` in
-  `check`, and in `verify` its findings under `not checked:`, named `stopped at the memory
-  limit`. What you can do: raise the limit, or narrow the cone as for the state cap.
+- **`check` has no state cap, and a cone stops at the memory limit.** `check` and `states`
+  hold at most `4GiB` of states, `verify`'s BFS half of `16GiB`; `--memory` or `memory` in
+  `rdra.toml` changes either. `--max-states <N>` adds a state cap, and a cone past it is the
+  `StateCapReached_<E>` error, so `check` fails rather than passing on part of the cone. A
+  cone that reaches the memory limit stops the same way: `MemoryCapReached_<E>` in `check`,
+  and in `verify` its findings under `not checked:`, named `stopped at the memory limit`. The
+  `check` message gives the states the cone held and the bytes each took, and, when the cone's
+  variables bound its states, an estimate of the memory to finish it (`at least about
+  12GiB`, for the cone alone, from the edges per state seen so far) and the `--memory` to give. The
+  bound is the product of the variables' domains, so on a large cone it is loose: the message
+  then says it is over `1TiB` and suggests narrowing. See it: the error, whose message names
+  the variables the reached states vary in. What you can do: raise `--memory`, or narrow the
+  cone by moving a guard that reads another entity.
 - **Int columns range over `0..5`, and `now` is a bounded clock.** Every Int, Money,
   Decimal, Date, and DateTime column takes values in `IntRange`. `now` starts in that range
   and a `Tick` action raises it to the top, so a run never sees a later time. See it: the

@@ -62,8 +62,8 @@ fn a_cone_past_the_memory_limit_stops_as_at_the_state_cap() {
     );
     assert!(
         stderr.contains(
-            "raise it with --memory or `memory` under [check] in rdra.toml, or narrow with \
-             --entity or --buc"
+            "raise it to 1MiB or more with --memory or `memory` under [check] in rdra.toml, or \
+             narrow with --entity or --buc"
         ),
         "{stderr}"
     );
@@ -85,6 +85,60 @@ fn a_cone_past_the_memory_limit_stops_as_at_the_state_cap() {
             String::from_utf8_lossy(&out.stderr)
         );
     }
+}
+
+/// A run that stops at the memory limit says what it held, and, when the cone's variables
+/// bound its states, what finishing needs and what to give `--memory`. `check` has no state
+/// cap, so the bounds line says so and `--max-states` still caps.
+#[test]
+fn a_run_at_the_memory_limit_estimates_what_finishing_needs() {
+    let out = run(&repo(), &["check", "--memory", "1KiB", ORDER]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.starts_with(
+            "bounds: 1 instance per entity, Int 0..5; no state cap per cone, memory 1KiB;"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains(
+            "new states first reached by: CancelOrder 1, CapturePay 1, PlaceOrder 1, ShipOrder 1; \
+             held at 172 B per state; the cone's variables allow at most 30 states, so if all are reachable \
+             this cone alone needs at least about 1MiB; raise it to 1MiB or more with --memory"
+        ),
+        "{stderr}"
+    );
+    // A cone whose variables allow far more states says the bound does not help.
+    let out = run(
+        &repo(),
+        &["check", "--memory", "4MiB", "samples/insurance-claim-ops"],
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains(
+            "allow at most 386983526400 states, over 1TiB if all were reachable, so that bound \
+             does not say what finishing needs; narrow with --entity or --buc"
+        ),
+        "{stderr}"
+    );
+    // The estimate is a figure `--memory` takes: the run it names completes.
+    let again = run(&repo(), &["check", "--memory", "1MiB", ORDER]);
+    assert!(
+        again.status.success(),
+        "{}",
+        String::from_utf8_lossy(&again.stderr)
+    );
+
+    let out = run(
+        &repo(),
+        &["check", "--max-states", "3", "--memory", "1GiB", ORDER],
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.starts_with("bounds: 1 instance per entity, Int 0..5; 3 states per cone;"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("error[StateCapReached_Order]"), "{stderr}");
 }
 
 /// Cones explored side by side share the limit with the results of the cones before them,
