@@ -1,6 +1,6 @@
 //! The BFS itself: interning bindings, admitting states, and checking each move.
 
-use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::ops::Range;
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -11,7 +11,7 @@ use std::time::Instant;
 use crate::fasthash::FastMap;
 use crate::lifecycle::diag::{CapGrowth, Diag, StateDiag, VarSpread};
 use crate::lifecycle::expr::{State, StateSlice};
-use crate::lifecycle::types::{ActId, Domain, EntId, Value, VarKind};
+use crate::lifecycle::types::{ActId, Domain, EntId, VarKind};
 use crate::lifecycle::view::pattern_bound;
 use crate::lifecycle::TransitionSystem;
 use crate::memory::Charge;
@@ -350,16 +350,29 @@ impl<'t> Bfs<'t> {
     /// case of the edge that first reached each state.
     fn growth(&self) -> CapGrowth {
         let ts = self.ts;
+        // The values each byte of a state took, in one pass and a bit per value: a run that
+        // stops holds as many states as its memory allows, so this allocates nothing per state.
+        let mut taken = vec![[0u64; 4]; ts.width];
+        for s in &self.states {
+            for (byte, seen) in s.0.iter().zip(&mut taken) {
+                seen[usize::from(*byte / 64)] |= 1 << (byte % 64);
+            }
+        }
         let mut vars: Vec<VarSpread> = ts
             .var_ids()
             .map(|v| {
                 let decl = ts.var(v);
                 let slots = ts.slots_of(&decl.kind);
-                let reached: BTreeSet<Value> = self
-                    .states
+                let mut values = [0u64; 4];
+                for slot in 0..slots {
+                    for (all, one) in values.iter_mut().zip(taken[ts.offset(v) + slot]) {
+                        *all |= one;
+                    }
+                }
+                let reached = values
                     .iter()
-                    .flat_map(|s| (0..slots).map(move |slot| s.get(ts, v, slot)))
-                    .collect();
+                    .map(|w| w.count_ones() as usize)
+                    .sum::<usize>();
                 let (name, range) = match &decl.kind {
                     VarKind::Now => ("now".to_string(), Some("clock".to_string())),
                     VarKind::Column { entity, .. } | VarKind::Prop { entity, .. } => {
@@ -375,7 +388,7 @@ impl<'t> Bfs<'t> {
                 };
                 VarSpread {
                     name,
-                    reached: reached.len(),
+                    reached,
                     domain: decl.domain.size(ts.bounds),
                     range,
                 }

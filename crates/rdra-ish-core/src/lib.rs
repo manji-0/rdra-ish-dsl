@@ -1,6 +1,7 @@
 //! rdra-core: RDRA semantic model and validation.
 
 pub mod access;
+pub mod allocator;
 pub mod analysis;
 pub(crate) mod analysis_diag;
 pub mod business_flow;
