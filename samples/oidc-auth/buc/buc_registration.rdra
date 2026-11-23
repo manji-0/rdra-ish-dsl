@@ -1,0 +1,221 @@
+module buc.registration
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+
+buc BucClientRegistration "Discover the OP and register a client"
+  description "The RP reads the OP's metadata and keys, registers itself with its redirect URIs, authentication method, and logout endpoints, and reads its registration back. The administrator suspends a client that misbehaves and reinstates it."
+
+// OpenID Connect Discovery 1.0 §4: GET /.well-known/openid-configuration.
+usecase DiscoverProvider "Read the OP configuration"
+  description "Fetch the issuer, the endpoint URLs, the supported response types, scopes, claims, and signing algorithms."
+  postcondition "The RP knows every endpoint it will call and that the issuer matches the one it asked for (Discovery §4.3)."
+
+// Discovery 1.0 §3 jwks_uri; Core §10.1.1: the RP fetches the keys again when it meets an
+// unknown kid.
+usecase FetchJwks "Fetch the OP signing keys (JWKS)"
+  description "Fetch the JWK Set the OP signs ID Tokens with, again whenever an ID Token names a kid the RP has not cached."
+
+// OpenID Connect Dynamic Client Registration 1.0 §3.1 and §3.2.
+usecase RegisterClient "Register a client"
+  description "Send the client metadata (redirect_uris, response_types, token_endpoint_auth_method, backchannel_logout_uri, CIBA delivery mode) and receive the client_id, the secret of a confidential client, and the registration access token."
+  error "invalid_redirect_uri or invalid_client_metadata (Dynamic Client Registration §3.3)."
+
+// Dynamic Client Registration 1.0 §4.2.
+usecase ReadClientRegistration "Read the client registration"
+  description "Read the registered metadata back from the client configuration endpoint with the registration access token."
+
+// The model's assumption: the OP's own control over registered clients.
+usecase SuspendClient "Suspend a client"
+  description "Stop a client from starting new authentications and redeeming tokens, for example after its secret leaked."
+
+usecase ReinstateClient "Reinstate a client" description "Let a suspended client sign End-Users in again."
+
+screen ClientAdminScreen "Client administration"
+
+api DiscoveryApi "OpenID Provider configuration"
+  method GET
+  path "/.well-known/openid-configuration"
+  idempotency "idempotent"
+  mode sync
+
+api JwksApi "JWK Set"
+  method GET
+  path "/jwks"
+  idempotency "idempotent"
+  mode sync
+
+api RegistrationApi "Client registration endpoint"
+  method POST
+  path "/register"
+  mode sync
+  auth bearer
+
+api ClientConfigurationApi "Client configuration endpoint"
+  method GET
+  path "/register/{client_id}"
+  idempotency "idempotent"
+  mode sync
+  auth bearer
+
+api ClientAdminApi "Client administration API"
+  method PATCH
+  path "/admin/clients/{client_id}"
+  mode sync
+
+dto RegistrationRequest "Client registration request" {
+  redirect_uris: String
+  response_types: String
+  grant_types: String @null
+  token_endpoint_auth_method: String
+  backchannel_logout_uri: String @null
+  frontchannel_logout_uri: String @null
+  backchannel_token_delivery_mode: String @null
+}
+
+dto RegistrationResponse "Client information response" {
+  client_id: String
+  client_secret: String @null
+  registration_access_token: String
+  registration_client_uri: String
+}
+
+dto RegistrationError "Client registration error" {
+  error: String
+  error_description: String @null
+}
+
+request(RegistrationApi, RegistrationRequest)
+response(RegistrationApi, RegistrationResponse)
+error_response(RegistrationApi, RegistrationError)
+response(ClientConfigurationApi, RegistrationResponse)
+maps_field(RegistrationRequest.token_endpoint_auth_method, Client.auth_method)
+maps_field(RegistrationRequest.backchannel_logout_uri, Client.backchannel_logout_uri)
+maps_field(RegistrationRequest.frontchannel_logout_uri, Client.frontchannel_logout_uri)
+maps_field(RegistrationResponse.client_id, Client.client_id)
+
+performs(RelyingParty, DiscoverProvider)
+performs(RelyingParty, FetchJwks)
+performs(RelyingParty, RegisterClient)
+performs(RelyingParty, ReadClientRegistration)
+performs(OpAdministrator, SuspendClient)
+performs(OpAdministrator, ReinstateClient)
+belongs(BucClientRegistration, ClientOnboarding).by(BackChannel).by(AdminConsole)
+
+contains(BucClientRegistration, DiscoverProvider)
+contains(BucClientRegistration, FetchJwks)
+contains(BucClientRegistration, RegisterClient)
+contains(BucClientRegistration, ReadClientRegistration)
+contains(BucClientRegistration, SuspendClient)
+contains(BucClientRegistration, ReinstateClient)
+contains(OpenIdProvider, DiscoveryApi)
+contains(OpenIdProvider, JwksApi)
+contains(OpenIdProvider, RegistrationApi)
+contains(OpenIdProvider, ClientConfigurationApi)
+contains(OpenIdProvider, ClientAdminApi)
+
+// The configuration document is static metadata of the issuer; the model reads the keys it
+// lists. The RP reads nothing else from the OP's store.
+invokes(DiscoverProvider, DiscoveryApi)
+reads(DiscoveryApi, SigningKey)
+
+invokes(FetchJwks, JwksApi)
+reads(JwksApi, SigningKey)
+
+// A registration chooses its metadata once; the registration fixes the type and the method.
+invokes(RegisterClient, RegistrationApi)
+creates(RegistrationApi, Client)
+
+invokes(ReadClientRegistration, ClientConfigurationApi)
+reads(ClientConfigurationApi, Client)
+
+displays(SuspendClient, ClientAdminScreen)
+invokes(SuspendClient, ClientAdminApi)
+updates(ClientAdminApi, Client)
+transitions(SuspendClient, Client.status, active -> suspended)
+
+displays(ReinstateClient, ClientAdminScreen)
+invokes(ReinstateClient, ClientAdminApi)
+transitions(ReinstateClient, Client.status, suspended -> active)
+shows(ClientAdminScreen, Client)
+
+field ClientStatusField "Client status"
+  access readonly
+  required true
+  source system
+
+contains(ClientAdminScreen, ClientStatusField)
+maps_field(ClientStatusField, Client.status)
+
+// Access constraints. Discovery and the JWK Set are public (Discovery §4); registration
+// takes an initial access token when the OP requires one (Dynamic Client Registration §3).
+requires_medium(DiscoverProvider, BackChannel)
+requires_medium(FetchJwks, BackChannel)
+requires_permission(RegisterClient, RegistrationAccess)
+requires_medium(RegisterClient, BackChannel)
+requires_permission(RegistrationApi, RegistrationAccess)
+requires_permission(ReadClientRegistration, RegistrationAccess)
+requires_medium(ReadClientRegistration, BackChannel)
+requires_permission(ClientConfigurationApi, RegistrationAccess)
+requires_permission(SuspendClient, OpAdministration)
+requires_medium(SuspendClient, AdminConsole)
+requires_permission(ReinstateClient, OpAdministration)
+requires_medium(ReinstateClient, AdminConsole)
+requires_permission(ClientAdminApi, OpAdministration)
+
+// The RP refreshes its cache of the configuration and the keys on its own schedule;
+// registration follows the discovery, and the RP reads its registration back after it.
+event EvProviderDiscovered "The RP read the OP configuration"
+event EvClientRegistered "The client is registered"
+
+triggers(RpMetadataRefresh, DiscoverProvider)
+triggers(RpMetadataRefresh, FetchJwks)
+raises(DiscoverProvider, EvProviderDiscovered)
+triggers(EvProviderDiscovered, RegisterClient)
+raises(RegisterClient, EvClientRegistered)
+triggers(EvClientRegistered, ReadClientRegistration)
+
+// Business flow
+flow RegistrationFlow "Client onboarding"
+step DiscoverStep "Discover the OP"
+step RegisterStep "Register the client"
+step VerifyRegistrationStep "Read the registration back"
+step SuspendStep "Suspend or reinstate the client"
+
+contains(BucClientRegistration, RegistrationFlow)
+contains(RegistrationFlow, DiscoverStep)
+contains(RegistrationFlow, RegisterStep)
+contains(RegistrationFlow, VerifyRegistrationStep)
+contains(RegistrationFlow, SuspendStep)
+precedes(DiscoverStep, RegisterStep)
+precedes(RegisterStep, VerifyRegistrationStep)
+excepts(VerifyRegistrationStep, SuspendStep)
+
+covers(DiscoverStep, DiscoverProvider)
+covers(DiscoverStep, FetchJwks)
+covers(DiscoverStep, RpMetadataRefresh)
+covers(DiscoverStep, EvProviderDiscovered)
+covers(RegisterStep, EvClientRegistered)
+covers(RegisterStep, RegisterClient)
+covers(VerifyRegistrationStep, ReadClientRegistration)
+covers(SuspendStep, SuspendClient)
+covers(SuspendStep, ReinstateClient)
+
+performs(RelyingParty, DiscoverStep)
+performs(RelyingParty, RegisterStep)
+performs(RelyingParty, VerifyRegistrationStep)
+performs(OpAdministrator, SuspendStep)
+
+// Requirement traceability
+requirement ReqDiscoverAndRegister "An RP configures itself from the OP's metadata and registers without manual steps"
+  priority "must"
+  source "OpenID Connect Discovery 1.0 §3, §4"
+  source "OpenID Connect Dynamic Client Registration 1.0 §3, §4"
+  stakeholder "RP developer"
+  acceptance_criteria "The configuration lists every endpoint the RP calls, the JWK Set holds every key that signs, and a registration returns a client_id and a registration access token that reads it back."
+  status "accepted"
+
+motivates(ReqDiscoverAndRegister, BucClientRegistration)
+achieves(ReqDiscoverAndRegister, OpenInterop)

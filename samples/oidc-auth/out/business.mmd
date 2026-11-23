@@ -1,0 +1,41 @@
+%% rdra-ish diagram=business scope=whole model=samples/oidc-auth
+%% kinds: business buc
+%% omitted: actor requirement flow step timer medium permission usecase screen event api entity condition
+flowchart LR
+  subgraph business__ClientOnboarding["Client and key management"]
+    %% desc business__ClientOnboarding: Publishing the OP's metadata and keys, registering clients, and keeping the keys and the registrations current.
+    buc__BucClientRegistration["Discover the OP and register a client"]:::buc
+    %% desc buc__BucClientRegistration: The RP reads the OP's metadata and keys, registers itself with its redirect URIs, authentication method, and logout endpoints, and reads its registration back. The administrator suspends a client that misbehaves and reinstates it.
+    buc__BucSigningKeys["Rotate the ID Token signing keys"]:::buc
+    %% desc buc__BucSigningKeys: The OP publishes the next key in its JWK Set before it signs with it, switches signing to it, and retires the old key once the ID Tokens it signed have expired. RPs that meet an unknown kid fetch the JWK Set again.
+  end
+  subgraph business__Identity["Federated sign-in"]
+    %% desc business__Identity: The OP authenticates End-Users for the clients registered with it, and hands each client an ID Token and the tokens to reach the End-User's resources.
+    buc__BucBackchannelSignIn["Sign the End-User in from another device (CIBA)"]:::buc
+    %% desc buc__BucBackchannelSignIn: A client that is not where the End-User is (a call-center agent's tool, a point of sale) asks the OP to authenticate the End-User it names with a login_hint. The OP reaches the End-User's authentication device out of band; the End-User approves or denies there. The client then receives the tokens by polling the token endpoint, by a ping that tells it to fetch them, or by a push of the tokens to its notification endpoint.
+    buc__BucBrowserSignIn["Sign the End-User in through the browser"]:::buc
+    %% desc buc__BucBrowserSignIn: The RP sends the End-User's browser to the authorization endpoint with a response_type, a prompt, PKCE, a nonce, and acr_values. The OP authenticates the End-User with a login page or the existing session, steps the authentication up when a second factor is asked for, obtains or reuses the consent, and answers on the redirect URI with the code, the tokens, or an error.
+    buc__BucCodeExchange["Redeem the code and read the End-User's claims"]:::buc
+    %% desc buc__BucCodeExchange: The RP redeems the authorization code at the token endpoint with its client authentication or the PKCE code_verifier, receives the ID Token, the access token, and the refresh token, validates the ID Token, and reads the End-User's claims from UserInfo. A code presented a second time revokes everything issued from it; a code nobody redeems expires.
+    buc__BucDeviceSignIn["Sign in on an input-constrained device"]:::buc
+    %% desc buc__BucDeviceSignIn: A device without a browser or a keyboard (a TV, a CLI) asks the OP for a device code and a user code, shows the user code and the verification URI, and polls the token endpoint. The End-User opens the URI on a phone or a computer, signs in, and approves or denies the device.
+  end
+  subgraph business__SessionControl["Session and token control"]
+    %% desc business__SessionControl: Refreshing, revoking, and inspecting tokens, and ending the End-User's sessions at the OP and at every RP.
+    buc__BucLogout["End the End-User's session at the OP and at every RP"]:::buc
+    %% desc buc__BucLogout: The End-User logs out at an RP, which sends the browser to the OP's end_session_endpoint, or logs out at the OP itself, or the OP session expires. The OP ends its session and tells every RP the session signed in to: by a Logout Token posted to each RP's backchannel_logout_uri, and by iframes that load each RP's frontchannel_logout_uri. An RP that watches the session through the check_session_iframe sees it change.
+    buc__BucTokenMaintenance["Refresh, revoke, and inspect tokens"]:::buc
+    %% desc buc__BucTokenMaintenance: The RP trades the refresh token for a new access token and a rotated refresh token; an old refresh token presented again revokes the family. The RP revokes a token it no longer needs, the resource server asks whether a token is active, and the End-User withdraws a consent. Expired tokens lapse.
+  end
+  buc__BucBrowserSignIn -->|An access token is delivered in the fragment| buc__BucCodeExchange
+  %% derived buc__BucBrowserSignIn -> buc__BucCodeExchange via event__EvFrontChannelAccessToken
+  buc__BucBrowserSignIn -->|An access token is delivered in the fragment| buc__BucTokenMaintenance
+  %% derived buc__BucBrowserSignIn -> buc__BucTokenMaintenance via event__EvFrontChannelAccessToken
+  buc__BucBrowserSignIn -->|An authorization code is delivered to the RP| buc__BucCodeExchange
+  %% derived buc__BucBrowserSignIn -> buc__BucCodeExchange via event__EvCodeIssued
+  buc__BucCodeExchange -->|A grant is revoked| buc__BucTokenMaintenance
+  %% derived buc__BucCodeExchange -> buc__BucTokenMaintenance via event__EvGrantRevoked
+  buc__BucCodeExchange -->|The token endpoint issued the tokens| buc__BucTokenMaintenance
+  %% derived buc__BucCodeExchange -> buc__BucTokenMaintenance via event__EvTokensIssued
+  classDef business fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;

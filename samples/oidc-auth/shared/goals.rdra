@@ -1,0 +1,55 @@
+module shared.goals
+
+// The goals state why the requirements exist. Every metric, baseline, and target is the
+// model's assumption; no specification gives the numbers.
+
+goal SecureSignIn "Sign End-Users in without leaking a code or a token to anyone else"
+  description "A stolen or replayed authorization code, a token sent to a client that did not prove itself, or a refresh token used by an attacker lets someone else act as the End-User."
+  metric "Incidents in which a code or a token was used by a party it was not issued to"
+  baseline "4 per year"
+  target "0 per year"
+  window "yearly"
+
+goal SingleSignOn "Let the End-User sign in once for every RP"
+  description "Every login page shown again is friction; every request that may show no page must still get an answer."
+  metric "Share of authentication requests answered from an existing OP session"
+  baseline "55%"
+  target "75%"
+  window "monthly"
+
+goal ReliableLogout "End the End-User's session everywhere when they log out"
+  description "An RP that keeps its own session after the End-User logged out at the OP leaves the End-User signed in on a shared device."
+  metric "Share of Logout Tokens acknowledged by the RP"
+  baseline "92%"
+  target "99%"
+  window "monthly"
+
+goal OpenInterop "Work with any conforming RP"
+  description "RPs are built with many libraries; the OP must answer every flow the specifications define the way they define it."
+  metric "OpenID Foundation conformance test plans the OP passes"
+  baseline "Basic, Implicit, Hybrid"
+  target "Basic, Implicit, Hybrid, Config, Dynamic, Logout, CIBA"
+  window "per release"
+
+// ── Non-goals ────────────────────────────────────────────
+
+// RFC 6749 §4.4: the client acts on its own behalf; no End-User is authenticated.
+requirement ReqNoClientCredentials "The Client Credentials grant is out of scope"
+  status "out-of-scope"
+  rationale "It authenticates a client, not an End-User, and issues no ID Token; it is OAuth 2.0, not an OpenID Connect authentication flow."
+
+// RFC 9700 §2.4: "The resource owner password credentials grant MUST NOT be used."
+requirement ReqNoPasswordGrant "The Resource Owner Password Credentials grant is out of scope"
+  status "out-of-scope"
+  rationale "The client would see the End-User's password, and RFC 9700 forbids the grant."
+
+// OpenID Connect Self-Issued OpenID Provider v2.
+requirement ReqNoSelfIssuedOp "Self-Issued OPs are out of scope"
+  status "out-of-scope"
+  rationale "The model is one OP that issues ID Tokens; a self-issued OP runs on the End-User's device and has no OP session, consent store, or token endpoint of this OP."
+
+// Core §6 request objects, RFC 9126 PAR, and Core §5.5 the claims parameter change how the
+// request travels and what it asks for, not the flow.
+requirement ReqRequestEncodingAsData "Request objects, PAR, and the claims parameter are carried as request parameters"
+  status "out-of-scope"
+  rationale "A request passed by value (request), by reference (request_uri), or pushed first (PAR) reaches the same validation and the same flow; the model keeps the parameters it reasons about (response_type, prompt, acr_values, PKCE, nonce) and does not tell the encodings apart."

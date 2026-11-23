@@ -1,0 +1,753 @@
+module buc.signin
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+
+buc BucBrowserSignIn "Sign the End-User in through the browser"
+  description "The RP sends the End-User's browser to the authorization endpoint with a response_type, a prompt, PKCE, a nonce, and acr_values. The OP authenticates the End-User with a login page or the existing session, steps the authentication up when a second factor is asked for, obtains or reuses the consent, and answers on the redirect URI with the code, the tokens, or an error."
+
+// ── The request ──────────────────────────────────────────
+
+// Core §3.1.2.1. The nonce is REQUIRED when an ID Token comes back from the authorization
+// endpoint (§3.2.2.1, §3.3.2.11) and OPTIONAL in the code flow.
+usecase RequestAuthentication "Send the authentication request"
+  description "Redirect the End-User to the authorization endpoint with scope openid, client_id, redirect_uri, response_type, state, nonce, prompt, max_age, acr_values, and the PKCE code_challenge."
+  precondition "The client is registered and active, and the redirect_uri is one it registered."
+
+// Core §4: "Sometimes, the RP is not the entity that initiates the Authentication Request.
+// The Authentication Request can be initiated by another party, such as an OP." The OP's
+// application launcher sends the browser to the RP's initiate_login_uri with iss, and the RP
+// then sends its own authentication request.
+usecase InitiateThirdPartyLogin "Start a sign-in from the OP (third-party initiated login)"
+  description "The End-User picks an application on the OP's launcher page; the OP redirects to the client's initiate_login_uri with iss, login_hint, and target_link_uri."
+
+// Core §3.1.2.2: the OP validates the request before it authenticates the End-User.
+usecase ValidateRequest "Validate the request"
+  description "Check the client, the redirect_uri, the response_type the client registered, and that a public client asking for a code sends an S256 code challenge."
+
+// RFC 6749 §4.1.2.1 invalid_request; RFC 9700 §2.1.1: public clients MUST use PKCE; RFC 7636
+// §4.2: S256 is mandatory to implement and plain is for clients that cannot do S256.
+usecase RejectInvalidRequest "Reject an invalid request"
+  description "Answer invalid_request on the redirect URI: a public client asked for a code without an S256 code challenge."
+
+// ── Authentication ───────────────────────────────────────
+
+// Core §3.1.2.3: the OP authenticates the End-User. The model splits the login page in two:
+// the login itself starts an OP session whether or not an RP's request led there (the
+// End-User may also open the OP's account page first), and the request then takes that
+// fresh session. So the session's life does not depend on any one request (README).
+usecase LogIn "Log in at the OP"
+  description "Enter the account identifier and the password on the OP's login page and start an OP session for the user agent."
+  error "The credential is wrong: the page is shown again."
+
+// Core §3.1.2.1 acr_values; §2 acr and amr.
+usecase StepUpAuthentication "Add a second factor to the session"
+  description "Enter the second factor, because a request asks for a multi-factor class or the End-User chose to, and raise the OP session to multi-factor."
+
+// Core §3.1.2.3: the OP MUST authenticate the End-User again when prompt=login or max_age has
+// passed; the request then takes the session of a login made on its own page.
+usecase AuthenticateEndUser "Authenticate for the request at the login page"
+  description "Show the login page for this request and take the session the End-User logs in to, at the level the request asks for."
+  precondition "prompt is not none: the OP may show a page."
+
+// Core §3.1.2.3: an existing session serves when no prompt or max_age forces a login.
+usecase ReuseSession "Reuse the OP session (single sign-on)"
+  description "Recognize the End-User from the OP session cookie and skip the login page. The session must still be authenticated, and multi-factor when the request asks for it."
+  precondition "prompt is not login or select_account."
+  guard "auth_time is within max_age when the request carries one."
+
+// Core §3.1.2.1 prompt=select_account.
+usecase SelectAccount "Select an account"
+  description "Show the accounts the user agent is signed in to and let the End-User pick the one to use."
+
+// ── Consent ──────────────────────────────────────────────
+
+// Core §3.1.2.4: the OP obtains the authorization decision, through an interactive dialogue
+// or by establishing consent by other means.
+usecase GrantConsent "Consent to the client"
+  description "Show the client, the scopes, and the claims requested, and record the End-User's consent."
+
+usecase ReuseConsent "Reuse the recorded consent"
+  description "Skip the consent page when the End-User has already consented to this client and prompt is not consent."
+
+// Core §3.1.2.6 and RFC 6749 §4.1.2.1 access_denied.
+// Core §3.1.2.4: consent may also be established "via previous administrative consent".
+usecase RecordAdministrativeConsent "Record administrative consent"
+  description "The administrator consents for an End-User to a client the organization trusts, so the End-User sees no consent page for it."
+
+usecase DenyConsent "Decline the client"
+  description "The End-User declines; the OP answers access_denied on the redirect URI."
+
+// ── Errors of a request that may show no page ────────────
+
+// Core §3.1.2.6. With prompt=none the OP "MUST NOT display any authentication or consent
+// user interface pages" (§3.1.2.1); it answers with one of these errors instead.
+usecase ReturnLoginRequired "Answer login_required"
+  description "prompt=none and the OP cannot authenticate the End-User without a login page."
+
+usecase ReturnAccountSelectionRequired "Answer account_selection_required"
+  description "prompt=none and the user agent holds several sessions the End-User must choose among."
+
+usecase ReturnInteractionRequired "Answer interaction_required"
+  description "prompt=none and the request asks for a multi-factor class the session does not have."
+
+usecase ReturnConsentRequired "Answer consent_required"
+  description "prompt=none, the End-User is authenticated, and no recorded consent covers the request."
+
+// ── The response, one use case per response_type ─────────
+
+// Core §3.1.2.5: code and state on the redirect URI.
+usecase IssueCodeResponse "Respond with a code (Authorization Code Flow)"
+  description "Redirect to the redirect_uri with the authorization code and state in the query."
+
+// Core §3.2.2.5: the ID Token in the fragment, no access token.
+usecase IssueIdTokenResponse "Respond with an ID Token (Implicit Flow, id_token)"
+  description "Redirect with the ID Token and state in the fragment."
+
+// Core §3.2.2.5: the ID Token with at_hash and the access token in the fragment.
+usecase IssueImplicitTokenResponse "Respond with an ID Token and an access token (Implicit Flow, id_token token)"
+  description "Redirect with the ID Token, the access token, token_type, expires_in, and state in the fragment."
+
+// Core §3.3.2.5: the code and the ID Token with c_hash.
+usecase IssueHybridIdTokenResponse "Respond with a code and an ID Token (Hybrid Flow, code id_token)"
+  description "Redirect with the code, the ID Token carrying c_hash, and state in the fragment."
+
+// Core §3.3.2.5: the code and the access token.
+usecase IssueHybridTokenResponse "Respond with a code and an access token (Hybrid Flow, code token)"
+  description "Redirect with the code, the access token, and state in the fragment."
+
+// Core §3.3.2.5: all three.
+usecase IssueHybridFullResponse "Respond with a code, an ID Token, and an access token (Hybrid Flow, code id_token token)"
+  description "Redirect with the code, the ID Token carrying c_hash and at_hash, the access token, and state in the fragment."
+
+event EvRequestReceived "The authentication request arrived"
+event EvLoginInitiated "The OP sends the browser to the client's initiate_login_uri"
+event EvRequestValidated "The authentication request is valid"
+event EvEndUserAuthenticated "The End-User is authenticated for the request"
+
+// The model's assumption: the OP drops the interaction when the End-User walks away; the RP
+// receives no response.
+usecase AbandonRequest "Drop an abandoned request"
+  description "Discard a request whose End-User did not finish the login or the consent within the interaction lifetime."
+
+// The model raises one event when the request is authorized, and the response_type picks the
+// use case that answers.
+event EvRequestAuthorized "The authentication request is authorized"
+
+// The RP's page with the "Sign in with the OP" button. The End-User clicks it; the RP
+// builds the request.
+screen RpSignInScreen "RP sign-in page"
+screen AppLauncherScreen "OP application launcher"
+screen LoginScreen "Login page"
+screen SecondFactorScreen "Second factor page"
+screen AccountChooserScreen "Account chooser"
+screen ConsentScreen "Consent page"
+screen ConsentAdminScreen "Administrative consents"
+
+api AuthorizationApi "Authorization endpoint"
+  method GET
+  path "/authorize"
+  mode sync
+
+// The OP's internal steps between the arrival of the request and the redirect back. They are
+// not endpoints an RP calls; the model draws them as APIs so that each writes its own rows.
+api RequestValidationApi "Request validation"
+
+api LoginApi "Login form"
+  method POST
+  path "/login"
+  mode sync
+
+api LoginResumeApi "Resume the request after the login"
+
+api SessionLookupApi "OP session lookup"
+
+api StepUpApi "Second factor form"
+  method POST
+  path "/login/mfa"
+  mode sync
+
+api ConsentApi "Consent form"
+  method POST
+  path "/consent"
+  mode sync
+
+api ConsentLookupApi "Recorded consent lookup"
+
+api ConsentAdminApi "Administrative consent"
+  method POST
+  path "/admin/consents"
+  mode sync
+
+api ErrorResponseApi "Authorization error response (redirect)"
+
+dto AuthenticationRequest "Authentication request parameters" {
+  scope: String
+  response_type: String
+  client_id: String
+  redirect_uri: String
+  state: String @null
+  nonce: String @null
+  prompt: String @null
+  max_age: Int @null
+  acr_values: String @null
+  code_challenge: String @null
+  code_challenge_method: String @null
+}
+
+dto AuthenticationResponse "Authentication response parameters" {
+  code: String @null
+  id_token: String @null
+  access_token: String @null
+  token_type: String @null
+  expires_in: Int @null
+  state: String @null
+}
+
+dto AuthenticationErrorResponse "Authentication error response" {
+  error: String
+  error_description: String @null
+  state: String @null
+}
+
+request(AuthorizationApi, AuthenticationRequest)
+response(AuthorizationApi, AuthenticationResponse)
+error_response(AuthorizationApi, AuthenticationErrorResponse)
+response(ErrorResponseApi, AuthenticationErrorResponse)
+maps_field(AuthenticationRequest.response_type, AuthorizationRequest.response_type)
+maps_field(AuthenticationRequest.prompt, Interaction.prompt)
+maps_field(AuthenticationRequest.nonce, AuthorizationRequest.nonce)
+maps_field(AuthenticationRequest.acr_values, Interaction.acr)
+maps_field(AuthenticationRequest.code_challenge_method, AuthorizationRequest.pkce)
+
+performs(EndUser, InitiateThirdPartyLogin)
+performs(RelyingParty, RequestAuthentication)
+performs(EndUser, LogIn)
+performs(EndUser, AuthenticateEndUser)
+performs(EndUser, StepUpAuthentication)
+performs(EndUser, SelectAccount)
+performs(EndUser, GrantConsent)
+performs(EndUser, DenyConsent)
+performs(OpAdministrator, RecordAdministrativeConsent)
+belongs(BucBrowserSignIn, Identity).by(UserAgent).by(AdminConsole)
+
+contains(BucBrowserSignIn, InitiateThirdPartyLogin)
+contains(BucBrowserSignIn, RequestAuthentication)
+contains(BucBrowserSignIn, ValidateRequest)
+contains(BucBrowserSignIn, RejectInvalidRequest)
+contains(BucBrowserSignIn, LogIn)
+contains(BucBrowserSignIn, AuthenticateEndUser)
+contains(BucBrowserSignIn, ReuseSession)
+contains(BucBrowserSignIn, StepUpAuthentication)
+contains(BucBrowserSignIn, SelectAccount)
+contains(BucBrowserSignIn, GrantConsent)
+contains(BucBrowserSignIn, ReuseConsent)
+contains(BucBrowserSignIn, RecordAdministrativeConsent)
+contains(BucBrowserSignIn, DenyConsent)
+contains(BucBrowserSignIn, AbandonRequest)
+contains(BucBrowserSignIn, ReturnLoginRequired)
+contains(BucBrowserSignIn, ReturnAccountSelectionRequired)
+contains(BucBrowserSignIn, ReturnInteractionRequired)
+contains(BucBrowserSignIn, ReturnConsentRequired)
+contains(BucBrowserSignIn, IssueCodeResponse)
+contains(BucBrowserSignIn, IssueIdTokenResponse)
+contains(BucBrowserSignIn, IssueImplicitTokenResponse)
+contains(BucBrowserSignIn, IssueHybridIdTokenResponse)
+contains(BucBrowserSignIn, IssueHybridTokenResponse)
+contains(BucBrowserSignIn, IssueHybridFullResponse)
+contains(OpenIdProvider, AuthorizationApi)
+contains(OpenIdProvider, RequestValidationApi)
+contains(OpenIdProvider, LoginApi)
+contains(OpenIdProvider, LoginResumeApi)
+contains(OpenIdProvider, SessionLookupApi)
+contains(OpenIdProvider, ConsentAdminApi)
+contains(OpenIdProvider, StepUpApi)
+contains(OpenIdProvider, ConsentApi)
+contains(OpenIdProvider, ConsentLookupApi)
+contains(OpenIdProvider, ErrorResponseApi)
+
+// ── The request ──────────────────────────────────────────
+
+// The launcher reads the registered clients; the RP's initiate_login_uri receives the browser.
+displays(InitiateThirdPartyLogin, AppLauncherScreen)
+reads(InitiateThirdPartyLogin, Client)
+raises(InitiateThirdPartyLogin, EvLoginInitiated)
+triggers(EvLoginInitiated, RpCallbackEndpoint)
+shows(AppLauncherScreen, Client)
+navigates(AppLauncherScreen, RpSignInScreen).via(InitiateThirdPartyLogin)
+
+displays(RequestAuthentication, RpSignInScreen)
+invokes(RequestAuthentication, AuthorizationApi)
+creates(AuthorizationApi, AuthorizationRequest)
+creates(AuthorizationApi, Interaction)
+reads(AuthorizationApi, Client)
+raises(RequestAuthentication, EvRequestReceived)
+
+// The client's status is not a guard here: a suspended client is checked in the device and
+// CIBA flows only, because reading it here doubles the states of the browser flow (README).
+
+// The RP sends a nonce whenever an ID Token comes back from the authorization endpoint.
+condition FrontChannelIdToken "An ID Token comes back from the authorization endpoint"
+holds(FrontChannelIdToken, AuthorizationRequest.response_type in (id_token, id_token_token, code_id_token, code_id_token_token))
+sets(RequestAuthentication, AuthorizationRequest.nonce == present).when(FrontChannelIdToken)
+
+// In the code flow the nonce is optional; the model's RP sends none there, so that a rule can
+// tell the two apart.
+condition NoFrontChannelIdToken "No ID Token comes back from the authorization endpoint"
+holds(NoFrontChannelIdToken, AuthorizationRequest.response_type in (code, code_token))
+sets(RequestAuthentication, AuthorizationRequest.nonce == null).when(NoFrontChannelIdToken)
+
+// A request passes when no code is issued, when a confidential client authenticates at the
+// token endpoint, or when the challenge is S256: three arms of one move, any of which serves.
+condition NoCodeIssued "No code is issued (Implicit Flow)"
+holds(NoCodeIssued, AuthorizationRequest.response_type in (id_token, id_token_token))
+
+condition ConfidentialClient "The client is confidential"
+holds(ConfidentialClient, Client.client_type == confidential).along(AuthorizationRequest, Client)
+
+condition S256Challenge "The request carries an S256 code challenge"
+holds(S256Challenge, AuthorizationRequest.pkce == s256)
+
+triggers(EvRequestReceived, ValidateRequest)
+invokes(ValidateRequest, RequestValidationApi)
+updates(RequestValidationApi, AuthorizationRequest)
+reads(RequestValidationApi, Client)
+transitions(ValidateRequest, AuthorizationRequest.status, received -> validated).when(NoCodeIssued)
+transitions(ValidateRequest, AuthorizationRequest.status, received -> validated).when(ConfidentialClient)
+transitions(ValidateRequest, AuthorizationRequest.status, received -> validated).when(S256Challenge)
+raises(ValidateRequest, EvRequestValidated)
+
+condition PublicClientWithoutS256 "A public client asks for a code without an S256 challenge"
+holds(PublicClientWithoutS256, AuthorizationRequest.pkce in (absent, plain), AuthorizationRequest.response_type in (code, code_id_token, code_token, code_id_token_token), Client.client_type == public).along(AuthorizationRequest, Client)
+
+triggers(EvRequestReceived, RejectInvalidRequest)
+invokes(RejectInvalidRequest, ErrorResponseApi)
+updates(ErrorResponseApi, AuthorizationRequest)
+deletes(ErrorResponseApi, Interaction)
+transitions(RejectInvalidRequest, AuthorizationRequest.status, received -> failed)
+applies_to(PublicClientWithoutS256, RejectInvalidRequest)
+
+// ── Authentication ───────────────────────────────────────
+
+condition RequestValidated "The request is valid and lets the OP show a page"
+holds(RequestValidated, AuthorizationRequest.status == validated, Interaction.prompt not in (none))
+
+displays(LogIn, LoginScreen)
+invokes(LogIn, LoginApi)
+creates(LoginApi, OpSession)
+reads(LoginApi, UserAccount)
+
+displays(StepUpAuthentication, SecondFactorScreen)
+invokes(StepUpAuthentication, StepUpApi)
+updates(StepUpApi, OpSession)
+transitions(StepUpAuthentication, OpSession.auth_level, single_factor -> multi_factor)
+
+condition SessionAuthenticated "The OP session is authenticated"
+holds(SessionAuthenticated, OpSession.status == authenticated)
+applies_to(SessionAuthenticated, StepUpAuthentication)
+
+// The request takes the session at the level it asks for: a multi-factor session serves any
+// request, a single-factor one only a request that asks for no second factor.
+condition SessionCoversAcr "The OP session is authenticated with a second factor"
+holds(SessionCoversAcr, OpSession.status == authenticated, OpSession.auth_level == multi_factor)
+
+condition SingleFactorEnough "The OP session is authenticated and the request asks for no second factor"
+holds(SingleFactorEnough, OpSession.status == authenticated, Interaction.acr == any)
+
+displays(AuthenticateEndUser, LoginScreen)
+invokes(AuthenticateEndUser, LoginResumeApi)
+updates(LoginResumeApi, Interaction)
+reads(LoginResumeApi, OpSession)
+transitions(AuthenticateEndUser, Interaction.authentication, pending -> login).when(SessionCoversAcr)
+transitions(AuthenticateEndUser, Interaction.authentication, pending -> login).when(SingleFactorEnough)
+links(AuthenticateEndUser, Interaction, OpSession)
+raises(AuthenticateEndUser, EvEndUserAuthenticated)
+applies_to(RequestValidated, AuthenticateEndUser)
+
+// Single sign-on: the session serves as it is when it covers the requested level.
+condition SessionMayServe "The request is valid and no prompt forces a login or an account choice"
+holds(SessionMayServe, AuthorizationRequest.status == validated, Interaction.prompt in (unspecified, none, consent))
+
+triggers(EvRequestValidated, ReuseSession)
+raises(ReuseSession, EvEndUserAuthenticated)
+invokes(ReuseSession, SessionLookupApi)
+updates(SessionLookupApi, Interaction)
+reads(SessionLookupApi, OpSession)
+transitions(ReuseSession, Interaction.authentication, pending -> sso).when(SessionCoversAcr)
+transitions(ReuseSession, Interaction.authentication, pending -> sso).when(SingleFactorEnough)
+links(ReuseSession, Interaction, OpSession)
+applies_to(SessionMayServe, ReuseSession)
+
+condition AccountChoiceAsked "prompt=select_account on a valid request, with an authenticated session to pick"
+holds(AccountChoiceAsked, AuthorizationRequest.status == validated, Interaction.prompt == select_account, OpSession.status == authenticated)
+
+displays(SelectAccount, AccountChooserScreen)
+invokes(SelectAccount, SessionLookupApi)
+transitions(SelectAccount, Interaction.authentication, pending -> sso).when(SessionCoversAcr)
+transitions(SelectAccount, Interaction.authentication, pending -> sso).when(SingleFactorEnough)
+links(SelectAccount, Interaction, OpSession)
+raises(SelectAccount, EvEndUserAuthenticated)
+applies_to(AccountChoiceAsked, SelectAccount)
+
+// ── Consent ──────────────────────────────────────────────
+
+condition EndUserAuthenticated "The End-User is authenticated for the request, and a page may be shown"
+holds(EndUserAuthenticated, Interaction.authentication in (login, sso), Interaction.prompt not in (none))
+
+displays(GrantConsent, ConsentScreen)
+invokes(GrantConsent, ConsentApi)
+creates(ConsentApi, Consent)
+updates(ConsentApi, AuthorizationRequest)
+reads(ConsentApi, Interaction)
+transitions(GrantConsent, AuthorizationRequest.status, validated -> consented)
+applies_to(EndUserAuthenticated, GrantConsent)
+raises(GrantConsent, EvRequestAuthorized)
+
+// The recorded consent is looked up through the client. The model cannot also tie it to the
+// End-User of the session (README).
+condition ConsentOnRecord "The End-User is authenticated, prompt is not consent, and a consent to the client is on record"
+holds(ConsentOnRecord, Interaction.authentication in (login, sso), Interaction.prompt not in (consent)).has(Consent.status == granted).along(Interaction, AuthorizationRequest, Client, Consent)
+
+triggers(EvEndUserAuthenticated, ReuseConsent)
+invokes(ReuseConsent, ConsentLookupApi)
+updates(ConsentLookupApi, AuthorizationRequest)
+reads(ConsentLookupApi, Consent)
+transitions(ReuseConsent, AuthorizationRequest.status, validated -> consented)
+applies_to(ConsentOnRecord, ReuseConsent)
+raises(ReuseConsent, EvRequestAuthorized)
+
+displays(RecordAdministrativeConsent, ConsentAdminScreen)
+invokes(RecordAdministrativeConsent, ConsentAdminApi)
+creates(ConsentAdminApi, Consent)
+reads(ConsentAdminApi, Client)
+reads(ConsentAdminApi, UserAccount)
+
+displays(DenyConsent, ConsentScreen)
+invokes(DenyConsent, ErrorResponseApi)
+transitions(DenyConsent, AuthorizationRequest.status, validated -> failed)
+applies_to(EndUserAuthenticated, DenyConsent)
+
+// ── Errors of a request that may show no page ────────────
+
+condition SilentUnauthenticated "prompt=none and the End-User is not authenticated"
+holds(SilentUnauthenticated, Interaction.prompt == none, Interaction.authentication == pending)
+
+triggers(EvRequestValidated, ReturnLoginRequired)
+invokes(ReturnLoginRequired, ErrorResponseApi)
+transitions(ReturnLoginRequired, AuthorizationRequest.status, validated -> failed)
+applies_to(SilentUnauthenticated, ReturnLoginRequired)
+
+triggers(EvRequestValidated, ReturnAccountSelectionRequired)
+invokes(ReturnAccountSelectionRequired, ErrorResponseApi)
+transitions(ReturnAccountSelectionRequired, AuthorizationRequest.status, validated -> failed)
+applies_to(SilentUnauthenticated, ReturnAccountSelectionRequired)
+
+condition SilentStepUp "prompt=none, the request asks for a second factor, and the End-User is not authenticated at that level"
+holds(SilentStepUp, Interaction.prompt == none, Interaction.acr == mfa, Interaction.authentication == pending)
+
+triggers(EvRequestValidated, ReturnInteractionRequired)
+invokes(ReturnInteractionRequired, ErrorResponseApi)
+transitions(ReturnInteractionRequired, AuthorizationRequest.status, validated -> failed)
+applies_to(SilentStepUp, ReturnInteractionRequired)
+
+condition SilentWithoutConsent "prompt=none, the End-User is authenticated, and no consent to the client is on record"
+holds(SilentWithoutConsent, Interaction.prompt == none, Interaction.authentication == sso).none(Consent.status == granted).along(Interaction, AuthorizationRequest, Client, Consent)
+
+triggers(EvEndUserAuthenticated, ReturnConsentRequired)
+invokes(ReturnConsentRequired, ErrorResponseApi)
+transitions(ReturnConsentRequired, AuthorizationRequest.status, validated -> failed)
+applies_to(SilentWithoutConsent, ReturnConsentRequired)
+
+// ── An abandoned request ─────────────────────────────────
+
+triggers(InteractionLifetime, AbandonRequest)
+invokes(AbandonRequest, ErrorResponseApi)
+transitions(AbandonRequest, AuthorizationRequest.status, (received, validated) -> abandoned)
+
+// ── The response ─────────────────────────────────────────
+
+// Each response writes the request, the grant, and what comes back on the redirect URI in
+// one transaction. The OP discards the login interaction once it has answered, as it does
+// on an error response (README).
+triggers(EvRequestAuthorized, IssueCodeResponse)
+raises(IssueCodeResponse, EvCodeIssued)
+transitions(IssueCodeResponse, AuthorizationRequest.status, consented -> responded)
+deletes(IssueCodeResponse, Interaction)
+creates(IssueCodeResponse, Grant)
+creates(IssueCodeResponse, AuthorizationCode)
+sets(IssueCodeResponse, Grant.flow == code)
+
+condition ResponseTypeCode "response_type=code"
+holds(ResponseTypeCode, AuthorizationRequest.response_type == code)
+applies_to(ResponseTypeCode, IssueCodeResponse)
+
+triggers(EvRequestAuthorized, IssueIdTokenResponse)
+transitions(IssueIdTokenResponse, AuthorizationRequest.status, consented -> responded)
+deletes(IssueIdTokenResponse, Interaction)
+creates(IssueIdTokenResponse, Grant)
+creates(IssueIdTokenResponse, IdToken)
+sets(IssueIdTokenResponse, Grant.flow == implicit)
+
+condition ResponseTypeIdToken "response_type=id_token"
+holds(ResponseTypeIdToken, AuthorizationRequest.response_type == id_token)
+applies_to(ResponseTypeIdToken, IssueIdTokenResponse)
+
+triggers(EvRequestAuthorized, IssueImplicitTokenResponse)
+raises(IssueImplicitTokenResponse, EvFrontChannelAccessToken)
+transitions(IssueImplicitTokenResponse, AuthorizationRequest.status, consented -> responded)
+deletes(IssueImplicitTokenResponse, Interaction)
+creates(IssueImplicitTokenResponse, Grant)
+creates(IssueImplicitTokenResponse, IdToken)
+creates(IssueImplicitTokenResponse, AccessToken)
+sets(IssueImplicitTokenResponse, Grant.flow == implicit)
+
+condition ResponseTypeIdTokenToken "response_type=id_token token"
+holds(ResponseTypeIdTokenToken, AuthorizationRequest.response_type == id_token_token)
+applies_to(ResponseTypeIdTokenToken, IssueImplicitTokenResponse)
+
+triggers(EvRequestAuthorized, IssueHybridIdTokenResponse)
+raises(IssueHybridIdTokenResponse, EvCodeIssued)
+transitions(IssueHybridIdTokenResponse, AuthorizationRequest.status, consented -> responded)
+deletes(IssueHybridIdTokenResponse, Interaction)
+creates(IssueHybridIdTokenResponse, Grant)
+creates(IssueHybridIdTokenResponse, AuthorizationCode)
+creates(IssueHybridIdTokenResponse, IdToken)
+sets(IssueHybridIdTokenResponse, Grant.flow == hybrid)
+
+condition ResponseTypeCodeIdToken "response_type=code id_token"
+holds(ResponseTypeCodeIdToken, AuthorizationRequest.response_type == code_id_token)
+applies_to(ResponseTypeCodeIdToken, IssueHybridIdTokenResponse)
+
+triggers(EvRequestAuthorized, IssueHybridTokenResponse)
+raises(IssueHybridTokenResponse, EvFrontChannelAccessToken)
+raises(IssueHybridTokenResponse, EvCodeIssued)
+transitions(IssueHybridTokenResponse, AuthorizationRequest.status, consented -> responded)
+deletes(IssueHybridTokenResponse, Interaction)
+creates(IssueHybridTokenResponse, Grant)
+creates(IssueHybridTokenResponse, AuthorizationCode)
+creates(IssueHybridTokenResponse, AccessToken)
+sets(IssueHybridTokenResponse, Grant.flow == hybrid)
+
+condition ResponseTypeCodeToken "response_type=code token"
+holds(ResponseTypeCodeToken, AuthorizationRequest.response_type == code_token)
+applies_to(ResponseTypeCodeToken, IssueHybridTokenResponse)
+
+triggers(EvRequestAuthorized, IssueHybridFullResponse)
+raises(IssueHybridFullResponse, EvFrontChannelAccessToken)
+raises(IssueHybridFullResponse, EvCodeIssued)
+transitions(IssueHybridFullResponse, AuthorizationRequest.status, consented -> responded)
+deletes(IssueHybridFullResponse, Interaction)
+creates(IssueHybridFullResponse, Grant)
+creates(IssueHybridFullResponse, AuthorizationCode)
+creates(IssueHybridFullResponse, IdToken)
+creates(IssueHybridFullResponse, AccessToken)
+sets(IssueHybridFullResponse, Grant.flow == hybrid)
+
+condition ResponseTypeCodeIdTokenToken "response_type=code id_token token"
+holds(ResponseTypeCodeIdTokenToken, AuthorizationRequest.response_type == code_id_token_token)
+applies_to(ResponseTypeCodeIdTokenToken, IssueHybridFullResponse)
+
+// Access constraints. The End-User's pages need the End-User's credential or the session;
+// the request and the response travel through the user agent.
+requires_medium(RequestAuthentication, UserAgent)
+requires_permission(InitiateThirdPartyLogin, EndUserCredential)
+requires_medium(InitiateThirdPartyLogin, UserAgent)
+requires_permission(AuthenticateEndUser, EndUserCredential)
+requires_medium(AuthenticateEndUser, UserAgent)
+requires_permission(LoginApi, EndUserCredential)
+requires_permission(LoginResumeApi, EndUserCredential)
+requires_permission(StepUpApi, EndUserCredential)
+requires_permission(LogIn, EndUserCredential)
+requires_medium(LogIn, UserAgent)
+requires_permission(RecordAdministrativeConsent, OpAdministration)
+requires_medium(RecordAdministrativeConsent, AdminConsole)
+requires_permission(ConsentAdminApi, OpAdministration)
+requires_permission(StepUpAuthentication, EndUserCredential)
+requires_medium(StepUpAuthentication, UserAgent)
+requires_permission(SelectAccount, EndUserCredential)
+requires_medium(SelectAccount, UserAgent)
+requires_permission(GrantConsent, EndUserCredential)
+requires_medium(GrantConsent, UserAgent)
+requires_permission(ConsentApi, EndUserCredential)
+requires_permission(DenyConsent, EndUserCredential)
+requires_medium(DenyConsent, UserAgent)
+
+// Screen transitions
+navigates(RpSignInScreen, LoginScreen).via(RequestAuthentication)
+navigates(RpSignInScreen, AccountChooserScreen).via(RequestAuthentication)
+navigates(RpSignInScreen, ConsentScreen).via(RequestAuthentication)
+navigates(AccountChooserScreen, LoginScreen).via(SelectAccount)
+navigates(LoginScreen, SecondFactorScreen).via(LogIn)
+navigates(LoginScreen, ConsentScreen).via(AuthenticateEndUser)
+navigates(SecondFactorScreen, ConsentScreen).via(StepUpAuthentication)
+navigates(AccountChooserScreen, ConsentScreen).via(SelectAccount)
+
+shows(ConsentScreen, Client)
+shows(AccountChooserScreen, OpSession)
+
+field LoginHintField "Account identifier"
+  access editable
+  required true
+  source actor
+
+field ClientNameField "Client requesting access"
+  access readonly
+  required true
+  source system
+
+field AcrField "Authentication level of the session"
+  access readonly
+  required true
+  source system
+
+field SignedInAccountField "Signed-in account"
+  access readonly
+  required true
+  source system
+
+field RequestedFlowField "Response type the RP asks for"
+  access readonly
+  required true
+  source system
+
+contains(RpSignInScreen, RequestedFlowField)
+maps_field(RequestedFlowField, AuthorizationRequest.response_type)
+
+field LaunchableClientField "Application"
+  access readonly
+  required true
+  source system
+
+contains(AppLauncherScreen, LaunchableClientField)
+maps_field(LaunchableClientField, Client.client_id)
+contains(LoginScreen, LoginHintField)
+contains(AccountChooserScreen, SignedInAccountField)
+maps_field(SignedInAccountField, UserAccount.subject)
+contains(ConsentScreen, ClientNameField)
+contains(SecondFactorScreen, AcrField)
+
+field ConsentedClientField "Client consented to"
+  access editable
+  required true
+  source actor
+
+contains(ConsentAdminScreen, ConsentedClientField)
+maps_field(ConsentedClientField, Client.client_id)
+maps_field(LoginHintField, UserAccount.subject)
+maps_field(ClientNameField, Client.client_id)
+maps_field(AcrField, OpSession.auth_level)
+
+// Business flow
+flow SignInFlow "Browser sign-in"
+step SendRequestStep "The RP sends the authentication request"
+step InvalidRequestStep "The request is invalid"
+step LoginStep "The End-User logs in"
+step SsoStep "The existing session is reused"
+step StepUpStep "The End-User adds a second factor"
+step ConsentStep "The End-User consents, or the consent is reused"
+step DenyStep "The End-User declines"
+step SilentErrorStep "prompt=none cannot be honoured without a page"
+step RespondStep "The OP answers with the code or the tokens"
+
+contains(BucBrowserSignIn, SignInFlow)
+contains(SignInFlow, SendRequestStep)
+contains(SignInFlow, InvalidRequestStep)
+contains(SignInFlow, LoginStep)
+contains(SignInFlow, SsoStep)
+contains(SignInFlow, StepUpStep)
+contains(SignInFlow, ConsentStep)
+contains(SignInFlow, DenyStep)
+contains(SignInFlow, SilentErrorStep)
+contains(SignInFlow, RespondStep)
+
+precedes(SendRequestStep, LoginStep)
+branches(SendRequestStep, SsoStep)
+excepts(SendRequestStep, InvalidRequestStep)
+excepts(SendRequestStep, SilentErrorStep)
+branches(SsoStep, StepUpStep)
+precedes(LoginStep, ConsentStep)
+precedes(SsoStep, ConsentStep)
+precedes(StepUpStep, ConsentStep)
+excepts(SsoStep, SilentErrorStep)
+excepts(ConsentStep, DenyStep)
+precedes(ConsentStep, RespondStep)
+
+covers(SendRequestStep, RequestAuthentication)
+covers(SendRequestStep, InitiateThirdPartyLogin)
+covers(SendRequestStep, EvLoginInitiated)
+covers(SendRequestStep, EvRequestReceived)
+covers(SendRequestStep, ValidateRequest)
+covers(SendRequestStep, EvRequestValidated)
+covers(LoginStep, EvEndUserAuthenticated)
+covers(InvalidRequestStep, RejectInvalidRequest)
+covers(LoginStep, AuthenticateEndUser)
+covers(LoginStep, LogIn)
+covers(ConsentStep, RecordAdministrativeConsent)
+covers(ConsentStep, AbandonRequest)
+covers(ConsentStep, InteractionLifetime)
+covers(LoginStep, SelectAccount)
+covers(SsoStep, ReuseSession)
+covers(StepUpStep, StepUpAuthentication)
+covers(ConsentStep, GrantConsent)
+covers(ConsentStep, ReuseConsent)
+covers(ConsentStep, EvRequestAuthorized)
+covers(DenyStep, DenyConsent)
+covers(SilentErrorStep, ReturnLoginRequired)
+covers(SilentErrorStep, ReturnAccountSelectionRequired)
+covers(SilentErrorStep, ReturnInteractionRequired)
+covers(SilentErrorStep, ReturnConsentRequired)
+covers(RespondStep, IssueCodeResponse)
+covers(RespondStep, IssueIdTokenResponse)
+covers(RespondStep, IssueImplicitTokenResponse)
+covers(RespondStep, IssueHybridIdTokenResponse)
+covers(RespondStep, IssueHybridTokenResponse)
+covers(RespondStep, IssueHybridFullResponse)
+covers(RespondStep, EvCodeIssued)
+covers(RespondStep, EvFrontChannelAccessToken)
+
+performs(RelyingParty, SendRequestStep)
+performs(EndUser, LoginStep)
+performs(EndUser, StepUpStep)
+performs(EndUser, ConsentStep)
+performs(EndUser, DenyStep)
+
+// Requirement traceability
+requirement ReqBrowserFlows "The OP answers every response type of the code, implicit, and hybrid flows"
+  priority "must"
+  source "OpenID Connect Core 1.0 §3.1, §3.2, §3.3"
+  stakeholder "RP developer"
+  acceptance_criteria "Each of code, id_token, id_token token, code id_token, code token, and code id_token token returns what Core §3 lists, and an ID Token from the authorization endpoint always carries the request's nonce."
+  status "accepted"
+
+requirement ReqHonourPrompt "The OP honours prompt, max_age, and acr_values"
+  priority "must"
+  source "OpenID Connect Core 1.0 §3.1.2.1, §3.1.2.3, §3.1.2.6"
+  stakeholder "End-User"
+  stakeholder "RP developer"
+  acceptance_criteria "prompt=none shows no page and answers login_required, interaction_required, account_selection_required, or consent_required; prompt=login always shows the login page; a request asking for a multi-factor class is answered only from a multi-factor session."
+  status "accepted"
+
+requirement ReqPkceForPublicClients "A public client gets a code only with an S256 code challenge"
+  priority "must"
+  source "RFC 7636 §4.2"
+  source "RFC 9700 §2.1.1"
+  stakeholder "End-User"
+  acceptance_criteria "A code-bearing request of a public client without S256 is answered invalid_request."
+  status "accepted"
+
+motivates(ReqBrowserFlows, BucBrowserSignIn)
+motivates(ReqHonourPrompt, BucBrowserSignIn)
+motivates(ReqPkceForPublicClients, BucBrowserSignIn)
+achieves(ReqBrowserFlows, SecureSignIn)
+achieves(ReqBrowserFlows, SingleSignOn)
+achieves(ReqBrowserFlows, OpenInterop)
+achieves(ReqHonourPrompt, SecureSignIn)
+achieves(ReqHonourPrompt, SingleSignOn)
+achieves(ReqHonourPrompt, OpenInterop)
+achieves(ReqPkceForPublicClients, SecureSignIn)
+achieves(ReqPkceForPublicClients, SingleSignOn)
+achieves(ReqPkceForPublicClients, OpenInterop)
+motivates(ReqNoSelfIssuedOp, BucBrowserSignIn)
+motivates(ReqRequestEncodingAsData, BucBrowserSignIn)

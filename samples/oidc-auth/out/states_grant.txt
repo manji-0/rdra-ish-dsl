@@ -1,0 +1,19 @@
+Entity: Grant (Authorization grant)
+  axes: flow[code|implicit|hybrid], status[active|revoked], last_refreshed_at[null|present]
+  labels: flow[code=Authorization Code|implicit=Implicit|hybrid=Hybrid], status[active=Active|revoked=Revoked]
+
+  FLOW      STATUS   LAST_REFRESHED_AT  INITIAL  TERMINAL  VIA                                                                                                                                                                                                                                      
+  ────────  ───────  ─────────────────  ───────  ────────  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  implicit  active   null               yes      no        BucBrowserSignIn/IssueIdTokenResponse, BucBrowserSignIn/IssueImplicitTokenResponse
+  hybrid    active   null               yes      no        BucBrowserSignIn/IssueHybridFullResponse, BucBrowserSignIn/IssueHybridIdTokenResponse, BucBrowserSignIn/IssueHybridTokenResponse
+  code      active   null               yes      no        BucBrowserSignIn/IssueCodeResponse
+  implicit  revoked  null               no       yes       BucBrowserSignIn/IssueIdTokenResponse, BucBrowserSignIn/IssueImplicitTokenResponse, BucTokenMaintenance/RevokeGrantOnWithdrawal
+  hybrid    revoked  null               no       yes       BucBrowserSignIn/IssueHybridFullResponse, BucBrowserSignIn/IssueHybridIdTokenResponse, BucBrowserSignIn/IssueHybridTokenResponse, BucTokenMaintenance/RevokeGrantOnWithdrawal
+  code      revoked  null               no       yes       BucBrowserSignIn/IssueCodeResponse, BucCodeExchange/RejectCodeReplay, BucTokenMaintenance/RevokeGrantOnWithdrawal, BucTokenMaintenance/RevokeRefreshToken
+  code      active   present            no       no        BucBrowserSignIn/IssueCodeResponse, BucTokenMaintenance/RefreshTokens
+  code      revoked  present            no       yes       BucBrowserSignIn/IssueCodeResponse, BucCodeExchange/RejectCodeReplay, BucTokenMaintenance/DetectRefreshTokenReuse, BucTokenMaintenance/RefreshTokens, BucTokenMaintenance/RevokeGrantOnWithdrawal, BucTokenMaintenance/RevokeRefreshToken
+
+  reachable: 8 / bound: 12
+  diagnostics:
+    [info][UnjoinedTrigger_Grant_EvConsentWithdrawn_RevokeGrantOnWithdrawal] triggers(EvConsentWithdrawn, RevokeGrantOnWithdrawal): RevokeGrantOnWithdrawal binds no row of Consent, the entity EvConsentWithdrawn is raised on, and no key joins its rows to one, so any Consent the event was raised on lets RevokeGrantOnWithdrawal run
+

@@ -1,0 +1,15 @@
+%% rdra-ish diagram=state scope=entity:Consent model=samples/oidc-auth
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "Consent.status" as statemodel__Consent_status {
+    [*] --> state__Consent_granted
+    state "Granted" as state__Consent_granted
+    state "Withdrawn" as state__Consent_withdrawn
+    %% transition usecase__WithdrawConsent
+    state__Consent_granted --> state__Consent_withdrawn : Withdraw a consent
+    state__Consent_withdrawn --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__Consent_withdrawn stateend

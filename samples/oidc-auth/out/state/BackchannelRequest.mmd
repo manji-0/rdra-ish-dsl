@@ -1,0 +1,42 @@
+%% rdra-ish diagram=state scope=entity:BackchannelRequest model=samples/oidc-auth
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "BackchannelRequest.status" as statemodel__BackchannelRequest_status {
+    [*] --> state__BackchannelRequest_pending
+    state "Pending" as state__BackchannelRequest_pending
+    state "Approved" as state__BackchannelRequest_approved
+    state "Denied" as state__BackchannelRequest_denied
+    state "Expired" as state__BackchannelRequest_expired
+    state "Ping sent" as state__BackchannelRequest_notified
+    state "Tokens issued" as state__BackchannelRequest_redeemed
+    state "Tokens pushed" as state__BackchannelRequest_pushed
+    %% transition usecase__RecordDeviceApproval
+    state__BackchannelRequest_pending --> state__BackchannelRequest_approved : Record the End-User's approval
+    %% transition usecase__RecordDeviceDenial
+    state__BackchannelRequest_pending --> state__BackchannelRequest_denied : Record the End-User's denial
+    %% transition usecase__ExpireBackchannelRequest
+    state__BackchannelRequest_pending --> state__BackchannelRequest_expired : Expire the backchannel request
+    %% transition usecase__ExpireBackchannelRequest
+    state__BackchannelRequest_approved --> state__BackchannelRequest_expired : Expire the backchannel request
+    %% transition usecase__SendPingCallback
+    state__BackchannelRequest_approved --> state__BackchannelRequest_notified : Ping the client [The client registered ping mode]
+    %% transition usecase__PollBackchannelToken
+    state__BackchannelRequest_approved --> state__BackchannelRequest_redeemed : Poll for the tokens [The client registered poll mode]
+    %% transition usecase__PushBackchannelTokens
+    state__BackchannelRequest_approved --> state__BackchannelRequest_pushed : Push the tokens to the client [The client registered push mode]
+    %% transition usecase__ExpireBackchannelRequest
+    state__BackchannelRequest_notified --> state__BackchannelRequest_expired : Expire the backchannel request
+    %% transition usecase__PollBackchannelToken
+    state__BackchannelRequest_notified --> state__BackchannelRequest_redeemed : Poll for the tokens [The client registered ping mode]
+    state__BackchannelRequest_denied --> [*]
+    state__BackchannelRequest_expired --> [*]
+    state__BackchannelRequest_redeemed --> [*]
+    state__BackchannelRequest_pushed --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__BackchannelRequest_denied stateend
+  class state__BackchannelRequest_expired stateend
+  class state__BackchannelRequest_redeemed stateend
+  class state__BackchannelRequest_pushed stateend

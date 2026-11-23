@@ -3,7 +3,7 @@
 use crate::lifecycle::build::naming::is_driven;
 use crate::lifecycle::build::Builder;
 use crate::lifecycle::types::{
-    At, CmpOp, Domain, InvText, Invariant, ModelRef, Pred, Site, Term, Value,
+    At, CmpOp, Domain, InvText, Invariant, ModelRef, Pred, Premise, Site, Term, Value,
 };
 use crate::model::{CheckExpr, CmpRhs, ComparisonProp, EffectValue, EntityKey};
 
@@ -139,6 +139,7 @@ impl Builder<'_> {
                         name: format!("Check_{}_{}_{i}", entity.id, col.name),
                         binders: vec![self.ent_of[&ek]],
                         body,
+                        premises: vec![Premise::rows()],
                         text: InvText::Check(check.expr.display()),
                         label: None,
                         site,

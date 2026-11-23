@@ -1,0 +1,14 @@
+module shared.access
+
+import shared.actors
+import shared.biz
+
+has_permission(EndUser, EndUserCredential)
+
+has_permission(RelyingParty, ClientCredential)
+has_permission(RelyingParty, BearerAccessToken)
+has_permission(RelyingParty, RegistrationAccess)
+
+has_permission(ResourceServer, ResourceCredential)
+
+has_permission(OpAdministrator, OpAdministration)

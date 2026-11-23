@@ -2555,8 +2555,10 @@ after(Pay).assert(Order.status == paid, Payment.status == captured)
 
 ### Temporal path properties
 
-Named path properties are checked by TLA+/TLC export (`export --kind tla` /
-`verify --backend tlc`), not by `rdra-ish states`:
+Only `verify` evaluates named path properties. `check` and `states` verify safety only, by
+state exploration, and evaluate no `property` of any form. `verify --backend tlc` checks
+`always`, `eventually`, and `leads_to` with TLC, and decides `can_reach` itself by BFS (see
+[Recoverability: `can_reach(...)`](#recoverability-can_reach)):
 
 ```rdra
 property PaidLeadsToShipped "paid eventually reaches shipped"
@@ -2574,6 +2576,7 @@ property NeverBoth "mutex"
 | `always(expr)` | `[]expr` |
 | `eventually(expr)` | `<>expr` |
 | `leads_to(p, q)` | `p ~> q` |
+| `can_reach(expr)` | none: CTL `AG (present => EF expr)`, written as a comment |
 
 Atoms use `Entity.column == value` / `!=`, `Entity.column in (a, b)` / `not in`, or numeric
 comparisons (`<`, `>`, `<=`, `>=`) over Int / Money / Decimal columns and literals. Prefer
@@ -2585,7 +2588,9 @@ When any `eventually` / `leads_to` property is exported, the Spec includes
 `WF_vars(Next)`: some step is taken while one can be, but no step in particular. Another
 instance's loop satisfies it, so a property about one instance can fail on a run that only
 ever moves the others. Temporal formulas are quantified over the present instances of each
-entity. `after(UseCase).assert(...)` becomes an independent TLA `PROPERTY`,
+entity, every combination of them unless `.along(...)` limits it (see [Scope of a property
+over several entities](#scope-of-a-property-over-several-entities)).
+`after(UseCase).assert(...)` becomes an independent TLA `PROPERTY`,
 `[][(\A p : UC(p) => post')]_vars`, that checks the state each step leaves and is **not**
 injected into the effects. Every constraint is its own `INVARIANT`; see
 [formal-verification.md](./formal-verification.md).
@@ -2628,6 +2633,42 @@ when the rule has a path.
 // joins Member and Loan, and the rule would count every loan in the system.
 invariant(Member).when(status == withdrawn).none(Loan.status == open).along(Member, Card, Loan)
 ```
+
+#### Scope of a property over several entities
+
+<!-- constrained-by #cross-entity-constraints -->
+
+A property whose atoms read two or more entities binds each one on its own, so the formula
+ranges over every combination of their rows, related or not. `.along(A, B, ..)` limits it
+to the rows that the keys of the path link, with `.role(role)` after it to pick the key of
+a hop that two keys join, as on a multi-entity `invariant` (see [Cross-Entity
+Constraints](#cross-entity-constraints)):
+
+```rdra
+// Pay captures a payment and pays the order it belongs to. Without `.along`, a captured
+// payment beside another order that is not paid breaks the property.
+property CapturedPaid "a captured payment's order is paid"
+  always(not (Payment.status == captured) or (Order.status == paid)).along(Payment, Order)
+```
+
+The link joins the trigger of the formula, next to the condition that the rows exist:
+
+| Form | TLA+ with `.along` |
+|---|---|
+| `always(x)` | `[](present /\ link => x)` |
+| `eventually(x)` | `[](present /\ link => <>x)` |
+| `leads_to(x, y)` | `(present /\ link /\ x) ~> y` |
+
+`link` is the owner link of each hop, such as `Payment_owner_Order[b0] = b1`. A path entity
+that no atom reads joins the binders and only links the ends. The path must cover every
+entity the atoms read, and each hop needs a key that binds it; otherwise the property is
+`UnbindableScope`, an error, and is not checked. A `verify` counterexample
+names the linked rows, and the property's cone keeps the owner vars the link reads.
+
+Write `.global()` on a property meant for every combination. `.global()` with `.along(...)`
+is `GlobalWithAlong`, an error. When keys relate the entities and the property has
+neither, `lint` `multi-rule-unscoped` warns and names the `.along(...)` the shortest key
+path gives. `.along` and `.global()` may come before or after `.fair(...)`.
 
 #### Fairness: `.fair(UseCase, ...)`
 
@@ -2675,13 +2716,55 @@ step stays enabled. `Spec`, the `.cfg`, and properties without
   nothing there; `verify` prints `<Property> assumes weak fairness per instance on ...` next
   to its temporal runs.
 
+#### Recoverability: `can_reach(...)`
+
+`can_reach(expr)` says that the actors can still finish an instance, not that they must:
+
+```rdra
+property OrderCanFinish "every order can still be delivered or cancelled"
+  can_reach(Order.status in (delivered, cancelled))
+```
+
+For each present instance, from every reachable state, some path reaches a state where
+`expr` holds for it. The path may move other instances too. The instance must stay present
+on the path and be present where `expr` holds, so deleting it does not finish it. This is
+the CTL formula `AG (present => EF expr)`. Over two or more entities it takes `.along(..)`,
+`.role(role)`, and `.global()` as the other forms do: the owner links join `present` in the
+trigger, so only linked rows must be able to finish. An instance may still loop forever: an Order
+that can be held and resumed forever passes while it can also be delivered.
+
+The form finds what the other checks miss. A `Deadlock_*` finding needs a state with no way
+out, so it misses an instance that moves between `pending` and `on_hold` forever once some
+guard is false. `eventually` and `leads_to` say that the instance must finish, so they need
+`.fair(...)`, and they fail when an actor may legitimately choose another branch forever.
+
+TLC cannot check a CTL formula, so `verify` decides `can_reach` by BFS on the property's
+cone, at its bounds, and the verdict holds within those bounds like every other verdict.
+`check` and `states` do not evaluate it. A violation prints a shortest trace to a state from which
+the goal is unreachable. It then lists what the goal reads of the instance in the states
+the instance is confined to:
+
+```
+error[OrderCanFinish]: property OrderCanFinish is violated: from the counterexample's last state no path reaches its goal for Order#1
+  ...
+  confined: from there Order#1 stays within 2 reachable states, where its goal never holds:
+    status = pending
+    status = on_hold
+```
+
+`export --kind tla` lists each `can_reach` in a comment and no `.cfg` names it. `.fair(...)`
+on it is `FairOnReachProperty`, since reachability needs no fairness. A scoped `verify`
+checks no property, `can_reach` included. See
+[formal-verification.md](./formal-verification.md#recoverability-on-a-cone) and the samples
+`can_reach_unmet.rdra` and `can_reach_met.rdra`.
+
 Errors: `.fair` on `always(...)` is `FairOnSafetyProperty` (fairness cannot change a safety
-verdict); a `.fair` with no argument, an argument that is not a use case, a use case listed
+verdict); `.fair` on `can_reach(...)` is `FairOnReachProperty`; a `.fair` with no argument, an argument that is not a use case, a use case listed
 twice, or a second `.fair` is `FairRequiresUseCases`; an undefined name is `UndefinedSymbol`;
 an atom whose column no single entity owns (`Order.missing`, or a bare `status` that two
-entities declare) is `UnresolvedPropertyColumn`; any other method after a property is
-`UnknownChainMethod`. A listed use case that changes
-nothing is `FairOnInertUseCase`.
+entities declare) is `UnresolvedPropertyColumn`; a method after a property other than
+`.fair`, `.along`, `.role` and `.global` is `UnknownChainMethod`. A listed use case that
+changes nothing is `FairOnInertUseCase`.
 
 ### Comparison Expressions in Constraints
 

@@ -1,0 +1,33 @@
+%% rdra-ish diagram=state scope=entity:OpSession model=samples/oidc-auth
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out, or declared by @end
+stateDiagram-v2
+  state "OpSession.auth_level" as statemodel__OpSession_auth_level {
+    [*] --> state__OpSession_auth_level_single_factor
+    state "Single factor" as state__OpSession_auth_level_single_factor
+    state "Multi-factor" as state__OpSession_auth_level_multi_factor
+    %% transition usecase__StepUpAuthentication
+    state__OpSession_auth_level_single_factor --> state__OpSession_auth_level_multi_factor : Add a second factor to the session [The OP session is authenticated]
+    state__OpSession_auth_level_single_factor --> [*]
+    state__OpSession_auth_level_multi_factor --> [*]
+  }
+  state "OpSession.status" as statemodel__OpSession_status {
+    [*] --> state__OpSession_status_authenticated
+    state "Authenticated" as state__OpSession_status_authenticated
+    state "Logged out" as state__OpSession_status_logged_out
+    state "Expired" as state__OpSession_status_expired
+    %% transition usecase__LogOutAtOp
+    state__OpSession_status_authenticated --> state__OpSession_status_logged_out : Log out at the OP
+    %% transition usecase__LogOutFromRp
+    state__OpSession_status_authenticated --> state__OpSession_status_logged_out : Log out from the RP (RP-Initiated Logout)
+    %% transition usecase__ExpireSession
+    state__OpSession_status_authenticated --> state__OpSession_status_expired : Expire the OP session
+    state__OpSession_status_logged_out --> [*]
+    state__OpSession_status_expired --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__OpSession_auth_level_single_factor stateend
+  class state__OpSession_auth_level_multi_factor stateend
+  class state__OpSession_status_logged_out stateend
+  class state__OpSession_status_expired stateend

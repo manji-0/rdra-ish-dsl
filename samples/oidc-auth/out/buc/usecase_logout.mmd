@@ -1,0 +1,111 @@
+%% rdra-ish diagram=usecase scope=buc:BucLogout model=samples/oidc-auth
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor extsystem timer usecase screen event entity state condition
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__EndUser(["End-User"]):::actor
+    %% desc actor__EndUser: Signs in to the OP in a user agent, consents to the claims a client asks for, approves a device or a backchannel request, ends the session, and withdraws a consent.
+    actor__RelyingParty(["Relying Party (client application)"]):::actor
+    %% desc actor__RelyingParty: Registers itself, sends the End-User to the authorization endpoint, redeems codes, refreshes and revokes tokens, calls UserInfo, polls for device and CIBA tokens, and starts a logout.
+    extsystem__RpCallbackEndpoint[["RP callback endpoints (backchannel logout, CIBA notification, initiate login)"]]:::extsystem
+  end
+  subgraph layer_environment["システム外部環境"]
+    timer__SessionCheckInterval(("RP's session check interval (RP policy, e.g. every few seconds)")):::timer
+    timer__SessionLifetime(("OP session lifetime (OP policy, e.g. 12 hours)")):::timer
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__CheckSessionState("Check the session state (Session Management)"):::usecase
+    %% desc usecase__CheckSessionState: The RP's hidden iframe asks the OP's check_session_iframe whether the session_state has changed; on changed the RP re-authenticates with prompt=none.
+    usecase__ExpireSession("Expire the OP session"):::usecase
+    %% desc usecase__ExpireSession: The OP session reaches its lifetime without activity.
+    usecase__LogOutAtOp("Log out at the OP"):::usecase
+    %% desc usecase__LogOutAtOp: Log out on the OP's own account page.
+    usecase__LogOutFromRp("Log out from the RP (RP-Initiated Logout)"):::usecase
+    %% desc usecase__LogOutFromRp: Follow the RP's logout link to the end_session_endpoint with the id_token_hint, confirm, and return to the post_logout_redirect_uri with the state.
+    usecase__RecordLogoutDelivered("Record the RP's acknowledgement"):::usecase
+    %% desc usecase__RecordLogoutDelivered: The RP answered 200: it ended its own session for that sid.
+    usecase__RecordLogoutFailed("Record a failed Logout Token delivery"):::usecase
+    %% desc usecase__RecordLogoutFailed: The RP answered 400 or did not answer. Back-Channel Logout §2.8 leaves retries to the OP; the model records the failure.
+    usecase__RenderFrontchannelLogout("Render the front-channel logout iframes"):::usecase
+    %% desc usecase__RenderFrontchannelLogout: Show the logged-out page with one hidden iframe per RP that registered a frontchannel_logout_uri.
+    usecase__SendBackchannelLogout("Send the Logout Token"):::usecase
+    %% desc usecase__SendBackchannelLogout: Sign a Logout Token naming the sub and the sid, and POST it to the backchannel_logout_uri of each RP the session signed in to.
+    screen__LoggedOutScreen["Logged-out page"]:::screen
+    screen__LogoutConfirmScreen["Logout confirmation"]:::screen
+    event__EvLogoutAcknowledged>"The RP acknowledged the Logout Token"]:::event
+    event__EvLogoutRejected>"The RP rejected the Logout Token or did not answer"]:::event
+    event__EvLogoutTokenSent>"A Logout Token is posted to an RP"]:::event
+    event__EvSessionEnded>"The OP session ended"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__Client[("Registered client")]:::entity
+    entity__IdToken[("ID Token")]:::entity
+    entity__LogoutNotice[("Backchannel logout notice")]:::entity
+    entity__OpSession[("OP session")]:::entity
+    state__LogoutNotice_delivered((("Delivered"))):::state
+    state__LogoutNotice_failed((("Failed"))):::state
+    state__LogoutNotice_pending((("Pending"))):::state
+    state__OpSession_status_authenticated((("Authenticated"))):::state
+    state__OpSession_status_expired((("Expired"))):::state
+    state__OpSession_status_logged_out((("Logged out"))):::state
+    condition__SessionEnded{"The OP session has ended"}:::condition
+  end
+  actor__EndUser -.-> usecase__LogOutAtOp
+  actor__EndUser -.-> usecase__LogOutFromRp
+  actor__RelyingParty -.-> usecase__CheckSessionState
+  condition__SessionEnded -.->|applies_to| usecase__SendBackchannelLogout
+  event__EvLogoutAcknowledged -.-> usecase__RecordLogoutDelivered
+  event__EvLogoutRejected -.-> usecase__RecordLogoutFailed
+  event__EvLogoutTokenSent -.-> extsystem__RpCallbackEndpoint
+  event__EvSessionEnded -.-> usecase__RenderFrontchannelLogout
+  event__EvSessionEnded -.-> usecase__SendBackchannelLogout
+  extsystem__RpCallbackEndpoint -.-> event__EvLogoutAcknowledged
+  extsystem__RpCallbackEndpoint -.-> event__EvLogoutRejected
+  screen__LoggedOutScreen -.-> entity__Client
+  timer__SessionCheckInterval -.-> usecase__CheckSessionState
+  timer__SessionLifetime -.-> usecase__ExpireSession
+  usecase__CheckSessionState -.->|reads| entity__OpSession
+  %% derived usecase__CheckSessionState -> entity__OpSession via api__CheckSessionApi
+  usecase__ExpireSession -.-> event__EvSessionEnded
+  usecase__ExpireSession -.->|transitions OpSession.status authenticated->expired| state__OpSession_status_expired
+  usecase__ExpireSession -.->|updates| entity__OpSession
+  %% derived usecase__ExpireSession -> entity__OpSession via api__SessionExpiryApi
+  usecase__LogOutAtOp -.-> screen__LoggedOutScreen
+  usecase__LogOutAtOp -.-> event__EvSessionEnded
+  usecase__LogOutAtOp -.->|transitions OpSession.status authenticated->logged_out| state__OpSession_status_logged_out
+  usecase__LogOutAtOp -.->|updates| entity__OpSession
+  %% derived usecase__LogOutAtOp -> entity__OpSession via api__AccountLogoutApi
+  usecase__LogOutFromRp -.-> screen__LoggedOutScreen
+  usecase__LogOutFromRp -.-> screen__LogoutConfirmScreen
+  usecase__LogOutFromRp -.-> event__EvSessionEnded
+  usecase__LogOutFromRp -.->|reads| entity__IdToken
+  %% derived usecase__LogOutFromRp -> entity__IdToken via api__EndSessionApi
+  usecase__LogOutFromRp -.->|transitions OpSession.status authenticated->logged_out| state__OpSession_status_logged_out
+  usecase__LogOutFromRp -.->|updates| entity__OpSession
+  %% derived usecase__LogOutFromRp -> entity__OpSession via api__EndSessionApi
+  usecase__RecordLogoutDelivered -.->|transitions LogoutNotice.status pending->delivered| state__LogoutNotice_delivered
+  usecase__RecordLogoutDelivered -.->|updates| entity__LogoutNotice
+  %% derived usecase__RecordLogoutDelivered -> entity__LogoutNotice via api__LogoutNoticeResultApi
+  usecase__RecordLogoutFailed -.->|transitions LogoutNotice.status pending->failed| state__LogoutNotice_failed
+  usecase__RecordLogoutFailed -.->|updates| entity__LogoutNotice
+  %% derived usecase__RecordLogoutFailed -> entity__LogoutNotice via api__LogoutNoticeResultApi
+  usecase__RenderFrontchannelLogout -.-> screen__LoggedOutScreen
+  usecase__RenderFrontchannelLogout -.->|reads| entity__Client
+  usecase__RenderFrontchannelLogout -.->|reads| entity__OpSession
+  usecase__SendBackchannelLogout -.->|creates| entity__LogoutNotice
+  %% derived usecase__SendBackchannelLogout -> entity__LogoutNotice via api__LogoutNoticeApi
+  usecase__SendBackchannelLogout -.-> event__EvLogoutTokenSent
+  usecase__SendBackchannelLogout -.->|reads| entity__Client
+  %% derived usecase__SendBackchannelLogout -> entity__Client via api__LogoutNoticeApi
+  usecase__SendBackchannelLogout -.->|reads| entity__OpSession
+  %% derived usecase__SendBackchannelLogout -> entity__OpSession via api__LogoutNoticeApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

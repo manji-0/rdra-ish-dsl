@@ -1,0 +1,41 @@
+%% rdra-ish diagram=robustness scope=buc:BucBackchannelSignIn model=samples/oidc-auth
+%% kinds: actor extsystem screen timer api entity
+%% omitted: buc step medium permission event condition
+flowchart LR
+  actor__RelyingParty(["Relying Party (client application)"]):::actor
+  extsystem__AuthenticationDevice[["Authentication device (CIBA, out of band)"]]:::extsystem
+  extsystem__RpCallbackEndpoint[["RP callback endpoints (backchannel logout, CIBA notification, initiate login)"]]:::extsystem
+  screen__ConsumptionDeviceScreen["Client's consumption device"]:::screen
+  timer__CibaRequestLifetime(("Backchannel authentication request lifetime (expires_in of the response)")):::timer
+  api__BackchannelAuthenticationApi{{"Backchannel authentication endpoint"}}:::api
+  api__BackchannelDecisionApi{{"Authentication device decision"}}:::api
+  api__BackchannelExpiryApi{{"Backchannel request expiry"}}:::api
+  api__BackchannelNotificationApi{{"Client notification (ping and push)"}}:::api
+  api__BackchannelTokenApi{{"Token endpoint (ciba)"}}:::api
+  entity__BackchannelRequest[("Backchannel authentication request")]:::entity
+  entity__Client[("Registered client")]:::entity
+  entity__UserAccount[("End-User account")]:::entity
+  actor__RelyingParty --> screen__ConsumptionDeviceScreen
+  api__BackchannelAuthenticationApi -->|C| entity__BackchannelRequest
+  api__BackchannelAuthenticationApi -->|R| entity__Client
+  api__BackchannelAuthenticationApi -->|R| entity__UserAccount
+  api__BackchannelAuthenticationApi -.->|The End-User is asked to authenticate on the device| extsystem__AuthenticationDevice
+  api__BackchannelDecisionApi -->|U| entity__BackchannelRequest
+  api__BackchannelExpiryApi -->|U| entity__BackchannelRequest
+  api__BackchannelNotificationApi -.->|The ping callback is sent| api__BackchannelTokenApi
+  api__BackchannelNotificationApi -.->|The ping callback is sent| extsystem__RpCallbackEndpoint
+  api__BackchannelNotificationApi -.->|The tokens are pushed| extsystem__RpCallbackEndpoint
+  api__BackchannelNotificationApi -->|U| entity__BackchannelRequest
+  api__BackchannelTokenApi -->|U| entity__BackchannelRequest
+  extsystem__AuthenticationDevice -.->|The End-User approved on the device| api__BackchannelDecisionApi
+  extsystem__AuthenticationDevice -.->|The End-User approved on the device| api__BackchannelNotificationApi
+  extsystem__AuthenticationDevice -.->|The End-User approved on the device| api__BackchannelTokenApi
+  extsystem__AuthenticationDevice -.->|The End-User declined on the device| api__BackchannelDecisionApi
+  screen__ConsumptionDeviceScreen -->|Send a backchannel authentication request| api__BackchannelAuthenticationApi
+  timer__CibaRequestLifetime -.-> api__BackchannelExpiryApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

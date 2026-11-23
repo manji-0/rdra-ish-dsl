@@ -617,6 +617,28 @@ pub enum Pred {
     },
 }
 
+/// What some reachable state must show for a rule's holding to say anything: present rows
+/// of the binders `pred` reads (of every binder, when it reads none) under which `pred`
+/// holds. A rule with a premise no reachable state meets holds vacuously
+/// (`StateDiag::VacuousRule`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Premise {
+    /// Read under the rule's binders, as its body is. `True` asks only that the rows exist.
+    pub pred: Pred,
+    /// The conditions as the author wrote them; empty for `True`.
+    pub text: String,
+}
+
+impl Premise {
+    /// Only that rows of the binders exist.
+    pub fn rows() -> Self {
+        Premise {
+            pred: Pred::True,
+            text: String::new(),
+        }
+    }
+}
+
 /// A state constraint, closed over present slots of its binders.
 #[derive(Clone, Debug)]
 pub struct Invariant {
@@ -624,6 +646,9 @@ pub struct Invariant {
     /// Universally bound entities, outermost first.
     pub binders: Vec<EntId>,
     pub body: Pred,
+    /// The premises of the rule, each of which some reachable state must meet: the rows it
+    /// ranges over, the guards of a `.when`, and each condition of a `forbidden` on its own.
+    pub premises: Vec<Premise>,
     /// The constraint as the author wrote it, for diagnostics; its variant is the kind.
     pub text: InvText,
     /// The rule's `.label("...")`, which a violation names.
@@ -737,6 +762,10 @@ pub struct Property {
     pub name: String,
     /// Entities the formula is quantified over per instance, outermost first.
     pub binders: Vec<EntId>,
+    /// `.along(..)`: the owner links that join the binders. It joins `present` in the
+    /// formula's trigger, so the formula speaks only of linked rows. `Pred::True` without
+    /// `.along`.
+    pub link: Pred,
     pub formula: Ltl,
     /// `.fair(UC, ...)`: each action of these use cases is weakly fair per instance it acts
     /// on. The TLA+ printer finds the actions by `ActionOrigin`, so a restriction that drops
@@ -746,9 +775,37 @@ pub struct Property {
 }
 
 impl Property {
+    /// Every predicate the property reads: the link, then the formula's operands.
+    pub fn preds(&self) -> impl Iterator<Item = &Pred> {
+        std::iter::once(&self.link).chain(self.formula.preds())
+    }
+
     /// Whether `.fair` names the use case of `action`.
     pub fn is_fair(&self, action: &Action) -> bool {
         matches!(&action.origin, ActionOrigin::UseCase { uc, .. } if self.fair.contains(uc))
+    }
+}
+
+/// A `can_reach(goal)` property: from every reachable state where its instance is present
+/// (and linked, under `.along`), some path on which it stays present reaches `goal`. That is
+/// CTL `AG (present => E[present U (present /\ goal)])`, which no LTL formula states, so TLC
+/// never checks it: BFS decides it on its cone's graph (`reach.rs`).
+#[derive(Clone, Debug)]
+pub struct Reach {
+    pub name: String,
+    /// Entities the goal is quantified over per instance, outermost first.
+    pub binders: Vec<EntId>,
+    /// `.along(..)`: the owner links that join the binders, read with `present`, so the
+    /// property speaks only of linked rows. `Pred::True` without `.along`.
+    pub link: Pred,
+    pub goal: Pred,
+    pub site: Site,
+}
+
+impl Reach {
+    /// Every predicate the property reads: the link, then the goal.
+    pub fn preds(&self) -> impl Iterator<Item = &Pred> {
+        [&self.link, &self.goal].into_iter()
     }
 }
 

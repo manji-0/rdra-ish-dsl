@@ -494,11 +494,14 @@ impl TransitionSystem {
                 })
             })
             .collect();
+        // A reduction keeps stuttering equivalence, which says nothing of `AG EF`, so a reduced
+        // system decides no `can_reach` (`explore_targets_with` reduces no cone of one).
+        self.reach.clear();
         let properties = std::mem::take(&mut self.properties);
         self.properties = properties
             .into_iter()
             .filter(|p| {
-                let preds: Vec<&Pred> = p.formula.preds().collect();
+                let preds: Vec<&Pred> = p.preds().collect();
                 reads_ok(self, &p.binders, &preds)
                     && self
                         .actions

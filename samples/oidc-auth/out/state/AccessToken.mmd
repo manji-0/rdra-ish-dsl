@@ -1,0 +1,28 @@
+%% rdra-ish diagram=state scope=entity:AccessToken model=samples/oidc-auth
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out, or declared by @end
+stateDiagram-v2
+  state "AccessToken.status" as statemodel__AccessToken_status {
+    [*] --> state__AccessToken_active
+    state "Active" as state__AccessToken_active
+    state "Expired" as state__AccessToken_expired
+    state "Revoked" as state__AccessToken_revoked
+    %% transition usecase__RefreshTokens
+    state__AccessToken_active --> state__AccessToken_active : Refresh the tokens [The grant is not revoked]
+    %% transition usecase__ExpireAccessToken
+    state__AccessToken_active --> state__AccessToken_expired : Expire an access token
+    %% transition usecase__RevokeAccessToken
+    state__AccessToken_active --> state__AccessToken_revoked : Revoke an access token (RFC 7009)
+    %% transition usecase__RevokeGrantAccessTokens
+    state__AccessToken_active --> state__AccessToken_revoked : Revoke the access tokens of a revoked grant [The grant is revoked]
+    %% transition usecase__RefreshTokens
+    state__AccessToken_expired --> state__AccessToken_active : Refresh the tokens [The grant is not revoked]
+    %% transition usecase__RefreshTokens
+    state__AccessToken_revoked --> state__AccessToken_active : Refresh the tokens [The grant is not revoked]
+    state__AccessToken_expired --> [*]
+    state__AccessToken_revoked --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__AccessToken_expired stateend
+  class state__AccessToken_revoked stateend

@@ -1,0 +1,228 @@
+module buc.device
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+import buc.code_exchange.{TokenRequest, TokenResponse, TokenError}
+
+buc BucDeviceSignIn "Sign in on an input-constrained device"
+  description "A device without a browser or a keyboard (a TV, a CLI) asks the OP for a device code and a user code, shows the user code and the verification URI, and polls the token endpoint. The End-User opens the URI on a phone or a computer, signs in, and approves or denies the device."
+
+// RFC 8628 §3.1 and §3.2.
+usecase StartDeviceAuthorization "Request a device code"
+  description "POST client_id and scope openid to the device authorization endpoint and receive device_code, user_code, verification_uri, verification_uri_complete, expires_in, and interval."
+
+// RFC 8628 §3.3: "the authorization server ... authenticates the end user and prompts the
+// user to input the user code ... and review the authorization request".
+usecase ApproveDevice "Approve the device"
+  description "Open the verification URI on another device, sign in, enter or confirm the user code, check the client and scopes, and approve."
+
+usecase DenyDevice "Deny the device" description "Decline the request after reading which client asks for what."
+
+// RFC 8628 §3.4 and §3.5: while the End-User has not decided, the token endpoint answers
+// authorization_pending, and slow_down when the device polls faster than the interval.
+usecase PollDevicePending "Poll while the End-User decides"
+  description "POST grant_type=urn:ietf:params:oauth:grant-type:device_code and receive authorization_pending, or slow_down when the device polled too soon."
+
+// RFC 8628 §3.5: after approval the token endpoint returns the tokens. The model records the
+// redemption on the device authorization and keeps no token rows for it (README).
+usecase RedeemDeviceCode "Redeem the device code"
+  description "The poll after the approval consumes the device code and receives the ID Token, the access token, and the refresh token."
+  error "access_denied after a denial; expired_token after expires_in (RFC 8628 §3.5)."
+
+usecase ExpireDeviceCode "Expire the device code"
+  description "The device code reaches expires_in before it is redeemed."
+
+// RFC 8628 §3.3: the device shows the user code and the verification URI (or a QR code of
+// verification_uri_complete).
+screen DeviceCodeScreen "User code display on the device"
+screen DeviceVerificationScreen "Device verification page"
+
+event EvDeviceCodeIssued "The device received its codes"
+event EvDeviceApproved "The End-User approved the device"
+
+api DeviceAuthorizationApi "Device authorization endpoint"
+  method POST
+  path "/device_authorization"
+  mode sync
+  auth client
+
+api DeviceVerificationApi "Device verification form"
+  method POST
+  path "/device"
+  mode sync
+
+api DevicePollApi "Token endpoint (device_code, pending)"
+  method POST
+  path "/token#device_code_pending"
+  mode sync
+  auth client
+
+api DeviceTokenApi "Token endpoint (device_code)"
+  method POST
+  path "/token#device_code"
+  mode sync
+  auth client
+
+api DeviceExpiryApi "Device code expiry"
+
+dto DeviceAuthorizationResponse "Device authorization response" {
+  device_code: String
+  user_code: String
+  verification_uri: String
+  verification_uri_complete: String @null
+  expires_in: Int
+  interval: Int @null
+}
+
+response(DeviceAuthorizationApi, DeviceAuthorizationResponse)
+maps_field(DeviceAuthorizationResponse.user_code, DeviceAuthorization.user_code)
+request(DeviceTokenApi, TokenRequest)
+response(DeviceTokenApi, TokenResponse)
+error_response(DeviceTokenApi, TokenError)
+response(DevicePollApi, TokenError)
+
+performs(RelyingParty, StartDeviceAuthorization)
+performs(EndUser, ApproveDevice)
+performs(EndUser, DenyDevice)
+performs(RelyingParty, PollDevicePending)
+performs(RelyingParty, RedeemDeviceCode)
+belongs(BucDeviceSignIn, Identity).by(InputConstrainedDevice).by(UserAgent)
+
+contains(BucDeviceSignIn, StartDeviceAuthorization)
+contains(BucDeviceSignIn, ApproveDevice)
+contains(BucDeviceSignIn, DenyDevice)
+contains(BucDeviceSignIn, PollDevicePending)
+contains(BucDeviceSignIn, RedeemDeviceCode)
+contains(BucDeviceSignIn, ExpireDeviceCode)
+contains(OpenIdProvider, DeviceAuthorizationApi)
+contains(OpenIdProvider, DeviceVerificationApi)
+contains(OpenIdProvider, DevicePollApi)
+contains(OpenIdProvider, DeviceTokenApi)
+contains(OpenIdProvider, DeviceExpiryApi)
+
+condition DeviceClientActive "The client is active"
+holds(DeviceClientActive, Client.status == active).along(DeviceAuthorization, Client)
+
+displays(StartDeviceAuthorization, DeviceCodeScreen)
+raises(StartDeviceAuthorization, EvDeviceCodeIssued)
+invokes(StartDeviceAuthorization, DeviceAuthorizationApi)
+creates(DeviceAuthorizationApi, DeviceAuthorization)
+reads(DeviceAuthorizationApi, Client)
+applies_to(DeviceClientActive, StartDeviceAuthorization)
+
+// The approval records who approved, so the tokens name that End-User.
+displays(ApproveDevice, DeviceVerificationScreen)
+invokes(ApproveDevice, DeviceVerificationApi)
+updates(DeviceVerificationApi, DeviceAuthorization)
+reads(DeviceVerificationApi, UserAccount)
+transitions(ApproveDevice, DeviceAuthorization.status, pending -> approved)
+raises(ApproveDevice, EvDeviceApproved)
+links(ApproveDevice, DeviceAuthorization, UserAccount)
+
+displays(DenyDevice, DeviceVerificationScreen)
+invokes(DenyDevice, DeviceVerificationApi)
+transitions(DenyDevice, DeviceAuthorization.status, pending -> denied)
+
+// The pending poll leaves the row as it is; the model keeps it for the error it answers.
+triggers(EvDeviceCodeIssued, PollDevicePending)
+invokes(PollDevicePending, DevicePollApi)
+reads(DevicePollApi, DeviceAuthorization)
+
+triggers(EvDeviceApproved, RedeemDeviceCode)
+invokes(RedeemDeviceCode, DeviceTokenApi)
+updates(DeviceTokenApi, DeviceAuthorization)
+transitions(RedeemDeviceCode, DeviceAuthorization.status, approved -> redeemed)
+applies_to(DeviceClientActive, RedeemDeviceCode)
+
+triggers(DeviceCodeLifetime, ExpireDeviceCode)
+invokes(ExpireDeviceCode, DeviceExpiryApi)
+updates(DeviceExpiryApi, DeviceAuthorization)
+transitions(ExpireDeviceCode, DeviceAuthorization.status, (pending, approved) -> expired)
+
+// Access constraints
+requires_permission(StartDeviceAuthorization, ClientCredential)
+requires_medium(StartDeviceAuthorization, InputConstrainedDevice)
+requires_permission(DeviceAuthorizationApi, ClientCredential)
+requires_permission(ApproveDevice, EndUserCredential)
+requires_medium(ApproveDevice, UserAgent)
+requires_permission(DenyDevice, EndUserCredential)
+requires_medium(DenyDevice, UserAgent)
+requires_permission(DeviceVerificationApi, EndUserCredential)
+requires_permission(PollDevicePending, ClientCredential)
+requires_medium(PollDevicePending, InputConstrainedDevice)
+requires_permission(DevicePollApi, ClientCredential)
+requires_permission(RedeemDeviceCode, ClientCredential)
+requires_medium(RedeemDeviceCode, InputConstrainedDevice)
+requires_permission(DeviceTokenApi, ClientCredential)
+
+field UserCodeField "User code"
+  access editable
+  required true
+  source actor
+
+field DisplayedUserCodeField "User code shown"
+  access readonly
+  required true
+  source system
+
+// The End-User leaves the device's screen for the verification page on another device.
+navigates(DeviceCodeScreen, DeviceVerificationScreen).via(ApproveDevice)
+contains(DeviceCodeScreen, DisplayedUserCodeField)
+maps_field(DisplayedUserCodeField, DeviceAuthorization.user_code)
+contains(DeviceVerificationScreen, UserCodeField)
+maps_field(UserCodeField, DeviceAuthorization.user_code)
+shows(DeviceVerificationScreen, Client)
+
+// Business flow
+flow DeviceFlow "Device authorization"
+step DeviceStartStep "The device asks for a code and shows the user code"
+step DevicePollStep "The device polls"
+step DeviceApproveStep "The End-User approves on another device"
+step DeviceDenyStep "The End-User denies"
+step DeviceRedeemStep "The device receives the tokens"
+step DeviceExpireStep "The code expires"
+
+contains(BucDeviceSignIn, DeviceFlow)
+contains(DeviceFlow, DeviceStartStep)
+contains(DeviceFlow, DevicePollStep)
+contains(DeviceFlow, DeviceApproveStep)
+contains(DeviceFlow, DeviceDenyStep)
+contains(DeviceFlow, DeviceRedeemStep)
+contains(DeviceFlow, DeviceExpireStep)
+
+precedes(DeviceStartStep, DevicePollStep)
+precedes(DeviceStartStep, DeviceApproveStep)
+precedes(DeviceApproveStep, DeviceRedeemStep)
+repeats(DevicePollStep, DevicePollStep)
+precedes(DevicePollStep, DeviceRedeemStep)
+excepts(DeviceApproveStep, DeviceDenyStep)
+excepts(DevicePollStep, DeviceExpireStep)
+
+covers(DeviceStartStep, StartDeviceAuthorization)
+covers(DeviceStartStep, EvDeviceCodeIssued)
+covers(DeviceApproveStep, EvDeviceApproved)
+covers(DevicePollStep, PollDevicePending)
+covers(DeviceApproveStep, ApproveDevice)
+covers(DeviceDenyStep, DenyDevice)
+covers(DeviceRedeemStep, RedeemDeviceCode)
+covers(DeviceExpireStep, ExpireDeviceCode)
+covers(DeviceExpireStep, DeviceCodeLifetime)
+
+performs(RelyingParty, DeviceStartStep)
+performs(RelyingParty, DevicePollStep)
+performs(EndUser, DeviceApproveStep)
+performs(EndUser, DeviceDenyStep)
+performs(RelyingParty, DeviceRedeemStep)
+
+// Requirement traceability
+requirement ReqDeviceFlow "A device without a browser signs the End-User in through another device"
+  priority "should"
+  source "RFC 8628 §3"
+  stakeholder "End-User"
+  acceptance_criteria "The device receives tokens only after the End-User approved at the verification URI; a denial or an expiry ends the device code."
+  status "accepted"
+
+motivates(ReqDeviceFlow, BucDeviceSignIn)
+achieves(ReqDeviceFlow, OpenInterop)

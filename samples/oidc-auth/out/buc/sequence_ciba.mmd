@@ -1,0 +1,83 @@
+%% rdra-ish diagram=sequence scope=buc:BucBackchannelSignIn model=samples/oidc-auth
+%% kinds: actor usecase timer screen api entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__RelyingParty as Relying Party (client application)
+  participant usecase__SendPingCallback as Ping the client
+  participant timer__CibaRequestLifetime as Backchannel authentication request lifetime (expires_in of the response)
+  participant screen__ConsumptionDeviceScreen as Client's consumption device
+  participant api__BackchannelAuthenticationApi as Backchannel authentication endpoint
+  participant api__BackchannelDecisionApi as Authentication device decision
+  participant api__BackchannelNotificationApi as Client notification (ping and push)
+  participant api__BackchannelExpiryApi as Backchannel request expiry
+  participant entity__Client as Registered client
+  participant entity__UserAccount as End-User account
+  participant entity__BackchannelRequest as Backchannel authentication request
+  participant extsystem__AuthenticationDevice as Authentication device (CIBA, out of band)
+  participant api__BackchannelTokenApi as Token endpoint (ciba)
+  participant extsystem__RpCallbackEndpoint as RP callback endpoints (backchannel logout, CIBA notification, initiate login)
+  Note over screen__ConsumptionDeviceScreen: 1. Send a backchannel authentication request
+  actor__RelyingParty ->> screen__ConsumptionDeviceScreen: Send a backchannel authentication request
+  screen__ConsumptionDeviceScreen ->> api__BackchannelAuthenticationApi: Backchannel authentication endpoint
+  alt The client is active: (Client.status == Active).along(BackchannelRequest, Client)
+    api__BackchannelAuthenticationApi ->> entity__Client: read
+    api__BackchannelAuthenticationApi ->> entity__UserAccount: read
+    api__BackchannelAuthenticationApi ->> entity__BackchannelRequest: create
+    api__BackchannelAuthenticationApi -) extsystem__AuthenticationDevice: The End-User is asked to authenticate on the device
+    api__BackchannelAuthenticationApi -->> screen__ConsumptionDeviceScreen: done
+  else guard fails
+    api__BackchannelAuthenticationApi -->> screen__ConsumptionDeviceScreen: rejected
+  end
+  Note over api__BackchannelDecisionApi: 2. Record the End-User's approval
+  extsystem__AuthenticationDevice ->> api__BackchannelDecisionApi: The End-User approved on the device
+  alt BackchannelRequest.status == Pending
+    api__BackchannelDecisionApi ->> entity__BackchannelRequest: update status Pending -> Approved
+    api__BackchannelDecisionApi -->> extsystem__AuthenticationDevice: done
+  else guard fails
+    api__BackchannelDecisionApi -->> extsystem__AuthenticationDevice: rejected
+  end
+  Note over api__BackchannelDecisionApi: 3. Record the End-User's denial
+  extsystem__AuthenticationDevice ->> api__BackchannelDecisionApi: The End-User declined on the device
+  alt BackchannelRequest.status == Pending
+    api__BackchannelDecisionApi ->> entity__BackchannelRequest: update status Pending -> Denied
+    api__BackchannelDecisionApi -->> extsystem__AuthenticationDevice: done
+  else guard fails
+    api__BackchannelDecisionApi -->> extsystem__AuthenticationDevice: rejected
+  end
+  Note over api__BackchannelNotificationApi: 4. Ping the client
+  extsystem__AuthenticationDevice ->> api__BackchannelNotificationApi: The End-User approved on the device
+  alt The client registered ping mode: BackchannelRequest.delivery_mode == Ping and BackchannelRequest.status == Approved
+    api__BackchannelNotificationApi ->> entity__BackchannelRequest: update status Approved -> Ping sent
+    api__BackchannelNotificationApi -) api__BackchannelTokenApi: The ping callback is sent
+    api__BackchannelNotificationApi -) extsystem__RpCallbackEndpoint: The ping callback is sent
+    api__BackchannelNotificationApi -->> extsystem__AuthenticationDevice: done
+  else guard fails
+    api__BackchannelNotificationApi -->> extsystem__AuthenticationDevice: rejected
+  end
+  Note over api__BackchannelTokenApi: 5. Poll for the tokens
+  actor__RelyingParty ->> api__BackchannelTokenApi: Poll for the tokens
+  extsystem__AuthenticationDevice ->> api__BackchannelTokenApi: The End-User approved on the device
+  usecase__SendPingCallback ->> api__BackchannelTokenApi: The ping callback is sent
+  alt BackchannelRequest.status in (Approved, Ping sent)
+    api__BackchannelTokenApi ->> entity__BackchannelRequest: update status Approved -> Tokens issued [The client registered poll mode], status Ping sent -> Tokens issued [The client registered ping mode]
+    api__BackchannelTokenApi -->> actor__RelyingParty: done
+  else guard fails
+    api__BackchannelTokenApi -->> actor__RelyingParty: rejected
+  end
+  Note over api__BackchannelNotificationApi: 6. Push the tokens to the client
+  extsystem__AuthenticationDevice ->> api__BackchannelNotificationApi: The End-User approved on the device
+  alt The client registered push mode: BackchannelRequest.delivery_mode == Push and BackchannelRequest.status == Approved
+    api__BackchannelNotificationApi ->> entity__BackchannelRequest: update status Approved -> Tokens pushed
+    api__BackchannelNotificationApi -) extsystem__RpCallbackEndpoint: The tokens are pushed
+    api__BackchannelNotificationApi -->> extsystem__AuthenticationDevice: done
+  else guard fails
+    api__BackchannelNotificationApi -->> extsystem__AuthenticationDevice: rejected
+  end
+  Note over api__BackchannelExpiryApi: 7. Expire the backchannel request
+  timer__CibaRequestLifetime ->> api__BackchannelExpiryApi: Backchannel authentication request lifetime (expires_in of the response)
+  alt BackchannelRequest.status in (Pending, Approved, Ping sent)
+    api__BackchannelExpiryApi ->> entity__BackchannelRequest: update status Pending -> Expired, status Approved -> Expired, status Ping sent -> Expired
+    api__BackchannelExpiryApi -->> timer__CibaRequestLifetime: done
+  else guard fails
+    api__BackchannelExpiryApi -->> timer__CibaRequestLifetime: rejected
+  end

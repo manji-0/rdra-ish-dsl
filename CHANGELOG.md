@@ -4,6 +4,32 @@
 
 ### Added
 
+- `samples/oidc-auth` models an OpenID Provider and every OpenID Connect authentication
+  scenario: discovery and dynamic registration, the code, implicit, and hybrid flows with
+  all six response types, PKCE, `prompt` / `max_age` / `acr_values` and the `prompt=none`
+  errors, consent, code redemption and replay, UserInfo, refresh-token rotation, revocation,
+  introspection, the device authorization grant, CIBA in poll, ping, and push mode,
+  RP-initiated, front-channel, and back-channel logout, session management, third-party
+  initiated login, and signing-key rotation. `check` reports nothing, and 13 labelled rules
+  each fail when the guard that protects them is removed.
+- `check` warns `Vacuous_<rule>` when a state rule holds and says nothing: no reachable
+  state has the rows it ranges over, the guards of its `.when` never hold, or one condition
+  of a `forbidden` of several is one no row ever meets, such as a state no use case enters.
+  What a `forbidden` forbids being unreachable is its claim and draws no warning (#170).
+- A `property` over two or more entities takes `.along(A, B, ..)` with `.role(role)`, and
+  `.global()`, as a multi-entity `invariant` does. The owner links of the path join the
+  trigger, so `verify` no longer reports a pair of unrelated rows as a counterexample.
+  `.global()` with `.along` is `GlobalWithAlong`, a path that misses an entity is
+  `UnbindableScope`, and `lint` `multi-rule-unscoped` now warns on a property with
+  neither. A property without the chain keeps its meaning (#165).
+- `property P can_reach(p)` says the actors can still finish each instance: from every
+  reachable state where it is present, some path reaches `p` for it (CTL
+  `AG (present => EF p)`). It finds a trap a `Deadlock_*` misses, such as an Order that
+  moves between `pending` and `on_hold` forever once a guard is false. TLC cannot check
+  it, so `verify` decides it by BFS on its cone, and a violation prints a shortest trace
+  and the states the instance is then confined to. `check` and `states` verify safety
+  only and evaluate no property, as the docs now say explicitly. `export --kind tla`
+  names it in a comment, and `.fair(...)` on it is `FairOnReachProperty` (#167).
 - `check`, `states`, and `verify` run within a memory limit: `--memory`, else `memory`
   under `[check]` or `[verify]` in `rdra.toml`, else `4GiB` for `check` and `states` and
   `16GiB` for `verify`. A size takes binary units (`4GiB`, `4G`, `4GB`, `4096MiB` are the

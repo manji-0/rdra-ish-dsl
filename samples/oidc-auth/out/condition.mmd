@@ -1,0 +1,347 @@
+%% rdra-ish diagram=condition scope=whole model=samples/oidc-auth
+%% kinds: condition statemodel variation value usecase
+%% omitted: (none)
+flowchart LR
+  condition__AccountChoiceAsked{"prompt=select_account on a valid request, with an authenticated session to pick"}:::condition
+  %% holds condition__AccountChoiceAsked: AuthorizationRequest.status == Validated, Interaction.prompt == prompt=select_account, OpSession.status == Authenticated
+  condition__BackchannelClientActive{"The client is active"}:::condition
+  %% holds condition__BackchannelClientActive: (Client.status == Active).along(BackchannelRequest, Client)
+  condition__CodeGrantActive{"The grant of the code is not revoked"}:::condition
+  %% holds condition__CodeGrantActive: Grant.status == Active
+  condition__ConfidentialClient{"The client is confidential"}:::condition
+  %% holds condition__ConfidentialClient: (Client.client_type == Confidential client).along(AuthorizationRequest, Client)
+  condition__ConsentOnRecord{"The End-User is authenticated, prompt is not consent, and a consent to the client is on record"}:::condition
+  %% holds condition__ConsentOnRecord: (Interaction.authentication in (Login page, Existing session), Interaction.prompt not in (prompt=consent)).along(Interaction, AuthorizationRequest, Client, Consent).has(Consent.status == Granted)
+  condition__DeviceClientActive{"The client is active"}:::condition
+  %% holds condition__DeviceClientActive: (Client.status == Active).along(DeviceAuthorization, Client)
+  condition__EndUserAuthenticated{"The End-User is authenticated for the request, and a page may be shown"}:::condition
+  %% holds condition__EndUserAuthenticated: Interaction.authentication in (Login page, Existing session), Interaction.prompt not in (prompt=none)
+  condition__FrontChannelIdToken{"An ID Token comes back from the authorization endpoint"}:::condition
+  %% holds condition__FrontChannelIdToken: AuthorizationRequest.response_type in (id_token (Implicit Flow), id_token token (Implicit Flow), code id_token (Hybrid Flow), code id_token token (Hybrid Flow))
+  condition__GrantRevoked{"The grant is revoked"}:::condition
+  %% holds condition__GrantRevoked: Grant.status == Revoked
+  condition__NoCodeIssued{"No code is issued (Implicit Flow)"}:::condition
+  %% holds condition__NoCodeIssued: AuthorizationRequest.response_type in (id_token (Implicit Flow), id_token token (Implicit Flow))
+  condition__NoFrontChannelIdToken{"No ID Token comes back from the authorization endpoint"}:::condition
+  %% holds condition__NoFrontChannelIdToken: AuthorizationRequest.response_type in (code (Authorization Code Flow), code token (Hybrid Flow))
+  condition__PingMode{"The client registered ping mode"}:::condition
+  %% holds condition__PingMode: BackchannelRequest.delivery_mode == Ping
+  condition__PollMode{"The client registered poll mode"}:::condition
+  %% holds condition__PollMode: BackchannelRequest.delivery_mode == Poll
+  condition__PublicClientWithoutS256{"A public client asks for a code without an S256 challenge"}:::condition
+  %% holds condition__PublicClientWithoutS256: (AuthorizationRequest.pkce in (No PKCE, plain), AuthorizationRequest.response_type in (code (Authorization Code Flow), code id_token (Hybrid Flow), code token (Hybrid Flow), code id_token token (Hybrid Flow)), Client.client_type == Public client).along(AuthorizationRequest, Client)
+  condition__PushMode{"The client registered push mode"}:::condition
+  %% holds condition__PushMode: BackchannelRequest.delivery_mode == Push
+  condition__RefreshAllowed{"The grant is not revoked"}:::condition
+  %% holds condition__RefreshAllowed: Grant.status == Active
+  condition__RequestValidated{"The request is valid and lets the OP show a page"}:::condition
+  %% holds condition__RequestValidated: AuthorizationRequest.status == Validated, Interaction.prompt not in (prompt=none)
+  condition__ResponseTypeCode{"response_type=code"}:::condition
+  %% holds condition__ResponseTypeCode: AuthorizationRequest.response_type == code (Authorization Code Flow)
+  condition__ResponseTypeCodeIdToken{"response_type=code id_token"}:::condition
+  %% holds condition__ResponseTypeCodeIdToken: AuthorizationRequest.response_type == code id_token (Hybrid Flow)
+  condition__ResponseTypeCodeIdTokenToken{"response_type=code id_token token"}:::condition
+  %% holds condition__ResponseTypeCodeIdTokenToken: AuthorizationRequest.response_type == code id_token token (Hybrid Flow)
+  condition__ResponseTypeCodeToken{"response_type=code token"}:::condition
+  %% holds condition__ResponseTypeCodeToken: AuthorizationRequest.response_type == code token (Hybrid Flow)
+  condition__ResponseTypeIdToken{"response_type=id_token"}:::condition
+  %% holds condition__ResponseTypeIdToken: AuthorizationRequest.response_type == id_token (Implicit Flow)
+  condition__ResponseTypeIdTokenToken{"response_type=id_token token"}:::condition
+  %% holds condition__ResponseTypeIdTokenToken: AuthorizationRequest.response_type == id_token token (Implicit Flow)
+  condition__S256Challenge{"The request carries an S256 code challenge"}:::condition
+  %% holds condition__S256Challenge: AuthorizationRequest.pkce == S256
+  condition__SessionAuthenticated{"The OP session is authenticated"}:::condition
+  %% holds condition__SessionAuthenticated: OpSession.status == Authenticated
+  condition__SessionCoversAcr{"The OP session is authenticated with a second factor"}:::condition
+  %% holds condition__SessionCoversAcr: OpSession.status == Authenticated, OpSession.auth_level == Multi-factor
+  condition__SessionEnded{"The OP session has ended"}:::condition
+  %% holds condition__SessionEnded: OpSession.status in (Logged out, Expired)
+  condition__SessionMayServe{"The request is valid and no prompt forces a login or an account choice"}:::condition
+  %% holds condition__SessionMayServe: AuthorizationRequest.status == Validated, Interaction.prompt in (No prompt, prompt=none, prompt=consent)
+  condition__SilentStepUp{"prompt=none, the request asks for a second factor, and the End-User is not authenticated at that level"}:::condition
+  %% holds condition__SilentStepUp: Interaction.prompt == prompt=none, Interaction.acr == A multi-factor class, Interaction.authentication == Not yet
+  condition__SilentUnauthenticated{"prompt=none and the End-User is not authenticated"}:::condition
+  %% holds condition__SilentUnauthenticated: Interaction.prompt == prompt=none, Interaction.authentication == Not yet
+  condition__SilentWithoutConsent{"prompt=none, the End-User is authenticated, and no consent to the client is on record"}:::condition
+  %% holds condition__SilentWithoutConsent: (Interaction.prompt == prompt=none, Interaction.authentication == Existing session).along(Interaction, AuthorizationRequest, Client, Consent).none(Consent.status == Granted)
+  condition__SingleFactorEnough{"The OP session is authenticated and the request asks for no second factor"}:::condition
+  %% holds condition__SingleFactorEnough: OpSession.status == Authenticated, Interaction.acr == No acr_values, or a single-factor class
+  statemodel__AuthorizationRequest_status[["AuthorizationRequest.status"]]:::statemodel
+  statemodel__BackchannelRequest_status[["BackchannelRequest.status"]]:::statemodel
+  statemodel__Client_status[["Client.status"]]:::statemodel
+  statemodel__Consent_status[["Consent.status"]]:::statemodel
+  statemodel__Grant_status[["Grant.status"]]:::statemodel
+  statemodel__Interaction_authentication[["Interaction.authentication"]]:::statemodel
+  statemodel__OpSession_auth_level[["OpSession.auth_level"]]:::statemodel
+  statemodel__OpSession_status[["OpSession.status"]]:::statemodel
+  subgraph variation__AcrRequest["Requested authentication context"]
+    variation__AcrRequest__any["No acr_values, or a single-factor class"]:::value
+    variation__AcrRequest__mfa["A multi-factor class"]:::value
+  end
+  subgraph variation__CibaDeliveryMode["CIBA token delivery mode"]
+    variation__CibaDeliveryMode__poll["Poll"]:::value
+    variation__CibaDeliveryMode__ping["Ping"]:::value
+    variation__CibaDeliveryMode__push["Push"]:::value
+  end
+  subgraph variation__ClientAuthMethod["Token endpoint authentication method"]
+    variation__ClientAuthMethod__client_secret_basic["client_secret_basic"]:::value
+    variation__ClientAuthMethod__client_secret_post["client_secret_post"]:::value
+    variation__ClientAuthMethod__client_secret_jwt["client_secret_jwt"]:::value
+    variation__ClientAuthMethod__private_key_jwt["private_key_jwt"]:::value
+    variation__ClientAuthMethod__none["none (public client)"]:::value
+  end
+  subgraph variation__ClientType["Client type"]
+    variation__ClientType__confidential["Confidential client"]:::value
+    variation__ClientType__public["Public client"]:::value
+  end
+  subgraph variation__PkceMethod["PKCE code challenge method"]
+    variation__PkceMethod__absent["No PKCE"]:::value
+    variation__PkceMethod__plain["plain"]:::value
+    variation__PkceMethod__s256["S256"]:::value
+  end
+  subgraph variation__Prompt["prompt parameter"]
+    variation__Prompt__unspecified["No prompt"]:::value
+    variation__Prompt__none["prompt=none"]:::value
+    variation__Prompt__login["prompt=login"]:::value
+    variation__Prompt__consent["prompt=consent"]:::value
+    variation__Prompt__select_account["prompt=select_account"]:::value
+  end
+  subgraph variation__ResponseType["Response type"]
+    variation__ResponseType__code["code (Authorization Code Flow)"]:::value
+    variation__ResponseType__id_token["id_token (Implicit Flow)"]:::value
+    variation__ResponseType__id_token_token["id_token token (Implicit Flow)"]:::value
+    variation__ResponseType__code_id_token["code id_token (Hybrid Flow)"]:::value
+    variation__ResponseType__code_token["code token (Hybrid Flow)"]:::value
+    variation__ResponseType__code_id_token_token["code id_token token (Hybrid Flow)"]:::value
+  end
+  usecase__AuthenticateEndUser("Authenticate for the request at the login page"):::usecase
+  %% desc usecase__AuthenticateEndUser: Show the login page for this request and take the session the End-User logs in to, at the level the request asks for.
+  usecase__DenyConsent("Decline the client"):::usecase
+  %% desc usecase__DenyConsent: The End-User declines; the OP answers access_denied on the redirect URI.
+  usecase__GrantConsent("Consent to the client"):::usecase
+  %% desc usecase__GrantConsent: Show the client, the scopes, and the claims requested, and record the End-User's consent.
+  usecase__IssueCodeResponse("Respond with a code (Authorization Code Flow)"):::usecase
+  %% desc usecase__IssueCodeResponse: Redirect to the redirect_uri with the authorization code and state in the query.
+  usecase__IssueHybridFullResponse("Respond with a code, an ID Token, and an access token (Hybrid Flow, code id_token token)"):::usecase
+  %% desc usecase__IssueHybridFullResponse: Redirect with the code, the ID Token carrying c_hash and at_hash, the access token, and state in the fragment.
+  usecase__IssueHybridIdTokenResponse("Respond with a code and an ID Token (Hybrid Flow, code id_token)"):::usecase
+  %% desc usecase__IssueHybridIdTokenResponse: Redirect with the code, the ID Token carrying c_hash, and state in the fragment.
+  usecase__IssueHybridTokenResponse("Respond with a code and an access token (Hybrid Flow, code token)"):::usecase
+  %% desc usecase__IssueHybridTokenResponse: Redirect with the code, the access token, and state in the fragment.
+  usecase__IssueIdTokenResponse("Respond with an ID Token (Implicit Flow, id_token)"):::usecase
+  %% desc usecase__IssueIdTokenResponse: Redirect with the ID Token and state in the fragment.
+  usecase__IssueImplicitTokenResponse("Respond with an ID Token and an access token (Implicit Flow, id_token token)"):::usecase
+  %% desc usecase__IssueImplicitTokenResponse: Redirect with the ID Token, the access token, token_type, expires_in, and state in the fragment.
+  usecase__PollBackchannelToken("Poll for the tokens"):::usecase
+  %% desc usecase__PollBackchannelToken: POST the auth_req_id to the token endpoint and receive the ID Token, the access token, and the refresh token, or authorization_pending, slow_down, access_denied, or expired_token (CIBA §11).
+  usecase__PushBackchannelTokens("Push the tokens to the client"):::usecase
+  %% desc usecase__PushBackchannelTokens: POST the auth_req_id, the ID Token carrying urn:openid:params:jwt:claim:auth_req_id, the access token, and the refresh token to the client notification endpoint.
+  usecase__RedeemCode("Redeem the authorization code"):::usecase
+  %% desc usecase__RedeemCode: POST grant_type=authorization_code with the code, the redirect_uri, the client authentication, and the code_verifier, and receive the ID Token, the access token, and the refresh token.
+  usecase__RedeemDeviceCode("Redeem the device code"):::usecase
+  %% desc usecase__RedeemDeviceCode: The poll after the approval consumes the device code and receives the ID Token, the access token, and the refresh token.
+  usecase__RefreshTokens("Refresh the tokens"):::usecase
+  %% desc usecase__RefreshTokens: POST grant_type=refresh_token and receive a new access token, a rotated refresh token, and optionally a new ID Token with the same sub (Core §12.2).
+  usecase__RejectInvalidRequest("Reject an invalid request"):::usecase
+  %% desc usecase__RejectInvalidRequest: Answer invalid_request on the redirect URI: a public client asked for a code without an S256 code challenge.
+  usecase__RequestAuthentication("Send the authentication request"):::usecase
+  %% desc usecase__RequestAuthentication: Redirect the End-User to the authorization endpoint with scope openid, client_id, redirect_uri, response_type, state, nonce, prompt, max_age, acr_values, and the PKCE code_challenge.
+  usecase__ReturnAccountSelectionRequired("Answer account_selection_required"):::usecase
+  %% desc usecase__ReturnAccountSelectionRequired: prompt=none and the user agent holds several sessions the End-User must choose among.
+  usecase__ReturnConsentRequired("Answer consent_required"):::usecase
+  %% desc usecase__ReturnConsentRequired: prompt=none, the End-User is authenticated, and no recorded consent covers the request.
+  usecase__ReturnInteractionRequired("Answer interaction_required"):::usecase
+  %% desc usecase__ReturnInteractionRequired: prompt=none and the request asks for a multi-factor class the session does not have.
+  usecase__ReturnLoginRequired("Answer login_required"):::usecase
+  %% desc usecase__ReturnLoginRequired: prompt=none and the OP cannot authenticate the End-User without a login page.
+  usecase__ReuseConsent("Reuse the recorded consent"):::usecase
+  %% desc usecase__ReuseConsent: Skip the consent page when the End-User has already consented to this client and prompt is not consent.
+  usecase__ReuseSession("Reuse the OP session (single sign-on)"):::usecase
+  %% desc usecase__ReuseSession: Recognize the End-User from the OP session cookie and skip the login page. The session must still be authenticated, and multi-factor when the request asks for it.
+  usecase__RevokeGrantAccessTokens("Revoke the access tokens of a revoked grant"):::usecase
+  %% desc usecase__RevokeGrantAccessTokens: Invalidate every access token issued under a grant that was revoked.
+  usecase__RevokeGrantRefreshTokens("Revoke the refresh tokens of a revoked grant"):::usecase
+  %% desc usecase__RevokeGrantRefreshTokens: Invalidate the refresh token family of a grant that was revoked.
+  usecase__SelectAccount("Select an account"):::usecase
+  %% desc usecase__SelectAccount: Show the accounts the user agent is signed in to and let the End-User pick the one to use.
+  usecase__SendBackchannelLogout("Send the Logout Token"):::usecase
+  %% desc usecase__SendBackchannelLogout: Sign a Logout Token naming the sub and the sid, and POST it to the backchannel_logout_uri of each RP the session signed in to.
+  usecase__SendPingCallback("Ping the client"):::usecase
+  %% desc usecase__SendPingCallback: POST the auth_req_id to the client notification endpoint, bearing the client_notification_token.
+  usecase__StartBackchannelAuthentication("Send a backchannel authentication request"):::usecase
+  %% desc usecase__StartBackchannelAuthentication: POST scope openid, a login hint, a binding_message, and, for ping and push, the client_notification_token to the backchannel authentication endpoint, and receive the auth_req_id.
+  usecase__StartDeviceAuthorization("Request a device code"):::usecase
+  %% desc usecase__StartDeviceAuthorization: POST client_id and scope openid to the device authorization endpoint and receive device_code, user_code, verification_uri, verification_uri_complete, expires_in, and interval.
+  usecase__StepUpAuthentication("Add a second factor to the session"):::usecase
+  %% desc usecase__StepUpAuthentication: Enter the second factor, because a request asks for a multi-factor class or the End-User chose to, and raise the OP session to multi-factor.
+  usecase__ValidateRequest("Validate the request"):::usecase
+  %% desc usecase__ValidateRequest: Check the client, the redirect_uri, the response_type the client registered, and that a public client asking for a code sends an S256 code challenge.
+  condition__AccountChoiceAsked -.->|applies_to| usecase__SelectAccount
+  condition__AccountChoiceAsked -.-> statemodel__AuthorizationRequest_status
+  %% derived condition__AccountChoiceAsked -> statemodel__AuthorizationRequest_status from holds
+  condition__AccountChoiceAsked -.-> statemodel__OpSession_status
+  %% derived condition__AccountChoiceAsked -> statemodel__OpSession_status from holds
+  condition__AccountChoiceAsked -.-> variation__Prompt
+  %% derived condition__AccountChoiceAsked -> variation__Prompt from holds
+  condition__BackchannelClientActive -.->|applies_to| usecase__StartBackchannelAuthentication
+  condition__BackchannelClientActive -.-> statemodel__Client_status
+  %% derived condition__BackchannelClientActive -> statemodel__Client_status from holds
+  condition__CodeGrantActive -.->|applies_to| usecase__RedeemCode
+  condition__CodeGrantActive -.-> statemodel__Grant_status
+  %% derived condition__CodeGrantActive -> statemodel__Grant_status from holds
+  condition__ConfidentialClient -.-> statemodel__AuthorizationRequest_status
+  %% derived condition__ConfidentialClient -> statemodel__AuthorizationRequest_status from when
+  condition__ConfidentialClient -.-> variation__ClientType
+  %% derived condition__ConfidentialClient -> variation__ClientType from holds
+  condition__ConfidentialClient -.->|when| usecase__ValidateRequest
+  %% derived condition__ConfidentialClient -> usecase__ValidateRequest via transitions AuthorizationRequest.status received->validated
+  condition__ConsentOnRecord -.->|applies_to| usecase__ReuseConsent
+  condition__ConsentOnRecord -.-> statemodel__Consent_status
+  %% derived condition__ConsentOnRecord -> statemodel__Consent_status from holds
+  condition__ConsentOnRecord -.-> statemodel__Interaction_authentication
+  %% derived condition__ConsentOnRecord -> statemodel__Interaction_authentication from holds
+  condition__ConsentOnRecord -.-> variation__Prompt
+  %% derived condition__ConsentOnRecord -> variation__Prompt from holds
+  condition__DeviceClientActive -.->|applies_to| usecase__RedeemDeviceCode
+  condition__DeviceClientActive -.->|applies_to| usecase__StartDeviceAuthorization
+  condition__DeviceClientActive -.-> statemodel__Client_status
+  %% derived condition__DeviceClientActive -> statemodel__Client_status from holds
+  condition__EndUserAuthenticated -.->|applies_to| usecase__DenyConsent
+  condition__EndUserAuthenticated -.->|applies_to| usecase__GrantConsent
+  condition__EndUserAuthenticated -.-> statemodel__Interaction_authentication
+  %% derived condition__EndUserAuthenticated -> statemodel__Interaction_authentication from holds
+  condition__EndUserAuthenticated -.-> variation__Prompt
+  %% derived condition__EndUserAuthenticated -> variation__Prompt from holds
+  condition__FrontChannelIdToken -.-> variation__ResponseType
+  %% derived condition__FrontChannelIdToken -> variation__ResponseType from holds
+  condition__FrontChannelIdToken -.->|when| usecase__RequestAuthentication
+  %% derived condition__FrontChannelIdToken -> usecase__RequestAuthentication via sets AuthorizationRequest.nonce present
+  condition__GrantRevoked -.->|applies_to| usecase__RevokeGrantAccessTokens
+  condition__GrantRevoked -.->|applies_to| usecase__RevokeGrantRefreshTokens
+  condition__GrantRevoked -.-> statemodel__Grant_status
+  %% derived condition__GrantRevoked -> statemodel__Grant_status from holds
+  condition__NoCodeIssued -.-> statemodel__AuthorizationRequest_status
+  %% derived condition__NoCodeIssued -> statemodel__AuthorizationRequest_status from when
+  condition__NoCodeIssued -.-> variation__ResponseType
+  %% derived condition__NoCodeIssued -> variation__ResponseType from holds
+  condition__NoCodeIssued -.->|when| usecase__ValidateRequest
+  %% derived condition__NoCodeIssued -> usecase__ValidateRequest via transitions AuthorizationRequest.status received->validated
+  condition__NoFrontChannelIdToken -.-> variation__ResponseType
+  %% derived condition__NoFrontChannelIdToken -> variation__ResponseType from holds
+  condition__NoFrontChannelIdToken -.->|when| usecase__RequestAuthentication
+  %% derived condition__NoFrontChannelIdToken -> usecase__RequestAuthentication via sets AuthorizationRequest.nonce null
+  condition__PingMode -.->|applies_to| usecase__SendPingCallback
+  condition__PingMode -.-> statemodel__BackchannelRequest_status
+  %% derived condition__PingMode -> statemodel__BackchannelRequest_status from when
+  condition__PingMode -.-> variation__CibaDeliveryMode
+  %% derived condition__PingMode -> variation__CibaDeliveryMode from holds
+  condition__PingMode -.->|when| usecase__PollBackchannelToken
+  %% derived condition__PingMode -> usecase__PollBackchannelToken via transitions BackchannelRequest.status notified->redeemed
+  condition__PollMode -.-> statemodel__BackchannelRequest_status
+  %% derived condition__PollMode -> statemodel__BackchannelRequest_status from when
+  condition__PollMode -.-> variation__CibaDeliveryMode
+  %% derived condition__PollMode -> variation__CibaDeliveryMode from holds
+  condition__PollMode -.->|when| usecase__PollBackchannelToken
+  %% derived condition__PollMode -> usecase__PollBackchannelToken via transitions BackchannelRequest.status approved->redeemed
+  condition__PublicClientWithoutS256 -.->|applies_to| usecase__RejectInvalidRequest
+  condition__PublicClientWithoutS256 -.-> variation__ClientType
+  %% derived condition__PublicClientWithoutS256 -> variation__ClientType from holds
+  condition__PublicClientWithoutS256 -.-> variation__PkceMethod
+  %% derived condition__PublicClientWithoutS256 -> variation__PkceMethod from holds
+  condition__PublicClientWithoutS256 -.-> variation__ResponseType
+  %% derived condition__PublicClientWithoutS256 -> variation__ResponseType from holds
+  condition__PushMode -.->|applies_to| usecase__PushBackchannelTokens
+  condition__PushMode -.-> variation__CibaDeliveryMode
+  %% derived condition__PushMode -> variation__CibaDeliveryMode from holds
+  condition__RefreshAllowed -.->|applies_to| usecase__RefreshTokens
+  condition__RefreshAllowed -.-> statemodel__Grant_status
+  %% derived condition__RefreshAllowed -> statemodel__Grant_status from holds
+  condition__RequestValidated -.->|applies_to| usecase__AuthenticateEndUser
+  condition__RequestValidated -.-> statemodel__AuthorizationRequest_status
+  %% derived condition__RequestValidated -> statemodel__AuthorizationRequest_status from holds
+  condition__RequestValidated -.-> variation__Prompt
+  %% derived condition__RequestValidated -> variation__Prompt from holds
+  condition__ResponseTypeCode -.->|applies_to| usecase__IssueCodeResponse
+  condition__ResponseTypeCode -.-> variation__ResponseType
+  %% derived condition__ResponseTypeCode -> variation__ResponseType from holds
+  condition__ResponseTypeCodeIdToken -.->|applies_to| usecase__IssueHybridIdTokenResponse
+  condition__ResponseTypeCodeIdToken -.-> variation__ResponseType
+  %% derived condition__ResponseTypeCodeIdToken -> variation__ResponseType from holds
+  condition__ResponseTypeCodeIdTokenToken -.->|applies_to| usecase__IssueHybridFullResponse
+  condition__ResponseTypeCodeIdTokenToken -.-> variation__ResponseType
+  %% derived condition__ResponseTypeCodeIdTokenToken -> variation__ResponseType from holds
+  condition__ResponseTypeCodeToken -.->|applies_to| usecase__IssueHybridTokenResponse
+  condition__ResponseTypeCodeToken -.-> variation__ResponseType
+  %% derived condition__ResponseTypeCodeToken -> variation__ResponseType from holds
+  condition__ResponseTypeIdToken -.->|applies_to| usecase__IssueIdTokenResponse
+  condition__ResponseTypeIdToken -.-> variation__ResponseType
+  %% derived condition__ResponseTypeIdToken -> variation__ResponseType from holds
+  condition__ResponseTypeIdTokenToken -.->|applies_to| usecase__IssueImplicitTokenResponse
+  condition__ResponseTypeIdTokenToken -.-> variation__ResponseType
+  %% derived condition__ResponseTypeIdTokenToken -> variation__ResponseType from holds
+  condition__S256Challenge -.-> statemodel__AuthorizationRequest_status
+  %% derived condition__S256Challenge -> statemodel__AuthorizationRequest_status from when
+  condition__S256Challenge -.-> variation__PkceMethod
+  %% derived condition__S256Challenge -> variation__PkceMethod from holds
+  condition__S256Challenge -.->|when| usecase__ValidateRequest
+  %% derived condition__S256Challenge -> usecase__ValidateRequest via transitions AuthorizationRequest.status received->validated
+  condition__SessionAuthenticated -.->|applies_to| usecase__StepUpAuthentication
+  condition__SessionAuthenticated -.-> statemodel__OpSession_status
+  %% derived condition__SessionAuthenticated -> statemodel__OpSession_status from holds
+  condition__SessionCoversAcr -.-> statemodel__Interaction_authentication
+  %% derived condition__SessionCoversAcr -> statemodel__Interaction_authentication from when
+  condition__SessionCoversAcr -.-> statemodel__OpSession_auth_level
+  %% derived condition__SessionCoversAcr -> statemodel__OpSession_auth_level from holds
+  condition__SessionCoversAcr -.-> statemodel__OpSession_status
+  %% derived condition__SessionCoversAcr -> statemodel__OpSession_status from holds
+  condition__SessionCoversAcr -.->|when| usecase__AuthenticateEndUser
+  %% derived condition__SessionCoversAcr -> usecase__AuthenticateEndUser via transitions Interaction.authentication pending->login
+  condition__SessionCoversAcr -.->|when| usecase__ReuseSession
+  %% derived condition__SessionCoversAcr -> usecase__ReuseSession via transitions Interaction.authentication pending->sso
+  condition__SessionCoversAcr -.->|when| usecase__SelectAccount
+  %% derived condition__SessionCoversAcr -> usecase__SelectAccount via transitions Interaction.authentication pending->sso
+  condition__SessionEnded -.->|applies_to| usecase__SendBackchannelLogout
+  condition__SessionEnded -.-> statemodel__OpSession_status
+  %% derived condition__SessionEnded -> statemodel__OpSession_status from holds
+  condition__SessionMayServe -.->|applies_to| usecase__ReuseSession
+  condition__SessionMayServe -.-> statemodel__AuthorizationRequest_status
+  %% derived condition__SessionMayServe -> statemodel__AuthorizationRequest_status from holds
+  condition__SessionMayServe -.-> variation__Prompt
+  %% derived condition__SessionMayServe -> variation__Prompt from holds
+  condition__SilentStepUp -.->|applies_to| usecase__ReturnInteractionRequired
+  condition__SilentStepUp -.-> statemodel__Interaction_authentication
+  %% derived condition__SilentStepUp -> statemodel__Interaction_authentication from holds
+  condition__SilentStepUp -.-> variation__AcrRequest
+  %% derived condition__SilentStepUp -> variation__AcrRequest from holds
+  condition__SilentStepUp -.-> variation__Prompt
+  %% derived condition__SilentStepUp -> variation__Prompt from holds
+  condition__SilentUnauthenticated -.->|applies_to| usecase__ReturnAccountSelectionRequired
+  condition__SilentUnauthenticated -.->|applies_to| usecase__ReturnLoginRequired
+  condition__SilentUnauthenticated -.-> statemodel__Interaction_authentication
+  %% derived condition__SilentUnauthenticated -> statemodel__Interaction_authentication from holds
+  condition__SilentUnauthenticated -.-> variation__Prompt
+  %% derived condition__SilentUnauthenticated -> variation__Prompt from holds
+  condition__SilentWithoutConsent -.->|applies_to| usecase__ReturnConsentRequired
+  condition__SilentWithoutConsent -.-> statemodel__Consent_status
+  %% derived condition__SilentWithoutConsent -> statemodel__Consent_status from holds
+  condition__SilentWithoutConsent -.-> statemodel__Interaction_authentication
+  %% derived condition__SilentWithoutConsent -> statemodel__Interaction_authentication from holds
+  condition__SilentWithoutConsent -.-> variation__Prompt
+  %% derived condition__SilentWithoutConsent -> variation__Prompt from holds
+  condition__SingleFactorEnough -.-> statemodel__Interaction_authentication
+  %% derived condition__SingleFactorEnough -> statemodel__Interaction_authentication from when
+  condition__SingleFactorEnough -.-> statemodel__OpSession_status
+  %% derived condition__SingleFactorEnough -> statemodel__OpSession_status from holds
+  condition__SingleFactorEnough -.-> variation__AcrRequest
+  %% derived condition__SingleFactorEnough -> variation__AcrRequest from holds
+  condition__SingleFactorEnough -.->|when| usecase__AuthenticateEndUser
+  %% derived condition__SingleFactorEnough -> usecase__AuthenticateEndUser via transitions Interaction.authentication pending->login
+  condition__SingleFactorEnough -.->|when| usecase__ReuseSession
+  %% derived condition__SingleFactorEnough -> usecase__ReuseSession via transitions Interaction.authentication pending->sso
+  condition__SingleFactorEnough -.->|when| usecase__SelectAccount
+  %% derived condition__SingleFactorEnough -> usecase__SelectAccount via transitions Interaction.authentication pending->sso
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;
+  classDef statemodel fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef variation fill:#f3d9fa,stroke:#862e9c,color:#000;
+  classDef value fill:#f3d9fa,stroke:#862e9c,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;

@@ -8,8 +8,11 @@
 
 RDRA-ish prints its lifecycle transition system as **TLA+** and optionally checks it
 with **TLC**. `rdra-ish states` and `check` explore the same system by breadth-first
-search (BFS) at one instance per entity. `verify` runs TLC on it at two instances by
-default and adds the temporal properties that BFS does not evaluate. See
+search (BFS) at one instance per entity, and verify safety only: invariants, `after`
+assertions, and state models. They evaluate no temporal property. Temporal properties and
+proofs belong to `verify`, which runs TLC on the system at two instances by default, checks
+the `always`, `eventually`, and `leads_to` properties with it, decides each `can_reach` by
+BFS, and proves state rules under `--prove`. See
 [state-derivation.md](./state-derivation.md) for the system itself.
 
 ## Commands
@@ -23,7 +26,7 @@ rdra-ish verify <INPUTS...> --backend tlc [-o <OUT_DIR>] [--instance-count N] [-
 |---|---|
 | `export --kind tla` | Write `RdraSpec.tla` **and** sibling `RdraSpec.cfg` for the whole model, and the `StateModel_<E>` specs that check the deadlocks and witnesses |
 | `verify --backend tlc` | Print one spec per cone of influence and one per temporal property, then run `tlc` / `tlc2` from `PATH` |
-| `states`, `check` | BFS on the same system, with no TLC dependency |
+| `states`, `check` | BFS on the same system, with no TLC dependency; safety only, no temporal property |
 
 `--instance-count` (default `2`) sets `InstanceCount` (`1..=255`; `1` warns that
 singleton ids cannot distinguish instances). `--int-range-max` (default `5`) sets
@@ -165,6 +168,7 @@ stays as it was.
 | `invariant(...).when(...).none/has(...)` | `\A` / `\E` over the ids, named `Quantifier_<Entity>_<n>`. A `relate` joins the sides by owner; without one the related side is independent. |
 | `after(UC).assert(...)` | `PROPERTY AfterAssert_<UC>_<n>`: `[][(\A p : UC(p) => post')]_vars`. It checks every step of the use case's last action, so a split use case once per run, on the run's rows. |
 | `property` with `always`, `eventually`, `leads_to` | A named formula and a `PROPERTY`, quantified per present instance |
+| `property P ... .along(A, B, ..)` | The owner link of each hop joins `present` in the trigger: `[](present /\ link => x)`, `[](present /\ link => <>x)`, `(present /\ link /\ x) ~> y`. Without `.along` a property over several entities ranges over every combination of their rows. |
 | Any `eventually` / `leads_to` property | `Spec` includes `WF_vars(Next)` |
 | `property P ... .fair(UC, ...)` | `Fair_P`, one `WF_vars` per action of each listed use case and per instance it acts on (`\A p0 \in E_Ids : WF_vars(UC(p0))`, a created slot bound inside with `\E`), and `P == Fair_P => (...)`. `Spec` is unchanged. |
 | Domain of every variable | `INVARIANT TypeOK`, kept apart from the business rules |
@@ -262,15 +266,19 @@ A property with `.fair(UC, ...)` (see
 assumption in its own formula, `Fair_P => (...)`, and its cone keeps the listed use cases
 whole. `verify` prints `<P> assumes weak fairness per instance on ...` under the `temporal
 properties:` line, since an `ok` for `P` holds only on the runs that do not starve them.
-`check` and `states` run BFS, which evaluates no temporal property, with or without `.fair`.
+`check` and `states` verify safety only, by state exploration: they evaluate no temporal
+property, with or without `.fair`. A `can_reach` property is CTL, which TLC cannot check, so
+`verify` decides it by BFS instead (see
+[Recoverability on a cone](#recoverability-on-a-cone)).
 
 ### Temporal properties on a cone
 
 <!-- derived-from ./state-derivation.md#exploration-by-cone-of-influence -->
 <!-- constrained-by ./language-reference.md#fairness-fairusecase- -->
 A property's cone (`TransitionSystem::property_cone`) is the smallest closed var set that
-holds what the formula reads and, for each action of each use case its `.fair` lists,
-everything the action reads and writes: its guards with the `applies_to` conditions and the
+holds what the formula reads, the owner vars of its `.along(...)` link, and, for each
+action of each use case its `.fair` lists, everything the action reads and writes: its
+guards with the `applies_to` conditions and the
 quantifier reads inside them, the existence of each instance it binds, the source of each
 transition, the clock when it ticks, the columns it assigns, transitions, or chooses, and the
 existence of each entity it creates or deletes. Closed means what it means for an invariant's
@@ -424,7 +432,8 @@ it: where an `always` condition is false, or where an `eventually` instance exis
 `leads_to` trigger holds and the goal never holds from then on. `verify` evaluates the
 property on the infinite behavior the way the module spells it, per instance of each
 binder: `always x` is `[](present => x)`, `eventually x` is `[](present => <>x)`, and
-`leads_to x y` is `(present /\ x) ~> y`. A lasso that does not replay, or that does not
+`leads_to x y` is `(present /\ x) ~> y`, with the `.along(...)` link joined to `present`
+when the property has one. A lasso that does not replay, or that does not
 violate the property, is a tool bug and prints the engine-disagreement line. TLC picks the
 lasso, so two runs may print different steps. In this run of `temporal_unmet.rdra`, TLC
 ends with `Back to state 7: CancelOrder`, and Order#1 is cancelled and reopened forever:
@@ -453,6 +462,77 @@ error[PendingLeadsToDelivered]: property PendingLeadsToDelivered is violated: it
     then loops back to step 7
 violated: Error: Temporal properties were violated.
 ```
+
+### Recoverability on a cone
+
+<!-- derived-from ./state-derivation.md#exploration-by-cone-of-influence -->
+<!-- constrained-by ./language-reference.md#recoverability-can_reach -->
+`property P can_reach(goal)` is the CTL formula `AG (present => E[present U (present /\
+goal)])` per instance of each binder: from every reachable state where the instance is
+present (and, under `.along`, linked), some path on which it stays present reaches a state
+where the goal holds for it.
+No TLA+ temporal formula states it, so TLC does not check it. `export --kind tla` lists it
+in a comment, and no `.cfg` names it.
+
+`verify` decides it by BFS on the property's cone, at its bounds; `check` and `states`,
+which verify safety only, do not evaluate it. The run
+keeps every edge it finds, so the decision is one pass over the explored graph per binding
+of the binders. The pass goes backward from the states where the instance is present and
+the goal holds, through states where the instance is present, and marks every state that
+can still reach the goal. A present state the pass does not mark fails the property. The
+first such state in discovery order ends a shortest trace, since BFS reaches states in
+depth order. The finding prints that trace, then what the goal reads of the instance in
+each state reachable from there. The pass is linear in the graph's states and edges, once
+per binding: two bindings at `verify`'s two instances.
+
+The cone must be exact, because `EF` is not monotone in the transitions. A step the cone
+allows and the whole model does not could reach the goal and hide a violation. Two kinds of
+cone allow such steps. One creates an entity whose slots the cone does not count (the
+`FreesSlots` case). The other runs a use case without its event's mark. So the cone of a
+`can_reach` keeps every action that writes into it, which brings in the marks it reads, and
+reads the existence of each entity such an action creates, until nothing more is added. On
+that cone, a path of the cone is a path of the whole model and the other way round, so the
+cone's verdict is the whole model's at the same bounds. A reduced cone (the next section)
+keeps stuttering equivalence, which says nothing of `AG EF`, so no `can_reach` cone is
+reduced. A cone that stops at the state cap decides nothing, since a state it did not expand
+has no edges and would look stuck: it reports `StateCapReached` as an invariant's cone
+does. A scoped `verify` checks no property, `can_reach` included.
+
+`verify` prints `can_reach properties: N, decided natively by BFS on each one's cone (TLC
+cannot check AG EF)` in its header, explores those cones beside the entity cones, and ends
+the BFS pass with `can_reach (BFS on N cones): N checked, M violated`. A violation fails the
+run after `tlc_result:`, as a deadlock does:
+
+```
+$ rdra-ish verify samples/formal-verification/can_reach_unmet.rdra --backend tlc
+bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 8388608 states per BFS cone; entities a check does not read are unbounded
+cones: 0 for 0 invariant(s) and 0 after-assert(s)
+temporal properties: none
+can_reach properties: 1, decided natively by BFS on each one's cone (TLC cannot check AG EF)
+error[OrderCanFinish]: property OrderCanFinish is violated: from the counterexample's last state no path reaches its goal for Order#1
+  rule: skills/rdra-ish-verify/samples/can_reach_unmet.rdra:57:1
+  counterexample (3 steps):
+    1. Place [Order#1]                                                 skills/rdra-ish-verify/samples/can_reach_unmet.rdra:17:1
+         + Order#1 (status=pending, in_stock=true, window_open=true)
+    2. CloseWindow [Order#1]                                           skills/rdra-ish-verify/samples/can_reach_unmet.rdra:23:1
+         Order#1.window_open: true -> false                            skills/rdra-ish-verify/samples/can_reach_unmet.rdra:47:1
+    3. LoseStock [Order#1]                                             skills/rdra-ish-verify/samples/can_reach_unmet.rdra:22:1
+         Order#1.in_stock: true -> false                               skills/rdra-ish-verify/samples/can_reach_unmet.rdra:46:1
+  confined: from there Order#1 stays within 34 reachable states, where its goal never holds:
+    status = pending
+    status = on_hold
+state models (BFS on 1 entity cone): 1 state model, 4 states witnessed, 0 deadlocks, 0 use cases that never run
+can_reach (BFS on 1 cone): 1 checked, 1 violated
+nothing to check
+tlc_result: ok
+Error: verification failed: 1 can_reach error(s) from BFS on their cones
+```
+
+The 34 states count the moves of Order#2 too; Order#1 stays at `pending` or `on_hold` in
+all of them. The tests in `lifecycle::tests::reach` compare the cone's verdict with the
+whole system's on both samples, at one instance and at two, and on a goal behind an event
+that is never raised and a goal that needs a slot the bound never frees, where a cone that
+is not exact would pass.
 
 ### Reduction by an independent sub-lifecycle
 
@@ -803,9 +883,9 @@ counterexample at one, two, or three instances.
   of 300,000 states is compared at 1 instance only. The test decides this on the run
   `verify` uses: the reduced cone where the cone reduces, the cone itself where it does not.
   It lists these cones in `VERIFY_FALLBACK` and fails when the list changes, so a cone that
-  grows past the cap fails it until it is listed. Today 11 cones in `samples/clinic-ops`,
-  `samples/patent-ops`, `samples/food-permit-ops` and `samples/insurance-claim-ops` are
-  listed. The table gives each listed cone and each cone the cap of 300,000 took off the
+  grows past the cap fails it until it is listed. Today 24 cones in `samples/clinic-ops`,
+  `samples/patent-ops`, `samples/food-permit-ops`, `samples/insurance-claim-ops` and
+  `samples/oidc-auth` are listed. The table gives each listed cone and each cone the cap of 300,000 took off the
   list, at 2 instances, measured with
   `lifecycle_measure -- 9000000 verify <sample>` (`RDRA_CONE_VARS=1` prints the vars of the
   cone and of its sub-lifecycle). "Sub-lifecycle" is the S side's states and classes; T is
@@ -822,6 +902,7 @@ counterexample at one, two, or three instances.
   | insurance-claim-ops entity `Claim` | 836,427 | over 9,000,000 | 255,292 / 2,428 | As `Payment`, with `senior_approved` and `completed_on` in place of the payment's columns. |
   | insurance-claim-ops invariant `MultiForbidden_Payment_3` (also `AfterAssert_PayClaim_0`, a separate cone of the same size) | 783,427 | over 9,000,000 | 255,292 / 2,428 | As `Payment`, without the payment's status. |
   | insurance-claim-ops invariants `Forbidden_Claim_0` and `Forbidden_Claim_4` (two cones, with the claim's other rules) | 633,787 | over 9,000,000 | 255,292 / 2,428 | As `Claim`, with fewer of the claim's columns (no `completed_on` or `late_interest_due`). |
+  | oidc-auth entities `AccessToken`, `AuthorizationCode`, `AuthorizationRequest`, `Consent`, `Grant`, `IdToken`, `Interaction` and `RefreshToken`, and invariants `Forbidden_Interaction_1`, `MultiForbidden_AuthorizationCode_3`, `Quantifier_Grant_0`, `Unique_Grant_AuthorizationRequest` and `Unique_AuthorizationCode_Grant` (13 cones) | over 2,000,000 | over 2,000,000 | none | The browser flow is one cone: the request, the interaction, the session it logs in or reuses, the consent, the grant, its code, and its tokens read each other through guards and raised events. Nothing reduces. The sample's `verify` header runs it at 1 instance (30,277 states) with `--prove`. |
   | patent-ops entity `PatentApplication` (compared at 2 instances since the cap of 300,000) | 293,833 | 2,167,411 | 73 / 73 | The filing guard `DraftsApproved` reads the drafting order and `FileApplication` moves the order to `filed`, so the order joins the application in T. S is the disclosure, its inventor and the firm; S is reduced inside, so its 73 states are already a quotient, and `obs` tells them all apart. |
   | patent-ops entity `Patent` and invariant `Forbidden_Patent_4` (two cones; compared at 2 instances since the cap of 300,000) | 202,569 | 1,494,339 | 73 / 73 | As `PatentApplication`, with the patent's columns in T beside fewer of the application's. |
   | food-permit-ops entity `PermitApplication` (off the list since #112) | 52,597 | 2,094,157 | 348 / 228 | The order lets the inspection's and the permit's side reduce against the application's; 1.2.0 listed this cone. |
@@ -918,9 +999,9 @@ gaps.
   BFS and TLC agree on the states, edges, findings, and verdicts of every cone, unreduced
   and reduced. A cone whose BFS, reduced as `verify` explores it, passes the test's cap of
   300,000 states at 2 instances is compared at 1 instance only. `VERIFY_FALLBACK` in
-  `crates/rdra-ish-cli/tests/engine_equivalence.rs` lists them, 11 cones today (19 before the
+  `crates/rdra-ish-cli/tests/engine_equivalence.rs` lists them, 24 cones today (19 before the
   reduction of #74, 16 after the patent-ops filing guard, 10 since the cap went from 200,000
-  to 300,000, and 11 since the event order of #112). The table under
+  to 300,000, 11 since the event order of #112, and 24 with `samples/oidc-auth`). The table under
   [Approximations and limitations](#approximations-and-limitations) gives each cone's size
   and what keeps it large:
   - `samples/clinic-ops`: entity `EligibilityCheck`, 905,528 states, which nothing
@@ -941,9 +1022,12 @@ gaps.
     claim's events as input bits) they reach 633,787 to 903,987 states. The `ClaimCase`
     view is reduced the other way, by the claim's and the payment's side under the case's
     two bits (93,904 states in 4,368 classes), to 4,580,087.
+  - `samples/oidc-auth`: 13 cones of the browser flow, over 2,000,000 states each, which
+    nothing reduces. `verify` at 2 instances does not finish them in 15 GB, so the sample's
+    header checks them at 1 instance with `--prove`.
 
-  `verify` still checks these cones at 2 instances: TLC runs on each, and BFS runs on each
-  entity cone. Only the agreement of the two engines is tested at 1 instance. This is
+  `verify` still checks these cones at 2 instances, except the oidc-auth cones its header
+  runs at 1: TLC runs on each, and BFS runs on each entity cone. Only the agreement of the two engines is tested at 1 instance. This is
   accepted for 1.0. See it: the list in the test, which fails when a cone joins or leaves
   it. What you can do: treat a `verify` verdict on these cones as TLC's alone, and keep a
   new model's cones under 300,000 states at 2 instances if you want the agreement tested.
@@ -994,7 +1078,10 @@ gaps.
   more instances, or run `verify --prove` to prove a state rule for any number of rows
   ([Proofs for any number of rows](#proofs-for-any-number-of-rows)).
 - **Temporal properties are checked only by `verify`, and a scoped run checks none.**
-  `check` and `states` evaluate no `property` and print a `note:` that says so. A run with
+  `check` and `states` verify safety only, by state exploration. They evaluate no
+  `property`, `can_reach` included, and `check` prints a `note:` that says so. `verify`
+  checks `always`, `eventually`, and `leads_to` with TLC and decides `can_reach` by BFS
+  ([Recoverability on a cone](#recoverability-on-a-cone)). A run with
   `--buc` or `--entity` checks no property: `--buc` drops use cases a property's fairness
   reads, and `--entity` may defer an error inside a property's cone. See it: the `note:`
   from `check`, and `temporal properties: 2, not checked: a scoped run checks none` in a
@@ -1087,6 +1174,7 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `event_order.rdra` | pass, pass | no state rule | `triggers(EvOrderExecuted, IssueCert)` runs IssueCert only after ExecuteCertIssue raised the event on the order (#30, #112), so the `after(IssueCert).assert` on the order's status holds with no guard |
 | `after_assert_unmet.rdra` | fail, fail | no state rule | `after(DeliverOrder).assert` without the `sets` that makes it true |
 | `temporal_fair.rdra` | pass, fail | no state rule | `leads_to(granted, registered or dismissed)` fails without fairness: another application is ordered to amend and amends forever, and `WF_vars(Next)` holds on that loop. The same property with `.fair(Register, Dismiss)` holds |
+| `temporal_along.rdra` | pass, fail | no state rule | `always(not captured or paid)` over a Payment and an Order holds with `.along(Payment, Order)`: Pay captures a payment and pays its own order. The same formula without `.along` fails on a captured payment beside another order that is never paid (#165) |
 | `temporal_unmet.rdra` | pass, fail | no state rule | `always(Order.status != shipped)` fails once an Order ships, and `leads_to(pending, delivered)` fails because ReopenOrder lets an Order be cancelled and reopened forever, so its lasso loops back. `check` does not model-check properties; each prints its lasso in model terms |
 | `one_to_one_shared.rdra` | pass, fail | 0 of 1 | `relate(.., 1:1)` adds `Unique_Shipment_Order`; Ship and Reship each link a Shipment to the same Order, which takes two instances |
 | `none_any_child.rdra` | pass, pass | 1 of 1 | `.none(Invoice)` on Issue says "no invoice yet" and reads the link only, so `Unique_Invoice_Order` holds on a cone without `Invoice.status` (25 states). The enumerating form `.none(Invoice.status in (<every value>))` builds the same cones |
@@ -1097,6 +1185,8 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `check_met.rdra` | pass, pass | 2 of 2 | The same check with a use case that keeps `qty` in range; `forbidden` reads the derived `bulk: Bool @derived(qty >= 3)` as its expression |
 | `unwitnessed_state.rdra` | fail, pass | 1 of 1 | `refunded` has no witness: Refund needs `shipped` and a refund window that holds only while `pending`. TLC passes; the BFS witness check fails `check` and `verify`, a shipped Order is a deadlock (Refund is its only way out), and both warn that Refund never runs (its guards never hold together). TLC alone finds both errors with the exported `StateModel_Order` specs |
 | `deadlock.rdra` | fail, pass | no state rule | An Order stays `paid` forever: Ship leaves `paid` only while a packing condition holds, and it holds only while `pending`. Express ships a pending Order, so `shipped` has a witness. TLC passes; the BFS deadlock check fails `check` and `verify`, and both warn that Ship never runs. TLC alone finds the deadlock with the exported `StateModel_Order` specs |
+| `can_reach_unmet.rdra` | pass, pass | no state rule | `can_reach(Order.status in (delivered, cancelled))` fails: once LoseStock and CloseWindow have run, an Order moves between `pending` and `on_hold` forever. Each of those states has a way out, so no deadlock is reported. `check` evaluates no property and TLC checks nothing; `verify`'s BFS fails it with a shortest trace and the states the Order is confined to |
+| `can_reach_met.rdra` | pass, pass | no state rule | The same model with Restock, so every reachable state can still finish. An Order may still be held and resumed forever: `can_reach` asks for a path, not for progress |
 | `partial_scope.rdra` | fail, not run | not run | Audit's `forbidden` reads the arithmetic `@derived` column `score`: a `DerivedColumnRead` build error stops `check` and `verify` before TLC. With `--entity Order` both defer it under `not checked:` and pass; TLC checks `Forbidden_Order_0` |
 | `fail/order.rdra` | fail, fail | 0 of 1 | Intentionally unsafe (reachable invariant violation) |
 
@@ -1145,8 +1235,11 @@ Name         = [A-Za-z0-9_]+
 - An `error: ...` line without a name, such as a load error, is a mismatch whatever the
   header says.
 - Each `(command, flags)` pair runs once, and a pair may appear on one line only. A root
-  with no `check` line expects `check: ok`, and one with no unflagged `verify` line expects
-  `verify: tlc=ok`. A flagged line adds a run and replaces neither default.
+  with no `check` line expects `check: ok`, and one with no `verify` line expects
+  `verify: tlc=ok`. A root whose `verify` lines all carry flags runs only those: use this
+  for a model whose default bounds do not finish, and name the bounds it is checked at
+  (`samples/oidc-auth` runs `--instance-count 1 --prove` and a scoped run at two
+  instances).
 
 ```rdra
 // unwitnessed_state.rdra: TLC passes, and the BFS state-model findings fail the run.
@@ -1161,7 +1254,7 @@ Name         = [A-Za-z0-9_]+
 
 The script prints one line per run with the verdict, the wall time, and the maximum RSS
 (GNU `time` on Linux, BSD `/usr/bin/time` on macOS), then the count of roots and runs.
-The script makes 65 runs of the 32 roots. Locally (Apple silicon) clinic-ops `verify` took
+The script makes 68 runs of the 33 roots. Locally (Apple silicon) clinic-ops `verify` took
 105 s at about 2.0 GB (50 s at 1.4 GB before the run marks of `CheckInPatient`, #80) and
 patent-ops `verify` 68 s at about 1.2 GB, their TLC JVMs included, and food-permit-ops
 `verify` 16 s, when last measured there. insurance-claim-ops `verify` takes about 180 s at

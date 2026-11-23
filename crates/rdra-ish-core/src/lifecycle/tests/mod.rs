@@ -20,6 +20,7 @@ mod membership;
 mod names;
 mod never_runs;
 mod owners;
+mod reach;
 mod reduce;
 mod select;
 mod set_guards;
@@ -28,6 +29,7 @@ mod trace;
 mod transition_audit;
 mod tx_groups;
 mod unjoined_writes;
+mod vacuous;
 mod witness;
 
 use super::{Bounds, Caps, Diag, EntityStateResult, Scope, StateDiag, TransitionSystem};

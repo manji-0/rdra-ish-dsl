@@ -112,9 +112,10 @@ pub(super) fn lint_rule_labels(model: &SemanticModel, issues: &mut Vec<LintIssue
     }
 }
 
-/// A `forbidden` or `invariant` over several entities with no `.along(...)` holds over every
-/// combination of their rows. When keys relate the entities, the rule is often meant only
-/// for related rows, and `check` at one instance per entity cannot tell the difference.
+/// A `forbidden`, `invariant` or `property` over several entities with no `.along(...)` holds
+/// over every combination of their rows. When keys relate the entities, the rule is often
+/// meant only for related rows: `check` at one instance per entity cannot tell the
+/// difference, and `verify` reports an unrelated pair as a counterexample.
 pub(super) fn lint_unscoped_multi_rules(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
     use crate::model::CrossConstraintScope;
     let forbidden = model.cross_forbidden_constraints.iter().map(|c| {
@@ -135,7 +136,16 @@ pub(super) fn lint_unscoped_multi_rules(model: &SemanticModel, issues: &mut Vec<
             c.site.clone(),
         )
     });
-    for (kind, scope, semantics, global, site) in forbidden.chain(invariants) {
+    let properties = model.temporal_properties.iter().map(|p| {
+        (
+            "property",
+            &p.scope,
+            &p.scope_semantics,
+            p.global,
+            p.site.clone(),
+        )
+    });
+    for (kind, scope, semantics, global, site) in forbidden.chain(invariants).chain(properties) {
         if global || scope.len() < 2 || !matches!(semantics, CrossConstraintScope::GlobalProduct) {
             continue;
         }
@@ -150,13 +160,18 @@ pub(super) fn lint_unscoped_multi_rules(model: &SemanticModel, issues: &mut Vec<
             .iter()
             .map(|e| model.entities[*e].id.as_str())
             .collect();
+        let seen = if kind == "property" {
+            "`verify` reports a pair of unrelated rows as a counterexample"
+        } else {
+            "`check` at one instance per entity sees one combination only"
+        };
         let mut issue = LintIssue::new(
             LintSeverity::Warning,
             "multi-rule-unscoped",
             kind,
             ids.join("|"),
             format!(
-                "{kind} on {} has no `.along(...)`, so it holds over every combination of their rows, related or not; `check` at one instance per entity sees one combination only",
+                "{kind} on {} has no `.along(...)`, so it holds over every combination of their rows, related or not; {seen}",
                 ids.join(", ")
             ),
             format!(

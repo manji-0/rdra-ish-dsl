@@ -1,0 +1,55 @@
+%% rdra-ish diagram=robustness scope=buc:BucTokenMaintenance model=samples/oidc-auth
+%% kinds: actor screen timer api entity
+%% omitted: buc step medium permission event condition
+flowchart LR
+  actor__EndUser(["End-User"]):::actor
+  screen__AuthorizedAppsScreen["Authorized applications"]:::screen
+  timer__AccessTokenLifetime(("Access token lifetime (OP policy, e.g. 1 hour)")):::timer
+  timer__RefreshTokenLifetime(("Refresh token lifetime (OP policy, e.g. 30 days idle)")):::timer
+  api__AccessTokenCascadeApi{{"Access token revocation on a revoked grant"}}:::api
+  api__AccessTokenExpiryApi{{"Access token expiry"}}:::api
+  api__AccessTokenRevocationApi{{"Revocation endpoint (access token)"}}:::api
+  api__ConsentManagementApi{{"Authorized applications"}}:::api
+  api__GrantWithdrawalApi{{"Grant revocation on consent withdrawal"}}:::api
+  api__IntrospectionApi{{"Introspection endpoint"}}:::api
+  api__RefreshApi{{"Token endpoint (refresh_token)"}}:::api
+  api__RefreshTokenCascadeApi{{"Refresh token revocation on a revoked grant"}}:::api
+  api__RefreshTokenExpiryApi{{"Refresh token expiry"}}:::api
+  api__RevocationApi{{"Revocation endpoint (refresh token)"}}:::api
+  entity__AccessToken[("Access token")]:::entity
+  entity__Consent[("Consent")]:::entity
+  entity__Grant[("Authorization grant")]:::entity
+  entity__RefreshToken[("Refresh token (rotation family)")]:::entity
+  entity__UserAccount[("End-User account")]:::entity
+  actor__EndUser --> screen__AuthorizedAppsScreen
+  api__AccessTokenCascadeApi -->|R| entity__Grant
+  api__AccessTokenCascadeApi -->|U| entity__AccessToken
+  api__AccessTokenExpiryApi -->|U| entity__AccessToken
+  api__AccessTokenRevocationApi -->|U| entity__AccessToken
+  api__ConsentManagementApi -.->|A consent is withdrawn| api__GrantWithdrawalApi
+  api__ConsentManagementApi -->|U| entity__Consent
+  api__GrantWithdrawalApi -.->|A grant is revoked| api__AccessTokenCascadeApi
+  api__GrantWithdrawalApi -.->|A grant is revoked| api__RefreshTokenCascadeApi
+  api__GrantWithdrawalApi -->|U| entity__Grant
+  api__IntrospectionApi -->|R| entity__AccessToken
+  api__IntrospectionApi -->|R| entity__Grant
+  api__IntrospectionApi -->|R| entity__UserAccount
+  api__RefreshApi -.->|The tokens were refreshed| api__RevocationApi
+  api__RefreshApi -->|U| entity__AccessToken
+  api__RefreshApi -->|U| entity__Grant
+  api__RefreshApi -->|U| entity__RefreshToken
+  api__RefreshTokenCascadeApi -->|R| entity__Grant
+  api__RefreshTokenCascadeApi -->|U| entity__RefreshToken
+  api__RefreshTokenExpiryApi -->|U| entity__RefreshToken
+  api__RevocationApi -.->|A grant is revoked| api__AccessTokenCascadeApi
+  api__RevocationApi -.->|A grant is revoked| api__RefreshTokenCascadeApi
+  api__RevocationApi -->|U| entity__Grant
+  api__RevocationApi -->|U| entity__RefreshToken
+  screen__AuthorizedAppsScreen -->|Withdraw a consent| api__ConsentManagementApi
+  timer__AccessTokenLifetime -.-> api__AccessTokenExpiryApi
+  timer__RefreshTokenLifetime -.-> api__RefreshTokenExpiryApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

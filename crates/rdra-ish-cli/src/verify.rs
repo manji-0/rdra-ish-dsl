@@ -20,7 +20,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
 use rdra_ish_core::lifecycle::{
-    ActId, Bounds, BoundsLine, Caps, Cone, LtlKind, NotChecked, Scope, Selection, Severity,
+    ActId, Bounds, BoundsLine, Caps, Cone, Diag, LtlKind, NotChecked, Scope, Selection, Severity,
     StateDiag, Target, TransitionSystem, VarSet,
 };
 use rdra_ish_core::{in_parallel, jobs, ResolvedProgram, SemanticModel};
@@ -211,7 +211,8 @@ fn cone_jobs(
     let mut order: Vec<(Cone, String, Vec<Target>)> = Vec::new();
     for &target in targets {
         let first = match target {
-            Target::Entity(_) => continue,
+            // BFS decides a `can_reach`, which TLC cannot check.
+            Target::Entity(_) | Target::Reach(_) => continue,
             Target::Invariant(i) => names.invariant(i).to_string(),
             Target::AfterAssert(i) => names.after(i).to_string(),
         };
@@ -954,10 +955,10 @@ pub fn run_tlc(
         (Ok(_), Some(Ok(tlc)), None | Some(Ok(_))) => Some(tlc),
         _ => None,
     };
-    let (bfs_errors, capped, proof, cones_ran) = std::thread::scope(|threads| {
+    let (bfs, proof, cones_ran) = std::thread::scope(|threads| {
         let cones =
             start.map(|tlc| threads.spawn(|| run_cones(tlc, &dir, &modules, &jobs, memory.cones)));
-        let (bfs_errors, capped) = state_models(program, model, &ts, scope, &selection, caps);
+        let bfs = state_models(program, model, &ts, scope, &selection, caps);
         let proof = match (&prove, z3) {
             (Some(Prove { deny_unproved, .. }), Some(z3)) => z3.and_then(|z3| {
                 let marks = Marks::of(model, &ts);
@@ -969,11 +970,10 @@ pub fn run_tlc(
             Ok(ran) => ran,
             Err(panic) => std::panic::resume_unwind(panic),
         });
-        (bfs_errors, capped, proof, cones_ran)
+        (bfs, proof, cones_ran)
     });
     let end = End {
-        bfs_errors,
-        capped,
+        bfs,
         deny_undecided,
         proof: proof?,
     };
@@ -1067,6 +1067,13 @@ fn print_plan(
             budget.as_secs()
         ),
         (false, n) => println!("temporal properties: {n}, not checked: a scoped run checks none"),
+    }
+    match (scope.is_whole(), ts.reach_properties().len()) {
+        (_, 0) => {}
+        (true, n) => println!(
+            "can_reach properties: {n}, decided natively by BFS on each one's cone (TLC cannot check AG EF)"
+        ),
+        (false, n) => println!("can_reach properties: {n}, not checked: a scoped run checks none"),
     }
     // A verdict under `.fair(...)` holds only on the runs that do not starve those use cases.
     for p in ts.properties().iter().filter(|p| !p.fair.is_empty()) {
@@ -1218,10 +1225,20 @@ fn fail(
     }
 }
 
+/// What BFS found at the verify bounds.
+struct Bfs {
+    /// Errors of the entity cones.
+    errors: usize,
+    /// Errors of the `can_reach` cones: violations, and cones the state cap stopped.
+    reach_errors: usize,
+    /// Findings an entity cone left undecided at the state cap.
+    capped: usize,
+}
+
 /// BFS on each selected entity cone at the verify bounds: the `NoWitness` errors, the
-/// `Deadlock`s (errors, or warnings at the bound), and the `NeverRuns` warnings, rendered,
-/// then the `not checked:` block and one summary line. Returns the errors and the findings a
-/// cone left undecided at the state cap or the memory limit.
+/// `Deadlock`s (errors, or warnings at the bound), and the `NeverRuns` warnings, rendered;
+/// then BFS on each `can_reach` cone, unreduced; then the `not checked:` block and one
+/// summary line each. Every run is held to `caps`, the state cap and the memory limit.
 fn state_models(
     program: &ResolvedProgram,
     model: &SemanticModel,
@@ -1229,14 +1246,19 @@ fn state_models(
     scope: &Scope,
     selection: &Selection,
     caps: Caps,
-) -> (usize, usize) {
-    let entities: Vec<Target> = selection
-        .targets
-        .iter()
-        .copied()
-        .filter(|t| matches!(t, Target::Entity(_)))
-        .collect();
+) -> Bfs {
+    let pick = |want: fn(&Target) -> bool| -> Vec<Target> {
+        selection.targets.iter().copied().filter(want).collect()
+    };
+    let entities = pick(|t| matches!(t, Target::Entity(_)));
+    // A scoped run checks no property, `can_reach` included.
+    let reach = match scope.is_whole() {
+        true => ts.reach_targets(),
+        false => Vec::new(),
+    };
     let mut run = ts.explore_targets_reduced(&entities, caps);
+    // Its own call, unreduced: a cone shared with an entity target would share its run.
+    let reach_run = (!reach.is_empty()).then(|| ts.explore_targets(&reach, caps));
     if !scope.bucs.is_empty() {
         run.defer_progress();
     }
@@ -1248,19 +1270,24 @@ fn state_models(
         scope,
         selection,
         undecided: run.undecided(),
-        temporal: ts.properties().len(),
+        temporal: ts.properties().len() + ts.reach_properties().len(),
     };
     if !not_checked.is_empty() {
         println!("{not_checked}");
     }
-    let mut errors = 0;
-    for d in run.verdicts() {
-        if let Some(text) = render_violation(program, model, &d.diag, TraceSource::Bfs) {
-            let finding = Finding::new(&d.diag, &[], text);
-            eprintln!("{finding}");
-            errors += usize::from(finding.severity == Severity::Error);
+    let report = |verdicts: &[Diag]| {
+        let mut errors = 0;
+        for d in verdicts {
+            if let Some(text) = render_violation(program, model, &d.diag, TraceSource::Bfs) {
+                let finding = Finding::new(&d.diag, &[], text);
+                eprintln!("{finding}");
+                errors += usize::from(finding.severity == Severity::Error);
+            }
         }
-    }
+        errors
+    };
+    let errors = report(run.verdicts());
+    let reach_errors = reach_run.as_ref().map_or(0, |r| report(r.verdicts()));
     let t = run.tally();
     let plural =
         |n: usize, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
@@ -1276,14 +1303,28 @@ fn state_models(
             "use cases that never run"
         ),
     );
-    (errors, capped)
+    if let Some(r) = &reach_run {
+        let cones = r.cones.len();
+        println!(
+            "can_reach (BFS on {cones} cone{}): {} checked, {} violated",
+            if cones == 1 { "" } else { "s" },
+            reach.len(),
+            r.verdicts()
+                .iter()
+                .filter(|d| matches!(d.diag, StateDiag::GoalUnreachable { .. }))
+                .count()
+        );
+    }
+    Bfs {
+        errors,
+        reach_errors,
+        capped,
+    }
 }
 
 /// How a run whose TLC checks passed ends.
 struct End {
-    bfs_errors: usize,
-    /// Findings a BFS cone left undecided at the state cap or the memory limit.
-    capped: usize,
+    bfs: Bfs,
     deny_undecided: bool,
     /// What `--prove` proved, when it ran.
     proof: Option<ProofTally>,
@@ -1306,15 +1347,26 @@ impl End {
                 println!("{u}");
             }
         }
-        if self.bfs_errors > 0 {
-            bail!(
-                "verification failed: {} state-model error(s) from BFS on the entity cones",
-                self.bfs_errors
-            );
+        let failed: Vec<String> = [
+            (
+                self.bfs.errors,
+                "state-model error(s) from BFS on the entity cones",
+            ),
+            (
+                self.bfs.reach_errors,
+                "can_reach error(s) from BFS on their cones",
+            ),
+        ]
+        .iter()
+        .filter(|(n, _)| *n > 0)
+        .map(|(n, what)| format!("{n} {what}"))
+        .collect();
+        if !failed.is_empty() {
+            bail!("verification failed: {}", failed.join(" and "));
         }
         let open = [
             (
-                self.capped,
+                self.bfs.capped,
                 "finding a cone stopped at the state cap or the memory limit left",
                 "findings a cone stopped at the state cap or the memory limit left",
             ),

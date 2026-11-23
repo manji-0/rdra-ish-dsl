@@ -1,0 +1,25 @@
+Entity: BackchannelRequest (Backchannel authentication request)
+  axes: delivery_mode[poll|ping|push], status[pending|approved|denied|expired|notified|redeemed|pushed]
+  labels: status[pending=Pending|approved=Approved|denied=Denied|expired=Expired|notified=Ping sent|redeemed=Tokens issued|pushed=Tokens pushed]
+
+  DELIVERY_MODE  STATUS    INITIAL  TERMINAL  VIA                                                                                                                                                                                 
+  ─────────────  ────────  ───────  ────────  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  poll           pending   yes      no        BucBackchannelSignIn/StartBackchannelAuthentication
+  ping           pending   yes      no        BucBackchannelSignIn/StartBackchannelAuthentication
+  push           pending   yes      no        BucBackchannelSignIn/StartBackchannelAuthentication
+  poll           approved  no       no        BucBackchannelSignIn/RecordDeviceApproval, BucBackchannelSignIn/StartBackchannelAuthentication
+  poll           denied    no       yes       BucBackchannelSignIn/RecordDeviceDenial, BucBackchannelSignIn/StartBackchannelAuthentication
+  poll           expired   no       yes       BucBackchannelSignIn/ExpireBackchannelRequest, BucBackchannelSignIn/RecordDeviceApproval, BucBackchannelSignIn/StartBackchannelAuthentication
+  ping           approved  no       no        BucBackchannelSignIn/RecordDeviceApproval, BucBackchannelSignIn/StartBackchannelAuthentication
+  ping           denied    no       yes       BucBackchannelSignIn/RecordDeviceDenial, BucBackchannelSignIn/StartBackchannelAuthentication
+  ping           expired   no       yes       BucBackchannelSignIn/ExpireBackchannelRequest, BucBackchannelSignIn/RecordDeviceApproval, BucBackchannelSignIn/SendPingCallback, BucBackchannelSignIn/StartBackchannelAuthentication
+  push           approved  no       no        BucBackchannelSignIn/RecordDeviceApproval, BucBackchannelSignIn/StartBackchannelAuthentication
+  push           denied    no       yes       BucBackchannelSignIn/RecordDeviceDenial, BucBackchannelSignIn/StartBackchannelAuthentication
+  push           expired   no       yes       BucBackchannelSignIn/ExpireBackchannelRequest, BucBackchannelSignIn/RecordDeviceApproval, BucBackchannelSignIn/StartBackchannelAuthentication
+  poll           redeemed  no       yes       BucBackchannelSignIn/PollBackchannelToken, BucBackchannelSignIn/RecordDeviceApproval, BucBackchannelSignIn/StartBackchannelAuthentication
+  ping           notified  no       no        BucBackchannelSignIn/RecordDeviceApproval, BucBackchannelSignIn/SendPingCallback, BucBackchannelSignIn/StartBackchannelAuthentication
+  push           pushed    no       yes       BucBackchannelSignIn/PushBackchannelTokens, BucBackchannelSignIn/RecordDeviceApproval, BucBackchannelSignIn/StartBackchannelAuthentication
+  ping           redeemed  no       yes       BucBackchannelSignIn/PollBackchannelToken, BucBackchannelSignIn/RecordDeviceApproval, BucBackchannelSignIn/SendPingCallback, BucBackchannelSignIn/StartBackchannelAuthentication
+
+  reachable: 16 / bound: 21
+

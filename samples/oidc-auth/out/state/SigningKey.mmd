@@ -1,0 +1,18 @@
+%% rdra-ish diagram=state scope=entity:SigningKey model=samples/oidc-auth
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "SigningKey.status" as statemodel__SigningKey_status {
+    [*] --> state__SigningKey_published
+    state "Published, not yet signing" as state__SigningKey_published
+    state "Signing" as state__SigningKey_active
+    state "Retired" as state__SigningKey_retired
+    %% transition usecase__ActivateKey
+    state__SigningKey_published --> state__SigningKey_active : Start signing with the published key
+    %% transition usecase__RetireKey
+    state__SigningKey_active --> state__SigningKey_retired : Retire a signing key
+    state__SigningKey_retired --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__SigningKey_retired stateend

@@ -303,6 +303,38 @@ invariant(Order, Payment)
     assert!(d.has("Order", |x| matches!(x, StateDiag::UnbindableScope { .. })));
 }
 
+/// A property's `.along` that misses an entity its formula reads, or that no relate binds,
+/// binds nothing, as a rule's does (#165).
+#[test]
+fn a_property_scope_that_binds_nothing_is_unbindable() {
+    for (along, reason) in [
+        ("Order, Note", "along(..) does not cover Payment"),
+        (
+            "Order, Payment",
+            "no N:1, 1:N, or 1:1 relate binds Order and Payment",
+        ),
+    ] {
+        let d = derive_src(&format!(
+            r#"
+entity Order "O" {{ id: Int @pk  status: Enum(open, paid) }}
+entity Payment "P" {{ id: Int @pk  status: Enum(pending, captured) }}
+entity Note "N" {{ id: Int @pk }}
+relate(Note, Order, N:1)
+usecase Place "注文"
+creates(Place, Order)
+creates(Place, Payment)
+property P always(not (Order.status == paid) or (Payment.status == captured)).along({along})
+"#
+        ));
+        let unbindable = |x: &StateDiag| {
+            matches!(x, StateDiag::UnbindableScope { constraint, reason: r, .. }
+                if constraint == "property P" && r == reason)
+        };
+        assert!(d.has("Order", unbindable), "{along}");
+        assert!(d.has("Payment", unbindable), "{along}");
+    }
+}
+
 #[test]
 fn false_state_condition_makes_a_cross_constraint_hold() {
     let d = derive_src(

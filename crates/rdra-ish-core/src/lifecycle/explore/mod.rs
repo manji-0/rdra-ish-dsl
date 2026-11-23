@@ -10,7 +10,7 @@ mod store;
 mod views;
 mod violations;
 
-pub use graph::LabelledEdges;
+pub use graph::{Adjacency, LabelledEdges};
 
 use std::collections::{BTreeSet, HashSet};
 

@@ -1,0 +1,28 @@
+%% rdra-ish diagram=state scope=entity:Grant model=samples/oidc-auth
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% set-only: Grant.flow (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "Grant.status" as statemodel__Grant_status {
+    [*] --> state__Grant_active
+    state "Active" as state__Grant_active
+    state "Revoked" as state__Grant_revoked
+    %% transition usecase__DetectRefreshTokenReuse
+    state__Grant_active --> state__Grant_revoked : Detect the reuse of a rotated refresh token
+    %% transition usecase__RejectCodeReplay
+    state__Grant_active --> state__Grant_revoked : Reject a replayed code and revoke its grant
+    %% transition usecase__RevokeGrantOnWithdrawal
+    state__Grant_active --> state__Grant_revoked : Revoke the grant of a withdrawn consent
+    %% transition usecase__RevokeRefreshToken
+    state__Grant_active --> state__Grant_revoked : Revoke a refresh token (RFC 7009)
+    %% transition usecase__DetectRefreshTokenReuse
+    state__Grant_revoked --> state__Grant_revoked : Detect the reuse of a rotated refresh token
+    %% transition usecase__RejectCodeReplay
+    state__Grant_revoked --> state__Grant_revoked : Reject a replayed code and revoke its grant
+    %% transition usecase__RevokeRefreshToken
+    state__Grant_revoked --> state__Grant_revoked : Revoke a refresh token (RFC 7009)
+    state__Grant_revoked --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__Grant_revoked stateend

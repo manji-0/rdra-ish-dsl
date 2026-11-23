@@ -1,0 +1,46 @@
+%% rdra-ish diagram=usecase scope=buc:BucSigningKeys model=samples/oidc-auth
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor timer usecase screen entity state
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__OpAdministrator(["OP Administrator"]):::actor
+    %% desc actor__OpAdministrator: Suspends and reinstates clients, publishes, activates, and retires signing keys.
+  end
+  subgraph layer_environment["システム外部環境"]
+    timer__KeyRotationSchedule(("Signing key rotation schedule (OP policy, e.g. every 90 days)")):::timer
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__ActivateKey("Start signing with the published key"):::usecase
+    %% desc usecase__ActivateKey: Sign new ID Tokens with the key published earlier; its kid appears in their headers.
+    usecase__PublishNextKey("Publish the next signing key"):::usecase
+    %% desc usecase__PublishNextKey: Generate a key pair and add its public key to the JWK Set, so RPs cache it before it signs.
+    usecase__RetireKey("Retire a signing key"):::usecase
+    %% desc usecase__RetireKey: Remove a key from the JWK Set after the last ID Token it signed has expired.
+    screen__KeyAdminScreen["Signing keys"]:::screen
+  end
+  subgraph layer_system["システム"]
+    entity__SigningKey[("ID Token signing key")]:::entity
+    state__SigningKey_active((("Signing"))):::state
+    state__SigningKey_published((("Published, not yet signing"))):::state
+    state__SigningKey_retired((("Retired"))):::state
+  end
+  actor__OpAdministrator -.-> usecase__PublishNextKey
+  screen__KeyAdminScreen -.-> entity__SigningKey
+  timer__KeyRotationSchedule -.-> usecase__ActivateKey
+  timer__KeyRotationSchedule -.-> usecase__RetireKey
+  usecase__ActivateKey -.->|transitions SigningKey.status published->active| state__SigningKey_active
+  usecase__ActivateKey -.->|updates| entity__SigningKey
+  %% derived usecase__ActivateKey -> entity__SigningKey via api__KeyRotationApi
+  usecase__PublishNextKey -.->|creates| entity__SigningKey
+  %% derived usecase__PublishNextKey -> entity__SigningKey via api__KeyAdminApi
+  usecase__PublishNextKey -.-> screen__KeyAdminScreen
+  usecase__RetireKey -.->|transitions SigningKey.status active->retired| state__SigningKey_retired
+  usecase__RetireKey -.->|updates| entity__SigningKey
+  %% derived usecase__RetireKey -> entity__SigningKey via api__KeyRotationApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;

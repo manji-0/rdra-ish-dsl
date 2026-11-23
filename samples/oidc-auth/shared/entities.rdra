@@ -1,0 +1,224 @@
+module shared.entities
+
+// Sections cited as "Core §x" are OpenID Connect Core 1.0. No specification fixes how an OP
+// stores its state: every status below is the model's assumption, named after the step the
+// specifications describe.
+
+// ── Values a party chooses ───────────────────────────────
+
+// RFC 6749 §2.1: "confidential" clients can keep a secret, "public" clients cannot.
+variation ClientType "Client type" {
+  confidential "Confidential client"
+  public "Public client"
+}
+
+// Core §9: the token endpoint client authentication methods; "none" is a public client.
+variation ClientAuthMethod "Token endpoint authentication method" {
+  client_secret_basic "client_secret_basic"
+  client_secret_post "client_secret_post"
+  client_secret_jwt "client_secret_jwt"
+  private_key_jwt "private_key_jwt"
+  none "none (public client)"
+}
+
+// Core §3: the response_type picks the flow. §3.1 code; §3.2 id_token and id_token token;
+// §3.3 code id_token, code token, and code id_token token.
+variation ResponseType "Response type" {
+  code "code (Authorization Code Flow)"
+  id_token "id_token (Implicit Flow)"
+  id_token_token "id_token token (Implicit Flow)"
+  code_id_token "code id_token (Hybrid Flow)"
+  code_token "code token (Hybrid Flow)"
+  code_id_token_token "code id_token token (Hybrid Flow)"
+}
+
+// Core §3.1.2.1 prompt. "unspecified" is a request without the parameter.
+variation Prompt "prompt parameter" {
+  unspecified "No prompt"
+  none "prompt=none"
+  login "prompt=login"
+  consent "prompt=consent"
+  select_account "prompt=select_account"
+}
+
+// RFC 7636 §4.3 code_challenge_method. "absent" is a request without PKCE.
+variation PkceMethod "PKCE code challenge method" {
+  absent "No PKCE"
+  plain "plain"
+  s256 "S256"
+}
+
+// Core §3.1.2.1 acr_values. The model reduces the requested Authentication Context Class
+// to whether it asks for a second factor.
+variation AcrRequest "Requested authentication context" {
+  any "No acr_values, or a single-factor class"
+  mfa "A multi-factor class"
+}
+
+// CIBA Core 1.0 §5: how the client receives the result.
+variation CibaDeliveryMode "CIBA token delivery mode" {
+  poll "Poll"
+  ping "Ping"
+  push "Push"
+}
+
+// ── Parties registered with the OP ───────────────────────
+
+// Core §2: "sub" is a locally unique identifier for the End-User at the issuer.
+entity UserAccount "End-User account" {
+  id: Int @pk
+  subject: String @unique @label("sub")
+  mfa_enrolled: Bool @default(false)
+}
+
+// OpenID Connect Dynamic Client Registration 1.0 §2 client metadata.
+entity Client "Registered client" {
+  id: Int @pk
+  client_id: String @unique
+  client_type: ClientType
+  auth_method: ClientAuthMethod
+  status: Enum(active "Active", suspended "Suspended") @default(active)
+  // OpenID Connect Back-Channel Logout 1.0 §2.2 and Front-Channel Logout 1.0 §2.
+  backchannel_logout_uri: String @null
+  frontchannel_logout_uri: String @null
+}
+
+// OpenID Connect Discovery 1.0 §3 jwks_uri. A key is published before it signs, so RPs have
+// cached it, and stays published after it stops signing, until the ID Tokens it signed expire.
+entity SigningKey "ID Token signing key" {
+  id: Int @pk
+  kid: String @unique
+  status: Enum(published "Published, not yet signing", active "Signing", retired "Retired") @default(published) @index
+}
+
+// ── The End-User's authentication at the OP ──────────────
+
+// OpenID Connect Session Management 1.0 §1: the OP's login session with the user agent.
+// Back-Channel Logout 1.0 §2.1 "sid" names it.
+entity OpSession "OP session" {
+  id: Int @pk
+  sid: String @unique
+  status: Enum(authenticated "Authenticated", logged_out "Logged out", expired "Expired") @default(authenticated) @index
+  // Core §2 "acr" and "amr": the model keeps whether a second factor was used.
+  // A session no request asks to step up stays single-factor.
+  auth_level: Enum(single_factor "Single factor", multi_factor "Multi-factor") @default(single_factor) @end(single_factor)
+  auth_time: DateTime
+}
+
+// Core §3.1.2.4: the OP obtains the End-User's consent, and may remember it.
+entity Consent "Consent" {
+  id: Int @pk
+  status: Enum(granted "Granted", withdrawn "Withdrawn") @default(granted)
+}
+
+// Core §3.1.2.1 Authentication Request, kept from its arrival to the response: the protocol
+// parameters the response depends on.
+entity AuthorizationRequest "Authentication request" {
+  id: Int @pk
+  response_type: ResponseType
+  pkce: PkceMethod
+  nonce: String @null
+  // Core §3.1.2.6 and RFC 6749 §4.1.2.1: which error an error response carries is the use
+  // case that sent it, so the model keeps no column for the error code.
+  status: Enum(received "Received", validated "Validated", consented "Consented", responded "Responded", failed "Error response", abandoned "Abandoned") @default(received) @index
+}
+
+// The End-User's side of one authentication request: what the RP allows the OP to show
+// (prompt), the authentication it asks for (acr_values), and how the End-User was
+// authenticated. The model keeps it apart from the request so that each row has few
+// combinations to explore (README).
+entity Interaction "Login interaction" {
+  id: Int @pk
+  prompt: Prompt
+  acr: AcrRequest
+  // By a login page, or by the existing OP session (single sign-on).
+  // A request that fails or is abandoned before the End-User authenticates leaves it pending.
+  authentication: Enum(pending "Not yet", login "Login page", sso "Existing session") @default(pending) @end(pending)
+}
+
+// The authorization the End-User gave one client through the browser: the root of every token
+// issued for it. The device and CIBA flows keep no grant or token rows (README).
+// RFC 6749 §4.1.2 asks the OP to revoke "all tokens previously issued based on that
+// authorization code" when a code is replayed, so the tokens hang off one grant.
+entity Grant "Authorization grant" {
+  id: Int @pk
+  flow: Enum(code "Authorization Code", implicit "Implicit", hybrid "Hybrid")
+  status: Enum(active "Active", revoked "Revoked") @default(active)
+  last_refreshed_at: DateTime @null
+}
+
+// RFC 6749 §4.1.2: short-lived and single use.
+entity AuthorizationCode "Authorization code" {
+  id: Int @pk
+  status: Enum(issued "Issued", redeemed "Redeemed", expired "Expired", replayed "Replay detected") @default(issued) @index
+}
+
+// RFC 6749 §1.4. The row is the access token most recently issued under a grant: a refresh
+// replaces it.
+entity AccessToken "Access token" {
+  id: Int @pk
+  status: Enum(active "Active", expired "Expired", revoked "Revoked") @default(active) @index @end(expired, revoked)
+}
+
+// RFC 6749 §1.5. RFC 9700 §4.14.2 rotates the refresh token on each use and revokes the
+// active one when an old one comes back. The row is the token family: a rotation replaces its
+// value and keeps it usable; the reuse of a replaced value revokes it.
+entity RefreshToken "Refresh token (rotation family)" {
+  id: Int @pk
+  status: Enum(active "Active, never rotated", rotated "Active, rotated", expired "Expired", revoked "Revoked") @default(active) @index
+}
+
+// Core §2 ID Token. The OP keeps a record of each one it signs, for the audit trail and for
+// id_token_hint (OpenID Connect RP-Initiated Logout 1.0 §2).
+entity IdToken "ID Token" {
+  id: Int @pk
+  nonce: String @null
+  auth_time: DateTime
+  acr: String @null
+  sid: String @null
+}
+
+// ── Decoupled flows ──────────────────────────────────────
+
+// RFC 8628 §3.2: the device_code and user_code pair.
+entity DeviceAuthorization "Device authorization" {
+  id: Int @pk
+  user_code: String @unique
+  status: Enum(pending "Pending", approved "Approved", denied "Denied", expired "Expired", redeemed "Redeemed") @default(pending) @index
+}
+
+// CIBA Core 1.0 §7: the backchannel authentication request and its auth_req_id.
+entity BackchannelRequest "Backchannel authentication request" {
+  id: Int @pk
+  delivery_mode: CibaDeliveryMode
+  status: Enum(pending "Pending", approved "Approved", denied "Denied", expired "Expired", notified "Ping sent", redeemed "Tokens issued", pushed "Tokens pushed") @default(pending) @index
+}
+
+// ── Logout ───────────────────────────────────────────────
+
+// Back-Channel Logout 1.0 §2.5: one Logout Token per RP that the session signed in to.
+entity LogoutNotice "Backchannel logout notice" {
+  id: Int @pk
+  status: Enum(pending "Pending", delivered "Delivered", failed "Failed") @default(pending)
+}
+
+// ── Relationships ────────────────────────────────────────
+
+relate(OpSession, UserAccount, N:1)
+relate(Consent, UserAccount, N:1)
+relate(Consent, Client, N:1)
+relate(AuthorizationRequest, Client, N:1)
+relate(Interaction, AuthorizationRequest, 1:1)
+// The interaction learns its session when the End-User authenticates or the session is reused.
+relate(Interaction, OpSession, N:1).optional()
+relate(Grant, AuthorizationRequest, 1:1)
+relate(AuthorizationCode, Grant, 1:1)
+relate(AccessToken, Grant, N:1)
+relate(RefreshToken, Grant, N:1)
+relate(IdToken, Grant, N:1)
+relate(DeviceAuthorization, Client, N:1)
+relate(DeviceAuthorization, UserAccount, N:1).optional()
+relate(BackchannelRequest, Client, N:1)
+relate(BackchannelRequest, UserAccount, N:1)
+relate(LogoutNotice, OpSession, N:1)
+relate(LogoutNotice, Client, N:1)

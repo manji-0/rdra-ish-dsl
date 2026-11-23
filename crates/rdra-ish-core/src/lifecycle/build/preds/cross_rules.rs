@@ -1,8 +1,8 @@
 //! Rules over several entities: scoped cross-entity invariants and related-row quantifiers.
 
-use super::display::{cross_display, entity_list, quantifier_display};
+use super::display::{cross_display, cross_displays, entity_list, quantifier_display};
 use super::guards::{Chain, PathOwner};
-use super::{at_of, implies, Binding};
+use super::{at_of, forbidden_premises, implies, premise, Binding};
 use crate::lifecycle::build::Builder;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::types::{At, InvText, ModelRef, Pred, Site};
@@ -10,7 +10,7 @@ use crate::model::{CrossConstraintScope, EntityKey, FkId, QuantifierKind, Relate
 
 impl Builder<'_> {
     /// Binders for a cross constraint's scope, plus the relate links its `.along` names.
-    fn scope_binding(
+    pub(super) fn scope_binding(
         &mut self,
         scope: &[EntityKey],
         semantics: &CrossConstraintScope,
@@ -112,6 +112,10 @@ impl Builder<'_> {
                 continue;
             };
             let conds = self.cross_all(&c.conditions, &binding, &site);
+            let Pred::And(parts) = &conds else {
+                unreachable!("cross_all builds a conjunction")
+            };
+            let premises = forbidden_premises(&link, parts, &cross_displays(model, &c.conditions));
             let body = implies(link, Pred::Not(Box::new(conds)));
             let text = InvText::CrossForbidden {
                 entities: entity_list(model, &c.scope),
@@ -121,7 +125,7 @@ impl Builder<'_> {
                 "MultiForbidden",
                 i,
                 &binding,
-                body,
+                (body, premises),
                 text,
                 c.label.clone(),
                 site,
@@ -139,12 +143,14 @@ impl Builder<'_> {
             };
             let g = self.cross_all(&c.guards, &binding, &site);
             let r = self.cross_all(&c.requireds, &binding, &site);
+            let premises = vec![premise(vec![link.clone(), g.clone()], guards.clone())];
             let body = implies(link, implies(g, r));
             let text = InvText::CrossInvariant {
                 entities: entity_list(model, &c.scope),
                 guards,
                 requireds,
             };
+            let body = (body, premises);
             self.push_invariant("MultiInv", i, &binding, body, text, c.label.clone(), site);
         }
     }
@@ -204,6 +210,19 @@ impl Builder<'_> {
             let site = Site::new(ModelRef::Quantifier(i), &q.site);
             let anchor: Binding = vec![(c.anchor, At::Bound(0))];
             let guards = self.cross_all(&c.guards, &anchor, &site);
+            let mut premises = vec![premise(
+                vec![guards.clone()],
+                cross_display(model, &c.guards),
+            )];
+            // `none` says something only of rows of the related entity; `has` asks for one.
+            if matches!(q.kind, QuantifierKind::None) {
+                let related = Pred::Exists {
+                    entity: self.ent_of[&q.related],
+                    body: Box::new(Pred::True),
+                };
+                let text = format!("some {} row beside it", model.entities[q.related].id);
+                premises.push(premise(vec![related], text));
+            }
             let kind = match q.kind {
                 QuantifierKind::Has => "has",
                 QuantifierKind::None => "none",
@@ -243,7 +262,7 @@ impl Builder<'_> {
                 "Quantifier",
                 i,
                 &anchor,
-                implies(guards, inner),
+                (implies(guards, inner), premises),
                 text,
                 c.label.clone(),
                 site,

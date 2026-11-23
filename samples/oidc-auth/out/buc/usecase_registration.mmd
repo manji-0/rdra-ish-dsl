@@ -1,0 +1,73 @@
+%% rdra-ish diagram=usecase scope=buc:BucClientRegistration model=samples/oidc-auth
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor timer usecase screen event entity state
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__OpAdministrator(["OP Administrator"]):::actor
+    %% desc actor__OpAdministrator: Suspends and reinstates clients, publishes, activates, and retires signing keys.
+    actor__RelyingParty(["Relying Party (client application)"]):::actor
+    %% desc actor__RelyingParty: Registers itself, sends the End-User to the authorization endpoint, redeems codes, refreshes and revokes tokens, calls UserInfo, polls for device and CIBA tokens, and starts a logout.
+  end
+  subgraph layer_environment["システム外部環境"]
+    timer__RpMetadataRefresh(("RP's metadata cache refresh (RP policy, e.g. daily)")):::timer
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__DiscoverProvider("Read the OP configuration"):::usecase
+    %% desc usecase__DiscoverProvider: Fetch the issuer, the endpoint URLs, the supported response types, scopes, claims, and signing algorithms.
+    usecase__FetchJwks("Fetch the OP signing keys (JWKS)"):::usecase
+    %% desc usecase__FetchJwks: Fetch the JWK Set the OP signs ID Tokens with, again whenever an ID Token names a kid the RP has not cached.
+    usecase__ReadClientRegistration("Read the client registration"):::usecase
+    %% desc usecase__ReadClientRegistration: Read the registered metadata back from the client configuration endpoint with the registration access token.
+    usecase__RegisterClient("Register a client"):::usecase
+    %% desc usecase__RegisterClient: Send the client metadata (redirect_uris, response_types, token_endpoint_auth_method, backchannel_logout_uri, CIBA delivery mode) and receive the client_id, the secret of a confidential client, and the registration access token.
+    usecase__ReinstateClient("Reinstate a client"):::usecase
+    %% desc usecase__ReinstateClient: Let a suspended client sign End-Users in again.
+    usecase__SuspendClient("Suspend a client"):::usecase
+    %% desc usecase__SuspendClient: Stop a client from starting new authentications and redeeming tokens, for example after its secret leaked.
+    screen__ClientAdminScreen["Client administration"]:::screen
+    event__EvClientRegistered>"The client is registered"]:::event
+    event__EvProviderDiscovered>"The RP read the OP configuration"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__Client[("Registered client")]:::entity
+    entity__SigningKey[("ID Token signing key")]:::entity
+    state__Client_active((("Active"))):::state
+    state__Client_suspended((("Suspended"))):::state
+  end
+  actor__OpAdministrator -.-> usecase__ReinstateClient
+  actor__OpAdministrator -.-> usecase__SuspendClient
+  actor__RelyingParty -.-> usecase__DiscoverProvider
+  actor__RelyingParty -.-> usecase__FetchJwks
+  actor__RelyingParty -.-> usecase__ReadClientRegistration
+  actor__RelyingParty -.-> usecase__RegisterClient
+  event__EvClientRegistered -.-> usecase__ReadClientRegistration
+  event__EvProviderDiscovered -.-> usecase__RegisterClient
+  screen__ClientAdminScreen -.-> entity__Client
+  timer__RpMetadataRefresh -.-> usecase__DiscoverProvider
+  timer__RpMetadataRefresh -.-> usecase__FetchJwks
+  usecase__DiscoverProvider -.-> event__EvProviderDiscovered
+  usecase__DiscoverProvider -.->|reads| entity__SigningKey
+  %% derived usecase__DiscoverProvider -> entity__SigningKey via api__DiscoveryApi
+  usecase__FetchJwks -.->|reads| entity__SigningKey
+  %% derived usecase__FetchJwks -> entity__SigningKey via api__JwksApi
+  usecase__ReadClientRegistration -.->|reads| entity__Client
+  %% derived usecase__ReadClientRegistration -> entity__Client via api__ClientConfigurationApi
+  usecase__RegisterClient -.->|creates| entity__Client
+  %% derived usecase__RegisterClient -> entity__Client via api__RegistrationApi
+  usecase__RegisterClient -.-> event__EvClientRegistered
+  usecase__ReinstateClient -.-> screen__ClientAdminScreen
+  usecase__ReinstateClient -.->|transitions Client.status suspended->active| state__Client_active
+  usecase__ReinstateClient -.->|updates| entity__Client
+  %% derived usecase__ReinstateClient -> entity__Client via api__ClientAdminApi
+  usecase__SuspendClient -.-> screen__ClientAdminScreen
+  usecase__SuspendClient -.->|transitions Client.status active->suspended| state__Client_suspended
+  usecase__SuspendClient -.->|updates| entity__Client
+  %% derived usecase__SuspendClient -> entity__Client via api__ClientAdminApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;

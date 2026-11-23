@@ -5,10 +5,10 @@ use std::collections::HashMap;
 use std::fmt;
 
 use super::cone::{Cone, Target};
-use super::diag::{Diag, StateDiag};
+use super::diag::{Diag, StateDiag, UnmetPremise};
 use super::explore::{Caps, ComponentRun};
 use super::findings::{Progress, Runs, Taken, Witness};
-use super::types::{ActionOrigin, EntId, GuardWhy, Pred, Site, Term, VarKind};
+use super::types::{ActionOrigin, EntId, GuardWhy, Pred, Premise, Site, Term, VarKind};
 use super::view::{entity_view, AbstractValue, EntityStateResult};
 use super::TransitionSystem;
 use crate::memory::{watch, MemorySize};
@@ -213,7 +213,9 @@ impl TransitionSystem {
         // Each cone is explored on its own system, so the cones run side by side; the runs
         // come back in cone order, and each is what it is alone.
         let explore = |cone: &Cone, shared: &[Target], caps: Caps| {
-            let system = if reduce {
+            // A reduction keeps what LTL reads, not `AG EF`: a `can_reach` cone stays whole.
+            let reach = shared.iter().any(|t| matches!(t, Target::Reach(_)));
+            let system = if reduce && !reach {
                 let seeds = shared.iter().map(|t| self.target_seed(*t));
                 self.reduced_cone(cone, seeds, caps)
             } else {
@@ -277,7 +279,13 @@ impl TransitionSystem {
         }
         out.cones = cones;
         out.tally.entity_cones = entity_cones.len();
-        for (i, r) in self.merge_variants(runs, &mut out.verdicts, &mut out.undecided) {
+        // Whether an action runs is judged on entity cones only: a run of other targets alone
+        // (verify's `can_reach` cones) judges none.
+        let judged = match entity_cones.is_empty() {
+            true => Vec::new(),
+            false => self.merge_variants(runs, &mut out.verdicts, &mut out.undecided),
+        };
+        for (i, r) in judged {
             if r.fired {
                 for arm in r.arms.into_iter().filter(|a| !a.taken) {
                     if let Some(diag) = arm.never {
@@ -638,9 +646,9 @@ impl TransitionSystem {
         }
     }
 
-    /// What the target's own cone says about an invariant or assert: its violations, each
-    /// trace marked when it creates more instances than the bound, and any cap that left the
-    /// verdict incomplete.
+    /// What the target's own cone says about an invariant, assert, or `can_reach`: its
+    /// violations, each trace marked when it creates more instances than the bound, and any
+    /// cap that left the verdict incomplete.
     fn verdict(&self, target: Target, cone: &ConeRun) -> Vec<Diag> {
         let run = &cone.run;
         debug_assert!(
@@ -648,6 +656,26 @@ impl TransitionSystem {
             "an entity target has no verdict"
         );
         let entities = self.target_entities(target);
+        if let Target::Reach(i) = target {
+            // A state the cap left unexpanded has no edges, so it would look stuck: only a
+            // complete graph decides.
+            if run.complete {
+                let name = &self.reach[i].name;
+                let local = run
+                    .system
+                    .reach_properties()
+                    .iter()
+                    .position(|r| r.name == *name)
+                    .expect("the cone holds what the property reads");
+                if let Some((at, mut diag)) = run.system.reach_failure(local, &run.graph()) {
+                    if let Some(trace) = diag.trace_mut() {
+                        *trace = run.trace_to(at);
+                    }
+                    return vec![Diag { entities, diag }];
+                }
+                return Vec::new();
+            }
+        }
         let mut out: Vec<Diag> = run
             .diags
             .iter()
@@ -673,7 +701,61 @@ impl TransitionSystem {
                 diag: d.diag.clone(),
             });
         }
+        if let Target::Invariant(i) = target {
+            out.extend(self.vacuous(i, cone).map(|diag| Diag { entities, diag }));
+        }
         out
+    }
+
+    /// The `VacuousRule` of invariant `i` on its cone: the rule holds there, the exploration
+    /// is complete, and no reached state meets one of its premises. When no state has the
+    /// rows the rule ranges over, that alone is reported.
+    fn vacuous(&self, i: usize, cone: &ConeRun) -> Option<StateDiag> {
+        let inv = &self.invariants[i];
+        let run = &cone.run;
+        let violated = run.diags.iter().any(
+            |d| matches!(&d.diag, StateDiag::ConstraintViolated { name, .. } if *name == inv.name),
+        );
+        if !run.complete || violated {
+            return None;
+        }
+        // The cone's copy of the rule reads the cone's vars.
+        let sys = &run.system;
+        let local = sys.invariants.iter().find(|x| x.name == inv.name)?;
+        let met = |pred: &Pred| {
+            run.states
+                .iter()
+                .any(|s| sys.meets(&local.binders, pred, s))
+        };
+        let unmet = |premise: &Premise| UnmetPremise {
+            rows: TransitionSystem::premise_rows(inv.binders.len(), &premise.pred)
+                .iter()
+                .zip(&inv.binders)
+                .filter(|(asked, _)| **asked)
+                .map(|(_, e)| self.entity(*e).id.clone())
+                .collect(),
+            text: premise.text.clone(),
+        };
+        // A condition the build could not express is `False` and has its own error.
+        let built = |p: &&Premise| !p.pred.nodes().any(|n| matches!(n, Pred::False));
+        let unmet: Vec<UnmetPremise> = match met(&Pred::True) {
+            false if !local.premises.is_empty() => vec![unmet(&Premise::rows())],
+            _ => local
+                .premises
+                .iter()
+                .filter(built)
+                .filter(|p| !met(&p.pred))
+                .map(unmet)
+                .collect(),
+        };
+        (!unmet.is_empty()).then(|| StateDiag::VacuousRule {
+            name: inv.name.clone(),
+            text: inv.text.clone(),
+            label: inv.label.clone(),
+            unmet,
+            one_instance: self.bounds.slots() == 1,
+            site: inv.site.clone(),
+        })
     }
 }
 
@@ -710,6 +792,10 @@ impl TargetExploration {
     pub fn defer_progress(&mut self) {
         let mut kept = Vec::new();
         for d in std::mem::take(&mut self.verdicts) {
+            // A use case the scope drops may reach the state that meets the premise.
+            if matches!(d.diag, StateDiag::VacuousRule { .. }) {
+                continue;
+            }
             let subject = match &d.diag {
                 StateDiag::NoWitness {
                     entity,

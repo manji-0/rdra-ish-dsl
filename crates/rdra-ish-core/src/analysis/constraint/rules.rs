@@ -45,7 +45,8 @@ pub(crate) fn process_forbidden(
     }
 
     add_condition_entities_to_scope(&mut scope, &conditions);
-    let scope_semantics = cross_scope_semantics_from_chain(model, pred, ctx, diags);
+    let scope_semantics =
+        cross_scope_semantics_from_chain(model, &pred.name, &pred.chain, ctx, diags);
     let label = rule_label(pred, ctx, diags);
     model
         .cross_forbidden_constraints
@@ -53,7 +54,7 @@ pub(crate) fn process_forbidden(
             label,
             site: Some(ctx.locate(pred.span.clone())),
             scope: scope.clone(),
-            global: global_chain(pred, &scope_semantics, ctx, diags),
+            global: global_chain(&pred.name, &pred.chain, &scope_semantics, ctx, diags),
             scope_semantics,
             conditions,
         });
@@ -82,7 +83,7 @@ pub(crate) fn process_invariant(
     let mut requireds = Vec::new();
     let mut quantified = false;
     let label = rule_label(pred, ctx, diags);
-    let along = along_scope(model, pred, ctx, diags);
+    let along = along_scope(model, &pred.name, &pred.chain, ctx, diags);
     for (at, cc) in pred.chain.iter().enumerate() {
         match cc.name.as_str() {
             "when" => match when_condition_ref(model, &pred.name, cc, ctx, diags) {
@@ -146,7 +147,7 @@ pub(crate) fn process_invariant(
         label,
         site: Some(ctx.locate(pred.span.clone())),
         scope: scope.clone(),
-        global: global_chain(pred, &scope_semantics, ctx, diags),
+        global: global_chain(&pred.name, &pred.chain, &scope_semantics, ctx, diags),
         scope_semantics,
         guards,
         requireds,
@@ -158,13 +159,14 @@ pub(crate) fn process_invariant(
 
 /// Whether the rule says `.global()`. With `.along(...)` too it is `GlobalWithAlong`: the
 /// path already limits the rule to related rows.
-fn global_chain(
-    pred: &PredicateCall,
+pub(crate) fn global_chain(
+    pred: &str,
+    chain: &[ChainCall],
     scope: &CrossConstraintScope,
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> bool {
-    let Some(global) = pred.chain.iter().find(|cc| cc.name == "global") else {
+    let Some(global) = chain.iter().find(|cc| cc.name == "global") else {
         return false;
     };
     if matches!(scope, CrossConstraintScope::RelationPath { .. }) {
@@ -173,7 +175,7 @@ fn global_chain(
             diags,
             global.span.clone(),
             RdraError::GlobalWithAlong {
-                pred: pred.name.clone(),
+                pred: pred.to_string(),
             },
         );
     }

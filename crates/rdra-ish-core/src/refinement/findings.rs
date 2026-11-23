@@ -10,7 +10,7 @@ use crate::model::{EntityKey, SemanticModel};
 
 pub(super) fn owning_stage(model: &SemanticModel, diag: &StateDiag) -> StageId {
     match diag {
-        StateDiag::ConstraintViolated { site, .. } => {
+        StateDiag::ConstraintViolated { site, .. } | StateDiag::VacuousRule { site, .. } => {
             rule_stage(model, &site.fact).unwrap_or(StageId::Lifecycle)
         }
         StateDiag::UnbindableScope { site, .. }
@@ -31,6 +31,7 @@ pub(super) fn owning_stage(model: &SemanticModel, diag: &StateDiag) -> StageId {
         | StateDiag::MemoryCapReached { .. }
         | StateDiag::AfterAssertViolated { .. }
         | StateDiag::PropertyViolated { .. }
+        | StateDiag::GoalUnreachable { .. }
         | StateDiag::NoWitness { .. }
         | StateDiag::NeverRuns { .. }
         | StateDiag::ArmNeverTaken { .. }

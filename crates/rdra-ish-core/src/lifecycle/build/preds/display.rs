@@ -6,12 +6,17 @@ use crate::model::{
 };
 
 pub(super) fn local_display(conds: &[EntityCondition]) -> String {
+    local_displays(conds).join(" AND ")
+}
+
+/// Each condition as written, in the order `Builder::local_conds` builds their predicates:
+/// the equalities, then the comparisons.
+pub(super) fn local_displays(conds: &[EntityCondition]) -> Vec<String> {
     EntityCondition::equals(conds)
         .map(|(c, v)| format!("{c}={}", v.literal()))
         // A comparison prints as written, `status != oa` or `status in (a, b)`.
         .chain(EntityCondition::comparisons(conds).map(ComparisonProp::display))
-        .collect::<Vec<_>>()
-        .join(" AND ")
+        .collect()
 }
 
 pub(super) fn cross_rhs_display(model: &crate::model::SemanticModel, rhs: &CrossCmpRhs) -> String {
@@ -28,6 +33,14 @@ pub(super) fn cross_display(
     model: &crate::model::SemanticModel,
     conds: &[CrossEntityCondition],
 ) -> String {
+    cross_displays(model, conds).join(" AND ")
+}
+
+/// Each condition as written, in the order `Builder::cross_all` builds their predicates.
+pub(super) fn cross_displays(
+    model: &crate::model::SemanticModel,
+    conds: &[CrossEntityCondition],
+) -> Vec<String> {
     conds
         .iter()
         .map(|c| match c {
@@ -45,8 +58,7 @@ pub(super) fn cross_display(
                 cross_rhs_display(model, &p.rhs)
             ),
         })
-        .collect::<Vec<_>>()
-        .join(" AND ")
+        .collect()
 }
 
 /// `.none(Related.col == v).role(role)` as written, for a diagnostic that names the call.

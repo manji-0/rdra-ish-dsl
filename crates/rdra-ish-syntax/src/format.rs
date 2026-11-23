@@ -244,6 +244,7 @@ fn format_property(prop: &PropertyDecl) -> String {
     let formula = match &prop.formula {
         AstTemporalFormula::Always(expr) => format!("always({})", format_expr(expr)),
         AstTemporalFormula::Eventually(expr) => format!("eventually({})", format_expr(expr)),
+        AstTemporalFormula::CanReach(expr) => format!("can_reach({})", format_expr(expr)),
         AstTemporalFormula::LeadsTo {
             antecedent,
             consequent,

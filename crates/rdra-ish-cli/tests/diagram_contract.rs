@@ -649,9 +649,11 @@ fn check_state(chart: &StateChart) -> Result<(), String> {
             if leaves || chart.ends.contains(state) || chart.starts.contains(state) {
                 return Err(format!("{state}: an unreachable state has a way in or out"));
             }
-        } else if leaves == chart.ends.contains(state) {
+        } else if !leaves && !chart.ends.contains(state) {
+            // A state with no way out is an end state. An `@end` state is one too, although an
+            // arm leaves it (state-derivation.md, Deadlocks).
             return Err(format!(
-                "{state}: an end state must be one with no transition out"
+                "{state}: a state with no transition out must be an end state"
             ));
         }
     }

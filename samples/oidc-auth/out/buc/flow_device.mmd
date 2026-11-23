@@ -1,0 +1,55 @@
+%% rdra-ish diagram=flow scope=buc:BucDeviceSignIn model=samples/oidc-auth
+%% kinds: flow step lane timer usecase event
+%% omitted: buc
+flowchart TD
+  subgraph flow__DeviceFlow["Device authorization"]
+    step__DeviceExpireStep["The code expires"]:::step
+    subgraph lane__DeviceFlow__EndUser["End-User"]
+      %% lane lane__DeviceFlow__EndUser: actor__EndUser
+      step__DeviceApproveStep["The End-User approves on another device"]:::step
+      step__DeviceDenyStep["The End-User denies"]:::step
+    end
+    subgraph lane__DeviceFlow__RelyingParty["Relying Party (client application)"]
+      %% lane lane__DeviceFlow__RelyingParty: actor__RelyingParty
+      step__DevicePollStep["The device polls"]:::step
+      step__DeviceRedeemStep["The device receives the tokens"]:::step
+      step__DeviceStartStep["The device asks for a code and shows the user code"]:::step
+    end
+  end
+  timer__DeviceCodeLifetime(("Device code lifetime (expires_in of the device authorization response)")):::timer
+  usecase__ApproveDevice("Approve the device"):::usecase
+  %% desc usecase__ApproveDevice: Open the verification URI on another device, sign in, enter or confirm the user code, check the client and scopes, and approve.
+  usecase__DenyDevice("Deny the device"):::usecase
+  %% desc usecase__DenyDevice: Decline the request after reading which client asks for what.
+  usecase__ExpireDeviceCode("Expire the device code"):::usecase
+  %% desc usecase__ExpireDeviceCode: The device code reaches expires_in before it is redeemed.
+  usecase__PollDevicePending("Poll while the End-User decides"):::usecase
+  %% desc usecase__PollDevicePending: POST grant_type=urn:ietf:params:oauth:grant-type:device_code and receive authorization_pending, or slow_down when the device polled too soon.
+  usecase__RedeemDeviceCode("Redeem the device code"):::usecase
+  %% desc usecase__RedeemDeviceCode: The poll after the approval consumes the device code and receives the ID Token, the access token, and the refresh token.
+  usecase__StartDeviceAuthorization("Request a device code"):::usecase
+  %% desc usecase__StartDeviceAuthorization: POST client_id and scope openid to the device authorization endpoint and receive device_code, user_code, verification_uri, verification_uri_complete, expires_in, and interval.
+  event__EvDeviceApproved>"The End-User approved the device"]:::event
+  event__EvDeviceCodeIssued>"The device received its codes"]:::event
+  step__DeviceApproveStep -.-> event__EvDeviceApproved
+  step__DeviceApproveStep -.-> usecase__ApproveDevice
+  step__DeviceApproveStep -.->|excepts| step__DeviceDenyStep
+  step__DeviceApproveStep -->|precedes| step__DeviceRedeemStep
+  step__DeviceDenyStep -.-> usecase__DenyDevice
+  step__DeviceExpireStep -.-> timer__DeviceCodeLifetime
+  step__DeviceExpireStep -.-> usecase__ExpireDeviceCode
+  step__DevicePollStep -.-> usecase__PollDevicePending
+  step__DevicePollStep -.->|excepts| step__DeviceExpireStep
+  step__DevicePollStep -->|precedes| step__DeviceRedeemStep
+  step__DevicePollStep -->|repeats| step__DevicePollStep
+  step__DeviceRedeemStep -.-> usecase__RedeemDeviceCode
+  step__DeviceStartStep -.-> event__EvDeviceCodeIssued
+  step__DeviceStartStep -.-> usecase__StartDeviceAuthorization
+  step__DeviceStartStep -->|precedes| step__DeviceApproveStep
+  step__DeviceStartStep -->|precedes| step__DevicePollStep
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;

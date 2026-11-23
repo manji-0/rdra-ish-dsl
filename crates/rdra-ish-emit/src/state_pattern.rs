@@ -158,10 +158,12 @@ violation_message(text, pattern_desc)
         StateDiag::StateCapReached { .. }
         | StateDiag::MemoryCapReached { .. }
         | StateDiag::NoWitness { .. }
+        | StateDiag::VacuousRule { .. }
         | StateDiag::NeverRuns { .. }
         | StateDiag::ArmNeverTaken { .. }
         | StateDiag::ValueNeverChosen { .. }
         | StateDiag::Deadlock { .. }
+        | StateDiag::GoalUnreachable { .. }
         | StateDiag::ContradictoryDrivenComparison { .. }
         | StateDiag::AssertOnInertUseCase { .. }
         | StateDiag::FairOnInertUseCase { .. }

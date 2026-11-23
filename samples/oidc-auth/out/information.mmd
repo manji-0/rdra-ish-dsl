@@ -1,0 +1,81 @@
+%% rdra-ish diagram=information scope=whole model=samples/oidc-auth
+%% kinds: entity statemodel variation
+%% omitted: columns adr constraint usecase screen field api condition
+flowchart LR
+  entity__AccessToken[("Access token")]:::entity
+  entity__AuthorizationCode[("Authorization code")]:::entity
+  entity__AuthorizationRequest[("Authentication request")]:::entity
+  entity__BackchannelRequest[("Backchannel authentication request")]:::entity
+  entity__Client[("Registered client")]:::entity
+  entity__Consent[("Consent")]:::entity
+  entity__DeviceAuthorization[("Device authorization")]:::entity
+  entity__Grant[("Authorization grant")]:::entity
+  entity__IdToken[("ID Token")]:::entity
+  entity__Interaction[("Login interaction")]:::entity
+  entity__LogoutNotice[("Backchannel logout notice")]:::entity
+  entity__OpSession[("OP session")]:::entity
+  entity__RefreshToken[("Refresh token (rotation family)")]:::entity
+  entity__SigningKey[("ID Token signing key")]:::entity
+  entity__UserAccount[("End-User account")]:::entity
+  statemodel__AccessToken_status[["AccessToken.status"]]:::statemodel
+  statemodel__AuthorizationCode_status[["AuthorizationCode.status"]]:::statemodel
+  statemodel__AuthorizationRequest_status[["AuthorizationRequest.status"]]:::statemodel
+  statemodel__BackchannelRequest_status[["BackchannelRequest.status"]]:::statemodel
+  statemodel__Client_status[["Client.status"]]:::statemodel
+  statemodel__Consent_status[["Consent.status"]]:::statemodel
+  statemodel__DeviceAuthorization_status[["DeviceAuthorization.status"]]:::statemodel
+  statemodel__Grant_status[["Grant.status"]]:::statemodel
+  statemodel__Interaction_authentication[["Interaction.authentication"]]:::statemodel
+  statemodel__LogoutNotice_status[["LogoutNotice.status"]]:::statemodel
+  statemodel__OpSession_auth_level[["OpSession.auth_level"]]:::statemodel
+  statemodel__OpSession_status[["OpSession.status"]]:::statemodel
+  statemodel__RefreshToken_status[["RefreshToken.status"]]:::statemodel
+  statemodel__SigningKey_status[["SigningKey.status"]]:::statemodel
+  variation__AcrRequest[\"Requested authentication context"\]:::variation
+  variation__CibaDeliveryMode[\"CIBA token delivery mode"\]:::variation
+  variation__ClientAuthMethod[\"Token endpoint authentication method"\]:::variation
+  variation__ClientType[\"Client type"\]:::variation
+  variation__PkceMethod[\"PKCE code challenge method"\]:::variation
+  variation__Prompt[\"prompt parameter"\]:::variation
+  variation__ResponseType[\"Response type"\]:::variation
+  entity__AccessToken ---|N:1| entity__Grant
+  entity__AccessToken -.-> statemodel__AccessToken_status
+  entity__AuthorizationCode ---|1:1| entity__Grant
+  entity__AuthorizationCode -.-> statemodel__AuthorizationCode_status
+  entity__AuthorizationRequest ---|N:1| entity__Client
+  entity__AuthorizationRequest -.-> statemodel__AuthorizationRequest_status
+  entity__AuthorizationRequest -.->|variation pkce| variation__PkceMethod
+  entity__AuthorizationRequest -.->|variation response_type| variation__ResponseType
+  entity__BackchannelRequest ---|N:1| entity__Client
+  entity__BackchannelRequest ---|N:1| entity__UserAccount
+  entity__BackchannelRequest -.-> statemodel__BackchannelRequest_status
+  entity__BackchannelRequest -.->|variation delivery_mode| variation__CibaDeliveryMode
+  entity__Client -.-> statemodel__Client_status
+  entity__Client -.->|variation auth_method| variation__ClientAuthMethod
+  entity__Client -.->|variation client_type| variation__ClientType
+  entity__Consent ---|N:1| entity__Client
+  entity__Consent ---|N:1| entity__UserAccount
+  entity__Consent -.-> statemodel__Consent_status
+  entity__DeviceAuthorization ---|N:1| entity__Client
+  entity__DeviceAuthorization ---|N:1| entity__UserAccount
+  entity__DeviceAuthorization -.-> statemodel__DeviceAuthorization_status
+  entity__Grant ---|1:1| entity__AuthorizationRequest
+  entity__Grant -.-> statemodel__Grant_status
+  entity__IdToken ---|N:1| entity__Grant
+  entity__Interaction ---|1:1| entity__AuthorizationRequest
+  entity__Interaction ---|N:1| entity__OpSession
+  entity__Interaction -.-> statemodel__Interaction_authentication
+  entity__Interaction -.->|variation acr| variation__AcrRequest
+  entity__Interaction -.->|variation prompt| variation__Prompt
+  entity__LogoutNotice ---|N:1| entity__Client
+  entity__LogoutNotice ---|N:1| entity__OpSession
+  entity__LogoutNotice -.-> statemodel__LogoutNotice_status
+  entity__OpSession ---|N:1| entity__UserAccount
+  entity__OpSession -.-> statemodel__OpSession_auth_level
+  entity__OpSession -.-> statemodel__OpSession_status
+  entity__RefreshToken ---|N:1| entity__Grant
+  entity__RefreshToken -.-> statemodel__RefreshToken_status
+  entity__SigningKey -.-> statemodel__SigningKey_status
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef statemodel fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef variation fill:#f3d9fa,stroke:#862e9c,color:#000;

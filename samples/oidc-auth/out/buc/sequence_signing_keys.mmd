@@ -1,0 +1,31 @@
+%% rdra-ish diagram=sequence scope=buc:BucSigningKeys model=samples/oidc-auth
+%% kinds: actor timer screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__OpAdministrator as OP Administrator
+  participant timer__KeyRotationSchedule as Signing key rotation schedule (OP policy, e.g. every 90 days)
+  participant screen__KeyAdminScreen as Signing keys
+  participant api__KeyAdminApi as Signing key administration
+  participant api__KeyRotationApi as Signing key rotation
+  participant entity__SigningKey as ID Token signing key
+  Note over screen__KeyAdminScreen: 1. Publish the next signing key
+  actor__OpAdministrator ->> screen__KeyAdminScreen: Publish the next signing key
+  screen__KeyAdminScreen ->> api__KeyAdminApi: Signing key administration
+  api__KeyAdminApi ->> entity__SigningKey: create
+  api__KeyAdminApi -->> screen__KeyAdminScreen: done
+  Note over api__KeyRotationApi: 2. Start signing with the published key
+  timer__KeyRotationSchedule ->> api__KeyRotationApi: Signing key rotation schedule (OP policy, e.g. every 90 days)
+  alt SigningKey.status == Published, not yet signing
+    api__KeyRotationApi ->> entity__SigningKey: update status Published, not yet signing -> Signing
+    api__KeyRotationApi -->> timer__KeyRotationSchedule: done
+  else guard fails
+    api__KeyRotationApi -->> timer__KeyRotationSchedule: rejected
+  end
+  Note over api__KeyRotationApi: 3. Retire a signing key
+  timer__KeyRotationSchedule ->> api__KeyRotationApi: Signing key rotation schedule (OP policy, e.g. every 90 days)
+  alt SigningKey.status == Signing
+    api__KeyRotationApi ->> entity__SigningKey: update status Signing -> Retired
+    api__KeyRotationApi -->> timer__KeyRotationSchedule: done
+  else guard fails
+    api__KeyRotationApi -->> timer__KeyRotationSchedule: rejected
+  end

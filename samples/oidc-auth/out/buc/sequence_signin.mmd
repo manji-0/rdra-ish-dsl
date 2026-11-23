@@ -1,0 +1,344 @@
+%% rdra-ish diagram=sequence scope=buc:BucBrowserSignIn model=samples/oidc-auth
+%% kinds: actor usecase timer screen api entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__EndUser as End-User
+  actor actor__RelyingParty as Relying Party (client application)
+  participant usecase__RequestAuthentication as Send the authentication request
+  participant usecase__ValidateRequest as Validate the request
+  participant usecase__AuthenticateEndUser as Authenticate for the request at the login page
+  participant usecase__ReuseSession as Reuse the OP session (single sign-on)
+  participant usecase__SelectAccount as Select an account
+  actor actor__OpAdministrator as OP Administrator
+  participant timer__InteractionLifetime as Login interaction lifetime (OP policy, e.g. 30 minutes)
+  participant usecase__GrantConsent as Consent to the client
+  participant usecase__ReuseConsent as Reuse the recorded consent
+  participant screen__AppLauncherScreen as OP application launcher
+  participant screen__RpSignInScreen as RP sign-in page
+  participant screen__LoginScreen as Login page
+  participant screen__SecondFactorScreen as Second factor page
+  participant screen__AccountChooserScreen as Account chooser
+  participant screen__ConsentScreen as Consent page
+  participant screen__ConsentAdminScreen as Administrative consents
+  participant usecase__InitiateThirdPartyLogin as Start a sign-in from the OP (third-party initiated login)
+  participant api__AuthorizationApi as Authorization endpoint
+  participant api__LoginApi as Login form
+  participant api__LoginResumeApi as Resume the request after the login
+  participant api__StepUpApi as Second factor form
+  participant api__ConsentApi as Consent form
+  participant api__ConsentAdminApi as Administrative consent
+  participant entity__Client as Registered client
+  participant entity__AuthorizationRequest as Authentication request
+  participant entity__Interaction as Login interaction
+  participant entity__UserAccount as End-User account
+  participant entity__OpSession as OP session
+  participant entity__Consent as Consent
+  participant entity__Grant as Authorization grant
+  participant entity__AuthorizationCode as Authorization code
+  participant entity__IdToken as ID Token
+  participant entity__AccessToken as Access token
+  participant extsystem__RpCallbackEndpoint as RP callback endpoints (backchannel logout, CIBA notification, initiate login)
+  participant api__RequestValidationApi as Request validation
+  participant api__ErrorResponseApi as Authorization error response (redirect)
+  participant api__SessionLookupApi as OP session lookup
+  participant api__ConsentLookupApi as Recorded consent lookup
+  participant usecase__IssueCodeResponse as Respond with a code (Authorization Code Flow)
+  participant usecase__IssueIdTokenResponse as Respond with an ID Token (Implicit Flow, id_token)
+  participant usecase__IssueImplicitTokenResponse as Respond with an ID Token and an access token (Implicit Flow, id_token token)
+  participant usecase__IssueHybridIdTokenResponse as Respond with a code and an ID Token (Hybrid Flow, code id_token)
+  participant usecase__IssueHybridTokenResponse as Respond with a code and an access token (Hybrid Flow, code token)
+  participant usecase__IssueHybridFullResponse as Respond with a code, an ID Token, and an access token (Hybrid Flow, code id_token token)
+  participant api__TokenApi as Token endpoint (authorization_code)
+  participant api__UserInfoApi as UserInfo endpoint
+  participant api__AccessTokenRevocationApi as Revocation endpoint (access token)
+  participant api__IntrospectionApi as Introspection endpoint
+  Note over screen__AppLauncherScreen: 1. Start a sign-in from the OP (third-party initiated login)
+  actor__EndUser ->> screen__AppLauncherScreen: Start a sign-in from the OP (third-party initiated login)
+  screen__AppLauncherScreen ->> usecase__InitiateThirdPartyLogin: Start a sign-in from the OP (third-party initiated login)
+  usecase__InitiateThirdPartyLogin ->> entity__Client: read
+  usecase__InitiateThirdPartyLogin -) extsystem__RpCallbackEndpoint: The OP sends the browser to the client's initiate_login_uri
+  usecase__InitiateThirdPartyLogin -->> screen__AppLauncherScreen: done
+  Note over screen__RpSignInScreen: 2. Send the authentication request
+  actor__RelyingParty ->> screen__RpSignInScreen: Send the authentication request
+  screen__RpSignInScreen ->> api__AuthorizationApi: Authorization endpoint
+  api__AuthorizationApi ->> entity__Client: read
+  Note over api__AuthorizationApi: transaction (API atomic boundary)
+  api__AuthorizationApi ->> entity__AuthorizationRequest: create nonce=set [An ID Token comes back from the authorization endpoint], nonce=null [No ID Token comes back from the authorization endpoint]
+  api__AuthorizationApi ->> entity__Interaction: create
+  api__AuthorizationApi -) api__RequestValidationApi: The authentication request arrived
+  api__AuthorizationApi -) api__ErrorResponseApi: The authentication request arrived
+  api__AuthorizationApi -->> screen__RpSignInScreen: done
+  Note over api__RequestValidationApi: 3. Validate the request
+  usecase__RequestAuthentication ->> api__RequestValidationApi: The authentication request arrived
+  alt AuthorizationRequest.status == Received
+    api__RequestValidationApi ->> entity__Client: read
+    api__RequestValidationApi ->> entity__AuthorizationRequest: update status Received -> Validated [No code is issued (Implicit Flow)], status Received -> Validated [The client is confidential], status Received -> Validated [The request carries an S256 code challenge]
+    api__RequestValidationApi -) api__SessionLookupApi: The authentication request is valid
+    api__RequestValidationApi -) api__ErrorResponseApi: The authentication request is valid
+    api__RequestValidationApi -) api__ErrorResponseApi: The authentication request is valid
+    api__RequestValidationApi -) api__ErrorResponseApi: The authentication request is valid
+    api__RequestValidationApi -->> usecase__RequestAuthentication: done
+  else guard fails
+    api__RequestValidationApi -->> usecase__RequestAuthentication: rejected
+  end
+  Note over api__ErrorResponseApi: 4. Reject an invalid request
+  usecase__RequestAuthentication ->> api__ErrorResponseApi: The authentication request arrived
+  alt A public client asks for a code without an S256 challenge: (AuthorizationRequest.pkce in (No PKCE, plain), AuthorizationRequest.response_type in (code (Authorization Code Flow), code id_token (Hybrid Flow), code token (Hybrid Flow), code id_token token (Hybrid Flow)), Client.client_type == Public client).along(AuthorizationRequest, Client) and AuthorizationRequest.status == Received
+    Note over api__ErrorResponseApi: transaction (API atomic boundary)
+    api__ErrorResponseApi ->> entity__AuthorizationRequest: update status Received -> Error response
+    api__ErrorResponseApi ->> entity__Interaction: delete
+    api__ErrorResponseApi -->> usecase__RequestAuthentication: done
+  else guard fails
+    api__ErrorResponseApi -->> usecase__RequestAuthentication: rejected
+  end
+  Note over screen__LoginScreen: 5. Log in at the OP
+  actor__EndUser ->> screen__LoginScreen: Log in at the OP
+  screen__LoginScreen ->> api__LoginApi: Login form
+  api__LoginApi ->> entity__UserAccount: read
+  api__LoginApi ->> entity__OpSession: create
+  api__LoginApi -->> screen__LoginScreen: done
+  Note over screen__LoginScreen: 6. Authenticate for the request at the login page
+  actor__EndUser ->> screen__LoginScreen: Authenticate for the request at the login page
+  screen__LoginScreen ->> api__LoginResumeApi: Resume the request after the login
+  alt The request is valid and lets the OP show a page: AuthorizationRequest.status == Validated, Interaction.prompt not in (prompt=none) and Interaction.authentication == Not yet
+    api__LoginResumeApi ->> entity__OpSession: read
+    api__LoginResumeApi ->> entity__Interaction: update authentication Not yet -> Login page [The OP session is authenticated with a second factor], authentication Not yet -> Login page [The OP session is authenticated and the request asks for no second factor]
+    api__LoginResumeApi -) api__ConsentLookupApi: The End-User is authenticated for the request
+    api__LoginResumeApi -) api__ErrorResponseApi: The End-User is authenticated for the request
+    api__LoginResumeApi -->> screen__LoginScreen: done
+  else guard fails
+    api__LoginResumeApi -->> screen__LoginScreen: rejected
+  end
+  Note over api__SessionLookupApi: 7. Reuse the OP session (single sign-on)
+  usecase__ValidateRequest ->> api__SessionLookupApi: The authentication request is valid
+  alt The request is valid and no prompt forces a login or an account choice: AuthorizationRequest.status == Validated, Interaction.prompt in (No prompt, prompt=none, prompt=consent) and Interaction.authentication == Not yet
+    api__SessionLookupApi ->> entity__OpSession: read
+    api__SessionLookupApi ->> entity__Interaction: update authentication Not yet -> Existing session [The OP session is authenticated with a second factor], authentication Not yet -> Existing session [The OP session is authenticated and the request asks for no second factor]
+    api__SessionLookupApi -) api__ConsentLookupApi: The End-User is authenticated for the request
+    api__SessionLookupApi -) api__ErrorResponseApi: The End-User is authenticated for the request
+    api__SessionLookupApi -->> usecase__ValidateRequest: done
+  else guard fails
+    api__SessionLookupApi -->> usecase__ValidateRequest: rejected
+  end
+  Note over screen__SecondFactorScreen: 8. Add a second factor to the session
+  actor__EndUser ->> screen__SecondFactorScreen: Add a second factor to the session
+  screen__SecondFactorScreen ->> api__StepUpApi: Second factor form
+  alt The OP session is authenticated: OpSession.status == Authenticated and OpSession.auth_level == Single factor
+    api__StepUpApi ->> entity__OpSession: update auth_level Single factor -> Multi-factor
+    api__StepUpApi -->> screen__SecondFactorScreen: done
+  else guard fails
+    api__StepUpApi -->> screen__SecondFactorScreen: rejected
+  end
+  Note over screen__AccountChooserScreen: 9. Select an account
+  actor__EndUser ->> screen__AccountChooserScreen: Select an account
+  screen__AccountChooserScreen ->> api__SessionLookupApi: OP session lookup
+  alt prompt=select_account on a valid request, with an authenticated session to pick: AuthorizationRequest.status == Validated, Interaction.prompt == prompt=select_account, OpSession.status == Authenticated and Interaction.authentication == Not yet
+    api__SessionLookupApi ->> entity__OpSession: read
+    api__SessionLookupApi ->> entity__Interaction: update authentication Not yet -> Existing session [The OP session is authenticated with a second factor], authentication Not yet -> Existing session [The OP session is authenticated and the request asks for no second factor]
+    api__SessionLookupApi -) api__ConsentLookupApi: The End-User is authenticated for the request
+    api__SessionLookupApi -) api__ErrorResponseApi: The End-User is authenticated for the request
+    api__SessionLookupApi -->> screen__AccountChooserScreen: done
+  else guard fails
+    api__SessionLookupApi -->> screen__AccountChooserScreen: rejected
+  end
+  Note over screen__ConsentScreen: 10. Consent to the client
+  actor__EndUser ->> screen__ConsentScreen: Consent to the client
+  screen__ConsentScreen ->> api__ConsentApi: Consent form
+  alt The End-User is authenticated for the request, and a page may be shown: Interaction.authentication in (Login page, Existing session), Interaction.prompt not in (prompt=none) and AuthorizationRequest.status == Validated
+    api__ConsentApi ->> entity__Interaction: read
+    Note over api__ConsentApi: transaction (API atomic boundary)
+    api__ConsentApi ->> entity__AuthorizationRequest: update status Validated -> Consented
+    api__ConsentApi ->> entity__Consent: create
+    api__ConsentApi -) usecase__IssueCodeResponse: The authentication request is authorized
+    api__ConsentApi -) usecase__IssueIdTokenResponse: The authentication request is authorized
+    api__ConsentApi -) usecase__IssueImplicitTokenResponse: The authentication request is authorized
+    api__ConsentApi -) usecase__IssueHybridIdTokenResponse: The authentication request is authorized
+    api__ConsentApi -) usecase__IssueHybridTokenResponse: The authentication request is authorized
+    api__ConsentApi -) usecase__IssueHybridFullResponse: The authentication request is authorized
+    api__ConsentApi -->> screen__ConsentScreen: done
+  else guard fails
+    api__ConsentApi -->> screen__ConsentScreen: rejected
+  end
+  Note over api__ConsentLookupApi: 11. Reuse the recorded consent
+  usecase__AuthenticateEndUser ->> api__ConsentLookupApi: The End-User is authenticated for the request
+  usecase__ReuseSession ->> api__ConsentLookupApi: The End-User is authenticated for the request
+  usecase__SelectAccount ->> api__ConsentLookupApi: The End-User is authenticated for the request
+  alt The End-User is authenticated, prompt is not consent, and a consent to the client is on record: (Interaction.authentication in (Login page, Existing session), Interaction.prompt not in (prompt=consent)).along(Interaction, AuthorizationRequest, Client, Consent).has(Consent.status == Granted) and AuthorizationRequest.status == Validated
+    api__ConsentLookupApi ->> entity__Consent: read
+    api__ConsentLookupApi ->> entity__AuthorizationRequest: update status Validated -> Consented
+    api__ConsentLookupApi -) usecase__IssueCodeResponse: The authentication request is authorized
+    api__ConsentLookupApi -) usecase__IssueIdTokenResponse: The authentication request is authorized
+    api__ConsentLookupApi -) usecase__IssueImplicitTokenResponse: The authentication request is authorized
+    api__ConsentLookupApi -) usecase__IssueHybridIdTokenResponse: The authentication request is authorized
+    api__ConsentLookupApi -) usecase__IssueHybridTokenResponse: The authentication request is authorized
+    api__ConsentLookupApi -) usecase__IssueHybridFullResponse: The authentication request is authorized
+    api__ConsentLookupApi -->> usecase__AuthenticateEndUser: done
+  else guard fails
+    api__ConsentLookupApi -->> usecase__AuthenticateEndUser: rejected
+  end
+  Note over screen__ConsentAdminScreen: 12. Record administrative consent
+  actor__OpAdministrator ->> screen__ConsentAdminScreen: Record administrative consent
+  screen__ConsentAdminScreen ->> api__ConsentAdminApi: Administrative consent
+  api__ConsentAdminApi ->> entity__Client: read
+  api__ConsentAdminApi ->> entity__UserAccount: read
+  api__ConsentAdminApi ->> entity__Consent: create
+  api__ConsentAdminApi -->> screen__ConsentAdminScreen: done
+  Note over screen__ConsentScreen: 13. Decline the client
+  actor__EndUser ->> screen__ConsentScreen: Decline the client
+  screen__ConsentScreen ->> api__ErrorResponseApi: Authorization error response (redirect)
+  alt The End-User is authenticated for the request, and a page may be shown: Interaction.authentication in (Login page, Existing session), Interaction.prompt not in (prompt=none) and AuthorizationRequest.status == Validated
+    Note over api__ErrorResponseApi: transaction (API atomic boundary)
+    api__ErrorResponseApi ->> entity__AuthorizationRequest: update status Validated -> Error response
+    api__ErrorResponseApi ->> entity__Interaction: delete
+    api__ErrorResponseApi -->> screen__ConsentScreen: done
+  else guard fails
+    api__ErrorResponseApi -->> screen__ConsentScreen: rejected
+  end
+  Note over api__ErrorResponseApi: 14. Drop an abandoned request
+  timer__InteractionLifetime ->> api__ErrorResponseApi: Login interaction lifetime (OP policy, e.g. 30 minutes)
+  alt AuthorizationRequest.status in (Received, Validated)
+    Note over api__ErrorResponseApi: transaction (API atomic boundary)
+    api__ErrorResponseApi ->> entity__AuthorizationRequest: update status Received -> Abandoned, status Validated -> Abandoned
+    api__ErrorResponseApi ->> entity__Interaction: delete
+    api__ErrorResponseApi -->> timer__InteractionLifetime: done
+  else guard fails
+    api__ErrorResponseApi -->> timer__InteractionLifetime: rejected
+  end
+  Note over api__ErrorResponseApi: 15. Answer login_required
+  usecase__ValidateRequest ->> api__ErrorResponseApi: The authentication request is valid
+  alt prompt=none and the End-User is not authenticated: Interaction.prompt == prompt=none, Interaction.authentication == Not yet and AuthorizationRequest.status == Validated
+    Note over api__ErrorResponseApi: transaction (API atomic boundary)
+    api__ErrorResponseApi ->> entity__AuthorizationRequest: update status Validated -> Error response
+    api__ErrorResponseApi ->> entity__Interaction: delete
+    api__ErrorResponseApi -->> usecase__ValidateRequest: done
+  else guard fails
+    api__ErrorResponseApi -->> usecase__ValidateRequest: rejected
+  end
+  Note over api__ErrorResponseApi: 16. Answer account_selection_required
+  usecase__ValidateRequest ->> api__ErrorResponseApi: The authentication request is valid
+  alt prompt=none and the End-User is not authenticated: Interaction.prompt == prompt=none, Interaction.authentication == Not yet and AuthorizationRequest.status == Validated
+    Note over api__ErrorResponseApi: transaction (API atomic boundary)
+    api__ErrorResponseApi ->> entity__AuthorizationRequest: update status Validated -> Error response
+    api__ErrorResponseApi ->> entity__Interaction: delete
+    api__ErrorResponseApi -->> usecase__ValidateRequest: done
+  else guard fails
+    api__ErrorResponseApi -->> usecase__ValidateRequest: rejected
+  end
+  Note over api__ErrorResponseApi: 17. Answer interaction_required
+  usecase__ValidateRequest ->> api__ErrorResponseApi: The authentication request is valid
+  alt prompt=none, the request asks for a second factor, and the End-User is not authenticated at that level: Interaction.prompt == prompt=none, Interaction.acr == A multi-factor class, Interaction.authentication == Not yet and AuthorizationRequest.status == Validated
+    Note over api__ErrorResponseApi: transaction (API atomic boundary)
+    api__ErrorResponseApi ->> entity__AuthorizationRequest: update status Validated -> Error response
+    api__ErrorResponseApi ->> entity__Interaction: delete
+    api__ErrorResponseApi -->> usecase__ValidateRequest: done
+  else guard fails
+    api__ErrorResponseApi -->> usecase__ValidateRequest: rejected
+  end
+  Note over api__ErrorResponseApi: 18. Answer consent_required
+  usecase__AuthenticateEndUser ->> api__ErrorResponseApi: The End-User is authenticated for the request
+  usecase__ReuseSession ->> api__ErrorResponseApi: The End-User is authenticated for the request
+  usecase__SelectAccount ->> api__ErrorResponseApi: The End-User is authenticated for the request
+  alt prompt=none, the End-User is authenticated, and no consent to the client is on record: (Interaction.prompt == prompt=none, Interaction.authentication == Existing session).along(Interaction, AuthorizationRequest, Client, Consent).none(Consent.status == Granted) and AuthorizationRequest.status == Validated
+    Note over api__ErrorResponseApi: transaction (API atomic boundary)
+    api__ErrorResponseApi ->> entity__AuthorizationRequest: update status Validated -> Error response
+    api__ErrorResponseApi ->> entity__Interaction: delete
+    api__ErrorResponseApi -->> usecase__AuthenticateEndUser: done
+  else guard fails
+    api__ErrorResponseApi -->> usecase__AuthenticateEndUser: rejected
+  end
+  Note over usecase__IssueCodeResponse: 19. Respond with a code (Authorization Code Flow)
+  usecase__GrantConsent ->> usecase__IssueCodeResponse: The authentication request is authorized
+  usecase__ReuseConsent ->> usecase__IssueCodeResponse: The authentication request is authorized
+  alt response_type=code: AuthorizationRequest.response_type == code (Authorization Code Flow) and AuthorizationRequest.status == Consented
+    Note over usecase__IssueCodeResponse: transaction (inferred from FK)
+    usecase__IssueCodeResponse ->> entity__AuthorizationRequest: update status Consented -> Responded
+    usecase__IssueCodeResponse ->> entity__Grant: create flow=code
+    usecase__IssueCodeResponse ->> entity__AuthorizationCode: create
+    usecase__IssueCodeResponse ->> entity__Interaction: delete
+    usecase__IssueCodeResponse -) api__TokenApi: An authorization code is delivered to the RP
+    usecase__IssueCodeResponse -->> usecase__GrantConsent: done
+  else guard fails
+    usecase__IssueCodeResponse -->> usecase__GrantConsent: rejected
+  end
+  Note over usecase__IssueIdTokenResponse: 20. Respond with an ID Token (Implicit Flow, id_token)
+  usecase__GrantConsent ->> usecase__IssueIdTokenResponse: The authentication request is authorized
+  usecase__ReuseConsent ->> usecase__IssueIdTokenResponse: The authentication request is authorized
+  alt response_type=id_token: AuthorizationRequest.response_type == id_token (Implicit Flow) and AuthorizationRequest.status == Consented
+    Note over usecase__IssueIdTokenResponse: transaction (inferred from FK)
+    usecase__IssueIdTokenResponse ->> entity__AuthorizationRequest: update status Consented -> Responded
+    usecase__IssueIdTokenResponse ->> entity__Grant: create flow=implicit
+    usecase__IssueIdTokenResponse ->> entity__IdToken: create
+    usecase__IssueIdTokenResponse ->> entity__Interaction: delete
+    usecase__IssueIdTokenResponse -->> usecase__GrantConsent: done
+  else guard fails
+    usecase__IssueIdTokenResponse -->> usecase__GrantConsent: rejected
+  end
+  Note over usecase__IssueImplicitTokenResponse: 21. Respond with an ID Token and an access token (Implicit Flow, id_token token)
+  usecase__GrantConsent ->> usecase__IssueImplicitTokenResponse: The authentication request is authorized
+  usecase__ReuseConsent ->> usecase__IssueImplicitTokenResponse: The authentication request is authorized
+  alt response_type=id_token token: AuthorizationRequest.response_type == id_token token (Implicit Flow) and AuthorizationRequest.status == Consented
+    Note over usecase__IssueImplicitTokenResponse: transaction (inferred from FK)
+    usecase__IssueImplicitTokenResponse ->> entity__AuthorizationRequest: update status Consented -> Responded
+    usecase__IssueImplicitTokenResponse ->> entity__Grant: create flow=implicit
+    usecase__IssueImplicitTokenResponse ->> entity__AccessToken: create
+    usecase__IssueImplicitTokenResponse ->> entity__IdToken: create
+    usecase__IssueImplicitTokenResponse ->> entity__Interaction: delete
+    usecase__IssueImplicitTokenResponse -) api__UserInfoApi: An access token is delivered in the fragment
+    usecase__IssueImplicitTokenResponse -) api__AccessTokenRevocationApi: An access token is delivered in the fragment
+    usecase__IssueImplicitTokenResponse -) api__IntrospectionApi: An access token is delivered in the fragment
+    usecase__IssueImplicitTokenResponse -->> usecase__GrantConsent: done
+  else guard fails
+    usecase__IssueImplicitTokenResponse -->> usecase__GrantConsent: rejected
+  end
+  Note over usecase__IssueHybridIdTokenResponse: 22. Respond with a code and an ID Token (Hybrid Flow, code id_token)
+  usecase__GrantConsent ->> usecase__IssueHybridIdTokenResponse: The authentication request is authorized
+  usecase__ReuseConsent ->> usecase__IssueHybridIdTokenResponse: The authentication request is authorized
+  alt response_type=code id_token: AuthorizationRequest.response_type == code id_token (Hybrid Flow) and AuthorizationRequest.status == Consented
+    Note over usecase__IssueHybridIdTokenResponse: transaction (inferred from FK)
+    usecase__IssueHybridIdTokenResponse ->> entity__AuthorizationRequest: update status Consented -> Responded
+    usecase__IssueHybridIdTokenResponse ->> entity__Grant: create flow=hybrid
+    usecase__IssueHybridIdTokenResponse ->> entity__AuthorizationCode: create
+    usecase__IssueHybridIdTokenResponse ->> entity__IdToken: create
+    usecase__IssueHybridIdTokenResponse ->> entity__Interaction: delete
+    usecase__IssueHybridIdTokenResponse -) api__TokenApi: An authorization code is delivered to the RP
+    usecase__IssueHybridIdTokenResponse -->> usecase__GrantConsent: done
+  else guard fails
+    usecase__IssueHybridIdTokenResponse -->> usecase__GrantConsent: rejected
+  end
+  Note over usecase__IssueHybridTokenResponse: 23. Respond with a code and an access token (Hybrid Flow, code token)
+  usecase__GrantConsent ->> usecase__IssueHybridTokenResponse: The authentication request is authorized
+  usecase__ReuseConsent ->> usecase__IssueHybridTokenResponse: The authentication request is authorized
+  alt response_type=code token: AuthorizationRequest.response_type == code token (Hybrid Flow) and AuthorizationRequest.status == Consented
+    Note over usecase__IssueHybridTokenResponse: transaction (inferred from FK)
+    usecase__IssueHybridTokenResponse ->> entity__AuthorizationRequest: update status Consented -> Responded
+    usecase__IssueHybridTokenResponse ->> entity__Grant: create flow=hybrid
+    usecase__IssueHybridTokenResponse ->> entity__AccessToken: create
+    usecase__IssueHybridTokenResponse ->> entity__AuthorizationCode: create
+    usecase__IssueHybridTokenResponse ->> entity__Interaction: delete
+    usecase__IssueHybridTokenResponse -) api__UserInfoApi: An access token is delivered in the fragment
+    usecase__IssueHybridTokenResponse -) api__AccessTokenRevocationApi: An access token is delivered in the fragment
+    usecase__IssueHybridTokenResponse -) api__IntrospectionApi: An access token is delivered in the fragment
+    usecase__IssueHybridTokenResponse -) api__TokenApi: An authorization code is delivered to the RP
+    usecase__IssueHybridTokenResponse -->> usecase__GrantConsent: done
+  else guard fails
+    usecase__IssueHybridTokenResponse -->> usecase__GrantConsent: rejected
+  end
+  Note over usecase__IssueHybridFullResponse: 24. Respond with a code, an ID Token, and an access token (Hybrid Flow, code id_token token)
+  usecase__GrantConsent ->> usecase__IssueHybridFullResponse: The authentication request is authorized
+  usecase__ReuseConsent ->> usecase__IssueHybridFullResponse: The authentication request is authorized
+  alt response_type=code id_token token: AuthorizationRequest.response_type == code id_token token (Hybrid Flow) and AuthorizationRequest.status == Consented
+    Note over usecase__IssueHybridFullResponse: transaction (inferred from FK)
+    usecase__IssueHybridFullResponse ->> entity__AuthorizationRequest: update status Consented -> Responded
+    usecase__IssueHybridFullResponse ->> entity__Grant: create flow=hybrid
+    usecase__IssueHybridFullResponse ->> entity__AccessToken: create
+    usecase__IssueHybridFullResponse ->> entity__AuthorizationCode: create
+    usecase__IssueHybridFullResponse ->> entity__IdToken: create
+    usecase__IssueHybridFullResponse ->> entity__Interaction: delete
+    usecase__IssueHybridFullResponse -) api__UserInfoApi: An access token is delivered in the fragment
+    usecase__IssueHybridFullResponse -) api__AccessTokenRevocationApi: An access token is delivered in the fragment
+    usecase__IssueHybridFullResponse -) api__IntrospectionApi: An access token is delivered in the fragment
+    usecase__IssueHybridFullResponse -) api__TokenApi: An authorization code is delivered to the RP
+    usecase__IssueHybridFullResponse -->> usecase__GrantConsent: done
+  else guard fails
+    usecase__IssueHybridFullResponse -->> usecase__GrantConsent: rejected
+  end
