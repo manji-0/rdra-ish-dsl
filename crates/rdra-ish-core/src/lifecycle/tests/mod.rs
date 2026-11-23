@@ -17,6 +17,7 @@ mod explored;
 mod guard_quantifiers;
 mod joins;
 mod lasso;
+mod liveness;
 mod membership;
 mod names;
 mod never_runs;

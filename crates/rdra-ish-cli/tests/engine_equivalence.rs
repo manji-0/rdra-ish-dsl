@@ -39,8 +39,9 @@ use rdra_ish_cli::tlc_env::{tlc_env, Heap};
 use rdra_ish_cli::tlc_output::{parse_dot, Outcome, TlcRun};
 use rdra_ish_cli::tlc_replay::{explain_property, explain_violation};
 use rdra_ish_core::lifecycle::{
-    ActId, Bounds, Caps, ComponentRun, Cone, LabelledEdges, Progress, PropertyVerdict, Runs, Scope,
-    Seed, State, StateDiag, StateModelFindings, Taken, Target, TransitionSystem, Witness,
+    ActId, Bounds, Caps, ComponentRun, Cone, Fairness, LabelledEdges, Loop, Progress,
+    PropertyVerdict, Runs, Scope, Seed, State, StateDiag, StateModelFindings, Taken, Target,
+    TransitionSystem, Witness,
 };
 use rdra_ish_core::{load_project, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
@@ -2873,6 +2874,69 @@ fn run_property(tlc: &Path, dir: &Path, bundle: &tla::TlaBundle) -> (Outcome, Tl
     (run.outcome(ok), run, log)
 }
 
+/// The native checker beside each TLC run of a property: the verdict on the same system and
+/// fairness must be TLC's, and a native counterexample must certify itself. `runs` gets one
+/// line per run: the verdict, and for a counterexample the steps of the native lasso and of
+/// TLC's.
+fn native_agrees(
+    label: &str,
+    run_name: &str,
+    graph: &ComponentRun,
+    i: usize,
+    fairness: Fairness,
+    (outcome, tlc_run, names): (Outcome, &TlcRun, &TlaNames),
+    runs: &mut Vec<String>,
+) {
+    let ts = &graph.system;
+    let verdict = match ts.properties()[i].formula.kind().is_liveness() {
+        true => graph.decide_liveness(i, fairness).unwrap_or_else(|fault| {
+            panic!("{label} ({run_name}): a native lasso fails its own check: {fault:?}")
+        }),
+        false => graph.decide_property(i).expect("a safety form"),
+    };
+    let native = match &verdict {
+        PropertyVerdict::Holds => Outcome::Ok,
+        PropertyVerdict::Violated(_) => Outcome::Counterexample,
+        PropertyVerdict::Undecided => Outcome::ToolError,
+    };
+    assert_eq!(
+        native,
+        outcome,
+        "{label} ({run_name}): native {} on {} states, TLC {} on {}",
+        native.as_str(),
+        graph.states.len(),
+        outcome.as_str(),
+        tlc_run.distinct_states.unwrap_or(0)
+    );
+    let PropertyVerdict::Violated(diag) = verdict else {
+        runs.push(format!("{label} ({run_name}): ok"));
+        return;
+    };
+    let steps = |d: &StateDiag| match d {
+        StateDiag::PropertyViolated { trace, lasso, .. } => {
+            let tail = match lasso {
+                Some(Loop::Back { to }) => format!(" back to {to}"),
+                Some(Loop::Stutter) => " stutter".to_string(),
+                None => String::new(),
+            };
+            format!("{}{tail}", trace.steps.len())
+        }
+        other => panic!("{label}: not a property violation: {other:?}"),
+    };
+    let tlc = tlc_run
+        .violations
+        .first()
+        .map(|v| match explain_property(ts, names, i, v) {
+            Ok(d) => steps(&d),
+            Err(why) => format!("no replay ({why})"),
+        })
+        .unwrap_or_else(|| "no trace".to_string());
+    runs.push(format!(
+        "{label} ({run_name}): counterexample, native {}, TLC {tlc}",
+        steps(&diag)
+    ));
+}
+
 #[test]
 fn a_property_cone_decides_what_the_whole_model_decides() {
     let Some(tlc) = find_tlc() else {
@@ -2887,6 +2951,7 @@ fn a_property_cone_decides_what_the_whole_model_decides() {
     let scratch = std::env::temp_dir().join(format!("rdra-temporal-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&scratch);
     std::fs::create_dir_all(&scratch).expect("scratch dir");
+    let mut runs = Vec::new();
     for (name, src, expected) in TEMPORAL_CASES {
         let model = if src.is_empty() {
             load(name)
@@ -2919,6 +2984,18 @@ fn a_property_cone_decides_what_the_whole_model_decides() {
             );
             let (mut first, mut run, mut log) = run_property(&tlc, &dir.join("plain"), &plain);
             let mut names = plain.names.clone();
+            native_agrees(
+                &label,
+                "plain",
+                &cone.reduced.clone().run(Caps::VERIFY),
+                cone.reduced_index,
+                Fairness::Plain,
+                (first, &run, &names),
+                &mut runs,
+            );
+            // The `Full` and `WfNext` runs read one graph, as the native checker does.
+            let unreduced = std::cell::OnceCell::new();
+            let unreduced = || unreduced.get_or_init(|| cone.system.clone().run(Caps::VERIFY));
             // As `verify` does: a counterexample on the reduced cone is read on the unreduced
             // one, whose run gives the outcome from here on.
             if first == Outcome::Counterexample && cone.is_reduced() {
@@ -2928,6 +3005,15 @@ fn a_property_cone_decides_what_the_whole_model_decides() {
                     "{label}: the Full run is reduced"
                 );
                 let (again, r, l) = run_property(&tlc, &dir.join("full"), &full);
+                native_agrees(
+                    &label,
+                    "full",
+                    unreduced(),
+                    cone.index,
+                    Fairness::Plain,
+                    (again, &r, &full.names),
+                    &mut runs,
+                );
                 assert_eq!(
                     again,
                     Outcome::Counterexample,
@@ -2945,6 +3031,15 @@ fn a_property_cone_decides_what_the_whole_model_decides() {
                         "{label}: the WF cone run lacks WF_vars(Next)"
                     );
                     let (second, r, l) = run_property(&tlc, &dir.join("wf"), &wf);
+                    native_agrees(
+                        &label,
+                        "wf",
+                        unreduced(),
+                        cone.index,
+                        Fairness::WfNext,
+                        (second, &r, &wf.names),
+                        &mut runs,
+                    );
                     (run, log, names) = (r, l, wf.names);
                     cone.after_wf(first, second)
                 }
@@ -2956,6 +3051,15 @@ fn a_property_cone_decides_what_the_whole_model_decides() {
                 whole_outcome,
                 Outcome::ToolError,
                 "{label}: whole model\n{whole_log}"
+            );
+            native_agrees(
+                &label,
+                "whole",
+                &ts.clone().run(Caps::VERIFY),
+                i,
+                Fairness::WfNext,
+                (whole_outcome, &whole_run, &whole.names),
+                &mut runs,
             );
             if ts.properties()[i].formula.kind().is_explored() {
                 explored_agrees(
@@ -2999,6 +3103,10 @@ fn a_property_cone_decides_what_the_whole_model_decides() {
             *name != "reduced_gate" || full_runs == 2,
             "{name}: {full_runs} counterexamples on the reduced cone, read on the Full run"
         );
+    }
+    println!("native and TLC agree on {} runs:", runs.len());
+    for line in &runs {
+        println!("  {line}");
     }
     let _ = std::fs::remove_dir_all(&scratch);
 }

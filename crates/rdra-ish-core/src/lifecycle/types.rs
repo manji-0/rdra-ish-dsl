@@ -374,6 +374,13 @@ impl ParamRole {
     pub fn is_row(self) -> bool {
         !matches!(self, ParamRole::Parent { .. })
     }
+
+    /// A param whose slot names the instance `.fair` is fair for: every role but `New`, whose
+    /// slot `Fair_P` binds inside `WF_vars`, so the lowest absent slot moving on does not
+    /// reset the instance's claim. The TLA+ printer and the liveness check both read this.
+    pub fn keys_fair_instance(self) -> bool {
+        self != ParamRole::New
+    }
 }
 
 /// A guard holds on the pre-state, or, when it reads `At::Next`, on the pre-state and the
@@ -756,8 +763,9 @@ pub struct AfterStep {
 }
 
 /// A temporal property. BFS does not check it while it explores; `explain_property`
-/// evaluates it on a lasso another engine found, and `ComponentRun::decide_property` decides
-/// the forms `LtlKind::is_explored` names on an explored graph.
+/// evaluates it on a lasso another engine found, `ComponentRun::decide_property` decides
+/// `always` and the forms `LtlKind::is_explored` names on an explored graph, and
+/// `ComponentRun::decide_liveness` decides `eventually` and `leads_to` there.
 #[derive(Clone, Debug)]
 pub struct Property {
     pub name: String,
@@ -785,6 +793,21 @@ impl Property {
     /// Whether `.fair` names the use case of `action`.
     pub fn is_fair(&self, action: &Action) -> bool {
         matches!(&action.origin, ActionOrigin::UseCase { uc, .. } if self.fair.contains(uc))
+    }
+
+    /// The fair instance a move of `action` bound to `params` is a step of: the slots of the
+    /// params that key it (`ParamRole::keys_fair_instance`), in param order. `None` when
+    /// `.fair` does not name the action's use case.
+    pub fn fair_instance(&self, action: &Action, params: &[u8]) -> Option<Box<[u8]>> {
+        self.is_fair(action).then(|| {
+            action
+                .params
+                .iter()
+                .zip(params)
+                .filter(|(param, _)| param.role.keys_fair_instance())
+                .map(|(_, slot)| *slot)
+                .collect()
+        })
     }
 }
 

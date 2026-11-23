@@ -4,6 +4,7 @@
 
 mod bfs;
 mod graph;
+mod liveness;
 mod moves;
 mod properties;
 mod scan;
@@ -12,6 +13,7 @@ mod views;
 mod violations;
 
 pub use graph::{Adjacency, LabelledEdges};
+pub use liveness::LassoFault;
 pub use properties::PropertyVerdict;
 
 use std::collections::{BTreeSet, HashSet};
