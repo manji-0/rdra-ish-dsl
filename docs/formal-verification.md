@@ -579,7 +579,7 @@ A scoped `verify` checks no property, `can_reach` included.
 `verify` prints `can_reach properties: N, decided natively by BFS on each one's cone (TLC
 cannot check AG EF)` in its header, explores those cones beside the entity cones, and ends
 the BFS pass with `can_reach (BFS on N cones): N checked, M violated`, followed by
-`, K not decided` when K of those cones stopped. A violation fails the
+`, K not decided` when the cones of K of them stopped. A violation fails the
 run with `result: counterexample`:
 
 ```
