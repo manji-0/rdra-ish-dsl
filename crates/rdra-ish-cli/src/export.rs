@@ -18,7 +18,6 @@ use rdra_ish_emit::{
     openapi::OpenApiJsonEmitter,
     sql::SqlEmitter,
     tla::{self, PrintMode, TlaBundle},
-    typescript::TypeScriptStateUnionEmitter,
     View,
 };
 
@@ -35,8 +34,7 @@ pub enum Export {
     Tla,
 }
 
-/// `caps` bound the BFS of an emitter that explores the states itself.
-pub fn export_output(kind: &ExportKind, dialect: SqlDialect, caps: Caps) -> Export {
+pub fn export_output(kind: &ExportKind, dialect: SqlDialect) -> Export {
     match kind {
         ExportKind::Openapi => {
             Export::Artifact(Output::declared(OpenApiJsonEmitter), "openapi.json")
@@ -54,10 +52,6 @@ pub fn export_output(kind: &ExportKind, dialect: SqlDialect, caps: Caps) -> Expo
         ExportKind::JsonSchema => {
             Export::Artifact(Output::declared(JsonSchemaEmitter), "json-schema.json")
         }
-        ExportKind::TypeScriptStates => Export::Artifact(
-            Output::states(TypeScriptStateUnionEmitter { caps }),
-            "entity-states.ts",
-        ),
         ExportKind::MermaidEr => Export::Artifact(Output::declared(ErMermaidEmitter), "er.mmd"),
         ExportKind::Tla => Export::Tla,
     }
@@ -75,7 +69,7 @@ pub(crate) fn run_export(
     let caps = generator_caps(manifest.as_ref());
     // An artifact gates by what its emitter reads. The TLA+ export gates after `tla_export`,
     // whose build errors stop it first.
-    match export_output(kind, dialect, caps) {
+    match export_output(kind, dialect) {
         Export::Artifact(output, ext) => {
             let content = output
                 .gate(&Lifecycle::new(&program, &model, caps))?

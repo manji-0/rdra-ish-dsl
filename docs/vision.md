@@ -135,7 +135,7 @@ DSL keeps these rules and adds what a normalized relational model needs:
 ## The lifecycle layer has one semantics
 
 `rdra-ish-core` defines one transition system in `crates/rdra-ish-core/src/lifecycle/`.
-`states`, `check`, the TLA+ export, `verify`, the TypeScript state unions, and the state
+`states`, `check`, the TLA+ export, `verify`, `codegen`, and the state
 diagrams all read it. The TLA+ emitter only prints it. [State derivation](./state-derivation.md)
 describes how the tool explores the system.
 
@@ -442,6 +442,17 @@ reasons and the phases.
   section of the changelog lists what `main` changed since the last one. Every run states
   its verdict on a `result:` line, and `tlc_result:` prints beside it only under
   `--with-tlc`.
+
+The maintainer decided these questions on 2026-11-24, for the next major release:
+
+- `codegen --lang ts` is the one way to get TypeScript state types. The next major
+  release removes `export --kind typescript-states` and `states --format typescript`,
+  which typed an entity by the patterns `states` reaches. Each fails with a usage error
+  that names `codegen`. This narrows the 2026-11-07 entry above.
+- The TypeScript types of `codegen` are covered by
+  [compatibility](./compatibility.md#the-typescript-types-of-codegen): the scalars, the id
+  types, the value sets, the state types, and the `<Entity>Row` row types. The rest of
+  `codegen` stays experimental. `export --kind json-schema` stays as it is.
 
 ## Sources
 

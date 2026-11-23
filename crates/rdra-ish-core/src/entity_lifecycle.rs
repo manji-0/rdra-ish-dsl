@@ -16,8 +16,8 @@ pub fn lifecycle_columns(model: &SemanticModel, entity: EntityKey) -> BTreeSet<&
         .collect()
 }
 
-/// The column a single-tag view of `entity` (a TypeScript union) discriminates on: `status`,
-/// then a `*_status` column, then the first lifecycle column by name.
+/// The column a state type of `entity` (`codegen`) is tagged by: `status`, then a `*_status`
+/// column, then the first lifecycle column by name.
 pub fn discriminator_column(model: &SemanticModel, entity: EntityKey) -> Option<&str> {
     let columns = lifecycle_columns(model, entity);
     columns

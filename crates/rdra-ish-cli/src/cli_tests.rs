@@ -15,11 +15,7 @@ fn export_artifact(
     kind: &ExportKind,
     view: &View,
 ) -> anyhow::Result<(String, &'static str)> {
-    match export_output(
-        kind,
-        crate::cli::SqlDialect::Postgres,
-        Caps::for_instances(1),
-    ) {
+    match export_output(kind, crate::cli::SqlDialect::Postgres) {
         Export::Artifact(Output::Declared(emitter), ext) => Ok((emitter.emit(model, view)?, ext)),
         _ => panic!("not a declared-model artifact"),
     }
