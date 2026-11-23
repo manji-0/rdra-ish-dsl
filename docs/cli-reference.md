@@ -569,13 +569,27 @@ What the limit counts:
   runs. A finished cone keeps its states and edges until its findings are read, so they
   stay counted, and the next cone has the rest of the limit. The cones run side by side,
   yet each stops where it would stop if they ran one at a time in order: a cone that met a
-  pool the others had filled, or that grew past the room left to it, runs again on its own.
-- **What the count leaves out.** The transition system, the per-entity views, the states a
-  worker holds while it expands them, and the memory that reading the findings of a cone
-  takes. On `insurance-claim-ops` at two instances, where most cones stop at the limit, the
-  process peaked at 1.2 to 1.4 times the limit run one cone at a time (`RDRA_JOBS=1`) and at
-  up to twice the limit with eight; a single large cone peaked within 20% of it. The
-  default limits stop no cone of the samples.
+  pool the others had filled, or that grew past the room left to it, runs again in that
+  room. The runs of the cones after it that grew past that room are dropped first; when the
+  rest still crowd it, they are dropped too, and each of those cones runs alone in its
+  turn. The stores held at once never pass the limit.
+- **What the count leaves out.** The transition system and the reductions `verify` builds
+  for its cones, the per-entity views, the states a worker holds while it expands them,
+  what a store's buffers take while they grow, and the passes that read a finished cone:
+  its findings, `can_reach`, the reduction of a cone to its classes, and the liveness search
+  of `eventually` and `leads_to`. Each pass takes memory in proportion to the cone's states
+  and moves, beside the cone it reads. Measured on macOS as the process's peak footprint
+  (the memory it has written and not given back), `check` at two instances on
+  `clinic-ops`, `patent-ops`, and `food-permit-ops` peaked at 1.02 to 1.23 times the
+  default `4GiB`, the findings adding under 3%. `verify --instance-count 2` on `oidc-auth`
+  peaked at 1.36 times a `2GiB` limit and 1.39 times `4GiB`, while one BFS run held the
+  whole limit: a run takes more than its count while it grows. Not measured on Linux. The
+  default limits stop no cone of the samples at the bounds their `// expect` headers name.
+- **Resident memory.** The resident set size (RSS) that `time` reports reads higher than
+  the footprint, up to 2.6 times the limit on `oidc-auth`: it counts memory the allocator
+  has freed and keeps for reuse, which macOS takes back when it needs it (`footprint <pid>`
+  lists it as reclaimable). `RDRA_ISH_MEMORY_STATS=1` prints a `memory:` line on stderr at
+  each phase, with the bytes the stores hold then (`held=`) and at most (`peak=`).
 - **TLC** (`verify --with-tlc` only). Each TLC run's `-Xmx`. Without `--with-tlc` BFS has
   the whole limit. With it, `verify` gives the TLC cone runs half the limit (at least
   `64MiB`) and BFS the rest; it starts no more cone runs at once than their
