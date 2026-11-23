@@ -40,8 +40,8 @@ use rdra_ish_cli::tlc_output::{parse_dot, Outcome, TlcRun};
 use rdra_ish_cli::tlc_replay::{explain_property, explain_violation};
 use rdra_ish_core::lifecycle::{
     ActId, Bounds, Caps, ComponentRun, Cone, Fairness, LabelledEdges, Loop, Progress,
-    PropertyVerdict, Runs, Scope, Seed, State, StateDiag, StateModelFindings, Taken, Target,
-    TransitionSystem, Witness,
+    PropertyVerdict, Runs, Scope, Seed, State, StateDiag, StateModelFindings, StateSlice, Taken,
+    Target, TransitionSystem, Witness,
 };
 use rdra_ish_core::{load_project, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
@@ -294,7 +294,7 @@ fn run_tlc(tlc: &Path, dir: &Path, args: &[&str], tla: &str, cfg: &str) -> (bool
 /// BFS's.
 fn tlc_edges(dir: &Path, label: &str, run: &ComponentRun, names: &TlaNames) -> Vec<Move> {
     let ts = &run.system;
-    let index: HashMap<&State, u32> = run
+    let index: HashMap<&StateSlice, u32> = run
         .states
         .iter()
         .enumerate()
@@ -304,7 +304,7 @@ fn tlc_edges(dir: &Path, label: &str, run: &ComponentRun, names: &TlaNames) -> V
     let file = std::fs::File::open(dir.join("graph.dot")).expect("graph.dot");
     let dot = parse_dot(BufReader::new(file), |canon| {
         let state = decoder.decode(canon)?;
-        index.get(&state).copied()
+        index.get(&*state).copied()
     })
     .unwrap_or_else(|why| panic!("{label}: TLC's graph does not map onto the BFS's: {why}"));
     let at: Vec<u32> = dot.nodes.iter().map(|n| n.state).collect();

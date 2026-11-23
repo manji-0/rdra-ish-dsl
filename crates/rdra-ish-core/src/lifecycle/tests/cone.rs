@@ -112,7 +112,7 @@ pub(super) fn assert_cones_exact(
             .iter()
             .map(|s| sub.project(s, &cr.cone.vars))
             .collect();
-        let reached: BTreeSet<State> = cr.run.states.iter().cloned().collect();
+        let reached: BTreeSet<State> = cr.run.states.iter().map(ToOwned::to_owned).collect();
         if sub.cone_frees_slots(&cr.cone) {
             // An entity the target does not read never runs out of slots.
             assert!(
@@ -231,7 +231,7 @@ fn every_state_replays_from_its_parent_path_through_moves() {
                     let path = run.path_to(at);
                     let start = path.first().map_or(at, |e| e.from);
                     assert!(run.parent(start).is_none(), "{sample}: path starts initial");
-                    let mut cur = run.states[start as usize].clone();
+                    let mut cur = run.states[start as usize].to_owned();
                     for e in &path {
                         assert_eq!(run.states[e.from as usize], cur, "{sample}: path is joined");
                         let (act, params) = run.step(e);
@@ -243,7 +243,7 @@ fn every_state_replays_from_its_parent_path_through_moves() {
                             "{sample}: the parent edge of {} is a move",
                             e.to
                         );
-                        cur = next.clone();
+                        cur = next.to_owned();
                     }
                     assert_eq!(
                         cur, run.states[at as usize],
@@ -251,7 +251,7 @@ fn every_state_replays_from_its_parent_path_through_moves() {
                     );
                     let states = std::iter::once(start)
                         .chain(path.iter().map(|e| e.to))
-                        .map(|i| run.states[i as usize].clone())
+                        .map(|i| run.states[i as usize].to_owned())
                         .collect();
                     let acts: Vec<_> = path.iter().map(|e| run.step(e).0).collect();
                     let replay = ts.replay(states, &acts).expect("a BFS path replays");

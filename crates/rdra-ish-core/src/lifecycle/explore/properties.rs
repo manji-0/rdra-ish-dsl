@@ -9,7 +9,7 @@
 use std::collections::VecDeque;
 
 use crate::lifecycle::diag::StateDiag;
-use crate::lifecycle::expr::State;
+use crate::lifecycle::expr::{State, StateSlice};
 use crate::lifecycle::types::{Ltl, Pred, Property};
 
 use super::{Caps, ComponentRun, Edge};
@@ -82,7 +82,7 @@ impl ComponentRun {
         };
         let states: Vec<State> = std::iter::once(first)
             .chain(path.iter().map(|e| e.to))
-            .map(|k| self.states[k as usize].clone())
+            .map(|k| self.states[k as usize].to_owned())
             .collect();
         let (instance, at) = ts
             .property_failure(p, &states, states.len() - 1)
@@ -151,8 +151,9 @@ impl ComponentRun {
         }
         let mut best: Option<(u32, Vec<Edge>)> = None;
         for bd in ts.binder_slots(p.binders.len()) {
-            let on =
-                |s: &State, pred: &Pred| ts.triggers(p, &bd, s) && ts.holds_bound(pred, s, &bd);
+            let on = |s: &StateSlice, pred: &Pred| {
+                ts.triggers(p, &bd, s) && ts.holds_bound(pred, s, &bd)
+            };
             let open: Vec<bool> = self.states.iter().map(|s| !on(s, x)).collect();
             // Per reached state: the edge into it, or `None` for an initial state.
             let mut via: Vec<Option<Option<u32>>> = vec![None; self.states.len()];

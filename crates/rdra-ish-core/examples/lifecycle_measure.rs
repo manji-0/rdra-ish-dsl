@@ -25,8 +25,8 @@ use std::path::Path;
 use std::time::Instant;
 
 use rdra_ish_core::lifecycle::{
-    Bounds, Caps, ComponentRun, Cone, Held, Layers, Scope, Seed, Target, TransitionSystem, VarId,
-    VarKind,
+    store_bytes, Bounds, Caps, ComponentRun, Cone, Held, Layers, Scope, Seed, Target,
+    TransitionSystem, VarId, VarKind,
 };
 use rdra_ish_core::memory::MemorySize;
 use rdra_ish_core::project::load_project;
@@ -85,8 +85,13 @@ fn bytes_stats(run: &ComponentRun) -> String {
         return "capped".to_string();
     }
     let n = run.states.len() as f64;
+    let model = store_bytes(
+        run.states.len() as u64,
+        run.state_width(),
+        run.edges().len() as u64,
+    );
     format!(
-        "bytes: {} states, {} edges ({:.2}/state), width {} B, peak {} B ({:.1} B/state, admitted {:.1}), kept {} B ({:.1} B/state)",
+        "bytes: {} states, {} edges ({:.2}/state), width {} B, peak {} B ({:.1} B/state, admitted {:.1}), kept {} B ({:.1} B/state), model {} B ({:+.1}%)",
         run.states.len(),
         run.edges().len(),
         run.edges().len() as f64 / n,
@@ -95,7 +100,9 @@ fn bytes_stats(run: &ComponentRun) -> String {
         run.peak as f64 / n,
         run.peak_admitted as f64 / n,
         run.kept_bytes(),
-        run.kept_bytes() as f64 / n
+        run.kept_bytes() as f64 / n,
+        model,
+        (model as f64 / run.peak as f64 - 1.0) * 100.0
     )
 }
 
