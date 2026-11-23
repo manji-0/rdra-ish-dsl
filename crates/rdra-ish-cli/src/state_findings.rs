@@ -808,6 +808,7 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
         StateDiag::MemoryCapReached { raise, .. } => {
             format!("{diag}; raise it with {raise}, or narrow with --entity or --buc")
         }
+        StateDiag::TimeBudgetReached { .. } => format!("{diag}; raise --temporal-budget"),
         StateDiag::ConstraintViolated {
             text,
             label,

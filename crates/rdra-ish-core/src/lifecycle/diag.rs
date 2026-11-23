@@ -203,6 +203,8 @@ pub enum StateDiag {
         states: usize,
         growth: CapGrowth,
     },
+    /// The run passed its deadline (`Caps::deadline`) at `states` states; exploration stopped.
+    TimeBudgetReached { states: usize },
     /// A reachable state violates a state constraint. Each constraint reports its first
     /// violation, with a shortest trace to it.
     ConstraintViolated {
@@ -587,6 +589,7 @@ impl StateDiag {
             StateDiag::PatternCapReached { .. } => with("PatternCapReached", &[]),
             StateDiag::StateCapReached { .. } => with("StateCapReached", &[]),
             StateDiag::MemoryCapReached { .. } => with("MemoryCapReached", &[]),
+            StateDiag::TimeBudgetReached { .. } => with("TimeBudgetReached", &[]),
             StateDiag::AssertOnInertUseCase { anchor, .. } => {
                 with("AssertOnInertUseCase", &[anchor])
             }
@@ -704,6 +707,7 @@ impl StateDiag {
             | StateDiag::ContradictoryDrivenComparison { .. }
             | StateDiag::StateCapReached { .. }
             | StateDiag::MemoryCapReached { .. }
+            | StateDiag::TimeBudgetReached { .. }
             | StateDiag::ConstraintViolated { .. }
             | StateDiag::AfterAssertViolated { .. }
             | StateDiag::PropertyViolated { .. }
@@ -851,6 +855,10 @@ impl fmt::Display for StateDiag {
             } => write!(
                 f,
                 "memory limit {limit} reached at {states} states; results are incomplete: {growth}"
+            ),
+            StateDiag::TimeBudgetReached { states } => write!(
+                f,
+                "time budget reached at {states} states; results are incomplete"
             ),
             StateDiag::ConstraintViolated {
                 name,

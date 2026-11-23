@@ -258,6 +258,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::PatternCapReached { .. }
             | StateDiag::StateCapReached { .. }
             | StateDiag::MemoryCapReached { .. }
+            | StateDiag::TimeBudgetReached { .. }
             | StateDiag::ConstraintViolated { .. }
             | StateDiag::VacuousRule { .. }
             | StateDiag::AfterAssertViolated { .. }

@@ -206,6 +206,7 @@ fn is_cap(d: &StateDiag) -> bool {
         StateDiag::PatternCapReached { .. }
             | StateDiag::StateCapReached { .. }
             | StateDiag::MemoryCapReached { .. }
+            | StateDiag::TimeBudgetReached { .. }
     )
 }
 

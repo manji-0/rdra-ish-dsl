@@ -142,3 +142,22 @@ fn a_run_stops_at_the_memory_limit_at_the_same_state_on_any_number_of_threads() 
         assert_eq!(many.diags, one.diags, "{threads} threads");
     }
 }
+
+/// A run past its deadline stops before it holds a state and says so: `verify` bounds a
+/// whole-model run by `--temporal-budget` this way, and a budget of 0 s stops it at once.
+#[test]
+fn a_run_past_its_deadline_stops_and_names_the_budget() {
+    use crate::lifecycle::StateDiag;
+    use std::time::{Duration, Instant};
+
+    let ts = TransitionSystem::build(&model_from(SHOP), Bounds::VERIFY, &Scope::ALL).ts;
+    let run = ts.clone().run(Caps::VERIFY.until(Instant::now()));
+    assert!(!run.complete);
+    assert!(run.states.is_empty(), "{} states", run.states.len());
+    assert!(run
+        .diags
+        .iter()
+        .any(|d| matches!(d.diag, StateDiag::TimeBudgetReached { states: 0 })));
+    let whole = ts.run(Caps::VERIFY.until(Instant::now() + Duration::from_secs(3600)));
+    assert!(whole.complete);
+}

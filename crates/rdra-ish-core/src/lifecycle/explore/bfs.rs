@@ -6,6 +6,7 @@ use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::Scope;
+use std::time::Instant;
 
 use crate::fasthash::FastMap;
 use crate::lifecycle::diag::{CapGrowth, Diag, StateDiag, VarSpread};
@@ -298,6 +299,21 @@ impl<'t> Bfs<'t> {
                 },
             });
             return false;
+        }
+        // Read the clock every 256 states, the first included, so a budget already spent
+        // stops the run before it holds a state.
+        if let Some(deadline) = self.caps.deadline {
+            if self.states.len().is_multiple_of(256) && Instant::now() >= deadline {
+                self.complete = false;
+                let entities = self.ts.entities.iter().map(|e| e.key).collect();
+                self.diags.push(Diag {
+                    entities,
+                    diag: StateDiag::TimeBudgetReached {
+                        states: self.states.len(),
+                    },
+                });
+                return false;
+            }
         }
         let bytes = self.bytes_with_one_more();
         if let Some(charge) = &mut self.charge {
