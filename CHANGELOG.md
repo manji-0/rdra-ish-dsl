@@ -4,6 +4,25 @@
 
 ### Breaking
 
+- `verify --prove` decides an invariant cone that BFS stopped at the memory limit (#232).
+  When z3 proves every rule the cone checks for any number of rows, the rules hold at the
+  run's bounds too, so the cone's line reads `ok (<n> states, BFS stopped at the memory
+  limit, decided by proof: --prove proved every check for any number of rows)` where it read
+  `not decided`. The cone no longer counts toward the closing warning or `--deny-undecided`,
+  and a run with nothing else open prints `result: ok`. A cone with an `after` assertion, or
+  with a rule z3 leaves unproved or out of scope, stays `not decided`, as does a cone stopped
+  at `--max-states` or `--max-patterns`. Without `--prove` nothing changes.
+
+- `verify --prove` gives each z3 check a budget of z3 resource units (`rlimit`) instead of
+  wall-clock time: 20,000,000 units for a check of a rule and 2,000,000 for a lemma, where
+  it gave 10 s and 0.5 s. Whether a rule is proved, and which lemmas it keeps, no longer
+  depends on the machine, its load, or `RDRA_JOBS`, so a proof can decide a verdict. No
+  flag sets the budgets. On every sample and engine-corpus case the proofs are the same as
+  with no practical limit, and a lemma check past its budget drops the lemma as a breaking
+  step does. In `rdra-ish-core`, `ProveOptions` has `rlimit` and `lemma_rlimit` in place of
+  `timeout_ms` and `lemma_timeout_ms`, and `Solver::check_sat` takes the check's budget.
+  `examples/prove_rlimit.rs` measures what each check spends.
+
 - The lifecycle checks unique column sets (#222). A `@unique` column, a `@unique(a, b)`,
   and the pair of keys of a `relate(A, B, N:M).via(J)` junction become the invariant
   `Unique_<Entity>_<columns>` when the lifecycle holds every column's value: an `Enum`,
@@ -83,6 +102,19 @@
 
 ### Added
 
+- `check --guards` reports which rules each guard protects (#198). A guard is a `holds`
+  condition applied to a use case, or the `.when` conditions of one column's arms or
+  values. For each guard, after a clean `check`, the run removes it from every action of
+  the use case, explores again the cones of the rules that keep the use case, under the
+  same caps and `--memory`, and prints on stdout the rules that now fail (`protects:`), a
+  `rules:` block with the guards each rule depends on, and, for a guard no rule depends
+  on, `no rule depends on this guard; it is either a business rule nobody wrote as a rule,
+  or not needed`. A rule whose cone stops at a cap without the guard is `not decided`. The
+  report adds no finding and leaves the exit status to `check`. On `samples/oidc-auth` it
+  takes about 3 s (34 guards, 131 cones), and `tests/guards_cli.rs` reads the sample
+  README's table of rules and guards and checks each row against it. The table now has one
+  row per rule, also names `AccountChoiceAsked` on `SelectAccount` for the `prompt=login`
+  rule, and no longer names `ConsentOnRecord`, whose removal alone fails no rule.
 - `RDRA_ISH_MEMORY_STATS=1` prints a `memory:` line on stderr at each phase of `check` and
   `verify`: the phase, the time, and the bytes the state stores hold then (`held=`) and
   have held at most (`peak=`) (#237).
@@ -113,9 +145,9 @@
   disagreement. `scripts/verify-samples.sh --with-tlc` and `scripts/reduction-diff.py
   --with-tlc` run the samples and random models that way.
 - `--temporal-budget` bounds the native whole-model run of a property its cone does not
-  decide: past the budget, or 2,097,152 states, the run stops with
-  `TimeBudgetReached` or the state cap and the property is `not decided` unless the partial
-  graph already holds a counterexample.
+  decide: past the budget, the memory limit, or `--max-states` when given, the run stops
+  and the property is `not decided` unless the partial graph already holds a
+  counterexample.
 - The `Vacuous_<name>` warning also covers an `after` assertion whose use case never runs
   and a temporal property whose rows never exist or whose `leads_to` trigger never holds.
   `verify` warns too: it explores by BFS each cone it hands to TLC, at the same bounds, so
@@ -305,6 +337,13 @@
 
 ### Fixed
 
+- `verify --prove` above one instance now offers every lemma candidate it would offer at
+  one instance (#231). Candidates were mined only at the run's bounds, and each mining run
+  stops at 50,000 states. On oidc-auth at two instances, 13 of 24 cones stopped there, and
+  the proof lost 2 of the 16 rules it proves at one instance. The prover now also mines every
+  cone at one instance per entity, where these cones finish, and offers both sets of
+  candidates. A kept `lemma:` that only the one-instance run offers ends with
+  `(mined at 1 instance per entity)`. oidc-auth proves 16 of 16 rules at both counts.
 - The cones `check`, `states`, and `verify` explore side by side no longer hold more than
   the memory limit between them. A cone that had to run again alone ran while the results
   of the cones after it stayed held, and its run counted past what the limit left: at
@@ -356,6 +395,15 @@
   permissions, actor inputs and the `TriggeredUseCaseUnreachable` warning too, as it
   already was for `next` and the BUC hand-offs. `performs(Actor, Buc)` now lends the actor
   to it, so its required permissions find the actor (#161).
+- `verify` no longer passes a `can_reach` whose cone stops at `--max-states`, the pattern
+  cap, or the `--memory` limit. Such a property is `not decided`: it is listed under
+  `not checked:` as `can_reach <P> is not decided: the <P> cone stopped at the state cap
+  (<n> states)` (or at the memory limit), the `can_reach (BFS on ...)` line adds
+  `, <n> not decided`, the `result:` line says `not decided`, and `--deny-undecided` fails
+  the run. The stop was dropped, so a run whose entity cones finished printed
+  `result: ok` and passed `--deny-undecided`, even where the full cone breaks the property.
+  `stable`, `unchanged`, `precedes`, `always`, `eventually`, and `leads_to` already counted
+  a stopped cone as undecided (#246).
 
 ## v2.3.0 - 2026-11-18
 

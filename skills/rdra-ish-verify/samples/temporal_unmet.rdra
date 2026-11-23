@@ -1,7 +1,7 @@
 // order.rdra's lifecycle with a Reopen use case and two temporal properties that fail.
 // NeverShipped is false as soon as an Order ships. PendingLeadsToDelivered fails only on an
 // infinite behavior: under weak fairness an Order can be cancelled and reopened forever, so
-// its TLC counterexample is a lasso that loops back (`Back to state K`), never a stutter.
+// its counterexample is a lasso that loops back (`then loops back to step K`), never a stutter.
 // `check` does not model-check temporal properties; `verify` runs each property alone and
 // prints its lasso in model terms.
 // expect check: ok

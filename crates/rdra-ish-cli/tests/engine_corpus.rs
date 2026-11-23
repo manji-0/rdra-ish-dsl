@@ -422,7 +422,8 @@ struct Observed {
     z3: BTreeMap<String, Z3>,
     /// `error[EngineDisagreement]` and `error[LassoFault]` lines.
     faults: Vec<String>,
-    /// The `M` of `can_reach (BFS on N cones): N checked, M violated`.
+    /// The `M` of `can_reach (BFS on N cones): N checked, M violated`, which may end in
+    /// `, K not decided`.
     can_reach_violated: Option<usize>,
     /// Errors without a name: a load or build error.
     unnamed: Vec<String>,
@@ -445,9 +446,8 @@ impl Observed {
                 }
             } else if let Some(rest) = line.strip_prefix("can_reach (BFS on ") {
                 out.can_reach_violated = rest
-                    .rsplit(", ")
-                    .next()
-                    .and_then(|v| v.strip_suffix(" violated"))
+                    .split(", ")
+                    .find_map(|v| v.strip_suffix(" violated"))
                     .and_then(|n| n.parse().ok());
             } else if let Some(rest) = line.strip_prefix("proved: ") {
                 out.z3.insert(rule_name(rest), Z3::Proved);

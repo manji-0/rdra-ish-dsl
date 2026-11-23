@@ -97,18 +97,25 @@ pub struct Cti {
 /// Per-query solver settings.
 #[derive(Clone, Copy, Debug)]
 pub struct ProveOptions {
-    /// Milliseconds a check of a rule may take before it counts as unknown.
-    pub timeout_ms: u32,
-    /// The same for a lemma. A lemma that times out leaves the set, which only costs proofs;
-    /// a check that breaks a candidate is the slow kind, so a short one saves the most.
-    pub lemma_timeout_ms: u32,
+    /// z3 resource units (`rlimit`) a check of a rule may spend before it counts as unknown.
+    /// A unit counts solver work, not time, so the answer does not depend on the machine or
+    /// its load; it does depend on the z3 version.
+    pub rlimit: u32,
+    /// The same for a lemma. A lemma that gives up leaves the set, which only costs proofs;
+    /// a check that breaks a candidate is the slow kind, so a low limit saves the most.
+    pub lemma_rlimit: u32,
 }
 
+/// The limits are set from `examples/prove_rlimit.rs` on every sample and engine-corpus case
+/// under z3 5.1.0, on 1, 2, 3, and 8 solvers: no check that keeps a candidate spent more
+/// than 42,000 units for a rule or 102,000 for a lemma, so the limits leave about 480 and 20
+/// times that. Only such a check must fit: a lemma check past its limit drops the lemma, as
+/// a step that breaks it does.
 impl Default for ProveOptions {
     fn default() -> Self {
         ProveOptions {
-            timeout_ms: 10_000,
-            lemma_timeout_ms: 500,
+            rlimit: 20_000_000,
+            lemma_rlimit: 2_000_000,
         }
     }
 }
@@ -125,8 +132,8 @@ struct Candidate {
     reads: VarSet,
     /// The formula over the pre-state.
     pre: String,
-    /// Milliseconds a check of it may take.
-    timeout_ms: u32,
+    /// z3 resource units a check of it may spend.
+    rlimit: u32,
 }
 
 /// Why a candidate left the set, and the step that showed it.
@@ -180,11 +187,49 @@ pub fn lemma_invariants(
         .collect()
 }
 
-/// Proves `rules` (indices into `ts.invariants()`) for any number of rows. The checks of one
-/// scope are shared out over `solvers`, at least one; the proof does not depend on how many
-/// there are (`violated_each`).
+/// `ts`'s model built again at one instance per entity, for `prove` to mine lemmas from:
+/// a cone that passes the mining cap at `ts`'s bounds often finishes there. `None` when `ts`
+/// already has one instance, or when the build differs from `ts` in more than its bounds
+/// (errors, or other entities, vars, or rules), so the twin's ids are always `ts`'s.
+pub fn mining_twin(
+    model: &crate::model::SemanticModel,
+    scope: &crate::lifecycle::Scope,
+    ts: &TransitionSystem,
+) -> Option<TransitionSystem> {
+    if ts.bounds.instances.get() == 1 {
+        return None;
+    }
+    let bounds = crate::lifecycle::Bounds {
+        instances: std::num::NonZeroU8::MIN,
+        ..ts.bounds
+    };
+    let built = TransitionSystem::build(model, bounds, scope);
+    let twin = built.ts;
+    let same = !crate::lifecycle::has_errors(&built.diags)
+        && twin.entity_ids().count() == ts.entity_ids().count()
+        && ts
+            .entity_ids()
+            .all(|e| twin.entity(e).id == ts.entity(e).id)
+        && twin.var_ids().count() == ts.var_ids().count()
+        && ts
+            .var_ids()
+            .all(|v| twin.var(v).kind == ts.var(v).kind && twin.var(v).domain == ts.var(v).domain)
+        && twin.invariants().len() == ts.invariants().len()
+        && ts
+            .invariants()
+            .iter()
+            .zip(twin.invariants())
+            .all(|(a, b)| a.name == b.name);
+    same.then_some(twin)
+}
+
+/// Proves `rules` (indices into `ts.invariants()`) for any number of rows. Lemmas are mined
+/// from `ts` and from `twin` (`mining_twin`), when given. The checks of one scope are shared
+/// out over `solvers`, at least one; the proof does not depend on how many there are
+/// (`violated_each`).
 pub fn prove<S: Solver + Send>(
     ts: &TransitionSystem,
+    twin: Option<&TransitionSystem>,
     rules: &[usize],
     solvers: &mut [S],
     options: ProveOptions,
@@ -206,7 +251,7 @@ pub fn prove<S: Solver + Send>(
         })
         .chain(lemmas(ts).into_iter().map(|(o, f)| (o, f, false)))
         .chain(
-            mine::mine(ts, rules)
+            mine::mine(ts, twin, rules)
                 .into_iter()
                 .map(|m| (Origin::Lemma(m.text), m.formula, m.fine)),
         );
@@ -220,16 +265,16 @@ pub fn prove<S: Solver + Send>(
                 let mut reads = VarSet::new();
                 ts.pred_reads(&formula.body, &mut reads);
                 reads.extend(formula.binders.iter().map(|e| ts.entity(*e).exists));
-                let timeout_ms = match origin {
-                    Origin::Rule(_) => options.timeout_ms,
-                    Origin::Lemma(_) => options.lemma_timeout_ms,
+                let rlimit = match origin {
+                    Origin::Rule(_) => options.rlimit,
+                    Origin::Lemma(_) => options.lemma_rlimit,
                 };
                 cands.push(Candidate {
                     origin,
                     formula,
                     reads,
                     pre,
-                    timeout_ms,
+                    rlimit,
                 });
             }
             Err(Unsupported(why)) => {
@@ -352,7 +397,7 @@ pub fn prove<S: Solver + Send>(
                         c.pre,
                         violation(&enc, c, Frame::Post)
                     ))?;
-                    if solver.check_sat()? == Sat::Sat {
+                    if solver.check_sat(c.rlimit)? == Sat::Sat {
                         cti = Some(read_cti(solver, ts, ActId::at_index(a), &c.formula)?);
                     }
                     solver.exec("(pop)\n(pop)")?;
@@ -403,12 +448,10 @@ fn assume(cands: &[Candidate], set: &Set) -> String {
         .collect()
 }
 
-/// The commands that assert some rows violate `c` in `frame`, and the candidate's timeout.
+/// The commands that assert some rows violate `c` in `frame`.
 fn violation(enc: &Enc, c: &Candidate, frame: Frame) -> String {
-    let rows = enc
-        .violation(&c.formula, frame)
-        .expect("a candidate that encodes has a violation that encodes");
-    format!("{rows}(set-option :timeout {})\n", c.timeout_ms)
+    enc.violation(&c.formula, frame)
+        .expect("a candidate that encodes has a violation that encodes")
 }
 
 /// Whether some state of `scope` violates each of `cands[ks]` in `frame`: one answer per
@@ -469,7 +512,7 @@ fn violated(
     frame: Frame,
 ) -> Result<Sat, SolverError> {
     solver.exec(&format!("(push)\n{}", violation(enc, c, frame)))?;
-    let sat = solver.check_sat()?;
+    let sat = solver.check_sat(c.rlimit)?;
     solver.exec("(pop)")?;
     Ok(sat)
 }

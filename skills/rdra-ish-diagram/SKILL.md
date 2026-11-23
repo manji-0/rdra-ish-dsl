@@ -70,7 +70,9 @@ a renderer drops the `%%` header.
 | `rdra` | RDRAGraph | Every element in its layer and every relation | ADRs |
 
 `state` is the only kind that refuses to write while `check` reports a lifecycle error.
-The others draw declared facts and print one note.
+The others draw declared facts and print one note. `diagram` explores the lifecycle at
+`check`'s default bounds, within `memory` under `[check]` in `rdra.toml`, and takes no
+`--memory` flag (`references/formats-and-output.md`).
 
 ### Reading Any Diagram
 
@@ -102,7 +104,7 @@ The others draw declared facts and print one note.
 - `references/usecase-and-flow.md` — `usecase` (UC複合図), `robustness`, `sequence`, and `flow`.
 - `references/information-and-data.md` — `information`, `condition`, `er`, and the data
   exports.
-- `references/lifecycle-and-events.md` — `state`, `event`, `states`, `check`, and TLA+.
+- `references/lifecycle-and-events.md` — `state`, `event`, `states`, `check`, and when to run `verify`.
 - `references/rdra-graph.md` — `rdra`, the whole graph, and its filters.
 - `references/access-and-apis.md` — API boundaries and the access CSV views.
 - `references/formats-and-output.md` — Mermaid output, rendering, and contract exports.

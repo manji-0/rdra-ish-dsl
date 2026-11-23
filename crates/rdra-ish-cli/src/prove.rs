@@ -83,14 +83,17 @@ impl Marks {
     }
 }
 
-/// Proves the selected state rules of `ts` and prints one line per rule.
+/// Proves the selected state rules of `ts` and prints one line per rule. Lemmas are mined
+/// from `twin` too (`prove::mining_twin`). Returns the tally and the rules proved, lemmas
+/// included, by index into `ts.invariants()`.
 pub(crate) fn run_proof(
     ts: &TransitionSystem,
+    twin: Option<&TransitionSystem>,
     selection: &Selection,
     marks: &Marks,
     binary: &Path,
     deny_unproved: bool,
-) -> Result<ProofTally> {
+) -> Result<(ProofTally, BTreeSet<usize>)> {
     let lemmas = &marks.lemmas;
     let version = Z3::version(binary).unwrap_or_default();
     let rules: Vec<usize> = selection
@@ -105,7 +108,7 @@ pub(crate) fn run_proof(
     let mut solvers = (0..rdra_ish_core::jobs())
         .map(|_| Z3::start(binary))
         .collect::<Result<Vec<_>, _>>()?;
-    let proof = prove::prove(ts, &rules, &mut solvers, ProveOptions::default())
+    let proof = prove::prove(ts, twin, &rules, &mut solvers, ProveOptions::default())
         .map_err(|e| anyhow::anyhow!("z3 failed: {e}"))?;
     let (yours, rules): (Vec<&RuleProof>, Vec<&RuleProof>) =
         proof.rules.iter().partition(|r| lemmas.contains(&r.inv));
@@ -164,12 +167,19 @@ pub(crate) fn run_proof(
             count(&app, out_of_scope)
         );
     }
-    Ok(ProofTally {
+    let tally = ProofTally {
         proved: count(&rules, proved),
         rules: rules.len(),
         unproved: count(&rules, unproved),
         deny_unproved,
-    })
+    };
+    let proved = proof
+        .rules
+        .iter()
+        .filter(|r| matches!(r.verdict, Verdict::Proved))
+        .map(|r| r.inv)
+        .collect();
+    Ok((tally, proved))
 }
 
 /// One rule's line, and the CTI under an unproved one. A lemma the model marks reads

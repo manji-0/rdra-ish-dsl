@@ -6,6 +6,7 @@ mod csv_cmd;
 mod diagram;
 mod export;
 mod fmt_cmd;
+mod guard_report;
 mod lifecycle_gate;
 mod list_output;
 mod load;
@@ -57,6 +58,7 @@ pub fn run() -> Result<()> {
             max_patterns,
             max_states,
             memory,
+            guards,
             bounds,
             scope,
         } => {
@@ -126,6 +128,17 @@ pub fn run() -> Result<()> {
                 eprintln!(
                     "note: {property_count} temporal properties were not model-checked by check; use verify"
                 );
+            }
+
+            if guards {
+                if tally.errors > 0 {
+                    eprintln!("note: --guards reports nothing on a model that fails check; fix the errors first");
+                } else {
+                    print!(
+                        "{}",
+                        guard_report::run(&program, &model, &scope, bounds.bounds()?, caps)
+                    );
+                }
             }
 
             if tally.errors > 0 {

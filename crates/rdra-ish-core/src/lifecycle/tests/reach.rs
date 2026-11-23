@@ -91,6 +91,32 @@ fn a_way_back_to_the_goal_passes() {
     assert!(unreachable_goals(&verdicts).is_empty(), "{verdicts:?}");
 }
 
+/// A cone the state cap stops decides nothing: a state it did not expand would look stuck.
+/// The property is undecided, with the cap, and is neither a violation nor a cap diagnostic
+/// among the verdicts, which only report violations (#246).
+#[test]
+fn a_cone_stopped_at_the_state_cap_leaves_the_property_undecided() {
+    use crate::lifecycle::{Subject, UndecidedWhy};
+    let ts = TransitionSystem::build(&load(UNMET), Bounds::STATES, &Scope::ALL).ts;
+    let run = ts.explore_targets(&ts.reach_targets(), Caps::new(usize::MAX, 10));
+    assert!(run.verdicts().is_empty(), "{:?}", run.verdicts());
+    let [undecided] = run.undecided() else {
+        panic!("one undecided can_reach expected: {:?}", run.undecided());
+    };
+    assert_eq!(
+        undecided.subject,
+        Subject::Reach {
+            name: "OrderCanFinish".into()
+        }
+    );
+    assert_eq!(undecided.why, UndecidedWhy::StateCap(10));
+    assert_eq!(
+        undecided.to_string(),
+        "can_reach OrderCanFinish is not decided: the OrderCanFinish cone stopped at the state \
+         cap (10 states)"
+    );
+}
+
 /// The only way to `done` is a use case an event starts, and the event's raiser can never
 /// run. A cone that left the event's mark out would let `Finish` run freely and pass; the
 /// cone keeps it, and fails as the whole system does.

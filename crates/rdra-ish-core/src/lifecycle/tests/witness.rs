@@ -200,6 +200,7 @@ fn undecided_by_subject(undecided: &[Undecided]) -> BySubject<'_> {
             | Subject::Arm { action, .. }
             | Subject::Choice { action, .. } => out.actions.push(action.as_str()),
             Subject::Deadlock { value, .. } => out.deadlocks.push((value.as_str(), u.why)),
+            Subject::Reach { name } => panic!("an entity cone left can_reach {name} open"),
         }
     }
     out

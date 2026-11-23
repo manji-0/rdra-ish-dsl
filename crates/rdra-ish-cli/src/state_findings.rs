@@ -449,7 +449,7 @@ fn guard_text(model: &SemanticModel, why: GuardWhy, site: &Site) -> String {
     }
 }
 
-fn location(program: &ResolvedProgram, site: &Site) -> Option<String> {
+pub(crate) fn location(program: &ResolvedProgram, site: &Site) -> Option<String> {
     format_location(program, site.span.as_ref()?)
 }
 

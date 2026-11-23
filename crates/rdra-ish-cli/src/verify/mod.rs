@@ -34,7 +34,10 @@ mod specs;
 mod tlc;
 mod tlc_tool;
 
-use self::bfs::{bfs_cones, explored_properties, report_bfs_cones, state_models, Explored, Safety};
+use self::bfs::{
+    bfs_cones, decide_by_proof, explored_properties, report_bfs_cones, state_models, Explored,
+    Safety,
+};
 use self::compare::disagreements;
 use self::end::{End, TlcEnd};
 use self::jobs::{cone_jobs, property_jobs, Job, JobKind};
@@ -222,7 +225,7 @@ pub fn run(
         (Some(dir), Some(Ok(_)), Some(Ok(tlc)), None | Some(Ok(_))) => Some((tlc, dir)),
         _ => None,
     };
-    let (bfs, natives, explored, proof, cones_ran) = std::thread::scope(|threads| {
+    let (bfs, mut natives, explored, proof, cones_ran) = std::thread::scope(|threads| {
         let cones = start
             .map(|(tlc, dir)| threads.spawn(|| run_cones(tlc, dir, &modules, &jobs, memory.cones)));
         mark("verify: state models");
@@ -259,7 +262,8 @@ pub fn run(
         let proof = match (&prove, z3) {
             (Some(Prove { deny_unproved, .. }), Some(z3)) => z3.and_then(|z3| {
                 let marks = Marks::of(model, &ts);
-                run_proof(&ts, &selection, &marks, &z3, *deny_unproved).map(Some)
+                let twin = rdra_ish_core::lifecycle::prove::mining_twin(model, scope, &ts);
+                run_proof(&ts, twin.as_ref(), &selection, &marks, &z3, *deny_unproved).map(Some)
             }),
             _ => Ok(None),
         };
@@ -274,6 +278,11 @@ pub fn run(
         };
         (bfs, natives, explored, proof, cones_ran)
     });
+    let proof = proof?;
+    // A cone BFS left open at the memory limit is decided by the rules the proof proved.
+    if let Some((_, proved)) = &proof {
+        natives.safety = decide_by_proof(&ts, &jobs, natives.safety, proved);
+    }
     let mut end = End {
         bfs,
         explored,
@@ -281,7 +290,7 @@ pub fn run(
         temporal: Temporal::default(),
         tlc: TlcEnd::default(),
         deny_undecided,
-        proof: proof?,
+        proof: proof.map(|(tally, _)| tally),
     };
 
     let mut index = match written {
