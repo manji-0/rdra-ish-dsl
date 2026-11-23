@@ -4,10 +4,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use rdra_ish_core::lifecycle::{
-    ActId, Action, ActionOrigin, Arm, At, Birth, CmpOp, Effect, EntId, FoldKey, Ltl, ParamRole,
-    Pred, Property, Rhs, Start, Term, TransitionSystem, Value, VarId, VarKind,
+    ActId, Action, Arm, At, Birth, CmpOp, Effect, EntId, FoldKey, Ltl, ParamRole, Pred, Property,
+    Rhs, Start, Term, TransitionSystem, Value, VarId, VarKind,
 };
-use rdra_ish_core::model::UseCaseKey;
 
 use super::names::owner_entity;
 use super::pred::Ctx;
@@ -970,25 +969,26 @@ fn closed(
     format!("{quant}({present}) => ({inner})")
 }
 
-/// Weak fairness on each action of `ucs`, per instance it acts on: one `WF_vars` per binding
-/// of its `Existing` and `Parent` params, with the `New` slot inside, so the lowest absent slot
-/// moving on does not reset an instance's claim. A conjunction, one line per action.
-fn fairness(ts: &TransitionSystem, names: &TlaNames, ucs: &[UseCaseKey]) -> String {
+/// Weak fairness on each action `p.fair` names, per instance it acts on: one `WF_vars` per
+/// binding of the params that key an instance (`ParamRole::keys_fair_instance`), with the
+/// `New` slot inside. A conjunction, one line per action. The liveness check reads the same
+/// instances (`Property::fair_instance`).
+fn fairness(ts: &TransitionSystem, names: &TlaNames, p: &Property) -> String {
     let mut out = String::new();
     for id in ts.action_ids() {
         let a = &ts.actions()[id.index()];
-        if !matches!(&a.origin, ActionOrigin::UseCase { uc, .. } if ucs.contains(uc)) {
+        if !p.is_fair(a) {
             continue;
         }
-        let bound = |new: bool| -> Vec<String> {
+        let bound = |keyed: bool| -> Vec<String> {
             a.params
                 .iter()
                 .enumerate()
-                .filter(|(_, param)| (param.role == ParamRole::New) == new)
+                .filter(|(_, param)| param.role.keys_fair_instance() == keyed)
                 .map(|(p, param)| format!("p{p} \\in {}", names.ids(param.entity)))
                 .collect()
         };
-        let (each, fresh) = (bound(false), bound(true));
+        let (each, fresh) = (bound(true), bound(false));
         let mut step = signature(ts, names, id, a);
         if !fresh.is_empty() {
             step = format!("\\E {} : {step}", fresh.join(", "));
@@ -1101,7 +1101,7 @@ fn checks(ts: &TransitionSystem, names: &TlaNames, latches: &[Latch], out: &mut 
         };
         match names.fair(i) {
             Some(fair) => {
-                out.push_str(&format!("{fair} ==\n{}", fairness(ts, names, &p.fair)));
+                out.push_str(&format!("{fair} ==\n{}", fairness(ts, names, p)));
                 out.push_str(&format!(
                     "{} == {fair} => ({quant}{formula})\n",
                     names.property(i)

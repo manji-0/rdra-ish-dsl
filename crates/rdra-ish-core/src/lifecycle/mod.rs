@@ -33,13 +33,15 @@ pub use diag::{
     created_via_apis, has_errors, label_prefix, Blocked, CapGrowth, Diag, Entry, Exit, Need,
     Severity, StateDiag, UnmetPremise, VarSpread,
 };
-pub use explore::{Adjacency, Caps, ComponentRun, Edge, Graph, LabelledEdges, PropertyVerdict};
+pub use explore::{
+    Adjacency, Caps, ComponentRun, Edge, Graph, LabelledEdges, LassoFault, PropertyVerdict,
+};
 pub use expr::State;
 pub use findings::{
     ActionRuns, ArmTaken, ModelState, Progress, Runs, StateModelFindings, Taken, ValueProgress,
     ValueWitness, Witness,
 };
-pub use lasso::{LassoReplay, Loop};
+pub use lasso::{Fairness, LassoReplay, Loop, Unfair};
 pub use reduce::{ClassMove, Fold, FoldKey, Reduction, Step};
 pub use select::{NotChecked, Scope, Selection, UnknownId, Without};
 pub use states::{derive_states, derive_states_built, BoundsLine, FindingTally, StatesReport};

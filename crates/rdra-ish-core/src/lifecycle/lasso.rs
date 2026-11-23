@@ -1,12 +1,34 @@
-//! A temporal counterexample from another engine: a lasso replayed through `moves`, and the
-//! property it violates, evaluated on the infinite behavior the lasso stands for with the
-//! semantics the TLA printer gives it.
+//! A temporal counterexample, from another engine or from the liveness search: a lasso
+//! replayed through `moves`, the property it violates, evaluated on the infinite behavior the
+//! lasso stands for with the semantics the TLA printer gives it, and the fairness of its loop.
+
+use std::collections::BTreeSet;
 
 use super::diag::StateDiag;
 use super::expr::{Env, State};
 use super::trace::{Replay, ReplayError};
 use super::types::{ActId, Ltl, Pred, Property};
 use super::TransitionSystem;
+
+/// The fairness a liveness run assumes beside the property's own `Fair_P`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Fairness {
+    /// `Fair_P` alone: a behavior may stop at a state where no fair instance is enabled.
+    Plain,
+    /// `Fair_P` and `WF_vars(Next)`: a behavior stops only at a state with no step to
+    /// another state.
+    WfNext,
+}
+
+/// Why a lasso's loop is not a behavior the fairness admits.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Unfair {
+    /// The fair instance of `act` on `slots` (`Property::fair_instance`) is enabled at every
+    /// state of the loop, and the loop never takes its step.
+    Starved { act: ActId, slots: Box<[u8]> },
+    /// Under `WF_vars(Next)`, the behavior stops at a state with a step to another state.
+    Stops,
+}
 
 /// How a lasso goes on after the last state of its finite part.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -114,6 +136,58 @@ impl TransitionSystem {
             site: p.site.clone(),
             trace,
         })
+    }
+
+    /// Why the loop of `replay` is not fair for `properties()[i]` under `fairness`; `None`
+    /// when it is. Weak fairness of an instance holds on the loop when the loop takes its
+    /// step or passes a state where it is disabled. A step of an instance from `s` to `t` is
+    /// a move of it with `t` as its successor; it is enabled at `s` when some move of it
+    /// leaves `s`. A move that changes no var is neither. Reads `moves` at the lasso's states
+    /// and nothing the search that built the lasso computed.
+    pub fn unfair_loop(
+        &self,
+        i: usize,
+        replay: &LassoReplay,
+        fairness: Fairness,
+    ) -> Option<Unfair> {
+        let p = &self.properties[i];
+        let states = &replay.prefix.states;
+        let cycle = &states[replay.entry()..];
+        let last = states.last().expect("replay has a state");
+        // The loop's steps, the one back to its first state included; a stutter has none.
+        let steps: Vec<(&State, &State)> = match replay.back {
+            None => Vec::new(),
+            Some(_) => cycle
+                .windows(2)
+                .map(|w| (&w[0], &w[1]))
+                .chain(std::iter::once((last, &cycle[0])))
+                .filter(|(a, b)| a != b)
+                .collect(),
+        };
+        let fair_moves = |s: &State, to: Option<&State>| -> BTreeSet<(ActId, Box<[u8]>)> {
+            self.moves(s)
+                .filter(|m| m.next != *s && to.is_none_or(|t| m.next == *t))
+                .filter_map(|m| {
+                    let slots = p.fair_instance(&self.actions[m.act.index()], &m.params)?;
+                    Some((m.act, slots))
+                })
+                .collect()
+        };
+        let mut starved = fair_moves(&cycle[0], None);
+        for s in &cycle[1..] {
+            let enabled = fair_moves(s, None);
+            starved.retain(|a| enabled.contains(a));
+        }
+        for (a, b) in &steps {
+            for taken in fair_moves(a, Some(b)) {
+                starved.remove(&taken);
+            }
+        }
+        if let Some((act, slots)) = starved.into_iter().next() {
+            return Some(Unfair::Starved { act, slots });
+        }
+        let stops = steps.is_empty() && self.moves(last).any(|m| m.next != *last);
+        (fairness == Fairness::WfNext && stops).then_some(Unfair::Stops)
     }
 
     /// The first binding of `p`'s binders (every slot, present or not, in index order, as

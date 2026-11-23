@@ -18,8 +18,9 @@ use crate::lifecycle::TransitionSystem;
 #[derive(Clone, Debug)]
 pub enum PropertyVerdict {
     Holds,
-    /// The shortest trace to the step (`stable`, `unchanged`) or state (`precedes`) that
-    /// breaks it.
+    /// The shortest trace to the step (`stable`, `unchanged`) or state (`always`,
+    /// `precedes`) that breaks it, or the lasso of `eventually` and `leads_to`
+    /// (`decide_liveness`).
     Violated(Box<StateDiag>),
     /// The run stopped at the state cap with no violation in what it reached.
     Undecided,

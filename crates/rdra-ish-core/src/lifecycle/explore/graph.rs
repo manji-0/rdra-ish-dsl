@@ -34,7 +34,7 @@ pub struct Adjacency {
 
 impl Adjacency {
     /// From `n` states and the `(from, to)` moves `moves` yields, each time it is called.
-    fn new<I: Iterator<Item = (u32, u32)>>(n: usize, moves: impl Fn() -> I) -> Self {
+    pub(super) fn new<I: Iterator<Item = (u32, u32)>>(n: usize, moves: impl Fn() -> I) -> Self {
         let moves = || moves().filter(|(from, to)| from != to);
         Adjacency {
             succs: Csr::new(n, moves),
