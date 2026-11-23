@@ -6,7 +6,9 @@
 // it. A checker that followed the key to the payment's new order would find that one paid
 // (a captured payment that cannot move again leaves Settle enabled) and answer ok.
 // expect CapturedPaid: native=counterexample tlc=counterexample
-// expect Deadlock_Order_status_open: native=counterexample tlc=none
+// TLC's StateModel_ run (#201) reports the deadlock: every step runs at most once per row,
+// so no cycle hides it.
+// expect Deadlock_Order_status_open: native=counterexample tlc=counterexample
 entity Order "注文" { id: Int @pk  status: Enum(open, paid) @default(open) }
 entity Payment "支払" {
   id: Int @pk

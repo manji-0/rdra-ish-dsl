@@ -4,7 +4,8 @@
 // and only Order#2 can be a rush order that never finishes. A checker that decided one
 // binding and assumed the others alike (Order#1 only) would answer ok.
 // expect RushFinishes: native=counterexample tlc=counterexample
-// expect Deadlock_Order_status_open: native=counterexample tlc=none
+// TLC's StateModel_ run (#201) reports the deadlock: no step repeats, so no cycle hides it.
+// expect Deadlock_Order_status_open: native=counterexample tlc=counterexample
 entity Order "注文" {
   id: Int @pk
   status: Enum(open, done) @default(open)
