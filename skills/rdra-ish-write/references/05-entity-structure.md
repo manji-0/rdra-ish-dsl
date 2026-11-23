@@ -73,7 +73,10 @@ Also ask:
    the lifecycle checks it as `Unique_A_<role>` (at two instances, so `verify` finds a
    second child linked to one parent). Write `1..*:1` when every parent must have a
    child; the lifecycle checks it as `MinCard_<Child>_<role>`, so the use case that
-   creates the parent must create its first child in the same transaction.
+   creates the parent must create its first child in the same transaction. Write
+   `0..3:1` when a parent has at most three children; the lifecycle checks it as
+   `MaxCard_<Child>_<role>`, so guard the use case that adds a child with a count such as
+   `holds(Room, Member.status == active).at_most(2, Loan)`.
    Chain `.role(name)` when two relates join one child to one parent, or when a second
    relate joins the same two entities the other way. Every rule, guard, quantifier and copy
    that joins such a pair then names its key with `.role(name)` (`AmbiguousOwnerLink`

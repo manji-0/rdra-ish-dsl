@@ -1358,8 +1358,8 @@ Canonical files: `skills/rdra-ish-verify/samples/` (each file is **standalone** 
 do not `check` the whole directory; ids such as `Order` collide). In this repo,
 `samples/formal-verification/` and `samples/formal-verification-fail/` are
 symlinks to those skill-bundled files (CLI tests keep working after skill install), except
-`unique_double_booking.rdra` and `unique_booking_guarded.rdra`, which live only in
-`samples/formal-verification/`.
+`unique_double_booking.rdra`, `unique_booking_guarded.rdra`, and `counting_rules.rdra`,
+which live only in `samples/formal-verification/`.
 
 The second column gives `check`'s verdict, then `verify`'s on the cones of the rules,
 `after` assertions, and properties. A state with no witness or a deadlock fails both
@@ -1385,6 +1385,7 @@ commands even where every cone passes; the `// expect` headers state each exit s
 | `one_to_one_shared.rdra` | pass, fail | 0 of 1 | `relate(.., 1:1)` adds `Unique_Shipment_Order`; Ship and Reship each link a Shipment to the same Order, which takes two instances |
 | `unique_double_booking.rdra` | pass, fail | 0 of 1 | `@unique(room_id, slot)` adds `Unique_Booking_room_id_slot`, which reads the owner Room beside `slot`; BookAm books any room for the morning, so two Bookings take one room at `am`, which takes two instances |
 | `unique_booking_guarded.rdra` | pass, pass | 1 of 1 | The same model with a guard on each booking use case: `.none(Booking.slot == am)` on the Room it binds keeps the slot free |
+| `counting_rules.rdra` | pass, pass | 2 of 2 | `relate(Loan, Member, 0..3:1)` adds `MaxCard_Loan_Member`, and `invariant(Member).at_most(3, ..)` counts the open loans; Borrow's `holds(..).at_most(2, Loan)` keeps both. At the default bounds both hold vacuously, and the warning names `--instances Loan=4`, under which `verify` passes too |
 | `none_any_child.rdra` | pass, pass | 1 of 1 | `.none(Invoice)` on Issue says "no invoice yet" and reads the link only, so `Unique_Invoice_Order` holds on a cone without `Invoice.status` (25 states). The enumerating form `.none(Invoice.status in (<every value>))` builds the same cones |
 | `none_any_child_bypassed.rdra` | pass, fail | 0 of 1 | The same model with Reissue, which creates an Invoice under a closed Order without the guard; `Unique_Invoice_Order` fails at two instances on the cone without `Invoice.status` |
 | `min_card_unmet.rdra` | fail, fail | 0 of 1 | `relate(OrderLine, Order, 1..*:1)` adds `MinCard_OrderLine_Order`; Place creates an Order without a line |
