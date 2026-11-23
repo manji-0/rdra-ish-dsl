@@ -69,7 +69,7 @@ fn one_of_each() -> Vec<StateDiag> {
                 slot: 1,
             }],
             witness: 3,
-            lasso: Loop::Stutter,
+            lasso: Some(Loop::Stutter),
             site: site(),
             trace: Trace::default(),
         },

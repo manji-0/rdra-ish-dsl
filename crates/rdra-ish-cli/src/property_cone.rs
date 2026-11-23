@@ -170,7 +170,7 @@ fn after_plain(kind: LtlKind, frees_slots: bool, plain: Outcome) -> AfterPlain {
     match plain {
         Outcome::Ok => AfterPlain::Decided(Verdict::Ok),
         Outcome::ToolError => AfterPlain::Decided(Verdict::ToolError),
-        Outcome::Counterexample if kind == LtlKind::Always => {
+        Outcome::Counterexample if !kind.is_liveness() => {
             AfterPlain::Decided(counterexample(frees_slots))
         }
         Outcome::Counterexample => AfterPlain::NeedsWfNext,

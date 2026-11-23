@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use rdra_ish_core::lifecycle::{
     ActId, Action, ActionOrigin, Arm, At, Birth, CmpOp, Effect, EntId, FoldKey, Ltl, ParamRole,
-    Pred, Rhs, Start, Term, TransitionSystem, Value, VarId, VarKind,
+    Pred, Property, Rhs, Start, Term, TransitionSystem, Value, VarId, VarKind,
 };
 use rdra_ish_core::model::UseCaseKey;
 
@@ -13,12 +13,14 @@ use super::names::owner_entity;
 use super::pred::Ctx;
 use super::{domain_set, render_value, TlaNames};
 
-/// `wf_next` adds `WF_vars(Next)` to `Spec`.
+/// `wf_next` adds `WF_vars(Next)` to `Spec`; `latched` are the `precedes` properties whose
+/// latch the module declares, and only those it defines.
 pub(super) fn render(
     ts: &TransitionSystem,
     names: &TlaNames,
     module_name: &str,
     wf_next: bool,
+    latched: &[usize],
 ) -> String {
     let mut out = format!(
         "---- MODULE {module_name} ----\n\
@@ -65,18 +67,111 @@ pub(super) fn render(
         );
         return out;
     }
-    variables(ts, names, &mut out);
+    let latches: Vec<Latch> = latched.iter().map(|&i| Latch::new(names, i)).collect();
+    variables(ts, names, &latches, &mut out);
     reduction(ts, names, &mut out);
-    type_ok(ts, names, &mut out);
-    init(ts, names, &mut out);
+    type_ok(ts, names, &latches, &mut out);
+    init(ts, names, &latches, &mut out);
+    for l in &latches {
+        l.step(ts, names, &mut out);
+    }
     for a in ts.action_ids() {
-        action(ts, names, a, &mut out);
+        action(ts, names, a, &latches, &mut out);
     }
     next(ts, names, wf_next, &mut out);
-    checks(ts, names, &mut out);
+    checks(ts, names, &latches, &mut out);
     state_checks(ts, names, &mut out);
     out.push_str("====\n");
     out
+}
+
+/// The latch of a `precedes(p, q)` property: `<P>_seen[b0, ..]` is whether the trigger and
+/// `p` have held for the binding, in this state or one before. `Init` sets it from the first
+/// state and every action from its successor through `<P>_latch`, so the property is the
+/// invariant that the trigger and `q` imply the latch.
+struct Latch {
+    property: usize,
+    var: String,
+    step: String,
+}
+
+impl Latch {
+    fn new(names: &TlaNames, property: usize) -> Self {
+        let (var, step) = names
+            .seen(property)
+            .expect("a precedes property has a latch");
+        Latch {
+            property,
+            var: var.to_string(),
+            step: step.to_string(),
+        }
+    }
+
+    /// `[b0 \in A_Ids, .. |-> <body>]` over the property's binders.
+    fn function(&self, ts: &TransitionSystem, names: &TlaNames, body: &str) -> String {
+        let p = &ts.properties()[self.property];
+        let over: Vec<String> = p
+            .binders
+            .iter()
+            .enumerate()
+            .map(|(k, e)| format!("b{k} \\in {}", names.ids(*e)))
+            .collect();
+        format!("[{} |-> {body}]", over.join(", "))
+    }
+
+    /// The trigger and `p` of the property, in the state or, `primed`, its successor.
+    fn seen_now(&self, ts: &TransitionSystem, names: &TlaNames, primed: bool) -> String {
+        let p = &ts.properties()[self.property];
+        let Ltl::Precedes(first, _) = &p.formula else {
+            unreachable!("a latch belongs to a precedes property")
+        };
+        let mut ctx = Ctx {
+            ts,
+            names,
+            primed,
+            depth: p.binders.len() as u8,
+        };
+        format!("({}) /\\ ({})", trigger(&mut ctx, p), ctx.pred(first))
+    }
+
+    /// `<P>_seen[b0, b1]`.
+    fn at(&self, ts: &TransitionSystem) -> String {
+        let n = ts.properties()[self.property].binders.len();
+        let bs: Vec<String> = (0..n).map(|k| format!("b{k}")).collect();
+        format!("{}[{}]", self.var, bs.join(", "))
+    }
+
+    fn type_ok(&self, ts: &TransitionSystem, names: &TlaNames) -> String {
+        let p = &ts.properties()[self.property];
+        let ids: Vec<&str> = p.binders.iter().map(|e| names.ids(*e)).collect();
+        format!("{} \\in [{} -> BOOLEAN]", self.var, ids.join(" \\X "))
+    }
+
+    fn init(&self, ts: &TransitionSystem, names: &TlaNames) -> String {
+        let now = self.seen_now(ts, names, false);
+        format!("{} = {}", self.var, self.function(ts, names, &now))
+    }
+
+    /// `<P>_latch == <P>_seen' = [b \in .. |-> <P>_seen[b] \/ (trigger /\ p)']`.
+    fn step(&self, ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
+        let next = self.seen_now(ts, names, true);
+        let body = format!("{} \\/ ({next})", self.at(ts));
+        out.push_str(&format!(
+            "{} == {}' = {}\n\n",
+            self.step,
+            self.var,
+            self.function(ts, names, &body)
+        ));
+    }
+}
+
+/// `present /\ link`: the slots a property binds are present, and `.along` links them.
+fn trigger(ctx: &mut Ctx, p: &Property) -> String {
+    let (_, mut present) = binders(ctx, &p.binders);
+    if !matches!(p.link, Pred::True) {
+        present = format!("{present} /\\ {}", ctx.pred(&p.link));
+    }
+    present
 }
 
 /// Whether the var is one the class var of a reduced cone stands for.
@@ -350,7 +445,7 @@ fn input_tuple(ts: &TransitionSystem, bytes: &[u8]) -> String {
     format!("<<{}>>", items.join(", "))
 }
 
-fn type_ok(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
+fn type_ok(ts: &TransitionSystem, names: &TlaNames, latches: &[Latch], out: &mut String) {
     out.push_str("TypeOK ==\n");
     if let (Some(r), Some(class)) = (ts.reduction(), names.class()) {
         out.push_str(&format!("  /\\ {class} \\in 1..{}\n", r.classes()));
@@ -367,10 +462,13 @@ fn type_ok(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
             None => out.push_str(&format!("  /\\ {} \\in {set}\n", names.var(v))),
         }
     }
+    for l in latches {
+        out.push_str(&format!("  /\\ {}\n", l.type_ok(ts, names)));
+    }
     out.push('\n');
 }
 
-fn init(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
+fn init(ts: &TransitionSystem, names: &TlaNames, latches: &[Latch], out: &mut String) {
     out.push_str("Init ==\n");
     if let (Some(r), Some(class)) = (ts.reduction(), names.class()) {
         let classes: Vec<String> = r
@@ -411,6 +509,10 @@ fn init(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
             Start::Identity => out.push_str(&format!("  /\\ {name} = [i \\in {ids} |-> i]\n")),
         }
     }
+    // After every var it reads.
+    for l in latches {
+        out.push_str(&format!("  /\\ {}\n", l.init(ts, names)));
+    }
     out.push('\n');
 }
 
@@ -430,7 +532,7 @@ fn var_groups(ts: &TransitionSystem) -> Vec<(Option<EntId>, Vec<VarId>)> {
 
 /// `VARIABLES`, a line per entity; `<E>_vars` for each entity with two or more vars; and
 /// `vars`, which names an entity's vars by their tuple.
-fn variables(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
+fn variables(ts: &TransitionSystem, names: &TlaNames, latches: &[Latch], out: &mut String) {
     let groups = var_groups(ts);
     let mut lines: Vec<String> = groups
         .iter()
@@ -440,6 +542,7 @@ fn variables(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
         })
         .collect();
     lines.extend(names.class().map(str::to_string));
+    lines.extend(latches.iter().map(|l| l.var.clone()));
     match lines.as_slice() {
         [one] => out.push_str(&format!("VARIABLES {one}\n\n")),
         many => out.push_str(&format!("VARIABLES\n  {}\n\n", many.join(",\n  "))),
@@ -455,7 +558,8 @@ fn variables(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
     if defined {
         out.push('\n');
     }
-    let all = tuple_items(ts, names, |_| true, true);
+    let mut all = tuple_items(ts, names, |_| true, true);
+    all.extend(latches.iter().map(|l| l.var.clone()));
     out.push_str(&format!("vars == <<{}>>\n\n", all.join(", ")));
 }
 
@@ -542,8 +646,10 @@ fn binder(
     format!("{quantifier} {} : ", ps.join(", "))
 }
 
-fn action(ts: &TransitionSystem, names: &TlaNames, id: ActId, out: &mut String) {
+fn action(ts: &TransitionSystem, names: &TlaNames, id: ActId, latches: &[Latch], out: &mut String) {
     let a = &ts.actions()[id.index()];
+    // Last: a latch reads the successor, which every other conjunct binds.
+    let latch_steps = latches.iter().map(|l| l.step.clone());
     if is_class_move(ts, id) {
         let class = names.class().expect("a reduced cone names its class var");
         let table = names.succ_table(id);
@@ -551,8 +657,9 @@ fn action(ts: &TransitionSystem, names: &TlaNames, id: ActId, out: &mut String) 
             "{} ==\n  /\\ {class}' \\in {table}[{class}]\n",
             names.action(id)
         ));
-        if let Some(rest) = unchanged(&tuple_items(ts, names, |_| true, false)) {
-            out.push_str(&format!("  /\\ {rest}\n"));
+        let rest = unchanged(&tuple_items(ts, names, |_| true, false));
+        for c in rest.into_iter().chain(latch_steps) {
+            out.push_str(&format!("  /\\ {c}\n"));
         }
         out.push('\n');
         return;
@@ -603,6 +710,7 @@ fn action(ts: &TransitionSystem, names: &TlaNames, id: ActId, out: &mut String) 
         let class = names.class().expect("a reduced cone names its class var");
         conj.push(format!("{class}' = {}", rise_expr(ts, names)));
     }
+    conj.extend(latch_steps);
     if !a.params.is_empty() {
         out.push_str(&param_legend(ts, a));
     }
@@ -898,7 +1006,7 @@ fn fairness(ts: &TransitionSystem, names: &TlaNames, ucs: &[UseCaseKey]) -> Stri
     out
 }
 
-fn checks(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
+fn checks(ts: &TransitionSystem, names: &TlaNames, latches: &[Latch], out: &mut String) {
     for (i, inv) in ts.invariants().iter().enumerate() {
         out.push_str(&format!(
             "{} == {}\n",
@@ -933,18 +1041,62 @@ fn checks(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
             primed: false,
             depth: p.binders.len() as u8,
         };
-        let (quant, mut present) = binders(&ctx, &p.binders);
+        let mut next = Ctx {
+            primed: true,
+            ..ctx
+        };
+        let (quant, _) = binders(&ctx, &p.binders);
         // A property speaks about an instance once it exists, and about the rows `.along`
         // links.
-        if !matches!(p.link, Pred::True) {
-            present = format!("{present} /\\ {}", ctx.pred(&p.link));
-        }
+        let present = trigger(&mut ctx, p);
         let formula = match &p.formula {
             Ltl::Always(x) => format!("[](({present}) => ({}))", ctx.pred(x)),
             Ltl::Eventually(x) => format!("[](({present}) => <>({}))", ctx.pred(x)),
             Ltl::LeadsTo(x, y) => {
                 let (x, y) = (ctx.pred(x), ctx.pred(y));
                 format!("(({present}) /\\ ({x})) ~> ({y})")
+            }
+            // A step and a state property quantify inside `[]`, so TLC checks them as it
+            // checks an after-assert and an invariant, on every step and state it reaches.
+            // The link is read before the step only, as the trigger reads it.
+            Ltl::Stable(x) => {
+                let after = binders(&next, &p.binders).1;
+                let (x, x2) = (ctx.pred(x), next.pred(x));
+                out.push_str(&format!(
+                    "{} == [][{quant}(({present}) /\\ ({x})) => (({after}) => ({x2}))]_vars\n",
+                    names.property(i)
+                ));
+                continue;
+            }
+            Ltl::Unchanged { when, columns } => {
+                let after = binders(&next, &p.binders).1;
+                let kept: Vec<String> = columns
+                    .iter()
+                    .filter_map(|c| Some(format!("{} = {}", next.slot(c)?.0, ctx.slot(c)?.0)))
+                    .collect();
+                let kept = match kept.is_empty() {
+                    true => "TRUE".to_string(),
+                    false => kept.join(" /\\ "),
+                };
+                out.push_str(&format!(
+                    "{} == [][{quant}(({present}) /\\ ({})) => (({after}) => ({kept}))]_vars\n",
+                    names.property(i),
+                    ctx.pred(when)
+                ));
+                continue;
+            }
+            Ltl::Precedes(_, y) => {
+                let Some(l) = latches.iter().find(|l| l.property == i) else {
+                    // The module declares no latch for a property its cfg does not check.
+                    continue;
+                };
+                out.push_str(&format!(
+                    "{} == []({quant}(({present}) /\\ ({})) => {})\n",
+                    names.property(i),
+                    ctx.pred(y),
+                    l.at(ts)
+                ));
+                continue;
             }
         };
         match names.fair(i) {

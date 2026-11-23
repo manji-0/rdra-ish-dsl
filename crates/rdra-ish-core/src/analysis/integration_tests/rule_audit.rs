@@ -384,6 +384,34 @@ const FORMS: &[(&str, Expect)] = &[
         "property P always(not (Ticket.status == done) or (Order.status == paid)).role(owner)",
         Error,
     ),
+    // properties for order and stability (#166): safety forms, so `.fair` is an error
+    ("property P stable(Order.status == paid)", Recorded),
+    ("property P unchanged(Order.total, Order.kind)", Recorded),
+    (
+        "property P unchanged(Order.total).when(Order.status == paid or Order.rush == true)",
+        Recorded,
+    ),
+    (
+        "property P precedes(Order.status == paid, Order.rush == true)",
+        Recorded,
+    ),
+    (
+        "property P precedes(Ticket.status == done, Order.status == paid).along(Ticket, Order)",
+        Recorded,
+    ),
+    ("property P stable(Order.status == paid).fair(Pay)", Error),
+    ("property P unchanged(Order.total).fair(Pay)", Error),
+    (
+        "property P precedes(Order.status == paid, Order.rush == true).fair(Pay)",
+        Error,
+    ),
+    ("property P unchanged(Order.nosuch)", Error),
+    ("property P unchanged(3)", Error),
+    // a derived column changes with the columns it reads, which `unchanged` does not see
+    (
+        "entity Doc \"Doc\" { id: Int @pk  a: Bool  b: Bool @derived(a == true) }\nproperty P unchanged(Doc.b)",
+        Error,
+    ),
 ];
 
 /// The rules a model records, its field mappings, its `sets` effects, and each condition body
@@ -488,6 +516,38 @@ fn every_rule_form_records_a_rule_or_fails_to_load() {
         }
     }
     assert!(wrong.is_empty(), "\n{}", wrong.join("\n"));
+}
+
+/// `.fair` on a safety form names the form; `.when` belongs to `unchanged` alone, written
+/// directly after it (#166).
+#[test]
+fn a_safety_form_rejects_fair_and_when_follows_unchanged_alone() {
+    for (form, line) in [
+        (
+            "stable",
+            "property P stable(Order.status == paid).fair(Pay)",
+        ),
+        ("unchanged", "property P unchanged(Order.total).fair(Pay)"),
+        (
+            "precedes",
+            "property P precedes(Order.status == paid, Order.rush == true).fair(Pay)",
+        ),
+    ] {
+        let (got, detail) = outcome(line);
+        assert_eq!(got, Error, "{line}");
+        assert!(
+            detail.contains(&format!("property 'P' is `{form}(...)`, a safety property")),
+            "{detail}"
+        );
+    }
+    for line in [
+        "property P stable(Order.status == paid).when(Order.rush == true)",
+        "property P unchanged(Order.total).along(Order).when(Order.rush == true)",
+    ] {
+        let (got, detail) = outcome(line);
+        assert_eq!(got, Error, "{line}");
+        assert!(detail.contains("unknown chain method '.when'"), "{detail}");
+    }
 }
 
 #[test]

@@ -69,6 +69,11 @@ run prints `OK: no errors within <bounds>` (for example `OK: no errors within 1 
 `check` prints a trailing `note:` that those were not model-checked (use
 `verify --backend tlc`).
 
+`check` and `states` do safety verification by state exploration only: the rules, the
+`after` assertions, and the state-model findings. They evaluate no `property`, whatever its
+form, including `can_reach`, `stable`, `unchanged`, and `precedes`, which BFS could decide. Temporal
+properties and inductive proofs (`verify --prove`) are `verify`'s.
+
 A violated constraint or `after` assertion prints once, with a shortest counterexample. Sites (`file:line:col`) print as the resolved absolute path; the examples in this page show them shortened.
 
 ```
@@ -1310,7 +1315,13 @@ only when neither decides it on the whole model (`RdraSpec_<P>`), after the cone
 most two at a time, under `--temporal-budget`; see
 [formal-verification.md](./formal-verification.md#temporal-properties-on-a-cone) for what
 decides. TLC does not say which property a temporal counterexample violates, so each
-property runs alone. Stdout names the bounds, the cone count, and each run's result; a
+property runs alone. `stable`, `unchanged`, and `precedes` get no TLC run: BFS decides each
+on its cone, prints `order and stability properties: <n>, each decided by BFS on its cone`
+and a `property <P> (BFS on its cone): ok|violated|not decided: ...` line per property, and
+prints a violation as `error[<P>]:` with the shortest trace to the step or state that
+breaks it, which fails the run with `verification failed: <n> property violation(s) from
+BFS on the property cones` (see
+[formal-verification.md](./formal-verification.md#order-and-stability-properties)). Stdout names the bounds, the cone count, and each run's result; a
 whole-model run prints TLC's progress (`  RdraSpec_<P>: N distinct states, M queued, S s`)
 about once a minute, and a run the budget stops before TLC prints its verdict prints `not
 decided` and is listed under `not checked:`. Stdout or stderr carries one `tlc_result: ok|counterexample|tool_error`

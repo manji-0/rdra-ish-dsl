@@ -11,7 +11,8 @@ use std::collections::BTreeSet;
 
 use super::expr::State;
 use super::types::{
-    ActId, Action, At, Effect, EntId, Guard, GuardWhy, ParamRole, Pred, Term, VarId, VarKind,
+    ActId, Action, At, Effect, EntId, Guard, GuardWhy, ParamRole, Pred, Property, Term, VarId,
+    VarKind,
 };
 use super::TransitionSystem;
 
@@ -74,6 +75,26 @@ impl TransitionSystem {
         reads
     }
 
+    /// What a property reads: `check_reads` of its link and operands, and the columns of
+    /// `unchanged`.
+    pub(crate) fn property_reads(&self, p: &Property) -> VarSet {
+        let mut reads = self.check_reads(&p.binders, p.preds());
+        for t in p.formula.columns() {
+            self.term_reads(t, &mut reads);
+        }
+        reads
+    }
+
+    fn term_reads(&self, t: &Term, out: &mut VarSet) {
+        match t {
+            Term::Slot { var, .. } => {
+                out.insert(*var);
+            }
+            Term::Now => out.extend(self.now),
+            Term::Lit(_) | Term::Int(_) | Term::Index(_) => {}
+        }
+    }
+
     pub(crate) fn pred_reads(&self, pred: &Pred, out: &mut VarSet) {
         for node in pred.nodes() {
             if let Pred::Forall { entity, .. } | Pred::Exists { entity, .. } = node {
@@ -81,13 +102,7 @@ impl TransitionSystem {
             }
         }
         for t in pred.terms() {
-            match t {
-                Term::Slot { var, .. } => {
-                    out.insert(*var);
-                }
-                Term::Now => out.extend(self.now),
-                Term::Lit(_) | Term::Int(_) | Term::Index(_) => {}
-            }
+            self.term_reads(t, out);
         }
     }
 
@@ -429,7 +444,7 @@ impl TransitionSystem {
     /// actions as kept.
     pub fn property_seed(&self, i: usize) -> Seed {
         let p = &self.properties[i];
-        let mut seed = self.check_reads(&p.binders, p.preds());
+        let mut seed = self.property_reads(p);
         let mut keep = BTreeSet::new();
         for (k, a) in self.actions.iter().enumerate() {
             if !p.is_fair(a) {

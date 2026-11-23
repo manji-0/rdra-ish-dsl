@@ -554,11 +554,11 @@ pub(crate) fn render_violation(
     ));
     match diag {
         StateDiag::PropertyViolated {
-            lasso: Loop::Stutter,
+            lasso: Some(Loop::Stutter),
             ..
         } => out.push_str("\n    then nothing changes forever"),
         StateDiag::PropertyViolated {
-            lasso: Loop::Back { to },
+            lasso: Some(Loop::Back { to }),
             ..
         } => out.push_str(&format!("\n    then loops back to step {to}")),
         StateDiag::GoalUnreachable {
