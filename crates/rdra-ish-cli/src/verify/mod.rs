@@ -31,16 +31,21 @@ mod jobs;
 mod native;
 mod report;
 mod specs;
+mod state_models;
 mod tlc;
 mod tlc_tool;
 
-use self::bfs::{bfs_cones, explored_properties, report_bfs_cones, state_models, Explored, Safety};
+use self::bfs::{
+    bfs_cones, explored_properties, report_bfs_cones, state_models, Explored, Safety,
+    STATE_MODEL_TLC_STATES,
+};
 use self::compare::disagreements;
 use self::end::{End, TlcEnd};
-use self::jobs::{cone_jobs, property_jobs, Job, JobKind};
+use self::jobs::{cone_jobs, explored_jobs, property_jobs, Job, JobKind};
 use self::native::{native_properties, native_wholes, Natives};
 use self::report::{print_plan, report_properties, Temporal};
 use self::specs::{out_names, spec_dir, write_specs_and_index, write_whole_specs};
+use self::state_models::{run_state_models, state_model_disagreements, state_model_jobs};
 use self::tlc::{run_cones, run_tlc_wholes, tlc_failures, Ran};
 pub(crate) use self::tlc_tool::find_on_path;
 use self::tlc_tool::Tlc;
@@ -197,6 +202,11 @@ pub fn run(
         whole_modules = (0..ts.properties().len())
             .map(|i| modules.claim(&format!("{whole_stem}_{}", names.property(i))))
             .collect();
+        // TLC's second opinion on `stable`, `unchanged`, and `precedes`; the native checker
+        // decides them without a job.
+        if with_tlc.is_some() {
+            jobs.extend(explored_jobs(&ts, &names, &mut modules));
+        }
     }
     // The modules are written for `-o`, a run by hand, and for TLC under `--with-tlc`.
     let dir = match keep || with_tlc.is_some() {
@@ -222,7 +232,15 @@ pub fn run(
     let (bfs, natives, explored, proof, cones_ran) = std::thread::scope(|threads| {
         let cones = start
             .map(|(tlc, dir)| threads.spawn(|| run_cones(tlc, dir, &modules, &jobs, memory.cones)));
-        let bfs = state_models(program, model, &ts, scope, &selection, caps);
+        let bfs = state_models(
+            program,
+            model,
+            &ts,
+            scope,
+            &selection,
+            caps,
+            start.is_some(),
+        );
         let (safety, mut vacuous) = bfs_cones(&ts, &jobs, caps);
         let (properties, property_vacuous) = native_properties(&ts, &jobs, caps);
         // A `--buc` drops use cases that may reach a premise.
@@ -324,16 +342,56 @@ pub fn run(
             (&jobs, &ran),
             (index, index_path.as_path()),
         )?;
-        disagreed = disagreements(&whole_modules, &jobs, &natives, (&ran, &whole_ran));
+        // The state models of the entity cones BFS explored to the end, after the cone runs,
+        // whose memory share they take.
+        let models = &end.bfs.models;
+        let model_jobs = state_model_jobs(dir, &mut modules, models, (index, index_path))?;
+        let model_ran = run_state_models(&tlc, dir, &modules, &model_jobs, memory.cones)?;
+        for (job, r) in model_jobs.iter().zip(&model_ran) {
+            println!("tlc: {}", r.line(job));
+        }
+        for (module, states) in &models.skipped {
+            println!(
+                "tlc: {module} ({states} states by BFS): not run, over the limit of {STATE_MODEL_TLC_STATES} states"
+            );
+        }
+        disagreed = disagreements(
+            &whole_modules,
+            &jobs,
+            (&natives, &end.explored),
+            (&ran, &whole_ran),
+        );
+        disagreed.extend(state_model_disagreements(models, &model_jobs, &model_ran));
         let all_jobs: Vec<&Job> = jobs.iter().chain(&wholes).collect();
         let all_ran: Vec<&Ran> = ran.iter().chain(&whole_ran).collect();
-        let outcome = worst(all_ran.iter().map(|r| r.decision.outcome()));
+        let model_outcomes: Vec<Outcome> = model_jobs
+            .iter()
+            .zip(&model_ran)
+            .map(|(job, r)| r.outcome(job, models))
+            .collect();
+        let outcome = worst(
+            all_ran
+                .iter()
+                .map(|r| r.decision.outcome())
+                .chain(model_outcomes.iter().copied()),
+        );
         end.tlc.tool_errors = all_ran
             .iter()
-            .filter(|r| r.decision.outcome() == Outcome::ToolError)
+            .map(|r| r.decision.outcome())
+            .chain(model_outcomes.iter().copied())
+            .filter(|o| *o == Outcome::ToolError)
             .count();
         if outcome != Outcome::Ok {
             tlc_failures(program, model, (&ts, &names), dir, (&all_jobs, &all_ran));
+        }
+        for (job, r) in model_jobs.iter().zip(&model_ran) {
+            if let Some(why) = &r.error {
+                eprintln!(
+                    "tlc: {} ({}):\n{why}",
+                    job.module,
+                    dir.join(format!("{}.tla", job.module)).display()
+                );
+            }
         }
         tlc_outcome = Some(outcome);
     }
