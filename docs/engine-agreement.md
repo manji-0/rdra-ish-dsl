@@ -191,6 +191,8 @@ loading the machine) it takes about 25 s in release, measured.
 | `cone_reduced_class_loops` | A reduced class loops inside itself and looks like a stop | counterexample |
 | `cone_reduced_loop_unreached` | A reduced class can loop, but not from the states the cone reaches; the reduced `_WF` counterexample does not lift | ok |
 | `cone_reduced_no_loop_capped` | No class can loop and the unreduced cone passes `--max-states`; `_WF` decides on the reduced cone | ok |
+| `cone_reduced_loop_fair_enabled` | A reduced class loops, but a fair step is enabled there; `_WF` decides ok on the reduced cone with marks present | ok |
+| `cone_reduced_inner_class_loops` | The loop is inside a class of a nested reduction, invisible to the outer one | counterexample |
 | `cone_always_frees_slots` | `always` on a cone that frees slots | ok (whole model) |
 | `safety_precedes_latch` | `precedes` reads a latch | ok; never-set latch counterexample |
 | `safety_stable_across_delete` | `stable` and `unchanged` across delete and create | ok; `PendingStays` counterexample |

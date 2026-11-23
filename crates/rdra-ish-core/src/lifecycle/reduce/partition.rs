@@ -575,3 +575,70 @@ impl Adj {
         &self.list[self.start[at as usize] as usize..self.start[at as usize + 1] as usize]
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lifecycle::tests::model_from;
+    use crate::lifecycle::{Bounds, Scope};
+
+    /// A job behind a gate behind a key, the key's status cycling or only rising.
+    fn model(key_cycles: bool) -> String {
+        let back = match key_cycles {
+            true => {
+                "usecase Relock \"施錠\"\ntransitions(Relock, Key.status, unlocked -> locked)\n"
+            }
+            false => "",
+        };
+        format!(
+            r#"
+entity Key "鍵" {{ id: Int @pk  status: Enum(locked, unlocked) @default(locked) }}
+entity Gate "門" {{ id: Int @pk  status: Enum(shut, open) @default(shut) }}
+entity Job "作業" {{ id: Int @pk  status: Enum(waiting, running) @default(waiting) }}
+relate(Gate, Key, N:1)
+relate(Job, Gate, N:1)
+usecase Unlock "解錠"
+usecase Swing "開く"
+usecase Submit "投入"
+usecase Start "開始"
+transitions(Unlock, Key.status, locked -> unlocked)
+{back}transitions(Swing, Gate.status, shut -> open)
+condition KeyOpen "鍵が開いている"
+holds(KeyOpen, Key.status == unlocked)
+applies_to(KeyOpen, Swing)
+creates(Submit, Job)
+transitions(Start, Job.status, waiting -> running)
+condition GateOpen "門が開いている"
+holds(GateOpen, Gate.status == open)
+applies_to(GateOpen, Start)
+property JobStarts eventually(Job.status == running).fair(Start)
+"#
+        )
+    }
+
+    /// The quotient of the job's sub-lifecycle with nothing observed: one class, never
+    /// explored, that can loop exactly when some var of the sub-lifecycle does not only rise
+    /// (docs/formal-verification.md, "WF_vars(Next) on a reduced cone", case 3). A property
+    /// cone observes what its T side reads, so this clause runs only where a read is folded
+    /// away, as in a cone of clinic-ops; the test clears `obs` to reach it directly.
+    #[test]
+    fn an_unobserved_sub_lifecycle_can_loop_unless_every_var_only_rises() {
+        for key_cycles in [false, true] {
+            let model = model_from(&model(key_cycles));
+            let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+            let (sys, seeds) = ts.cone_system(&ts.property_cone(0), [ts.property_seed(0)]);
+            let mut split = sys.split_with(&seeds, true);
+            assert!(!split.s.is_empty(), "the job's cone has a sub-lifecycle");
+            split.obs.clear();
+            let ext = Extended::of(&sys, &split);
+            assert!(ext.obs_local.is_empty());
+            let q = Quotient::of(&ext, &sys, Caps::VERIFY).expect("one class");
+            assert_eq!(q.reps.len(), 1, "an unobserved sub-lifecycle is one class");
+            assert_eq!(
+                q.loops,
+                vec![key_cycles],
+                "the class can loop exactly when the key's status cycles"
+            );
+        }
+    }
+}

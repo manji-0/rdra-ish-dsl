@@ -890,10 +890,12 @@ fn a_capped_graph_decides_nothing_the_full_graph_contradicts() {
 
 /// The run with `WF_vars(Next)` on a reduced cone (docs/formal-verification.md,
 /// "WF_vars(Next) on a reduced cone") never contradicts the same run on the unreduced cone:
-/// its `ok` is the unreduced `ok`, and a counterexample it certifies is one there. Two cases
-/// pin what it decides: on `cone_reduced_class_loops` the run blind to the class loop answers
-/// ok where the property fails, and the conservative run finds the loop; on
-/// `cone_reduced_loop_unreached` the conservative run's counterexample does not lift.
+/// its `ok` is the unreduced `ok`, and a counterexample it certifies is one there. Four cases
+/// pin what it decides: on `cone_reduced_class_loops` and `cone_reduced_inner_class_loops`
+/// the run blind to the class loop answers ok where the property fails, and the conservative
+/// run finds the loop (in the second only through an inner class); on
+/// `cone_reduced_loop_unreached` the conservative run's counterexample does not lift; on
+/// `cone_reduced_loop_fair_enabled` it decides ok with classes that can loop.
 #[test]
 fn a_reduced_wf_next_run_decides_what_the_unreduced_one_decides() {
     use rdra_ish_core::lifecycle::{ReducedVerdict, Spurious};
@@ -935,8 +937,10 @@ fn a_reduced_wf_next_run_decides_what_the_unreduced_one_decides() {
                 _ => panic!("{name:?}: the reduced run says {got:?}, the unreduced cone {truth:?}"),
             }
             let blind_holds = matches!(blind, Ok(PropertyVerdict::Holds));
+            let marks = reduced.reduction().map_or(0, |r| r.divergence.looping);
             let tag = match got {
                 ReducedVerdict::Violated(_) if blind_holds => "found what the blind run misses",
+                ReducedVerdict::Holds if marks > 0 => "ok with classes that can loop",
                 ReducedVerdict::Spurious(Spurious::NoLoop) => "spurious, no loop",
                 _ => "agrees",
             };
@@ -951,5 +955,16 @@ fn a_reduced_wf_next_run_decides_what_the_unreduced_one_decides() {
     assert_eq!(
         at("cone_reduced_loop_unreached", "SeenFinishes"),
         Some("spurious, no loop")
+    );
+    // A class loops, but a fair step is enabled there: the run decides ok on the reduced
+    // cone with the marks present, and does not fall back.
+    assert_eq!(
+        at("cone_reduced_loop_fair_enabled", "JobStarts"),
+        Some("ok with classes that can loop")
+    );
+    // Only the inner reduction's class shows the loop.
+    assert_eq!(
+        at("cone_reduced_inner_class_loops", "JobStarts"),
+        Some("found what the blind run misses")
     );
 }
