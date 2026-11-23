@@ -1,4 +1,4 @@
-# When To Use TLA+ vs `check` and `states`
+# When To Use `verify` vs `check` and `states`
 
 <!-- derived-from ../../../docs/formal-verification.md -->
 <!-- derived-from ../../../docs/state-derivation.md -->
@@ -13,10 +13,11 @@
 | `col < now` / DateTime vs `now` | `check` or `verify` | Global `now` + `Tick`; the invariant finds violations |
 | `property` `always` / `eventually` / `leads_to` | `verify` | Path properties; `check` and `states` do not evaluate them |
 | `property` `stable` / `unchanged` / `precedes` | `verify` | Safety properties BFS decides on their cone, but only `verify` runs it: `check` and `states` evaluate no `property` |
+| `property` `can_reach` (each instance can still finish) | `verify` | BFS decides it on its cone; TLC cannot check it, and `check` and `states` evaluate no `property` |
 | `after(UC).assert(...)` | `check` or `verify` | Checked after the last step of each run of the use case |
 | `invariant(...).when(...).none/has(...)` | `check`, or `verify` for two related rows | Quantifiers over present instances |
 | Multi-entity `forbidden` / `invariant` + `.along` | `check` for one instance, `verify` for two | Both join instances through the `relate` owners |
-| 1:1 key (`Unique_*`) | `verify` | Two children of one parent need two instances; at one it holds vacuously |
+| 1:1 key, `@unique` column set, N:M junction key pair (`Unique_*`) | `verify` (or `check --instance-count 2`) | Two rows that share the key or the values need two instances; at one it holds vacuously |
 | A use case that writes two entities joined only through a third (`UnjoinedWrite_*` warning) | `verify` | One instance has one row between, so only two show rows of different parents |
 | Child-side minimum (`MinCard_*`), `@check` (`Check_*`) | `check` or `verify` | One instance already shows a parent without a child, or a bad value |
 

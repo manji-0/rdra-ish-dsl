@@ -31,6 +31,13 @@ colours. The outputs of declared facts and the data layer (`diagram` of every ot
 ER, and `tla` exports) still write and print one note. TLC on the `tla` export finds no
 deadlock and no state without a witness, so run `verify` for those.
 
+These outputs, `codegen`, and `next` explore the lifecycle at the bounds `check` runs at by
+default: no state cap, 1,024 patterns per entity, and `memory` under `[check]` in
+`rdra.toml` (4GiB unless set). They take no `--memory` flag. A cone past the limit is
+`MemoryCapReached`: it refuses `diagram --kind state` and `codegen` (exit 1); the other
+diagrams, `list`, `csv`, and `export` still write and print a note. Raise `memory` under
+`[check]`, or narrow the model.
+
 ## Commands
 
 ```sh

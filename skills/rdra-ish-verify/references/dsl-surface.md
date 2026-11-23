@@ -57,9 +57,10 @@ property ShippedOnceCaptured
   hop no key binds is `UnbindableScope` (example below the table).
 - Only `verify` evaluates properties. `check` and `states` verify safety only, by state
   exploration, and evaluate no `property`; `check` prints a `note:` that it did not.
-  `verify` checks `always`, `eventually`, and `leads_to` each in its own TLC run on its cone
-  (the whole model only when the cone does not decide it). It decides `can_reach`,
-  `stable`, `unchanged`, and `precedes` by BFS on their cone, with no TLC run.
+  `verify` checks `always`, `eventually`, and `leads_to` each alone with its native checker
+  on its cone (the whole model only when the cone does not decide it); `--with-tlc` runs TLC
+  on the same runs beside it. It decides `can_reach`, `stable`, `unchanged`, and
+  `precedes` by BFS on their cone, with no TLC run even under `--with-tlc`.
 - `can_reach(expr)` says the actors can still finish each present instance: from every
   reachable state, some path on which the instance stays present reaches `expr`. It is CTL
   `AG (present => EF expr)`, which TLC cannot check, so `verify` decides it by BFS on its
@@ -266,7 +267,7 @@ forbidden(Disclosure, status == file, acquired == false)
 ```
 
 Use Int / Money / Decimal columns and `sets(UC, E.col == N)` when the quantity itself
-must be checked; `check` and TLC both evaluate a comparison on the values over
+must be checked; `check` and `verify` both evaluate a comparison on the values over
 `0..--int-range-max`. Drive the comparison with `drives(UC, E.col op rhs, true|false)` only
 when the model does not track the values.
 
@@ -276,7 +277,8 @@ A column typed by a `variation` (`method: PaymentMethod`) is an attribute, not a
 lifecycle. `states` and the TLA+ export give it a variable only when a `sets`, an
 entity-local or multi-entity constraint, a condition body, an `after(UC).assert`, or a
 `property` names it. A created instance takes any value unless the creating use case sets
-it, and `@default` does not pin the choice, so TLC checks the rule against each value.
+it, and `@default` does not pin the choice, so `check` and `verify` check the rule
+against each value.
 An update keeps the value unless the use case `chooses` it, which again takes every value,
 or only the values its `chooses(UC, E.col, value)` lines list. A `transitions` on it is an
 error, and so is `chooses` on any other column.
@@ -340,6 +342,5 @@ forbidden(Notice, final == true, scope == free)
 ## Conditions
 
 A `condition` with a `holds` body that `applies_to` a use case (or an API that the use case
-invokes) is a guard on that use case in `states`, `check`, and the TLA+ export. TLC checks
-it. A body applied to a use case that writes nothing is `UnbindableCondition`. A condition
+invokes) is a guard on that use case in `states`, `check`, `verify`, and the TLA+ export. A body applied to a use case that writes nothing is `UnbindableCondition`. A condition
 with only `combines` is a trace link and guards nothing.

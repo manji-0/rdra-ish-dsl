@@ -61,11 +61,12 @@ A good RDRA-ish analysis report does three things:
   passed. Report everything under `not checked:` (a `--buc` or `--entity` scope, or a
   cap) as not checked.
 - When a cap or the memory limit stops the exploration (`PatternCapReached`,
-  `StateCapReached`, `MemoryCapReached`), say so and
-  narrow the analysis before drawing strong conclusions. Name the columns and use cases the
-  `StateCapReached` message lists as growing the cone, and raise `--max-states` only after
-  saying why the cone is that large. A `MemoryCapReached` message estimates what finishing
-  the cone needs; report that figure, and narrow before raising `--memory` past it.
+  `MemoryCapReached`, or `StateCapReached` under a `--max-states` you passed), say so and
+  narrow the analysis before drawing strong conclusions. `check` and `states` have no state
+  cap by default: the memory limit (`--memory`, else `memory` under `[check]` in
+  `rdra.toml`, else 4GiB) is what stops a cone. Name the columns and use cases a
+  `StateCapReached` or `MemoryCapReached` message lists as growing the cone, and say why the cone is that large before raising a limit.
+  When a `MemoryCapReached` message names a `--memory` that would finish the cone, report that figure, and narrow before raising `--memory` past it.
 
 ## Recommendation Patterns
 
