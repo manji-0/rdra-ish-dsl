@@ -663,7 +663,13 @@ The cone's vars split into a target side T and the rest S:
   a choice starts from the base value in the creating action and from any value elsewhere, a
   transition is its arms, and the clock ticks up. A raised mark, an existence, an owner key,
   and a status whose arms all point forward are monotone. The rule is checked on the cone,
-  so a model that adds a backward arm loses the reduction and nothing else. The quotient is
+  so a model that adds a backward arm loses the reduction and nothing else. The counter of a
+  [counted trigger](./state-derivation.md#counted-triggers) is never monotone, whatever arms
+  the cone holds, and the split puts every counter in T, with its raisers and its handler,
+  which write it: a counted edge is never reduced across. Every action that reads a counter
+  also writes it, so a counter in S could only be internal to S, which the argument below
+  allows; T is the simpler rule, and the one #220 asked for
+  ([design](./design/counted-events.md#the-reduction)). The quotient is
   then computed on S *extended* with its inputs (`restrict_to` of S and the inputs, without
   the havoc of a `Triggered` parameter): the S actions are silent, and every T action that
   writes an input is a *rise*, kept with the guards it has on S and the inputs. The
@@ -1182,10 +1188,14 @@ names each gap that 2.0 keeps, how to see it in a run, and what you can do about
 [compatibility contract](./compatibility.md#bounds) promises results only within these
 gaps.
 
-- **The order is by row and the mark counts no events.** A use case that a use case's
-  event triggers runs only after a raise on its rows (#112), but the record of the raise is
-  a latch: after the first raise the handler runs as often as its states and guards allow,
-  a second raise queues nothing, and a raiser never waits for its handler. The order ties
+- **The order is by row and the mark counts no events, unless the edge says `.counted`.** A
+  use case that a use case's event triggers runs only after a raise on its rows (#112), but
+  the record of the raise is a latch: after the first raise the handler runs as often as its
+  states and guards allow, a second raise queues nothing, and a raiser never waits for its
+  handler. `triggers(Ev, UC).counted(k)` counts the raises of that one edge instead: the
+  handler runs once per raise, and a raise with `k` pending is the violation
+  `EventOverflow_<E>_<Ev>_<UC>`, which is a limit of the model unless `k` is the real
+  capacity ([Counted triggers](./state-derivation.md#counted-triggers)). The order ties
   the handler to the raiser's row only through a parameter that is that row or its parent
   through the raiser's key; a handler that binds the entity otherwise runs on any raised
   row (`UnjoinedTrigger`), and raisers with no entity in common order nothing
@@ -1198,7 +1208,8 @@ gaps.
   raised`, which names each step that ran without its event. What you can do: a handler
   that must run once per event takes a from-state the raiser sets and the handler leaves,
   as a `transitions` arm; a rule that must be checked with the order reads something the
-  raiser writes, which pulls the raiser into its cone. [`triggers` and event-driven BUC
+  raiser writes, which pulls the raiser into its cone; a handler that must run once per
+  event can also take `.counted(k)`. [`triggers` and event-driven BUC
   chaining](./language-reference.md#triggers-and-event-driven-buc-chaining) has the rules
   from the model's side.
 - **Some cones are compared with TLC at 1 instance only.** `engine_equivalence` checks that

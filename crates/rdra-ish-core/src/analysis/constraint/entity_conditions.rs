@@ -141,7 +141,10 @@ pub(crate) fn context_value_from_arg(
             }
             Some(BusinessMappingContextValue::Ref(node))
         }
-        PredicateArg::Transition { .. } | PredicateArg::Card(_) | PredicateArg::Expr(_) => None,
+        PredicateArg::Transition { .. }
+        | PredicateArg::Card(_)
+        | PredicateArg::Int(_)
+        | PredicateArg::Expr(_) => None,
     }
 }
 
@@ -156,7 +159,7 @@ fn context_arg_id(arg: &PredicateArg) -> String {
         }
         PredicateArg::Lit(s) => s.clone(),
         PredicateArg::Transition { .. } => "<transition>".to_string(),
-        PredicateArg::Card(c) => c.clone(),
+        PredicateArg::Card(c) | PredicateArg::Int(c) => c.clone(),
         PredicateArg::Expr(_) => "<expr>".to_string(),
     }
 }

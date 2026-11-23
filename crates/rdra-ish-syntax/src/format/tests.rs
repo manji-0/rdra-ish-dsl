@@ -410,3 +410,11 @@ fn keeps_a_default_bare_or_quoted_as_written() {
         "entity E \"E\" {\n  n: Int @default(0)\n  m: Money @default(\"3\")\n  s: Enum(a, b) @default(a)\n}\n",
     );
 }
+
+#[test]
+fn keeps_a_counted_trigger() {
+    assert_formats_to(
+        "triggers( EvPaid,Post ).counted( 2 )\n",
+        "triggers(EvPaid, Post).counted(2)\n",
+    );
+}

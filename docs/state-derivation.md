@@ -41,6 +41,7 @@ holds one value per slot.
 | An owner (a `relate` foreign key) | the parent's slot, or `null` for an optional relate | The entity is the child of an N:1, 1:N, or 1:1 `relate` |
 | A run mark `<E>._run_<UC>` | `none`, `1`, .., `k-1` | A use case split into k transaction groups writes the entity in a group before its last (see [Runs of a split use case](#runs)) |
 | A raised mark `<E>._raised_<Ev>` | `false`, `true` | Every use case that raises `Ev` has an action, some use case with an action is triggered by it, and `E` is a mark entity of the event (see [Triggers](#triggers)) |
+| A counter `<E>._pending_<Ev>_<UC>` | `0`, `1`, .., `k`, `over` | As for a raised mark, for an edge `triggers(Ev, UC).counted(k)` (see [Counted triggers](#counted-triggers)) |
 | `now` | `0..5` | Something compares a column to `now` |
 
 A `@derived` column is never a variable. A construct that reads a Bool `@derived` column
@@ -191,6 +192,26 @@ own](./language-reference.md#a-use-case-that-also-starts-on-its-own)); `triggers
 opt-out. The mark is not an axis of `states`, a delete does not reset it, and it costs one
 Bool per slot of each mark entity, only in a cone that reads it
 ([Exploration by cone of influence](#exploration-by-cone-of-influence)).
+
+<a id="counted-triggers"></a>**Counted triggers.** `triggers(Ev, UC).counted(k)`, with `k`
+from 1 to 16, replaces the latch of that one edge with a counter
+([design](./design/counted-events.md)). Each mark entity `E` the edge reads gets
+`<E>._pending_<Ev>_<UC>` per slot, `0` at the start. The last step of every raiser takes it
+from `i` to `i + 1` on its row, and from `k` to `over`; it has no guard, so a raiser never
+waits. The first step of `UC` (each variant) runs only where the counter is not `0`, printed
+as the same `event <Ev> was raised on the bound row (triggers)`, and takes it from `i` to
+`i - 1`. At `over` a raise changes nothing and the handler runs as under the latch, with no
+decrement. The state rule `EventOverflow_<E>_<Ev>_<UC>` says no present row is at `over`,
+so a raise with `k` already pending is a violation with a trace; it has no premise, so it
+is never vacuous. The counter belongs to its edge: a latch edge of the same event keeps the
+shared latch, and two counted handlers have a counter each. The counter is not an axis of
+`states`, and a delete does not reset it.
+
+A counted edge needs a tracked edge. On a free event, on a handler that a free trigger also
+starts or that writes nothing, on raisers with no entity in common, on a handler that raises
+the event itself, or on a raiser that binds a mark entity twice, `.counted` is the error
+`UncountedTrigger`, naming the reason. An edge whose raiser or handler the run's scope leaves
+out (`--buc`, `--without-usecase`) is not checked in that run, and draws no error.
 
 An action takes one parameter per entity it writes. A `creates` takes the lowest
 `absent` slot. An `updates` or `deletes` takes any `present` slot. The
@@ -558,6 +579,10 @@ cone of influence:
   with the order, since the view keeps its own use cases' marks. The `bounds:` line is
   unchanged. The exact cone of a handler pulls each raiser's reads in, along a chain of
   events, so a view grows where an event joins two lifecycles that 1.x explored apart.
+  A counter of a [counted trigger](#counted-triggers) is never left out: the raisers and
+  the handler read it through their own transitions, so a cone that holds any of them holds
+  the counter and every action that writes it. A cone of a raiser therefore holds the
+  handler too, which the latch did not need.
 - **Shared.** Targets with the same cone are explored once.
 - **Reduced in `verify`.** `verify` explores each cone reduced by its independent
   sub-lifecycle, the entities of the cone that its targets' actions never write, quotiented
@@ -947,10 +972,11 @@ these names, and the `// expect` headers of the samples list the names of the er
 | `UnanchoredTrigger { event, usecase, raisers, site }` | `UnanchoredTrigger_<E>_<event>_<usecase>` | info | The use cases that raise the event bind no entity in common, so the event has no row to be raised on: the use case it triggers runs as if the event were free (see [Triggers](#triggers)). Reported on the `triggers` line. |
 | `UnjoinedTrigger { event, usecase, entity, site }` | `UnjoinedTrigger_<E>_<event>_<usecase>` | info | The triggered use case binds no row of the entity the event is raised on, and no key joins its rows to one, so any row the event was raised on lets it run: its `Triggered` parameter is unjoined. Reported on the `triggers` line. |
 | `TriggerNeverRuns { usecase, event, site }` | `TriggerNeverRuns_<E>_<usecase>_<event>` | info | A use case that several tracked events trigger never runs after this event, while it runs after another: the variant `<usecase>_by_<event>` carries no edge on a cone that ran to the end. `Runs_<usecase>` is not raised, since the use case runs. A variant that did not fire only on cones that stopped at the cap is not decided (`whether <usecase>_by_<event> can run`). |
+| `UncountedTrigger { event, usecase, why, site }` | `UncountedTrigger_<E>_<event>_<usecase>` | error | A `triggers(Ev, UC).counted(k)` edge has no counter: the event is free, the use case writes nothing or a free trigger also starts it, the raisers share no entity, the use case raises the event itself, or a raiser binds the event's entity twice. `why` names which (see [Counted triggers](#counted-triggers)). Reported on the `triggers` line. |
 | `UnboundCopySource { usecase, column, source, reason }` | `UnboundCopySource_<E>_<usecase>_<column>` | error | A `sets(UC, E.col == F.src)` names an `F` that the step binds to no one row: not written by this or an earlier step of the use case and not the target's parent, a child of the target, or the parent of a child created unlinked. The copy is not applied. |
 | `AmbiguousOwnerLink { statement, a, b, roles, rewrite }` | `AmbiguousOwnerLink_<E>_<a>_<b>` | error | A `.has/.none(...)`, a `holds` body, or a copy joins two entities that several keys join, and no `.role(role)` names one. The message names the candidate roles and the statement with the `.role` to add; the join is left unlinked. |
 | `DerivedColumnRead { column }` | `DerivedColumnRead_<entity>_<column>` | error | A constraint, condition, assertion, or property reads an arithmetic `@derived` column, which the lifecycle cannot evaluate. |
-| `ConstraintViolated { name, ... }` | the rule's name, such as `Forbidden_Order_0` | error | A reachable state breaks a `forbidden`, `invariant`, `required`, `exclusive`, `@check`, multi-entity, or quantifier rule, or a unique set (`Unique_<Entity>_<columns>`, see [Unique column sets](#unique-column-sets)). |
+| `ConstraintViolated { name, ... }` | the rule's name, such as `Forbidden_Order_0` | error | A reachable state breaks a `forbidden`, `invariant`, `required`, `exclusive`, `@check`, multi-entity, or quantifier rule, a unique set (`Unique_<Entity>_<columns>`, see [Unique column sets](#unique-column-sets)), or a counted trigger's `EventOverflow_<E>_<Ev>_<UC>` ([Counted triggers](#counted-triggers)). |
 | `AfterAssertViolated { anchor, ... }` | `AfterAssert_<anchor>_<i>` | error | A step of the anchor use case ends in a state that fails the assertion. |
 | `PropertyViolated { name, kind, instance, witness, lasso, ... }` | the property's name, such as `NeverShipped` | error | A property fails: an `always` at a state, an `eventually` or `leads_to` on a lasso that replays through the step relation and passes the property's fairness, a `stable` or `unchanged` at the step that breaks it, or a `precedes` at the state where its second condition first holds without the first. Only `verify` reports it; `check` and `states` evaluate no property. |
 | `GoalUnreachable { name, instance, confined, states, .. }` | the property's name, such as `OrderCanFinish` | error | A `can_reach` property fails: from the last state of a shortest trace, no path on which the instance stays present reaches the goal. `confined` lists what the goal reads of the instance in the states it can still reach. Only `verify` reports it. |

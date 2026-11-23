@@ -275,6 +275,7 @@ only the methods below, and any other name is an `unknown chain method` error
 | `reads` | `.by(...)`, `.order(...)`, `.page(...)`, `.count()`, `.sum(...)`, each at most once: the [query shape](#query-shapes) |
 | `links`, `relinks`, `unlinks` | `.role(...)`, to pick the key when several join the child to the parent |
 | `creates`, `updates`, `deletes` | `.apart()`, on a use case's write: the row need not be joined to the other rows the use case writes, so it draws no `UnjoinedWrite` |
+| `triggers` | `.counted(k)`, at most once, on an edge from an event to a use case: the use case runs once per raise, with at most `k` (1 to 16) raises pending per row. See [Counting raises](#counting-raises-counted) |
 | every other predicate (including `combines`) | none |
 
 ---
@@ -766,7 +767,8 @@ after(IssueCert).assert(CertificateOrder.status == executed)
 ```
 
 The record is a latch: once the event was raised on a row, the triggered use case runs
-there as often as its states and guards allow, and a second raise changes nothing. A use
+there as often as its states and guards allow, and a second raise changes nothing
+(`.counted(k)` makes it count, see [Counting raises](#counting-raises-counted)). A use
 case several events trigger runs after any of them; `check` and `verify` judge it as one
 use case, and a trace names the step that ran after `Ev` as `<UC>_by_<Ev>`. A raiser never
 waits for the use cases its event triggers. Whether two use cases are ordered, and how the
@@ -806,6 +808,45 @@ triggers(EvSurveyReported, AssessDamage)
 
 Dropping the use-case edge (`triggers(Ev, Buc)` alone) keeps the event diagram and frees
 the use case; that is a model change a reviewer sees, not a modifier that hides one.
+
+#### Counting raises: `.counted`
+
+<!-- derived-from ./design/counted-events.md#semantics -->
+
+`triggers(Ev, UC).counted(k)` makes the edge count: each raise on a row adds one pending
+run, each run of `UC` takes one, and `UC` runs only while a raise is pending. `k`, a whole
+number from 1 to 16, is how many raises may be pending on one row. Use it when the business
+asks for "once per event": every payment is posted exactly once, no notification is lost
+when two arrive before the handler, a queue of capacity 2 never overflows.
+
+```rdra
+raises(ReceivePayment, EvPaymentReceived)
+triggers(EvPaymentReceived, PostToLedger).counted(2)
+```
+
+A raise never waits. A raise that finds `k` raises already pending is the violation
+`EventOverflow_<E>_<Ev>_<UC>` (`<E>` the entity the event is raised on), which `check` and
+`verify` report with a trace like any rule, and which `verify --prove` tries to prove for any
+number of rows. When `k` is the real capacity, the overflow is a defect of the model. When it
+is not, the overflow says only that `k` is too small for the model, so raise it. After an
+overflow the row keeps no count, and `UC` runs there as under the latch.
+
+Counting removes runs: a counted handler runs only where the latch would also let it run.
+So `.counted` cannot make a `forbidden` fail that passes without it; what it exposes is a
+run the latch allowed and the model never earned, through `leads_to`, `can_reach`, a
+deadlock, or a state with no witness. With `PostToLedger` fair,
+`leads_to(Payment.status == received, Payment.status == posted).fair(PostToLedger)` then
+says every raise is handled.
+
+Each counted edge has its own count, also when other handlers share the event; a handler
+without `.counted` keeps the latch. `.counted` needs an edge the order already tracks: on an
+event that is free, on a use case that a timer or a free event also starts, on raisers with
+no entity in common, on a use case that raises the event itself, or on a raiser that binds
+the event's entity twice, `check` reports `UncountedTrigger` (error) and names the reason.
+A `.counted` on a timer, a BUC, or an external system, a value outside 1 to 16, or a second
+`.counted` on one line is `CountedTriggerInvalid`. `codegen` does not print a use case that
+raises or handles a counted event, and says so. The cost is one value of `k + 2` per row in
+every cone that holds the raiser or the handler, and such a cone holds both.
 
 `outbox(event::E)` declares that a raised event is intentionally published outside the
 local model boundary, such as a domain event sent to an outbox, external subscriber, or

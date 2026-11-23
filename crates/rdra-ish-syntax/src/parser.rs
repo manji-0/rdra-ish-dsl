@@ -926,6 +926,8 @@ fn chain_call() -> impl Parser<Token, ChainCall, Error = Simple<Token>> + Clone 
             predicate_arg()
                 .map(|arg| (arg, false))
                 .or(kind_word_arg().map(|arg| (arg, true)))
+                // A bare integer (`.counted(2)`); a predicate's own arguments take none.
+                .or(select! { Token::IntLit(s) => PredicateArg::Int(s) }.map(|arg| (arg, false)))
                 .separated_by(just(Token::Comma))
                 .allow_trailing(),
         )
@@ -935,6 +937,13 @@ fn chain_call() -> impl Parser<Token, ChainCall, Error = Simple<Token>> + Clone 
                 return Err(Simple::custom(
                     span,
                     "`actor` and `system` are bare words only in `.caller(...)`",
+                ));
+            }
+            let int = |(arg, _): &(PredicateArg, bool)| matches!(arg, PredicateArg::Int(_));
+            if name != "counted" && args.iter().any(int) {
+                return Err(Simple::custom(
+                    span,
+                    "a bare number is an argument only of `.counted(k)`",
                 ));
             }
             let args = args.into_iter().map(|(arg, _)| arg).collect();

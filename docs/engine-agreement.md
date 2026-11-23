@@ -184,6 +184,7 @@ loading the machine) it takes about 25 s in release, measured.
 | `fair_enabled_disabled_forever` | Enabled and disabled forever, alternately, is not forced | counterexample |
 | `fair_stop_vs_wf_next` | A stop Fair_P allows and WF_vars(Next) forbids | `PaidShips` ok via `_WF`; `ShippedReopens` counterexample |
 | `fair_triggered_handler` | A fair handler keyed by its `Triggered` row | fair ok; unfair counterexample (whole model) |
+| `fair_counted_exposes_lost_run` | The latch hides a missing raise that a counted handler exposes | counted counterexample, deadlock, no witness; latch ok |
 | `fair_split_use_case` | A split use case is fair per step (`Earlier`) | fair ok; unfair counterexample (whole model) |
 | `fair_creating_use_case` | A fair use case that creates (`New`) and runs out of slots | counterexample; voucher-per-bill ok |
 | `fair_same_edge_two_bindings` | One edge with a fair and a non-fair label | counterexample |
@@ -208,6 +209,8 @@ loading the machine) it takes about 25 s in release, measured.
 | `safety_stable_across_delete` | `stable` and `unchanged` across delete and create | ok; `PendingStays` counterexample |
 | `safety_can_reach_frees_slots` | `can_reach` where slots run out | counterexample; per-bill ok |
 | `safety_vacuity` | A trigger that never holds | ok; `always` counterexample |
+| `safety_counted_once_per_raise` | A counted handler runs once per raise; the latch runs twice after one | counted ok, z3 proved; latch counterexample |
+| `safety_event_overflow` | A raise past `k` is `EventOverflow`, and the raiser never waits | `k = 2` counterexample; `k = 3` ok, z3 proved |
 | `safety_unique_sets` | A unique column set over column vars, owner vars, and a nullable Int that two rows leave null | single column and junction counterexample; guarded set and null set ok, z3 proved |
 | `cap_temporal_budget_zero` | `--temporal-budget 0` | not decided on both engines |
 | `cap_memory_limit` | `--memory 2KiB` stops runs partway (native only) | not decided |
