@@ -184,6 +184,7 @@ impl<'t> Bfs<'t> {
             bindings: Bindings::default(),
             charge: caps.memory.map(Charge::new),
             peak_admitted: 0,
+            layers: Default::default(),
         }
     }
 
@@ -249,6 +250,7 @@ impl<'t> Bfs<'t> {
     /// Reads `moves[range]`, the moves from `states[at]`; false when a cap stops the run.
     /// `s2` is a state of the system, overwritten with each successor in turn.
     fn take(&mut self, at: usize, moves: &Moves, range: Range<usize>, s2: &mut State) -> bool {
+        self.layers.read(at);
         let from = at as u32;
         let s = self.states[at].clone();
         for i in range {
@@ -340,6 +342,7 @@ impl<'t> Bfs<'t> {
         self.seen.insert(s.clone(), self.states.len() as u32);
         self.states.push(s);
         self.parents.push(parent);
+        self.layers.admit(parent.is_none());
         true
     }
 

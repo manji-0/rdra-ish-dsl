@@ -5,8 +5,8 @@ use std::fmt;
 
 use rdra_ish_core::lifecycle::{
     derive_states_built, label_prefix, ActionOrigin, Birth, Blocked, Bounds, BoundsLine, Caps,
-    Change, GuardWhy, InvText, Loop, ModelRef, ParamRole, Scope, Severity, Site, StateDiag,
-    StatesReport, Trace, TraceStep, TransitionSystem,
+    Change, Estimate, GuardWhy, Held, InvText, Loop, ModelRef, ParamRole, Scope, Severity, Site,
+    StateDiag, StatesReport, Trace, TraceStep, TransitionSystem,
 };
 use rdra_ish_core::memory::MemorySize;
 use rdra_ish_core::model::{LinkKind, SetValue};
@@ -782,6 +782,70 @@ fn violation_message(text: &InvText, p: &str) -> String {
     }
 }
 
+/// A run stopped at the memory limit: what it held, what its layers say about the states the
+/// cone reaches, and what to give `raise` to finish. The cone's variables bound its states;
+/// that bound is named only when the layers say less and it stays under 1TiB.
+fn memory_cap_message(diag: &StateDiag, raise: &str, states: usize, held: &Held) -> String {
+    let narrow = "narrow with --entity or --buc";
+    let each = if states == 0 {
+        String::new()
+    } else {
+        format!("; held at {} B per state", held.bytes_per_state(states))
+    };
+    let estimate = held.layers.estimate();
+    let frontier = match estimate {
+        Estimate::Falling {
+            states: about,
+            peak,
+            depth,
+        } => format!(
+            "; the frontier peaked at depth {peak} and has shrunk for {} layers since, so the \
+             cone probably holds about {about} states (its falling side taken to mirror its \
+             rising side: an estimate, not a bound)",
+            depth - peak
+        ),
+        Estimate::Unsettled { peak, depth } => format!(
+            "; the frontier peaked at depth {peak}, but by depth {depth} it has not fallen far \
+             enough to estimate the states left"
+        ),
+        Estimate::Overrun { peak, .. } => format!(
+            "; the frontier peaked at depth {peak}, and the states since already outnumber its \
+             rise, so its layers give no estimate of the states left"
+        ),
+        Estimate::Rising {
+            depth,
+            last,
+            before,
+        } if before > 0 => format!(
+            "; the frontier still grows ({last} new states at depth {depth}, {:.1}x the depth \
+             before), so its layers give no estimate of the states left",
+            last as f64 / before as f64
+        ),
+        Estimate::Rising { .. } => {
+            "; the run stopped before its layers show how the frontier grows".to_string()
+        }
+    };
+    let bound = held.bound.map(|b| b.max(states as u64));
+    match (estimate.states_to_cover(), bound) {
+        (Some(cover), bound) if bound.is_none_or(|b| cover <= b) => {
+            let need = MemorySize::covering(held.bytes_for(cover));
+            format!(
+                "{diag}{each}{frontier}; with a quarter to spare, this cone alone probably needs \
+                 about {need}: try {need} with {raise}, or {narrow}"
+            )
+        }
+        (_, Some(bound)) if held.bytes_for(bound) <= 1 << 40 => {
+            let need = MemorySize::covering(held.bytes_for(bound));
+            format!(
+                "{diag}{each}{frontier}; the cone's variables allow at most {bound} states, so \
+                 if all are reachable this cone alone needs at least about {need}; raise it to \
+                 {need} or more with {raise}, or {narrow}"
+            )
+        }
+        _ => format!("{diag}{each}{frontier}; raise it with {raise}, or {narrow}"),
+    }
+}
+
 pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
     match diag {
         StateDiag::UnreachableEnumVariant { column, variant } => format!(
@@ -811,30 +875,7 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
             states,
             held,
             ..
-        } => {
-            let narrow = "narrow with --entity or --buc";
-            let each = if *states == 0 {
-                String::new()
-            } else {
-                format!("; held at {} B per state", held.bytes_per_state(*states))
-            };
-            match (held.bound, held.bytes_to_finish(*states)) {
-                (Some(bound), Some(need)) if need <= 1 << 40 => {
-                    let need = MemorySize::covering(need);
-                    format!(
-                        "{diag}{each}; the cone's variables allow at most {bound} states, so if \
-                         all are reachable this cone alone needs at least about {need}; raise it \
-                         to {need} or more with {raise}, or {narrow}"
-                    )
-                }
-                (Some(bound), Some(_)) => format!(
-                    "{diag}{each}; the cone's variables allow at most {bound} states, over 1TiB \
-                     if all were reachable, so that bound does not say what finishing needs; \
-                     {narrow}"
-                ),
-                _ => format!("{diag}{each}; raise it with {raise}, or {narrow}"),
-            }
-        }
+        } => memory_cap_message(diag, raise, *states, held),
         StateDiag::TimeBudgetReached { .. } => format!("{diag}; raise --temporal-budget"),
         StateDiag::ConstraintViolated {
             text,

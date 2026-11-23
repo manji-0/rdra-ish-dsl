@@ -9,7 +9,10 @@
 //! Run: `cargo run --release -p rdra-ish-core --example lifecycle_measure -- STATE_CAP [verify [SAMPLE]]`
 //! `SAMPLE` is a line of `samples.txt` or a path to any project. `RDRA_CONE_VARS=1` prints the
 //! vars of each cone under its line, and the vars of its sub-lifecycle where it reduces.
-//! `RDRA_REDUCED_ONLY=1` skips the unreduced exploration.
+//! `RDRA_REDUCED_ONLY=1` skips the unreduced exploration. `RDRA_LAYERS=1` prints, under each
+//! run of a thousand states and more, reduced or not, the states first reached at each depth
+//! with the depth being expanded and how many of its states were, and for a complete run the
+//! same for that cone rerun under a state cap of 10%, 25%, and 50% of its states.
 //!
 //! Under each temporal property's line it prints what the graph passes cost on the cone's
 //! run: moves, self-loops, the time to build the adjacency without self-loops, and the time
@@ -21,7 +24,7 @@ use std::path::Path;
 use std::time::Instant;
 
 use rdra_ish_core::lifecycle::{
-    Bounds, Caps, ComponentRun, Cone, Scope, Seed, Target, TransitionSystem, VarId, VarKind,
+    Bounds, Caps, ComponentRun, Cone, Layers, Scope, Seed, Target, TransitionSystem, VarId, VarKind,
 };
 use rdra_ish_core::project::load_project;
 
@@ -93,6 +96,33 @@ fn bytes_stats(run: &ComponentRun) -> String {
     )
 }
 
+/// `reading expanded | new states per depth`.
+fn layers_line(layers: &Layers) -> String {
+    let new: Vec<String> = layers.new.iter().map(u64::to_string).collect();
+    format!("{} {} | {}", layers.reading, layers.expanded, new.join(" "))
+}
+
+/// The layers of a run of a thousand states and more, and, for a complete one, of the same
+/// system rerun under a state cap of 10%, 25%, and 50% of its states.
+fn print_layers(name: &str, system: &TransitionSystem, run: &ComponentRun) {
+    if run.states.len() < 1000 {
+        return;
+    }
+    if !run.complete {
+        println!("    layers {name} capped: {}", layers_line(&run.layers));
+        return;
+    }
+    println!("    layers {name}: {}", layers_line(&run.layers));
+    for pct in [10, 25, 50] {
+        let at = run.states.len() * pct / 100;
+        let stopped = system.clone().run(Caps::new(usize::MAX, at));
+        println!(
+            "    layers {name} at {pct}%: {}",
+            layers_line(&stopped.layers)
+        );
+    }
+}
+
 fn main() {
     let cap: usize = std::env::args()
         .nth(1)
@@ -105,6 +135,7 @@ fn main() {
     let only = std::env::args().nth(3);
     let show_vars = std::env::var_os("RDRA_CONE_VARS").is_some();
     let reduced_only = std::env::var_os("RDRA_REDUCED_ONLY").is_some();
+    let show_layers = std::env::var_os("RDRA_LAYERS").is_some();
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let list = std::fs::read_to_string(repo.join("samples.txt")).expect("samples.txt");
     let caps = Caps::new(usize::MAX, cap);
@@ -172,7 +203,14 @@ fn main() {
                 None if reduced_only => (0, "-".to_string(), "-".to_string(), "-".to_string()),
                 None => {
                     let start = Instant::now();
-                    let run = ts.restrict_to(&cone.vars, &cone.keep).run(caps);
+                    let system = ts.restrict_to(&cone.vars, &cone.keep);
+                    let run = if show_layers {
+                        let run = system.clone().run(caps);
+                        print_layers(&format!("unreduced {name}"), &system, &run);
+                        run
+                    } else {
+                        system.run(caps)
+                    };
                     let n = if run.complete {
                         run.states.len()
                     } else {
@@ -203,7 +241,13 @@ fn main() {
                     sub_vars = system
                         .reduction()
                         .map(|r| var_names(&system, r.vars().iter().copied()));
-                    let run = system.run(caps);
+                    let run = if show_layers {
+                        let run = system.clone().run(caps);
+                        print_layers(&format!("reduced {name}"), &system, &run);
+                        run
+                    } else {
+                        system.run(caps)
+                    };
                     let n = if run.complete {
                         run.states.len().to_string()
                     } else {

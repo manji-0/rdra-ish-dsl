@@ -592,21 +592,43 @@ checked:`, ends with a warning, and exits `0`, or `1` under `--deny-undecided`; 
 `result:` line says `not decided` either way:
 
 What `check` and `states` say when a cone stops at the limit: the states it held, the bytes
-each took (the store counted above, with the state that did not fit), and, from the
-cone's variables, the most states the cone can have (the product of their domains). From
-that bound the message estimates what finishing needs, with
-`32·p2(n) + 2·n·blk(w) + 25·buckets(n) + 12·p2(e)` bytes for `n` states of `w` bytes and `e`
-edges (`p2` rounds up to a power of two, `blk` to 16 bytes, `buckets` to a power of two of
-at least `n·8/7`); on the sample cones of a thousand states and more it stood 2.4% to 6.7%
-over what the run counts. `e` is the edges per state seen so far times the bound; early
-layers have fewer, so the figure is a lower bound if all the states are reachable. The
-bound is loose: most of the product is never reached, and a cone with more than `1TiB` in
-it says so and suggests narrowing in place of a size. The estimate is for the one cone;
-the cones share the limit, so allow more than it says.
+each took (the store counted above, with the state that did not fit), and what the cone's
+BFS layers say about the states it reaches. BFS reaches the cone depth by depth, and the
+run counts the new states of each depth (one number per depth, counted in the store). On
+the sample cones that number rises to a peak and falls about as it rose, so:
+
+- **Past the peak.** Once two whole depths lie past the largest one, the message takes the
+  fall to mirror the rise: the cone probably holds twice the states before the peak plus
+  the peak. It is an estimate, not a bound. On 73 sample cones at `check` and `verify`
+  bounds, stopped at a tenth to nine tenths of their states, the 61 estimates came out at
+  0.51 to 1.37 of the true count, and at 0.74 or more but once. The message names the
+  memory for a quarter more states than the estimate; replayed on those runs, that size
+  covered the store of all but one of the 61 and stood at most 2.6 times over it.
+- **Still rising.** While the last whole depth is the largest yet, nothing says where the
+  peak is, and the message says the frontier still grows and by how much. The peak of the
+  sample cones came after 36% to 100% of their states (63% at the median), so a run that
+  stops early usually gets no estimate.
+- **Just past the peak, or a long fall.** One depth past the peak, or a fall that already
+  holds more states than the mirror gives, gets no estimate either, and the message says
+  which.
+
+Without an estimate from the layers, the message falls back on the cone's variables: the
+most states the cone can have is the product of their domains, and if finishing at that
+many takes no more than `1TiB` the message names that size as what finishing needs at the
+least, if all of them are reachable. The bound is loose: most of the product is never
+reached. A size is computed with `32·p2(n) + 2·n·blk(w) + 25·buckets(n) + 12·p2(e)` bytes
+for `n` states of `w` bytes and `e` edges (`p2` rounds up to a power of two, `blk` to 16
+bytes, `buckets` to a power of two of at least `n·8/7`); on the sample cones of a thousand
+states and more it stood 2.4% to 6.7% over what the run counts. `e` is the edges per
+expanded state seen so far times `n`; early depths have fewer, so that part is low. Every
+figure is for the one cone; the cones share the limit, so allow more than it says.
 
 ```text
-error[MemoryCapReached_Order]: state derivation for entity 'Order': memory limit 1KiB reached at 5 states; results are incomplete: the cone has 3 variables, 2 of them vary (values reached/domain: Order.status 4/5, Order._exists 2/3); new states first reached by: CancelOrder 1, CapturePay 1, PlaceOrder 1, ShipOrder 1; held at 172 B per state; the cone's variables allow at most 30 states, so if all are reachable this cone alone needs at least about 1MiB; raise it to 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
+error[MemoryCapReached_Task]: state derivation for entity 'Task': memory limit 56KiB reached at 256 states; results are incomplete: the cone has 9 variables, 9 of them vary (...); new states first reached by: Flip7 127, Flip6 64, Flip5 32, Flip4 16, Flip3 8, Flip2 4, Flip1 2, Close 1; held at 231 B per state; the frontier peaked at depth 5 and has shrunk for 3 layers since, so the cone probably holds about 258 states (its falling side taken to mirror its rising side: an estimate, not a bound); with a quarter to spare, this cone alone probably needs about 1MiB: try 1MiB with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
+error[MemoryCapReached_Order]: state derivation for entity 'Order': memory limit 1KiB reached at 5 states; results are incomplete: the cone has 3 variables, 2 of them vary (values reached/domain: Order.status 4/5, Order._exists 2/3); new states first reached by: CancelOrder 1, CapturePay 1, PlaceOrder 1, ShipOrder 1; held at 177 B per state; the frontier peaked at depth 2, but by depth 3 it has not fallen far enough to estimate the states left; the cone's variables allow at most 30 states, so if all are reachable this cone alone needs at least about 1MiB; raise it to 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
 ```
+
+The `Task` cone (`crates/rdra-ish-cli/tests/fixtures/memory/flags.rdra`) holds 257 states.
 
 `verify` lists what the cones leave undecided:
 
