@@ -5,9 +5,9 @@ use std::sync::Arc;
 use super::extended::Extended;
 use super::*;
 use crate::lifecycle::cone::VarSet;
-use crate::lifecycle::explore::Caps;
+use crate::lifecycle::explore::{Adjacency, Caps};
 use crate::lifecycle::expr::State;
-use crate::lifecycle::types::ActId;
+use crate::lifecycle::types::{ActId, VarId};
 use crate::lifecycle::TransitionSystem;
 
 /// The classes of S, with the initial states' and the moves' classes.
@@ -19,6 +19,21 @@ pub(super) struct Quotient {
     pub(super) rises: BTreeMap<(u32, Box<[u8]>), u32>,
     pub(super) inner: Option<Arc<Reduction>>,
     pub(super) states: usize,
+    /// Per class, whether it can loop inside itself (`can_loop`).
+    pub(super) loops: Vec<bool>,
+    pub(super) divergence: Divergence,
+}
+
+/// What the divergence marks of one reduction say, for measurement: how many classes can
+/// loop inside themselves, how many hold states that can and states that cannot, and, when
+/// `RDRA_ISH_DIVERGENCE_STATS` is set, the classes a partition that tells the two apart
+/// would have.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Divergence {
+    pub classes: usize,
+    pub looping: usize,
+    pub mixed: usize,
+    pub sensitive: Option<usize>,
 }
 
 /// The partition of a run of the extended sub-lifecycle: the coarsest one that refines
@@ -77,6 +92,12 @@ impl Quotient {
                 rises: BTreeMap::new(),
                 inner: None,
                 states: initial.len(),
+                loops: vec![s_cycles(ext)],
+                divergence: Divergence {
+                    classes: 1,
+                    looping: usize::from(s_cycles(ext)),
+                    ..Divergence::default()
+                },
             });
         }
         // The inputs stay on the nested T side: the rises are kept, and only `obs` anchors.
@@ -160,6 +181,19 @@ impl Quotient {
                 moves[class[x] as usize].push((act, params, class[y]));
             }
         }
+        let (loops, divergence) = match s_cycles(ext) {
+            true => divergence(&run, &sub, &silent, &rise_edges, &initial, &class),
+            false => {
+                let classes = reps.len();
+                // Nothing loops, so a partition that tells divergence apart is this one.
+                let d = Divergence {
+                    classes,
+                    sensitive: std::env::var_os("RDRA_ISH_DIVERGENCE_STATS").map(|_| classes),
+                    ..Divergence::default()
+                };
+                (vec![false; classes], d)
+            }
+        };
         Some(Quotient {
             reps,
             class_of,
@@ -168,8 +202,168 @@ impl Quotient {
             rises,
             inner: sub.reduction.clone(),
             states: n,
+            loops,
+            divergence,
         })
     }
+}
+
+/// Whether some S var is not monotone. When every S var is monotone, each changes finitely
+/// often, so no path of S steps is infinite and no class can loop; an unobserved S, one
+/// class that is never explored, can loop only otherwise.
+fn s_cycles(ext: &Extended) -> bool {
+    let monotone = ext.system.monotone_vars();
+    (0..monotone.len()).any(|v| !monotone[v] && !ext.inputs_local.contains(&VarId::at(v)))
+}
+
+/// Which classes can loop inside themselves (docs/formal-verification.md, "WF_vars(Next) on
+/// a reduced cone"): a class holds a cycle of silent edges between its states, or a state
+/// whose inner class can loop. One depth-first pass over the silent edges, which keeps a
+/// colour per state and the edges by source. Under `RDRA_ISH_DIVERGENCE_STATS` it also counts
+/// the classes that hold both states that can reach such a loop inside the class and states
+/// that cannot, and estimates the classes of a partition that tells them apart.
+fn divergence(
+    run: &crate::lifecycle::explore::ComponentRun,
+    sub: &TransitionSystem,
+    silent: &[(u32, u32)],
+    rises: &[(u32, u32)],
+    initial: &[u32],
+    class: &[u32],
+) -> (Vec<bool>, Divergence) {
+    let n = run.states.len();
+    let classes = class.iter().max().map_or(0, |c| *c as usize + 1);
+    let mut loops = vec![false; classes];
+    let inner = sub
+        .reduction()
+        .filter(|inner| inner.loops.iter().any(|l| *l));
+    let inner_loops = |i: usize| {
+        inner.is_some_and(|inner| {
+            inner
+                .class(sub, &run.states[i])
+                .is_some_and(|c| inner.can_loop(c))
+        })
+    };
+    for i in 0..n {
+        if !loops[class[i] as usize] && inner_loops(i) {
+            loops[class[i] as usize] = true;
+        }
+    }
+    let succ = Adj::new(n, silent);
+    let inside = |x: u32, y: u32| x != y && class[x as usize] == class[y as usize];
+    // White 0, on the stack 1, done 2: an edge to a state on the stack closes a cycle.
+    let mut colour = vec![0u8; n];
+    let mut stack: Vec<(u32, u32)> = Vec::new();
+    for root in 0..n as u32 {
+        if colour[root as usize] != 0 {
+            continue;
+        }
+        colour[root as usize] = 1;
+        stack.push((root, succ.start[root as usize]));
+        while let Some(top) = stack.last_mut() {
+            let (u, k) = *top;
+            if k == succ.start[u as usize + 1] {
+                colour[u as usize] = 2;
+                stack.pop();
+                continue;
+            }
+            top.1 += 1;
+            let v = succ.list[k as usize];
+            if !inside(u, v) {
+                continue;
+            }
+            match colour[v as usize] {
+                0 => {
+                    colour[v as usize] = 1;
+                    stack.push((v, succ.start[v as usize]));
+                }
+                1 => loops[class[v as usize] as usize] = true,
+                _ => {}
+            }
+        }
+    }
+    let looping = loops.iter().filter(|l| **l).count();
+    let mut divergence = Divergence {
+        classes,
+        looping,
+        ..Divergence::default()
+    };
+    if std::env::var_os("RDRA_ISH_DIVERGENCE_STATS").is_some() {
+        divergence.mixed = mixed_classes(n, silent, class, &inner_loops);
+        divergence.sensitive = Some(sensitive_classes(n, silent, rises, initial, &inner_loops));
+    }
+    (loops, divergence)
+}
+
+/// The states on a cycle of silent edges inside one block of `block`, or that hold an inner
+/// class that can loop; and the in-block edges.
+fn on_loop(
+    n: usize,
+    silent: &[(u32, u32)],
+    block: &[u32],
+    inner_loops: &dyn Fn(usize) -> bool,
+) -> (Vec<bool>, Adjacency) {
+    let inside = || {
+        silent
+            .iter()
+            .copied()
+            .filter(|&(x, y)| block[x as usize] == block[y as usize])
+    };
+    let adjacency = Adjacency::new(n, inside);
+    let (comp, count) = adjacency.components();
+    let mut size = vec![0u32; count];
+    comp.iter().for_each(|c| size[*c as usize] += 1);
+    let seeds = (0..n)
+        .map(|i| size[comp[i] as usize] >= 2 || inner_loops(i))
+        .collect();
+    (seeds, adjacency)
+}
+
+/// The classes that can loop and hold a state no silent path inside the class takes to a
+/// loop.
+fn mixed_classes(
+    n: usize,
+    silent: &[(u32, u32)],
+    class: &[u32],
+    inner_loops: &dyn Fn(usize) -> bool,
+) -> usize {
+    let classes = class.iter().max().map_or(0, |c| *c as usize + 1);
+    let (mut can, adjacency) = on_loop(n, silent, class, inner_loops);
+    let mut loops = vec![false; classes];
+    let mut queue: VecDeque<u32> = (0..n as u32).filter(|&i| can[i as usize]).collect();
+    while let Some(at) = queue.pop_front() {
+        loops[class[at as usize] as usize] = true;
+        for &p in adjacency.preds(at) {
+            if !can[p as usize] {
+                can[p as usize] = true;
+                queue.push_back(p);
+            }
+        }
+    }
+    let mut some_cannot = vec![false; classes];
+    for i in 0..n {
+        some_cannot[class[i] as usize] |= !can[i];
+    }
+    (0..classes).filter(|&c| loops[c] && some_cannot[c]).count()
+}
+
+/// The classes of a partition that tells divergence apart, estimated: every state on a
+/// silent cycle inside its `obs` and inputs block steps to a fresh sink, which no other state
+/// is like, and the partition is computed again.
+fn sensitive_classes(
+    n: usize,
+    silent: &[(u32, u32)],
+    rises: &[(u32, u32)],
+    initial: &[u32],
+    inner_loops: &dyn Fn(usize) -> bool,
+) -> usize {
+    let (on, _) = on_loop(n, silent, initial, inner_loops);
+    let sink = n as u32;
+    let mut edges: Vec<(u32, u32)> = silent.to_vec();
+    edges.extend((0..n as u32).filter(|&i| on[i as usize]).map(|i| (i, sink)));
+    let mut first: Vec<u32> = initial.to_vec();
+    first.push(initial.iter().max().map_or(0, |b| b + 1));
+    let blocks = quotient_blocks(n + 1, &edges, rises, &first);
+    blocks[..n].iter().collect::<BTreeSet<_>>().len()
 }
 
 /// The moves of a run by source state, for shortest paths over the silent edges, with the
@@ -379,5 +573,72 @@ impl Adj {
 
     pub(super) fn of(&self, at: u32) -> &[u32] {
         &self.list[self.start[at as usize] as usize..self.start[at as usize + 1] as usize]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lifecycle::tests::model_from;
+    use crate::lifecycle::{Bounds, Scope};
+
+    /// A job behind a gate behind a key, the key's status cycling or only rising.
+    fn model(key_cycles: bool) -> String {
+        let back = match key_cycles {
+            true => {
+                "usecase Relock \"施錠\"\ntransitions(Relock, Key.status, unlocked -> locked)\n"
+            }
+            false => "",
+        };
+        format!(
+            r#"
+entity Key "鍵" {{ id: Int @pk  status: Enum(locked, unlocked) @default(locked) }}
+entity Gate "門" {{ id: Int @pk  status: Enum(shut, open) @default(shut) }}
+entity Job "作業" {{ id: Int @pk  status: Enum(waiting, running) @default(waiting) }}
+relate(Gate, Key, N:1)
+relate(Job, Gate, N:1)
+usecase Unlock "解錠"
+usecase Swing "開く"
+usecase Submit "投入"
+usecase Start "開始"
+transitions(Unlock, Key.status, locked -> unlocked)
+{back}transitions(Swing, Gate.status, shut -> open)
+condition KeyOpen "鍵が開いている"
+holds(KeyOpen, Key.status == unlocked)
+applies_to(KeyOpen, Swing)
+creates(Submit, Job)
+transitions(Start, Job.status, waiting -> running)
+condition GateOpen "門が開いている"
+holds(GateOpen, Gate.status == open)
+applies_to(GateOpen, Start)
+property JobStarts eventually(Job.status == running).fair(Start)
+"#
+        )
+    }
+
+    /// The quotient of the job's sub-lifecycle with nothing observed: one class, never
+    /// explored, that can loop exactly when some var of the sub-lifecycle does not only rise
+    /// (docs/formal-verification.md, "WF_vars(Next) on a reduced cone", case 3). A property
+    /// cone observes what its T side reads, so this clause runs only where a read is folded
+    /// away, as in a cone of clinic-ops; the test clears `obs` to reach it directly.
+    #[test]
+    fn an_unobserved_sub_lifecycle_can_loop_unless_every_var_only_rises() {
+        for key_cycles in [false, true] {
+            let model = model_from(&model(key_cycles));
+            let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+            let (sys, seeds) = ts.cone_system(&ts.property_cone(0), [ts.property_seed(0)]);
+            let mut split = sys.split_with(&seeds, true);
+            assert!(!split.s.is_empty(), "the job's cone has a sub-lifecycle");
+            split.obs.clear();
+            let ext = Extended::of(&sys, &split);
+            assert!(ext.obs_local.is_empty());
+            let q = Quotient::of(&ext, &sys, Caps::VERIFY).expect("one class");
+            assert_eq!(q.reps.len(), 1, "an unobserved sub-lifecycle is one class");
+            assert_eq!(
+                q.loops,
+                vec![key_cycles],
+                "the class can loop exactly when the key's status cycles"
+            );
+        }
     }
 }

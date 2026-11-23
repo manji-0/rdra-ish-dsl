@@ -189,6 +189,10 @@ loading the machine) it takes about 25 s in release, measured.
 | `cone_independent_loop` | An independent loop outside the cone | unfair counterexample; fair ok |
 | `cone_copy_from_parent` | A copy from the parent into the cone | ok |
 | `cone_reduced_class_loops` | A reduced class loops inside itself and looks like a stop | counterexample |
+| `cone_reduced_loop_unreached` | A reduced class can loop, but not from the states the cone reaches; the reduced `_WF` counterexample does not lift | ok |
+| `cone_reduced_no_loop_capped` | No class can loop and the unreduced cone passes `--max-states`; `_WF` decides on the reduced cone | ok |
+| `cone_reduced_loop_fair_enabled` | A reduced class loops, but a fair step is enabled there; `_WF` decides ok on the reduced cone with marks present | ok |
+| `cone_reduced_inner_class_loops` | The loop is inside a class of a nested reduction, invisible to the outer one | counterexample |
 | `cone_always_frees_slots` | `always` on a cone that frees slots | ok (whole model) |
 | `safety_precedes_latch` | `precedes` reads a latch | ok; never-set latch counterexample |
 | `safety_stable_across_delete` | `stable` and `unchanged` across delete and create | ok; `PendingStays` counterexample |
@@ -225,3 +229,36 @@ time, and the suite was run on each. Each bug was reverted afterwards.
 The third and fourth rows are the reason every case states its verdicts. The shared ladder
 moved seven verdicts in both engines at once, and the shared frees-slots rule moved one.
 Rules 1 to 3 saw nothing, and only the stated verdicts failed.
+
+## Mutation run
+
+<!-- derived-from #what-the-corpus-catches -->
+<!-- constrained-by ./design/native-temporal-verification.md#phases -->
+
+The planted bugs above were a one-time check. The mutation run repeats it for every
+mutant `cargo mutants` makes in `property_cone.rs`, `verify/native.rs`, `cone.rs`, and
+`explore/liveness.rs`. `.cargo/mutants.toml` holds the files and the test command, which
+is the whole `engine_corpus` test (the stated verdicts, the header check, and the
+capped-graph test). The run keeps `tlc` and `z3` off `PATH`, so a mutant is caught only
+when a stated verdict or the capped-graph test fails. That is the check that sees a wrong
+`ok` the native checker and TLC share through the cone ladder.
+
+The run takes too long for a pull request, so it starts only by hand. Run it at the exit
+of phase 4 and again before the release gate (phase 6) of the
+[native verification plan](./design/native-temporal-verification.md#phases):
+
+```sh
+gh workflow run mutants.yml                 # every mutant, over 4 shards
+gh workflow run mutants.yml -f re=liveness  # only the mutants whose name matches
+```
+
+The `summary` job lists the `missed` and `timeout` mutants, and each shard's `mutants.out`
+is an artifact with each mutant's diff and log. A missed mutant is a change to the checker
+that the corpus did not notice. Kill it with a new corpus case that the mutant gets wrong,
+or record why it is equivalent to the original code. A timeout is a mutant whose corpus
+ran past 60 seconds. Unmutated, the corpus takes about a second, so a timeout means the
+mutant made the checker hang. A hang is noticed, so a timeout needs no new case. Each
+test process runs under a 2 GiB address-space cap. A mutant that makes the checker
+allocate without end fails its test at the cap and counts as caught; without the cap it
+fills the runner and the whole shard is cancelled. A shard that uploads no results is
+named at the top of the summary, and its mutants are in none of the counts.

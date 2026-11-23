@@ -35,7 +35,7 @@ pub use diag::{
 };
 pub use explore::{
     store_bytes, Adjacency, Caps, ComponentRun, Edge, Estimate, Graph, Held, LabelledEdges,
-    LassoFault, Layers, PropertyVerdict, States,
+    LassoFault, Layers, PropertyVerdict, ReducedVerdict, Spurious, States,
 };
 pub use expr::{State, StateSlice};
 pub use findings::{
@@ -43,7 +43,7 @@ pub use findings::{
     ValueWitness, Witness,
 };
 pub use lasso::{Fairness, LassoReplay, Loop, Unfair};
-pub use reduce::{ClassMove, Fold, FoldKey, Reduction, Step};
+pub use reduce::{ClassMove, Divergence, Fold, FoldKey, Reduction, Step};
 pub use select::{NotChecked, Scope, Selection, UnknownId, Without};
 pub use states::{derive_states, derive_states_built, BoundsLine, FindingTally, StatesReport};
 pub use targets::{ConeRun, Subject, Tally, TargetExploration, Undecided, UndecidedWhy};

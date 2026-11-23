@@ -1,0 +1,47 @@
+// trap: a reduced class loops, but the fair step is enabled there, so it is no place to stop.
+// The gate is the job's independent sub-lifecycle; the job observes only its status. The
+// gate goes shut -> ajar -> open, and while ajar its latch can be set and cleared forever
+// (Unlatch, Relatch), a loop inside the class `ajar`. The job may start once the gate is
+// ajar or open, and JobStarts is fair on both starts. The plain run stops at a shut gate,
+// where no fair start is enabled, and finds a counterexample. Under WF_vars(Next) a shut
+// gate must move on, and at `ajar` the latch may loop forever only while StartAjar is
+// enabled, which weak fairness then takes. The run with WF_vars(Next) on the reduced cone
+// marks `ajar` as a class that can loop, yet lets no state stop there, because a fair start
+// is enabled: it decides ok on the reduced cone, which the unreduced cone confirms. A
+// checker that let a state stop on the mark alone would find a counterexample there that
+// does not certify. One instance keeps another gate from looping beside the job's.
+// flags: --instance-count 1
+// expect JobStarts: native=ok tlc=ok
+entity Gate "門" { id: Int @pk  status: Enum(shut, ajar, open) @default(shut)  latch: Bool @default(false) }
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+relate(Job, Gate, N:1)
+usecase Crack "少し開ける"
+usecase Swing "開け放つ"
+usecase Unlatch "掛け金を外す"
+usecase Relatch "掛け金を掛ける"
+usecase Submit "投入"
+usecase StartAjar "半開きで開始"
+usecase StartOpen "全開で開始"
+transitions(Crack, Gate.status, shut -> ajar)
+transitions(Swing, Gate.status, ajar -> open)
+sets(Unlatch, Gate.latch == true)
+sets(Relatch, Gate.latch == false)
+condition Ajar "半開き"
+holds(Ajar, Gate.status == ajar)
+applies_to(Ajar, Unlatch)
+applies_to(Ajar, Relatch)
+applies_to(Ajar, StartAjar)
+condition Latched "掛け金が掛かっている"
+holds(Latched, Gate.latch == false)
+applies_to(Latched, Unlatch)
+condition Unlatched "掛け金が外れている"
+holds(Unlatched, Gate.latch == true)
+applies_to(Unlatched, Relatch)
+applies_to(Unlatched, Swing)
+creates(Submit, Job)
+transitions(StartAjar, Job.status, waiting -> running)
+transitions(StartOpen, Job.status, waiting -> running)
+condition Open "全開"
+holds(Open, Gate.status == open)
+applies_to(Open, StartOpen)
+property JobStarts eventually(Job.status == running).fair(StartAjar, StartOpen)

@@ -1,0 +1,144 @@
+name: Mutants
+# cargo mutants over the native liveness ladder (#204). .cargo/mutants.toml holds the files
+# and the test command; docs/engine-agreement.md#mutation-run says when to run it and how to
+# read the survivors. On demand only: gh workflow run mutants.yml [-f shards=N] [-f re=REGEX]
+on:
+  workflow_dispatch:
+    inputs:
+      shards:
+        description: Number of shards, one runner each
+        default: "4"
+      re:
+        description: Only the mutants whose name matches this regex, as `cargo mutants --list` prints them (a file path, a function)
+        default: ""
+
+env:
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    shell: nix develop --command bash -eo pipefail {0}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.plan.outputs.shards }}
+    steps:
+      - id: plan
+        shell: bash
+        env:
+          SHARDS: ${{ inputs.shards }}
+        run: |
+          [[ "$SHARDS" =~ ^[1-9][0-9]?$ ]] || { echo "shards must be 1 to 99, got '$SHARDS'" >&2; exit 1; }
+          echo "shards=$(seq 0 $((SHARDS - 1)) | jq -cs .)" >> "$GITHUB_OUTPUT"
+
+  shard:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: cachix/install-nix-action@v31
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: mutants
+          save-if: ${{ matrix.shard == 0 }}
+      - name: cargo mutants, shard ${{ matrix.shard }} of ${{ inputs.shards }}
+        # No JVM and no z3: the corpus then checks only the verdicts each case states, which
+        # catch a wrong ok that native and TLC share through the cone ladder. The baseline runs
+        # here, not in cargo mutants: cargo-mutants 27.1 tests its baseline in the mutated
+        # packages and ignores test_package, so a shard of rdra-ish-core mutants alone would
+        # look for engine_corpus in rdra-ish-core. The corpus takes about a second unmutated,
+        # so a mutant past 60 s is a hang. The step's own timeout leaves time to upload.
+        timeout-minutes: 330
+        env:
+          # rust-cache sets CARGO_INCREMENTAL=0, which overrides the mutants profile; a
+          # mutant then rebuilds rdra-ish-core from scratch.
+          CARGO_INCREMENTAL: "1"
+          SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ inputs.shards }}
+          RE: ${{ inputs.re }}
+        run: |
+          PATH="$(tr ':' '\n' <<<"$PATH" | while IFS= read -r d; do
+            [[ -n "$d" && ! -e "$d/tlc" && ! -e "$d/tlc2" && ! -e "$d/z3" ]] && printf '%s\n' "$d"
+          done | paste -sd: -)"
+          export PATH
+          unset RDRA_Z3 RDRA_TLC_JAR
+          if type -P tlc tlc2 z3; then echo "tlc or z3 is still on PATH" >&2; exit 1; fi
+          # A mutant can make the checker allocate without end (a lasso walk that never
+          # stops grows past 16 GB in under a minute), and the runner then cancels the whole
+          # shard before the 60 s timeout. Cargo runs the test binary through this runner,
+          # not rustc, and the rdra-ish processes it spawns inherit the cap: each of the
+          # test binary and its four workers gets 2 GiB. The unmutated corpus needs about
+          # 12 MB. A mutant over the cap fails its test and counts as caught.
+          type -P prlimit >/dev/null || { echo "prlimit is not on PATH" >&2; exit 1; }
+          host=$(rustc -vV | sed -n 's/^host: //p' | tr 'a-z-' 'A-Z_')
+          export "CARGO_TARGET_${host}_RUNNER=prlimit --as=$((2 << 30))"
+          cargo test --profile mutants -p rdra-ish-cli --test engine_corpus
+          args=(--in-place --baseline skip --timeout 60 --build-timeout 1200
+            --shard "$SHARD/$SHARDS" --sharding round-robin)
+          [[ -n "$RE" ]] && args+=(--re "$RE")
+          # Exit 2 (a mutant missed) and 3 (a timeout) are results; the summary job lists them.
+          cargo mutants "${args[@]}" || { rc=$?; [[ $rc == 2 || $rc == 3 ]]; }
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mutants-shard-${{ matrix.shard }}
+          path: mutants.out
+          if-no-files-found: ignore
+
+  summary:
+    needs: shard
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: mutants-shard-*
+          path: shards
+      - name: Merge the shards' outcomes into the job summary
+        shell: bash
+        env:
+          SHARDS: ${{ inputs.shards }}
+        run: |
+          count() { cat shards/*/"$1" 2>/dev/null | wc -l || true; }
+          # A cancelled shard uploads nothing, so its mutants are missing from every count.
+          missing=$(for i in $(seq 0 $((SHARDS - 1))); do
+            [[ -d "shards/mutants-shard-$i" ]] || echo "$i"
+          done | paste -sd' ' -)
+          tested=0
+          {
+            echo "## cargo mutants over the liveness ladder"
+            echo
+            if [[ -n "$missing" ]]; then
+              echo "> [!WARNING]"
+              echo "> Shards $missing uploaded no results (cancelled or lost): their mutants are in none of the counts below."
+              echo
+            fi
+            echo "| outcome | mutants |"
+            echo "|---|---|"
+            for o in missed timeout caught unviable; do
+              n=$(count "$o.txt")
+              tested=$((tested + n))
+              echo "| $o | $n |"
+            done
+            # A shard that hit its timeout uploads what it finished: tested falls short of
+            # listed, and an empty missed list then does not mean no survivors.
+            listed=$(cat shards/*/mutants.json 2>/dev/null | jq -s 'map(length) | add // 0') || true
+            echo "| tested of listed | $tested of $listed |"
+            echo "| shards reporting | $(find shards -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l) of $SHARDS |"
+            for o in missed timeout; do
+              echo
+              echo "### $o"
+              echo
+              echo '```'
+              cat shards/*/"$o.txt" 2>/dev/null | sort || true
+              echo '```'
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+          [[ -z "$missing" ]] || echo "::error::mutants shards $missing uploaded no results"
