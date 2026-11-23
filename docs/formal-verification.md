@@ -815,9 +815,11 @@ counterexample is the whole model's, and its `ok` is the whole model's only when
 holds every var an action writes (`cone_keeps_every_write`). Otherwise the property goes to
 the whole model, as it does after the unreduced run.
 
-**Candidates.** A stop at a class that can loop need not exist in C: the looping states of
-`c` may be ones that C does not reach at `t`, since `X` takes its rises without their T
-guards and folds bits that rise and fall freely. So a counterexample of the run on R is
+**Candidates.** A stop at a class that can loop need not exist in C. The class may hold
+states that can loop and states that cannot, and C may reach it at `t` only in the second
+kind (`cone_reduced_loop_unreached` in the corpus). The looping states may also be ones that
+C does not reach at `t` at all, since `X` takes its rises without their T guards and folds
+bits that rise and fall freely. So a counterexample of the run on R is
 lifted to C and certified there before anything uses it. The prefix lifts with `lift`. A
 loop of R lifts by lifting the prefix and the loop repeated, until the concrete state at the
 end of a copy is one at the end of an earlier copy. That takes at most as many copies as the
