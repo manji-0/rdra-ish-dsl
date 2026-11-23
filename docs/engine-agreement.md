@@ -14,6 +14,7 @@ says in its header why the verdict moved.
 
 <!-- constrained-by ./formal-verification.md#temporal-properties-on-a-cone -->
 <!-- constrained-by ./formal-verification.md#proofs-for-any-number-of-rows -->
+<!-- constrained-by ./formal-verification.md#state-models-with-tlc-alone -->
 
 The corpus harness (`crates/rdra-ish-cli/tests/engine_corpus.rs`) checks these rules on
 every case, whatever the case's header says.
@@ -37,7 +38,11 @@ every case, whatever the case's header says.
      must be one that BFS reports, as an error or, when only the instance bound blocks it,
      as a warning. A deadlock that TLC does not report has no TLC verdict: a cycle
      anywhere in the column's cone keeps a move enabled and hides it from TLC. The corpus
-     states such a deadlock as `tlc=none`.
+     states such a deadlock as `tlc=none`. Until
+     [#261](https://github.com/manji-0/rdra-ish-dsl/issues/261) is fixed, the `Deadlock_`
+     invariant can also report a deadlock that does not exist, when a step that writes the
+     column reads an event mark outside the column's cone; `verify --with-tlc` then fails
+     with `error[EngineDisagreement]` on a correct model.
 2. The rule holds per run as well as for the final verdict. Each property line names its
    runs (`Cone_P`, `Cone_P_Full`, `Cone_P_WF`, `RdraSpec_P`). The native and TLC lines must
    agree on each run that both decided. A final verdict can agree while two runs disagree
@@ -223,6 +228,7 @@ under a load average of 30 to 60, measured.
 | `safety_precedes_latch` | `precedes` reads a latch | ok; never-set latch counterexample |
 | `safety_stable_across_delete` | `stable` and `unchanged` across delete and create | ok; `PendingStays` counterexample |
 | `safety_can_reach_frees_slots` | `can_reach` where slots run out | counterexample; per-bill ok |
+| `safety_stable_frees_slots` | `stable` and `unchanged` on a cone that frees slots go to the whole model in both engines | ok (whole model) |
 | `safety_vacuity` | A trigger that never holds | ok; `always` counterexample |
 | `safety_unique_sets` | A unique column set over column vars, owner vars, and a nullable Int that two rows leave null | single column and junction counterexample; guarded set and null set ok, z3 proved |
 | `cap_temporal_budget_zero` | `--temporal-budget 0` | not decided on both engines |

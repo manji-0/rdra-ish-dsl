@@ -85,7 +85,9 @@ and prints one note with the error count that names the state-model specs and `v
 cone (see [What `verify` checks](#what-verify-checks)). `export --kind tla` writes the same
 cones as TLA+, so TLC alone reaches the states the BFS reaches. TLC finds the same missing
 witnesses, and a deadlock it reports is one `check` reports, but a TLC pass does not prove
-that no deadlock exists (see below). `check` and `verify` decide the deadlocks. For each
+that no deadlock exists (see below). One exception is open: the invariant leaves out an event
+mark that a step writing the column reads, so TLC can report a deadlock that does not exist
+([#261](https://github.com/manji-0/rdra-ish-dsl/issues/261)). `check` and `verify` decide the deadlocks. For each
 cone whose entities have a state model, `export` writes three files:
 
 | File | Checks |

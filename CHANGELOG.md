@@ -127,8 +127,10 @@
 
   The cross-check found that the `Deadlock_` invariant `export --kind tla` prints leaves out
   the vars a writing step reads outside the column's cone, such as an event mark, so TLC
-  can report a deadlock that does not exist (#261). The engine corpus records it as a known
-  disagreement in `fair_triggered_handler.rdra`.
+  can report a deadlock that does not exist (#261). Until it is fixed, `verify --with-tlc`
+  on a correct model of that shape prints `error[EngineDisagreement]` and exits 1 with
+  `result: tool_error`. The engine corpus records it as a known disagreement in
+  `fair_triggered_handler.rdra`.
 - `--temporal-budget` bounds the native whole-model run of a property its cone does not
   decide: past the budget, the memory limit, or `--max-states` when given, the run stops
   and the property is `not decided` unless the partial graph already holds a
