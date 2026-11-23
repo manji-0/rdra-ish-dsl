@@ -18,23 +18,10 @@
 //! differently is a tool bug (`disagreements`): the run fails and keeps its specs. A check
 //! one engine leaves undecided is no disagreement.
 
-use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
-use std::io::{BufRead, BufReader};
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{mpsc, Mutex};
-use std::time::{Duration, Instant};
+mod tlc_tool;
 
-use anyhow::{bail, Context, Result};
-use rdra_ish_core::lifecycle::{
-    ActId, Bounds, BoundsLine, Caps, ComponentRun, Cone, Diag, Fairness, LassoFault, NotChecked,
-    PropertyVerdict, Scope, Selection, Severity, StateDiag, Target, TransitionSystem, VarSet,
-};
-use rdra_ish_core::{in_parallel, jobs, ResolvedProgram, SemanticModel};
-use rdra_ish_emit::tla::{self, PrintMode, TlaBundle, TlaNames};
-
+pub(crate) use self::tlc_tool::find_on_path;
+use self::tlc_tool::Tlc;
 use crate::export::{checked_system, tla_bounds, tla_file, Modules};
 use crate::memory::{tlc_plan, Budgeted, VerifySplit};
 use crate::property_cone::{AfterPlain, ConeRun, PropertyCone, Verdict};
@@ -43,7 +30,22 @@ use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_env::{current_user_heap, tlc_env_sized, Heap};
 use crate::tlc_output::{progress, summarize, Outcome, TlcRun};
 use crate::tlc_replay::{explain_property, explain_violation};
+use anyhow::{bail, Context, Result};
+use rdra_ish_core::lifecycle::{
+    ActId, Bounds, BoundsLine, Caps, ComponentRun, Cone, Diag, Fairness, LassoFault, NotChecked,
+    PropertyVerdict, Scope, Selection, Severity, StateDiag, Target, TransitionSystem, VarSet,
+};
 use rdra_ish_core::memory::MemoryPool;
+use rdra_ish_core::{in_parallel, jobs, ResolvedProgram, SemanticModel};
+use rdra_ish_emit::tla::{self, PrintMode, TlaBundle, TlaNames};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::io::{BufRead, BufReader};
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{mpsc, Mutex};
+use std::time::{Duration, Instant};
 
 /// Distinct states a whole-model temporal run may reach before it is stopped, natively and
 /// under TLC. Separate from `Caps::VERIFY`, the BFS cap per cone: the run's memory and time
@@ -2350,80 +2352,6 @@ impl End {
         }
         Ok(())
     }
-}
-
-/// How `verify` starts TLC: a `tlc` / `tlc2` launcher on PATH, or `java -cp <jar> tlc2.TLC`
-/// when `--tlc-jar` or `RDRA_TLC_JAR` names `tla2tools.jar`.
-pub(crate) enum Tlc {
-    Launcher(PathBuf),
-    Jar(PathBuf),
-}
-
-/// The env variable that names `tla2tools.jar` when `--tlc-jar` is not given.
-pub(crate) const TLC_JAR_ENV: &str = "RDRA_TLC_JAR";
-
-impl Tlc {
-    /// `--tlc-jar` first, then `RDRA_TLC_JAR`, then `tlc` and `tlc2` on PATH.
-    fn find(jar: Option<PathBuf>) -> Result<Tlc> {
-        let jar = jar.or_else(|| {
-            std::env::var_os(TLC_JAR_ENV)
-                .filter(|v| !v.is_empty())
-                .map(PathBuf::from)
-        });
-        if let Some(jar) = jar {
-            if !jar.is_file() {
-                bail!(
-                    "tla2tools.jar not found at {} (from --tlc-jar or {TLC_JAR_ENV})",
-                    jar.display()
-                );
-            }
-            return Ok(Tlc::Jar(jar));
-        }
-        for candidate in ["tlc", "tlc2"] {
-            if let Some(path) = find_on_path(candidate) {
-                return Ok(Tlc::Launcher(path));
-            }
-        }
-        bail!(
-            "TLC not found on PATH (tried `tlc`, `tlc2`)\n\
-             Get it one of these ways:\n  \
-             - Nix: `nix shell nixpkgs#tlaplus` (add `--extra-experimental-features 'nix-command flakes'` \
-             if flakes are off), then run verify in that shell\n  \
-             - Download tla2tools.jar from https://github.com/tlaplus/tlaplus/releases and pass \
-             `--tlc-jar <path>` or set {TLC_JAR_ENV}=<path> (needs `java` on PATH)\n\
-             Or use `rdra-ish export --kind tla` to generate the spec without running TLC."
-        );
-    }
-
-    fn command(&self) -> Command {
-        match self {
-            Tlc::Launcher(path) => Command::new(path),
-            Tlc::Jar(jar) => {
-                let mut command = Command::new("java");
-                command.arg("-cp").arg(jar).arg("tlc2.TLC");
-                command
-            }
-        }
-    }
-
-    fn display(&self) -> String {
-        match self {
-            Tlc::Launcher(path) => path.display().to_string(),
-            Tlc::Jar(jar) => format!("java -cp {} tlc2.TLC", jar.display()),
-        }
-    }
-}
-
-/// The first `name` on PATH that is a file, also trying the platform's executable suffix.
-pub(crate) fn find_on_path(name: &str) -> Option<PathBuf> {
-    let paths = std::env::var_os("PATH")?;
-    let exe = format!("{name}{}", std::env::consts::EXE_SUFFIX);
-    std::env::split_paths(&paths).find_map(|dir| {
-        [name, exe.as_str()]
-            .into_iter()
-            .map(|file| dir.join(file))
-            .find(|path| path.is_file())
-    })
 }
 
 #[cfg(test)]
