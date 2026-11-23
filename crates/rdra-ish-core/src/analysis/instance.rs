@@ -496,21 +496,35 @@ fn ast_column_to_model(
                         },
                     );
                 }
-                if let ColumnType::Variation(key) = &mc.col_type {
-                    if let Some(variation) = model.variations.get(*key) {
-                        if !variation.has_value(v) {
-                            push_error(
-                                ctx,
-                                diags,
-                                col.span.clone(),
-                                RdraError::InvalidVariationValue {
-                                    variation: variation.id.clone(),
-                                    value: v.clone(),
-                                    allowed: variation.value_names().join(", "),
-                                },
-                            );
-                        }
+                // A default is a value of the column, as a `sets` value is (#187). An Enum with
+                // no values already drew `UnknownColumnType`.
+                let outside = match &mc.col_type {
+                    ColumnType::Variation(key) => model
+                        .variations
+                        .get(*key)
+                        .filter(|variation| !variation.has_value(v))
+                        .map(|variation| RdraError::InvalidVariationValue {
+                            variation: variation.id.clone(),
+                            value: v.clone(),
+                            allowed: variation.value_names().join(", "),
+                        }),
+                    ColumnType::Enum(values) if !values.is_empty() && !values.contains(v) => {
+                        Some(RdraError::InvalidEnumVariant {
+                            col: col.name.clone(),
+                            value: v.clone(),
+                            allowed: values.join(", "),
+                        })
                     }
+                    ColumnType::Bool if v != "true" && v != "false" => {
+                        Some(RdraError::InvalidBoolValue {
+                            col: col.name.clone(),
+                            value: v.clone(),
+                        })
+                    }
+                    _ => None,
+                };
+                if let Some(error) = outside {
+                    push_error(ctx, diags, col.span.clone(), error);
                 }
                 mc.default_val = Some(v.clone());
             }

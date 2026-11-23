@@ -344,6 +344,51 @@ fn end_rejects_an_unknown_value_and_a_column_without_states() {
     );
 }
 
+/// The errors of `columns` declared on an entity and on a DTO.
+fn default_errors_of(columns: &str) -> Vec<String> {
+    end_values_of(&format!(
+        "entity E \"E\" {{\n  id: Int @pk\n{columns}\n}}\ndto D \"D\" {{\n{columns}\n}}\n"
+    ))
+    .1
+}
+
+/// An Enum `@default` that is not one of the column's values is an error, as a variation's
+/// is, never a start at the first value (#187).
+#[test]
+fn an_enum_default_outside_its_values_is_an_error() {
+    let ok = default_errors_of("  status: Enum(open, closed) @default(closed)");
+    assert!(ok.is_empty(), "{ok:?}");
+
+    let errors = default_errors_of("  status: Enum(open, closed) @default(bogus)");
+    assert_eq!(errors.len(), 2, "the entity and the DTO: {errors:?}");
+    assert!(
+        errors
+            .iter()
+            .all(|e| e.contains("column 'status' has no variant 'bogus'")
+                && e.contains("declared variants are: open, closed")),
+        "{errors:?}"
+    );
+}
+
+/// A Bool `@default` other than `true` or `false` is an error, never a start at `false`
+/// (#187). `null` is no default of a Bool, which the lifecycle reads as two values.
+#[test]
+fn a_bool_default_other_than_true_or_false_is_an_error() {
+    let ok = default_errors_of("  on: Bool @default(true)\n  off: Bool @null @default(false)");
+    assert!(ok.is_empty(), "{ok:?}");
+
+    for default in ["maybe", "null", "TRUE"] {
+        let errors = default_errors_of(&format!("  flag: Bool @null @default({default})"));
+        assert_eq!(errors.len(), 2, "the entity and the DTO: {errors:?}");
+        assert!(
+            errors
+                .iter()
+                .all(|e| e.contains(&format!("column 'flag' set to '{default}'"))),
+            "{errors:?}"
+        );
+    }
+}
+
 #[test]
 fn global_and_along_on_one_rule_is_an_error() {
     let src = r#"
