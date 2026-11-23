@@ -1,7 +1,6 @@
 use super::bfs::{Bfs, Explored, Safety};
 use super::report::Temporal;
 use crate::prove::ProofTally;
-use crate::tlc_output::Outcome;
 use anyhow::{bail, Result};
 use rdra_ish_core::lifecycle::BoundsLine;
 
@@ -12,6 +11,27 @@ pub(super) struct TlcEnd {
     pub(super) tool_errors: usize,
     /// Checks the two engines decide differently.
     pub(super) disagreements: usize,
+}
+
+/// What the `result:` line says of the whole run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum RunResult {
+    Ok,
+    /// Nothing failed, but a cap, the budget, or `--deny-unproved` left something undecided.
+    NotDecided,
+    Counterexample,
+    ToolError,
+}
+
+impl RunResult {
+    pub(super) fn as_str(self) -> &'static str {
+        match self {
+            RunResult::Ok => "ok",
+            RunResult::NotDecided => "not decided",
+            RunResult::Counterexample => "counterexample",
+            RunResult::ToolError => "tool_error",
+        }
+    }
 }
 
 /// How a run ends.
@@ -29,21 +49,36 @@ pub(super) struct End {
 }
 
 impl End {
-    /// The verdict the `result:` line states: of the invariants, the after-asserts, and the
-    /// properties, every form and `can_reach` included. The state-model findings of the
-    /// entity cones fail the run beside it and do not move it.
-    pub(super) fn outcome(&self) -> Outcome {
-        if self.temporal.faults > 0 {
-            return Outcome::ToolError;
-        }
-        let violated = self.safety.violated
+    /// The verdict the `result:` line states for the whole run, so that `ok` means exit 0 with
+    /// nothing undecided: a tool error first, then a failure (a violation, or a state-model or
+    /// `can_reach` error of BFS), then anything a cap, the budget, or `--deny-unproved` left
+    /// undecided.
+    pub(super) fn result(&self, undecided: usize) -> RunResult {
+        let tool = self.temporal.faults + self.tlc.disagreements + self.tlc.tool_errors;
+        let failed = self.bfs.errors
+            + self.bfs.reach_errors
+            + self.safety.violated
             + self.explored.violated
-            + self.temporal.violated
-            + self.bfs.reach_errors;
-        match violated {
-            0 => Outcome::Ok,
-            _ => Outcome::Counterexample,
+            + self.temporal.violated;
+        let open = self.capped() + undecided + self.unproved_denied();
+        match (tool, failed, open) {
+            (0, 0, 0) => RunResult::Ok,
+            (0, 0, _) => RunResult::NotDecided,
+            (0, _, _) => RunResult::Counterexample,
+            _ => RunResult::ToolError,
         }
+    }
+
+    /// Findings a cone stopped at the state cap or the memory limit left.
+    fn capped(&self) -> usize {
+        self.bfs.capped + self.explored.capped + self.safety.capped + self.temporal.capped
+    }
+
+    /// Rules left unproved when `--deny-unproved` makes that fail the run.
+    fn unproved_denied(&self) -> usize {
+        self.proof
+            .filter(|p| p.deny_unproved)
+            .map_or(0, |p| p.unproved)
     }
 
     /// A violation, an error of BFS, or a tool error fails the run. A temporal property the
@@ -101,7 +136,7 @@ impl End {
         }
         let open = [
             (
-                self.bfs.capped + self.explored.capped + self.safety.capped + self.temporal.capped,
+                self.capped(),
                 "finding a cone stopped at the state cap or the memory limit left",
                 "findings a cone stopped at the state cap or the memory limit left",
             ),

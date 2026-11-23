@@ -439,7 +439,7 @@ not assign.
 state model must have a witness there (see
 [state-derivation.md](./state-derivation.md#state-models-and-witnesses)). A `NoWitness`
 error fails `verify` even when every invariant and property holds: the run prints
-`result: ok` and no `OK:` line, and exits 1. A deadlock, an instance that no path moves off a state with a
+`result: counterexample` and no `OK:` line, and exits 1. A deadlock, an instance that no path moves off a state with a
 way out (see [state-derivation.md](./state-derivation.md#deadlocks)), fails it the same way;
 one whose way out lacks only a free slot is a warning at the bound. TLC's own deadlock check
 stays off: every bounded model ends with no enabled action, and an always-enabled loop would

@@ -306,23 +306,22 @@ pub fn run(
     }
     end.tlc.disagreements = disagreed.len();
 
-    // A disagreement reports neither engine's verdict as the result.
-    let result = match disagreed.is_empty() {
-        true => end.outcome(),
-        false => Outcome::ToolError,
+    // `result:` states the verdict of the whole run; a disagreement reports neither engine's
+    // verdict, and counts as a tool error.
+    let result = end.result(undecided.len());
+    let say = |label: &str, verdict: &str| match verdict {
+        "ok" => println!("{label}: ok"),
+        other => eprintln!("{label}: {other}"),
     };
-    let say = |label: &str, outcome: Outcome| match outcome {
-        Outcome::Ok => println!("{label}: ok"),
-        other => eprintln!("{label}: {}", other.as_str()),
-    };
-    say("result", result);
+    say("result", result.as_str());
     if let Some(outcome) = tlc_outcome {
         say(
             "tlc_result",
             match disagreed.is_empty() {
                 true => outcome,
                 false => Outcome::ToolError,
-            },
+            }
+            .as_str(),
         );
     }
     if let Some(dir) = &dir {

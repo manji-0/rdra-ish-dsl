@@ -70,8 +70,9 @@ rdra-ish export samples/order.rdra --kind tla -o /tmp/rdra-tla   # the whole-mod
 ## Reading a Run
 
 Every result opens with its `bounds:` line, and `OK: no errors within ...` holds only
-inside those bounds. Every run carries one `result: ok|counterexample|tool_error` line,
-and `--with-tlc` adds TLC's own `tlc_result:` line after it.
+inside those bounds. Every run carries one `result: ok|not decided|counterexample|tool_error` line, the verdict of
+the whole run: `ok` means exit 0 with nothing undecided, and a state-model error fails it as
+`counterexample` does. `--with-tlc` adds TLC's own `tlc_result:` line after it.
 Each finding prints its stable name after the severity, so cite that name.
 
 **An invariant or `after` assertion fails.** Each cone line names the checks it answers.
@@ -125,7 +126,7 @@ error[PendingLeadsToDelivered]: property PendingLeadsToDelivered is violated: it
 prints what it finds first.
 A state no reachable state holds (`error[Witness_<E>_<col>_<value>]`) or an instance that
 can never leave a state with a way out (`error[Deadlock_<E>_<col>_<value>]`) fails the
-run even when every check holds: `result: ok`, no `OK:` line, exit 1. A use case that never
+run even when every check holds: `result: counterexample`, no `OK:` line, exit 1. A use case that never
 runs (`warning[Runs_<action>]`) and a deadlock that only a free instance slot would
 clear (`deadlock at the bound`) are warnings. When staying at a state is correct, such as
 a stock row waiting at `free` to be used, declare it with `@end(free)` on the column
@@ -148,7 +149,7 @@ warning[Runs_Ship]: use case Ship can never run: each of its guards holds in som
   declared: use case Ship   samples/deadlock.rdra:14:1
 state models (BFS on 1 entity cone): 1 state model, 3 states witnessed, 1 deadlock, 1 use case that never runs
 nothing to check
-result: ok
+result: counterexample
 Error: verification failed: 1 state-model error(s) from BFS on the entity cones
 ```
 
