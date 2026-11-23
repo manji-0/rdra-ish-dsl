@@ -156,6 +156,7 @@ violation_message(text, pattern_desc)
             label_prefix(label)
         ),
         StateDiag::StateCapReached { .. }
+        | StateDiag::MemoryCapReached { .. }
         | StateDiag::NoWitness { .. }
         | StateDiag::VacuousRule { .. }
         | StateDiag::NeverRuns { .. }

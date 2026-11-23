@@ -6,6 +6,7 @@ use std::path::{Component, Path, PathBuf};
 
 use serde::Deserialize;
 
+use crate::memory::MemorySize;
 use crate::{build_merged_model, resolve_overlaid, Diagnostic, ResolvedProgram, SemanticModel};
 
 pub const MANIFEST_FILE: &str = "rdra.toml";
@@ -17,11 +18,25 @@ pub struct Manifest {
     pub model: ModelSection,
     #[serde(default)]
     pub dependencies: BTreeMap<String, toml::Value>,
+    /// `[check]`: what `check` and `states` run with.
+    #[serde(default)]
+    pub check: CommandSection,
+    /// `[verify]`: what `verify` runs with.
+    #[serde(default)]
+    pub verify: CommandSection,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct ModelSection {
     pub name: String,
+}
+
+/// The settings of one command in `rdra.toml`; its flag overrides each of them.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CommandSection {
+    /// `memory = "4GiB"`: what the command may use (`--memory`).
+    pub memory: Option<MemorySize>,
 }
 
 #[derive(Debug)]
@@ -336,6 +351,63 @@ mod tests {
         let err = load_project(&[src], None).unwrap_err().to_string();
 
         assert!(err.contains("rdra.toml:3:"), "{err}");
+    }
+
+    #[test]
+    fn memory_is_read_per_command() {
+        let dir = repo();
+        write(
+            &dir.path().join("rdra.toml"),
+            "[model]\nname = \"shop\"\n\n[check]\nmemory = \"512MiB\"\n\n[verify]\nmemory = \"8G\"\n",
+        );
+        let src = layout(dir.path());
+
+        let manifest = discover(&[src]).unwrap().unwrap();
+
+        assert_eq!(
+            manifest.check.memory.map(|m| m.to_string()).as_deref(),
+            Some("512MiB")
+        );
+        assert_eq!(
+            manifest.verify.memory.map(|m| m.to_string()).as_deref(),
+            Some("8GiB")
+        );
+    }
+
+    #[test]
+    fn a_manifest_without_memory_leaves_it_to_the_default() {
+        let dir = repo();
+        write(&dir.path().join("rdra.toml"), MANIFEST);
+        let src = layout(dir.path());
+
+        let manifest = discover(&[src]).unwrap().unwrap();
+
+        assert_eq!(
+            (manifest.check.memory, manifest.verify.memory),
+            (None, None)
+        );
+    }
+
+    #[test]
+    fn a_bad_memory_value_names_the_file_line_and_value() {
+        for (body, line, what) in [
+            ("[verify]\nmemory = \"4096\"\n", 4, "\"4096\""),
+            ("[check]\n\nmemory = \"lots\"\n", 5, "\"lots\""),
+            ("[check]\nmemory = 4\n", 4, "string"),
+            ("[check]\nmemroy = \"4GiB\"\n", 4, "memroy"),
+        ] {
+            let dir = repo();
+            write(
+                &dir.path().join("rdra.toml"),
+                &format!("[model]\nname = \"shop\"\n{body}"),
+            );
+            let src = layout(dir.path());
+
+            let err = discover(&[src]).unwrap_err().to_string();
+
+            assert!(err.contains(&format!("rdra.toml:{line}:")), "{body}: {err}");
+            assert!(err.contains(what), "{body}: {err}");
+        }
     }
 
     #[test]
