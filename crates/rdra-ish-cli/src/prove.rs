@@ -83,9 +83,11 @@ impl Marks {
     }
 }
 
-/// Proves the selected state rules of `ts` and prints one line per rule.
+/// Proves the selected state rules of `ts` and prints one line per rule. Lemmas are mined
+/// from `twin` too (`prove::mining_twin`).
 pub(crate) fn run_proof(
     ts: &TransitionSystem,
+    twin: Option<&TransitionSystem>,
     selection: &Selection,
     marks: &Marks,
     binary: &Path,
@@ -105,7 +107,7 @@ pub(crate) fn run_proof(
     let mut solvers = (0..rdra_ish_core::jobs())
         .map(|_| Z3::start(binary))
         .collect::<Result<Vec<_>, _>>()?;
-    let proof = prove::prove(ts, &rules, &mut solvers, ProveOptions::default())
+    let proof = prove::prove(ts, twin, &rules, &mut solvers, ProveOptions::default())
         .map_err(|e| anyhow::anyhow!("z3 failed: {e}"))?;
     let (yours, rules): (Vec<&RuleProof>, Vec<&RuleProof>) =
         proof.rules.iter().partition(|r| lemmas.contains(&r.inv));
