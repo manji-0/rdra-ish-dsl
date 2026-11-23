@@ -152,9 +152,9 @@ E can get stuck at col = v is not decided: ...`. See [Deadlocks](./state-derivat
 | `--strict` | Promote permission / access consistency gaps (`ActorPermissionMissing`, no-actor paths, etc.) from warnings to errors for exit. |
 | `--deny-deprecated` | Promote each `DeprecatedSyntax` warning (a [deprecated form](./language-reference.md#deprecated-and-removed-forms) that still loads) to an error, so `check` prints it as `error:` and exits `1`. Without the flag a deprecated form does not change the exit status. |
 | `--max-patterns <n>` | Cap on each entity's distinct patterns within one target cone. Default: 2^(10 + 8 * (n - 1)) for `n` = `--instance-count` (`1024` at one instance, `262144` at two). Past it, the run records a `PatternCapReached` **error**. Same as [`states`](#states). |
-| `--max-states <n>` | Cap on the joint states of one target cone, printed in the `bounds:` line. Default: four times the default `--max-patterns`, at least `65536` (`65536` at one instance, `1048576` at two, `268435456` at three). Past it, the run records a `StateCapReached` **error** that names what the cone's states vary in. A larger `--int-range-max` makes more states per cone, so it reaches the cap sooner; a larger `--instance-count` does too, but it also raises the default cap. A flag you pass replaces its default. Same as [`states`](#states). |
-| `--memory <size>` | What the run may hold in memory: the states of the cones it explores at once. Default: `memory` under `[check]` in [`rdra.toml`](#project-manifest), else `4GiB`. A cone whose states pass it stops as at `--max-states`: the run records a `MemoryCapReached` **error** that names the limit, and the findings the cone leaves are listed under `not checked:`. See [Memory limit](#memory-limit). Same as [`states`](#states). |
-| `--instance-count <n>` | Instances (slots) per entity, `1..=255` (default `1`). A violation that needs two rows of an entity (a uniqueness or a quantifier across rows) shows only from `2`. The `bounds:` line and the final `OK:` line print the value used. Same name and validation as [`verify`](#verify); the default differs (`verify` runs `2`). A larger value also raises the default `--max-patterns` and `--max-states`. |
+| `--max-states <n>` | Cap on the joint states of one target cone, printed in the `bounds:` line. Default: none; `--memory` stops a run that outgrows the machine, and the `bounds:` line says `no state cap per cone, memory 4GiB`. Past a cap you give, the run records a `StateCapReached` **error** that names what the cone's states vary in. A larger `--int-range-max` or `--instance-count` makes more states per cone, so it reaches the cap sooner. Same as [`states`](#states). |
+| `--memory <size>` | What the run may hold in memory: the states of the cones it explores at once. Default: `memory` under `[check]` in [`rdra.toml`](#project-manifest), else `4GiB`. A cone whose states pass it stops: the run records a `MemoryCapReached` **error** that names the limit, says how many states it held and what each took, and estimates what finishing needs; the findings the cone leaves are listed under `not checked:`. See [Memory limit](#memory-limit). Same as [`states`](#states). |
+| `--instance-count <n>` | Instances (slots) per entity, `1..=255` (default `1`). A violation that needs two rows of an entity (a uniqueness or a quantifier across rows) shows only from `2`. The `bounds:` line and the final `OK:` line print the value used. Same name and validation as [`verify`](#verify); the default differs (`verify` runs `2`). A larger value also raises the default `--max-patterns`. |
 | `--int-range-max <n>` | The Int domain is `0..=n`, `1..=255` (default `5`). Printed in the `bounds:` line. Same as [`verify`](#verify). |
 | `--buc <id>` | Keep only the use cases reachable from the BUC; repeatable. See [Partial runs](#partial-runs). |
 | `--entity <id>` | Check only the entity's view and the invariants and after-asserts that read it; repeatable. See [Partial runs](#partial-runs). |
@@ -198,7 +198,7 @@ so the whole model still fails:
 
 ```
 $ rdra-ish check samples/formal-verification/partial_scope.rdra --entity Order
-bounds: 1 instance per entity, Int 0..5; 65536 states per cone; entities a check does not read are unbounded
+bounds: 1 instance per entity, Int 0..5; no state cap per cone, memory 4GiB; entities a check does not read are unbounded
 scope: --entity Order
 not checked: 1 entity view (Audit), 1 invariant (Forbidden_Audit_1), 0 after-asserts; 1 build error deferred; 1 finding not decided
   deferred error[DerivedColumnRead_Audit_score]: Audit: Audit.score is derived by arithmetic, which the lifecycle cannot evaluate; compare the columns it reads instead
@@ -585,10 +585,30 @@ What the limit counts:
   exits, which would end the proof, so `verify` leaves z3 unbounded.
 
 A cone that reaches the limit stops as a cone that reaches `--max-states` does. `check`
-reports a `MemoryCapReached` error that names the limit and how to raise it, and exits `1`.
+reports a `MemoryCapReached` error that names the limit, says what the held states took, and
+estimates what finishing needs, and exits `1`.
 `states` marks the views it cut. `verify` lists the findings the cone leaves under `not
 checked:`, ends with a warning, and exits `0`, or `1` under `--deny-undecided`; its
 `result:` line says `not decided` either way:
+
+What `check` and `states` say when a cone stops at the limit: the states it held, the bytes
+each took (the store counted above, with the state that did not fit), and, from the
+cone's variables, the most states the cone can have (the product of their domains). From
+that bound the message estimates what finishing needs, with
+`32·p2(n) + 2·n·blk(w) + 25·buckets(n) + 12·p2(e)` bytes for `n` states of `w` bytes and `e`
+edges (`p2` rounds up to a power of two, `blk` to 16 bytes, `buckets` to a power of two of
+at least `n·8/7`); on the sample cones of a thousand states and more it stood 2.4% to 6.7%
+over what the run counts. `e` is the edges per state seen so far times the bound; early
+layers have fewer, so the figure is a lower bound if all the states are reachable. The
+bound is loose: most of the product is never reached, and a cone with more than `1TiB` in
+it says so and suggests narrowing in place of a size. The estimate is for the one cone;
+the cones share the limit, so allow more than it says.
+
+```text
+error[MemoryCapReached_Order]: state derivation for entity 'Order': memory limit 1KiB reached at 5 states; results are incomplete: the cone has 3 variables, 2 of them vary (values reached/domain: Order.status 4/5, Order._exists 2/3); new states first reached by: CancelOrder 1, CapturePay 1, PlaceOrder 1, ShipOrder 1; held at 172 B per state; the cone's variables allow at most 30 states, so if all are reachable this cone alone needs at least about 1MiB; raise it to 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
+```
+
+`verify` lists what the cones leave undecided:
 
 ```text
 not checked: 10 findings not decided
@@ -1582,9 +1602,9 @@ rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns 
 | `--format` | `table` \| `csv` \| `json` \| `typescript` | `table` | Output format. `typescript` (alias `type-script`) emits entity state unions. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Keep only the use cases reachable from the named BUCs. See [Partial runs](#partial-runs). |
 | `--max-patterns` | unsigned integer | 2^(10 + 8 * (n - 1)) for `n` = `--instance-count`: `1024`, `262144`, ... | Cap on each entity's distinct patterns within one target cone (an entity view, invariant, or after-assert is explored on the variables it reads). Only entities the target reads are bounded to one instance: a use case that also creates an entity outside the cone (an audit row, say) never runs out of slots for it. When the cap is hit, the result is marked `truncated` and a fail-closed `PatternCapReached` **error** is recorded (exit non-zero for all formats). |
-| `--max-states` | unsigned integer | the larger of `65536` and four times the default `--max-patterns`: `65536` at one instance, `1048576` at two | Cap on the joint states of one target cone, printed in the `bounds:` line. When the cap is hit, the result is marked `truncated` and a fail-closed `StateCapReached` **error** is recorded (exit non-zero for all formats). The message names what the reached states vary in, so you can see which entity's columns a guard pulled into the cone (see the example below). |
-| `--memory` | size | `memory` under `[check]` in `rdra.toml`, else `4GiB` | What the run may hold in memory, such as `4GiB` or `512MiB` (`G` and `GB` also mean GiB). A cone whose states pass it stops as at `--max-states`, with a fail-closed `MemoryCapReached` error. See [Memory limit](#memory-limit). |
-| `--instance-count` | unsigned integer | `1` | Instances (slots) per entity, `1..=255`. The `bounds:` line prints the value used. A larger value makes more states per cone and raises the default `--max-patterns` and `--max-states` (see them below); a run that outgrows the machine stops at `--memory`, not at a cap. |
+| `--max-states` | unsigned integer | none | Cap on the joint states of one target cone, printed in the `bounds:` line (`no state cap per cone, memory 4GiB` without it). When the cap is hit, the result is marked `truncated` and a fail-closed `StateCapReached` **error** is recorded (exit non-zero for all formats). The message names what the reached states vary in, so you can see which entity's columns a guard pulled into the cone (see the example below). |
+| `--memory` | size | `memory` under `[check]` in `rdra.toml`, else `4GiB` | What the run may hold in memory, such as `4GiB` or `512MiB` (`G` and `GB` also mean GiB). A cone whose states pass it stops, with a fail-closed `MemoryCapReached` error that estimates what finishing needs. See [Memory limit](#memory-limit). |
+| `--instance-count` | unsigned integer | `1` | Instances (slots) per entity, `1..=255`. The `bounds:` line prints the value used. A larger value makes more states per cone and raises the default `--max-patterns` (see it below); a run that outgrows the machine stops at `--memory`. |
 | `--int-range-max` | unsigned integer | `5` | The Int domain is `0..=N`, `1..=255` (`0` is rejected). |
 | `--entity <id>` | string (repeatable) | — (all entities) | Derive only the named entities' views, and the invariants and after-asserts that read them, each on its own cone. Every output format holds only those views. Exit severity considers the selected targets and the build errors their cones read; a build error outside them is deferred and listed under `not checked:`. See [Partial runs](#partial-runs). |
 | `--without-usecase <id>` | string (repeatable) | — | Assume the use case never runs and leave it out. See [Partial runs](#partial-runs). |

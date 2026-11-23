@@ -163,20 +163,24 @@ fn a_run_past_its_deadline_stops_and_names_the_budget() {
 }
 
 #[test]
-fn default_caps_scale_with_the_instance_count() {
+fn default_pattern_cap_scales_with_the_instance_count_and_there_is_no_state_cap() {
     let at = |n| {
         let caps = Caps::for_instances(n);
         (caps.patterns, caps.states)
     };
-    assert_eq!(
-        at(1),
-        (1 << 10, 1 << 16),
-        "one instance keeps the 65,536 states"
-    );
-    assert_eq!(at(2), (1 << 18, 1 << 20));
-    assert_eq!(at(3), (1 << 26, 1 << 28));
+    assert_eq!(at(1), (1 << 10, usize::MAX));
+    assert_eq!(at(2), (1 << 18, usize::MAX));
+    assert_eq!(at(3), (1 << 26, usize::MAX));
     assert_eq!(at(0), at(1), "no instances counts as one");
-    assert_eq!(Caps::STATES, Caps::for_instances(1));
+    // The generators charge no memory pool, so they keep a state cap.
+    assert_eq!(
+        (
+            Caps::STATES.patterns,
+            Caps::STATES.states,
+            Caps::STATES.memory
+        ),
+        (1 << 10, 1 << 16, None)
+    );
 }
 
 #[test]
@@ -184,7 +188,6 @@ fn default_caps_saturate_where_the_shift_leaves_usize() {
     let last_exact = (usize::BITS - 1 - 10) / 8 + 1;
     let caps = Caps::for_instances(last_exact);
     assert_eq!(caps.patterns, 1 << (10 + 8 * (last_exact - 1)));
-    assert_eq!(caps.states, caps.patterns.saturating_mul(4));
     for n in [last_exact + 1, 100, 255, u32::MAX] {
         let caps = Caps::for_instances(n);
         assert_eq!(
@@ -193,4 +196,82 @@ fn default_caps_saturate_where_the_shift_leaves_usize() {
             "n = {n}"
         );
     }
+}
+
+/// `store_bytes` is the store `Bfs::bytes_with_one_more` counts, modelled: on complete runs
+/// of a thousand states and more it is never under `peak` and at most 10% over, and at the
+/// state a run stops at it is the same within the same bounds.
+#[test]
+fn store_bytes_models_the_store_a_run_counts() {
+    use super::store::store_bytes;
+    use crate::lifecycle::StateDiag;
+    use crate::memory::{MemoryPool, MemorySize};
+
+    let within = |model: u64, counted: u64, what: &str| {
+        assert!(
+            model >= counted && model * 10 <= counted * 11,
+            "{what}: model {model} B against {counted} B counted"
+        );
+    };
+    for instances in [2u8, 3] {
+        let bounds = Bounds {
+            instances: NonZeroU8::new(instances).expect("instances"),
+            int_max: 5,
+        };
+        let ts = TransitionSystem::build(&model_from(SHOP), bounds, &Scope::ALL).ts;
+        let whole = ts.clone().run_on(Caps::VERIFY, Threads::Fixed(0));
+        assert!(whole.complete && whole.states.len() >= 1000);
+        let n = whole.states.len() as u64;
+        within(
+            store_bytes(n, whole.state_width(), whole.edges().len() as u64),
+            whole.peak,
+            &format!("{instances} instances, {n} states"),
+        );
+
+        let limit = MemorySize::from_bytes(whole.peak / 3).expect("not zero");
+        let caps = Caps::VERIFY.charged_to(MemoryPool::for_command(limit, "--memory"));
+        let stopped = ts.run_on(caps, Threads::Fixed(0));
+        let held = stopped
+            .diags
+            .iter()
+            .find_map(|d| match d.diag {
+                StateDiag::MemoryCapReached { held, .. } => Some(held),
+                _ => None,
+            })
+            .expect("a run at a third of its peak stops at the limit");
+        let states = stopped.states.len() as u64;
+        assert!(states >= 1000, "{states} states");
+        within(
+            store_bytes(states + 1, held.width, held.edges),
+            held.bytes,
+            &format!("{instances} instances, stopped at {states} states"),
+        );
+        let need = held.bytes_to_finish(stopped.states.len()).expect("a bound");
+        assert!(
+            need >= held.bytes,
+            "{need} B to finish, {} B held",
+            held.bytes
+        );
+    }
+}
+
+#[test]
+fn store_bytes_saturates_and_a_missing_bound_estimates_nothing() {
+    use super::store::{store_bytes, Held};
+
+    assert_eq!(store_bytes(u64::MAX, 16, u64::MAX), u64::MAX);
+    assert_eq!(store_bytes(0, 0, 0), 32 * 4 + 25 * 4 + 12 * 4);
+    let held = |bound| Held {
+        bytes: 1000,
+        width: 10,
+        edges: 20,
+        bound,
+    };
+    assert_eq!(held(None).bytes_to_finish(10), None);
+    // 2 edges per state held, so 2048 edges at a bound of 1024 states.
+    assert_eq!(
+        held(Some(1024)).bytes_to_finish(10),
+        Some(store_bytes(1024, 10, 2048))
+    );
+    assert_eq!(held(None).bytes_per_state(9), 100);
 }

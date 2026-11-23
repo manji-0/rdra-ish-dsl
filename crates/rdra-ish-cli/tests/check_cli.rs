@@ -25,7 +25,7 @@ fn check_prints_one_verdict_with_its_counterexample() {
     let file = "skills/rdra-ish-verify/samples/cross_order_payment_split.rdra";
     let expected = format!(
         "\
-bounds: 1 instance per entity, Int 0..5; 65536 states per cone; entities a check does not read are unbounded
+bounds: 1 instance per entity, Int 0..5; no state cap per cone, memory 4GiB; entities a check does not read are unbounded
 error[MultiForbidden_Order_0]: invariant MultiForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order(status=cancelled); Payment(status=captured)
   rule: {file}:44:1
   counterexample (3 steps):
@@ -43,7 +43,7 @@ error[MultiForbidden_Order_0]: invariant MultiForbidden_Order_0 is violated: mul
     assert_eq!(verdicts, 1, "a multi-entity rule prints once: {stderr}");
 }
 
-const BOUNDS: &str = "bounds: 1 instance per entity, Int 0..5; 65536 states per cone; entities a check does not read are unbounded";
+const BOUNDS: &str = "bounds: 1 instance per entity, Int 0..5; no state cap per cone, memory 4GiB; entities a check does not read are unbounded";
 
 fn run(args: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
@@ -674,7 +674,11 @@ fn max_states_sets_the_cap_and_the_cap_names_what_grows() {
         let stderr = String::from_utf8_lossy(&out.stderr);
         assert_eq!(
             stderr.lines().find(|l| l.starts_with("bounds:")),
-            Some(BOUNDS.replace("65536 states", "3 states").as_str()),
+            Some(
+                BOUNDS
+                    .replace("no state cap per cone, memory 4GiB", "3 states per cone")
+                    .as_str()
+            ),
             "{cmd}"
         );
     }
@@ -1077,11 +1081,11 @@ fn actor_scope_decides_the_deadlock_another_actor_hides() {
 
 const GADGET: &str = "crates/rdra-ish-cli/tests/fixtures/caps/gadget.rdra";
 
-/// Two instances of `Gadget` pass the 256 patterns the cap was at one instance; the default now
-/// follows `--instance-count`, so the run completes, and a cap given on the command line still
-/// decides.
+/// Two instances of `Gadget` pass the 256 patterns the cap was at one instance; the default
+/// pattern cap follows `--instance-count`, so the run completes, and a cap given on the command
+/// line still decides. `check` has no state cap unless `--max-states` gives one.
 #[test]
-fn check_defaults_to_caps_that_follow_the_instance_count() {
+fn check_defaults_to_a_pattern_cap_that_follows_the_instance_count_and_no_state_cap() {
     let run_at = |extra: &[&str]| {
         let mut args = vec!["check", GADGET, "--instance-count", "2"];
         args.extend_from_slice(extra);
@@ -1095,7 +1099,9 @@ fn check_defaults_to_caps_that_follow_the_instance_count() {
     let (code, stderr) = run_at(&[]);
     assert_eq!(code, Some(0), "{stderr}");
     assert!(
-        stderr.starts_with("bounds: 2 instances per entity, Int 0..5; 1048576 states per cone;"),
+        stderr.starts_with(
+            "bounds: 2 instances per entity, Int 0..5; no state cap per cone, memory 4GiB;"
+        ),
         "{stderr}"
     );
     assert!(!stderr.contains("CapReached"), "{stderr}");

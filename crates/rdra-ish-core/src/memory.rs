@@ -37,6 +37,14 @@ impl MemorySize {
     pub fn bytes(self) -> u64 {
         self.0.get()
     }
+
+    /// The least size of whole GiB, or of whole MiB under 1GiB, that holds `bytes`: what to
+    /// give `--memory` for a run that needs that much.
+    pub fn covering(bytes: u64) -> MemorySize {
+        let unit = if bytes > GIB { GIB } else { MIB };
+        let rounded = bytes.div_ceil(unit).max(1).saturating_mul(unit);
+        MemorySize(NonZeroU64::new(rounded).expect("a size is not zero"))
+    }
 }
 
 /// Why a size did not parse.

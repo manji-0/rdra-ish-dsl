@@ -173,13 +173,12 @@ pub(crate) enum Commands {
         #[arg(long)]
         max_patterns: Option<usize>,
         /// Cap on the joint states of each target cone; a cone past it is a
-        /// `StateCapReached` error. Default: four times the default --max-patterns, at least
-        /// 65536 (65536 at one instance, 1048576 at two)
+        /// `StateCapReached` error. Default: none; --memory stops a run that outgrows it
         #[arg(long)]
         max_states: Option<usize>,
         /// What the run may hold in memory, such as 4GiB or 512MiB (G and GB also mean GiB);
-        /// a cone whose states pass it stops, as at --max-states. Default: `memory` under
-        /// [check] in rdra.toml, else 4GiB
+        /// a cone whose states pass it stops, and the message estimates what finishing it
+        /// needs. Default: `memory` under [check] in rdra.toml, else 4GiB
         #[arg(long, value_name = "SIZE")]
         memory: Option<MemorySize>,
         #[command(flatten)]
@@ -300,13 +299,12 @@ pub(crate) enum Commands {
         #[arg(long)]
         max_patterns: Option<usize>,
         /// Cap on the joint states of each target cone; a cone past it is a
-        /// `StateCapReached` error. Default: four times the default --max-patterns, at least
-        /// 65536 (65536 at one instance, 1048576 at two)
+        /// `StateCapReached` error. Default: none; --memory stops a run that outgrows it
         #[arg(long)]
         max_states: Option<usize>,
         /// What the run may hold in memory, such as 4GiB or 512MiB (G and GB also mean GiB);
-        /// a cone whose states pass it stops, as at --max-states. Default: `memory` under
-        /// [check] in rdra.toml, else 4GiB
+        /// a cone whose states pass it stops, and the message estimates what finishing it
+        /// needs. Default: `memory` under [check] in rdra.toml, else 4GiB
         #[arg(long, value_name = "SIZE")]
         memory: Option<MemorySize>,
         #[command(flatten)]
@@ -638,7 +636,7 @@ mod tests {
     use clap::Parser;
 
     #[test]
-    fn check_and_states_caps_follow_the_instance_count_unless_given() {
+    fn check_and_states_pattern_cap_follows_the_instance_count_and_the_state_cap_is_given_only() {
         fn caps(args: &[&str]) -> (usize, usize) {
             let mut argv = vec!["rdra-ish", args[0], "m.rdra"];
             argv.extend_from_slice(&args[1..]);
@@ -662,19 +660,18 @@ mod tests {
             (caps.patterns, caps.states)
         }
         for command in ["check", "states"] {
-            assert_eq!(caps(&[command]), (1 << 10, 1 << 16));
+            assert_eq!(caps(&[command]), (1 << 10, usize::MAX));
             assert_eq!(
                 caps(&[command, "--instance-count", "2"]),
-                (1 << 18, 1 << 20)
+                (1 << 18, usize::MAX)
             );
             assert_eq!(
                 caps(&[command, "--instance-count", "3"]),
-                (1 << 26, 1 << 28)
+                (1 << 26, usize::MAX)
             );
             assert_eq!(
                 caps(&[command, "--instance-count", "2", "--max-patterns", "7"]),
-                (7, 1 << 20),
-                "the states default does not follow an explicit pattern cap"
+                (7, usize::MAX)
             );
             assert_eq!(
                 caps(&[command, "--instance-count", "2", "--max-states", "9"]),

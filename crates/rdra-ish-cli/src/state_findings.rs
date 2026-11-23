@@ -8,6 +8,7 @@ use rdra_ish_core::lifecycle::{
     Change, GuardWhy, InvText, Loop, ModelRef, ParamRole, Scope, Severity, Site, StateDiag,
     StatesReport, Trace, TraceStep, TransitionSystem,
 };
+use rdra_ish_core::memory::MemorySize;
 use rdra_ish_core::model::{LinkKind, SetValue};
 use rdra_ish_core::{format_location, ResolvedProgram, SemanticModel};
 
@@ -805,8 +806,34 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
         StateDiag::StateCapReached { .. } => format!(
             "{diag}; raise --max-states, or narrow with --entity or --buc"
         ),
-        StateDiag::MemoryCapReached { raise, .. } => {
-            format!("{diag}; raise it with {raise}, or narrow with --entity or --buc")
+        StateDiag::MemoryCapReached {
+            raise,
+            states,
+            held,
+            ..
+        } => {
+            let narrow = "narrow with --entity or --buc";
+            let each = if *states == 0 {
+                String::new()
+            } else {
+                format!("; held at {} B per state", held.bytes_per_state(*states))
+            };
+            match (held.bound, held.bytes_to_finish(*states)) {
+                (Some(bound), Some(need)) if need <= 1 << 40 => {
+                    let need = MemorySize::covering(need);
+                    format!(
+                        "{diag}{each}; the cone's variables allow at most {bound} states, so if \
+                         all are reachable this cone alone needs at least about {need}; raise it \
+                         to {need} or more with {raise}, or {narrow}"
+                    )
+                }
+                (Some(bound), Some(_)) => format!(
+                    "{diag}{each}; the cone's variables allow at most {bound} states, over 1TiB \
+                     if all were reachable, so that bound does not say what finishing needs; \
+                     {narrow}"
+                ),
+                _ => format!("{diag}{each}; raise it with {raise}, or {narrow}"),
+            }
         }
         StateDiag::TimeBudgetReached { .. } => format!("{diag}; raise --temporal-budget"),
         StateDiag::ConstraintViolated {

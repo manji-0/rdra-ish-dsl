@@ -33,6 +33,13 @@
 
 ### Added
 
+- A `MemoryCapReached` error of `check` and `states` says what the cone held and what
+  finishing needs: the bytes each held state took, and, from the most states the cone's
+  variables allow, the memory to finish it (`at least about 12GiB`, for the cone alone, at
+  the edges per state seen so far) with the `--memory` to give. When the bound is past
+  `1TiB`, it says so and suggests narrowing. The estimate is the store model `store_bytes`
+  of `rdra-ish-core`, which stood 2.4% to 6.7% over the bytes a run counts on the 52 sample
+  cones of a thousand states and more.
 - `verify --max-states <N>` and `--max-patterns <N>` raise the exploration caps that were
   fixed: `--max-states` is the state cap of every BFS run `verify` makes (entity, safety, and
   property cones, and the whole-model run), `--max-patterns` the patterns per entity (default
@@ -41,7 +48,7 @@
   whole-model run) stops a run as `not decided`. The `bounds:` line says `no state cap per
   BFS cone, memory <limit>`, or the cap given, and the hints name the flag. Under
   `--with-tlc` the whole-model TLC run keeps its 2,097,152 cap unless `--max-states` is
-  given. Not settable in `rdra.toml`; `check` and `states` are unchanged.
+  given. Not settable in `rdra.toml`.
 
 - `verify --with-tlc` runs TLC beside the native checker as a second opinion and fails the
   run when the two disagree on a check; a check one engine leaves `not decided` is no
@@ -142,13 +149,15 @@
 
 ### Changed
 
-- The default `--max-patterns` and `--max-states` of `check` and `states` follow
-  `--instance-count`: 2^(10 + 8 * (n - 1)) patterns (1,024, 2^18, 2^26, ...) and the larger
-  of 65,536 and four times that many states (65,536, 2^20, 2^28, ...), for `n` instances.
-  A count whose shift passes the word size saturates; the 4GiB `--memory` default is what
-  stops such a run, as before. A flag you pass always wins. At one instance the state cap
-  stays 65,536 and the pattern cap rises from 256 to 1,024; the generators run at that.
-  `verify`'s caps do not change.
+- `check` and `states` have no state cap by default: `--memory` (4GiB, or `memory` under
+  `[check]`) is what stops a cone, and `--max-states <N>` still caps it. The `bounds:` line
+  says `no state cap per cone, memory 4GiB`, or `<N> states per cone` under the flag. A cone
+  past 65,536 states, which `check` used to refuse at the default cap, now completes within
+  the memory limit. The default `--max-patterns` follows `--instance-count`: 2^(10 + 8 * (n -
+  1)) patterns (1,024, 2^18, 2^26, ...) for `n` instances, up from 256 at one; a shift past
+  the word size saturates, and a flag you pass always wins. The generators have no memory
+  pool, so they keep their state cap of 65,536 and 1,024 patterns. `verify`'s caps do not
+  change.
 - `verify` checks `always`, `eventually`, and `leads_to` natively on the graph BFS
   explores, under each property's fairness, through the same ladder of runs TLC took: the
   reduced cone, the full cone, the cone with `WF_vars(Next)`, and the whole model. A

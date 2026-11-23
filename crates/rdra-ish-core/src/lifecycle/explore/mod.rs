@@ -15,6 +15,7 @@ mod violations;
 pub use graph::{Adjacency, LabelledEdges};
 pub use liveness::LassoFault;
 pub use properties::PropertyVerdict;
+pub use store::{store_bytes, Held};
 
 use std::collections::{BTreeSet, HashSet};
 
@@ -44,10 +45,9 @@ pub struct Caps {
 
 impl Caps {
     /// The default caps at `instances` per entity (`--instance-count`): 2^(10 + 8 * (n - 1))
-    /// patterns, and the larger of 2^16 and four times that many joint states. Each added
-    /// instance multiplies a cone's states by far more than the pattern cap grew by, so the
-    /// defaults grow with it; `--memory` is what stops a run that outgrows the machine. A shift
-    /// past `usize` saturates, and `0` counts as `1`.
+    /// patterns and no state cap. Each added instance multiplies a cone's states by far more
+    /// than the pattern cap grew by, so the pattern cap grows with it; `--memory` is what stops
+    /// a run that outgrows the machine. A shift past `usize` saturates, and `0` counts as `1`.
     pub const fn for_instances(instances: u32) -> Self {
         let shift = 10 + 8 * (instances.saturating_sub(1) as u64);
         let patterns = match 1usize.checked_shl(if shift > u32::MAX as u64 {
@@ -58,8 +58,7 @@ impl Caps {
             Some(patterns) => patterns,
             None => usize::MAX,
         };
-        let states = patterns.saturating_mul(4);
-        Caps::new(patterns, if states > 1 << 16 { states } else { 1 << 16 })
+        Caps::new(patterns, usize::MAX)
     }
 
     pub const fn new(patterns: usize, states: usize) -> Self {
