@@ -176,17 +176,17 @@ impl ComponentRun {
         let (first, walk, tail) = self.walk(&fair, &avoid, start);
         let step = |e: &Edge| {
             let (act, params) = self.step(e);
-            (act, params.into(), self.states[e.to as usize].clone())
+            (act, params.into(), self.states[e.to as usize].to_owned())
         };
         let lifted = match tail {
             Loop::Stutter => {
                 let prefix: Vec<_> = walk.iter().map(step).collect();
-                ts.lift_stop(cone, &self.states[first as usize], &prefix)
+                ts.lift_stop(cone, &self.states[first as usize].to_owned(), &prefix)
             }
             Loop::Back { to } => {
                 let prefix: Vec<_> = walk[..to - 1].iter().map(step).collect();
                 let cycle: Vec<_> = walk[to - 1..].iter().map(step).collect();
-                ts.lift_cycle(&self.states[first as usize], &prefix, &cycle)
+                ts.lift_cycle(&self.states[first as usize].to_owned(), &prefix, &cycle)
             }
         };
         let (states, actions, tail) = match lifted {
@@ -379,7 +379,7 @@ impl ComponentRun {
     /// end, and for a component a loop that covers every fair instance and returns.
     fn lasso(&self, fair: &FairSteps, avoid: &Avoid, start: u32) -> Lasso {
         let (first, walk, tail) = self.walk(fair, avoid, start);
-        let mut states = vec![self.states[first as usize].clone()];
+        let mut states = vec![self.states[first as usize].to_owned()];
         let mut actions = Vec::with_capacity(walk.len());
         let steps = match tail {
             Loop::Stutter => walk.len(),
@@ -388,7 +388,7 @@ impl ComponentRun {
         for (k, e) in walk.iter().enumerate() {
             actions.push(self.bindings[e.binding as usize].0);
             if k < steps {
-                states.push(self.states[e.to as usize].clone());
+                states.push(self.states[e.to as usize].to_owned());
             }
         }
         Lasso {

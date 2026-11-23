@@ -183,7 +183,8 @@ written by hand can name them:
 
 - Invariants: `Forbidden_<E>_<n>`, `Inv_<E>_<n>`, `Required_<E>_<n>`, `Exclusive_<E>_<n>`,
   `MultiForbidden_<E>_<n>`, `MultiInv_<E>_<n>`, `Quantifier_<E>_<n>`, `Check_<E>_<column>_<n>`,
-  `Unique_<Child>_<role>`, `MinCard_<Child>_<role>`, and `TypeOK`.
+  `Unique_<Child>_<role>`, `Unique_<Entity>_<columns>`, `MinCard_<Child>_<role>`, and
+  `TypeOK`.
 - Properties: `AfterAssert_<UC>_<n>`, each temporal property under its declared name, and
   `Fair_<P>`. A `precedes` property adds the variable `<P>_seen` and the operator
   `<P>_latch` in a module whose `.cfg` checks it.
@@ -253,7 +254,8 @@ minor release.
   `--z3` are experimental: the `proved:` / `unproved:` / `lemma:` lines, which rules prove,
   and the clause the `OK:` line gains may change or go away in any release. So is the
   `.lemma()` marker on a rule: `check` checks a lemma like any rule, but `verify` runs no
-  cone for one, so a lemma that only fails at two instances passes `verify`. Do not mark
+  cone of its own for one and checks it only in a cone another check runs, so a lemma that
+  only fails at two instances can pass `verify`. Do not mark
   a rule the model must keep as a lemma. Apart from lemmas, `verify` without `--prove` is
   unchanged.
 
@@ -261,22 +263,23 @@ minor release.
 
 <!-- constrained-by ./formal-verification.md#approximations-and-limitations -->
 Every result holds within the bounds its `bounds:` line prints: the instances per entity,
-the Int range, and the state caps of `check` and of the `verify` BFS. A release may change
-a default bound or cap. That is not a breaking change, and the changelog records it. A
-result that changes for a model within the same printed bounds is a breaking change,
-unless it fixes a bug that the changelog names. 2.0.0 is such a change: for a model with
-`raises` and `triggers` between use cases, `check` and `verify` order the triggered use
-case after its event within the same bounds, so a verdict can move while the `bounds:` line
-stays as it was. The `### Breaking` entry for #112 in the [changelog](../CHANGELOG.md)
+the Int range, the state cap (none unless `--max-states` gives one), and the memory limit.
+A release may change a default bound, cap, or memory limit. That is not a breaking
+change, and the changelog records it. A result that changes for a model within the same
+printed bounds is a breaking change, unless it fixes a bug that the changelog names. 2.0.0
+is such a change: for a model with `raises` and `triggers` between use cases, `check` and
+`verify` order the triggered use case after its event within the same bounds, so a verdict
+can move while the `bounds:` line stays as it was. The `### Breaking` entry for #112 in the [changelog](../CHANGELOG.md)
 names which verdicts move and how to migrate.
 
 To keep a result reproducible across releases, pass the bounds a command takes as flags
-instead of relying on the defaults: `--instance-count`, `--int-range-max`, and
-`--max-patterns` (its default follows `--instance-count`) and `--max-states` (default none) for `check` and `states`, and `--instance-count` and `--int-range-max` for
-`verify`. The [Bounds](./state-derivation.md#bounds) table lists each command's defaults.
-The [memory limit](./cli-reference.md#memory-limit) (`--memory`) can leave a cone
-undecided as `--max-states` does; its count of a cone's bytes is the same on every
-machine, but a release may change it.
+instead of relying on the defaults: `--instance-count`, `--int-range-max`,
+`--max-patterns`, and `--max-states` for `check`, `states`, and `verify`. The default of
+`--max-patterns` follows `--instance-count` in `check` and `states` and is 256 in `verify`;
+`--max-states` has no default. The [Bounds](./state-derivation.md#bounds) table lists each
+command's defaults. The [memory limit](./cli-reference.md#memory-limit) (`--memory`) can
+leave a cone undecided as `--max-states` does; its count of a cone's bytes is the same on
+every machine, but a release may change it.
 [Known verification gaps](./formal-verification.md#known-verification-gaps) lists what the
 bounds leave unchecked.
 

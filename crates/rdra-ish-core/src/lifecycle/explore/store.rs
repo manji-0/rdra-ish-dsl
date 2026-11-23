@@ -2,11 +2,8 @@
 //! collections rather than read from the process, so a run stops at the same state on any
 //! machine and with any number of worker threads.
 
-use std::collections::HashMap;
-use std::hash::BuildHasher;
 use std::mem::size_of;
 
-use crate::lifecycle::expr::State;
 use crate::lifecycle::types::ActId;
 
 use super::{Bfs, ComponentRun, Edge, Layers};
@@ -26,21 +23,6 @@ fn vec_bytes<T>(v: &Vec<T>, more: usize) -> u64 {
     (cap * size_of::<T>()) as u64
 }
 
-/// A `HashMap`'s table once `more` entries are inserted: one control byte and one entry per
-/// bucket, at 7/8 load, doubling when full.
-fn map_bytes<K, V, S: BuildHasher>(m: &HashMap<K, V, S>, more: usize) -> u64 {
-    let buckets = |cap: usize| match cap {
-        0 => 0,
-        c if c < 8 => (c + 1).next_power_of_two(),
-        c => (c * 8 / 7).next_power_of_two(),
-    };
-    let mut n = buckets(m.capacity());
-    if m.len() + more > m.capacity() {
-        n = (n * 2).max(4);
-    }
-    (n * (size_of::<(K, V)>() + 1)) as u64
-}
-
 /// One binding: its entry in `Bindings::list` and its key in `Bindings::index`.
 pub(super) fn binding_bytes(params: &[u8]) -> u64 {
     2 * block(params.len())
@@ -49,18 +31,19 @@ pub(super) fn binding_bytes(params: &[u8]) -> u64 {
 }
 
 /// The bytes the store of a run takes once it holds `states` states of `width` bytes and
-/// `edges` edges, with `seen`: `32 * p2(n) + 2 * n * blk(w) + 25 * buckets(n) + 12 * p2(e)`,
-/// where `p2(x)` is the least power of two of at least `x` (4 at the least), `blk(w)` rounds
-/// the width up to 16, and `buckets(n)` is the least power of two of at least `n * 8 / 7`.
-/// It models `Bfs::bytes_with_one_more` at a run's end; on the 52 sample cones of a thousand
-/// states and more it stood 2.4% to 6.7% over what that counts and never under. Saturates at
-/// `u64::MAX`.
+/// `edges` edges, with `seen`: `(w + 8 + 4) * p2(n) + 5 * buckets(n) + 12 * p2(e)`, where `p2(x)`
+/// is the least power of two of at least `x` (4 at the least) and `buckets(n)` the least power
+/// of two of at least `n * 8 / 7`. Each state is `w` bytes in `states` and an 8-byte parent,
+/// `seen` holds a 4-byte index and a control byte per bucket, and an edge is 12 bytes; the 4
+/// bytes per state more stand for the bindings and the layers. It models
+/// `Bfs::bytes_with_one_more` at a run's end; on the sample cones of a thousand states and
+/// more, at `check` and `verify` bounds, it stood 0.9% to 5.2% over what that counts and never
+/// under. Saturates at `u64::MAX`.
 pub fn store_bytes(states: u64, width: usize, edges: u64) -> u64 {
     let p2 = |x: u128| x.max(4).next_power_of_two();
     let n = u128::from(states);
-    let blk = width.div_ceil(16) as u128 * 16;
     let total =
-        32 * p2(n) + 2 * n * blk + 25 * p2((n * 8).div_ceil(7)) + 12 * p2(u128::from(edges));
+        (width as u128 + 8 + 4) * p2(n) + 5 * p2((n * 8).div_ceil(7)) + 12 * p2(u128::from(edges));
     u64::try_from(total).unwrap_or(u64::MAX)
 }
 
@@ -118,11 +101,10 @@ impl Bfs<'_> {
         }
     }
 
-    /// The store once one more state is admitted: each state twice (in `states` and as a key
-    /// of `seen`), its parent, every edge, and the bindings.
+    /// The store once one more state is admitted: each state once, in `states`, its index in
+    /// `seen`, its parent, every edge, and the bindings.
     pub(super) fn bytes_with_one_more(&self) -> u64 {
-        let width = self.states.first().map_or(0, |s| s.0.len());
-        self.kept_with(1) + map_bytes(&self.seen, 1) + (self.states.len() as u64 + 1) * block(width)
+        self.kept_with(1) + self.seen.bytes_with(1)
     }
 
     /// What the run's result keeps once the run ends and `seen` is dropped.
@@ -131,9 +113,7 @@ impl Bfs<'_> {
     }
 
     fn kept_with(&self, more: usize) -> u64 {
-        let width = self.states.first().map_or(0, |s| s.0.len());
-        vec_bytes::<State>(&self.states, more)
-            + (self.states.len() + more) as u64 * block(width)
+        self.states.bytes_with(more)
             + vec_bytes::<Option<u32>>(&self.parents, more)
             + vec_bytes::<Edge>(&self.edges, 0)
             + self.bindings.bytes
@@ -149,6 +129,6 @@ impl ComponentRun {
 
     /// Bytes in one state.
     pub fn state_width(&self) -> usize {
-        self.states.first().map_or(0, |s| s.0.len())
+        self.states.width()
     }
 }

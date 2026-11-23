@@ -131,8 +131,8 @@ impl Quotient {
         let mut class: Vec<u32> = Vec::with_capacity(n);
         for (i, st) in run.states.iter().enumerate() {
             let c = *rep_of_block.entry(blocks[i]).or_insert_with(|| {
-                reps.push(st.0.clone());
-                class_of.insert(st.0.clone(), reps.len() as u32 - 1);
+                reps.push(st.0.into());
+                class_of.insert(st.0.into(), reps.len() as u32 - 1);
                 reps.len() as u32 - 1
             });
             class.push(c);
@@ -164,7 +164,7 @@ impl Quotient {
             if ext.rise[act.index()] {
                 // Every state of a block rises into the same blocks; the representative's
                 // edges are enough.
-                if reps[class[x] as usize] == run.states[x].0 {
+                if *reps[class[x] as usize] == run.states[x].0 {
                     let inputs = run.system.project(&run.states[y], &ext.inputs_local).0;
                     let was = rises.insert((class[x], inputs), class[y]);
                     assert!(was.is_none_or(|c| c == class[y]), "a rise is a function");

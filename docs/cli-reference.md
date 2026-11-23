@@ -47,6 +47,15 @@ reads, and `crates/rdra-ish-cli/tests/export_gate.rs` runs every kind against th
 | `export`, every other kind | the data layer | writes, with a note |
 | `states` | the derivation, which is its output | prints the report with its `[error]` rows and exits 1 |
 
+[`codegen`](#codegen) refuses (exit 1) while `check` reports an error, lifecycle errors
+included, unless `--allow-failing` is given.
+
+The generators (`codegen`, `next`, and the lifecycle gate of `diagram`, `export`, `list`, and
+`csv`) explore the lifecycle at the caps `check` runs at by default, within `memory` under
+`[check]` (see [Memory limit](#memory-limit)). A cone past that limit is the lifecycle error
+`MemoryCapReached_<E>`: it refuses `codegen` and the outputs above that read the explored
+states, and is counted in the note of the others.
+
 `verify` refuses on a build error of the transition system it checks and reports every
 other finding itself.
 
@@ -65,8 +74,8 @@ status `1` before running secondary consistency checks. Otherwise it reports unr
 model warnings and state-pattern findings. State diagnostics share severity with
 `states`: Error-severity findings print as `error:` and cause exit `1`; only a clean
 run prints `OK: no errors within <bounds>` (for example `OK: no errors within 1 instance per entity, Int 0..5`), or `OK: no errors in the selected scope, within <bounds>` under `--buc` or `--entity` (see [Partial runs](#partial-runs)). A failed run ends with a summary line on stdout instead: `FAIL: <E> errors, <W> warnings within <bounds>` (for example `FAIL: 1 error, 0 warnings within 1 instance per entity, Int 0..5`), with `in the selected scope,` under a scope, or `FAIL: <E> errors, <W> warnings; the model did not load, so nothing was explored` when a load error stops the run before exploration. Info findings are not counted. When the model has temporal `property` declarations,
-`check` prints a trailing `note:` that those were not model-checked (use
-`verify`).
+`check` prints `note: <n> temporal properties were not model-checked by check; use verify`
+on stderr before the `OK:` or `FAIL:` line.
 
 `check` and `states` do safety verification by state exploration only: the rules, the
 `after` assertions, and the state-model findings. They evaluate no `property`, whatever its
@@ -229,8 +238,10 @@ the temporal properties, `can_reach` ones included: a scoped run checks none.
   unreachable enum variants, a state of a state model with no reachability witness, an
   instance that can never leave a state (deadlock), a use case that never runs, a reachable
   state that breaks a `forbidden`, `invariant`,
-  `required`, `exclusive`, multi-entity, or quantifier rule, a failed `after` assertion,
-  a condition body that no use case can bind, and pattern truncation. See
+  `required`, `exclusive`, multi-entity, quantifier, or `@unique` (`Unique_*`) rule, a
+  failed `after` assertion, a rule or `after` assertion that holds vacuously
+  (`Vacuous_<name>`), a condition body that no use case can bind, and a cone stopped at a
+  cap or the memory limit. See
   [Diagnostics](./state-derivation.md#diagnostics).
 
 | Argument | Type | Description |
@@ -615,8 +626,8 @@ number, `0`, and a fraction are refused.
 What the limit counts:
 
 - **BFS.** The states a cone has reached are counted in bytes as they are stored: each
-  state twice (in the list and in the index of seen states), its parent, every edge, and the
-  bindings, by the length and capacity of each collection. The count is the same on every
+  state once (in one buffer, with its number in the index of seen states), its parent, every
+  edge, and the bindings, by the length and capacity of each collection. The count is the same on every
   machine and with any number of threads, so a cone stops at the same state wherever it
   runs. A finished cone keeps its states and edges until its findings are read, so they
   stay counted, and the next cone has the rest of the limit. The cones run side by side,
@@ -646,7 +657,7 @@ reports a `MemoryCapReached` error that names the limit, says what the held stat
 estimates what finishing needs, and exits `1`.
 `states` marks the views it cut. `verify` lists the findings the cone leaves under `not
 checked:`, ends with a warning, and exits `0`, or `1` under `--deny-undecided`; its
-`result:` line says `not decided` either way:
+`result:` line says `not decided` either way. Examples of both close this section.
 
 What `check` and `states` say when a cone stops at the limit: the states it held, the bytes
 each took (the store counted above, with the state that did not fit), and what the cone's
@@ -676,28 +687,36 @@ Without an estimate from the layers, the message falls back on the cone's variab
 most states the cone can have is the product of their domains, and if finishing at that
 many takes no more than `1TiB` the message names that size as what finishing needs at the
 least, if all of them are reachable. The bound is loose: most of the product is never
-reached. A size is computed with `32·p2(n) + 2·n·blk(w) + 25·buckets(n) + 12·p2(e)` bytes
-for `n` states of `w` bytes and `e` edges (`p2` rounds up to a power of two, `blk` to 16
-bytes, `buckets` to a power of two of at least `n·8/7`); on the sample cones of a thousand
-states and more it stood 2.4% to 6.7% over what the run counts. `e` is the edges per
+reached. A size is computed with `(w + 12)·p2(n) + 5·buckets(n) + 12·p2(e)` bytes for `n`
+states of `w` bytes and `e` edges (`p2` rounds up to a power of two, `buckets` to a power of
+two of at least `n·8/7`): the run keeps each state once, in one buffer, and indexes it by
+number. On the sample cones of a thousand states and more, at `check` and `verify` bounds, it
+stood 0.9% to 5.2% over what the run counts. `e` is the edges per
 expanded state seen so far times `n`; early depths have fewer, so that part is low. Every
 figure is for the one cone; the cones share the limit, so allow more than it says.
 
 ```text
-error[MemoryCapReached_Task]: state derivation for entity 'Task': memory limit 56KiB reached at 256 states; results are incomplete: the cone has 9 variables, 9 of them vary (...); new states first reached by: Flip7 127, Flip6 64, Flip5 32, Flip4 16, Flip3 8, Flip2 4, Flip1 2, Close 1; held at 231 B per state; the frontier peaked at depth 5 and has shrunk for 3 layers since, so the cone probably holds about 258 states (its falling side taken to mirror its rising side: an estimate, not a bound); with a quarter to spare, this cone alone probably needs about 1MiB: try 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
-error[MemoryCapReached_Order]: state derivation for entity 'Order': memory limit 1KiB reached at 5 states; results are incomplete: the cone has 3 variables, 2 of them vary (values reached/domain: Order.status 4/5, Order._exists 2/3); new states first reached by: CancelOrder 1, CapturePay 1, PlaceOrder 1, ShipOrder 1; held at 177 B per state; the frontier peaked at depth 2, but by depth 3 it has not fallen far enough to estimate the states left; the cone's variables allow at most 30 states, so if all are reachable this cone alone needs at least about 1MiB; raise it to 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
+error[MemoryCapReached_Task]: state derivation for entity 'Task': memory limit 36KiB reached at 256 states; results are incomplete: the cone has 9 variables, 9 of them vary (...); new states first reached by: Flip7 127, Flip6 64, Flip5 32, Flip4 16, Flip3 8, Flip2 4, Flip1 2, Close 1; held at 145 B per state; the frontier peaked at depth 5 and has shrunk for 3 layers since, so the cone probably holds about 258 states (its falling side taken to mirror its rising side: an estimate, not a bound); with a quarter to spare, this cone alone probably needs about 1MiB: try 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
+error[MemoryCapReached_Order]: state derivation for entity 'Order': memory limit 1KiB reached at 3 states; results are incomplete: the cone has 3 variables, 2 of them vary (values reached/domain: Order._exists 2/3, Order.status 2/5); new states first reached by: CapturePay 1, PlaceOrder 1; held at 101 B per state; the frontier peaked at depth 0, but by depth 1 it has not fallen far enough to estimate the states left; the cone's variables allow at most 30 states, so if all are reachable this cone alone needs at least about 1MiB; raise it to 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
 ```
 
 The `Task` cone (`crates/rdra-ish-cli/tests/fixtures/memory/flags.rdra`) holds 257 states.
 
-`verify` lists what the cones leave undecided:
+`verify` lists what the cones leave undecided. `verify samples/patent-ops --memory 256MiB`
+prints (trimmed):
 
 ```text
 not checked: 10 findings not decided
-  whether some OfficeAction can get stuck at status = open is not decided: the OfficeAction cone stopped at the memory limit (512MiB; raise it with --memory or `memory` under [verify] in rdra.toml; BFS has 256MiB of it)
+  whether some OfficeAction can get stuck at status = open is not decided: the OfficeAction cone stopped at the memory limit (256MiB; raise it with --memory or `memory` under [verify] in rdra.toml)
 ...
-warning: 10 findings a cone stopped at the state cap or the memory limit left undecided; the OK line holds only for what was decided (--deny-undecided fails the run)
+Cone_Forbidden_OfficeAction_3 [Forbidden_OfficeAction_3, Exclusive_OfficeAction_0]: not decided (939300 states, stopped at the state or pattern cap (--max-states, --max-patterns) or the memory limit)
+...
+result: not decided
+warning: 11 findings a cone stopped at the state cap or the memory limit left undecided; the OK line holds only for what was decided (--deny-undecided fails the run)
 ```
+
+Under `--with-tlc` the reason also names the share BFS has: `BFS has 256MiB of it` at
+`--memory 512MiB`.
 
 ---
 
@@ -775,7 +794,7 @@ relation, from which the RDRAGraph views can be derived.
 | `business` | 業務の流れ図 (ビジネスコンテキスト, ビジネスユースケース) | The business flow: each business holding its BUCs, and an edge from a BUC to the BUC it hands off to, labelled with the event that passes it | Actors and external systems (`list --kind buc-roles`); use cases, steps, and events as nodes; a hand-off no event carries | The named BUCs and the BUCs they hand off to or from, with their businesses |
 | `usecase` | UC複合図 | Each use case with its actors, screens and what they show, the entities it reads and writes, its events, external systems, and timers, the conditions on it, and its transitions | BUCs, steps, media, permissions, fields, APIs (their CRUD is folded into the use case), and DTOs | The use cases the BUCs contain, directly or through a step; `--usecase` names use cases instead |
 | `robustness` | ロバストネス図 | The use cases as an ICONIX robustness diagram: actors, boundaries (screens, external systems, timers), controls (APIs, or the use case itself), and the entities each control reads and writes | BUCs, steps, events (named in edge labels), conditions, states, media, permissions, fields, and DTOs | The use cases the BUCs contain, directly or through a step; `--usecase` names use cases instead |
-| `sequence` | シーケンス図 | One use case in order: the actors, screen, controls (APIs, or the use case itself), entities, and external systems that take part, the guards, each control's reads and writes with the `sets` values and the lifecycle move, and the events it raises | BUCs, steps, other use cases (a triggered one is one message to its control), permissions, media, fields, and DTOs | Exactly one use case, named by one `--usecase`; `--buc` is refused |
+| `sequence` | シーケンス図 | One use case in order: the actors, screen, controls (APIs, or the use case itself), entities, and external systems that take part, the guards, each control's reads and writes with the `sets` values and the lifecycle move, and the events it raises | BUCs, steps, other use cases (a triggered one is one message to its control), permissions, media, fields, and DTOs | The BUCs' use cases one after another, each under a numbered note; without `--buc`, exactly one `--usecase` |
 | `flow` | 業務フロー | Each flow with its steps, their `precedes`, `branches`, `excepts`, and `repeats` edges, what each step `covers`, and a lane per actor | Actors without `performs(Actor, Step)`; screens and entities | The flows the BUCs contain |
 | `screen` | 画面遷移図 | Each screen; a solid edge per `navigates`, labelled with its `.via` use case; where none is declared, a dashed `業務上の順番` edge between the screens of consecutive steps in one actor's lane | Use cases, fields, and entities as nodes | The screens the BUCs' use cases display, and the business order of the BUCs' flows |
 | `information` | 情報モデル | Entities with their `relate` links, state models, and the variations their columns take | Columns (`er`) and use cases | The entities `er` draws for the BUCs |
@@ -1191,7 +1210,7 @@ stateDiagram-v2
 
 `scripts/sample-artifacts.tsv` lists every committed `out/` file of `samples/ec-site`,
 `samples/clinic-ops`, `samples/patent-ops`, `samples/food-permit-ops`,
-`samples/insurance-claim-ops`, `samples/personal-info`, each `samples/incremental-order`
+`samples/insurance-claim-ops`, `samples/oidc-auth`, `samples/personal-info`, each `samples/incremental-order`
 step, and `samples/api-contract`. Each row holds the output path and the `rdra-ish` command that
 writes it. CI runs `scripts/check-sample-artifacts.sh` after the Rust snapshot tests. The
 script builds the binary once and runs every row. It then rewrites the documents that
@@ -1371,6 +1390,10 @@ message that names `mermaid-er`. Use `diagram` when choosing a diagram view duri
 interactive review; use `export` when a downstream tool or CI job expects a named
 artifact kind.
 
+`--kind typescript-states` (also `type-script-states`) was removed: it is a usage error
+(exit 2) that writes nothing and names the rewrite, `codegen <INPUTS> --lang ts -o
+<FILE>.ts` (see [`codegen`](#codegen)).
+
 The command writes the artifact to the output path and prints `wrote <path>`.
 
 ---
@@ -1390,7 +1413,7 @@ rdra-ish verify <INPUTS...> [--with-tlc] [-o <OUT>] [--instance-count <N>] [--in
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--with-tlc` | flag | off | Also run TLC on every cone and property run the native checker makes, and fail the run (exit 1) when the two decide a check differently. Requires `tlc` or `tlc2` on `PATH`, or `tla2tools.jar` named by `--tlc-jar` (see [Getting TLC](#getting-tlc)); without one the run exits 1. |
 | `--backend` | `tlc` | none | Deprecated. `--backend tlc` is a spelling of `--with-tlc` that prints `warning: --backend tlc is deprecated: ...` on stderr. The next major release removes it. |
-| `-o`, `--out` | path | none; under `--with-tlc` a temp dir, deleted when TLC passes every check and kept when it does not | Directory for the specs, for a TLC run by hand: one `Cone_<check>.tla` / `.cfg` pair per cone, named after the first invariant or after-assert that reads it, one `Cone_<Property>.tla` / `.cfg` pair per `always`, `eventually`, and `leads_to` with a `Cone_<Property>_WF` pair beside it for an `eventually` or `leads_to` and a `Cone_<Property>_Full` pair for a reduced cone, `cones.txt` listing each module and the checks it answers, and, when the model declares temporal properties, the whole-model `RdraSpec.tla` / `.cfg` with every `PROPERTY` and a `RdraSpec_<Property>` pair for each property its cone leaves undecided. A path ending in `.tla` writes into its directory and names the whole-model module after its stem, and each whole-model property module `<stem>_<Property>`. The native checker reads none of these files. |
+| `-o`, `--out` | path | none; under `--with-tlc` a temp dir, deleted when TLC passes every check and kept when it does not | Directory for the specs, for a TLC run by hand: one `Cone_<check>.tla` / `.cfg` pair per cone, named after the first invariant or after-assert that reads it, one `Cone_<Property>.tla` / `.cfg` pair per `always`, `eventually`, and `leads_to` with a `Cone_<Property>_WF` pair beside it for an `eventually` or `leads_to` and a `Cone_<Property>_Full` pair for a reduced cone, `cones.txt` listing each module and the checks it answers, and, when the model declares temporal properties, the whole-model `RdraSpec.tla` / `.cfg` with every `PROPERTY` and a `RdraSpec_<Property>` pair for each property its cone leaves undecided. A path ending in `.tla` writes into its directory and names the whole-model module after its stem, and each whole-model property module `<stem>_<Property>`. With `-o`, stdout says `wrote <n> specs and <dir>/cones.txt`. The native checker reads none of these files. |
 | `--instance-count` | unsigned integer | `2` | Multi-instance `InstanceCount` (`1..=255`; `1` warns). |
 | `--int-range-max` | unsigned integer | `5` | Upper bound for `IntRange == 0..N` (`1..=255`; `0` rejected). |
 | `--max-states` | unsigned integer | none | The state cap of every BFS run `verify` makes: each entity, safety, and property cone (`_Full` and `_WF` included) and the whole-model run. Without it BFS has no state cap: `--memory` stops a cone, and `--memory` and `--temporal-budget` stop the whole-model run, as `not decided`. The `bounds:` line says `no state cap per BFS cone, memory <limit>`, or the cap given. Under `--with-tlc` TLC's whole-model run needs a bound, and keeps 2,097,152 states unless `--max-states` is given; TLC's cone runs have no state cap. |
@@ -1427,6 +1450,10 @@ decides. The labels name the runs and the modules `-o` writes, whichever engine 
 their own: `verify` prints `order and stability properties: <n>, each decided by BFS on its
 cone` and a `property <P> (BFS on its cone): ok|violated|not decided: ...` line per property
 (see [formal-verification.md](./formal-verification.md#order-and-stability-properties)).
+`can_reach` is decided by BFS on its cone too, with no TLC run: `verify` prints
+`can_reach properties: <n>, decided natively by BFS on each one's cone (TLC cannot check AG
+EF)` and `can_reach (BFS on <k> cones): <n> checked, <v> violated` (see
+[formal-verification.md](./formal-verification.md#recoverability-on-a-cone)).
 Stdout names the bounds, the cone count, and each run's result. A whole-model run the budget
 stops before it decides prints `not decided` and is listed under `not checked:`.
 
@@ -1443,14 +1470,14 @@ Under `--with-tlc` a `tlc_result: ok|counterexample|tool_error` line of the same
 follows it with TLC's verdict, and each TLC run prints its own line prefixed `tlc: `, after
 the native lines.
 
-`verify` also explores each entity's cone with BFS at the same bounds, at the same bounds with no state cap but `--memory` (or `--max-states`), and prints what it finds before the cone lines; the `bounds:` line names
+`verify` also explores each entity's cone with BFS at the same bounds, with no state cap but `--memory` (or `--max-states`), and prints what it finds before the cone lines; the `bounds:` line names
 the cap as `no state cap per BFS cone, memory 16GiB`, or `<N> states per BFS cone` under `--max-states`. It reads off each cone's run whether a rule, an
 `after` assertion, or a property holds there and says nothing, and warns `Vacuous_<name>`
 (see [Rules that hold vacuously](./state-derivation.md#rules-that-hold-vacuously)). A state
 of a state model with no witness there, and a deadlock, print as in `check` and fail the run
 even when every check holds: stderr carries `result: counterexample`, no `OK:` line
 follows, and the exit status is 1. A deadlock at the bound and a use case that never runs print as in
-`check`, as a `warning:` that does not fail the run. A cone that stops at the cap lists each
+`check`, as a `warning:` that does not fail the run. A cone that stops at the state cap or the memory limit lists each
 state, each deadlock, and each use case it leaves undecided under `not checked:` on stdout.
 Then one summary line follows on stdout:
 
@@ -1519,8 +1546,9 @@ the counterexample in model terms, decoded from TLC's states and replayed throug
 relation BFS uses (the lowest binding when several give the same state), marked `from TLC`,
 then TLC's own `violated: Error: ... is violated.` line and raw trace. A TLC run that fails
 without a model violation fails the run with `<n> TLC run(s) that failed without a model
-violation`. A failed run ends with `specs: <dir>`; without `-o` it adds `(kept because a
-check failed)` or `(kept because the engines disagree)`.
+violation`. A run in which TLC does not pass, or the engines disagree, ends with
+`specs: <dir>`; without `-o` it adds `(kept because a check failed)` or `(kept because the
+engines disagree)`. No other run prints a `specs:` line.
 
 ```
 $ rdra-ish verify samples/formal-verification/cross_order_payment_split.rdra --with-tlc
@@ -1681,12 +1709,12 @@ rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--format` | `table` \| `csv` \| `json` | `table` | Output format. For TypeScript state types, use [`codegen --lang ts`](#codegen). |
+| `--format` | `table` \| `csv` \| `json` | `table` | Output format. For TypeScript state types, use [`codegen --lang ts`](#codegen): `--format typescript` (also `type-script`) was removed, and is a usage error (exit 2) that names that rewrite. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Keep only the use cases reachable from the named BUCs. See [Partial runs](#partial-runs). |
 | `--max-patterns` | unsigned integer | 2^(10 + 8 * (n - 1)) for `n` = `--instance-count`: `1024`, `262144`, ... | Cap on each entity's distinct patterns within one target cone (an entity view, invariant, or after-assert is explored on the variables it reads). Only entities the target reads are bounded to one instance: a use case that also creates an entity outside the cone (an audit row, say) never runs out of slots for it. When the cap is hit, the result is marked `truncated` and a fail-closed `PatternCapReached` **error** is recorded (exit non-zero for all formats). |
-| `--max-states` | unsigned integer | none | Cap on the joint states of one target cone, printed in the `bounds:` line (`no state cap per cone, memory 4GiB` without it). When the cap is hit, the result is marked `truncated` and a fail-closed `StateCapReached` **error** is recorded (exit non-zero for all formats). The message names what the reached states vary in, so you can see which entity's columns a guard pulled into the cone (see the example below). |
+| `--max-states` | unsigned integer | none | Cap on the joint states of one target cone, printed in the `bounds:` line (`no state cap per cone, memory 4GiB` without it). When the cap is hit, the result is marked `truncated` and a fail-closed `StateCapReached` **error** is recorded (exit non-zero for all formats). The message names what the reached states vary in, so you can see which entity's columns a guard pulled into the cone (see the example in [Exploration by cone of influence](./state-derivation.md#exploration-by-cone-of-influence)). |
 | `--memory` | size | `memory` under `[check]` in `rdra.toml`, else `4GiB` | What the run may hold in memory, such as `4GiB` or `512MiB` (`G` and `GB` also mean GiB). A cone whose states pass it stops, with a fail-closed `MemoryCapReached` error that estimates what finishing needs. See [Memory limit](#memory-limit). |
-| `--instance-count` | unsigned integer | `1` | Instances (slots) per entity, `1..=255`. The `bounds:` line prints the value used. A larger value makes more states per cone and raises the default `--max-patterns` (see it below); a run that outgrows the machine stops at `--memory`. |
+| `--instance-count` | unsigned integer | `1` | Instances (slots) per entity, `1..=255`. The `bounds:` line prints the value used. A larger value makes more states per cone and raises the default `--max-patterns` (see it above); a run that outgrows the machine stops at `--memory`. |
 | `--int-range-max` | unsigned integer | `5` | The Int domain is `0..=N`, `1..=255` (`0` is rejected). |
 | `--entity <id>` | string (repeatable) | — (all entities) | Derive only the named entities' views, and the invariants and after-asserts that read them, each on its own cone. Every output format holds only those views. Exit severity considers the selected targets and the build errors their cones read; a build error outside them is deferred and listed under `not checked:`. See [Partial runs](#partial-runs). |
 | `--without-usecase <id>` | string (repeatable) | — | Assume the use case never runs and leave it out. See [Partial runs](#partial-runs). |
@@ -1696,8 +1724,9 @@ rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns 
 Output is written to stdout. In the table, each entity opens with an `axes:` line, the
 value domain of each state axis, and a `labels:` line when an inline `Enum` axis has
 labeled values (`status[pending=受付前|paid=支払済]`). Exit is based on structured severity
-(all formats), not string-scanning `[error]`. stderr starts with a `bounds:` line: one instance per entity,
-the Int range, the state cap per target cone, and that entities a check does not read are unbounded.
+(all formats), not string-scanning `[error]`. stderr starts with a `bounds:` line: the instances per entity,
+the Int range, the state cap per target cone (`no state cap per cone, memory 4GiB` without
+`--max-states`), and that entities a check does not read are unbounded.
 `check` prints the same line, and `verify` prints it on stdout with the TLA+ constants. Diagnostics that name no entity are printed
 on stderr too, and so is the `not checked:` block, which lists each state of a state model,
 each deadlock, and each use case the run does not decide (a capped cone, or `--buc`, which
@@ -1740,8 +1769,9 @@ key, each variation and inline `Enum` as a value set, and each entity and DTO as
 key column takes its parent's id type, and a `@null` column is `T | null`, `Option<T>`, or
 `*T`.
 
-An entity with a lifecycle column is a **state type**: one variant per value of its tag
-column (`status`, else a `*_status` column, else the first lifecycle column by name, when that column is an inline `Enum`), and the entity's type is their union, a
+An entity whose tag column is an inline `Enum` that `transitions` drive is a **state type**:
+one variant per value of its tag column (of the columns `transitions` names, `status`, else
+a `*_status` column, else the first by name), and the entity's type is their union, a
 TypeScript union of interfaces, a Rust enum of structs with a `status()` method, or a Go
 interface that only the generated variants implement. A variant narrows a nullable column
 only where a rule says so: `invariant(E).when(status == v).then(x == present)` makes `x`
@@ -1749,7 +1779,8 @@ present in `v`, `forbidden(E, status == v, x == present)` makes it null there, a
 `required(E, x == present)` makes it present in every state. A rule with another atom or a
 `.when(Cond)` narrows nothing. A null column is `null` in TypeScript and left out of the
 Rust and Go structs, with a doc line naming the rule. The Rust and Go variants hold no tag
-field: the variant is the tag, and writing it to a row is the code's job.
+field: the variant is the tag, and writing it to a row is the code's job. An entity whose
+`Enum` only `sets` writes, with no `transitions` (ec-site's `Payment`), is a plain record.
 
 Each use case of one transaction gets **transition functions**, read from the transition
 system `check` and `verify` explore. A use case gets one function per combination of the
