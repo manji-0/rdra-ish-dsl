@@ -91,3 +91,7 @@ jobs:
         run: RDRA_REQUIRE_TLC=1 cargo test --release -p rdra-ish-cli --test engine_equivalence
       - name: No rule z3 proves has a BFS counterexample at 1 to 3 instances
         run: RDRA_REQUIRE_Z3=1 cargo test --release -p rdra-ish-cli --test proof_equivalence
+      - name: The adversarial corpus gives its stated verdicts, and native, TLC and z3 agree on it
+        # docs/engine-agreement.md: each case under crates/rdra-ish-cli/tests/engine_corpus/
+        # states every engine's verdict; about 25 s locally.
+        run: RDRA_REQUIRE_TLC=1 RDRA_REQUIRE_Z3=1 cargo test --release -p rdra-ish-cli --test engine_corpus

@@ -1,10 +1,11 @@
 // trap: a fair use case that creates (a `New` parameter) and runs out of slots.
 // Pay moves the order and creates a receipt; Reissue creates receipts and writes nothing
-// else. The receipt's key joins Pay's writes, so Pay is one step. The fair instance is Pay(order), with the receipt bound inside, so the cone counts
-// receipt slots. Once Reissue takes the last receipt, Pay is disabled forever and a pending
-// order may stop: PendingPays fails though Pay is fair. A bill's PayBill creates a voucher
-// and nothing else creates one, so at 2 instances each bill has a voucher slot of its own
-// and BillPays holds.
+// else. The receipt's key joins Pay's writes, so Pay is one step. The fair instance is
+// Pay(order), with the receipt bound inside, so the cone counts receipt slots. Once
+// Reissue takes the last receipt, Pay is disabled forever and a pending order may stop:
+// PendingPays fails though Pay is fair. A bill's PayBill creates a voucher and nothing
+// else creates one, so at 2 instances each bill has a voucher slot of its own and
+// BillPays holds.
 // expect PendingPays: native=counterexample tlc=counterexample
 // expect BillPays: native=ok tlc=ok
 entity Order "注文" { id: Int @pk  status: Enum(pending, paid) @default(pending) }

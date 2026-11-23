@@ -3,8 +3,9 @@
 // light is off; Swing opens an ajar door with no guard. So no state has a light off and a
 // door open, at any bound. The rule is not inductive alone: from the unreachable state
 // (light off, door ajar), Swing breaks it, and no mined lemma rules that state out, since
-// the light and the door are not related by a key. z3 reports the CTI; BFS finds nothing.
-// Here the lemma states that fact; it holds at every bound and makes the rule inductive.
+// the light and the door are not related by a key (z3_cti_true_rule.rdra). Here a
+// `.lemma()` states that fact; it holds at every bound and makes the rule inductive, so z3
+// proves both. A lemma z3 kept must not have a BFS counterexample either.
 // expect MultiForbidden_Light_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 // expect MultiForbidden_Light_1: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 // expect Deadlock_Door_state_closed: native=counterexample tlc=none

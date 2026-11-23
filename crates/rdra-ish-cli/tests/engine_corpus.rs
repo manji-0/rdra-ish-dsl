@@ -468,7 +468,9 @@ impl Observed {
                     lines.next();
                 }
                 if name == "EngineDisagreement" || name == "LassoFault" {
-                    out.faults.push(line.to_string());
+                    if !out.faults.iter().any(|f| f == line) {
+                        out.faults.push(line.to_string());
+                    }
                 } else if from_tlc {
                     out.tlc_errors.insert(name);
                 } else {
