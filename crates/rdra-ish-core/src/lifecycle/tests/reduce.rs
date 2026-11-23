@@ -381,7 +381,7 @@ fn lifted_path(run: &ComponentRun, at: u32) -> (State, Vec<Step>) {
         .iter()
         .map(|e| {
             let (act, params) = run.step(e);
-            (act, params.into(), run.states[e.to as usize].clone())
+            (act, params.into(), run.states[e.to as usize].to_owned())
         })
         .collect();
     run.system.lifted(&run.states[first as usize], &steps)
