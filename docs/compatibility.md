@@ -56,9 +56,13 @@ the behavior it describes.
   display label that a change to the stage order renumbers.
 - **The `bounds:`, `result:`, and `tlc_result:` lines.** Their form stays parseable as the
   CLI reference shows it. Every `verify` run that reaches its checks prints `result:` with
-  `ok`, `counterexample`, or `tool_error`: the verdict of the invariants, the
-  after-assertions, and the properties. `tlc_result:` has the same form, gives TLC's
-  verdict, and prints only under `--with-tlc`.
+  `ok`, `not decided`, `counterexample`, or `tool_error`: the verdict of the whole run.
+  `ok` means exit 0 with nothing undecided, so a script that reads only this line never
+  misses a failure; `counterexample` means a check or a state-model error of the entity
+  cones failed the run; `not decided` means nothing failed but a cap, the budget, or
+  `--deny-unproved` left something open (exit 0, or 1 under `--deny-undecided`);
+  `tool_error` means a tool bug or a failed TLC run. `tlc_result:` has the form
+  `ok|counterexample|tool_error`, gives TLC's verdict, and prints only under `--with-tlc`.
 
 ### The Mermaid diagrams
 

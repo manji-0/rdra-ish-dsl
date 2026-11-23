@@ -517,7 +517,12 @@ fn a_property_the_cone_cannot_decide_runs_on_the_whole_model_under_the_budget() 
         stdout.contains("; raise --temporal-budget, or name the use cases the property relies on with .fair(UseCase, ...)"),
         "{stdout}"
     );
-    assert!(stdout.contains("\nresult: ok\n"), "{stdout}");
+    // Exit 0, but something is undecided: `result:` is not `ok`.
+    assert!(!stdout.contains("result: ok"), "{stdout}");
+    assert!(
+        stderr.lines().any(|l| l == "result: not decided"),
+        "{stderr}"
+    );
     assert!(!stdout.contains("tlc_result"), "{stdout}");
     assert!(
         stdout.ends_with("OK: no errors within 2 instances per entity, Int 0..5\n"),
@@ -546,6 +551,11 @@ fn a_property_the_cone_cannot_decide_runs_on_the_whole_model_under_the_budget() 
         "{stderr}"
     );
     assert!(!stdout.contains("OK:"), "{stdout}");
+    assert!(
+        stderr.lines().any(|l| l == "result: not decided"),
+        "{stderr}"
+    );
+    assert!(!stdout.contains("result: ok"), "{stdout}");
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
@@ -571,7 +581,7 @@ fn verify_prints_the_bounds_line_and_an_ok_line_that_repeats_them() {
 }
 
 /// A state no use case reaches fails `verify` from BFS on the entity cones, though no
-/// invariant or property is violated: `result: ok` and exit 1.
+/// invariant or property is violated: `result: counterexample` and exit 1.
 #[test]
 fn an_unwitnessed_state_fails_verify_while_the_checks_pass() {
     let tmp = scratch("verify_cli_unwitnessed");
@@ -580,7 +590,11 @@ fn an_unwitnessed_state_fails_verify_while_the_checks_pass() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
-    assert!(stdout.lines().any(|l| l == "result: ok"), "{stdout}");
+    assert!(!stdout.contains("result: ok"), "{stdout}");
+    assert!(
+        stderr.lines().any(|l| l == "result: counterexample"),
+        "{stderr}"
+    );
     assert!(!stdout.contains("OK: no errors"), "{stdout}");
     assert!(
         stderr.contains(
@@ -611,7 +625,11 @@ fn a_deadlock_fails_verify_while_the_checks_pass() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
-    assert!(stdout.lines().any(|l| l == "result: ok"), "{stdout}");
+    assert!(!stdout.contains("result: ok"), "{stdout}");
+    assert!(
+        stderr.lines().any(|l| l == "result: counterexample"),
+        "{stderr}"
+    );
     assert!(!stdout.contains("OK: no errors"), "{stdout}");
     assert!(
         stderr.contains(

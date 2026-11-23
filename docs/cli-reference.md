@@ -587,7 +587,8 @@ What the limit counts:
 A cone that reaches the limit stops as a cone that reaches `--max-states` does. `check`
 reports a `MemoryCapReached` error that names the limit and how to raise it, and exits `1`.
 `states` marks the views it cut. `verify` lists the findings the cone leaves under `not
-checked:`, ends with a warning, and exits `0`, or `1` under `--deny-undecided`:
+checked:`, ends with a warning, and exits `0`, or `1` under `--deny-undecided`; its
+`result:` line says `not decided` either way:
 
 ```text
 not checked: 10 findings not decided
@@ -1325,12 +1326,16 @@ cone` and a `property <P> (BFS on its cone): ok|violated|not decided: ...` line 
 Stdout names the bounds, the cone count, and each run's result. A whole-model run the budget
 stops before it decides prints `not decided` and is listed under `not checked:`.
 
-Every run that reaches its checks prints one `result: ok|counterexample|tool_error` line:
-`ok` on stdout when every invariant, `after` assertion, and property it checked holds,
-otherwise on stderr. `counterexample` means one of them is violated; `tool_error` means a
-native counterexample failed its own check or the engines disagree, a tool bug either way.
-The state-model findings of the entity cones, below, fail the run beside it and do not move
-it. Under `--with-tlc` a `tlc_result: ok|counterexample|tool_error` line of the same form
+Every run that reaches its checks prints one `result: ok|not decided|counterexample|tool_error`
+line, the verdict of the whole run: `ok` on stdout when the run exits 0 with nothing
+undecided, otherwise on stderr. `counterexample` means a check is violated or a state-model
+finding of the entity cones, below, fails the run (a deadlock, a state with no witness, a
+`can_reach` error). `not decided` means nothing failed, but a cap, the budget, or
+`--deny-unproved` left something open: the run exits 0, or 1 under `--deny-undecided` or
+`--deny-unproved`, and never prints `ok`. `tool_error` means a native counterexample failed its
+own check, the engines disagree, or a TLC run failed without a model violation: a tool bug
+or a broken run. A run that fails or leaves a finding undecided never prints `result: ok`.
+Under `--with-tlc` a `tlc_result: ok|counterexample|tool_error` line of the same form
 follows it with TLC's verdict, and each TLC run prints its own line prefixed `tlc: `, after
 the native lines.
 
@@ -1340,8 +1345,8 @@ the cap as `8388608 states per BFS cone`. It reads off each cone's run whether a
 `after` assertion, or a property holds there and says nothing, and warns `Vacuous_<name>`
 (see [Rules that hold vacuously](./state-derivation.md#rules-that-hold-vacuously)). A state
 of a state model with no witness there, and a deadlock, print as in `check` and fail the run
-even when every check holds: stdout carries `result: ok`, no `OK:` line follows, and the
-exit status is 1. A deadlock at the bound and a use case that never runs print as in
+even when every check holds: stderr carries `result: counterexample`, no `OK:` line
+follows, and the exit status is 1. A deadlock at the bound and a use case that never runs print as in
 `check`, as a `warning:` that does not fail the run. A cone that stops at the cap lists each
 state, each deadlock, and each use case it leaves undecided under `not checked:` on stdout.
 Then one summary line follows on stdout:

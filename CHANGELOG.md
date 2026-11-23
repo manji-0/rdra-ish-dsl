@@ -12,8 +12,11 @@
   specs, and fails the run with `result: tool_error`. `--with-tlc` without `tlc` exits 1.
   The verdicts, the run labels (`Cone_<name>`, `_Full`, `_WF`, `RdraSpec_<P>`), and the
   counterexamples' shape stay. To migrate:
-  - Read `result: ok|counterexample|tool_error` in place of `tlc_result:`, which prints
-    beside it only under `--with-tlc`.
+  - Read `result: ok|not decided|counterexample|tool_error` in place of `tlc_result:`, which
+    prints beside it only under `--with-tlc`. `result:` is the verdict of the whole run: `ok`
+    means exit 0 with nothing undecided, a state-model error (a deadlock, a state with no
+    witness) makes it `counterexample`, and a cap, the budget, or `--deny-unproved` that
+    leaves a finding open makes it `not decided`.
   - Replace `--backend tlc` with `--with-tlc` where you want TLC. `--backend tlc` still
     works, means `--with-tlc`, and prints a deprecation warning; the next major release
     removes it. Drop it where you do not.
