@@ -2,7 +2,7 @@
 // cones that keep Issue hold Invoice._owner_Order and not Invoice.status. Issue creates one
 // Invoice per open Order, so Unique_Invoice_Order (relate 1:1) holds at InstanceCount == 2.
 // expect check: ok
-// expect verify: tlc=ok
+// expect verify: ok
 entity Order "注文" {
   id: Int @pk
   status: Enum(open, closed) @default(open)

@@ -5,7 +5,7 @@
 // order, related or not, and fails at two instances on a captured payment beside another
 // order that is never paid.
 // expect check: ok
-// expect verify: tlc=counterexample fail CapturedPaidAnyOrder
+// expect verify: fail CapturedPaidAnyOrder
 entity Order "注文" {
   id: Int @pk
   status: Enum(draft, paid, cancelled) @default(draft)

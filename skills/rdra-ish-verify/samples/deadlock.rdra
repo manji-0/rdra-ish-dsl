@@ -3,7 +3,7 @@
 // Express ships a pending Order directly, so shipped is reachable and the deadlock is the one
 // error. TLC finds no violation: the BFS state-model finding fails the run.
 // expect check: fail Deadlock_Order_status_paid
-// expect verify: tlc=ok fail Deadlock_Order_status_paid
+// expect verify: fail Deadlock_Order_status_paid
 entity Order "注文" {
   id: Int @pk
   status: Enum(pending, paid, shipped) @default(pending)

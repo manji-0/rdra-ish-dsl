@@ -9,19 +9,28 @@ states, and a lifted trace can take another path to the same violation. Where th
 run leaves a finding undecided (a cone past the state cap) and the reduced run decides it, the
 seed is listed under `plain_undecided` and compared on what the unreduced run decided.
 
-  python3 -I scripts/reduction-diff.py run BIN --seeds 0:40 [--jobs N] [--fail-on-timeout]
+With `--with-tlc` both runs pass `--with-tlc`, so TLC runs every cone beside the native
+checker, and every check on which the two engines differ (an `error[EngineDisagreement]`
+line, or an `error[LassoFault]` line for a native counterexample that fails its own check)
+is recorded. Such a seed is listed under `disagreed`, its model copied to
+`<work>/disagreed/seed<N>.rdra`, whatever the reduced and unreduced runs compare to.
+
+  python3 -I scripts/reduction-diff.py run BIN --seeds 0:40 [--jobs N] [--fail-on-timeout] [--with-tlc]
   (--timeout S and --work DIR go before the subcommand)
   python3 -I scripts/reduction-diff.py gen SEED
-  python3 -I scripts/reduction-diff.py compare BIN MODEL.rdra [--instance-count N]
-  python3 -I scripts/reduction-diff.py minimize BIN MODEL.rdra OUT.rdra [--instance-count N]
+  python3 -I scripts/reduction-diff.py compare BIN MODEL.rdra [--instance-count N] [--with-tlc]
+  python3 -I scripts/reduction-diff.py minimize BIN MODEL.rdra OUT.rdra [--instance-count N] [--with-tlc]
 
-`run` needs `tlc` on PATH (run it under `nix develop`). It writes each seed's model and
-outputs under `--work` (default target/reduction-diff), copies a diverging model to
-`<work>/diverged/seed<N>.rdra`, and ends with one JSON summary line. A seed whose run passes
-`--timeout` is listed under `timed_out` with the side that timed out first (the unreduced
-run is skipped after the reduced one times out), never dropped silently. The exit code is 1 when any seed diverges, or times out under `--fail-on-timeout`.
+`run --with-tlc` needs `tlc` on PATH (run it under `nix develop`); without it no run starts
+TLC. It writes each seed's model and outputs under `--work` (default target/reduction-diff),
+copies a diverging model to `<work>/diverged/seed<N>.rdra`, and ends with one JSON summary
+line. A seed whose run passes `--timeout` is listed under `timed_out` with the side that
+timed out first (the unreduced run is skipped after the reduced one times out), never
+dropped silently. The exit code is 1 when any seed diverges or disagrees, or times out under
+`--fail-on-timeout`.
 
-`minimize` shrinks a diverging model by deleting lines (ddmin) while it still diverges.
+`minimize` shrinks a diverging or disagreeing model by deleting lines (ddmin) while it
+still does.
 """
 
 import argparse
@@ -273,8 +282,15 @@ def sh(cmd, timeout, env=None, cwd=None):
 VERDICT = re.compile(r"^\S+ \[([^\]]*)\]: (ok|counterexample|tool_error|not decided)\b", re.M)
 
 
+# A check the native checker and TLC decide differently, or a native counterexample that
+# fails its own check: a tool bug, recorded apart from the comparison of the two runs.
+ENGINE_BUG = re.compile(r"^error\[(?:EngineDisagreement|LassoFault)\]: (.*)$", re.M)
+
+
 def observe(rc, out):
-    """What both runs must agree on."""
+    """What both runs must agree on, and the engine bugs each run reports."""
+    disagreements = ENGINE_BUG.findall(out)
+    out = ENGINE_BUG.sub("", out)
     names = sorted(set(re.findall(r"^(?:error|warning|info)\[([^\]]+)\]", out, re.M)))
     # A cone's line gives the cone's outcome, and the cones group checks differently when
     # reduced; a check of a cone with a counterexample is violated when a finding names it.
@@ -287,9 +303,13 @@ def observe(rc, out):
             # A property the cone leaves undecided runs again on the whole model; the later
             # line is the verdict.
             checks[check] = verdict
-    keep = ("state models", "not checked", "tlc_result", "OK:", "verification ", "Error: verification")
+    keep = ("state models", "not checked", "result:", "tlc_result", "OK:", "verification ", "Error: verification")
     lines = [l for l in out.splitlines() if l.startswith(keep)]
-    return dict(rc=rc, names=names, checks=checks, lines=lines)
+    return dict(rc=rc, names=names, checks=checks, lines=lines, disagreements=disagreements)
+
+
+def disagreed(sides):
+    return any(o != "timeout" and o["disagreements"] for o in sides.values())
 
 
 def undecided(o):
@@ -299,7 +319,8 @@ def undecided(o):
 def agreement(red, plain):
     """"same"; "plain_undecided" when they agree on all the unreduced run decided, which a
     cone past the state cap or the budget can leave open where its reduced cone decides; or
-    "diverged"."""
+    "diverged". The engine bugs are compared by `disagreed`, not here."""
+    red, plain = (dict(o, disagreements=[]) for o in (red, plain))
     if red == plain:
         return "same"
     if undecided(red) or not undecided(plain):
@@ -328,7 +349,7 @@ def has_reduced_cone(d):
     return d.is_dir() and any("S_class" in f.read_text() for f in d.glob("*.tla"))
 
 
-def verify_both(bin_, model, instances, timeout, work):
+def verify_both(bin_, model, instances, timeout, work, with_tlc=False):
     """Each side's observation, or "timeout"; and whether the users' run reduced a cone."""
     sides = {}
     for side in ("reduced", "plain"):
@@ -338,6 +359,8 @@ def verify_both(bin_, model, instances, timeout, work):
         env = {k: v for k, v in os.environ.items() if k != "RDRA_ISH_NO_REDUCE"}
         env.update(extra)
         cmd = [bin_, "verify", "--deny-undecided", "--instance-count", str(instances), "-o", str(d), str(model)]
+        if with_tlc:
+            cmd.append("--with-tlc")
         rc, out = sh(cmd, timeout, env=env, cwd=work)
         (work / f"{side}.out").write_text(out)
         sides[side] = "timeout" if rc == "timeout" else observe(rc, out)
@@ -371,8 +394,14 @@ def compare_seed(args, seed):
     ok, out = loads(args.bin, model, args.timeout, work)
     if not ok:
         return dict(res, status="load_error", detail=out[:300])
-    sides, reduced = verify_both(args.bin, model, instances, args.timeout, work)
+    sides, reduced = verify_both(args.bin, model, instances, args.timeout, work, args.with_tlc)
     res["reduced"] = reduced
+    if disagreed(sides):
+        bad = Path(args.work) / "disagreed"
+        bad.mkdir(exist_ok=True)
+        shutil.copy(model, bad / f"seed{seed}.rdra")
+        found = {s: o["disagreements"] for s, o in sides.items() if o != "timeout" and o["disagreements"]}
+        return dict(res, status="disagreed", disagreements=found)
     late = [s for s, o in sides.items() if o == "timeout"]
     if late:
         return dict(res, status="timeout", side=late[0])
@@ -395,7 +424,7 @@ def seed_list(spec):
 
 
 def cmd_run(args):
-    if shutil.which("tlc") is None:
+    if args.with_tlc and shutil.which("tlc") is None:
         sys.exit("tlc is not on PATH; run under `nix develop`")
     args.bin = str(Path(args.bin).resolve())
     Path(args.work).mkdir(parents=True, exist_ok=True)
@@ -407,6 +436,11 @@ def cmd_run(args):
         print(f"seed {x['seed']} diverges at {x['instances']} instances:")
         for side in ("reduced", "plain"):
             print(f"  {side}: {json.dumps(x[side], ensure_ascii=False)}")
+    for x in by("disagreed"):
+        print(f"seed {x['seed']}: the engines disagree at {x['instances']} instances:")
+        for side, lines in x["disagreements"].items():
+            for line in lines:
+                print(f"  {side}: {line}")
     (Path(args.work) / "results.json").write_text(json.dumps(results, indent=1, ensure_ascii=False))
     summary = dict(
         generated=len(results),
@@ -418,9 +452,12 @@ def cmd_run(args):
         timed_out=[(x["seed"], x["side"]) for x in by("timeout")],
         load_errors=[x["seed"] for x in by("load_error")],
         diverged=[x["seed"] for x in by("diverged")],
+        with_tlc=args.with_tlc,
+        disagreed=[x["seed"] for x in by("disagreed")],
     )
     print(json.dumps(summary))
-    return 1 if summary["diverged"] or (args.fail_on_timeout and summary["timed_out"]) else 0
+    failed = summary["diverged"] or summary["disagreed"]
+    return 1 if failed or (args.fail_on_timeout and summary["timed_out"]) else 0
 
 
 def cmd_gen(args):
@@ -434,7 +471,9 @@ def diverges(args, lines, work):
     model.write_text("\n".join(lines) + "\n")
     if not loads(args.bin, model, args.timeout, work)[0]:
         return False
-    sides, _ = verify_both(args.bin, model, args.instance_count, args.timeout, work)
+    sides, _ = verify_both(args.bin, model, args.instance_count, args.timeout, work, args.with_tlc)
+    if disagreed(sides):
+        return True
     return "timeout" not in sides.values() and agreement(sides["reduced"], sides["plain"]) == "diverged"
 
 
@@ -443,11 +482,13 @@ def cmd_compare(args):
     work = Path(args.work) / "compare"
     work.mkdir(parents=True, exist_ok=True)
     model = Path(args.model).resolve()
-    sides, reduced = verify_both(args.bin, model, args.instance_count, args.timeout, work)
+    sides, reduced = verify_both(args.bin, model, args.instance_count, args.timeout, work, args.with_tlc)
     late = "timeout" in sides.values()
     status = "timeout" if late else agreement(sides["reduced"], sides["plain"])
+    if disagreed(sides):
+        status = "disagreed"
     print(json.dumps(dict(status=status, reduces_a_cone=reduced, sides=sides), ensure_ascii=False, indent=1))
-    return 1 if status in ("timeout", "diverged") else 0
+    return 1 if status in ("timeout", "diverged", "disagreed") else 0
 
 
 def cmd_minimize(args):
@@ -456,7 +497,7 @@ def cmd_minimize(args):
     work.mkdir(parents=True, exist_ok=True)
     cur = Path(args.model).read_text().splitlines()
     if not diverges(args, cur, work):
-        sys.exit("the model does not diverge")
+        sys.exit("the model neither diverges nor disagrees")
     chunks = 2
     while len(cur) >= 2:
         size = max(1, len(cur) // chunks)
@@ -484,6 +525,7 @@ def main():
     p.add_argument("--seeds", required=True, help="A:B (B excluded), or seeds and ranges joined by commas")
     p.add_argument("--fail-on-timeout", action="store_true", help="exit 1 when a seed times out")
     p.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) // 2))
+    p.add_argument("--with-tlc", action="store_true", help="run TLC beside the native checker and record where they differ")
     p = sub.add_parser("gen")
     p.add_argument("seed", type=int)
     for name in ("compare", "minimize"):
@@ -493,6 +535,7 @@ def main():
         if name == "minimize":
             p.add_argument("out")
         p.add_argument("--instance-count", type=int, default=2)
+        p.add_argument("--with-tlc", action="store_true", help="run TLC beside the native checker")
     args = ap.parse_args()
     args.work = str(Path(args.work).resolve())
     return dict(run=cmd_run, gen=cmd_gen, compare=cmd_compare, minimize=cmd_minimize)[args.cmd](args)

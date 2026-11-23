@@ -34,7 +34,6 @@ use rdra_ish_core::{collect_rdra_files, load_project, Project};
 use rdra_ish_core::{lint_issues, LintSeverity, RdraError};
 use state_findings::state_findings;
 use states::run_states;
-use verify::run_tlc;
 
 fn is_strict_access_gap(error: &RdraError) -> bool {
     matches!(
@@ -122,7 +121,7 @@ pub fn run() -> Result<()> {
             let property_count = model.temporal_properties.len();
             if property_count > 0 {
                 eprintln!(
-                    "note: {property_count} temporal properties were not model-checked by check; use verify --backend tlc"
+                    "note: {property_count} temporal properties were not model-checked by check; use verify"
                 );
             }
 
@@ -240,6 +239,7 @@ pub fn run() -> Result<()> {
 
         Commands::Verify {
             inputs,
+            with_tlc,
             backend,
             out,
             instance_count,
@@ -253,12 +253,22 @@ pub fn run() -> Result<()> {
             memory,
             scope,
         } => {
+            // `--backend tlc` is the old spelling of `--with-tlc`, kept until the next major
+            // release.
+            if let Some(cli::VerifyBackend::Tlc) = backend {
+                eprintln!("warning: --backend tlc is deprecated: it now means --with-tlc, which runs TLC beside the native checker, and the next major release removes it");
+            }
+            let with_tlc = with_tlc || backend.is_some();
+            if tlc_jar.is_some() && !with_tlc {
+                eprintln!(
+                    "warning: --tlc-jar applies only with --with-tlc; this run starts no TLC"
+                );
+            }
             let (program, model, manifest) = load_clean_with_manifest(&inputs)?;
             let memory = memory_limit(memory, manifest.as_ref(), Budgeted::Verify);
-            let memory = memory::VerifySplit::of(memory)?;
+            let memory = memory::VerifySplit::of(memory, with_tlc)?;
             let scope = scope.resolve(&model)?;
-            let cli::VerifyBackend::Tlc = backend;
-            run_tlc(
+            verify::run(
                 &program,
                 &model,
                 out,
@@ -270,7 +280,7 @@ pub fn run() -> Result<()> {
                     prove: prove.then_some(verify::Prove { z3, deny_unproved }),
                     memory,
                 },
-                tlc_jar,
+                with_tlc.then_some(verify::WithTlc { jar: tlc_jar }),
             )?;
         }
     }

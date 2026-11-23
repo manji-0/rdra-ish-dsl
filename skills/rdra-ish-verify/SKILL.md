@@ -1,10 +1,11 @@
 ---
 name: rdra-ish-verify
 description: >-
-  Formal-verify RDRA-ish models with TLA+/TLC. Use when the user asks about
-  export --kind tla, verify --backend tlc, temporal property / always /
+  Formal-verify RDRA-ish models with rdra-ish verify (native, no JVM; TLC as a
+  second opinion). Use when the user asks about
+  export --kind tla, verify, verify --with-tlc, temporal property / always /
   eventually / leads_to, after.assert, invariant(E).when().none/has, Int/Money/Decimal/now
-  arithmetic, multi-entity forbidden/invariant with .along, whether TLC
+  arithmetic, multi-entity forbidden/invariant with .along, whether verify
   should complement rdra-ish states, or verify --prove (a rule for any number of
   rows, a counterexample to induction, a .lemma()).
 license: MIT
@@ -35,17 +36,21 @@ after `npx skills add` / `gh skill install`. In the `rdra-ish-dsl` repository,
    sample file at a time: the samples reuse ids such as `Order`, so checking the whole
    `samples/` directory fails on duplicate declarations.
 2. Run `rdra-ish check <file>` first. For a model split over several files, pass its
-   root directory (`rdra-ish check ec-site/`), not a list of files. It explores the same transition system as TLC by
-   breadth-first search at one instance per entity, so it is the fast loop.
-3. Decide whether TLC is needed with `references/when-to-use.md`: temporal `property`,
-   and rules that need two instances (quantifiers, `.along` over several rows, 1:1 keys).
-4. With `tlc` or `tlc2` on `PATH` (`nix develop` provides it in the repository; elsewhere
-   `nix shell nixpkgs#tlaplus`), or with `--tlc-jar <tla2tools.jar>` / `RDRA_TLC_JAR`, run
-   `rdra-ish verify <file>`. `--backend tlc` is the default.
+   root directory (`rdra-ish check ec-site/`), not a list of files. It explores the
+   transition system by breadth-first search at one instance per entity, so it is the fast
+   loop. It evaluates no `property`.
+3. Decide whether `verify` is needed with `references/when-to-use.md`: temporal
+   `property`, and rules that need two instances (quantifiers, `.along` over several rows,
+   1:1 keys).
+4. Run `rdra-ish verify <file>`. It needs no JVM and no TLC. For a second opinion on a
+   result that matters, run `rdra-ish verify <file> --with-tlc` with `tlc` or `tlc2` on
+   `PATH` (`nix develop` provides it in the repository; elsewhere
+   `nix shell nixpkgs#tlaplus`) or `--tlc-jar <tla2tools.jar>`: TLC checks the same cones,
+   and a check the two decide differently fails the run as a tool bug.
 5. Report each failure by the name after its severity (`error[MultiForbidden_Order_0]`,
    `error[Deadlock_Order_status_paid]`, `error[NeverShipped]`) and its model-term
    counterexample, together with the `bounds:` line the result holds under. Paste the
-   `bounds:` line (with its BFS state cap), `tlc_result:` and the last line exactly as
+   `bounds:` line (with its BFS state cap), `result:` and the last line exactly as
    printed, in a code block; do not paraphrase them.
 
 A passing run names its bounds first and last:
@@ -61,7 +66,7 @@ Cone_PaidLeadsToShipped [PaidLeadsToShipped]: not decided (31 states, Cone_PaidL
 Cone_EventuallyTerminal [EventuallyTerminal]: not decided (31 states, Cone_EventuallyTerminal_WF: ok, needs the whole model's WF_vars(Next))
 RdraSpec_PaidLeadsToShipped [PaidLeadsToShipped]: ok (31 states)
 RdraSpec_EventuallyTerminal [EventuallyTerminal]: ok (31 states)
-tlc_result: ok
+result: ok
 OK: no errors within 2 instances per entity, Int 0..5
 ```
 

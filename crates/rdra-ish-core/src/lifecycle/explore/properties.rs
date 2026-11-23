@@ -1,9 +1,10 @@
 //! The property forms BFS decides on the graph it explored (`LtlKind::is_explored`):
 //! `stable` and `unchanged` on each edge, and `precedes` on each state with the latch the
 //! TLA+ printer spells `<P>_seen`. `always` is decided on each state too, as an invariant
-//! over the present binders, though only `verify` under `RDRA_ISH_NATIVE` asks for it. The latch is no var of the system: a state where `q`
-//! holds and the latch is unset is one a path reaches through states where `p` never held,
-//! so the search walks the graph that keeps only those states.
+//! over the present binders, on the graphs `verify` explores for an `always` property. The
+//! latch is no var of the system: a state where `q` holds and the latch is unset is one a
+//! path reaches through states where `p` never held, so the search walks the graph that
+//! keeps only those states.
 
 use std::collections::VecDeque;
 
@@ -32,8 +33,9 @@ impl TransitionSystem {
     /// sub-lifecycle, as TLC's run of it does: the reduction keeps what a state predicate over
     /// the property's vars sees. The other forms read the unreduced cone. A cone that frees an
     /// entity's slots (`cone_frees_slots`) reaches a superset, so a violation there is decided
-    /// again on the whole system.
-    pub fn decide_property(&self, i: usize, caps: Caps) -> PropertyVerdict {
+    /// again on the whole system, under `whole`: a whole-model run is bounded as `verify`
+    /// bounds one, by its own state cap and `--temporal-budget`.
+    pub fn decide_property(&self, i: usize, caps: Caps, whole: Caps) -> PropertyVerdict {
         let cone = self.property_cone(i);
         let system = match self.properties()[i].formula {
             Ltl::Always(_) => self.reduced_cone(&cone, [self.property_seed(i)], caps),
@@ -52,7 +54,7 @@ impl TransitionSystem {
         match verdict {
             PropertyVerdict::Violated(_) if self.cone_frees_slots(&cone) => self
                 .clone()
-                .run(caps)
+                .run(whole)
                 .decide_property(i)
                 .expect("an explored form"),
             verdict => verdict,

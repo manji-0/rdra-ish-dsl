@@ -1,7 +1,7 @@
 // A condition guard with .none(): Revoke runs only while no linked assignment is active.
 // Without the guard on Revoke, the invariant(...).none(...) below fails (see quantifier_none).
 // expect check: ok
-// expect verify: tlc=ok
+// expect verify: ok
 entity ClientCertificate "証明書" {
   id: Int @pk
   status: Enum(active, revoked) @default(active)

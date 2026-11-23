@@ -158,7 +158,7 @@ not.
 ## Verification
 
 `check` reports no warning. `verify --deny-undecided` at 2 instances decides every check and
-prints `tlc_result: ok`, with one error, `Deadlock_ClaimCase_status_assessed` (see
+prints `result: ok`, with one error, `Deadlock_ClaimCase_status_assessed` (see
 [Known verification gaps](#known-verification-gaps)), which the `// expect verify` header
 names; it takes about 180 s locally (2.1 GB for `rdra-ish`, 5.9 GB with TLC's JVMs). The
 settlement guard on `CompleteClaim` joins the claim's cone to the case's, and `verify` explores

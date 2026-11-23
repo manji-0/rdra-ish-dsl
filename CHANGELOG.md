@@ -2,8 +2,42 @@
 
 ## Unreleased
 
+### Breaking
+
+- `verify` decides every invariant, `after` assertion, and property with its native
+  checker and starts no JVM: `tlc` is no longer needed, and `verify` no longer fails when it
+  is missing. TLC runs only under the new `--with-tlc`, beside the native checker, on the
+  same cones and runs; a check the two decide differently prints
+  `error[EngineDisagreement]: <module> [<checks>]: native <a>, TLC <b>; ...`, keeps the
+  specs, and fails the run with `result: tool_error`. `--with-tlc` without `tlc` exits 1.
+  The verdicts, the run labels (`Cone_<name>`, `_Full`, `_WF`, `RdraSpec_<P>`), and the
+  counterexamples' shape stay. To migrate:
+  - Read `result: ok|counterexample|tool_error` in place of `tlc_result:`, which prints
+    beside it only under `--with-tlc`.
+  - Replace `--backend tlc` with `--with-tlc` where you want TLC. `--backend tlc` still
+    works, means `--with-tlc`, and prints a deprecation warning; the next major release
+    removes it. Drop it where you do not.
+  - In a sample's `// expect verify:` header, write `ok` for `tlc=ok` and `fail <Names>`
+    for `tlc=counterexample fail <Names>`. `tlc=` is allowed only on a line whose flags hold
+    `--with-tlc`, which `scripts/verify-samples.sh --with-tlc` runs.
+  - A native counterexample is BFS's shortest trace, so it may differ from TLC's and has
+    no `from TLC` mark, `violated:` line, or raw trace; those print under `--with-tlc`
+    after a `tlc: <module> (<path>):` line.
+  - Without `-o` and `--with-tlc`, `verify` writes no spec to a temp dir and prints no
+    `specs:` line. `--tlc-jar`, `RDRA_TLC_JAR`, and `RDRA_TLC_HEAP` apply only with
+    `--with-tlc`, and `--memory` gives BFS the whole limit without it.
+  - The `RDRA_ISH_NATIVE` test hook is gone; the default does what it did and more.
+
 ### Added
 
+- `verify --with-tlc` runs TLC beside the native checker as a second opinion and fails the
+  run when the two disagree on a check; a check one engine leaves `not decided` is no
+  disagreement. `scripts/verify-samples.sh --with-tlc` and `scripts/reduction-diff.py
+  --with-tlc` run the samples and random models that way.
+- `--temporal-budget` bounds the native whole-model run of a property its cone does not
+  decide: past the budget, or 2,097,152 states, the run stops with
+  `TimeBudgetReached` or the state cap and the property is `not decided` unless the partial
+  graph already holds a counterexample.
 - The `Vacuous_<name>` warning also covers an `after` assertion whose use case never runs
   and a temporal property whose rows never exist or whose `leads_to` trigger never holds.
   `verify` warns too: it explores by BFS each cone it hands to TLC, at the same bounds, so
@@ -94,6 +128,16 @@
   the state columns their timers sweep.
 
 ### Changed
+
+- `verify` checks `always`, `eventually`, and `leads_to` natively on the graph BFS
+  explores, under each property's fairness, through the same ladder of runs TLC took: the
+  reduced cone, the full cone, the cone with `WF_vars(Next)`, and the whole model. A
+  `leads_to` or `eventually` counterexample is a lasso that replays through the step
+  relation and passes the fairness check; one that does not is `error[LassoFault]`, a tool
+  bug. One run each on 4 cores: patent-ops 2.0 s and 0.5 GB, food-permit-ops 6.3 s and
+  1.6 GB, insurance-claim-ops 10.7 s and 2.1 GB, where TLC took 33 s, 24 s, and 127 s.
+- `check` says of a model's properties `note: <n> temporal properties were not
+  model-checked by check; use verify`.
 
 - `verify` runs less TLC: 194 s to 113 s on insurance-claim-ops and 28 s to 23 s on
   food-permit-ops (4 cores). A cone whose checks all stand in the module of a larger cone

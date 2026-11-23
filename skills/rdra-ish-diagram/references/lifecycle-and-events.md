@@ -32,7 +32,7 @@ rdra-ish states src/ --format json --entity <EntityId>
 
 # Lifecycle findings, then formal verification (temporal / two-instance rules)
 rdra-ish check src/
-rdra-ish verify src/ --backend tlc -o out/
+rdra-ish verify src/
 ```
 
 ## Reading State Diagrams

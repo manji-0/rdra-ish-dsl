@@ -5,7 +5,7 @@
 // Order.status, not Invoice.status. At one instance the invariant holds vacuously, so
 // `check` passes.
 // expect check: ok
-// expect verify: tlc=counterexample fail Unique_Invoice_Order
+// expect verify: fail Unique_Invoice_Order
 entity Order "注文" {
   id: Int @pk
   status: Enum(open, closed) @default(open)

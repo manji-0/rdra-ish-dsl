@@ -3,7 +3,7 @@
 // moves the order to executed, so the certificate's order is executed when the assertion
 // after IssueCert reads it.
 // expect check: ok
-// expect verify: tlc=ok
+// expect verify: ok
 entity CertificateOrder "証明書発行依頼" {
   id: Int @pk
   status: Enum(requested, executed) @default(requested)

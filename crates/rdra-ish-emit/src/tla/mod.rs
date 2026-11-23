@@ -43,7 +43,7 @@ pub enum PrintMode {
     Witnesses,
 }
 
-/// Files written by `export --kind tla` and `verify --backend tlc`.
+/// Files written by `export --kind tla` and `verify`.
 #[derive(Debug, Clone)]
 pub struct TlaBundle {
     pub module_name: String,

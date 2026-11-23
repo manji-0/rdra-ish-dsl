@@ -2834,7 +2834,7 @@ fn explored_agrees(
     (whole, outcome, run): (&tla::TlaBundle, Outcome, &TlcRun),
     log: &str,
 ) {
-    match (ts.decide_property(i, Caps::VERIFY), outcome) {
+    match (ts.decide_property(i, Caps::VERIFY, Caps::VERIFY), outcome) {
         (PropertyVerdict::Holds, Outcome::Ok) => {}
         (PropertyVerdict::Violated(native), Outcome::Counterexample) => {
             let StateDiag::PropertyViolated { trace, witness, .. } = *native else {

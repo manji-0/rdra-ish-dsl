@@ -4,7 +4,7 @@
 // (expected TLC fail / counterexample on the AfterAssert property, not a vacuous pass).
 // The invariant and forbidden of order.rdra are left out so the after property is the only check.
 // expect check: fail AfterAssert_DeliverOrder_0
-// expect verify: tlc=counterexample fail AfterAssert_DeliverOrder_0
+// expect verify: fail AfterAssert_DeliverOrder_0
 entity Order "注文" {
   id: Int @pk
   status: Enum(pending, paid, shipped, delivered, cancelled) @default(pending)

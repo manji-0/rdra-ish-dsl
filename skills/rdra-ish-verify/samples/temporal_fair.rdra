@@ -7,7 +7,7 @@
 // `.fair(Register, Dismiss)` assumes each application's Register and Dismiss steps are taken
 // once they stay enabled, which rules the loop out, and GrantEnds holds.
 // expect check: ok
-// expect verify: tlc=counterexample fail GrantEndsUnfair
+// expect verify: fail GrantEndsUnfair
 entity Application "出願" {
   id: Int @pk
   status: Enum(filed, formality_order, granted, registered, dismissed) @default(filed)

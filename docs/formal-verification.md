@@ -1,4 +1,4 @@
-# Formal Verification (TLA+ / TLC)
+# Formal Verification
 
 <!-- derived-from ./state-derivation.md -->
 <!-- derived-from ./language-reference.md#entity-state-constraints -->
@@ -6,13 +6,21 @@
 <!-- derived-from ./cli-reference.md#export -->
 <!-- derived-from ./cli-reference.md#verify -->
 
-RDRA-ish prints its lifecycle transition system as **TLA+** and optionally checks it
-with **TLC**. `rdra-ish states` and `check` explore the same system by breadth-first
-search (BFS) at one instance per entity, and verify safety only: invariants, `after`
-assertions, and state models. They evaluate no temporal property. Temporal properties and
-proofs belong to `verify`, which runs TLC on the system at two instances by default, checks
-the `always`, `eventually`, and `leads_to` properties with it, decides each `can_reach`,
-`stable`, `unchanged`, and `precedes` by BFS, and proves state rules under `--prove`. See
+Three commands check a model, and each one checks different things:
+
+- **`check` and `states`** verify safety by state exploration: breadth-first search (BFS)
+  at one instance per entity over the invariants, the `after` assertions, and the state
+  models. They evaluate no `property`.
+- **`verify`** checks every `property` and every invariant and `after` assertion at two
+  instances by default, each on its own cone, with a native checker that needs no JVM. It
+  decides the safety checks, `stable`, `unchanged`, `precedes`, and `can_reach` by BFS, and
+  `always`, `eventually`, and `leads_to` on the graph BFS explores, under each property's
+  fairness. With `--prove` it also proves state rules for any number of rows with z3.
+- **TLC** runs only under `verify --with-tlc`, on the same cones and the same runs, as a
+  second opinion. A check the two engines decide differently fails the run.
+
+RDRA-ish prints its lifecycle transition system as **TLA+** for TLC: `export --kind tla`
+writes the whole model, and `verify -o` writes the module of each cone. See
 [state-derivation.md](./state-derivation.md) for the system itself, and
 [Order and stability properties](#order-and-stability-properties) for `stable`,
 `unchanged`, and `precedes`.
@@ -21,14 +29,15 @@ the `always`, `eventually`, and `leads_to` properties with it, decides each `can
 
 ```
 rdra-ish export <INPUTS...> --kind tla [-o <OUT>] [--instance-count N] [--int-range-max N]
-rdra-ish verify <INPUTS...> --backend tlc [-o <OUT_DIR>] [--instance-count N] [--int-range-max N]
+rdra-ish verify <INPUTS...> [--with-tlc] [-o <OUT_DIR>] [--instance-count N] [--int-range-max N]
 ```
 
 | Command | Role |
 |---|---|
 | `export --kind tla` | Write `RdraSpec.tla` **and** sibling `RdraSpec.cfg` for the whole model, and the `StateModel_<E>` specs that check the deadlocks and witnesses |
-| `verify --backend tlc` | Print one spec per cone of influence and one per temporal property, then run `tlc` / `tlc2` from `PATH` |
-| `states`, `check` | BFS on the same system, with no TLC dependency; safety only, no temporal property |
+| `verify` | Decide every invariant, `after` assertion, and property on its own cone with the native checker; no JVM |
+| `verify --with-tlc` | The same, and run `tlc` / `tlc2` from `PATH` on one spec per cone and per property run beside it; a check the two decide differently fails the run |
+| `states`, `check` | BFS on the same system; safety only, no `property` |
 
 `--instance-count` (default `2`) sets `InstanceCount` (`1..=255`; `1` warns that
 singleton ids cannot distinguish instances). `--int-range-max` (default `5`) sets
@@ -45,15 +54,17 @@ module name. If `-o` is a directory (or has no extension), `export` writes
 `WF_vars(Next)`), and `cones.txt`, which lists each module TLC may run and the checks it
 answers. When the model has temporal properties it also writes the whole-model `RdraSpec`
 pair, whose `.cfg` names every property, for a run by hand, and a `RdraSpec_<Property>`
-pair for each property its cone leaves undecided, which TLC runs (see
-[Temporal properties on a cone](#temporal-properties-on-a-cone)).
-Without `-o`, `verify` writes them to a temp dir. It deletes the dir when every check
-passes, and keeps it and prints `specs: <dir>` when one fails. The TLC heap settings
-(`RDRA_TLC_HEAP`, `JAVA_TOOL_OPTIONS`) are in [cli-reference.md](./cli-reference.md#verify).
-`verify` runs within a memory limit, `16GiB` unless `--memory` or `memory` under `[verify]`
-in `rdra.toml` says otherwise: BFS takes half, and TLC runs only as many cones at once as
-their `-Xmx` fit in the other half (see
-[Memory limit](./cli-reference.md#memory-limit)).
+pair for each property its cone leaves undecided, which the whole-model run decides (see
+[Temporal properties on a cone](#temporal-properties-on-a-cone)). The native checker reads
+none of these files: they are for a TLC run by hand, and for TLC under `--with-tlc`.
+Without `-o`, `verify` writes nothing, and `verify --with-tlc` writes them to a temp dir. It
+deletes the dir when TLC passes every check, and keeps it and prints `specs: <dir>` when TLC
+finds a counterexample or the engines disagree. The TLC heap settings (`RDRA_TLC_HEAP`,
+`JAVA_TOOL_OPTIONS`) apply only with `--with-tlc` and are in
+[cli-reference.md](./cli-reference.md#verify). `verify` runs within a memory limit, `16GiB`
+unless `--memory` or `memory` under `[verify]` in `rdra.toml` says otherwise. BFS takes all
+of it; under `--with-tlc` BFS takes half, and TLC runs only as many cones at once as their
+`-Xmx` fit in the other half (see [Memory limit](./cli-reference.md#memory-limit)).
 
 The `.cfg` names `SPECIFICATION Spec`, `INVARIANT TypeOK`, one `INVARIANT` per
 constraint, one `PROPERTY` per `after` assertion and temporal property, and
@@ -262,7 +273,8 @@ state graph the explorer reaches.
 ## What `verify` checks
 
 `verify` restricts the system to the cone of influence of each invariant and
-`after` assertion, prints that cone, and runs TLC on each cone in parallel. A cone
+`after` assertion and decides each cone by BFS, the cones side by side. Under `--with-tlc`
+it also prints each cone and runs TLC on it in parallel. A cone
 reaches the whole model's states projected onto it. When an action of the cone also
 creates an entity the cone does not read, the cone drops that creation and never runs out
 of that entity's slots, so it reaches a superset: the `bounds:` line says so (`entities a
@@ -277,11 +289,13 @@ This keeps clinic-ops tractable: a whole-model run at `InstanceCount=2` took 62 
 
 A temporal property is checked on a cone of its own, and on the whole model only when that
 cone does not decide it (see [Temporal properties on a cone](#temporal-properties-on-a-cone)).
-TLC reports a temporal violation as `Temporal properties were violated.` without naming the
-property, so each property runs alone: module `Cone_<Property>` with a `.cfg` that names
-that one `PROPERTY`. The property cones run with the other cones, in parallel.
+The native checker explores the property's cone and decides the property on the graph it
+reached. TLC reports a temporal violation as `Temporal properties were violated.` without
+naming the property, so under `--with-tlc` each property runs alone: module
+`Cone_<Property>` with a `.cfg` that names that one `PROPERTY`. The property cones run with
+the other cones, in parallel.
 
-Up to 8 cone runs go at once, the property cones and the cones with the most variables
+Under `--with-tlc`, up to 8 TLC cone runs go at once, the property cones and the cones with the most variables
 first, since those tend to be the long ones. Each run gets the cores divided by the runs
 at once, and no fewer than 2 TLC workers on 4 cores or more: once the short cones are
 done, a long cone on one worker would leave the other cores idle. With several workers
@@ -291,8 +305,8 @@ again on one worker, and `verify` reports only that run, so a counterexample is 
 single worker finds. A temporal property's lasso differs from run to run on one worker
 too.
 
-A cone's module holds every check that reads only the cone's vars, so a larger cone often
-holds all the checks of a smaller one. `verify` does not run the smaller cone when the
+A cone's system holds every check that reads only the cone's vars, so a larger cone often
+holds all the checks of a smaller one. Neither engine runs the smaller cone when the
 larger one passes: its line reads `ok (checked in Cone_<larger>)`, with no state count. That
 is sound when the larger cone takes every step the smaller one takes, so that it reaches
 every state the smaller one reaches. `verify` asks for three things:
@@ -367,7 +381,14 @@ or `leads_to`: a step outside the cone satisfies it, so the cone with `WF_vars(N
 own would rule out runs the whole model allows (another entity looping forever while the
 property's instance stands still), and the cone without it admits a stutter the whole model's
 `WF_vars(Next)` rules out. `verify` therefore gives such a property up to two runs on the
-cone, and the whole model only when neither decides:
+cone, and the whole model only when neither decides. The native checker runs each one on
+the graph BFS explores: a behavior that avoids the goal forever either stops at a state
+where the fairness lets it stop or cycles through a strongly connected set of goal-free
+states that the fairness admits, and the property fails when a triggered state reaches
+such an end. The two runs on the unreduced cone read one graph. Each counterexample
+replays through the step relation, fails the property, and passes the fairness check
+before it prints; one that does not is a tool bug and prints `error[LassoFault]`. Under
+`--with-tlc` TLC runs the same ladder on the modules below:
 
 1. `Cone_<P>`, the cone with `Spec == Init /\ [][Next]_vars` and the property
    `Fair_P => (...)`. An `ok` is the whole model's verdict.
@@ -379,11 +400,13 @@ cone, and the whole model only when neither decides:
    changes the cone; otherwise the first run's counterexample needs the whole model's
    `WF_vars(Next)` to rule out, and the property is undecided on the cone.
 3. `RdraSpec_<P>`, the whole model, for a property its cone leaves undecided. This is the
-   run that did not finish on food-permit-ops. It prints TLC's progress (distinct states,
-   queue, seconds, about once a minute) and stops at `--temporal-budget` seconds (default
-   300) or at the first progress line past 2,097,152 distinct states. A run stopped
-   after TLC printed its verdict keeps that verdict; otherwise the property is `not
-   decided`, listed under `not checked:`, and the run still ends in `OK:`
+   run that did not finish on food-permit-ops. The native checker explores the whole model
+   once for every such property and stops at `--temporal-budget` seconds (default 300) or
+   at 2,097,152 states. TLC under `--with-tlc` prints its progress (distinct states, queue,
+   seconds, about once a minute) and stops at the same budget or at the first progress line
+   past the same count. A run stopped after it found a counterexample keeps that verdict;
+   otherwise the property is `not decided`, listed under `not checked:`, and the run still
+   ends in `OK:`
    with exit status 0, as a BFS cone at its cap does, after a `warning:` on stderr that
    counts what was left undecided. `--deny-undecided` makes that an error with exit
    status 1.
@@ -400,23 +423,23 @@ the reduced cone, before the `_WF` note. A property without `.fair` rests on
 `WF_vars(Next)` alone, so it reaches the whole model unless its cone holds every written
 var; name the use cases it relies on to keep it on the cone. On food-permit-ops
 `HygieneManagerEventuallyAppointed` runs on a 243-state cone and the whole `verify` takes
-18 s; on patent-ops `GrantEnds` runs on a 75,017-state cone; on insurance-claim-ops
+6 s; on patent-ops `GrantEnds` runs on a 75,017-state cone; on insurance-claim-ops
 `ClaimEventuallyDecided` runs on a 633,787-state cone and `SubrogationEnds` on a 372-state one. The test
 `a_property_cone_decides_what_the_whole_model_decides` in `engine_equivalence` compares the
-cone verdict with the whole-model verdict on the temporal samples and on fixtures for each
-case: another entity looping outside the cone, a fair use case whose guard reads another
+cone verdict with the whole-model verdict, and the native verdict of each run with TLC's,
+on the temporal samples and on fixtures for each case: another entity looping outside the cone, a fair use case whose guard reads another
 entity, a guard that toggles forever, a cone that frees slots, a cone that holds every
 written var, a fair use case copying from its parent, a copy from an optional parent the
 cone leaves out, a `.none` guard on a fair use case whose quantified column another use
 case writes, and a condition on a creating use case that reads a column the creation does
 not assign.
 
-While TLC runs, `verify` explores each entity's cone with BFS at the same bounds, capped at
+`verify` also explores each entity's cone with BFS at the same bounds, capped at
 8,388,608 states per cone (`Caps::VERIFY`, named in the `bounds:` line). Each state of a
 state model must have a witness there (see
 [state-derivation.md](./state-derivation.md#state-models-and-witnesses)). A `NoWitness`
-error fails `verify` even when every TLC check passes: the run prints `tlc_result: ok` and
-no `OK:` line, and exits 1. A deadlock, an instance that no path moves off a state with a
+error fails `verify` even when every invariant and property holds: the run prints
+`result: ok` and no `OK:` line, and exits 1. A deadlock, an instance that no path moves off a state with a
 way out (see [state-derivation.md](./state-derivation.md#deadlocks)), fails it the same way;
 one whose way out lacks only a free slot is a warning at the bound. TLC's own deadlock check
 stays off: every bounded model ends with no enabled action, and an always-enabled loop would
@@ -431,15 +454,15 @@ pass ends with a `state models (BFS on N entity cones): ...` summary line. The c
 states of the reduced cone (see
 [Reduction by an independent sub-lifecycle](#reduction-by-an-independent-sub-lifecycle)); the
 sub-lifecycle it explores to reduce a cone has the same cap, and a cone whose sub-lifecycle
-passes it runs unreduced. On clinic-ops the whole `verify` takes about 17 s and 0.5 GB (it
-took 2.5 minutes and 3.7 GB before the reduction); its largest cone is `EligibilityCheck`
+passes it runs unreduced. On clinic-ops the whole `verify` takes about 3 s and 1.3 GB (it
+took 2.5 minutes and 3.7 GB with TLC before the reduction); its largest cone is `EligibilityCheck`
 (905,528 states at 2 instances, which nothing reduces), while `Charge`, past the cap
 unreduced, is 38,533 states reduced and `Prescription` (4,266,635 unreduced) is 1,690. On
 patent-ops the `OfficeAction` cone (over 8,388,608 states unreduced, 1,341,707 reduced) is under
 the cap too, so `verify` decides all four of its stuck-state checks (see the sample's README).
 
 ```
-$ rdra-ish verify samples/formal-verification/order.rdra --backend tlc
+$ rdra-ish verify samples/formal-verification/order.rdra
 bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 8388608 states per BFS cone; entities a check does not read are unbounded
 cones: 1 for 2 invariant(s) and 1 after-assert(s)
 temporal properties: 2, each checked on its cone, and on the whole model only when the cone does not decide it (budget 300 s)
@@ -449,7 +472,7 @@ Cone_PaidLeadsToShipped [PaidLeadsToShipped]: not decided (31 states, Cone_PaidL
 Cone_EventuallyTerminal [EventuallyTerminal]: not decided (31 states, Cone_EventuallyTerminal_WF: ok, needs the whole model's WF_vars(Next))
 RdraSpec_PaidLeadsToShipped [PaidLeadsToShipped]: ok (31 states)
 RdraSpec_EventuallyTerminal [EventuallyTerminal]: ok (31 states)
-tlc_result: ok
+result: ok
 OK: no errors within 2 instances per entity, Int 0..5
 ```
 
@@ -457,25 +480,28 @@ Both properties of `order.rdra` have no `.fair`, and `DeliverOrder` writes `deli
 which neither reads, so their cones do not decide them and the whole model (31 states) does.
 With `.fair(ShipOrder)` on `PaidLeadsToShipped`, its first cone run would decide it.
 
-A violated invariant or `after` assertion prints in model terms first, the same way
-`check` prints it: the rule's `path:line:col`, one line per step with the use case, its
-bound instances (`Place [Order#1, Payment#1]`), and its site, and under each step the
-values it changed. `verify` gets that trace by decoding TLC's states and replaying them
-through the step relation BFS uses, and builds the message with the code `check` uses.
-TLC's own `violated: Error: ... is violated.` line and its trace follow, with one
+A violated invariant or `after` assertion prints in model terms, the same way `check`
+prints it: the rule's `path:line:col`, one line per step with the use case, its bound
+instances (`Place [Order#1, Payment#1]`), and its site, and under each step the values it
+changed. The trace is BFS's shortest path to the violation, built with the code `check`
+uses. Under `--with-tlc`, TLC's counterexample of a failed run prints after it, under a
+`tlc: Cone_<name> (<path>):` line: `verify` decodes TLC's states, replays them through the
+same step relation, and prints them in model terms (`counterexample (N steps, from TLC)`),
+then TLC's own `violated: Error: ... is violated.` line and its trace, with one
 `name[slot] = value` line per variable and slot. The name is the constraint's name, so it
-points at the rule that broke. A step that no move of the cone explains is a tool bug, and
-`verify` says the engines disagree instead of printing the model-term block. The full
+points at the rule that broke. A TLC step that no move of the cone explains is a tool bug,
+and `verify` says the engines disagree instead of printing the model-term block. The full
 output is in [cli-reference.md](./cli-reference.md#verify).
 
-A violated temporal property prints the same way, under `error[<Property>]`. TLC's
-counterexample is a lasso: a finite trace, then either `State N: Stuttering` (the last
-state repeats forever) or `Back to state K: <action>` (one more step returns to state K
-and the behavior repeats from there). `verify` replays the trace and the step back
-through the BFS step relation and prints the step back as the last numbered step,
-followed by `then loops back to step K`: the behavior repeats steps K through the last one
-forever. K is TLC's state number, since TLC's state K is the state step K starts from. A
-stutter ends with `then nothing changes forever`.
+A violated temporal property prints the same way, under `error[<Property>]`. An `always`
+fails at a state, so its counterexample is the shortest trace to it. An `eventually` or
+`leads_to` counterexample is a lasso: a finite trace, then either a stop (the last state
+repeats forever) or a loop back. `verify` prints a loop's last step as the last numbered
+step, followed by `then loops back to step K`: the behavior repeats steps K through the
+last one forever. A stop ends with `then nothing changes forever`. TLC's lasso under
+`--with-tlc` reads `State N: Stuttering` or `Back to state K: <action>`; `verify` replays
+it the same way, and K is TLC's state number, since TLC's state K is the state step K
+starts from.
 
 The message head names the property, the instance it fails for, and the step that shows
 it: where an `always` condition is false, or where an `eventually` instance exists or a
@@ -483,34 +509,23 @@ it: where an `always` condition is false, or where an `eventually` instance exis
 property on the infinite behavior the way the module spells it, per instance of each
 binder: `always x` is `[](present => x)`, `eventually x` is `[](present => <>x)`, and
 `leads_to x y` is `(present /\ x) ~> y`, with the `.along(...)` link joined to `present`
-when the property has one. A lasso that does not replay, or that does not
-violate the property, is a tool bug and prints the engine-disagreement line. TLC picks the
-lasso, so two runs may print different steps. In this run of `temporal_unmet.rdra`, TLC
-ends with `Back to state 7: CancelOrder`, and Order#1 is cancelled and reopened forever:
+when the property has one. A native counterexample that does not replay, does not violate
+the property, or loops unfairly is a tool bug and prints `error[LassoFault]`; a TLC lasso
+that does not replay prints the engine-disagreement line. The native lasso reaches its loop
+by the shortest path BFS found, while TLC picks its own, so the two may print different
+steps. In this run of `temporal_unmet.rdra`, Order#1 is cancelled and reopened forever:
 
 ```
 error[PendingLeadsToDelivered]: property PendingLeadsToDelivered is violated: its leads_to trigger holds for Order#1 after step 1, and its goal never holds from then on
   rule: skills/rdra-ish-verify/samples/temporal_unmet.rdra:48:1
-  counterexample (8 steps, from TLC):
-    1. PlaceOrder [Order#1]                              skills/rdra-ish-verify/samples/temporal_unmet.rdra:15:1
-         + Order#1 (status=pending, delivered_at=null)
-    2. PlaceOrder [Order#2]                              skills/rdra-ish-verify/samples/temporal_unmet.rdra:15:1
-         + Order#2 (status=pending, delivered_at=null)
-    3. CancelOrder [Order#1]                             skills/rdra-ish-verify/samples/temporal_unmet.rdra:19:1
-         Order#1.status: pending -> cancelled            skills/rdra-ish-verify/samples/temporal_unmet.rdra:40:1
-    4. CapturePay [Order#2]                              skills/rdra-ish-verify/samples/temporal_unmet.rdra:16:1
-         Order#2.status: pending -> paid                 skills/rdra-ish-verify/samples/temporal_unmet.rdra:37:1
-    5. ShipOrder [Order#2]                               skills/rdra-ish-verify/samples/temporal_unmet.rdra:17:1
-         Order#2.status: paid -> shipped                 skills/rdra-ish-verify/samples/temporal_unmet.rdra:38:1
-    6. DeliverOrder [Order#2]                            skills/rdra-ish-verify/samples/temporal_unmet.rdra:18:1
-         Order#2.status: shipped -> delivered            skills/rdra-ish-verify/samples/temporal_unmet.rdra:39:1
-         Order#2.delivered_at: null -> present           skills/rdra-ish-verify/samples/temporal_unmet.rdra:43:1
-    7. ReopenOrder [Order#1]                             skills/rdra-ish-verify/samples/temporal_unmet.rdra:20:1
-         Order#1.status: cancelled -> pending            skills/rdra-ish-verify/samples/temporal_unmet.rdra:41:1
-    8. CancelOrder [Order#1]                             skills/rdra-ish-verify/samples/temporal_unmet.rdra:19:1
-         Order#1.status: pending -> cancelled            skills/rdra-ish-verify/samples/temporal_unmet.rdra:40:1
-    then loops back to step 7
-violated: Error: Temporal properties were violated.
+  counterexample (3 steps):
+    1. PlaceOrder [Order#1]                     skills/rdra-ish-verify/samples/temporal_unmet.rdra:15:1
+         + Order#1 (status=pending)
+    2. CancelOrder [Order#1]                    skills/rdra-ish-verify/samples/temporal_unmet.rdra:19:1
+         Order#1.status: pending -> cancelled   skills/rdra-ish-verify/samples/temporal_unmet.rdra:40:1
+    3. ReopenOrder [Order#1]                    skills/rdra-ish-verify/samples/temporal_unmet.rdra:20:1
+         Order#1.status: cancelled -> pending   skills/rdra-ish-verify/samples/temporal_unmet.rdra:41:1
+    then loops back to step 2
 ```
 
 ### Recoverability on a cone
@@ -551,10 +566,10 @@ does. A scoped `verify` checks no property, `can_reach` included.
 `verify` prints `can_reach properties: N, decided natively by BFS on each one's cone (TLC
 cannot check AG EF)` in its header, explores those cones beside the entity cones, and ends
 the BFS pass with `can_reach (BFS on N cones): N checked, M violated`. A violation fails the
-run after `tlc_result:`, as a deadlock does:
+run with `result: counterexample`:
 
 ```
-$ rdra-ish verify samples/formal-verification/can_reach_unmet.rdra --backend tlc
+$ rdra-ish verify samples/formal-verification/can_reach_unmet.rdra
 bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 8388608 states per BFS cone; entities a check does not read are unbounded
 cones: 0 for 0 invariant(s) and 0 after-assert(s)
 temporal properties: none
@@ -573,8 +588,7 @@ error[OrderCanFinish]: property OrderCanFinish is violated: from the counterexam
     status = on_hold
 state models (BFS on 1 entity cone): 1 state model, 4 states witnessed, 0 deadlocks, 0 use cases that never run
 can_reach (BFS on 1 cone): 1 checked, 1 violated
-nothing to check
-tlc_result: ok
+result: counterexample
 Error: verification failed: 1 can_reach error(s) from BFS on their cones
 ```
 
@@ -743,7 +757,7 @@ not checked: 1 entity view (Audit), 1 invariant (Forbidden_Audit_1), 0 after-ass
   whether Record can run is not decided: no cone of a selected entity keeps it
 state models (BFS on 1 entity cone): 1 state model, 2 states witnessed, 0 deadlocks, 0 use cases that never run
 Cone_Forbidden_Order_0 [Forbidden_Order_0]: ok (7 states)
-tlc_result: ok
+result: ok
 OK: no errors in the selected scope, within 2 instances per entity, Int 0..5
 ```
 
@@ -800,7 +814,7 @@ invariant(Order).when(status == placed).none(Shipment).label("a placed order has
 ```
 
 A rule marked `.lemma()` is checked by `check` like any rule, so a wrong lemma fails there
-with a trace. `verify` runs no TLC cone for a lemma: the proof keeps a lemma only when it
+with a trace. `verify` runs no cone for a lemma: the proof keeps a lemma only when it
 proves it, so a wrong one never helps a proof, and a lemma that reads two large cones would
 join them into one far larger cone. In the proof a lemma is one more candidate. It prints as `proved: lemma <name>` or `unproved: lemma <name>`, and the
 `proof: your lemmas: ...` line counts it apart from the rules, so it never counts toward the
@@ -1077,10 +1091,12 @@ gaps.
     header checks them at 1 instance with `--prove`.
 
   `verify` still checks these cones at 2 instances, except the oidc-auth cones its header
-  runs at 1: TLC runs on each, and BFS runs on each entity cone. Only the agreement of the two engines is tested at 1 instance. This is
-  accepted for 1.0. See it: the list in the test, which fails when a cone joins or leaves
-  it. What you can do: treat a `verify` verdict on these cones as TLC's alone, and keep a
-  new model's cones under 300,000 states at 2 instances if you want the agreement tested.
+  runs at 1: the native checker decides each, and `--with-tlc` runs TLC on each beside it.
+  Only the agreement of the two engines on the states and edges is tested at 1 instance.
+  This is accepted for 1.0. See it: the list in the test, which fails when a cone joins or
+  leaves it. What you can do: run `verify --with-tlc` for a second opinion on these cones,
+  and keep a new model's cones under 300,000 states at 2 instances if you want the agreement
+  tested.
 - **insurance-claim-ops cannot check that a payment deadline follows its reason.** The
   deadline is writable, `sets(UC, E.due_on == N).when(Reason)` with a timer use case that
   waits for `due_on <= now` (#98), but the cone it adds does not decide at the cap: with a
@@ -1093,7 +1109,8 @@ gaps.
 - **The `verify` BFS stops at 8,388,608 states per cone.** The BFS pass that finds missing
   witnesses, deadlocks, use cases that never run, arms never taken, and values never chosen
   stops at `Caps::VERIFY`, 2^23 states. A cone that stops there decides none of these
-  findings. TLC still checks its invariants. The cap counts the states of the cone reduced
+  findings, and an invariant's cone that stops there leaves its invariants `not decided`.
+  The cap counts the states of the cone reduced
   by its independent sub-lifecycle (see
   [Reduction by an independent sub-lifecycle](#reduction-by-an-independent-sub-lifecycle)).
   Every sample cone is under the cap at 2 instances (the largest, `BusinessPermit` of
@@ -1127,11 +1144,10 @@ gaps.
   `verify`, or pass `--instance-count N` to `check`, `states`, or `verify` for a rule about
   more instances, or run `verify --prove` to prove a state rule for any number of rows
   ([Proofs for any number of rows](#proofs-for-any-number-of-rows)).
-- **Temporal properties are checked only by `verify`, and a scoped run checks none.**
-  `check` and `states` verify safety only, by state exploration. They evaluate no
-  `property`, `can_reach` included, and `check` prints a `note:` that says so. `verify`
-  checks `always`, `eventually`, and `leads_to` with TLC and decides `can_reach` by BFS
-  ([Recoverability on a cone](#recoverability-on-a-cone)). A run with
+- **A scoped `verify` checks no property.** `check` and `states` verify safety by state
+  exploration and evaluate no `property`, as the top of this page says; `verify` checks
+  every form ([Recoverability on a cone](#recoverability-on-a-cone) for `can_reach`). A
+  run with
   `--buc` or `--entity` checks no property: `--buc` drops use cases a property's fairness
   reads, and `--entity` may defer an error inside a property's cone. See it: the `note:`
   from `check`, and `temporal properties: 2, not checked: a scoped run checks none` in a
@@ -1197,8 +1213,10 @@ gaps.
 1. Model lifecycle with `transitions` / `sets` and entity-local rules.
 2. Run `rdra-ish states` and `rdra-ish check` for quick feedback.
 3. `rdra-ish export samples/formal-verification/order.rdra --kind tla -o /tmp/rdra-tla` and inspect the Spec and `.cfg`.
-4. Install [TLA+ tools](https://github.com/tlaplus/tlaplus) so `tlc` is on `PATH` (`nix develop` provides it).
-5. `rdra-ish verify samples/formal-verification/order.rdra --backend tlc -o /tmp/rdra-tla` to run TLC.
+4. `rdra-ish verify samples/formal-verification/order.rdra` to check every rule and property.
+5. For a second opinion, install [TLA+ tools](https://github.com/tlaplus/tlaplus) so `tlc` is
+   on `PATH` (`nix develop` provides it) and run
+   `rdra-ish verify samples/formal-verification/order.rdra --with-tlc -o /tmp/rdra-tla`.
 
 Agent skill: `skills/rdra-ish-verify/` (routing + references + bundled samples).
 Install: see [`skills/README.md`](../skills/README.md) (`npx skills add` / `gh skill install`).
@@ -1210,7 +1228,7 @@ do not `check` the whole directory; ids such as `Order` collide). In this repo,
 `samples/formal-verification/` and `samples/formal-verification-fail/` are
 symlinks to those skill-bundled files (CLI tests keep working after skill install).
 
-| Sample | `check` and TLC | `--prove` | Focus |
+| Sample | `check` and `verify`'s cones | `--prove` | Focus |
 |---|---|---|---|
 | `order.rdra` | pass, pass | 2 of 2 | Lifecycle invariants + `after.assert` + `leads_to` / `eventually` + `WF_vars` |
 | `int_stock.rdra` | pass, pass | 1 of 1 | Int columns, arithmetic `forbidden`, Int temporal property |
@@ -1241,7 +1259,8 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `partial_scope.rdra` | fail, not run | not run | Audit's `forbidden` reads the arithmetic `@derived` column `score`: a `DerivedColumnRead` build error stops `check` and `verify` before TLC. With `--entity Order` both defer it under `not checked:` and pass; TLC checks `Forbidden_Order_0` |
 | `fail/order.rdra` | fail, fail | 0 of 1 | Intentionally unsafe (reachable invariant violation) |
 
-BFS and TLC give the same verdict on every row at the same bounds. `check` runs at one
+The native checker and TLC give the same verdict on every row at the same bounds.
+`check` runs at one
 instance per entity, where `Unique_*` holds vacuously. The `--prove` column counts the state
 rules `verify --prove` proves for any number of rows. A rule that fails `check` or TLC is
 never proved, and `one_to_one_shared` and `none_any_child_bypassed`, which pass `check`, are
@@ -1251,8 +1270,11 @@ unproved too.
 
 Each sample root in `samples.txt` states what `check` and `verify` must report in
 `// expect` comment lines. `scripts/verify-samples.sh <rdra-ish binary>` runs both commands
-on every root and fails when a run differs from its header. CI runs it on the release
-binary in the `formal-verify` job.
+on every root, with no `tlc` or `tlc2` on `PATH` and no `RDRA_TLC_JAR`, and fails when a run
+differs from its header. `scripts/verify-samples.sh --with-tlc <rdra-ish binary>` runs every
+`verify` again with `--with-tlc`: each run must match the same header, print
+`tlc_result:`, and report no engine disagreement. CI runs both on the release binary in the
+`formal-verify` job.
 
 The script reads the header from the root's first `.rdra` file in load order, which
 `rdra-ish files <root>` prints first. An `// expect` line in any other file of the root
@@ -1263,23 +1285,24 @@ header       = "// expect " command [" " flags] ": " expectation
 command      = "check" | "verify"
 flags        = CLI words passed to the command as written, e.g. "--entity Order"
 check exp    = "ok" | "fail" " " Name { " " Name }
-verify exp   = "tlc=" ("ok" | "counterexample") [" fail" " " Name { " " Name }]
-             | "fail" " " Name { " " Name }
+verify exp   = "ok" | "fail" " " Name { " " Name }
+             | "tlc=" ("ok" | "counterexample") [" fail" " " Name { " " Name }]
+                 (only when flags hold "--with-tlc")
 Name         = [A-Za-z0-9_]+
 ```
 
 - `fail` means exit status 1, and its absence exit status 0. Any other status, such as a
   `tool_error` exit, is a mismatch.
-- `tlc=` must equal the `tlc_result:` line. A `verify` expectation without `tlc=` asserts
-  that no `tlc_result:` line is printed: the run stops before TLC, as at a build error.
-  `tlc=counterexample` also needs TLC's own `violated: Error: ... violated.` line.
-- With `RDRA_ISH_NATIVE` set, a test hook and not a setting, `verify` decides every
-  invariant, `after` assertion, and `always` by BFS, and TLC runs only `eventually` and
-  `leads_to`. The script then does not compare `tlc=` and compares the exit status and the
-  names only. CI runs the samples once more this way, until BFS decides by default.
+- `tlc=` names TLC's verdict, so it may appear only on a line whose flags hold
+  `--with-tlc`, and it must equal the `tlc_result:` line. `tlc=counterexample` also needs
+  TLC's own `violated: Error: ... violated.` line. A line without `tlc=` says nothing of
+  TLC, and the `--with-tlc` mode of the script only asks that a run that prints `result:`
+  prints `tlc_result:` too. Without `--with-tlc` the script skips a line whose flags hold
+  `--with-tlc`, since TLC is not on `PATH` there.
 - `fail` needs at least one name. The names must equal the set of names of the run's
   errors, not just be part of it. Every lifecycle error prints as `error[<Name>]: ...`, and
-  the script reads the name from there and from TLC's `violated:` line. A name is the
+  the script reads the name from there and, when TLC ran, from TLC's `violated:` line. A
+  name is the
   invariant or `after` property name (`MultiForbidden_Order_0`,
   `AfterAssert_DeliverOrder_0`), the temporal property's name (`NeverShipped`; TLC's
   temporal line names none, so it comes from `error[<Name>]:` only),
@@ -1291,20 +1314,23 @@ Name         = [A-Za-z0-9_]+
   header says.
 - Each `(command, flags)` pair runs once, and a pair may appear on one line only. A root
   with no `check` line expects `check: ok`, and one with no `verify` line expects
-  `verify: tlc=ok`. A root whose `verify` lines all carry flags runs only those: use this
+  `verify: ok`. A root whose `verify` lines all carry flags runs only those: use this
   for a model whose default bounds do not finish, and name the bounds it is checked at
   (`samples/oidc-auth` runs `--instance-count 1 --prove` and a scoped run at two
   instances).
 
 ```rdra
-// unwitnessed_state.rdra: TLC passes, and the BFS state-model findings fail the run.
+// unwitnessed_state.rdra: every rule holds, and the BFS state-model findings fail the run.
 // expect check: fail Witness_Order_status_refunded Deadlock_Order_status_shipped
-// expect verify: tlc=ok fail Witness_Order_status_refunded Deadlock_Order_status_shipped
+// expect verify: fail Witness_Order_status_refunded Deadlock_Order_status_shipped
 
-// partial_scope.rdra: the build error stops both commands before TLC; --entity Order passes.
+// partial_scope.rdra: the build error stops both commands before any cone; --entity Order passes.
 // expect check: fail DerivedColumnRead_Audit_score
 // expect verify: fail DerivedColumnRead_Audit_score
-// expect verify --entity Order: tlc=ok
+// expect verify --entity Order: ok
+
+// A line whose flags hold --with-tlc may name TLC's verdict too.
+// expect verify --with-tlc: tlc=ok fail Witness_Order_status_refunded Deadlock_Order_status_shipped
 ```
 
 The script prints one line per run with the verdict, the wall time, and the maximum RSS

@@ -698,6 +698,7 @@ impl TransitionSystem {
                 StateDiag::PatternCapReached { .. }
                     | StateDiag::StateCapReached { .. }
                     | StateDiag::MemoryCapReached { .. }
+                    | StateDiag::TimeBudgetReached { .. }
             )
         }) {
             out.push(Diag {

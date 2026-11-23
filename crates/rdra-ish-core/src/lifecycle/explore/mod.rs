@@ -18,6 +18,8 @@ pub use properties::PropertyVerdict;
 
 use std::collections::{BTreeSet, HashSet};
 
+use std::time::Instant;
+
 use crate::fasthash::FastMap;
 use crate::memory::{Charge, MemoryPool};
 
@@ -35,6 +37,9 @@ pub struct Caps {
     pub states: usize,
     /// The pool every run's state store is charged to (`--memory`); `None` charges nothing.
     pub memory: Option<&'static MemoryPool>,
+    /// When the run stops, with `StateDiag::TimeBudgetReached` (`verify --temporal-budget`);
+    /// `None` runs until a cap or the end.
+    pub deadline: Option<Instant>,
 }
 
 impl Caps {
@@ -48,6 +53,15 @@ impl Caps {
             patterns,
             states,
             memory: None,
+            deadline: None,
+        }
+    }
+
+    /// These caps, with every run stopped at `deadline`.
+    pub const fn until(self, deadline: Instant) -> Self {
+        Caps {
+            deadline: Some(deadline),
+            ..self
         }
     }
 

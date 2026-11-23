@@ -11,7 +11,7 @@ TypeScript unions read the explored states. `export --kind tla` and `verify` pri
 same transition system as TLA+ for TLC (see [formal-verification.md](./formal-verification.md)),
 and `verify --prove` encodes it for z3, for any number of rows
 ([Proofs for any number of rows](./formal-verification.md#proofs-for-any-number-of-rows)).
-No second reading of the model exists, so BFS and TLC cannot disagree on what a use case
+No second reading of the model exists, so the native checker and TLC cannot disagree on what a use case
 does. The test `engine_equivalence` checks that on every sample.
 
 The implementation lives in `crates/rdra-ish-core/src/lifecycle/`.
@@ -412,7 +412,7 @@ clock has ticked past it. A deadline that depends on the row is one guarded `set
 | `relate(Child, Parent, 1..*:1)` | `MinCard_<Child>_<role>`: every present parent slot is owned by a present child, in every state. Info `MinCardNeedsCreate` names each use case that creates the parent and no child in the same transaction group. A pre-existing parent of a created child fails at the start and draws a warning; a pre-existing child of a pre-existing parent starts linked slot for slot. |
 | `col: T @check(expr)` | `Check_<Entity>_<column>_<n>`: every present slot satisfies `expr`, read as every rule reads a comparison (see [Null](./language-reference.md#null) in the language reference): a null operand satisfies no comparison but `!=`, so `qty: Int @null @check(qty >= 1)` fails while `qty` is null, and `@check(qty == null or qty >= 1)` admits it. A comparison with a value reads the column's slot: `@check(status == open or closed_at == present)` is `status = open \/ closed_at = present`. A created slot starts at the base value: `@check(qty >= 1)` without `@default(1)` or a creating `sets` fails at creation, and so does a `@null` column with no default. A logical `@derived` column keeps SQL semantics: its value is neither `true` nor `false` while an operand is null. |
 | `after(UC).assert(...)` | A predicate on the state each run of `UC` leaves, checked on every step of the last action of `UC`. An entity an earlier step wrote is read on the run's row; an entity no step binds is read on every present row, with the `UnboundAfterRead` warning. |
-| `property` with `always`, `eventually`, `leads_to` | Data only. BFS does not evaluate it, and `check` prints a `note:` that TLC does. |
+| `property` with `always`, `eventually`, `leads_to`, `stable`, `unchanged`, `precedes`, or `can_reach` | Data only for `check` and `states`: their BFS evaluates no property, and `check` prints a `note:` that says to use `verify`. `verify` checks every form, each on its own cone (see [Temporal properties on a cone](./formal-verification.md#temporal-properties-on-a-cone)). |
 
 Every check reads the instances that exist. A rule over an entity with no instance
 holds vacuously in that state.
@@ -449,14 +449,13 @@ it. `check` explores one instance per entity, where a state that needs a second 
 entity is not reached: a rule may be vacuous there and violated at `--instance-count 2`, and
 the warning says so at one instance.
 
-`verify` asks TLC whether each check holds, and TLC says nothing of premises. `verify`
-therefore explores by BFS each cone it hands to TLC, reduced as TLC gets it and at the same
-bounds, and warns of the cone's own rules, assertions, and property that hold vacuously
-there. A rule that is vacuous at one instance in `check` and not in `verify` needed a
+`verify` reads the premises off the run that decides each check: the BFS of each cone,
+reduced as TLC under `--with-tlc` gets it and at the same bounds. It warns of the cone's own
+rules, assertions, and property that hold vacuously there. A rule that is vacuous at one instance in `check` and not in `verify` needed a
 second row. The warning does not change `verify`'s result.
 
-BFS evaluates no temporal formula, so `check` warns of a vacuous property without saying
-whether it holds; `verify` says both. An `after` assertion on a use case that never runs
+`check` evaluates no property, so it warns of a vacuous property without saying whether it
+holds; `verify` says both. An `after` assertion on a use case that never runs
 is reported beside the `Runs_<UseCase>` warning that says why.
 
 ---
@@ -884,7 +883,7 @@ these names, and the `// expect` headers of the samples list the names of the er
 | `DerivedColumnRead { column }` | `DerivedColumnRead_<entity>_<column>` | error | A constraint, condition, assertion, or property reads an arithmetic `@derived` column, which the lifecycle cannot evaluate. |
 | `ConstraintViolated { name, ... }` | the rule's name, such as `Forbidden_Order_0` | error | A reachable state breaks a `forbidden`, `invariant`, `required`, `exclusive`, `@check`, multi-entity, or quantifier rule. |
 | `AfterAssertViolated { anchor, ... }` | `AfterAssert_<anchor>_<i>` | error | A step of the anchor use case ends in a state that fails the assertion. |
-| `PropertyViolated { name, kind, instance, witness, lasso, ... }` | the property's name, such as `NeverShipped` | error | A temporal property fails on the lasso TLC found, replayed through the step relation. Only `verify` reports it; BFS does not check properties. |
+| `PropertyViolated { name, kind, instance, witness, lasso, ... }` | the property's name, such as `NeverShipped` | error | A property fails: an `always` at a state, an `eventually` or `leads_to` on a lasso that replays through the step relation and passes the property's fairness. Only `verify` reports it; `check` and `states` evaluate no property. |
 | `AssertOnInertUseCase { anchor }` | `AssertOnInertUseCase_<E>_<anchor>` | error | `after(UC).assert` names a use case with no action. |
 | `FairOnInertUseCase { property, usecase }` | `FairOnInertUseCase_<E>_<property>_<usecase>` | error | A property's `.fair(...)` names a use case with no action, so its fairness constrains no step. |
 | `PatternCapReached { cap, bound }` | `PatternCapReached_<E>` | error | An entity view exceeded `--max-patterns`. Raise the flag or narrow `--buc`. |

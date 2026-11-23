@@ -1,8 +1,10 @@
-//! Where `verify` leaves its specs. Without `-o` a failed run keeps its temp dir and names
-//! it; a relative `-o` resolves against the working directory, not TLC's.
+//! `verify` as users run it: the native checker decides every check with no TLC on PATH and
+//! no jar, and `--with-tlc` runs TLC beside it. Without `-o` a `--with-tlc` run that fails
+//! keeps its temp dir and names it; a relative `-o` resolves against the working directory,
+//! not TLC's.
 //!
-//! Without `tlc` on PATH each test is skipped with a printed reason; `RDRA_REQUIRE_TLC=1`
-//! turns the skip into a failure.
+//! Without `tlc` on PATH each `--with-tlc` test is skipped with a printed reason;
+//! `RDRA_REQUIRE_TLC=1` turns the skip into a failure.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -34,12 +36,34 @@ fn have_tlc() -> bool {
     found
 }
 
+/// Runs `verify` with no `tlc` on PATH and no jar, so a run that passes or fails here
+/// started no TLC.
 fn verify(cwd: &Path, tmpdir: &Path, args: &[&str]) -> Output {
+    let empty = tmpdir.join("no-tools");
+    std::fs::create_dir_all(&empty).unwrap();
+    verify_on_path(cwd, tmpdir, &empty, args)
+}
+
+/// Runs `verify` with `path` as PATH and no jar.
+fn verify_on_path(cwd: &Path, tmpdir: &Path, path: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
         .current_dir(cwd)
         .env("TMPDIR", tmpdir)
-        .env_remove("RDRA_ISH_NATIVE")
+        .env("PATH", path)
+        .env_remove("RDRA_TLC_JAR")
         .arg("verify")
+        .args(args)
+        .output()
+        .expect("rdra-ish runs")
+}
+
+/// Runs `verify --with-tlc` with the caller's PATH, which `have_tlc` has found `tlc` on.
+fn verify_with_tlc(cwd: &Path, tmpdir: &Path, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .current_dir(cwd)
+        .env("TMPDIR", tmpdir)
+        .arg("verify")
+        .arg("--with-tlc")
         .args(args)
         .output()
         .expect("rdra-ish runs")
@@ -90,9 +114,7 @@ fn verify_decides_order_and_stability_by_bfs_and_check_does_not() {
     );
     assert!(!stderr.contains("then nothing changes forever"), "{stderr}");
     assert!(
-        stderr.contains(
-            "verification failed: 3 property violation(s) from BFS on the property cones"
-        ),
+        stderr.contains("verification failed: 3 property violation(s)"),
         "{stderr}"
     );
 
@@ -124,7 +146,7 @@ fn failed_verify_without_out_keeps_and_names_its_specs() {
     }
     let tmp = scratch("verify_cli_kept_specs");
     let sample = repo().join("samples/formal-verification-fail/order.rdra");
-    let output = verify(&repo(), &tmp, &[sample.to_str().unwrap()]);
+    let output = verify_with_tlc(&repo(), &tmp, &[sample.to_str().unwrap()]);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(output.status.code(), Some(1), "{stderr}");
     let line = stderr
@@ -144,33 +166,39 @@ fn failed_verify_without_out_keeps_and_names_its_specs() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+/// A native run without `-o` writes no spec, failing or not; a passing `--with-tlc` run
+/// removes the temp dir it wrote.
 #[test]
 fn passing_verify_without_out_removes_its_specs() {
-    if !have_tlc() {
-        return;
-    }
     let tmp = scratch("verify_cli_removed_specs");
-    let sample = repo().join("samples/formal-verification/check_met.rdra");
-    let output = verify(&repo(), &tmp, &[sample.to_str().unwrap()]);
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let left: Vec<_> = std::fs::read_dir(&tmp).unwrap().flatten().collect();
-    assert!(
-        left.iter()
-            .all(|e| !e.file_name().to_string_lossy().starts_with("rdra-ish-tlc-")),
-        "a passing run left {left:?}"
-    );
+    let left = |tmp: &Path| -> usize {
+        std::fs::read_dir(tmp)
+            .unwrap()
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy().starts_with("rdra-ish-tlc-"))
+            .count()
+    };
+    for sample in ["check_met.rdra", "check_unmet.rdra"] {
+        let sample = repo().join("samples/formal-verification").join(sample);
+        let output = verify(&repo(), &tmp, &[sample.to_str().unwrap()]);
+        assert!(output.status.code().is_some(), "{output:?}");
+        assert_eq!(left(&tmp), 0, "a native run wrote specs");
+    }
+    if have_tlc() {
+        let sample = repo().join("samples/formal-verification/check_met.rdra");
+        let output = verify_with_tlc(&repo(), &tmp, &[sample.to_str().unwrap()]);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(left(&tmp), 0, "a passing run left its specs");
+    }
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
 #[test]
 fn relative_out_is_relative_to_the_working_directory() {
-    if !have_tlc() {
-        return;
-    }
     let cwd = scratch("verify_cli_relative_out");
     let sample = repo().join("samples/formal-verification/check_met.rdra");
     let output = verify(&cwd, &cwd, &[sample.to_str().unwrap(), "-o", "specs"]);
@@ -184,34 +212,52 @@ fn relative_out_is_relative_to_the_working_directory() {
     let _ = std::fs::remove_dir_all(&cwd);
 }
 
-/// TLC's counterexample prints in model terms, through the renderer `check` uses, before
-/// TLC's own error line.
+/// A counterexample prints in model terms, through the renderer `check` uses. Natively it
+/// is BFS's shortest trace; under `--with-tlc` TLC's prints too, before TLC's own error line.
 #[test]
-fn a_tlc_counterexample_prints_in_model_terms() {
-    if !have_tlc() {
-        return;
-    }
+fn a_counterexample_prints_in_model_terms() {
     let tmp = scratch("verify_cli_model_terms");
     let sample = repo().join("samples/formal-verification/cross_order_payment_split.rdra");
-    let output = verify(&repo(), &tmp, &[sample.to_str().unwrap()]);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert_eq!(output.status.code(), Some(1), "{stderr}");
-    let mut rest: &str = &stderr;
-    for expected in [
+    let in_order = |stderr: &str, lines: &[&str]| {
+        let mut rest = stderr;
+        for expected in lines {
+            let at = rest
+                .find(expected)
+                .unwrap_or_else(|| panic!("{expected:?} missing or out of order\n{stderr}"));
+            rest = &rest[at + expected.len()..];
+        }
+    };
+    let trace = [
         "error[MultiForbidden_Order_0]: invariant MultiForbidden_Order_0 is violated: ",
         "  rule: ",
         "cross_order_payment_split.rdra:44:1",
-        "  counterexample (3 steps, from TLC):",
+        "  counterexample (3 steps):",
         "    1. Place [Order#1, Payment#1]",
         "    2. Pay_1, transaction 1 of Pay [Payment#1]",
         "         Payment#1.status: pending -> captured",
         "    3. Cancel [Order#1]",
-        "violated: Error: Invariant MultiForbidden_Order_0 is violated.",
-    ] {
-        let at = rest
-            .find(expected)
-            .unwrap_or_else(|| panic!("{expected:?} missing or out of order\n{stderr}"));
-        rest = &rest[at + expected.len()..];
+    ];
+    let output = verify(&repo(), &tmp, &[sample.to_str().unwrap()]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stderr}");
+    in_order(&stderr, &trace);
+    assert!(!stderr.contains("from TLC"), "{stderr}");
+    assert!(!stderr.contains("violated: Error:"), "{stderr}");
+    assert!(stderr.contains("\nresult: counterexample\n"), "{stderr}");
+    if have_tlc() {
+        let output = verify_with_tlc(&repo(), &tmp, &[sample.to_str().unwrap()]);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(1), "{stderr}");
+        in_order(&stderr, &trace);
+        in_order(
+            &stderr,
+            &[
+                "tlc: Cone_MultiForbidden_Order_0 (",
+                "  counterexample (3 steps, from TLC):",
+                "violated: Error: Invariant MultiForbidden_Order_0 is violated.",
+                "\nresult: counterexample\ntlc_result: counterexample\n",
+            ],
+        );
     }
     let _ = std::fs::remove_dir_all(&tmp);
 }
@@ -235,9 +281,6 @@ invariant(Order, Parcel).along(Parcel, Order).when(Parcel.state == sent).then(Or
 
 #[test]
 fn verify_reports_every_rule_that_fails_in_the_same_state() {
-    if !have_tlc() {
-        return;
-    }
     let tmp = scratch("verify_cli_same_state");
     let model = tmp.join("m.rdra");
     std::fs::write(&model, SAME_STATE_RULES).unwrap();
@@ -245,8 +288,21 @@ fn verify_reports_every_rule_that_fails_in_the_same_state() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
+    for name in ["Forbidden_Parcel_0", "MultiInv_Order_0"] {
+        assert!(
+            stderr.contains(&format!("error[{name}]: invariant {name} is violated: ")),
+            "{name} missing\n{stderr}"
+        );
+    }
+    if !have_tlc() {
+        return;
+    }
+    let output = verify_with_tlc(&repo(), &tmp, &[model.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
     let cone = stderr
-        .split("\nCone_")
+        .split("\ntlc: Cone_")
         .find(|block| block.starts_with("MultiInv_Order_0 ("))
         .unwrap_or_else(|| panic!("no block for the cross-entity cone\n{stderr}"));
     for name in ["Forbidden_Parcel_0", "MultiInv_Order_0"] {
@@ -260,17 +316,15 @@ fn verify_reports_every_rule_that_fails_in_the_same_state() {
         );
     }
     assert!(!stderr.contains("BFS and TLC disagree"), "{stderr}");
+    assert!(!stderr.contains("EngineDisagreement"), "{stderr}");
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// Each temporal property runs in its own module and its lasso prints in model terms, named
-/// after the property. TLC picks the lasso, so only its shape is fixed: a leads_to that an
-/// endless cancel and reopen breaks loops back; an always may stutter or loop.
+/// Each temporal property is decided on its own cone and its counterexample prints in model
+/// terms, named after the property, with no TLC on PATH: a leads_to that an endless cancel and
+/// reopen breaks loops back. `-o` still writes a module per run.
 #[test]
 fn a_temporal_counterexample_prints_its_lasso_in_model_terms() {
-    if !have_tlc() {
-        return;
-    }
     let tmp = scratch("verify_cli_temporal");
     let sample = repo().join("samples/formal-verification/temporal_unmet.rdra");
     let out = tmp.join("M.tla");
@@ -328,19 +382,21 @@ fn a_temporal_counterexample_prints_its_lasso_in_model_terms() {
             .find(&head)
             .unwrap_or_else(|| panic!("no {head:?}\n{stderr}"));
         let rest = &stderr[at..];
-        &rest[..rest.find("\nviolated: ").unwrap_or(rest.len())]
+        let end = ["\nerror[", "\nresult: "]
+            .iter()
+            .filter_map(|m| rest[1..].find(m).map(|k| k + 1))
+            .min()
+            .unwrap_or(rest.len());
+        &rest[..end]
     };
+    // An always fails at a state: BFS's shortest trace to it, with no loop.
     let always = block("NeverShipped");
     assert!(
-        always.contains("its always condition is false for Order#"),
+        always.contains("its always condition is false for Order#1 after step 3"),
         "{always}"
     );
-    assert!(always.contains(", from TLC):"), "{always}");
-    assert!(
-        always.ends_with("\n    then nothing changes forever")
-            || always.contains("\n    then loops back to step "),
-        "{always}"
-    );
+    assert!(always.contains("  counterexample (3 steps):"), "{always}");
+    assert!(!always.contains("then "), "{always}");
     let leads_to = block("PendingLeadsToDelivered");
     assert!(
         leads_to.contains("its leads_to trigger holds for Order#"),
@@ -360,9 +416,6 @@ fn a_temporal_counterexample_prints_its_lasso_in_model_terms() {
 /// assumption the passing verdict rests on.
 #[test]
 fn a_fair_property_holds_where_the_unfair_one_loops() {
-    if !have_tlc() {
-        return;
-    }
     let tmp = scratch("verify_cli_fair");
     let sample = repo().join("samples/formal-verification/temporal_fair.rdra");
     let output = verify(&repo(), &tmp, &[sample.to_str().unwrap()]);
@@ -388,9 +441,6 @@ fn a_fair_property_holds_where_the_unfair_one_loops() {
 /// an order it does not belong to (#165).
 #[test]
 fn a_property_along_reads_only_linked_rows() {
-    if !have_tlc() {
-        return;
-    }
     let tmp = scratch("verify_cli_along");
     let sample = repo().join("samples/formal-verification/temporal_along.rdra");
     let out = tmp.join("M.tla");
@@ -426,9 +476,6 @@ fn a_property_along_reads_only_linked_rows() {
 /// listed as not decided, and the run still ends in `OK:` as a BFS cone at its cap does.
 #[test]
 fn a_property_the_cone_cannot_decide_runs_on_the_whole_model_under_the_budget() {
-    if !have_tlc() {
-        return;
-    }
     let tmp = scratch("verify_cli_whole_model");
     let sample = repo().join("samples/formal-verification/order.rdra");
     let output = verify(&repo(), &tmp, &[sample.to_str().unwrap()]);
@@ -470,7 +517,8 @@ fn a_property_the_cone_cannot_decide_runs_on_the_whole_model_under_the_budget() 
         stdout.contains("; raise --temporal-budget, or name the use cases the property relies on with .fair(UseCase, ...)"),
         "{stdout}"
     );
-    assert!(stdout.contains("\ntlc_result: ok\n"), "{stdout}");
+    assert!(stdout.contains("\nresult: ok\n"), "{stdout}");
+    assert!(!stdout.contains("tlc_result"), "{stdout}");
     assert!(
         stdout.ends_with("OK: no errors within 2 instances per entity, Int 0..5\n"),
         "{stdout}"
@@ -504,9 +552,6 @@ fn a_property_the_cone_cannot_decide_runs_on_the_whole_model_under_the_budget() 
 /// `verify` states the bounds first, and a passing run ends with them in its `OK:` line.
 #[test]
 fn verify_prints_the_bounds_line_and_an_ok_line_that_repeats_them() {
-    if !have_tlc() {
-        return;
-    }
     let tmp = scratch("verify_cli_bounds");
     let sample = repo().join("samples/formal-verification/check_met.rdra");
     let output = verify(&repo(), &tmp, &[sample.to_str().unwrap()]);
@@ -525,20 +570,17 @@ fn verify_prints_the_bounds_line_and_an_ok_line_that_repeats_them() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// A state no use case reaches fails `verify` from BFS on the entity cones, though TLC finds
-/// no violation.
+/// A state no use case reaches fails `verify` from BFS on the entity cones, though no
+/// invariant or property is violated: `result: ok` and exit 1.
 #[test]
-fn an_unwitnessed_state_fails_verify_while_tlc_passes() {
-    if !have_tlc() {
-        return;
-    }
+fn an_unwitnessed_state_fails_verify_while_the_checks_pass() {
     let tmp = scratch("verify_cli_unwitnessed");
     let sample = repo().join("samples/formal-verification/unwitnessed_state.rdra");
     let output = verify(&repo(), &tmp, &[sample.to_str().unwrap()]);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
-    assert!(stdout.lines().any(|l| l == "tlc_result: ok"), "{stdout}");
+    assert!(stdout.lines().any(|l| l == "result: ok"), "{stdout}");
     assert!(!stdout.contains("OK: no errors"), "{stdout}");
     assert!(
         stderr.contains(
@@ -559,20 +601,17 @@ fn an_unwitnessed_state_fails_verify_while_tlc_passes() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// An instance that can never leave a state fails `verify` from BFS on the entity cones,
-/// though TLC finds no violation; the summary line counts it.
+/// An instance that can never leave a state fails `verify` from BFS on the entity cones, though
+/// no invariant or property is violated; the summary line counts it.
 #[test]
-fn a_deadlock_fails_verify_while_tlc_passes() {
-    if !have_tlc() {
-        return;
-    }
+fn a_deadlock_fails_verify_while_the_checks_pass() {
     let tmp = scratch("verify_cli_deadlock");
     let sample = repo().join("samples/formal-verification/deadlock.rdra");
     let output = verify(&repo(), &tmp, &[sample.to_str().unwrap()]);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
-    assert!(stdout.lines().any(|l| l == "tlc_result: ok"), "{stdout}");
+    assert!(stdout.lines().any(|l| l == "result: ok"), "{stdout}");
     assert!(!stdout.contains("OK: no errors"), "{stdout}");
     assert!(
         stderr.contains(
@@ -589,13 +628,10 @@ fn a_deadlock_fails_verify_while_tlc_passes() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// `verify` decides a `can_reach` by BFS at its bounds and says so; TLC runs nothing for it.
+/// `verify` decides a `can_reach` by BFS at its bounds and says so; TLC could not check it.
 /// At two instances the trap is the same, and the passing model passes.
 #[test]
 fn verify_decides_a_can_reach_natively() {
-    if !have_tlc() {
-        return;
-    }
     let tmp = scratch("verify_cli_can_reach");
     let sample = repo().join("samples/formal-verification/can_reach_unmet.rdra");
     let output = verify(&repo(), &tmp, &[sample.to_str().unwrap()]);
@@ -641,13 +677,10 @@ fn verify_decides_a_can_reach_natively() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// `verify --entity Order` defers Audit's build error, runs TLC on Order's invariant cone,
-/// and passes in the selected scope; the whole run stops at the build gate.
+/// `verify --entity Order` defers Audit's build error, decides Order's invariant cone, and
+/// passes in the selected scope; the whole run stops at the build gate.
 #[test]
 fn an_entity_scope_verifies_part_of_a_model() {
-    if !have_tlc() {
-        return;
-    }
     let tmp = scratch("verify_cli_partial_scope");
     let sample = repo().join("samples/formal-verification/partial_scope.rdra");
     let sample = sample.to_str().unwrap();
@@ -672,7 +705,7 @@ fn an_entity_scope_verifies_part_of_a_model() {
         lines.contains(&"Cone_Forbidden_Order_0 [Forbidden_Order_0]: ok (7 states)"),
         "{stdout}"
     );
-    assert!(lines.contains(&"tlc_result: ok"), "{stdout}");
+    assert!(lines.contains(&"result: ok"), "{stdout}");
     assert_eq!(
         lines.last(),
         Some(&"OK: no errors in the selected scope, within 2 instances per entity, Int 0..5"),
@@ -685,9 +718,6 @@ fn an_entity_scope_verifies_part_of_a_model() {
 /// temporal properties it skips under `not checked:`, and passes in the selected scope.
 #[test]
 fn a_buc_scope_skips_temporal_properties_and_leaves_progress_undecided() {
-    if !have_tlc() {
-        return;
-    }
     let tmp = scratch("verify_cli_buc_scope");
     let sample = repo().join("samples/formal-verification/order.rdra");
     let output = verify(
@@ -724,9 +754,6 @@ fn a_buc_scope_skips_temporal_properties_and_leaves_progress_undecided() {
 /// property's cone, and the whole model all decide.
 #[test]
 fn a_creation_guard_on_an_unassigned_column_is_decided() {
-    if !have_tlc() {
-        return;
-    }
     let tmp = scratch("verify_cli_guard_on_unassigned");
     let model = tmp.join("m.rdra");
     std::fs::write(
@@ -755,23 +782,33 @@ property P eventually(E.status == b)
         "{stdout}"
     );
     assert!(lines.contains(&"RdraSpec_P [P]: ok (7 states)"), "{stdout}");
-    assert!(lines.contains(&"tlc_result: ok"), "{stdout}");
+    assert!(lines.contains(&"result: ok"), "{stdout}");
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
 /// Runs `verify` on `src` with `-o <tmp>/<out>`; returns stdout, stderr, the exit code, and
 /// the out dir.
 fn verify_model(test: &str, src: &str, out: &str) -> (String, String, Option<i32>, PathBuf) {
+    verify_model_with(test, src, out, false)
+}
+
+/// `verify_model`, under `--with-tlc` when `tlc`.
+fn verify_model_with(
+    test: &str,
+    src: &str,
+    out: &str,
+    tlc: bool,
+) -> (String, String, Option<i32>, PathBuf) {
     let tmp = scratch(test);
     let model = tmp.join("m.rdra");
     std::fs::write(&model, src).unwrap();
     let dir = tmp.join("out");
     let target = dir.join(out);
-    let output = verify(
-        &repo(),
-        &tmp,
-        &[model.to_str().unwrap(), "-o", target.to_str().unwrap()],
-    );
+    let args = [model.to_str().unwrap(), "-o", target.to_str().unwrap()];
+    let output = match tlc {
+        true => verify_with_tlc(&repo(), &tmp, &args),
+        false => verify(&repo(), &tmp, &args),
+    };
     (
         String::from_utf8_lossy(&output.stdout).into_owned(),
         String::from_utf8_lossy(&output.stderr).into_owned(),
@@ -835,9 +872,6 @@ property Q_Full "作業はまだ待つ"
 /// read the wrong spec and ended in `tool_error`.
 #[test]
 fn a_property_named_like_another_property_module_keeps_its_own_spec() {
-    if !have_tlc() {
-        return;
-    }
     let (stdout, stderr, code, dir) = verify_model("verify_cli_wf_named", WF_NAMED, "M.tla");
     assert_eq!(code, Some(1), "{stdout}{stderr}");
     let lines: Vec<&str> = stdout.lines().collect();
@@ -898,7 +932,8 @@ fn a_rerun_cfg_named_like_a_property_module_leaves_that_cfg() {
     let src = format!(
         "{SAME_STATE_RULES}property MultiInv_Order_0_rest1 \"注文は払われない\"\n  always(Order.status == pending)\n"
     );
-    let (stdout, stderr, code, dir) = verify_model("verify_cli_rest_named", &src, "M.tla");
+    let (stdout, stderr, code, dir) =
+        verify_model_with("verify_cli_rest_named", &src, "M.tla", true);
     assert_eq!(code, Some(1), "{stdout}{stderr}");
     assert!(
         stderr.contains("error[MultiInv_Order_0]: invariant MultiInv_Order_0 is violated: "),
@@ -920,9 +955,6 @@ fn a_rerun_cfg_named_like_a_property_module_leaves_that_cfg() {
 /// spec is left as it ran.
 #[test]
 fn a_whole_model_run_named_like_a_cone_leaves_the_cone_spec() {
-    if !have_tlc() {
-        return;
-    }
     let src = r#"entity E "E" { id: Int @pk  status: Enum(a, b) @default(a)  seen: Bool @default(false) }
 usecase Make "作成"
 usecase Flip "切替"
@@ -963,9 +995,6 @@ property P eventually(E.status == b)
 /// ended in `tool_error`. The later module takes `_2`; each property keeps its name.
 #[test]
 fn properties_whose_names_differ_in_case_write_two_files() {
-    if !have_tlc() {
-        return;
-    }
     let src = r#"
 entity Job "作業" { id: Int @pk  status: Enum(waiting, running, done) @default(waiting) }
 usecase Submit "投入"
@@ -1006,9 +1035,6 @@ property ready "y"
 /// `verify`'s labels and findings; the var takes `_2`.
 #[test]
 fn a_property_named_like_a_var_keeps_its_name() {
-    if !have_tlc() {
-        return;
-    }
     let src = r#"
 entity Job "作業" { id: Int @pk  status: Enum(waiting, running, done) @default(waiting) }
 usecase Submit "投入"
@@ -1030,11 +1056,16 @@ property Job_status "never running"
         stderr.contains("error[Job_status]: property Job_status is violated: "),
         "{stderr}"
     );
-    assert!(stderr.contains("Job_status_2[1] = "), "{stderr}");
+    if have_tlc() {
+        let (_, stderr, code, _) =
+            verify_model_with("verify_cli_property_var_tlc", src, "M.tla", true);
+        assert_eq!(code, Some(1), "{stderr}");
+        assert!(stderr.contains("Job_status_2[1] = "), "{stderr}");
+    }
 }
 
-/// `--tlc-jar` names the jar TLC runs from, so a missing jar is an error that names it,
-/// with or without `tlc` on PATH.
+/// `--tlc-jar` names the jar TLC runs from under `--with-tlc`, so a missing jar is an error
+/// that names it, with or without `tlc` on PATH.
 #[test]
 fn a_missing_tlc_jar_is_named_in_the_error() {
     let tmp = scratch("missing_tlc_jar");
@@ -1044,6 +1075,7 @@ fn a_missing_tlc_jar_is_named_in_the_error() {
         &tmp,
         &[
             "samples/formal-verification/check_met.rdra",
+            "--with-tlc",
             "--tlc-jar",
             jar.to_str().unwrap(),
         ],
@@ -1073,9 +1105,6 @@ sets(Flag, Order.flagged == true)
 /// its line carries its own state count and the counterexample is the larger cone's alone.
 #[test]
 fn a_cone_another_cone_covers_runs_only_when_that_cone_fails() {
-    if !have_tlc() {
-        return;
-    }
     let line = |stdout: &str| {
         stdout
             .lines()
@@ -1156,9 +1185,6 @@ forbidden(E, v == true, status == raised)
 /// cone drops. Each cone runs and reports its counterexample.
 #[test]
 fn a_cone_that_takes_steps_the_larger_module_does_not_still_runs() {
-    if !have_tlc() {
-        return;
-    }
     for (test, src, failing) in [
         (
             "verify_cli_assert_cone",
@@ -1203,17 +1229,14 @@ property HeldFlags "保留は印"
   leads_to(Order.held == true, Order.flagged == true)
 "#;
 
-/// `verify` explores each cone it hands to TLC and warns of a check that holds vacuously: a
-/// rule, an `after` assertion, and a `leads_to`. The run still passes, and at two instances
+/// `verify` explores each cone it decides and warns of a check that holds vacuously: a rule,
+/// an `after` assertion, and a `leads_to`. The run still passes, and at two instances
 /// the warning carries no note about one instance.
 #[test]
 fn verify_warns_of_checks_that_hold_vacuously() {
-    if !have_tlc() {
-        return;
-    }
     let (stdout, stderr, code, _) = verify_model("verify_cli_vacuous", VACUOUS_CHECKS, "specs");
     assert_eq!(code, Some(0), "{stdout}\n{stderr}");
-    assert!(stdout.contains("tlc_result: ok"), "{stdout}");
+    assert!(stdout.contains("\nresult: ok\n"), "{stdout}");
     for warning in [
         "warning[Vacuous_Inv_Order_0]: Inv_Order_0 holds vacuously: no reachable state has a row of Order with held=true\n",
         "warning[Vacuous_AfterAssert_Ship_0]: AfterAssert_Ship_0 holds vacuously: Ship never runs to its last step\n",
@@ -1221,23 +1244,6 @@ fn verify_warns_of_checks_that_hold_vacuously() {
     ] {
         assert!(stderr.contains(warning), "missing {warning}\n{stderr}");
     }
-}
-
-/// Runs `verify` under the test hook `RDRA_ISH_NATIVE`, with no `tlc` on PATH and no jar, so a
-/// run that passes or fails here started no TLC.
-fn verify_native(cwd: &Path, tmpdir: &Path, args: &[&str]) -> Output {
-    let empty = tmpdir.join("no-tools");
-    std::fs::create_dir_all(&empty).unwrap();
-    Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
-        .current_dir(cwd)
-        .env("TMPDIR", tmpdir)
-        .env("RDRA_ISH_NATIVE", "1")
-        .env("PATH", &empty)
-        .env_remove("RDRA_TLC_JAR")
-        .arg("verify")
-        .args(args)
-        .output()
-        .expect("rdra-ish runs")
 }
 
 /// The names of the `error[<name>]:` findings, sorted.
@@ -1292,15 +1298,15 @@ after(Pay).assert(Order.paid_at == present)
 property CapturedPaid always((not (Payment.status == captured)) or (Order.status != draft)).along(Payment, Order)
 "#;
 
-/// Under `RDRA_ISH_NATIVE` BFS decides a rule, an `after` assertion, and `always` with and
-/// without `.along`, with no TLC on PATH: the run fails with the error names the TLC run
-/// reports, each with BFS's trace, and passes where they hold.
+/// The native checker decides a rule, an `after` assertion, and `always` with and without
+/// `.along`, with no TLC on PATH: the run fails with the error names TLC reports beside it,
+/// each with BFS's trace, and passes where they hold.
 #[test]
 fn a_native_verify_decides_the_safety_checks_without_tlc() {
     let tmp = scratch("verify_cli_native_safety");
     let model = tmp.join("violated.rdra");
     std::fs::write(&model, SAFETY_VIOLATED).unwrap();
-    let output = verify_native(&repo(), &tmp, &[model.to_str().unwrap()]);
+    let output = verify(&repo(), &tmp, &[model.to_str().unwrap()]);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
@@ -1321,11 +1327,13 @@ fn a_native_verify_decides_the_safety_checks_without_tlc() {
     assert!(
         stdout.lines().any(|l| l.starts_with("Cone_Inv_Order_0 [")
             && l.contains("]: counterexample (")
-            && l.ends_with(" states, BFS)")),
+            && l.ends_with(" states)")),
         "{stdout}"
     );
     assert!(
-        stdout.contains("property CapturedPaid (BFS on its cone): violated\n"),
+        stdout
+            .lines()
+            .any(|l| l.starts_with("Cone_CapturedPaid [CapturedPaid]: counterexample (")),
         "{stdout}"
     );
     // The shortest trace: Capture moves the payment of a draft order in one step.
@@ -1334,19 +1342,23 @@ fn a_native_verify_decides_the_safety_checks_without_tlc() {
         "{stderr}"
     );
     assert!(
-        stderr.contains("verification failed: 2 property violation(s) from BFS on the property cones and 2 invariant or after-assert violation(s) from BFS on their cones"),
+        stderr.contains("verification failed: 2 invariant or after-assert violation(s) and 2 property violation(s)"),
         "{stderr}"
     );
     if have_tlc() {
-        let tlc = verify(&repo(), &tmp, &[model.to_str().unwrap()]);
+        let tlc = verify_with_tlc(&repo(), &tmp, &[model.to_str().unwrap()]);
         let tlc_stderr = String::from_utf8_lossy(&tlc.stderr);
         assert_eq!(tlc.status.code(), Some(1), "{tlc_stderr}");
         assert_eq!(error_names(&tlc_stderr), names, "{tlc_stderr}");
+        assert!(
+            tlc_stderr.contains("\ntlc_result: counterexample\n"),
+            "{tlc_stderr}"
+        );
     }
 
     let model = tmp.join("held.rdra");
     std::fs::write(&model, SAFETY_HELD).unwrap();
-    let output = verify_native(&repo(), &tmp, &[model.to_str().unwrap()]);
+    let output = verify(&repo(), &tmp, &[model.to_str().unwrap()]);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(output.status.code(), Some(0), "{stdout}{stderr}");
@@ -1358,22 +1370,27 @@ fn a_native_verify_decides_the_safety_checks_without_tlc() {
         "{stdout}"
     );
     assert!(
-        stdout.contains("property CapturedPaid (BFS on its cone): ok\n"),
+        stdout.contains("\nCone_CapturedPaid [CapturedPaid]: ok ("),
         "{stdout}"
     );
     if have_tlc() {
-        let tlc = verify(&repo(), &tmp, &[model.to_str().unwrap()]);
+        let tlc = verify_with_tlc(&repo(), &tmp, &[model.to_str().unwrap()]);
+        let tlc_stdout = String::from_utf8_lossy(&tlc.stdout);
         assert_eq!(
             tlc.status.code(),
             Some(0),
             "{}",
             String::from_utf8_lossy(&tlc.stderr)
         );
+        assert!(
+            tlc_stdout.contains("\nresult: ok\ntlc_result: ok\n"),
+            "{tlc_stdout}"
+        );
     }
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// A `.lemma()` rule only helps `--prove`, so the native run explores no cone for it either,
+/// A `.lemma()` rule only helps `--prove`, so the run explores no cone for it,
 /// and still decides the other rule's cone. That cone's system holds the lemma, so it is
 /// checked there, as TLC checks every rule of the module it runs.
 #[test]
@@ -1405,7 +1422,7 @@ invariant(Order).when(status == placed).none(Shipment).label("no shipment yet").
     )
     .unwrap();
     let specs = tmp.join("specs");
-    let output = verify_native(
+    let output = verify(
         &repo(),
         &tmp,
         &[model.to_str().unwrap(), "-o", specs.to_str().unwrap()],
@@ -1423,5 +1440,180 @@ invariant(Order).when(status == placed).none(Shipment).label("no shipment yet").
     assert!(!stdout.contains("Cone_Quantifier_Order_0"), "{stdout}");
     let cones = std::fs::read_to_string(specs.join("cones.txt")).unwrap();
     assert!(!cones.contains("Cone_Quantifier_Order_0"), "{cones}");
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// `eventually` and `leads_to` are decided natively, with no TLC on PATH: on the cone with
+/// `Fair_P` alone, again with `WF_vars(Next)`, and on the whole model when the cone leaves
+/// them open. `--with-tlc` runs TLC's ladder beside it, and the two agree run by run.
+#[test]
+fn liveness_is_decided_without_tlc_and_tlc_agrees() {
+    let tmp = scratch("verify_cli_native_liveness");
+    for (sample, code, lines) in [
+        (
+            "temporal_unmet.rdra",
+            1,
+            &["Cone_PendingLeadsToDelivered [PendingLeadsToDelivered]: counterexample (31 states, Cone_PendingLeadsToDelivered_WF: counterexample)"][..],
+        ),
+        (
+            "temporal_fair.rdra",
+            1,
+            &["Cone_GrantEnds [GrantEnds]: ok (43 states)"][..],
+        ),
+        (
+            "order.rdra",
+            0,
+            &[
+                "Cone_EventuallyTerminal [EventuallyTerminal]: not decided (31 states, Cone_EventuallyTerminal_WF: ok, needs the whole model's WF_vars(Next))",
+                "RdraSpec_EventuallyTerminal [EventuallyTerminal]: ok (31 states)",
+            ][..],
+        ),
+    ] {
+        let sample = repo().join("samples/formal-verification").join(sample);
+        let output = verify(&repo(), &tmp, &[sample.to_str().unwrap()]);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(code), "{stdout}{stderr}");
+        for line in lines {
+            assert!(stdout.lines().any(|l| l == *line), "{line}\n{stdout}");
+        }
+        let result = match code {
+            0 => stdout.lines().any(|l| l == "result: ok"),
+            _ => stderr.lines().any(|l| l == "result: counterexample"),
+        };
+        assert!(result, "{stdout}{stderr}");
+        if !have_tlc() {
+            continue;
+        }
+        let tlc = verify_with_tlc(&repo(), &tmp, &[sample.to_str().unwrap()]);
+        let tlc_stdout = String::from_utf8_lossy(&tlc.stdout);
+        let tlc_stderr = String::from_utf8_lossy(&tlc.stderr);
+        assert_eq!(tlc.status.code(), Some(code), "{tlc_stdout}{tlc_stderr}");
+        assert!(!tlc_stderr.contains("EngineDisagreement"), "{tlc_stderr}");
+        for line in lines {
+            assert!(
+                tlc_stdout.lines().any(|l| l == format!("tlc: {line}")),
+                "tlc: {line}\n{tlc_stdout}"
+            );
+        }
+        assert_eq!(error_names(&tlc_stderr), error_names(&stderr), "{tlc_stderr}");
+    }
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// A `tlc` on PATH that passes every module whatever it holds: a stand-in for a TLC that
+/// disagrees with the native checker.
+#[cfg(unix)]
+fn fake_tlc(dir: &Path) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let bin = dir.join("fake-tlc");
+    std::fs::create_dir_all(&bin).unwrap();
+    let tlc = bin.join("tlc");
+    std::fs::write(
+        &tlc,
+        "#!/bin/sh\necho '7 states generated, 7 distinct states found, 0 states left on queue.'\necho 'Model checking completed. No error has been found.'\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&tlc, std::fs::Permissions::from_mode(0o755)).unwrap();
+    bin
+}
+
+/// When the engines decide a check differently, neither verdict is the result: the run prints
+/// the engine-disagreement line with both, reports `tool_error`, keeps its specs, and exits 1.
+#[cfg(unix)]
+#[test]
+fn an_engine_disagreement_fails_the_run_and_keeps_the_specs() {
+    let tmp = scratch("verify_cli_disagreement");
+    let path = fake_tlc(&tmp);
+    let sample = repo().join("samples/formal-verification/check_unmet.rdra");
+    let output = verify_on_path(
+        &repo(),
+        &tmp,
+        &path,
+        &[sample.to_str().unwrap(), "--with-tlc"],
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
+    assert!(
+        stderr.contains("\nerror[EngineDisagreement]: Cone_Check_CartLine_qty_0 [Check_CartLine_qty_0]: native counterexample, TLC ok; one engine is wrong (a tool bug, not a finding about the model)\n"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("\nresult: tool_error\ntlc_result: tool_error\n"),
+        "{stderr}"
+    );
+    let dir = stderr
+        .lines()
+        .find_map(|l| l.strip_prefix("specs: "))
+        .and_then(|l| l.strip_suffix(" (kept because the engines disagree)"))
+        .unwrap_or_else(|| panic!("no kept specs: line\n{stderr}"));
+    assert!(Path::new(dir)
+        .join("Cone_Check_CartLine_qty_0.tla")
+        .is_file());
+    assert!(
+        stderr.contains("1 check(s) the native checker and TLC decide differently (a tool bug)"),
+        "{stderr}"
+    );
+    let _ = std::fs::remove_dir_all(dir);
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// `--backend tlc` still runs TLC, as `--with-tlc` does, and warns that it is deprecated.
+#[cfg(unix)]
+#[test]
+fn backend_tlc_warns_and_runs_tlc_beside_the_native_checker() {
+    let tmp = scratch("verify_cli_backend_tlc");
+    let path = fake_tlc(&tmp);
+    let sample = repo().join("samples/formal-verification/check_met.rdra");
+    let output = verify_on_path(
+        &repo(),
+        &tmp,
+        &path,
+        &[sample.to_str().unwrap(), "--backend", "tlc"],
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(0), "{stdout}{stderr}");
+    assert!(
+        stderr.starts_with("warning: --backend tlc is deprecated: it now means --with-tlc"),
+        "{stderr}"
+    );
+    assert!(
+        stdout.contains("\ntlc: Cone_Forbidden_CartLine_0 [Forbidden_CartLine_0, Check_CartLine_qty_0]: ok (7 states)\n"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("\nresult: ok\ntlc_result: ok\n"),
+        "{stdout}"
+    );
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// `--with-tlc` without `tlc` on PATH is an error; without the flag a `--tlc-jar` that names
+/// nothing starts no TLC and only warns.
+#[test]
+fn with_tlc_needs_tlc_and_tlc_jar_needs_with_tlc() {
+    let tmp = scratch("verify_cli_needs_tlc");
+    let sample = repo().join("samples/formal-verification/check_met.rdra");
+    let output = verify(&repo(), &tmp, &[sample.to_str().unwrap(), "--with-tlc"]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stderr}");
+    assert!(stderr.contains("TLC not found on PATH"), "{stderr}");
+
+    let jar = tmp.join("absent.jar");
+    let output = verify(
+        &repo(),
+        &tmp,
+        &[sample.to_str().unwrap(), "--tlc-jar", jar.to_str().unwrap()],
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(0), "{stdout}{stderr}");
+    assert!(
+        stderr.contains("warning: --tlc-jar applies only with --with-tlc; this run starts no TLC"),
+        "{stderr}"
+    );
+    assert!(!stdout.contains("tlc_result"), "{stdout}");
     let _ = std::fs::remove_dir_all(&tmp);
 }

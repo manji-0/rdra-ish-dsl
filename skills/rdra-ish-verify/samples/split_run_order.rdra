@@ -6,7 +6,7 @@
 // TLC intent: expected PASS. Unique_Settlement_Claim holds at 2 instances, no claim is stuck
 // at negotiating, and a started run finishes under .fair(OpenSettlement).
 // expect check: ok
-// expect verify: tlc=ok
+// expect verify: ok
 variation Kind "種目" {
   liability "賠償"
   vehicle "車両"

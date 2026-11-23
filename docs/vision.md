@@ -176,7 +176,12 @@ The transition system follows these rules:
 
 ## Verification is bounded, fails closed, and points at the model
 
-A passing `verify` must mean something, and a failing one must say where to look:
+A passing `verify` must mean something, and a failing one must say where to look.
+Each command checks its own declarations. `check` and `states` check the state rules, the
+`after` assertions, and the state models by state exploration, and evaluate no `property`.
+`verify` checks the same rules and assertions at two instances, every `property` form, and,
+with `--prove`, proves state rules for any number of rows. Its native checker needs no JVM,
+and `verify --with-tlc` has TLC check the same cones as a second opinion.
 
 - Every effect in the model is exported. If a constraint reads a column that no
   action writes, `verify` warns that the constraint checks only the initial value.
@@ -419,6 +424,24 @@ The maintainer decided this question on 2026-11-21:
   it, each stage is a gate `next` decides per BUC, and the API boundary and the verified
   rules are rdra-ish layers with no RDRA step. See
   [One stage order replaces three](#one-stage-order-replaces-three).
+
+The maintainer decided these questions on 2026-11-23:
+
+The plan in [#168](https://github.com/manji-0/rdra-ish-dsl/pull/168) records the
+reasons and the phases.
+
+- `verify` decides every check with a native checker by default and starts no JVM.
+  `--with-tlc` runs TLC beside it and fails the run when the two decide a check
+  differently. `--backend tlc` stays as a deprecated spelling of `--with-tlc` until the
+  next major release.
+- `check` and `states` do safety verification by state exploration only. Every `property`
+  form and every inductive proof belongs to `verify`, and the documents say so.
+- Each phase of the native checker lands on `main` when its exit check passes, and no
+  release ships until the native checker is stable. `main` is the early channel; the
+  promises of [compatibility](./compatibility.md) cover releases, and the `Unreleased`
+  section of the changelog lists what `main` changed since the last one. Every run states
+  its verdict on a `result:` line, and `tlc_result:` prints beside it only under
+  `--with-tlc`.
 
 ## Sources
 

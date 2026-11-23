@@ -5,7 +5,7 @@
 // `check` does not model-check temporal properties; `verify` runs each property alone and
 // prints its lasso in model terms.
 // expect check: ok
-// expect verify: tlc=counterexample fail NeverShipped PendingLeadsToDelivered
+// expect verify: fail NeverShipped PendingLeadsToDelivered
 entity Order "注文" {
   id: Int @pk
   status: Enum(pending, paid, shipped, delivered, cancelled) @default(pending)

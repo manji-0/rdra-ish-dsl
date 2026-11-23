@@ -136,7 +136,7 @@ Each figure is a cone size at the 2 instances of `verify`, from
   inspection's and the permit's side out of the application's view, which is 52,597 states
   reduced (`RDRA_REDUCED_ONLY=1 lifecycle_measure -- 9000000 verify`), while the permit's view
   holds the raisers of the events that move the permit and is 4,648,771 states reduced,
-  about half the `verify` cap of 8,388,608. `verify` decides every check: `tlc_result: ok`, no
+  about half the `verify` cap of 8,388,608. `verify` decides every check: `result: ok`, no
   deadlock, every use case runs, in 36 s and 1.6 GB locally. A change that grows the permit's
   cone further takes the view past the cap; measure it first. Before #73 the guard could not be written: the only link between the
   two entities was the registration key, which no renewal has, and a second key made the join
