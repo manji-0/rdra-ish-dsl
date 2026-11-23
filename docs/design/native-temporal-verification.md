@@ -13,8 +13,9 @@ Status: proposed on 2026-11-23. Nothing here is implemented. The plan starts aft
 [#167](https://github.com/manji-0/rdra-ish-dsl/issues/167) land. The owner decided three
 questions on 2026-11-23: `verify` defaults to the native checker and `--with-tlc` adds
 TLC, each phase lands on `main` when it passes while the next release waits until the
-native checker is stable, and `check` and `states` evaluate no `property`.
-[Decisions](#decisions) records them and lists what is still open.
+native checker is stable, and `check` and `states` evaluate no `property`. The same day
+the owner settled `--backend tlc`, the verdict line, verdicts that move off `not decided`,
+and the release gate. [Decisions](#decisions) records them and lists what is still open.
 
 `verify` needs a JVM and TLC today. TLC decides every invariant cone, every `after`
 assertion, and every temporal property, while the explorer in `rdra-ish-core` reaches the
@@ -600,15 +601,15 @@ runs TLC. A test hook selects it, `RDRA_ISH_NATIVE`, which is not a setting, as
 | `--tlc-jar`, `RDRA_TLC_HEAP` | Apply only with `--with-tlc`. |
 | `--temporal-budget` | Bounds the widened cone of step 6 in seconds, and TLC's whole-model run under `--with-tlc`. |
 | `-o <dir>` | Still writes the modules and `cones.txt`, for a TLC run by hand. |
-| `--backend tlc` | Open, see [Decisions](#decisions). |
+| `--backend tlc` | A deprecated spelling of `--with-tlc` that prints a warning, removed in the next major release. |
 
 **Output.** A native run prints the lines `verify` prints today, with these differences.
 The cone names stay `Cone_<name>` as labels, so a script that reads the lines keeps
 working. The second and third runs keep their notes (`Cone_P_WF: ok`). Steps 4 to 6 add a
 note that says why the cone decided (`nothing outside the cone runs forever`, `<Entity>
 runs forever outside the cone`, `on the cone widened by N vars`). The `tlc_result:` line
-prints only when TLC ran, which is under `--with-tlc`. What a native run prints in its
-place is open (see [Decisions](#decisions)).
+prints only when TLC ran, which is under `--with-tlc`. Every run prints the verdict on a
+`result:` line of the same form (see [Decisions](#decisions)).
 
 **`compatibility.md` changes in the change that moves a covered item.** The page states
 what the next release keeps, so it is edited where the behavior moves and not at the
@@ -655,12 +656,14 @@ plan's proposal:
    natively. Each domain sample's native `verify` takes no more wall time and no more peak
    memory than the TLC run in [What exists today](#what-exists-today), measured on the
    same machine.
-7. **Two weeks without a fix to a verdict.** For 14 days no commit on `main` changed a
-   native verdict on a sample, a fixture, or a sweep seed.
+7. **A quiet period without a fix to a verdict.** For the period the owner sets, shorter
+   than 14 days, no commit on `main` changed a native verdict on a sample, a fixture, or a
+   sweep seed.
 8. **The contract is written.** `compatibility.md`, the changelog, the docs, and the
    skills below describe the tool at that commit.
 
-Item 7 is a waiting time and the others are checks. The owner may prefer another length.
+Item 7 is a waiting time and the others are checks. The owner chose a wait shorter than
+14 days and has not given the number yet.
 
 **CI.** Before the default changes, the `formal-verify` job runs the samples as today and
 once more under `RDRA_ISH_NATIVE`. After it, the step that checks every sample against its
@@ -843,30 +846,26 @@ The owner decided these questions on 2026-11-23:
   `always`, `eventually`, and `leads_to`, and it changes what #166 and #167 say about
   `check`.
 
+The owner decided four more on 2026-11-23:
+
+- **`--backend tlc` stays as a deprecated spelling of `--with-tlc`.** It prints a warning
+  and runs TLC beside the native checker, so a script that passes it keeps getting what it
+  asked for. The major release after the one that changes the default removes it.
+- **Every run states its verdict on a neutral `result:` line.** The line has the form
+  `tlc_result:` has today. Under `--with-tlc`, `tlc_result:` prints beside it. An
+  `// expect verify:` header reads `ok` or `fail <Names>`, and `tlc=` stays for a line
+  whose flags hold `--with-tlc`.
+- **The native checker may decide what today is `not decided`.** A run that passes today
+  with a `not decided` property can fail with its counterexample at the same bounds. Each
+  change of phase 4 that moves a sample's verdict names the property in the `### Breaking`
+  entry.
+- **The release gate keeps its eight criteria, with a shorter wait.** Item 7 waits fewer
+  than 14 days. The owner has not given the number yet.
+
 Still open, each with a recommendation:
 
-- **Open: the release gate's criteria.** [Migration](#migration) proposes eight.
-  Recommendation: adopt them, and treat the 14 days of item 7 as the one number to argue
-  about.
-- **Open: what happens to `--backend tlc`?** The flag is covered, it has one value, and
-  every doc, skill, and sample transcript writes it. Recommendation: keep accepting
-  `--backend tlc` as a deprecated spelling of `--with-tlc` that prints a warning, and
-  remove it in the major release after this one. A script that passes it then keeps
-  running TLC, which is what the script asked for. Removing the flag at once is simpler
-  and breaks every such script on upgrade.
-- **Open: which line states the verdict of a native run?** The decisions above removed
-  the reason to keep `tlc_result:` as the only line, since the contract changes in the
-  same change. Recommendation: one neutral `result:` line in every run, with the form
-  `tlc_result:` has, and `tlc_result:` beside it under `--with-tlc`. An `// expect verify:`
-  header then reads `ok` or `fail <Names>`, and `tlc=` stays for a line whose flags hold
-  `--with-tlc`. The earlier recommendation was a `native_result:` line. It named the engine
-  in a line that every run prints, which a default engine does not need.
-- **Open: is the native checker allowed to decide what today is `not decided`?** A
-  property that step 4, 5, or 6 decides as a counterexample fails a run that passes today
-  at the same bounds. The decisions above leave little against it: the release already
-  carries breaks, users of `main` see the move first, and `--with-tlc` reads a TLC `not
-  decided` as no verdict. Recommendation: yes, with each moved sample property named in the
-  `### Breaking` entry. A `not decided` is not a verdict that anyone should rely on.
+- **Open: how many days item 7 of the release gate waits.** Fewer than 14, by the decision
+  above.
 - **Open: step 5 or only step 6?** Step 5 is a shortcut for a case step 6 also decides, at
   the cost of a product of two graphs. Recommendation: keep step 5, because the product is
   what makes the domain samples' whole models too large, and measure in phase 4 how often
