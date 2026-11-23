@@ -867,6 +867,11 @@ The owner decided four more on 2026-11-23:
   with a `not decided` property can fail with its counterexample at the same bounds. Each
   change of phase 4 that moves a sample's verdict names the property in the `### Breaking`
   entry.
+- **`result:` states the verdict of the whole run.** It counts the state-model findings
+  (a deadlock, a use case that never runs) beside the invariants, the `after` assertions,
+  and the properties, so `result: ok` means exit 0. Phase 3 had it count only the checks,
+  which let `result: ok` stand beside a failing run. Decided on 2026-11-23, before any
+  release carries the line.
 - **The release gate keeps its eight criteria, with a shorter wait.** Item 7 waits fewer
   than 14 days. The owner has not given the number yet.
 
