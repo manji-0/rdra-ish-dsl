@@ -154,6 +154,15 @@
 
 ### Changed
 
+- BFS keeps each explored state once, in one buffer, with a table of state numbers to find
+  it by, in place of a heap block per state and a second copy as the key of the seen
+  set. The store per state on the sample cones of a thousand states and more falls from
+  215 to 125 bytes at the median at `check` bounds (260 to 154 at the most) and from 248 to
+  159 at `verify` bounds (403 to 316). States, edges, verdicts, and counterexamples do not
+  change, but a cone fits more states under `--memory`: a cone that stopped at the limit
+  stops later or finishes, and the `held at <N> B per state` of `MemoryCapReached` is
+  smaller. The memory estimate follows the new store, `(w + 12)·p2(n) + 5·buckets(n) +
+  12·p2(e)` bytes.
 - `check` and `states` have no state cap by default: `--memory` (4GiB, or `memory` under
   `[check]`) is what stops a cone, and `--max-states <N>` still caps it. The `bounds:` line
   says `no state cap per cone, memory 4GiB`, or `<N> states per cone` under the flag. A cone

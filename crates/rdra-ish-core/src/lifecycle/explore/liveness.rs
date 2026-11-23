@@ -289,7 +289,7 @@ impl ComponentRun {
             walk.extend(self.fair_loop(fair, avoid, end));
             Loop::Back { to: entry }
         };
-        let mut states = vec![self.states[first as usize].clone()];
+        let mut states = vec![self.states[first as usize].to_owned()];
         let mut actions = Vec::with_capacity(walk.len());
         let steps = match tail {
             Loop::Stutter => walk.len(),
@@ -298,7 +298,7 @@ impl ComponentRun {
         for (k, e) in walk.iter().enumerate() {
             actions.push(self.bindings[e.binding as usize].0);
             if k < steps {
-                states.push(self.states[e.to as usize].clone());
+                states.push(self.states[e.to as usize].to_owned());
             }
         }
         Lasso {

@@ -1,6 +1,6 @@
 //! Scans a set of states for the guard checks that hold in none of them.
 
-use crate::lifecycle::expr::{Env, State};
+use crate::lifecycle::expr::{Env, StateSlice};
 use crate::lifecycle::types::{ActId, Action, ParamRole, Value};
 use crate::lifecycle::TransitionSystem;
 
@@ -12,7 +12,7 @@ impl TransitionSystem {
     pub(crate) fn scan_guards<'a>(
         &self,
         act: ActId,
-        states: impl IntoIterator<Item = &'a State>,
+        states: impl IntoIterator<Item = &'a StateSlice>,
         pin: Option<(usize, u8)>,
     ) -> Scan {
         let action = &self.actions[act.index()];
@@ -103,7 +103,7 @@ impl TransitionSystem {
     /// finds one and every pre-guard holds under some binding that gives them any slot; empty
     /// when `s` has no such binding. Post-guards are not read: a creation on a taken slot has
     /// no successor to read them on.
-    fn crowded_in(&self, action: &Action, s: &State, pin: Option<(usize, u8)>) -> Vec<usize> {
+    fn crowded_in(&self, action: &Action, s: &StateSlice, pin: Option<(usize, u8)>) -> Vec<usize> {
         let free = |p: &crate::lifecycle::types::Param| {
             let exists = self.entity(p.entity).exists;
             (0..self.bounds.slots()).any(|slot| s.get(self, exists, slot) == Value::ABSENT)

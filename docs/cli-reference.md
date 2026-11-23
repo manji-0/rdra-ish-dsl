@@ -563,8 +563,8 @@ number, `0`, and a fraction are refused.
 What the limit counts:
 
 - **BFS.** The states a cone has reached are counted in bytes as they are stored: each
-  state twice (in the list and in the index of seen states), its parent, every edge, and the
-  bindings, by the length and capacity of each collection. The count is the same on every
+  state once (in one buffer, with its number in the index of seen states), its parent, every
+  edge, and the bindings, by the length and capacity of each collection. The count is the same on every
   machine and with any number of threads, so a cone stops at the same state wherever it
   runs. A finished cone keeps its states and edges until its findings are read, so they
   stay counted, and the next cone has the rest of the limit. The cones run side by side,
@@ -624,16 +624,17 @@ Without an estimate from the layers, the message falls back on the cone's variab
 most states the cone can have is the product of their domains, and if finishing at that
 many takes no more than `1TiB` the message names that size as what finishing needs at the
 least, if all of them are reachable. The bound is loose: most of the product is never
-reached. A size is computed with `32·p2(n) + 2·n·blk(w) + 25·buckets(n) + 12·p2(e)` bytes
-for `n` states of `w` bytes and `e` edges (`p2` rounds up to a power of two, `blk` to 16
-bytes, `buckets` to a power of two of at least `n·8/7`); on the sample cones of a thousand
-states and more it stood 2.4% to 6.7% over what the run counts. `e` is the edges per
+reached. A size is computed with `(w + 12)·p2(n) + 5·buckets(n) + 12·p2(e)` bytes for `n`
+states of `w` bytes and `e` edges (`p2` rounds up to a power of two, `buckets` to a power of
+two of at least `n·8/7`): the run keeps each state once, in one buffer, and indexes it by
+number. On the sample cones of a thousand states and more, at `check` and `verify` bounds, it
+stood 0.9% to 5.2% over what the run counts. `e` is the edges per
 expanded state seen so far times `n`; early depths have fewer, so that part is low. Every
 figure is for the one cone; the cones share the limit, so allow more than it says.
 
 ```text
-error[MemoryCapReached_Task]: state derivation for entity 'Task': memory limit 56KiB reached at 256 states; results are incomplete: the cone has 9 variables, 9 of them vary (...); new states first reached by: Flip7 127, Flip6 64, Flip5 32, Flip4 16, Flip3 8, Flip2 4, Flip1 2, Close 1; held at 231 B per state; the frontier peaked at depth 5 and has shrunk for 3 layers since, so the cone probably holds about 258 states (its falling side taken to mirror its rising side: an estimate, not a bound); with a quarter to spare, this cone alone probably needs about 1MiB: try 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
-error[MemoryCapReached_Order]: state derivation for entity 'Order': memory limit 1KiB reached at 5 states; results are incomplete: the cone has 3 variables, 2 of them vary (values reached/domain: Order.status 4/5, Order._exists 2/3); new states first reached by: CancelOrder 1, CapturePay 1, PlaceOrder 1, ShipOrder 1; held at 177 B per state; the frontier peaked at depth 2, but by depth 3 it has not fallen far enough to estimate the states left; the cone's variables allow at most 30 states, so if all are reachable this cone alone needs at least about 1MiB; raise it to 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
+error[MemoryCapReached_Task]: state derivation for entity 'Task': memory limit 36KiB reached at 256 states; results are incomplete: the cone has 9 variables, 9 of them vary (...); new states first reached by: Flip7 127, Flip6 64, Flip5 32, Flip4 16, Flip3 8, Flip2 4, Flip1 2, Close 1; held at 145 B per state; the frontier peaked at depth 5 and has shrunk for 3 layers since, so the cone probably holds about 258 states (its falling side taken to mirror its rising side: an estimate, not a bound); with a quarter to spare, this cone alone probably needs about 1MiB: try 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
+error[MemoryCapReached_Order]: state derivation for entity 'Order': memory limit 1KiB reached at 3 states; results are incomplete: the cone has 3 variables, 2 of them vary (values reached/domain: Order._exists 2/3, Order.status 2/5); new states first reached by: CapturePay 1, PlaceOrder 1; held at 101 B per state; the frontier peaked at depth 0, but by depth 1 it has not fallen far enough to estimate the states left; the cone's variables allow at most 30 states, so if all are reachable this cone alone needs at least about 1MiB; raise it to 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
 ```
 
 The `Task` cone (`crates/rdra-ish-cli/tests/fixtures/memory/flags.rdra`) holds 257 states.

@@ -894,6 +894,7 @@ name = "rdra-ish-core"
 version = "2.3.0"
 dependencies = [
  "dunce",
+ "hashbrown 0.17.1",
  "insta",
  "miette",
  "petgraph",

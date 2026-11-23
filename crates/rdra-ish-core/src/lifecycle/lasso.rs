@@ -5,7 +5,7 @@
 use std::collections::BTreeSet;
 
 use super::diag::StateDiag;
-use super::expr::{Env, State};
+use super::expr::{Env, State, StateSlice};
 use super::trace::{Replay, ReplayError};
 use super::types::{ActId, Ltl, Pred, Property};
 use super::TransitionSystem;
@@ -164,15 +164,16 @@ impl TransitionSystem {
                 .filter(|(a, b)| a != b)
                 .collect(),
         };
-        let fair_moves = |s: &State, to: Option<&State>| -> BTreeSet<(ActId, Box<[u8]>)> {
-            self.moves(s)
-                .filter(|m| m.next != *s && to.is_none_or(|t| m.next == *t))
-                .filter_map(|m| {
-                    let slots = p.fair_instance(&self.actions[m.act.index()], &m.params)?;
-                    Some((m.act, slots))
-                })
-                .collect()
-        };
+        let fair_moves =
+            |s: &StateSlice, to: Option<&StateSlice>| -> BTreeSet<(ActId, Box<[u8]>)> {
+                self.moves(s)
+                    .filter(|m| m.next != *s && to.is_none_or(|t| m.next == *t))
+                    .filter_map(|m| {
+                        let slots = p.fair_instance(&self.actions[m.act.index()], &m.params)?;
+                        Some((m.act, slots))
+                    })
+                    .collect()
+            };
         let mut starved = fair_moves(&cycle[0], None);
         for s in &cycle[1..] {
             let enabled = fair_moves(s, None);
@@ -217,18 +218,18 @@ impl TransitionSystem {
     }
 
     /// `pred` with the property's binders at `binding`.
-    pub(crate) fn holds_bound(&self, pred: &Pred, s: &State, binding: &[u8]) -> bool {
+    pub(crate) fn holds_bound(&self, pred: &Pred, s: &StateSlice, binding: &[u8]) -> bool {
         let mut env = Env::new(&[]);
         env.bound = binding.to_vec();
         self.eval(pred, s, &mut env)
     }
 
     /// The trigger of every form: the bound slots are present and `.along` links them.
-    pub(crate) fn triggers(&self, p: &Property, binding: &[u8], s: &State) -> bool {
+    pub(crate) fn triggers(&self, p: &Property, binding: &[u8], s: &StateSlice) -> bool {
         self.present(p, binding, s) && self.holds_bound(&p.link, s, binding)
     }
 
-    fn present(&self, p: &Property, binding: &[u8], s: &State) -> bool {
+    fn present(&self, p: &Property, binding: &[u8], s: &StateSlice) -> bool {
         p.binders
             .iter()
             .zip(binding)
@@ -239,7 +240,13 @@ impl TransitionSystem {
     /// and `p` (`when`) hold before it, the bound slots are present after it, and `p` fails
     /// (a column moves). The link is read before the step only, so a step that moves a key
     /// keeps the obligation the trigger took on. False for every other form.
-    pub(crate) fn step_breaks(&self, p: &Property, binding: &[u8], a: &State, b: &State) -> bool {
+    pub(crate) fn step_breaks(
+        &self,
+        p: &Property,
+        binding: &[u8],
+        a: &StateSlice,
+        b: &StateSlice,
+    ) -> bool {
         let breaks = match &p.formula {
             Ltl::Stable(x) => self.holds_bound(x, a, binding) && !self.holds_bound(x, b, binding),
             Ltl::Unchanged { when, columns } => {
@@ -266,8 +273,8 @@ impl TransitionSystem {
         states: &[State],
         entry: usize,
     ) -> Option<usize> {
-        let holds = |pred: &Pred, s: &State| self.holds_bound(pred, s, binding);
-        let trigger = |s: &State| self.triggers(p, binding, s);
+        let holds = |pred: &Pred, s: &StateSlice| self.holds_bound(pred, s, binding);
+        let trigger = |s: &StateSlice| self.triggers(p, binding, s);
         // From position i the behavior visits the rest of the finite part, then the loop.
         let never_from =
             |i: usize, goal: &Pred| !states[i.min(entry)..].iter().any(|s| holds(goal, s));

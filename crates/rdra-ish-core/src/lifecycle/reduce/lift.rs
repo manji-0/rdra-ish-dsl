@@ -6,7 +6,7 @@ use super::partition::{quotient_blocks, split_edges, Succ};
 use super::*;
 use crate::lifecycle::cone::VarSet;
 use crate::lifecycle::explore::Caps;
-use crate::lifecycle::expr::State;
+use crate::lifecycle::expr::{State, StateSlice};
 use crate::lifecycle::types::ActId;
 use crate::lifecycle::TransitionSystem;
 
@@ -40,7 +40,7 @@ impl TransitionSystem {
             .collect();
         let (silent, rise_edges) = split_edges(&run, &ext.rise);
         let blocks = quotient_blocks(n, &silent, &rise_edges, &initial);
-        let at: HashMap<&State, u32> = run
+        let at: HashMap<&StateSlice, u32> = run
             .states
             .iter()
             .enumerate()
@@ -64,7 +64,7 @@ impl TransitionSystem {
             .take(sub.initial_states().len())
             .find(|s| blocks[at[*s] as usize] == start_block)
             .expect("the start's class holds an initial S state")
-            .clone();
+            .to_owned();
         enum Lifted {
             /// A T step, and the rises of the extended sub-lifecycle it makes.
             T(ActId, Box<[u8]>, State, usize),
@@ -72,7 +72,7 @@ impl TransitionSystem {
         }
         let mut level: Vec<Lifted> = Vec::new();
         let mut s_steps: Vec<Step> = Vec::new();
-        let mut s_at = at[&s0];
+        let mut s_at = at[&*s0];
         for (act, params, post) in steps {
             if !r.skips(*act) {
                 let after = run
@@ -94,7 +94,7 @@ impl TransitionSystem {
                         })
                         .expect("a T step's rise is a rise of the extended sub-lifecycle");
                     let (a, p) = run.step(&e);
-                    s_steps.push((a, p.into(), run.states[e.to as usize].clone()));
+                    s_steps.push((a, p.into(), run.states[e.to as usize].to_owned()));
                     s_at = e.to;
                 }
                 level.push(Lifted::T(*act, params.clone(), post.clone(), stages.len()));
@@ -105,7 +105,7 @@ impl TransitionSystem {
             let mut count = 0;
             for e in path {
                 let (a, p) = run.step(&e);
-                s_steps.push((a, p.into(), run.states[e.to as usize].clone()));
+                s_steps.push((a, p.into(), run.states[e.to as usize].to_owned()));
                 s_at = e.to;
                 count += 1;
             }
