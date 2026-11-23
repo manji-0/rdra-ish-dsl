@@ -53,7 +53,8 @@ pub struct Tally {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Undecided {
     pub subject: Subject,
-    /// The entity whose cone stopped; `None` when the scope, not a cone, left it open.
+    /// The entity or the `can_reach` property whose cone stopped; `None` when the scope, not
+    /// a cone, left it open.
     pub cone: Option<String>,
     pub why: UndecidedWhy,
 }
@@ -88,6 +89,8 @@ pub enum Subject {
         column: String,
         value: String,
     },
+    /// Whether a `can_reach` property holds.
+    Reach { name: String },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -138,6 +141,7 @@ impl fmt::Display for Undecided {
                 f,
                 "whether some {entity} can get stuck at {column} = {value} is not decided: "
             )?,
+            Subject::Reach { name } => write!(f, "can_reach {name} is not decided: ")?,
         }
         let cone = self.cone.as_deref().unwrap_or("its");
         match self.why {
@@ -156,6 +160,19 @@ impl fmt::Display for Undecided {
             UndecidedWhy::Unselected => write!(f, "no cone of a selected entity keeps it"),
         }
     }
+}
+
+/// The cap or the limit a run stopped at, read off its diagnostics; `None` for a run that did
+/// not stop.
+fn stopped_at(run: &ComponentRun) -> Option<UndecidedWhy> {
+    run.diags.iter().find_map(|d| match d.diag {
+        StateDiag::StateCapReached { cap, .. } => Some(UndecidedWhy::StateCap(cap)),
+        StateDiag::PatternCapReached { cap, .. } => Some(UndecidedWhy::PatternCap(cap)),
+        StateDiag::MemoryCapReached { limit, raise, .. } => {
+            Some(UndecidedWhy::MemoryCap(limit, raise))
+        }
+        _ => None,
+    })
 }
 
 /// What the entity cones that keep one action say about it.
@@ -277,6 +294,17 @@ impl TransitionSystem {
                         entity_cones.push(at);
                     }
                     self.entity_findings(e, &cones[at], &mut out, &mut runs);
+                }
+                // A state the cap left unexpanded has no edges, so it would look stuck: only a
+                // complete graph decides a `can_reach`.
+                Target::Reach(i) if !cones[at].run.complete => {
+                    let name = self.reach[i].name.clone();
+                    out.undecided.push(Undecided {
+                        subject: Subject::Reach { name: name.clone() },
+                        cone: Some(name),
+                        why: stopped_at(&cones[at].run)
+                            .expect("an incomplete run stopped at a cap"),
+                    });
                 }
                 _ => out.verdicts.extend(self.verdict(target, &cones[at])),
             }
@@ -511,14 +539,7 @@ impl TransitionSystem {
         let run = &cone.run;
         let decl = self.entity(e);
         let local = run.system.local_entity(decl.key);
-        let why = run.diags.iter().find_map(|d| match d.diag {
-            StateDiag::StateCapReached { cap, .. } => Some(UndecidedWhy::StateCap(cap)),
-            StateDiag::PatternCapReached { cap, .. } => Some(UndecidedWhy::PatternCap(cap)),
-            StateDiag::MemoryCapReached { limit, raise, .. } => {
-                Some(UndecidedWhy::MemoryCap(limit, raise))
-            }
-            _ => None,
-        });
+        let why = stopped_at(run);
         let capped = || why.expect("an incomplete run stopped at a cap");
         let findings = run.system.state_model_findings(local, &run.graph());
         let mut models = Vec::new();
@@ -638,7 +659,7 @@ impl TransitionSystem {
     }
 
     /// The diagnostic is a violation of this invariant or assert.
-    fn reports(&self, target: Target, d: &StateDiag) -> bool {
+    pub(super) fn reports(&self, target: Target, d: &StateDiag) -> bool {
         match (target, d) {
             (Target::Invariant(i), StateDiag::ConstraintViolated { name, .. }) => {
                 *name == self.invariants[i].name
@@ -652,7 +673,8 @@ impl TransitionSystem {
 
     /// What the target's own cone says about an invariant, assert, or `can_reach`: its
     /// violations, each trace marked when it creates more instances than the bound, and any
-    /// cap that left the verdict incomplete.
+    /// cap that left the verdict of an invariant or an assert incomplete. A `can_reach` cone
+    /// that stopped is undecided instead (`explore_targets_with`).
     fn verdict(&self, target: Target, cone: &ConeRun) -> Vec<Diag> {
         let run = &cone.run;
         debug_assert!(
@@ -661,24 +683,21 @@ impl TransitionSystem {
         );
         let entities = self.target_entities(target);
         if let Target::Reach(i) = target {
-            // A state the cap left unexpanded has no edges, so it would look stuck: only a
-            // complete graph decides.
-            if run.complete {
-                let name = &self.reach[i].name;
-                let local = run
-                    .system
-                    .reach_properties()
-                    .iter()
-                    .position(|r| r.name == *name)
-                    .expect("the cone holds what the property reads");
-                if let Some((at, mut diag)) = run.system.reach_failure(local, &run.graph()) {
-                    if let Some(trace) = diag.trace_mut() {
-                        *trace = run.trace_to(at);
-                    }
-                    return vec![Diag { entities, diag }];
+            debug_assert!(run.complete, "a stopped can_reach cone is undecided");
+            let name = &self.reach[i].name;
+            let local = run
+                .system
+                .reach_properties()
+                .iter()
+                .position(|r| r.name == *name)
+                .expect("the cone holds what the property reads");
+            if let Some((at, mut diag)) = run.system.reach_failure(local, &run.graph()) {
+                if let Some(trace) = diag.trace_mut() {
+                    *trace = run.trace_to(at);
                 }
-                return Vec::new();
+                return vec![Diag { entities, diag }];
             }
+            return Vec::new();
         }
         let mut out: Vec<Diag> = run
             .diags
@@ -929,7 +948,7 @@ impl TargetExploration {
         &self.verdicts
     }
 
-    /// The states of state models and the actions no cone decided.
+    /// The states of state models, the actions, and the `can_reach` properties no cone decided.
     pub fn undecided(&self) -> &[Undecided] {
         &self.undecided
     }

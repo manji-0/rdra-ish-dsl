@@ -571,11 +571,15 @@ cone's verdict is the whole model's at the same bounds. A reduced cone (the next
 keeps stuttering equivalence, which says nothing of `AG EF`, so no `can_reach` cone is
 reduced. A cone that stops at `--max-states` or the memory limit decides nothing, since a
 state it did not expand has no edges and would look stuck: no violation is read from it.
+`verify` lists such a property under `not checked:` as `can_reach <P> is not decided: the <P>
+cone stopped at the state cap (<n> states)` (or at the memory limit), counts it toward
+`--deny-undecided`, and prints `result: not decided`.
 A scoped `verify` checks no property, `can_reach` included.
 
 `verify` prints `can_reach properties: N, decided natively by BFS on each one's cone (TLC
 cannot check AG EF)` in its header, explores those cones beside the entity cones, and ends
-the BFS pass with `can_reach (BFS on N cones): N checked, M violated`. A violation fails the
+the BFS pass with `can_reach (BFS on N cones): N checked, M violated`, followed by
+`, K not decided` when the cones of K of them stopped. A violation fails the
 run with `result: counterexample`:
 
 ```
@@ -902,12 +906,15 @@ rules and lemmas that is inductive together (the Houdini algorithm):
 
 - An absent row holds base values, a row of an entity no use case deletes is never
   deleted, and a present row's key never names an absent row.
-- What BFS shows on each entity cone and each rule's cone at the run's bounds: the
-  patterns a present row takes, the values of each column and of each pair of columns,
-  the patterns a child row takes with the parent its key names (whole, per parent column,
+- What BFS shows on each entity cone and each rule's cone, at the run's bounds and again at
+  one instance per entity: the patterns a present row takes, the values of each column and
+  of each pair of columns, the patterns a child row takes with the parent its key names (whole, per parent column,
   and one column of each), and the pairs of patterns two children of one parent take. The
   pairs of one column of each are many on a model with many columns, so they join only
-  when a rule stays unproved without them, and the proof runs once more.
+  when a rule stays unproved without them, and the proof runs once more. Each mining run
+  stops at 50,000 states. A cone that passes this cap at the run's bounds usually finishes at
+  one instance, so mining there as well keeps the candidates a one-instance proof uses. A
+  lemma that only the one-instance run offers prints with `(mined at 1 instance per entity)`.
 
 A lemma is only a guess until it survives the same checks, so a capped exploration costs
 proofs, not soundness. The lemmas a proof kept print as `lemma:` lines.
@@ -967,10 +974,15 @@ unproved: Unique_Shipment_Order: not inductive; Ship(Order#1, Shipment#1) breaks
 ```
 
 Here the CTI is also a real run: `one_to_one_shared` links two Shipments to one Order, and
-`verify` at two instances reports the violation with its trace. A rule z3 gives up on
-(each check of a rule has 10 s, of a lemma 0.5 s) is `unproved` with `z3 gave up on <action>`. The checks of one
-step are shared out over several z3 processes (`RDRA_JOBS`); the proof and its CTIs do not
-depend on how many. A rule that fails in an
+`verify` at two instances reports the violation with its trace. A rule z3 gives up on is
+`unproved` with `z3 gave up on <action>`. Each check has a budget of z3 resource units
+(`rlimit`), a count of solver steps, not of time: 20,000,000 for a check of a rule and
+2,000,000 for a lemma. So the proof is the same on a busy machine and an idle one. The
+units are z3's own and may count differently in another z3 version; the budgets were set on
+z3 5.1.0, where no check that keeps a candidate spent more than about a twentieth of its
+budget on any sample. A lemma check that runs out drops the lemma, as a step that breaks it
+does. The checks of one step are shared out over several z3 processes (`RDRA_JOBS`); the
+proof and its CTIs do not depend on how many. A rule that fails in an
 initial state is `unproved` too; the bounded engines report that violation.
 
 Some rules have no `CHECK` in the schema `export --kind sql` writes: a rule over several
@@ -982,7 +994,20 @@ application has to keep them. `--prove` marks each such rule with
 an obligation the use cases already discharge, for any number of rows.
 
 `--prove` reads the state rules only. After-asserts and temporal properties are not tried.
-The result does not change the exit status unless `--deny-unproved` is given. Every rule of
+A proof decides one kind of verdict: an invariant cone that BFS stopped at the memory limit
+before a violation. When z3 proves every rule the cone checks, the rules hold at the run's
+bounds too, since the encoding allows every step the explorer takes at any bound. The
+cone's line then reads `ok`, and still says where BFS stopped:
+
+```
+Cone_Forbidden_CartLine_0 [Forbidden_CartLine_0, Check_CartLine_qty_0]: ok (8 states, BFS stopped at the memory limit, decided by proof: --prove proved every check for any number of rows)
+```
+
+Such a cone counts as decided, so a run whose only open checks it decides prints
+`result: ok`. A cone that also checks an `after` assertion, or a rule z3 leaves unproved or
+out of scope, stays `not decided`, as does a cone stopped at `--max-states` or
+`--max-patterns`. Otherwise the proof does not change the exit status unless
+`--deny-unproved` is given. Every rule of
 the domain samples proves, insurance-claim-ops' with the lemma above.
 `tests/proof_equivalence.rs` checks on every sample that no rule it proves has a BFS
 counterexample at one, two, or three instances.

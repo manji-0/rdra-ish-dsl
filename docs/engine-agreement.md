@@ -49,7 +49,9 @@ every case, whatever the case's header says.
    also a counterexample on the full graph. The test
    `a_capped_graph_decides_nothing_the_full_graph_contradicts` explores the whole model of
    every case under every state cap from 1 up to its size. It decides each `always`,
-   `eventually`, and `leads_to` under both fairness readings.
+   `eventually`, and `leads_to` under both fairness readings. Under `verify --prove` an
+   invariant cone that the memory limit stopped prints `ok` when z3 proves every rule in
+   it. That `ok` is z3's verdict, held to rule 4, not the stopped graph's.
 
 **Each engine against the header.** Every case states its expected verdict per engine, so
 the corpus also catches a drift that all engines share. Two parts are shared. The cone
