@@ -882,6 +882,7 @@ dependencies = [
  "anyhow",
  "clap",
  "dunce",
+ "insta",
  "miette",
  "rdra-ish-core",
  "rdra-ish-emit",

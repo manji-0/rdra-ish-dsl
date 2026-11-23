@@ -98,7 +98,6 @@ const EXPECTED: &[(&str, &[(&str, Gate)])] = &[
             ("dbml", Note),
             ("sql", Note),
             ("json-schema", Note),
-            ("type-script-states", Stop),
             ("mermaid-er", Note),
             ("tla", Note),
         ],
@@ -300,10 +299,8 @@ fn doc_rows() -> Vec<(String, Option<String>, Gate)> {
 fn the_cli_reference_table_states_every_kinds_gate() {
     let rows = doc_rows();
     let gate_of = |command: &str, kind: &str| {
-        // The docs spell `type-script-states` by its alias.
-        let kind = kind.replace("type-script", "typescript");
         rows.iter()
-            .find(|(c, k, _)| c == command && k.as_deref() == Some(kind.as_str()))
+            .find(|(c, k, _)| c == command && k.as_deref() == Some(kind))
             .or_else(|| rows.iter().find(|(c, k, _)| c == command && k.is_none()))
             .map(|(_, _, gate)| *gate)
             .unwrap_or_else(|| panic!("docs: no row for {command} --kind {kind}"))

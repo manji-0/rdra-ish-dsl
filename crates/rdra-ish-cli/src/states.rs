@@ -3,12 +3,9 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
+use rdra_ish_core::format_location;
 use rdra_ish_core::lifecycle::{derive_states_built, Bounds, Caps, Site};
-use rdra_ish_core::{entity_state_variants, format_location};
-use rdra_ish_emit::{
-    state_pattern::{render_csv, render_json, render_table},
-    typescript::emit_typescript_state_unions,
-};
+use rdra_ish_emit::state_pattern::{render_csv, render_json, render_table};
 
 use crate::cli::{ScopeArgs, StatesFormat};
 use crate::load::load_clean;
@@ -27,7 +24,7 @@ pub fn run_states(
     let caps = charged(caps, memory, manifest.as_ref(), Budgeted::Check);
     let scope = scope.resolve(&model)?;
 
-    // Exit on structured severity (not string scan) so csv / typescript also fail-closed.
+    // Exit on structured severity (not string scan) so csv and json also fail-closed.
     let (report, ts) = derive_states_built(&model, &scope, bounds, caps);
     eprintln!("{}", report.bounds_line(&model));
     for d in report.unattributed() {
@@ -48,9 +45,6 @@ pub fn run_states(
         StatesFormat::Json => render_json(&report.views, &model, &|site: &Site| {
             format_location(&program, site.span.as_ref()?)
         })?,
-        StatesFormat::TypeScript => {
-            emit_typescript_state_unions(&model, &entity_state_variants(&model, &report.views))
-        }
     };
     print!("{}", output);
 

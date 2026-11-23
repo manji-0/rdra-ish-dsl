@@ -1221,7 +1221,7 @@ argument other than `tz` and `local` is `InvalidTypeArgs`.
 | `@index(a, b)` | Declares a composite index over the named columns. |
 | `@check(expr)` | A check constraint: `expr` is a condition over the entity's own columns (`and`, `or`, `not` over comparisons), typed like a `forbidden` comparison. A missing column is `UnknownColumn`; arithmetic is `ArithNotInCheck`. The lifecycle checks it as the invariant `Check_<Entity>_<column>_<n>` (see [state-derivation.md](./state-derivation.md#checks)). |
 | `@null` | Makes the column nullable. A nullable column is a **state axis** with values `{null, present}`. |
-| `@default(v)` | Declares a default value `v`. State derivation starts the column at `v`, except a column typed by a variation: a row of it starts at any value of the variation unless the use case that creates it sets the column, and `@default` does not pick the start (info `DefaultOnVariationIgnored`; see [Actions](./state-derivation.md#actions)). |
+| `@default(v)` | Declares a default value `v`. On an `Enum` column `v` is one of its values (otherwise `InvalidEnumVariant`), on a `Bool` column `true` or `false` (otherwise `InvalidBoolValue`), and on a variation column one of the variation's values (otherwise `InvalidVariationValue`). State derivation starts the column at `v`, except a column typed by a variation: a row of it starts at any value of the variation unless the use case that creates it sets the column, and `@default` does not pick the start (info `DefaultOnVariationIgnored`; see [Actions](./state-derivation.md#actions)). |
 | `@label("...")` | Overrides the column's display label. |
 | `@soft_delete` | Marks the column as the soft-delete marker, such as `deleted_at` or `is_deleted`. |
 | `@history` | Marks the column as part of history/versioning, such as `valid_from`, `valid_to`, or `version`. |
@@ -1917,9 +1917,9 @@ transitions(EndPublication, Disposition.publication, published -> ended)
   `transitions(Go, E.period, x -> z)`. A self-loop `x -> x` lets it run
   but leaves the period at `x`; with the arms above, a row at `(b, y)` then has no use case
   that moves the period, and `check` reports `Deadlock_E_period_y`.
-- **A single-tag export picks one column.** `export --kind typescript` tags each state union
-  by `status`, else a `*_status` column, else the first lifecycle column by name; the other
-  columns are fields of each variant.
+- **A state type picks one tag column.** `codegen` tags each state type by `status`, else
+  a `*_status` column, else the first lifecycle column by name; the other columns are
+  fields of each variant.
 
 #### Guard one arm: `.when`
 

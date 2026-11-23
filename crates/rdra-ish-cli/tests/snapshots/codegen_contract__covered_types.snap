@@ -1,0 +1,224 @@
+---
+source: crates/rdra-ish-cli/tests/codegen_contract.rs
+expression: "covered(&String::from_utf8(output.stdout).unwrap())"
+---
+export type Money = string & { readonly __brand: "Money" };
+
+export type Decimal = string & { readonly __brand: "Decimal" };
+
+export type Date = string & { readonly __brand: "Date" };
+
+export type DateTime = string & { readonly __brand: "DateTime" };
+
+export type CustomerId = string & { readonly __brand: "CustomerId" };
+
+export type OrderId = number & { readonly __brand: "OrderId" };
+
+export type ShipmentId = number & { readonly __brand: "ShipmentId" };
+
+export type PaymentMethod =
+  "credit_card"
+  | "bank_transfer"
+;
+
+export const PaymentMethodValues: readonly PaymentMethod[] = ["credit_card", "bank_transfer"];
+
+export type OrderStatus =
+  "pending"
+  | "paid"
+  | "shipped"
+  | "on_hold"
+  | "onHold"
+  | "_2day"
+;
+
+export const OrderStatusValues: readonly OrderStatus[] = ["pending", "paid", "shipped", "on_hold", "onHold", "_2day"];
+
+export type OrderChannel =
+  "web"
+  | "shop"
+;
+
+export const OrderChannelValues: readonly OrderChannel[] = ["web", "shop"];
+
+export type ShipmentPhase =
+  "packing"
+  | "sealed"
+;
+
+export const ShipmentPhaseValues: readonly ShipmentPhase[] = ["packing", "sealed"];
+
+export type ShipmentDeliveryStatus =
+  "waiting"
+  | "delivered"
+;
+
+export const ShipmentDeliveryStatusValues: readonly ShipmentDeliveryStatus[] = ["waiting", "delivered"];
+
+export interface OrderPending {
+  status: "pending";
+  id: OrderId;
+  total: Money;
+  rate: Decimal;
+  due_on: Date;
+  gift: boolean;
+  qty: number;
+  method: PaymentMethod;
+  channel: OrderChannel;
+  paid_at: DateTime | null;
+  receipt: string;
+  note: string | null;
+  customer_code: CustomerId;
+  shipped_at: null;
+  memo: null;
+  legacy_ref: null;
+}
+
+export interface OrderPaid {
+  status: "paid";
+  id: OrderId;
+  total: Money;
+  rate: Decimal;
+  due_on: Date;
+  gift: boolean;
+  qty: number;
+  method: PaymentMethod;
+  channel: OrderChannel;
+  paid_at: DateTime;
+  receipt: string;
+  note: string | null;
+  customer_code: CustomerId;
+  shipped_at: null;
+  memo: null;
+  legacy_ref: null;
+}
+
+export interface OrderShipped {
+  status: "shipped";
+  id: OrderId;
+  total: Money;
+  rate: Decimal;
+  due_on: Date;
+  gift: boolean;
+  qty: number;
+  method: PaymentMethod;
+  channel: OrderChannel;
+  paid_at: DateTime;
+  shipped_at: DateTime;
+  receipt: string;
+  note: string | null;
+  customer_code: CustomerId;
+  memo: null;
+  legacy_ref: null;
+}
+
+export interface OrderOnHold {
+  status: "on_hold";
+  id: OrderId;
+  total: Money;
+  rate: Decimal;
+  due_on: Date;
+  gift: boolean;
+  qty: number;
+  method: PaymentMethod;
+  channel: OrderChannel;
+  paid_at: DateTime | null;
+  shipped_at: DateTime | null;
+  receipt: string;
+  memo: string | null;
+  customer_code: CustomerId;
+  note: null;
+  legacy_ref: null;
+}
+
+export interface OrderOnHold2 {
+  status: "onHold";
+  id: OrderId;
+  total: Money;
+  rate: Decimal;
+  due_on: Date;
+  gift: boolean;
+  qty: number;
+  method: PaymentMethod;
+  channel: OrderChannel;
+  paid_at: DateTime | null;
+  shipped_at: DateTime | null;
+  receipt: string;
+  note: string | null;
+  customer_code: CustomerId;
+  memo: null;
+  legacy_ref: null;
+}
+
+export interface OrderV2day {
+  status: "_2day";
+  id: OrderId;
+  total: Money;
+  rate: Decimal;
+  due_on: Date;
+  gift: boolean;
+  qty: number;
+  method: PaymentMethod;
+  channel: OrderChannel;
+  paid_at: DateTime | null;
+  shipped_at: DateTime | null;
+  receipt: string;
+  note: string | null;
+  customer_code: CustomerId;
+  memo: null;
+  legacy_ref: null;
+}
+
+export type Order =
+  OrderPending
+  | OrderPaid
+  | OrderShipped
+  | OrderOnHold
+  | OrderOnHold2
+  | OrderV2day
+;
+
+export interface ShipmentWaiting {
+  delivery_status: "waiting";
+  id: ShipmentId;
+  phase: ShipmentPhase;
+  order_id: OrderId;
+}
+
+export interface ShipmentDelivered {
+  delivery_status: "delivered";
+  id: ShipmentId;
+  phase: ShipmentPhase;
+  order_id: OrderId;
+}
+
+export type Shipment =
+  ShipmentWaiting
+  | ShipmentDelivered
+;
+
+export interface OrderRow {
+  id: OrderId;
+  status: OrderStatus;
+  total: Money;
+  rate: Decimal;
+  due_on: Date;
+  gift: boolean;
+  qty: number;
+  method: PaymentMethod;
+  channel: OrderChannel;
+  paid_at: DateTime | null;
+  shipped_at: DateTime | null;
+  receipt: string | null;
+  note: string | null;
+  memo: string | null;
+  legacy_ref: string | null;
+  customer_code: CustomerId;
+}
+
+export interface ShipmentRow {
+  id: ShipmentId;
+  phase: ShipmentPhase;
+  delivery_status: ShipmentDeliveryStatus;
+  order_id: OrderId;
+}

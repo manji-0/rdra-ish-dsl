@@ -156,6 +156,9 @@ struct Case {
     tlc_skip: bool,
     expects: BTreeMap<String, Expect>,
     known: Vec<Known>,
+    /// `// rejects: <text>`: the model fails to load with an `error:` line that contains
+    /// `text`, so no engine runs.
+    rejects: Vec<String>,
     /// The `can_reach` properties of the model, which print a line only when they fail.
     can_reach: BTreeSet<String>,
 }
@@ -188,6 +191,7 @@ fn parse_case(path: &Path) -> Result<Case, String> {
         tlc_skip: false,
         expects: BTreeMap::new(),
         known: Vec::new(),
+        rejects: Vec::new(),
         can_reach: can_reach_properties(&text),
     };
     let mut trap = false;
@@ -222,7 +226,9 @@ fn parse_case(path: &Path) -> Result<Case, String> {
         } else if let Some(rest) = body.strip_prefix("known ") {
             case.known
                 .push(parse_known(rest).ok_or(format!("malformed: {line}"))?);
-        } else if ["expect", "known", "flags", "tlc", "trap"]
+        } else if let Some(text) = body.strip_prefix("rejects: ") {
+            case.rejects.push(text.to_string());
+        } else if ["expect", "known", "flags", "tlc", "trap", "rejects"]
             .iter()
             .any(|k| body.starts_with(&format!("{k}:")) || body.starts_with(&format!("{k} ")))
         {
@@ -244,6 +250,11 @@ fn parse_case(path: &Path) -> Result<Case, String> {
         }
     }
     for (check, e) in &case.expects {
+        if !case.rejects.is_empty() && (e.native != V::None || e.tlc != V::None) {
+            return Err(format!(
+                "{check}: a model that `rejects` runs no engine, so native=none tlc=none"
+            ));
+        }
         if case.tlc_skip && e.tlc != V::None {
             return Err(format!("{check}: tlc={} on a case that skips TLC", e.tlc));
         }
@@ -606,8 +617,20 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
     };
     let fail = |report: &mut Report, msg: String| report.failures.push(msg);
 
-    for line in &main.unnamed {
+    let rejected = |line: &str| {
+        (line.starts_with("Error: model has errors") && !case.rejects.is_empty())
+            || case.rejects.iter().any(|r| line.contains(r.as_str()))
+    };
+    for line in main.unnamed.iter().filter(|l| !rejected(l)) {
         fail(&mut report, format!("an error without a name: {line}"));
+    }
+    for r in &case.rejects {
+        if !main.unnamed.iter().any(|l| l.contains(r.as_str())) {
+            fail(
+                &mut report,
+                format!("the model loads without the error `{r}`"),
+            );
+        }
     }
     // Every check the run names is stated, and every stated check is in the run.
     let seen = main.checks();

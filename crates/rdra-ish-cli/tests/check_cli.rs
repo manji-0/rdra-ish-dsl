@@ -922,6 +922,43 @@ forbidden(Item, stock == 0)
     assert!(!stderr.contains("Forbidden_Item_0"), "{stderr}");
 }
 
+/// An Enum or Bool `@default` outside the column's values stops the model from loading, so
+/// no engine explores from the first value (#187).
+#[test]
+fn an_enum_or_bool_default_outside_its_values_stops_the_model() {
+    let src = |status: &str, flag: &str| {
+        format!(
+            r#"entity Item "商品" {{ id: Int @pk  status: Enum(open, closed) @default({status})  flag: Bool @default({flag}) }}
+usecase Make "作る"
+usecase Close "閉じる"
+creates(Make, Item)
+transitions(Close, Item.status, open -> closed)
+sets(Close, Item.flag == true)
+forbidden(Item, status == closed)
+"#
+        )
+    };
+    for command in ["check", "verify"] {
+        let (code, _, stderr) =
+            run_on_source("default-in-values", &src("open", "false"), &[command]);
+        assert_eq!(code, Some(1), "{command}: {stderr}");
+        assert!(
+            stderr.contains("error[Forbidden_Item_0]"),
+            "{command}: {stderr}"
+        );
+
+        let (code, _, stderr) =
+            run_on_source("default-outside-values", &src("bogus", "maybe"), &[command]);
+        assert_eq!(code, Some(1), "{command}: {stderr}");
+        assert!(
+            stderr.contains("column 'status' has no variant 'bogus'")
+                && stderr.contains("column 'flag' set to 'maybe'"),
+            "{command}: {stderr}"
+        );
+        assert!(!stderr.contains("Forbidden_Item_0"), "{command}: {stderr}");
+    }
+}
+
 #[test]
 fn states_bounds_flags_change_the_bounds_line() {
     let (_, _, stderr) = run_on_source("states-default", TWO_CASES_ONE_HANDLER, &["states"]);
