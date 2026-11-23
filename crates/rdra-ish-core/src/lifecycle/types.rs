@@ -673,7 +673,7 @@ pub enum InvKind {
     CrossForbidden,
     CrossInvariant,
     Quantifier,
-    /// A 1:1 key: no two present children belong to one parent slot.
+    /// A 1:1 key or a unique column set: no two present rows agree on it.
     Unique,
     /// A child-side range `1..*` / `1..1`: every present parent slot has a present child.
     MinCard,
@@ -691,7 +691,7 @@ impl InvText {
             InvText::CrossForbidden { .. } => InvKind::CrossForbidden,
             InvText::CrossInvariant { .. } => InvKind::CrossInvariant,
             InvText::Quantifier { .. } => InvKind::Quantifier,
-            InvText::Unique { .. } => InvKind::Unique,
+            InvText::Unique { .. } | InvText::UniqueSet { .. } => InvKind::Unique,
             InvText::MinCard { .. } => InvKind::MinCard,
             InvText::Check(_) => InvKind::Check,
         }
@@ -729,6 +729,12 @@ pub enum InvText {
         child: String,
         parent: String,
         role: String,
+    },
+    /// A `@unique` column, a `@unique(a, b)`, or an N:M junction's pair of keys, by the
+    /// columns of the set (`room_id, slot`).
+    UniqueSet {
+        entity: String,
+        columns: String,
     },
     /// `relate(child, parent, 1..*:1)`, by the key's role.
     MinCard {

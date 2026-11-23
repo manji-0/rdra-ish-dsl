@@ -4,6 +4,19 @@
 
 ### Breaking
 
+- The lifecycle checks unique column sets (#222). A `@unique` column, a `@unique(a, b)`,
+  and the pair of keys of a `relate(A, B, N:M).via(J)` junction become the invariant
+  `Unique_<Entity>_<columns>` when the lifecycle holds every column's value: an `Enum`,
+  `Bool`, or variation column, a compared `Int`, or a key column, read as its key's owner.
+  Two present rows that agree on every column break it; a null column exempts its row, as
+  in SQL. `check`, `states`, `verify` (with its TLA+ export under `--with-tlc`), and
+  `verify --prove` check it. A model whose use case creates a second row at the same values,
+  such as two bookings of one room at one slot, now fails `check --instance-count 2` and
+  `verify`, where the database used to be the first to reject it. Add a guard that keeps the
+  set free, such as `holds(AmFree, Room.open == true).none(Booking.slot == am)`. Sets with a
+  `String` column, or on an entity with a `@soft_delete` column, are not checked. No sample
+  changes verdict.
+
 - `verify` decides every invariant, `after` assertion, and property with its native
   checker and starts no JVM: `tlc` is no longer needed, and `verify` no longer fails when it
   is missing. TLC runs only under the new `--with-tlc`, beside the native checker, on the

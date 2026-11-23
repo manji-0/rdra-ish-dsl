@@ -179,6 +179,7 @@ fn text(t: &InvText) -> String {
             parent,
             role,
         } => format!("{child} unique per {parent} ({role})"),
+        InvText::UniqueSet { entity, columns } => format!("{entity} unique on ({columns})"),
         InvText::MinCard {
             child,
             parent,

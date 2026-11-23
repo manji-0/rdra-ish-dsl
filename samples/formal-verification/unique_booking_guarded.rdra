@@ -1,0 +1,36 @@
+// unique_double_booking.rdra with a guard on each booking use case: the Room it binds has no
+// Booking at that slot yet. A guard that compares the Room links the created Booking to it,
+// so Unique_Booking_room_id_slot holds at InstanceCount == 2, and z3 proves it for any
+// number of rows.
+// expect check: ok
+// expect verify: ok
+entity Room "会議室" {
+  id: Int @pk
+  open: Bool @default(true)
+}
+
+entity Booking "予約" {
+  id: Int @pk
+  slot: Enum(am, pm) @default(pm) @unique(room_id, slot)
+}
+
+usecase BookAm "午前予約"
+usecase BookPm "午後予約"
+
+buc BucBooking "Booking"
+contains(BucBooking, BookAm)
+contains(BucBooking, BookPm)
+
+creates(BookAm, Booking)
+creates(BookPm, Booking)
+sets(BookAm, Booking.slot == am)
+
+relate(Booking, Room, N:1)
+
+condition AmFree "午前が空いている会議室"
+holds(AmFree, Room.open == true).none(Booking.slot == am)
+applies_to(AmFree, BookAm)
+
+condition PmFree "午後が空いている会議室"
+holds(PmFree, Room.open == true).none(Booking.slot == pm)
+applies_to(PmFree, BookPm)
