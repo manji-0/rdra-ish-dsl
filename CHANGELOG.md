@@ -92,10 +92,10 @@
   on, `no rule depends on this guard; it is either a business rule nobody wrote as a rule,
   or not needed`. A rule whose cone stops at a cap without the guard is `not decided`. The
   report adds no finding and leaves the exit status to `check`. On `samples/oidc-auth` it
-  takes about 3 s (34 guards, 131 cones), and `tests/guards_cli.rs` checks the sample
-  README's table of rules and guards against it. The table now also names
-  `AccountChoiceAsked` on `SelectAccount` for the `prompt=login` rule, and no longer
-  names `ConsentOnRecord`, whose removal alone fails no rule.
+  takes about 3 s (34 guards, 131 cones), and `tests/guards_cli.rs` reads the sample
+  README's table of rules and guards and checks each row against it. The table now has one
+  row per rule, also names `AccountChoiceAsked` on `SelectAccount` for the `prompt=login`
+  rule, and no longer names `ConsentOnRecord`, whose removal alone fails no rule.
 - A `MemoryCapReached` error of `check` and `states` says what the cone held and what
   finishing needs: the bytes each held state took, and an estimate of the states the cone
   reaches from its BFS layers. Once the frontier has shrunk for two depths past its peak,

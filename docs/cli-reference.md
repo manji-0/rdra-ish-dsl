@@ -245,7 +245,12 @@ conditions on one column's `transitions` arms, `chooses` values, or `sets` value
 guard, the run removes it from every action of the use case (each transaction group and
 each `<UC>_by_<Ev>` copy), explores again the cone of each rule (`forbidden`, `invariant`,
 the other constraints, and `after` assertions) that keeps the use case, and lists the rules
-that now fail. Triggers, `transitions` sources, keys, and links are not removed.
+that now fail. Triggers, `transitions` sources, keys, and links are not removed. A
+condition with no `holds` body, or one applied to something other than a use case, puts no
+guard on the lifecycle and is not listed. Removing the `.when` conditions of a column opens
+every arm or value of it to the use case at once; that is not the same as deleting one
+`.when(...)` from the source, which can leave two unguarded `sets` of one column that
+conflict.
 
 ```
 $ rdra-ish check crates/rdra-ish-cli/tests/fixtures/guards/unprotected.rdra --guards
@@ -278,8 +283,10 @@ without`.
 The run explores one set of cones per guard, one guard after another, under the same
 caps and memory limit as `check`. Only the rule cones that keep the use case run again,
 and rules that share a cone share a run. Under a scope (`--entity`, `--buc`, ...) only the
-selected rules are explored. A model that fails `check` gets no report, only a `note:`: a
-rule that already fails depends on no guard. The order is the build's order of the use
+selected rules are explored. A model that fails `check` gets no report, only a `note:` to
+fix the errors first. Temporal properties are `verify`'s and are not counted, so a guard
+that serves only a `property` is one no rule depends on. The report is text only; it has
+no `--format json`. The order is the build's order of the use
 cases and their guards, so two runs print the same report.
 
 ---

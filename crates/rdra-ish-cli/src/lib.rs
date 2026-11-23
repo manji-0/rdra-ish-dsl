@@ -130,7 +130,7 @@ pub fn run() -> Result<()> {
 
             if guards {
                 if tally.errors > 0 {
-                    eprintln!("note: --guards reports nothing on a model that fails check: a rule that already fails depends on no guard");
+                    eprintln!("note: --guards reports nothing on a model that fails check; fix the errors first");
                 } else {
                     print!(
                         "{}",

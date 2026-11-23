@@ -2,6 +2,7 @@
 
 mod common;
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -109,45 +110,116 @@ fn a_failing_model_gets_no_report() {
     );
 }
 
-/// The "Rules" table of samples/oidc-auth/README.md: each labelled rule with the guards
-/// whose removal alone fails it. A rule the README protects by something other than a
-/// guard (the token sets of the implicit responses, the use case `RejectCodeReplay`, the
-/// `links` of `ApproveDevice`) or by a guard and a trigger together (`SessionEnded` and the
-/// order of `EvSessionEnded`) depends on no guard here.
+/// The ids a `.rdra` declaration line starting with `keyword` names, in every file of `dir`.
+fn declared(dir: &Path, keyword: &str) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).expect("sample dir") {
+            let path = entry.expect("entry").path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().is_some_and(|e| e == "rdra") {
+                let text = std::fs::read_to_string(&path).expect("rdra file");
+                for line in text.lines() {
+                    if let Some(rest) = line.strip_prefix(&format!("{keyword} ")) {
+                        let id: String = rest
+                            .chars()
+                            .take_while(|c| c.is_alphanumeric() || *c == '_')
+                            .collect();
+                        out.insert(id);
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The identifiers inside the backtick spans of a table cell.
+fn quoted_ids(cell: &str) -> BTreeSet<String> {
+    cell.split('`')
+        .skip(1)
+        .step_by(2)
+        .flat_map(|span| {
+            span.split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                .filter(|w| !w.is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+/// The "Rules" table of samples/oidc-auth/README.md against the report: one row per
+/// labelled rule, and in each row the use cases (and conditions) of exactly the guards the
+/// rule depends on. A rule the README protects by something other than a guard (the token
+/// sets of the implicit responses, transitions of `RejectCodeReplay`, the `links` of
+/// `ApproveDevice`) depends on no guard; a row that pairs a guard with a trigger (the
+/// Logout Token rule) depends on neither alone.
 #[test]
-fn oidc_auth_rules_depend_on_the_guards_its_readme_lists() {
+fn oidc_auth_readme_rules_table_is_what_the_report_finds() {
     let (code, stdout, stderr) = run(&["check", "samples/oidc-auth", "--guards"]);
     assert_eq!(code, Some(0), "{stderr}");
-    let rules: Vec<&str> = stdout
+    let sample = repo().join("samples/oidc-auth");
+    let usecases = declared(&sample, "usecase");
+    let conditions = declared(&sample, "condition");
+    let readme = std::fs::read_to_string(sample.join("README.md")).expect("README");
+    let (_, table) = readme.split_once("\n## Rules\n").expect("a Rules section");
+    let rows: BTreeMap<&str, &str> = table
         .lines()
-        .skip_while(|l| *l != "rules:")
-        .skip(1)
-        .take_while(|l| l.starts_with("  "))
-        .filter(|l| l.contains('「'))
-        .map(str::trim)
+        .skip_while(|l| !l.starts_with("| Rule |"))
+        .skip(2)
+        .take_while(|l| l.starts_with('|'))
+        .map(|l| {
+            let cells: Vec<&str> = l.trim_matches('|').split(" | ").map(str::trim).collect();
+            (cells[0], cells[1])
+        })
         .collect();
-    let readme = [
-        "「An ID Token from the authorization endpoint always answers a nonce」 depends on the .when values of AuthorizationRequest.nonce on RequestAuthentication",
-        "「prompt=none never shows the login page」 depends on condition RequestValidated on AuthenticateEndUser",
-        "「prompt=login never reuses the session without a login」 depends on condition SessionMayServe on ReuseSession; condition AccountChoiceAsked on SelectAccount",
-        "「A poll-mode client is neither pinged nor pushed to」 depends on condition PingMode on SendPingCallback; condition PushMode on PushBackchannelTokens",
-        "「A ping-mode client is not pushed the tokens」 depends on condition PushMode on PushBackchannelTokens",
-        "「A push-mode client is neither pinged nor polls」 depends on the .when arms of BackchannelRequest.status on PollBackchannelToken; condition PingMode on SendPingCallback",
-        "「A public client gets no code without an S256 code challenge」 depends on the .when arms of AuthorizationRequest.status on ValidateRequest",
-        "「A request is authorized only after the End-User is authenticated」 depends on condition EndUserAuthenticated on GrantConsent",
-        "「A request asking for a second factor is served only by a multi-factor session」 depends on the .when arms of Interaction.authentication on AuthenticateEndUser; the .when arms of Interaction.authentication on ReuseSession; the .when arms of Interaction.authentication on SelectAccount",
-        "「A replayed code leaves its grant revoked」 depends on no guard",
-        "「A Logout Token is sent only for a session that ended」 depends on no guard",
-        "「The Implicit Flow issues no refresh token」 depends on no guard",
-        "「An approved device authorization names the End-User who approved it」 depends on no guard",
-    ];
-    assert_eq!(rules, readme, "{stdout}");
-    // Either the guard or the trigger keeps the Logout Token rule, so neither alone is a
-    // dependency; the guard is listed as one no rule depends on.
-    assert!(
-        stdout.contains(
-            "guard: condition SessionEnded on SendBackchannelLogout   samples/oidc-auth/buc/buc_logout.rdra:139:1\n  no rule depends on this guard;"
-        ),
-        "{stdout}"
+    assert_eq!(rows.len(), 13, "{rows:?}");
+    // `「label」 depends on <guard>; <guard>` or `depends on no guard`.
+    let mut seen = 0;
+    for line in stdout.lines().skip_while(|l| *l != "rules:").skip(1) {
+        let Some(rest) = line.trim().strip_prefix('「') else {
+            continue;
+        };
+        let (label, guards) = rest.split_once("」 depends on ").expect("a rules line");
+        let cell = rows
+            .get(label)
+            .unwrap_or_else(|| panic!("no README row for 「{label}」"));
+        seen += 1;
+        let named = quoted_ids(cell);
+        let named_ucs: BTreeSet<&String> = named.iter().filter(|w| usecases.contains(*w)).collect();
+        let named_conds: BTreeSet<&String> =
+            named.iter().filter(|w| conditions.contains(*w)).collect();
+        if guards == "no guard" {
+            assert!(
+                named_conds.is_empty() || cell.contains("triggers("),
+                "「{label}」 depends on no single guard, but its row names one alone: {cell}"
+            );
+            continue;
+        }
+        let (mut ucs, mut conds) = (BTreeSet::new(), BTreeSet::new());
+        for guard in guards.split("; ") {
+            let (what, uc) = guard.rsplit_once(" on ").expect("a guard on a use case");
+            ucs.insert(uc.to_string());
+            if let Some(cond) = what.strip_prefix("condition ") {
+                conds.insert(cond.to_string());
+            }
+        }
+        assert_eq!(
+            named_ucs,
+            ucs.iter().collect(),
+            "「{label}」: the row's use cases are not those of the guards it depends on: {cell}"
+        );
+        assert_eq!(
+            named_conds,
+            conds.iter().collect(),
+            "「{label}」: the row's conditions are not those it depends on: {cell}"
+        );
+    }
+    assert_eq!(
+        seen,
+        rows.len(),
+        "every labelled rule has a rules: line: {stdout}"
     );
 }
