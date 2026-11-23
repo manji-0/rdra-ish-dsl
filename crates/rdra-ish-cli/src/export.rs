@@ -25,6 +25,7 @@ use rdra_ish_emit::{
 use crate::cli::{ExportKind, SqlDialect};
 use crate::lifecycle_gate::{gate, Lifecycle, Output, Reads};
 use crate::load::load_clean;
+use crate::memory::generator_caps;
 use crate::state_findings::Finding;
 
 /// What an export kind writes: an artifact its emitter prints, or the TLA+ bundle, which is
@@ -34,7 +35,8 @@ pub enum Export {
     Tla,
 }
 
-pub fn export_output(kind: &ExportKind, dialect: SqlDialect) -> Export {
+/// `caps` bound the BFS of an emitter that explores the states itself.
+pub fn export_output(kind: &ExportKind, dialect: SqlDialect, caps: Caps) -> Export {
     match kind {
         ExportKind::Openapi => {
             Export::Artifact(Output::declared(OpenApiJsonEmitter), "openapi.json")
@@ -53,7 +55,7 @@ pub fn export_output(kind: &ExportKind, dialect: SqlDialect) -> Export {
             Export::Artifact(Output::declared(JsonSchemaEmitter), "json-schema.json")
         }
         ExportKind::TypeScriptStates => Export::Artifact(
-            Output::states(TypeScriptStateUnionEmitter::default()),
+            Output::states(TypeScriptStateUnionEmitter { caps }),
             "entity-states.ts",
         ),
         ExportKind::MermaidEr => Export::Artifact(Output::declared(ErMermaidEmitter), "er.mmd"),
@@ -69,13 +71,14 @@ pub(crate) fn run_export(
     int_range_max: u32,
     dialect: SqlDialect,
 ) -> Result<()> {
-    let (program, model) = load_clean(inputs)?;
+    let (program, model, manifest) = load_clean(inputs)?;
+    let caps = generator_caps(manifest.as_ref());
     // An artifact gates by what its emitter reads. The TLA+ export gates after `tla_export`,
     // whose build errors stop it first.
-    match export_output(kind, dialect) {
+    match export_output(kind, dialect, caps) {
         Export::Artifact(output, ext) => {
             let content = output
-                .gate(&Lifecycle::new(&program, &model))?
+                .gate(&Lifecycle::new(&program, &model, caps))?
                 .emit(&model, &View::whole())?;
             let out_path = if out.extension().is_some() {
                 out.to_path_buf()
@@ -95,7 +98,7 @@ pub(crate) fn run_export(
                 whole: bundle,
                 state_models,
             } = tla_export(&model, bounds, &module_name)?;
-            gate(&Lifecycle::new(&program, &model), Reads::System)?;
+            gate(&Lifecycle::new(&program, &model, caps), Reads::System)?;
             write_tla(out, bundle, state_models)
         }
     }

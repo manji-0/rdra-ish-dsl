@@ -29,7 +29,7 @@ fn fails_on_the_whole_system(model: &SemanticModel, bounds: Bounds, i: usize) ->
 /// What `verify`'s BFS says about each `can_reach` of `model`, at `bounds`.
 fn reach_verdicts(model: &SemanticModel, bounds: Bounds) -> Vec<Diag> {
     let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
-    let run = ts.explore_targets(&ts.reach_targets(), Caps::STATES);
+    let run = ts.explore_targets(&ts.reach_targets(), Caps::for_instances(1));
     run.verdicts().to_vec()
 }
 
@@ -46,7 +46,7 @@ fn fails_on_its_cone(model: &SemanticModel, bounds: Bounds, i: usize) -> bool {
 /// with a shortest trace into the trap and the states the Order is then confined to.
 #[test]
 fn a_cycle_with_no_way_out_fails_where_no_deadlock_does() {
-    let report = super::super::derive_states(&load(UNMET), &Scope::ALL, Caps::STATES);
+    let report = super::super::derive_states(&load(UNMET), &Scope::ALL, Caps::for_instances(1));
     assert!(
         !report
             .diags
@@ -205,7 +205,7 @@ fn the_cone_decides_what_the_whole_system_decides() {
 /// `check` and `states` verify safety only: they explore no `can_reach` cone.
 #[test]
 fn check_and_states_do_not_evaluate_can_reach() {
-    let report = super::super::derive_states(&load(UNMET), &Scope::ALL, Caps::STATES);
+    let report = super::super::derive_states(&load(UNMET), &Scope::ALL, Caps::for_instances(1));
     assert!(unreachable_goals(&report.diags).is_empty());
 }
 

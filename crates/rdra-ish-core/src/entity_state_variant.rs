@@ -178,7 +178,7 @@ sets(usecase::DeliverOrder, Order.delivered_at == present)
     #[test]
     fn collect_entity_state_variants_order() {
         let model = model_from(ORDER_SRC);
-        let collections = collect_entity_state_variants(&model, &[], Caps::STATES);
+        let collections = collect_entity_state_variants(&model, &[], Caps::for_instances(1));
         assert_eq!(collections.len(), 1);
 
         let order = &collections[0];
@@ -226,7 +226,7 @@ transitions(Show, Case.publication, hidden -> shown)
 transitions(Close, Case.status, open -> closed)
 "#,
         );
-        let collections = collect_entity_state_variants(&model, &[], Caps::STATES);
+        let collections = collect_entity_state_variants(&model, &[], Caps::for_instances(1));
         let case = &collections[0];
         assert_eq!(case.discriminator_column, "status");
         assert_eq!(case.variants.len(), 4);

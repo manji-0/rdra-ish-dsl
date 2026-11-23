@@ -16,10 +16,14 @@ use std::fs;
 use crate::cli::{CsvFormat, CsvKind};
 use crate::lifecycle_gate::{gate, Lifecycle};
 use crate::load::load_clean;
+use crate::memory::generator_caps;
 
 pub fn run_csv(inputs: &[PathBuf], kind: CsvKind, format: CsvFormat, out: PathBuf) -> Result<()> {
-    let (program, model) = load_clean(inputs)?;
-    gate(&Lifecycle::new(&program, &model), kind.reads())?;
+    let (program, model, manifest) = load_clean(inputs)?;
+    gate(
+        &Lifecycle::new(&program, &model, generator_caps(manifest.as_ref())),
+        kind.reads(),
+    )?;
 
     let view = View::whole();
 

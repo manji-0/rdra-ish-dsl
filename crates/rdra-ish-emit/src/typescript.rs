@@ -7,13 +7,8 @@ use rdra_ish_core::{
 };
 
 pub struct TypeScriptStateUnionEmitter {
+    /// The caps of its BFS; the CLI passes those `check` runs at by default.
     pub caps: Caps,
-}
-
-impl Default for TypeScriptStateUnionEmitter {
-    fn default() -> Self {
-        Self { caps: Caps::STATES }
-    }
 }
 
 impl StatesEmitter for TypeScriptStateUnionEmitter {
@@ -229,7 +224,7 @@ sets(usecase::DeliverOrder, Order.delivered_at == present)
     #[test]
     fn typescript_state_union_snapshot() {
         let model = model_from(ORDER_SRC);
-        let collections = collect_entity_state_variants(&model, &[], Caps::STATES);
+        let collections = collect_entity_state_variants(&model, &[], Caps::for_instances(1));
         insta::assert_snapshot!(emit_typescript_state_unions(&model, &collections));
     }
 
@@ -254,7 +249,7 @@ transitions(Archive, Item.status, active -> archived)
 forbidden(Item, stock > 4)
 "#,
         );
-        let collections = collect_entity_state_variants(&model, &[], Caps::STATES);
+        let collections = collect_entity_state_variants(&model, &[], Caps::for_instances(1));
         let out = emit_typescript_state_unions(&model, &collections);
         assert!(out.contains("stock: number;"), "{out}");
         assert!(
@@ -268,10 +263,12 @@ forbidden(Item, stock > 4)
     fn emitter_matches_helper() {
         let model = model_from(ORDER_SRC);
         let view = View::whole();
-        let from_emitter = TypeScriptStateUnionEmitter::default()
-            .emit(&model, &view, &Explored::default())
-            .unwrap();
-        let collections = collect_entity_state_variants(&model, &[], Caps::STATES);
+        let from_emitter = TypeScriptStateUnionEmitter {
+            caps: Caps::for_instances(1),
+        }
+        .emit(&model, &view, &Explored::default())
+        .unwrap();
+        let collections = collect_entity_state_variants(&model, &[], Caps::for_instances(1));
         assert_eq!(
             from_emitter,
             emit_typescript_state_unions(&model, &collections)

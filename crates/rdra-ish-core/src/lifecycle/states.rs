@@ -12,12 +12,6 @@ use super::{Bounds, TransitionSystem};
 use crate::model::{EntityKey, SemanticModel};
 
 impl Caps {
-    /// What the generators run at, with one instance per entity: 2^10 patterns and 2^16
-    /// states. A generator charges its runs to no memory pool, so it keeps a state cap; `check`
-    /// and `states` have none by default (`for_instances`) and stop at `--memory`.
-    /// `examples/lifecycle_measure.rs` prints the largest cone of each sample.
-    pub const STATES: Caps = Caps::new(1 << 10, 1 << 16);
-
     /// For BFS at `Bounds::VERIFY`: 2^23 states per cone. `verify` itself sets no state cap
     /// unless `--max-states` is given; the memory limit stops a run. A cone past it leaves its state-model
     /// findings undecided; `engine_equivalence`'s `VERIFY_FALLBACK` names the sample cones

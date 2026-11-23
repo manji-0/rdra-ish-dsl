@@ -49,7 +49,7 @@ fn a_rule_about_a_state_no_row_reaches_holds_vacuously() {
         "{ORDERS}invariant(Order).when(status == void).then(flagged == true)\n\
          forbidden(Order, status == void, flagged == true)\n"
     );
-    let found = vacuous(&src, Bounds::STATES, Caps::STATES);
+    let found = vacuous(&src, Bounds::STATES, Caps::for_instances(1));
     let void = vec!["status=void".to_string()];
     assert_eq!(
         found,
@@ -73,7 +73,10 @@ fn a_rule_whose_premises_some_state_meets_is_not_vacuous() {
          forbidden(Order, status == void)\n\
          invariant(Order).when(status == paid).then(flagged == false)\n"
     );
-    assert_eq!(vacuous(&src, Bounds::STATES, Caps::STATES), BTreeMap::new());
+    assert_eq!(
+        vacuous(&src, Bounds::STATES, Caps::for_instances(1)),
+        BTreeMap::new()
+    );
 }
 
 /// A rule over an entity no use case can create ranges over no row at all; that alone is
@@ -86,7 +89,7 @@ fn a_rule_over_rows_that_never_exist_holds_vacuously() {
          condition Never \"起きない\"\nholds(Never, Order.status == void)\napplies_to(Never, Summon)\n\
          forbidden(Ghost, seen == true, loud == true)\n"
     );
-    let found = vacuous(&src, Bounds::STATES, Caps::STATES);
+    let found = vacuous(&src, Bounds::STATES, Caps::for_instances(1));
     assert_eq!(
         found.get("Forbidden_Ghost_0"),
         Some(&vec![String::new()]),
@@ -100,7 +103,7 @@ fn a_rule_over_rows_that_never_exist_holds_vacuously() {
 fn a_violated_rule_and_a_capped_run_report_no_vacuity() {
     let violated = format!("{ORDERS}forbidden(Order, status == paid, flagged == true)\n");
     assert_eq!(
-        vacuous(&violated, Bounds::STATES, Caps::STATES),
+        vacuous(&violated, Bounds::STATES, Caps::for_instances(1)),
         BTreeMap::new()
     );
     let capped = format!("{ORDERS}forbidden(Order, status == void, flagged == true)\n");
@@ -138,7 +141,10 @@ transitions(Pay, Payment.status, pending -> captured)
 relate(Payment, Order, N:1)
 forbidden(Order, Payment, Order.status == cancelled, Payment.status == captured).along(Order, Payment)
 "#;
-    assert_eq!(vacuous(src, Bounds::STATES, Caps::STATES), BTreeMap::new());
+    assert_eq!(
+        vacuous(src, Bounds::STATES, Caps::for_instances(1)),
+        BTreeMap::new()
+    );
 }
 
 /// A `.none(...)` says something only of rows of the related entity: with no such row ever,
@@ -153,7 +159,7 @@ fn a_none_over_rows_that_never_exist_holds_vacuously() {
          condition Never \"起きない\"\nholds(Never, Order.status == void)\napplies_to(Never, AddLine)\n\
          invariant(Order).none(Line.kind == gift)\n"
     );
-    let found = vacuous(&src, Bounds::STATES, Caps::STATES);
+    let found = vacuous(&src, Bounds::STATES, Caps::for_instances(1));
     assert_eq!(
         found.get("Quantifier_Order_0"),
         Some(&vec!["some Line row beside it".to_string()]),
@@ -203,7 +209,7 @@ forbidden(Order, Payment, Order.status == void, Payment.status == captured).alon
 fn a_run_whose_scope_drops_use_cases_reports_no_vacuity() {
     let src = format!("{ORDERS}forbidden(Order, status == void, flagged == true)\n");
     let ts = TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL).ts;
-    let mut run = ts.explore_targets(&ts.targets(), Caps::STATES);
+    let mut run = ts.explore_targets(&ts.targets(), Caps::for_instances(1));
     assert_eq!(texts(run.verdicts()).len(), 1);
     run.defer_progress();
     assert_eq!(texts(run.verdicts()), BTreeMap::new());
@@ -236,7 +242,7 @@ fn an_assert_after_a_use_case_that_never_runs_holds_vacuously() {
          after(Pay).assert(Order.status == paid)\n\
          after(Pay).assert(Desk.id == 1)\n"
     );
-    let found = vacuous(&src, Bounds::STATES, Caps::STATES);
+    let found = vacuous(&src, Bounds::STATES, Caps::for_instances(1));
     assert_eq!(
         found,
         BTreeMap::from([
@@ -263,7 +269,7 @@ fn a_leads_to_whose_trigger_never_holds_holds_vacuously() {
          property DeskStays \"窓口は残る\"\n  always(Desk.id == 1)\n"
     );
     let ts = TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL).ts;
-    let found = texts(&ts.vacuous_properties(Caps::STATES));
+    let found = texts(&ts.vacuous_properties(Caps::for_instances(1)));
     assert_eq!(
         found,
         BTreeMap::from([
@@ -301,7 +307,7 @@ property TwoLead "両方"
   leads_to(Order.status == open, Desk.busy == true)
 "#;
     let ts = TransitionSystem::build(&model_from(src), Bounds::STATES, &Scope::ALL).ts;
-    let found = texts(&ts.vacuous_properties(Caps::STATES));
+    let found = texts(&ts.vacuous_properties(Caps::for_instances(1)));
     assert_eq!(
         found.get("TwoLead"),
         Some(&vec![
@@ -323,7 +329,7 @@ fn a_stable_or_precedes_over_a_state_no_row_reaches_holds_vacuously() {
          property OpenFirst \"未払が先\"\n  precedes(Order.status == open, Order.status == paid)\n"
     );
     let ts = TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL).ts;
-    let found = texts(&ts.vacuous_properties(Caps::STATES));
+    let found = texts(&ts.vacuous_properties(Caps::for_instances(1)));
     assert_eq!(
         found,
         BTreeMap::from([

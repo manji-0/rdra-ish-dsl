@@ -172,15 +172,6 @@ fn default_pattern_cap_scales_with_the_instance_count_and_there_is_no_state_cap(
     assert_eq!(at(2), (1 << 18, usize::MAX));
     assert_eq!(at(3), (1 << 26, usize::MAX));
     assert_eq!(at(0), at(1), "no instances counts as one");
-    // The generators charge no memory pool, so they keep a state cap.
-    assert_eq!(
-        (
-            Caps::STATES.patterns,
-            Caps::STATES.states,
-            Caps::STATES.memory
-        ),
-        (1 << 10, 1 << 16, None)
-    );
 }
 
 #[test]

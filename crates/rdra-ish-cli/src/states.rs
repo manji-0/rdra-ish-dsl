@@ -11,10 +11,10 @@ use rdra_ish_emit::{
 };
 
 use crate::cli::{ScopeArgs, StatesFormat};
-use crate::load::load_clean_with_manifest;
-use crate::memory::{memory_limit, Budgeted};
+use crate::load::load_clean;
+use crate::memory::{charged, Budgeted};
 use crate::state_findings::{state_diag_message, Finding};
-use rdra_ish_core::memory::{MemoryPool, MemorySize};
+use rdra_ish_core::memory::MemorySize;
 
 pub fn run_states(
     inputs: &[PathBuf],
@@ -23,11 +23,8 @@ pub fn run_states(
     (caps, memory): (Caps, Option<MemorySize>),
     scope: &ScopeArgs,
 ) -> Result<()> {
-    let (program, model, manifest) = load_clean_with_manifest(inputs)?;
-    let caps = caps.charged_to(MemoryPool::for_command(
-        memory_limit(memory, manifest.as_ref(), Budgeted::Check),
-        Budgeted::Check.raise(),
-    ));
+    let (program, model, manifest) = load_clean(inputs)?;
+    let caps = charged(caps, memory, manifest.as_ref(), Budgeted::Check);
     let scope = scope.resolve(&model)?;
 
     // Exit on structured severity (not string scan) so csv / typescript also fail-closed.

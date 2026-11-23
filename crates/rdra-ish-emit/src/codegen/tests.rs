@@ -2,6 +2,9 @@ use super::*;
 use rdra_ish_core::analysis::build_model;
 use rdra_ish_syntax::parse;
 
+/// What `check` explores at by default, less the memory pool.
+const CAPS: Caps = Caps::for_instances(1);
+
 fn model_from(src: &str) -> SemanticModel {
     let (ast, parse_errors) = parse(src);
     assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
@@ -58,6 +61,7 @@ fn generated(lang: Lang) -> String {
         version: "x.y.z".to_string(),
         check: CheckStatus::Passed {
             bounds: "1 instance per entity, Int 0..5".to_string(),
+            caps: CAPS,
         },
     };
     generate(&model, &options, &|_| None).expect("generates")
@@ -83,7 +87,7 @@ fn go_snapshot() {
 #[test]
 fn keys_and_obligations() {
     let model = model_from(SRC);
-    let domain = build(&model, true, &|_| None).unwrap();
+    let domain = build(&model, Some(CAPS), &|_| None).unwrap();
     let order = domain.sums.iter().find(|r| r.name == "Order").unwrap();
     let key = order.variants[0]
         .fields
@@ -114,7 +118,9 @@ entity OrderStatus "Order Status" {
 }
 "#,
     );
-    let err = build(&model, true, &|_| None).unwrap_err().to_string();
+    let err = build(&model, Some(CAPS), &|_| None)
+        .unwrap_err()
+        .to_string();
     assert!(err.contains("OrderStatus"), "{err}");
     assert!(err.contains("entity OrderStatus"), "{err}");
 }
@@ -124,7 +130,7 @@ entity OrderStatus "Order Status" {
 #[test]
 fn rules_refine_the_states_they_name() {
     let model = model_from(SRC);
-    let domain = build(&model, true, &|_| None).unwrap();
+    let domain = build(&model, Some(CAPS), &|_| None).unwrap();
     let order = domain.sums.iter().find(|s| s.name == "Order").unwrap();
     let variant = |name: &str| order.variants.iter().find(|v| v.name == name).unwrap();
     let paid_at = |v: &ir::VariantDecl| v.fields.iter().find(|f| f.wire == "paid_at").cloned();
@@ -137,7 +143,7 @@ fn rules_refine_the_states_they_name() {
     assert!(paid_at(variant("OrderCancelled")).unwrap().nullable);
 
     // A model `check` rejects refines nothing.
-    let unrefined = build(&model, false, &|_| None).unwrap();
+    let unrefined = build(&model, None, &|_| None).unwrap();
     let order = unrefined.sums.iter().find(|s| s.name == "Order").unwrap();
     assert!(order
         .variants
@@ -206,7 +212,7 @@ forbidden(Order, status == pending, paid_at == present)
 
 fn functions_of(src: &str) -> DomainModel {
     let model = model_from(src);
-    build(&model, true, &|_| None).unwrap()
+    build(&model, Some(CAPS), &|_| None).unwrap()
 }
 
 /// A created row that a transition of the same use case moves ends where the arm from its
@@ -309,7 +315,7 @@ transitions(Pay, Order.status, pending -> paid)
 sets(Pay, Order.paid_at == present)
 "#;
     let model = model_from(src);
-    let domain = build(&model, true, &|_| None).unwrap();
+    let domain = build(&model, Some(CAPS), &|_| None).unwrap();
     let c = &domain.candidates;
     assert!(
         c.contains(&"invariant(Order).when(status == paid).then(paid_at == present)".to_string()),
@@ -349,7 +355,7 @@ triggers(EvShipped, Dispatch)
 creates(Dispatch, Shipment)
 "#;
     let model = model_from(src);
-    let domain = build(&model, true, &|_| None).unwrap();
+    let domain = build(&model, Some(CAPS), &|_| None).unwrap();
     let event = domain
         .events
         .iter()
@@ -398,7 +404,7 @@ transitions(Decide, Case.status, open -> refused)
 transitions(Publish, Case.publication, hidden -> shown)
 "#;
     let model = model_from(src);
-    let domain = build(&model, true, &|_| None).unwrap();
+    let domain = build(&model, Some(CAPS), &|_| None).unwrap();
     let names: Vec<&str> = domain.fns.iter().map(|f| f.name.as_str()).collect();
     assert!(names.contains(&"DecideToGranted"), "{names:?}");
     assert!(names.contains(&"DecideToRefused"), "{names:?}");
@@ -471,7 +477,7 @@ holds(NoActive, Cert.status == active).none(Assignment.status == active)
 applies_to(NoActive, Revoke)
 "#;
     let model = model_from(src);
-    let domain = build(&model, true, &|_| None).unwrap();
+    let domain = build(&model, Some(CAPS), &|_| None).unwrap();
     let revoke = domain.fns.iter().find(|f| f.action == "Revoke").unwrap();
     let list = revoke
         .inputs

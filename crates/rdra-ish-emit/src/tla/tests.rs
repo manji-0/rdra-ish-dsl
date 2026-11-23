@@ -116,7 +116,7 @@ fn the_bfs_after_assert_name_is_the_tla_property_name() {
     let report = rdra_ish_core::lifecycle::derive_states(
         &model,
         &Scope::ALL,
-        rdra_ish_core::lifecycle::Caps::STATES,
+        rdra_ish_core::lifecycle::Caps::for_instances(1),
     );
     let names: Vec<String> = report
         .diags

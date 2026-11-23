@@ -23,19 +23,22 @@ use crate::state_findings::{
     Finding, READS_NO_LIFECYCLE, TLA_STATE_MODELS,
 };
 
-/// The lifecycle at the `states` defaults, explored on first use and at most once, so a
+/// The lifecycle at the `check` defaults, explored on first use and at most once, so a
 /// command that gates several outputs runs one search.
 pub(crate) struct Lifecycle<'a> {
     program: &'a ResolvedProgram,
     model: &'a SemanticModel,
+    /// `memory::generator_caps`: what `check` explores at by default.
+    caps: Caps,
     explored: OnceCell<(Vec<Finding>, Explored)>,
 }
 
 impl<'a> Lifecycle<'a> {
-    pub(crate) fn new(program: &'a ResolvedProgram, model: &'a SemanticModel) -> Self {
+    pub(crate) fn new(program: &'a ResolvedProgram, model: &'a SemanticModel, caps: Caps) -> Self {
         Lifecycle {
             program,
             model,
+            caps,
             explored: OnceCell::new(),
         }
     }
@@ -43,7 +46,7 @@ impl<'a> Lifecycle<'a> {
     fn explored(&self) -> &(Vec<Finding>, Explored) {
         self.explored.get_or_init(|| {
             let (report, ts) =
-                derive_states_built(self.model, &Scope::ALL, Bounds::STATES, Caps::STATES);
+                derive_states_built(self.model, &Scope::ALL, Bounds::STATES, self.caps);
             let findings = findings_of(self.program, self.model, &report, &ts).findings;
             (findings, Explored::from_report(&report))
         })
@@ -182,6 +185,7 @@ impl Gated<'_> {
 
 #[cfg(test)]
 mod tests {
+    use rdra_ish_core::lifecycle::Caps;
     use rdra_ish_emit::mermaid::{ErMermaidEmitter, StateMermaidEmitter};
     use rdra_ish_emit::typescript::TypeScriptStateUnionEmitter;
 
@@ -191,7 +195,10 @@ mod tests {
     fn what_an_output_reads_follows_the_trait_its_emitter_implements() {
         assert_eq!(Output::declared(ErMermaidEmitter).reads(), Reads::Declared);
         assert_eq!(
-            Output::states(TypeScriptStateUnionEmitter::default()).reads(),
+            Output::states(TypeScriptStateUnionEmitter {
+                caps: Caps::for_instances(1)
+            })
+            .reads(),
             Reads::States
         );
         assert_eq!(

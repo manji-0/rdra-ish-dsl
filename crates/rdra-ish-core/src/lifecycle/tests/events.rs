@@ -26,7 +26,7 @@ fn derive_at_two(src: &str) -> Derived {
         &model_from(src),
         &Scope::ALL,
         Bounds::VERIFY,
-        Caps::STATES,
+        Caps::for_instances(1),
     );
     Derived {
         views: report.views,
@@ -252,8 +252,8 @@ triggers(Ev2, Handle)
 "#;
     let ts = TransitionSystem::build(&model_from(src), Bounds::STATES, &Scope::ALL).ts;
     let targets = ts.targets();
-    for (states, complete) in [(6, false), (Caps::STATES.states, true)] {
-        let x = ts.explore_targets(&targets, Caps::new(Caps::STATES.patterns, states));
+    for (states, complete) in [(6, false), (Caps::for_instances(1).states, true)] {
+        let x = ts.explore_targets(&targets, Caps::new(Caps::for_instances(1).patterns, states));
         assert_eq!(x.cone_of(targets[0]).run.complete, complete);
         let names: Vec<String> = x.verdicts().iter().map(|d| d.diag.name(&[])).collect();
         assert!(

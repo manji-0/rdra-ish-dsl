@@ -1,8 +1,10 @@
 //! What a command may use in memory (`--memory`, else `memory` in `rdra.toml`, else the
-//! command's default), and how `verify` splits it between BFS and the TLC runs.
+//! command's default), the caps `check` and the generators explore at, and how `verify`
+//! splits its memory between BFS and the TLC runs.
 
 use anyhow::{bail, Result};
-use rdra_ish_core::memory::MemorySize;
+use rdra_ish_core::lifecycle::{Bounds, Caps};
+use rdra_ish_core::memory::{MemoryPool, MemorySize};
 use rdra_ish_core::project::Manifest;
 
 use crate::tlc_env::Heap;
@@ -14,6 +16,9 @@ const MIB: u64 = 1 << 20;
 pub(crate) enum Budgeted {
     /// `check` and `states`: `[check]`.
     Check,
+    /// The generators: the outputs that read the explored states, and `codegen` and `next`,
+    /// which run `check`'s findings first. `[check]`, as `check`; they take no `--memory`.
+    Generators,
     /// `verify`: `[verify]`.
     Verify,
 }
@@ -23,6 +28,7 @@ impl Budgeted {
     pub(crate) fn raise(self) -> &'static str {
         match self {
             Budgeted::Check => "--memory or `memory` under [check] in rdra.toml",
+            Budgeted::Generators => "`memory` under [check] in rdra.toml",
             Budgeted::Verify => "--memory or `memory` under [verify] in rdra.toml",
         }
     }
@@ -35,14 +41,39 @@ pub(crate) fn memory_limit(
     command: Budgeted,
 ) -> MemorySize {
     let section = manifest.map(|m| match command {
-        Budgeted::Check => &m.check,
+        Budgeted::Check | Budgeted::Generators => &m.check,
         Budgeted::Verify => &m.verify,
     });
     flag.or(section.and_then(|s| s.memory))
         .unwrap_or(match command {
-            Budgeted::Check => MemorySize::CHECK,
+            Budgeted::Check | Budgeted::Generators => MemorySize::CHECK,
             Budgeted::Verify => MemorySize::VERIFY,
         })
+}
+
+/// `caps` with every run charged to one pool of `command`'s memory limit.
+pub(crate) fn charged(
+    caps: Caps,
+    flag: Option<MemorySize>,
+    manifest: Option<&Manifest>,
+    command: Budgeted,
+) -> Caps {
+    caps.charged_to(MemoryPool::for_command(
+        memory_limit(flag, manifest, command),
+        command.raise(),
+    ))
+}
+
+/// What the generators explore at: the caps `check` runs at by default, at the bounds the
+/// generators run at (`Bounds::STATES`), so no state cap and the memory of `[check]`. A model
+/// `check` passes at its defaults explores the same here.
+pub(crate) fn generator_caps(manifest: Option<&Manifest>) -> Caps {
+    charged(
+        Caps::for_instances(Bounds::STATES.instances.get().into()),
+        None,
+        manifest,
+        Budgeted::Generators,
+    )
 }
 
 /// The least heap a TLC run gets. TLC checks a small cone in 32 MiB; a `--memory` that
@@ -153,6 +184,8 @@ mod tests {
             (None, Some(&neither), Budgeted::Verify, "16GiB"),
             (None, None, Budgeted::Check, "4GiB"),
             (None, None, Budgeted::Verify, "16GiB"),
+            (None, Some(&both), Budgeted::Generators, "1GiB"),
+            (None, None, Budgeted::Generators, "4GiB"),
         ] {
             let got = memory_limit(flag.map(size), m, command);
             assert_eq!(got.to_string(), want, "{flag:?} {command:?}");

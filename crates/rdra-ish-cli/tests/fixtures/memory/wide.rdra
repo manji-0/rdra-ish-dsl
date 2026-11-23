@@ -1,0 +1,174 @@
+// Task has 7 flags and Gate 8. Task closes only when every Gate flag is on, so the Task
+// cone holds Task and the Gate flags: about 66,000 joint states, just past the 65,536 the
+// generators once stopped at, in a few MiB. `check` and the generators finish it alike.
+entity Task "Task" {
+  id: Int @pk
+  status: Enum(open, done) @default(open)
+  f1: Enum(off, on) @default(off)
+  f2: Enum(off, on) @default(off)
+  f3: Enum(off, on) @default(off)
+  f4: Enum(off, on) @default(off)
+  f5: Enum(off, on) @default(off)
+  f6: Enum(off, on) @default(off)
+  f7: Enum(off, on) @default(off)
+}
+
+entity Gate "Gate" {
+  id: Int @pk
+  status: Enum(open, done) @default(open)
+  f1: Enum(off, on) @default(off)
+  f2: Enum(off, on) @default(off)
+  f3: Enum(off, on) @default(off)
+  f4: Enum(off, on) @default(off)
+  f5: Enum(off, on) @default(off)
+  f6: Enum(off, on) @default(off)
+  f7: Enum(off, on) @default(off)
+  f8: Enum(off, on) @default(off)
+}
+
+buc Flows "Flows"
+
+condition GateOpen "Gate open"
+holds(GateOpen, Gate.f1 == on, Gate.f2 == on, Gate.f3 == on, Gate.f4 == on, Gate.f5 == on, Gate.f6 == on, Gate.f7 == on, Gate.f8 == on)
+
+usecase OpenGate "OpenGate"
+usecase CloseGate "CloseGate"
+usecase FlipGate1 "FlipGate1"
+usecase FlipGate2 "FlipGate2"
+usecase FlipGate3 "FlipGate3"
+usecase FlipGate4 "FlipGate4"
+usecase FlipGate5 "FlipGate5"
+usecase FlipGate6 "FlipGate6"
+usecase FlipGate7 "FlipGate7"
+usecase FlipGate8 "FlipGate8"
+usecase UnflipGate1 "UnflipGate1"
+usecase UnflipGate2 "UnflipGate2"
+usecase UnflipGate3 "UnflipGate3"
+usecase UnflipGate4 "UnflipGate4"
+usecase UnflipGate5 "UnflipGate5"
+usecase UnflipGate6 "UnflipGate6"
+usecase UnflipGate7 "UnflipGate7"
+usecase UnflipGate8 "UnflipGate8"
+
+contains(Flows, OpenGate)
+contains(Flows, CloseGate)
+contains(Flows, FlipGate1)
+contains(Flows, FlipGate2)
+contains(Flows, FlipGate3)
+contains(Flows, FlipGate4)
+contains(Flows, FlipGate5)
+contains(Flows, FlipGate6)
+contains(Flows, FlipGate7)
+contains(Flows, FlipGate8)
+contains(Flows, UnflipGate1)
+contains(Flows, UnflipGate2)
+contains(Flows, UnflipGate3)
+contains(Flows, UnflipGate4)
+contains(Flows, UnflipGate5)
+contains(Flows, UnflipGate6)
+contains(Flows, UnflipGate7)
+contains(Flows, UnflipGate8)
+
+creates(OpenGate, Gate)
+updates(CloseGate, Gate)
+updates(FlipGate1, Gate)
+updates(FlipGate2, Gate)
+updates(FlipGate3, Gate)
+updates(FlipGate4, Gate)
+updates(FlipGate5, Gate)
+updates(FlipGate6, Gate)
+updates(FlipGate7, Gate)
+updates(FlipGate8, Gate)
+updates(UnflipGate1, Gate)
+updates(UnflipGate2, Gate)
+updates(UnflipGate3, Gate)
+updates(UnflipGate4, Gate)
+updates(UnflipGate5, Gate)
+updates(UnflipGate6, Gate)
+updates(UnflipGate7, Gate)
+updates(UnflipGate8, Gate)
+
+transitions(CloseGate, Gate.status, open -> done)
+transitions(FlipGate1, Gate.f1, off -> on)
+transitions(FlipGate2, Gate.f2, off -> on)
+transitions(FlipGate3, Gate.f3, off -> on)
+transitions(FlipGate4, Gate.f4, off -> on)
+transitions(FlipGate5, Gate.f5, off -> on)
+transitions(FlipGate6, Gate.f6, off -> on)
+transitions(FlipGate7, Gate.f7, off -> on)
+transitions(FlipGate8, Gate.f8, off -> on)
+transitions(UnflipGate1, Gate.f1, on -> off)
+transitions(UnflipGate2, Gate.f2, on -> off)
+transitions(UnflipGate3, Gate.f3, on -> off)
+transitions(UnflipGate4, Gate.f4, on -> off)
+transitions(UnflipGate5, Gate.f5, on -> off)
+transitions(UnflipGate6, Gate.f6, on -> off)
+transitions(UnflipGate7, Gate.f7, on -> off)
+transitions(UnflipGate8, Gate.f8, on -> off)
+
+usecase OpenTask "OpenTask"
+usecase CloseTask "CloseTask"
+usecase FlipTask1 "FlipTask1"
+usecase FlipTask2 "FlipTask2"
+usecase FlipTask3 "FlipTask3"
+usecase FlipTask4 "FlipTask4"
+usecase FlipTask5 "FlipTask5"
+usecase FlipTask6 "FlipTask6"
+usecase FlipTask7 "FlipTask7"
+usecase UnflipTask1 "UnflipTask1"
+usecase UnflipTask2 "UnflipTask2"
+usecase UnflipTask3 "UnflipTask3"
+usecase UnflipTask4 "UnflipTask4"
+usecase UnflipTask5 "UnflipTask5"
+usecase UnflipTask6 "UnflipTask6"
+usecase UnflipTask7 "UnflipTask7"
+
+contains(Flows, OpenTask)
+contains(Flows, CloseTask)
+contains(Flows, FlipTask1)
+contains(Flows, FlipTask2)
+contains(Flows, FlipTask3)
+contains(Flows, FlipTask4)
+contains(Flows, FlipTask5)
+contains(Flows, FlipTask6)
+contains(Flows, FlipTask7)
+contains(Flows, UnflipTask1)
+contains(Flows, UnflipTask2)
+contains(Flows, UnflipTask3)
+contains(Flows, UnflipTask4)
+contains(Flows, UnflipTask5)
+contains(Flows, UnflipTask6)
+contains(Flows, UnflipTask7)
+
+creates(OpenTask, Task)
+updates(CloseTask, Task)
+updates(FlipTask1, Task)
+updates(FlipTask2, Task)
+updates(FlipTask3, Task)
+updates(FlipTask4, Task)
+updates(FlipTask5, Task)
+updates(FlipTask6, Task)
+updates(FlipTask7, Task)
+updates(UnflipTask1, Task)
+updates(UnflipTask2, Task)
+updates(UnflipTask3, Task)
+updates(UnflipTask4, Task)
+updates(UnflipTask5, Task)
+updates(UnflipTask6, Task)
+updates(UnflipTask7, Task)
+
+transitions(CloseTask, Task.status, open -> done).when(GateOpen)
+transitions(FlipTask1, Task.f1, off -> on)
+transitions(FlipTask2, Task.f2, off -> on)
+transitions(FlipTask3, Task.f3, off -> on)
+transitions(FlipTask4, Task.f4, off -> on)
+transitions(FlipTask5, Task.f5, off -> on)
+transitions(FlipTask6, Task.f6, off -> on)
+transitions(FlipTask7, Task.f7, off -> on)
+transitions(UnflipTask1, Task.f1, on -> off)
+transitions(UnflipTask2, Task.f2, on -> off)
+transitions(UnflipTask3, Task.f3, on -> off)
+transitions(UnflipTask4, Task.f4, on -> off)
+transitions(UnflipTask5, Task.f5, on -> off)
+transitions(UnflipTask6, Task.f6, on -> off)
+transitions(UnflipTask7, Task.f7, on -> off)

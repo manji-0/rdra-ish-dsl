@@ -19,6 +19,8 @@ use std::fs;
 use crate::cli::{DiagramArgs, DiagramKind};
 use crate::lifecycle_gate::{Gated, Lifecycle, Output};
 use crate::load::load_clean;
+use crate::memory::generator_caps;
+use rdra_ish_core::lifecycle::Caps;
 
 /// Mermaid's default `maxTextSize`: a diagram with more characters is not rendered.
 const MERMAID_MAX_TEXT: usize = 50_000;
@@ -49,7 +51,8 @@ pub fn run_diagram(args: DiagramArgs) -> Result<()> {
         format: _,
     } = args;
     let inputs = inputs.as_slice();
-    let (program, model) = load_clean(inputs)?;
+    let (program, model, manifest) = load_clean(inputs)?;
+    let caps = generator_caps(manifest.as_ref());
     let model_path = inputs
         .iter()
         .map(|input| input.display().to_string())
@@ -67,7 +70,7 @@ pub fn run_diagram(args: DiagramArgs) -> Result<()> {
         let Some(dir) = out else {
             anyhow::bail!("--all writes one file per diagram; pass --out <directory>");
         };
-        return write_all(&program, &model, &model_path, dress, &dir);
+        return write_all(&program, &model, caps, &model_path, dress, &dir);
     }
 
     if matches!(kind, DiagramKind::Sequence) {
@@ -213,7 +216,7 @@ pub fn run_diagram(args: DiagramArgs) -> Result<()> {
             eprintln!("warning: {}", diag.error);
         }
     }
-    let lifecycle = Lifecycle::new(&program, &model);
+    let lifecycle = Lifecycle::new(&program, &model, caps);
     let gated = diagram_output(&kind).gate(&lifecycle)?;
     let text = render(
         &gated,
@@ -273,6 +276,7 @@ fn render(
 fn write_all(
     program: &rdra_ish_core::ResolvedProgram,
     model: &SemanticModel,
+    caps: Caps,
     model_path: &str,
     dress: Dress,
     dir: &Path,
@@ -309,7 +313,7 @@ fn write_all(
         DiagramKind::Flow,
         DiagramKind::Sequence,
     ];
-    let lifecycle = Lifecycle::new(program, model);
+    let lifecycle = Lifecycle::new(program, model, caps);
     let mut written = 0;
     let mut empty = 0;
     let mut write = |kind: &DiagramKind, gated: &Gated, name: String, shot: Shot, about: &str| {

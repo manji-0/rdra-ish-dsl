@@ -79,7 +79,7 @@ fn every_witness_ends_in_its_pattern() {
 }
 
 fn derive_states_all(model: &SemanticModel) -> Vec<EntityStateResult> {
-    super::super::derive_states(model, &Scope::ALL, Caps::STATES).views
+    super::super::derive_states(model, &Scope::ALL, Caps::for_instances(1)).views
 }
 
 /// At both bounds, a witnessed state's first state holds it in a present slot, and no state
@@ -212,9 +212,10 @@ fn undecided_by_subject(undecided: &[Undecided]) -> BySubject<'_> {
 fn a_capped_cone_leaves_its_states_and_actions_undecided() {
     let model = sample_model(UNWITNESSED);
     let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
-    let run = built
-        .ts
-        .explore_targets(&built.ts.targets(), Caps::new(Caps::STATES.patterns, 2));
+    let run = built.ts.explore_targets(
+        &built.ts.targets(),
+        Caps::new(Caps::for_instances(1).patterns, 2),
+    );
     assert!(
         !run.verdicts().iter().any(|d| matches!(
             d.diag,
@@ -283,7 +284,7 @@ fn a_buc_scope_leaves_unwitnessed_states_and_dead_actions_undecided() {
     let report = super::super::derive_states(
         &model,
         &Scope::from_bucs(&["BucOrderRefund".to_string()]),
-        Caps::STATES,
+        Caps::for_instances(1),
     );
     assert!(!report.has_errors(), "{:?}", report.diags);
     assert!(
