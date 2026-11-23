@@ -406,21 +406,43 @@ impl TransitionSystem {
     fn reach_seed(&self, i: usize) -> Seed {
         let r = &self.reach[i];
         let mut seed = self.check_reads(&r.binders, r.preds());
+        let keep = self.keep_writers(&mut seed, true);
+        (seed, keep)
+    }
+
+    /// The smallest set holding `seed` that decides whether a step can still change it: every
+    /// action that writes into it is kept, so each mark such an action reads is in it, with
+    /// what the mark brings, and so is every other var it reads. A step that leaves the set as
+    /// it was then never enables a step that writes it: it changes nothing such a step reads,
+    /// and a slot it takes is one fewer for a creation. `cone` alone leaves a mark out when
+    /// the raiser is not in by its own writes, and the raiser's step, which changes nothing
+    /// of the set, then enables a handler's step that does (#261).
+    pub fn closed_cone(&self, seed: &VarSet) -> VarSet {
+        let mut seed = seed.clone();
+        let keep = self.keep_writers(&mut seed, false);
+        self.cone(&seed, &keep)
+    }
+
+    /// Every action that writes into the cone of `seed` with them kept; with `new_slots`,
+    /// `seed` also grows by the existence of each entity such an action creates.
+    fn keep_writers(&self, seed: &mut VarSet, new_slots: bool) -> BTreeSet<ActId> {
         let mut keep = BTreeSet::new();
         loop {
-            let vars = self.cone(&seed, &keep);
+            let vars = self.cone(seed, &keep);
             let mut grew = false;
             for (k, a) in self.actions.iter().enumerate() {
                 if !keep.contains(&ActId::at(k)) && self.action_writes(a).is_disjoint(&vars) {
                     continue;
                 }
                 grew |= keep.insert(ActId::at(k));
-                for p in a.params.iter().filter(|p| p.role == ParamRole::New) {
-                    grew |= seed.insert(self.entity(p.entity).exists);
+                if new_slots {
+                    for p in a.params.iter().filter(|p| p.role == ParamRole::New) {
+                        grew |= seed.insert(self.entity(p.entity).exists);
+                    }
                 }
             }
             if !grew {
-                return (seed, keep);
+                return keep;
             }
         }
     }

@@ -99,8 +99,11 @@ spec of an entity cone that no longer exists stays there. Export into an empty d
 
 `Deadlock_<E>_<col>_<s>` says that wherever an instance is at `s`, some step can still
 change the column's cone: the column, its entity's existence, and every variable that the
-steps writing them read. It is `ENABLED (Next /\ c' # c)`, with `c` the tuple of those
-variables. A step outside that cone cannot move the column or open its way out, so a column
+steps writing them read, and so on until no step that writes the cone reads a variable
+outside it. That includes the raised mark a triggered use case waits on, the link to the
+row its event was raised on, and what the use case that raises it reads
+([Triggers](./state-derivation.md#triggers)). It is `ENABLED (Next /\ c' # c)`, with `c`
+the tuple of those variables. A step outside that cone cannot move the column or open its way out, so a column
 that another use case toggles back and forth does not hide the deadlock. TLC reports the
 invariant violated in a state with an instance at `s` and no move of the cone left, which
 is a deadlock `check` reports. A pass does not prove that the model has no deadlock: a
