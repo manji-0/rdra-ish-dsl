@@ -492,3 +492,43 @@ applies_to(NoActive, Revoke)
     let text = format!("{body:?}");
     assert!(text.contains("KeyEq"), "{text}");
 }
+
+/// A delete the key's children reject keeps its function, with the guard as the condition
+/// `Restrict_<Child>_<role>` over the child rows; a line the step deletes with the Order is
+/// told apart by its primary key (#199).
+#[test]
+fn a_restricted_delete_rejects_while_a_child_names_the_row() {
+    let src = |extra: &str| {
+        format!(
+            r#"
+entity Order "Order" {{ id: Int @pk }}
+entity OrderLine "Line" {{ id: Int @pk }}
+relate(OrderLine, Order, N:1)
+usecase Open "Open"
+usecase AddLine "Add line"
+usecase Cancel "Cancel"
+creates(Open, Order)
+creates(AddLine, OrderLine)
+deletes(Cancel, Order)
+{extra}
+"#
+        )
+    };
+    for (extra, same_row) in [("", false), ("deletes(Cancel, OrderLine)", true)] {
+        let domain = functions_of(&src(extra));
+        let cancel = domain
+            .fns
+            .iter()
+            .find(|f| f.action == "Cancel")
+            .unwrap_or_else(|| panic!("{extra}: Cancel has a function: {:?}", domain.skipped));
+        let [cond] = cancel.conditions.as_slice() else {
+            panic!("{extra}: one condition: {:?}", cancel.conditions);
+        };
+        assert_eq!(cond.id, "Restrict_OrderLine_Order");
+        let ir::Expr::Forall { body, .. } = &cond.expr else {
+            panic!("{extra}: a Forall over the lines: {:?}", cond.expr);
+        };
+        let keys = format!("{body:?}").matches("KeyEq").count();
+        assert_eq!(keys, if same_row { 2 } else { 1 }, "{extra}: {body:?}");
+    }
+}

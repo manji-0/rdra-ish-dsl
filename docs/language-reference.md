@@ -250,20 +250,24 @@ removes only the row it names, and the action decides what happens to the childr
 
 | `.on_delete` | The lifecycle |
 |---|---|
-| none, `restrict`, `no_action` | The database rejects the delete while a child names the row (no `.on_delete` is the SQL default, which the export leaves in place). The delete is enabled only when no present child names the row. A child that the same step deletes does not count. |
+| none, `restrict`, `no_action` | The database rejects the delete while a child names the row (no `.on_delete` is the SQL default, which the export leaves in place). The delete is enabled only when no present child names the row. A child that the same step deletes, unlinks, or relinks does not count. |
 | `cascade`, `set_null`, `set_default` | The lifecycle does not run the action yet. The delete is enabled, and the children stay present and still name the deleted row, where every rule still sees them. |
 
 Each key whose parent some use case deletes gets the invariant
 `DanglingKey_<Child>_<role>`: every present child names a present parent, or no parent
 under `.optional()`. Under a rejecting action the guard keeps the rule. Under `cascade`,
-`set_null`, or `set_default`, the rule fails when a delete leaves a child behind. The fix is
-to delete or unlink the children in an earlier step before the parent goes. The info
-`DeleteLeavesChildren` names each use case that deletes a `cascade` parent and not the
-child. A `deletes(UC, Child)` in the same use case removes one child row per run. At two
-instances an Order with two lines still blocks the delete, or under `cascade` still fails
-`DanglingKey_*`. A parent with a `@soft_delete` column is
-marked, not removed, so its keys get no guard and no `DanglingKey_*`. `.on_update` is not
-read. [Keys and roles](#relate-and-fk-generation) covers `.role`, `.key`, and composite
+`set_null`, or `set_default`, the rule fails as soon as the unguarded delete can run while a
+child names the row. Deleting the children in another use case does not prevent that; guard
+the deleting use case with a condition that no child remains, such as
+`holds(NoLines, Order.status == draft).none(OrderLine)`. The info `DeleteLeavesChildren`
+names each use case that deletes a `cascade` parent and not the child. A step that deletes
+or unlinks a child in the same step as its parent leaves that child out of the guard. It
+removes one child row per run, so at two instances an Order with two lines still blocks
+the delete, where the database would accept one statement that removes both. A parent with
+a `@soft_delete` column is marked, not removed, so its keys get no guard and no
+`DanglingKey_*`. A pre-existing child of a created parent starts naming a parent that does
+not exist (`PreExistingChildOfCreatedParent`), so its key gets no `DanglingKey_*` either.
+`.on_update` is not read. [Keys and roles](#relate-and-fk-generation) covers `.role`, `.key`, and composite
 parent keys.
 
 ### Chain methods

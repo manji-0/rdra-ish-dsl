@@ -157,6 +157,32 @@ pub(super) fn atom(
             parent_field: parent_field.clone(),
         });
     }
+    // The same row: two rows of one entity whose primary keys agree.
+    if let (Term::Index(a), TsCmp::Eq, Term::Index(b)) = (lhs, op, rhs) {
+        let q = quant.as_deref().ok_or_else(unsupported)?;
+        let quant_ref: &Option<&mut Quant<'_>> = quant;
+        let (ra, _, rowa) = resolve(*a, rows, bind, quant_ref).ok_or_else(unsupported)?;
+        let (rb, _, rowb) = resolve(*b, rows, bind, quant_ref).ok_or_else(unsupported)?;
+        let entity = q
+            .model
+            .entities
+            .values()
+            .find(|e| e.id == rowa.entity && rowa.entity == rowb.entity)
+            .ok_or_else(unsupported)?;
+        let [pk] = entity.primary_key.as_slice() else {
+            return Err("a row over several key columns".into());
+        };
+        let field = |row: &RowParam| row.fields.iter().find(|f| f.wire == *pk).cloned();
+        let (Some(fa), Some(fb)) = (field(&rowa), field(&rowb)) else {
+            return Err("a key on a column with no field".into());
+        };
+        return Ok(Expr::KeyEq {
+            child: ra,
+            child_field: fa,
+            parent: rb,
+            parent_field: fb,
+        });
+    }
     let Term::Slot { var, at } = lhs else {
         return Err(unsupported());
     };

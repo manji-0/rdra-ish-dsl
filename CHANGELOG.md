@@ -12,17 +12,20 @@
   guard. A model that deletes a parent while its children stay now finds that delete
   disabled, which can turn a passing liveness or `can_reach` property into a
   counterexample, add a deadlock, or make the use case one that never runs. To migrate,
-  delete the children in an earlier step before the parent goes (a use case that
-  `deletes(UC, Child)`), or declare `.on_delete(cascade)` where the database removes them.
-  Each key whose parent some use case deletes also gets the invariant
-  `DanglingKey_<Child>_<role>`: every present child names a present parent. The lifecycle
-  does not run `cascade`, `set_null`, or `set_default` yet: their delete removes the one
-  row as before, and the rule fails when it leaves a child behind. So a key that declares
-  `cascade` re-enables the delete, and `DanglingKey_*` then reports the children it leaves
-  until the model deletes them before the parent; a model that only had the info
-  `DeleteLeavesChildren` now fails. A parent with a `@soft_delete` column is marked, not
-  removed, so its keys get no guard and no rule. No sample changes verdict: no sample
-  deletes a row that a key names.
+  delete the children first, in a use case that `deletes(UC, Child)` or `unlinks` them. A
+  step that unlinks a child and deletes its parent is enabled. Each key whose parent some
+  use case deletes also gets the invariant `DanglingKey_<Child>_<role>`: every present
+  child names a present parent. The lifecycle does not run `cascade`, `set_null`, or
+  `set_default` yet. Their delete removes the one row with no guard, so the rule fails as
+  soon as the delete can run while a child names the row, and deleting the children in
+  another use case does not prevent that. Declaring `.on_delete(cascade)` therefore trades
+  the disabled delete for a `DanglingKey_*` counterexample, and a model that only had the
+  info `DeleteLeavesChildren` now fails. To clear it, guard the deleting use case with a
+  condition that no child remains, such as
+  `holds(NoLines, Order.status == draft).none(OrderLine)`. A parent with a `@soft_delete`
+  column is marked, not removed, so its keys get no guard and no rule. A pre-existing child
+  of a created parent, which `PreExistingChildOfCreatedParent` already reports, gets no
+  rule. No sample changes verdict: no sample deletes a row that a key names.
 
 - The lifecycle checks unique column sets (#222). A `@unique` column, a `@unique(a, b)`,
   and the pair of keys of a `relate(A, B, N:M).via(J)` junction become the invariant

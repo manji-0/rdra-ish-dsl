@@ -164,7 +164,7 @@ stays as it was.
 | A `Triggered` parameter | One more `\E p \in <E>_Ids` on the triggered operator with `<E>_exists[p] = "present"` and the mark conjunct, and, when the one direct key joins it to one of the operator's rows, `<Child>_owner_<Parent>[c] = p` (or `= c`). A cone that leaves the mark out prints the operator without the conjunct and without the parameter, and the var is not in the module. |
 | A use case several tracked events trigger | One operator per variant, `<UC>_by_<Ev>`, each in `Next`; `AfterAssert_<UC>_<n>` ranges over every variant's last step. |
 | `creates` | `FirstAbsent(<E>_exists, p)` and `<E>_exists' = ... "present"`. A deleted slot is never reused. |
-| `deletes` | `<E>_exists'` becomes `"deleted"`, columns and owners return to the base value. Per key to `E` with no `.on_delete`, `restrict`, or `no_action`, a guard `\A b0 \in <Child>_Ids : (<Child>_exists[b0] = "present") => (~(<Child>_owner_<E>[b0] = p0))`: no present child names the row, so the step waits as the database's reject makes it. A child the same step deletes is left out. |
+| `deletes` | `<E>_exists'` becomes `"deleted"`, columns and owners return to the base value. Per key to `E` with no `.on_delete`, `restrict`, or `no_action`, a guard `\A b0 \in <Child>_Ids : (<Child>_exists[b0] = "present") => (~(<Child>_owner_<E>[b0] = p0))`: no present child names the row, so the step waits as the database's reject makes it. A child the same step deletes, unlinks, or relinks is left out. |
 | `sets`, `transitions(UC, E.col, a -> b)` | Primed assignments. A transition guards `col = a` and writes `b`; arms to several targets write through a `CASE` on the source. `UNCHANGED` lists every variable the action does not assign, an entity the action leaves alone by its tuple `<E>_vars`. |
 | Variation column of a created instance | `\E v0 \in {values} : col' = ...`, so TLC explores every value. `@default` does not pin it. |
 | `applies_to(Condition, UseCase \| Api)` with a `holds` body | A guard conjunct on the use case's operator. A condition on a created instance is evaluated on the primed variable, after the assignments and the `UNCHANGED` that bind every primed variable it reads. |
@@ -992,11 +992,15 @@ to add a case.
   `InstanceCount` times.
 - **`.on_delete` runs only as a reject.** A key with no `.on_delete`, `restrict`, or
   `no_action` guards the parent's `deletes`: it waits until no present child names the row,
-  as the database's reject would. The lifecycle does not run `cascade`, `set_null`, or
-  `set_default`: the delete removes the one row, and the children keep naming it until
-  `DanglingKey_<Child>_<role>` reports them. Delete or unlink the children in an earlier
-  step. A guard on a child that the system leaves out (a scope without the child's
-  entity) reads nothing, and the delete runs as before.
+  as the database's reject would. A child the same step deletes, unlinks, or relinks does
+  not count, but a step removes one child row per run, so a delete that the database would
+  accept after one statement removes every child stays disabled while a second child
+  exists. For that pattern the model reaches fewer states than the database, and an OK
+  says nothing about the states it misses. The lifecycle does not run `cascade`,
+  `set_null`, or `set_default`: the delete removes the one row with no guard, and
+  `DanglingKey_<Child>_<role>` reports the children it leaves. Guard the deleting use case
+  with a condition such as `.none(Child)`. A child entity the lifecycle leaves out (a
+  published entity) has no key var, so no guard reads it and the delete runs as before.
 - **Conditions are checked.** A `holds` body is a guard on each use case it applies to.
   A body applied to a use case that writes nothing is `UnbindableCondition`, an error.
 - **One use case across entities.** A use case is one atomic action per transaction

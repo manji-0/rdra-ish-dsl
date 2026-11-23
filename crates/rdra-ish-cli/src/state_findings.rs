@@ -805,21 +805,18 @@ fn violation_message(text: &InvText, p: &str) -> String {
     }
 }
 
-/// What a `DanglingKey_*` violation asks of the model, by the key's `.on_delete`: the
-/// lifecycle does not run `cascade`, `set_null` or `set_default`, so the use case that
-/// deletes the parent must remove or unlink the children itself.
+/// What a `DanglingKey_*` violation asks of the model, by the key's `.on_delete`. The
+/// lifecycle does not run `cascade`, `set_null` or `set_default`, and their delete has no
+/// guard, so the use case that deletes the parent must wait until no child names it.
 fn dangling_fix(on_delete: &str, child: &str) -> String {
+    let wait = format!(
+        "guard the use case that deletes the parent with a condition such as .none({child}), and remove the '{child}' rows in an earlier step"
+    );
     match on_delete {
-        "cascade" => format!(
-            "the lifecycle does not run .on_delete(cascade), so delete the '{child}' rows before the parent"
-        ),
-        "set_null" => format!(
-            "the lifecycle does not run .on_delete(set_null), so unlink the '{child}' rows before the parent is deleted"
-        ),
-        "set_default" => format!(
-            "the lifecycle does not run .on_delete(set_default), so relink or delete the '{child}' rows before the parent"
-        ),
-        _ => format!("the delete of the parent left the '{child}' rows naming it"),
+        "cascade" | "set_null" | "set_default" => {
+            format!("the lifecycle does not run .on_delete({on_delete}); {wait}")
+        }
+        _ => format!("the '{child}' row names a parent that was never created or is gone"),
     }
 }
 

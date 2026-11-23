@@ -46,7 +46,8 @@
 - **Dangling keys**: one `INVARIANT DanglingKey_<Child>_<role>` per key whose parent a
   use case deletes: every present child names a present parent. A key with no
   `.on_delete`, `restrict`, or `no_action` guards the delete, so it holds; `cascade` and
-  `set_null` are not run, so a delete that leaves a child fails it.
+  `set_null` are not run, so their unguarded delete fails it while a child names the
+  parent; a condition such as `.none(Child)` on the deleting use case clears it.
 - **`@check`**: one `INVARIANT Check_<Entity>_<column>_<n>` per `@check(expr)`. A null
   operand satisfies no comparison but `!=`, as in every rule; `@check(qty == null or qty
   >= 1)` admits null. A `@derived` column

@@ -196,4 +196,42 @@ fn only_a_deleted_hard_parent_has_a_guard_and_a_rule() {
         .invariants()
         .iter()
         .all(|i| !i.name.starts_with("DanglingKey_")));
+    // A pre-existing line of a created Order starts naming an Order that does not exist yet,
+    // which `PreExistingChildOfCreatedParent` reports; no delete causes it, so no rule.
+    let pre = order("", "").replace("creates(AddLine, OrderLine)", "");
+    assert_eq!(rules(&pre).1, Vec::<String>::new());
+}
+
+/// Deleting the lines in an earlier step does not clear `DanglingKey_*` on a cascade key,
+/// since its delete has no guard; a condition that no line remains does, at two slots too.
+#[test]
+fn a_cascade_delete_needs_its_own_guard_to_leave_no_child() {
+    let remove = "usecase RemoveLine \"明細削除\"\ndeletes(RemoveLine, OrderLine)";
+    let violated = |src: &str| {
+        derive_scoped(&model_from(src), Bounds::VERIFY, &Scope::ALL)
+            .diags
+            .iter()
+            .any(|x| {
+                matches!(&x.diag, StateDiag::ConstraintViolated { name, .. }
+                    if name == "DanglingKey_OrderLine_Order")
+            })
+    };
+    assert!(violated(&order(".on_delete(cascade)", remove)));
+    let guarded = format!(
+        "{remove}\ncondition NoLines \"明細なし\"\nholds(NoLines, Order.status == draft).none(OrderLine)\napplies_to(NoLines, CancelDraft)"
+    );
+    assert!(!violated(&order(".on_delete(cascade)", &guarded)));
+}
+
+/// A step that unlinks a line and deletes its Order is what the database accepts: the line
+/// no longer names the row when the delete runs, so the guard leaves it out.
+#[test]
+fn a_child_the_step_unlinks_does_not_hold_the_delete() {
+    let src = order(
+        ".optional()",
+        "usecase Attach \"紐付け\"\nlinks(Attach, OrderLine, Order)\nunlinks(CancelDraft, OrderLine, Order)",
+    );
+    let run = explore(&src, Bounds::STATES);
+    assert!(reaches(&run, Value::DELETED, Value::PRESENT));
+    assert!(!dangling_violated(&src));
 }

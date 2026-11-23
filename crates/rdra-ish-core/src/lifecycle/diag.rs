@@ -457,7 +457,7 @@ pub enum StateDiag {
         site: Site,
     },
     /// A use case deletes the parent of a key with `.on_delete(cascade)`, which the lifecycle
-    /// does not read: the children stay, and every rule still sees them.
+    /// does not run: the children stay, and every rule still sees them.
     DeleteLeavesChildren {
         usecase: String,
         parent: String,
@@ -1173,7 +1173,7 @@ impl fmt::Display for StateDiag {
                 ..
             } => write!(
                 f,
-                "{usecase} deletes a {parent} whose key from {child} says .on_delete(cascade), which the lifecycle does not read: the {child} rows stay, and every rule still sees them; add deletes({usecase}, {child}) to remove them with it"
+                "{usecase} deletes a {parent} whose key from {child} says .on_delete(cascade), which the lifecycle does not run: the {child} rows stay, every rule still sees them, and DanglingKey_* fails once one names the deleted {parent}; let {usecase} run only when no {child} remains, such as with a condition .none({child})"
             ),
             StateDiag::GuardReadsLaterStep {
                 condition,

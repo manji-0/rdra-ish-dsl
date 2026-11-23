@@ -235,8 +235,9 @@ impl Builder<'_> {
 
     /// A `Restrict` guard per row the draft deletes and per key of that row's entity whose
     /// database rejects the delete (`ForeignKey::delete_rejected`): no present child names the
-    /// row, apart from the children the same step deletes. A child outside the system has no
-    /// owner var, so no guard reads it.
+    /// row, apart from the children the same step deletes or moves off the key (`unlinks`,
+    /// `relinks`). A child outside the system (a published entity) has no owner var, so no
+    /// guard reads it.
     pub(in crate::lifecycle::build) fn restrict_guards(&self, a: &mut ActionDraft) {
         let model = self.model;
         let deleted: Vec<u8> = a
@@ -270,10 +271,19 @@ impl Builder<'_> {
                     CmpOp::Eq,
                     Term::Index(At::Param(p)),
                 );
+                // A child the step moves to another value of the key, before the parent goes.
+                let moved = a.effects.iter().filter_map(|eff| match eff {
+                    Effect::Assign {
+                        var, param, rhs, ..
+                    } if *var == owner && *rhs != Rhs::Param(p) => Some(*param),
+                    _ => None,
+                });
                 let mut body: Vec<Pred> = deleted
                     .iter()
-                    .filter(|&&q| entity(q) == child)
-                    .map(|&q| {
+                    .copied()
+                    .filter(|&q| entity(q) == child)
+                    .chain(moved)
+                    .map(|q| {
                         Pred::Cmp(
                             Term::Index(At::Bound(0)),
                             CmpOp::Eq,
@@ -316,7 +326,12 @@ impl Builder<'_> {
                     matches!(eff, Effect::Delete { param } if a.params[usize::from(*param)].entity == p)
                 })
             });
-            if !deleted || !self.hard_deleted_parent(fk) {
+            // A pre-existing child of a created parent starts naming a parent that does not
+            // exist yet (`PreExistingChildOfCreatedParent` says so), which no delete causes.
+            let birth = |e: EntId| self.ts.entities[e.index()].birth;
+            let starts_dangling =
+                birth(c) == Birth::PreExisting && birth(p) == Birth::Created && !fk.optional();
+            if !deleted || !self.hard_deleted_parent(fk) || starts_dangling {
                 continue;
             }
             let Some(owner) = self.owner_var(id) else {
