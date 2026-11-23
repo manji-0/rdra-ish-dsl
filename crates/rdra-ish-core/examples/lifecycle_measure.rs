@@ -72,6 +72,27 @@ fn graph_stats(run: &ComponentRun) -> String {
     )
 }
 
+/// The bytes `Caps::memory` counts for a complete run: states, edges, the state width, and the
+/// peak store (with `seen`) and the kept store per state.
+fn bytes_stats(run: &ComponentRun) -> String {
+    if !run.complete {
+        return "capped".to_string();
+    }
+    let n = run.states.len() as f64;
+    format!(
+        "bytes: {} states, {} edges ({:.2}/state), width {} B, peak {} B ({:.1} B/state, admitted {:.1}), kept {} B ({:.1} B/state)",
+        run.states.len(),
+        run.edges().len(),
+        run.edges().len() as f64 / n,
+        run.state_width(),
+        run.peak,
+        run.peak as f64 / n,
+        run.peak_admitted as f64 / n,
+        run.kept_bytes(),
+        run.kept_bytes() as f64 / n
+    )
+}
+
 fn main() {
     let cap: usize = std::env::args()
         .nth(1)
@@ -123,8 +144,8 @@ fn main() {
                 .or_default()
                 .push(ts.property_seed(i));
         }
-        let mut seen: HashMap<Cone, (usize, String, String)> = HashMap::new();
-        let mut reduced_seen: HashMap<Cone, (String, String, String)> = HashMap::new();
+        let mut seen: HashMap<Cone, (usize, String, String, String)> = HashMap::new();
+        let mut reduced_seen: HashMap<Cone, (String, String, String, String)> = HashMap::new();
         let mut sub_vars: Option<String> = None;
         let mut worst: (usize, String) = (0, String::new());
         let targets = ts
@@ -146,9 +167,9 @@ fn main() {
                     _ => None,
                 })
                 .collect();
-            let (states, ms, graph) = match seen.get(&cone) {
-                Some((n, _, g)) => (*n, "cached".to_string(), g.clone()),
-                None if reduced_only => (0, "-".to_string(), "-".to_string()),
+            let (states, ms, graph, bytes) = match seen.get(&cone) {
+                Some((n, _, g, b)) => (*n, "cached".to_string(), g.clone(), b.clone()),
+                None if reduced_only => (0, "-".to_string(), "-".to_string(), "-".to_string()),
                 None => {
                     let start = Instant::now();
                     let run = ts.restrict_to(&cone.vars, &cone.keep).run(caps);
@@ -159,12 +180,19 @@ fn main() {
                     };
                     let ms = start.elapsed().as_millis().to_string();
                     let graph = graph_stats(&run);
-                    seen.insert(cone.clone(), (n, ms.clone(), graph.clone()));
-                    (n, ms, graph)
+                    let bytes = bytes_stats(&run);
+                    seen.insert(cone.clone(), (n, ms.clone(), graph.clone(), bytes.clone()));
+                    (n, ms, graph, bytes)
                 }
             };
-            let (reduced, sub, rms, reduced_graph) = match reduced_seen.get(&cone) {
-                Some((r, s, g)) => (r.clone(), s.clone(), "cached".to_string(), g.clone()),
+            let (reduced, sub, rms, reduced_graph, reduced_bytes) = match reduced_seen.get(&cone) {
+                Some((r, s, g, b)) => (
+                    r.clone(),
+                    s.clone(),
+                    "cached".to_string(),
+                    g.clone(),
+                    b.clone(),
+                ),
                 None => {
                     let start = Instant::now();
                     let system = ts.reduced_cone(&cone, shared[&cone].iter().cloned(), caps);
@@ -183,8 +211,12 @@ fn main() {
                     };
                     let ms = start.elapsed().as_millis().to_string();
                     let graph = graph_stats(&run);
-                    reduced_seen.insert(cone.clone(), (n.clone(), sub.clone(), graph.clone()));
-                    (n, sub, ms, graph)
+                    let bytes = bytes_stats(&run);
+                    reduced_seen.insert(
+                        cone.clone(),
+                        (n.clone(), sub.clone(), graph.clone(), bytes.clone()),
+                    );
+                    (n, sub, ms, graph, bytes)
                 }
             };
             let shown = if reduced_only {
@@ -205,6 +237,8 @@ fn main() {
                 sub,
                 rms
             );
+            println!("    unreduced {bytes}");
+            println!("    reduced   {reduced_bytes}");
             if name.starts_with("property ") {
                 println!("    unreduced: {graph}");
                 println!("    reduced:   {reduced_graph}");

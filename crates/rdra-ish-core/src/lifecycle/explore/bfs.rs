@@ -183,6 +183,7 @@ impl<'t> Bfs<'t> {
             edges: Vec::new(),
             bindings: Bindings::default(),
             charge: caps.memory.map(Charge::new),
+            peak_admitted: 0,
         }
     }
 
@@ -316,6 +317,7 @@ impl<'t> Bfs<'t> {
             }
         }
         let bytes = self.bytes_with_one_more();
+        self.peak_admitted = bytes;
         if let Some(charge) = &mut self.charge {
             if !charge.cover(bytes) {
                 let pool = charge.pool();
