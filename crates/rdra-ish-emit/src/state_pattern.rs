@@ -95,6 +95,9 @@ fn violation_message(text: &InvText, p: &str) -> String {
 } => format!(
             "1:1 key shared: two '{child}' rows belong to one '{parent}' through '{role}' in patterns ({p})"
         ),
+        InvText::UniqueSet { entity, columns } => format!(
+            "unique set shared: two '{entity}' rows agree on ({columns}) in patterns ({p})"
+        ),
         InvText::MinCard {
                 child,
                 parent,

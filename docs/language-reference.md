@@ -1215,8 +1215,8 @@ argument other than `tz` and `local` is `InvalidTypeArgs`.
 |---|---|
 | `@pk` | Marks the column as the primary key. FK columns are auto-generated against this key by `relate`. |
 | `@pk(a, b)` | Declares a composite primary key over the named columns. A `relate` to the entity generates one FK column per key column. |
-| `@unique` | Adds a unique constraint. |
-| `@unique(a, b)` | Declares a composite unique constraint over the named columns. |
+| `@unique` | Adds a unique constraint. The lifecycle checks it as `Unique_<Entity>_<column>` when it holds the column's value (see [Unique column sets](./state-derivation.md#unique-column-sets)). |
+| `@unique(a, b)` | Declares a composite unique constraint over the named columns. The lifecycle checks it as `Unique_<Entity>_<a>_<b>` when it holds every column's value; a key column such as `room_id` reads as its key's owner. |
 | `@index` | Adds an index for the column. |
 | `@index(a, b)` | Declares a composite index over the named columns. |
 | `@check(expr)` | A check constraint: `expr` is a condition over the entity's own columns (`and`, `or`, `not` over comparisons), typed like a `forbidden` comparison. A missing column is `UnknownColumn`; arithmetic is `ArithNotInCheck`. The lifecycle checks it as the invariant `Check_<Entity>_<column>_<n>` (see [state-derivation.md](./state-derivation.md#checks)). |
@@ -1611,6 +1611,11 @@ relate(Order, Product, N:M).via(OrderProduct)
 // adds composite unique (order_id, product_id) when missing
 // and synthesizes relate(OrderProduct, Order, N:1) + relate(OrderProduct, Product, N:1)
 ```
+
+The lifecycle checks the junction's pair as `Unique_OrderProduct_order_id_product_id`: no
+two present `OrderProduct` rows link the same Order and Product. A use case that creates the
+junction row needs a guard that keeps the pair free (see
+[Unique column sets](./state-derivation.md#unique-column-sets)).
 
 Bare `relate(A, B, N:M)` without `.via` is an error. The equivalent manual form is
 still valid: `relate(Junction, A, N:1)` plus `relate(Junction, B, N:1)` (synthesis
@@ -2925,6 +2930,9 @@ nothing sets it. A rule that admits null says so: `@check(qty == null or qty >= 
 is a logical `@derived` column, which is a value, not a rule: `bulk: Bool @derived(qty >=
 3)` is neither `true` nor `false` while `qty` is null, so `bulk == true` and `bulk ==
 false` are both false there and `bulk == null` is true.
+A unique column set reads null the same way: two rows whose column is null do not agree, as
+in SQL, so neither breaks `Unique_<Entity>_<columns>` (see
+[Unique column sets](./state-derivation.md#unique-column-sets)).
 
 #### Semantics and interaction with `sets`
 

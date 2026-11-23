@@ -772,6 +772,9 @@ fn violation_message(text: &InvText, p: &str) -> String {
 } => format!(
             "1:1 key is shared: two '{child}' rows belong to one '{parent}' through '{role}', witnessed by {p}"
         ),
+        InvText::UniqueSet { entity, columns } => format!(
+            "unique set is shared: two '{entity}' rows agree on ({columns}), witnessed by {p}; guard each use case that writes the set, such as with `.none({entity}...)` on the parent it binds"
+        ),
         InvText::MinCard {
                 child,
                 parent,
