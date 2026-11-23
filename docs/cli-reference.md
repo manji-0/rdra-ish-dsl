@@ -577,18 +577,15 @@ What the limit counts:
   what a store's buffers take while they grow, and the passes that read a finished cone:
   its findings, `can_reach`, the reduction of a cone to its classes, and the liveness search
   of `eventually` and `leads_to`. Each pass takes memory in proportion to the cone's states
-  and moves, beside the cone it reads. Measured on macOS as the process's peak footprint
-  (the memory it has written and not given back), `check` at two instances on
-  `clinic-ops`, `patent-ops`, and `food-permit-ops` peaked at 1.02 to 1.23 times the
-  default `4GiB`, the findings adding under 3%. `verify --instance-count 2` on `oidc-auth`
-  peaked at 1.36 times a `2GiB` limit and 1.39 times `4GiB`, while one BFS run held the
-  whole limit: a run takes more than its count while it grows. Not measured on Linux. The
-  default limits stop no cone of the samples at the bounds their `// expect` headers name.
-- **Resident memory.** The resident set size (RSS) that `time` reports reads higher than
-  the footprint, up to 2.6 times the limit on `oidc-auth`: it counts memory the allocator
-  has freed and keeps for reuse, which macOS takes back when it needs it (`footprint <pid>`
-  lists it as reclaimable). `RDRA_ISH_MEMORY_STATS=1` prints a `memory:` line on stderr at
-  each phase, with the bytes the stores hold then (`held=`) and at most (`peak=`).
+  and moves, beside the cone it reads. Measured on macOS, where the peak resident set size
+  and the peak footprint agreed within 2%: `check --instance-count 2` on `clinic-ops`,
+  `patent-ops`, `food-permit-ops`, `insurance-claim-ops`, and `oidc-auth` peaked at 0.92 to
+  1.17 times the default `4GiB`, the findings adding under 3%. `verify --instance-count 2`
+  on `oidc-auth` with `--memory 2GiB` peaked at 1.85 times the limit, in single BFS runs
+  that took more than their count, and in the reductions it builds. Not measured on Linux.
+  The default limits stop no cone of the samples at the bounds their `// expect` headers
+  name. `RDRA_ISH_MEMORY_STATS=1` prints a `memory:` line on stderr at each phase, with the
+  bytes the stores hold then (`held=`) and have held at most (`peak=`).
 - **TLC** (`verify --with-tlc` only). Each TLC run's `-Xmx`. Without `--with-tlc` BFS has
   the whole limit. With it, `verify` gives the TLC cone runs half the limit (at least
   `64MiB`) and BFS the rest; it starts no more cone runs at once than their

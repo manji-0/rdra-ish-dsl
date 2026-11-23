@@ -209,8 +209,8 @@ fn cones_side_by_side_stop_where_they_stop_one_at_a_time() {
 /// A cone run again alone, because its run beside the others did not end as it would in its
 /// own room, runs only beside the runs behind it that leave it that room: what the pool held
 /// at once stays within the limit (the most `RDRA_ISH_MEMORY_STATS` reports), on any number
-/// of jobs. Before, all of them stayed held: food-permit-ops reached 17,888,272 bytes of this
-/// 16MiB on four jobs, and 5803MiB of the default 4GiB.
+/// of jobs. Before, all of them stayed held: food-permit-ops reached 19,820,200 bytes of this
+/// 16MiB on eight jobs.
 #[test]
 fn the_cones_run_again_alone_hold_no_more_than_the_limit() {
     const LIMIT: u64 = 16 << 20;

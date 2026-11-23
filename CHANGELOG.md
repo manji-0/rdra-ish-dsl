@@ -308,16 +308,16 @@
 - The cones `check`, `states`, and `verify` explore side by side no longer hold more than
   the memory limit between them. A cone that had to run again alone ran while the results
   of the cones after it stayed held, and its run counted past what the limit left: at
-  `--instance-count 2` and the default `4GiB`, `check` held up to 5803MiB of state stores
-  at once on `food-permit-ops`, 4968MiB on `patent-ops`, and 4473MiB on `clinic-ops`,
+  `--instance-count 2` and the default `4GiB`, `check` held up to 5264MiB of state stores
+  at once on `food-permit-ops`, 5226MiB on `clinic-ops`, and 4670MiB on `patent-ops`,
   depending on how the threads ran. Now the runs after it that can no longer count are
   dropped first, and when the rest still crowd it, they are dropped too and run alone in
   their turn. Every cone stops at the same state as before, on any number of threads, but
   one: the `can_reach` cones of `verify` now leave room for the entity cones' results,
-  which stay held while they run, so under a tight limit they may stop sooner. The
-  peak footprint of those three runs (macOS) fell from 1.10 to 1.40 times the limit to 1.02
-  to 1.23 times; the rest is one cone's run passing its own count while it grows (#242).
-  Passes over a finished cone stay uncounted (#243) (#237).
+  which stay held while they run, so under a tight limit they may stop sooner. The peak
+  memory of `check --instance-count 2` on five samples (macOS) went from 1.01 to 1.32
+  times the limit to 0.92 to 1.17 times. A single run still takes more than its count
+  while it grows (#242), and passes over a finished cone stay uncounted (#243) (#237).
 - An integer `@default` outside `0..--int-range-max` on an Int, Money, Decimal, Date, or
   DateTime column that a rule reads is `error[IntLiteralOutOfBounds_<E>_<value>]`, as a
   literal there is: `@default(7) of stock is outside the bounded domain 0..5`. The column
