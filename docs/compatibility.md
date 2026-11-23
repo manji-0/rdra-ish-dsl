@@ -161,6 +161,9 @@ To keep a result reproducible across releases, pass the bounds a command takes a
 instead of relying on the defaults: `--instance-count`, `--int-range-max`, and
 `--max-states` for `check` and `states`, and `--instance-count` and `--int-range-max` for
 `verify`. The [Bounds](./state-derivation.md#bounds) table lists each command's defaults.
+The [memory limit](./cli-reference.md#memory-limit) (`--memory`) can leave a cone
+undecided as `--max-states` does; its count of a cone's bytes is the same on every
+machine, but a release may change it.
 [Known verification gaps](./formal-verification.md#known-verification-gaps) lists what the
 bounds leave unchecked.
 

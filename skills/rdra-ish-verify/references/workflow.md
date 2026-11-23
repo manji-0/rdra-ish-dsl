@@ -54,7 +54,12 @@ rdra-ish export samples/order.rdra --kind tla -o /tmp/rdra-tla   # the whole-mod
   under that assumption, and name the use cases left out on the `scope:` line.
 - When TLC runs out of heap the result is `tool_error`: set `RDRA_TLC_HEAP=4g` (default
   `1g` per cone, `2g` per temporal property run), or put `-Xmx` in `JAVA_TOOL_OPTIONS`,
-  which wins.
+  which wins. `verify` starts only as many TLC runs at once as their heaps fit in half its
+  memory limit (`--memory`, or `memory` under `[verify]` in `rdra.toml`; default `16GiB`).
+- A finding listed as `not decided: the <E> cone stopped at the memory limit (...)` means
+  the cone's states outgrew BFS's half of that limit. Raise `--memory`, or narrow the cone
+  as for the state cap; `check` reports the same stop as `MemoryCapReached_<E>` (default
+  limit `4GiB`, `memory` under `[check]`).
 - While TLC runs, `verify` explores the cones itself, side by side on the machine's cores
   (at most 8). `RDRA_JOBS=2` lowers that when memory is short; the result does not change.
 

@@ -28,6 +28,7 @@ pub(super) fn owning_stage(model: &SemanticModel, diag: &StateDiag) -> StageId {
         | StateDiag::MinCardNeedsCreate { .. }
         | StateDiag::PatternCapReached { .. }
         | StateDiag::StateCapReached { .. }
+        | StateDiag::MemoryCapReached { .. }
         | StateDiag::AfterAssertViolated { .. }
         | StateDiag::PropertyViolated { .. }
         | StateDiag::GoalUnreachable { .. }

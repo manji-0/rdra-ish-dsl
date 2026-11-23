@@ -37,6 +37,13 @@
   and the states the instance is then confined to. `check` and `states` verify safety
   only and evaluate no property, as the docs now say explicitly. `export --kind tla`
   names it in a comment, and `.fair(...)` on it is `FairOnReachProperty` (#167).
+- `check`, `states`, and `verify` run within a memory limit: `--memory`, else `memory`
+  under `[check]` or `[verify]` in `rdra.toml`, else `4GiB` for `check` and `states` and
+  `16GiB` for `verify`. A size takes binary units (`4GiB`, `4G`, `4GB`, `4096MiB` are the
+  same). A BFS cone whose states pass the limit stops as at `--max-states`:
+  `MemoryCapReached_<E>` in `check`, findings `not decided` in `verify`. `verify` gives
+  BFS half and starts only as many TLC runs at once as their `-Xmx` fit in the other half;
+  `RDRA_TLC_HEAP` and an `-Xmx` in `JAVA_TOOL_OPTIONS` still set the heap (#174).
 - insurance-claim-ops states 「賠償責任の事故は示談交渉の前に請求を完了しない」 as a
   `.lemma()`, so `verify --prove` proves every state rule of every domain sample. The docs
   and the `rdra-ish-verify` skill show how to find a lemma behind a CTI that turns on a

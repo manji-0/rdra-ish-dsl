@@ -7,6 +7,7 @@ mod graph;
 mod moves;
 mod properties;
 mod scan;
+mod store;
 mod views;
 mod violations;
 
@@ -16,6 +17,7 @@ pub use properties::PropertyVerdict;
 use std::collections::{BTreeSet, HashSet};
 
 use crate::fasthash::FastMap;
+use crate::memory::{Charge, MemoryPool};
 
 use super::diag::Diag;
 use super::expr::State;
@@ -29,6 +31,8 @@ pub struct Caps {
     pub patterns: usize,
     /// Joint states per run (`--max-states`).
     pub states: usize,
+    /// The pool every run's state store is charged to (`--memory`); `None` charges nothing.
+    pub memory: Option<&'static MemoryPool>,
 }
 
 impl Caps {
@@ -38,7 +42,19 @@ impl Caps {
     pub const DEFAULT_STATES: usize = 65_536;
 
     pub const fn new(patterns: usize, states: usize) -> Self {
-        Caps { patterns, states }
+        Caps {
+            patterns,
+            states,
+            memory: None,
+        }
+    }
+
+    /// These caps, with every run charged to `pool`.
+    pub const fn charged_to(self, pool: &'static MemoryPool) -> Self {
+        Caps {
+            memory: Some(pool),
+            ..self
+        }
     }
 }
 
@@ -58,6 +74,10 @@ pub struct ComponentRun {
     edges: Vec<Edge>,
     /// `(action, params)` of each distinct binding an edge names.
     bindings: Vec<(ActId, Box<[u8]>)>,
+    /// What the run's result holds, in the bytes `Caps::memory` counts.
+    pub(crate) kept: u64,
+    /// `kept`, charged to `Caps::memory` while the result is alive.
+    _charge: Option<Charge>,
 }
 
 /// The worker threads a run computes moves on, beside the thread that reads them.
@@ -201,6 +221,8 @@ struct Bindings {
     list: Vec<(ActId, Box<[u8]>)>,
     /// Per action: its params to their index in `list`.
     index: Vec<FastMap<Box<[u8]>, u32>>,
+    /// What `list` and `index` hold, in bytes (`store::binding_bytes`).
+    bytes: u64,
 }
 
 struct Bfs<'t> {
@@ -220,6 +242,9 @@ struct Bfs<'t> {
     parents: Vec<Option<u32>>,
     edges: Vec<Edge>,
     bindings: Bindings,
+    /// What the store is charged to `Caps::memory`, when the caps name a pool; the result
+    /// keeps what it holds of it.
+    charge: Option<Charge>,
 }
 
 impl TransitionSystem {
@@ -233,6 +258,10 @@ impl TransitionSystem {
     fn run_on(self, caps: Caps, threads: Threads) -> ComponentRun {
         let mut bfs = Bfs::new(&self, caps);
         bfs.go(threads);
+        let kept = bfs.kept();
+        if let Some(charge) = &mut bfs.charge {
+            charge.shrink_to(kept);
+        }
         let Bfs {
             states,
             complete,
@@ -242,6 +271,7 @@ impl TransitionSystem {
             edges,
             bindings,
             violations,
+            charge,
             ..
         } = bfs;
         let mut run = ComponentRun {
@@ -253,6 +283,8 @@ impl TransitionSystem {
             parents,
             edges,
             bindings: bindings.list,
+            kept,
+            _charge: charge,
         };
         for (at, reach) in &violations {
             let (trace, last) = run.trace_of(reach);

@@ -96,6 +96,11 @@ impl Why {
 
 impl PropertyCone {
     pub fn new(ts: &TransitionSystem, i: usize) -> Self {
+        Self::under(ts, i, Caps::VERIFY)
+    }
+
+    /// `new`, with the run that reduces the cone under `caps`.
+    pub fn under(ts: &TransitionSystem, i: usize, caps: Caps) -> Self {
         let cone = ts.property_cone(i);
         let system = ts.restrict_to(&cone.vars, &cone.keep);
         let name = &ts.properties()[i].name;
@@ -109,7 +114,7 @@ impl PropertyCone {
         // A create writes the created entity's existence, so a cone that holds every write
         // counts every slot, and the `WfNext` run's `ok` needs no slot caveat.
         debug_assert!(!whole || !frees_slots);
-        let reduced = ts.reduced_cone(&cone, [ts.property_seed(i)], Caps::VERIFY);
+        let reduced = ts.reduced_cone(&cone, [ts.property_seed(i)], caps);
         let reduced_index = reduced
             .properties()
             .iter()

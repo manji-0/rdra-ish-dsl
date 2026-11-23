@@ -203,7 +203,9 @@ fn first_states(run: &ComponentRun, e: EntId) -> Vec<Option<u32>> {
 fn is_cap(d: &StateDiag) -> bool {
     matches!(
         d,
-        StateDiag::PatternCapReached { .. } | StateDiag::StateCapReached { .. }
+        StateDiag::PatternCapReached { .. }
+            | StateDiag::StateCapReached { .. }
+            | StateDiag::MemoryCapReached { .. }
     )
 }
 

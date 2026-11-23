@@ -258,6 +258,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::MinCardNeedsCreate { .. }
             | StateDiag::PatternCapReached { .. }
             | StateDiag::StateCapReached { .. }
+            | StateDiag::MemoryCapReached { .. }
             | StateDiag::ConstraintViolated { .. }
             | StateDiag::VacuousRule { .. }
             | StateDiag::AfterAssertViolated { .. }

@@ -805,6 +805,9 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
         StateDiag::StateCapReached { .. } => format!(
             "{diag}; raise --max-states, or narrow with --entity or --buc"
         ),
+        StateDiag::MemoryCapReached { raise, .. } => {
+            format!("{diag}; raise it with {raise}, or narrow with --entity or --buc")
+        }
         StateDiag::ConstraintViolated {
             text,
             label,
