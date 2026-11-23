@@ -295,17 +295,17 @@ pub(super) fn count_op(bound: CountBound) -> CmpOp {
 }
 
 impl Builder<'_> {
-    /// The premise of a count that only more than `n` rows can break (`at_most`, `exactly`,
-    /// a range's high end): some state has `n + 1` rows of `related`, linked or not. When the
-    /// bounds give `related` `n` slots or fewer, no state has them, and the text says which
-    /// count lifts the bound. `None` for `at_least`, which fewer rows break.
+    /// The premise of a count that only more than `n` rows can break (`at_most`, a range's
+    /// high end): some state has `n + 1` rows of `related`, linked or not. When the bounds
+    /// give `related` `n` slots or fewer, no state has them, and the text says which count
+    /// lifts the bound. `None` for `at_least` and `exactly`, which fewer rows break.
     pub(super) fn count_premise(
         &self,
         related: EntityKey,
         bound: CountBound,
         n: u8,
     ) -> Option<Premise> {
-        if bound == CountBound::AtLeast {
+        if bound != CountBound::AtMost {
             return None;
         }
         let id = &self.model.entities[related].id;

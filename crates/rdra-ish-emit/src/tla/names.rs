@@ -11,7 +11,7 @@ use super::{render_value, sanitize_ident};
 /// Identifiers the module defines itself, the TLA+ keywords, and the Integers operators.
 #[rustfmt::skip]
 const RESERVED: &[&str] = &[
-    "vars", "Init", "Next", "Spec", "TypeOK", "InstanceCount", "IntRange", "FirstAbsent", "Cardinality",
+    "vars", "Init", "Next", "Spec", "TypeOK", "InstanceCount", "IntRange", "FirstAbsent", "Cardinality", "IsFiniteSet",
     "now", "nothing", "ex", "i", "j", "Int", "Nat",
     "Print", "PrintT", "Assert", "JavaTime", "Permutations", "SortSeq", "RandomElement", "Any",
     "ToString", "TLCEval", "TLCGet", "TLCSet",
