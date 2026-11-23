@@ -83,6 +83,19 @@
 
 ### Added
 
+- `check --guards` reports which rules each guard protects (#198). A guard is a `holds`
+  condition applied to a use case, or the `.when` conditions of one column's arms or
+  values. For each guard, after a clean `check`, the run removes it from every action of
+  the use case, explores again the cones of the rules that keep the use case, under the
+  same caps and `--memory`, and prints on stdout the rules that now fail (`protects:`), a
+  `rules:` block with the guards each rule depends on, and, for a guard no rule depends
+  on, `no rule depends on this guard; it is either a business rule nobody wrote as a rule,
+  or not needed`. A rule whose cone stops at a cap without the guard is `not decided`. The
+  report adds no finding and leaves the exit status to `check`. On `samples/oidc-auth` it
+  takes about 3 s (34 guards, 131 cones), and `tests/guards_cli.rs` reads the sample
+  README's table of rules and guards and checks each row against it. The table now has one
+  row per rule, also names `AccountChoiceAsked` on `SelectAccount` for the `prompt=login`
+  rule, and no longer names `ConsentOnRecord`, whose removal alone fails no rule.
 - A `MemoryCapReached` error of `check` and `states` says what the cone held and what
   finishing needs: the bytes each held state took, and an estimate of the states the cone
   reaches from its BFS layers. Once the frontier has shrunk for two depths past its peak,
@@ -302,6 +315,13 @@
 
 ### Fixed
 
+- `verify --prove` above one instance now offers every lemma candidate it would offer at
+  one instance (#231). Candidates were mined only at the run's bounds, and each mining run
+  stops at 50,000 states. On oidc-auth at two instances, 13 of 24 cones stopped there, and
+  the proof lost 2 of the 16 rules it proves at one instance. The prover now also mines every
+  cone at one instance per entity, where these cones finish, and offers both sets of
+  candidates. A kept `lemma:` that only the one-instance run offers ends with
+  `(mined at 1 instance per entity)`. oidc-auth proves 16 of 16 rules at both counts.
 - An integer `@default` outside `0..--int-range-max` on an Int, Money, Decimal, Date, or
   DateTime column that a rule reads is `error[IntLiteralOutOfBounds_<E>_<value>]`, as a
   literal there is: `@default(7) of stock is outside the bounded domain 0..5`. The column

@@ -180,11 +180,49 @@ pub fn lemma_invariants(
         .collect()
 }
 
-/// Proves `rules` (indices into `ts.invariants()`) for any number of rows. The checks of one
-/// scope are shared out over `solvers`, at least one; the proof does not depend on how many
-/// there are (`violated_each`).
+/// `ts`'s model built again at one instance per entity, for `prove` to mine lemmas from:
+/// a cone that passes the mining cap at `ts`'s bounds often finishes there. `None` when `ts`
+/// already has one instance, or when the build differs from `ts` in more than its bounds
+/// (errors, or other entities, vars, or rules), so the twin's ids are always `ts`'s.
+pub fn mining_twin(
+    model: &crate::model::SemanticModel,
+    scope: &crate::lifecycle::Scope,
+    ts: &TransitionSystem,
+) -> Option<TransitionSystem> {
+    if ts.bounds.instances.get() == 1 {
+        return None;
+    }
+    let bounds = crate::lifecycle::Bounds {
+        instances: std::num::NonZeroU8::MIN,
+        ..ts.bounds
+    };
+    let built = TransitionSystem::build(model, bounds, scope);
+    let twin = built.ts;
+    let same = !crate::lifecycle::has_errors(&built.diags)
+        && twin.entity_ids().count() == ts.entity_ids().count()
+        && ts
+            .entity_ids()
+            .all(|e| twin.entity(e).id == ts.entity(e).id)
+        && twin.var_ids().count() == ts.var_ids().count()
+        && ts
+            .var_ids()
+            .all(|v| twin.var(v).kind == ts.var(v).kind && twin.var(v).domain == ts.var(v).domain)
+        && twin.invariants().len() == ts.invariants().len()
+        && ts
+            .invariants()
+            .iter()
+            .zip(twin.invariants())
+            .all(|(a, b)| a.name == b.name);
+    same.then_some(twin)
+}
+
+/// Proves `rules` (indices into `ts.invariants()`) for any number of rows. Lemmas are mined
+/// from `ts` and from `twin` (`mining_twin`), when given. The checks of one scope are shared
+/// out over `solvers`, at least one; the proof does not depend on how many there are
+/// (`violated_each`).
 pub fn prove<S: Solver + Send>(
     ts: &TransitionSystem,
+    twin: Option<&TransitionSystem>,
     rules: &[usize],
     solvers: &mut [S],
     options: ProveOptions,
@@ -206,7 +244,7 @@ pub fn prove<S: Solver + Send>(
         })
         .chain(lemmas(ts).into_iter().map(|(o, f)| (o, f, false)))
         .chain(
-            mine::mine(ts, rules)
+            mine::mine(ts, twin, rules)
                 .into_iter()
                 .map(|m| (Origin::Lemma(m.text), m.formula, m.fine)),
         );

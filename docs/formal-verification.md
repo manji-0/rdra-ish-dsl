@@ -900,12 +900,15 @@ rules and lemmas that is inductive together (the Houdini algorithm):
 
 - An absent row holds base values, a row of an entity no use case deletes is never
   deleted, and a present row's key never names an absent row.
-- What BFS shows on each entity cone and each rule's cone at the run's bounds: the
-  patterns a present row takes, the values of each column and of each pair of columns,
-  the patterns a child row takes with the parent its key names (whole, per parent column,
+- What BFS shows on each entity cone and each rule's cone, at the run's bounds and again at
+  one instance per entity: the patterns a present row takes, the values of each column and
+  of each pair of columns, the patterns a child row takes with the parent its key names (whole, per parent column,
   and one column of each), and the pairs of patterns two children of one parent take. The
   pairs of one column of each are many on a model with many columns, so they join only
-  when a rule stays unproved without them, and the proof runs once more.
+  when a rule stays unproved without them, and the proof runs once more. Each mining run
+  stops at 50,000 states. A cone that passes this cap at the run's bounds usually finishes at
+  one instance, so mining there as well keeps the candidates a one-instance proof uses. A
+  lemma that only the one-instance run offers prints with `(mined at 1 instance per entity)`.
 
 A lemma is only a guess until it survives the same checks, so a capped exploration costs
 proofs, not soundness. The lemmas a proof kept print as `lemma:` lines.

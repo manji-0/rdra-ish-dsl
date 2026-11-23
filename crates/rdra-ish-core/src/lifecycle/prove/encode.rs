@@ -38,7 +38,7 @@ type R<T> = Result<T, Unsupported>;
 
 /// A state formula: `body` over every present row of `binders` (every row but `nil`, with
 /// `all_rows`).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub(super) struct Formula {
     pub binders: Vec<EntId>,
     pub body: Pred,
