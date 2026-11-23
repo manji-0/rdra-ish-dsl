@@ -45,3 +45,9 @@ dunce        = "1"
 # test
 insta        = { version = "1", features = ["toml"] }
 tempfile     = "3"
+
+# cargo mutants (.cargo/mutants.toml): release, with incremental builds, since each mutant
+# rebuilds only the crate it changed and what depends on it.
+[profile.mutants]
+inherits = "release"
+incremental = true
