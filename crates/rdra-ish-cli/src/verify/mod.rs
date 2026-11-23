@@ -18,11 +18,13 @@
 //! differently is a tool bug (`disagreements`): the run fails and keeps its specs. A check
 //! one engine leaves undecided is no disagreement.
 
+mod specs;
 mod tlc_tool;
 
+use self::specs::{out_names, spec_dir, write_specs_and_index, write_whole_specs};
 pub(crate) use self::tlc_tool::find_on_path;
 use self::tlc_tool::Tlc;
-use crate::export::{checked_system, tla_bounds, tla_file, Modules};
+use crate::export::{checked_system, tla_bounds, Modules};
 use crate::memory::{tlc_plan, Budgeted, VerifySplit};
 use crate::property_cone::{AfterPlain, ConeRun, PropertyCone, Verdict};
 use crate::prove::{find_z3, run_proof, Marks, ProofTally};
@@ -226,28 +228,6 @@ impl Ran {
         let states = self.run.distinct_states;
         run_line(module, checks, self.decision.as_str(), states, &self.notes)
     }
-}
-
-/// The whole-model module name, and the directory `-o` names: `-o X.tla` writes next to
-/// `X.tla` and names the whole-model module `X`; any other `-o` is a directory.
-fn out_names(out: Option<PathBuf>) -> (Option<PathBuf>, String) {
-    match out {
-        Some(path) => match tla_file(&path) {
-            Some((parent, stem)) => (Some(parent), stem),
-            None => (Some(path), "RdraSpec".to_string()),
-        },
-        None => (None, "RdraSpec".to_string()),
-    }
-}
-
-/// Creates the directory the specs go to: `out`, or a temp dir when `-o` names none.
-fn spec_dir(out: Option<PathBuf>) -> Result<PathBuf> {
-    let dir = out.unwrap_or_else(|| {
-        std::env::temp_dir().join(format!("rdra-ish-tlc-{}", std::process::id()))
-    });
-    fs::create_dir_all(&dir).with_context(|| format!("failed to create {}", dir.display()))?;
-    // TLC runs inside `dir`, so the metadir and java tmpdir paths must not be relative.
-    dunce::canonicalize(&dir).with_context(|| format!("failed to resolve {}", dir.display()))
 }
 
 /// Each distinct cone of a selected invariant or after-assert, in target order, named after
@@ -882,14 +862,6 @@ fn run_some(
     done.into_iter().map(|(_, r)| r).collect()
 }
 
-fn write_spec(dir: &Path, module: &str, tla: &str, cfg: &str) -> Result<()> {
-    for (ext, text) in [("tla", tla), ("cfg", cfg)] {
-        let path = dir.join(format!("{module}.{ext}"));
-        fs::write(&path, text).with_context(|| format!("failed to write {}", path.display()))?;
-    }
-    Ok(())
-}
-
 /// Each violated check of a cone run once, in model terms, from its first TLC trace. A trace
 /// that does not replay is a disagreement between the engines and says so.
 fn model_traces(
@@ -1269,61 +1241,6 @@ fn print_plan(
         );
     }
     line
-}
-
-/// Writes every job's specs, the whole-model module, and `cones.txt` under `dir`. Returns the
-/// index text and its path.
-fn write_specs_and_index<'a>(
-    dir: &Path,
-    jobs: impl IntoIterator<Item = &'a Job>,
-    whole: &Option<TlaBundle>,
-) -> Result<(String, PathBuf)> {
-    let mut index = String::new();
-    for job in jobs {
-        write_spec(dir, &job.module, &job.tla, &job.cfg)?;
-        index.push_str(&format!("{}.tla: {}\n", job.module, job.checks.join(" ")));
-        if let JobKind::PropertyCone(p) = &job.kind {
-            for extra in p.full.iter().chain(&p.wf) {
-                write_spec(dir, &extra.module, &extra.tla, &extra.cfg)?;
-                index.push_str(&format!("{}.tla: {}\n", extra.module, job.checks.join(" ")));
-            }
-        }
-    }
-    if let Some(w) = &whole {
-        write_spec(dir, &w.module_name, &w.tla, &w.cfg)?;
-    }
-    let index_path = dir.join("cones.txt");
-    fs::write(&index_path, &index)
-        .with_context(|| format!("failed to write {}", index_path.display()))?;
-    Ok((index, index_path))
-}
-
-/// Writes the whole-model module of each property in `open` that `cones.txt` does not list
-/// yet, and the index with them.
-fn write_whole_specs(
-    dir: &Path,
-    (index, index_path): (&mut String, &Path),
-    (ts, names): (&TransitionSystem, &TlaNames),
-    whole_modules: &[String],
-    open: &[usize],
-) -> Result<()> {
-    let wholes: Vec<Job> = open
-        .iter()
-        .filter(|&&i| {
-            let listed = format!("{}.tla: ", whole_modules[i]);
-            !index.lines().any(|l| l.starts_with(&listed))
-        })
-        .map(|&i| whole_job(ts, names, &whole_modules[i], i))
-        .collect();
-    for job in &wholes {
-        write_spec(dir, &job.module, &job.tla, &job.cfg)?;
-        index.push_str(&format!("{}.tla: {}\n", job.module, job.checks.join(" ")));
-    }
-    if !wholes.is_empty() {
-        fs::write(index_path, &index)
-            .with_context(|| format!("failed to write {}", index_path.display()))?;
-    }
-    Ok(())
 }
 
 /// Under `--with-tlc`, runs the properties TLC's cones leave undecided on the whole model,
