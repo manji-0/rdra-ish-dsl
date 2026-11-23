@@ -2609,8 +2609,8 @@ injected into the effects. Every constraint is its own `INVARIANT`; see
 `sets(UC, Entity.intCol == 3)` assigns an Int effect. Int, Money, Decimal, Date, and
 DateTime columns that something names become `0..5` variables in `states` and in the TLA+
 export (nullable ones add `null`). The export domain is a fixed approximation (default
-`0..5`, override with `--int-range-max`), and an Int literal outside it is
-`IntLiteralOutOfBounds`. `@default(0)` is valid on Int columns.
+`0..5`, override with `--int-range-max`), and an Int literal or an integer `@default`
+outside it is `IntLiteralOutOfBounds`. `@default(0)` is valid on Int columns.
 
 `invariant(Entity).when(conditions...).has/none(Related.col == val)` declares a to-many
 quantifier rule. It ranges over the present instances: `none` fails in a reachable state where the

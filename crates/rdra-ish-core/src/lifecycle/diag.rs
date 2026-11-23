@@ -4,7 +4,7 @@ use std::fmt;
 
 use super::lasso::Loop;
 use super::trace::{Inst, Trace};
-use super::types::{ActionOrigin, GuardWhy, InvText, LtlKind, ParamRole, Site};
+use super::types::{ActionOrigin, GuardWhy, InvText, LtlKind, ModelRef, ParamRole, Site};
 use crate::memory::MemorySize;
 use crate::model::EntityKey;
 
@@ -350,7 +350,8 @@ pub enum StateDiag {
         usecase: String,
         site: Site,
     },
-    /// An Int literal outside the bounded domain `0..=max`.
+    /// An Int literal outside the bounded domain `0..=max`: in a rule, or a numeric `@default`
+    /// (its site a `ModelRef::Column`).
     IntLiteralOutOfBounds { value: i64, max: u8, site: Site },
     /// A cross-entity constraint whose entities no relate path binds.
     UnbindableScope {
@@ -1050,12 +1051,16 @@ impl fmt::Display for StateDiag {
                 f,
                 "property {property}: .fair({usecase}) names a use case with no effect, so its fairness constrains no step"
             ),
-            StateDiag::IntLiteralOutOfBounds { value, max, .. } => {
-                write!(
+            StateDiag::IntLiteralOutOfBounds { value, max, site } => match &site.fact {
+                ModelRef::Column { column, .. } => write!(
+                    f,
+                    "@default({value}) of {column} is outside the bounded domain 0..{max}"
+                ),
+                _ => write!(
                     f,
                     "Int literal {value} is outside the bounded domain 0..{max}"
-                )
-            }
+                ),
+            },
             StateDiag::UnbindableScope {
                 constraint, reason, ..
             } => write!(f, "{constraint}: {reason}"),
