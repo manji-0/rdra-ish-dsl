@@ -577,12 +577,12 @@ What the limit counts:
   what a store's buffers take while they grow, and the passes that read a finished cone:
   its findings, `can_reach`, the reduction of a cone to its classes, and the liveness search
   of `eventually` and `leads_to`. Each pass takes memory in proportion to the cone's states
-  and moves, beside the cone it reads. Measured on macOS, where the peak resident set size
-  and the peak footprint agreed within 2%: `check --instance-count 2` on `clinic-ops`,
-  `patent-ops`, `food-permit-ops`, `insurance-claim-ops`, and `oidc-auth` peaked at 0.92 to
-  1.17 times the default `4GiB`, the findings adding under 3%. `verify --instance-count 2`
-  on `oidc-auth` with `--memory 2GiB` peaked at 1.85 times the limit, in single BFS runs
-  that took more than their count, and in the reductions it builds. Not measured on Linux.
+  and moves, beside the cone it reads. Measured once each on macOS, where the peak resident
+  set size and the peak footprint agreed within 2%: `check --instance-count 2` on
+  `clinic-ops`, `patent-ops`, `food-permit-ops`, `insurance-claim-ops`, and `oidc-auth`
+  peaked at 0.92 to 1.17 times the default `4GiB`, the findings adding under 3%.
+  `verify --instance-count 2` on `oidc-auth` with `--memory 2GiB` peaked at 1.85 times the
+  limit, while single BFS runs took more than their count. Not measured on Linux.
   The default limits stop no cone of the samples at the bounds their `// expect` headers
   name. `RDRA_ISH_MEMORY_STATS=1` prints a `memory:` line on stderr at each phase, with the
   bytes the stores hold then (`held=`) and have held at most (`peak=`).

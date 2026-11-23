@@ -314,10 +314,11 @@
   dropped first, and when the rest still crowd it, they are dropped too and run alone in
   their turn. Every cone stops at the same state as before, on any number of threads, but
   one: the `can_reach` cones of `verify` now leave room for the entity cones' results,
-  which stay held while they run, so under a tight limit they may stop sooner. The peak
-  memory of `check --instance-count 2` on five samples (macOS) went from 1.01 to 1.32
-  times the limit to 0.92 to 1.17 times. A single run still takes more than its count
-  while it grows (#242), and passes over a finished cone stay uncounted (#243) (#237).
+  which stay held while they run, so under a tight limit they may stop sooner. In one
+  run each of `check --instance-count 2` on five samples (macOS), the peak memory was 1.01
+  to 1.32 times the limit before and 0.92 to 1.17 times after. A single run still takes
+  more than its count while it grows (#242), and passes over a finished cone stay
+  uncounted (#243) (#237).
 - An integer `@default` outside `0..--int-range-max` on an Int, Money, Decimal, Date, or
   DateTime column that a rule reads is `error[IntLiteralOutOfBounds_<E>_<value>]`, as a
   literal there is: `@default(7) of stock is outside the bounded domain 0..5`. The column
