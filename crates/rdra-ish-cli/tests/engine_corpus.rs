@@ -516,9 +516,10 @@ impl Observed {
             .filter(mine)
             .find(|l| l.module.starts_with("RdraSpec_"))
             .or_else(|| lines.iter().find(mine));
-        match line.map(|l| l.verdict) {
-            Some(V::Counterexample) => V::Ok,
-            Some(v) => v,
+        match line.map(|l| (l.verdict, l.checks.len())) {
+            // A cone of several checks fails only those its errors name.
+            Some((V::Counterexample, n)) if n > 1 => V::Ok,
+            Some((v, _)) => v,
             // A `can_reach` prints a line only when it fails.
             None if can_reach && !tlc => V::Ok,
             None => V::None,
@@ -712,7 +713,8 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
                 at_bounds.push((*n, got));
             }
         }
-        // Rule 3: a rule z3 proves for any number of rows has no counterexample at any bound.
+        // Rules 4 and 5: a rule z3 proves for any number of rows has no counterexample at any
+        // bound.
         if z3 == Some(Z3::Proved) {
             for (n, v) in &at_bounds {
                 if *v == V::Counterexample {
@@ -744,7 +746,7 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
             }
         }
     }
-    // Rule 4: no engine disagreement and no counterexample that fails its own check, unless
+    // Rule 3: no engine disagreement and no counterexample that fails its own check, unless
     // a `known` line covers a check the fault line names.
     for line in main
         .faults

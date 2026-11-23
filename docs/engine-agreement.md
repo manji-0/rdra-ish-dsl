@@ -21,9 +21,11 @@ every case, whatever the case's header says.
 **Native against TLC**, on `verify --with-tlc`:
 
 1. Each check that both engines decide gets the same verdict. `not decided` from either
-   engine is no disagreement, since that engine gave no verdict. TLC checks no `stable`,
-   `unchanged`, `precedes`, `can_reach`, or state-model finding, so those have no TLC
-   verdict.
+   engine is no disagreement, since that engine gave no verdict. `verify --with-tlc`
+   starts no TLC run for `stable`, `unchanged`, `precedes`, `can_reach`, or a state-model
+   finding, so those have no TLC verdict in the corpus. TLC can check the first three on
+   the specs `export` writes, and `engine_equivalence`'s `explored_agrees` compares them
+   there; the corpus's `safety_` cases rest on their stated verdicts.
 2. The rule holds per run as well as for the final verdict. Each property line names its
    runs (`Cone_P`, `Cone_P_Full`, `Cone_P_WF`, `RdraSpec_P`). The native and TLC lines must
    agree on each run that both decided. A final verdict can agree while two runs disagree
