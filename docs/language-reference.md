@@ -2689,12 +2689,12 @@ spelling:
 | `.at_most(0, ..)`, `.exactly(0, ..)` | `QuantifierCountSpelling` | `.none(..)` |
 | `n` that is not a whole number from 1 to 255 (`.at_most(x, ..)`, `.at_most(300, ..)`) | `QuantifierCountInvalid` | a whole number |
 
-`.at_most(n)` and `.exactly(n)` can fail only where `n + 1` rows of the counted entity
-exist, so they need `n + 1` slots of it. When no reachable state has them, the rule is
-`Vacuous_<rule>`, whose message names the bound and the `--instances Entity=k` that lifts it
-(see [Per-entity instance counts](./cli-reference.md#per-entity-instance-counts)).
-`.at_least(n)` on an entity with fewer than `n` slots fails wherever it applies, an artifact
-of the bound, and the build warns `CountAboveBound` with the same flag. TLC checks the
+`.at_most(n)` can fail only where `n + 1` rows of the counted entity exist, so it needs
+`n + 1` slots of it. When no reachable state has them, the rule is `Vacuous_<rule>`, whose
+message names the bound and the `--instances Entity=k` that lifts it (see
+[Per-entity instance counts](./cli-reference.md#per-entity-instance-counts)).
+`.at_least(n)` and `.exactly(n)` on an entity with fewer than `n` slots fail wherever they
+apply, an artifact of the bound, and the build warns `CountAboveBound` with the same flag. TLC checks the
 count with `Cardinality` (the module extends `FiniteSets`), and `--prove` unrolls a count of
 up to 8 rows into distinct witnesses: `.at_most(7, ..)` is the largest `at_most` it proves.
 See [design/counting-rules.md](./design/counting-rules.md).

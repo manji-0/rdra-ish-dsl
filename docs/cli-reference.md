@@ -588,10 +588,10 @@ a `1..` range under a pre-existing parent) needs as many slots as its parent; ot
 are the `IdentityStartSlots` error. Without `--instances` and the tables every output is the
 same as before the flag existed.
 
-A counted rule names the count it needs. `.at_most(3, Loan)`, `.exactly(3, Loan)`, and
-a card `0..3:1` break only with four rows of `Loan`; below that they hold vacuously, and
-the `Vacuous_*` warning ends `(Loan has 2 slots; --instances Loan=4 gives it 4)`.
-`.at_least(3, Loan)` with fewer slots fails wherever it applies, and the
+A counted rule names the count it needs. `.at_most(3, Loan)` and a card `0..3:1` break
+only with four rows of `Loan`; below that they hold vacuously, and the `Vacuous_*` warning
+ends `(Loan has 2 slots; --instances Loan=4 gives it 4)`. `.at_least(3, Loan)` and
+`.exactly(3, Loan)` with fewer slots fail wherever they apply, and the
 `CountAboveBound` warning names the same flag (see
 [Counted quantifiers](./language-reference.md#counted-quantifiers)).
 

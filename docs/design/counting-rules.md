@@ -226,9 +226,9 @@ children.
 
 ### Vacuity
 
-`at_most(n)` and `exactly(n)` can fail only in a state with `n + 1` rows of the counted
-entity. Each gets the premise "`n + 1` rows of the counted entity", a count over every
-present row with no link or condition. When no reachable state meets it, the rule is
+`at_most(n)` can fail only in a state with `n + 1` rows of the counted entity. It gets the
+premise "`n + 1` rows of the counted entity", a count over every present row with no link
+or condition. When no reachable state meets it, the rule is
 `Vacuous_<rule>` (`VacuousRule`, a warning), as `Unique_*` is when no state has two rows.
 `MaxCard_*` gets the same premise. When the counted entity's count is `n` or less, the
 premise text names the bound and the flag that lifts it:
@@ -237,9 +237,12 @@ premise text names the bound and the flag that lifts it:
 warning[Vacuous_Quantifier_Member_0]: Quantifier_Member_0 holds vacuously: no reachable state has a row of Member with 4 rows of Loan (Loan has 2 slots; --instances Loan=4 gives it 4)
 ```
 
-`at_least(n)` with fewer than `n` slots of the counted entity is the opposite: the rule
-fails in every state where it applies, and its counterexample is an artifact of the
-bound. The build reports `CountAboveBound`, a warning, naming the entity, `n`, and the
+`exactly(n)` fails with fewer rows too, so it gets no premise: a premise of `n + 1` rows
+would call a rule vacuous that the states below `n` exercise.
+
+`at_least(n)` and `exactly(n)` with fewer than `n` slots of the counted entity are the
+opposite: the rule fails in every state where it applies, and its counterexample is an
+artifact of the bound. The build reports `CountAboveBound`, a warning, naming the entity, `n`, and the
 flag. The counterexample is still reported; the warning says why it is not the domain's.
 
 Rejected: **reporting nothing at one instance, as `Unique_*` does.** `Unique_*` drops its

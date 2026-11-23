@@ -105,8 +105,9 @@
   `check`, `states`, `verify` (TLC through `Cardinality`, its module extending
   `FiniteSets`), and `verify --prove` (counts of up to 8 rows, unrolled into distinct
   witnesses) check both; generated code checks a counted guard over the related rows'
-  list. A count that needs more rows than the bounds give is `Vacuous_<rule>`, naming the
-  `--instances` that lifts it, or `CountAboveBound` for `at_least`. The corpus cases
+  list. An `at_most` count or a maximum that needs more rows than the bounds give is
+  `Vacuous_<rule>`, naming the `--instances` that lifts it; `at_least` and `exactly` above
+  the bound warn `CountAboveBound`. The corpus cases
   `safety_at_most_bound`, `safety_at_least_guard`, and `safety_count_per_entity` check it
   with the native checker at 1 to 4 instances, TLC, and z3, and the sample
   `formal-verification/counting_rules.rdra` shows it. No sample changes verdict.

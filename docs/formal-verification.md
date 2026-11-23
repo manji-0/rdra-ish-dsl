@@ -888,7 +888,10 @@ present)`, a copy) takes any number. Both add steps and remove none, so a proof 
 at every bound. Enum columns keep their declared values. A guard
 or write the encoding cannot state is widened the same way (the guard is dropped, the write
 takes any value) and printed as a `note:` line. A rule the encoding cannot state is
-`out of scope`, never approximated.
+`out of scope`, never approximated. A count (`.at_most`, `.at_least`, `.exactly`,
+`MaxCard_*`) is stated as "at least `k` distinct present rows", which is exact for `k` up
+to 8: `.at_most(7, ..)` is the largest `at_most` stated, and a larger count is a guard
+widened or a rule out of scope.
 
 Most true rules are not inductive alone: a step breaks them only from a state no run
 reaches. The prover therefore adds candidate **lemmas** and keeps the largest set of
