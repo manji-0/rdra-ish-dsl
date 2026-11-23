@@ -268,6 +268,7 @@ impl TransitionSystem {
             undecided: Vec::new(),
             tally: Tally::default(),
         };
+        crate::memory::mark("targets: findings");
         let mut runs: Vec<RunsSoFar> = self.actions.iter().map(|_| RunsSoFar::default()).collect();
         let mut entity_cones = Vec::new();
         for &(target, at) in &answered {
@@ -281,6 +282,7 @@ impl TransitionSystem {
                 _ => out.verdicts.extend(self.verdict(target, &cones[at])),
             }
         }
+        crate::memory::mark("targets: findings read");
         out.cones = cones;
         out.tally.entity_cones = entity_cones.len();
         // Whether an action runs is judged on entity cones only: a run of other targets alone

@@ -51,7 +51,7 @@ use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_output::Outcome;
 use anyhow::Result;
 use rdra_ish_core::lifecycle::{Caps, Scope, Target};
-use rdra_ish_core::memory::MemoryPool;
+use rdra_ish_core::memory::{mark, MemoryPool};
 use rdra_ish_core::{ResolvedProgram, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
 use std::fs;
@@ -180,7 +180,9 @@ pub fn run(
         budget: whole_time,
         states: max_states,
     };
+    mark("verify: cone jobs");
     let mut jobs = cone_jobs(&ts, &names, &targets, &mut modules, caps);
+    mark("verify: cone jobs built");
     let cones = jobs.len();
     let line = print_plan(
         model,
@@ -194,6 +196,7 @@ pub fn run(
     let mut whole_modules = Vec::new();
     if temporal {
         jobs.extend(property_jobs(&ts, &names, &mut modules, caps));
+        mark("verify: property jobs built");
         whole_modules = (0..ts.properties().len())
             .map(|i| modules.claim(&format!("{whole_stem}_{}", names.property(i))))
             .collect();
@@ -222,9 +225,13 @@ pub fn run(
     let (bfs, natives, explored, proof, cones_ran) = std::thread::scope(|threads| {
         let cones = start
             .map(|(tlc, dir)| threads.spawn(|| run_cones(tlc, dir, &modules, &jobs, memory.cones)));
+        mark("verify: state models");
         let bfs = state_models(program, model, &ts, scope, &selection, caps);
+        mark("verify: safety cones");
         let (safety, mut vacuous) = bfs_cones(&ts, &jobs, caps);
+        mark("verify: property cones");
         let (properties, property_vacuous) = native_properties(&ts, &jobs, caps);
+        mark("verify: explored properties");
         // A `--buc` drops use cases that may reach a premise.
         if scope.bucs.is_empty() {
             vacuous.extend(property_vacuous);
@@ -246,7 +253,9 @@ pub fn run(
                 _ => None,
             })
             .collect();
+        mark("verify: whole-model properties");
         let wholes = native_wholes(&ts, &open, caps, budget);
+        mark("verify: proof");
         let proof = match (&prove, z3) {
             (Some(Prove { deny_unproved, .. }), Some(z3)) => z3.and_then(|z3| {
                 let marks = Marks::of(model, &ts);
@@ -289,6 +298,7 @@ pub fn run(
     if jobs.is_empty() && end.explored.checked == 0 && ts.reach_properties().is_empty() {
         println!("nothing to check");
     }
+    mark("verify: report");
     end.safety = report_bfs_cones(program, model, &jobs, &natives.safety);
     end.temporal = report_properties(program, model, &ts, &jobs, &natives, &whole_modules);
     let undecided = natives.undecided_lines(&names);

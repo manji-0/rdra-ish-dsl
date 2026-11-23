@@ -123,6 +123,8 @@ pub struct MemoryPool {
     /// How to raise `limit`, named in the message of a run that stops.
     raise: &'static str,
     held: AtomicU64,
+    /// The most `held` has been.
+    peak: AtomicU64,
     /// The pool this one is carved from, which counts what this one holds as well.
     parent: Option<&'static MemoryPool>,
 }
@@ -141,13 +143,16 @@ impl MemoryPool {
         share: MemorySize,
         raise: &'static str,
     ) -> &'static MemoryPool {
-        Box::leak(Box::new(MemoryPool {
+        let pool: &'static MemoryPool = Box::leak(Box::new(MemoryPool {
             limit,
             room: share.bytes(),
             raise,
             held: AtomicU64::new(0),
+            peak: AtomicU64::new(0),
             parent: None,
-        }))
+        }));
+        let _ = TRACED.set(pool);
+        pool
     }
 
     /// A pool that lets its runs hold `room` bytes and names this pool's limit. What its runs
@@ -156,6 +161,7 @@ impl MemoryPool {
         Box::leak(Box::new(MemoryPool {
             room,
             held: AtomicU64::new(0),
+            peak: AtomicU64::new(0),
             parent: Some(self),
             ..*self
         }))
@@ -179,12 +185,26 @@ impl MemoryPool {
             .held
             .try_update(Ordering::Relaxed, Ordering::Relaxed, |held| {
                 held.checked_add(bytes).filter(|after| *after <= self.room)
-            })
-            .is_ok();
-        if let (true, Some(parent)) = (taken, self.parent) {
-            parent.held.fetch_add(bytes, Ordering::Relaxed);
+            });
+        let Ok(before) = taken else {
+            return false;
+        };
+        self.peak.fetch_max(before + bytes, Ordering::Relaxed);
+        if let Some(parent) = self.parent {
+            let before = parent.held.fetch_add(bytes, Ordering::Relaxed);
+            parent.peak.fetch_max(before + bytes, Ordering::Relaxed);
         }
-        taken
+        true
+    }
+
+    /// The bytes the pool's runs hold now.
+    pub fn held(&self) -> u64 {
+        self.held.load(Ordering::Relaxed)
+    }
+
+    /// The most bytes the pool's runs have held at once.
+    pub fn peak(&self) -> u64 {
+        self.peak.load(Ordering::Relaxed)
     }
 
     fn release(&self, bytes: u64) {
@@ -193,6 +213,22 @@ impl MemoryPool {
             parent.held.fetch_sub(bytes, Ordering::Relaxed);
         }
     }
+}
+
+/// The first command pool the process made, which `mark` reports on.
+static TRACED: std::sync::OnceLock<&'static MemoryPool> = std::sync::OnceLock::new();
+
+/// Under `RDRA_ISH_MEMORY_STATS`, one line on stderr: `phase`, the Unix time in
+/// milliseconds, and what the command's pool holds now and has held at most.
+pub fn mark(phase: &str) {
+    if std::env::var_os("RDRA_ISH_MEMORY_STATS").is_none() {
+        return;
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis());
+    let (held, peak) = TRACED.get().map_or((0, 0), |p| (p.held(), p.peak()));
+    eprintln!("memory: {phase} t={now} held={held} peak={peak}");
 }
 
 /// Pools compare by identity: two runs share a budget only when they charge one pool.

@@ -95,7 +95,9 @@ pub fn run() -> Result<()> {
                 manifest.as_ref(),
                 Budgeted::Check,
             );
+            rdra_ish_core::memory::mark("check: explore");
             let lifecycle = state_findings(&program, &model, &scope, bounds.bounds()?, caps);
+            rdra_ish_core::memory::mark("check: done");
             eprintln!("{}", lifecycle.bounds);
             for diag in rdra_ish_core::consistency_diagnostics(&model) {
                 let as_error = strict && is_strict_access_gap(&diag.error);
