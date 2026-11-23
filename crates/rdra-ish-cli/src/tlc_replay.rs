@@ -2,7 +2,7 @@
 //! relation BFS uses, and the violated check built by the code BFS reports with.
 
 use rdra_ish_core::lifecycle::{
-    ActId, Loop, ReplayError, State, StateDiag, Target, TransitionSystem,
+    ActId, Loop, LtlKind, ReplayError, State, StateDiag, Target, TransitionSystem,
 };
 use rdra_ish_emit::tla::TlaNames;
 
@@ -31,7 +31,9 @@ pub fn explain_violation(
 }
 
 /// The violation of `properties()[i]` that TLC's lasso shows, in a run that checks that
-/// property alone. TLC does not name the property it reports, so the run says which.
+/// property alone. TLC does not name the property it reports, so the run says which. TLC
+/// checks `stable` and `unchanged` as an action property and `precedes` as an invariant, and
+/// prints a finite trace for each.
 pub fn explain_property(
     ts: &TransitionSystem,
     names: &TlaNames,
@@ -39,11 +41,21 @@ pub fn explain_property(
     v: &Violation,
 ) -> Result<StateDiag, String> {
     let name = names.property(i);
-    if v.kind != ViolationKind::Temporal {
+    let kind = ts.properties()[i].formula.kind();
+    let expected = match kind {
+        LtlKind::Stable | LtlKind::Unchanged => ViolationKind::ActionProperty,
+        LtlKind::Precedes => ViolationKind::Invariant,
+        LtlKind::Always | LtlKind::Eventually | LtlKind::LeadsTo => ViolationKind::Temporal,
+    };
+    if v.kind != expected {
         return Err(format!("TLC reports `{}` in the run of {name}", v.line));
     }
     let (states, mut actions) = decode(ts, names, v)?;
-    let tail = match v.lasso.as_ref().ok_or("TLC printed no lasso")? {
+    let lasso = match kind.is_explored() {
+        true => &Lasso::Stutter,
+        false => v.lasso.as_ref().ok_or("TLC printed no lasso")?,
+    };
+    let tail = match lasso {
         Lasso::Stutter => Loop::Stutter,
         Lasso::Back { to, label } => {
             actions.push(names.action_index(ts, label).ok_or_else(|| {

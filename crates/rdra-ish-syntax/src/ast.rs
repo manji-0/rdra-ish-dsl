@@ -488,6 +488,37 @@ pub enum AstTemporalFormula {
     /// `can_reach(p)`: from every reachable state with the instance present, some path
     /// reaches `p` (CTL `AG (present => EF p)`).
     CanReach(Expr),
+    /// `stable(p)`: once `p` holds it keeps holding while the instance is present.
+    Stable(Expr),
+    /// `unchanged(E.col, ..)` and the `.when(p)` written directly after it: while `p` holds
+    /// a step leaves the columns as they are. `None` without `.when`, which is `p` true.
+    Unchanged {
+        columns: Vec<Operand>,
+        when: Option<Expr>,
+    },
+    /// `precedes(p, q)`: `q` holds only in a state where `p` holds or held before.
+    Precedes {
+        first: Expr,
+        then: Expr,
+    },
+}
+
+impl AstTemporalFormula {
+    /// The state predicates of the formula, left to right.
+    pub fn exprs(&self) -> Vec<&Expr> {
+        match self {
+            AstTemporalFormula::Always(e)
+            | AstTemporalFormula::Eventually(e)
+            | AstTemporalFormula::Stable(e)
+            | AstTemporalFormula::CanReach(e) => vec![e],
+            AstTemporalFormula::LeadsTo {
+                antecedent: a,
+                consequent: b,
+            }
+            | AstTemporalFormula::Precedes { first: a, then: b } => vec![a, b],
+            AstTemporalFormula::Unchanged { when, .. } => when.iter().collect(),
+        }
+    }
 }
 
 /// A `property` declaration binding a temporal formula to an id/label.

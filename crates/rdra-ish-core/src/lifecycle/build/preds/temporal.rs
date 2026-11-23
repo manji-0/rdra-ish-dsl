@@ -129,6 +129,32 @@ impl Builder<'_> {
                     });
                     continue;
                 }
+                TemporalFormula::Stable(e) => {
+                    Ltl::Stable(self.temporal(&prop.id, e, &mut binding, &site))
+                }
+                TemporalFormula::Unchanged { columns, when } => {
+                    let mut terms = Vec::new();
+                    for col in columns {
+                        let at = Self::bind(&mut binding, col.entity);
+                        // A column no var holds never changes.
+                        if let Some((t, _)) = self.read_slot(col.entity, &col.column, at, &site) {
+                            terms.push(t);
+                        }
+                    }
+                    let when = match when {
+                        Some(e) => self.temporal(&prop.id, e, &mut binding, &site),
+                        None => Pred::True,
+                    };
+                    Ltl::Unchanged {
+                        when,
+                        columns: terms,
+                    }
+                }
+                TemporalFormula::Precedes { first, then } => {
+                    let p = self.temporal(&prop.id, first, &mut binding, &site);
+                    let q = self.temporal(&prop.id, then, &mut binding, &site);
+                    Ltl::Precedes(p, q)
+                }
             };
             for uk in &prop.fair {
                 if !self.uc_actions.contains_key(uk) && !self.active_ucs.contains(uk) {

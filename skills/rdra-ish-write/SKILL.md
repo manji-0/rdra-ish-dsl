@@ -189,6 +189,7 @@ kinds fail to parse, with a hint naming the replacement.
 | `invariant` (multi-entity) | `(Entity...).when(...).then(...)[.along(...)[.role(role)] \| .global()]` | required co-occurrence across entities |
 | `invariant` (quantifier) | `(Entity).when(...).none/has(...)` | to-many quantifier over related rows (prefer `Entity.col`) |
 | `property` | `Name ["label"] always\|eventually\|leads_to(...)[.along(...)[.role(role)] \| .global()][.fair(UC, ...)]` | temporal path property, checked by `verify` only; over several entities `.along` limits it to linked rows |
+| `property` | `Name ["label"] stable(p) \| unchanged(E.col, ..)[.when(p)] \| precedes(p, q)` then `[.along(...)[.role(role)] \| .global()]` | order and stability: `p` keeps holding, the columns keep their values while `p` holds, `q` only after `p`; `verify` decides each by BFS, `check` never; no `.fair` |
 | `after` | `(UseCase).assert(...)` | predicate on the state each run of the use case leaves, read after its last step |
 | `relate` | `(Entity, Entity, 1:1\|1:N\|N:1\|N:M)` | ER relation and generated key; see below |
 | `has_permission` | `(Actor, Permission)` | actor-side grant |

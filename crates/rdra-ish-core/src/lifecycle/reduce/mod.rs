@@ -501,8 +501,7 @@ impl TransitionSystem {
         self.properties = properties
             .into_iter()
             .filter(|p| {
-                let preds: Vec<&Pred> = p.preds().collect();
-                reads_ok(self, &p.binders, &preds)
+                self.property_reads(p).is_subset(&readable)
                     && self
                         .actions
                         .iter()
