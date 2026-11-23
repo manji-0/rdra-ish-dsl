@@ -143,16 +143,20 @@ while IFS= read -r root; do
     got_tlc="${got_tlc:-none}"
     got_names="$(error_names "$work/out")"
     [[ "$cmd" == check ]] && want_tlc="$got_tlc"
+    # Under the test hook RDRA_ISH_NATIVE, BFS decides every safety check and TLC runs only
+    # `eventually` and `leads_to`, so its line and its verdict are not compared: the exit
+    # status and the error names are.
+    [[ -n "${RDRA_ISH_NATIVE:-}" ]] && want_tlc="$got_tlc"
     # A TLC counterexample must carry TLC's own violation line, not only our rendering.
-    native=true
+    tlc_line=true
     if [[ "$want_tlc" == counterexample ]] && ! grep -q '^violated: Error: .* violated' "$work/out"; then
-      native=false
+      tlc_line=false
     fi
     # An error without a name cannot be matched against the header.
     unnamed="$(grep -c '^error: ' "$work/out")"
 
     label="$cmd${flags:+ $flags}"
-    if [[ "$status" == "$want_exit" && "$got_tlc" == "$want_tlc" && "$got_names" == "$want_names" && "$unnamed" == 0 ]] && $native; then
+    if [[ "$status" == "$want_exit" && "$got_tlc" == "$want_tlc" && "$got_names" == "$want_names" && "$unnamed" == 0 ]] && $tlc_line; then
       verdict=ok
     else
       verdict=MISMATCH
@@ -162,7 +166,7 @@ while IFS= read -r root; do
     if [[ "$verdict" == MISMATCH ]]; then
       echo "  expected: exit=$want_exit tlc_result=$want_tlc errors=[$want_names]  ($exp)"
       echo "  actual:   exit=$status tlc_result=$got_tlc errors=[$got_names]"
-      $native || echo "  no TLC 'violated: Error: ...' line for the counterexample"
+      $tlc_line || echo "  no TLC 'violated: Error: ...' line for the counterexample"
       [[ "$unnamed" == 0 ]] || echo "  $unnamed unnamed 'error: ...' line(s); every error must print error[<name>]:"
       tail -n 40 "$work/out" | sed 's/^/  | /'
     fi

@@ -9,6 +9,12 @@
 //! `.fair` names whole, so their weak fairness restricts to it; the whole model's
 //! `WF_vars(Next)` does not, which is what `property_cone::Verdict` decides. Each property
 //! runs alone, because TLC does not say which property its lasso violates.
+//!
+//! Under the test hook `RDRA_ISH_NATIVE` (phase 1 of the native checker plan, #168) BFS
+//! decides every safety check: each invariant and after-assert cone on the same reduced
+//! system TLC would check (`bfs_cones`), and each `always` as an invariant over its present
+//! binders, beside the forms above. TLC runs only `eventually` and `leads_to`, so its
+//! `tlc_result:` line prints only when one of those ran.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -21,8 +27,8 @@ use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
 use rdra_ish_core::lifecycle::{
-    ActId, Bounds, BoundsLine, Caps, Cone, Diag, NotChecked, PropertyVerdict, Scope, Selection,
-    Severity, StateDiag, Target, TransitionSystem, VarSet,
+    ActId, Bounds, BoundsLine, Caps, ComponentRun, Cone, Diag, LtlKind, NotChecked,
+    PropertyVerdict, Scope, Selection, Severity, StateDiag, Target, TransitionSystem, VarSet,
 };
 use rdra_ish_core::{in_parallel, jobs, ResolvedProgram, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaBundle, TlaNames};
@@ -36,6 +42,16 @@ use crate::tlc_env::{current_user_heap, tlc_env_sized, Heap};
 use crate::tlc_output::{progress, summarize, Outcome, TlcRun};
 use crate::tlc_replay::{explain_property, explain_violation};
 use rdra_ish_core::memory::MemoryPool;
+
+/// The test hook that has BFS decide every safety check of `verify` without TLC. It is not a
+/// setting, as `RDRA_ISH_NO_REDUCE` is not one: phase 3 makes the native path the default.
+const NATIVE_HOOK: &str = "RDRA_ISH_NATIVE";
+
+/// `verify` decides a property of this kind by BFS on its cone and starts no TLC run for it:
+/// the forms `LtlKind::is_explored` names, and an `always` under `RDRA_ISH_NATIVE`.
+fn decided_by_bfs(kind: LtlKind, native: bool) -> bool {
+    kind.is_explored() || (native && matches!(kind, LtlKind::Always))
+}
 
 /// Distinct states a whole-model temporal run may reach before it is stopped. Separate from
 /// `Caps::VERIFY`, the BFS cap per cone: TLC's memory and time grow with this one, and
@@ -276,9 +292,10 @@ fn property_jobs(
     names: &TlaNames,
     modules: &mut Modules,
     caps: Caps,
+    native: bool,
 ) -> Vec<Job> {
     let tlc: Vec<usize> = (0..ts.properties().len())
-        .filter(|&i| !ts.properties()[i].formula.kind().is_explored())
+        .filter(|&i| !decided_by_bfs(ts.properties()[i].formula.kind(), native))
         .collect();
     let plain: Vec<String> = tlc
         .iter()
@@ -928,15 +945,21 @@ pub fn run_tlc(
         memory.bfs,
         Box::leak(raise.into_boxed_str()),
     ));
+    let native = std::env::var_os(NATIVE_HOOK).is_some();
     let mut jobs = cone_jobs(&ts, &names, &targets, &mut modules, caps);
     let cones = jobs.len();
+    // Under the hook BFS decides the safety cones, and `jobs` keeps only what TLC runs.
+    let bfs_jobs = match native {
+        true => std::mem::take(&mut jobs),
+        false => Vec::new(),
+    };
     let line = print_plan(
         model,
         &ts,
         scope,
         &selection,
         bounds,
-        (cones, temporal),
+        (cones, temporal, native),
         budget,
     );
     // The whole-model module with every property, for a run by hand; verify runs a property
@@ -944,7 +967,7 @@ pub fn run_tlc(
     let whole = temporal.then(|| tla::print(&ts, PrintMode::Temporal, &whole_name));
     let mut whole_modules = Vec::new();
     if temporal {
-        jobs.extend(property_jobs(&ts, &names, &mut modules, caps));
+        jobs.extend(property_jobs(&ts, &names, &mut modules, caps, native));
         whole_modules = (0..ts.properties().len())
             .map(|i| modules.claim(&format!("{whole_stem}_{}", names.property(i))))
             .collect();
@@ -952,27 +975,29 @@ pub fn run_tlc(
     // TLC starts on the cones while BFS and the proof run here: none reads what another
     // finds. A failure to write the specs or to find a tool is reported where it was before
     // the engines ran side by side, after what BFS and the proof print, and starts no TLC run.
-    let written = write_specs_and_index(&dir, &jobs, &whole);
+    let written = write_specs_and_index(&dir, bfs_jobs.iter().chain(&jobs), &whole);
     let tlc = (!jobs.is_empty()).then(|| Tlc::find(tlc_jar));
     let z3 = prove.as_ref().map(|p| find_z3(p.z3.clone()));
     let start = match (&written, &tlc, &z3) {
         (Ok(_), Some(Ok(tlc)), None | Some(Ok(_))) => Some(tlc),
         _ => None,
     };
-    let (bfs, explored, proof, cones_ran) = std::thread::scope(|threads| {
+    let (bfs, safety_cones, explored, proof, cones_ran) = std::thread::scope(|threads| {
         let cones =
             start.map(|tlc| threads.spawn(|| run_cones(tlc, &dir, &modules, &jobs, memory.cones)));
         let bfs = state_models(program, model, &ts, scope, &selection, caps);
+        let (safety_cones, mut vacuous) = bfs_cones(&ts, &bfs_jobs, caps);
         // A `--buc` drops use cases that may reach a premise.
         if scope.bucs.is_empty() {
-            for d in vacuous_checks(&ts, &jobs, caps) {
+            vacuous.extend(vacuous_checks(&ts, &jobs, caps));
+            for d in vacuous {
                 if let Some(text) = render_violation(program, model, &d.diag, TraceSource::Bfs) {
                     eprintln!("{}", Finding::new(&d.diag, &[], text));
                 }
             }
         }
         let explored = match temporal {
-            true => explored_properties(program, model, &ts, caps),
+            true => explored_properties(program, model, &ts, caps, native),
             false => Explored::default(),
         };
         let proof = match (&prove, z3) {
@@ -986,11 +1011,12 @@ pub fn run_tlc(
             Ok(ran) => ran,
             Err(panic) => std::panic::resume_unwind(panic),
         });
-        (bfs, explored, proof, cones_ran)
+        (bfs, safety_cones, explored, proof, cones_ran)
     });
-    let end = End {
+    let mut end = End {
         bfs,
         explored,
+        safety: Safety::default(),
         deny_undecided,
         proof: proof?,
     };
@@ -999,17 +1025,25 @@ pub fn run_tlc(
     if keep {
         println!(
             "wrote {} specs and {}",
-            jobs.len() + usize::from(whole.is_some()),
+            bfs_jobs.len() + jobs.len() + usize::from(whole.is_some()),
             index_path.display()
         );
     }
 
-    if jobs.is_empty() {
+    if jobs.is_empty() && bfs_jobs.is_empty() {
         if !keep {
             let _ = fs::remove_dir_all(&dir);
         }
         println!("nothing to check");
         println!("tlc_result: ok");
+        return end.finish(&line, &[]);
+    }
+    end.safety = report_bfs_cones(program, model, &bfs_jobs, &safety_cones);
+    // No TLC run: no `tlc_result:` line either.
+    if jobs.is_empty() {
+        if !keep {
+            let _ = fs::remove_dir_all(&dir);
+        }
         return end.finish(&line, &[]);
     }
     let tlc = tlc.expect("a run with jobs looks for TLC")?;
@@ -1065,7 +1099,7 @@ fn print_plan(
     scope: &Scope,
     selection: &Selection,
     bounds: Bounds,
-    (cones, temporal): (usize, bool),
+    (cones, temporal, native): (usize, bool, bool),
     budget: Duration,
 ) -> BoundsLine {
     let line =
@@ -1080,8 +1114,12 @@ fn print_plan(
     let explored = ts
         .properties()
         .iter()
-        .filter(|p| p.formula.kind().is_explored())
+        .filter(|p| decided_by_bfs(p.formula.kind(), native))
         .count();
+    let explored_what = match native {
+        true => "safety properties",
+        false => "order and stability properties",
+    };
     match (temporal, ts.properties().len() - explored, explored) {
         (_, 0, 0) => println!("temporal properties: none"),
         (true, n, m) => {
@@ -1092,7 +1130,7 @@ fn print_plan(
                 );
             }
             if m > 0 {
-                println!("order and stability properties: {m}, each decided by BFS on its cone");
+                println!("{explored_what}: {m}, each decided by BFS on its cone");
             }
         }
         (false, n, m) => println!(
@@ -1125,9 +1163,9 @@ fn print_plan(
 
 /// Writes every job's specs, the whole-model module, and `cones.txt` under `dir`. Returns the
 /// index text and its path.
-fn write_specs_and_index(
+fn write_specs_and_index<'a>(
     dir: &Path,
-    jobs: &[Job],
+    jobs: impl IntoIterator<Item = &'a Job>,
     whole: &Option<TlaBundle>,
 ) -> Result<(String, PathBuf)> {
     let mut index = String::new();
@@ -1362,19 +1400,18 @@ struct Explored {
     capped: usize,
 }
 
-/// Each property `LtlKind::is_explored` names, decided by BFS on its cone: a line per
-/// property, and each violation rendered with the shortest trace to the step or state that
-/// breaks it.
+/// Each property `decided_by_bfs` names, decided by BFS on its cone: a line per property, and
+/// each violation rendered with the shortest trace to the step or state that breaks it.
 fn explored_properties(
     program: &ResolvedProgram,
     model: &SemanticModel,
     ts: &TransitionSystem,
     caps: Caps,
+    native: bool,
 ) -> Explored {
     let mut out = Explored::default();
     for (i, p) in ts.properties().iter().enumerate() {
-        let kind = p.formula.kind();
-        if !kind.is_explored() {
+        if !decided_by_bfs(p.formula.kind(), native) {
             continue;
         }
         let verdict = ts.decide_property(i, caps);
@@ -1439,10 +1476,180 @@ fn vacuous_checks(ts: &TransitionSystem, jobs: &[Job], caps: Caps) -> Vec<Diag> 
     found.into_iter().flatten().collect()
 }
 
+/// A safety cone decided by BFS under `RDRA_ISH_NATIVE`: the explorer on the module's own
+/// system, the reduced cone TLC would check, at verify's bounds and caps.
+enum BfsCone {
+    Ran {
+        states: usize,
+        /// The violated invariants and after-asserts, each with BFS's shortest trace.
+        found: Vec<Diag>,
+        /// False when the run stopped at the state cap or the memory limit.
+        complete: bool,
+    },
+    /// The cone at this index of the jobs covers this one (`covering`) and passed.
+    Covered(usize),
+}
+
+impl BfsCone {
+    /// The verdict of `run`, a run of `cone`'s system.
+    fn of(ts: &TransitionSystem, cone: &ConeSystem, run: &ComponentRun) -> BfsCone {
+        // The module checks every invariant and after-assert its system holds, as TLC does.
+        let found = run
+            .diags
+            .iter()
+            .filter(|d| {
+                matches!(
+                    d.diag,
+                    StateDiag::ConstraintViolated { .. } | StateDiag::AfterAssertViolated { .. }
+                )
+            })
+            .cloned()
+            .map(|mut d| {
+                if let Some(trace) = d.diag.trace_mut() {
+                    ts.annotate(&cone.cone, trace);
+                }
+                d
+            })
+            .collect();
+        BfsCone::Ran {
+            states: run.states.len(),
+            found,
+            complete: run.complete,
+        }
+    }
+
+    fn passed(&self) -> bool {
+        match self {
+            BfsCone::Ran {
+                found, complete, ..
+            } => found.is_empty() && *complete,
+            BfsCone::Covered(_) => true,
+        }
+    }
+
+    /// The run line, in the form of `Ran::line`.
+    fn line(&self, module: &str, checks: &[String], jobs: &[Job]) -> String {
+        let (verdict, inside) = match self {
+            BfsCone::Ran {
+                states,
+                found,
+                complete,
+            } => {
+                let verdict = match (found.is_empty(), complete) {
+                    (false, _) => "counterexample",
+                    (true, true) => "ok",
+                    (true, false) => "not decided",
+                };
+                let mut inside = format!("{states} states, BFS");
+                if !complete {
+                    inside.push_str(" stopped at the state cap or the memory limit");
+                }
+                (verdict, inside)
+            }
+            BfsCone::Covered(by) => ("ok", format!("checked in {}", jobs[*by].module)),
+        };
+        format!("{module} [{}]: {verdict} ({inside})", checks.join(", "))
+    }
+}
+
+/// Each safety cone of `jobs` decided by BFS (`RDRA_ISH_NATIVE`), and the vacuous checks
+/// their runs show. As `run_cones` does for TLC, a cone another cone covers waits for it: it
+/// is `ok` when that one passes and runs itself when it does not. Its vacuous checks are read
+/// off the cone that covers it, as `vacuous_checks` reads them. A run that met the memory
+/// limit beside others runs again alone, so that a crowded pool does not leave it undecided.
+fn bfs_cones(ts: &TransitionSystem, jobs: &[Job], caps: Caps) -> (Vec<BfsCone>, Vec<Diag>) {
+    let covers = covering(jobs);
+    let cone = |at: usize| match &jobs[at].kind {
+        JobKind::Cone(cone) => cone.as_ref(),
+        JobKind::PropertyCone(_) | JobKind::Whole(_) => {
+            unreachable!("bfs_cones takes safety cones")
+        }
+    };
+    // The verdict of the cone at `at`, and the vacuous checks of it and of the cones it
+    // covers, read off its run; the run is dropped here. `crowded`: the run met the memory
+    // limit, maybe only because the runs beside it held the rest.
+    let decide = |at: usize| {
+        let run = cone(at).system.clone().run(caps);
+        let vacuous: Vec<Diag> = std::iter::once(at)
+            .chain((0..jobs.len()).filter(|a| covers[*a] == Some(at)))
+            .flat_map(|a| cone(a).targets.iter())
+            .filter_map(|t| ts.vacuity(*t, &run))
+            .collect();
+        let crowded = run
+            .diags
+            .iter()
+            .any(|d| matches!(d.diag, StateDiag::MemoryCapReached { .. }));
+        (BfsCone::of(ts, cone(at), &run), vacuous, crowded)
+    };
+    let first: Vec<usize> = (0..jobs.len()).filter(|a| covers[*a].is_none()).collect();
+    let ran = in_parallel(first.clone(), rdra_ish_core::jobs(), decide);
+    let mut out: Vec<Option<BfsCone>> = jobs.iter().map(|_| None).collect();
+    let mut found = Vec::new();
+    for (&at, (verdict, vacuous, crowded)) in first.iter().zip(ran) {
+        let (verdict, vacuous, _) = match crowded {
+            true => decide(at),
+            false => (verdict, vacuous, crowded),
+        };
+        found.extend(vacuous);
+        out[at] = Some(verdict);
+    }
+    for at in 0..jobs.len() {
+        if let Some(by) = covers[at] {
+            out[at] = Some(match out[by].as_ref().is_some_and(BfsCone::passed) {
+                true => BfsCone::Covered(by),
+                false => BfsCone::of(ts, cone(at), &cone(at).system.clone().run(caps)),
+            });
+        }
+    }
+    let out = out
+        .into_iter()
+        .map(|c| c.expect("every cone is decided"))
+        .collect();
+    (out, found)
+}
+
+/// What BFS decided of the safety cones under `RDRA_ISH_NATIVE`.
+#[derive(Default)]
+struct Safety {
+    /// Invariants and after-asserts violated.
+    violated: usize,
+    /// Cones the state cap or the memory limit stopped before a violation.
+    capped: usize,
+}
+
+/// Prints each cone's run line and renders each violation with its BFS trace.
+fn report_bfs_cones(
+    program: &ResolvedProgram,
+    model: &SemanticModel,
+    jobs: &[Job],
+    cones: &[BfsCone],
+) -> Safety {
+    let mut out = Safety::default();
+    for (job, cone) in jobs.iter().zip(cones) {
+        println!("{}", cone.line(&job.module, &job.checks, jobs));
+        let BfsCone::Ran {
+            found, complete, ..
+        } = cone
+        else {
+            continue;
+        };
+        for d in found {
+            let text = render_violation(program, model, &d.diag, TraceSource::Bfs)
+                .expect("a violation renders");
+            eprintln!("{}", Finding::new(&d.diag, &[], text));
+        }
+        out.violated += found.len();
+        out.capped += usize::from(found.is_empty() && !complete);
+    }
+    out
+}
+
 /// How a run whose TLC checks passed ends.
 struct End {
     bfs: Bfs,
     explored: Explored,
+    /// What BFS decided of the safety cones under `RDRA_ISH_NATIVE`.
+    safety: Safety,
     deny_undecided: bool,
     /// What `--prove` proved, when it ran.
     proof: Option<ProofTally>,
@@ -1478,6 +1685,10 @@ impl End {
                 self.explored.violated,
                 "property violation(s) from BFS on the property cones",
             ),
+            (
+                self.safety.violated,
+                "invariant or after-assert violation(s) from BFS on their cones",
+            ),
         ]
         .iter()
         .filter(|(n, _)| *n > 0)
@@ -1488,7 +1699,7 @@ impl End {
         }
         let open = [
             (
-                self.bfs.capped + self.explored.capped,
+                self.bfs.capped + self.explored.capped + self.safety.capped,
                 "finding a cone stopped at the state cap or the memory limit left",
                 "findings a cone stopped at the state cap or the memory limit left",
             ),
