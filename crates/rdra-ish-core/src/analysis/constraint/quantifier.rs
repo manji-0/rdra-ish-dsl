@@ -80,10 +80,7 @@ fn quantifier_path_misfit(
         fix
     });
     Some(RdraError::QuantifierAlongShape {
-        method: match q.kind {
-            crate::model::QuantifierKind::Has => "has".to_string(),
-            crate::model::QuantifierKind::None => "none".to_string(),
-        },
+        method: q.kind.method().to_string(),
         ends: format!("{} to {}", id(&anchor), id(&q.related)),
         path: path.iter().map(id).collect::<Vec<_>>().join(", "),
         fix: fix.iter().map(id).collect::<Vec<_>>().join(", "),
@@ -98,35 +95,36 @@ fn related_quantifier(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<crate::model::RelatedQuantifier> {
-    let kind = match cc.name.as_str() {
-        "has" => crate::model::QuantifierKind::Has,
-        "none" => crate::model::QuantifierKind::None,
-        _ => return None,
+    let (kind, args) = match cc.name.as_str() {
+        "has" => (crate::model::QuantifierKind::Has, cc.args.as_slice()),
+        "none" => (crate::model::QuantifierKind::None, cc.args.as_slice()),
+        method => {
+            let bound = crate::model::CountBound::of_method(method)?;
+            let n = count_arg(cc, bound, ctx, diags)?;
+            (
+                crate::model::QuantifierKind::Count { bound, n },
+                &cc.args[1..],
+            )
+        }
     };
     // `.none(Permit)` and `.none(Permit, Permit.status == x)` name the related entity first;
     // `.none(Permit.status == x)` names it in the conditions.
-    let (related, related_args) = match cc.args.first() {
+    let (related, related_args) = match args.first() {
         Some(PredicateArg::Ref(_)) => {
-            let related = resolve_entity_scope_arg(model, &cc.name, &cc.args[0], ctx, diags)?;
-            (related, &cc.args[1..])
+            let related = resolve_entity_scope_arg(model, &cc.name, &args[0], ctx, diags)?;
+            (related, &args[1..])
         }
         _ => {
             let mut related_scope = Vec::new();
-            let preview = collect_cross_chain_conditions(
-                model,
-                &related_scope,
-                &cc.name,
-                &cc.args,
-                ctx,
-                diags,
-            );
+            let preview =
+                collect_cross_chain_conditions(model, &related_scope, &cc.name, args, ctx, diags);
             add_condition_entities_to_scope(&mut related_scope, &preview);
             let related = related_scope
                 .iter()
                 .copied()
                 .find(|e| *e != anchor)
                 .or_else(|| related_scope.first().copied())?;
-            (related, cc.args.as_slice())
+            (related, args)
         }
     };
 
@@ -143,4 +141,72 @@ fn related_quantifier(
         by,
         site: Some(ctx.locate(cc.span.clone())),
     })
+}
+
+/// The count of `.at_most(n, ..)`, `.at_least(n, ..)` or `.exactly(n, ..)`: its first argument,
+/// a whole number from 1 to 255. A count another form says (`at_least(1)` is `.has`,
+/// `at_most(0)` and `exactly(0)` are `.none`, `at_least(0)` always holds) is
+/// `QuantifierCountSpelling`; anything else is `QuantifierCountInvalid`. Each reports its
+/// error and gives `None`.
+fn count_arg(
+    cc: &ChainCall,
+    bound: crate::model::CountBound,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<u8> {
+    use crate::model::CountBound::*;
+    let invalid = |found: Option<String>| RdraError::QuantifierCountInvalid {
+        method: cc.name.clone(),
+        found,
+    };
+    let n = match cc.args.first() {
+        Some(PredicateArg::Int(text)) => match text.parse::<u8>() {
+            Ok(n) => n,
+            Err(_) => {
+                push_error(ctx, diags, cc.span.clone(), invalid(Some(text.clone())));
+                return None;
+            }
+        },
+        Some(PredicateArg::Ref(q)) => {
+            let found = q.parts.join(".");
+            push_error(ctx, diags, cc.span.clone(), invalid(Some(found)));
+            return None;
+        }
+        Some(PredicateArg::Lit(text)) => {
+            push_error(
+                ctx,
+                diags,
+                cc.span.clone(),
+                invalid(Some(format!("\"{text}\""))),
+            );
+            return None;
+        }
+        _ => {
+            push_error(ctx, diags, cc.span.clone(), invalid(None));
+            return None;
+        }
+    };
+    let written = format!("{}({n}", cc.name);
+    let respell = |meaning: &str, fix: &str| RdraError::QuantifierCountSpelling {
+        written: written.clone(),
+        meaning: meaning.to_string(),
+        fix: fix.to_string(),
+    };
+    let err = match (bound, n) {
+        (AtLeast, 0) => respell(
+            "true of every row: no count is below 0",
+            "remove it, or write the least count the rule asks for",
+        ),
+        (AtLeast, 1) => respell(
+            "the rule `.has(...)` states",
+            "write `.has(...)` with the same arguments after the count",
+        ),
+        (AtMost | Exactly, 0) => respell(
+            "the rule `.none(...)` states",
+            "write `.none(...)` with the same arguments after the count",
+        ),
+        _ => return Some(n),
+    };
+    push_error(ctx, diags, cc.span.clone(), err);
+    None
 }

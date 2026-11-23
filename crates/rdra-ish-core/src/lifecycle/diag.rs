@@ -190,6 +190,16 @@ pub enum StateDiag {
         parent_slots: u8,
         site: Site,
     },
+    /// A count that needs `n` rows (`.at_least(n, ..)`, `.exactly(n, ..)`) of an entity the
+    /// bounds give fewer slots: every state where the rule applies breaks it, and its
+    /// counterexample is the bound's, not the model's.
+    CountAboveBound {
+        rule: String,
+        entity: String,
+        n: u8,
+        slots: u8,
+        site: Site,
+    },
     /// A child-side range needs a child per parent, but the parent starts present and the
     /// child absent, so `MinCard_*` fails in the initial state.
     MinCardOfPreExistingParent { child: String, site: Site },
@@ -593,6 +603,7 @@ impl StateDiag {
                 with("PreExistingChildOfCreatedParent", &[parent])
             }
             StateDiag::IdentityStartSlots { parent, .. } => with("IdentityStartSlots", &[parent]),
+            StateDiag::CountAboveBound { rule, .. } => with("CountAboveBound", &[rule]),
             StateDiag::MinCardOfPreExistingParent { child, .. } => {
                 with("MinCardOfPreExistingParent", &[child])
             }
@@ -705,6 +716,7 @@ impl StateDiag {
             | StateDiag::UnwrittenConstrainedVar { .. }
             | StateDiag::PreExistingChildOfCreatedParent { .. }
             | StateDiag::MinCardOfPreExistingParent { .. }
+            | StateDiag::CountAboveBound { .. }
             | StateDiag::NeverRuns { .. }
             | StateDiag::VacuousRule { .. }
             | StateDiag::ArmNeverTaken { .. }
@@ -852,6 +864,17 @@ impl fmt::Display for StateDiag {
             } => write!(
                 f,
                 "this entity starts present with each row linked to its own {parent}, so it needs as many slots as {parent}, but the bounds give it {child_slots} and {parent} {parent_slots}; give both the same count with --instances"
+            ),
+            StateDiag::CountAboveBound {
+                rule,
+                entity,
+                n,
+                slots,
+                ..
+            } => write!(
+                f,
+                "{rule} needs {n} rows of {entity}, but the bounds give {entity} {slots} slot{}, so every state where it applies breaks it; --instances {entity}={n} lets a state have them",
+                if *slots == 1 { "" } else { "s" }
             ),
             StateDiag::MinCardOfPreExistingParent { child, .. } => write!(
                 f,

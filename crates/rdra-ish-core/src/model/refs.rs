@@ -152,6 +152,9 @@ pub struct RelationOptions {
     pub optional: bool,
     /// Children per parent at least: `One` for `1..*` / `1..1` on the child side.
     pub children_min: super::foreign_key::Min,
+    /// Children per parent at most: `hi` of a child-side range `lo..hi` with `hi` from 2 to
+    /// 255. `None` for `*` and `1`.
+    pub children_most: Option<u8>,
     pub on_delete: Option<RefAction>,
     pub on_update: Option<RefAction>,
 }

@@ -132,7 +132,31 @@ impl TransitionSystem {
             Pred::Or(parts) => parts.iter().any(|p| self.eval(p, state, env)),
             Pred::Forall { entity, body } => self.quantify(*entity, body, state, env, true),
             Pred::Exists { entity, body } => self.quantify(*entity, body, state, env, false),
+            Pred::Count {
+                entity,
+                body,
+                op,
+                n,
+            } => {
+                let count = self.count(*entity, body, state, env);
+                ordered(count.cmp(&usize::from(*n)), *op)
+            }
         }
+    }
+
+    /// The present slots of `entity` for which `body` holds, with the slot as the next
+    /// binder.
+    fn count(&self, entity: EntId, body: &Pred, state: &StateSlice, env: &mut Env) -> usize {
+        let mut count = 0;
+        for slot in 0..self.slots(entity) {
+            if !state.is_present(self, entity, slot) {
+                continue;
+            }
+            env.bound.push(slot as u8);
+            count += usize::from(self.eval(body, state, env));
+            env.bound.pop();
+        }
+        count
     }
 
     fn quantify(

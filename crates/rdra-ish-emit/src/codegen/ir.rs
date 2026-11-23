@@ -374,6 +374,15 @@ pub enum Expr {
         elem: usize,
         body: Box<Expr>,
     },
+    /// The rows of the input list `input`, bound as row `elem`, that make `body` hold,
+    /// counted: `count op n`.
+    Count {
+        input: usize,
+        elem: usize,
+        body: Box<Expr>,
+        op: CmpOp,
+        n: u8,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

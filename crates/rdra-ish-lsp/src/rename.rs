@@ -349,6 +349,22 @@ performs(Staff, Book)
                 ENTITY_TGT,
                 "condition C \"c\"\nholds(C, A.status == x).none(Tgt.status == y)",
             ),
+            ("invariant", "at_most" | "at_least" | "exactly") => (
+                ENTITY_TGT,
+                match method {
+                    "at_most" => "invariant(A).when(A.status == x).at_most(3, Tgt.status == y)",
+                    "at_least" => "invariant(A).when(A.status == x).at_least(3, Tgt.status == y)",
+                    _ => "invariant(A).when(A.status == x).exactly(3, Tgt.status == y)",
+                },
+            ),
+            ("holds", "at_most" | "at_least" | "exactly") => (
+                ENTITY_TGT,
+                match method {
+                    "at_most" => "condition C \"c\"\nholds(C, A.status == x).at_most(3, Tgt.status == y)",
+                    "at_least" => "condition C \"c\"\nholds(C, A.status == x).at_least(3, Tgt.status == y)",
+                    _ => "condition C \"c\"\nholds(C, A.status == x).exactly(3, Tgt.status == y)",
+                },
+            ),
             ("after", "assert") => (
                 ENTITY_TGT,
                 "usecase U \"u\"\nafter(U).assert(Tgt.status == x)",

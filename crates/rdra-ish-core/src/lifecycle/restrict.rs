@@ -299,7 +299,9 @@ pub(crate) fn renumber_pred(pred: &mut Pred, at: &impl Fn(&mut u8)) {
         }
         Pred::Not(p) => renumber_pred(p, at),
         Pred::And(ps) | Pred::Or(ps) => ps.iter_mut().for_each(|p| renumber_pred(p, at)),
-        Pred::Forall { body, .. } | Pred::Exists { body, .. } => renumber_pred(body, at),
+        Pred::Forall { body, .. } | Pred::Exists { body, .. } | Pred::Count { body, .. } => {
+            renumber_pred(body, at)
+        }
     }
 }
 
@@ -398,6 +400,17 @@ impl Remap {
             Pred::Exists { entity, body } => Pred::Exists {
                 entity: self.e(*entity),
                 body: Box::new(self.pred(body)),
+            },
+            Pred::Count {
+                entity,
+                body,
+                op,
+                n,
+            } => Pred::Count {
+                entity: self.e(*entity),
+                body: Box::new(self.pred(body)),
+                op: *op,
+                n: *n,
             },
         }
     }

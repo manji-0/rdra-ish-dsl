@@ -897,9 +897,11 @@ fn property_decl() -> impl Parser<Token, PropertyDecl, Error = Simple<Token>> + 
 /// - `performs(A, B)` → `PredicateArg::Ref`
 fn predicate_arg() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> + Clone {
     let expr = comparison().map(PredicateArg::Expr);
+    let int = select! { Token::IntLit(s) => PredicateArg::Int(s) };
     expr.or(transition_arg())
         .or(card_arg())
         .or(predicate_atom())
+        .or(int)
 }
 
 fn kind_word_arg() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> + Clone {

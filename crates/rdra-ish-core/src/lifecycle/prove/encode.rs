@@ -36,6 +36,9 @@ pub(super) struct Unsupported(pub String);
 
 type R<T> = Result<T, Unsupported>;
 
+/// The most witnesses a count unrolls into: `.at_most(7, ..)` needs 8.
+const COUNT_WITNESSES: u16 = 8;
+
 /// A state formula: `body` over every present row of `binders` (every row but `nil`, with
 /// `all_rows`).
 #[derive(Clone, Debug, PartialEq)]
@@ -587,7 +590,61 @@ impl Enc<'_> {
                     _ => format!("(exists (({b} {s})) (and {present} {body}))"),
                 }
             }
+            Pred::Count {
+                entity,
+                body,
+                op,
+                n,
+            } => {
+                let at_least = |k: u16| self.at_least(*entity, body, k, scope);
+                let n = u16::from(*n);
+                match op {
+                    CmpOp::Ge => at_least(n)?,
+                    CmpOp::Gt => at_least(n + 1)?,
+                    CmpOp::Le => format!("(not {})", at_least(n + 1)?),
+                    CmpOp::Lt => format!("(not {})", at_least(n)?),
+                    CmpOp::Eq => format!("(and {} (not {}))", at_least(n)?, at_least(n + 1)?),
+                    CmpOp::Ne => format!("(not (and {} (not {})))", at_least(n)?, at_least(n + 1)?),
+                }
+            }
         })
+    }
+
+    /// "At least `k` present rows of `entity` satisfy `body`": `k` distinct rows, each
+    /// present and satisfying it. The body reads its row as `b<depth>`; each witness binds that
+    /// name with `let`. That is the count, not an approximation of it, in either polarity.
+    /// Past `COUNT_WITNESSES` witnesses the formula is out of scope.
+    fn at_least(&self, entity: EntId, body: &Pred, k: u16, scope: &Scope) -> R<String> {
+        if k == 0 {
+            return Ok("true".to_string());
+        }
+        if k > COUNT_WITNESSES {
+            return Err(Unsupported(format!(
+                "a count of {k} or more rows (at most {COUNT_WITNESSES} unroll)"
+            )));
+        }
+        let b = bound(scope.bound.len());
+        let mut inner = Scope {
+            frame: scope.frame,
+            params: scope.params,
+            bound: scope.bound.clone(),
+        };
+        inner.bound.push(entity);
+        let body = self.pred(body, &inner)?;
+        let present = self.present(entity, scope.frame, &b);
+        let s = sort(entity);
+        let witnesses: Vec<String> = (0..k).map(|i| format!("{b}_{i}")).collect();
+        let decls: Vec<String> = witnesses.iter().map(|w| format!("({w} {s})")).collect();
+        let mut parts: Vec<String> = Vec::new();
+        if k > 1 {
+            parts.push(format!("(distinct {})", witnesses.join(" ")));
+        }
+        parts.extend(
+            witnesses
+                .iter()
+                .map(|w| format!("(let (({b} {w})) (and {present} {body}))")),
+        );
+        Ok(format!("(exists ({}) {})", decls.join(" "), and(parts)))
     }
 
     fn row(&self, at: At, scope: &Scope) -> (String, EntId, Frame) {

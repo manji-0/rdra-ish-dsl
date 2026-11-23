@@ -36,6 +36,13 @@ fn one_of_each() -> Vec<StateDiag> {
             parent_slots: 1,
             site: site(),
         },
+        StateDiag::CountAboveBound {
+            rule: "Quantifier_Claim_0".into(),
+            entity: "Estimate".into(),
+            n: 3,
+            slots: 2,
+            site: site(),
+        },
         StateDiag::MinCardOfPreExistingParent {
             child: "Line".into(),
             site: site(),
@@ -260,6 +267,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::NoCreationPath
             | StateDiag::PreExistingChildOfCreatedParent { .. }
             | StateDiag::IdentityStartSlots { .. }
+            | StateDiag::CountAboveBound { .. }
             | StateDiag::MinCardOfPreExistingParent { .. }
             | StateDiag::MinCardNeedsCreate { .. }
             | StateDiag::PatternCapReached { .. }

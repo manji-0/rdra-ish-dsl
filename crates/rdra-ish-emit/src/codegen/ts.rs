@@ -635,6 +635,25 @@ fn expr(
             row(*elem),
             expr(body, row, input)
         ),
+        Expr::Count {
+            input: i,
+            elem,
+            body,
+            op,
+            n,
+        } => {
+            let op = match op {
+                CmpOp::Eq => "===",
+                CmpOp::Ne => "!==",
+                other => other.symbol(),
+            };
+            format!(
+                "{}.filter(({}) => {}).length {op} {n}",
+                input(*i),
+                row(*elem),
+                expr(body, row, input)
+            )
+        }
     }
 }
 

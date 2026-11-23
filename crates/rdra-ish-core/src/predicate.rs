@@ -270,10 +270,13 @@ impl Predicate {
             ],
             Forbidden => &["when", "along", "role", "label", "global", "lemma"],
             Invariant => &[
-                "when", "then", "has", "none", "along", "role", "label", "global", "lemma",
+                "when", "then", "has", "none", "at_most", "at_least", "exactly", "along", "role",
+                "label", "global", "lemma",
             ],
             Required | Exclusive => &["label"],
-            Holds => &["has", "none", "along", "role"],
+            Holds => &[
+                "has", "none", "at_most", "at_least", "exactly", "along", "role",
+            ],
             Sets => &["role", "when"],
             Links | Relinks | Unlinks => &["role"],
             After => &["assert", "label"],

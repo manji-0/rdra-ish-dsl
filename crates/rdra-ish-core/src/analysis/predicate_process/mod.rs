@@ -56,7 +56,7 @@ pub(super) fn predicate_arg_display(arg: &PredicateArg) -> String {
         PredicateArg::Transition { from, to } => {
             format!("{} -> {to}", rdra_ish_syntax::format::format_sources(from))
         }
-        PredicateArg::Card(c) => c.clone(),
+        PredicateArg::Card(c) | PredicateArg::Int(c) => c.clone(),
     }
 }
 
@@ -121,7 +121,7 @@ pub(crate) fn process_predicate(
                 && pred
                     .chain
                     .iter()
-                    .any(|cc| matches!(cc.name.as_str(), "has" | "none")));
+                    .any(|cc| crate::model::QuantifierKind::METHODS.contains(&cc.name.as_str())));
         if is_cross {
             if p == Predicate::Forbidden {
                 process_cross_forbidden(model, pred, ctx, diags);

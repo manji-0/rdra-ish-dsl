@@ -6,7 +6,10 @@ use super::{at_of, forbidden_premises, implies, premise, Binding};
 use crate::lifecycle::build::Builder;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::types::{At, InvText, ModelRef, Pred, Site};
-use crate::model::{CrossConstraintScope, EntityKey, FkId, QuantifierKind, RelatedQuantifier};
+use crate::lifecycle::types::{CmpOp, Premise};
+use crate::model::{
+    CountBound, CrossConstraintScope, EntityKey, FkId, QuantifierKind, RelatedQuantifier,
+};
 
 impl Builder<'_> {
     /// Binders for a cross constraint's scope, plus the relate links its `.along` names.
@@ -200,6 +203,12 @@ impl Builder<'_> {
                 entity,
                 body: Box::new(implies(link, Pred::Not(Box::new(conds)))),
             },
+            QuantifierKind::Count { bound, n } => Pred::Count {
+                entity,
+                body: Box::new(Pred::And(vec![link, conds])),
+                op: count_op(bound),
+                n,
+            },
         }
     }
 
@@ -223,9 +232,14 @@ impl Builder<'_> {
                 let text = format!("some {} row beside it", model.entities[q.related].id);
                 premises.push(premise(vec![related], text));
             }
+            if let QuantifierKind::Count { bound, n } = q.kind {
+                premises.extend(self.count_premise(q.related, bound, n));
+                let rule = format!("Quantifier_{}_{i}", model.entities[c.anchor].id);
+                self.count_above_bound(&rule, q.related, bound, n, &site);
+            }
             let kind = match q.kind {
-                QuantifierKind::Has => "has",
-                QuantifierKind::None => "none",
+                QuantifierKind::Count { n, .. } => format!("{} {n}", q.kind.method()),
+                kind => kind.method().to_string(),
             };
             let mut constraint = format!(
                 "{} when ({}) {} {}",
@@ -268,5 +282,80 @@ impl Builder<'_> {
                 site,
             );
         }
+    }
+}
+
+/// The comparison a counted quantifier makes of its count with `n`.
+pub(super) fn count_op(bound: CountBound) -> CmpOp {
+    match bound {
+        CountBound::AtMost => CmpOp::Le,
+        CountBound::AtLeast => CmpOp::Ge,
+        CountBound::Exactly => CmpOp::Eq,
+    }
+}
+
+impl Builder<'_> {
+    /// The premise of a count that only more than `n` rows can break (`at_most`, `exactly`,
+    /// a range's high end): some state has `n + 1` rows of `related`, linked or not. When the
+    /// bounds give `related` `n` slots or fewer, no state has them, and the text says which
+    /// count lifts the bound. `None` for `at_least`, which fewer rows break.
+    pub(super) fn count_premise(
+        &self,
+        related: EntityKey,
+        bound: CountBound,
+        n: u8,
+    ) -> Option<Premise> {
+        if bound == CountBound::AtLeast {
+            return None;
+        }
+        let id = &self.model.entities[related].id;
+        let entity = self.ent_of[&related];
+        let rows = u16::from(n) + 1;
+        let slots = self.ts.slots(entity);
+        let mut text = format!("{rows} rows of {id}");
+        if slots < usize::from(rows) {
+            text.push_str(&format!(
+                " ({id} has {slots} slot{}; --instances {id}={rows} gives it {rows})",
+                if slots == 1 { "" } else { "s" }
+            ));
+        }
+        // No `u8` count is 256, and no bound reaches it: the premise is never met.
+        let pred = match u8::try_from(rows) {
+            Ok(rows) => Pred::Count {
+                entity,
+                body: Box::new(Pred::True),
+                op: CmpOp::Ge,
+                n: rows,
+            },
+            Err(_) => Pred::Not(Box::new(Pred::True)),
+        };
+        Some(Premise { pred, text })
+    }
+
+    /// `CountAboveBound` on a count that needs `n` rows (`at_least`, `exactly`) of an entity
+    /// the bounds give fewer slots: every state the rule applies in breaks it.
+    pub(super) fn count_above_bound(
+        &mut self,
+        rule: &str,
+        related: EntityKey,
+        bound: CountBound,
+        n: u8,
+        site: &Site,
+    ) {
+        let slots = self.ts.slots(self.ent_of[&related]);
+        if bound == CountBound::AtMost || usize::from(n) <= slots {
+            return;
+        }
+        let entity = self.model.entities[related].id.clone();
+        self.diag(
+            vec![related],
+            StateDiag::CountAboveBound {
+                rule: rule.to_string(),
+                entity,
+                n,
+                slots: slots as u8,
+                site: site.clone(),
+            },
+        );
     }
 }

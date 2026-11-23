@@ -48,9 +48,9 @@ pub(crate) fn arg_as_str(arg: &PredicateArg) -> Option<String> {
 /// `.none` before it, or `None` when it follows none, where it selects the key of the
 /// statement itself (a `holds` body, a copy).
 fn by_owner(chain: &[ChainCall], at: usize) -> Option<usize> {
-    chain[..at]
-        .iter()
-        .rposition(|cc| matches!(cc.name.as_str(), "along" | "has" | "none"))
+    chain[..at].iter().rposition(|cc| {
+        cc.name == "along" || crate::model::QuantifierKind::METHODS.contains(&cc.name.as_str())
+    })
 }
 
 /// The roles the `.role(..)` calls that select the key of `owner` name (see [`by_owner`]).
