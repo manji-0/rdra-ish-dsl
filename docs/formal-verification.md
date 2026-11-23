@@ -571,11 +571,15 @@ cone's verdict is the whole model's at the same bounds. A reduced cone (the next
 keeps stuttering equivalence, which says nothing of `AG EF`, so no `can_reach` cone is
 reduced. A cone that stops at `--max-states` or the memory limit decides nothing, since a
 state it did not expand has no edges and would look stuck: no violation is read from it.
+`verify` lists such a property under `not checked:` as `can_reach <P> is not decided: the <P>
+cone stopped at the state cap (<n> states)` (or at the memory limit), counts it toward
+`--deny-undecided`, and prints `result: not decided`.
 A scoped `verify` checks no property, `can_reach` included.
 
 `verify` prints `can_reach properties: N, decided natively by BFS on each one's cone (TLC
 cannot check AG EF)` in its header, explores those cones beside the entity cones, and ends
-the BFS pass with `can_reach (BFS on N cones): N checked, M violated`. A violation fails the
+the BFS pass with `can_reach (BFS on N cones): N checked, M violated`, followed by
+`, K not decided` when K of those cones stopped. A violation fails the
 run with `result: counterexample`:
 
 ```

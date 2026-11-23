@@ -1399,7 +1399,9 @@ cone` and a `property <P> (BFS on its cone): ok|violated|not decided: ...` line 
 (see [formal-verification.md](./formal-verification.md#order-and-stability-properties)).
 `can_reach` is decided by BFS on its cone too, with no TLC run: `verify` prints
 `can_reach properties: <n>, decided natively by BFS on each one's cone (TLC cannot check AG
-EF)` and `can_reach (BFS on <k> cones): <n> checked, <v> violated` (see
+EF)` and `can_reach (BFS on <k> cones): <n> checked, <v> violated`, with `, <u> not decided`
+when a cone stopped at a cap or the memory limit; each such property is listed under
+`not checked:` (see
 [formal-verification.md](./formal-verification.md#recoverability-on-a-cone)).
 Stdout names the bounds, the cone count, and each run's result. A whole-model run the budget
 stops before it decides prints `not decided` and is listed under `not checked:`.
