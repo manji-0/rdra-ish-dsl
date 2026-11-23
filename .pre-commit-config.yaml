@@ -33,4 +33,7 @@ repos:
         name: cargo test (crates the commit touches)
         entry: nix develop --command scripts/diff-test.sh
         language: system
+        # pre-commit splits many files into batches and runs them in parallel; two runs of
+        # the same crate's tests share target/tmp and overwrite each other's fixtures.
+        require_serial: true
         files: '^(crates/.*|Cargo\.(toml|lock))$'
