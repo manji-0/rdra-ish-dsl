@@ -35,12 +35,11 @@ pub(super) fn print_plan(
     ts: &TransitionSystem,
     scope: &Scope,
     selection: &Selection,
-    bounds: Bounds,
+    (bounds, caps): (Bounds, Caps),
     (cones, temporal, with_tlc): (usize, bool, bool),
     budget: Duration,
 ) -> BoundsLine {
-    let line =
-        BoundsLine::verify(bounds, Some(Caps::VERIFY)).with_scope(scope.line(model, selection));
+    let line = BoundsLine::verify(bounds, Some(caps)).with_scope(scope.line(model, selection));
     println!("{line}");
     let checked = |pick: fn(&Target) -> bool| selection.targets.iter().filter(|t| pick(t)).count();
     println!(

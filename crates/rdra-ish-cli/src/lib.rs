@@ -246,6 +246,8 @@ pub fn run() -> Result<()> {
             out,
             instance_count,
             int_range_max,
+            max_patterns,
+            max_states,
             temporal_budget,
             deny_undecided,
             prove,
@@ -278,6 +280,8 @@ pub fn run() -> Result<()> {
                 &scope,
                 verify::Budget {
                     temporal: std::time::Duration::from_secs(temporal_budget),
+                    max_patterns,
+                    max_states,
                     deny_undecided,
                     prove: prove.then_some(verify::Prove { z3, deny_unproved }),
                     memory,

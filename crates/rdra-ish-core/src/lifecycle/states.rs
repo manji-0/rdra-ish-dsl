@@ -17,7 +17,8 @@ impl Caps {
     /// `examples/lifecycle_measure.rs` prints the largest cone of each sample.
     pub const STATES: Caps = Caps::for_instances(1);
 
-    /// For BFS at `Bounds::VERIFY`: 2^23 states per cone. A cone past it leaves its state-model
+    /// For BFS at `Bounds::VERIFY`: 2^23 states per cone. `verify` itself sets no state cap
+    /// unless `--max-states` is given; the memory limit stops a run. A cone past it leaves its state-model
     /// findings undecided; `engine_equivalence`'s `VERIFY_FALLBACK` names the sample cones
     /// over 300,000 states there.
     pub const VERIFY: Caps = Caps::new(256, 1 << 23);
@@ -143,7 +144,13 @@ impl fmt::Display for BoundsLine {
         }
         if let Some(caps) = self.caps {
             let bfs = if self.tla { "BFS " } else { "" };
-            write!(f, "; {} states per {bfs}cone", caps.states)?;
+            match (caps.states, caps.memory) {
+                (usize::MAX, Some(pool)) => {
+                    write!(f, "; no state cap per {bfs}cone, memory {}", pool.limit())?
+                }
+                (usize::MAX, None) => write!(f, "; no state cap per {bfs}cone")?,
+                (states, _) => write!(f, "; {states} states per {bfs}cone")?,
+            }
         }
         write!(f, "; entities a check does not read are unbounded")?;
         if let Some(scope) = &self.scope {

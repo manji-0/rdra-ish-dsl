@@ -401,10 +401,11 @@ before it prints; one that does not is a tool bug and prints `error[LassoFault]`
    `WF_vars(Next)` to rule out, and the property is undecided on the cone.
 3. `RdraSpec_<P>`, the whole model, for a property its cone leaves undecided. This is the
    run that did not finish on food-permit-ops. The native checker explores the whole model
-   once for every such property and stops at `--temporal-budget` seconds (default 300) or
-   at 2,097,152 states. TLC under `--with-tlc` prints its progress (distinct states, queue,
-   seconds, about once a minute) and stops at the same budget or at the first progress line
-   past the same count. A run stopped after it found a counterexample keeps that verdict;
+   once for every such property and stops at `--temporal-budget` seconds (default 300), at
+   the `--memory` limit, or at `--max-states` states when given. TLC under `--with-tlc` prints
+   its progress (distinct states, queue, seconds, about once a minute) and stops at the same
+   budget or at the first progress line past 2,097,152 states, or past `--max-states` when
+   given: TLC's heap is not `--memory`'s pool, so its whole-model run keeps a bound. A run stopped after it found a counterexample keeps that verdict;
    otherwise the property is `not decided`, listed under `not checked:`, and the run still
    ends in `OK:`
    with exit status 0, as a BFS cone at its cap does, after a `warning:` on stderr that
@@ -434,8 +435,9 @@ cone leaves out, a `.none` guard on a fair use case whose quantified column anot
 case writes, and a condition on a creating use case that reads a column the creation does
 not assign.
 
-`verify` also explores each entity's cone with BFS at the same bounds, capped at
-8,388,608 states per cone (`Caps::VERIFY`, named in the `bounds:` line). Each state of a
+`verify` also explores each entity's cone with BFS at the same bounds, with no state
+cap: `--memory` stops a cone, and `--max-states <N>` caps every BFS run (the `bounds:` line
+names the cap or says `no state cap`). The pattern cap is 256 per entity (`--max-patterns`). Each state of a
 state model must have a witness there (see
 [state-derivation.md](./state-derivation.md#state-models-and-witnesses)). A `NoWitness`
 error fails `verify` even when every invariant and property holds: the run prints
@@ -463,7 +465,7 @@ the cap too, so `verify` decides all four of its stuck-state checks (see the sam
 
 ```
 $ rdra-ish verify samples/formal-verification/order.rdra
-bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 8388608 states per BFS cone; entities a check does not read are unbounded
+bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); no state cap per BFS cone, memory 16GiB; entities a check does not read are unbounded
 cones: 1 for 2 invariant(s) and 1 after-assert(s)
 temporal properties: 2, each checked on its cone, and on the whole model only when the cone does not decide it (budget 300 s)
 state models (BFS on 1 entity cone): 1 state model, 5 states witnessed, 0 deadlocks, 0 use cases that never run
@@ -570,7 +572,7 @@ run with `result: counterexample`:
 
 ```
 $ rdra-ish verify samples/formal-verification/can_reach_unmet.rdra
-bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 8388608 states per BFS cone; entities a check does not read are unbounded
+bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); no state cap per BFS cone, memory 16GiB; entities a check does not read are unbounded
 cones: 0 for 0 invariant(s) and 0 after-assert(s)
 temporal properties: none
 can_reach properties: 1, decided natively by BFS on each one's cone (TLC cannot check AG EF)
@@ -748,7 +750,7 @@ rest. The whole run still fails on it:
 
 ```
 $ rdra-ish verify samples/formal-verification/partial_scope.rdra --entity Order
-bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 8388608 states per BFS cone; entities a check does not read are unbounded
+bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); no state cap per BFS cone, memory 16GiB; entities a check does not read are unbounded
 scope: --entity Order
 cones: 1 for 1 invariant(s) and 0 after-assert(s)
 temporal properties: none
@@ -1111,21 +1113,23 @@ gaps.
   the Claim cone is 836,427 states reduced. See it:
   [Known verification gaps](../samples/insurance-claim-ops/README.md#known-verification-gaps).
   What you can do: keep the reason out of the checked rules, as the sample does.
-- **The `verify` BFS stops at 8,388,608 states per cone.** The BFS pass that finds missing
-  witnesses, deadlocks, use cases that never run, arms never taken, and values never chosen
-  stops at `Caps::VERIFY`, 2^23 states. A cone that stops there decides none of these
-  findings, and an invariant's cone that stops there leaves its invariants `not decided`.
-  The cap counts the states of the cone reduced
+- **The `verify` BFS stops at the memory limit, or at `--max-states`.** The BFS pass that
+  finds missing witnesses, deadlocks, use cases that never run, arms never taken, and values
+  never chosen has no state cap unless `--max-states` gives one; `--memory` stops it. A cone
+  that stops decides none of these findings, and an invariant's cone that stops leaves its
+  invariants `not decided`. The count is the states of the cone reduced
   by its independent sub-lifecycle (see
   [Reduction by an independent sub-lifecycle](#reduction-by-an-independent-sub-lifecycle)).
-  Every sample cone is under the cap at 2 instances (the largest, `BusinessPermit` of
+  Every sample cone is under 8,388,608 states, the cap before `--max-states` (default none) (the largest, `BusinessPermit` of
   food-permit-ops, has 4,648,771 states reduced; `Charge` of clinic-ops, over 8,388,608
   unreduced, has 38,533), so `verify --deny-undecided` decides every check on all of them;
   the price is insurance-claim-ops's 180 s and 2.1 GB. See it: each undecided finding under
   `not checked:` on stdout and the `warning:` on stderr that counts them (`--deny-undecided` fails the run instead). What
   you can do: rely on `check` at 1 instance for those findings, or shrink the cone, for
-  example by removing a guard that pulls another entity's columns in. The whole-model
-  temporal run below keeps its own cap of 2,097,152 distinct states.
+  example by removing a guard that pulls another entity's columns in. Or raise
+  `--memory`; `verify --max-states <N>` caps every BFS run, to bound the time. The
+  whole-model run of TLC under `--with-tlc` keeps its own cap of 2,097,152 distinct states
+  unless `--max-states` is given.
 - **`check` stops at 65,536 states per cone at one instance, and at 2^20 at two.** A cone past the cap is the
   `StateCapReached_<E>` error, so `check` fails rather than passing on part of the cone.
   See it: the error, whose message names the variables the reached states vary in. What
@@ -1162,11 +1166,12 @@ gaps.
   whose first cone run finds a counterexample and whose `_WF` run finds none needs the whole
   model's `WF_vars(Next)` (see [Temporal properties on a cone](#temporal-properties-on-a-cone));
   so does a property whose cone frees an entity's slots and finds a counterexample. The
-  whole-model run stops at `--temporal-budget` seconds (300 by default) or at 2,097,152
-  distinct states, and the property is then `not decided`, which warns and does not fail
+  whole-model run stops at `--temporal-budget` seconds (300 by default), at the `--memory`
+  limit, or at `--max-states` states when given (TLC: 2,097,152 distinct states unless
+  given), and the property is then `not decided`, which warns and does not fail
   the run unless `--deny-undecided` is given. The `not checked:` line names the cause. At
-  the state cap it says that `--temporal-budget` does not lift the cap; at the time budget it
-  offers the budget. Both suggest `.fair(UseCase, ...)` naming the use cases the property
+  the state cap it says that `--temporal-budget` does not lift the cap and offers
+  `--max-states`; at the time budget it offers the budget. Both suggest `.fair(UseCase, ...)` naming the use cases the property
   relies on, which decides it on its cone. On
   patent-ops, food-permit-ops, and insurance-claim-ops at 2 instances a whole-model run does
   not finish (14 million states in 11 minutes, 6.9 million in 300 s, and 2.3 million with 1.7

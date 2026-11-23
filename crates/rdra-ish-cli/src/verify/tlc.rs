@@ -2,7 +2,7 @@ use super::jobs::{whole_job, ConeSystem, Job, JobKind};
 use super::report::run_line;
 use super::specs::write_whole_specs;
 use super::tlc_tool::Tlc;
-use super::WHOLE_MODEL_STATE_CAP;
+use super::{WholeRun, WHOLE_MODEL_STATE_CAP};
 use crate::export::Modules;
 use crate::memory::tlc_plan;
 use crate::property_cone::{AfterPlain, ConeRun, Verdict};
@@ -260,24 +260,24 @@ fn run_cfg(
 
 /// What to change when a property's whole-model run stopped. A property without `.fair` rests
 /// on the whole model's `WF_vars(Next)`; naming the use cases it relies on lets its cone decide
-/// it. The state cap is fixed, so only a smaller model or a cone lifts it.
+/// it. --max-states raises the cap.
 pub(super) fn undecided_hint(stop: Stop) -> &'static str {
     match stop {
-        Stop::StateCap => "the model has more states than the cap; --temporal-budget does not lift it, so name the use cases the property relies on with .fair(UseCase, ...) to decide it on its cone, or shrink the model",
+        Stop::StateCap => "the model has more states than the cap; --temporal-budget does not lift it, so raise --max-states (memory and time grow with it), or name the use cases the property relies on with .fair(UseCase, ...) to decide it on its cone, or shrink the model",
         Stop::Budget => "raise --temporal-budget, or name the use cases the property relies on with .fair(UseCase, ...) to decide it on its cone",
         Stop::Memory => "raise --memory, or name the use cases the property relies on with .fair(UseCase, ...) to decide it on its cone",
     }
 }
 
 /// A whole-model property run under a budget: TLC's progress lines (about one a minute) print
-/// as they come, and the run is killed past `budget` or past `WHOLE_MODEL_STATE_CAP` distinct states,
+/// as they come, and the run is killed past `budget` or past the whole-model state cap of distinct states,
 /// and left undecided unless TLC had already printed its verdict.
 fn run_whole(
     tlc: &Tlc,
     dir: &Path,
     job: &Job,
     (workers, heap): (&str, u64),
-    budget: Duration,
+    whole: WholeRun,
 ) -> Result<Ran> {
     let tla = format!("{}.tla", job.module);
     let cfg = format!("{}.cfg", job.module);
@@ -312,7 +312,10 @@ fn run_whole(
     .collect();
     drop(tx);
     let start = Instant::now();
-    let cap = WHOLE_MODEL_STATE_CAP;
+    let (budget, cap) = (
+        whole.budget,
+        whole.states.unwrap_or(WHOLE_MODEL_STATE_CAP) as u64,
+    );
     let mut log = String::new();
     let mut stopped: Option<String> = None;
     let mut capped = false;
@@ -531,7 +534,7 @@ fn run_wholes(
     tlc: &Tlc,
     dir: &Path,
     jobs: &[Job],
-    budget: Duration,
+    budget: WholeRun,
     share: u64,
 ) -> Result<Vec<Ran>> {
     let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
@@ -632,7 +635,7 @@ pub(super) fn run_tlc_wholes(
     (tlc, dir): (&Tlc, &Path),
     (ts, names): (&TransitionSystem, &TlaNames),
     whole_modules: &[String],
-    (budget, share): (Duration, u64),
+    (budget, share): (WholeRun, u64),
     (jobs, ran): (&[Job], &[Ran]),
     index: (&mut String, &Path),
 ) -> Result<(Vec<Job>, Vec<Ran>)> {

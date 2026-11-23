@@ -1,7 +1,7 @@
 use super::jobs::{ConeSystem, Job, JobKind};
 use super::report::run_line;
 use super::tlc::covering;
-use super::whole_caps;
+use super::WholeRun;
 use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_output::Outcome;
 use rdra_ish_core::lifecycle::{
@@ -10,7 +10,6 @@ use rdra_ish_core::lifecycle::{
 };
 use rdra_ish_core::{in_parallel, ResolvedProgram, SemanticModel};
 use std::collections::BTreeSet;
-use std::time::Duration;
 
 /// What BFS found at the verify bounds.
 pub(super) struct Bfs {
@@ -128,7 +127,7 @@ pub(super) fn explored_properties(
     model: &SemanticModel,
     ts: &TransitionSystem,
     caps: Caps,
-    budget: Duration,
+    budget: WholeRun,
 ) -> Explored {
     let mut out = Explored::default();
     for (i, p) in ts.properties().iter().enumerate() {
@@ -136,7 +135,7 @@ pub(super) fn explored_properties(
             continue;
         }
         out.checked += 1;
-        let verdict = ts.decide_property(i, caps, whole_caps(caps, budget));
+        let verdict = ts.decide_property(i, caps, budget.caps(caps));
         // BFS decides this property, so no other run looks for its premises.
         if let (PropertyVerdict::Holds, Some(d)) = (&verdict, ts.vacuous_property(i, caps)) {
             if let Some(text) = render_violation(program, model, &d.diag, TraceSource::Bfs) {
@@ -147,7 +146,7 @@ pub(super) fn explored_properties(
             PropertyVerdict::Holds => "ok",
             PropertyVerdict::Violated(_) => "violated",
             PropertyVerdict::Undecided => {
-                "not decided: BFS stopped at the state cap or the memory limit"
+                "not decided: BFS stopped at the state or pattern cap (--max-states, --max-patterns) or the memory limit"
             }
         };
         println!("property {} (BFS on its cone): {said}", p.name);
@@ -234,7 +233,7 @@ impl BfsCone {
             } => {
                 let notes = match complete {
                     true => Vec::new(),
-                    false => vec!["stopped at the state cap or the memory limit".to_string()],
+                    false => vec!["stopped at the state or pattern cap (--max-states, --max-patterns) or the memory limit".to_string()],
                 };
                 run_line(module, checks, verdict, Some(*states as u64), &notes)
             }

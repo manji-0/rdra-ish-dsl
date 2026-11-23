@@ -1280,7 +1280,7 @@ with the native checker. No JVM starts. `--with-tlc` runs TLC beside it as a sec
 opinion. See [formal-verification.md](./formal-verification.md).
 
 ```
-rdra-ish verify <INPUTS...> [--with-tlc] [-o <OUT>] [--instance-count <N>] [--int-range-max <N>] [--temporal-budget <SECS>] [--deny-undecided] [--prove [--deny-unproved] [--z3 <PATH>]] [--tlc-jar <PATH>] [--memory <SIZE>] [--buc <ID>]... [--entity <ID>]... [--without-usecase <ID>]... [--without-buc <ID>]... [--actor <ID>]...
+rdra-ish verify <INPUTS...> [--with-tlc] [-o <OUT>] [--instance-count <N>] [--int-range-max <N>] [--max-patterns <N>] [--max-states <N>] [--temporal-budget <SECS>] [--deny-undecided] [--prove [--deny-unproved] [--z3 <PATH>]] [--tlc-jar <PATH>] [--memory <SIZE>] [--buc <ID>]... [--entity <ID>]... [--without-usecase <ID>]... [--without-buc <ID>]... [--actor <ID>]...
 ```
 
 | Option | Type | Default | Description |
@@ -1291,7 +1291,9 @@ rdra-ish verify <INPUTS...> [--with-tlc] [-o <OUT>] [--instance-count <N>] [--in
 | `-o`, `--out` | path | none; under `--with-tlc` a temp dir, deleted when TLC passes every check and kept when it does not | Directory for the specs, for a TLC run by hand: one `Cone_<check>.tla` / `.cfg` pair per cone, named after the first invariant or after-assert that reads it, one `Cone_<Property>.tla` / `.cfg` pair per `always`, `eventually`, and `leads_to` with a `Cone_<Property>_WF` pair beside it for an `eventually` or `leads_to` and a `Cone_<Property>_Full` pair for a reduced cone, `cones.txt` listing each module and the checks it answers, and, when the model declares temporal properties, the whole-model `RdraSpec.tla` / `.cfg` with every `PROPERTY` and a `RdraSpec_<Property>` pair for each property its cone leaves undecided. A path ending in `.tla` writes into its directory and names the whole-model module after its stem, and each whole-model property module `<stem>_<Property>`. The native checker reads none of these files. |
 | `--instance-count` | unsigned integer | `2` | Multi-instance `InstanceCount` (`1..=255`; `1` warns). |
 | `--int-range-max` | unsigned integer | `5` | Upper bound for `IntRange == 0..N` (`1..=255`; `0` rejected). |
-| `--temporal-budget` | unsigned integer | `300` | Seconds a temporal property's whole-model run gets when its cone does not decide it. Past them, or past 2,097,152 states, the run stops and, unless it had already found a counterexample, the property is `not decided`, which warns and does not fail the run. Under `--with-tlc` TLC's whole-model run gets the same budget, and its state count is read from its progress lines (about one a minute). |
+| `--max-states` | unsigned integer | none | The state cap of every BFS run `verify` makes: each entity, safety, and property cone (`_Full` and `_WF` included) and the whole-model run. Without it BFS has no state cap: `--memory` stops a cone, and `--memory` and `--temporal-budget` stop the whole-model run, as `not decided`. The `bounds:` line says `no state cap per BFS cone, memory <limit>`, or the cap given. Under `--with-tlc` TLC's whole-model run needs a bound, and keeps 2,097,152 states unless `--max-states` is given; TLC's cone runs have no state cap. |
+| `--max-patterns` | unsigned integer | `256` | The cap on each entity's distinct patterns within one cone; a cone past it is `not decided`. |
+| `--temporal-budget` | unsigned integer | `300` | Seconds a temporal property's whole-model run gets when its cone does not decide it. Past them, or past `--max-states` states or `--memory`, the run stops and, unless it had already found a counterexample, the property is `not decided`, which warns and does not fail the run. Under `--with-tlc` TLC's whole-model run gets the same budget, and its state count is read from its progress lines (about one a minute). |
 | `--tlc-jar` | path | `RDRA_TLC_JAR`, else none | With `--with-tlc`: run TLC as `java -cp <PATH> tlc2.TLC` from `tla2tools.jar` instead of a `tlc` / `tlc2` launcher on `PATH`. Needs `java` on `PATH`. Without `--with-tlc` it prints a warning and starts no TLC. |
 | `--memory` | size | `memory` under `[verify]` in `rdra.toml`, else `16GiB` | What the run may hold in memory, such as `16GiB` or `512MiB` (`G` and `GB` also mean GiB). BFS takes all of it; under `--with-tlc` BFS takes half and the TLC cone runs going at once the other half, at least `64MiB`. A BFS cone past its share stops and leaves its findings undecided. See [Memory limit](#memory-limit). |
 | `--deny-undecided` | flag | off | Fail the run (exit 1) when it leaves a finding undecided: a temporal property past `--temporal-budget`, or a check, state, deadlock, or use case a BFS cone left at its state cap or the memory limit. Findings a `--buc` or `--entity` scope leaves open do not count. Without it, `verify` prints `warning: <what> undecided; the OK line holds only for what was decided (--deny-undecided fails the run)` on stderr and passes. |
@@ -1339,9 +1341,8 @@ Under `--with-tlc` a `tlc_result: ok|counterexample|tool_error` line of the same
 follows it with TLC's verdict, and each TLC run prints its own line prefixed `tlc: `, after
 the native lines.
 
-`verify` also explores each entity's cone with BFS at the same bounds, capped at 8,388,608
-states per cone, and prints what it finds before the cone lines; the `bounds:` line names
-the cap as `8388608 states per BFS cone`. It reads off each cone's run whether a rule, an
+`verify` also explores each entity's cone with BFS at the same bounds, at the same bounds with no state cap but `--memory` (or `--max-states`), and prints what it finds before the cone lines; the `bounds:` line names
+the cap as `no state cap per BFS cone, memory 16GiB`, or `<N> states per BFS cone` under `--max-states`. It reads off each cone's run whether a rule, an
 `after` assertion, or a property holds there and says nothing, and warns `Vacuous_<name>`
 (see [Rules that hold vacuously](./state-derivation.md#rules-that-hold-vacuously)). A state
 of a state model with no witness there, and a deadlock, print as in `check` and fail the run

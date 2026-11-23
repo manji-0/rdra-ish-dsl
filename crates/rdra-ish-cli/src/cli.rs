@@ -337,6 +337,16 @@ pub(crate) enum Commands {
         /// TLA+ `IntRange == 0..N` upper bound
         #[arg(long, default_value_t = 5)]
         int_range_max: u32,
+        /// Cap on each entity's distinct patterns within one cone; past it the cone is not
+        /// decided. Default: 256
+        #[arg(long)]
+        max_patterns: Option<usize>,
+        /// Cap on the joint states of every BFS run: each entity, safety, and property cone,
+        /// and the whole-model run. A run past it is not decided. Default: none; --memory
+        /// stops a run (and --temporal-budget the whole-model one). Under --with-tlc the
+        /// whole-model TLC run keeps a cap of 2097152 (2^21) without it
+        #[arg(long)]
+        max_states: Option<usize>,
         /// Seconds a temporal property's whole-model run gets when its cone does not decide
         /// it; past them the property is reported as not decided, unless the run had already
         /// found a counterexample

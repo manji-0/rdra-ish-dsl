@@ -2,7 +2,7 @@ use super::bfs::{crowded, BfsCone};
 use super::jobs::{Job, JobKind, PropertyJob};
 use super::report::run_line;
 use super::tlc::{undecided_hint, Decision, Stop};
-use super::whole_caps;
+use super::WholeRun;
 use crate::property_cone::{AfterPlain, ConeRun, Verdict};
 use crate::tlc_output::Outcome;
 use rdra_ish_core::in_parallel;
@@ -10,7 +10,6 @@ use rdra_ish_core::lifecycle::{
     Caps, ComponentRun, Diag, Fairness, LassoFault, PropertyVerdict, StateDiag, TransitionSystem,
 };
 use rdra_ish_emit::tla::TlaNames;
-use std::time::Duration;
 
 /// What the native checker decides of one `always`, `eventually`, or `leads_to`, on its cone
 /// or on the whole model.
@@ -193,7 +192,7 @@ fn native_property(ts: &TransitionSystem, p: &PropertyJob, caps: Caps) -> (Nativ
 impl Native {
     /// A cone run stopped at the state cap or the memory limit before it decided.
     pub(super) fn capped(mut self) -> Native {
-        let why = "stopped at the state cap or the memory limit".to_string();
+        let why = "stopped at the state or pattern cap (--max-states, --max-patterns) or the memory limit".to_string();
         self.notes.push(why.clone());
         self.decision = Decision::Undecided { why, stop: None };
         self.cone_capped = true;
@@ -242,7 +241,7 @@ pub(super) fn native_properties(
 }
 
 /// The properties `open` names, which their cones leave undecided, on the whole model: one
-/// exploration under the budget and `WHOLE_MODEL_STATE_CAP`, and each property decided on
+/// exploration under the budget and the whole-model state cap, and each property decided on
 /// its graph with `WF_vars(Next)`. A run that stopped decides a property only by a
 /// counterexample, which is real on the states it reached, as TLC's verdict printed before a
 /// kill is.
@@ -250,12 +249,12 @@ pub(super) fn native_wholes(
     ts: &TransitionSystem,
     open: &[usize],
     caps: Caps,
-    budget: Duration,
+    budget: WholeRun,
 ) -> Vec<Native> {
     if open.is_empty() {
         return Vec::new();
     }
-    let run = ts.clone().run(whole_caps(caps, budget));
+    let run = ts.clone().run(budget.caps(caps));
     let states = run.states.len() as u64;
     let stop = run.diags.iter().find_map(|d| match &d.diag {
         StateDiag::StateCapReached { cap, .. } => Some((
@@ -268,7 +267,10 @@ pub(super) fn native_wholes(
         )),
         StateDiag::TimeBudgetReached { .. } => Some((
             Stop::Budget,
-            format!("stopped at the time budget of {} s", budget.as_secs()),
+            format!(
+                "stopped at the time budget of {} s",
+                budget.budget.as_secs()
+            ),
         )),
         _ => None,
     });

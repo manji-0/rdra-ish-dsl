@@ -569,7 +569,7 @@ fn verify_prints_the_bounds_line_and_an_ok_line_that_repeats_them() {
     assert!(output.status.success(), "{stdout}");
     assert!(
         stdout.lines().any(|l| l
-            == "bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 8388608 states per BFS cone; entities a check does not read are unbounded"),
+            == "bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); no state cap per BFS cone, memory 16GiB; entities a check does not read are unbounded"),
         "{stdout}"
     );
     assert_eq!(
@@ -577,6 +577,118 @@ fn verify_prints_the_bounds_line_and_an_ok_line_that_repeats_them() {
         Some("OK: no errors within 2 instances per entity, Int 0..5"),
         "{stdout}"
     );
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// `--max-states` is the state cap of every BFS run: a cone `order.rdra` decides in 31 states
+/// is not decided at 10, and decided at 31; the header names the cap in force.
+#[test]
+fn max_states_raises_the_cap_of_each_cone() {
+    let tmp = scratch("verify_cli_max_states_cone");
+    let sample = repo().join("samples/formal-verification/order.rdra");
+    let sample = sample.to_str().unwrap();
+    let small = verify(&repo(), &tmp, &[sample, "--max-states", "10"]);
+    let stdout = String::from_utf8_lossy(&small.stdout);
+    assert!(
+        stdout.contains("; 10 states per BFS cone;"),
+        "the header names the cap in force: {stdout}"
+    );
+    assert!(
+        stdout.contains("Cone_Forbidden_Order_0 [Forbidden_Order_0, Inv_Order_0, AfterAssert_DeliverOrder_0]: not decided (10 states, stopped at the state or pattern cap (--max-states, --max-patterns) or the memory limit)"),
+        "{stdout}"
+    );
+    let stderr = String::from_utf8_lossy(&small.stderr);
+    assert!(
+        stderr.lines().any(|l| l == "result: not decided"),
+        "{stderr}"
+    );
+
+    let large = verify(&repo(), &tmp, &[sample, "--max-states", "31"]);
+    let stdout = String::from_utf8_lossy(&large.stdout);
+    assert!(stdout.contains("; 31 states per BFS cone;"), "{stdout}");
+    assert!(
+        stdout.contains("\nCone_Forbidden_Order_0 [Forbidden_Order_0, Inv_Order_0, AfterAssert_DeliverOrder_0]: ok (31 states)\n"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("\nresult: ok\n"), "{stdout}");
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// The whole-model run takes the same `--max-states`: with a second entity the whole model
+/// has 403 states, though each cone has 31. At 100 the run is stopped and the hint names the
+/// flag; at 403 it decides. Without the flag it stays under 2^21 and decides.
+#[test]
+fn max_states_raises_the_cap_of_the_whole_model_run() {
+    let tmp = scratch("verify_cli_max_states_whole");
+    let mut src =
+        std::fs::read_to_string(repo().join("samples/formal-verification/order.rdra")).unwrap();
+    src.push_str(
+        r#"
+entity Parcel "Parcel" {
+  id: Int @pk
+  status: Enum(packed, sent, received) @default(packed)
+}
+usecase PackParcel "Pack"
+usecase SendParcel "Send"
+usecase ReceiveParcel "Receive"
+buc BucParcel "Parcel"
+contains(BucParcel, PackParcel)
+contains(BucParcel, SendParcel)
+contains(BucParcel, ReceiveParcel)
+creates(PackParcel, Parcel)
+updates(SendParcel, Parcel)
+updates(ReceiveParcel, Parcel)
+transitions(SendParcel, Parcel.status, packed -> sent)
+transitions(ReceiveParcel, Parcel.status, sent -> received)
+"#,
+    );
+    let model = tmp.join("m.rdra");
+    std::fs::write(&model, src).unwrap();
+    let model = model.to_str().unwrap();
+
+    let small = verify(&repo(), &tmp, &[model, "--max-states", "100"]);
+    let stdout = String::from_utf8_lossy(&small.stdout);
+    assert!(
+        stdout.contains("\nRdraSpec_PaidLeadsToShipped [PaidLeadsToShipped]: not decided (100 states, stopped at the state cap of 100 states)\n"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("so raise --max-states ("), "{stdout}");
+
+    for args in [&["--max-states", "403"][..], &[]] {
+        let large = verify(&repo(), &tmp, &[&[model][..], args].concat());
+        let stdout = String::from_utf8_lossy(&large.stdout);
+        assert!(
+            stdout
+                .contains("\nRdraSpec_PaidLeadsToShipped [PaidLeadsToShipped]: ok (403 states)\n"),
+            "{args:?}: {stdout}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// `--max-patterns` caps the distinct patterns per entity: `order.rdra` has five, so a cap of
+/// 3 leaves its findings undecided, and the default 256 decides them.
+#[test]
+fn max_patterns_caps_the_patterns_of_each_entity() {
+    let tmp = scratch("verify_cli_max_patterns");
+    let sample = repo().join("samples/formal-verification/order.rdra");
+    let sample = sample.to_str().unwrap();
+    let capped = verify(&repo(), &tmp, &[sample, "--max-patterns", "3"]);
+    let stdout = String::from_utf8_lossy(&capped.stdout);
+    assert!(
+        stdout.contains("state Order.status = shipped is not decided: the Order cone stopped at the pattern cap (3 patterns)"),
+        "{stdout}"
+    );
+    let stderr = String::from_utf8_lossy(&capped.stderr);
+    assert!(
+        stderr.lines().any(|l| l == "result: not decided"),
+        "{stderr}"
+    );
+
+    let default = verify(&repo(), &tmp, &[sample]);
+    let stdout = String::from_utf8_lossy(&default.stdout);
+    assert!(!stdout.contains("pattern cap ("), "{stdout}");
+    assert!(stdout.contains("\nresult: ok\n"), "{stdout}");
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
