@@ -17,6 +17,12 @@
 //! does not say which property its lasso violates. A check the two engines decide
 //! differently is a tool bug (`disagreements`): the run fails and keeps its specs. A check
 //! one engine leaves undecided is no disagreement.
+//!
+//! This file holds the entry point `run` and its options. The rest is one file per seam:
+//! `jobs` builds the cones and property runs, `bfs` explores the safety cones and the
+//! `explored` properties, `native` decides the lasso properties, `tlc` and `tlc_tool` run
+//! TLC, `specs` writes the modules for `-o`, `compare` finds where the engines differ, and
+//! `report` and `end` print the plan, the property lines, and the closing tally.
 
 mod bfs;
 mod compare;
