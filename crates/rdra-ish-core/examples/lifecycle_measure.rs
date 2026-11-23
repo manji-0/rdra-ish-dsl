@@ -10,13 +10,18 @@
 //! `SAMPLE` is a line of `samples.txt` or a path to any project. `RDRA_CONE_VARS=1` prints the
 //! vars of each cone under its line, and the vars of its sub-lifecycle where it reduces.
 //! `RDRA_REDUCED_ONLY=1` skips the unreduced exploration.
+//!
+//! Under each temporal property's line it prints what the graph passes cost on the cone's
+//! run: moves, self-loops, the time to build the adjacency without self-loops, and the time
+//! of an iterative Tarjan pass over it with the number of components, once for the cone
+//! unreduced and once reduced.
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 use std::time::Instant;
 
 use rdra_ish_core::lifecycle::{
-    Bounds, Caps, Cone, Scope, Seed, Target, TransitionSystem, VarId, VarKind,
+    Bounds, Caps, ComponentRun, Cone, Scope, Seed, Target, TransitionSystem, VarId, VarKind,
 };
 use rdra_ish_core::project::load_project;
 
@@ -40,6 +45,31 @@ fn var_names(ts: &TransitionSystem, vars: impl IntoIterator<Item = VarId>) -> St
         })
         .collect();
     names.join(" ")
+}
+
+/// The cost of the graph passes on a complete run: moves, self-loops, the adjacency, and the
+/// components of the forward graph.
+fn graph_stats(run: &ComponentRun) -> String {
+    if !run.complete {
+        return "capped".to_string();
+    }
+    let graph = run.graph();
+    let loops = graph.edges().filter(|(from, to, _)| from == to).count();
+    let start = Instant::now();
+    let adjacency = graph.adjacency();
+    let adjacency_ms = start.elapsed().as_secs_f64() * 1e3;
+    let start = Instant::now();
+    let (_, components) = adjacency.components();
+    let components_ms = start.elapsed().as_secs_f64() * 1e3;
+    format!(
+        "{} states, {} edges, {} self-loops, adjacency {:.1} ms, components {} in {:.1} ms",
+        run.states.len(),
+        run.edges().len(),
+        loops,
+        adjacency_ms,
+        components,
+        components_ms
+    )
 }
 
 fn main() {
@@ -93,8 +123,8 @@ fn main() {
                 .or_default()
                 .push(ts.property_seed(i));
         }
-        let mut seen: HashMap<Cone, (usize, String)> = HashMap::new();
-        let mut reduced_seen: HashMap<Cone, (String, String)> = HashMap::new();
+        let mut seen: HashMap<Cone, (usize, String, String)> = HashMap::new();
+        let mut reduced_seen: HashMap<Cone, (String, String, String)> = HashMap::new();
         let mut sub_vars: Option<String> = None;
         let mut worst: (usize, String) = (0, String::new());
         let targets = ts
@@ -116,9 +146,9 @@ fn main() {
                     _ => None,
                 })
                 .collect();
-            let (states, ms) = match seen.get(&cone) {
-                Some((n, _)) => (*n, "cached".to_string()),
-                None if reduced_only => (0, "-".to_string()),
+            let (states, ms, graph) = match seen.get(&cone) {
+                Some((n, _, g)) => (*n, "cached".to_string(), g.clone()),
+                None if reduced_only => (0, "-".to_string(), "-".to_string()),
                 None => {
                     let start = Instant::now();
                     let run = ts.restrict_to(&cone.vars, &cone.keep).run(caps);
@@ -128,12 +158,13 @@ fn main() {
                         usize::MAX
                     };
                     let ms = start.elapsed().as_millis().to_string();
-                    seen.insert(cone.clone(), (n, ms.clone()));
-                    (n, ms)
+                    let graph = graph_stats(&run);
+                    seen.insert(cone.clone(), (n, ms.clone(), graph.clone()));
+                    (n, ms, graph)
                 }
             };
-            let (reduced, sub, rms) = match reduced_seen.get(&cone) {
-                Some((r, s)) => (r.clone(), s.clone(), "cached".to_string()),
+            let (reduced, sub, rms, reduced_graph) = match reduced_seen.get(&cone) {
+                Some((r, s, g)) => (r.clone(), s.clone(), "cached".to_string(), g.clone()),
                 None => {
                     let start = Instant::now();
                     let system = ts.reduced_cone(&cone, shared[&cone].iter().cloned(), caps);
@@ -150,8 +181,10 @@ fn main() {
                     } else {
                         format!(">{cap}")
                     };
-                    reduced_seen.insert(cone.clone(), (n.clone(), sub.clone()));
-                    (n, sub, start.elapsed().as_millis().to_string())
+                    let ms = start.elapsed().as_millis().to_string();
+                    let graph = graph_stats(&run);
+                    reduced_seen.insert(cone.clone(), (n.clone(), sub.clone(), graph.clone()));
+                    (n, sub, ms, graph)
                 }
             };
             let shown = if reduced_only {
@@ -172,6 +205,10 @@ fn main() {
                 sub,
                 rms
             );
+            if name.starts_with("property ") {
+                println!("    unreduced: {graph}");
+                println!("    reduced:   {reduced_graph}");
+            }
             if show_vars {
                 println!("    vars: {}", var_names(ts, cone.vars.iter().copied()));
                 if let Some(s) = sub_vars.take() {
