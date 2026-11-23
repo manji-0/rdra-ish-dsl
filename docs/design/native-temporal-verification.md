@@ -747,9 +747,16 @@ timeout. From this phase on, no release is tagged until the gate passes.
 **Phase 4: decide on a cone what the whole model decided.** Add the widening that makes a
 cone exact, by existence and by raised mark, then steps 4, 5, and 6, each in its own
 change with its fixtures. Each change that moves a sample's verdict adds the property to
-the `### Breaking` entry. Exit: the undecided list of `TEMPORAL_CASES` is empty with every
-verdict equal to the whole model's, the whole-model mode of `reduction-diff.py` finds no
-difference on seeds `0:500`, and `order.rdra` prints no `RdraSpec_` line.
+the `### Breaking` entry. The same widening by raised mark also serves the safety side
+([#206](https://github.com/manji-0/rdra-ish-dsl/issues/206)): a counterexample whose trace
+runs a handler without its event having been raised replays on the cone widened with the
+left-out marks and their raisers. A replay that succeeds prints the counterexample without
+the `note:` row; one that fails reruns that check alone on the widened cone, under the same
+memory limit, and keeps the note if the rerun is undecided. Exit: the undecided list of
+`TEMPORAL_CASES` is empty with every verdict equal to the whole model's, the whole-model
+mode of `reduction-diff.py` finds no difference on seeds `0:500`, `order.rdra` prints no
+`RdraSpec_` line, and a corpus case whose only cone counterexample runs a handler before its
+raiser reports `ok`, beside a twin whose violation is real either way.
 
 **Phase 5: lift a reduced lasso.** Replace the second run by the lift where the unreduced
 cone passes the cap, then everywhere if the lifted lassos are no longer than the explored
@@ -771,8 +778,8 @@ rewrite here. The first one is not a choice any more.
   `check` and `states` evaluate no `property`. The evaluators stay where the issues put
   them, in the explorer, and only a run that `verify` starts receives the properties.
   `check` prints its note for these forms as for `always`. The TLC formula of `stable` and
-  `unchanged` and the latch of `precedes` stay, because `--with-tlc` and the tests compare
-  them.
+  `unchanged` and the latch of `precedes` stay, because the tests compare them with TLC.
+  `--with-tlc` starts no TLC run for these forms (`verify/jobs.rs`).
 
 - **#165: keep the link as its own field.** Store the `.along` link as one `Pred` on
   `Property`, beside the formula, and not inside the operands. The printer, `fails_at`, the
