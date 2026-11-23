@@ -602,12 +602,15 @@ the sample cones that number rises to a peak and falls about as it rose, so:
   the peak. It is an estimate, not a bound. On 73 sample cones at `check` and `verify`
   bounds, stopped at a tenth to nine tenths of their states, the 61 estimates came out at
   0.51 to 1.37 of the true count, and at 0.74 or more but once. The message names the
-  memory for a quarter more states than the estimate; replayed on those runs, that size
+  memory for a quarter more states than the estimate; rerun at those caps, that size
   covered the store of all but one of the 61 and stood at most 2.6 times over it.
 - **Still rising.** While the last whole depth is the largest yet, nothing says where the
   peak is, and the message says the frontier still grows and by how much. The peak of the
   sample cones came after 36% to 100% of their states (63% at the median), so a run that
-  stops early usually gets no estimate.
+  stops early usually gets no estimate: of the 73 cones, 1 got one when stopped at half its
+  states, 10 at three quarters, and 49 at nine tenths. A cone that outgrows a machine is
+  often still rising; the `Complaint` cone of `insurance-claim-ops` at two instances stops
+  at the default `4GiB` with 13.5 million states, still growing 1.6 times per depth.
 - **Just past the peak, or a long fall.** One depth past the peak, or a fall that already
   holds more states than the mirror gives, gets no estimate either, and the message says
   which.
@@ -624,7 +627,7 @@ expanded state seen so far times `n`; early depths have fewer, so that part is l
 figure is for the one cone; the cones share the limit, so allow more than it says.
 
 ```text
-error[MemoryCapReached_Task]: state derivation for entity 'Task': memory limit 56KiB reached at 256 states; results are incomplete: the cone has 9 variables, 9 of them vary (...); new states first reached by: Flip7 127, Flip6 64, Flip5 32, Flip4 16, Flip3 8, Flip2 4, Flip1 2, Close 1; held at 231 B per state; the frontier peaked at depth 5 and has shrunk for 3 layers since, so the cone probably holds about 258 states (its falling side taken to mirror its rising side: an estimate, not a bound); with a quarter to spare, this cone alone probably needs about 1MiB: try 1MiB with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
+error[MemoryCapReached_Task]: state derivation for entity 'Task': memory limit 56KiB reached at 256 states; results are incomplete: the cone has 9 variables, 9 of them vary (...); new states first reached by: Flip7 127, Flip6 64, Flip5 32, Flip4 16, Flip3 8, Flip2 4, Flip1 2, Close 1; held at 231 B per state; the frontier peaked at depth 5 and has shrunk for 3 layers since, so the cone probably holds about 258 states (its falling side taken to mirror its rising side: an estimate, not a bound); with a quarter to spare, this cone alone probably needs about 1MiB: try 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
 error[MemoryCapReached_Order]: state derivation for entity 'Order': memory limit 1KiB reached at 5 states; results are incomplete: the cone has 3 variables, 2 of them vary (values reached/domain: Order.status 4/5, Order._exists 2/3); new states first reached by: CancelOrder 1, CapturePay 1, PlaceOrder 1, ShipOrder 1; held at 177 B per state; the frontier peaked at depth 2, but by depth 3 it has not fallen far enough to estimate the states left; the cone's variables allow at most 30 states, so if all are reachable this cone alone needs at least about 1MiB; raise it to 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
 ```
 

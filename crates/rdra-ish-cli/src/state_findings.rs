@@ -831,7 +831,7 @@ fn memory_cap_message(diag: &StateDiag, raise: &str, states: usize, held: &Held)
             let need = MemorySize::covering(held.bytes_for(cover));
             format!(
                 "{diag}{each}{frontier}; with a quarter to spare, this cone alone probably needs \
-                 about {need}: try {need} with {raise}, or {narrow}"
+                 about {need}: try {need} or more with {raise}, or {narrow}"
             )
         }
         (_, Some(bound)) if held.bytes_for(bound) <= 1 << 40 => {

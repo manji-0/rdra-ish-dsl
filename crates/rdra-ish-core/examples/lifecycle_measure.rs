@@ -12,7 +12,8 @@
 //! `RDRA_REDUCED_ONLY=1` skips the unreduced exploration. `RDRA_LAYERS=1` prints, under each
 //! run of a thousand states and more, reduced or not, the states first reached at each depth
 //! with the depth being expanded and how many of its states were, and for a complete run the
-//! same for that cone rerun under a state cap of 10%, 25%, and 50% of its states.
+//! same for that cone rerun under a state cap of 10% to 90% of its states, with what the
+//! estimate makes of each rerun.
 //!
 //! Under each temporal property's line it prints what the graph passes cost on the cone's
 //! run: moves, self-loops, the time to build the adjacency without self-loops, and the time
@@ -24,8 +25,10 @@ use std::path::Path;
 use std::time::Instant;
 
 use rdra_ish_core::lifecycle::{
-    Bounds, Caps, ComponentRun, Cone, Layers, Scope, Seed, Target, TransitionSystem, VarId, VarKind,
+    Bounds, Caps, ComponentRun, Cone, Held, Layers, Scope, Seed, Target, TransitionSystem, VarId,
+    VarKind,
 };
+use rdra_ish_core::memory::MemorySize;
 use rdra_ish_core::project::load_project;
 
 fn target_name(ts: &TransitionSystem, t: Target) -> String {
@@ -103,7 +106,10 @@ fn layers_line(layers: &Layers) -> String {
 }
 
 /// The layers of a run of a thousand states and more, and, for a complete one, of the same
-/// system rerun under a state cap of 10%, 25%, and 50% of its states.
+/// system rerun under a state cap of 10% to 90% of its states. Under each rerun: what
+/// `Layers::estimate` makes of it, the store `MemoryCapReached` would name for it
+/// (`Held::bytes_for` the states to cover, at the rerun's edges per expanded state), and the
+/// complete run's peak store.
 fn print_layers(name: &str, system: &TransitionSystem, run: &ComponentRun) {
     if run.states.len() < 1000 {
         return;
@@ -113,12 +119,28 @@ fn print_layers(name: &str, system: &TransitionSystem, run: &ComponentRun) {
         return;
     }
     println!("    layers {name}: {}", layers_line(&run.layers));
-    for pct in [10, 25, 50] {
+    for pct in [10, 25, 50, 60, 75, 90] {
         let at = run.states.len() * pct / 100;
         let stopped = system.clone().run(Caps::new(usize::MAX, at));
         println!(
             "    layers {name} at {pct}%: {}",
             layers_line(&stopped.layers)
+        );
+        let estimate = stopped.layers.estimate();
+        let held = Held {
+            bytes: stopped.peak,
+            width: stopped.state_width(),
+            edges: stopped.edges().len() as u64,
+            bound: None,
+            layers: stopped.layers.clone(),
+        };
+        let need = estimate.states_to_cover().map_or("-".to_string(), |n| {
+            MemorySize::covering(held.bytes_for(n)).bytes().to_string()
+        });
+        println!(
+            "    estimate {name} at {pct}%: {estimate:?} need {need} peak {} states {}",
+            run.peak,
+            run.states.len()
         );
     }
 }

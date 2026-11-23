@@ -164,8 +164,8 @@ fn a_run_past_its_frontiers_peak_estimates_the_states_its_cone_reaches() {
             "the frontier peaked at depth 5 and has shrunk for 3 layers since, so the cone \
              probably holds about 258 states (its falling side taken to mirror its rising side: \
              an estimate, not a bound); with a quarter to spare, this cone alone probably needs \
-             about 1MiB: try 1MiB with --memory or `memory` under [check] in rdra.toml, or narrow \
-             with --entity or --buc"
+             about 1MiB: try 1MiB or more with --memory or `memory` under [check] in rdra.toml, or \
+             narrow with --entity or --buc"
         ),
         "{stderr}"
     );
