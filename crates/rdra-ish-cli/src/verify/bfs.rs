@@ -5,8 +5,8 @@ use super::WholeRun;
 use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_output::Outcome;
 use rdra_ish_core::lifecycle::{
-    Caps, ComponentRun, Diag, NotChecked, PropertyVerdict, Scope, Selection, Severity, StateDiag,
-    Target, TransitionSystem, Undecided,
+    Caps, ComponentRun, Diag, NotChecked, PropertyVerdict, RunEnd, Scope, Selection, Severity,
+    StateDiag, Target, TransitionSystem, Undecided,
 };
 use rdra_ish_core::{in_parallel, ResolvedProgram, SemanticModel};
 use std::collections::BTreeSet;
@@ -184,8 +184,8 @@ pub(super) enum BfsCone {
         states: usize,
         /// The violated invariants and after-asserts, each with BFS's shortest trace.
         found: Vec<Diag>,
-        /// False when the run stopped at the state cap or the memory limit.
-        complete: bool,
+        /// How the run ended: a run stops once every check has failed.
+        end: RunEnd,
         /// The run stopped at the memory limit.
         memory: bool,
     },
@@ -220,7 +220,7 @@ impl BfsCone {
         BfsCone::Ran {
             states: run.states.len(),
             found,
-            complete: run.complete,
+            end: run.end(),
             memory: crowded(run),
         }
     }
@@ -239,7 +239,7 @@ impl BfsCone {
         let BfsCone::Ran {
             states,
             found,
-            complete: false,
+            end: RunEnd::Capped,
             memory: true,
         } = &self
         else {
@@ -272,12 +272,10 @@ impl BfsCone {
     /// The verdict, `None` when the run stopped before a violation.
     pub(super) fn verdict(&self) -> Option<Outcome> {
         match self {
-            BfsCone::Ran {
-                found, complete, ..
-            } => match (found.is_empty(), complete) {
+            BfsCone::Ran { found, end, .. } => match (found.is_empty(), end) {
                 (false, _) => Some(Outcome::Counterexample),
-                (true, true) => Some(Outcome::Ok),
-                (true, false) => None,
+                (true, RunEnd::Complete) => Some(Outcome::Ok),
+                (true, RunEnd::Capped | RunEnd::ChecksFailed) => None,
             },
             BfsCone::Covered(_) | BfsCone::Proved { .. } => Some(Outcome::Ok),
         }
@@ -287,12 +285,10 @@ impl BfsCone {
     pub(super) fn line(&self, module: &str, checks: &[String], jobs: &[Job]) -> String {
         let verdict = self.verdict().map_or("not decided", Outcome::as_str);
         match self {
-            BfsCone::Ran {
-                states, complete, ..
-            } => {
-                let notes = match complete {
-                    true => Vec::new(),
-                    false => vec!["stopped at the state or pattern cap (--max-states, --max-patterns) or the memory limit".to_string()],
+            BfsCone::Ran { states, end, .. } => {
+                let notes = match end {
+                    RunEnd::Complete | RunEnd::ChecksFailed => Vec::new(),
+                    RunEnd::Capped => vec!["stopped at the state or pattern cap (--max-states, --max-patterns) or the memory limit".to_string()],
                 };
                 run_line(module, checks, verdict, Some(*states as u64), &notes)
             }
@@ -361,7 +357,9 @@ pub(super) fn bfs_cones(
     // covers, read off its run; the run is dropped here.
     let decide = |at: usize| {
         let me = cone(at).expect("a safety cone");
-        let run = me.system.clone().run(caps);
+        // A safety cone decides its checks alone, so it stops once every one has failed:
+        // a check it holds is then violated, so neither vacuous nor covering another.
+        let run = me.system.clone().run(caps.until_all_violated());
         let vacuous: Vec<Diag> = std::iter::once(at)
             .chain((0..jobs.len()).filter(|a| covers[*a] == Some(at)))
             .filter_map(cone)
@@ -388,7 +386,10 @@ pub(super) fn bfs_cones(
         if let (Some(by), Some(me)) = (covers[at], cone(at)) {
             out[at] = Some(match out[by].as_ref().is_some_and(BfsCone::passed) {
                 true => BfsCone::Covered(by),
-                false => BfsCone::of(ts, me, &me.system.clone().run(caps)),
+                false => {
+                    let run = me.system.clone().run(caps.until_all_violated());
+                    BfsCone::of(ts, me, &run)
+                }
             });
         }
     }
@@ -418,10 +419,7 @@ pub(super) fn report_bfs_cones(
             continue;
         };
         println!("{}", cone.line(&job.module, &job.checks, jobs));
-        let BfsCone::Ran {
-            found, complete, ..
-        } = cone
-        else {
+        let BfsCone::Ran { found, end, .. } = cone else {
             continue;
         };
         // A check several cones hold is reported once, from the first cone that breaks it, so
@@ -431,7 +429,7 @@ pub(super) fn report_bfs_cones(
                 .expect("a violation renders");
             eprintln!("{}", Finding::new(&d.diag, &[], text));
         }
-        out.capped += usize::from(found.is_empty() && !complete);
+        out.capped += usize::from(found.is_empty() && *end != RunEnd::Complete);
     }
     out.violated = reported.len();
     out

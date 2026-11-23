@@ -36,7 +36,7 @@ pub use diag::{
 };
 pub use explore::{
     store_bytes, Adjacency, Caps, ComponentRun, Edge, Estimate, Graph, Held, LabelledEdges,
-    LassoFault, Layers, PropertyVerdict, ReducedVerdict, Spurious, States,
+    LassoFault, Layers, PropertyVerdict, ReducedVerdict, RunEnd, Spurious, States,
 };
 pub use expr::{State, StateSlice};
 pub use findings::{

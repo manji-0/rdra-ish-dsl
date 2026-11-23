@@ -1,0 +1,85 @@
+// tests/fixtures/memory/flags.rdra with a rule that reads every flag, broken two steps in
+// (Open, then Close with every flag off). The rule's cone is the whole Task: 16,000-odd joint
+// states at two instances and far more at three, against a counterexample of two steps.
+// BFS stops the cone once its one check has failed (#213).
+entity Task "Task" {
+  id: Int @pk
+  status: Enum(open, done) @default(open)
+  f1: Enum(off, on) @default(off)
+  f2: Enum(off, on) @default(off)
+  f3: Enum(off, on) @default(off)
+  f4: Enum(off, on) @default(off)
+  f5: Enum(off, on) @default(off)
+  f6: Enum(off, on) @default(off)
+  f7: Enum(off, on) @default(off)
+}
+
+usecase Open "Open"
+usecase Close "Close"
+usecase Flip1 "Flip 1"
+usecase Flip2 "Flip 2"
+usecase Flip3 "Flip 3"
+usecase Flip4 "Flip 4"
+usecase Flip5 "Flip 5"
+usecase Flip6 "Flip 6"
+usecase Flip7 "Flip 7"
+usecase Unflip1 "Unflip 1"
+usecase Unflip2 "Unflip 2"
+usecase Unflip3 "Unflip 3"
+usecase Unflip4 "Unflip 4"
+usecase Unflip5 "Unflip 5"
+usecase Unflip6 "Unflip 6"
+usecase Unflip7 "Unflip 7"
+
+buc Tasks "Tasks"
+contains(Tasks, Open)
+contains(Tasks, Close)
+contains(Tasks, Flip1)
+contains(Tasks, Flip2)
+contains(Tasks, Flip3)
+contains(Tasks, Flip4)
+contains(Tasks, Flip5)
+contains(Tasks, Flip6)
+contains(Tasks, Flip7)
+contains(Tasks, Unflip1)
+contains(Tasks, Unflip2)
+contains(Tasks, Unflip3)
+contains(Tasks, Unflip4)
+contains(Tasks, Unflip5)
+contains(Tasks, Unflip6)
+contains(Tasks, Unflip7)
+
+creates(Open, Task)
+updates(Close, Task)
+updates(Flip1, Task)
+updates(Flip2, Task)
+updates(Flip3, Task)
+updates(Flip4, Task)
+updates(Flip5, Task)
+updates(Flip6, Task)
+updates(Flip7, Task)
+updates(Unflip1, Task)
+updates(Unflip2, Task)
+updates(Unflip3, Task)
+updates(Unflip4, Task)
+updates(Unflip5, Task)
+updates(Unflip6, Task)
+updates(Unflip7, Task)
+
+transitions(Close, Task.status, open -> done)
+transitions(Flip1, Task.f1, off -> on)
+transitions(Flip2, Task.f2, off -> on)
+transitions(Flip3, Task.f3, off -> on)
+transitions(Flip4, Task.f4, off -> on)
+transitions(Flip5, Task.f5, off -> on)
+transitions(Flip6, Task.f6, off -> on)
+transitions(Flip7, Task.f7, off -> on)
+transitions(Unflip1, Task.f1, on -> off)
+transitions(Unflip2, Task.f2, on -> off)
+transitions(Unflip3, Task.f3, on -> off)
+transitions(Unflip4, Task.f4, on -> off)
+transitions(Unflip5, Task.f5, on -> off)
+transitions(Unflip6, Task.f6, on -> off)
+transitions(Unflip7, Task.f7, on -> off)
+
+forbidden(Task, status == done, f1 == off, f2 == off, f3 == off, f4 == off, f5 == off, f6 == off, f7 == off)

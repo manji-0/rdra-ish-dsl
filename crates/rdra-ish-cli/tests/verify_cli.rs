@@ -1818,3 +1818,38 @@ fn with_tlc_needs_tlc_and_tlc_jar_needs_with_tlc() {
     assert!(!stdout.contains("tlc_result"), "{stdout}");
     let _ = std::fs::remove_dir_all(&tmp);
 }
+
+/// A safety cone stops once every check on it has failed (#213): the flags rule's cone has
+/// 65,793 states at two instances, and BFS stops after 3 with the 2-step counterexample and
+/// no cap note. TLC, which explores the whole module, gives the same verdict.
+#[test]
+fn a_safety_cone_stops_once_every_check_on_it_has_failed() {
+    let tmp = scratch("verify_cli_early_stop");
+    let model = repo().join("crates/rdra-ish-cli/tests/fixtures/early_stop/flags_fail.rdra");
+    let output = verify(&repo(), &tmp, &[model.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
+    assert!(
+        stdout.contains("\nCone_Forbidden_Task_0 [Forbidden_Task_0]: counterexample (3 states)\n"),
+        "{stdout}"
+    );
+    assert!(
+        stderr.contains("error[Forbidden_Task_0]: invariant Forbidden_Task_0 is violated"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("  counterexample (2 steps):"), "{stderr}");
+    if have_tlc() {
+        let output = verify_with_tlc(&repo(), &tmp, &[model.to_str().unwrap()]);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stdout.contains(
+                "\ntlc: Cone_Forbidden_Task_0 [Forbidden_Task_0]: counterexample (65793 states)\n"
+            ),
+            "{stdout}"
+        );
+        assert!(!stderr.contains("EngineDisagreement"), "{stderr}");
+    }
+    let _ = std::fs::remove_dir_all(&tmp);
+}
