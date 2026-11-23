@@ -70,6 +70,15 @@ jobs:
           export PATH
           unset RDRA_Z3 RDRA_TLC_JAR
           if type -P tlc tlc2 z3; then echo "tlc or z3 is still on PATH" >&2; exit 1; fi
+          # A mutant can make the checker allocate without end (a lasso walk that never
+          # stops grows past 16 GB in under a minute), and the runner then cancels the whole
+          # shard before the 60 s timeout. Cargo runs the test binary through this runner,
+          # not rustc, and the rdra-ish processes it spawns inherit the cap: each of the
+          # test binary and its four workers gets 2 GiB. The unmutated corpus needs about
+          # 12 MB. A mutant over the cap fails its test and counts as caught.
+          type -P prlimit >/dev/null || { echo "prlimit is not on PATH" >&2; exit 1; }
+          host=$(rustc -vV | sed -n 's/^host: //p' | tr 'a-z-' 'A-Z_')
+          export "CARGO_TARGET_${host}_RUNNER=prlimit --as=$((2 << 30))"
           cargo test --profile mutants -p rdra-ish-cli --test engine_corpus
           args=(--in-place --baseline skip --timeout 60 --build-timeout 1200
             --shard "$SHARD/$SHARDS" --sharding round-robin)
@@ -98,10 +107,19 @@ jobs:
           SHARDS: ${{ inputs.shards }}
         run: |
           count() { cat shards/*/"$1" 2>/dev/null | wc -l || true; }
+          # A cancelled shard uploads nothing, so its mutants are missing from every count.
+          missing=$(for i in $(seq 0 $((SHARDS - 1))); do
+            [[ -d "shards/mutants-shard-$i" ]] || echo "$i"
+          done | paste -sd' ' -)
           tested=0
           {
             echo "## cargo mutants over the liveness ladder"
             echo
+            if [[ -n "$missing" ]]; then
+              echo "> [!WARNING]"
+              echo "> Shards $missing uploaded no results (cancelled or lost): their mutants are in none of the counts below."
+              echo
+            fi
             echo "| outcome | mutants |"
             echo "|---|---|"
             for o in missed timeout caught unviable; do
@@ -123,3 +141,4 @@ jobs:
               echo '```'
             done
           } >> "$GITHUB_STEP_SUMMARY"
+          [[ -z "$missing" ]] || echo "::error::mutants shards $missing uploaded no results"
