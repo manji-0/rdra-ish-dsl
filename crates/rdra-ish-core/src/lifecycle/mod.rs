@@ -34,8 +34,8 @@ pub use diag::{
     Severity, StateDiag, UnmetPremise, VarSpread,
 };
 pub use explore::{
-    store_bytes, Adjacency, Caps, ComponentRun, Edge, Graph, Held, LabelledEdges, LassoFault,
-    PropertyVerdict,
+    store_bytes, Adjacency, Caps, ComponentRun, Edge, Estimate, Graph, Held, LabelledEdges,
+    LassoFault, Layers, PropertyVerdict,
 };
 pub use expr::State;
 pub use findings::{

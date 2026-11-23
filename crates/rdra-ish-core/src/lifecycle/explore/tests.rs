@@ -234,8 +234,8 @@ fn store_bytes_models_the_store_a_run_counts() {
         let held = stopped
             .diags
             .iter()
-            .find_map(|d| match d.diag {
-                StateDiag::MemoryCapReached { held, .. } => Some(held),
+            .find_map(|d| match &d.diag {
+                StateDiag::MemoryCapReached { held, .. } => Some(held.clone()),
                 _ => None,
             })
             .expect("a run at a third of its peak stops at the limit");
@@ -246,7 +246,7 @@ fn store_bytes_models_the_store_a_run_counts() {
             held.bytes,
             &format!("{instances} instances, stopped at {states} states"),
         );
-        let need = held.bytes_to_finish(stopped.states.len()).expect("a bound");
+        let need = held.bytes_for(held.bound.expect("a bound"));
         assert!(
             need >= held.bytes,
             "{need} B to finish, {} B held",
@@ -256,22 +256,156 @@ fn store_bytes_models_the_store_a_run_counts() {
 }
 
 #[test]
-fn store_bytes_saturates_and_a_missing_bound_estimates_nothing() {
+fn store_bytes_saturates_and_scales_the_edges_by_the_states_expanded() {
     use super::store::{store_bytes, Held};
 
     assert_eq!(store_bytes(u64::MAX, 16, u64::MAX), u64::MAX);
     assert_eq!(store_bytes(0, 0, 0), 32 * 4 + 25 * 4 + 12 * 4);
-    let held = |bound| Held {
+    // 10 states reached, 5 of them expanded: 4 edges per expanded state.
+    let held = Held {
         bytes: 1000,
         width: 10,
         edges: 20,
-        bound,
+        bound: None,
+        layers: layers(&[1, 4, 5], 4),
     };
-    assert_eq!(held(None).bytes_to_finish(10), None);
-    // 2 edges per state held, so 2048 edges at a bound of 1024 states.
+    assert_eq!(held.layers.expanded_states(), 5);
+    assert_eq!(held.bytes_for(1024), store_bytes(1024, 10, 4096));
+    assert_eq!(held.bytes_per_state(9), 100);
+}
+
+/// The layers of a run stopped while it expands the next-to-last layer of `new`, after
+/// `expanded` of its states: every layer but the last is whole, and the last holds what that
+/// layer has found so far.
+fn layers(new: &[u64], expanded: u64) -> super::Layers {
+    let mut layers = super::Layers::default();
+    for _ in 0..new[0] {
+        layers.admit(true);
+    }
+    let mut at = 0;
+    for d in 0..new.len() - 1 {
+        for i in 0..new[d] {
+            layers.read(at);
+            if i == 0 {
+                for _ in 0..new[d + 1] {
+                    layers.admit(false);
+                }
+            }
+            at += 1;
+        }
+    }
+    layers.expanded = expanded;
+    layers
+}
+
+#[test]
+fn a_run_counts_the_new_states_of_each_depth() {
+    let ts = TransitionSystem::build(&model_from(SHOP), Bounds::VERIFY, &Scope::ALL).ts;
+    let run = ts.run_on(Caps::VERIFY, Threads::Fixed(0));
+    assert!(run.complete);
+    let layers = &run.layers;
+    assert_eq!(layers.states(), run.states.len() as u64);
     assert_eq!(
-        held(Some(1024)).bytes_to_finish(10),
-        Some(store_bytes(1024, 10, 2048))
+        layers.whole().len(),
+        layers.new.len(),
+        "a finished run has no layer filling"
     );
-    assert_eq!(held(None).bytes_per_state(9), 100);
+    // A state's depth is one past its parent's.
+    let mut depth = vec![0usize; run.states.len()];
+    for (i, parent) in run.parents.iter().enumerate() {
+        if let Some(edge) = parent {
+            depth[i] = depth[run.edges[*edge as usize].from as usize] + 1;
+        }
+    }
+    let mut counted = vec![0u64; layers.new.len()];
+    for d in depth {
+        counted[d] += 1;
+    }
+    assert_eq!(counted, layers.new);
+}
+
+#[test]
+fn the_estimate_mirrors_the_rising_layers_once_two_have_fallen() {
+    use super::Estimate;
+
+    // Still rising: no estimate.
+    assert_eq!(
+        layers(&[1, 3, 9, 4], 2).estimate(),
+        Estimate::Rising {
+            depth: 2,
+            last: 9,
+            before: 3
+        }
+    );
+    // One layer past the peak is not enough.
+    assert_eq!(
+        layers(&[1, 3, 9, 6, 2], 2).estimate(),
+        Estimate::Unsettled { peak: 2, depth: 3 }
+    );
+    // Two past it: the falling side holds what the rising side did, 1 + 4 on each side of 9,
+    // one more than the 18 states reached.
+    let falling = layers(&[1, 4, 9, 2, 1, 1], 1).estimate();
+    assert_eq!(
+        falling,
+        Estimate::Falling {
+            states: 19,
+            peak: 2,
+            depth: 4
+        }
+    );
+    assert_eq!(falling.states_to_cover(), Some(23));
+    // A fall that already holds more than the mirror says settles nothing.
+    assert_eq!(
+        layers(&[1, 9, 8, 7, 1], 1).estimate(),
+        Estimate::Overrun { peak: 1, depth: 3 }
+    );
+    // A tie keeps the first of the largest layers as the peak: the mirror of 1 + 4 + 1 is
+    // under the 13 states reached.
+    assert_eq!(
+        layers(&[1, 4, 4, 2, 1, 1], 0).estimate(),
+        Estimate::Overrun { peak: 1, depth: 4 }
+    );
+}
+
+/// A cone of `samples/patent-ops` at `Bounds::VERIFY` (the `PriorityClaim` view, reduced) as
+/// `examples/lifecycle_measure.rs` printed it, stopped at nine tenths of its 22233 states:
+/// the estimate comes out within a third of the count, and its states to cover over it.
+#[test]
+fn the_estimate_on_a_sample_cone_comes_within_a_third_of_its_states() {
+    use super::Estimate;
+
+    const PRIORITY_CLAIM: [u64; 31] = [
+        1, 1, 3, 5, 7, 9, 12, 18, 19, 30, 50, 68, 109, 192, 327, 512, 748, 992, 1260, 1601, 1997,
+        2347, 2505, 2552, 2372, 1913, 1368, 758, 336, 106, 15,
+    ];
+    let total: u64 = PRIORITY_CLAIM.iter().sum();
+    assert_eq!(total, 22233);
+    // Nine tenths in: depth 25 is whole and depth 26 has 359 of its 1368 states.
+    let mut stopped = PRIORITY_CLAIM[..26].to_vec();
+    stopped.push(359);
+    let estimate = layers(&stopped, 502).estimate();
+    let Estimate::Falling {
+        states,
+        peak,
+        depth,
+    } = estimate
+    else {
+        panic!("{estimate:?}");
+    };
+    assert_eq!((peak, depth), (23, 25));
+    assert!(
+        states * 3 <= total * 4 && states * 4 >= total * 3,
+        "{states} of {total}"
+    );
+    assert!(estimate.states_to_cover().expect("an estimate") >= total);
+    // Eight tenths in, one layer past the peak: no estimate yet.
+    let mut stopped = PRIORITY_CLAIM[..25].to_vec();
+    stopped.push(49);
+    assert_eq!(
+        layers(&stopped, 60).estimate(),
+        Estimate::Unsettled {
+            peak: 23,
+            depth: 24
+        }
+    );
 }
