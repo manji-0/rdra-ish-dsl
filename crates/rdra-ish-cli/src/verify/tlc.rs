@@ -1,7 +1,8 @@
 use super::jobs::{whole_job, ConeSystem, Job, JobKind};
+use super::report::run_line;
 use super::specs::write_whole_specs;
 use super::tlc_tool::Tlc;
-use super::{run_line, WHOLE_MODEL_STATE_CAP};
+use super::WHOLE_MODEL_STATE_CAP;
 use crate::export::Modules;
 use crate::memory::tlc_plan;
 use crate::property_cone::{AfterPlain, ConeRun, Verdict};

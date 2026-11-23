@@ -1,7 +1,8 @@
 use super::bfs::{crowded, BfsCone};
 use super::jobs::{Job, JobKind, PropertyJob};
+use super::report::run_line;
 use super::tlc::{undecided_hint, Decision, Stop};
-use super::{run_line, whole_caps};
+use super::whole_caps;
 use crate::property_cone::{AfterPlain, ConeRun, Verdict};
 use crate::tlc_output::Outcome;
 use rdra_ish_core::in_parallel;

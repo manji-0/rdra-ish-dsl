@@ -1,6 +1,7 @@
 use super::jobs::{ConeSystem, Job, JobKind};
+use super::report::run_line;
 use super::tlc::covering;
-use super::{run_line, whole_caps};
+use super::whole_caps;
 use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_output::Outcome;
 use rdra_ish_core::lifecycle::{
