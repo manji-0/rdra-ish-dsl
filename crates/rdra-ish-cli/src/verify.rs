@@ -14,7 +14,8 @@
 //! decides every safety check: each invariant and after-assert cone on the same reduced
 //! system TLC would check (`bfs_cones`), and each `always` as an invariant over its present
 //! binders, beside the forms above. TLC runs only `eventually` and `leads_to`, so its
-//! `tlc_result:` line prints only when one of those ran.
+//! `tlc_result:` line prints only when one of those ran, or as today when nothing at all
+//! goes to a cone (`nothing to check`).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -1611,7 +1612,7 @@ fn bfs_cones(ts: &TransitionSystem, jobs: &[Job], caps: Caps) -> (Vec<BfsCone>, 
 /// What BFS decided of the safety cones under `RDRA_ISH_NATIVE`.
 #[derive(Default)]
 struct Safety {
-    /// Invariants and after-asserts violated.
+    /// Distinct invariants and after-asserts violated.
     violated: usize,
     /// Cones the state cap or the memory limit stopped before a violation.
     capped: usize,
@@ -1625,6 +1626,7 @@ fn report_bfs_cones(
     cones: &[BfsCone],
 ) -> Safety {
     let mut out = Safety::default();
+    let mut reported = BTreeSet::new();
     for (job, cone) in jobs.iter().zip(cones) {
         println!("{}", cone.line(&job.module, &job.checks, jobs));
         let BfsCone::Ran {
@@ -1633,14 +1635,16 @@ fn report_bfs_cones(
         else {
             continue;
         };
-        for d in found {
+        // A check several cones hold is reported once, from the first cone that breaks it, so
+        // the count does not depend on how the cones overlap.
+        for d in found.iter().filter(|d| reported.insert(d.diag.name(&[]))) {
             let text = render_violation(program, model, &d.diag, TraceSource::Bfs)
                 .expect("a violation renders");
             eprintln!("{}", Finding::new(&d.diag, &[], text));
         }
-        out.violated += found.len();
         out.capped += usize::from(found.is_empty() && !complete);
     }
+    out.violated = reported.len();
     out
 }
 

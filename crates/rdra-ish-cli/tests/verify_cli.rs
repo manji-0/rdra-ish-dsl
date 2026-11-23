@@ -38,6 +38,7 @@ fn verify(cwd: &Path, tmpdir: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
         .current_dir(cwd)
         .env("TMPDIR", tmpdir)
+        .env_remove("RDRA_ISH_NATIVE")
         .arg("verify")
         .args(args)
         .output()
