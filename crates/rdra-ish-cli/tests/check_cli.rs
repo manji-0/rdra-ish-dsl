@@ -1036,3 +1036,44 @@ fn actor_scope_decides_the_deadlock_another_actor_hides() {
     let (_, _, stderr) = run_on_source("self-buc", SELF_SERVICE, &["check", "--buc", "BucSelf"]);
     assert!(!stderr.contains("error[Deadlock"), "{stderr}");
 }
+
+const GADGET: &str = "crates/rdra-ish-cli/tests/fixtures/caps/gadget.rdra";
+
+/// Two instances of `Gadget` pass the 256 patterns the cap was at one instance; the default now
+/// follows `--instance-count`, so the run completes, and a cap given on the command line still
+/// decides.
+#[test]
+fn check_defaults_to_caps_that_follow_the_instance_count() {
+    let run_at = |extra: &[&str]| {
+        let mut args = vec!["check", GADGET, "--instance-count", "2"];
+        args.extend_from_slice(extra);
+        let output = run(&args);
+        (
+            output.status.code(),
+            String::from_utf8_lossy(&output.stderr).into_owned(),
+        )
+    };
+
+    let (code, stderr) = run_at(&[]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(
+        stderr.starts_with("bounds: 2 instances per entity, Int 0..5; 1048576 states per cone;"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("CapReached"), "{stderr}");
+
+    let (code, stderr) = run_at(&["--max-patterns", "256"]);
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(
+        stderr.contains("error[PatternCapReached_Gadget]"),
+        "{stderr}"
+    );
+
+    let (code, stderr) = run_at(&["--max-states", "1000"]);
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(
+        stderr.starts_with("bounds: 2 instances per entity, Int 0..5; 1000 states per cone;"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("error[StateCapReached_Gadget]"), "{stderr}");
+}

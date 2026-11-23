@@ -1,0 +1,78 @@
+// Five columns that move on their own: 5^4 rows of states, so two instances pass the old 256-pattern cap.
+entity Gadget "Gadget" {
+  id: Int @pk
+  e: Enum(x, y) @default(x)
+  a: Enum(s0, s1, s2, s3, s4) @default(s0)
+  b: Enum(s0, s1, s2, s3, s4) @default(s0)
+  c: Enum(s0, s1, s2, s3, s4) @default(s0)
+  d: Enum(s0, s1, s2, s3, s4) @default(s0)
+}
+usecase Make "Make"
+usecase Step_a0 "Step a0"
+usecase Step_a1 "Step a1"
+usecase Step_a2 "Step a2"
+usecase Step_a3 "Step a3"
+usecase Step_b0 "Step b0"
+usecase Step_b1 "Step b1"
+usecase Step_b2 "Step b2"
+usecase Step_b3 "Step b3"
+usecase Step_c0 "Step c0"
+usecase Step_c1 "Step c1"
+usecase Step_c2 "Step c2"
+usecase Step_c3 "Step c3"
+usecase Step_d0 "Step d0"
+usecase Step_d1 "Step d1"
+usecase Step_d2 "Step d2"
+usecase Step_d3 "Step d3"
+buc Gadgets "Gadgets"
+contains(Gadgets, Make)
+creates(Make, Gadget)
+contains(Gadgets, Step_a0)
+updates(Step_a0, Gadget)
+transitions(Step_a0, Gadget.a, s0 -> s1)
+contains(Gadgets, Step_a1)
+updates(Step_a1, Gadget)
+transitions(Step_a1, Gadget.a, s1 -> s2)
+contains(Gadgets, Step_a2)
+updates(Step_a2, Gadget)
+transitions(Step_a2, Gadget.a, s2 -> s3)
+contains(Gadgets, Step_a3)
+updates(Step_a3, Gadget)
+transitions(Step_a3, Gadget.a, s3 -> s4)
+contains(Gadgets, Step_b0)
+updates(Step_b0, Gadget)
+transitions(Step_b0, Gadget.b, s0 -> s1)
+contains(Gadgets, Step_b1)
+updates(Step_b1, Gadget)
+transitions(Step_b1, Gadget.b, s1 -> s2)
+contains(Gadgets, Step_b2)
+updates(Step_b2, Gadget)
+transitions(Step_b2, Gadget.b, s2 -> s3)
+contains(Gadgets, Step_b3)
+updates(Step_b3, Gadget)
+transitions(Step_b3, Gadget.b, s3 -> s4)
+contains(Gadgets, Step_c0)
+updates(Step_c0, Gadget)
+transitions(Step_c0, Gadget.c, s0 -> s1)
+contains(Gadgets, Step_c1)
+updates(Step_c1, Gadget)
+transitions(Step_c1, Gadget.c, s1 -> s2)
+contains(Gadgets, Step_c2)
+updates(Step_c2, Gadget)
+transitions(Step_c2, Gadget.c, s2 -> s3)
+contains(Gadgets, Step_c3)
+updates(Step_c3, Gadget)
+transitions(Step_c3, Gadget.c, s3 -> s4)
+contains(Gadgets, Step_d0)
+updates(Step_d0, Gadget)
+transitions(Step_d0, Gadget.d, s0 -> s1)
+contains(Gadgets, Step_d1)
+updates(Step_d1, Gadget)
+transitions(Step_d1, Gadget.d, s1 -> s2)
+contains(Gadgets, Step_d2)
+updates(Step_d2, Gadget)
+transitions(Step_d2, Gadget.d, s2 -> s3)
+contains(Gadgets, Step_d3)
+updates(Step_d3, Gadget)
+transitions(Step_d3, Gadget.d, s3 -> s4)
+forbidden(Gadget, a == s4, b == s4, c == s4, d == s4, e == y)

@@ -220,7 +220,7 @@ fn a_capped_cone_leaves_an_untaken_arm_undecided() {
     let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
     let run = built
         .ts
-        .explore_targets(&built.ts.targets(), Caps::new(Caps::DEFAULT_PATTERNS, 4));
+        .explore_targets(&built.ts.targets(), Caps::new(Caps::STATES.patterns, 4));
     assert!(
         !run.verdicts()
             .iter()

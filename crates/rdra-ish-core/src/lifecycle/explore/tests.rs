@@ -161,3 +161,36 @@ fn a_run_past_its_deadline_stops_and_names_the_budget() {
     let whole = ts.run(Caps::VERIFY.until(Instant::now() + Duration::from_secs(3600)));
     assert!(whole.complete);
 }
+
+#[test]
+fn default_caps_scale_with_the_instance_count() {
+    let at = |n| {
+        let caps = Caps::for_instances(n);
+        (caps.patterns, caps.states)
+    };
+    assert_eq!(
+        at(1),
+        (1 << 10, 1 << 16),
+        "one instance keeps the 65,536 states"
+    );
+    assert_eq!(at(2), (1 << 18, 1 << 20));
+    assert_eq!(at(3), (1 << 26, 1 << 28));
+    assert_eq!(at(0), at(1), "no instances counts as one");
+    assert_eq!(Caps::STATES, Caps::for_instances(1));
+}
+
+#[test]
+fn default_caps_saturate_where_the_shift_leaves_usize() {
+    let last_exact = (usize::BITS - 1 - 10) / 8 + 1;
+    let caps = Caps::for_instances(last_exact);
+    assert_eq!(caps.patterns, 1 << (10 + 8 * (last_exact - 1)));
+    assert_eq!(caps.states, caps.patterns.saturating_mul(4));
+    for n in [last_exact + 1, 100, 255, u32::MAX] {
+        let caps = Caps::for_instances(n);
+        assert_eq!(
+            (caps.patterns, caps.states),
+            (usize::MAX, usize::MAX),
+            "n = {n}"
+        );
+    }
+}

@@ -28,7 +28,7 @@ use lifecycle_gate::{gate, Lifecycle};
 use list_output::{format_lint_issues, format_rules, format_transitions, list_elements};
 use load::{deny_deprecated, eprint_diagnostic, load_clean, load_clean_with_manifest};
 use memory::{memory_limit, Budgeted};
-use rdra_ish_core::lifecycle::{Caps, FindingTally, Severity};
+use rdra_ish_core::lifecycle::{FindingTally, Severity};
 use rdra_ish_core::memory::MemoryPool;
 use rdra_ish_core::{collect_rdra_files, load_project, Project};
 use rdra_ish_core::{lint_issues, LintSeverity, RdraError};
@@ -90,10 +90,12 @@ pub fn run() -> Result<()> {
 
             let scope = scope.resolve(&model)?;
             // Same severity as `states` (fail-closed on caps and violated constraints).
-            let caps = Caps::new(max_patterns, max_states).charged_to(MemoryPool::for_command(
-                memory_limit(memory, manifest.as_ref(), Budgeted::Check),
-                Budgeted::Check.raise(),
-            ));
+            let caps = bounds
+                .caps(max_patterns, max_states)
+                .charged_to(MemoryPool::for_command(
+                    memory_limit(memory, manifest.as_ref(), Budgeted::Check),
+                    Budgeted::Check.raise(),
+                ));
             let lifecycle = state_findings(&program, &model, &scope, bounds.bounds()?, caps);
             eprintln!("{}", lifecycle.bounds);
             for diag in rdra_ish_core::consistency_diagnostics(&model) {
@@ -233,7 +235,7 @@ pub fn run() -> Result<()> {
             &inputs,
             format,
             bounds.bounds()?,
-            (Caps::new(max_patterns, max_states), memory),
+            (bounds.caps(max_patterns, max_states), memory),
             &scope,
         )?,
 

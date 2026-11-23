@@ -177,7 +177,7 @@ names which verdicts move and how to migrate.
 
 To keep a result reproducible across releases, pass the bounds a command takes as flags
 instead of relying on the defaults: `--instance-count`, `--int-range-max`, and
-`--max-states` for `check` and `states`, and `--instance-count` and `--int-range-max` for
+`--max-patterns` and `--max-states` for `check` and `states` (their defaults follow `--instance-count`), and `--instance-count` and `--int-range-max` for
 `verify`. The [Bounds](./state-derivation.md#bounds) table lists each command's defaults.
 The [memory limit](./cli-reference.md#memory-limit) (`--memory`) can leave a cone
 undecided as `--max-states` does; its count of a cone's bytes is the same on every

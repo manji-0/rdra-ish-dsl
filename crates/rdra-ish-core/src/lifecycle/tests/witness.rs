@@ -214,7 +214,7 @@ fn a_capped_cone_leaves_its_states_and_actions_undecided() {
     let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
     let run = built
         .ts
-        .explore_targets(&built.ts.targets(), Caps::new(Caps::DEFAULT_PATTERNS, 2));
+        .explore_targets(&built.ts.targets(), Caps::new(Caps::STATES.patterns, 2));
     assert!(
         !run.verdicts().iter().any(|d| matches!(
             d.diag,
