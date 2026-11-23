@@ -1,0 +1,46 @@
+// trap: a split use case is fair per step, the later step keyed by the row the earlier one
+// bound (an `Earlier` parameter).
+// OpenSettlement moves the claim through ClaimApi, then creates its settlement through
+// SettlementApi. With OpenSettlement fair, a started run finishes, the settlement can be
+// agreed, and the claim closes: Ends holds. Without it, a run can stop between the two
+// steps; the cone's WF_vars(Next) rules that stop out, but Ping loops outside the cone, so
+// the whole model's WF_vars(Next) does not, and EndsUnfairSplit fails on the whole model.
+// expect Ends: native=ok tlc=ok
+// expect EndsUnfairSplit: native=counterexample tlc=counterexample
+// expect Unique_Settlement_Claim: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+entity Claim "案件" {
+  id: Int @pk
+  status: Enum(open, negotiating, closed) @default(open)
+}
+entity Settlement "示談" {
+  id: Int @pk
+  status: Enum(pending, agreed) @default(pending)
+}
+entity Bell "呼び鈴" { id: Int @pk  state: Enum(idle, ringing) @default(idle) }
+relate(Settlement, Claim, 1:1)
+usecase Report "受付"
+usecase OpenSettlement "示談開始"
+usecase Agree "示談成立"
+usecase Close "終了"
+usecase Hang "設置"
+usecase Ping "鳴らす"
+usecase Hush "止める"
+api ClaimApi "案件 API"
+api SettlementApi "示談 API"
+creates(Report, Claim)
+invokes(OpenSettlement, ClaimApi)
+updates(ClaimApi, Claim)
+transitions(OpenSettlement, Claim.status, open -> negotiating)
+invokes(OpenSettlement, SettlementApi)
+creates(SettlementApi, Settlement)
+transitions(Agree, Settlement.status, pending -> agreed)
+transitions(Close, Claim.status, negotiating -> closed).when(Agreed)
+condition Agreed "示談成立済み"
+holds(Agreed, Settlement.status == agreed)
+creates(Hang, Bell)
+transitions(Ping, Bell.state, idle -> ringing)
+transitions(Hush, Bell.state, ringing -> idle)
+property Ends
+  leads_to(Claim.status == negotiating, Claim.status == closed).fair(OpenSettlement, Agree, Close)
+property EndsUnfairSplit
+  leads_to(Claim.status == negotiating, Claim.status == closed).fair(Agree, Close)

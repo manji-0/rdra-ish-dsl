@@ -1,0 +1,33 @@
+// trap: a fair handler keyed by the row its event was raised for (a `Triggered` parameter).
+// Execute raises EvExecuted for the order; Post, which the event triggers, posts the
+// order's ledger and binds the order only through the raise. With Post fair, a ledger of
+// an executed order is posted (PostedFair). Without it, nothing forces Post, the run may
+// stop after the raise, and PostedUnfair fails: its cone holds every written var except
+// the bell's, and the bell loops forever in the whole model.
+// expect PostedFair: native=ok tlc=ok
+// expect PostedUnfair: native=counterexample tlc=counterexample
+entity Order "依頼" { id: Int @pk  status: Enum(requested, executed) @default(requested) }
+entity Ledger "台帳" { id: Int @pk  state: Enum(open, posted) @default(open) }
+entity Bell "呼び鈴" { id: Int @pk  state: Enum(idle, ringing) @default(idle) }
+relate(Ledger, Order, N:1)
+usecase Request "依頼"
+usecase OpenLedger "台帳作成"
+usecase Execute "実行"
+usecase Post "記帳"
+usecase Hang "設置"
+usecase Ping "鳴らす"
+usecase Hush "止める"
+event EvExecuted "実行済"
+creates(Request, Order)
+creates(OpenLedger, Ledger)
+transitions(Execute, Order.status, requested -> executed)
+raises(Execute, EvExecuted)
+triggers(EvExecuted, Post)
+transitions(Post, Ledger.state, open -> posted)
+creates(Hang, Bell)
+transitions(Ping, Bell.state, idle -> ringing)
+transitions(Hush, Bell.state, ringing -> idle)
+property PostedFair
+  leads_to(Order.status == executed, Ledger.state == posted).along(Ledger, Order).fair(Post)
+property PostedUnfair
+  leads_to(Order.status == executed, Ledger.state == posted).along(Ledger, Order)

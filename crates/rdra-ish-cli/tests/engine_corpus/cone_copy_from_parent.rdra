@@ -1,0 +1,25 @@
+// trap: a fair use case copies its parent's column into the cone.
+// Issue copies the application's kind onto the permit, so the parent's column, its owner
+// and its creation come into the cone. With Issue fair, a draft permit is issued
+// (IssueEventually). Without `.fair`, the copy target looks cyclic to a static rule
+// (any value to any value), and the property needs the whole model's WF_vars(Next), where
+// nothing loops: IssueEventuallyPlain holds as well.
+// expect IssueEventually: native=ok tlc=ok
+// expect IssueEventuallyPlain: native=ok tlc=ok
+entity Application "申請" { id: Int @pk  kind: Enum(food, retail) @default(food) }
+entity Permit "許可" {
+  id: Int @pk
+  status: Enum(draft, issued) @default(draft)
+  kind: Enum(food, retail) @default(food)
+}
+relate(Permit, Application, N:1)
+usecase File "申請"
+usecase Draft "許可作成"
+usecase Issue "発行"
+creates(File, Application)
+creates(Draft, Permit)
+updates(Issue, Permit)
+transitions(Issue, Permit.status, draft -> issued)
+sets(Issue, Permit.kind == Application.kind)
+property IssueEventually leads_to(Permit.status == draft, Permit.status == issued).fair(Issue)
+property IssueEventuallyPlain leads_to(Permit.status == draft, Permit.status == issued)

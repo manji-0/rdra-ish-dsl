@@ -1,0 +1,46 @@
+// trap: a reduced class that loops inside itself looks like a stop.
+// The gate behind its key is the job's independent sub-lifecycle, so the job's cone is
+// reduced by it, with the gate's states grouped by what the job observes (open or not).
+// While the gate is shut its latch can be set and cleared forever (Unlatch, Relatch), a
+// loop inside one class that the reduced graph cannot show. JobStartsUnfair has no
+// `.fair`: on the unreduced cone the latch loops while the key stays locked, which meets
+// WF_vars(Next), and the job never starts. On the reduced graph that class has a move to
+// `open` and no loop, so a WF_vars(Next) run there would answer ok; it must run unreduced.
+// JobStarts is fair on Start only, which is never enabled before the gate opens, so it
+// fails the same way. JobWaits fails at the first Start.
+// expect JobStarts: native=counterexample tlc=counterexample
+// expect JobStartsUnfair: native=counterexample tlc=counterexample
+// expect JobWaits: native=counterexample tlc=counterexample
+entity Key "鍵" { id: Int @pk  status: Enum(locked, unlocked) @default(locked) }
+entity Gate "門" { id: Int @pk  status: Enum(shut, open) @default(shut)  latch: Bool @default(false) }
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+relate(Gate, Key, N:1)
+relate(Job, Gate, N:1)
+usecase Unlock "解錠"
+usecase Unlatch "掛け金を外す"
+usecase Relatch "掛け金を掛ける"
+usecase Swing "開く"
+usecase Submit "投入"
+usecase Start "開始"
+transitions(Unlock, Key.status, locked -> unlocked)
+sets(Unlatch, Gate.latch == true)
+sets(Relatch, Gate.latch == false)
+transitions(Swing, Gate.status, shut -> open)
+condition Unlatched "掛け金が外れている"
+holds(Unlatched, Gate.latch == true)
+applies_to(Unlatched, Swing)
+applies_to(Unlatched, Relatch)
+condition Latched "掛け金が掛かっている"
+holds(Latched, Gate.latch == false)
+applies_to(Latched, Unlatch)
+condition KeyOpen "鍵が開いている"
+holds(KeyOpen, Key.status == unlocked)
+applies_to(KeyOpen, Swing)
+creates(Submit, Job)
+transitions(Start, Job.status, waiting -> running)
+condition GateOpen "門が開いている"
+holds(GateOpen, Gate.status == open)
+applies_to(GateOpen, Start)
+property JobStarts eventually(Job.status == running).fair(Start)
+property JobStartsUnfair eventually(Job.status == running)
+property JobWaits always(Job.status == waiting)

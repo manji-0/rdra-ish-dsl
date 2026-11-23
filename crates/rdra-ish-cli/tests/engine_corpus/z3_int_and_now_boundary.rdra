@@ -1,0 +1,36 @@
+// trap: Int columns and `now` at the top of the range.
+// BFS ranges Int and Date columns and `now` over 0..5, and Tick stops `now` at 5; z3 has
+// no top.
+// - Forbidden_Item_0 (stock > 5): stock takes only the written values 1 and 5, so both
+//   engines agree it holds; the top value 5 itself is reachable.
+// - Forbidden_Item_1 (stock == 5): Restock writes the top value, a real violation for both.
+// - Forbidden_Coupon_2 (an active coupon past its expiry, 5): BFS never sees `now` past 5,
+//   so it finds nothing at any instance count; z3's `now` has no top, so it must not prove the
+//   rule. That is no disagreement: the bound hides the violation, as
+//   z3_now_past_the_top.rdra shows with a wider range.
+// - Forbidden_Coupon_3 (issued after the clock): `issued_on` is never written, so both
+//   engines start it at 0, the base value, and `now` starts at 0 too. z3 proves it and BFS
+//   finds nothing: the two encodings read the same Init.
+// expect Forbidden_Item_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+// expect Forbidden_Item_1: native=counterexample tlc=counterexample z3=unproved bfs=counterexample,counterexample,counterexample
+// expect Forbidden_Coupon_2: native=ok tlc=ok z3=unproved bfs=ok,ok,ok
+// expect Forbidden_Coupon_3: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+entity Item "商品" { id: Int @pk  stock: Int @default("1") }
+entity Coupon "クーポン" {
+  id: Int @pk
+  status: Enum(active, expired) @default(active)
+  expires_at: Date @default("5")
+  issued_on: Date
+}
+usecase Stock "商品登録"
+usecase Restock "補充"
+usecase Issue "発行"
+usecase Expire "失効"
+creates(Stock, Item)
+sets(Restock, Item.stock == 5)
+creates(Issue, Coupon)
+transitions(Expire, Coupon.status, active -> expired)
+forbidden(Item, stock > 5)
+forbidden(Item, stock == 5)
+forbidden(Coupon, status == active, expires_at < now)
+forbidden(Coupon, issued_on > now)

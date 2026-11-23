@@ -1,0 +1,19 @@
+// trap: vacuity. A property whose trigger never holds passes on every engine.
+// Finish moves an order to `done` and sets `closed` in the same step, so no state has a
+// done order that is not closed: the trigger of DoneOpenCloses never holds and the
+// property is ok, vacuously. AlwaysDone is not vacuous: it fails at the first Place, so a
+// checker that skipped a property it found vacuous somewhere would miss it.
+// expect DoneOpenCloses: native=ok tlc=ok
+// expect AlwaysDone: native=counterexample tlc=counterexample
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(open, done) @default(open)
+  closed: Bool @default(false)
+}
+usecase Place "注文"
+usecase Finish "完了"
+creates(Place, Order)
+transitions(Finish, Order.status, open -> done)
+sets(Finish, Order.closed == true)
+property DoneOpenCloses leads_to(Order.status == done and Order.closed == false, Order.closed == true)
+property AlwaysDone always(Order.status == done)

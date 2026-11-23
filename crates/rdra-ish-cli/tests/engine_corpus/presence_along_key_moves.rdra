@@ -1,0 +1,35 @@
+// trap: `.along` with a key that moves after the trigger.
+// A captured payment of an open order triggers the obligation for that (payment, order)
+// pair. Move relinks the payment to another order, once per payment; Settle pays only an
+// order that has a captured payment, so the first order can be left with none and never
+// paid. The obligation stays with the pair bound at the trigger, so the property fails for
+// it. A checker that followed the key to the payment's new order would find that one paid
+// (a captured payment that cannot move again leaves Settle enabled) and answer ok.
+// expect CapturedPaid: native=counterexample tlc=counterexample
+// expect Deadlock_Order_status_open: native=counterexample tlc=none
+entity Order "注文" { id: Int @pk  status: Enum(open, paid) @default(open) }
+entity Payment "支払" {
+  id: Int @pk
+  status: Enum(pending, captured) @default(pending)
+  moved: Bool @default(false)
+}
+relate(Payment, Order, N:1)
+usecase Place "注文"
+usecase Charge "支払登録"
+usecase Capture "確定"
+usecase Move "付け替え"
+usecase Settle "入金消込"
+creates(Place, Order)
+creates(Charge, Payment)
+transitions(Capture, Payment.status, pending -> captured)
+relinks(Move, Payment, Order)
+sets(Move, Payment.moved == true)
+condition NotMoved "未移動"
+holds(NotMoved, Payment.moved == false)
+applies_to(NotMoved, Move)
+transitions(Settle, Order.status, open -> paid)
+condition HasCapture "確定済みの支払がある"
+holds(HasCapture, Order.status == open).has(Payment.status == captured)
+applies_to(HasCapture, Settle)
+property CapturedPaid
+  leads_to(Payment.status == captured, Order.status == paid).along(Payment, Order).fair(Settle)

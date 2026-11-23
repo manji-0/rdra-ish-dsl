@@ -1,0 +1,25 @@
+// trap: an action enabled and disabled forever, alternately, is not forced by weak fairness.
+// Ship needs the mark at x. Flip and Flop are fair too, and the cycle (paid, x) -> (paid, y)
+// -> (paid, x) takes both while Ship is disabled at (paid, y) once per round. Weak fairness
+// is met and the order is never shipped: a counterexample. Strong fairness would force Ship,
+// and so would a checker that read "enabled somewhere in the cycle" as "enabled forever".
+// expect PaidShips: native=counterexample tlc=counterexample
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid, shipped) @default(pending)
+  mark: Enum(x, y) @default(x)
+}
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Ship "出荷"
+usecase Flip "切替"
+usecase Flop "戻し"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+transitions(Flip, Order.mark, x -> y)
+transitions(Flop, Order.mark, y -> x)
+condition AtX "印が x"
+holds(AtX, Order.mark == x)
+applies_to(AtX, Ship)
+property PaidShips leads_to(Order.status == paid, Order.status == shipped).fair(Ship, Flip, Flop)

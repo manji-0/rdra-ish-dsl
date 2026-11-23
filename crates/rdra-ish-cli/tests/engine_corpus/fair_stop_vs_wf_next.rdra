@@ -1,0 +1,19 @@
+// trap: a stop that Fair_P allows and WF_vars(Next) rules out.
+// No property names a fair use case, so any stop is fair under Fair_P. The plain run of
+// PaidShips stops at `paid` and finds a counterexample; the run with WF_vars(Next) does
+// not, since Ship can still move the order. The cone holds every var an action writes, so
+// its WF_vars(Next) is the whole model's and the second run decides ok. ShippedReopens
+// waits at `shipped`, where no move is left: that stop meets WF_vars(Next) too, and the
+// property fails on both runs. A checker that read WfNext as Plain would report PaidShips
+// violated; one that read Plain as WfNext would not stop at `paid` in the first run.
+// expect PaidShips: native=ok tlc=ok
+// expect ShippedReopens: native=counterexample tlc=counterexample
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid, shipped) @default(pending) }
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Ship "出荷"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+property PaidShips leads_to(Order.status == paid, Order.status == shipped)
+property ShippedReopens leads_to(Order.status == shipped, Order.status == pending)

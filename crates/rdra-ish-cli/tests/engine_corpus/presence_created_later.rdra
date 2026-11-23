@@ -1,0 +1,13 @@
+// trap: a row created later triggers from the state that creates it, not before.
+// Place is not fair, so a run may never create an order. An absent slot triggers nothing,
+// so that run is no counterexample, and every created order is finished by the fair
+// Finish: EventuallyDone holds. A checker that read the trigger without presence would
+// take the absent slot's base value (status = open) as triggered and report a stop at the
+// initial state.
+// expect EventuallyDone: native=ok tlc=ok
+entity Order "注文" { id: Int @pk  status: Enum(open, done) @default(open) }
+usecase Place "注文"
+usecase Finish "完了"
+creates(Place, Order)
+transitions(Finish, Order.status, open -> done)
+property EventuallyDone eventually(Order.status == done).fair(Finish)

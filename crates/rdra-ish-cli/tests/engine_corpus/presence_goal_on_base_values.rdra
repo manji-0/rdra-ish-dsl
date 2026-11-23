@@ -1,0 +1,17 @@
+// trap: a goal holds on the base values of a deleted row.
+// Flag sets `held`, and only Drop ends a held order, by deleting it. The deleted row's
+// `held` is its base value, false, so the goal holds after the delete, and Drop is fair:
+// the property holds. A checker that read the goal as "present and not held" would see the
+// goal never hold and report a counterexample.
+// expect HeldReleased: native=ok tlc=ok
+entity Order "注文" { id: Int @pk  held: Bool @default(false) }
+usecase Place "注文"
+usecase Flag "保留"
+usecase Drop "削除"
+creates(Place, Order)
+sets(Flag, Order.held == true)
+deletes(Drop, Order)
+condition Held "保留中"
+holds(Held, Order.held == true)
+applies_to(Held, Drop)
+property HeldReleased leads_to(Order.held == true, Order.held == false).fair(Drop)

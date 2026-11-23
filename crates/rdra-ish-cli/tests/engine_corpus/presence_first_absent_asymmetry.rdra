@@ -1,0 +1,34 @@
+// trap: creation takes the lowest absent slot, so the slots are not symmetric.
+// The gate opens only once some order is done, PlaceRush needs the gate open, and Finish
+// skips rush orders. So the first order is never a rush order, it always takes Order#1,
+// and only Order#2 can be a rush order that never finishes. A checker that decided one
+// binding and assumed the others alike (Order#1 only) would answer ok.
+// expect RushFinishes: native=counterexample tlc=counterexample
+// expect Deadlock_Order_status_open: native=counterexample tlc=none
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(open, done) @default(open)
+  rush: Bool @default(false)
+}
+entity Gate "受付窓口" { id: Int @pk  state: Enum(closed, open) @default(closed) }
+usecase Place "注文"
+usecase PlaceRush "急ぎ注文"
+usecase Finish "完了"
+usecase Build "窓口設置"
+usecase OpenGate "窓口開設"
+creates(Place, Order)
+creates(PlaceRush, Order)
+sets(PlaceRush, Order.rush == true)
+transitions(Finish, Order.status, open -> done)
+creates(Build, Gate)
+transitions(OpenGate, Gate.state, closed -> open)
+condition NotRush "急ぎではない"
+holds(NotRush, Order.rush == false)
+applies_to(NotRush, Finish)
+condition SomeDone "完了した注文がある"
+holds(SomeDone, Gate.state == closed).has(Order.status == done)
+applies_to(SomeDone, OpenGate)
+condition GateOpen "窓口が開いている"
+holds(GateOpen, Gate.state == open)
+applies_to(GateOpen, PlaceRush)
+property RushFinishes eventually(Order.status == done).fair(Finish)

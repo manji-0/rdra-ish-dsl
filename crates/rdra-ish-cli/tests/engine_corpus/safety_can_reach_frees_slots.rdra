@@ -1,0 +1,27 @@
+// trap: `can_reach` on a cone that would free slots.
+// Pay creates a receipt; Reissue creates receipts too. Once Reissue takes the last receipt
+// slot, a pending order can never be paid. A cone that dropped the receipt slots would
+// find a path to `paid` from every state and answer ok; the cone of a `can_reach` must be
+// exact, so the property fails. BillCanPay has a voucher slot per bill and holds.
+// expect OrderCanPay: native=counterexample tlc=none
+// expect BillCanPay: native=ok tlc=none
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid) @default(pending) }
+entity Receipt "領収書" { id: Int @pk }
+entity Bill "請求" { id: Int @pk  status: Enum(pending, paid) @default(pending) }
+entity Voucher "伝票" { id: Int @pk }
+relate(Receipt, Order, N:1)
+relate(Voucher, Bill, N:1)
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Reissue "再発行"
+usecase Issue "請求発行"
+usecase PayBill "請求支払い"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+creates(Pay, Receipt)
+creates(Reissue, Receipt)
+creates(Issue, Bill)
+transitions(PayBill, Bill.status, pending -> paid)
+creates(PayBill, Voucher)
+property OrderCanPay can_reach(Order.status == paid)
+property BillCanPay can_reach(Bill.status == paid)

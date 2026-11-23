@@ -1,0 +1,35 @@
+// trap: a fair instance whose only step leaves the goal-false region is still enabled.
+// At `paid` the mark flips between x and y forever (Flip, Flop). Ship needs the mark at x
+// or y, so its guard reads the mark and the mark is in the cone; z, where Ship is
+// disabled, can only be reached before the order is paid (Lock), and the fair Unlock
+// leaves it. The cycle (paid, x) <-> (paid, y) lies in the goal-false region with Ship
+// enabled at both states, and Ship's step leaves the region, so the cycle never takes it:
+// the cycle is not fair, and the property holds. A checker that read enabledness inside
+// the region only would accept the cycle and report a counterexample.
+// expect PaidShips: native=ok tlc=ok
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid, shipped) @default(pending)
+  mark: Enum(x, y, z) @default(x)
+}
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Ship "出荷"
+usecase Flip "切替"
+usecase Flop "戻し"
+usecase Lock "施錠"
+usecase Unlock "解錠"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+transitions(Flip, Order.mark, x -> y)
+transitions(Flop, Order.mark, y -> x)
+transitions(Lock, Order.mark, x -> z)
+transitions(Unlock, Order.mark, z -> x)
+condition Unlocked "施錠されていない"
+holds(Unlocked, Order.mark in (x, y))
+applies_to(Unlocked, Ship)
+condition Pending "未払い"
+holds(Pending, Order.status == pending)
+applies_to(Pending, Lock)
+property PaidShips leads_to(Order.status == paid, Order.status == shipped).fair(Ship, Unlock)

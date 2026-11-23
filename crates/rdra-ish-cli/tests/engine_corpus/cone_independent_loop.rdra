@@ -1,0 +1,23 @@
+// trap: an independent loop outside the cone keeps the whole model's WF_vars(Next) met.
+// The ticket opens and closes forever. Without `.fair`, the cone's stutter at `paid` is
+// ruled out by the cone's own WF_vars(Next) but not by the whole model's, which the
+// ticket's loop meets: PaidShipsUnfair fails on the whole model. With `.fair(Ship)` the
+// cone decides ok, and the whole model agrees.
+// expect PaidShipsUnfair: native=counterexample tlc=counterexample
+// expect PaidShips: native=ok tlc=ok
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid, shipped) @default(pending) }
+entity Ticket "問い合わせ" { id: Int @pk  status: Enum(open, closed) @default(open) }
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Ship "出荷"
+usecase Open "起票"
+usecase Close "完了"
+usecase Reopen "再開"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+creates(Open, Ticket)
+transitions(Close, Ticket.status, open -> closed)
+transitions(Reopen, Ticket.status, closed -> open)
+property PaidShipsUnfair leads_to(Order.status == paid, Order.status == shipped)
+property PaidShips leads_to(Order.status == paid, Order.status == shipped).fair(Ship)

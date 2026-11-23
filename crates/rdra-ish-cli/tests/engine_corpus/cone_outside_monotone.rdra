@@ -1,0 +1,38 @@
+// trap: a var outside the cone that is monotone only because nothing deletes it.
+// The property has no `.fair`, and Stamp writes the order's stamp outside the cone, so the
+// cone does not decide and the whole model does. Stamp only goes from false to true, so it
+// changes finitely often and cannot meet WF_vars(Next) forever: the whole model says ok.
+// The note's existence rises and falls (Write creates, Erase deletes), so a static
+// monotonicity rule sees a cycle there; without slot reuse the notes still run out, and
+// the whole model is ok as well. Phase 4's "nothing outside can run forever" must accept
+// the first and either decide the second ok or leave it to a wider cone, never call it a
+// counterexample.
+// expect PaidShipsStamp: native=ok tlc=ok
+// expect PaidShipsNotes: native=ok tlc=ok
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid, shipped) @default(pending)
+  stamped: Bool @default(false)
+}
+entity Bill "請求" { id: Int @pk  status: Enum(pending, paid, shipped) @default(pending) }
+entity Note "メモ" { id: Int @pk }
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Ship "出荷"
+usecase Stamp "押印"
+usecase Issue "請求"
+usecase PayBill "請求支払い"
+usecase ShipBill "請求出荷"
+usecase Write "メモ作成"
+usecase Erase "メモ削除"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+sets(Stamp, Order.stamped == true)
+creates(Issue, Bill)
+transitions(PayBill, Bill.status, pending -> paid)
+transitions(ShipBill, Bill.status, paid -> shipped)
+creates(Write, Note)
+deletes(Erase, Note)
+property PaidShipsStamp leads_to(Order.status == paid, Order.status == shipped)
+property PaidShipsNotes leads_to(Bill.status == paid, Bill.status == shipped)

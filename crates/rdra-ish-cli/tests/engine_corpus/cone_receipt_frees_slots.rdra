@@ -1,0 +1,20 @@
+// trap: the receipt model. A cone that frees slots passes with WF_vars(Next), and the whole
+// model fails (docs/design/native-temporal-verification.md, "Modes and the cone").
+// Pay moves the order and, in the same step, creates a receipt the property does not read,
+// so the cone counts no receipt slots and Pay is always enabled there. Reissue creates
+// receipts and writes nothing else. In the whole model Reissue can take the last receipt
+// slot first, and a pending order can never pay. The cone's WF_vars(Next) run says ok,
+// which must not be taken as the whole model's: Receipt's existence only rises, so a rule
+// "everything outside the cone is monotone" would wrongly accept it.
+// expect PendingPays: native=counterexample tlc=counterexample
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid) @default(pending) }
+entity Receipt "領収書" { id: Int @pk }
+relate(Receipt, Order, N:1)
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Reissue "再発行"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+creates(Pay, Receipt)
+creates(Reissue, Receipt)
+property PendingPays leads_to(Order.status == pending, Order.status == paid)

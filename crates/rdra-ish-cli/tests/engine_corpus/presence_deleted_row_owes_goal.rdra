@@ -1,0 +1,14 @@
+// trap: a row deleted after its trigger still owes its goal, read on its base values.
+// A pending order may be dropped before Pay runs. The deleted row holds its base values
+// (status = pending), which never reach `paid`, and Pay cannot run on an absent row, so the
+// property fails although Pay is fair. A checker that released the obligation on delete
+// would answer ok.
+// expect PendingPays: native=counterexample tlc=counterexample
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid) @default(pending) }
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Drop "取消"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+deletes(Drop, Order)
+property PendingPays leads_to(Order.status == pending, Order.status == paid).fair(Pay, Drop)

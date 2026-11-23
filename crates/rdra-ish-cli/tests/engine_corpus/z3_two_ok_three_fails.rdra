@@ -1,0 +1,23 @@
+// trap: an invariant true at 2 instances and false at 3.
+// Top moves an order from c to d only while one other order is at a and another at b, so
+// `d` needs three orders. BFS finds no violation at 1 or 2 instances and one at 3; z3 must
+// not prove the rule, since it claims any number of rows.
+// expect Forbidden_Order_0: native=ok tlc=ok z3=unproved bfs=ok,ok,counterexample
+// expect Deadlock_Order_status_c: native=counterexample tlc=none
+// expect Witness_Order_status_d: native=counterexample tlc=none
+entity Order "注文" { id: Int @pk  status: Enum(a, b, c, d) @default(a) }
+usecase Place "注文"
+usecase Up "上げる"
+usecase Mid "中間"
+usecase Top "最上位"
+creates(Place, Order)
+transitions(Up, Order.status, a -> b)
+transitions(Mid, Order.status, b -> c)
+transitions(Top, Order.status, c -> d)
+condition OtherAtA "a の注文がある"
+holds(OtherAtA, Order.status == c).has(Order.status == a)
+applies_to(OtherAtA, Top)
+condition OtherAtB "b の注文がある"
+holds(OtherAtB, Order.status == c).has(Order.status == b)
+applies_to(OtherAtB, Top)
+forbidden(Order, status == d)

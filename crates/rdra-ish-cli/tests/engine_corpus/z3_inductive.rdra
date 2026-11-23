@@ -1,0 +1,27 @@
+// trap: an invariant z3 proves by induction; BFS must find no violation at any bound.
+// Ship needs a paid order, and nothing unsets `paid`, so a shipped order is paid in every
+// reachable state, for any number of rows. The second rule is a real violation (Ship does
+// not need an approval), so z3 must not prove it and BFS finds it at every bound.
+// expect Forbidden_Order_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+// expect Forbidden_Order_1: native=counterexample tlc=counterexample z3=unproved bfs=counterexample,counterexample,counterexample
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, packed, shipped) @default(pending)
+  paid: Bool @default(false)
+  approved: Bool @default(false)
+}
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Pack "梱包"
+usecase Ship "出荷"
+usecase Approve "承認"
+creates(Place, Order)
+sets(Pay, Order.paid == true)
+transitions(Pack, Order.status, pending -> packed)
+transitions(Ship, Order.status, packed -> shipped)
+sets(Approve, Order.approved == true)
+condition Paid "支払済み"
+holds(Paid, Order.paid == true)
+applies_to(Paid, Ship)
+forbidden(Order, status == shipped, paid == false)
+forbidden(Order, status == shipped, approved == false)

@@ -1,0 +1,30 @@
+// trap: a fair use case that creates (a `New` parameter) and runs out of slots.
+// Pay moves the order and creates a receipt; Reissue creates receipts and writes nothing
+// else. The receipt's key joins Pay's writes, so Pay is one step. The fair instance is
+// Pay(order), with the receipt bound inside, so the cone counts receipt slots. Once
+// Reissue takes the last receipt, Pay is disabled forever and a pending order may stop:
+// PendingPays fails though Pay is fair. A bill's PayBill creates a voucher and nothing
+// else creates one, so at 2 instances each bill has a voucher slot of its own and
+// BillPays holds.
+// expect PendingPays: native=counterexample tlc=counterexample
+// expect BillPays: native=ok tlc=ok
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid) @default(pending) }
+entity Receipt "領収書" { id: Int @pk }
+entity Bill "請求" { id: Int @pk  status: Enum(pending, paid) @default(pending) }
+entity Voucher "伝票" { id: Int @pk }
+relate(Receipt, Order, N:1)
+relate(Voucher, Bill, N:1)
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Reissue "再発行"
+usecase Issue "請求発行"
+usecase PayBill "請求支払い"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+creates(Pay, Receipt)
+creates(Reissue, Receipt)
+creates(Issue, Bill)
+transitions(PayBill, Bill.status, pending -> paid)
+creates(PayBill, Voucher)
+property PendingPays leads_to(Order.status == pending, Order.status == paid).fair(Pay)
+property BillPays leads_to(Bill.status == pending, Bill.status == paid).fair(PayBill)

@@ -881,6 +881,11 @@ the domain samples proves, insurance-claim-ops' with the lemma above.
 `tests/proof_equivalence.rs` checks on every sample that no rule it proves has a BFS
 counterexample at one, two, or three instances.
 
+The three engines are held to each other, and to verdicts stated by hand, on an adversarial
+corpus of small models, each built around one way they could differ: see
+[engine-agreement.md](./engine-agreement.md) for the agreement rules, the corpus, and how
+to add a case.
+
 ## Approximations and limitations
 
 - **Bounds.** A `verify` OK holds for the stated `InstanceCount` and `IntRange` and says
