@@ -1,5 +1,5 @@
 // expect check: ok
-// expect verify: tlc=ok
+// expect verify: ok
 module buc.annuity
 
 import shared.actors

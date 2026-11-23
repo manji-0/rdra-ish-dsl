@@ -2,10 +2,20 @@
 # Run `check` and `verify` on every sample root in samples.txt and compare each run with the
 # `// expect` headers in the root's first .rdra file in load order (`rdra-ish files`).
 # The header grammar is in docs/formal-verification.md ("Sample expectations").
-# Usage: scripts/verify-samples.sh <rdra-ish binary>
+# Usage: scripts/verify-samples.sh [--with-tlc] <rdra-ish binary>
+#
+# Without --with-tlc every run has no `tlc` or `tlc2` on PATH and no RDRA_TLC_JAR, so a
+# passing run proves that `verify` needs no JVM. With --with-tlc every `verify` run also
+# runs TLC beside the native checker: it must match the same header, print `tlc_result:`, and
+# report no engine disagreement, which would add an error name the header does not list.
 set -uo pipefail
 
-bin="${1:?usage: scripts/verify-samples.sh <rdra-ish binary>}"
+with_tlc=false
+if [[ "${1:-}" == --with-tlc ]]; then
+  with_tlc=true
+  shift
+fi
+bin="${1:?usage: scripts/verify-samples.sh [--with-tlc] <rdra-ish binary>}"
 [[ "$bin" == /* ]] || bin="$PWD/$bin"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root" || exit 2
@@ -21,9 +31,22 @@ fi
 gnu_time=false
 "$timer" -v true >/dev/null 2>&1 && gnu_time=true
 
+# PATH without the directories that hold `tlc` or `tlc2`, for the runs without --with-tlc.
+run_path="$PATH"
+if ! $with_tlc; then
+  run_path="$(tr ':' '\n' <<<"$PATH" | while IFS= read -r d; do
+    [[ -n "$d" && ! -e "$d/tlc" && ! -e "$d/tlc2" ]] && printf '%s\n' "$d"
+  done | paste -sd: -)"
+  if PATH="$run_path" type -P tlc tlc2 >/dev/null; then
+    echo "verify-samples: tlc is still on PATH after removing it" >&2
+    exit 2
+  fi
+fi
+
 name_re='[A-Za-z0-9_]+'
 check_re="^(ok|fail( $name_re)+)$"
-verify_re="^(tlc=(ok|counterexample)( fail( $name_re)+)?|fail( $name_re)+)$"
+# `tlc=` names TLC's verdict, so only a line whose flags hold --with-tlc may carry it.
+tlc_re="^(tlc=(ok|counterexample)( fail( $name_re)+)?|ok|fail( $name_re)+)$"
 header_re='^// expect (check|verify)( [^:]*)?: (.*)$'
 
 # Runs "$@" with combined output in $work/out; sets status, wall (s), and rss (MB).
@@ -83,7 +106,8 @@ while IFS= read -r root; do
     cmd="${BASH_REMATCH[1]}"
     flags="${BASH_REMATCH[2]# }"
     exp="${BASH_REMATCH[3]}"
-    if [[ "$cmd" == check ]]; then re="$check_re"; else re="$verify_re"; fi
+    re="$check_re"
+    [[ "$cmd" == verify && " $flags " == *" --with-tlc "* ]] && re="$tlc_re"
     if [[ ! "$exp" =~ $re ]]; then
       malformed="$line"
       break
@@ -102,7 +126,7 @@ while IFS= read -r root; do
   fi
   # A command with no header line runs once without flags. A root whose lines for a
   # command are all flagged runs only those: the flags state the bounds it is checked at.
-  for default in "check|ok" "verify|tlc=ok"; do
+  for default in "check|ok" "verify|ok"; do
     found=false
     for k in ${keys[@]+"${keys[@]}"}; do
       [[ "${k%%|*}" == "${default%%|*}" ]] && found=true
@@ -117,6 +141,11 @@ while IFS= read -r root; do
     cmd="${keys[$i]%%|*}"
     flags="${keys[$i]#*|}"
     exp="${exps[$i]}"
+    # A line that asks for TLC runs only in the --with-tlc mode, which has TLC on PATH.
+    if ! $with_tlc && [[ " $flags " == *" --with-tlc "* ]]; then
+      printf '%-8s %-56s %s\n' skip "$root" "$cmd $flags"
+      continue
+    fi
     runs=$((runs + 1))
 
     want_exit=0
@@ -133,20 +162,27 @@ while IFS= read -r root; do
     want_names="$(tr ' ' '\n' <<<"$want_names" | sed '/^$/d' | sort -u | tr '\n' ' ' | sed 's/ $//')"
 
     rm -rf "$work/tla"
+    extra=()
+    if $with_tlc && [[ "$cmd" == verify && " $flags " != *" --with-tlc "* ]]; then
+      extra=(--with-tlc)
+    fi
     # shellcheck disable=SC2086 # header flags are CLI words
     if [[ "$cmd" == check ]]; then
-      measure "$bin" check "$root" $flags
+      measure env -u RDRA_TLC_JAR PATH="$run_path" "$bin" check "$root" $flags
     else
-      measure "$bin" verify "$root" --backend tlc -o "$work/tla" $flags
+      measure env -u RDRA_TLC_JAR PATH="$run_path" "$bin" verify "$root" -o "$work/tla" ${extra[@]+"${extra[@]}"} $flags
     fi
     got_tlc="$(sed -nE 's/^tlc_result: ([a-z_]+).*/\1/p' "$work/out" | head -n 1)"
     got_tlc="${got_tlc:-none}"
     got_names="$(error_names "$work/out")"
-    [[ "$cmd" == check ]] && want_tlc="$got_tlc"
-    # Under the test hook RDRA_ISH_NATIVE, BFS decides every safety check and TLC runs only
-    # `eventually` and `leads_to`, so its line and its verdict are not compared: the exit
-    # status and the error names are.
-    [[ -n "${RDRA_ISH_NATIVE:-}" ]] && want_tlc="$got_tlc"
+    # Without a `tlc=` the header says nothing of TLC's verdict, but a run with TLC prints one.
+    if [[ "$want_tlc" == none ]]; then
+      want_tlc="$got_tlc"
+      # A run that states its result under --with-tlc states TLC's beside it.
+      if [[ ${#extra[@]} -gt 0 && "$got_tlc" == none ]] && grep -q '^result: ' "$work/out"; then
+        want_tlc=printed
+      fi
+    fi
     # A TLC counterexample must carry TLC's own violation line, not only our rendering.
     tlc_line=true
     if [[ "$want_tlc" == counterexample ]] && ! grep -q '^violated: Error: .* violated' "$work/out"; then

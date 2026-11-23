@@ -1,5 +1,5 @@
 // expect check: ok
-// expect verify: tlc=ok fail Deadlock_ClaimCase_status_assessed
+// expect verify: fail Deadlock_ClaimCase_status_assessed
 module buc.claim
 
 import shared.actors

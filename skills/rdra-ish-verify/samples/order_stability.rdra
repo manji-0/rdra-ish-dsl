@@ -6,7 +6,7 @@
 // draft, Refund zeroes a cancelled order's amount, and Ship reads no invoice, so the other
 // three fail, each at the shortest trace to the step or state that breaks it.
 // expect check: ok
-// expect verify: tlc=ok fail CancelledStaysCancelled AmountKeptOnceDecided ShippedAfterInvoiced
+// expect verify: fail CancelledStaysCancelled AmountKeptOnceDecided ShippedAfterInvoiced
 entity Order "注文" {
   id: Int @pk
   status: Enum(draft, approved, cancelled, shipped) @default(draft)

@@ -3,7 +3,7 @@
 // still finishes it, and can_reach holds in `verify`. An Order may still be held and
 // resumed forever: can_reach asks that it can finish, not that it must.
 // expect check: ok
-// expect verify: tlc=ok
+// expect verify: ok
 entity Order "注文" {
   id: Int @pk
   status: Enum(pending, on_hold, delivered, cancelled) @default(pending)

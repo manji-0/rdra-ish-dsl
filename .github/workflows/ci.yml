@@ -39,7 +39,7 @@ jobs:
       - name: sample artifact snapshots
         run: bash scripts/check-sample-artifacts.sh
       - name: skill snippets
-        # Debug binary; its verify transcripts need the devShell's tlc.
+        # Debug binary; a verify transcript with --with-tlc needs the devShell's tlc.
         run: |
           cargo build -p rdra-ish-cli
           python3 -I scripts/check-skill-snippets.py target/debug/rdra-ish
@@ -56,23 +56,26 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Build CLI
         run: cargo build -p rdra-ish-cli --release
-      - name: Check and verify every sample against its expect header
+      - name: Check and verify every sample against its expect header, with no JVM
+        # The script takes tlc and tlc2 off PATH and unsets RDRA_TLC_JAR, and fails when tlc
+        # is still found, so every run here is the native checker alone.
         run: scripts/verify-samples.sh target/release/rdra-ish
         timeout-minutes: 20
-      - name: The same, with BFS deciding every safety check (RDRA_ISH_NATIVE)
-        # Phase 1 of docs/design/native-temporal-verification.md: under the test hook TLC runs
-        # only eventually and leads_to, and each run must end with the header's exit status
-        # and error names.
-        run: RDRA_ISH_NATIVE=1 scripts/verify-samples.sh target/release/rdra-ish
+      - name: The same, with TLC beside the native checker (--with-tlc)
+        # Each verify run must match its header, print tlc_result:, and report no
+        # error[EngineDisagreement], which would add a name the header does not list.
+        run: scripts/verify-samples.sh --with-tlc target/release/rdra-ish
         timeout-minutes: 20
       - name: A reduced cone decides what its cone decides on the domain samples
         run: cargo test --release -p rdra-ish-core --lib reduced_domain_cones_decide_what_the_cones_decide
-      - name: Reduced and unreduced verify agree on random models
+      - name: Reduced and unreduced verify agree on random models, and TLC agrees with both
         # Quick seeds of a local sweep: reduced cones, timers, chooses, split use cases and
         # 3 instances among them; 78 to 127 raise events and reduce a cone whose
-        # sub-lifecycle reads inputs of T. A seed that slows past the timeout fails the step.
+        # sub-lifecycle reads inputs of T. --with-tlc runs TLC beside the native checker and
+        # fails a seed the engines decide differently. A seed that slows past the timeout
+        # fails the step.
         run: >-
-          python3 -I scripts/reduction-diff.py run target/release/rdra-ish --fail-on-timeout
+          python3 -I scripts/reduction-diff.py run target/release/rdra-ish --fail-on-timeout --with-tlc
           --seeds 0,2,4,7,8,13,15,18,22,23,27,31,32,38,39,41,45,46,47,49,52,53,55,57,59,188,244,417,419,459,496,78,79,86,88,89,92,95,99,100,109,113,114,125,127
         timeout-minutes: 10
 

@@ -3,7 +3,7 @@
 // qty 1 (@default(1)); ClearQty sets qty to 0, which breaks the check. check_met.rdra keeps
 // qty in range and passes.
 // expect check: fail Check_CartLine_qty_0
-// expect verify: tlc=counterexample fail Check_CartLine_qty_0
+// expect verify: fail Check_CartLine_qty_0
 entity CartLine "カート明細" {
   id: Int @pk
   qty: Int @default("1") @check(qty >= 1)

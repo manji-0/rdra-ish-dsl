@@ -6,7 +6,7 @@
 // `verify` decides it by BFS on its cone, since TLC cannot check it; `check` verifies safety
 // only and leaves it to `verify`.
 // expect check: ok
-// expect verify: tlc=ok fail OrderCanFinish
+// expect verify: fail OrderCanFinish
 entity Order "注文" {
   id: Int @pk
   status: Enum(pending, on_hold, delivered, cancelled) @default(pending)

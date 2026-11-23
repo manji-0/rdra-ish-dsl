@@ -4,7 +4,7 @@
 // `--entity Order` defers that error, lists it under `not checked:`, and passes.
 // expect check: fail DerivedColumnRead_Audit_score
 // expect verify: fail DerivedColumnRead_Audit_score
-// expect verify --entity Order: tlc=ok
+// expect verify --entity Order: ok
 entity Order "注文" {
   id: Int @pk
   status: Enum(pending, paid) @default(pending)
