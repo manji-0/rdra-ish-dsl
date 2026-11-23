@@ -40,6 +40,7 @@ mod split;
 
 use extended::Extended;
 pub use fold::{Fold, FoldKey};
+pub use partition::Divergence;
 use partition::Quotient;
 use split::Split;
 
@@ -110,11 +111,22 @@ pub struct Reduction {
     inner: Option<Arc<Reduction>>,
     /// Extended S states explored.
     pub states: usize,
+    /// Per class, whether a behavior can step inside it forever (`can_loop`).
+    loops: Vec<bool>,
+    /// The divergence marks, counted.
+    pub divergence: Divergence,
 }
 
 impl Reduction {
     pub fn classes(&self) -> usize {
         self.reps.len()
+    }
+
+    /// Whether a behavior of the cone may step inside `class` forever while T stands still
+    /// (docs/formal-verification.md, "WF_vars(Next) on a reduced cone"). An over-approximation:
+    /// a class this marks may hold no such loop among the states the cone reaches.
+    pub fn can_loop(&self, class: u32) -> bool {
+        self.loops[class as usize]
     }
 
     /// Whether this reduction, or one nested in it, has fewer classes than states. A quotient
@@ -403,6 +415,8 @@ impl TransitionSystem {
             rises,
             inner,
             states: n,
+            loops,
+            divergence,
         } = quotient;
         let all: Vec<VarId> = split.s.union(&split.inputs).copied().collect();
         let spans: Vec<(usize, usize, bool)> = all
@@ -456,6 +470,8 @@ impl TransitionSystem {
             moves,
             inner,
             states: n,
+            loops,
+            divergence,
         };
         if reduction.tla_cells() > TLA_CELL_BUDGET {
             return Err(if split.inputs.is_empty() && split.folds.is_empty() {
