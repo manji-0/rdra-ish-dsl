@@ -4,6 +4,19 @@
 
 ### Breaking
 
+- The lifecycle checks unique column sets (#222). A `@unique` column, a `@unique(a, b)`,
+  and the pair of keys of a `relate(A, B, N:M).via(J)` junction become the invariant
+  `Unique_<Entity>_<columns>` when the lifecycle holds every column's value: an `Enum`,
+  `Bool`, or variation column, a compared `Int`, or a key column, read as its key's owner.
+  Two present rows that agree on every column break it; a null column exempts its row, as
+  in SQL. `check`, `states`, `verify` (with its TLA+ export under `--with-tlc`), and
+  `verify --prove` check it. A model whose use case creates a second row at the same values,
+  such as two bookings of one room at one slot, now fails `check --instance-count 2` and
+  `verify`, where the database used to be the first to reject it. Add a guard that keeps the
+  set free, such as `holds(AmFree, Room.open == true).none(Booking.slot == am)`. Sets with a
+  `String` column, or on an entity with a `@soft_delete` column, are not checked. No sample
+  changes verdict.
+
 - `verify` decides every invariant, `after` assertion, and property with its native
   checker and starts no JVM: `tlc` is no longer needed, and `verify` no longer fails when it
   is missing. TLC runs only under the new `--with-tlc`, beside the native checker, on the
@@ -164,6 +177,16 @@
 
 ### Changed
 
+- `verify` runs `Cone_<P>_WF` on the reduced cone first, with every class whose
+  sub-lifecycle can loop taken as a place a behavior may stop. An `ok` there is the
+  unreduced cone's `ok`, and a counterexample there prints only after it lifts to the
+  unreduced cone and replays, fails the property, and passes the fairness check; anything
+  else runs `Cone_<P>_Full` and `Cone_<P>_WF` on the unreduced cone as before. The note reads
+  `Cone_<P>_WF: ok on the reduced cone` and has no `Cone_<P>_Full` part. A property whose
+  unreduced cone passes the state cap or the memory limit can now be decided where it was
+  `not decided`. No sample's verdict changes. The argument is in
+  [WF_vars(Next) on a reduced cone](docs/formal-verification.md#wf_varsnext-on-a-reduced-cone);
+  `RDRA_ISH_NO_WF_REDUCED` turns the run off for measurement.
 - `check` and `states` have no state cap by default: `--memory` (4GiB, or `memory` under
   `[check]`) is what stops a cone, and `--max-states <N>` still caps it. The `bounds:` line
   says `no state cap per cone, memory 4GiB`, or `<N> states per cone` under the flag. A cone

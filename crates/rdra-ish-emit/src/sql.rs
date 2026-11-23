@@ -983,6 +983,7 @@ fn inv_text(inv: &Invariant) -> String {
             parent,
             role,
         } => format!("{child} -> {parent} ({role})"),
+        InvText::UniqueSet { entity, columns } => format!("{entity} unique ({columns})"),
     }
 }
 

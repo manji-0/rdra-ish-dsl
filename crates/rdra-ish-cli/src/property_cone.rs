@@ -23,8 +23,10 @@
 //! what the property and its fair actions read, and `Spec` admits stuttering in that run, so
 //! its `ok` is the cone's. A counterexample there is real, but the reduced cone's lasso does
 //! not lift step by step, so the `Full` run repeats the `Plain` run on the unreduced cone and
-//! the verdict reads from it; the `WfNext` run is on the unreduced cone, where `WF_vars(Next)`
-//! keeps its meaning.
+//! the verdict reads from it. The `WfNext` run reads the reduced cone first, with every class
+//! that can loop inside itself taken as a place to stop, which keeps its `ok` sound; when that
+//! does not decide, it runs on the unreduced cone, where `WF_vars(Next)` keeps its meaning
+//! (docs/formal-verification.md, "WF_vars(Next) on a reduced cone").
 
 use rdra_ish_core::lifecycle::{Caps, LtlKind, TransitionSystem};
 use rdra_ish_emit::tla::{self, PrintMode, TlaBundle};

@@ -30,6 +30,7 @@ mod system;
 mod trace;
 mod transition_audit;
 mod tx_groups;
+mod unique_sets;
 mod unjoined_writes;
 mod vacuous;
 mod witness;

@@ -197,11 +197,16 @@ loading the machine) it takes about 25 s in release, measured.
 | `cone_independent_loop` | An independent loop outside the cone | unfair counterexample; fair ok |
 | `cone_copy_from_parent` | A copy from the parent into the cone | ok |
 | `cone_reduced_class_loops` | A reduced class loops inside itself and looks like a stop | counterexample |
+| `cone_reduced_loop_unreached` | A reduced class can loop, but not from the states the cone reaches; the reduced `_WF` counterexample does not lift | ok |
+| `cone_reduced_no_loop_capped` | No class can loop and the unreduced cone passes `--max-states`; `_WF` decides on the reduced cone | ok |
+| `cone_reduced_loop_fair_enabled` | A reduced class loops, but a fair step is enabled there; `_WF` decides ok on the reduced cone with marks present | ok |
+| `cone_reduced_inner_class_loops` | The loop is inside a class of a nested reduction, invisible to the outer one | counterexample |
 | `cone_always_frees_slots` | `always` on a cone that frees slots | ok (whole model) |
 | `safety_precedes_latch` | `precedes` reads a latch | ok; never-set latch counterexample |
 | `safety_stable_across_delete` | `stable` and `unchanged` across delete and create | ok; `PendingStays` counterexample |
 | `safety_can_reach_frees_slots` | `can_reach` where slots run out | counterexample; per-bill ok |
 | `safety_vacuity` | A trigger that never holds | ok; `always` counterexample |
+| `safety_unique_sets` | A unique column set over column vars, owner vars, and a nullable Int that two rows leave null | single column and junction counterexample; guarded set and null set ok, z3 proved |
 | `cap_temporal_budget_zero` | `--temporal-budget 0` | not decided on both engines |
 | `cap_memory_limit` | `--memory 2KiB` stops runs partway (native only) | not decided |
 | `z3_two_ok_three_fails` | True at 2 instances, false at 3 | z3 unproved; BFS ok, ok, counterexample |
@@ -262,4 +267,8 @@ is an artifact with each mutant's diff and log. A missed mutant is a change to t
 that the corpus did not notice. Kill it with a new corpus case that the mutant gets wrong,
 or record why it is equivalent to the original code. A timeout is a mutant whose corpus
 ran past 60 seconds. Unmutated, the corpus takes about a second, so a timeout means the
-mutant made the checker hang. A hang is noticed, so a timeout needs no new case.
+mutant made the checker hang. A hang is noticed, so a timeout needs no new case. Each
+test process runs under a 2 GiB address-space cap. A mutant that makes the checker
+allocate without end fails its test at the cap and counts as caught; without the cap it
+fills the runner and the whole shard is cancelled. A shard that uploads no results is
+named at the top of the summary, and its mutants are in none of the counts.

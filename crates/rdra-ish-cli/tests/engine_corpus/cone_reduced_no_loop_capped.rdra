@@ -1,0 +1,37 @@
+// trap: a reduced sub-lifecycle with no loop, and an unreduced cone past the cap.
+// The gate is the job's independent sub-lifecycle: it is prepared through x0 to x4, one
+// step at a time, and then swings open; the job starts once its gate is open. The job
+// observes only the gate's status, so the five prepared states of a shut gate are one
+// class. JobStarts has no `.fair`: the plain run stops at a waiting job and finds a
+// counterexample, and only WF_vars(Next) rules it out, since every var only rises and the
+// last moves left are the job's. The cone holds every var an action writes, so its
+// WF_vars(Next) is the whole model's. No class can loop (every gate var is monotone), so the
+// run with WF_vars(Next) on the reduced cone has the stops of the blind run, finds none
+// that the goal does not end, and decides ok. The unreduced cone passes the state cap, so a
+// checker that ran WF_vars(Next) there would leave the property not decided.
+// flags: --max-states 300
+// expect JobStarts: native=ok tlc=ok
+entity Gate "門" { id: Int @pk  status: Enum(shut, open) @default(shut)  x: Enum(x0, x1, x2, x3, x4) @default(x0) }
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+relate(Job, Gate, N:1)
+usecase Prep1 "準備1"
+usecase Prep2 "準備2"
+usecase Prep3 "準備3"
+usecase Prep4 "準備4"
+usecase Swing "開く"
+usecase Submit "投入"
+usecase Start "開始"
+transitions(Prep1, Gate.x, x0 -> x1)
+transitions(Prep2, Gate.x, x1 -> x2)
+transitions(Prep3, Gate.x, x2 -> x3)
+transitions(Prep4, Gate.x, x3 -> x4)
+transitions(Swing, Gate.status, shut -> open)
+condition Prepared "準備ができている"
+holds(Prepared, Gate.x == x4)
+applies_to(Prepared, Swing)
+creates(Submit, Job)
+transitions(Start, Job.status, waiting -> running)
+condition GateOpen "門が開いている"
+holds(GateOpen, Gate.status == open)
+applies_to(GateOpen, Start)
+property JobStarts eventually(Job.status == running)

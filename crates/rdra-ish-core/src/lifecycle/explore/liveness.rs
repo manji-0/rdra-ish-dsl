@@ -78,6 +78,43 @@ struct Lasso {
     tail: Loop,
 }
 
+/// Which states of `N` may stop.
+#[derive(Clone, Copy)]
+enum StopRule<'a> {
+    Fair(Fairness),
+    /// `WF_vars(Next)` on a reduced graph: per state, whether its class can loop inside
+    /// itself, where a behavior of the cone may step forever while the reduced graph stands
+    /// still.
+    Looping(&'a [bool]),
+}
+
+/// What the run with `WF_vars(Next)` on a reduced cone decides (`decide_liveness_reduced`).
+#[derive(Clone, Debug)]
+pub enum ReducedVerdict {
+    /// No counterexample on a complete graph: the property holds on the unreduced cone under
+    /// `WF_vars(Next)`.
+    Holds,
+    /// No counterexample on a graph a cap stopped.
+    Undecided,
+    /// A counterexample lifted to the unreduced cone that replays there, fails the property,
+    /// and passes the fairness check under `WF_vars(Next)`.
+    Violated(Box<crate::lifecycle::diag::StateDiag>),
+    /// A counterexample of the reduced graph that does not lift to one of the unreduced cone.
+    Spurious(Spurious),
+}
+
+/// Why a counterexample of the reduced graph is not one of the unreduced cone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Spurious {
+    /// The lifted loop did not close within the copies tried.
+    Unclosed,
+    /// From the concrete state of a stop, no walk of S steps that keeps T and `obs` reaches a
+    /// state with no move or a cycle.
+    NoLoop,
+    /// The lifted lasso does not replay, satisfies the property, or is not fair.
+    Fails,
+}
+
 impl ComponentRun {
     /// `properties()[i]`, an `eventually` or a `leads_to`, decided on this run's graph under
     /// `fairness`. A counterexample is a lasso that replays through `moves`, fails the
@@ -89,12 +126,13 @@ impl ComponentRun {
         i: usize,
         fairness: Fairness,
     ) -> Result<PropertyVerdict, LassoFault> {
-        let Some(lasso) = self.liveness_lasso(i, fairness) else {
+        let Some((fair, avoid, start)) = self.liveness_search(i, StopRule::Fair(fairness)) else {
             return Ok(match self.complete {
                 true => PropertyVerdict::Holds,
                 false => PropertyVerdict::Undecided,
             });
         };
+        let lasso = self.lasso(&fair, &avoid, start);
         let ts = &self.system;
         let replay = ts
             .replay_lasso(lasso.states, &lasso.actions, lasso.tail)
@@ -108,9 +146,71 @@ impl ComponentRun {
         Ok(PropertyVerdict::Violated(Box::new(diag)))
     }
 
-    /// The lasso of the binding whose failing triggered state BFS found first, the first
-    /// binding on a tie; `None` when every binding holds.
-    fn liveness_lasso(&self, i: usize, fairness: Fairness) -> Option<Lasso> {
+    /// `properties()[i]` under `WF_vars(Next)` on this run of a reduced cone, with every state
+    /// whose class can loop (`Reduction::can_loop`) taken as one where a behavior may stop
+    /// when no fair instance is enabled (docs/formal-verification.md, "WF_vars(Next) on a
+    /// reduced cone"). No counterexample is the unreduced cone's `ok` under `WF_vars(Next)`.
+    /// A counterexample is lifted to `cone`, the unreduced cone with the property at
+    /// `cone_i`, and must replay there, fail the property, and pass `unfair_loop` under
+    /// `WF_vars(Next)`; one that does not is `Spurious`, never printed.
+    pub fn decide_liveness_reduced(
+        &self,
+        i: usize,
+        cone: &crate::lifecycle::TransitionSystem,
+        cone_i: usize,
+    ) -> ReducedVerdict {
+        let ts = &self.system;
+        let r = ts.reduction().expect("a reduced cone");
+        let looping: Vec<bool> = self
+            .states
+            .iter()
+            .map(|s| r.class(ts, s).is_some_and(|c| r.can_loop(c)))
+            .collect();
+        let Some((fair, avoid, start)) = self.liveness_search(i, StopRule::Looping(&looping))
+        else {
+            return match self.complete {
+                true => ReducedVerdict::Holds,
+                false => ReducedVerdict::Undecided,
+            };
+        };
+        let (first, walk, tail) = self.walk(&fair, &avoid, start);
+        let step = |e: &Edge| {
+            let (act, params) = self.step(e);
+            (act, params.into(), self.states[e.to as usize].clone())
+        };
+        let lifted = match tail {
+            Loop::Stutter => {
+                let prefix: Vec<_> = walk.iter().map(step).collect();
+                ts.lift_stop(cone, &self.states[first as usize], &prefix)
+            }
+            Loop::Back { to } => {
+                let prefix: Vec<_> = walk[..to - 1].iter().map(step).collect();
+                let cycle: Vec<_> = walk[to - 1..].iter().map(step).collect();
+                ts.lift_cycle(&self.states[first as usize], &prefix, &cycle)
+            }
+        };
+        let (states, actions, tail) = match lifted {
+            Ok(lasso) => lasso,
+            Err(why) => return ReducedVerdict::Spurious(why),
+        };
+        let Ok(replay) = cone.replay_lasso(states, &actions, tail) else {
+            return ReducedVerdict::Spurious(Spurious::Fails);
+        };
+        let Some(diag) = cone.explain_property(cone_i, &replay) else {
+            return ReducedVerdict::Spurious(Spurious::Fails);
+        };
+        if cone
+            .unfair_loop(cone_i, &replay, Fairness::WfNext)
+            .is_some()
+        {
+            return ReducedVerdict::Spurious(Spurious::Fails);
+        }
+        ReducedVerdict::Violated(Box::new(diag))
+    }
+
+    /// The search of the binding whose failing triggered state BFS found first, the first
+    /// binding on a tie, with that state; `None` when every binding holds.
+    fn liveness_search(&self, i: usize, rule: StopRule) -> Option<(FairSteps, Avoid, u32)> {
         let ts = &self.system;
         let p = &ts.properties()[i];
         let (cause, goal) = match &p.formula {
@@ -121,7 +221,7 @@ impl ComponentRun {
         let fair = self.fair_steps(i);
         let mut best: Option<(u32, Avoid)> = None;
         for b in ts.binder_slots(p.binders.len()) {
-            let avoid = self.avoid(&fair, goal, &b, fairness);
+            let avoid = self.avoid(&fair, goal, &b, rule);
             let found = (0..self.states.len() as u32).find(|&s| {
                 let st = &self.states[s as usize];
                 avoid.toward[s as usize] != NONE
@@ -133,7 +233,7 @@ impl ComponentRun {
             }
         }
         let (start, avoid) = best?;
-        Some(self.lasso(&fair, &avoid, start))
+        Some((fair, avoid, start))
     }
 
     /// The fair instances of `properties()[i]` and where each is enabled.
@@ -188,7 +288,7 @@ impl ComponentRun {
     }
 
     /// The search for one binding: `N`, its components, the fair ends, and the backward walk.
-    fn avoid(&self, fair: &FairSteps, goal: &Pred, b: &[u8], fairness: Fairness) -> Avoid {
+    fn avoid(&self, fair: &FairSteps, goal: &Pred, b: &[u8], rule: StopRule) -> Avoid {
         let ts = &self.system;
         let n = self.states.len();
         let expanded = self.expanded();
@@ -239,9 +339,15 @@ impl ComponentRun {
             .map(|s| {
                 in_n[s]
                     && s < expanded
-                    && match fairness {
-                        Fairness::Plain => fair.enabled(s as u32).iter().all(|w| *w == 0),
-                        Fairness::WfNext => !fair.moves_on[s],
+                    && match rule {
+                        StopRule::Fair(Fairness::Plain) => {
+                            fair.enabled(s as u32).iter().all(|w| *w == 0)
+                        }
+                        StopRule::Fair(Fairness::WfNext) => !fair.moves_on[s],
+                        StopRule::Looping(looping) => {
+                            fair.enabled(s as u32).iter().all(|w| *w == 0)
+                                && (!fair.moves_on[s] || looping[s])
+                        }
                     }
             })
             .collect();
@@ -272,23 +378,7 @@ impl ComponentRun {
     /// The lasso from `start`: the BFS path to it, a shortest walk inside `N` to the nearest
     /// end, and for a component a loop that covers every fair instance and returns.
     fn lasso(&self, fair: &FairSteps, avoid: &Avoid, start: u32) -> Lasso {
-        let mut walk: Vec<Edge> = self.path_to(start);
-        let mut at = start;
-        while avoid.toward[at as usize] != at {
-            let to = avoid.toward[at as usize];
-            walk.push(self.edge_between(at, to));
-            at = to;
-        }
-        let end = at;
-        let first = walk.first().map_or(start, |e| e.from);
-        let tail = if avoid.stops[end as usize] {
-            Loop::Stutter
-        } else {
-            debug_assert!(avoid.fair_cycle[avoid.comp[end as usize] as usize]);
-            let entry = walk.len() + 1;
-            walk.extend(self.fair_loop(fair, avoid, end));
-            Loop::Back { to: entry }
-        };
+        let (first, walk, tail) = self.walk(fair, avoid, start);
         let mut states = vec![self.states[first as usize].clone()];
         let mut actions = Vec::with_capacity(walk.len());
         let steps = match tail {
@@ -306,6 +396,29 @@ impl ComponentRun {
             actions,
             tail,
         }
+    }
+
+    /// The lasso from `start` as a walk of edges from its first state: with `Loop::Back`,
+    /// the last edge returns to the state the loop starts at.
+    fn walk(&self, fair: &FairSteps, avoid: &Avoid, start: u32) -> (u32, Vec<Edge>, Loop) {
+        let mut walk: Vec<Edge> = self.path_to(start);
+        let mut at = start;
+        while avoid.toward[at as usize] != at {
+            let to = avoid.toward[at as usize];
+            walk.push(self.edge_between(at, to));
+            at = to;
+        }
+        let end = at;
+        let first = walk.first().map_or(start, |e| e.from);
+        let tail = if avoid.stops[end as usize] {
+            Loop::Stutter
+        } else {
+            debug_assert!(avoid.fair_cycle[avoid.comp[end as usize] as usize]);
+            let entry = walk.len() + 1;
+            walk.extend(self.fair_loop(fair, avoid, end));
+            Loop::Back { to: entry }
+        };
+        (first, walk, tail)
     }
 
     /// A walk inside `end`'s component from `end` back to it that, for each fair instance,

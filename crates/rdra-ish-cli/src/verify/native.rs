@@ -7,7 +7,8 @@ use crate::property_cone::{AfterPlain, ConeRun, Verdict};
 use crate::tlc_output::Outcome;
 use rdra_ish_core::in_parallel;
 use rdra_ish_core::lifecycle::{
-    Caps, ComponentRun, Diag, Fairness, LassoFault, PropertyVerdict, StateDiag, TransitionSystem,
+    Caps, ComponentRun, Diag, Fairness, LassoFault, PropertyVerdict, ReducedVerdict, StateDiag,
+    TransitionSystem,
 };
 use rdra_ish_emit::tla::TlaNames;
 
@@ -98,9 +99,10 @@ fn explore(system: &TransitionSystem, caps: Caps, crowded_run: &mut bool) -> Com
 }
 
 /// `p` on its cone by the runs `property_cone` defines, each on a graph BFS explores: `Plain`
-/// on the reduced cone, `Full` on the unreduced cone after a counterexample there, and
-/// `WfNext` on the same unreduced graph when `after_plain` asks for it. Also returns the
-/// vacuity the plain run shows.
+/// on the reduced cone, then, when `after_plain` asks for `WfNext`, `WfNext` on the same
+/// reduced graph with the classes that can loop marked. When that does not decide, `Full` on
+/// the unreduced cone after the counterexample, and `WfNext` on the same unreduced graph.
+/// Also returns the vacuity the plain run shows.
 fn native_property(ts: &TransitionSystem, p: &PropertyJob, caps: Caps) -> (Native, Option<Diag>) {
     let cone = &p.cone;
     let mut out = Native {
@@ -118,8 +120,46 @@ fn native_property(ts: &TransitionSystem, p: &PropertyJob, caps: Caps) -> (Nativ
     let vacuous = ts.property_vacuity(p.index, &plain_run);
     out.states = Some(plain_run.states.len() as u64);
     let mut last = Answer::of(&plain_run, cone.reduced_index, Fairness::Plain);
-    drop(plain_run);
     out.runs.push((ConeRun::Plain, last.outcome()));
+    // A liveness counterexample on the reduced cone asks for the run with `WF_vars(Next)`.
+    // It runs first on the reduced graph, with every class that can loop taken as a place
+    // to stop: its `ok` is the unreduced cone's, and a counterexample that lifts and
+    // certifies on the unreduced cone is real. Anything else falls back to the unreduced
+    // cone below.
+    let reduced_wf = match (&last, &p.wf) {
+        (Answer::Verdict(Outcome::Counterexample, _), Some(_))
+            if cone.is_reduced()
+                && cone.after_plain(Outcome::Counterexample) == AfterPlain::NeedsWfNext
+                && std::env::var_os("RDRA_ISH_NO_WF_REDUCED").is_none() =>
+        {
+            Some(plain_run.decide_liveness_reduced(cone.reduced_index, &cone.system, cone.index))
+        }
+        _ => None,
+    };
+    if let Some(verdict) = &reduced_wf {
+        wf_reduced_stats(ts, p, &cone.reduced, verdict);
+    }
+    drop(plain_run);
+    let reduced_wf = match reduced_wf {
+        Some(ReducedVerdict::Holds) => Some((Outcome::Ok, None)),
+        Some(ReducedVerdict::Violated(d)) => Some((Outcome::Counterexample, Some(d))),
+        Some(ReducedVerdict::Undecided | ReducedVerdict::Spurious(_)) | None => None,
+    };
+    if let Some((second, found)) = reduced_wf {
+        let wf = p.wf.as_ref().expect("checked above");
+        out.crowded = crowded_run;
+        out.runs.push((ConeRun::WfNext, second));
+        out.notes.push(format!(
+            "{}: {} on the reduced cone",
+            wf.module,
+            second.as_str()
+        ));
+        out.found = found;
+        return (
+            out.decided(cone.after_wf(Outcome::Counterexample, second)),
+            vacuous,
+        );
+    }
     let mut unreduced: Option<ComponentRun> = None;
     // A counterexample on the reduced cone is real, but its lasso is read on the unreduced
     // cone, whose run gives the verdict from here on.
@@ -171,25 +211,62 @@ fn native_property(ts: &TransitionSystem, p: &PropertyJob, caps: Caps) -> (Nativ
             }
         }
     };
-    out.decision = match verdict {
-        Verdict::Ok => Decision::Decided(Outcome::Ok),
-        Verdict::Counterexample => Decision::Decided(Outcome::Counterexample),
-        Verdict::ToolError => Decision::Decided(Outcome::ToolError),
-        Verdict::Undecided(why) => {
-            out.notes.push(why.as_str().to_string());
-            Decision::Undecided {
-                why: why.as_str().to_string(),
-                stop: None,
-            }
-        }
-    };
-    if out.decision.verdict() != Some(Outcome::Counterexample) {
-        out.found = None;
+    (out.decided(verdict), vacuous)
+}
+
+/// Under `RDRA_ISH_WF_REDUCED_STATS`, one line on stderr per run with `WF_vars(Next)` on a
+/// reduced cone: what it decided, and the divergence marks of the reduction, for measuring
+/// the trial of docs/formal-verification.md, "WF_vars(Next) on a reduced cone".
+fn wf_reduced_stats(
+    ts: &TransitionSystem,
+    p: &PropertyJob,
+    reduced: &TransitionSystem,
+    verdict: &ReducedVerdict,
+) {
+    if std::env::var_os("RDRA_ISH_WF_REDUCED_STATS").is_none() {
+        return;
     }
-    (out, vacuous)
+    let outcome = match verdict {
+        ReducedVerdict::Holds => "ok".to_string(),
+        ReducedVerdict::Undecided => "undecided".to_string(),
+        ReducedVerdict::Violated(_) => "counterexample".to_string(),
+        ReducedVerdict::Spurious(why) => format!("spurious-{why:?}"),
+    };
+    let d = reduced
+        .reduction()
+        .map(|r| r.divergence)
+        .unwrap_or_default();
+    let sensitive = d.sensitive.map_or("-".to_string(), |n| n.to_string());
+    eprintln!(
+        "wf-reduced: {} {outcome} classes={} looping={} mixed={} sensitive={sensitive}",
+        ts.properties()[p.index].name,
+        d.classes,
+        d.looping,
+        d.mixed
+    );
 }
 
 impl Native {
+    /// The decision `verdict` states; a counterexample's lasso is kept only for one.
+    fn decided(mut self, verdict: Verdict) -> Native {
+        self.decision = match verdict {
+            Verdict::Ok => Decision::Decided(Outcome::Ok),
+            Verdict::Counterexample => Decision::Decided(Outcome::Counterexample),
+            Verdict::ToolError => Decision::Decided(Outcome::ToolError),
+            Verdict::Undecided(why) => {
+                self.notes.push(why.as_str().to_string());
+                Decision::Undecided {
+                    why: why.as_str().to_string(),
+                    stop: None,
+                }
+            }
+        };
+        if self.decision.verdict() != Some(Outcome::Counterexample) {
+            self.found = None;
+        }
+        self
+    }
+
     /// A cone run stopped at the state cap or the memory limit before it decided.
     pub(super) fn capped(mut self) -> Native {
         let why = "stopped at the state or pattern cap (--max-states, --max-patterns) or the memory limit".to_string();
