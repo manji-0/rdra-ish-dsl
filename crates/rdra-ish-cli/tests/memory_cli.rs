@@ -155,18 +155,19 @@ fn a_bad_memory_value_is_a_manifest_error_with_its_line() {
     assert!(String::from_utf8_lossy(&flag.stderr).contains("invalid memory size \"16\""));
 }
 
-/// The flags fixture has no rule, so no TLC run: only BFS's half of `--memory` is at stake.
+/// Without `--with-tlc` BFS has all of `--memory`, and a cone past it leaves its findings
+/// undecided.
 #[test]
 fn verify_leaves_a_cone_past_its_bfs_share_undecided() {
-    let small = run(&repo(), &["verify", "--memory", "65MiB", FLAGS]);
+    let small = run(&repo(), &["verify", "--memory", "1MiB", FLAGS]);
     let stdout = String::from_utf8_lossy(&small.stdout);
     let stderr = String::from_utf8_lossy(&small.stderr);
     assert!(small.status.success(), "{stdout}\n{stderr}");
     assert!(
         stdout.contains(
             "  whether some Task can get stuck at status = open is not decided: the Task cone \
-             stopped at the memory limit (65MiB; raise it with --memory or `memory` under [verify] \
-             in rdra.toml; BFS has 1MiB of it)"
+             stopped at the memory limit (1MiB; raise it with --memory or `memory` under [verify] \
+             in rdra.toml)"
         ),
         "{stdout}"
     );
@@ -179,7 +180,7 @@ fn verify_leaves_a_cone_past_its_bfs_share_undecided() {
 
     let denied = run(
         &repo(),
-        &["verify", "--memory", "65MiB", "--deny-undecided", FLAGS],
+        &["verify", "--memory", "1MiB", "--deny-undecided", FLAGS],
     );
     assert_eq!(denied.status.code(), Some(1));
 
@@ -188,7 +189,11 @@ fn verify_leaves_a_cone_past_its_bfs_share_undecided() {
     assert!(default.status.success(), "{stdout}");
     assert!(!stdout.contains("memory limit"), "{stdout}");
 
-    let too_small = run(&repo(), &["verify", "--memory", "64MiB", FLAGS]);
+    // Under `--with-tlc` the TLC runs take their share first, so 64MiB leaves BFS none.
+    let too_small = run(
+        &repo(),
+        &["verify", "--with-tlc", "--memory", "64MiB", FLAGS],
+    );
     assert!(String::from_utf8_lossy(&too_small.stderr)
         .contains("--memory 64MiB is too small for verify: a TLC run takes 64MiB"),);
 }
@@ -246,7 +251,13 @@ fn tlc_runs(test: &str, memory: &str, env: &[(&str, &str)]) -> (Vec<String>, usi
         .env_remove("RDRA_TLC_HEAP")
         .env_remove("RDRA_TLC_JAR")
         .env_remove("JAVA_TOOL_OPTIONS")
-        .args(["verify", "--memory", memory, model.to_str().unwrap()]);
+        .args([
+            "verify",
+            "--with-tlc",
+            "--memory",
+            memory,
+            model.to_str().unwrap(),
+        ]);
     for (key, value) in env {
         command.env(key, value);
     }

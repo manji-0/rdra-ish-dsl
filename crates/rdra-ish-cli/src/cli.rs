@@ -310,14 +310,21 @@ pub(crate) enum Commands {
         #[command(flatten)]
         scope: ScopeArgs,
     },
-    /// Formally verify temporal/safety properties via an external checker
+    /// Formally verify every invariant, after-assert, and temporal property, natively; with
+    /// --with-tlc TLC runs beside the native checker
     Verify {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Verification backend
-        #[arg(long, default_value = "tlc")]
-        backend: VerifyBackend,
-        /// Directory to write generated TLA+/CFG (defaults to a temp dir)
+        /// Also run TLC on the same cones beside the native checker; a check the two decide
+        /// differently fails the run (exit 1). Needs `tlc` on PATH or --tlc-jar
+        #[arg(long)]
+        with_tlc: bool,
+        /// [deprecated] `--backend tlc` is a spelling of --with-tlc, removed in the next major
+        /// release
+        #[arg(long, value_name = "BACKEND")]
+        backend: Option<VerifyBackend>,
+        /// Directory to write the generated TLA+/CFG modules and cones.txt to, for a TLC run
+        /// by hand (without it, --with-tlc writes them to a temp dir)
         #[arg(short, long)]
         out: Option<PathBuf>,
         /// TLA+ multi-instance `InstanceCount`
@@ -327,8 +334,8 @@ pub(crate) enum Commands {
         #[arg(long, default_value_t = 5)]
         int_range_max: u32,
         /// Seconds a temporal property's whole-model run gets when its cone does not decide
-        /// it; past them the property is reported as not decided, unless TLC had already
-        /// printed its verdict
+        /// it; past them the property is reported as not decided, unless the run had already
+        /// found a counterexample
         #[arg(long, default_value_t = 300)]
         temporal_budget: u64,
         /// Treat a finding verify leaves undecided (a BFS cone stopped at the state cap or the
@@ -347,12 +354,12 @@ pub(crate) enum Commands {
         /// on PATH
         #[arg(long, value_name = "PATH", requires = "prove")]
         z3: Option<PathBuf>,
-        /// Run TLC as `java -cp <path> tlc2.TLC` from `tla2tools.jar` instead of a `tlc` /
-        /// `tlc2` launcher on PATH; `RDRA_TLC_JAR` sets it when the flag is absent
+        /// With --with-tlc, run TLC as `java -cp <path> tlc2.TLC` from `tla2tools.jar` instead
+        /// of a `tlc` / `tlc2` launcher on PATH; `RDRA_TLC_JAR` sets it when the flag is absent
         #[arg(long, value_name = "PATH")]
         tlc_jar: Option<PathBuf>,
-        /// What the run and its TLC runs may hold in memory, such as 16GiB (G and GB also
-        /// mean GiB): BFS takes half, and the TLC runs at once take no more `-Xmx` than the
+        /// What the run may hold in memory, such as 16GiB (G and GB also mean GiB); under
+        /// --with-tlc BFS takes half, and the TLC runs at once take no more `-Xmx` than the
         /// rest. Default: `memory` under [verify] in rdra.toml, else 16GiB
         #[arg(long, value_name = "SIZE")]
         memory: Option<MemorySize>,
@@ -481,7 +488,7 @@ impl ScopeArgs {
 
 #[derive(ValueEnum, Clone)]
 pub(crate) enum VerifyBackend {
-    /// TLA+ model checker (TLC)
+    /// TLA+ model checker (TLC), beside the native checker: the same as --with-tlc
     Tlc,
 }
 

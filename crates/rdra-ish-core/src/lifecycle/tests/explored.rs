@@ -58,7 +58,7 @@ fn decide(ts: &TransitionSystem, name: &str) -> Option<Violation> {
         .iter()
         .position(|p| p.name == name)
         .unwrap_or_else(|| panic!("no property {name}"));
-    match ts.decide_property(i, Caps::VERIFY) {
+    match ts.decide_property(i, Caps::VERIFY, Caps::VERIFY) {
         PropertyVerdict::Holds => None,
         PropertyVerdict::Undecided => panic!("{name}: undecided"),
         PropertyVerdict::Violated(diag) => match *diag {

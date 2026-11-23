@@ -49,9 +49,10 @@ pub(crate) fn memory_limit(
 /// leaves no BFS beside this much is refused.
 const LEAST_HEAP: u64 = 64 * MIB;
 
-/// How `verify` spends its memory. While BFS, the proof, and the TLC cone runs go side by
-/// side, the cone runs hold half, or `LEAST_HEAP` when half is less, and BFS the rest; the
-/// whole-model runs come after BFS has let go, so they may take all of it.
+/// How `verify` spends its memory. Without `--with-tlc` BFS holds all of it. With it, while
+/// BFS, the proof, and the TLC cone runs go side by side, the cone runs hold half, or
+/// `LEAST_HEAP` when half is less, and BFS the rest; the TLC whole-model runs come after BFS
+/// has let go, so they may take all of it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct VerifySplit {
     pub(crate) limit: MemorySize,
@@ -64,8 +65,16 @@ pub(crate) struct VerifySplit {
 }
 
 impl VerifySplit {
-    pub(crate) fn of(limit: MemorySize) -> Result<Self> {
+    pub(crate) fn of(limit: MemorySize, with_tlc: bool) -> Result<Self> {
         let bytes = limit.bytes();
+        if !with_tlc {
+            return Ok(VerifySplit {
+                limit,
+                bfs: limit,
+                cones: 0,
+                wholes: 0,
+            });
+        }
         let cones = (bytes - bytes / 2).max(LEAST_HEAP);
         let Some(bfs) = MemorySize::from_bytes(bytes.saturating_sub(cones)) else {
             bail!(
@@ -152,7 +161,7 @@ mod tests {
 
     #[test]
     fn the_default_verify_budget_runs_today_plan() {
-        let split = VerifySplit::of(MemorySize::VERIFY).unwrap();
+        let split = VerifySplit::of(MemorySize::VERIFY, true).unwrap();
         assert_eq!(split.bfs.to_string(), "8GiB");
         assert_eq!(
             tlc_plan(split.cones, 8, Heap::Cone, None),
@@ -172,7 +181,7 @@ mod tests {
 
     #[test]
     fn a_smaller_budget_queues_the_runs_before_it_shrinks_a_heap() {
-        let split = VerifySplit::of(size("4GiB")).unwrap();
+        let split = VerifySplit::of(size("4GiB"), true).unwrap();
         assert_eq!(
             tlc_plan(split.cones, 8, Heap::Cone, None),
             TlcPlan {
@@ -187,7 +196,7 @@ mod tests {
                 heap: 2 * GIB
             }
         );
-        let split = VerifySplit::of(size("1GiB")).unwrap();
+        let split = VerifySplit::of(size("1GiB"), true).unwrap();
         assert_eq!(
             tlc_plan(split.cones, 8, Heap::Cone, None),
             TlcPlan {
@@ -202,7 +211,7 @@ mod tests {
                 heap: GIB
             }
         );
-        let split = VerifySplit::of(size("80MiB")).unwrap();
+        let split = VerifySplit::of(size("80MiB"), true).unwrap();
         assert_eq!(split.bfs.to_string(), "16MiB");
         assert_eq!(
             tlc_plan(split.cones, 8, Heap::Cone, None),
@@ -215,7 +224,7 @@ mod tests {
 
     #[test]
     fn a_heap_the_user_names_is_kept_and_queued_to_fit() {
-        let split = VerifySplit::of(MemorySize::VERIFY).unwrap();
+        let split = VerifySplit::of(MemorySize::VERIFY, true).unwrap();
         assert_eq!(
             tlc_plan(split.cones, 8, Heap::Cone, Some(4 * GIB)),
             TlcPlan {
@@ -234,11 +243,23 @@ mod tests {
 
     #[test]
     fn verify_refuses_a_budget_too_small_for_one_tlc_run() {
-        let err = VerifySplit::of(size("64MiB")).unwrap_err().to_string();
+        let err = VerifySplit::of(size("64MiB"), true)
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("a TLC run takes 64MiB"), "{err}");
         assert_eq!(
-            VerifySplit::of(size("65MiB")).unwrap().bfs.to_string(),
+            VerifySplit::of(size("65MiB"), true)
+                .unwrap()
+                .bfs
+                .to_string(),
             "1MiB"
         );
+    }
+
+    /// Without `--with-tlc` no TLC run takes a share, so a budget too small for one is fine.
+    #[test]
+    fn without_tlc_bfs_holds_the_whole_budget() {
+        let split = VerifySplit::of(size("64MiB"), false).unwrap();
+        assert_eq!(split.bfs.to_string(), "64MiB");
     }
 }

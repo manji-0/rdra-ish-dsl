@@ -1,21 +1,22 @@
-//! `rdra-ish verify --backend tlc`: check every invariant, after-assert, and temporal property
-//! on its own cone, and a temporal property on the whole system only when its cone does not
-//! decide it. BFS decides `stable`, `unchanged`, and `precedes` on its own cones
-//! (`TransitionSystem::decide_property`); TLC runs none of them.
+//! `rdra-ish verify`: check every invariant, after-assert, and temporal property on its own
+//! cone, and a temporal property on the whole system only when its cone does not decide it.
+//! The native checker decides each one on the graph BFS explores: a safety cone by the
+//! explorer (`bfs_cones`), `stable`, `unchanged`, and `precedes` on their cones
+//! (`TransitionSystem::decide_property`), and `always`, `eventually`, and `leads_to` by the
+//! runs `property_cone` defines (`native_property`), the whole-model run included
+//! (`native_wholes`), under `--temporal-budget` and `WHOLE_MODEL_STATE_CAP`.
 //!
 //! A cone (`TransitionSystem::target_cone`) is closed: its restricted system reaches exactly
 //! the projection of the whole system's states, so a safety verdict on the cone is the
 //! verdict on the whole model. A property's cone (`property_cone`) also keeps the actions its
 //! `.fair` names whole, so their weak fairness restricts to it; the whole model's
-//! `WF_vars(Next)` does not, which is what `property_cone::Verdict` decides. Each property
-//! runs alone, because TLC does not say which property its lasso violates.
+//! `WF_vars(Next)` does not, which is what `property_cone::Verdict` decides.
 //!
-//! Under the test hook `RDRA_ISH_NATIVE` (phase 1 of the native checker plan, #168) BFS
-//! decides every safety check: each invariant and after-assert cone on the same reduced
-//! system TLC would check (`bfs_cones`), and each `always` as an invariant over its present
-//! binders, beside the forms above. TLC runs only `eventually` and `leads_to`, so its
-//! `tlc_result:` line prints only when one of those ran, or as today when nothing at all
-//! goes to a cone (`nothing to check`).
+//! `--with-tlc` also prints a TLA+ module per run and has TLC run the same cones and the
+//! same ladder of property runs beside the native checker, each property alone, because TLC
+//! does not say which property its lasso violates. A check the two engines decide
+//! differently is a tool bug (`disagreements`): the run fails and keeps its specs. A check
+//! one engine leaves undecided is no disagreement.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -28,7 +29,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
 use rdra_ish_core::lifecycle::{
-    ActId, Bounds, BoundsLine, Caps, ComponentRun, Cone, Diag, LtlKind, NotChecked,
+    ActId, Bounds, BoundsLine, Caps, ComponentRun, Cone, Diag, Fairness, LassoFault, NotChecked,
     PropertyVerdict, Scope, Selection, Severity, StateDiag, Target, TransitionSystem, VarSet,
 };
 use rdra_ish_core::{in_parallel, jobs, ResolvedProgram, SemanticModel};
@@ -44,20 +45,16 @@ use crate::tlc_output::{progress, summarize, Outcome, TlcRun};
 use crate::tlc_replay::{explain_property, explain_violation};
 use rdra_ish_core::memory::MemoryPool;
 
-/// The test hook that has BFS decide every safety check of `verify` without TLC. It is not a
-/// setting, as `RDRA_ISH_NO_REDUCE` is not one: phase 3 makes the native path the default.
-const NATIVE_HOOK: &str = "RDRA_ISH_NATIVE";
-
-/// `verify` decides a property of this kind by BFS on its cone and starts no TLC run for it:
-/// the forms `LtlKind::is_explored` names, and an `always` under `RDRA_ISH_NATIVE`.
-fn decided_by_bfs(kind: LtlKind, native: bool) -> bool {
-    kind.is_explored() || (native && matches!(kind, LtlKind::Always))
-}
-
-/// Distinct states a whole-model temporal run may reach before it is stopped. Separate from
-/// `Caps::VERIFY`, the BFS cap per cone: TLC's memory and time grow with this one, and
-/// `--temporal-budget` bounds only the time.
+/// Distinct states a whole-model temporal run may reach before it is stopped, natively and
+/// under TLC. Separate from `Caps::VERIFY`, the BFS cap per cone: the run's memory and time
+/// grow with this one, and `--temporal-budget` bounds only the time.
 const WHOLE_MODEL_STATE_CAP: u64 = 1 << 21;
+
+/// `--with-tlc`: TLC runs beside the native checker.
+pub struct WithTlc {
+    /// `--tlc-jar`: run TLC from `tla2tools.jar`; else `RDRA_TLC_JAR`, else `tlc` on PATH.
+    pub jar: Option<PathBuf>,
+}
 
 /// What `verify` spends on a check it may not finish, and whether one it leaves undecided
 /// fails the run.
@@ -68,7 +65,7 @@ pub struct Budget {
     pub deny_undecided: bool,
     /// `--prove`: z3 tries each state rule for any number of rows.
     pub prove: Option<Prove>,
-    /// `--memory`, split between BFS and the TLC runs.
+    /// `--memory`, split between BFS and the TLC runs under `--with-tlc`.
     pub memory: VerifySplit,
 }
 
@@ -148,11 +145,11 @@ struct ConeSystem {
 /// What a run decides about its checks.
 enum Decision {
     Decided(Outcome),
-    /// The property is not decided, and why. `capped`: the whole-model run stopped at the
-    /// state cap, not at the time budget.
+    /// The property is not decided, and why. `stop`: why a whole-model run stopped, which
+    /// says what to change; `None` when a cone left it undecided.
     Undecided {
         why: String,
-        capped: bool,
+        stop: Option<Stop>,
     },
 }
 
@@ -164,8 +161,53 @@ impl Decision {
             Decision::Undecided { .. } => Outcome::Ok,
         }
     }
+
+    /// The verdict, when the run gave one.
+    fn verdict(&self) -> Option<Outcome> {
+        match self {
+            Decision::Decided(outcome) => Some(*outcome),
+            Decision::Undecided { .. } => None,
+        }
+    }
+
+    fn as_str(&self) -> &'static str {
+        match self {
+            Decision::Decided(outcome) => outcome.as_str(),
+            Decision::Undecided { .. } => "not decided",
+        }
+    }
 }
 
+/// Why a whole-model run stopped before it decided.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Stop {
+    Budget,
+    StateCap,
+    Memory,
+}
+
+/// A run line: `<module> [<checks>]: <verdict> (<states> states, <notes>)`, the same for
+/// either engine.
+fn run_line(
+    module: &str,
+    checks: &[String],
+    verdict: &str,
+    states: Option<u64>,
+    notes: &[String],
+) -> String {
+    let inside: Vec<String> = states
+        .map(|n| format!("{n} states"))
+        .into_iter()
+        .chain(notes.iter().cloned())
+        .collect();
+    let inside = match inside.is_empty() {
+        true => String::new(),
+        false => format!(" ({})", inside.join(", ")),
+    };
+    format!("{module} [{}]: {verdict}{inside}", checks.join(", "))
+}
+
+/// One TLC run of a job, under `--with-tlc`.
 struct Ran {
     decision: Decision,
     /// The run whose counterexample is explained: the last one of the job.
@@ -173,48 +215,37 @@ struct Ran {
     log: String,
     /// What the run line says after the state count.
     notes: Vec<String>,
+    /// A property cone's runs and what each said, compared with the native runs.
+    runs: Vec<(ConeRun, Outcome)>,
 }
 
 impl Ran {
     fn line(&self, module: &str, checks: &[String]) -> String {
-        let verdict = match &self.decision {
-            Decision::Undecided { .. } => "not decided",
-            Decision::Decided(outcome) => outcome.as_str(),
-        };
-        let mut inside: Vec<String> = self
-            .run
-            .distinct_states
-            .map(|n| format!("{n} states"))
-            .into_iter()
-            .collect();
-        inside.extend(self.notes.iter().cloned());
-        let inside = match inside.is_empty() {
-            true => String::new(),
-            false => format!(" ({})", inside.join(", ")),
-        };
-        format!("{module} [{}]: {verdict}{inside}", checks.join(", "))
+        let states = self.run.distinct_states;
+        run_line(module, checks, self.decision.as_str(), states, &self.notes)
     }
 }
 
-/// Where the specs go, and the whole-model module name. `-o X.tla` writes next to `X.tla`
-/// and names the whole-model module `X`; any other `-o` is a directory.
-fn out_dir(out: Option<PathBuf>) -> Result<(PathBuf, String, bool)> {
-    let (dir, whole, keep) = match out {
+/// The whole-model module name, and the directory `-o` names: `-o X.tla` writes next to
+/// `X.tla` and names the whole-model module `X`; any other `-o` is a directory.
+fn out_names(out: Option<PathBuf>) -> (Option<PathBuf>, String) {
+    match out {
         Some(path) => match tla_file(&path) {
-            Some((parent, stem)) => (parent, stem, true),
-            None => (path, "RdraSpec".to_string(), true),
+            Some((parent, stem)) => (Some(parent), stem),
+            None => (Some(path), "RdraSpec".to_string()),
         },
-        None => (
-            std::env::temp_dir().join(format!("rdra-ish-tlc-{}", std::process::id())),
-            "RdraSpec".to_string(),
-            false,
-        ),
-    };
+        None => (None, "RdraSpec".to_string()),
+    }
+}
+
+/// Creates the directory the specs go to: `out`, or a temp dir when `-o` names none.
+fn spec_dir(out: Option<PathBuf>) -> Result<PathBuf> {
+    let dir = out.unwrap_or_else(|| {
+        std::env::temp_dir().join(format!("rdra-ish-tlc-{}", std::process::id()))
+    });
     fs::create_dir_all(&dir).with_context(|| format!("failed to create {}", dir.display()))?;
     // TLC runs inside `dir`, so the metadir and java tmpdir paths must not be relative.
-    let dir = dunce::canonicalize(&dir)
-        .with_context(|| format!("failed to resolve {}", dir.display()))?;
-    Ok((dir, whole, keep))
+    dunce::canonicalize(&dir).with_context(|| format!("failed to resolve {}", dir.display()))
 }
 
 /// Each distinct cone of a selected invariant or after-assert, in target order, named after
@@ -284,7 +315,7 @@ fn cone_jobs(
     })
 }
 
-/// One run per temporal property on its cone, module `Cone_<property>`, with the `_WF`
+/// One run per `always`, `eventually`, and `leads_to` on its cone, module `Cone_<property>`, with the `_WF`
 /// module (the same cone with `WF_vars(Next)`) printed beside it for the second run. Every
 /// `Cone_<property>` is claimed before any `_Full` or `_WF`, so each property's own module
 /// keeps its name.
@@ -293,10 +324,11 @@ fn property_jobs(
     names: &TlaNames,
     modules: &mut Modules,
     caps: Caps,
-    native: bool,
 ) -> Vec<Job> {
+    // The forms `LtlKind::is_explored` names are decided on their cones by
+    // `explored_properties`, with no run of their own.
     let tlc: Vec<usize> = (0..ts.properties().len())
-        .filter(|&i| !decided_by_bfs(ts.properties()[i].formula.kind(), native))
+        .filter(|&i| !ts.properties()[i].formula.kind().is_explored())
         .collect();
     let plain: Vec<String> = tlc
         .iter()
@@ -412,6 +444,7 @@ fn run_job(
         JobKind::PropertyCone(p) => {
             let (cone, wf) = (&p.cone, &p.wf);
             let mut plain = ran.decision.outcome();
+            ran.runs.push((ConeRun::Plain, plain));
             // A counterexample on the reduced cone is real, but its lasso is read on the
             // unreduced cone, whose run gives the verdict from here on.
             if let (Outcome::Counterexample, Some(full)) = (plain, &p.full) {
@@ -424,6 +457,7 @@ fn run_job(
                 ));
                 ran.log.push_str(&more.log);
                 ran.run = more.run;
+                ran.runs.push((ConeRun::Full, more.decision.outcome()));
                 plain = match more.decision.outcome() {
                     Outcome::Ok => {
                         ran.notes.push(
@@ -444,6 +478,7 @@ fn run_job(
                     let cfg = format!("{}.cfg", wf.module);
                     let more = run_cfg(tlc, dir, &wf.module, heap, &cfg, workers, false)?;
                     let wf_outcome = more.decision.outcome();
+                    ran.runs.push((ConeRun::WfNext, wf_outcome));
                     ran.notes
                         .push(format!("{}: {}", wf.module, wf_outcome.as_str()));
                     ran.log.push_str(&more.log);
@@ -459,7 +494,7 @@ fn run_job(
                     ran.notes.push(why.as_str().to_string());
                     Decision::Undecided {
                         why: why.as_str().to_string(),
-                        capped: false,
+                        stop: None,
                     }
                 }
             };
@@ -522,17 +557,18 @@ fn run_cfg(
         run,
         log,
         notes: Vec::new(),
+        runs: Vec::new(),
     })
 }
 
 /// What to change when a property's whole-model run stopped. A property without `.fair` rests
 /// on the whole model's `WF_vars(Next)`; naming the use cases it relies on lets its cone decide
 /// it. The state cap is fixed, so only a smaller model or a cone lifts it.
-fn undecided_hint(capped: bool) -> &'static str {
-    if capped {
-        "the model has more states than the cap; --temporal-budget does not lift it, so name the use cases the property relies on with .fair(UseCase, ...) to decide it on its cone, or shrink the model"
-    } else {
-        "raise --temporal-budget, or name the use cases the property relies on with .fair(UseCase, ...) to decide it on its cone"
+fn undecided_hint(stop: Stop) -> &'static str {
+    match stop {
+        Stop::StateCap => "the model has more states than the cap; --temporal-budget does not lift it, so name the use cases the property relies on with .fair(UseCase, ...) to decide it on its cone, or shrink the model",
+        Stop::Budget => "raise --temporal-budget, or name the use cases the property relies on with .fair(UseCase, ...) to decide it on its cone",
+        Stop::Memory => "raise --memory, or name the use cases the property relies on with .fair(UseCase, ...) to decide it on its cone",
     }
 }
 
@@ -633,7 +669,10 @@ fn run_whole(
         (Some(why), None) => (
             Decision::Undecided {
                 why: why.clone(),
-                capped,
+                stop: Some(match capped {
+                    true => Stop::StateCap,
+                    false => Stop::Budget,
+                }),
             },
             vec![why],
         ),
@@ -644,6 +683,7 @@ fn run_whole(
         run,
         log,
         notes,
+        runs: Vec::new(),
     })
 }
 
@@ -705,6 +745,7 @@ fn run_cones(
                     "checked in {}",
                     jobs[covers[i].expect("a job without a run is covered")].module
                 )],
+                runs: Vec::new(),
             })
         })
         .collect())
@@ -896,9 +937,9 @@ fn model_traces(
         .collect()
 }
 
-/// Runs `verify --backend tlc`. `bounds` is `(--instance-count, --int-range-max)`; `tlc_jar`
-/// is `--tlc-jar`.
-pub fn run_tlc(
+/// Runs `verify`. `bounds` is `(--instance-count, --int-range-max)`; `with_tlc` is
+/// `--with-tlc` and its `--tlc-jar`.
+pub fn run(
     program: &ResolvedProgram,
     model: &SemanticModel,
     out: Option<PathBuf>,
@@ -910,12 +951,13 @@ pub fn run_tlc(
         prove,
         memory,
     }: Budget,
-    tlc_jar: Option<PathBuf>,
+    with_tlc: Option<WithTlc>,
 ) -> Result<()> {
     let bounds = tla_bounds(instance_count, int_range_max)?;
     let built = checked_system(model, bounds, scope)?;
     let (ts, selection) = (built.ts, built.selection);
-    let (dir, whole_name, keep) = out_dir(out)?;
+    let (out, whole_name) = out_names(out);
+    let keep = out.is_some();
     let names = TlaNames::new(&ts);
 
     // A scope checks no property: `--buc` drops use cases fairness would read, and an error
@@ -929,8 +971,8 @@ pub fn run_tlc(
         false => whole_name,
     };
     // A `.lemma()` rule only helps `--prove`, which keeps a lemma only when it proves it, so
-    // TLC runs no cone for one: a lemma that joins two large cones would cost more than the
-    // rules it helps. `check` still checks it.
+    // no cone runs for one: a lemma that joins two large cones would cost more than the rules
+    // it helps. `check` still checks it.
     let lemmas = rdra_ish_core::lifecycle::prove::lemma_invariants(model, &ts);
     let targets: Vec<Target> = selection
         .targets
@@ -938,59 +980,66 @@ pub fn run_tlc(
         .copied()
         .filter(|t| !matches!(t, Target::Invariant(i) if lemmas.contains(i)))
         .collect();
-    // Every BFS of the run, the ones that reduce a cone for TLC included, is charged to one
-    // pool: BFS's half of `--memory`.
-    let raise = format!("{}; BFS has {} of it", Budgeted::Verify.raise(), memory.bfs);
+    // Every BFS of the run, the ones that reduce a cone included, is charged to one pool:
+    // all of `--memory`, or BFS's half of it under `--with-tlc`.
+    let raise = if memory.bfs == memory.limit {
+        Budgeted::Verify.raise().to_string()
+    } else {
+        format!("{}; BFS has {} of it", Budgeted::Verify.raise(), memory.bfs)
+    };
     let caps = Caps::VERIFY.charged_to(MemoryPool::share_of(
         memory.limit,
         memory.bfs,
         Box::leak(raise.into_boxed_str()),
     ));
-    let native = std::env::var_os(NATIVE_HOOK).is_some();
     let mut jobs = cone_jobs(&ts, &names, &targets, &mut modules, caps);
     let cones = jobs.len();
-    // Under the hook BFS decides the safety cones, and `jobs` keeps only what TLC runs.
-    let bfs_jobs = match native {
-        true => std::mem::take(&mut jobs),
-        false => Vec::new(),
-    };
     let line = print_plan(
         model,
         &ts,
         scope,
         &selection,
         bounds,
-        (cones, temporal, native),
+        (cones, temporal, with_tlc.is_some()),
         budget,
     );
-    // The whole-model module with every property, for a run by hand; verify runs a property
-    // on it only when its cone leaves it undecided.
-    let whole = temporal.then(|| tla::print(&ts, PrintMode::Temporal, &whole_name));
     let mut whole_modules = Vec::new();
     if temporal {
-        jobs.extend(property_jobs(&ts, &names, &mut modules, caps, native));
+        jobs.extend(property_jobs(&ts, &names, &mut modules, caps));
         whole_modules = (0..ts.properties().len())
             .map(|i| modules.claim(&format!("{whole_stem}_{}", names.property(i))))
             .collect();
     }
+    // The modules are written for `-o`, a run by hand, and for TLC under `--with-tlc`.
+    let dir = match keep || with_tlc.is_some() {
+        true => Some(spec_dir(out)?),
+        false => None,
+    };
+    // The whole-model module with every property, for a run by hand; a property runs on it
+    // only when its cone leaves it undecided.
+    let whole =
+        (temporal && dir.is_some()).then(|| tla::print(&ts, PrintMode::Temporal, &whole_name));
     // TLC starts on the cones while BFS and the proof run here: none reads what another
-    // finds. A failure to write the specs or to find a tool is reported where it was before
-    // the engines ran side by side, after what BFS and the proof print, and starts no TLC run.
-    let written = write_specs_and_index(&dir, bfs_jobs.iter().chain(&jobs), &whole);
-    let tlc = (!jobs.is_empty()).then(|| Tlc::find(tlc_jar));
+    // finds. A failure to write the specs or to find a tool is reported after what BFS and
+    // the proof print, and starts no TLC run.
+    let written = dir
+        .as_ref()
+        .map(|dir| write_specs_and_index(dir, &jobs, &whole));
+    let tlc = with_tlc.map(|w| Tlc::find(w.jar));
     let z3 = prove.as_ref().map(|p| find_z3(p.z3.clone()));
-    let start = match (&written, &tlc, &z3) {
-        (Ok(_), Some(Ok(tlc)), None | Some(Ok(_))) => Some(tlc),
+    let start = match (&dir, &written, &tlc, &z3) {
+        (Some(dir), Some(Ok(_)), Some(Ok(tlc)), None | Some(Ok(_))) => Some((tlc, dir)),
         _ => None,
     };
-    let (bfs, safety_cones, explored, proof, cones_ran) = std::thread::scope(|threads| {
-        let cones =
-            start.map(|tlc| threads.spawn(|| run_cones(tlc, &dir, &modules, &jobs, memory.cones)));
+    let (bfs, natives, explored, proof, cones_ran) = std::thread::scope(|threads| {
+        let cones = start
+            .map(|(tlc, dir)| threads.spawn(|| run_cones(tlc, dir, &modules, &jobs, memory.cones)));
         let bfs = state_models(program, model, &ts, scope, &selection, caps);
-        let (safety_cones, mut vacuous) = bfs_cones(&ts, &bfs_jobs, caps);
+        let (safety, mut vacuous) = bfs_cones(&ts, &jobs, caps);
+        let (properties, property_vacuous) = native_properties(&ts, &jobs, caps);
         // A `--buc` drops use cases that may reach a premise.
         if scope.bucs.is_empty() {
-            vacuous.extend(vacuous_checks(&ts, &jobs, caps));
+            vacuous.extend(property_vacuous);
             for d in vacuous {
                 if let Some(text) = render_violation(program, model, &d.diag, TraceSource::Bfs) {
                     eprintln!("{}", Finding::new(&d.diag, &[], text));
@@ -998,9 +1047,18 @@ pub fn run_tlc(
             }
         }
         let explored = match temporal {
-            true => explored_properties(program, model, &ts, caps, native),
+            true => explored_properties(program, model, &ts, caps, budget),
             false => Explored::default(),
         };
+        let open: Vec<usize> = jobs
+            .iter()
+            .zip(&properties)
+            .filter_map(|(job, native)| match (&job.kind, native) {
+                (JobKind::PropertyCone(p), Some(n)) if n.goes_whole() => Some(p.index),
+                _ => None,
+            })
+            .collect();
+        let wholes = native_wholes(&ts, &open, caps, budget);
         let proof = match (&prove, z3) {
             (Some(Prove { deny_unproved, .. }), Some(z3)) => z3.and_then(|z3| {
                 let marks = Marks::of(model, &ts);
@@ -1012,84 +1070,134 @@ pub fn run_tlc(
             Ok(ran) => ran,
             Err(panic) => std::panic::resume_unwind(panic),
         });
-        (bfs, safety_cones, explored, proof, cones_ran)
+        let natives = Natives {
+            safety,
+            properties,
+            wholes: open.into_iter().zip(wholes).collect(),
+        };
+        (bfs, natives, explored, proof, cones_ran)
     });
     let mut end = End {
         bfs,
         explored,
         safety: Safety::default(),
+        temporal: Temporal::default(),
+        tlc: TlcEnd::default(),
         deny_undecided,
         proof: proof?,
     };
 
-    let (mut index, index_path) = written?;
-    if keep {
+    let mut index = match written {
+        Some(written) => Some(written?),
+        None => None,
+    };
+    if let (true, Some((_, index_path))) = (keep, &index) {
         println!(
             "wrote {} specs and {}",
-            bfs_jobs.len() + jobs.len() + usize::from(whole.is_some()),
+            jobs.len() + usize::from(whole.is_some()),
             index_path.display()
         );
     }
-
-    if jobs.is_empty() && bfs_jobs.is_empty() {
-        if !keep {
-            let _ = fs::remove_dir_all(&dir);
-        }
+    if jobs.is_empty() && end.explored.checked == 0 && ts.reach_properties().is_empty() {
         println!("nothing to check");
-        println!("tlc_result: ok");
-        return end.finish(&line, &[]);
     }
-    end.safety = report_bfs_cones(program, model, &bfs_jobs, &safety_cones);
-    // No TLC run: no `tlc_result:` line either.
-    if jobs.is_empty() {
-        if !keep {
-            let _ = fs::remove_dir_all(&dir);
+    end.safety = report_bfs_cones(program, model, &jobs, &natives.safety);
+    end.temporal = report_properties(program, model, &ts, &jobs, &natives, &whole_modules);
+    let undecided = natives.undecided_lines(&names);
+    // Under `-o` the whole-model module of each property its cone leaves undecided is
+    // written, for a run by hand, as TLC's whole-model run writes it.
+    if let (true, Some(dir), Some((index, index_path))) = (keep, &dir, &mut index) {
+        let open: Vec<usize> = natives.wholes.iter().map(|(i, _)| *i).collect();
+        write_whole_specs(
+            dir,
+            (index, index_path),
+            (&ts, &names),
+            &whole_modules,
+            &open,
+        )?;
+    }
+
+    let mut disagreed = Vec::new();
+    let mut tlc_outcome = None;
+    if let Some(tlc) = tlc {
+        let tlc = tlc?;
+        let dir = dir.as_deref().expect("--with-tlc writes the specs");
+        let (index, index_path) = index.as_mut().expect("--with-tlc writes the index");
+        let ran = cones_ran.expect("TLC started once the specs and the tools were there")?;
+        for (job, r) in jobs.iter().zip(&ran) {
+            println!("tlc: {}", r.line(&job.module, &job.checks));
         }
-        return end.finish(&line, &[]);
+        let (wholes, whole_ran) = run_tlc_wholes(
+            (&tlc, dir),
+            (&ts, &names),
+            &whole_modules,
+            (budget, memory.wholes),
+            (&jobs, &ran),
+            (index, index_path.as_path()),
+        )?;
+        disagreed = disagreements(&whole_modules, &jobs, &natives, (&ran, &whole_ran));
+        let all_jobs: Vec<&Job> = jobs.iter().chain(&wholes).collect();
+        let all_ran: Vec<&Ran> = ran.iter().chain(&whole_ran).collect();
+        let outcome = worst(all_ran.iter().map(|r| r.decision.outcome()));
+        end.tlc.tool_errors = all_ran
+            .iter()
+            .filter(|r| r.decision.outcome() == Outcome::ToolError)
+            .count();
+        if outcome != Outcome::Ok {
+            tlc_failures(program, model, (&ts, &names), dir, (&all_jobs, &all_ran));
+        }
+        tlc_outcome = Some(outcome);
     }
-    let tlc = tlc.expect("a run with jobs looks for TLC")?;
-    let mut ran = cones_ran.expect("TLC started once the specs and the tools were there")?;
-    for (job, r) in jobs.iter().zip(&ran) {
-        println!("{}", r.line(&job.module, &job.checks));
+    for d in &disagreed {
+        eprintln!("{d}");
     }
+    end.tlc.disagreements = disagreed.len();
 
-    let undecided = run_undecided_wholes(
-        (&tlc, dir.as_path()),
-        (&ts, &names),
-        &whole_modules,
-        (budget, memory.wholes),
-        (&mut jobs, &mut ran),
-        (&mut index, index_path.as_path()),
-    )?;
-
-    let outcome = if ran
-        .iter()
-        .any(|r| r.decision.outcome() == Outcome::Counterexample)
-    {
-        Outcome::Counterexample
-    } else if ran
-        .iter()
-        .any(|r| r.decision.outcome() == Outcome::ToolError)
-    {
-        Outcome::ToolError
-    } else {
-        Outcome::Ok
+    // A disagreement reports neither engine's verdict as the result.
+    let result = match disagreed.is_empty() {
+        true => end.outcome(),
+        false => Outcome::ToolError,
     };
-    if outcome == Outcome::Ok {
-        if !keep {
-            let _ = fs::remove_dir_all(&dir);
-        }
-        println!("tlc_result: ok");
-        return end.finish(&line, &undecided);
+    let say = |label: &str, outcome: Outcome| match outcome {
+        Outcome::Ok => println!("{label}: ok"),
+        other => eprintln!("{label}: {}", other.as_str()),
+    };
+    say("result", result);
+    if let Some(outcome) = tlc_outcome {
+        say(
+            "tlc_result",
+            match disagreed.is_empty() {
+                true => outcome,
+                false => Outcome::ToolError,
+            },
+        );
     }
-    fail(
-        program,
-        model,
-        (&ts, &names),
-        (dir.as_path(), keep),
-        (jobs.as_slice(), ran.as_slice()),
-        outcome,
-    )
+    if let Some(dir) = &dir {
+        let failed = tlc_outcome.is_some_and(|o| o != Outcome::Ok);
+        let kept = match (!disagreed.is_empty(), failed) {
+            (true, _) => Some("the engines disagree"),
+            (false, true) => Some("a check failed"),
+            (false, false) => None,
+        };
+        match (keep, kept) {
+            (true, Some(_)) => eprintln!("specs: {}", dir.display()),
+            (true, None) => {}
+            (false, Some(why)) => eprintln!("specs: {} (kept because {why})", dir.display()),
+            (false, None) => {
+                let _ = fs::remove_dir_all(dir);
+            }
+        }
+    }
+    end.finish(&line, &undecided)
+}
+
+/// The worst of `outcomes`: a counterexample over a tool error over `ok`.
+fn worst(outcomes: impl IntoIterator<Item = Outcome>) -> Outcome {
+    outcomes.into_iter().fold(Outcome::Ok, |a, b| match (a, b) {
+        (Outcome::Counterexample, _) | (_, Outcome::Counterexample) => Outcome::Counterexample,
+        (Outcome::ToolError, _) | (_, Outcome::ToolError) => Outcome::ToolError,
+        _ => Outcome::Ok,
+    })
 }
 
 /// The header of a run: the bounds line, the cone and property counts, and the fairness
@@ -1100,7 +1208,7 @@ fn print_plan(
     scope: &Scope,
     selection: &Selection,
     bounds: Bounds,
-    (cones, temporal, native): (usize, bool, bool),
+    (cones, temporal, with_tlc): (usize, bool, bool),
     budget: Duration,
 ) -> BoundsLine {
     let line =
@@ -1115,12 +1223,8 @@ fn print_plan(
     let explored = ts
         .properties()
         .iter()
-        .filter(|p| decided_by_bfs(p.formula.kind(), native))
+        .filter(|p| p.formula.kind().is_explored())
         .count();
-    let explored_what = match native {
-        true => "safety properties",
-        false => "order and stability properties",
-    };
     match (temporal, ts.properties().len() - explored, explored) {
         (_, 0, 0) => println!("temporal properties: none"),
         (true, n, m) => {
@@ -1131,7 +1235,7 @@ fn print_plan(
                 );
             }
             if m > 0 {
-                println!("{explored_what}: {m}, each decided by BFS on its cone");
+                println!("order and stability properties: {m}, each decided by BFS on its cone");
             }
         }
         (false, n, m) => println!(
@@ -1145,6 +1249,9 @@ fn print_plan(
             "can_reach properties: {n}, decided natively by BFS on each one's cone (TLC cannot check AG EF)"
         ),
         (false, n) => println!("can_reach properties: {n}, not checked: a scoped run checks none"),
+    }
+    if with_tlc {
+        println!("tlc: runs the same cones beside the native checker (--with-tlc); a check the two decide differently fails the run");
     }
     // A verdict under `.fair(...)` holds only on the runs that do not starve those use cases.
     for p in ts.properties().iter().filter(|p| !p.fair.is_empty()) {
@@ -1189,28 +1296,22 @@ fn write_specs_and_index<'a>(
     Ok((index, index_path))
 }
 
-/// Runs the properties the cones leave undecided on the whole model, under the budget, and
-/// appends their jobs and results. Returns the findings the whole-model runs leave undecided,
-/// one line each.
-fn run_undecided_wholes(
-    (tlc, dir): (&Tlc, &Path),
+/// Writes the whole-model module of each property in `open` that `cones.txt` does not list
+/// yet, and the index with them.
+fn write_whole_specs(
+    dir: &Path,
+    (index, index_path): (&mut String, &Path),
     (ts, names): (&TransitionSystem, &TlaNames),
     whole_modules: &[String],
-    (budget, share): (Duration, u64),
-    (jobs, ran): (&mut Vec<Job>, &mut Vec<Ran>),
-    (index, index_path): (&mut String, &Path),
-) -> Result<Vec<String>> {
-    // The properties the cones leave undecided run on the whole model, under the budget.
-    let wholes: Vec<Job> = jobs
+    open: &[usize],
+) -> Result<()> {
+    let wholes: Vec<Job> = open
         .iter()
-        .zip(&*ran)
-        .filter(|(_, r)| matches!(r.decision, Decision::Undecided { .. }))
-        .filter_map(|(job, _)| match &job.kind {
-            JobKind::PropertyCone(p) => {
-                Some(whole_job(ts, names, &whole_modules[p.index], p.index))
-            }
-            _ => None,
+        .filter(|&&i| {
+            let listed = format!("{}.tla: ", whole_modules[i]);
+            !index.lines().any(|l| l.starts_with(&listed))
         })
+        .map(|&i| whole_job(ts, names, &whole_modules[i], i))
         .collect();
     for job in &wholes {
         write_spec(dir, &job.module, &job.tla, &job.cfg)?;
@@ -1219,80 +1320,71 @@ fn run_undecided_wholes(
     if !wholes.is_empty() {
         fs::write(index_path, &index)
             .with_context(|| format!("failed to write {}", index_path.display()))?;
-        let more = run_wholes(tlc, dir, &wholes, budget, share)?;
-        for (job, r) in wholes.iter().zip(&more) {
-            println!("{}", r.line(&job.module, &job.checks));
-        }
-        let undecided = undecided_lines(&wholes, &more);
-        jobs.extend(wholes);
-        ran.extend(more);
-        return Ok(undecided);
     }
-    Ok(Vec::new())
+    Ok(())
 }
 
-/// The findings the whole-model runs leave undecided, one line each.
-fn undecided_lines(jobs: &[Job], ran: &[Ran]) -> Vec<String> {
-    jobs.iter()
+/// Under `--with-tlc`, runs the properties TLC's cones leave undecided on the whole model,
+/// under the budget, and prints their lines. Returns their jobs and runs.
+fn run_tlc_wholes(
+    (tlc, dir): (&Tlc, &Path),
+    (ts, names): (&TransitionSystem, &TlaNames),
+    whole_modules: &[String],
+    (budget, share): (Duration, u64),
+    (jobs, ran): (&[Job], &[Ran]),
+    index: (&mut String, &Path),
+) -> Result<(Vec<Job>, Vec<Ran>)> {
+    let open: Vec<usize> = jobs
+        .iter()
         .zip(ran)
-        .filter_map(|(job, r)| {
-            let Decision::Undecided { why, capped } = &r.decision else {
-                return None;
-            };
-            let states = r
-                .run
-                .distinct_states
-                .map_or(String::new(), |n| format!(" after {n} states"));
-            Some(format!(
-                "  {}: the whole-model run {why}{states}; {}",
-                job.checks.join(", "),
-                undecided_hint(*capped)
-            ))
+        .filter(|(_, r)| matches!(r.decision, Decision::Undecided { .. }))
+        .filter_map(|(job, _)| match &job.kind {
+            JobKind::PropertyCone(p) => Some(p.index),
+            _ => None,
         })
-        .collect()
+        .collect();
+    if open.is_empty() {
+        return Ok((Vec::new(), Vec::new()));
+    }
+    // A whole-model module `-o` already wrote for the native run is run as it is.
+    write_whole_specs(dir, index, (ts, names), whole_modules, &open)?;
+    let wholes: Vec<Job> = open
+        .iter()
+        .map(|&i| whole_job(ts, names, &whole_modules[i], i))
+        .collect();
+    let more = run_wholes(tlc, dir, &wholes, budget, share)?;
+    for (job, r) in wholes.iter().zip(&more) {
+        println!("tlc: {}", r.line(&job.module, &job.checks));
+    }
+    Ok((wholes, more))
 }
 
-/// Reports the failed jobs: their lifted counterexamples and TLC's summary. Always an error.
-fn fail(
+/// Prints TLC's failed runs under `--with-tlc`: their counterexamples in model terms and TLC's
+/// own summary, with its `violated:` lines.
+fn tlc_failures(
     program: &ResolvedProgram,
     model: &SemanticModel,
     (ts, names): (&TransitionSystem, &TlaNames),
-    (dir, keep): (&Path, bool),
-    (jobs, ran): (&[Job], &[Ran]),
-    outcome: Outcome,
-) -> Result<()> {
-    eprintln!("tlc_result: {}", outcome.as_str());
-    let failed: Vec<String> = jobs
-        .iter()
-        .zip(ran)
-        .filter(|(_, r)| r.decision.outcome() == outcome)
-        .map(|(job, r)| {
-            let mut body = format!(
-                "{} ({}):\n",
-                job.module,
-                dir.join(format!("{}.tla", job.module)).display()
-            );
-            if r.decision.outcome() == Outcome::Counterexample {
-                for block in model_traces(program, model, (ts, names), &job.kind, &r.run) {
-                    body.push_str(&block);
-                    body.push('\n');
-                }
+    dir: &Path,
+    (jobs, ran): (&[&Job], &[&Ran]),
+) {
+    for (job, r) in jobs.iter().zip(ran) {
+        if r.decision.outcome() == Outcome::Ok {
+            continue;
+        }
+        let mut body = format!(
+            "tlc: {} ({}):\n",
+            job.module,
+            dir.join(format!("{}.tla", job.module)).display()
+        );
+        if r.decision.outcome() == Outcome::Counterexample {
+            for block in model_traces(program, model, (ts, names), &job.kind, &r.run) {
+                body.push_str(&block);
+                body.push('\n');
             }
-            body.push_str(&summarize(&r.run, &r.log));
-            body
-        })
-        .collect();
-    let specs = if keep {
-        format!("specs: {}", dir.display())
-    } else {
-        format!("specs: {} (kept because a check failed)", dir.display())
-    };
-    match outcome {
-        Outcome::Counterexample => bail!("TLC verification failed\n{}\n{specs}", failed.join("\n")),
-        _ => bail!(
-            "TLC tool failed without a model violation\n{}\n{specs}",
-            failed.join("\n")
-        ),
+        }
+        body.push_str(&summarize(&r.run, &r.log));
+        eprintln!("{body}");
     }
 }
 
@@ -1396,27 +1488,39 @@ fn state_models(
 /// What BFS decided of the `stable`, `unchanged`, and `precedes` properties.
 #[derive(Default)]
 struct Explored {
+    /// Properties decided this way.
+    checked: usize,
     violated: usize,
     /// Properties whose cone BFS stopped at the state cap or the memory limit before a violation.
     capped: usize,
 }
 
-/// Each property `decided_by_bfs` names, decided by BFS on its cone: a line per property, and
-/// each violation rendered with the shortest trace to the step or state that breaks it.
+/// Caps for a whole-model run that starts now: `WHOLE_MODEL_STATE_CAP` states, and the time
+/// budget from now.
+fn whole_caps(caps: Caps, budget: Duration) -> Caps {
+    let states = usize::try_from(WHOLE_MODEL_STATE_CAP).expect("the cap fits in usize");
+    Caps { states, ..caps }.until(Instant::now() + budget)
+}
+
+/// Each property `LtlKind::is_explored` names, decided by BFS on its cone: a line per property,
+/// and each violation rendered with the shortest trace to the step or state that breaks it.
+/// A cone that frees slots is decided again on the whole model, under the budget and the
+/// whole-model cap.
 fn explored_properties(
     program: &ResolvedProgram,
     model: &SemanticModel,
     ts: &TransitionSystem,
     caps: Caps,
-    native: bool,
+    budget: Duration,
 ) -> Explored {
     let mut out = Explored::default();
     for (i, p) in ts.properties().iter().enumerate() {
-        if !decided_by_bfs(p.formula.kind(), native) {
+        if !p.formula.kind().is_explored() {
             continue;
         }
-        let verdict = ts.decide_property(i, caps);
-        // BFS decides this property, so no TLC cone looks for its premises.
+        out.checked += 1;
+        let verdict = ts.decide_property(i, caps, whole_caps(caps, budget));
+        // BFS decides this property, so no other run looks for its premises.
         if let (PropertyVerdict::Holds, Some(d)) = (&verdict, ts.vacuous_property(i, caps)) {
             if let Some(text) = render_violation(program, model, &d.diag, TraceSource::Bfs) {
                 eprintln!("{}", Finding::new(&d.diag, &[], text));
@@ -1444,41 +1548,8 @@ fn explored_properties(
     out
 }
 
-/// The checks TLC is asked about that hold vacuously (`StateDiag::VacuousRule`): BFS explores
-/// each cone as TLC gets it, at the same bounds, and looks for a state that meets each
-/// premise of the cone's own rules, asserts, or property. TLC says only that a check holds.
-/// The cones are explored side by side, and each run is dropped once it is read.
-fn vacuous_checks(ts: &TransitionSystem, jobs: &[Job], caps: Caps) -> Vec<Diag> {
-    // A covered cone takes the steps of the cone that covers it and no others on its own
-    // vars, so its checks are read off that cone's run and it is not explored again.
-    let covers = covering(jobs);
-    let at: Vec<usize> = (0..jobs.len()).collect();
-    let found = in_parallel(at, rdra_ish_core::jobs(), |at| match &jobs[at].kind {
-        JobKind::Cone(_) if covers[at].is_some() => Vec::new(),
-        JobKind::Cone(cone) => {
-            let run = cone.system.clone().run(caps);
-            let covered = (0..jobs.len()).filter(|a| covers[*a] == Some(at));
-            std::iter::once(at)
-                .chain(covered)
-                .filter_map(|a| match &jobs[a].kind {
-                    JobKind::Cone(cone) => Some(&cone.targets),
-                    JobKind::PropertyCone(_) | JobKind::Whole(_) => None,
-                })
-                .flatten()
-                .filter_map(|t| ts.vacuity(*t, &run))
-                .collect::<Vec<Diag>>()
-        }
-        JobKind::PropertyCone(p) => {
-            let run = p.cone.reduced.clone().run(caps);
-            ts.property_vacuity(p.index, &run).into_iter().collect()
-        }
-        JobKind::Whole(_) => Vec::new(),
-    });
-    found.into_iter().flatten().collect()
-}
-
-/// A safety cone decided by BFS under `RDRA_ISH_NATIVE`: the explorer on the module's own
-/// system, the reduced cone TLC would check, at verify's bounds and caps.
+/// A safety cone decided by BFS: the explorer on the module's own system, the reduced cone
+/// TLC would check, at verify's bounds and caps.
 enum BfsCone {
     Ran {
         states: usize,
@@ -1520,69 +1591,81 @@ impl BfsCone {
     }
 
     fn passed(&self) -> bool {
+        self.verdict() == Some(Outcome::Ok)
+    }
+
+    /// The verdict, `None` when the run stopped before a violation.
+    fn verdict(&self) -> Option<Outcome> {
         match self {
             BfsCone::Ran {
                 found, complete, ..
-            } => found.is_empty() && *complete,
-            BfsCone::Covered(_) => true,
+            } => match (found.is_empty(), complete) {
+                (false, _) => Some(Outcome::Counterexample),
+                (true, true) => Some(Outcome::Ok),
+                (true, false) => None,
+            },
+            BfsCone::Covered(_) => Some(Outcome::Ok),
         }
     }
 
     /// The run line, in the form of `Ran::line`.
     fn line(&self, module: &str, checks: &[String], jobs: &[Job]) -> String {
-        let (verdict, inside) = match self {
+        let verdict = self.verdict().map_or("not decided", Outcome::as_str);
+        match self {
             BfsCone::Ran {
-                states,
-                found,
-                complete,
+                states, complete, ..
             } => {
-                let verdict = match (found.is_empty(), complete) {
-                    (false, _) => "counterexample",
-                    (true, true) => "ok",
-                    (true, false) => "not decided",
+                let notes = match complete {
+                    true => Vec::new(),
+                    false => vec!["stopped at the state cap or the memory limit".to_string()],
                 };
-                let mut inside = format!("{states} states, BFS");
-                if !complete {
-                    inside.push_str(" stopped at the state cap or the memory limit");
-                }
-                (verdict, inside)
+                run_line(module, checks, verdict, Some(*states as u64), &notes)
             }
-            BfsCone::Covered(by) => ("ok", format!("checked in {}", jobs[*by].module)),
-        };
-        format!("{module} [{}]: {verdict} ({inside})", checks.join(", "))
+            BfsCone::Covered(by) => run_line(
+                module,
+                checks,
+                verdict,
+                None,
+                &[format!("checked in {}", jobs[*by].module)],
+            ),
+        }
     }
 }
 
-/// Each safety cone of `jobs` decided by BFS (`RDRA_ISH_NATIVE`), and the vacuous checks
-/// their runs show. As `run_cones` does for TLC, a cone another cone covers waits for it: it
-/// is `ok` when that one passes and runs itself when it does not. Its vacuous checks are read
-/// off the cone that covers it, as `vacuous_checks` reads them. A run that met the memory
-/// limit beside others runs again alone, so that a crowded pool does not leave it undecided.
-fn bfs_cones(ts: &TransitionSystem, jobs: &[Job], caps: Caps) -> (Vec<BfsCone>, Vec<Diag>) {
+/// The run met the memory limit, maybe only because the runs beside it held the rest.
+fn crowded(run: &ComponentRun) -> bool {
+    run.diags
+        .iter()
+        .any(|d| matches!(d.diag, StateDiag::MemoryCapReached { .. }))
+}
+
+/// Each safety cone of `jobs` decided by BFS, `None` for a property's job, and the vacuous
+/// checks their runs show. As `run_cones` does for TLC, a cone another cone covers waits for
+/// it: it is `ok` when that one passes and runs itself when it does not. Its vacuous checks
+/// are read off the cone that covers it. A run that met the memory limit beside others runs
+/// again alone, so that a crowded pool does not leave it undecided.
+fn bfs_cones(ts: &TransitionSystem, jobs: &[Job], caps: Caps) -> (Vec<Option<BfsCone>>, Vec<Diag>) {
     let covers = covering(jobs);
     let cone = |at: usize| match &jobs[at].kind {
-        JobKind::Cone(cone) => cone.as_ref(),
-        JobKind::PropertyCone(_) | JobKind::Whole(_) => {
-            unreachable!("bfs_cones takes safety cones")
-        }
+        JobKind::Cone(cone) => Some(cone.as_ref()),
+        JobKind::PropertyCone(_) | JobKind::Whole(_) => None,
     };
     // The verdict of the cone at `at`, and the vacuous checks of it and of the cones it
-    // covers, read off its run; the run is dropped here. `crowded`: the run met the memory
-    // limit, maybe only because the runs beside it held the rest.
+    // covers, read off its run; the run is dropped here.
     let decide = |at: usize| {
-        let run = cone(at).system.clone().run(caps);
+        let me = cone(at).expect("a safety cone");
+        let run = me.system.clone().run(caps);
         let vacuous: Vec<Diag> = std::iter::once(at)
             .chain((0..jobs.len()).filter(|a| covers[*a] == Some(at)))
-            .flat_map(|a| cone(a).targets.iter())
+            .filter_map(cone)
+            .flat_map(|c| c.targets.iter())
             .filter_map(|t| ts.vacuity(*t, &run))
             .collect();
-        let crowded = run
-            .diags
-            .iter()
-            .any(|d| matches!(d.diag, StateDiag::MemoryCapReached { .. }));
-        (BfsCone::of(ts, cone(at), &run), vacuous, crowded)
+        (BfsCone::of(ts, me, &run), vacuous, crowded(&run))
     };
-    let first: Vec<usize> = (0..jobs.len()).filter(|a| covers[*a].is_none()).collect();
+    let first: Vec<usize> = (0..jobs.len())
+        .filter(|a| cone(*a).is_some() && covers[*a].is_none())
+        .collect();
     let ran = in_parallel(first.clone(), rdra_ish_core::jobs(), decide);
     let mut out: Vec<Option<BfsCone>> = jobs.iter().map(|_| None).collect();
     let mut found = Vec::new();
@@ -1595,21 +1678,17 @@ fn bfs_cones(ts: &TransitionSystem, jobs: &[Job], caps: Caps) -> (Vec<BfsCone>, 
         out[at] = Some(verdict);
     }
     for at in 0..jobs.len() {
-        if let Some(by) = covers[at] {
+        if let (Some(by), Some(me)) = (covers[at], cone(at)) {
             out[at] = Some(match out[by].as_ref().is_some_and(BfsCone::passed) {
                 true => BfsCone::Covered(by),
-                false => BfsCone::of(ts, cone(at), &cone(at).system.clone().run(caps)),
+                false => BfsCone::of(ts, me, &me.system.clone().run(caps)),
             });
         }
     }
-    let out = out
-        .into_iter()
-        .map(|c| c.expect("every cone is decided"))
-        .collect();
     (out, found)
 }
 
-/// What BFS decided of the safety cones under `RDRA_ISH_NATIVE`.
+/// What BFS decided of the safety cones.
 #[derive(Default)]
 struct Safety {
     /// Distinct invariants and after-asserts violated.
@@ -1618,16 +1697,19 @@ struct Safety {
     capped: usize,
 }
 
-/// Prints each cone's run line and renders each violation with its BFS trace.
+/// Prints each safety cone's run line and renders each violation with its BFS trace.
 fn report_bfs_cones(
     program: &ResolvedProgram,
     model: &SemanticModel,
     jobs: &[Job],
-    cones: &[BfsCone],
+    cones: &[Option<BfsCone>],
 ) -> Safety {
     let mut out = Safety::default();
     let mut reported = BTreeSet::new();
     for (job, cone) in jobs.iter().zip(cones) {
+        let Some(cone) = cone else {
+            continue;
+        };
         println!("{}", cone.line(&job.module, &job.checks, jobs));
         let BfsCone::Ran {
             found, complete, ..
@@ -1648,21 +1730,540 @@ fn report_bfs_cones(
     out
 }
 
-/// How a run whose TLC checks passed ends.
+/// What the native checker decides of one `always`, `eventually`, or `leads_to`, on its cone
+/// or on the whole model.
+struct Native {
+    decision: Decision,
+    /// The states of the run the line reports: the plain cone's, or the whole model's.
+    states: Option<u64>,
+    notes: Vec<String>,
+    /// Each cone run and what it said, for `--with-tlc` to compare.
+    runs: Vec<(ConeRun, Outcome)>,
+    /// The counterexample of a `counterexample` verdict.
+    found: Option<Box<StateDiag>>,
+    /// A counterexample that failed its own check, or a reduced cone that disagrees with its
+    /// cone: a tool bug, never a finding about the model.
+    fault: Option<String>,
+    /// A cone run stopped at the state cap or the memory limit: a finding the cone leaves
+    /// undecided, which no whole-model run takes up.
+    cone_capped: bool,
+    /// A run met the memory limit, maybe only because the runs beside it held the rest.
+    crowded: bool,
+}
+
+impl Native {
+    fn line(&self, module: &str, checks: &[String]) -> String {
+        run_line(
+            module,
+            checks,
+            self.decision.as_str(),
+            self.states,
+            &self.notes,
+        )
+    }
+
+    /// The cone leaves the property to the whole model.
+    fn goes_whole(&self) -> bool {
+        matches!(self.decision, Decision::Undecided { .. }) && !self.cone_capped
+    }
+}
+
+/// One run's answer on a graph.
+enum Answer {
+    Verdict(Outcome, Option<Box<StateDiag>>),
+    /// The run stopped at a cap or the budget before it found a counterexample.
+    Stopped,
+    Fault(LassoFault),
+}
+
+impl Answer {
+    /// `properties()[i]` of `run`'s system on its graph: an `always` by its states, an
+    /// `eventually` or `leads_to` by its fair components under `fairness`.
+    fn of(run: &ComponentRun, i: usize, fairness: Fairness) -> Answer {
+        let verdict = match run.system.properties()[i].formula.kind().is_liveness() {
+            true => run.decide_liveness(i, fairness),
+            false => Ok(run.decide_property(i).expect("an always")),
+        };
+        match verdict {
+            Ok(PropertyVerdict::Holds) => Answer::Verdict(Outcome::Ok, None),
+            Ok(PropertyVerdict::Violated(d)) => Answer::Verdict(Outcome::Counterexample, Some(d)),
+            Ok(PropertyVerdict::Undecided) => Answer::Stopped,
+            Err(fault) => Answer::Fault(fault),
+        }
+    }
+
+    fn as_str(&self) -> &'static str {
+        match self {
+            Answer::Verdict(outcome, _) => outcome.as_str(),
+            Answer::Stopped => "not decided",
+            Answer::Fault(_) => "tool_error",
+        }
+    }
+
+    fn outcome(&self) -> Outcome {
+        match self {
+            Answer::Verdict(outcome, _) => *outcome,
+            Answer::Stopped => Outcome::Ok,
+            Answer::Fault(_) => Outcome::ToolError,
+        }
+    }
+}
+
+/// Explores `system` under `caps`, and marks `crowded` when the run met the memory limit.
+fn explore(system: &TransitionSystem, caps: Caps, crowded_run: &mut bool) -> ComponentRun {
+    let run = system.clone().run(caps);
+    *crowded_run |= crowded(&run);
+    run
+}
+
+/// `p` on its cone by the runs `property_cone` defines, each on a graph BFS explores: `Plain`
+/// on the reduced cone, `Full` on the unreduced cone after a counterexample there, and
+/// `WfNext` on the same unreduced graph when `after_plain` asks for it. Also returns the
+/// vacuity the plain run shows.
+fn native_property(ts: &TransitionSystem, p: &PropertyJob, caps: Caps) -> (Native, Option<Diag>) {
+    let cone = &p.cone;
+    let mut out = Native {
+        decision: Decision::Decided(Outcome::Ok),
+        states: None,
+        notes: Vec::new(),
+        runs: Vec::new(),
+        found: None,
+        fault: None,
+        cone_capped: false,
+        crowded: false,
+    };
+    let mut crowded_run = false;
+    let plain_run = explore(&cone.reduced, caps, &mut crowded_run);
+    let vacuous = ts.property_vacuity(p.index, &plain_run);
+    out.states = Some(plain_run.states.len() as u64);
+    let mut last = Answer::of(&plain_run, cone.reduced_index, Fairness::Plain);
+    drop(plain_run);
+    out.runs.push((ConeRun::Plain, last.outcome()));
+    let mut unreduced: Option<ComponentRun> = None;
+    // A counterexample on the reduced cone is real, but its lasso is read on the unreduced
+    // cone, whose run gives the verdict from here on.
+    if let (Answer::Verdict(Outcome::Counterexample, _), Some(full)) = (&last, &p.full) {
+        let run = explore(&cone.system, caps, &mut crowded_run);
+        let again = Answer::of(&run, cone.index, Fairness::Plain);
+        unreduced = Some(run);
+        out.runs.push((ConeRun::Full, again.outcome()));
+        out.notes
+            .push(format!("{}: {}", full.module, again.as_str()));
+        last = match again {
+            Answer::Verdict(Outcome::Ok, _) => {
+                out.fault =
+                    Some("the reduced cone finds a counterexample the cone does not".to_string());
+                Answer::Verdict(Outcome::ToolError, None)
+            }
+            other => other,
+        };
+    }
+    out.crowded = crowded_run;
+    let (plain, found) = match last {
+        Answer::Verdict(outcome, found) => (outcome, found),
+        Answer::Stopped => return (out.capped(), vacuous),
+        Answer::Fault(fault) => return (out.faulty(&fault), vacuous),
+    };
+    out.found = found;
+    let verdict = match cone.after_plain(plain) {
+        AfterPlain::Decided(verdict) => verdict,
+        AfterPlain::NeedsWfNext => {
+            let wf =
+                p.wf.as_ref()
+                    .expect("an eventually or leads_to has a WF module");
+            let run = match unreduced {
+                Some(run) => run,
+                None => explore(&cone.system, caps, &mut crowded_run),
+            };
+            out.crowded = crowded_run;
+            let second = Answer::of(&run, cone.index, Fairness::WfNext);
+            out.runs.push((ConeRun::WfNext, second.outcome()));
+            out.notes
+                .push(format!("{}: {}", wf.module, second.as_str()));
+            match second {
+                Answer::Verdict(outcome, found) => {
+                    out.found = found.or(out.found.take());
+                    cone.after_wf(plain, outcome)
+                }
+                Answer::Stopped => return (out.capped(), vacuous),
+                Answer::Fault(fault) => return (out.faulty(&fault), vacuous),
+            }
+        }
+    };
+    out.decision = match verdict {
+        Verdict::Ok => Decision::Decided(Outcome::Ok),
+        Verdict::Counterexample => Decision::Decided(Outcome::Counterexample),
+        Verdict::ToolError => Decision::Decided(Outcome::ToolError),
+        Verdict::Undecided(why) => {
+            out.notes.push(why.as_str().to_string());
+            Decision::Undecided {
+                why: why.as_str().to_string(),
+                stop: None,
+            }
+        }
+    };
+    if out.decision.verdict() != Some(Outcome::Counterexample) {
+        out.found = None;
+    }
+    (out, vacuous)
+}
+
+impl Native {
+    /// A cone run stopped at the state cap or the memory limit before it decided.
+    fn capped(mut self) -> Native {
+        let why = "stopped at the state cap or the memory limit".to_string();
+        self.notes.push(why.clone());
+        self.decision = Decision::Undecided { why, stop: None };
+        self.cone_capped = true;
+        self.found = None;
+        self
+    }
+
+    /// A counterexample that failed its own check.
+    fn faulty(mut self, fault: &LassoFault) -> Native {
+        self.fault = Some(format!(
+            "the counterexample fails its own check ({fault:?})"
+        ));
+        self.decision = Decision::Decided(Outcome::ToolError);
+        self.found = None;
+        self
+    }
+}
+
+/// `native_property` for every property job, side by side, `None` for a safety cone. A
+/// property whose runs met the memory limit beside others is decided again alone. Also
+/// returns the vacuous properties.
+fn native_properties(
+    ts: &TransitionSystem,
+    jobs: &[Job],
+    caps: Caps,
+) -> (Vec<Option<Native>>, Vec<Diag>) {
+    let at: Vec<usize> = (0..jobs.len())
+        .filter(|&k| matches!(jobs[k].kind, JobKind::PropertyCone(_)))
+        .collect();
+    let decide = |k: usize| match &jobs[k].kind {
+        JobKind::PropertyCone(p) => native_property(ts, p, caps),
+        JobKind::Cone(_) | JobKind::Whole(_) => unreachable!("a property's job"),
+    };
+    let ran = in_parallel(at.clone(), rdra_ish_core::jobs(), decide);
+    let mut out: Vec<Option<Native>> = jobs.iter().map(|_| None).collect();
+    let mut vacuous = Vec::new();
+    for (k, (native, vacuity)) in at.into_iter().zip(ran) {
+        let (native, vacuity) = match native.crowded {
+            true => decide(k),
+            false => (native, vacuity),
+        };
+        vacuous.extend(vacuity);
+        out[k] = Some(native);
+    }
+    (out, vacuous)
+}
+
+/// The properties `open` names, which their cones leave undecided, on the whole model: one
+/// exploration under the budget and `WHOLE_MODEL_STATE_CAP`, and each property decided on
+/// its graph with `WF_vars(Next)`. A run that stopped decides a property only by a
+/// counterexample, which is real on the states it reached, as TLC's verdict printed before a
+/// kill is.
+fn native_wholes(
+    ts: &TransitionSystem,
+    open: &[usize],
+    caps: Caps,
+    budget: Duration,
+) -> Vec<Native> {
+    if open.is_empty() {
+        return Vec::new();
+    }
+    let run = ts.clone().run(whole_caps(caps, budget));
+    let states = run.states.len() as u64;
+    let stop = run.diags.iter().find_map(|d| match &d.diag {
+        StateDiag::StateCapReached { cap, .. } => Some((
+            Stop::StateCap,
+            format!("stopped at the state cap of {cap} states"),
+        )),
+        StateDiag::MemoryCapReached { limit, .. } => Some((
+            Stop::Memory,
+            format!("stopped at the memory limit of {limit}"),
+        )),
+        StateDiag::TimeBudgetReached { .. } => Some((
+            Stop::Budget,
+            format!("stopped at the time budget of {} s", budget.as_secs()),
+        )),
+        _ => None,
+    });
+    open.iter()
+        .map(|&i| {
+            let mut native = Native {
+                decision: Decision::Decided(Outcome::Ok),
+                states: (states > 0).then_some(states),
+                notes: Vec::new(),
+                runs: Vec::new(),
+                found: None,
+                fault: None,
+                cone_capped: false,
+                crowded: false,
+            };
+            match Answer::of(&run, i, Fairness::WfNext) {
+                Answer::Verdict(outcome, found) => {
+                    native.decision = Decision::Decided(outcome);
+                    native.found = found;
+                }
+                Answer::Stopped => {
+                    let (stop, why) = stop.clone().expect("a run that stopped says why");
+                    native.notes.push(why.clone());
+                    native.decision = Decision::Undecided {
+                        why,
+                        stop: Some(stop),
+                    };
+                }
+                Answer::Fault(fault) => native = native.faulty(&fault),
+            }
+            native
+        })
+        .collect()
+}
+
+/// What the native checker decided: per job, a safety cone's verdict or a property's on its
+/// cone, and per property the cone left open, its whole-model verdict.
+struct Natives {
+    safety: Vec<Option<BfsCone>>,
+    properties: Vec<Option<Native>>,
+    wholes: Vec<(usize, Native)>,
+}
+
+impl Natives {
+    /// The whole-model verdict of property `i`, when its cone left it open.
+    fn whole(&self, i: usize) -> Option<&Native> {
+        self.wholes.iter().find(|(at, _)| *at == i).map(|(_, n)| n)
+    }
+
+    /// The properties the whole-model run leaves undecided, one line each.
+    fn undecided_lines(&self, names: &TlaNames) -> Vec<String> {
+        self.wholes
+            .iter()
+            .filter_map(|(i, native)| {
+                let Decision::Undecided {
+                    why,
+                    stop: Some(stop),
+                } = &native.decision
+                else {
+                    return None;
+                };
+                let states = native
+                    .states
+                    .map_or(String::new(), |n| format!(" after {n} states"));
+                Some(format!(
+                    "  {}: the whole-model run {why}{states}; {}",
+                    names.property(*i),
+                    undecided_hint(*stop)
+                ))
+            })
+            .collect()
+    }
+}
+
+/// What the native checker decided of the `always`, `eventually`, and `leads_to` properties.
+#[derive(Default)]
+struct Temporal {
+    violated: usize,
+    /// Counterexamples that failed their own check: a tool bug.
+    faults: usize,
+    /// Properties a cone run stopped at the state cap or the memory limit left undecided.
+    capped: usize,
+}
+
+/// Prints each property's cone line and then its whole-model line, renders each
+/// counterexample, and reports each fault.
+fn report_properties(
+    program: &ResolvedProgram,
+    model: &SemanticModel,
+    ts: &TransitionSystem,
+    jobs: &[Job],
+    natives: &Natives,
+    whole_modules: &[String],
+) -> Temporal {
+    let mut out = Temporal::default();
+    let mut report = |module: &str, checks: &[String], native: &Native| {
+        println!("{}", native.line(module, checks));
+        if let Some(diag) = &native.found {
+            let text = render_violation(program, model, diag, TraceSource::Bfs)
+                .expect("a property violation renders");
+            eprintln!("{}", Finding::new(diag, &[], text));
+            out.violated += 1;
+        }
+        if let Some(fault) = &native.fault {
+            eprintln!("error[LassoFault]: {module} [{}]: {fault}; a tool bug, not a finding about the model", checks.join(", "));
+            out.faults += 1;
+        }
+    };
+    let mut capped = 0;
+    for (job, native) in jobs.iter().zip(&natives.properties) {
+        if let Some(native) = native {
+            report(&job.module, &job.checks, native);
+            capped += usize::from(native.cone_capped);
+        }
+    }
+    for (i, native) in &natives.wholes {
+        let checks = [ts.properties()[*i].name.clone()];
+        report(&whole_modules[*i], &checks, native);
+    }
+    out.capped = capped;
+    out
+}
+
+/// Under `--with-tlc`, each check the two engines decide differently, as an
+/// `error[EngineDisagreement]` line: a safety cone's verdict and the checks its counterexample
+/// breaks, and a property's verdict on each run both made and in the end. A check one engine
+/// leaves undecided, or a TLC run that failed as a tool, is no disagreement.
+fn disagreements(
+    whole_modules: &[String],
+    jobs: &[Job],
+    natives: &Natives,
+    (ran, whole_ran): (&[Ran], &[Ran]),
+) -> Vec<String> {
+    let line = |module: &str, checks: &[String], native: &str, tlc: &str| {
+        format!(
+            "error[EngineDisagreement]: {module} [{}]: native {native}, TLC {tlc}; one engine is wrong (a tool bug, not a finding about the model)",
+            checks.join(", ")
+        )
+    };
+    let differ = |a: Option<Outcome>, b: Option<Outcome>| match (a, b) {
+        (Some(a), Some(b)) => a != b && a != Outcome::ToolError && b != Outcome::ToolError,
+        _ => false,
+    };
+    let mut out = Vec::new();
+    let mut tlc_wholes = whole_ran.iter();
+    for (k, (job, tlc)) in jobs.iter().zip(ran).enumerate() {
+        match &job.kind {
+            JobKind::Cone(cs) => {
+                let Some(native) = &natives.safety[k] else {
+                    continue;
+                };
+                let (a, b) = (native.verdict(), tlc.decision.verdict());
+                if differ(a, b) {
+                    out.push(line(&job.module, &job.checks, as_str(a), as_str(b)));
+                    continue;
+                }
+                if (a, b) != (Some(Outcome::Counterexample), Some(Outcome::Counterexample)) {
+                    continue;
+                }
+                let BfsCone::Ran { found, .. } = native else {
+                    continue;
+                };
+                let mine: BTreeSet<String> = found.iter().map(|d| d.diag.name(&[])).collect();
+                let theirs: Option<BTreeSet<String>> = tlc
+                    .run
+                    .violations
+                    .iter()
+                    .map(|v| explain_violation(&cs.system, &cs.names, v).map(|d| d.name(&[])))
+                    .collect::<Result<_, _>>()
+                    .ok();
+                if let Some(theirs) = theirs.filter(|t| *t != mine) {
+                    let list =
+                        |s: &BTreeSet<String>| s.iter().cloned().collect::<Vec<_>>().join(" ");
+                    out.push(line(
+                        &job.module,
+                        &job.checks,
+                        &format!("violates {}", list(&mine)),
+                        &format!("violates {}", list(&theirs)),
+                    ));
+                }
+            }
+            JobKind::PropertyCone(p) => {
+                let Some(native) = &natives.properties[k] else {
+                    continue;
+                };
+                let module = |run: ConeRun| match run {
+                    ConeRun::Plain => job.module.clone(),
+                    ConeRun::Full => p
+                        .full
+                        .as_ref()
+                        .map_or(job.module.clone(), |s| s.module.clone()),
+                    ConeRun::WfNext => {
+                        p.wf.as_ref()
+                            .map_or(job.module.clone(), |s| s.module.clone())
+                    }
+                };
+                for (run, mine) in &native.runs {
+                    let theirs = tlc.runs.iter().find(|(r, _)| r == run).map(|(_, o)| *o);
+                    if differ(Some(*mine), theirs) {
+                        out.push(line(
+                            &module(*run),
+                            &job.checks,
+                            mine.as_str(),
+                            as_str(theirs),
+                        ));
+                    }
+                }
+                // The final verdict: the whole-model run's where a cone left the property open.
+                let tlc_whole = match tlc.decision {
+                    Decision::Undecided { .. } => tlc_wholes.next(),
+                    Decision::Decided(_) => None,
+                };
+                let mine = natives.whole(p.index).unwrap_or(native);
+                let theirs = tlc_whole.unwrap_or(tlc);
+                let (a, b) = (mine.decision.verdict(), theirs.decision.verdict());
+                if differ(a, b) {
+                    let module = match (natives.whole(p.index), tlc_whole) {
+                        (None, None) => &job.module,
+                        _ => &whole_modules[p.index],
+                    };
+                    out.push(line(module, &job.checks, as_str(a), as_str(b)));
+                }
+            }
+            JobKind::Whole(_) => {}
+        }
+    }
+    out
+}
+
+fn as_str(outcome: Option<Outcome>) -> &'static str {
+    outcome.map_or("not decided", Outcome::as_str)
+}
+
+/// What TLC adds to the end of a `--with-tlc` run.
+#[derive(Default)]
+struct TlcEnd {
+    /// TLC runs that failed without a model violation.
+    tool_errors: usize,
+    /// Checks the two engines decide differently.
+    disagreements: usize,
+}
+
+/// How a run ends.
 struct End {
     bfs: Bfs,
     explored: Explored,
-    /// What BFS decided of the safety cones under `RDRA_ISH_NATIVE`.
+    /// What BFS decided of the safety cones.
     safety: Safety,
+    /// What the native checker decided of `always`, `eventually`, and `leads_to`.
+    temporal: Temporal,
+    tlc: TlcEnd,
     deny_undecided: bool,
     /// What `--prove` proved, when it ran.
     proof: Option<ProofTally>,
 }
 
 impl End {
-    /// A BFS error still fails the run. A temporal property the budget left undecided is
-    /// listed, as the BFS cap lists the findings it leaves; what the bounds left undecided is
-    /// a warning, and an error under `--deny-undecided`.
+    /// The verdict the `result:` line states: of the invariants, the after-asserts, and the
+    /// properties, every form and `can_reach` included. The state-model findings of the
+    /// entity cones fail the run beside it and do not move it.
+    fn outcome(&self) -> Outcome {
+        if self.temporal.faults > 0 {
+            return Outcome::ToolError;
+        }
+        let violated = self.safety.violated
+            + self.explored.violated
+            + self.temporal.violated
+            + self.bfs.reach_errors;
+        match violated {
+            0 => Outcome::Ok,
+            _ => Outcome::Counterexample,
+        }
+    }
+
+    /// A violation, an error of BFS, or a tool error fails the run. A temporal property the
+    /// budget left undecided is listed, as the BFS cap lists the findings it leaves; what the
+    /// bounds left undecided is a warning, and an error under `--deny-undecided`.
     fn finish(&self, line: &BoundsLine, undecided: &[String]) -> Result<()> {
         if !undecided.is_empty() {
             println!(
@@ -1686,12 +2287,24 @@ impl End {
                 "can_reach error(s) from BFS on their cones",
             ),
             (
-                self.explored.violated,
-                "property violation(s) from BFS on the property cones",
+                self.safety.violated,
+                "invariant or after-assert violation(s)",
             ),
             (
-                self.safety.violated,
-                "invariant or after-assert violation(s) from BFS on their cones",
+                self.explored.violated + self.temporal.violated,
+                "property violation(s)",
+            ),
+            (
+                self.temporal.faults,
+                "counterexample(s) that fail their own check (a tool bug)",
+            ),
+            (
+                self.tlc.disagreements,
+                "check(s) the native checker and TLC decide differently (a tool bug)",
+            ),
+            (
+                self.tlc.tool_errors,
+                "TLC run(s) that failed without a model violation",
             ),
         ]
         .iter()
@@ -1703,7 +2316,7 @@ impl End {
         }
         let open = [
             (
-                self.bfs.capped + self.explored.capped + self.safety.capped,
+                self.bfs.capped + self.explored.capped + self.safety.capped + self.temporal.capped,
                 "finding a cone stopped at the state cap or the memory limit left",
                 "findings a cone stopped at the state cap or the memory limit left",
             ),
@@ -1833,12 +2446,12 @@ mod worker_tests {
 
 #[cfg(test)]
 mod hint_tests {
-    use super::undecided_hint;
+    use super::{undecided_hint, Stop};
 
     /// Raising the budget cannot lift the state cap, so that hint must not offer it.
     #[test]
     fn a_state_cap_hint_does_not_offer_the_budget() {
-        let hint = undecided_hint(true);
+        let hint = undecided_hint(Stop::StateCap);
         assert!(hint.contains("does not lift"), "{hint}");
         assert!(hint.contains(".fair(UseCase, ...)"), "{hint}");
         assert!(!hint.starts_with("raise --temporal-budget"), "{hint}");
@@ -1846,8 +2459,15 @@ mod hint_tests {
 
     #[test]
     fn a_time_budget_hint_offers_the_budget_and_fair() {
-        let hint = undecided_hint(false);
+        let hint = undecided_hint(Stop::Budget);
         assert!(hint.starts_with("raise --temporal-budget"), "{hint}");
+        assert!(hint.contains(".fair(UseCase, ...)"), "{hint}");
+    }
+
+    #[test]
+    fn a_memory_hint_offers_the_memory_limit_and_fair() {
+        let hint = undecided_hint(Stop::Memory);
+        assert!(hint.starts_with("raise --memory"), "{hint}");
         assert!(hint.contains(".fair(UseCase, ...)"), "{hint}");
     }
 }

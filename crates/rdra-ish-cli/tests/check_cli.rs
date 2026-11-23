@@ -391,7 +391,7 @@ fn check_leaves_a_can_reach_property_to_verify() {
     assert_eq!(
         String::from_utf8_lossy(&output.stderr),
         format!(
-            "{BOUNDS}\nnote: 1 temporal properties were not model-checked by check; use verify --backend tlc\n"
+            "{BOUNDS}\nnote: 1 temporal properties were not model-checked by check; use verify\n"
         )
     );
 }
