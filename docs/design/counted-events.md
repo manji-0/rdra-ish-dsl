@@ -29,7 +29,7 @@ verdicts.
 | 9 | TLA+ | `<E>_pending_<Ev>_<UC>`, a function from `<E>_Ids` to the strings `"0"`..`"k"` and `"over"`. The overflow rule is one more `INVARIANT`. |
 | 10 | z3 | In scope. The counter is an Enum var and its writes are transition arms, which the encoding already has. |
 | 11 | Code generation | Out of scope. A use case that raises or handles a counted event is reported as unsupported, as other effects the generator does not print. |
-| 12 | What is rejected | `.counted` on a timer, a BUC, or an external system; on an event that is free or a handler a free trigger also starts; on an edge with no mark entity; a raiser that binds a mark entity twice; and `k` outside 1..16. |
+| 12 | What is rejected | `.counted` on a timer, a BUC, or an external system, and `k` outside 1..16 (`CountedTriggerInvalid`); on an event that is free, a handler that writes nothing or that a free trigger also starts, an edge with no mark entity, a handler that raises its own event, or a raiser that binds a mark entity twice (`UncountedTrigger`). |
 
 ## Syntax
 
@@ -47,9 +47,10 @@ triggers(EvPaymentReceived, PostToLedger).counted(2)
 grows one argument form, an integer literal, for chain calls only. A predicate's own
 arguments are unchanged. `k` must be at least 1, and at most 16, since every row holds one of
 `k + 2` values and the state space grows with their product. The analysis reports
-`InvalidChainArgument` for a missing, repeated, or non-integer argument and for a value
+`CountedTriggerInvalid` for a missing, repeated, or non-integer argument and for a value
 outside 1..16, and for `.counted` on a `triggers` line whose target is not a use case or
-whose source is a timer.
+whose source is a timer. The lifecycle builder reports `UncountedTrigger` (an error) for a
+counted edge the event order does not track, naming why (row 12 above).
 
 The option is per edge because the counter belongs to the handler. Under the latch, one mark
 per `(entity, event)` serves every handler, because nothing consumes it
@@ -211,11 +212,15 @@ corpus compare BFS and TLC on the counted cases as on every other.
 ## z3
 
 In scope through the existing encoding: an Enum var with transition arms and a `!=` guard.
-`--prove` reports `EventOverflow_*` like any other state rule. Induction alone seldom proves
-it, since a state with the counter at `k` and a raiser enabled is a counterexample to
-induction whether or not it is reachable, so the usual verdict is `unproved` with a CTI.
-That is no disagreement ([rule 6](../engine-agreement.md#agreement-rules)). A rule that is
-proved still holds at every bound, which the corpus checks with `bfs=`.
+`--prove` reports `EventOverflow_*` like any other state rule. Induction alone proves it
+only where the raises are bounded by the raiser's own states: a state with the counter at
+`k` and a raiser enabled is a counterexample to induction whether or not it is reachable.
+The prover's reached-pattern lemmas over a row's columns and its counter close that gap on
+the corpus models (`safety_counted_once_per_raise`, `safety_event_overflow` with `k = 3`,
+`fair_counted_exposes_lost_run`), where the overflow rule and the once-per-raise
+`forbidden` are proved. Where the lemmas fail the verdict is `unproved` with a CTI, which is
+no disagreement ([rule 6](../engine-agreement.md#agreement-rules)). A rule that is proved
+still holds at every bound, which the corpus checks with `bfs=`.
 
 ## Code generation
 
@@ -228,9 +233,13 @@ the model generates as before.
 
 ## Cost
 
-Measured on the corpus models only; no sample uses the option. A counter multiplies the
-states of every cone that holds it by at most `k + 2` per row, and it pulls the handler into
-every cone of a raiser. The option is per edge and off by default.
+No sample uses the option, so no sample's verdict, state count, or wall time moves; every
+model without `.counted` builds the same transition system as before. On the corpus models
+a counter multiplies the states of a cone by at most `k + 2` per row: the box of
+`safety_counted_once_per_raise` reaches 43 states at 2 instances where its latch twin
+reaches 57, because the counter removes runs; the inbox of `safety_event_overflow` at
+`k = 2` reaches 183. A counter also pulls the handler into every cone of a raiser. The
+option is per edge and off by default.
 
 ## Non-goals
 

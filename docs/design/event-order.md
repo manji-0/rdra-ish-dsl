@@ -27,9 +27,9 @@ The eight questions of #112, each with its answer, and the four decisions the re
 
 | # | Question | Decision |
 |---|---|---|
-| 1 | Boolean or counter; does a second raise mean a second run | A boolean per row that is set and never cleared (a latch). After the first raise the use case runs as 1.x let it, any number of times. A second raise changes nothing. |
+| 1 | Boolean or counter; does a second raise mean a second run | A boolean per row that is set and never cleared (a latch). After the first raise the use case runs as 1.x let it, any number of times. A second raise changes nothing. (#220 adds an opt-in counter per edge, `.counted(k)`; see [counted events](./counted-events.md).) |
 | 2 | Which rows carry the mark; which rows the triggered use case runs on | The rows of the entities every raiser's last step binds. The triggered use case reads the mark on its own row of such an entity when it has exactly one row of it and that row can be the raiser's (rule 5). When it binds none, or binds the entity twice, or through a key the raiser does not use, it binds one raised row as an extra parameter, linked to its own rows by the one direct key between them when there is one, and otherwise any raised row. |
-| 3 | Several use cases triggered by one event | One mark per `(entity, event)`, read by every triggered use case. Nothing consumes it, so nothing is shared out. |
+| 3 | Several use cases triggered by one event | One mark per `(entity, event)`, read by every triggered use case. Nothing consumes it, so nothing is shared out. (A counted edge consumes, so it has its own counter per `(entity, event, use case)`; [counted events](./counted-events.md#syntax).) |
 | 4 | Timers | Unchanged. A timer is a free trigger. Its use case runs whenever `now` and its guards allow, and a use case a timer also starts needs no mark. |
 | 5 | Events an external system raises | Free. The event may occur at any time, so the use case runs as in 1.x. An event with no `raises`, or raised by a use case with no action, is free too. |
 | 6 | Deadlock and witness | The mark is not a view axis, so `states` keeps its shape. A use case that waits for a mark that never comes is `NeverRuns` with the mark as the blocking guard, and a state the triggered use case had to leave is a deadlock as today. A set mark is never a finding by itself. |
@@ -175,7 +175,9 @@ Quotable as the 2.0 semantics. "Binds" means has a parameter on, in any role; "i
    change a reviewer can see, not a modifier that hides one.
 9. **What is not said.** The mark counts no events. Two raises on a row are one mark,
    and a triggered use case that ran once can run again without a new raise, as it can
-   today. The order is "not before the first raise on these rows", nothing more.
+   today. The order is "not before the first raise on these rows", nothing more. An edge
+   with `.counted(k)` (#220) replaces rules 3, 6, and 9 for itself; see
+   [counted events](./counted-events.md#semantics).
 
 ### Checks and findings
 
