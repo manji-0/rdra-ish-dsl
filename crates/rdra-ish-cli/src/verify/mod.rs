@@ -30,6 +30,7 @@ mod end;
 mod jobs;
 mod native;
 mod report;
+mod schedule;
 mod shared;
 mod specs;
 mod state_models;

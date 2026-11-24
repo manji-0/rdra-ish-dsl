@@ -10,12 +10,13 @@
 //! keeps a move enabled: a deadlock only BFS finds is no disagreement.
 
 use super::bfs::{StateModelCone, StateModels};
+use super::schedule::{run_budgeted, Budget};
 use super::tlc::{clean_up, tlc_command};
 use super::tlc_tool::Tlc;
 use crate::export::Modules;
-use crate::memory::tlc_plan;
+use crate::memory::{tlc_workers, TlcHeap};
 use crate::tlc_env::{current_user_heap, Heap, Jit};
-use crate::tlc_output::{InvariantScan, Outcome};
+use crate::tlc_output::{out_of_memory, InvariantScan, Outcome};
 use anyhow::{Context, Result};
 use rdra_ish_core::lifecycle::TransitionSystem;
 use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
@@ -24,8 +25,6 @@ use std::fs;
 use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
 use std::process::Stdio;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Mutex;
 
 /// Up to this many states a witnesses cfg runs with `-continue`, which prints a trace for each
 /// state that violates a `Witness_`, so almost every state; above it each run stops at the
@@ -47,6 +46,8 @@ pub(super) struct StateModelJob {
     pub(super) witnesses: Vec<String>,
     /// BFS's state count.
     states: usize,
+    /// The bytes of the module: TLC's heap follows it (`TlcHeap::of`).
+    module_bytes: u64,
 }
 
 /// What TLC found on one `StateModel_` module.
@@ -62,6 +63,21 @@ pub(super) struct StateModelRan {
 }
 
 impl StateModelRan {
+    /// A job that failed as a tool before any run: why.
+    fn failed(why: String) -> Self {
+        StateModelRan {
+            states: None,
+            deadlocks: BTreeSet::new(),
+            witnessed: BTreeSet::new(),
+            error: Some(why),
+        }
+    }
+
+    /// Whether a run of the job stopped because the JVM ran out of memory.
+    fn out_of_memory(&self) -> bool {
+        self.error.as_deref().is_some_and(out_of_memory)
+    }
+
     /// The deadlocks and the states without a witness, in cfg order.
     pub(super) fn found(&self, job: &StateModelJob) -> Vec<String> {
         let unwitnessed = job
@@ -169,6 +185,7 @@ pub(super) fn state_model_jobs(
             deadlocks,
             witnesses,
             states: *states,
+            module_bytes: bundle.tla.len() as u64,
         });
     }
     if !out.is_empty() {
@@ -178,8 +195,11 @@ pub(super) fn state_model_jobs(
     Ok(out)
 }
 
-/// Runs every job, up to 8 at once and no more than `share` bytes of `-Xmx` hold, the largest
-/// first. The results come back in job order.
+/// Runs every job, the largest heap first, then the most states, as many at once as the cores
+/// allow and their heaps fit `share` (`Budget`), each with the heap its module needs
+/// (`TlcHeap::of`) and once more at twice the heap when it runs out of memory and the share
+/// holds that. A job whose module needs more than the share has no run. The results come back
+/// in job order.
 pub(super) fn run_state_models(
     tlc: &Tlc,
     dir: &Path,
@@ -187,33 +207,42 @@ pub(super) fn run_state_models(
     jobs: &[StateModelJob],
     share: u64,
 ) -> Result<Vec<StateModelRan>> {
-    if jobs.is_empty() {
-        return Ok(Vec::new());
-    }
     let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
-    let plan = tlc_plan(
-        share,
-        cores.min(8).min(jobs.len()),
-        Heap::Cone,
-        current_user_heap(),
-    );
-    let workers = (cores / plan.at_once).max(1).to_string();
+    let set = current_user_heap();
+    let heaps: Vec<TlcHeap> = jobs
+        .iter()
+        .map(|job| TlcHeap::of(job.module_bytes, Heap::Cone, share, set))
+        .collect();
     let mut order: Vec<usize> = (0..jobs.len()).collect();
-    order.sort_by_key(|k| std::cmp::Reverse(jobs[*k].states));
-    let next = AtomicUsize::new(0);
-    let done: Mutex<Vec<(usize, Result<StateModelRan>)>> = Mutex::new(Vec::new());
-    std::thread::scope(|s| {
-        for _ in 0..plan.at_once.min(jobs.len()) {
-            s.spawn(|| {
-                while let Some(&k) = order.get(next.fetch_add(1, Ordering::SeqCst)) {
-                    let ran = run_one(tlc, dir, modules, &jobs[k], (&workers, plan.heap));
-                    done.lock().expect("lock").push((k, ran));
+    order.sort_by_key(|k| std::cmp::Reverse((heaps[*k].charge(), jobs[*k].states)));
+    let budget = Budget::new(share);
+    let done = run_budgeted(
+        &order,
+        cores,
+        &budget,
+        |k| heaps[k].charge(),
+        |k, hold, in_flight| {
+            let (job, heap) = (&jobs[k], heaps[k]);
+            // As in `tlc::run_some`: the runs that fit the share divide the cores.
+            let fit = usize::try_from(share / heap.charge().max(1)).unwrap_or(usize::MAX);
+            let workers = tlc_workers(cores, in_flight.min(fit.max(1))).to_string();
+            let bytes = match heap {
+                TlcHeap::OverShare { need } => {
+                    let (_, report) =
+                        TlcHeap::over_share(&job.module, job.module_bytes, need, share);
+                    return Ok(StateModelRan::failed(report));
                 }
-            });
-        }
-    });
-    let mut done = done.into_inner().expect("lock");
-    done.sort_by_key(|(k, _)| *k);
+                TlcHeap::Sized(bytes) | TlcHeap::User(bytes) => bytes,
+            };
+            let ran = run_one(tlc, dir, modules, job, (&workers, bytes))?;
+            let (true, Some(more)) = (ran.out_of_memory(), heap.doubled(share)) else {
+                return Ok(ran);
+            };
+            hold.regrow(more.charge());
+            let doubled = more.bytes().expect("a doubled heap is sized");
+            run_one(tlc, dir, modules, job, (&workers, doubled))
+        },
+    );
     done.into_iter().map(|(_, r)| r).collect()
 }
 
