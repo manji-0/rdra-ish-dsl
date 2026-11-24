@@ -411,13 +411,30 @@ fn assert_real_path(plain: &TransitionSystem, start: &State, steps: &[Step]) {
     }
 }
 
-/// The reduced cones of a model decide what its cones decide, and their traces lift.
+/// The reduced cones of a model decide what its cones decide, and their traces lift, with S
+/// run plainly and up to `H` (#212 phase 2). Returns the cones the plain quotient reduces.
 fn assert_reduction_exact(sample: &str, model: &SemanticModel, bounds: Bounds) -> usize {
+    let n = assert_reduction_exact_in(sample, model, bounds.clone(), false);
+    assert_reduction_exact_in(sample, model, bounds, true);
+    n
+}
+
+/// `assert_reduction_exact`, with S forced up to `H` at once when `up_to_h` says so.
+fn assert_reduction_exact_in(
+    sample: &str,
+    model: &SemanticModel,
+    bounds: Bounds,
+    up_to_h: bool,
+) -> usize {
     let caps = Caps::new(usize::MAX, 200_000);
+    let reduce_caps = match up_to_h {
+        true => caps.forcing_s_up_to_h(),
+        false => caps,
+    };
     let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
     let targets = ts.targets();
     let plain = ts.explore_targets(&targets, caps);
-    let reduced = ts.explore_targets_reduced(&targets, caps);
+    let reduced = ts.explore_targets_reduced(&targets, reduce_caps);
     let plain_views = plain.entity_views(&ts, model, &[]);
     let reduced_views = reduced.entity_views(&ts, model, &[]);
     let mut reductions = 0;
@@ -479,12 +496,12 @@ fn assert_reduction_exact(sample: &str, model: &SemanticModel, bounds: Bounds) -
     reductions
 }
 
-fn reductions_in(samples: &[&str]) -> usize {
+fn reductions_in(samples: &[&str], up_to_h: bool) -> usize {
     let mut reductions = 0;
     for sample in samples {
         let model = load(sample);
         for bounds in [Bounds::STATES, Bounds::VERIFY] {
-            reductions += assert_reduction_exact(sample, &model, bounds);
+            reductions += assert_reduction_exact_in(sample, &model, bounds, up_to_h);
         }
     }
     reductions
@@ -493,14 +510,23 @@ fn reductions_in(samples: &[&str]) -> usize {
 /// Most bundled sample cones quotient to themselves and stay unreduced (#101); two reduce.
 #[test]
 fn reduced_cones_decide_what_the_cones_decide() {
-    let reductions = reductions_in(SAMPLES);
+    let reductions = reductions_in(SAMPLES, false);
+    assert!(reductions >= 2, "{reductions} cones reduced");
+}
+
+/// With S run up to `H` (#212 phase 2), the reduced cones reach the same states on T and
+/// `obs`, decide the same, and their traces lift to real paths; the `Classes::of` twin holds
+/// each quotient to the plain one.
+#[test]
+fn reduced_cones_up_to_h_decide_what_the_cones_decide() {
+    let reductions = reductions_in(SAMPLES, true);
     assert!(reductions >= 2, "{reductions} cones reduced");
 }
 
 /// The domain samples explore millions of states; CI runs this in release in formal-verify.
 #[test]
 fn reduced_domain_cones_decide_what_the_cones_decide() {
-    let reductions = reductions_in(DOMAIN_SAMPLES);
+    let reductions = reductions_in(DOMAIN_SAMPLES, false);
     assert!(reductions >= 53, "{reductions} cones reduced");
 }
 
@@ -609,6 +635,60 @@ fn a_violation_behind_the_sub_lifecycle_lifts_to_a_longer_real_trace() {
         steps(a[0])
     );
     assert_eq!(a[0].name(&[]), b[0].name(&[]));
+}
+
+/// S up to `H` on a sub-lifecycle `H` permutes (#212 phase 2): at two instances the key's
+/// sub-lifecycle, nested in the gate's, holds two cards that nothing the quotient reads names,
+/// so `H` swaps them (the gate's own S holds a nested reduction and runs plain), and it
+/// stores fewer states than its plain run while its quotient has the same classes. The
+/// reduced cone decides the same, and every trace of it, the violation's included, lifts
+/// through both reductions and the permutations to a real path of the unreduced cone.
+#[test]
+fn a_sub_lifecycle_up_to_h_stores_fewer_states_and_lifts_its_traces() {
+    let model = model_from(GATE);
+    let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+    let job = entity_target(&ts, "Job");
+    let rule = Target::Invariant(0);
+    let caps = Caps::new(usize::MAX, 200_000);
+    let plain = ts.explore_targets_reduced(&[job, rule], caps);
+    let up = ts.explore_targets_reduced(&[job, rule], caps.forcing_s_up_to_h());
+    let (p, u) = (plain.cone_of(rule), up.cone_of(rule));
+    let (pr, ur) = (
+        p.run
+            .system
+            .reduction()
+            .expect("the plain quotient reduces the gate"),
+        u.run
+            .system
+            .reduction()
+            .expect("the quotient up to H reduces the gate"),
+    );
+    let (pi, ui) = (
+        pr.inner().expect("the gate's S nests the key's reduction"),
+        ur.inner().expect("the gate's S nests the key's reduction"),
+    );
+    assert!(
+        ui.states < pi.states,
+        "H moves the cards: {} states up to H, {} plain",
+        ui.states,
+        pi.states
+    );
+    assert_eq!(ui.classes(), pi.classes(), "the same inner classes");
+    assert_eq!(ur.classes(), pr.classes(), "the same classes");
+    assert_eq!(
+        u.run.states.len(),
+        p.run.states.len(),
+        "the same reduced cone"
+    );
+    let (a, b) = (violated(&plain), violated(&up));
+    assert_eq!(a.len(), 1);
+    assert_eq!(b.len(), 1);
+    assert_eq!(a[0].name(&[]), b[0].name(&[]));
+    let unreduced = ts.restrict_to(&u.cone.vars, &u.cone.keep);
+    for at in 0..u.run.states.len() as u32 {
+        let (start, steps) = lifted_path(&u.run, at);
+        assert_real_path(&unreduced, &start, &steps);
+    }
 }
 
 /// Two actions of one name are two actions: the reduced cone relates the gate's action to

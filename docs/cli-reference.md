@@ -686,6 +686,14 @@ Cone_Inv_Encounter_2 [Inv_Encounter_2]: ok (1696486 orbits, about 820M states)
 - **`retry`** runs a cone as `never` does and runs it again up to symmetry only when it
   stopped at the memory limit; the line then adds `retried up to instance symmetry after the
   memory limit at <n> states`.
+- **Reduced cones** (phase 2). The sub-lifecycle a reduced cone quotients runs up to `H`,
+  the subgroup that leaves in place every entity whose rows the quotient reads (`obs`, the
+  inputs, the fold bits, the stubs of T parents, and the rows a T key can name), under
+  `retry` and `always` alike, once its plain run stopped at the memory limit, alone. The
+  classes are the plain run's, so the verdicts are too; their numbering, their
+  representatives, the cone's TLA+ tables, and its lifted traces can differ. A cone whose
+  sub-lifecycle fits keeps its output. A trace through
+  such a cone runs the sub-lifecycle up to `H` again and lifts its path to concrete states.
 - **Shared runs.** Under `always` a cone that runs up to symmetry shares no run with the
   entity, safety, and property passes: none of them decides it on a plain run of the same
   system, and its run decides nothing for them. A cone run up to symmetry stops once every
