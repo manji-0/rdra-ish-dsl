@@ -10,8 +10,8 @@
 // expect OrderComplete: native=counterexample tlc=counterexample
 // expect ParcelComplete: native=ok tlc=ok
 // expect EventOverflow_Order_EvDispatched_Deliver: native=ok tlc=ok z3=proved bfs=ok,ok,ok
-// expect Deadlock_Order_delivered_partial: native=counterexample tlc=none
-// expect Witness_Order_delivered_complete: native=counterexample tlc=none
+// expect Deadlock_Order_delivered_partial: native=counterexample tlc=counterexample
+// expect Witness_Order_delivered_complete: native=counterexample tlc=counterexample
 entity Order "注文" {
   id: Int @pk
   parcels: Enum(packing, sent) @default(packing)
