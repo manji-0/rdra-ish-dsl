@@ -473,7 +473,8 @@ impl Enc<'_> {
         }
         for &p in &deleted {
             let decl = ts.entity(entities[usize::from(p)]);
-            for &v in decl.columns.iter().chain(&decl.owners) {
+            // A deleted row keeps its keys, as in the native step.
+            for &v in &decl.columns {
                 match self.value(v, ts.var(v).base) {
                     Ok(base) => set(&mut next, v, p, "", &base),
                     Err(_) => unreachable!("a base value is always expressible"),
