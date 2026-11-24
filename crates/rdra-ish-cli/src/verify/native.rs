@@ -1,4 +1,4 @@
-use super::bfs::{crowded, BfsCone};
+use super::bfs::{about, crowded, BfsCone};
 use super::jobs::{Job, JobKind, PropertyJob};
 use super::report::run_line;
 use super::shared::Shared;
@@ -9,7 +9,7 @@ use crate::tlc_output::Outcome;
 use rdra_ish_core::in_parallel;
 use rdra_ish_core::lifecycle::{
     Caps, ComponentRun, Diag, Fairness, LassoFault, PropertyVerdict, ReducedVerdict, StateDiag,
-    TransitionSystem,
+    Symmetry, TransitionSystem,
 };
 use rdra_ish_emit::tla::TlaNames;
 
@@ -153,7 +153,19 @@ impl Plain {
 /// reduced graph with the classes that can loop marked. When that does not decide, `Full` on
 /// the unreduced cone after the counterexample, and `WfNext` on the same unreduced graph.
 /// Also returns the vacuity the plain run shows.
-fn native_property(ts: &TransitionSystem, p: &PropertyJob, caps: Caps) -> (Native, Option<Diag>) {
+///
+/// With `orbits`, an `always` on a cone the sub-lifecycle reduction leaves whole runs up to
+/// instance symmetry instead (`always_up_to_symmetry`); `orbits` holds the states of a
+/// plain run that stopped at the memory limit first, under `--symmetry retry`.
+fn native_property(
+    ts: &TransitionSystem,
+    p: &PropertyJob,
+    caps: Caps,
+    orbits: Option<Option<usize>>,
+) -> (Native, Option<Diag>) {
+    if let (Some(retried_at), true) = (orbits, p.symmetric()) {
+        return always_up_to_symmetry(ts, p, caps, retried_at);
+    }
     let plain = Plain::of(ts, p, &p.cone.reduced.clone().run(caps));
     native_property_after(p, caps, plain)
 }
@@ -250,6 +262,61 @@ fn native_property_after(p: &PropertyJob, caps: Caps, plain: Plain) -> (Native, 
     (out.decided(verdict), vacuous)
 }
 
+/// `p`, an `always`, on its cone explored up to instance symmetry: the first stored class
+/// that breaks it, its counterexample lifted to concrete states.
+fn always_up_to_symmetry(
+    ts: &TransitionSystem,
+    p: &PropertyJob,
+    caps: Caps,
+    retried_at: Option<usize>,
+) -> (Native, Option<Diag>) {
+    let cone = &p.cone;
+    let mut out = Native {
+        decision: Decision::Decided(Outcome::Ok),
+        states: None,
+        notes: Vec::new(),
+        runs: Vec::new(),
+        found: None,
+        fault: None,
+        cone_capped: false,
+        crowded: false,
+    };
+    let run = cone.reduced.clone().run_orbits(caps);
+    out.crowded = run
+        .diags()
+        .iter()
+        .any(|d| matches!(d.diag, StateDiag::MemoryCapReached { .. }));
+    let vacuous = ts.property_vacuity(p.index, &run);
+    out.notes.push(format!(
+        "{} orbits, about {} states",
+        run.orbits(),
+        about(run.estimate())
+    ));
+    if let Some(at) = retried_at {
+        out.notes.push(format!(
+            "retried up to instance symmetry after the memory limit at {at} states"
+        ));
+    }
+    let answer = match run.decide_always(cone.reduced_index) {
+        Some(PropertyVerdict::Holds) => Answer::Verdict(Outcome::Ok, None),
+        Some(PropertyVerdict::Violated(d)) => Answer::Verdict(Outcome::Counterexample, Some(d)),
+        Some(PropertyVerdict::Undecided) => Answer::Stopped,
+        None => unreachable!("an always"),
+    };
+    out.runs.push((ConeRun::Plain, answer.outcome()));
+    match answer {
+        Answer::Verdict(outcome, found) => {
+            out.found = found;
+            match cone.after_plain(outcome) {
+                AfterPlain::Decided(verdict) => (out.decided(verdict), vacuous),
+                AfterPlain::NeedsWfNext => unreachable!("an always needs no WF_vars(Next)"),
+            }
+        }
+        Answer::Stopped => (out.capped(), vacuous),
+        Answer::Fault(fault) => (out.faulty(&fault), vacuous),
+    }
+}
+
 /// Under `RDRA_ISH_WF_REDUCED_STATS`, one line on stderr per run with `WF_vars(Next)` on a
 /// reduced cone: what it decided, and the divergence marks of the reduction, for measuring
 /// the trial of docs/formal-verification.md, "WF_vars(Next) on a reduced cone".
@@ -327,23 +394,31 @@ impl Native {
 /// `native_property` for every property job, side by side, `None` for a safety cone. A
 /// property whose plain answer `shared` holds, read off an earlier pass's run of its reduced
 /// cone (#209), goes on from there. A property whose runs met the memory limit beside others
-/// is decided again alone. Also returns the vacuous properties.
+/// is decided again alone. Also returns the vacuous properties. `--symmetry` runs an `always`
+/// on a cone the reduction leaves whole up to instance symmetry: always, when `shared` holds
+/// no plain answer for it (`Shared::up_to_symmetry`), or under `retry` once its lone plain
+/// run also stopped at the memory limit.
 pub(super) fn native_properties(
     ts: &TransitionSystem,
     jobs: &[Job],
     caps: Caps,
     shared: &mut Shared,
+    symmetry: Symmetry,
 ) -> (Vec<Option<Native>>, Vec<Diag>) {
     let at: Vec<(usize, Option<Plain>)> = (0..jobs.len())
         .filter(|&k| matches!(jobs[k].kind, JobKind::PropertyCone(_)))
         .map(|k| (k, shared.plain[k].take()))
         .collect();
-    let decide = |(k, plain): (usize, Option<Plain>)| match (&jobs[k].kind, plain) {
-        (JobKind::PropertyCone(p), Some(plain)) => native_property_after(p, caps, plain),
-        (JobKind::PropertyCone(p), None) => native_property(ts, p, caps),
-        (JobKind::Cone(_) | JobKind::Explored(_) | JobKind::Whole(_), _) => {
+    let job = |k: usize| match &jobs[k].kind {
+        JobKind::PropertyCone(p) => p.as_ref(),
+        JobKind::Cone(_) | JobKind::Explored(_) | JobKind::Whole(_) => {
             unreachable!("a property's job")
         }
+    };
+    let orbits = (symmetry == Symmetry::Always).then_some(None);
+    let decide = |(k, plain): (usize, Option<Plain>)| match plain {
+        Some(plain) => native_property_after(job(k), caps, plain),
+        None => native_property(ts, job(k), caps, orbits),
     };
     let ks: Vec<usize> = at.iter().map(|(k, _)| *k).collect();
     let ran = in_parallel(at, rdra_ish_core::jobs(), decide);
@@ -351,8 +426,19 @@ pub(super) fn native_properties(
     let mut vacuous = Vec::new();
     for (k, (native, vacuity)) in ks.into_iter().zip(ran) {
         let (native, vacuity) = match native.crowded {
-            true => decide((k, None)),
+            true => {
+                drop((native, vacuity));
+                decide((k, None))
+            }
             false => (native, vacuity),
+        };
+        let retry = symmetry == Symmetry::Retry && native.crowded && job(k).symmetric();
+        let (native, vacuity) = match (retry, native.states) {
+            (true, Some(states)) => {
+                drop((native, vacuity));
+                native_property(ts, job(k), caps, Some(Some(states as usize)))
+            }
+            _ => (native, vacuity),
         };
         vacuous.extend(vacuity);
         out[k] = Some(native);

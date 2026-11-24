@@ -1,0 +1,37 @@
+// trap: a rule that holds only because a child's key moves with its parent's row.
+// An order can be rushed only while its shop is gold, and a shop never goes back to basic,
+// so no rushed order belongs to a basic shop: the rule holds at every count. Up to instance
+// symmetry the shops are sorted, basic first; a canonical form that moved the shops but
+// left each order's key where it was would point a rushed order at a basic shop, and report
+// a counterexample the model does not have. Dropped orders leave deleted rows under shops
+// that move, whose key holds the base value and must stay there.
+// expect MultiForbidden_Order_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+entity Shop "店" {
+  id: Int @pk
+  tier: Enum(basic, gold) @default(basic)
+}
+
+entity Order "注文" {
+  id: Int @pk
+  rush: Bool @default(false)
+}
+
+relate(Order, Shop, N:1)
+
+usecase Open "開店"
+usecase Upgrade "昇格"
+usecase Place "注文"
+usecase Rush "急ぎ"
+usecase Drop "取消"
+
+creates(Open, Shop)
+transitions(Upgrade, Shop.tier, basic -> gold)
+creates(Place, Order)
+sets(Rush, Order.rush == true)
+deletes(Drop, Order)
+
+condition AtGold "上位の店の注文"
+holds(AtGold, Shop.tier == gold)
+applies_to(AtGold, Rush)
+
+forbidden(Order, Shop, Order.rush == true, Shop.tier == basic).along(Order, Shop)

@@ -132,6 +132,23 @@
 
 ### Added
 
+- `verify --symmetry never|retry|always` (#212, phase 1; experimental, default `never`):
+  explore an unreduced safety cone, and the cone of an `always` property, up to instance
+  symmetry, one stored state per orbit of states that differ only in which slot holds which
+  row. The cone line reads `(<n> orbits, about <m> states)`. `retry` reruns up to symmetry
+  only a cone that stopped at the memory limit. `symmetry` under `[verify]` in `rdra.toml`
+  sets the default; under `[check]` it warns and is not read. A counterexample is lifted to
+  concrete slots and replayed, with the rows each step names, before it prints. A static
+  scan leaves out an entity whose slots the model tells apart (an ordered id comparison, an
+  id against a literal, a key set to a literal row, and six more) and names it and the
+  reason under the line. A cone run up to symmetry gathers no entity view (#251) and shares
+  no run with the entity, safety and property passes (#209). Without the option nothing changes. At `--instance-count 3` the
+  five clinic-ops and insurance-claim-ops lines that stopped at the memory limit are decided
+  under `--memory 8GiB`. In `rdra-ish-core`, `TransitionSystem::run_orbits` returns an
+  `OrbitRun`, which has no graph or adjacency to read, and the vacuity readers take any
+  `StoredRun`. The `shadow` build adds two twins: `canonical` (against every element of the
+  group, up to 1,296) and `orbit_run` (against the plain run, up to 200,000 states).
+
 - A `perf` cargo feature (#296): `cargo build --release -p rdra-ish-cli --features perf`
   builds a CLI that, under `RDRA_PERF=1`, prints on stderr a `perf-pass` line per pass of
   `verify` (wall and CPU time, allocations, the live heap and the memory pool at their
@@ -142,6 +159,7 @@
   `scripts/perf-tables.py <binary>` runs the five measured `verify` runs of #296 one at a
   time at `RDRA_JOBS=1` and prints the totals, the passes, the BFS CPU per pass and the
   largest runs. A build without the feature is unchanged.
+
 - A `shadow` cargo feature (#275): `cargo build --release -p rdra-ish-cli --features shadow`
   builds a CLI in which every fast function that has a reference twin also runs the twin and
   panics, naming the call, when the two differ. The twins are the enabled bindings
