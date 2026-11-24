@@ -344,9 +344,10 @@ cargo kani -p rdra-ish-core                                        # every harne
 cargo kani -p rdra-ish-core --harness compare_negates_and_mirrors  # one harness
 ```
 
-Two harnesses take most of the time. `store_bytes_only_grows` takes about 4 minutes, and
-the `States` harness in `explore/arena.rs` about a minute and 8 GB of memory. The others
-take under 10 seconds each. At width 3 and 9 pushes the `States` harness did not finish in
+Two harnesses take most of the time. On an 18-core Mac `store_bytes_only_grows` takes about
+4 minutes, and the `States` harness in `explore/arena.rs` about a minute and 8 GB of
+memory; on the CI runner they take about 9 and 3.5 minutes. The others take under 20
+seconds each. At width 3 and 9 pushes the `States` harness did not finish in
 10 minutes (#275), so its bound stays small.
 
 ### In CI
