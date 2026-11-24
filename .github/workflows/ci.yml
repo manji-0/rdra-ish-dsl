@@ -231,16 +231,21 @@ jobs:
         # `cargo build` resolves other features and compiled every crate a second time.
         run: cargo test --release -p rdra-ish-cli --features shadow --test engine_corpus --no-run
       - name: Every twin compares calls
-        # How many calls each twin compared and skipped on two samples. patent-ops reaches
-        # every twin but `Fold::holds`, which quantifier_guard reaches; the step fails when a
-        # line is missing (a build without the feature) or a twin compared none in both.
+        # How many calls each twin compared and skipped on four runs. `verify` on patent-ops
+        # reaches every twin but three: `Fold::holds`, which quantifier_guard reaches; a shared
+        # run of S, which clinic-ops reaches; and the view twins (`observe`), which only a run
+        # that builds an entity view reaches since #251's step 2, as `check` does. The step
+        # fails when a line is missing (a build without the feature) or a twin compared none
+        # in all four.
         run: |
-          for sample in samples/patent-ops samples/formal-verification/quantifier_guard.rdra; do
-            RDRA_ISH_SHADOW_STATS=1 target/release/rdra-ish verify "$sample" 2>&1 >/dev/null \
+          for run in "verify samples/patent-ops" \
+            "verify samples/formal-verification/quantifier_guard.rdra" \
+            "verify samples/clinic-ops" "check samples/patent-ops"; do
+            RDRA_ISH_SHADOW_STATS=1 target/release/rdra-ish $run 2>&1 >/dev/null \
               | grep '^shadow: compared/skipped ' >> shadow-stats.txt || true
           done
           cat shadow-stats.txt
-          test "$(wc -l < shadow-stats.txt)" -eq 2
+          test "$(wc -l < shadow-stats.txt)" -eq 4
           python3 - <<'EOF'
           import collections, re
           compared = collections.Counter()

@@ -12,6 +12,7 @@
 //! | `observe`'s skip of a row whose columns are unchanged (#251) | `explore/bfs/reference.rs`: what the edge would intern |
 //! | `quotient_blocks` (`reduce/partition.rs`, #252) | `reduce/partition/reference.rs`: the sweeps, on quotients of up to `SHADOW_CAP` states |
 //! | a `QuotientCache` hit (`reduce/cache.rs`, #252), a declined entry's included (#289) | `Classes::of` itself, through a cache that holds nothing |
+//! | a run of S another quotient key ran (`QuotientCache::run_of_s`, #296) | a fresh run of the sub-lifecycle |
 //! | the reduced step's class moves (`moves_of_into`, #252) | `reduce/reference.rs`: `moves_from` |
 //! | a fold's input bit without allocations (`Fold::holds`, `reduce/fold.rs`, #296) | `reduce/fold/reference.rs`: the bit with its `Vec`s |
 //!
@@ -37,9 +38,10 @@ pub(crate) enum Twin {
     CacheHit,
     ClassMoves,
     FoldHolds,
+    SharedRun,
 }
 
-const TWINS: [(Twin, &str); 8] = [
+const TWINS: [(Twin, &str); 9] = [
     (Twin::EachEnabled, "each_enabled"),
     (Twin::Seen, "seen"),
     (Twin::Source, "source"),
@@ -48,6 +50,7 @@ const TWINS: [(Twin, &str); 8] = [
     (Twin::CacheHit, "cache_hit"),
     (Twin::ClassMoves, "class_moves"),
     (Twin::FoldHolds, "fold_holds"),
+    (Twin::SharedRun, "shared_run"),
 ];
 
 static COMPARED: [AtomicU64; TWINS.len()] = [const { AtomicU64::new(0) }; TWINS.len()];

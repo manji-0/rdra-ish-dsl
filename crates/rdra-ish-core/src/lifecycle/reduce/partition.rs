@@ -11,7 +11,7 @@ use crate::lifecycle::explore::{Adjacency, Caps, Checks, ComponentRun};
 use crate::lifecycle::expr::State;
 use crate::lifecycle::types::{ActId, VarId};
 use crate::lifecycle::{StateDiag, TransitionSystem};
-use crate::memory::{watch, Watched};
+use crate::memory::Watched;
 
 #[cfg(any(test, feature = "shadow"))]
 mod reference;
@@ -254,14 +254,13 @@ impl Classes {
         // The inputs stay on the nested T side: the rises are kept, and only `obs` anchors.
         let (sub, clean) =
             raw.reduced_in(&[(ext.obs_local.clone(), ext.rise_actions())], caps, cache);
-        // The quotient reads the graph alone, so the run evaluates no check.
-        let (run, seen) = {
+        // The quotient reads the graph alone, so the run evaluates no check. Another key over
+        // the same sub-lifecycle may have run it already (`QuotientCache::run_of_s`).
+        let (run, seen) = cache.run_of_s(&sub, caps, || {
             let _label = crate::perf::label("S");
-            watch(|| {
-                sub.clone()
-                    .run_checking(caps.without_views(), Checks::none())
-            })
-        };
+            sub.clone()
+                .run_checking(caps.without_views(), Checks::none())
+        });
         if !run.complete {
             return (Classified::Nothing, Ended::stopped(clean, seen, &run));
         }
@@ -276,7 +275,7 @@ impl Classes {
             .states
             .iter()
             .map(|st| {
-                let key = run.system.project(st, &key_vars);
+                let key = sub.project(st, &key_vars);
                 let len = index.len() as u32;
                 *index.entry(key).or_insert(len)
             })
@@ -340,7 +339,7 @@ impl Classes {
                 // Every state of a block rises into the same blocks; the representative's
                 // edges are enough.
                 if *reps[class[x] as usize] == run.states[x].0 {
-                    let inputs = run.system.project(&run.states[y], &ext.inputs_local).0;
+                    let inputs = sub.project(&run.states[y], &ext.inputs_local).0;
                     let was = rises.insert((class[x], inputs), class[y]);
                     assert!(was.is_none_or(|c| c == class[y]), "a rise is a function");
                 }
