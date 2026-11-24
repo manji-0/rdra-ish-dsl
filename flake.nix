@@ -33,10 +33,17 @@
             }
           )
         );
-      # TLC 1.7.4 as nixpkgs packages it, on JDK 21 instead of JDK 8, with a class-data-sharing
+      # TLC 1.7.4 as nixpkgs packages it, on JDK 17 instead of JDK 8, with a class-data-sharing
       # archive of the classes TLC loads (#309). Each `verify --with-tlc` starts many short
-      # TLC runs, and both cut what a run costs before it reaches the model: 0.80 to 0.63 s
-      # wall and 0.70 to 0.59 CPU-s for an 87-state cone. The archive is recorded from one run of
+      # TLC runs, and both cut what a run costs before it reaches the model: 0.80 to 0.64 s
+      # wall and 0.70 to 0.50 CPU-s for an 87-state cone.
+      #
+      # Not JDK 19 or later: TLC 1.7.4's BufferedRandomAccessFile.read(byte[], int, int) breaks
+      # when it reads back a record still in its write buffer, and from JDK 19 on
+      # RandomAccessFile.readLong reads through it (JDK 17 reads byte by byte), so a `-continue`
+      # run that prints many traces dies with an ArrayIndexOutOfBoundsException.
+      #
+      # The archive is recorded from one run of
       # nix/tlc-cds/Train.tla against the jar's store path. The JVM checks that the jar and
       # the JDK are the ones it was recorded with and ignores it when they are not, so the
       # archive can only go unused, not change a run. `-XX:+UseParallelGC` stays as nixpkgs
@@ -44,7 +51,7 @@
       tlcFor =
         pkgs:
         let
-          jdk = pkgs.jdk21_headless;
+          jdk = pkgs.jdk17_headless;
           tlaplus = pkgs.tlaplus.override { jre8 = jdk; };
           jar = "${tlaplus}/share/java/tla2tools.jar";
           archive = pkgs.runCommand "tla2tools-${tlaplus.version}-cds" { } ''
@@ -71,7 +78,7 @@
             train -Xshare:on -XX:SharedArchiveFile=$out/tla2tools.jsa
           '';
         in
-        pkgs.runCommand "tlaplus-${tlaplus.version}-jdk21"
+        pkgs.runCommand "tlaplus-${tlaplus.version}-jdk17"
           {
             nativeBuildInputs = [ pkgs.makeWrapper ];
             inherit (tlaplus) meta;
@@ -140,7 +147,7 @@
             pkgs.python3
 
             # Formal verification (TLC)
-            pkgs.jdk21_headless
+            pkgs.jdk17_headless
             (tlcFor pkgs)
             # `verify --prove` (tests/prove_cli.rs, tests/proof_equivalence.rs)
             pkgs.z3
@@ -159,7 +166,7 @@
           # GNU time for scripts/verify-samples.sh (macOS has BSD /usr/bin/time).
           ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.time ];
 
-          JAVA_HOME = "${pkgs.jdk21_headless}";
+          JAVA_HOME = "${pkgs.jdk17_headless}";
 
           # A GOROOT from the user's shell (a version manager's Go, say) points the flake's
           # `go` at another toolchain's standard library, and the codegen build tests then
