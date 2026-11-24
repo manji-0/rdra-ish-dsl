@@ -222,7 +222,7 @@ impl TransitionSystem {
             if open == 0 {
                 break;
             }
-            for slot in 0..self.bounds.slots() {
+            for slot in 0..self.slots(e) {
                 if !s.is_present(self, e, slot) {
                     continue;
                 }
@@ -328,7 +328,7 @@ impl TransitionSystem {
         let mut columns: Vec<(VarId, Vec<Vec<bool>>)> = Vec::new();
         for (var, value, exits) in open {
             if !columns.iter().any(|(v, _)| *v == var) {
-                let leave = (0..self.bounds.slots())
+                let leave = (0..self.slots(e))
                     .map(|k| self.can_leave(e, var, k, g, &adjacency))
                     .collect();
                 columns.push((var, leave));
@@ -337,7 +337,7 @@ impl TransitionSystem {
             let stuck = |at: usize, k: usize| {
                 present(at, k) && g.states[at].get(self, var, k) == value && !leave[k][at]
             };
-            let first = (0..self.bounds.slots())
+            let first = (0..self.slots(e))
                 .filter_map(|k| (0..n).find(|&at| stuck(at, k)).map(|at| (at, k)))
                 .min();
             let progress = match first {
@@ -513,7 +513,7 @@ impl TransitionSystem {
                         continue;
                     }
                     let moves = |s: &StateSlice, t: &StateSlice| {
-                        (0..self.bounds.slots()).any(|k| match from {
+                        (0..self.slots(e)).any(|k| match from {
                             Some(from) => {
                                 s.is_present(self, e, k)
                                     && s.get(self, var, k) == from
@@ -545,7 +545,7 @@ impl TransitionSystem {
                     let at_from = || {
                         let Some(from) = from else { return true };
                         g.states.iter().any(|s| {
-                            (0..self.bounds.slots())
+                            (0..self.slots(e))
                                 .any(|k| s.is_present(self, e, k) && s.get(self, var, k) == from)
                         })
                     };

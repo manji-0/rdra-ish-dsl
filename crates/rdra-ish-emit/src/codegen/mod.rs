@@ -650,6 +650,16 @@ fn obligations(
                     fk.site.as_ref(),
                 );
             }
+            if let Some(most) = fk.children.most {
+                push(
+                    Some(format!("MaxCard_{}_{role}", entity.id)),
+                    format!(
+                        "every present {} has at most {most} {} through {cols}.",
+                        parent.id, entity.id
+                    ),
+                    fk.site.as_ref(),
+                );
+            }
             for (what, action) in [("delete", fk.on_delete), ("update", fk.on_update)] {
                 if let Some(action) = action {
                     push(

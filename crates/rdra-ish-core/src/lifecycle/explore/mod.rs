@@ -238,6 +238,8 @@ pub(crate) struct Moves {
     /// The successor of every move, `width` bytes each.
     next: Vec<u8>,
     width: usize,
+    /// What the reduced step reuses from one state to the next.
+    pub(crate) reduced: super::reduce::StepBuffers,
 }
 
 impl Moves {
@@ -373,6 +375,8 @@ struct Bfs<'t> {
     /// Per `(entity, slot)`: the state being expanded, and the slot's pattern id in it, so
     /// `observe` looks a source pattern up once per expanded state instead of once per edge.
     sources: Vec<(usize, usize)>,
+    /// The slots `sources` holds per entity: the most any entity has.
+    source_slots: usize,
     complete: bool,
     checks_failed: bool,
     diags: Vec<Diag>,

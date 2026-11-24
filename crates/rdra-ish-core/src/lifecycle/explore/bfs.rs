@@ -223,7 +223,8 @@ impl<'t> Bfs<'t> {
             states: States::new(ts.width),
             seen: Default::default(),
             keys: Default::default(),
-            sources: vec![(usize::MAX, 0); ts.entities.len() * ts.bounds.slots()],
+            sources: vec![(usize::MAX, 0); ts.entities.len() * ts.most_slots()],
+            source_slots: ts.most_slots(),
             complete: true,
             checks_failed: false,
             diags: Vec::new(),
@@ -245,7 +246,7 @@ impl<'t> Bfs<'t> {
         for s in ts.initial_states() {
             for (i, _) in ts.entities.iter().enumerate() {
                 let e = EntId::at(i);
-                for slot in 0..ts.bounds.slots() {
+                for slot in 0..ts.slots(e) {
                     if s.is_present(ts, e, slot) {
                         let key = ts.pattern_key(&s, e, slot);
                         let Some(id) = self.intern(e, &key) else {
@@ -445,7 +446,7 @@ impl<'t> Bfs<'t> {
                 VarSpread {
                     name,
                     reached: reached.len(),
-                    domain: decl.domain.size(ts.bounds),
+                    domain: decl.domain.size(ts),
                     range,
                 }
             })
@@ -498,7 +499,7 @@ impl<'t> Bfs<'t> {
         slot: usize,
         key: &mut Vec<u8>,
     ) -> usize {
-        let cached = &mut self.sources[e.index() * self.ts.bounds.slots() + slot];
+        let cached = &mut self.sources[e.index() * self.source_slots + slot];
         if cached.0 == at {
             return cached.1;
         }

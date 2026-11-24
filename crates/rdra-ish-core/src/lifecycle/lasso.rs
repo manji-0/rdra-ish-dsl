@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use super::diag::StateDiag;
 use super::expr::{Env, State, StateSlice};
 use super::trace::{Replay, ReplayError};
-use super::types::{ActId, Ltl, Pred, Property};
+use super::types::{ActId, EntId, Ltl, Pred, Property};
 use super::TransitionSystem;
 
 /// The fairness a liveness run assumes beside the property's own `Fair_P`.
@@ -200,18 +200,19 @@ impl TransitionSystem {
         states: &[State],
         entry: usize,
     ) -> Option<(Vec<u8>, usize)> {
-        self.binder_slots(p.binders.len())
+        self.binder_slots(&p.binders)
             .find_map(|b| Some((b.clone(), self.fails_at(p, &b, states, entry)?)))
     }
 
-    /// Every binding of `n` binders, each over every slot, the last binder fastest.
-    pub(crate) fn binder_slots(&self, n: usize) -> impl Iterator<Item = Vec<u8>> {
-        let slots = self.bounds.slots();
-        (0..slots.pow(n as u32)).map(move |mut k| {
-            let mut b = vec![0u8; n];
-            for slot in b.iter_mut().rev() {
-                *slot = (k % slots) as u8;
-                k /= slots;
+    /// Every binding of `binders`, each over every slot of its entity, the last binder
+    /// fastest.
+    pub(crate) fn binder_slots(&self, binders: &[EntId]) -> impl Iterator<Item = Vec<u8>> {
+        let radix: Vec<usize> = binders.iter().map(|&e| self.slots(e)).collect();
+        (0..radix.iter().product::<usize>()).map(move |mut k| {
+            let mut b = vec![0u8; radix.len()];
+            for (slot, n) in b.iter_mut().zip(&radix).rev() {
+                *slot = (k % n) as u8;
+                k /= n;
             }
             b
         })

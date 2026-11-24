@@ -121,6 +121,7 @@ fn key_fact(relation: usize, rel: &Relation) -> Option<ForeignKey> {
         children: Multiplicity {
             min: rel.options.children_min,
             max,
+            most: rel.options.children_most,
         },
         parent_min: if rel.options.optional {
             Min::Zero
@@ -680,10 +681,7 @@ type SelectorSite<'a> = (
 );
 
 fn quantifier_selectors<'a>(model: &SemanticModel, q: &'a RelatedQuantifier) -> SelectorSite<'a> {
-    let method = match q.kind {
-        QuantifierKind::Has => "has",
-        QuantifierKind::None => "none",
-    };
+    let method = q.kind.method();
     let on = format!(
         "that joins {} (.{method}(...))",
         model.entities[q.related].id

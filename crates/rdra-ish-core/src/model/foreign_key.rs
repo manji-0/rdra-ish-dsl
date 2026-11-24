@@ -22,6 +22,9 @@ impl FkId {
 pub struct Multiplicity {
     pub min: Min,
     pub max: Max,
+    /// At most this many: the high end of a child-side range `lo..hi` with `hi` from 2 to
+    /// 255, which the lifecycle checks as `MaxCard_*`. `None` for `*` and `1`.
+    pub most: Option<u8>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -109,6 +112,15 @@ impl ForeignKey {
 
     pub fn unique(&self) -> bool {
         self.children.max == Max::One
+    }
+
+    /// Whether the database rejects deleting a parent that a child still names: `restrict`,
+    /// `no_action`, or no `.on_delete`, the SQL default the export leaves in place.
+    pub fn delete_rejected(&self) -> bool {
+        matches!(
+            self.on_delete,
+            None | Some(RefAction::Restrict | RefAction::NoAction)
+        )
     }
 }
 

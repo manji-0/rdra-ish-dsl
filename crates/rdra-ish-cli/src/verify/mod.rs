@@ -31,29 +31,31 @@ mod jobs;
 mod native;
 mod report;
 mod specs;
+mod state_models;
 mod tlc;
 mod tlc_tool;
 
 use self::bfs::{
     bfs_cones, decide_by_proof, explored_properties, report_bfs_cones, state_models, Explored,
-    Safety,
+    Safety, STATE_MODEL_TLC_STATES,
 };
 use self::compare::disagreements;
 use self::end::{End, TlcEnd};
-use self::jobs::{cone_jobs, property_jobs, Job, JobKind};
+use self::jobs::{cone_jobs, explored_jobs, property_jobs, Job, JobKind};
 use self::native::{native_properties, native_wholes, Natives};
 use self::report::{print_plan, report_properties, Temporal};
 use self::specs::{out_names, spec_dir, write_specs_and_index, write_whole_specs};
+use self::state_models::{run_state_models, state_model_disagreements, state_model_jobs};
 use self::tlc::{run_cones, run_tlc_wholes, tlc_failures, Ran};
 pub(crate) use self::tlc_tool::find_on_path;
 use self::tlc_tool::Tlc;
-use crate::export::{checked_system, tla_bounds, Modules};
+use crate::export::{checked_system, Modules};
 use crate::memory::{Budgeted, VerifySplit};
 use crate::prove::{find_z3, run_proof, Marks};
 use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_output::Outcome;
 use anyhow::Result;
-use rdra_ish_core::lifecycle::{Caps, Scope, Target};
+use rdra_ish_core::lifecycle::{Caps, QuotientCache, Scope, Target};
 use rdra_ish_core::memory::MemoryPool;
 use rdra_ish_core::{ResolvedProgram, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
@@ -117,13 +119,13 @@ pub struct Prove {
     pub deny_unproved: bool,
 }
 
-/// Runs `verify`. `bounds` is `(--instance-count, --int-range-max)`; `with_tlc` is
+/// Runs `verify` at `bounds` (`export::verify_bounds`); `with_tlc` is
 /// `--with-tlc` and its `--tlc-jar`.
 pub fn run(
     program: &ResolvedProgram,
     model: &SemanticModel,
     out: Option<PathBuf>,
-    (instance_count, int_range_max): (u32, u32),
+    bounds: rdra_ish_core::lifecycle::Bounds,
     scope: &Scope,
     Budget {
         temporal: whole_time,
@@ -135,8 +137,7 @@ pub fn run(
     }: Budget,
     with_tlc: Option<WithTlc>,
 ) -> Result<()> {
-    let bounds = tla_bounds(instance_count, int_range_max)?;
-    let built = checked_system(model, bounds, scope)?;
+    let built = checked_system(model, bounds.clone(), scope)?;
     let (ts, selection) = (built.ts, built.selection);
     let (out, whole_name) = out_names(out);
     let keep = out.is_some();
@@ -183,7 +184,10 @@ pub fn run(
         budget: whole_time,
         states: max_states,
     };
-    let mut jobs = cone_jobs(&ts, &names, &targets, &mut modules, caps);
+    // The quotients the passes that reduce cones share: a sub-lifecycle many cones have is
+    // explored and partitioned once (#252). The entity pass, the last of them, drops it.
+    let quotients = QuotientCache::new();
+    let mut jobs = cone_jobs(&ts, &names, &targets, &mut modules, caps, &quotients);
     let cones = jobs.len();
     let line = print_plan(
         model,
@@ -196,10 +200,15 @@ pub fn run(
     );
     let mut whole_modules = Vec::new();
     if temporal {
-        jobs.extend(property_jobs(&ts, &names, &mut modules, caps));
+        jobs.extend(property_jobs(&ts, &names, &mut modules, caps, &quotients));
         whole_modules = (0..ts.properties().len())
             .map(|i| modules.claim(&format!("{whole_stem}_{}", names.property(i))))
             .collect();
+        // TLC's second opinion on `stable`, `unchanged`, and `precedes`; the native checker
+        // decides them without a job.
+        if with_tlc.is_some() {
+            jobs.extend(explored_jobs(&ts, &names, &mut modules));
+        }
     }
     // The modules are written for `-o`, a run by hand, and for TLC under `--with-tlc`.
     let dir = match keep || with_tlc.is_some() {
@@ -225,7 +234,16 @@ pub fn run(
     let (bfs, mut natives, explored, proof, cones_ran) = std::thread::scope(|threads| {
         let cones = start
             .map(|(tlc, dir)| threads.spawn(|| run_cones(tlc, dir, &modules, &jobs, memory.cones)));
-        let bfs = state_models(program, model, &ts, scope, &selection, caps);
+        let bfs = state_models(
+            program,
+            model,
+            &ts,
+            scope,
+            &selection,
+            caps,
+            start.is_some(),
+            quotients,
+        );
         let (safety, mut vacuous) = bfs_cones(&ts, &jobs, caps);
         let (properties, property_vacuous) = native_properties(&ts, &jobs, caps);
         // A `--buc` drops use cases that may reach a premise.
@@ -332,16 +350,52 @@ pub fn run(
             (&jobs, &ran),
             (index, index_path.as_path()),
         )?;
-        disagreed = disagreements(&whole_modules, &jobs, &natives, (&ran, &whole_ran));
+        // The state models of the entity cones BFS explored to the end, after the cone runs,
+        // whose memory share they take.
+        let models = &end.bfs.models;
+        let model_jobs = state_model_jobs(dir, &mut modules, models, (index, index_path))?;
+        let model_ran = run_state_models(&tlc, dir, &modules, &model_jobs, memory.cones)?;
+        for (job, r) in model_jobs.iter().zip(&model_ran) {
+            println!("tlc: {}", r.line(job));
+        }
+        for (module, states) in &models.skipped {
+            println!(
+                "tlc: {module} ({states} states by BFS): not run, over the limit of {STATE_MODEL_TLC_STATES} states"
+            );
+        }
+        disagreed = disagreements(
+            &whole_modules,
+            &jobs,
+            (&natives, &end.explored),
+            (&ran, &whole_ran),
+        );
+        disagreed.extend(state_model_disagreements(models, &model_jobs, &model_ran));
         let all_jobs: Vec<&Job> = jobs.iter().chain(&wholes).collect();
         let all_ran: Vec<&Ran> = ran.iter().chain(&whole_ran).collect();
-        let outcome = worst(all_ran.iter().map(|r| r.decision.outcome()));
+        let model_outcomes: Vec<Outcome> = model_ran.iter().map(|r| r.outcome()).collect();
+        let outcome = worst(
+            all_ran
+                .iter()
+                .map(|r| r.decision.outcome())
+                .chain(model_outcomes.iter().copied()),
+        );
         end.tlc.tool_errors = all_ran
             .iter()
-            .filter(|r| r.decision.outcome() == Outcome::ToolError)
+            .map(|r| r.decision.outcome())
+            .chain(model_outcomes.iter().copied())
+            .filter(|o| *o == Outcome::ToolError)
             .count();
         if outcome != Outcome::Ok {
             tlc_failures(program, model, (&ts, &names), dir, (&all_jobs, &all_ran));
+        }
+        for (job, r) in model_jobs.iter().zip(&model_ran) {
+            if let Some(why) = &r.error {
+                eprintln!(
+                    "tlc: {} ({}):\n{why}",
+                    job.module,
+                    dir.join(format!("{}.tla", job.module)).display()
+                );
+            }
         }
         tlc_outcome = Some(outcome);
     }

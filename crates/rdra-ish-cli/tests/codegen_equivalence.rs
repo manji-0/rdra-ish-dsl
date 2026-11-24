@@ -131,7 +131,7 @@ impl Rows<'_> {
             .entity_ids()
             .find(|e| self.ts.entity(*e).id == entity)?;
         let mut out = Vec::new();
-        for slot in 0..self.ts.bounds.slots() {
+        for slot in 0..self.ts.slots(e) {
             if !self.state.is_present(self.ts, e, slot) {
                 continue;
             }
@@ -203,6 +203,12 @@ impl Rows<'_> {
             }
             Expr::Exists { elem, body, .. } => self.over(*elem, body)?.iter().any(|v| *v),
             Expr::Forall { elem, body, .. } => self.over(*elem, body)?.iter().all(|v| *v),
+            Expr::Count {
+                elem, body, op, n, ..
+            } => {
+                let count = self.over(*elem, body)?.iter().filter(|v| **v).count();
+                compare(i64::try_from(count).ok()?, *op, i64::from(*n))
+            }
             Expr::IntCmp {
                 row,
                 field,
@@ -211,14 +217,7 @@ impl Rows<'_> {
             } => {
                 let (var, v) = self.get(*row, &field.wire)?;
                 let n = self.ts.var(var).domain.number(v)?;
-                match op {
-                    CmpOp::Eq => n == *value,
-                    CmpOp::Ne => n != *value,
-                    CmpOp::Lt => n < *value,
-                    CmpOp::Le => n <= *value,
-                    CmpOp::Gt => n > *value,
-                    CmpOp::Ge => n >= *value,
-                }
+                compare(n, *op, *value)
             }
         })
     }
@@ -526,7 +525,7 @@ fn functions_agree_with_the_transition_system() {
                 continue;
             };
             for state in &run.states {
-                for slot in 0..ts.bounds.slots() {
+                for slot in 0..ts.slots(e) {
                     if !state.is_present(ts, e, slot) {
                         continue;
                     }
@@ -586,7 +585,7 @@ fn functions_agree_with_the_transition_system() {
             let e = action.params[0].entity;
             let entity = ts.entity(e).id.clone();
             for (at, state) in run.states.iter().enumerate() {
-                for slot in 0..ts.bounds.slots() {
+                for slot in 0..ts.slots(e) {
                     if !state.is_present(ts, e, slot) {
                         continue;
                     }
@@ -665,4 +664,15 @@ fn type_name(id: &str) -> String {
         }
     }
     out
+}
+
+fn compare(a: i64, op: CmpOp, b: i64) -> bool {
+    match op {
+        CmpOp::Eq => a == b,
+        CmpOp::Ne => a != b,
+        CmpOp::Lt => a < b,
+        CmpOp::Le => a <= b,
+        CmpOp::Gt => a > b,
+        CmpOp::Ge => a >= b,
+    }
 }

@@ -66,7 +66,7 @@ impl BoundsLine {
         } else {
             ""
         };
-        format!("OK: no errors{scoped} within {}", Within(self.bounds))
+        format!("OK: no errors{scoped} within {}", Within(&self.bounds))
     }
 
     /// The final line of a run with an error: `FAIL: 3 errors, 5 warnings within ...`, with
@@ -80,7 +80,7 @@ impl BoundsLine {
         format!(
             "FAIL: {}{scoped} within {}",
             FindingTally { errors, warnings },
-            Within(self.bounds)
+            Within(&self.bounds)
         )
     }
 }
@@ -117,19 +117,24 @@ impl fmt::Display for FindingTally {
     }
 }
 
-struct Within(Bounds);
+struct Within<'a>(&'a Bounds);
 
-impl fmt::Display for Within {
+impl fmt::Display for Within<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let n = self.0.instances.get();
         let s = if n == 1 { "" } else { "s" };
-        write!(f, "{n} instance{s} per entity, Int 0..{}", self.0.int_max)
+        write!(
+            f,
+            "{n} instance{s} per entity{}, Int 0..{}",
+            self.0.per_entity_note(),
+            self.0.int_max
+        )
     }
 }
 
 impl fmt::Display for BoundsLine {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "bounds: {}", Within(self.bounds))?;
+        write!(f, "bounds: {}", Within(&self.bounds))?;
         if self.tla {
             write!(
                 f,
@@ -173,7 +178,7 @@ impl StatesReport {
     /// The bounds and the scope the views were derived under.
     pub fn bounds_line(&self, model: &SemanticModel) -> BoundsLine {
         BoundsLine {
-            bounds: self.bounds,
+            bounds: self.bounds.clone(),
             caps: Some(self.caps),
             tla: false,
             scope: self.scope.line(model, &self.selection),
@@ -258,7 +263,7 @@ pub fn derive_states_built(
     bounds: Bounds,
     caps: Caps,
 ) -> (StatesReport, TransitionSystem) {
-    let built = TransitionSystem::build(model, bounds, scope);
+    let built = TransitionSystem::build(model, bounds.clone(), scope);
     let mut run = built.ts.explore_targets(&built.selection.targets, caps);
     if !scope.bucs.is_empty() {
         run.defer_progress();

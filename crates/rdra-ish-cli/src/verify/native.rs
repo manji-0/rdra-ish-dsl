@@ -301,7 +301,9 @@ pub(super) fn native_properties(
         .collect();
     let decide = |k: usize| match &jobs[k].kind {
         JobKind::PropertyCone(p) => native_property(ts, p, caps),
-        JobKind::Cone(_) | JobKind::Whole(_) => unreachable!("a property's job"),
+        JobKind::Cone(_) | JobKind::Explored(_) | JobKind::Whole(_) => {
+            unreachable!("a property's job")
+        }
     };
     let ran = in_parallel(at.clone(), rdra_ish_core::jobs(), decide);
     let mut out: Vec<Option<Native>> = jobs.iter().map(|_| None).collect();

@@ -7,8 +7,10 @@
 // the light and the door are not related by a key. z3 reports the CTI; BFS finds nothing.
 // z3_lemma.rdra adds the missing fact as a `.lemma()`.
 // expect MultiForbidden_Light_0: native=ok tlc=ok z3=unproved bfs=ok,ok,ok
-// expect Deadlock_Door_state_closed: native=counterexample tlc=none
-// expect Deadlock_Light_state_on: native=counterexample tlc=none
+// TLC's StateModel_ runs (#201) report both deadlocks: no step repeats, so no cycle hides
+// them (every light off with every door closed, and the other way round).
+// expect Deadlock_Door_state_closed: native=counterexample tlc=counterexample
+// expect Deadlock_Light_state_on: native=counterexample tlc=counterexample
 entity Light "照明" { id: Int @pk  state: Enum(on, off) @default(on) }
 entity Door "扉" { id: Int @pk  state: Enum(closed, ajar, open) @default(closed) }
 usecase Install "照明設置"

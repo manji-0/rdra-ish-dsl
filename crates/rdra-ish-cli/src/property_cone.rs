@@ -28,7 +28,7 @@
 //! does not decide, it runs on the unreduced cone, where `WF_vars(Next)` keeps its meaning
 //! (docs/formal-verification.md, "WF_vars(Next) on a reduced cone").
 
-use rdra_ish_core::lifecycle::{Caps, LtlKind, TransitionSystem};
+use rdra_ish_core::lifecycle::{Caps, LtlKind, QuotientCache, TransitionSystem};
 use rdra_ish_emit::tla::{self, PrintMode, TlaBundle};
 
 use crate::tlc_output::Outcome;
@@ -98,11 +98,12 @@ impl Why {
 
 impl PropertyCone {
     pub fn new(ts: &TransitionSystem, i: usize) -> Self {
-        Self::under(ts, i, Caps::VERIFY)
+        Self::under(ts, i, Caps::VERIFY, &QuotientCache::new())
     }
 
-    /// `new`, with the run that reduces the cone under `caps`.
-    pub fn under(ts: &TransitionSystem, i: usize, caps: Caps) -> Self {
+    /// `new`, with the run that reduces the cone under `caps` and the quotient shared
+    /// through `quotients`.
+    pub fn under(ts: &TransitionSystem, i: usize, caps: Caps, quotients: &QuotientCache) -> Self {
         let cone = ts.property_cone(i);
         let system = ts.restrict_to(&cone.vars, &cone.keep);
         let name = &ts.properties()[i].name;
@@ -116,7 +117,7 @@ impl PropertyCone {
         // A create writes the created entity's existence, so a cone that holds every write
         // counts every slot, and the `WfNext` run's `ok` needs no slot caveat.
         debug_assert!(!whole || !frees_slots);
-        let reduced = ts.reduced_cone(&cone, [ts.property_seed(i)], caps);
+        let reduced = ts.reduced_cone_in(&cone, [ts.property_seed(i)], caps, quotients);
         let reduced_index = reduced
             .properties()
             .iter()

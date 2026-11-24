@@ -183,10 +183,67 @@ pub struct TemporalAssertion {
 }
 
 /// to-many 関連先に対する量化制約。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QuantifierKind {
     Has,
     None,
+    /// `.at_most(n, ..)`, `.at_least(n, ..)`, `.exactly(n, ..)`: the linked rows that match,
+    /// counted and compared with `n`. The analysis gives `at_most` and `exactly` an `n` of 1
+    /// or more and `at_least` one of 2 or more; the other forms are `.has` or `.none`.
+    Count {
+        bound: CountBound,
+        n: u8,
+    },
+}
+
+/// How a counted quantifier compares its count with `n`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CountBound {
+    AtMost,
+    AtLeast,
+    Exactly,
+}
+
+impl QuantifierKind {
+    /// The chain method that writes it: `has`, `none`, `at_most`, `at_least`, `exactly`.
+    pub fn method(self) -> &'static str {
+        match self {
+            QuantifierKind::Has => "has",
+            QuantifierKind::None => "none",
+            QuantifierKind::Count { bound, .. } => bound.method(),
+        }
+    }
+
+    /// The count argument a call writes before the related entity: `3, ` of
+    /// `.at_most(3, Loan)`, and nothing for `.has` and `.none`.
+    pub fn count_arg(self) -> String {
+        match self {
+            QuantifierKind::Count { n, .. } => format!("{n}, "),
+            QuantifierKind::Has | QuantifierKind::None => String::new(),
+        }
+    }
+
+    /// The chain method names of every quantifier.
+    pub const METHODS: [&'static str; 5] = ["has", "none", "at_most", "at_least", "exactly"];
+}
+
+impl CountBound {
+    pub fn method(self) -> &'static str {
+        match self {
+            CountBound::AtMost => "at_most",
+            CountBound::AtLeast => "at_least",
+            CountBound::Exactly => "exactly",
+        }
+    }
+
+    pub fn of_method(method: &str) -> Option<CountBound> {
+        Some(match method {
+            "at_most" => CountBound::AtMost,
+            "at_least" => CountBound::AtLeast,
+            "exactly" => CountBound::Exactly,
+            _ => return None,
+        })
+    }
 }
 
 /// One `.has(...)` / `.none(...)` chain call: whether some, or no, row of `related` matches

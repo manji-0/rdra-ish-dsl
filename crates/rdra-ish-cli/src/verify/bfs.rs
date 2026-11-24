@@ -5,8 +5,8 @@ use super::WholeRun;
 use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_output::Outcome;
 use rdra_ish_core::lifecycle::{
-    Caps, Checks, ComponentRun, Diag, NotChecked, PropertyVerdict, RunEnd, Scope, Selection,
-    Severity, StateDiag, Target, TransitionSystem, Undecided,
+    Caps, Checks, ComponentRun, Diag, EntId, NotChecked, PropertyVerdict, QuotientCache, RunEnd,
+    Scope, Selection, Severity, StateDiag, Target, TargetExploration, TransitionSystem, Undecided,
 };
 use rdra_ish_core::{in_parallel, ResolvedProgram, SemanticModel};
 use std::collections::BTreeSet;
@@ -20,12 +20,41 @@ pub(super) struct Bfs {
     /// Findings an entity cone, and `can_reach` properties their cone, left undecided at the
     /// state cap or the memory limit.
     pub(super) capped: usize,
+    /// Under `--with-tlc`, what TLC checks again of the state models (`StateModels`).
+    pub(super) models: StateModels,
 }
+
+/// The entity cones whose state models TLC checks under `--with-tlc`, and the deadlocks and
+/// missing witnesses BFS found on any cone, errors and warnings alike.
+#[derive(Default)]
+pub(super) struct StateModels {
+    pub(super) cones: Vec<StateModelCone>,
+    /// Too large for TLC: each module's name and BFS's state count.
+    pub(super) skipped: Vec<(String, usize)>,
+    pub(super) found: BTreeSet<String>,
+}
+
+/// An entity cone BFS explored to the end, as TLC checks its state models: the system BFS
+/// explored (reduced as `verify` explores it), so TLC reaches the states BFS reached.
+pub(super) struct StateModelCone {
+    pub(super) system: TransitionSystem,
+    /// The entities of the cone with a state model, as ids of `system`.
+    pub(super) entities: Vec<EntId>,
+    /// `StateModel_<E>`, `E` the first of them, as `export --kind tla` names it.
+    pub(super) first: String,
+    pub(super) states: usize,
+}
+
+/// The largest entity cone, in BFS's states, whose state models TLC checks under
+/// `--with-tlc`. Each rerun explores the cone again, and a witnesses run above 1,000 states
+/// finds one witness per run.
+pub(super) const STATE_MODEL_TLC_STATES: usize = 100_000;
 
 /// BFS on each selected entity cone at the verify bounds: the `NoWitness` errors, the
 /// `Deadlock`s (errors, or warnings at the bound), and the `NeverRuns` warnings, rendered;
 /// then BFS on each `can_reach` cone, unreduced; then the `not checked:` block and one
 /// summary line each. Every run is held to `caps`, the state cap and the memory limit.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn state_models(
     program: &ResolvedProgram,
     model: &SemanticModel,
@@ -33,6 +62,8 @@ pub(super) fn state_models(
     scope: &Scope,
     selection: &Selection,
     caps: Caps,
+    with_tlc: bool,
+    quotients: QuotientCache,
 ) -> Bfs {
     let pick = |want: fn(&Target) -> bool| -> Vec<Target> {
         selection.targets.iter().copied().filter(want).collect()
@@ -43,7 +74,10 @@ pub(super) fn state_models(
         true => ts.reach_targets(),
         false => Vec::new(),
     };
-    let mut run = ts.explore_targets_reduced(&entities, caps);
+    let mut run = ts.explore_targets_reduced_in(&entities, caps, &quotients);
+    // The entity pass is the last that reduces a cone: what the cache holds goes back to the
+    // pool before the runs that follow, which see it as they would without the cache.
+    drop(quotients);
     // Its own call, unreduced: a cone shared with an entity target would share its run.
     let reach_run = (!reach.is_empty()).then(|| ts.explore_targets(&reach, caps));
     if !scope.bucs.is_empty() {
@@ -80,6 +114,10 @@ pub(super) fn state_models(
             }
         }
         errors
+    };
+    let models = match with_tlc && scope.is_whole() {
+        true => state_model_cones(ts, &run),
+        false => StateModels::default(),
     };
     let errors = report(run.verdicts());
     let reach_errors = reach_run.as_ref().map_or(0, |r| report(r.verdicts()));
@@ -118,7 +156,69 @@ pub(super) fn state_models(
         errors,
         reach_errors,
         capped,
+        models,
     }
+}
+
+/// The entity cones of `run` with a state model that BFS explored to the end, the ones up to
+/// `STATE_MODEL_TLC_STATES` states for TLC and the rest named as skipped, and the deadlocks
+/// and missing witnesses BFS found. A cone the state cap or the memory limit stopped decides
+/// nothing to compare.
+fn state_model_cones(ts: &TransitionSystem, run: &TargetExploration) -> StateModels {
+    let mut out = StateModels::default();
+    let mut groups: Vec<(usize, Vec<EntId>)> = Vec::new();
+    for (target, at) in &run.targets {
+        let Target::Entity(e) = target else {
+            continue;
+        };
+        match groups.iter_mut().find(|(g, _)| g == at) {
+            Some((_, shared)) => shared.push(*e),
+            None => groups.push((*at, vec![*e])),
+        }
+    }
+    for (at, shared) in groups {
+        let cone = &run.cones[at].run;
+        let modelled: Vec<EntId> = shared
+            .into_iter()
+            .filter(|e| !ts.state_model_states(*e).is_empty())
+            .collect();
+        let Some(first) = modelled.first() else {
+            continue;
+        };
+        let first = format!("StateModel_{}", ts.entity(*first).id);
+        let states = cone.states.len();
+        if !cone.complete {
+            continue;
+        }
+        if states > STATE_MODEL_TLC_STATES {
+            out.skipped.push((first, states));
+            continue;
+        }
+        let system = cone.system.clone();
+        let entities = modelled
+            .iter()
+            .map(|e| {
+                let key = ts.entity(*e).key;
+                system
+                    .entity_ids()
+                    .find(|x| system.entity(*x).key == key)
+                    .expect("an entity is in its own cone")
+            })
+            .collect();
+        out.cones.push(StateModelCone {
+            system,
+            entities,
+            first,
+            states,
+        });
+    }
+    out.found = run
+        .verdicts()
+        .iter()
+        .map(|d| d.diag.name(&[]))
+        .filter(|n| n.starts_with("Deadlock_") || n.starts_with("Witness_"))
+        .collect();
+    out
 }
 
 /// What BFS decided of the `stable`, `unchanged`, and `precedes` properties.
@@ -129,6 +229,19 @@ pub(super) struct Explored {
     pub(super) violated: usize,
     /// Properties whose cone BFS stopped at the state cap or the memory limit before a violation.
     pub(super) capped: usize,
+    /// Each property's index and its verdict, `None` when not decided, for `--with-tlc` to
+    /// compare.
+    pub(super) verdicts: Vec<(usize, Option<Outcome>)>,
+}
+
+impl Explored {
+    /// The verdict of property `i`, when it is one of these and BFS decided it.
+    pub(super) fn verdict(&self, i: usize) -> Option<Outcome> {
+        self.verdicts
+            .iter()
+            .find(|(at, _)| *at == i)
+            .and_then(|(_, v)| *v)
+    }
 }
 
 /// Each property `LtlKind::is_explored` names, decided by BFS on its cone: a line per property,
@@ -163,6 +276,14 @@ pub(super) fn explored_properties(
             }
         };
         println!("property {} (BFS on its cone): {said}", p.name);
+        out.verdicts.push((
+            i,
+            match &verdict {
+                PropertyVerdict::Holds => Some(Outcome::Ok),
+                PropertyVerdict::Violated(_) => Some(Outcome::Counterexample),
+                PropertyVerdict::Undecided => None,
+            },
+        ));
         match verdict {
             PropertyVerdict::Holds => {}
             PropertyVerdict::Undecided => out.capped += 1,
@@ -356,7 +477,7 @@ pub(super) fn bfs_cones(
     let covers = covering(jobs);
     let cone = |at: usize| match &jobs[at].kind {
         JobKind::Cone(cone) => Some(cone.as_ref()),
-        JobKind::PropertyCone(_) | JobKind::Whole(_) => None,
+        JobKind::PropertyCone(_) | JobKind::Explored(_) | JobKind::Whole(_) => None,
     };
     // The verdict of the cone at `at`, and the vacuous checks of it and of the cones it
     // covers, read off its run; the run is dropped here.

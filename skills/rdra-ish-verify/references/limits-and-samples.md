@@ -58,6 +58,17 @@
   `relate(.., 1..*:1)` or `1..1:1`: every present parent has a present child. A use
   case that creates the parent without a child in the same transaction fails it, at one
   instance too, so `check` finds it.
+- **Dangling keys**: one `INVARIANT DanglingKey_<Child>_<role>` per key with no
+  `.on_delete`, `restrict`, or `no_action` whose parent a use case deletes: every present
+  child names a present parent. The key guards the delete, so it holds. `cascade`,
+  `set_null`, and `set_default` are not run yet: their delete removes the one row with no
+  guard, the children stay, and the key gets no `DanglingKey_*`.
+- **Child-side maximum and counts**: one `INVARIANT MaxCard_<Child>_<role>` per
+  `relate(.., 0..3:1)` (a high end from 2 to 255), and a `Quantifier_*` per
+  `.at_most/.at_least/.exactly(n, ..)`, printed with `Cardinality` (the module extends
+  `FiniteSets`). `at_most(n)` needs `n + 1` rows of the counted entity, more than the
+  default two instances: `verify --instances Loan=4` gives one entity more slots. Below it
+  the rule is `Vacuous_*`. The repository's `counting_rules` sample shows both forms.
 - **`@check`**: one `INVARIANT Check_<Entity>_<column>_<n>` per `@check(expr)`. A null
   operand satisfies no comparison but `!=`, as in every rule; `@check(qty == null or qty
   >= 1)` admits null. A `@derived` column
@@ -78,6 +89,8 @@
   `--temporal-budget` or at the memory limit (or `--max-states`, when given) as not decided.
 - **State models**: witnesses, deadlocks, and use cases that never run come from BFS on
   each entity's cone, at `verify`'s bounds (no state cap; `--memory` stops a cone, `--max-states <N>` sets one, `--max-patterns <N>` the 256 patterns).
+  `--memory` does not yet bound the whole process (#242): when cones stop at it, the process
+  can take up to about twice the limit, so give about half the memory you can spare.
   TLC's own `CHECK_DEADLOCK` stays `FALSE`: every bounded model ends with no enabled
   action, and TLC cannot see one instance stuck while others keep moving. `export --kind
   tla` writes the same cones as `StateModel_<E>.tla` with `Deadlock_` and `Witness_`

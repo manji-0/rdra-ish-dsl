@@ -183,16 +183,13 @@ pub fn condition_body_display(
     text.push_str(&crate::rules::by_display(&body.by));
     text.push_str(&crate::rules::along_display(model, &body.along));
     for q in &body.quantifiers {
-        let method = match q.kind {
-            QuantifierKind::Has => "has",
-            QuantifierKind::None => "none",
-        };
+        let method = q.kind.method();
         let arg = if q.conditions.is_empty() {
             model.entities[q.related].id.clone()
         } else {
             comparisons(&q.conditions)
         };
-        text.push_str(&format!(".{method}({arg})"));
+        text.push_str(&format!(".{method}({}{arg})", q.kind.count_arg()));
         text.push_str(&crate::rules::by_display(&q.by));
     }
     Some(text)
@@ -487,7 +484,7 @@ pub(crate) fn process_holds_predicate(
     add_condition_entities_to_scope(&mut anchors, &body);
     let mut quantifiers = Vec::new();
     for (at, cc) in pred.chain.iter().enumerate() {
-        if matches!(cc.name.as_str(), "has" | "none") {
+        if crate::model::QuantifierKind::METHODS.contains(&cc.name.as_str()) {
             let Some(anchor) = anchors.first().copied() else {
                 break;
             };

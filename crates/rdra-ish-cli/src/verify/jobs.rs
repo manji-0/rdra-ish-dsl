@@ -1,6 +1,8 @@
 use crate::export::Modules;
 use crate::property_cone::{ConeRun, PropertyCone};
-use rdra_ish_core::lifecycle::{ActId, Caps, Cone, Target, TransitionSystem, VarSet};
+use rdra_ish_core::lifecycle::{
+    ActId, Caps, Cone, QuotientCache, Target, TransitionSystem, VarSet,
+};
 use rdra_ish_core::{in_parallel, jobs};
 use rdra_ish_emit::tla::{self, PrintMode, TlaBundle, TlaNames};
 use std::collections::BTreeMap;
@@ -26,8 +28,23 @@ pub(super) enum JobKind {
     Cone(Box<ConeSystem>),
     /// `properties()[i]` on its cone.
     PropertyCone(Box<PropertyJob>),
+    /// A `stable`, `unchanged`, or `precedes` on its cone, under `--with-tlc` only.
+    Explored(Box<ExploredJob>),
     /// `properties()[i]` on the whole system, after its cone left it undecided.
     Whole(usize),
+}
+
+/// A form `LtlKind::is_explored` names, on its cone as the native checker decides it
+/// (`TransitionSystem::decide_property`): the unreduced cone, then the whole model when a
+/// counterexample there may create instances past the bound.
+pub(super) struct ExploredJob {
+    /// The property's index in the whole system.
+    pub(super) index: usize,
+    /// The cone as a system, and the property's index in it.
+    pub(super) system: TransitionSystem,
+    pub(super) cone_index: usize,
+    pub(super) names: TlaNames,
+    pub(super) frees_slots: bool,
 }
 
 /// A property on its cone; the `_Full` module beside it is the unreduced cone, run after a
@@ -50,6 +67,7 @@ impl Job {
         match &self.kind {
             JobKind::Cone(cone) => (false, cone.system.var_ids().count()),
             JobKind::PropertyCone(p) => (true, p.cone.reduced.var_ids().count()),
+            JobKind::Explored(e) => (true, e.system.var_ids().count()),
             JobKind::Whole(_) => (true, usize::MAX),
         }
     }
@@ -79,6 +97,7 @@ pub(super) fn cone_jobs(
     targets: &[Target],
     modules: &mut Modules,
     caps: Caps,
+    quotients: &QuotientCache,
 ) -> Vec<Job> {
     let mut at: BTreeMap<VarSet, usize> = BTreeMap::new();
     let mut order: Vec<(Cone, String, Vec<Target>)> = Vec::new();
@@ -101,15 +120,20 @@ pub(super) fn cone_jobs(
             }
         }
     }
-    // The names are claimed in target order; reducing and printing a cone reads nothing of
-    // another, so the cones are prepared side by side.
-    let named: Vec<(Cone, String, Vec<Target>)> = order
+    // The names are claimed in target order. The cones are reduced one at a time in that
+    // order, so the quotients `quotients` holds, and what it is charged, are the same on any
+    // number of threads, and each quotient run has the room it has alone; printing a cone
+    // reads nothing of another, so the cones are printed side by side.
+    let named: Vec<(Cone, String, Vec<Target>, TransitionSystem)> = order
         .into_iter()
-        .map(|(cone, first, shared)| (cone, modules.claim(&format!("Cone_{first}")), shared))
+        .map(|(cone, first, shared)| {
+            let module = modules.claim(&format!("Cone_{first}"));
+            let seeds = shared.iter().map(|t| ts.target_seed(*t));
+            let sub = ts.reduced_cone_in(&cone, seeds, caps, quotients);
+            (cone, module, shared, sub)
+        })
         .collect();
-    in_parallel(named, jobs(), |(cone, module, shared)| {
-        let seeds = shared.iter().map(|t| ts.target_seed(*t));
-        let sub = ts.reduced_cone(&cone, seeds, caps);
+    in_parallel(named, jobs(), |(cone, module, shared, sub)| {
         let bundle = tla::print(&sub, PrintMode::Safety, &module);
         let n = &bundle.names;
         let checks = (0..sub.invariants().len())
@@ -146,6 +170,7 @@ pub(super) fn property_jobs(
     names: &TlaNames,
     modules: &mut Modules,
     caps: Caps,
+    quotients: &QuotientCache,
 ) -> Vec<Job> {
     // The forms `LtlKind::is_explored` names are decided on their cones by
     // `explored_properties`, with no run of their own.
@@ -156,9 +181,12 @@ pub(super) fn property_jobs(
         .iter()
         .map(|&i| modules.claim(&format!("Cone_{}", names.property(i))))
         .collect();
-    // Reducing a property's cone reads nothing of another's; the `_Full` and `_WF` names are
-    // claimed afterwards, in property order.
-    let cones = in_parallel(tlc.clone(), jobs(), |i| PropertyCone::under(ts, i, caps));
+    // The cones are reduced one at a time in property order, as `cone_jobs` reduces its own;
+    // the `_Full` and `_WF` names are claimed afterwards, in property order.
+    let cones: Vec<PropertyCone> = tlc
+        .iter()
+        .map(|&i| PropertyCone::under(ts, i, caps, quotients))
+        .collect();
     tlc.into_iter()
         .zip(plain.into_iter().zip(cones))
         .map(|(i, (module, cone))| {
@@ -190,6 +218,46 @@ pub(super) fn property_jobs(
                     names,
                     full,
                     wf,
+                })),
+            }
+        })
+        .collect()
+}
+
+/// Under `--with-tlc`, one run per `stable`, `unchanged`, and `precedes` on its cone, module
+/// `Cone_<property>`. The native checker decides these on its own explored graph
+/// (`explored_properties`), so the default run builds none of them. Their names are claimed
+/// after every other cone's, so the other modules keep the names a run without TLC gives them.
+pub(super) fn explored_jobs(
+    ts: &TransitionSystem,
+    names: &TlaNames,
+    modules: &mut Modules,
+) -> Vec<Job> {
+    (0..ts.properties().len())
+        .filter(|&i| ts.properties()[i].formula.kind().is_explored())
+        .map(|i| {
+            let name = names.property(i);
+            let module = modules.claim(&format!("Cone_{name}"));
+            let cone = ts.property_cone(i);
+            let system = ts.restrict_to(&cone.vars, &cone.keep);
+            let property = &ts.properties()[i].name;
+            let cone_index = system
+                .properties()
+                .iter()
+                .position(|p| p.name == *property)
+                .expect("the cone holds what the property reads");
+            let bundle = tla::print(&system, PrintMode::ConeProperty(cone_index), &module);
+            Job {
+                module: bundle.module_name,
+                tla: bundle.tla,
+                cfg: bundle.cfg,
+                checks: vec![name.to_string()],
+                kind: JobKind::Explored(Box::new(ExploredJob {
+                    index: i,
+                    frees_slots: ts.cone_frees_slots(&cone),
+                    system,
+                    cone_index,
+                    names: bundle.names,
                 })),
             }
         })

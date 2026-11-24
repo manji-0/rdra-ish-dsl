@@ -5,7 +5,7 @@ use super::tlc_tool::Tlc;
 use super::{WholeRun, WHOLE_MODEL_STATE_CAP};
 use crate::export::Modules;
 use crate::memory::tlc_plan;
-use crate::property_cone::{AfterPlain, ConeRun, Verdict};
+use crate::property_cone::{AfterPlain, ConeRun, Verdict, Why};
 use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_env::{current_user_heap, tlc_env_sized, Heap};
 use crate::tlc_output::{progress, summarize, Outcome, TlcRun};
@@ -196,12 +196,28 @@ fn run_job(
                 }
             };
         }
+        // The native checker reads the unreduced cone, as this run does; a counterexample
+        // there may create instances past the bound when the cone frees slots, and the
+        // whole-model run decides.
+        JobKind::Explored(e) => {
+            if let (Outcome::Counterexample, true) = (ran.decision.outcome(), e.frees_slots) {
+                let why = Why::FreesSlots.as_str().to_string();
+                ran.notes.push(why.clone());
+                ran.decision = Decision::Undecided { why, stop: None };
+            }
+        }
         JobKind::Whole(_) => {}
     }
     Ok(ran)
 }
 
-fn tlc_command(tlc: &Tlc, dir: &Path, module: &str, heap: u64, workers: &str) -> Result<Command> {
+pub(super) fn tlc_command(
+    tlc: &Tlc,
+    dir: &Path,
+    module: &str,
+    heap: u64,
+    workers: &str,
+) -> Result<Command> {
     let meta = dir.join(format!("{module}.states"));
     // TLC unpacks its standard modules into java.io.tmpdir; parallel runs must not share it.
     let tmp = dir.join(format!("{module}.tmp"));
@@ -216,7 +232,7 @@ fn tlc_command(tlc: &Tlc, dir: &Path, module: &str, heap: u64, workers: &str) ->
     Ok(command)
 }
 
-fn clean_up(dir: &Path, module: &str) {
+pub(super) fn clean_up(dir: &Path, module: &str) {
     let _ = fs::remove_dir_all(dir.join(format!("{module}.states")));
     let _ = fs::remove_dir_all(dir.join(format!("{module}.tmp")));
 }
@@ -459,7 +475,7 @@ pub(super) fn covering(jobs: &[Job]) -> Vec<Option<usize>> {
         .iter()
         .map(|job| match &job.kind {
             JobKind::Cone(cone) => Some(Covered::of(job, cone)),
-            JobKind::PropertyCone(_) | JobKind::Whole(_) => None,
+            JobKind::PropertyCone(_) | JobKind::Explored(_) | JobKind::Whole(_) => None,
         })
         .collect();
     (0..jobs.len())
@@ -608,6 +624,11 @@ fn model_traces(
             .iter()
             .map(|v| explain_property(&p.cone.system, &p.names, p.cone.index, v))
             .collect(),
+        JobKind::Explored(e) => run
+            .violations
+            .iter()
+            .map(|v| explain_property(&e.system, &e.names, e.cone_index, v))
+            .collect(),
         JobKind::Whole(i) => run
             .violations
             .iter()
@@ -645,6 +666,7 @@ pub(super) fn run_tlc_wholes(
         .filter(|(_, r)| matches!(r.decision, Decision::Undecided { .. }))
         .filter_map(|(job, _)| match &job.kind {
             JobKind::PropertyCone(p) => Some(p.index),
+            JobKind::Explored(e) => Some(e.index),
             _ => None,
         })
         .collect();

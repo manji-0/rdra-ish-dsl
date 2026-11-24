@@ -68,7 +68,10 @@ pub(super) fn add_validators(
 
     let mut obligations: Vec<(String, String, Option<String>)> = Vec::new();
     for inv in ts.invariants() {
-        if matches!(inv.text.kind(), InvKind::Unique | InvKind::MinCard) {
+        if matches!(
+            inv.text.kind(),
+            InvKind::Unique | InvKind::MinCard | InvKind::DanglingKey | InvKind::MaxCard
+        ) {
             continue; // obligations of the data layer
         }
         if inv.text.kind() == InvKind::Overflow {
@@ -190,6 +193,18 @@ fn text(t: &InvText) -> String {
         } => {
             format!("{parent} has a {child} ({role})")
         }
+        InvText::DanglingKey {
+            child,
+            parent,
+            role,
+            ..
+        } => format!("{child} names a present {parent} ({role})"),
+        InvText::MaxCard {
+            child,
+            parent,
+            role,
+            most,
+        } => format!("{parent} has at most {most} {child} ({role})"),
         InvText::Overflow {
             event,
             usecase,

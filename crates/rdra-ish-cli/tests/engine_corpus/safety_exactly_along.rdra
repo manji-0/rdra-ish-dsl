@@ -1,0 +1,48 @@
+// trap: counts along a path, and `exactly` in a guard and a rule. A member's loans are the
+// loans of its cards, two hops away. Activate makes a member active only while it has
+// exactly two loans, and nothing deletes a loan or moves one, so an active member keeps two
+// or more: the `at_least(2)` rule holds at any count, and z3 proves it. Borrow adds a loan
+// to any card, so an active member can reach three: the `exactly(2)` rule and the
+// unguarded `at_most(2)` rule fail once Loan has three slots, and hold at one and two. An
+// engine that bound the path's entities in the wrong order, counted a card in place of a
+// loan, or read `exactly` as `at_least`, would let Activate run on one loan or miss the
+// third.
+// expect Quantifier_Member_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+// expect Quantifier_Member_1: native=ok tlc=ok z3=unproved bfs=ok,ok,counterexample
+// expect Quantifier_Member_2: native=ok tlc=ok z3=unproved bfs=ok,ok,counterexample
+// expect Deadlock_Member_status_pending: native=counterexample tlc=counterexample
+entity Member "会員" {
+  id: Int @pk
+  status: Enum(pending, active) @default(pending)
+}
+
+entity Card "カード" {
+  id: Int @pk
+}
+
+entity Loan "貸出" {
+  id: Int @pk
+}
+
+usecase Join "入会"
+usecase Issue "カード発行"
+usecase Borrow "貸出"
+usecase Activate "有効化"
+
+creates(Join, Member)
+creates(Issue, Card)
+updates(Issue, Member)
+creates(Borrow, Loan)
+updates(Borrow, Card)
+transitions(Activate, Member.status, pending -> active)
+
+relate(Card, Member, N:1)
+relate(Loan, Card, N:1)
+
+condition TwoLoans "貸出がちょうど2件の会員だけ有効化できる"
+holds(TwoLoans, Member.status == pending).exactly(2, Loan).along(Member, Card, Loan)
+applies_to(TwoLoans, Activate)
+
+invariant(Member).when(status == active).at_least(2, Loan).along(Member, Card, Loan)
+invariant(Member).when(status == active).exactly(2, Loan).along(Member, Card, Loan)
+invariant(Member).at_most(2, Loan).along(Member, Card, Loan)

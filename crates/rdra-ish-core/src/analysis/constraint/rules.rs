@@ -96,7 +96,7 @@ pub(crate) fn process_invariant(
             "then" => requireds.extend(collect_cross_chain_conditions(
                 model, &scope, &pred.name, &cc.args, ctx, diags,
             )),
-            "has" | "none" => {
+            m if crate::model::QuantifierKind::METHODS.contains(&m) => {
                 quantified = true;
                 // The anchor is the first entity the scope names. An empty scope is a
                 // leading entity that did not resolve, which is reported.

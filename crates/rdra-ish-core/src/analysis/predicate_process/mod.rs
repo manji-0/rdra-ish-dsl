@@ -121,7 +121,7 @@ pub(crate) fn process_predicate(
                 && pred
                     .chain
                     .iter()
-                    .any(|cc| matches!(cc.name.as_str(), "has" | "none")));
+                    .any(|cc| crate::model::QuantifierKind::METHODS.contains(&cc.name.as_str())));
         if is_cross {
             if p == Predicate::Forbidden {
                 process_cross_forbidden(model, pred, ctx, diags);

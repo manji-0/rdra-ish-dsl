@@ -2,7 +2,7 @@
 
 use crate::model::{
     ComparisonProp, CrossCmpRhs, CrossEntityCondition, EffectValue, EntityCondition, EntityKey,
-    QuantifierKind, RelatedQuantifier,
+    RelatedQuantifier,
 };
 
 pub(super) fn local_display(conds: &[EntityCondition]) -> String {
@@ -66,16 +66,13 @@ pub(super) fn quantifier_display(
     model: &crate::model::SemanticModel,
     q: &RelatedQuantifier,
 ) -> String {
-    let method = match q.kind {
-        QuantifierKind::Has => "has",
-        QuantifierKind::None => "none",
-    };
+    let method = q.kind.method();
     let arg = if q.conditions.is_empty() {
         model.entities[q.related].id.clone()
     } else {
         "...".to_string()
     };
-    format!(".{method}({arg})")
+    format!(".{method}({}{arg})", q.kind.count_arg())
 }
 
 pub(super) fn entity_list(model: &crate::model::SemanticModel, scope: &[EntityKey]) -> String {

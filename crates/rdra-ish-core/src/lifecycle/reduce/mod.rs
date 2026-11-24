@@ -32,16 +32,18 @@ use super::expr::{State, StateSlice};
 use super::types::{ActId, EntId, Pred, Value, VarId};
 use super::TransitionSystem;
 
+mod cache;
 mod extended;
 mod fold;
 mod lift;
 mod partition;
 mod split;
 
+pub use cache::QuotientCache;
 use extended::Extended;
 pub use fold::{Fold, FoldKey};
 pub use partition::Divergence;
-use partition::Quotient;
+use partition::{NoQuotient, Quotient};
 use split::Split;
 
 /// The most cells (`Reduction::tla_cells`) a reduced cone may print for TLC. Measured with
@@ -68,8 +70,17 @@ pub type Step = (ActId, Box<[u8]>, State);
 /// it enters.
 pub type ClassMove = (ActId, Box<[u8]>, u32);
 
+/// The buffers a reduced step reuses from state to state (`moves_of_into`): the key of the
+/// state's class, and its input bytes before and after a step.
+#[derive(Default)]
+pub(crate) struct StepBuffers {
+    key: Vec<u8>,
+    before: Vec<u8>,
+    after: Vec<u8>,
+}
+
 /// A cone's S side quotiented, in the cone system's ids.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Reduction {
     /// S, ascending.
     vars: Vec<VarId>,
@@ -83,7 +94,7 @@ pub struct Reduction {
     /// under those inputs.
     rises: BTreeMap<(u32, Box<[u8]>), u32>,
     /// The input bits: per group of S actions whose reads of T fold into one bit, the folds.
-    /// A bit is a function of the T state (`bit_values`); in the extended sub-lifecycle it is
+    /// A bit is a function of the T state (`push_bits`); in the extended sub-lifecycle it is
     /// a var that flips freely.
     bits: Vec<Vec<Fold>>,
     /// Per S action the extended sub-lifecycle keeps, the cone's actions it stands for: the
@@ -163,6 +174,14 @@ impl Reduction {
         &self.bits
     }
 
+    /// Per bit group, the slots of its key's entity in `ts`, the cone: one bit per slot.
+    pub fn bit_slots(&self, ts: &TransitionSystem) -> Vec<usize> {
+        self.bits
+            .iter()
+            .map(|group| ts.slots(group[0].key_entity(ts)))
+            .collect()
+    }
+
     /// The vars of the extended sub-lifecycle in its layout: S and the inputs, ascending; a
     /// var of a nested reduction indexes them.
     pub fn sub_vars(&self) -> &[VarId] {
@@ -195,12 +214,18 @@ impl Reduction {
     /// their layout, the stubs, then the input bits.
     pub(crate) fn key(&self, ts: &TransitionSystem, s: &StateSlice) -> Vec<u8> {
         let mut key = Vec::new();
-        for &(at, w, _) in &self.spans {
-            key.extend_from_slice(&s.0[at..at + w]);
-        }
-        key.extend_from_slice(&self.tail);
-        key.extend(self.bit_values(ts, s));
+        self.key_into(ts, s, &mut key);
         key
+    }
+
+    /// `key` written into `out`, which keeps its allocation.
+    fn key_into(&self, ts: &TransitionSystem, s: &StateSlice, out: &mut Vec<u8>) {
+        out.clear();
+        for &(at, w, _) in &self.spans {
+            out.extend_from_slice(&s.0[at..at + w]);
+        }
+        out.extend_from_slice(&self.tail);
+        self.push_bits(ts, s, out);
     }
 
     /// The input bytes of a state, in the extended sub-lifecycle's order: the raw inputs,
@@ -224,25 +249,17 @@ impl Reduction {
                 out.extend_from_slice(&s.0[at..at + w]);
             }
         }
-        let slots = ts.bounds.slots();
-        for group in &self.bits {
-            for c in 0..slots as u8 {
-                out.push(u8::from(group.iter().any(|f| f.holds(ts, s, c))));
-            }
-        }
+        self.push_bits(ts, s, out);
     }
 
-    /// The input bits of a state: per bit group and slot of its key, whether some fold of
-    /// the group holds there.
-    fn bit_values(&self, ts: &TransitionSystem, s: &StateSlice) -> Vec<u8> {
-        let slots = ts.bounds.slots();
-        let mut out = Vec::with_capacity(self.bits.len() * slots);
+    /// Appends the input bits of a state to `out`: per bit group and slot of its key, whether
+    /// some fold of the group holds there.
+    fn push_bits(&self, ts: &TransitionSystem, s: &StateSlice, out: &mut Vec<u8>) {
         for group in &self.bits {
-            for c in 0..slots as u8 {
+            for c in 0..ts.slots(group[0].key_entity(ts)) as u8 {
                 out.push(u8::from(group.iter().any(|f| f.holds(ts, s, c))));
             }
         }
-        out
     }
 
     /// Writes the S part of `bytes`, an extended sub-lifecycle state, into `s`.
@@ -258,7 +275,13 @@ impl Reduction {
 
     /// The class of a state whose S part is a representative.
     pub fn class(&self, ts: &TransitionSystem, s: &StateSlice) -> Option<u32> {
-        self.class_of.get(self.key(ts, s).as_slice()).copied()
+        self.class_into(ts, s, &mut Vec::new())
+    }
+
+    /// `class`, with the key built in `key`, which keeps its allocation.
+    fn class_into(&self, ts: &TransitionSystem, s: &StateSlice, key: &mut Vec<u8>) -> Option<u32> {
+        self.key_into(ts, s, key);
+        self.class_of.get(key.as_slice()).copied()
     }
 
     /// The representative's bytes, as the extended sub-lifecycle's state.
@@ -351,21 +374,6 @@ impl Reduction {
         Some(out)
     }
 
-    /// The class moves from `s`: the last action, its params, and the successor.
-    pub(crate) fn moves_from(&self, ts: &TransitionSystem, s: &StateSlice) -> Vec<Step> {
-        let class = self
-            .class(ts, s)
-            .expect("a reduced state holds a representative");
-        self.moves[class as usize]
-            .iter()
-            .map(|(act, params, to)| {
-                let mut s2 = s.to_owned();
-                self.write(&mut s2, &self.reps[*to as usize]);
-                (*act, params.clone(), s2)
-            })
-            .collect()
-    }
-
     /// Whether a class move's `params` bind the cone action `act` as it is: the extended
     /// sub-lifecycle kept its params and did not fold it.
     fn in_cone_params(&self, ts: &TransitionSystem, act: ActId, params: &[u8]) -> bool {
@@ -387,21 +395,37 @@ impl TransitionSystem {
     /// `caps`, and the tables TLC would get fit under `TLA_CELL_BUDGET`; otherwise unchanged.
     /// `seeds` are what each target that shares the cone reads and keeps.
     pub fn reduced(&self, seeds: &[Seed], caps: Caps) -> TransitionSystem {
-        match self.reduced_with(seeds, caps, true) {
-            Ok(out) => out,
-            Err(Unreduced::OverBudgetWithInputs) => self
-                .reduced_with(seeds, caps, false)
-                .unwrap_or_else(|_| self.clone()),
-            Err(Unreduced::Nothing) => self.clone(),
-        }
+        self.reduced_in(seeds, caps, &QuotientCache::new()).0
     }
 
-    /// One attempt at `reduced`, with or without the inputs of S.
+    /// `reduced`, with the quotients `cache` holds; the flag says whether no cap and no limit
+    /// stopped a run of the reduction, nested ones included.
+    pub(super) fn reduced_in(
+        &self,
+        seeds: &[Seed],
+        caps: Caps,
+        cache: &QuotientCache,
+    ) -> (TransitionSystem, bool) {
+        let mut clean = true;
+        let out = match self.reduced_with(seeds, caps, true, cache, &mut clean) {
+            Ok(out) => out,
+            Err(Unreduced::OverBudgetWithInputs) => self
+                .reduced_with(seeds, caps, false, cache, &mut clean)
+                .unwrap_or_else(|_| self.clone()),
+            Err(Unreduced::Nothing) => self.clone(),
+        };
+        (out, clean)
+    }
+
+    /// One attempt at `reduced`, with or without the inputs of S. `clean` turns false when a
+    /// cap or a limit stopped a run of the quotient.
     fn reduced_with(
         &self,
         seeds: &[Seed],
         caps: Caps,
         inputs: bool,
+        cache: &QuotientCache,
+        clean: &mut bool,
     ) -> Result<TransitionSystem, Unreduced> {
         let split = self.split_with(seeds, inputs);
         // Every S var observed by T makes the quotient the identity, whatever the inputs do.
@@ -409,20 +433,30 @@ impl TransitionSystem {
             return Err(Unreduced::Nothing);
         }
         let ext = Extended::of(self, &split);
-        let Some(quotient) = Quotient::of(&ext, self, caps) else {
-            return Err(Unreduced::Nothing);
+        // Past the budget, the split without inputs is worth a try when this one had any.
+        let over_budget = || match split.inputs.is_empty() && split.folds.is_empty() {
+            true => Unreduced::Nothing,
+            false => Unreduced::OverBudgetWithInputs,
         };
-        let Quotient {
-            reps,
-            class_of,
-            init,
-            moves,
-            rises,
-            inner,
-            states: n,
-            loops,
-            divergence,
-        } = quotient;
+        let (quotient, quotient_clean) = Quotient::of(&ext, self, caps, cache);
+        *clean &= quotient_clean;
+        let Quotient { classes, moves } = match quotient {
+            Ok(quotient) => quotient,
+            Err(NoQuotient::Nothing) => return Err(Unreduced::Nothing),
+            Err(NoQuotient::TooLarge) => return Err(over_budget()),
+        };
+        let n = classes.states;
+        let (reps, class_of, init) = (
+            classes.reps.clone(),
+            classes.class_of.clone(),
+            classes.init.clone(),
+        );
+        let (rises, inner, loops, divergence) = (
+            classes.rises.clone(),
+            classes.inner.clone(),
+            classes.loops.clone(),
+            classes.divergence,
+        );
         let all: Vec<VarId> = split.s.union(&split.inputs).copied().collect();
         let spans: Vec<(usize, usize, bool)> = all
             .iter()
@@ -435,7 +469,11 @@ impl TransitionSystem {
         // After S and the raw inputs come the stubs, then the bit vars, whose values a
         // state's `key` computes.
         let first = &ext.system.initial_states()[0].0;
-        let bits_width = ext.bits.len() * self.bounds.slots();
+        let bits_width: usize = ext
+            .bits
+            .iter()
+            .map(|group| self.slots(group[0].key_entity(self)))
+            .sum();
         let tail = first[width..first.len() - bits_width].into();
         let mut skip = vec![false; self.actions.len()];
         for a in &split.s_actions {
@@ -479,11 +517,7 @@ impl TransitionSystem {
             divergence,
         };
         if reduction.tla_cells() > TLA_CELL_BUDGET {
-            return Err(if split.inputs.is_empty() && split.folds.is_empty() {
-                Unreduced::Nothing
-            } else {
-                Unreduced::OverBudgetWithInputs
-            });
+            return Err(over_budget());
         }
         let mut out = self.clone();
         out.reduction = Some(Arc::new(reduction));
@@ -542,11 +576,22 @@ impl TransitionSystem {
         seeds: impl IntoIterator<Item = Seed>,
         caps: Caps,
     ) -> TransitionSystem {
+        self.reduced_cone_in(cone, seeds, caps, &QuotientCache::new())
+    }
+
+    /// `reduced_cone`, sharing quotients through `cache` with the other cones reduced in it.
+    pub fn reduced_cone_in(
+        &self,
+        cone: &Cone,
+        seeds: impl IntoIterator<Item = Seed>,
+        caps: Caps,
+        cache: &QuotientCache,
+    ) -> TransitionSystem {
         let (sys, local) = self.cone_system(cone, seeds);
         if std::env::var_os("RDRA_ISH_NO_REDUCE").is_some() {
             return sys;
         }
-        sys.reduced(&local, caps)
+        sys.reduced_in(&local, caps, cache).0
     }
 
     /// The cone as a system, and the seeds in its ids.
@@ -590,7 +635,8 @@ impl TransitionSystem {
 
     /// The moves of `s`, with the reduction applied when the system has one and `reduced`: the
     /// S actions are left out, the class moves come last, and a T step that sets an input of
-    /// S moves the representative to the class the inputs put it in.
+    /// S moves the representative to the class the inputs put it in. The class of `s` is
+    /// looked up once, when a step or the class moves first need it, in buffers `out` keeps.
     pub(crate) fn moves_of_into(
         &self,
         s: &StateSlice,
@@ -599,10 +645,17 @@ impl TransitionSystem {
         out: &mut super::explore::Moves,
     ) {
         let r = self.reduction().filter(|_| reduced);
-        let rises = r
-            .filter(|r| !r.inputs.is_empty() || !r.bits.is_empty())
-            .map(|r| (r, r.input_bytes(self, s)));
-        let mut after = Vec::new();
+        let mut buffers = std::mem::take(&mut out.reduced);
+        let StepBuffers { key, before, after } = &mut buffers;
+        let rises = r.filter(|r| !r.inputs.is_empty() || !r.bits.is_empty());
+        if let Some(r) = rises {
+            r.input_bytes_into(self, s, before);
+        }
+        let mut class: Option<u32> = None;
+        let class_of = |r: &Reduction, key: &mut Vec<u8>| {
+            r.class_into(self, s, key)
+                .expect("a reduced state holds a representative")
+        };
         self.each_raw_move(
             s,
             |act| r.is_some_and(|r| r.skips(act)),
@@ -610,16 +663,12 @@ impl TransitionSystem {
             |act, params, next| {
                 // A steady action's step leaves the inputs as they were, so the class too.
                 debug_assert!(rises
-                    .as_ref()
-                    .is_none_or(|(r, before)| !r.is_steady(act)
-                        || r.input_bytes(self, next) == *before));
-                if let Some((r, before)) = rises.as_ref().filter(|(r, _)| !r.is_steady(act)) {
-                    r.input_bytes_into(self, next, &mut after);
-                    if after != *before {
-                        let class = r
-                            .class(self, s)
-                            .expect("a reduced state holds a representative");
-                        let to = r.recanon(class, before, &after).unwrap_or_else(|| {
+                    .is_none_or(|r| !r.is_steady(act) || r.input_bytes(self, next) == *before));
+                if let Some(r) = rises.filter(|r| !r.is_steady(act)) {
+                    r.input_bytes_into(self, next, after);
+                    if after != before {
+                        let class = *class.get_or_insert_with(|| class_of(r, key));
+                        let to = r.recanon(class, before, after).unwrap_or_else(|| {
                             panic!(
                                 "a T step's rise is a rise of the extended sub-lifecycle: {} from class {class} inputs {before:?} to {after:?}, known {:?}",
                                 self.actions[act.index()].name,
@@ -633,9 +682,13 @@ impl TransitionSystem {
             },
         );
         if let Some(r) = r {
-            for (act, params, next) in r.moves_from(self, s) {
-                out.push(act, &params, &next);
+            let class = class.unwrap_or_else(|| class_of(r, key));
+            for (act, params, to) in &r.moves[class as usize] {
+                scratch.0.copy_from_slice(&s.0);
+                r.write(scratch, &r.reps[*to as usize]);
+                out.push(*act, params, scratch);
             }
         }
+        out.reduced = buffers;
     }
 }

@@ -11,8 +11,11 @@
 // flags: --instance-count 1
 // A gate that steps aside never leaves `pa`, and its job is never seen: both are deadlocks.
 // expect SeenFinishes: native=ok tlc=ok
-// expect Deadlock_Gate_phase_pa: native=counterexample tlc=none
-// expect Deadlock_Job_status_waiting: native=counterexample tlc=none
+// TLC's StateModel_ runs (#201) report both. The toggle between x3 and x4 hides the gate's
+// deadlock from TLC, but a gate back at `pa` at x2 has no move left. The job's cone holds the
+// gate's phase and not x, so the toggle does not hide the job's.
+// expect Deadlock_Gate_phase_pa: native=counterexample tlc=counterexample
+// expect Deadlock_Job_status_waiting: native=counterexample tlc=counterexample
 entity Gate "門" { id: Int @pk  phase: Enum(pa, pb) @default(pa)  x: Enum(x0, x2, x3, x4) @default(x0) }
 entity Job "作業" { id: Int @pk  status: Enum(waiting, seen, done) @default(waiting) }
 relate(Job, Gate, N:1)

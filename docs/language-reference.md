@@ -201,7 +201,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `reads` | `(UseCase \| Api, Entity)` | The use case or API reads the entity. Chain methods say how it finds the rows (see [Query shapes](#query-shapes)). |
 | `creates` | `(UseCase \| Api, Entity)` | The use case or API creates the entity. Seeds the initial state pattern. |
 | `updates` | `(UseCase \| Api, Entity)` | The use case or API updates the entity. Produces a transition operation in state derivation. |
-| `deletes` | `(UseCase \| Api, Entity)` | The use case or API deletes the entity. Marks the source pattern terminal. It removes one row; the children of a key with `.on_delete(cascade)` stay (info `DeleteLeavesChildren`), so a use case that removes them `deletes` the child too. |
+| `deletes` | `(UseCase \| Api, Entity)` | The use case or API deletes the entity. Marks the source pattern terminal. It removes one row. Under a key with no `.on_delete`, `restrict`, or `no_action`, it waits until no present child names the row (`DanglingKey_*`). The children of a `cascade`, `set_null`, or `set_default` key stay (info `DeleteLeavesChildren` for `cascade`). See [relate](#relate-and-fk-generation). |
 | `displays` | `(UseCase, Screen)` | The use case displays the screen. |
 | `shows` | `(Screen, Entity)` | The screen shows information from the entity. |
 | `navigates` | `(Screen, Screen)` | The user moves from the first screen to the second. `.via(UseCase)` names the use case whose operation causes the move. `diagram --kind screen` draws it. See [Screen transitions](#screen-transitions). |
@@ -243,13 +243,32 @@ With the default role (the parent id in lowercase) and a parent key `id`, that i
 With `.optional().on_delete(set_null).on_update(cascade)`, the generated column is
 nullable, marked `fk_optional`, and carries the delete/update actions for CSV/list
 review. An action other than `cascade`, `restrict`, `set_null`, `set_default`, or
-`no_action` is `UnknownRefAction`. The lifecycle does not read `.on_delete` or
-`.on_update`: `states`, `check`, and `verify` delete only the row a `deletes` names, and a
-child under an `.on_delete(cascade)` key stays present after its parent is deleted, where
-every rule still sees it. The info `DeleteLeavesChildren` names each use case that
-deletes such a parent and not the child; write `deletes(UC, Child)` too to remove a
-child with it, one row per run. [Keys and roles](#relate-and-fk-generation) covers
-`.role`, `.key`, and composite parent keys.
+`no_action` is `UnknownRefAction`.
+
+`states`, `check`, and `verify` read `.on_delete` as follows. A `deletes(UC, Parent)`
+removes only the row it names, and the action decides what happens to the children:
+
+| `.on_delete` | The lifecycle |
+|---|---|
+| none, `restrict`, `no_action` | The database rejects the delete while a child names the row (no `.on_delete` is the SQL default, which the export leaves in place). The delete is enabled only when no present child names the row. A child that the same step deletes, unlinks, or relinks does not count. |
+| `cascade`, `set_null`, `set_default` | The lifecycle does not run the action yet. The delete is enabled, and the children stay present and still name the deleted row, where every rule still sees them. The key gets no `DanglingKey_*`. |
+
+Each key with no `.on_delete`, `restrict`, or `no_action` whose parent some use case
+deletes gets the invariant `DanglingKey_<Child>_<role>`: every present child names a
+present parent, or no parent under `.optional()`. The guard keeps the rule. A `cascade`,
+`set_null`, or `set_default` key gets no such rule: the lifecycle deletes the one row and
+does not run the action, so a failure there would describe the missing action, not the
+model. The info `DeleteLeavesChildren` names each use case that deletes a `cascade` parent
+and not the child; write `deletes(UC, Child)` too to remove a child with it, one row per
+run. A step that deletes
+or unlinks a child in the same step as its parent leaves that child out of the guard. It
+removes one child row per run, so at two instances an Order with two lines still blocks
+the delete, where the database would accept one statement that removes both. A parent with
+a `@soft_delete` column is marked, not removed, so its keys get no guard and no
+`DanglingKey_*`. A pre-existing child of a created parent starts naming a parent that does
+not exist (`PreExistingChildOfCreatedParent`), so its key gets no `DanglingKey_*` either.
+`.on_update` is not read. [Keys and roles](#relate-and-fk-generation) covers `.role`, `.key`, and composite
+parent keys.
 
 ### Chain methods
 
@@ -265,9 +284,9 @@ only the methods below, and any other name is an `unknown chain method` error
 | `chooses` | `.when(Condition)`, at most once, on the form with a value: the condition's `holds` body guards this value |
 | `relate` | `.via(...)`, `.optional()`, `.on_delete(...)`, `.on_update(...)`, `.role(...)`, `.key(...)`, `.references(...)` |
 | `forbidden` | `.when(Condition)`, `.along(...)`, `.role(...)`, `.label("...")`, `.global()`, `.lemma()` |
-| `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)`, `.role(...)`, `.label("...")`, `.global()`, `.lemma()` |
+| `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.at_most(n, ...)`, `.at_least(n, ...)`, `.exactly(n, ...)`, `.along(...)`, `.role(...)`, `.label("...")`, `.global()`, `.lemma()` |
 | `required`, `exclusive` | `.label("...")` |
-| `holds` | `.has(...)`, `.none(...)`, `.along(...)`, `.role(...)` |
+| `holds` | `.has(...)`, `.none(...)`, `.at_most(n, ...)`, `.at_least(n, ...)`, `.exactly(n, ...)`, `.along(...)`, `.role(...)` |
 | `sets` | `.role(...)`, on a copy (`Entity.column == Source.column`); `.when(Condition)`, at most once, on a literal value: the condition's `holds` body guards this value |
 | `after` | `.assert(...)`, `.label("...")` |
 | `property` | `.along(...)`, `.role(...)`, `.global()`, `.fair(UseCase, ...)`; `.when(...)` directly after `unchanged(...)`. See [Temporal path properties](#temporal-path-properties) |
@@ -1506,6 +1525,20 @@ assignment is active (`samples/formal-verification/quantifier_guard.rdra`). A co
 a `.has` or `.none` is part of the body for `condition_edges`, so a lifecycle column there links
 the state model.
 
+A body may also count the rows: `.at_most(n, Related...)`, `.at_least(n, Related...)`, and
+`.exactly(n, Related...)` take the same rows as `.has(Related...)`, the present rows of the
+related entity that the relate links and the body's comparisons match, before the use case
+runs, and compare their number with `n`. Each row counts once, also when `.along` reaches it
+by several chains. `n` is a whole number from 1 to 255 (see
+[Counted quantifiers](#counted-quantifiers) for the forms that have a shorter spelling).
+
+```rdra
+// Lend only from a shelf with at most two open loans, so the third is the last.
+condition ShelfUnderLimit "開いている貸出が2件以下の棚だけ貸し出せる"
+holds(ShelfUnderLimit, Shelf.open == true).at_most(2, Copy.status == open)
+applies_to(ShelfUnderLimit, Lend)
+```
+
 One function, `condition_edges`, gives a condition's links. With a body, an operand on a
 variation-typed column links the variation and an operand on a lifecycle column links the state
 model. Without a body, the `combines` declarations are the links. `list --kind condition`,
@@ -1785,24 +1818,29 @@ to the entity `Order`.
 ### Cardinality ranges
 
 The child side of a card, the `N` of `N:1` and `1:N` or the left of `1:1`, accepts a
-range `lo..hi` where `lo` is `0` or `1` and `hi` is `1` or `*`. A range stands for the
-side it ends in: `hi` of `1` for `1`, `*` for `N`. Every card without a range keeps its
-kind. A minimum of 1 means every parent has at least one child:
+range `lo..hi` where `lo` is `0` or `1` and `hi` is `1`, a whole number from 2 to 255, or
+`*`. A range stands for the side it ends in: `hi` of `1` for `1`, a number above 1 or `*`
+for `N`. Every card without a range keeps its kind. A minimum of 1 means every parent has
+at least one child, and a maximum above 1 that every parent has at most that many:
 
 ```rdra
 relate(OrderLine, Order, 1..*:1) // every Order has an OrderLine
 relate(Shipment, Order, 1..1:1) // every Order has exactly one Shipment
+relate(Loan, Member, 0..3:1) // every Member has at most 3 Loans
 ```
 
 The lifecycle checks that minimum as the invariant `MinCard_<Child>_<role>` (see
-[state-derivation.md](./state-derivation.md#checks)). A minimum of 0 is the default and
-adds no check. `rdra-ish fmt` prints the card as written. One spelling serves each
+[state-derivation.md](./state-derivation.md#checks)), and the maximum as
+`MaxCard_<Child>_<role>`, a count of the present children with the key, as
+`.at_most(hi, Child)` counts (see [Counted quantifiers](#counted-quantifiers)). A minimum of
+0 and a maximum of `*` are the defaults and add no check. The ER, DBML, SQL, and Mermaid
+outputs draw a side with a maximum as many; no DDL states the maximum. `rdra-ish fmt` prints the card as written. One spelling serves each
 side, so a parent that may have no child needs no range, and a child that may have no
 parent is `.optional()`.
 
 | Diagnostic | When |
 |---|---|
-| `MinCardOutOfRange` | The low end is not 0 or 1, or the high end is not 1 or `*` (`2..*:1`). |
+| `MinCardOutOfRange` | The low end is not 0 or 1, or the high end is not 1, a whole number from 2 to 255, or `*` (`2..*:1`, `0..0:1`). |
 | `MinCardOnParentSide` | A range sits on the parent side (`N:0..1`). Write that side as `1` and add `.optional()` when a child may have no parent. |
 | `MinCardOnManyToMany` | A range makes the card an N:M, which holds no key of its own (`N:1..*`, `1..*:M`). Give the junction's keys the range instead. |
 
@@ -2685,6 +2723,42 @@ closed).has(Invoice)` says a closed order has an invoice, and reads only the lin
 so use `--instance-count 2`, or `verify`, for rules that need two related instances. To make a use case
 respect such a rule, put the same `.none(...)` on a `holds` guard (see Conditions).
 
+#### Counted quantifiers
+
+`invariant(Entity).when(conditions...).at_most(n, Related.col == val)` says that at most `n`
+present related rows, linked as for `.has` and matching the condition, exist for each
+anchor row the `.when` holds for. `.at_least(n, ...)` says at least `n`, and `.exactly(n,
+...)` exactly `n`. A bare entity, `.at_most(3, Loan)`, counts every linked row. `.along` and
+`.role` work as on `.has`, and a `holds` body takes the same forms (see Conditions). The
+lifecycle names the rule `Quantifier_<Anchor>_<i>`, as for `.has` and `.none`.
+
+```rdra
+// A member holds at most three open loans.
+invariant(Member).at_most(3, Loan.status == open)
+// An assessed claim has two estimates or more.
+invariant(Claim).when(status == assessed).at_least(2, Estimate)
+```
+
+A count whose `n` has a shorter spelling is an error that names it, so each rule has one
+spelling:
+
+| Written | Error | Write |
+|---|---|---|
+| `.at_least(0, ..)` | `QuantifierCountSpelling` | nothing: the rule always holds |
+| `.at_least(1, ..)` | `QuantifierCountSpelling` | `.has(..)` |
+| `.at_most(0, ..)`, `.exactly(0, ..)` | `QuantifierCountSpelling` | `.none(..)` |
+| `n` that is not a whole number from 1 to 255 (`.at_most(x, ..)`, `.at_most(300, ..)`) | `QuantifierCountInvalid` | a whole number |
+
+`.at_most(n)` can fail only where `n + 1` rows of the counted entity exist, so it needs
+`n + 1` slots of it. When no reachable state has them, the rule is `Vacuous_<rule>`, whose
+message names the bound and the `--instances Entity=k` that lifts it (see
+[Per-entity instance counts](./cli-reference.md#per-entity-instance-counts)).
+`.at_least(n)` and `.exactly(n)` on an entity with fewer than `n` slots fail wherever they
+apply, an artifact of the bound, and the build warns `CountAboveBound` with the same flag. TLC checks the
+count with `Cardinality` (the module extends `FiniteSets`), and `--prove` unrolls a count of
+up to 8 rows into distinct witnesses: `.at_most(7, ..)` is the largest `at_most` it proves.
+See [design/counting-rules.md](./design/counting-rules.md).
+
 `.along(Anchor, .., Related)` after the `.has(...)` or `.none(...)` counts along the path
 instead of the one hop, as on a `holds` (see Conditions): the rows of the related entity,
 and of every entity between, that the hops' keys chain to the anchor's row. `.none` holds
@@ -2778,8 +2852,9 @@ property ShippedAfterPaid
   set in `Init` and by every action whose successor has the instance present with `p`.
 
 Each form is a safety property: a finite run breaks it. `verify` decides each one by BFS on
-the property's cone, and starts no TLC run for it. `stable` and `unchanged` are checked on
-every edge of the explored graph, and `precedes` on every state the latch can reach unset.
+the property's cone, and under `--with-tlc` TLC checks it on the same cone. `stable` and
+`unchanged` are checked on every edge of the explored graph, and `precedes` on every state
+the latch can reach unset.
 A violation prints the shortest trace to the step (`stable`, `unchanged`) or the state
 (`precedes`) that breaks it, with no loop after it. `export --kind tla` writes the same
 formulas: `stable` and `unchanged` as action properties quantified inside `[]`, which TLC

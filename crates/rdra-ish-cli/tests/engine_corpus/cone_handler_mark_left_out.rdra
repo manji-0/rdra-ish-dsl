@@ -8,7 +8,9 @@
 // the mark and Approve, and fails there for the same reason.
 // expect ShipsUnfair: native=counterexample tlc=counterexample
 // expect ShipsFair: native=counterexample tlc=counterexample
-// expect Deadlock_Order_status_paid: native=counterexample tlc=none
+// TLC's StateModel_ run (#201) reports the deadlock: with every order rejected and paid,
+// no step of the status's cone is left, and no cycle hides it.
+// expect Deadlock_Order_status_paid: native=counterexample tlc=counterexample
 entity Order "注文" {
   id: Int @pk
   status: Enum(pending, paid, shipped) @default(pending)

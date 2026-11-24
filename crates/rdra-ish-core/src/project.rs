@@ -37,6 +37,9 @@ pub struct ModelSection {
 pub struct CommandSection {
     /// `memory = "4GiB"`: what the command may use (`--memory`).
     pub memory: Option<MemorySize>,
+    /// `instances = { Loan = 4 }`: the slot count of each entity it names (`--instances`).
+    #[serde(default)]
+    pub instances: BTreeMap<String, std::num::NonZeroU8>,
 }
 
 #[derive(Debug)]

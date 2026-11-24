@@ -593,7 +593,7 @@ fn check_model(
     bounds: Bounds,
 ) -> ModelReport {
     let workers = std::thread::available_parallelism().map_or(4, |n| n.get().min(8));
-    let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
+    let ts = TransitionSystem::build(model, bounds.clone(), &Scope::ALL).ts;
     let mut cones: Vec<(Cone, String, Vec<Seed>)> = Vec::new();
     // `verify` runs no TLC cone for a `.lemma()` rule or a `can_reach`, so neither does the
     // comparison.
@@ -1723,6 +1723,40 @@ fn bfs_and_tlc_agree_on_two_keys_to_one_parent() {
     }
 }
 
+/// `deletes` over keys with different `.on_delete` (#199): the lines' key states none, the
+/// SQL default, so Cancel waits until no present line names the Order, and a line Cancel
+/// deletes in the same step does not count; the notes' key says cascade, which the
+/// lifecycle does not run, so a note outlives its Order with no guard and no rule. Both
+/// engines reach the same states, and `DanglingKey_OrderLine_Order`, the only such rule,
+/// holds.
+const DELETE_ACTIONS: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(draft, placed) @default(draft) }
+entity OrderLine "明細" { id: Int @pk }
+entity Note "メモ" { id: Int @pk }
+relate(OrderLine, Order, N:1)
+relate(Note, Order, N:1).on_delete(cascade)
+usecase Open "起票"
+usecase AddLine "明細追加"
+usecase RemoveLine "明細削除"
+usecase AddNote "メモ追加"
+usecase Cancel "取消"
+usecase Place "確定"
+creates(Open, Order)
+creates(AddLine, OrderLine)
+deletes(RemoveLine, OrderLine)
+creates(AddNote, Note)
+deletes(Cancel, Order)
+deletes(Cancel, OrderLine)
+transitions(Place, Order.status, draft -> placed)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_a_delete_its_children_restrict() {
+    if let Some(violated) = check_fixture("delete_actions", DELETE_ACTIONS) {
+        assert!(violated.is_empty(), "{violated:?}");
+    }
+}
+
 /// `ShipBilled` checks the address it writes and ships the order (#76). The written address is
 /// the order's on the key the guard's `.role(BILLED_KEY)` names only; the other key keeps its own
 /// row. Billed to it, the order may ship to an address in the west, and both engines reach the
@@ -1857,14 +1891,7 @@ fn tla_names_cover_every_slot() {
             let keys = names.slot_keys(&ts);
             let unique: BTreeSet<&String> = keys.iter().collect();
             assert_eq!(unique.len(), keys.len(), "{sample}: two slots share a key");
-            let width: usize = ts
-                .vars()
-                .iter()
-                .map(|d| match d.kind {
-                    rdra_ish_core::lifecycle::VarKind::Now => 1,
-                    _ => bounds.slots(),
-                })
-                .sum();
+            let width: usize = ts.vars().iter().map(|d| ts.slots_of(&d.kind)).sum();
             assert_eq!(keys.len(), width, "{sample}: a slot has no key");
             // The declaration, a line per entity, up to the blank line that ends it.
             let declared: Vec<&str> = bundle

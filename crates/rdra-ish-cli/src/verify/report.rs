@@ -1,3 +1,4 @@
+use super::bfs::STATE_MODEL_TLC_STATES;
 use super::jobs::Job;
 use super::native::{Native, Natives};
 use crate::state_findings::{render_violation, Finding, TraceSource};
@@ -61,8 +62,14 @@ pub(super) fn print_plan(
                     budget.as_secs()
                 );
             }
-            if m > 0 {
-                println!("order and stability properties: {m}, each decided by BFS on its cone");
+            match (m, with_tlc) {
+                (0, _) => {}
+                (m, false) => println!(
+                    "order and stability properties: {m}, each decided by BFS on its cone"
+                ),
+                (m, true) => println!(
+                    "order and stability properties: {m}, each decided by BFS on its cone, and by TLC on the same cone"
+                ),
             }
         }
         (false, n, m) => println!(
@@ -78,7 +85,7 @@ pub(super) fn print_plan(
         (false, n) => println!("can_reach properties: {n}, not checked: a scoped run checks none"),
     }
     if with_tlc {
-        println!("tlc: runs the same cones beside the native checker (--with-tlc); a check the two decide differently fails the run");
+        println!("tlc: runs the same cones beside the native checker (--with-tlc), and the state models of each entity cone up to {STATE_MODEL_TLC_STATES} states; a check the two decide differently fails the run");
     }
     // A verdict under `.fair(...)` holds only on the runs that do not starve those use cases.
     for p in ts.properties().iter().filter(|p| !p.fair.is_empty()) {

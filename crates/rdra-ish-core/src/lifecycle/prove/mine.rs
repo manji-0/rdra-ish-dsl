@@ -122,10 +122,9 @@ fn record(ts: &TransitionSystem, map: &Remap, run: &ComponentRun, seen: &mut See
     let pattern = |s: &crate::lifecycle::StateSlice, vars: &[VarId], slot: usize| -> Pattern {
         vars.iter().map(|v| s.get(sys, *v, slot).0).collect()
     };
-    let slots = sys.bounds.slots();
     for s in &run.states {
         for (se, whole, sub_vars, whole_vars) in &entities {
-            for slot in (0..slots).filter(|&k| s.is_present(sys, *se, k)) {
+            for slot in (0..sys.slots(*se)).filter(|&k| s.is_present(sys, *se, k)) {
                 seen.rows
                     .entry((*whole, whole_vars.clone()))
                     .or_default()
@@ -143,7 +142,7 @@ fn record(ts: &TransitionSystem, map: &Remap, run: &ComponentRun, seen: &mut See
                 continue;
             };
             let pairs = seen.siblings.entry((back[&o], c.3.clone())).or_default();
-            let linked: Vec<(usize, u8)> = (0..slots)
+            let linked: Vec<(usize, u8)> = (0..sys.slots(child))
                 .filter(|&k| s.is_present(sys, child, k))
                 .filter_map(|k| Some((k, sys.var(o).domain.slot(s.get(sys, o, k))?)))
                 .collect();
@@ -156,7 +155,7 @@ fn record(ts: &TransitionSystem, map: &Remap, run: &ComponentRun, seen: &mut See
                     }
                 }
             }
-            for slot in (0..slots).filter(|&k| s.is_present(sys, child, k)) {
+            for slot in (0..sys.slots(child)).filter(|&k| s.is_present(sys, child, k)) {
                 let Some(ps) = sys.var(o).domain.slot(s.get(sys, o, slot)) else {
                     continue;
                 };
@@ -222,7 +221,7 @@ fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<Mined> {
         }
         for (i, a) in vars.iter().enumerate() {
             let values: BTreeSet<Pattern> = patterns.iter().map(|p| vec![p[i]]).collect();
-            if values.len() < ts.var(*a).domain.size(ts.bounds) {
+            if values.len() < ts.var(*a).domain.size(ts) {
                 push(
                     format!(
                         "a present {id} row's {} is one of {}",
@@ -240,7 +239,7 @@ fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<Mined> {
             }
             for (j, b) in vars.iter().enumerate().skip(i + 1) {
                 let pairs: BTreeSet<Pattern> = patterns.iter().map(|p| vec![p[i], p[j]]).collect();
-                let full = ts.var(*a).domain.size(ts.bounds) * ts.var(*b).domain.size(ts.bounds);
+                let full = ts.var(*a).domain.size(ts) * ts.var(*b).domain.size(ts);
                 if pairs.len() < full && pairs.len() <= PATTERN_CAP {
                     push(
                         format!(
@@ -287,7 +286,7 @@ fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<Mined> {
             let full = cvars
                 .iter()
                 .chain(&pvars)
-                .map(|v| ts.var(*v).domain.size(ts.bounds))
+                .map(|v| ts.var(*v).domain.size(ts))
                 .product::<usize>();
             if pairs.len() > PATTERN_CAP
                 || pairs.len() >= full

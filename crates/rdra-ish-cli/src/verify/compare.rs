@@ -1,4 +1,4 @@
-use super::bfs::BfsCone;
+use super::bfs::{BfsCone, Explored};
 use super::jobs::{Job, JobKind};
 use super::native::Natives;
 use super::tlc::{Decision, Ran};
@@ -10,12 +10,13 @@ use std::collections::BTreeSet;
 
 /// Under `--with-tlc`, each check the two engines decide differently, as an
 /// `error[EngineDisagreement]` line: a safety cone's verdict and the checks its counterexample
-/// breaks, and a property's verdict on each run both made and in the end. A check one engine
+/// breaks, a property's verdict on each run both made and in the end, and the final verdict
+/// of a `stable`, `unchanged`, or `precedes`. A check one engine
 /// leaves undecided, or a TLC run that failed as a tool, is no disagreement.
 pub(super) fn disagreements(
     whole_modules: &[String],
     jobs: &[Job],
-    natives: &Natives,
+    (natives, explored): (&Natives, &Explored),
     (ran, whole_ran): (&[Ran], &[Ran]),
 ) -> Vec<String> {
     let line = |module: &str, checks: &[String], native: &str, tlc: &str| {
@@ -64,6 +65,24 @@ pub(super) fn disagreements(
                         &format!("violates {}", list(&mine)),
                         &format!("violates {}", list(&theirs)),
                     ));
+                }
+            }
+            JobKind::Explored(e) => {
+                // The final verdicts: the whole-model run's where a cone left it open.
+                let tlc_whole = match tlc.decision {
+                    Decision::Undecided { .. } => tlc_wholes.next(),
+                    Decision::Decided(_) => None,
+                };
+                let (a, b) = (
+                    explored.verdict(e.index),
+                    tlc_whole.unwrap_or(tlc).decision.verdict(),
+                );
+                if differ(a, b) {
+                    let module = match tlc_whole {
+                        Some(_) => &whole_modules[e.index],
+                        None => &job.module,
+                    };
+                    out.push(line(module, &job.checks, as_str(a), as_str(b)));
                 }
             }
             JobKind::PropertyCone(p) => {

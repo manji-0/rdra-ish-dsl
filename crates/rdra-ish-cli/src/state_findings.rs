@@ -93,7 +93,7 @@ pub(crate) fn findings_of(
     });
     let violations = report.diags.iter().filter_map(|d| {
         let mut text = render_violation(program, model, &d.diag, TraceSource::Bfs)?;
-        if report.bounds.instances.get() == 1 {
+        if ts.most_slots() == 1 {
             text.push_str(&one_instance_note(&d.diag, ts));
         }
         Some(Finding::new(&d.diag, &[], text))
@@ -446,6 +446,17 @@ fn guard_text(model: &SemanticModel, why: GuardWhy, site: &Site) -> String {
             "event {} was raised on the bound row (triggers)",
             model.events[event].id
         ),
+        (GuardWhy::Restrict { fk }, _) => {
+            let fk = model.foreign_key(fk);
+            let (child, parent) = (&model.entities[fk.child].id, &model.entities[fk.parent].id);
+            let action = fk
+                .on_delete
+                .map_or("unset, the SQL default", |a| a.as_str());
+            format!(
+                "no {child} names the deleted {parent} through '{}' (.on_delete: {action}, so the database rejects the delete); delete the {child} rows first",
+                fk.role_or(parent)
+            )
+        }
     }
 }
 
@@ -782,6 +793,21 @@ fn violation_message(text: &InvText, p: &str) -> String {
 } => format!(
             "minimum children unmet: a '{parent}' has no '{child}' through '{role}', witnessed by {p}"
         ),
+        InvText::DanglingKey {
+                child,
+                parent,
+                role,
+} => format!(
+            "dangling key: a '{child}' names a '{parent}' through '{role}' that is not present, witnessed by {p}; the '{child}' row names a parent that was never created or is gone"
+        ),
+        InvText::MaxCard {
+            child,
+            parent,
+            role,
+            most,
+        } => format!(
+            "maximum children exceeded: a '{parent}' has more than {most} '{child}' through '{role}', witnessed by {p}"
+        ),
         InvText::Overflow {
                 event,
                 usecase,
@@ -923,6 +949,8 @@ violation_message(text, pattern_desc)
         | StateDiag::AmbiguousOwnerLink { .. }
         | StateDiag::UnwrittenConstrainedVar { .. }
         | StateDiag::PreExistingChildOfCreatedParent { .. }
+        | StateDiag::IdentityStartSlots { .. }
+        | StateDiag::CountAboveBound { .. }
         | StateDiag::MinCardOfPreExistingParent { .. }
         | StateDiag::MinCardNeedsCreate { .. }
         | StateDiag::UnsupportedComparison { .. }

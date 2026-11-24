@@ -73,6 +73,7 @@ impl Builder<'_> {
                 id: entity.id.clone(),
                 label: entity.label.clone(),
                 birth,
+                slots: self.bounds.of(&entity.id),
                 exists,
                 columns,
                 owners: Vec::new(),
@@ -152,7 +153,7 @@ impl Builder<'_> {
                 };
                 // A default that is no integer (`"9.99"`, a date) is schema text; it starts unset.
                 let base = match col.default_val.as_deref().map(str::parse::<i64>) {
-                    Some(Ok(n)) => domain.of_number(n, self.bounds).unwrap_or_else(|| {
+                    Some(Ok(n)) => domain.of_number(n, &self.bounds).unwrap_or_else(|| {
                         let site = Site::bare(ModelRef::Column {
                             entity: ek,
                             column: col.name.clone(),
@@ -255,13 +256,29 @@ impl Builder<'_> {
             };
             let child_pre = self.ts.entities[c.index()].birth == Birth::PreExisting;
             let parent_created = self.ts.entities[p.index()].birth == Birth::Created;
-            let start = match (child_pre, parent_created && fk.optional()) {
+            let mut start = match (child_pre, parent_created && fk.optional()) {
                 (false, _) | (true, true) => Start::Base,
                 // Under a minimum of one child per parent, with as many child slots as
                 // parent slots, every start that holds is a permutation of the identity.
                 (true, false) if fk.unique() || fk.children.min == Min::One => Start::Identity,
                 (true, false) => Start::Any,
             };
+            let slots = |e: EntId| self.ts.entities[e.index()].slots;
+            if start == Start::Identity && slots(c) != slots(p) {
+                let model = self.model;
+                self.diag(
+                    vec![fk.child],
+                    StateDiag::IdentityStartSlots {
+                        parent: model.entities[fk.parent].id.clone(),
+                        child_slots: slots(c).get(),
+                        parent_slots: slots(p).get(),
+                        site: Site::new(ModelRef::Relation(fk.relation), &fk.site),
+                    },
+                );
+                // An error stops every export and verify; `check` still explores, from any
+                // parent slot, so no start names a slot the parent does not have.
+                start = Start::Any;
+            }
             if child_pre && parent_created && !fk.optional() {
                 let model = self.model;
                 self.diag(

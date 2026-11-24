@@ -77,10 +77,7 @@ fn enabled_bindings_are_the_bindings_whose_pre_guards_hold() {
 /// state.
 #[test]
 fn a_run_is_the_same_on_any_number_of_threads() {
-    let bounds = Bounds {
-        instances: NonZeroU8::new(3).expect("3 instances"),
-        int_max: 5,
-    };
+    let bounds = Bounds::uniform(NonZeroU8::new(3).expect("3 instances"), 5);
     let ts = TransitionSystem::build(&model_from(SHOP), bounds, &Scope::ALL).ts;
     for (caps, complete) in [(Caps::VERIFY, true), (Caps::new(256, 5_000), false)] {
         let one = ts.clone().run_on(caps, Checks::All, Threads::Fixed(0));
@@ -117,10 +114,7 @@ fn a_run_stops_at_the_memory_limit_at_the_same_state_on_any_number_of_threads() 
     use crate::lifecycle::StateDiag;
     use crate::memory::{MemoryPool, MemorySize};
 
-    let bounds = Bounds {
-        instances: NonZeroU8::new(3).expect("3 instances"),
-        int_max: 5,
-    };
+    let bounds = Bounds::uniform(NonZeroU8::new(3).expect("3 instances"), 5);
     let ts = TransitionSystem::build(&model_from(SHOP), bounds, &Scope::ALL).ts;
     let limit = MemorySize::from_bytes(512 << 10).expect("not zero");
     let charged = || Caps::VERIFY.charged_to(MemoryPool::for_command(limit, "--memory"));
@@ -211,10 +205,7 @@ fn store_bytes_models_the_store_a_run_counts() {
         );
     };
     for instances in [2u8, 3] {
-        let bounds = Bounds {
-            instances: NonZeroU8::new(instances).expect("instances"),
-            int_max: 5,
-        };
+        let bounds = Bounds::uniform(NonZeroU8::new(instances).expect("instances"), 5);
         let ts = TransitionSystem::build(&model_from(SHOP), bounds, &Scope::ALL).ts;
         let whole = ts
             .clone()
@@ -421,10 +412,7 @@ const BROKEN: &str = "forbidden(Customer, status == closed)\n\
 fn a_run_stops_once_every_check_has_failed() {
     use super::RunEnd;
 
-    let bounds = Bounds {
-        instances: NonZeroU8::new(3).expect("3 instances"),
-        int_max: 5,
-    };
+    let bounds = Bounds::uniform(NonZeroU8::new(3).expect("3 instances"), 5);
     let src = format!("{SHOP}{BROKEN}");
     let ts = TransitionSystem::build(&model_from(&src), bounds, &Scope::ALL).ts;
     let whole = ts

@@ -99,8 +99,8 @@ struct Expect {
     native: V,
     tlc: V,
     z3: Option<Z3>,
-    /// The native verdict at 1, 2, and 3 instances per entity.
-    bfs: Option<[V; 3]>,
+    /// The native verdict at 1, 2, and 3 instances per entity, and at 4 when it has four.
+    bfs: Option<Vec<V>>,
 }
 
 /// The engines a `// known` line may name.
@@ -121,6 +121,7 @@ impl Engine {
             "bfs1" => Engine::Bfs(1),
             "bfs2" => Engine::Bfs(2),
             "bfs3" => Engine::Bfs(3),
+            "bfs4" => Engine::Bfs(4),
             _ => return None,
         })
     }
@@ -172,10 +173,21 @@ impl Case {
                     .expect("a number after the flag")
             })
         };
-        Bounds {
-            instances: NonZeroU8::new(flag("--instance-count").unwrap_or(2)).unwrap(),
-            int_max: flag("--int-range-max").unwrap_or(Bounds::VERIFY.int_max),
+        let mut bounds = Bounds::uniform(
+            NonZeroU8::new(flag("--instance-count").unwrap_or(2)).unwrap(),
+            flag("--int-range-max").unwrap_or(Bounds::VERIFY.int_max),
+        );
+        // `--instances <Entity>=<n>`, each.
+        for (i, f) in self.flags.iter().enumerate() {
+            if f == "--instances" {
+                let (entity, n) = self.flags[i + 1]
+                    .split_once('=')
+                    .expect("<Entity>=<n> after --instances");
+                let n = NonZeroU8::new(n.parse().expect("a count")).expect("not zero");
+                bounds.per_entity.insert(entity.to_string(), n);
+            }
         }
+        bounds
     }
 }
 
@@ -258,7 +270,7 @@ fn parse_case(path: &Path) -> Result<Case, String> {
         if case.tlc_skip && e.tlc != V::None {
             return Err(format!("{check}: tlc={} on a case that skips TLC", e.tlc));
         }
-        if e.bfs.is_some_and(|b| b[1] != e.native) {
+        if e.bfs.as_ref().is_some_and(|b| b[1] != e.native) {
             return Err(format!("{check}: bfs at 2 instances differs from native"));
         }
         if e.z3 == Some(Z3::Proved) && e.bfs.is_none() {
@@ -290,7 +302,7 @@ fn can_reach_properties(text: &str) -> BTreeSet<String> {
     out
 }
 
-/// `<Check>: native=V tlc=V [z3=Z] [bfs=V,V,V]`
+/// `<Check>: native=V tlc=V [z3=Z] [bfs=V,V,V[,V]]`
 fn parse_expect(rest: &str) -> Option<(String, Expect)> {
     let (check, fields) = rest.split_once(": ")?;
     let mut map: BTreeMap<&str, &str> = BTreeMap::new();
@@ -309,7 +321,10 @@ fn parse_expect(rest: &str) -> Option<(String, Expect)> {
     let bfs = match map.remove("bfs") {
         Some(b) => {
             let v: Vec<V> = b.split(',').map(V::parse).collect::<Option<_>>()?;
-            Some(<[V; 3]>::try_from(v).ok()?)
+            if !(3..=4).contains(&v.len()) {
+                return None;
+            }
+            Some(v)
         }
         None => None,
     };
@@ -434,7 +449,25 @@ impl Observed {
     fn parse(stdout: &str, stderr: &str) -> Observed {
         let mut out = Observed::default();
         for line in stdout.lines() {
-            if let Some(rest) = line.strip_prefix("tlc: ") {
+            if let Some(rest) = line.strip_prefix("tlc: StateModel_") {
+                // `StateModel_<E> (<n> states): <checks>; found <A>, <B>`: each named
+                // deadlock or state without a witness is TLC's counterexample to that check.
+                // A deadlock TLC does not report has no verdict, since a TLC pass proves no
+                // deadlock away; a state it witnesses needs no line.
+                out.tlc_ran = true;
+                match rest.rsplit_once("; ") {
+                    Some((_, said)) if said.starts_with("tool_error") => {
+                        out.faults.push(line.to_string());
+                    }
+                    Some((_, said)) => {
+                        let found = said.strip_prefix("found ").unwrap_or("none");
+                        if found != "none" {
+                            out.tlc_errors.extend(found.split(", ").map(str::to_string));
+                        }
+                    }
+                    None => {}
+                }
+            } else if let Some(rest) = line.strip_prefix("tlc: ") {
                 out.tlc_ran = true;
                 out.tlc_lines.extend(parse_run_line(rest));
             } else if let Some(run) = parse_run_line(line) {
@@ -608,9 +641,14 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
     }
     let main = verify(case, &args);
     let needs_bounds = case.expects.values().any(|e| e.bfs.is_some());
+    let needs_four = case
+        .expects
+        .values()
+        .any(|e| e.bfs.as_ref().is_some_and(|b| b.len() == 4));
     let bounded: BTreeMap<u8, Observed> = match needs_bounds {
         true => [1u8, 3]
             .into_iter()
+            .chain(needs_four.then_some(4))
             .map(|n| (n, verify(case, &["--instance-count", &n.to_string()])))
             .collect(),
         false => BTreeMap::new(),
@@ -723,8 +761,11 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
             judge(&mut report, check, Engine::Z3, want, got);
         }
         let mut at_bounds = vec![(2u8, native)];
-        if let Some(bfs) = e.bfs {
-            for (n, run) in &bounded {
+        if let Some(bfs) = &e.bfs {
+            for (n, run) in bounded
+                .iter()
+                .filter(|(n, _)| usize::from(**n) <= bfs.len())
+            {
                 let got = run.verdict(false, check, can_reach(check));
                 judge(
                     &mut report,
@@ -793,7 +834,11 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
 #[test]
 fn bfs_and_tlc_and_z3_agree_on_the_adversarial_corpus() {
     let tools = tools();
-    let cases = cases();
+    let mut cases = cases();
+    // `RDRA_CORPUS_CASE=<text>` runs only the cases whose name contains it.
+    if let Ok(only) = std::env::var("RDRA_CORPUS_CASE") {
+        cases.retain(|c| c.name.contains(&only));
+    }
     let next = AtomicUsize::new(0);
     let reports: Mutex<Vec<(String, Report)>> = Mutex::new(Vec::new());
     let workers = std::thread::available_parallelism().map_or(2, |n| n.get().clamp(1, 4));
