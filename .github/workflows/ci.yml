@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
   pull_request:
+    # labeled/unlabeled: adding or removing `no-verify` decides the verification jobs again.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 env:
   CARGO_TERM_COLOR: always
@@ -13,6 +15,38 @@ defaults:
     shell: nix develop --command bash -eo pipefail {0}
 
 jobs:
+  changes:
+    # Whether the pull request can change a verification result: formal-verify and
+    # engine-equivalence run only then. scripts/verify-relevant.sh lists the paths that
+    # cannot (prose, the editor and LSP, codegen, the diagram and data-layer exports). The
+    # label `no-verify` skips them for a change a reviewer judged unable to reach them, such
+    # as help text. A push to main runs every job.
+    runs-on: ubuntu-latest
+    outputs:
+      verify: ${{ steps.decide.outputs.verify }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+      - id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          NO_VERIFY: ${{ contains(github.event.pull_request.labels.*.name, 'no-verify') }}
+        # On a pull request HEAD is its merge into the base, so HEAD^1 is the base.
+        run: |
+          if [ "$EVENT" != pull_request ]; then
+            verify=true
+          elif [ "$NO_VERIFY" = true ]; then
+            verify=false
+          else
+            git diff --name-only HEAD^1 HEAD | tee changed.txt
+            verify=$(scripts/verify-relevant.sh < changed.txt)
+          fi
+          echo "verify=$verify" | tee -a "$GITHUB_OUTPUT"
+
   check:
     runs-on: ubuntu-latest
     steps:
@@ -41,6 +75,8 @@ jobs:
         run: nix build -L && ./result/bin/rdra-ish --help >/dev/null && test -x ./result/bin/rdra-ish-lsp
 
   formal-verify:
+    needs: changes
+    if: needs.changes.outputs.verify == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -78,6 +114,8 @@ jobs:
 
   engine-equivalence:
     # The longest check; a job of its own so it runs beside formal-verify.
+    needs: changes
+    if: needs.changes.outputs.verify == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
