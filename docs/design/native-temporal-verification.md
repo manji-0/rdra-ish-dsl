@@ -140,7 +140,9 @@ Non-goals:
   the `bounds:` line. Proofs for any number of rows stay with `verify --prove`, which reads
   state rules only.
 - **`next`, real time, and counting.** There is no next-step operator, the clock `now` stays
-  a bounded counter, and a raised mark still counts no events.
+  a bounded counter, and a raised mark still counts no events. (Reopened for one opt-in form
+  by #220: `triggers(Ev, UC).counted(k)` counts the raises of that edge, with a bound and an
+  overflow rule, in [counted events](./counted-events.md). A latch edge is unchanged.)
 - **Symbolic or partial-order search.** The checker reads the graph BFS built. It adds no
   BDD, no SAT encoding, and no on-the-fly product.
 - **Removing the TLA+ export.** `export --kind tla` and its names stay covered by
@@ -163,7 +165,8 @@ graph:
   cone, so a cone is a system of its own.
 
 Three things are abstracted, and the native checker inherits each one unchanged. Int-like
-columns and `now` stop at the top of the range. A raised mark is a latch. A cone that does
+columns and `now` stop at the top of the range. A raised mark is a latch, unless its edge
+says `.counted(k)` ([counted events](./counted-events.md)). A cone that does
 not hold every raiser of an event runs the handler unordered, so a finding there can be a
 run the order prevents
 ([Known verification gaps](../formal-verification.md#known-verification-gaps)).
@@ -781,7 +784,8 @@ rewrite here. The first one is not a choice any more.
   them, in the explorer, and only a run that `verify` starts receives the properties.
   `check` prints its note for these forms as for `always`. The TLC formula of `stable` and
   `unchanged` and the latch of `precedes` stay, because the tests compare them with TLC.
-  `--with-tlc` starts no TLC run for these forms (`verify/jobs.rs`).
+  `--with-tlc` started no TLC run for these forms until #201, which added one per
+  property on its cone (`verify/jobs.rs`, `explored_jobs`).
 
 - **#165: keep the link as its own field.** Store the `.along` link as one `Pred` on
   `Property`, beside the formula, and not inside the operands. The printer, `fails_at`, the

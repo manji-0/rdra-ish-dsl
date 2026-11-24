@@ -148,7 +148,16 @@ impl TransitionSystem {
                 )
             }
             VarKind::Run { usecase, .. } => format!("run of {usecase}"),
-            VarKind::Raised { event, .. } => format!("raised {event}"),
+            VarKind::Raised {
+                event,
+                handler: None,
+                ..
+            } => format!("raised {event}"),
+            VarKind::Raised {
+                event,
+                handler: Some(uc),
+                ..
+            } => format!("pending {event} for {uc}"),
             VarKind::Exists(_) | VarKind::Now => self.var_name(var),
         }
     }

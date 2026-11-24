@@ -3,7 +3,12 @@
 use std::collections::BTreeMap;
 
 use super::model_from;
-use crate::lifecycle::{Bounds, Caps, Diag, Scope, StateDiag, TransitionSystem, UnmetPremise};
+use std::num::NonZeroU8;
+
+use crate::lifecycle::{
+    Bounds, Caps, Diag, RunEnd, Scope, StateDiag, Target, TargetExploration, TransitionSystem,
+    UnmetPremise,
+};
 
 /// The premises no reachable state meets, per rule that holds vacuously.
 fn vacuous(src: &str, bounds: Bounds, caps: Caps) -> BTreeMap<String, Vec<String>> {
@@ -342,5 +347,92 @@ fn a_stable_or_precedes_over_a_state_no_row_reaches_holds_vacuously() {
                 vec!["its precedes second condition holds in no reachable state".to_string()]
             ),
         ])
+    );
+}
+
+/// A cone of checks alone stops once every check on it has failed, but one rule that holds
+/// keeps it going to the end: Inv_Order_0 shares Forbidden_Order_0's cone, which Pay and
+/// Flag break, and is reported vacuous as on a run that never stops.
+#[test]
+fn a_violated_rule_does_not_hide_the_vacuity_of_a_rule_on_its_cone() {
+    let src = format!(
+        "{ORDERS}forbidden(Order, status == paid, flagged == true)\n\
+         invariant(Order).when(status == void).then(flagged == true)\n"
+    );
+    let ts = TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL).ts;
+    let targets = ts.targets();
+    let run = ts.explore_targets(&targets, Caps::for_instances(1));
+    let checks: Vec<Target> = targets
+        .iter()
+        .copied()
+        .filter(|t| matches!(t, Target::Invariant(_)))
+        .collect();
+    assert_eq!(checks.len(), 2);
+    let cone = run.cone_of(checks[0]);
+    assert_eq!(cone.cone, run.cone_of(checks[1]).cone, "one cone");
+    assert_eq!(cone.run.end(), RunEnd::Complete);
+    assert_eq!(
+        texts(run.verdicts()),
+        BTreeMap::from([("Inv_Order_0".to_string(), vec!["status=void".to_string()])])
+    );
+}
+
+const TAGS: &str = r#"
+entity Tag "札" { id: Int @pk  mark: Enum(a, b) @default(a) }
+usecase Make "作成"
+creates(Make, Tag)
+after(Make).assert(Tag.mark == b)
+"#;
+
+/// The first Make breaks the assert. On its own the cone stops there, with the
+/// counterexample of the run to the end; when the cone is also the entity's, the entity's
+/// view needs every state, and it runs to the end.
+#[test]
+fn a_cone_that_also_answers_an_entity_target_runs_to_the_end() {
+    let bounds = Bounds::uniform(NonZeroU8::new(3).expect("3 instances"), 3);
+    let ts = TransitionSystem::build(&model_from(TAGS), bounds, &Scope::ALL).ts;
+    let targets = ts.targets();
+    let assert = *targets
+        .iter()
+        .find(|t| matches!(t, Target::AfterAssert(_)))
+        .expect("the assert");
+    let entity = *targets
+        .iter()
+        .find(|t| matches!(t, Target::Entity(_)))
+        .expect("the entity");
+    let caps = Caps::for_instances(3);
+    let alone = ts.explore_targets(&[assert], caps);
+    let shared = ts.explore_targets(&[assert, entity], caps);
+    assert_eq!(shared.cones.len(), 1, "the assert's cone is the entity's");
+    let (stopped, whole) = (&alone.cone_of(assert).run, &shared.cone_of(assert).run);
+    assert_eq!(stopped.end(), RunEnd::ChecksFailed);
+    assert_eq!(whole.end(), RunEnd::Complete);
+    assert!(stopped.states.len() < whole.states.len());
+    let violations = |run: &TargetExploration| -> Vec<Diag> {
+        run.verdicts()
+            .iter()
+            .filter(|d| matches!(d.diag, StateDiag::AfterAssertViolated { .. }))
+            .cloned()
+            .collect()
+    };
+    assert_eq!(violations(&alone).len(), 1);
+    assert_eq!(violations(&alone), violations(&shared));
+}
+
+/// A property's cone runs to the end whatever its rules do: Forbidden_Order_0 fails on it,
+/// and VoidShips is still found vacuous.
+#[test]
+fn a_property_cone_with_a_violated_rule_still_reports_vacuity() {
+    let src = format!(
+        "{SHIPPING}forbidden(Order, status == paid)\n\
+         property VoidShips \"無効は出荷\"\n  leads_to(Order.status == void, Order.status == shipped)\n"
+    );
+    let ts = TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL).ts;
+    assert_eq!(
+        texts(&ts.vacuous_properties(Caps::for_instances(1))),
+        BTreeMap::from([(
+            "VoidShips".to_string(),
+            vec!["its leads_to trigger holds in no reachable state".to_string()]
+        )])
     );
 }

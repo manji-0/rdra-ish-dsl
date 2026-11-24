@@ -1,0 +1,48 @@
+// trap: the latch hides a missing raise that counting exposes.
+// An order ships in two parcels, and Deliver, which EvDispatched triggers, records one
+// parcel per run (none -> partial -> complete). The model has a bug: Dispatch can send only
+// one parcel (packing -> sent), so the second parcel is never dispatched. Under the latch
+// (the Parcel copy, Arrive) one raise lets Arrive run twice, the parcel reaches complete,
+// and ParcelComplete is ok: the bug is hidden. With `.counted(2)` Deliver runs once per
+// raise, the order stops at partial, and OrderComplete fails with Deliver fair; the state
+// model shows it too (partial is a deadlock and complete is never reached). A checker that
+// let a counted handler run without a pending raise would say ok here.
+// expect OrderComplete: native=counterexample tlc=counterexample
+// expect ParcelComplete: native=ok tlc=ok
+// expect EventOverflow_Order_EvDispatched_Deliver: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+// expect Deadlock_Order_delivered_partial: native=counterexample tlc=counterexample
+// expect Witness_Order_delivered_complete: native=counterexample tlc=counterexample
+entity Order "注文" {
+  id: Int @pk
+  parcels: Enum(packing, sent) @default(packing)
+  delivered: Enum(none, partial, complete) @default(none)
+}
+entity Parcel "小包" {
+  id: Int @pk
+  parcels: Enum(packing, sent) @default(packing)
+  delivered: Enum(none, partial, complete) @default(none)
+}
+usecase Place "注文"
+usecase Dispatch "出荷"
+usecase Deliver "配達記録"
+usecase Pack "小包作成"
+usecase Hand "引渡し"
+usecase Arrive "到着記録"
+event EvDispatched "出荷済"
+event EvHanded "引渡済"
+creates(Place, Order)
+transitions(Dispatch, Order.parcels, packing -> sent)
+raises(Dispatch, EvDispatched)
+triggers(EvDispatched, Deliver).counted(2)
+transitions(Deliver, Order.delivered, none -> partial)
+transitions(Deliver, Order.delivered, partial -> complete)
+creates(Pack, Parcel)
+transitions(Hand, Parcel.parcels, packing -> sent)
+raises(Hand, EvHanded)
+triggers(EvHanded, Arrive)
+transitions(Arrive, Parcel.delivered, none -> partial)
+transitions(Arrive, Parcel.delivered, partial -> complete)
+property OrderComplete
+  leads_to(Order.parcels == sent, Order.delivered == complete).fair(Deliver)
+property ParcelComplete
+  leads_to(Parcel.parcels == sent, Parcel.delivered == complete).fair(Arrive)

@@ -717,6 +717,7 @@ fn format_predicate_arg(arg: &PredicateArg) -> String {
         PredicateArg::Expr(expr) => format_expr(expr),
         PredicateArg::Transition { from, to } => format!("{} -> {to}", format_sources(from)),
         PredicateArg::Card(card) => card.clone(),
+        PredicateArg::Int(n) => n.clone(),
     }
 }
 

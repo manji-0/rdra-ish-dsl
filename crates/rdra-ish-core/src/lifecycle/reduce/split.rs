@@ -27,11 +27,13 @@ impl TransitionSystem {
     /// and owners, which makes them cyclic; an assignment or a choice in the action that
     /// creates the row starts from base, elsewhere from any value; a transition is its arms;
     /// the clock ticks up. Such a var changes at most as often as its domain has values, so
-    /// a sub-lifecycle that reads it as a free input sees finitely many input histories.
+    /// a sub-lifecycle that reads it as a free input sees finitely many input histories. A
+    /// counted mark is never monotone, whatever arms this system holds: its handler takes it
+    /// down, also where this system holds the raiser alone (docs/design/counted-events.md).
     pub(crate) fn monotone_vars(&self) -> Vec<bool> {
         let n = self.vars.len();
         let mut edges: Vec<BTreeSet<(u8, u8)>> = vec![BTreeSet::new(); n];
-        let mut cyclic = vec![false; n];
+        let mut cyclic: Vec<bool> = self.var_ids().map(|v| self.is_counted(v)).collect();
         for a in &self.actions {
             let creates: BTreeSet<u8> = a
                 .effects
@@ -103,7 +105,9 @@ impl TransitionSystem {
     /// that is not monotone, has every write in T. So S is closed up to its inputs: its
     /// writers read S and monotone T vars, and write only S. An entity's vars share a side
     /// (`own_existence`): a T entity's view is observed in full, and S is a system of whole
-    /// entities, whose owner vars may name a parent in T (`restrict_to`).
+    /// entities, whose owner vars may name a parent in T (`restrict_to`). T also holds every
+    /// counted mark, so a counter, its raisers, and its handler are never reduced
+    /// (docs/design/counted-events.md, "The reduction").
     pub(super) fn split_at(
         &self,
         anchor: Option<VarId>,
@@ -113,7 +117,10 @@ impl TransitionSystem {
         monotone: &[bool],
     ) -> Seed {
         let own: Vec<Option<VarId>> = self.var_ids().map(|v| self.own_existence(v)).collect();
-        let mut t: VarSet = anchor.into_iter().collect();
+        let mut t: VarSet = anchor
+            .into_iter()
+            .chain(self.var_ids().filter(|v| self.is_counted(*v)))
+            .collect();
         let mut t_actions = BTreeSet::new();
         loop {
             let mut grew = false;

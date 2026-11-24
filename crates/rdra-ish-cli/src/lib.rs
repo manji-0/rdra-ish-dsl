@@ -6,6 +6,7 @@ mod csv_cmd;
 mod diagram;
 mod export;
 mod fmt_cmd;
+mod guard_report;
 mod lifecycle_gate;
 mod list_output;
 mod load;
@@ -57,6 +58,7 @@ pub fn run() -> Result<()> {
             max_patterns,
             max_states,
             memory,
+            guards,
             bounds,
             scope,
         } => {
@@ -96,7 +98,7 @@ pub fn run() -> Result<()> {
                 manifest.as_ref(),
                 Budgeted::Check,
             );
-            let lifecycle = state_findings(&program, &model, &scope, bounds, caps);
+            let lifecycle = state_findings(&program, &model, &scope, bounds.clone(), caps);
             eprintln!("{}", lifecycle.bounds);
             for diag in rdra_ish_core::consistency_diagnostics(&model) {
                 let as_error = strict && is_strict_access_gap(&diag.error);
@@ -125,6 +127,17 @@ pub fn run() -> Result<()> {
                 eprintln!(
                     "note: {property_count} temporal properties were not model-checked by check; use verify"
                 );
+            }
+
+            if guards {
+                if tally.errors > 0 {
+                    eprintln!("note: --guards reports nothing on a model that fails check; fix the errors first");
+                } else {
+                    print!(
+                        "{}",
+                        guard_report::run(&program, &model, &scope, bounds, caps)
+                    );
+                }
             }
 
             if tally.errors > 0 {

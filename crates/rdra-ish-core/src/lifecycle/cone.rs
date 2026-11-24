@@ -260,10 +260,25 @@ impl TransitionSystem {
             .collect()
     }
 
+    /// Whether `v` is the counter of a counted edge (`triggers(Ev, UC).counted(k)`), which is
+    /// not monotone and so is never havocked or taken as an input of a sub-lifecycle
+    /// (docs/design/counted-events.md).
+    pub(crate) fn is_counted(&self, v: VarId) -> bool {
+        matches!(
+            self.var(v).kind,
+            VarKind::Raised {
+                handler: Some(_),
+                ..
+            }
+        )
+    }
+
     /// The smallest closed set holding `seed` and everything the `keep` actions read, except
-    /// that a mark is read exactly only by a `keep` action or when every action that sets it
+    /// that a latch is read exactly only by a `keep` action or when every action that sets it
     /// is in the set by its own writes; otherwise it stays out, with the raiser's lifecycle,
-    /// and `restrict_to` drops the guards on it (docs/state-derivation.md, "Triggers").
+    /// and `restrict_to` drops the guards on it (docs/state-derivation.md, "Triggers"). A
+    /// counter is always read exactly: dropping its guard would drop the handler's decrement
+    /// with it, and the handler's and the raisers' transitions read it anyway.
     pub fn cone(&self, seed: &VarSet, keep: &BTreeSet<ActId>) -> VarSet {
         let reads: Vec<VarSet> = self.actions.iter().map(|a| self.plain_reads(a)).collect();
         let marks: Vec<Vec<(VarId, VarSet)>> =
@@ -289,6 +304,7 @@ impl TransitionSystem {
             for i in (0..self.actions.len()).filter(|&i| taken[i]) {
                 for (mark, r) in &marks[i] {
                     let exact = keep.contains(&ActId::at(i))
+                        || self.is_counted(*mark)
                         || (0..self.actions.len())
                             .filter(|&j| writes[j].contains(mark))
                             .all(|j| taken[j]);
@@ -406,21 +422,43 @@ impl TransitionSystem {
     fn reach_seed(&self, i: usize) -> Seed {
         let r = &self.reach[i];
         let mut seed = self.check_reads(&r.binders, r.preds());
+        let keep = self.keep_writers(&mut seed, true);
+        (seed, keep)
+    }
+
+    /// The smallest set holding `seed` that decides whether a step can still change it: every
+    /// action that writes into it is kept, so each mark such an action reads is in it, with
+    /// what the mark brings, and so is every other var it reads. A step that leaves the set as
+    /// it was then never enables a step that writes it: it changes nothing such a step reads,
+    /// and a slot it takes is one fewer for a creation. `cone` alone leaves a mark out when
+    /// the raiser is not in by its own writes, and the raiser's step, which changes nothing
+    /// of the set, then enables a handler's step that does (#261).
+    pub fn closed_cone(&self, seed: &VarSet) -> VarSet {
+        let mut seed = seed.clone();
+        let keep = self.keep_writers(&mut seed, false);
+        self.cone(&seed, &keep)
+    }
+
+    /// Every action that writes into the cone of `seed` with them kept; with `new_slots`,
+    /// `seed` also grows by the existence of each entity such an action creates.
+    fn keep_writers(&self, seed: &mut VarSet, new_slots: bool) -> BTreeSet<ActId> {
         let mut keep = BTreeSet::new();
         loop {
-            let vars = self.cone(&seed, &keep);
+            let vars = self.cone(seed, &keep);
             let mut grew = false;
             for (k, a) in self.actions.iter().enumerate() {
                 if !keep.contains(&ActId::at(k)) && self.action_writes(a).is_disjoint(&vars) {
                     continue;
                 }
                 grew |= keep.insert(ActId::at(k));
-                for p in a.params.iter().filter(|p| p.role == ParamRole::New) {
-                    grew |= seed.insert(self.entity(p.entity).exists);
+                if new_slots {
+                    for p in a.params.iter().filter(|p| p.role == ParamRole::New) {
+                        grew |= seed.insert(self.entity(p.entity).exists);
+                    }
                 }
             }
             if !grew {
-                return (seed, keep);
+                return keep;
             }
         }
     }

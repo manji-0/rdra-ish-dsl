@@ -113,7 +113,7 @@ bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 
 cones: 1 for 1 invariant(s) and 0 after-assert(s)
 temporal properties: none
 state models (BFS on 2 entity cones): 2 state models, 5 states witnessed, 0 deadlocks, 0 use cases that never run
-Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: counterexample (31 states)
+Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: counterexample (7 states)
 error[MultiForbidden_Order_0]: invariant MultiForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order[1](status=cancelled); Payment[1](status=captured)
   rule: samples/cross_order_payment_split.rdra:44:1
   counterexample (3 steps):
@@ -196,6 +196,49 @@ not checked: 1 entity view (Audit), 1 invariant (Forbidden_Audit_1), 0 after-ass
   whether Record can run is not decided: no cone of a selected entity keeps it
 OK: no errors in the selected scope, within 1 instance per entity, Int 0..5
 ```
+
+## Which Rules a Guard Protects
+
+<!-- derived-from ../../../docs/cli-reference.md#guard-dependencies -->
+
+`check` passing says the rules hold; it does not say the rules are strong enough to notice a
+lost guard. `rdra-ish check <model> --guards` drops each guard in turn (a condition applied to
+a use case, or the `.when` conditions of one column's arms or values), explores again the
+cones of the rules that keep the use case, and prints on stdout which rules then fail. It
+adds no finding and keeps `check`'s exit status:
+
+```text
+$ rdra-ish check samples/split_run_order.rdra --guards
+...
+guards: 2 guards: 1 protect a rule, 1 no rule depends on; 4 cones explored again
+guard: condition Eligible on OpenSettlement   samples/split_run_order.rdra:48:1
+  protects: MultiForbidden_Claim_0
+guard: the .when arms of Claim.status on Close   samples/split_run_order.rdra:44:1
+  no rule depends on this guard; it is either a business rule nobody wrote as a rule, or not needed
+rules:
+  MultiForbidden_Claim_0 depends on condition Eligible on OpenSettlement
+  Unique_Settlement_Claim depends on no guard
+OK: no errors within 1 instance per entity, Int 0..5
+```
+
+Read it this way:
+
+- `protects:` names a rule that fails without the guard. The guard is load-bearing for that
+  rule; changing it needs the rule to change too.
+- `no rule depends on this guard` is the common answer and not a defect. Many guards are
+  the business rule itself. Ask the user which case it is: a rule nobody wrote (propose
+  the `forbidden` or `invariant` that the guard enforces, so `check` notices when the
+  guard is lost), or a guard the model does not need. A guard that only backs up another
+  guard or a trigger lands here too, as does a guard that serves a temporal `property`
+  only: the report reads `check`'s rules, not `verify`'s properties.
+- `not decided` means that without the guard the cone reached a cap before any
+  counterexample. Do not count it as protected; raise `--max-states` or `--memory` to
+  decide it.
+- In `rules:`, `depends on no guard` means the rule holds without any single guard: an
+  effect, a use case, a key, or two guards together keep it.
+
+Report the guards by the names the report prints, and never call a guard wrong because no
+rule depends on it.
 
 ## Reporting Tips
 

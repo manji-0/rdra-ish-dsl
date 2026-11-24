@@ -113,7 +113,7 @@ pub(super) fn resolve_entity_scope_arg(
             );
             None
         }
-        PredicateArg::Transition { .. } | PredicateArg::Card(_) => {
+        PredicateArg::Transition { .. } | PredicateArg::Card(_) | PredicateArg::Int(_) => {
             push_error(
                 ctx,
                 diags,

@@ -27,6 +27,7 @@ pub(super) fn build(model: &SemanticModel, bounds: Bounds, scope: &Scope) -> Bui
     b.clock();
     b.actions(scope);
     b.invariants();
+    b.overflow_rules();
     b.after_asserts();
     b.properties();
     b.name_generated_checks_apart();
@@ -57,6 +58,8 @@ struct Builder<'m> {
     /// The entity each `holds` body on a split use case reads before the later transaction
     /// group that writes it (`GuardReadsLaterStep`), for the guard's `Runs_` row.
     later_reads: HashMap<(UseCaseKey, ConditionKey), EntityKey>,
+    /// `EventOverflow_<E>_<Ev>_<UC>` of each counted mark, which follow the model's rules.
+    overflows: Vec<super::types::Invariant>,
 }
 
 impl<'m> Builder<'m> {
@@ -76,6 +79,7 @@ impl<'m> Builder<'m> {
             diags: Vec::new(),
             acting: Vec::new(),
             later_reads: HashMap::new(),
+            overflows: Vec::new(),
         }
     }
 

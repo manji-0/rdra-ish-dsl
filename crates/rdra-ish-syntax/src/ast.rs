@@ -460,6 +460,8 @@ pub enum PredicateArg {
     },
     /// Cardinality literal: `N:1`, `1:N`, `1:1`, `N:M`.
     Card(std::string::String),
+    /// A bare integer, as written: only a chain call takes one (`.counted(2)`).
+    Int(std::string::String),
 }
 
 // ── Chain call ────────────────────────────────────────────────────────────────

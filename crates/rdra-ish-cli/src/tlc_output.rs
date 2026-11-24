@@ -163,6 +163,54 @@ fn violation_name(line: &str) -> Option<String> {
     (!name.is_empty()).then(|| name.to_string())
 }
 
+/// What a run of a `StateModel_` cfg says, read line by line without its traces: with
+/// `-continue` a witnesses cfg prints a trace for almost every reached state.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct InvariantScan {
+    /// The invariants TLC reports violated, `TypeOK` aside, in either of TLC's forms:
+    /// `Error: Invariant X is violated.` and `Error: Invariant X is violated by the initial
+    /// state:`.
+    pub violated: BTreeSet<String>,
+    /// `TypeOK` failed: the printer's typing, so a tool error.
+    pub type_ok: bool,
+    /// TLC said it finished model checking.
+    pub completed: bool,
+    pub distinct_states: Option<u64>,
+}
+
+impl InvariantScan {
+    pub fn line(&mut self, line: &str) {
+        let line = line.trim();
+        if line.contains("Model checking completed") || line.contains("No error has been found") {
+            self.completed = true;
+        }
+        if let Some(n) = distinct_states(line) {
+            self.distinct_states = Some(n);
+        }
+        let Some(rest) = line.strip_prefix("Error: Invariant ") else {
+            return;
+        };
+        let Some((name, _)) = rest.split_once(" is violated") else {
+            return;
+        };
+        match name.trim() {
+            "TypeOK" => self.type_ok = true,
+            "" => {}
+            name => {
+                self.violated.insert(name.to_string());
+            }
+        }
+    }
+
+    pub fn parse(output: &str) -> Self {
+        let mut scan = InvariantScan::default();
+        for line in output.lines() {
+            scan.line(line);
+        }
+        scan
+    }
+}
+
 fn distinct_states(line: &str) -> Option<u64> {
     let (head, _) = line.split_once(" distinct states found")?;
     head.rsplit(", ")
@@ -600,6 +648,25 @@ Model checking completed. No error has been found.
         assert!(run.violations.is_empty());
         assert_eq!(run.outcome(false), Outcome::ToolError);
         assert_eq!(run.verdict(), None);
+    }
+
+    /// A run that halts in an initial state names its invariant in another form, which
+    /// `TlcRun` does not name; a state-model run reads both.
+    #[test]
+    fn an_invariant_scan_names_both_forms_and_flags_type_ok() {
+        let log = "Error: Invariant Witness_A is violated by the initial state:\n\
+                   /\\ s = <<\"a\">>\n\
+                   Error: Invariant Witness_B is violated.\n\
+                   Error: Invariant TypeOK is violated.\n\
+                   Model checking completed. No error has been found.\n\
+                   9 states generated, 4 distinct states found, 0 states left on queue.\n";
+        let scan = InvariantScan::parse(log);
+        assert_eq!(
+            scan.violated.iter().map(String::as_str).collect::<Vec<_>>(),
+            ["Witness_A", "Witness_B"]
+        );
+        assert!(scan.type_ok && scan.completed);
+        assert_eq!(scan.distinct_states, Some(4));
     }
 
     #[test]

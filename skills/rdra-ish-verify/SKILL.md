@@ -28,6 +28,7 @@ after `npx skills add` / `gh skill install`. In the `rdra-ish-dsl` repository,
 | "states で足りる？ / TLA が必要？" | Compare `check` (one instance, no temporal properties) with `verify` (two instances, temporal) | `references/when-to-use.md` |
 | "property / after.assert / when / .along を書きたい" | Author the DSL surface correctly | `references/dsl-surface.md` |
 | "export / verify を回したい", "what does this output mean?" | Run check, then verify, and read the result | `references/workflow.md` |
+| "このガードは必要？ / which rules does this guard protect?" | Run `rdra-ish check <model> --guards` and read each guard's line | `references/workflow.md` |
 | "何行でも成り立つ？ / --prove / CTI / lemma" | Run `rdra-ish verify --prove`, read each `unproved:` CTI, and propose at most one `.lemma()` per CTI | `references/prove.md` |
 | "サンプルや制限は？" | Open a file under `samples/`; note the bounds and approximations | `references/limits-and-samples.md` |
 
@@ -83,6 +84,7 @@ rdra-ish check samples/order.rdra
 rdra-ish states samples/order.rdra
 rdra-ish verify samples/order.rdra
 rdra-ish verify samples/partial_scope.rdra --entity Order
+rdra-ish check samples/split_run_order.rdra --guards
 rdra-ish export samples/order.rdra --kind tla -o /tmp/rdra-tla
 ```
 
@@ -97,7 +99,8 @@ rdra-ish export samples/order.rdra --kind tla -o /tmp/rdra-tla
 
 - `references/when-to-use.md` — `check` / `states` vs `verify` decision table
 - `references/dsl-surface.md` — `property`, `after.assert`, quantifiers, `.along`
-- `references/workflow.md` — commands, output files, and how to read each finding
+- `references/workflow.md` — commands, output files, how to read each finding, and how
+  to read `check --guards`
 - `references/limits-and-samples.md` — bounds, approximations, and the bundled samples
 - `references/prove.md` — `verify --prove`: proved / unproved lines, reading a CTI, and
   writing a `.lemma()`

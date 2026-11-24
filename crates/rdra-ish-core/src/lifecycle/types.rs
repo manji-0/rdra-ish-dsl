@@ -185,10 +185,17 @@ pub enum VarKind {
     /// last step of every use case that raises it sets it, the first step of every use case
     /// the event triggers reads it, nothing clears it, a delete does not reset it (as `Run`),
     /// and it is not a view axis. `Domain::Bool`, base `FALSE`.
+    ///
+    /// With `handler`, the counter of one counted edge `triggers(Ev, UC).counted(k)`
+    /// (docs/design/counted-events.md): `Domain::Enum` of `0`..`k` and `over`, base `0`; the
+    /// last step of a raiser adds one, the first step of the handler takes one, and a raise
+    /// at `k` moves it to `over`, which stays.
     Raised {
         entity: EntId,
         /// The event id.
         event: String,
+        /// The use case id of a counted edge's handler; `None` for the latch.
+        handler: Option<String>,
     },
     Now,
 }
@@ -736,6 +743,8 @@ pub enum InvKind {
     MinCard,
     /// A column's `@check(expr)`: no present slot makes the expression false.
     Check,
+    /// A counted edge's counter is never past its `k` (`EventOverflow_<E>_<Ev>_<UC>`).
+    Overflow,
 }
 
 impl InvText {
@@ -751,6 +760,7 @@ impl InvText {
             InvText::Unique { .. } | InvText::UniqueSet { .. } => InvKind::Unique,
             InvText::MinCard { .. } => InvKind::MinCard,
             InvText::Check(_) => InvKind::Check,
+            InvText::Overflow { .. } => InvKind::Overflow,
         }
     }
 }
@@ -798,6 +808,12 @@ pub enum InvText {
         child: String,
         parent: String,
         role: String,
+    },
+    /// `triggers(event, usecase).counted(cap)`: no row has more than `cap` raises pending.
+    Overflow {
+        event: String,
+        usecase: String,
+        cap: u8,
     },
 }
 
