@@ -353,6 +353,12 @@
 
 ### Changed
 
+- `verify` no longer runs a sub-lifecycle again for each cone that shares it after the run
+  stopped at the memory limit (#289). The declined quotient is shared through the quotient
+  cache of #252 when no other run's bytes decided the stop: a cone with the same extended
+  sub-lifecycle and caps takes it when its pool has no more room than the one the run was
+  refused in and covers what the run was granted, and computes otherwise. The output is
+  unchanged.
 - `diagram`, `list`, `csv`, and `export` explore the lifecycle only for an output that
   reads it: the state diagram and the TLA+ export (#285). Every other kind draws declared
   facts and the data layer, and explored the whole lifecycle only to print the stderr note
