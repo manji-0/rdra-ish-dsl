@@ -68,6 +68,24 @@ pub(crate) struct Canon {
     dropped: bool,
     /// `Group::slots` of the last call.
     width: usize,
+    /// Scratch kept between calls, so that a call allocates nothing once warm: the branch
+    /// being sorted, a branch being split, the ties of a sort, one tie's rows, its named
+    /// and unnamed rows, the places a split has filled, and the branches a split grows.
+    cur: Vec<u8>,
+    split_pos: Vec<u8>,
+    ties: Vec<(usize, usize)>,
+    rows: Vec<u8>,
+    named_rows: Vec<u8>,
+    unnamed_rows: Vec<u8>,
+    used: Vec<bool>,
+    grown_pos: Vec<u8>,
+    grown_mult: Vec<u128>,
+    /// `merge`'s projections, flat, and the branches in their order.
+    merge_keys: Vec<u8>,
+    merge_order: Vec<usize>,
+    merge_keep: Vec<(usize, u128)>,
+    /// The injections of `j` rows into `k` places, flat, `j` bytes each, per `(j, k)` seen.
+    placements: Vec<((usize, usize), Vec<u8>)>,
 }
 
 impl Canon {
@@ -243,8 +261,10 @@ impl Canon {
         self.pos2.clear();
         self.mult2.clear();
         self.best.clear();
+        let mut pos = std::mem::take(&mut self.cur);
         for b in 0..branches {
-            let mut pos: Vec<u8> = self.pos[b * n..(b + 1) * n].to_vec();
+            pos.clear();
+            pos.extend_from_slice(&self.pos[b * n..(b + 1) * n]);
             // Insertion sort, ties in slot order.
             self.order.clear();
             for &x in &self.slots {
@@ -278,8 +298,9 @@ impl Canon {
             if !self.least(self.key.len()) {
                 continue;
             }
-            self.split(g, s, class, b, pos);
+            self.split(g, s, class, b, &pos);
         }
+        self.cur = pos;
         std::mem::swap(&mut self.pos, &mut self.pos2);
         std::mem::swap(&mut self.mult, &mut self.mult2);
     }
@@ -287,12 +308,13 @@ impl Canon {
     /// Adds branch `b`, sorted into `pos`, to the next branches: one per placement of the
     /// named rows of each tie, the unnamed ones in slot order, each standing for the orders
     /// of its unnamed rows.
-    fn split(&mut self, g: &Group, s: &[u8], class: &Class, b: usize, pos: Vec<u8>) {
+    fn split(&mut self, g: &Group, s: &[u8], class: &Class, b: usize, pos: &[u8]) {
         let n = g.slots;
         let m = self.order.len();
         let mut mult = self.mult[b];
         // The tie groups, as ranges of `order`, with their named members.
-        let mut ties: Vec<(usize, usize)> = Vec::new();
+        let mut ties = std::mem::take(&mut self.ties);
+        ties.clear();
         let mut lo = 0;
         while lo < m {
             let mut hi = lo + 1;
@@ -303,7 +325,7 @@ impl Canon {
                     class,
                     usize::from(self.order[lo]),
                     usize::from(self.order[hi]),
-                    &pos,
+                    pos,
                 )
                 .is_eq()
             {
@@ -325,57 +347,62 @@ impl Canon {
             lo = hi;
         }
         let start = self.mult2.len();
-        self.pos2.extend_from_slice(&pos);
+        self.pos2.extend_from_slice(pos);
         self.mult2.push(mult);
-        for (lo, hi) in ties {
+        for &(lo, hi) in &ties {
             // The rows of the tie in slot order, and the positions it fills.
-            let mut rows: Vec<u8> = self.order[lo..hi].to_vec();
-            rows.sort_unstable();
-            let places: Vec<u8> = self.slots[lo..hi].to_vec();
-            let named: Vec<u8> = rows
-                .iter()
-                .copied()
-                .filter(|&x| self.named[class.first + usize::from(x)])
-                .collect();
-            let unnamed: Vec<u8> = rows
-                .iter()
-                .copied()
-                .filter(|&x| !self.named[class.first + usize::from(x)])
-                .collect();
-            let placements = injections(named.len(), places.len());
+            self.rows.clear();
+            self.rows.extend_from_slice(&self.order[lo..hi]);
+            self.rows.sort_unstable();
+            self.named_rows.clear();
+            self.unnamed_rows.clear();
+            for &x in &self.rows {
+                match self.named[class.first + usize::from(x)] {
+                    true => self.named_rows.push(x),
+                    false => self.unnamed_rows.push(x),
+                }
+            }
+            let (j, k) = (self.named_rows.len(), hi - lo);
+            let at = placements(&mut self.placements, j, k);
+            let flat = &self.placements[at].1;
+            let places = &self.slots[lo..hi];
             let end = self.mult2.len();
-            let mut grown_pos = Vec::new();
-            let mut grown_mult = Vec::new();
+            self.grown_pos.clear();
+            self.grown_mult.clear();
             for at in start..end {
-                if grown_mult.len() >= BRANCH_CAP * 2 {
+                if self.grown_mult.len() >= BRANCH_CAP * 2 {
                     self.dropped = true;
                     break;
                 }
-                for placement in &placements {
-                    let mut p = self.pos2[at * n..(at + 1) * n].to_vec();
-                    let mut used = vec![false; places.len()];
-                    for (row, &i) in named.iter().zip(placement) {
-                        p[class.first + usize::from(*row)] = places[i];
-                        used[i] = true;
+                for placement in flat.chunks_exact(j) {
+                    let p = &mut self.split_pos;
+                    p.clear();
+                    p.extend_from_slice(&self.pos2[at * n..(at + 1) * n]);
+                    self.used.clear();
+                    self.used.resize(k, false);
+                    for (row, &i) in self.named_rows.iter().zip(placement) {
+                        p[class.first + usize::from(*row)] = places[usize::from(i)];
+                        self.used[usize::from(i)] = true;
                     }
                     let mut free = places
                         .iter()
-                        .zip(&used)
+                        .zip(&self.used)
                         .filter(|(_, u)| !**u)
                         .map(|(x, _)| *x);
-                    for row in &unnamed {
+                    for row in &self.unnamed_rows {
                         p[class.first + usize::from(*row)] =
                             free.next().expect("as many places as rows");
                     }
-                    grown_pos.extend_from_slice(&p);
-                    grown_mult.push(self.mult2[at]);
+                    self.grown_pos.extend_from_slice(p);
+                    self.grown_mult.push(self.mult2[at]);
                 }
             }
             self.pos2.truncate(start * n);
             self.mult2.truncate(start);
-            self.pos2.extend_from_slice(&grown_pos);
-            self.mult2.extend_from_slice(&grown_mult);
+            self.pos2.extend_from_slice(&self.grown_pos);
+            self.mult2.extend_from_slice(&self.grown_mult);
         }
+        self.ties = ties;
     }
 
     /// A block whose rows name each other's: every element of the block's group, per branch,
@@ -435,53 +462,69 @@ impl Canon {
         if branches < 2 {
             return;
         }
-        let project = |pos: &[u8], out: &mut Vec<u8>| {
-            out.clear();
+        let width: usize = later.iter().map(|&c| g.classes[c].slots).sum();
+        let mut keys = std::mem::take(&mut self.merge_keys);
+        keys.clear();
+        for b in 0..branches {
+            let pos = &self.pos[b * n..(b + 1) * n];
             for &c in later {
                 let class = &g.classes[c];
                 for slot in 0..class.slots {
-                    out.push(match self.named[class.first + slot] {
+                    keys.push(match self.named[class.first + slot] {
                         true => pos[class.first + slot],
                         false => u8::MAX,
                     });
                 }
             }
-        };
-        let mut keys: Vec<(Vec<u8>, usize)> = (0..branches)
-            .map(|b| {
-                let mut k = Vec::new();
-                project(&self.pos[b * n..(b + 1) * n], &mut k);
-                (k, b)
-            })
-            .collect();
-        keys.sort();
-        let mut keep: Vec<(usize, u128)> = Vec::new();
+        }
+        let key = |b: usize| &keys[b * width..(b + 1) * width];
+        let mut order = std::mem::take(&mut self.merge_order);
+        order.clear();
+        order.extend(0..branches);
+        // By projection, then by branch, so the first of each run is its earliest branch.
+        order.sort_unstable_by(|&a, &b| key(a).cmp(key(b)).then(a.cmp(&b)));
+        let mut keep = std::mem::take(&mut self.merge_keep);
+        keep.clear();
         let mut i = 0;
-        while i < keys.len() {
+        while i < order.len() {
             let mut j = i;
             let mut sum = 0u128;
-            let mut first = usize::MAX;
-            while j < keys.len() && keys[j].0 == keys[i].0 {
-                sum = sum.saturating_add(self.mult[keys[j].1]);
-                first = first.min(keys[j].1);
+            while j < order.len() && key(order[j]) == key(order[i]) {
+                sum = sum.saturating_add(self.mult[order[j]]);
                 j += 1;
             }
-            keep.push((first, sum));
+            keep.push((order[i], sum));
             i = j;
         }
         keep.sort_unstable();
-        if keep.len() == branches {
-            return;
+        self.merge_keys = keys;
+        self.merge_order = order;
+        if keep.len() < branches {
+            self.pos2.clear();
+            self.mult2.clear();
+            for &(b, m) in &keep {
+                self.pos2.extend_from_slice(&self.pos[b * n..(b + 1) * n]);
+                self.mult2.push(m);
+            }
+            std::mem::swap(&mut self.pos, &mut self.pos2);
+            std::mem::swap(&mut self.mult, &mut self.mult2);
         }
-        self.pos2.clear();
-        self.mult2.clear();
-        for (b, m) in keep {
-            self.pos2.extend_from_slice(&self.pos[b * n..(b + 1) * n]);
-            self.mult2.push(m);
-        }
-        std::mem::swap(&mut self.pos, &mut self.pos2);
-        std::mem::swap(&mut self.mult, &mut self.mult2);
+        self.merge_keep = keep;
     }
+}
+
+/// The index in `memo` of the injections of `j` items into `k` places, flat, `j` bytes
+/// each; computed on the first call for `(j, k)`.
+fn placements(memo: &mut Vec<((usize, usize), Vec<u8>)>, j: usize, k: usize) -> usize {
+    if let Some(at) = memo.iter().position(|(jk, _)| *jk == (j, k)) {
+        return at;
+    }
+    let flat = injections(j, k)
+        .into_iter()
+        .flat_map(|p| p.into_iter().map(|x| x as u8))
+        .collect();
+    memo.push(((j, k), flat));
+    memo.len() - 1
 }
 
 /// Every injective map of `j` items into `k` places, as the place of each item.

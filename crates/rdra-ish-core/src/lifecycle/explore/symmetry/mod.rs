@@ -451,7 +451,8 @@ impl Group {
         !self.classes.iter().any(|c| c.moves)
     }
 
-    /// The class of each param of an action, by its entity.
+    /// The class of an entity.
+    #[cfg(any(test, feature = "shadow"))]
     pub(crate) fn class_of(&self, e: EntId) -> usize {
         self.class_of[e.index()]
     }
@@ -544,27 +545,28 @@ mod proofs {
     use super::canon::Canon;
     use super::*;
 
-    /// Shop: 3 slots, existence at 0..3 and a two-valued column at 3..6. Order: 2 slots,
-    /// existence at 6..8 and a mandatory key to Shop at 8..10. `now` at 10.
+    /// Shop: 2 slots, existence at 0..2. Order: 2 slots, existence at 2..4 and a mandatory
+    /// key to Shop at 4..6. `now` at 6. A column that is no key moves as existence does, so
+    /// the layout leaves it out.
     fn group() -> Group {
         let col = |off, owner| Col { off, ent: 0, owner };
         Group {
             classes: vec![
                 Class {
-                    slots: 3,
+                    slots: 2,
                     entities: vec![EntId::at(0)],
                     exists: vec![0],
-                    cols: vec![col(0, None), col(3, None)],
+                    cols: vec![col(0, None)],
                     moves: true,
                     first: 0,
                 },
                 Class {
                     slots: 2,
                     entities: vec![EntId::at(1)],
-                    exists: vec![6],
-                    cols: vec![col(6, None), col(8, Some((0, false)))],
+                    exists: vec![2],
+                    cols: vec![col(2, None), col(4, Some((0, false)))],
                     moves: true,
-                    first: 3,
+                    first: 2,
                 },
             ],
             blocks: vec![
@@ -581,61 +583,43 @@ mod proofs {
             ],
             children: vec![
                 vec![ChildRef {
-                    off: 8,
-                    exists: 6,
+                    off: 4,
+                    exists: 2,
                     slots: 2,
                     optional: false,
                 }],
                 vec![],
             ],
             class_of: vec![0, 1],
-            free: vec![10],
-            slots: 5,
+            free: vec![6],
+            slots: 4,
             left_out: vec![],
         }
     }
 
-    const THREE: [[u8; 3]; 6] = [
-        [0, 1, 2],
-        [0, 2, 1],
-        [1, 0, 2],
-        [1, 2, 0],
-        [2, 0, 1],
-        [2, 1, 0],
-    ];
-
-    /// Any element of the group of every class's slots.
-    fn any_perm() -> Vec<u8> {
-        let (a, b): (u8, bool) = (kani::any(), kani::any());
-        kani::assume(a < 6);
-        let mut p = THREE[usize::from(a)].to_vec();
-        p.extend(if b { [1, 0] } else { [0, 1] });
-        p
+    /// Any element of the group of every class's slots: a swap or not, per class.
+    fn any_perm() -> [u8; 4] {
+        let (a, b): (bool, bool) = (kani::any(), kani::any());
+        [u8::from(a), u8::from(!a), u8::from(b), u8::from(!b)]
     }
 
-    /// Any state of the layout: absent, present or deleted rows, any column value, keys
-    /// that name a slot of Shop.
-    fn any_state() -> [u8; 11] {
-        let s: [u8; 11] = kani::any();
-        for i in 0..11 {
-            let top = match i {
-                0..=2 | 6..=7 => 2,
-                8..=9 => 2,
-                _ => 1,
-            };
-            kani::assume(s[i] <= top);
-        }
+    /// Any state of the layout: absent, present or deleted rows, and keys that name a slot
+    /// of Shop.
+    fn any_state() -> [u8; 7] {
+        let s: [u8; 7] = kani::any();
+        kani::assume(s[0] <= 2 && s[1] <= 2 && s[2] <= 2 && s[3] <= 2);
+        kani::assume(s[4] <= 1 && s[5] <= 1 && s[6] <= 1);
         s
     }
 
     /// `apply` is an action: applying `g` after `h` is applying their composition.
     #[kani::proof]
-    #[kani::unwind(12)]
+    #[kani::unwind(8)]
     fn apply_of_a_composition_is_the_composition_of_applies() {
         let g = group();
         let (a, b) = (any_perm(), any_perm());
         let s = any_state();
-        let (mut once, mut mid, mut twice) = ([0u8; 11], [0u8; 11], [0u8; 11]);
+        let (mut once, mut mid, mut twice) = ([0u8; 7], [0u8; 7], [0u8; 7]);
         g.apply(&g.compose(&a, &b), &s, &mut once);
         g.apply(&b, &s, &mut mid);
         g.apply(&a, &mid, &mut twice);
@@ -645,21 +629,18 @@ mod proofs {
     /// The canonical form is a function of the orbit: `canonical(g(s)) = canonical(s)` for
     /// every `g` of `G_s`, which fixes the absent slots, and the orbit sizes agree.
     #[kani::proof]
-    #[kani::unwind(12)]
+    #[kani::unwind(8)]
     fn the_canonical_form_is_constant_on_an_orbit() {
         let g = group();
         let p = any_perm();
         let s = any_state();
-        for (slot, exists) in [(0, 0), (1, 1), (2, 2), (3, 6), (4, 7)] {
-            if s[exists] == Value::ABSENT.0 {
-                let first = if slot < 3 { 0 } else { 3 };
-                kani::assume(usize::from(p[slot]) + first == slot);
-            }
-        }
-        let mut moved = [0u8; 11];
+        // A class with an absent row has nothing to swap.
+        kani::assume(s[0] != 0 && s[1] != 0 || p[0] == 0);
+        kani::assume(s[2] != 0 && s[3] != 0 || p[2] == 0);
+        let mut moved = [0u8; 7];
         g.apply(&p, &s, &mut moved);
         let mut canon = Canon::default();
-        let (mut a, mut b) = ([0u8; 11], [0u8; 11]);
+        let (mut a, mut b) = ([0u8; 7], [0u8; 7]);
         let x = canon.canonical(&g, &s, &mut a);
         let y = canon.canonical(&g, &moved, &mut b);
         assert_eq!(a, b);

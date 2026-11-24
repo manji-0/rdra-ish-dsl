@@ -668,11 +668,14 @@ rdra-ish verify samples/clinic-ops --instance-count 3 --memory 8GiB --symmetry a
 ```
 
 ```text
-Cone_Inv_Encounter_2 [Inv_Encounter_2]: ok (1696486 orbits, about 140M states)
+Cone_Inv_Encounter_2 [Inv_Encounter_2]: ok (1696486 orbits, about 820M states)
 ```
 
-- **The line.** `(<n> orbits, about <m> states)`: the orbits stored, and the states they
-  stand for, the sum of each orbit's size, rounded to two figures. A cone whose groups a
+- **The line.** `(<n> orbits, about <m> states)`: the orbits stored, and the sum of their
+  sizes, rounded to two figures. The sum counts every image of a stored state under the
+  group, and the model need not reach each one, so it can exceed the states a plain run
+  stores: on the samples it was exact on
+  three cones and 5% and 83% over on two. A cone whose groups a
   rule breaks names the entity under the line: `note: instance symmetry leaves Shop out: a
   step reads the key of a row an earlier step may have deleted`. That entity's slots stay
   fixed and the other entities still permute.
