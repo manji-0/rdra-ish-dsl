@@ -11,11 +11,16 @@
 //! shared, so a job decided on a shared run is decided as on a run of its own. What changes is
 //! the state count a failing safety cone prints: the whole shared run's, where a run of its own
 //! would have stopped once its checks had all failed (#213).
+//!
+//! Under `--symmetry always`, a job that runs up to instance symmetry (#212) shares nothing:
+//! no earlier pass decides it on a plain run, and its run up to symmetry decides no other
+//! job. Only plain, complete runs are shared, so a job decided on one is decided as without
+//! the option. `never` and `retry` share as before.
 
 use super::bfs::{safety_on, BfsCone};
 use super::jobs::{Job, JobKind};
 use super::native::Plain;
-use rdra_ish_core::lifecycle::{Checks, ComponentRun, Diag, TransitionSystem};
+use rdra_ish_core::lifecycle::{Checks, ComponentRun, Diag, Symmetry, TransitionSystem};
 
 /// What an earlier pass decided of a later pass's jobs on a run they share, per job index.
 pub(super) struct Shared {
@@ -23,21 +28,34 @@ pub(super) struct Shared {
     pub(super) safety: Vec<Option<(BfsCone, Vec<Diag>)>>,
     /// What a property's plain run says.
     pub(super) plain: Vec<Option<Plain>>,
+    /// The jobs that run up to instance symmetry, which share nothing.
+    orbits: Vec<bool>,
 }
 
 impl Shared {
-    pub(super) fn new(jobs: &[Job]) -> Self {
+    pub(super) fn new(jobs: &[Job], symmetry: Symmetry) -> Self {
         Shared {
             safety: jobs.iter().map(|_| None).collect(),
             plain: jobs.iter().map(|_| None).collect(),
+            orbits: (jobs.iter())
+                .map(|job| symmetry == Symmetry::Always && job.symmetric())
+                .collect(),
         }
     }
 
-    /// The systems of the safety and property cones among `jobs`: an entity cone of one of
-    /// them is run with every check, so that its run can decide them.
-    pub(super) fn wanted(jobs: &[Job]) -> Vec<&TransitionSystem> {
-        jobs.iter()
-            .filter_map(|job| match &job.kind {
+    /// Whether `jobs[k]` runs up to instance symmetry (`--symmetry always`): no run decides
+    /// it here, and its own run decides no other job.
+    pub(super) fn up_to_symmetry(&self, k: usize) -> bool {
+        self.orbits[k]
+    }
+
+    /// The systems of the safety and property cones among `jobs` that do not run up to
+    /// symmetry: an entity cone of one of them is run with every check, so that its run can
+    /// decide them.
+    pub(super) fn wanted<'j>(&self, jobs: &'j [Job]) -> Vec<&'j TransitionSystem> {
+        (jobs.iter().enumerate())
+            .filter(|(k, _)| !self.orbits[*k])
+            .filter_map(|(_, job)| match &job.kind {
                 JobKind::Cone(cone) => Some(&cone.system),
                 JobKind::PropertyCone(p) => Some(&p.cone.reduced),
                 JobKind::Explored(_) | JobKind::Whole(_) => None,
@@ -60,6 +78,9 @@ impl Shared {
             return;
         }
         for (k, job) in jobs.iter().enumerate() {
+            if self.orbits[k] {
+                continue;
+            }
             match &job.kind {
                 JobKind::Cone(cone) if self.safety[k].is_none() && cone.system == run.system => {
                     self.safety[k] = Some(safety_on(ts, jobs, covers, k, run));

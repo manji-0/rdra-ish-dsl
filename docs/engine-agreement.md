@@ -70,6 +70,15 @@ every case, whatever the case's header says.
    invariant cone that the memory limit stopped prints `ok` when z3 proves every rule in
    it. That `ok` is z3's verdict, held to rule 4, not the stopped graph's.
 
+**The native checker up to instance symmetry**, on `verify --symmetry always`:
+
+8. With `--symmetry always` and reduction off (`RDRA_ISH_NO_REDUCE=1`, so that every safety
+   cone and `always` cone goes through the orbit run), each check that both runs decide gets
+   the verdict the plain run gives, at 2 instances and at every bound the case runs BFS at.
+   The run prints no fault and does not panic: a lifted counterexample that does not replay
+   through the step relation, or whose steps do not bind the rows they name, panics. See
+   [Instance symmetry](./cli-reference.md#instance-symmetry).
+
 **Each engine against the header.** Every case states its expected verdict per engine, so
 the corpus also catches a drift that all engines share. Two parts are shared. The cone
 ladder decides both the native and the TLC verdict from each engine's runs, so a wrong
@@ -243,6 +252,14 @@ under a load average of 30 to 60, measured.
 | `safety_counted_once_per_raise` | A counted handler runs once per raise; the latch runs twice after one | counted ok, z3 proved; latch counterexample |
 | `safety_event_overflow` | A raise past `k` is `EventOverflow`, and the raiser never waits | `k = 2` counterexample; `k = 3` ok, z3 proved |
 | `safety_unique_sets` | A unique column set over column vars, owner vars, and a nullable Int that two rows leave null | single column and junction counterexample; guarded set and null set ok, z3 proved |
+| `sym_owner_coupled` | A child's key moves with its parent's row, a deleted child's too | ok, z3 proved; BFS ok, ok, ok |
+| `sym_identity_pair` | A pre-existing 1:1 child starts at its parent's slot, so the two permute as one class | counterexample |
+| `sym_master_ties` | Identical master rows, some named by children and some not | counterexample |
+| `sym_self_owned` | A key that names rows of its own entity, enumerated jointly | ok, z3 proved; BFS ok, ok, ok |
+| `sym_first_absent` | A creation takes the first absent slot, and the group fixes absent slots | ok, z3 proved; BFS ok, ok, ok |
+| `sym_per_entity_bounds` | Classes of different slot counts (`--instances`) | ok, z3 proved |
+| `sym_deleted_row_owner` | A later step reads the key of a row an earlier step deleted, which keeps its parent, so the key must move with that parent | counterexample |
+| `sym_lift_compose` | A counterexample the canonical form reorders at several steps; the lift composes every permutation | counterexample at 2 and 3 |
 | `cap_temporal_budget_zero` | `--temporal-budget 0` | not decided on both engines |
 | `cap_memory_limit` | `--memory 2KiB` stops runs partway (native only) | not decided |
 | `z3_two_ok_three_fails` | True at 2 instances, false at 3 | z3 unproved; BFS ok, ok, counterexample |
@@ -277,6 +294,30 @@ time, and the suite was run on each. #201 added the sixth, once TLC checked `sta
 The third and fourth rows are the reason every case states its verdicts. The shared ladder
 moved seven verdicts in both engines at once, and the shared frees-slots rule moved one.
 Rules 1 to 3 saw nothing, and only the stated verdicts failed.
+
+### Instance symmetry
+
+<!-- constrained-by ./design/instance-symmetry.md#verifying-the-reduction -->
+
+Phase 1 of [instance symmetry](./design/instance-symmetry.md) planted these bugs one at a
+time and ran the symmetry unit tests (the exhaustive test over every state of four small
+systems), the `sym_` cases under rule 8 in a release build, and the `sym_` cases at 1, 2,
+and 3 instances on a `shadow` build. Each bug was reverted afterwards.
+
+| Planted bug | Where | Caught by |
+|---|---|---|
+| A deleted row's key is not relabelled | `Group::apply` | three exhaustive tests; rule 8 (`sym_deleted_row_owner` does not replay at 2 and 3 instances); the `canonical` twin on `sym_deleted_row_owner` and `sym_owner_coupled` |
+| An identity pair is not coupled into one class | `Group::of` | the exhaustive test `an_identity_pair` |
+| Absent slots are permuted | `Canon::canonical` | five exhaustive tests; the `canonical` twin on every `sym_` case |
+| Ties that a child names are taken in slot order | `Canon::split` | the exhaustive test `a_parent_and_an_owner_child` |
+| The lift undoes only the last permutation | `lift` in `explore/orbit.rs` | rule 8 on `sym_lift_compose` (step 6 does not bind the row it names), release and `shadow` |
+| The scan's ordered-id rule is gone | `breaks.rs` | the unit test `a_guard_that_orders_row_ids_leaves_the_class_out` |
+| `compose` ignores its second permutation | `Group::compose` | the Kani harness `apply_of_a_composition_is_the_composition_of_applies` |
+| `compose` applies its arguments in the wrong order | `Group::compose` | the unit test `apply_compose_and_inverse_agree_on_three_slots`; not the Kani harness, whose 2-slot groups commute |
+
+Rule 8 misses the uncoupled identity pair and the permuted absent slots: the wrong
+canonical form there still gives the plain run's verdicts on every case, so only the
+exhaustive test and the `canonical` twin see it.
 
 ## Mutation run
 
@@ -327,6 +368,7 @@ compile it.
 | `store_bytes_never_overflows` | `explore/store.rs` | `store_bytes` neither overflows nor panics | every input |
 | `store_bytes_only_grows` | `explore/store.rs` | more states, wider states, or more edges never count as fewer bytes, so past `u64` the count stays at `u64::MAX` | every input |
 | `a_push_takes_the_bytes_bytes_with_said_and_reads_back` | `explore/arena.rs` | a pushed state reads back, no index leaves the buffer, and `bytes_with(1)` before a push is `bytes_with(0)` after it, from an empty store or a `slice` of one | width up to 2, up to 5 pushes |
+| `apply_of_a_composition_is_the_composition_of_applies` | `explore/symmetry/mod.rs` | `apply(g ∘ h) = apply(g) ∘ apply(h)`, keys relabelled on present rows only | a 2-slot parent and a 2-slot child with a key to it, every state, every pair of permutations |
 
 A result holds up to its bound and no further, and for one thread.
 
@@ -344,9 +386,12 @@ cargo kani -p rdra-ish-core                                        # every harne
 cargo kani -p rdra-ish-core --harness compare_negates_and_mirrors  # one harness
 ```
 
-Two harnesses take most of the time. On an 18-core Mac `store_bytes_only_grows` takes about
-4 minutes, and the `States` harness in `explore/arena.rs` about a minute and 8 GB of
-memory; on the CI runner they take about 9 and 3.5 minutes. The others take under 20
+Three harnesses take most of the time. On an 18-core Mac `store_bytes_only_grows` takes about
+4 minutes, the `States` harness in `explore/arena.rs` about a minute and 8 GB of memory, and
+`apply_of_a_composition_is_the_composition_of_applies` about 7 minutes; on the CI runner the
+first two take about 9 and 3.5 minutes. The symmetry harness stays at 2 slots per class: at
+3 it did not finish in 20 minutes, and a harness of the canonical form itself did not finish
+in 30 at 2, so the exhaustive unit test and the `canonical` twin check the canonical form. The others take under 20
 seconds each. At width 3 and 9 pushes the `States` harness did not finish in
 10 minutes (#275), so its bound stays small.
 

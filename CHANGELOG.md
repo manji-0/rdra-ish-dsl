@@ -132,6 +132,24 @@
 
 ### Added
 
+- `verify --symmetry never|retry|always` (#212, phase 1; experimental, default `never`):
+  explore an unreduced safety cone, and the cone of an `always` property, up to instance
+  symmetry, one stored state per orbit of states that differ only in which slot holds which
+  row. The cone line reads `(<n> orbits, about <m> states)`. `retry` reruns up to symmetry
+  only a cone that stopped at the memory limit. `symmetry` under `[verify]` in `rdra.toml`
+  sets the default; under `[check]` it warns and is not read. A counterexample is lifted to
+  concrete slots and replayed, with the rows each step names, before it prints. A static
+  scan leaves out an entity whose slots the model tells apart (an ordered id comparison, an
+  id against a literal, a key set to a literal row, and five more) and names it and the
+  reason under the line. A cone run up to symmetry gathers no entity view (#251) and shares
+  no run with the entity, safety and property passes (#209). Without the option nothing
+  changes. At `--instance-count 3` the
+  five clinic-ops and insurance-claim-ops lines that stopped at the memory limit are decided
+  under `--memory 8GiB`. In `rdra-ish-core`, `TransitionSystem::run_orbits` returns an
+  `OrbitRun`, which has no graph or adjacency to read, and the vacuity readers take any
+  `StoredRun`. The `shadow` build adds two twins: `canonical` (against every element of the
+  group, up to 1,296) and `orbit_run` (against the plain run, up to 200,000 states).
+
 - A `perf` cargo feature (#296): `cargo build --release -p rdra-ish-cli --features perf`
   builds a CLI that, under `RDRA_PERF=1`, prints on stderr a `perf-pass` line per pass of
   `verify` (wall and CPU time, allocations, the live heap and the memory pool at their
@@ -142,6 +160,7 @@
   `scripts/perf-tables.py <binary>` runs the five measured `verify` runs of #296 one at a
   time at `RDRA_JOBS=1` and prints the totals, the passes, the BFS CPU per pass and the
   largest runs. A build without the feature is unchanged.
+
 - A `shadow` cargo feature (#275): `cargo build --release -p rdra-ish-cli --features shadow`
   builds a CLI in which every fast function that has a reference twin also runs the twin and
   panics, naming the call, when the two differ. The twins are the enabled bindings
@@ -353,6 +372,28 @@
 
 ### Changed
 
+- Keys of the quotient cache that explore the same sub-lifecycle share its run of S (#296):
+  keys that differ in what T observes, the inputs or the rises, or only in where their
+  actions came from, partitioned one run each, which `verify` explored again per key. A
+  complete run is held by the sub-lifecycle and the caps that can stop it, charged to the
+  command's pool while the cache holds it, and taken only by a pool that covers its peak;
+  a run that a cap or the memory limit stopped is never shared. The output is unchanged;
+  a `shadow` build holds every shared run to a fresh one, and `RDRA_ISH_QUOTIENT_STATS`
+  counts them (`runs_held`, `run_hits`, `run_bytes`). At `RDRA_JOBS=1`, `verify` retires 8%
+  fewer instructions on `insurance-claim-ops` (312.4 G to 288.6 G).
+- **Verdicts can change:** a deleted row keeps its keys (#212). `deletes(UC, E)` resets the
+  row's columns to their base values and no longer resets its keys to the first slot. The
+  only reader that sees the difference is a later step that binds the deleted row: a step
+  of a split use case whose earlier step deleted it (an `Earlier` parameter) and that reads
+  its key, in a guard or an `after` assertion. That step now reads the
+  parent the row had, where it read the first slot. The native checker, z3, and the TLA+
+  export (`<E>_owner_<P>` stays `UNCHANGED` on a delete) agree. No sample, skill example, or
+  engine-corpus case changes verdict except `sym_deleted_row_owner`, which reads that key
+  and now has a counterexample. A cone that deletes keyed rows can store more states,
+  since deleted rows that named different parents now differ; every sample's `verify`
+  output is unchanged, byte for byte. The TLA+
+  export changes text on 9 models (no verdict). Instance symmetry relabels a deleted row's
+  key with its parent, so a model that reads it is no longer left out of the group.
 - The flake's `tlc` (in `nix develop` and on the `PATH` of the flake's `rdra-ish`) runs TLC
   1.7.4 on JDK 17 instead of JDK 8, with a class-data-sharing archive of TLC's classes built
   with it (#309). `verify --with-tlc` also compiles a state-model run of at most 10,000

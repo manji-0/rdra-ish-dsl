@@ -271,6 +271,7 @@ pub fn run() -> Result<()> {
             z3,
             tlc_jar,
             memory,
+            symmetry,
             scope,
         } => {
             // `--backend tlc` is the old spelling of `--with-tlc`, kept until the next major
@@ -286,6 +287,15 @@ pub fn run() -> Result<()> {
             }
             let (program, model, manifest) = load_clean(&inputs)?;
             let memory = memory_limit(memory, manifest.as_ref(), Budgeted::Verify);
+            if manifest
+                .as_ref()
+                .is_some_and(|m| m.check.symmetry.is_some())
+            {
+                eprintln!("warning: `symmetry` under [check] in rdra.toml is not read: check and states explore every state; verify reads it under [verify]");
+            }
+            let symmetry = symmetry
+                .or(manifest.as_ref().and_then(|m| m.verify.symmetry))
+                .unwrap_or_default();
             let memory = memory::VerifySplit::of(memory, with_tlc)?;
             let scope = scope.resolve(&model)?;
             let bounds = export::verify_bounds(
@@ -306,6 +316,7 @@ pub fn run() -> Result<()> {
                     deny_undecided,
                     prove: prove.then_some(verify::Prove { z3, deny_unproved }),
                     memory,
+                    symmetry,
                 },
                 with_tlc.then_some(verify::WithTlc { jar: tlc_jar }),
             )?;

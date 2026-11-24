@@ -1,0 +1,45 @@
+// trap: a deleted row keeps its key, and a later step reads it, so the key must move with
+// its parent's row.
+// Cancel deletes an item in its first step and flags, in its second, the shop the deleted
+// item's key names, which is the shop the item belonged to. Two items in two shops cancelled
+// flag two shops, and the mall allows one: the rule fails. Up to instance symmetry the shops
+// are sorted; a group that moved the shops but left a deleted item's key where it was would
+// flag whichever shop took that slot, store forms no run reaches, and lift a trace whose
+// second step does not flag the shop it names.
+// flags: --instances Mall=1
+// expect Quantifier_Mall_0: native=counterexample tlc=counterexample z3=unproved
+// expect DanglingKey_Item_Shop: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+entity Mall "館" {
+  id: Int @pk
+}
+
+entity Shop "店" {
+  id: Int @pk
+  st: Enum(open, flagged) @default(open)
+}
+
+entity Item "品" {
+  id: Int @pk
+}
+
+relate(Shop, Mall, N:1)
+relate(Item, Shop, N:1)
+
+usecase OpenShop "開店"
+usecase CloseShop "閉店"
+usecase AddItem "追加"
+usecase Cancel "取消"
+
+api ItemApi "品 API"
+api ShopApi "店 API"
+
+creates(OpenShop, Shop)
+deletes(CloseShop, Shop)
+creates(AddItem, Item)
+invokes(Cancel, ItemApi)
+deletes(ItemApi, Item)
+invokes(Cancel, ShopApi)
+updates(ShopApi, Shop)
+transitions(Cancel, Shop.st, open -> flagged)
+
+invariant(Mall).at_most(1, Shop.st == flagged)

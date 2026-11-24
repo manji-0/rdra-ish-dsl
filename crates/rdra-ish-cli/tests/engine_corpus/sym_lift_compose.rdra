@@ -1,0 +1,29 @@
+// trap: a counterexample whose rows the canonical form reorders at several steps.
+// Jobs under one queue move a -> b -> c, each step on any job, and the queue allows at most
+// one job at c; two jobs at c is reachable, so the rule fails. Up to instance symmetry each
+// step sorts the jobs again, so the stored path names its rows in the order of each stored
+// form; the lifted trace must undo every sort so far, composed, to name the concrete rows.
+// A lift that undid only the last sort would advance a job past its state, and the trace
+// would not replay.
+// flags: --instances Queue=1
+// expect Quantifier_Queue_0: native=counterexample tlc=counterexample z3=unproved bfs=ok,counterexample,counterexample
+entity Queue "列" {
+  id: Int @pk
+}
+
+entity Job "仕事" {
+  id: Int @pk
+  status: Enum(a, b, c) @default(a)
+}
+
+relate(Job, Queue, N:1)
+
+usecase Add "追加"
+usecase Start "開始"
+usecase Finish "終了"
+
+creates(Add, Job)
+transitions(Start, Job.status, a -> b)
+transitions(Finish, Job.status, b -> c)
+
+invariant(Queue).at_most(1, Job.status == c)

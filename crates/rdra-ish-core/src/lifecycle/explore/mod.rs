@@ -8,6 +8,7 @@ mod bfs;
 mod graph;
 mod liveness;
 mod moves;
+mod orbit;
 #[cfg(feature = "perf")]
 mod perf;
 #[cfg(feature = "perf")]
@@ -17,16 +18,19 @@ mod properties;
 mod reach;
 mod scan;
 mod store;
+pub(crate) mod symmetry;
 mod views;
 mod violations;
 
 pub use arena::States;
 pub use graph::{Adjacency, LabelledEdges};
 pub use liveness::{LassoFault, ReducedVerdict, Spurious};
+pub use orbit::{LabelledEdge, OrbitRun};
 pub(crate) use plan::Plans;
 pub use properties::PropertyVerdict;
 pub use reach::{Estimate, Layers};
 pub use store::{store_bytes, Held};
+pub use symmetry::{LeftOut, Rule as SymmetryRule, Symmetry};
 
 use std::collections::BTreeSet;
 
@@ -197,6 +201,72 @@ pub struct ComponentRun {
     _charge: Option<Charge>,
 }
 
+/// What a reader of state predicates and action labels reads of a run, plain or up to
+/// symmetry (`OrbitRun`): the stored states, whether the run reached all of them, its
+/// diagnostics, and the targets of the edges an action labels. Each such reader is sound on
+/// a run up to symmetry, since a state predicate that reads every row has one value on a
+/// whole class, and an action labels an edge of the stored graph exactly when it labels one
+/// of the plain graph.
+pub trait StoredRun {
+    fn system(&self) -> &TransitionSystem;
+    fn stored(&self) -> &States;
+    /// The run reached every state, or every class.
+    fn whole(&self) -> bool;
+    fn diagnostics(&self) -> &[Diag];
+    fn evaluated(&self) -> &Checks;
+    /// The stored target of each edge `act` labels, in discovery order.
+    fn targets_of(&self, act: ActId) -> Vec<&StateSlice>;
+}
+
+impl StoredRun for ComponentRun {
+    fn system(&self) -> &TransitionSystem {
+        &self.system
+    }
+    fn stored(&self) -> &States {
+        &self.states
+    }
+    fn whole(&self) -> bool {
+        self.complete
+    }
+    fn diagnostics(&self) -> &[Diag] {
+        &self.diags
+    }
+    fn evaluated(&self) -> &Checks {
+        &self.checks
+    }
+    fn targets_of(&self, act: ActId) -> Vec<&StateSlice> {
+        self.edges
+            .iter()
+            .filter(|e| self.step(e).0 == act)
+            .map(|e| &self.states[e.to as usize])
+            .collect()
+    }
+}
+
+impl StoredRun for OrbitRun {
+    fn system(&self) -> &TransitionSystem {
+        OrbitRun::system(self)
+    }
+    fn stored(&self) -> &States {
+        self.states()
+    }
+    fn whole(&self) -> bool {
+        self.complete()
+    }
+    fn diagnostics(&self) -> &[Diag] {
+        self.diags()
+    }
+    fn evaluated(&self) -> &Checks {
+        self.checks()
+    }
+    fn targets_of(&self, act: ActId) -> Vec<&StateSlice> {
+        self.labelled_edges()
+            .filter(|e| e.act == act)
+            .map(|e| &self.states()[e.to as usize])
+            .collect()
+    }
+}
+
 /// How a run ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RunEnd {
@@ -210,6 +280,32 @@ pub enum RunEnd {
 }
 
 impl ComponentRun {
+    /// Charges what the run keeps to `pool` instead of the pool it ran in, for a result held
+    /// past its cone (`QuotientCache`); false, leaving the charge where it was, when `pool`
+    /// has less left.
+    pub(crate) fn charge_to(&mut self, pool: &'static crate::memory::MemoryPool) -> bool {
+        match Charge::hold(pool, self.kept) {
+            Some(charge) => {
+                self._charge = Some(charge);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Whether `other` is the same run of the same graph: the states, parents, edges,
+    /// bindings and findings in the same order, and the same end. The system is not compared.
+    #[cfg(any(test, feature = "shadow"))]
+    pub(crate) fn same_graph(&self, other: &ComponentRun) -> bool {
+        self.states == other.states
+            && self.parents == other.parents
+            && self.edges == other.edges
+            && self.bindings == other.bindings
+            && self.diags == other.diags
+            && self.complete == other.complete
+            && self.checks_failed == other.checks_failed
+    }
+
     /// The invariants and after-asserts the run evaluated; `diags` says nothing of the rest.
     pub fn checks(&self) -> &Checks {
         &self.checks
@@ -268,6 +364,10 @@ pub(crate) struct Moves {
     /// The successor of every move, `width` bytes each.
     next: Vec<u8>,
     width: usize,
+    /// Under symmetry: each successor's canonical form, `width` bytes each, and what
+    /// canonicalizing it found (`canonicalize`).
+    canon: Vec<u8>,
+    found: Vec<symmetry::Canonical>,
     /// What the reduced step reuses from one state to the next.
     pub(crate) reduced: super::reduce::StepBuffers,
 }
@@ -293,6 +393,37 @@ impl Moves {
             self.acts[i],
             &self.params[from..self.param_ends[i]],
             &self.next[i * self.width..(i + 1) * self.width],
+        )
+    }
+
+    /// Canonicalizes the successors of the moves from `from` on, in a worker.
+    /// A `shadow` build holds each form to `symmetry/reference.rs`.
+    pub(crate) fn canonicalize(
+        &mut self,
+        ts: &TransitionSystem,
+        group: &symmetry::Group,
+        canon: &mut symmetry::Canon,
+        from: usize,
+    ) {
+        let w = self.width;
+        self.canon.resize(self.len() * w, 0);
+        for i in from..self.len() {
+            let (next, out) = (
+                &self.next[i * w..(i + 1) * w],
+                &mut self.canon[i * w..(i + 1) * w],
+            );
+            let found = canon.canonical(group, next, out);
+            symmetry::check(ts, group, next, out, found);
+            self.found.push(found);
+        }
+    }
+
+    /// Move `i`'s canonical successor and what canonicalizing it found, after
+    /// `canonicalize`.
+    pub(crate) fn canonical(&self, i: usize) -> (&[u8], symmetry::Canonical) {
+        (
+            &self.canon[i * self.width..(i + 1) * self.width],
+            self.found[i],
         )
     }
 
@@ -423,6 +554,21 @@ struct Bfs<'t> {
     charge: Option<Charge>,
     peak_admitted: u64,
     layers: Layers,
+    /// The group a run up to symmetry stores canonical forms under (`run_orbits`); `None`
+    /// for a plain run.
+    group: Option<&'t symmetry::Group>,
+    /// The reader thread's canonicalizer: for the initial states and the chunks it expands.
+    canon: symmetry::Canon,
+    /// Under symmetry: the index in `edges` of each orbit self-edge, a move into the class
+    /// of its own source, which is stored as a loop but is a real step.
+    orbit_self: Vec<u32>,
+    orbits: symmetry::Orbits,
+}
+
+/// What a run up to symmetry found beside its plain run's result.
+pub(crate) struct OrbitParts {
+    pub(crate) orbit_self: Vec<u32>,
+    pub(crate) orbits: symmetry::Orbits,
 }
 
 impl TransitionSystem {
@@ -441,13 +587,27 @@ impl TransitionSystem {
     /// `run_checking` with `threads` workers. The run does not depend on the number: the
     /// states, the edges, and the findings come out in the order one thread finds them.
     fn run_on(self, caps: Caps, checks: Checks, threads: Threads) -> ComponentRun {
+        let (mut run, violations, _) = self.bfs_on(caps, checks, threads, None);
+        run.trace_violations(&violations);
+        run
+    }
+
+    /// The BFS of `run_on`, up to the symmetry of `group` when there is one, with where each
+    /// violation was seen; the violations' traces are not filled in.
+    fn bfs_on(
+        self,
+        caps: Caps,
+        checks: Checks,
+        threads: Threads,
+        group: Option<&symmetry::Group>,
+    ) -> (ComponentRun, Vec<(usize, Reach)>, OrbitParts) {
         crate::shadow_assert!(
             !caps.stop_when_all_violated || checks == Checks::All,
             "a run that stops once every check fails evaluates every check"
         );
         #[cfg(feature = "perf")]
         let clock = perf::Clock::start();
-        let mut bfs = Bfs::new(&self, caps, &checks);
+        let mut bfs = Bfs::new(&self, caps, &checks, group);
         bfs.go(threads);
         let kept = bfs.kept();
         let peak_admitted = bfs.peak_admitted;
@@ -467,9 +627,11 @@ impl TransitionSystem {
             violations,
             charge,
             layers,
+            orbit_self,
+            orbits,
             ..
         } = bfs;
-        let mut run = ComponentRun {
+        let run = ComponentRun {
             system: self,
             states,
             complete,
@@ -487,7 +649,17 @@ impl TransitionSystem {
             layers,
             _charge: charge,
         };
-        for (at, reach) in &violations {
+        #[cfg(feature = "perf")]
+        perf::line(&run, clock, caps.stop_when_all_violated);
+        (run, violations, OrbitParts { orbit_self, orbits })
+    }
+}
+
+impl ComponentRun {
+    /// Fills in the trace of each violation the run reported, at its index in `diags`.
+    fn trace_violations(&mut self, violations: &[(usize, Reach)]) {
+        let run = self;
+        for (at, reach) in violations {
             let (trace, last) = run.trace_of(reach);
             // A reduced run holds representatives: the message describes the lifted state.
             if run.system.reduction().is_some() {
@@ -505,9 +677,6 @@ impl TransitionSystem {
                 *t = trace;
             }
         }
-        #[cfg(feature = "perf")]
-        perf::line(&run, clock, caps.stop_when_all_violated);
-        run
     }
 }
 

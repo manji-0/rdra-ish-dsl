@@ -18,6 +18,9 @@ while IFS= read -r path; do
     crates/rdra-ish-core/src/lifecycle/expr.rs) relevant=true ;;
     crates/rdra-ish-core/src/lifecycle/explore/arena.rs) relevant=true ;;
     crates/rdra-ish-core/src/lifecycle/explore/store.rs) relevant=true ;;
+    crates/rdra-ish-core/src/lifecycle/explore/symmetry/mod.rs) relevant=true ;;
+    # The canonical form the symmetry harness runs.
+    crates/rdra-ish-core/src/lifecycle/explore/symmetry/canon.rs) relevant=true ;;
     # What they run: `CmpOp`, `Domain`, `Value` and `EntId` (types.rs), `Edge` (explore/mod.rs).
     crates/rdra-ish-core/src/lifecycle/types.rs) relevant=true ;;
     crates/rdra-ish-core/src/lifecycle/explore/mod.rs) relevant=true ;;
