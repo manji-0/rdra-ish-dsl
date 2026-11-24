@@ -19,7 +19,7 @@ number is marked **measured**, **computed** (arithmetic on measured numbers) or
 <!-- derived-from #workers-probe-the-reader-commits -->
 <!-- derived-from #why-the-run-is-the-one-thread-run -->
 
-1. **Today the reader limits one cone to 1.9x.** On main (c51f2543), `Bfs::take` is 34% of a
+1. **Today the reader limits one cone to 1.9x.** On main (c51f2543), `Bfs::take` is 36% of a
    one-thread food-permit-ops run. At 8 jobs the reader thread spends 89% of its samples in
    `take`, and each of the 7 workers waits 81% to 83% of the time. food-permit-ops gains
    1.94x at 6 to 18 jobs (measured, median of three).
@@ -32,15 +32,15 @@ number is marked **measured**, **computed** (arithmetic on measured numbers) or
 3. **3.1 as designed here.** Workers pack, hash and probe each successor against a table
    that one thread writes and many threads read. They resolve repeats within their own
    chunk and evaluate the after-asserts and invariants. The reader probes only a worker's
-   miss, assigns numbers, and pushes edges in order. Estimated reader share after 3.1: 14%,
-   14% and 10% of the one-thread run (from 34%, 32% and 24%). Estimated gain for
-   food-permit-ops: 1.94x to about 3.4x at 6 to 8 jobs.
-4. **#296's exit criterion is out of reach for 3.1 alone.** The criterion is a quarter of
-   the one-thread time at 8 jobs. Outside BFS, 14.6% of the food-permit-ops run is serial:
-   the findings and the adjacency of the one large cone, start and exit. With a reader that
-   costs nothing, the bound is 1 / 0.146 ≈ 6.8x. With the 3.1 reader it is about 3.4x
-   (computed). 3.3 ([Beyond 3.1](#beyond-31-in-flight-dedup)) reaches about 4.0x with no
-   margin; a parallel adjacency build would add the margin. See [Decisions for the owner](#decisions-for-the-owner).
+   miss, assigns numbers, and pushes edges in order. Estimated reader share after 3.1: 15%,
+   14% and 10% of the one-thread run (from 36%, 32% and 24%). Estimated gain for
+   food-permit-ops: from 1.94x to 3.5x to 3.9x at 6 to 18 jobs.
+4. **#296's exit criterion sits just above that estimate.** The criterion is 4x: a quarter
+   of the one-thread time at 8 jobs. The model gives 3.9x for 3.1. The same model gives
+   2.16x for today's code against 1.94x measured, and corrected by that ratio it gives
+   3.5x. 3.3 ([Beyond 3.1](#beyond-31-in-flight-dedup)) gives 4.2x to 4.7x. Outside BFS,
+   10% of the food-permit-ops run is serial (the findings and adjacency of the one large
+   cone, start and exit), which bounds any design at about 10x. See [Decisions for the owner](#decisions-for-the-owner).
 5. **The output stays the one-thread output.** A worker's hit is final, because the table
    and the store only grow. A worker's miss is a hint, and the reader probes again. Every
    stop point is decided on the reader, in move order, from reader-owned lengths. The new
@@ -79,36 +79,44 @@ in brackets):
 | 18 | 2.15, 1.93x (3.29) | 1.90, 2.19x (2.25) | 4.18, 3.07x (5.84) |
 
 - Instructions grow by 1% to 2% from 1 to 18 jobs, and cycles by 12% to 18%: the helpers
-  wait, they do not contend. The stdout of every run is byte-identical to the 1-job run.
+  wait, they do not contend. The stdout and stderr of every run are byte-identical to the
+  1-job run.
 - clinic-ops is bimodal at 6 to 18 jobs (1.55 s to 2.00 s). `Helpers::take` gives every
-  free helper to the first run that asks. At 8 jobs, the second-largest run (2.15 M states)
-  got no helper: its thread CPU equals its one-thread CPU. The largest run held 7 helpers
-  and used about one (measured, `perf-run` lines). Which run asks first depends on timing.
-  This is #163's budget problem, and 3.2 addresses it.
+  free helper to the first run that asks, and the run keeps them until it ends. Which of
+  the two largest runs (2.24 M and 2.15 M states) asks first depends on timing. In one
+  `perf` run at 8 jobs, the second one's thread CPU equalled its one-thread CPU: it
+  expanded every chunk itself. That build's thread CPU is inflated above 1 job (see
+  [Measurement method](#measurement-method)), so the wall times, not that line, are the
+  evidence. This is #163's budget problem, and 3.2 addresses it.
 
 ### The reader today
 
 From `sample` at 1 ms on a build with `#[inline(never)]` on the hot functions, 1 job. The
-shares are of the whole run.
+shares are of the whole run. The food-permit-ops profile is taken without the 180 samples
+`sample` recorded while it attached at launch, 4.8% of the file, which hold only
+`_dyld_start`. The other two profiles have no such samples.
 
 | Part of `Bfs::take` | food-permit-ops | clinic-ops | insurance-claim-ops |
 |---|---:|---:|---:|
-| `Bfs::take`, all of it (#296) | **34.3%** (54.7%) | **32.0%** (47.0%) | **23.8%** (24.6%) |
-| · `Seen::find`, hashing and compare included | 9.3% | 9.9% | 7.0% |
-| · `Bindings::id` | 8.3% | 6.4% | 2.1% |
-| · `take`'s own code: edge push, loop, layers | 3.7% | 3.9% | 2.2% |
-| · rehash when `seen` grows | 3.5% | 3.2% | 2.4% |
-| · copies (`s2`, `to_owned`) | 3.0% | 2.0% | 2.0% |
-| · self-loop compare (`*s2 == s`) | 2.5% | 2.1% | 1.0% |
-| · `Moves::get` | 1.3% | 1.4% | 0.7% |
-| · `admit`: insert, push, charge | 2.1% | 2.5% | 1.7% |
-| · `check_invariants`, `check_after` | 0.6% | 0.7% | 4.6% |
-| `expand`, all threads | 48.5% | 45.1% | 64.2% |
-| Outside BFS: findings, adjacency, start and exit | 14.6% | not split (several cones) | not split (several cones) |
+| `Bfs::take`, all of it (#296) | **36.0%** (54.7%) | **32.0%** (47.0%) | **23.8%** (24.6%) |
+| · `Seen::find`, hashing and compare included | 9.7% | 9.9% | 7.0% |
+| · `Bindings::id` | 8.7% | 6.4% | 2.1% |
+| · `take`'s own code: edge push, loop, layers | 3.9% | 3.9% | 2.2% |
+| · rehash when `seen` grows | 3.7% | 3.2% | 2.4% |
+| · copies (`s2`, `to_owned`) | 3.2% | 2.0% | 2.0% |
+| · self-loop compare (`*s2 == s`) | 2.6% | 2.1% | 1.0% |
+| · `Moves::get` | 1.4% | 1.4% | 0.7% |
+| · `admit`: insert, push, charge | 2.3% | 2.5% | 1.7% |
+| · `check_invariants`, `check_after` | 0.5% | 0.7% | 4.6% |
+| `expand`, all threads | 51.0% | 45.1% | 64.2% |
+| Outside BFS: findings, adjacency, start and exit | 10.2% | not split (several cones) | not split (several cones) |
+
+The 10.2% outside BFS agrees with the `perf` build's own lines: the BFS runs' walls sum to
+3.69 s of the 4.15 s run, which leaves 11.1% (measured).
 
 At 8 jobs on food-permit-ops, the reader thread spends 88.8% of its samples in `take`. The 7
 workers spend 17% to 18% in `expand` and 81% to 83% waiting (measured). With one cone at
-98% of the BFS work, the bound is `1 / (take + outside BFS) = 1 / (0.343 + 0.146) = 2.04x`
+98% of the BFS work, the bound is `1 / (take + outside BFS) = 1 / (0.360 + 0.102) = 2.16x`
 (computed). The measured speedup is 1.94x.
 
 ### Hits, loops and stale misses
@@ -144,13 +152,15 @@ order. The second move into `ab` almost always comes within a chunk or two of th
 ### What changed since #296
 
 - **Instructions fell by 15% to 32%**: 1.1 (`Fold::holds`), 1.2 (one run per equal cone:
-  insurance-claim-ops has 21 BFS runs instead of 25), and #300.
+  insurance-claim-ops has 21 BFS runs instead of 25), 1.4 (below), and the smaller changes
+  merged since 5eb2fe0e (the allocation-free canonicalizer among them).
 - **`observe` is gone from `verify`.** Item 1.4 gathers view patterns only where a caller
-  reads them, and `verify` reads none. `observe` was 28.9%, 18.5% and 8.5% of the three runs
-  in #296's profile. That is why the reader share fell from 54.7% to 34.3% on
-  food-permit-ops. In absolute terms, the rest of the reader stayed about the same: 30.8 G
-  instructions now against 28.8 G then (computed from the shares). The one-cone bound rose
-  from 1.8x to 2.0x, and food-permit-ops at 8 jobs went from 1.7x to 1.94x.
+  reads them, and `verify` reads none: its caps are built `.without_views()`
+  (`verify/mod.rs`), and the profiles show no `observe`. `observe` was 28.9%, 18.5% and
+  8.5% of the three runs in #296's profile. That is why the reader share fell from 54.7%
+  to 36.0% on food-permit-ops. In absolute terms, the rest of the reader stayed about the
+  same: 32 G instructions now against 29 G then (computed from the shares). The one-cone
+  bound rose from 1.8x to 2.2x, and food-permit-ops at 8 jobs went from 1.7x to 1.94x.
 - **insurance-claim-ops' reader share barely moved** (24.6% to 23.8%), because 1.1 took
   instructions out of `expand`, not out of the reader.
 - **Wall times are 20% to 31% lower at 1 job.** That is fewer instructions plus a quieter
@@ -324,12 +334,12 @@ table, at 8 jobs:
 
 | | food-permit-ops | clinic-ops | insurance-claim-ops |
 |---|---:|---:|---:|
-| Reader today | 34.3% | 32.0% | 23.8% |
+| Reader today | 36.0% | 32.0% | 23.8% |
 | Reader probes per edge, today (non-loop edges plus `admit`'s second probe) | 0.803 | 1.088 | 1.121 |
 | Reader probes per edge after 3.1: fresh, plus stale outside the chunk | 0.285 | 0.285 | 0.437 |
 | Same, without the worker's `SameAs` dedup | 0.422 | 0.717 | 0.768 |
-| Reader after 3.1 | **14.4%** | **14.0%** | **9.6%** |
-| Same, without `SameAs` | 15.6% | 16.9% | 11.1% |
+| Reader after 3.1 | **15.4%** | **14.0%** | **9.6%** |
+| Same, without `SameAs` | 16.6% | 16.9% | 11.1% |
 
 How the estimate is made. The `seen.find` share is scaled by the probe ratio, less its
 hashing (26% of it). `Bindings::id` falls to a tenth. The copies fall to a fifth. The
@@ -341,17 +351,20 @@ the pack on the workers.
 For food-permit-ops, whose one cone is 98% of the BFS work, the wall time model is
 `T(n) = max(reader, BFS / n) + outside BFS`. It assumes the reader expands chunks itself
 whenever it would otherwise wait (see [Efficiency cores](#efficiency-cores)). Without that,
-moving work off the reader makes 2 jobs slower than today: one worker would carry 68% of
-the run. Applied to today's shares at 8 jobs, with today's reader, the model gives 2.04x,
-against 1.94x measured. After 3.1:
+moving work off the reader makes 2 jobs slower than today: one worker would carry 74% of
+the run. Applied to today's shares at 8 jobs, with today's reader, the model gives 2.16x,
+against 1.94x measured: it is 11% optimistic. After 3.1, with BFS at 89.8% of the run:
 
 | Jobs | 2 | 4 | 6 | 8 | 18 |
 |---|---:|---:|---:|---:|---:|
-| Speedup (computed) | 1.8x | 2.8x | 3.4x | 3.4x | 3.4x |
+| Speedup, model (computed) | 1.8x | 3.1x | 3.9x | 3.9x | 3.9x |
+| Same, less the model's 11% (estimated) | 1.6x | 2.8x | 3.5x | 3.5x | 3.5x |
 | Today, measured | 1.57x | 1.91x | 1.95x | 1.94x | 1.93x |
 
-Up to 4 jobs the expansion bounds the run. From 6 jobs on, the reader (14.4%) plus the
-serial part outside BFS (14.6%) is the bound: 1 / 0.29 = 3.4x.
+Up to 4 jobs the expansion bounds the run. From 6 jobs on, the reader (15.4%) plus the
+serial part outside BFS (10.2%) is the bound: 1 / 0.256 = 3.9x. The factors "a tenth" and
+"a fifth" above are guesses of the same size as the gap to 4x, so the estimate is a range,
+3.5x to 3.9x, not a verdict.
 
 ## Symmetry
 
@@ -458,8 +471,10 @@ food-permit-ops stops gaining at about 6. Proposal:
 The instructions stay the same in all three. Background QoS confines the process to the
 second tier at a low clock: 3.9x slower, with 20% lower IPC and a third of the clock.
 Utility QoS stayed on the first tier. The second tier's speed at default QoS was not
-measured: that needs several runs at once on a loaded machine, which this study's rule of
-one measurement at a time did not allow. 3.9x is therefore the worst case.
+measured. Neither class that `taskpolicy` sets puts a full-clock thread there: utility
+stays on the fast tier, and background is clocked down. Several runs at once would fill
+the fast tier, but this study ran one measurement at a time. 3.9x is therefore the worst
+case.
 
 **What the design does about it:**
 
@@ -487,11 +502,12 @@ one measurement at a time did not allow. 3.9x is therefore the worst case.
   saturates at about 6 jobs. The second tier matters only for side-by-side cones and for
   3.3.
 - **On a base M5 (#315: 4 + 6 cores),** the reader plus 3 helpers fill the fast tier. After
-  3.1 the reader saturates when the helpers deliver `(expand + moved) / reader = 68.4 / 14.4
-  ≈ 4.75` fast-core equivalents (computed for food-permit-ops). So the 6 slower cores
-  decide whether 3.1 reaches its bound there. #315 should measure the second tier at
-  default QoS first, with one `RDRA_JOBS=1` run at a time per tier, not with concurrent
-  runs.
+  3.1 the reader saturates when the helpers deliver `(BFS - reader) / reader = (89.8 -
+  15.4) / 15.4 ≈ 4.8` fast-core equivalents (computed for food-permit-ops). So the 6 slower
+  cores decide whether 3.1 reaches its bound there. #315 needs a method for the second
+  tier's speed at default QoS first. Candidates: per-cluster residency and frequency from
+  `powermetrics` during an 18-job run, or one 1-job run started while a known load holds
+  the fast tier, if the one-at-a-time rule allows it.
 
 ## Holding it correct
 
@@ -562,12 +578,12 @@ run. Two ways remove them:
   states in move order and cuts at the first state that does not fit, and the shards insert
   the states up to the cut. There is no pipelining across the barrier.
 
-Either takes the reader to about 8.5% on food-permit-ops (computed: 14.4% less the probes
-and the rehash). That makes about 4.0x at 8 jobs: just the exit criterion, and only if all
-7 helpers run at full speed. Decide after 3.1 is measured, as #254 says. Independently, the
-14.6% outside BFS (findings and `Adjacency::new` of the one large cone) bounds every design
-at 6.8x on food-permit-ops. A parallel adjacency build is the next lever there, and it is
-outside #296's list.
+Either takes the reader to about 9% on food-permit-ops (computed: 15.4% less the probes
+and the rehash). Then the expansion bounds the run at 8 jobs: 4.7x by the model, 4.2x less
+its 11%, and only if all 7 helpers run at full speed. Decide after 3.1 is measured, as
+#254 says. Independently, the 10.2% outside BFS (the findings and `Adjacency::new` of the
+one large cone, start and exit) bounds every design at about 10x on food-permit-ops. A
+parallel adjacency build is the lever there, and it is outside #296's list.
 
 ## If phase 2 lands differently
 
@@ -597,10 +613,10 @@ outside #296's list.
 <!-- derived-from #beyond-31-in-flight-dedup -->
 
 1. **The exit criterion.** "food-permit-ops at 8 jobs at or under a quarter of one job" is
-   estimated out of reach for 3.1 alone: about 3.4x. Choose one:
+   estimated just out of reach for 3.1 alone: 3.5x to 3.9x. Choose one:
+   - keep it as the exit of phase 3, and build 3.3 only if 3.1 measures under 4x; or
    - restate it for 3.1 as "at or under 30% of one job at 6 or 8 jobs, same output at
-     every job count", and make 4x the exit of 3.3; or
-   - keep it, and plan 3.3 and a parallel adjacency build into phase 3.
+     every job count", and make 4x the exit of 3.3.
 2. **Helpers and cones split** (3.2). `RDRA_JOBS` keeps setting both. Should the default
    helper count become `available_parallelism() - 1`, with cones side by side staying at
    `min(cores, 8)`? This is a documented behavior of `RDRA_JOBS` in `cli-reference.md`.
@@ -619,7 +635,8 @@ outside #296's list.
   threads, giving 44 s of user time on insurance-claim-ops at 8 jobs against 15 s for the
   plain build.
 - **Shares.** `sample` at 1 ms on the plain build with `#[inline(never)]` on the functions
-  #296 names, at 1 job, and at 8 jobs on food-permit-ops per thread.
+  #296 names, at 1 job, and at 8 jobs on food-permit-ops per thread. Samples taken while
+  `sample` attached at launch (`_dyld_start` alone) are left out.
 - **Stale misses.** The same build with `perf` and a patch to `perf.rs`'s `RDRA_PERF=2`
   columns. For every non-loop edge, the patch takes the move that admitted its target, from
   `parents`, and compares that move's source with `chunk start - helpers × 512`. Not for
