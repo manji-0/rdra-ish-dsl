@@ -347,6 +347,13 @@
   fewer instructions on `insurance-claim-ops`, 9% fewer on `patent-ops` and 28% fewer on
   `oidc-auth` at one instance. `RDRA_ISH_NO_QUOTIENT_CACHE=1` turns the sharing off, and
   `RDRA_ISH_QUOTIENT_STATS=1` prints what it did.
+- BFS finds a state's enabled bindings without walking every guard (#253), and prints what
+  it printed. Each system works out once which guards read the successor, and turns each
+  guard conjunct that reads one var of one param's row into a test of that byte, taken from
+  the evaluator itself on every byte value; a slot that fails is no candidate, so no guard is
+  evaluated for it. `verify` at `RDRA_JOBS=1` retires 29% fewer instructions on
+  food-permit-ops, 30% fewer on patent-ops, and 25% fewer on oidc-auth at
+  `--instance-count 1`.
 - A BFS run evaluates only the invariants and `after` assertions its caller reads (#251). An
   entity cone and a `can_reach` cone evaluate the checks among their own targets, so a cone
   of entity targets alone evaluates none, and the run that quotients a sub-lifecycle

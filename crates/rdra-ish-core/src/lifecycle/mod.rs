@@ -92,6 +92,8 @@ pub struct TransitionSystem {
     api_ids: std::collections::HashMap<crate::model::ApiKey, String>,
     /// The S side of a reduced cone (`reduced`).
     reduction: Option<std::sync::Arc<Reduction>>,
+    /// What the move generator reads of each action's guards (`explore::Plans`).
+    plans: explore::Plans,
 }
 
 impl TransitionSystem {
@@ -114,11 +116,13 @@ impl TransitionSystem {
             width: 0,
             api_ids: std::collections::HashMap::new(),
             reduction: None,
+            plans: explore::Plans::default(),
         }
     }
 
     /// Assigns each var its slots in the flat state.
     fn layout(&mut self) {
+        self.plans = explore::Plans::default();
         self.offsets.clear();
         let mut at = 0;
         for var in &self.vars {

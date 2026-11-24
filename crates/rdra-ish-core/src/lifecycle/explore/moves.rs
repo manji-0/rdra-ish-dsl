@@ -6,6 +6,7 @@ use crate::lifecycle::expr::{Env, State, StateSlice};
 use crate::lifecycle::types::{ActId, Action, Effect, EntId, ParamRole, Rhs, Start, Value, VarId};
 use crate::lifecycle::TransitionSystem;
 
+use super::plan::Plan;
 use super::{Move, Moves};
 
 impl TransitionSystem {
@@ -135,15 +136,56 @@ impl TransitionSystem {
     /// The `bindings` of `action` in `state` whose pre-guards hold, in `bindings` order.
     #[cfg(test)]
     pub(super) fn enabled_bindings(&self, action: &Action, state: &StateSlice) -> Vec<Box<[u8]>> {
+        let ai = self
+            .actions
+            .iter()
+            .position(|a| std::ptr::eq(a, action))
+            .expect("an action of this system");
         let mut out = Vec::new();
-        self.each_enabled(action, state, |params| out.push(params.into()));
+        self.each_enabled(action, &self.plans()[ai], state, |params| {
+            out.push(params.into())
+        });
         out
     }
 
     /// Calls `found` with each of the `bindings` of `action` in `state` whose pre-guards hold,
-    /// in `bindings` order. It walks the choices in buffers on the stack, so a state where
-    /// the action cannot run costs no allocation.
-    fn each_enabled(&self, action: &Action, state: &StateSlice, mut found: impl FnMut(&[u8])) {
+    /// in `bindings` order. A build with debug assertions checks the result against `bindings`
+    /// and `pre_guards_hold`, the definition.
+    fn each_enabled(
+        &self,
+        action: &Action,
+        plan: &Plan,
+        state: &StateSlice,
+        mut found: impl FnMut(&[u8]),
+    ) {
+        if !cfg!(debug_assertions) {
+            return self.each_planned(action, plan, state, found);
+        }
+        let mut got: Vec<Box<[u8]>> = Vec::new();
+        self.each_planned(action, plan, state, |params| got.push(params.into()));
+        let want: Vec<Box<[u8]>> = self
+            .bindings(action, state)
+            .into_iter()
+            .filter(|params| self.pre_guards_hold(action, state, params))
+            .map(Vec::into_boxed_slice)
+            .collect();
+        assert_eq!(got, want, "the enabled bindings of {}", action.name);
+        got.iter().for_each(|params| found(params));
+    }
+
+    /// `each_enabled` as `plan` reads the guards: a slot that fails its param's row tests is
+    /// no candidate, and a candidate is enabled when the rest of the pre-state guards hold.
+    /// The row tests are conjuncts of the guards that read that slot alone, so dropping the
+    /// slot drops only bindings the guards reject, and the rest keep their order. It walks the
+    /// choices in buffers on the stack, so a state where the action cannot run costs no
+    /// allocation.
+    pub(super) fn each_planned(
+        &self,
+        action: &Action,
+        plan: &Plan,
+        state: &StateSlice,
+        mut found: impl FnMut(&[u8]),
+    ) {
         const MAX: usize = 16;
         let count = action.params.len();
         if self.most_slots() > MAX || count > MAX {
@@ -156,31 +198,36 @@ impl TransitionSystem {
         }
         // Per param: how many candidate slots it has, and the slots, lowest first.
         let mut choices = [(0usize, [0u8; MAX]); MAX];
-        for (p, (n, list)) in action.params.iter().zip(&mut choices) {
+        for (i, (p, (n, list))) in action.params.iter().zip(&mut choices).enumerate() {
             let exists = self.entity(p.entity).exists;
             let slots = self.slots(p.entity);
+            let row = |s: usize| plan.row_holds(i, state, s);
             match p.role {
                 ParamRole::New => {
                     if let Some(s) =
                         (0..slots).find(|&s| state.get(self, exists, s) == Value::ABSENT)
                     {
-                        list[0] = s as u8;
-                        *n = 1;
+                        if row(s) {
+                            list[0] = s as u8;
+                            *n = 1;
+                        }
                     }
                 }
                 ParamRole::Existing | ParamRole::Parent { .. } | ParamRole::Triggered => {
                     for s in 0..slots {
-                        if state.get(self, exists, s) == Value::PRESENT {
+                        if state.get(self, exists, s) == Value::PRESENT && row(s) {
                             list[*n] = s as u8;
                             *n += 1;
                         }
                     }
                 }
                 ParamRole::Earlier { .. } => {
-                    for (s, cell) in list.iter_mut().enumerate().take(slots) {
-                        *cell = s as u8;
+                    for s in 0..slots {
+                        if row(s) {
+                            list[*n] = s as u8;
+                            *n += 1;
+                        }
                     }
-                    *n = slots;
                 }
             }
             if *n == 0 {
@@ -194,7 +241,7 @@ impl TransitionSystem {
             *param = list[0];
         }
         loop {
-            if self.pre_guards_hold(action, state, &params[..count]) {
+            if self.rest_holds(plan, state, &params[..count]) {
                 found(&params[..count]);
             }
             // The last param varies fastest, as `bindings` lists them.
@@ -213,6 +260,12 @@ impl TransitionSystem {
                 params[i] = choices[i].1[0];
             }
         }
+    }
+
+    /// Whether the pre-state guards `plan` leaves to `eval` hold.
+    fn rest_holds(&self, plan: &Plan, state: &StateSlice, params: &[u8]) -> bool {
+        let mut env = Env::new(params);
+        plan.pre.iter().all(|pred| self.eval(pred, state, &mut env))
     }
 
     pub(super) fn pre_guards_hold(
@@ -348,23 +401,22 @@ impl TransitionSystem {
         scratch: &mut State,
         mut found: impl FnMut(ActId, &[u8], &mut State),
     ) {
-        for (ai, action) in self.actions.iter().enumerate() {
+        let plans = self.plans();
+        for (ai, (action, plan)) in self.actions.iter().zip(plans).enumerate() {
             let act = ActId::at(ai);
             if skip(act) {
                 continue;
             }
-            self.each_enabled(action, s, |params| {
+            self.each_enabled(action, plan, s, |params| {
                 self.each_successor(action, params, s, scratch, |next| {
                     let holds = {
                         let mut env = Env {
                             next: Some(next),
                             ..Env::new(params)
                         };
-                        action
-                            .guards
+                        plan.post
                             .iter()
-                            .filter(|g| g.reads_successor())
-                            .all(|g| self.eval(&g.pred, s, &mut env))
+                            .all(|&g| self.eval(&action.guards[g].pred, s, &mut env))
                     };
                     if holds {
                         found(act, params, next);
