@@ -449,31 +449,73 @@ forbidden(C, status == y)
 "#;
 
 /// A `tlc` that records the `JAVA_TOOL_OPTIONS` of each run, and when it starts and ends.
+/// With `oom_at`, a run whose options hold that `-Xmx` prints TLC's out-of-memory error and
+/// exits 255, and any other run passes.
 #[cfg(unix)]
-fn fake_tlc(dir: &Path) -> PathBuf {
+fn fake_tlc(dir: &Path, oom_at: Option<&str>) -> PathBuf {
     use std::os::unix::fs::PermissionsExt;
     let bin = dir.join("bin");
     std::fs::create_dir_all(&bin).unwrap();
     let tlc = bin.join("tlc");
+    let outcome = match oom_at {
+        Some(xmx) => format!(
+            "case \"$JAVA_TOOL_OPTIONS \" in\n\
+             *\"-Xmx{xmx} \"*)\n\
+               echo 'Error: Java ran out of memory.  Running Java with a larger maximum heap size may allow the model checker to complete.'\n\
+               echo end >> \"$RDRA_TEST_RECORD\"\n\
+               exit 255;;\n\
+             esac\n\
+             echo '4 states generated, 2 distinct states found, 0 states left on queue.'\n\
+             echo 'Model checking completed. No error has been found.'\n"
+        ),
+        None => String::new(),
+    };
     std::fs::write(
         &tlc,
-        "#!/bin/sh\necho \"start $JAVA_TOOL_OPTIONS\" >> \"$RDRA_TEST_RECORD\"\nsleep 1\necho end >> \"$RDRA_TEST_RECORD\"\n",
+        format!(
+            "#!/bin/sh\necho \"start $JAVA_TOOL_OPTIONS\" >> \"$RDRA_TEST_RECORD\"\nsleep 1\n{outcome}echo end >> \"$RDRA_TEST_RECORD\"\n"
+        ),
     )
     .unwrap();
     std::fs::set_permissions(&tlc, std::fs::Permissions::from_mode(0o755)).unwrap();
     bin
 }
 
-/// The `-Xmx` of every run, and the most runs that were going at once.
+/// What `verify --with-tlc` did with the TLC runs of `THREE_CONES` at `memory`.
 #[cfg(unix)]
-fn tlc_runs(test: &str, memory: &str, env: &[(&str, &str)]) -> (Vec<String>, usize) {
+struct TlcRuns {
+    /// The `-Xmx` of every run, in start order.
+    heaps: Vec<String>,
+    /// The most runs that were going at once.
+    most: usize,
+    /// Each start at which the runs going held more than the cone runs' share of `memory`,
+    /// counting each JVM at its `-Xmx` and 256 MiB, with more than one run going.
+    over: Vec<String>,
+    stdout: String,
+    stderr: String,
+}
+
+/// `-Xmx` as bytes: `1g`, `512m`.
+#[cfg(unix)]
+fn xmx_bytes(xmx: &str) -> u64 {
+    let (digits, unit) = xmx.split_at(xmx.len() - 1);
+    let n: u64 = digits.parse().expect("an -Xmx size");
+    match unit {
+        "g" => n << 30,
+        "m" => n << 20,
+        other => panic!("unit {other}"),
+    }
+}
+
+#[cfg(unix)]
+fn tlc_runs(test: &str, memory: &str, env: &[(&str, &str)], oom_at: Option<&str>) -> TlcRuns {
     let dir = scratch(test);
     let model = dir.join("m.rdra");
     std::fs::write(&model, THREE_CONES).unwrap();
     let record = dir.join("record");
     let path = format!(
         "{}:{}",
-        fake_tlc(&dir).display(),
+        fake_tlc(&dir, oom_at).display(),
         std::env::var("PATH").unwrap_or_default()
     );
     let mut command = Command::new(env!("CARGO_BIN_EXE_rdra-ish"));
@@ -494,51 +536,131 @@ fn tlc_runs(test: &str, memory: &str, env: &[(&str, &str)]) -> (Vec<String>, usi
     for (key, value) in env {
         command.env(key, value);
     }
-    command.output().expect("rdra-ish runs");
+    let output = command.output().expect("rdra-ish runs");
+    let limit: u64 = memory.trim_end_matches("GiB").parse::<u64>().expect("GiB") << 30;
+    let share = limit - limit / 2;
     let text = std::fs::read_to_string(&record).expect("tlc ran");
-    let (mut going, mut most, mut heaps) = (0usize, 0usize, Vec::new());
+    let mut runs = TlcRuns {
+        heaps: Vec::new(),
+        most: 0,
+        over: Vec::new(),
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    };
+    // The fake runs do not say which run ends, so the run that ends is charged the largest
+    // heap going: what is left going is then the least it can be.
+    let mut going: Vec<u64> = Vec::new();
     for line in text.lines() {
         if let Some(opts) = line.strip_prefix("start ") {
-            going += 1;
-            most = most.max(going);
-            heaps.push(
-                opts.split_whitespace()
-                    .find(|o| o.starts_with("-Xmx"))
-                    .expect("an -Xmx")
-                    .to_string(),
-            );
+            let xmx = opts
+                .split_whitespace()
+                .find_map(|o| o.strip_prefix("-Xmx"))
+                .expect("an -Xmx");
+            runs.heaps.push(format!("-Xmx{xmx}"));
+            going.push(xmx_bytes(xmx) + (256 << 20));
+            runs.most = runs.most.max(going.len());
+            let held: u64 = going.iter().sum();
+            if going.len() > 1 && held > share {
+                runs.over
+                    .push(format!("{} runs hold {held} of {share}", going.len()));
+            }
         } else {
-            going -= 1;
+            let largest = (0..going.len()).max_by_key(|i| going[*i]).expect("a run");
+            going.remove(largest);
         }
     }
-    (heaps, most)
+    runs
 }
 
 #[cfg(unix)]
 #[test]
 fn verify_sizes_and_queues_tlc_runs_to_fit_the_memory() {
-    // 16GiB: TLC's half holds eight runs of 1g, so the three cones go side by side.
-    let (heaps, most) = tlc_runs("memory_cli_tlc_default", "16GiB", &[]);
-    assert!(heaps.iter().all(|h| h == "-Xmx1g"), "{heaps:?}");
+    // 16GiB: TLC's half holds six runs of 1g and 256MiB each, so the three cones go side by
+    // side.
+    let runs = tlc_runs("memory_cli_tlc_default", "16GiB", &[], None);
+    assert!(runs.heaps.iter().all(|h| h == "-Xmx1g"), "{:?}", runs.heaps);
     let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
-    assert!(most >= 2.min(cores), "{most} at once on {cores} cores");
+    assert!(
+        runs.most >= 2.min(cores),
+        "{} at once on {cores} cores",
+        runs.most
+    );
+    assert!(runs.over.is_empty(), "{:?}", runs.over);
 
-    // 2GiB: TLC's half holds one run of 1g at a time.
-    let (heaps, most) = tlc_runs("memory_cli_tlc_queued", "2GiB", &[]);
-    assert!(heaps.iter().all(|h| h == "-Xmx1g"), "{heaps:?}");
-    assert_eq!(most, 1);
+    // 4GiB: TLC's half, 2GiB, holds one run of 1g and the 256MiB its JVM holds beside it,
+    // not two.
+    let runs = tlc_runs("memory_cli_tlc_charged", "4GiB", &[], None);
+    assert!(runs.heaps.iter().all(|h| h == "-Xmx1g"), "{:?}", runs.heaps);
+    assert_eq!(runs.most, 1);
 
     // 1GiB: TLC's half is less than one default heap, so the heap shrinks to it.
-    let (heaps, most) = tlc_runs("memory_cli_tlc_shrunk", "1GiB", &[]);
-    assert!(heaps.iter().all(|h| h == "-Xmx512m"), "{heaps:?}");
-    assert_eq!(most, 1);
+    let runs = tlc_runs("memory_cli_tlc_shrunk", "1GiB", &[], None);
+    assert!(
+        runs.heaps.iter().all(|h| h == "-Xmx512m"),
+        "{:?}",
+        runs.heaps
+    );
+    assert_eq!(runs.most, 1);
 
-    // A heap the user names is kept, and the runs queue to fit it.
-    let (heaps, most) = tlc_runs(
+    // A heap the user names is kept, and the runs queue to fit it: two of 4g and 256MiB
+    // each are past TLC's 8GiB.
+    let runs = tlc_runs(
         "memory_cli_tlc_user_heap",
         "16GiB",
         &[("RDRA_TLC_HEAP", "4g")],
+        None,
     );
-    assert!(heaps.iter().all(|h| h == "-Xmx4g"), "{heaps:?}");
-    assert!(most <= 2, "{most} at once");
+    assert!(runs.heaps.iter().all(|h| h == "-Xmx4g"), "{:?}", runs.heaps);
+    assert_eq!(runs.most, 1);
+}
+
+/// A run that runs out of memory is run once more at twice the heap when TLC's share holds
+/// that, and its line says so; when the share does not, it is a tool error with the hint.
+/// It is not run again on one worker first, as a run that fails otherwise is (#309).
+#[cfg(unix)]
+#[test]
+fn a_run_out_of_memory_reruns_once_at_twice_the_heap_within_the_share() {
+    let runs = tlc_runs("memory_cli_tlc_oom_retry", "16GiB", &[], Some("1g"));
+    assert_eq!(
+        runs.heaps.iter().filter(|h| *h == "-Xmx1g").count(),
+        3,
+        "{:?}",
+        runs.heaps
+    );
+    assert_eq!(
+        runs.heaps.iter().filter(|h| *h == "-Xmx2g").count(),
+        3,
+        "{:?}",
+        runs.heaps
+    );
+    assert!(runs.over.is_empty(), "{:?}", runs.over);
+    let rerun = "(2 states, rerun at -Xmx2g after -Xmx1g ran out of memory)";
+    assert_eq!(
+        runs.stdout.lines().filter(|l| l.ends_with(rerun)).count(),
+        3,
+        "{}",
+        runs.stdout
+    );
+    assert!(
+        runs.stdout.contains("\ntlc_result: ok"),
+        "{}{}",
+        runs.stdout,
+        runs.stderr
+    );
+
+    // 2GiB: TLC's half is 1GiB, which holds no 2g rerun.
+    let runs = tlc_runs("memory_cli_tlc_oom_no_room", "2GiB", &[], Some("1g"));
+    assert!(runs.heaps.iter().all(|h| h == "-Xmx1g"), "{:?}", runs.heaps);
+    assert_eq!(runs.heaps.len(), 3, "{:?}", runs.heaps);
+    assert!(
+        runs.stderr
+            .contains("hint: TLC ran out of memory; set the heap with RDRA_TLC_HEAP=4g"),
+        "{}",
+        runs.stderr
+    );
+    assert!(
+        runs.stderr.contains("\ntlc_result: tool_error\n"),
+        "{}",
+        runs.stderr
+    );
 }
