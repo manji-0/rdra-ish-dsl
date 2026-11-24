@@ -79,6 +79,7 @@ and prints one note with the error count that names the state-model specs and `v
 ### State models with TLC alone
 
 <!-- constrained-by #what-verify-checks -->
+<!-- constrained-by ./state-derivation.md#triggers -->
 `check` and `verify` find a deadlock or a state with no witness by BFS on each entity's
 cone (see [What `verify` checks](#what-verify-checks)). `export --kind tla` writes the same
 cones as TLA+, so TLC alone reaches the states the BFS reaches. TLC finds the same missing
