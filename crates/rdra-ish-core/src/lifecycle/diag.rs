@@ -449,6 +449,15 @@ pub enum StateDiag {
         entity: String,
         site: Site,
     },
+    /// `triggers(Ev, UC).counted(k)` has no counter: the event is free, the use case writes
+    /// nothing or also starts freely, the raisers share no row, the use case raises the event
+    /// itself, or a raiser binds the event's entity twice (docs/design/counted-events.md).
+    UncountedTrigger {
+        event: String,
+        usecase: String,
+        why: String,
+        site: Site,
+    },
     /// A use case several tracked events trigger never runs after one of them, while it runs
     /// after another.
     TriggerNeverRuns {
@@ -637,6 +646,9 @@ impl StateDiag {
             StateDiag::TriggerNeverRuns { usecase, event, .. } => {
                 with("TriggerNeverRuns", &[usecase, event])
             }
+            StateDiag::UncountedTrigger { event, usecase, .. } => {
+                with("UncountedTrigger", &[event, usecase])
+            }
             StateDiag::DeleteLeavesChildren { usecase, child, .. } => {
                 with("DeleteLeavesChildren", &[usecase, child])
             }
@@ -725,6 +737,7 @@ impl StateDiag {
             | StateDiag::UnboundCopySource { .. }
             | StateDiag::AmbiguousOwnerLink { .. }
             | StateDiag::UnsupportedComparison { .. }
+            | StateDiag::UncountedTrigger { .. }
             | StateDiag::DerivedColumnRead { .. } => Severity::Error,
         }
     }
@@ -1165,6 +1178,15 @@ impl fmt::Display for StateDiag {
             StateDiag::TriggerNeverRuns { usecase, event, .. } => write!(
                 f,
                 "{usecase} never runs after {event}, while it runs after another of its events"
+            ),
+            StateDiag::UncountedTrigger {
+                event,
+                usecase,
+                why,
+                ..
+            } => write!(
+                f,
+                "triggers({event}, {usecase}).counted(..) counts nothing: {why}"
             ),
             StateDiag::DeleteLeavesChildren {
                 usecase,

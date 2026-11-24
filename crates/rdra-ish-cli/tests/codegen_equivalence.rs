@@ -23,8 +23,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use rdra_ish_core::lifecycle::{
-    ActionOrigin, Bounds, Caps, Domain, GuardWhy, ParamRole, Scope, State, TransitionSystem, Value,
-    VarId, VarKind,
+    ActionOrigin, Bounds, Caps, Domain, GuardWhy, ParamRole, Scope, StateSlice, TransitionSystem,
+    Value, VarId, VarKind,
 };
 use rdra_ish_core::load_project;
 use rdra_ish_emit::codegen::build;
@@ -77,7 +77,7 @@ fn enum_name(ts: &TransitionSystem, var: VarId, value: Value) -> Option<String> 
 struct Rows<'a> {
     ts: &'a TransitionSystem,
     model: &'a rdra_ish_core::SemanticModel,
-    state: &'a State,
+    state: &'a StateSlice,
     /// `(entity id, slot)` per row of the function.
     rows: Vec<(String, usize)>,
     /// The entity of each row a quantifier binds, numbered after `rows`.
@@ -90,7 +90,7 @@ impl Rows<'_> {
     fn new<'a>(
         ts: &'a TransitionSystem,
         model: &'a rdra_ish_core::SemanticModel,
-        state: &'a State,
+        state: &'a StateSlice,
         rows: Vec<(String, usize)>,
         elems: Vec<String>,
     ) -> Rows<'a> {
@@ -363,7 +363,7 @@ fn functions_agree_with_the_transition_system() {
                         continue;
                     };
                     let raised = ts.var_ids().find(|v| {
-                        matches!(&ts.var(*v).kind, VarKind::Raised { entity, event: ev }
+                        matches!(&ts.var(*v).kind, VarKind::Raised { entity, event: ev, handler: None }
                             if *entity == e && type_name(ev) == event.ty)
                     });
                     let Some(p) = action.params.iter().position(|q| q.entity == e) else {
@@ -402,7 +402,7 @@ fn functions_agree_with_the_transition_system() {
                 let e = action.params[out.param].entity;
                 let entity = ts.entity(e).id.clone();
                 let slot = usize::from(params[out.param]);
-                let at = |column: &str, state: &State| {
+                let at = |column: &str, state: &StateSlice| {
                     column_var(ts, &entity, column).map(|v| (v, state.get(ts, v, slot)))
                 };
                 match &out.kind {

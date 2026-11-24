@@ -30,7 +30,7 @@ Also ask:
 3. Add `contains(Buc, UseCase)` for each visible action.
 4. Add `performs(Actor, Buc)` for an actor who takes part in every use case of the BUC.
    A use case's actors are its direct performers plus the performers of each BUC that
-   contains it, and the permission check later holds each of them to the use case's
+   contains it (or covers it from a flow step), and the permission check later holds each of them to the use case's
    permissions. For an actor who runs only some use cases, write
    `performs(Actor, UseCase)` for those instead.
 5. Add `flow` and `step` only when the business sequence itself must be reviewed.

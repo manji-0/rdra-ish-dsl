@@ -27,6 +27,25 @@
   of a created parent, which `PreExistingChildOfCreatedParent` already reports, gets no
   rule. No sample changes verdict: no sample deletes a row that a key names.
 
+- `verify --prove` decides an invariant cone that BFS stopped at the memory limit (#232).
+  When z3 proves every rule the cone checks for any number of rows, the rules hold at the
+  run's bounds too, so the cone's line reads `ok (<n> states, BFS stopped at the memory
+  limit, decided by proof: --prove proved every check for any number of rows)` where it read
+  `not decided`. The cone no longer counts toward the closing warning or `--deny-undecided`,
+  and a run with nothing else open prints `result: ok`. A cone with an `after` assertion, or
+  with a rule z3 leaves unproved or out of scope, stays `not decided`, as does a cone stopped
+  at `--max-states` or `--max-patterns`. Without `--prove` nothing changes.
+
+- `verify --prove` gives each z3 check a budget of z3 resource units (`rlimit`) instead of
+  wall-clock time: 20,000,000 units for a check of a rule and 2,000,000 for a lemma, where
+  it gave 10 s and 0.5 s. Whether a rule is proved, and which lemmas it keeps, no longer
+  depends on the machine, its load, or `RDRA_JOBS`, so a proof can decide a verdict. No
+  flag sets the budgets. On every sample and engine-corpus case the proofs are the same as
+  with no practical limit, and a lemma check past its budget drops the lemma as a breaking
+  step does. In `rdra-ish-core`, `ProveOptions` has `rlimit` and `lemma_rlimit` in place of
+  `timeout_ms` and `lemma_timeout_ms`, and `Solver::check_sat` takes the check's budget.
+  `examples/prove_rlimit.rs` measures what each check spends.
+
 - The lifecycle checks unique column sets (#222). A `@unique` column, a `@unique(a, b)`,
   and the pair of keys of a `relate(A, B, N:M).via(J)` junction become the invariant
   `Unique_<Entity>_<columns>` when the lifecycle holds every column's value: an `Enum`,
@@ -106,6 +125,35 @@
 
 ### Added
 
+- `check --guards` reports which rules each guard protects (#198). A guard is a `holds`
+  condition applied to a use case, or the `.when` conditions of one column's arms or
+  values. For each guard, after a clean `check`, the run removes it from every action of
+  the use case, explores again the cones of the rules that keep the use case, under the
+  same caps and `--memory`, and prints on stdout the rules that now fail (`protects:`), a
+  `rules:` block with the guards each rule depends on, and, for a guard no rule depends
+  on, `no rule depends on this guard; it is either a business rule nobody wrote as a rule,
+  or not needed`. A rule whose cone stops at a cap without the guard is `not decided`. The
+  report adds no finding and leaves the exit status to `check`. On `samples/oidc-auth` it
+  takes about 3 s (34 guards, 131 cones), and `tests/guards_cli.rs` reads the sample
+  README's table of rules and guards and checks each row against it. The table now has one
+  row per rule, also names `AccountChoiceAsked` on `SelectAccount` for the `prompt=login`
+  rule, and no longer names `ConsentOnRecord`, whose removal alone fails no rule.
+- `triggers(Event, UseCase).counted(k)` makes a handler run once per raise (#220). Each
+  counted edge has a counter per row of the event's entity, `<E>._pending_<Ev>_<UC>`
+  (`<E>_pending_<Ev>_<UC>` in TLA+), with the values `0` to `k` and `over`: the last step
+  of every raiser adds one, the handler runs only while a raise is pending and takes one,
+  and a raise with `k` already pending is the state rule `EventOverflow_<E>_<Ev>_<UC>`,
+  which `check`, `states`, `verify`, `verify --with-tlc`, and `verify --prove` report. The
+  raiser never waits, and after an overflow the handler runs as under the latch. `k` is a
+  whole number from 1 to 16; `.counted` on a timer, a BUC, or an external system, or with
+  any other argument, is the error `CountedTriggerInvalid`, and on an edge the event order
+  does not track (a free event, a handler a free trigger also starts, raisers with no entity
+  in common, a handler that raises the event itself, a raiser that binds the entity twice)
+  it is the error `UncountedTrigger`. A counted mark is never left out of a cone and never
+  reduced across, so a cone of its raiser holds the handler too. `codegen` reports a use
+  case that raises or handles a counted event as unsupported. Edges without `.counted` keep
+  the latch, and every model without it builds the same transition system as before.
+  Design: `docs/design/counted-events.md`.
 - A `MemoryCapReached` error of `check` and `states` says what the cone held and what
   finishing needs: the bytes each held state took, and an estimate of the states the cone
   reaches from its BFS layers. Once the frontier has shrunk for two depths past its peak,
@@ -133,9 +181,9 @@
   disagreement. `scripts/verify-samples.sh --with-tlc` and `scripts/reduction-diff.py
   --with-tlc` run the samples and random models that way.
 - `--temporal-budget` bounds the native whole-model run of a property its cone does not
-  decide: past the budget, or 2,097,152 states, the run stops with
-  `TimeBudgetReached` or the state cap and the property is `not decided` unless the partial
-  graph already holds a counterexample.
+  decide: past the budget, the memory limit, or `--max-states` when given, the run stops
+  and the property is `not decided` unless the partial graph already holds a
+  counterexample.
 - The `Vacuous_<name>` warning also covers an `after` assertion whose use case never runs
   and a temporal property whose rows never exist or whose `leads_to` trigger never holds.
   `verify` warns too: it explores by BFS each cone it hands to TLC, at the same bounds, so
@@ -227,6 +275,19 @@
 
 ### Changed
 
+- A safety cone stops once every invariant and `after` assertion on it has a
+  counterexample (#213), in `verify` and in `check` and `states`. The counterexamples are
+  BFS's first, so they stay the shortest, and the verdicts and traces do not change. A cone
+  that also answers an entity view, a `can_reach`, or a temporal property runs to the end. A
+  stopped cone counts as neither complete nor capped: it reports no vacuity, which a
+  violated check does not have, and no cap note. The `(N states)` of a failing
+  `Cone_<name>` run line now counts the states BFS reached before it stopped, so it can be
+  smaller than TLC's line for the same module (`samples/formal-verification-fail`: 7 to 3).
+  On `crates/rdra-ish-cli/tests/fixtures/early_stop/flags_fail.rdra` at
+  `--instance-count 3` the rule's cone stops at 3 of its 16,843,009 states; in one run on a
+  shared machine `verify` took 108 s where it took 206 s, the rest being the Task entity
+  cone, which runs to the end.
+  BFS also tracks violated checks as a bit per check name instead of a set of strings.
 - `verify` runs `Cone_<P>_WF` on the reduced cone first, with every class whose
   sub-lifecycle can loop taken as a place a behavior may stop. An `ok` there is the
   unreduced cone's `ok`, and a counterexample there prints only after it lifts to the
@@ -237,6 +298,15 @@
   `not decided`. No sample's verdict changes. The argument is in
   [WF_vars(Next) on a reduced cone](docs/formal-verification.md#wf_varsnext-on-a-reduced-cone);
   `RDRA_ISH_NO_WF_REDUCED` turns the run off for measurement.
+- BFS keeps each explored state once, in one buffer, with a table of state numbers to find
+  it by, in place of a heap block per state and a second copy as the key of the seen
+  set. The store per state on the sample cones of a thousand states and more falls from
+  215 to 125 bytes at the median at `check` bounds (260 to 154 at the most) and from 248 to
+  159 at `verify` bounds (403 to 316). States, edges, verdicts, and counterexamples do not
+  change, but a cone fits more states under `--memory`: a cone that stopped at the limit
+  stops later or finishes, and the `held at <N> B per state` of `MemoryCapReached` is
+  smaller. The memory estimate follows the new store, `(w + 12)·p2(n) + 5·buckets(n) +
+  12·p2(e)` bytes.
 - The TypeScript types of `codegen --lang ts` are covered by the compatibility contract
   ([The TypeScript types of `codegen`](./docs/compatibility.md#the-typescript-types-of-codegen)).
   The contract covers the scalars, the `<Entity>Id` types, the value sets with their
@@ -316,6 +386,13 @@
 
 ### Fixed
 
+- `verify --prove` above one instance now offers every lemma candidate it would offer at
+  one instance (#231). Candidates were mined only at the run's bounds, and each mining run
+  stops at 50,000 states. On oidc-auth at two instances, 13 of 24 cones stopped there, and
+  the proof lost 2 of the 16 rules it proves at one instance. The prover now also mines every
+  cone at one instance per entity, where these cones finish, and offers both sets of
+  candidates. A kept `lemma:` that only the one-instance run offers ends with
+  `(mined at 1 instance per entity)`. oidc-auth proves 16 of 16 rules at both counts.
 - An integer `@default` outside `0..--int-range-max` on an Int, Money, Decimal, Date, or
   DateTime column that a rule reads is `error[IntLiteralOutOfBounds_<E>_<value>]`, as a
   literal there is: `@default(7) of stock is outside the bounded domain 0..5`. The column
@@ -353,6 +430,15 @@
   permissions, actor inputs and the `TriggeredUseCaseUnreachable` warning too, as it
   already was for `next` and the BUC hand-offs. `performs(Actor, Buc)` now lends the actor
   to it, so its required permissions find the actor (#161).
+- `verify` no longer passes a `can_reach` whose cone stops at `--max-states`, the pattern
+  cap, or the `--memory` limit. Such a property is `not decided`: it is listed under
+  `not checked:` as `can_reach <P> is not decided: the <P> cone stopped at the state cap
+  (<n> states)` (or at the memory limit), the `can_reach (BFS on ...)` line adds
+  `, <n> not decided`, the `result:` line says `not decided`, and `--deny-undecided` fails
+  the run. The stop was dropped, so a run whose entity cones finished printed
+  `result: ok` and passed `--deny-undecided`, even where the full cone breaks the property.
+  `stable`, `unchanged`, `precedes`, `always`, `eventually`, and `leads_to` already counted
+  a stopped cone as undecided (#246).
 
 ## v2.3.0 - 2026-11-18
 

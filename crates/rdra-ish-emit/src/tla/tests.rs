@@ -473,7 +473,7 @@ fn decode_inverts_canon() {
         let names = TlaNames::new(ts);
         for s in &run.states {
             let canon = names.canon(ts, s);
-            assert_eq!(names.decode(ts, &canon).as_ref(), Some(s), "{name}");
+            assert_eq!(names.decode(ts, &canon).as_deref(), Some(s), "{name}");
         }
         let canon = names.canon(ts, &run.states[0]);
         let key = canon
@@ -1024,7 +1024,7 @@ sets(Mark, Job.owner_Gate == true)
     unique.dedup();
     assert_eq!(unique, vars);
     for s in &run.states {
-        assert_eq!(names.decode(ts, &names.canon(ts, s)).as_ref(), Some(s));
+        assert_eq!(names.decode(ts, &names.canon(ts, s)).as_deref(), Some(s));
     }
 }
 
@@ -1093,7 +1093,7 @@ forbidden(Job, status == running)
         assert_eq!(
             names
                 .decode(&run.system, &names.canon(&run.system, s))
-                .as_ref(),
+                .as_deref(),
             Some(s)
         );
     }
@@ -1228,6 +1228,84 @@ sets(Mark, Order.flag == true)
     let watched = "<<Order_exists, Order_status>>";
     assert!(
         tla.contains(&format!("ENABLED (Next /\\ {watched}' # {watched})\n")),
+        "{tla}"
+    );
+}
+
+/// Post moves a Ledger only once Execute raised EvExecuted on its Order, so the deadlock of
+/// `open` watches the event mark Post reads, the link it joins by, and Execute's own reads:
+/// with an Order still to execute the ledger has a way on, and Execute's step is a move of
+/// the cone (#261).
+const TRIGGERED_POST: &str = r#"
+entity Order "依頼" { id: Int @pk  status: Enum(requested, executed) @default(requested) }
+entity Ledger "台帳" { id: Int @pk  state: Enum(open, posted) @default(open) }
+relate(Ledger, Order, N:1)
+usecase Request "依頼"
+usecase OpenLedger "台帳作成"
+usecase Execute "実行"
+usecase Post "記帳"
+event EvExecuted "実行済"
+creates(Request, Order)
+creates(OpenLedger, Ledger)
+transitions(Execute, Order.status, requested -> executed)
+raises(Execute, EvExecuted)
+triggers(EvExecuted, Post)
+transitions(Post, Ledger.state, open -> posted)
+"#;
+
+#[test]
+fn a_deadlock_watches_the_event_mark_its_way_out_reads() {
+    let ts = system(TRIGGERED_POST);
+    let ledger = entity_named(&ts, "Ledger");
+    let tla = print_state_models(&ts, &[ledger], "M").tla;
+    let watched = "<<Ledger_exists, Ledger_state, Order_exists, Order_status, Ledger_owner_Order, Order_raised_EvExecuted>>";
+    assert!(
+        tla.contains(&format!(
+            "\nDeadlock_Ledger_state_open == \\A b0 \\in Ledger_Ids : (Ledger_exists[b0] = \"present\" /\\ Ledger_state[b0] = \"open\") => ENABLED (Next /\\ {watched}' # {watched})\n"
+        )),
+        "{tla}"
+    );
+}
+
+/// Execute itself waits on EvApproved, which Approve raises while writing only `approved`,
+/// a column nothing in the cone reads. The deadlock follows the chain to Approve's mark,
+/// and leaves `approved` out.
+#[test]
+fn a_deadlock_follows_a_chain_of_events_to_the_first_raiser() {
+    let src = r#"
+entity Order "依頼" {
+  id: Int @pk
+  status: Enum(requested, executed) @default(requested)
+  approved: Bool @default(false)
+}
+entity Ledger "台帳" { id: Int @pk  state: Enum(open, posted) @default(open) }
+relate(Ledger, Order, N:1)
+usecase Request "依頼"
+usecase OpenLedger "台帳作成"
+usecase Approve "承認"
+usecase Execute "実行"
+usecase Post "記帳"
+event EvApproved "承認済"
+event EvExecuted "実行済"
+creates(Request, Order)
+creates(OpenLedger, Ledger)
+updates(Approve, Order)
+sets(Approve, Order.approved == true)
+raises(Approve, EvApproved)
+triggers(EvApproved, Execute)
+transitions(Execute, Order.status, requested -> executed)
+raises(Execute, EvExecuted)
+triggers(EvExecuted, Post)
+transitions(Post, Ledger.state, open -> posted)
+"#;
+    let ts = system(src);
+    let ledger = entity_named(&ts, "Ledger");
+    let tla = print_state_models(&ts, &[ledger], "M").tla;
+    let watched = "<<Ledger_exists, Ledger_state, Order_exists, Order_status, Ledger_owner_Order, Order_raised_EvApproved, Order_raised_EvExecuted>>";
+    assert!(
+        tla.contains(&format!(
+            "\nDeadlock_Ledger_state_open == \\A b0 \\in Ledger_Ids : (Ledger_exists[b0] = \"present\" /\\ Ledger_state[b0] = \"open\") => ENABLED (Next /\\ {watched}' # {watched})\n"
+        )),
         "{tla}"
     );
 }

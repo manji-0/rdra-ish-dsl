@@ -27,7 +27,7 @@ same order:
 | Interaction | `actor`, `usecase`, `screen`, `field`, `event` | Who does what, on which screen, and what does it cause? | [Interaction Layer](#interaction-layer) |
 | System boundary | `system`, `extsystem`, `api`, `dto`, `permission` | Which boundary owns the operation, and who may call it? | [System Boundary](#system-boundary) |
 | Data | `entity`, `variation`, `condition` | What is stored, and how is it related? | [Data Layer](#data-layer) |
-| Lifecycle and rules | `transitions`, `chooses`, `sets`, `drives`, and the rules `forbidden`, `invariant`, `required`, `exclusive` | Which states are reachable, and which are forbidden? | [Lifecycle](#lifecycle), [Entity State Constraints](#entity-state-constraints) |
+| Lifecycle and rules | `transitions`, `chooses`, `sets`, `drives`, the rules `forbidden`, `invariant`, `required`, `exclusive`, `after(...).assert(...)`, and the temporal `property` | Which states are reachable, and which are forbidden? | [Lifecycle](#lifecycle), [Entity State Constraints](#entity-state-constraints) |
 
 A kind is part of the language only when some review output consumes it. The
 [kind index](#kind-index) lists that output for every kind.
@@ -289,10 +289,12 @@ only the methods below, and any other name is an `unknown chain method` error
 | `holds` | `.has(...)`, `.none(...)`, `.along(...)`, `.role(...)` |
 | `sets` | `.role(...)`, on a copy (`Entity.column == Source.column`); `.when(Condition)`, at most once, on a literal value: the condition's `holds` body guards this value |
 | `after` | `.assert(...)`, `.label("...")` |
+| `property` | `.along(...)`, `.role(...)`, `.global()`, `.fair(UseCase, ...)`; `.when(...)` directly after `unchanged(...)`. See [Temporal path properties](#temporal-path-properties) |
 | `exposes` | `.append()`, `.upsert()` (an entity), `.caller(actor \| system \| any)` (a use case) |
 | `reads` | `.by(...)`, `.order(...)`, `.page(...)`, `.count()`, `.sum(...)`, each at most once: the [query shape](#query-shapes) |
 | `links`, `relinks`, `unlinks` | `.role(...)`, to pick the key when several join the child to the parent |
 | `creates`, `updates`, `deletes` | `.apart()`, on a use case's write: the row need not be joined to the other rows the use case writes, so it draws no `UnjoinedWrite` |
+| `triggers` | `.counted(k)`, at most once, on an edge from an event to a use case: the use case runs once per raise, with at most `k` (1 to 16) raises pending per row. See [Counting raises](#counting-raises-counted) |
 | every other predicate (including `combines`) | none |
 
 ---
@@ -674,7 +676,7 @@ usecase CapturePayment "Capture payment"
 `precondition`, `postcondition`, `guard`, `alternative` / `alternative_flow`, and
 `error` / `error_condition` / `business_error` may be repeated. These clauses are
 stored on the use case and shown by `rdra-ish list --kind usecase`. They are **not**
-evaluated by `check`, `states`, or TLA+/TLC. For machine-checked postconditions use
+evaluated by `check`, `states`, or `verify`. For machine-checked postconditions use
 `after(UseCase).assert(...)`. Use `compensates(RefundPayment, CapturePayment)` to make
 a compensation relationship explicit between use cases.
 
@@ -784,7 +786,8 @@ after(IssueCert).assert(CertificateOrder.status == executed)
 ```
 
 The record is a latch: once the event was raised on a row, the triggered use case runs
-there as often as its states and guards allow, and a second raise changes nothing. A use
+there as often as its states and guards allow, and a second raise changes nothing
+(`.counted(k)` makes it count, see [Counting raises](#counting-raises-counted)). A use
 case several events trigger runs after any of them; `check` and `verify` judge it as one
 use case, and a trace names the step that ran after `Ev` as `<UC>_by_<Ev>`. A raiser never
 waits for the use cases its event triggers. Whether two use cases are ordered, and how the
@@ -824,6 +827,45 @@ triggers(EvSurveyReported, AssessDamage)
 
 Dropping the use-case edge (`triggers(Ev, Buc)` alone) keeps the event diagram and frees
 the use case; that is a model change a reviewer sees, not a modifier that hides one.
+
+#### Counting raises: `.counted`
+
+<!-- derived-from ./design/counted-events.md#semantics -->
+
+`triggers(Ev, UC).counted(k)` makes the edge count: each raise on a row adds one pending
+run, each run of `UC` takes one, and `UC` runs only while a raise is pending. `k`, a whole
+number from 1 to 16, is how many raises may be pending on one row. Use it when the business
+asks for "once per event": every payment is posted exactly once, no notification is lost
+when two arrive before the handler, a queue of capacity 2 never overflows.
+
+```rdra
+raises(ReceivePayment, EvPaymentReceived)
+triggers(EvPaymentReceived, PostToLedger).counted(2)
+```
+
+A raise never waits. A raise that finds `k` raises already pending is the violation
+`EventOverflow_<E>_<Ev>_<UC>` (`<E>` the entity the event is raised on), which `check` and
+`verify` report with a trace like any rule, and which `verify --prove` tries to prove for any
+number of rows. When `k` is the real capacity, the overflow is a defect of the model. When it
+is not, the overflow says only that `k` is too small for the model, so raise it. After an
+overflow the row keeps no count, and `UC` runs there as under the latch.
+
+Counting removes runs: a counted handler runs only where the latch would also let it run.
+So `.counted` cannot make a `forbidden` fail that passes without it; what it exposes is a
+run the latch allowed and the model never earned, through `leads_to`, `can_reach`, a
+deadlock, or a state with no witness. With `PostToLedger` fair,
+`leads_to(Payment.status == received, Payment.status == posted).fair(PostToLedger)` then
+says every raise is handled.
+
+Each counted edge has its own count, also when other handlers share the event; a handler
+without `.counted` keeps the latch. `.counted` needs an edge the order already tracks: on an
+event that is free, on a use case that a timer or a free event also starts, on raisers with
+no entity in common, on a use case that raises the event itself, or on a raiser that binds
+the event's entity twice, `check` reports `UncountedTrigger` (error) and names the reason.
+A `.counted` on a timer, a BUC, or an external system, a value outside 1 to 16, or a second
+`.counted` on one line is `CountedTriggerInvalid`. `codegen` does not print a use case that
+raises or handles a counted event, and says so. The cost is one value of `k + 2` per row in
+every cone that holds the raiser or the handler, and such a cone holds both.
 
 `outbox(event::E)` declares that a raised event is intentionally published outside the
 local model boundary, such as a domain event sent to an outbox, external subscriber, or
@@ -1193,8 +1235,8 @@ other output, and every rule name, keeps the entity id.
 A `rows` clause estimates how many rows the table holds. It decides which index findings
 matter: `lint` `query-index-missing` skips an entity under 10,000 rows, where a scan is
 cheap, and a `.has` / `.none` over an entity of 1,000,000 rows or more wants its own index
-(see [Query shapes](#query-shapes)). Write a whole number, bare or quoted, with `_` or `,`
-separators or an exponent:
+(see [Query shapes](#query-shapes)). Write a whole number, bare (`rows 5000`) or quoted; a
+quoted one may use `_` or `,` separators or an exponent (`rows "1_000_000"`, `rows "5e7"`):
 
 ```rdra
 entity AuditLog "Audit log"
@@ -1235,12 +1277,12 @@ argument other than `tz` and `local` is `InvalidTypeArgs`.
 | `@pk` | Marks the column as the primary key. FK columns are auto-generated against this key by `relate`. |
 | `@pk(a, b)` | Declares a composite primary key over the named columns. A `relate` to the entity generates one FK column per key column. |
 | `@unique` | Adds a unique constraint. The lifecycle checks it as `Unique_<Entity>_<column>` when it holds the column's value (see [Unique column sets](./state-derivation.md#unique-column-sets)). |
-| `@unique(a, b)` | Declares a composite unique constraint over the named columns. The lifecycle checks it as `Unique_<Entity>_<a>_<b>` when it holds every column's value; a key column such as `room_id` reads as its key's owner. |
+| `@unique(a, b)` | Declares a composite unique constraint over the named columns. The lifecycle checks it as `Unique_<Entity>_<a>_<b>` when it holds every column's value; a key column such as `room_id` reads as its key's owner. A set with a column the lifecycle holds no value of, such as a `String`, and a set on an entity with a `@soft_delete` column are left to the database and not checked. |
 | `@index` | Adds an index for the column. |
 | `@index(a, b)` | Declares a composite index over the named columns. |
 | `@check(expr)` | A check constraint: `expr` is a condition over the entity's own columns (`and`, `or`, `not` over comparisons), typed like a `forbidden` comparison. A missing column is `UnknownColumn`; arithmetic is `ArithNotInCheck`. The lifecycle checks it as the invariant `Check_<Entity>_<column>_<n>` (see [state-derivation.md](./state-derivation.md#checks)). |
 | `@null` | Makes the column nullable. A nullable column is a **state axis** with values `{null, present}`. |
-| `@default(v)` | Declares a default value `v`. On an `Enum` column `v` is one of its values (otherwise `InvalidEnumVariant`), on a `Bool` column `true` or `false` (otherwise `InvalidBoolValue`), and on a variation column one of the variation's values (otherwise `InvalidVariationValue`). State derivation starts the column at `v`, except a column typed by a variation: a row of it starts at any value of the variation unless the use case that creates it sets the column, and `@default` does not pick the start (info `DefaultOnVariationIgnored`; see [Actions](./state-derivation.md#actions)). |
+| `@default(v)` | Declares a default value `v`. On an `Enum` column `v` is one of its values (otherwise `InvalidEnumVariant`), on a `Bool` column `true` or `false` (otherwise `InvalidBoolValue`), and on a variation column one of the variation's values (otherwise `InvalidVariationValue`); `@default(null)` is none of these. An integer default on an `Int`, `Money`, `Decimal`, `Date`, or `DateTime` column that a rule reads lies in `0..--int-range-max` (otherwise `IntLiteralOutOfBounds_<Entity>_<value>`). State derivation starts the column at `v`, except a column typed by a variation: a row of it starts at any value of the variation unless the use case that creates it sets the column, and `@default` does not pick the start (info `DefaultOnVariationIgnored`; see [Actions](./state-derivation.md#actions)). |
 | `@label("...")` | Overrides the column's display label. |
 | `@soft_delete` | Marks the column as the soft-delete marker, such as `deleted_at` or `is_deleted`. |
 | `@history` | Marks the column as part of history/versioning, such as `valid_from`, `valid_to`, or `version`. |
@@ -2320,6 +2362,14 @@ an `invariant` with neither `.then(...)` nor `.has/.none(...)` is
 `InvariantWithoutConsequence`, `.then(...)` without `.when(...)` is `InvariantWithoutWhen`,
 and `after(UseCase)` without `.assert(...)` is `AfterWithoutAssert`.
 
+A rule that holds and says nothing draws a warning. `check` and `verify` warn
+`Vacuous_<name>` when no reachable state has the rows a rule ranges over, the guards of its
+`.when` never hold, or one condition of a `forbidden` of several is one no row ever meets;
+also when an `after` assertion's use case never runs, or a `property`'s rows never exist or
+its `leads_to` trigger never holds. A `forbidden` whose forbidden state is unreachable
+draws none: that is its claim. See [Rules that hold
+vacuously](./state-derivation.md#rules-that-hold-vacuously).
+
 ### Labelling a rule
 
 A rule says what is forbidden or required, not why. `.label("...")` names the rule in
@@ -2505,7 +2555,7 @@ not co-occur.
 ### Cross-Entity Constraints
 
 Cross-entity constraints describe rules that mention columns from more than one entity.
-They are parsed, type-checked, and checked by `states` and `verify` over every
+They are parsed, type-checked, and checked by `check`, `states`, and `verify` over every
 combination of the participating entities' present instances.
 
 Use `Entity.column` when a condition points at a column. The leading entity arguments
@@ -2553,7 +2603,7 @@ Write `.global()` on a rule meant for every combination to say so; `.global()` w
 
 `.lemma()` on a `forbidden` or an `invariant` marks a fact written to help `verify --prove`
 prove the other rules for any number of rows. `check` checks it as a rule, and `--prove`
-lists it apart from the rules; `verify` runs no cone for it, since the proof uses a lemma
+lists it apart from the rules; `verify` runs no cone of its own for it, since the proof uses a lemma
 only once it proves it. See [Proofs for any number of
 rows](./formal-verification.md#proofs-for-any-number-of-rows).
 
@@ -2633,8 +2683,10 @@ injected into the effects. Every constraint is its own `INVARIANT`; see
 `sets(UC, Entity.intCol == 3)` assigns an Int effect. Int, Money, Decimal, Date, and
 DateTime columns that something names become `0..5` variables in `states` and in the TLA+
 export (nullable ones add `null`). The export domain is a fixed approximation (default
-`0..5`, override with `--int-range-max`), and an Int literal or an integer `@default`
-outside it is `IntLiteralOutOfBounds`. `@default(0)` is valid on Int columns.
+`0..5`, override with `--int-range-max`). An Int literal outside it, or an integer `@default`
+outside it on a column a rule reads, is `IntLiteralOutOfBounds_<Entity>_<value>`, and the
+model fails `check` and stops `verify` before any engine runs. `@default(0)` and a default
+at the top of the range are valid.
 
 `invariant(Entity).when(conditions...).has/none(Related.col == val)` declares a to-many
 quantifier rule. It ranges over the present instances: `none` fails in a reachable state where the
@@ -2648,8 +2700,8 @@ is the same rule as `invariant(Entity, Related)`. `.has(Related)` and `.none(Rel
 the entity alone and range over every linked row: `invariant(Order).when(status ==
 closed).has(Invoice)` says a closed order has an invoice, and reads only the link. A
 `.has(...)` or `.none(...)` that names nothing, as `.none()`, is
-`QuantifierWithoutCondition`. `states` runs one instance per entity, so use
-`verify --instance-count 2` for rules that need two related instances. To make a use case
+`QuantifierWithoutCondition`. `check` and `states` run one instance per entity by default,
+so use `--instance-count 2`, or `verify`, for rules that need two related instances. To make a use case
 respect such a rule, put the same `.none(...)` on a `holds` guard (see Conditions).
 
 `.along(Anchor, .., Related)` after the `.has(...)` or `.none(...)` counts along the path
@@ -2683,7 +2735,7 @@ Constraints](#cross-entity-constraints)):
 // Pay captures a payment and pays the order it belongs to. Without `.along`, a captured
 // payment beside another order that is not paid breaks the property.
 property CapturedPaid "a captured payment's order is paid"
-  always(not (Payment.status == captured) or (Order.status == paid)).along(Payment, Order)
+  always((not (Payment.status == captured)) or (Order.status == paid)).along(Payment, Order)
 ```
 
 The link joins the trigger of the formula, next to the condition that the rows exist:
@@ -2715,14 +2767,16 @@ links:
 
 ```rdra
 // Once cancelled, an order stays cancelled while it exists.
-property CancelledStaysCancelled stable(Order.status == cancelled)
+property CancelledStaysCancelled
+  stable(Order.status == cancelled)
 
 // While the order is approved or shipped, a step leaves its amount as it is.
 property AmountKeptOnceApproved
   unchanged(Order.amount).when(Order.status in (approved, shipped))
 
 // An order is shipped only in a state where it is paid or was paid before.
-property ShippedAfterPaid precedes(Order.paid == true, Order.status == shipped)
+property ShippedAfterPaid
+  precedes(Order.paid == true, Order.status == shipped)
 ```
 
 - `stable(p)`: once `p` holds for an instance, it keeps holding while the instance is
@@ -2799,8 +2853,7 @@ step stays enabled. `Spec`, the `.cfg`, and properties without
   what it reads and of the listed use cases, and a property whose verdict rests on
   `WF_vars(Next)` alone needs the whole model (see
   [formal-verification.md](./formal-verification.md#temporal-properties-on-a-cone)).
-- `check` and `states` run BFS, which evaluates no temporal property, so `.fair` changes
-  nothing there; `verify` prints `<Property> assumes weak fairness per instance on ...` next
+- `check` and `states` evaluate no temporal property, so `.fair` changes nothing there; `verify` prints `<Property> assumes weak fairness per instance on ...` next
   to its temporal runs.
 
 #### Recoverability: `can_reach(...)`
@@ -2834,7 +2887,7 @@ the instance is confined to:
 ```
 error[OrderCanFinish]: property OrderCanFinish is violated: from the counterexample's last state no path reaches its goal for Order#1
   ...
-  confined: from there Order#1 stays within 2 reachable states, where its goal never holds:
+  confined: from there Order#1 stays within 34 reachable states, where its goal never holds:
     status = pending
     status = on_hold
 ```
@@ -2913,7 +2966,7 @@ required(Ticket, priority in (1, 2, 3))
 | The list names at least one value. | parse error |
 
 `in` is a keyword only between a comparison's left-hand column and `(`, so a column may
-still be named `in` (`in in (1, 2)` is valid). `states`, `check`, and TLC read the
+still be named `in` (`in in (1, 2)` is valid). `states`, `check`, and `verify` read the
 disjunction alike; the TLA+ export writes `Order_status[b0] \in {"paid", "shipped"}` and
 `\notin`. `list --kind rule`, `list --kind condition`, the sequence diagram's guards, and a
 violation print the set as written, `status in (paid, shipped)`, with value labels where
@@ -2972,7 +3025,7 @@ drives(Refund, Stock.stock < selling, false)
 A comparison that no `drives` names is not a variable. It reads the Int values, so a
 `forbidden(Stock, stock < selling)` is violated in any reachable state where `stock` is
 below `selling`, and `required` and `exclusive` read the values the same way. `states`,
-`check`, and TLC read it the same way.
+`check`, and `verify` read it the same way.
 
 ### Bare identifiers
 

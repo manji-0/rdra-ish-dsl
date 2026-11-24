@@ -113,6 +113,13 @@ fn violation_message(text: &InvText, p: &str) -> String {
 } => format!(
             "dangling key: a '{child}' names a '{parent}' through '{role}' that is not present in patterns ({p})"
         ),
+        InvText::Overflow {
+                event,
+                usecase,
+                cap,
+} => format!(
+            "event overflow: a raise of {event} finds {cap} raises already pending for {usecase} in patterns ({p})"
+        ),
     }
 }
 
@@ -197,6 +204,7 @@ violation_message(text, pattern_desc)
         | StateDiag::UnanchoredTrigger { .. }
         | StateDiag::UnjoinedTrigger { .. }
         | StateDiag::TriggerNeverRuns { .. }
+        | StateDiag::UncountedTrigger { .. }
         | StateDiag::DeleteLeavesChildren { .. }
         | StateDiag::GuardReadsLaterStep { .. }
         | StateDiag::DrivenComparisonColumnWritten { .. }

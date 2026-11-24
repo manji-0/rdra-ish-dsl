@@ -1,0 +1,33 @@
+// Two entities no use case links: each entity view explores its own small cone, while the
+// `can_reach` goal reads both, so its cone is their product. A lost Order never gets done,
+// so the property fails on its whole cone; a `--max-states` or a `--memory` between the
+// entity cones and the product stops only the `can_reach` cone, which then decides
+// nothing (#246).
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(open, done, lost) @default(open)
+}
+
+entity Ticket "問い合わせ" {
+  id: Int @pk
+  status: Enum(open, closed) @default(open)
+}
+
+usecase PlaceOrder "注文"
+usecase FinishOrder "注文完了"
+usecase LoseOrder "注文紛失"
+usecase OpenTicket "問い合わせ"
+usecase CloseTicket "問い合わせ完了"
+
+creates(PlaceOrder, Order)
+updates(FinishOrder, Order)
+updates(LoseOrder, Order)
+creates(OpenTicket, Ticket)
+updates(CloseTicket, Ticket)
+
+transitions(FinishOrder, Order.status, open -> done)
+transitions(LoseOrder, Order.status, open -> lost)
+transitions(CloseTicket, Ticket.status, open -> closed)
+
+property BothCanFinish "an order and a ticket can both still finish"
+  can_reach((Order.status == done) and (Ticket.status == closed)).global()

@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use rdra_ish_core::lifecycle::{
-    ActId, EntId, Ltl, ModelState, State, TransitionSystem, Value, VarId, VarKind,
+    ActId, EntId, Ltl, ModelState, State, StateSlice, TransitionSystem, Value, VarId, VarKind,
 };
 
 use super::{render_value, sanitize_ident};
@@ -166,9 +166,16 @@ impl TlaNames {
                 VarKind::Run { entity: e, usecase } => {
                     Some(format!("{}_run_{usecase}", entity(*e)))
                 }
-                VarKind::Raised { entity: e, event } => {
-                    Some(format!("{}_raised_{event}", entity(*e)))
-                }
+                VarKind::Raised {
+                    entity: e,
+                    event,
+                    handler: None,
+                } => Some(format!("{}_raised_{event}", entity(*e))),
+                VarKind::Raised {
+                    entity: e,
+                    event,
+                    handler: Some(uc),
+                } => Some(format!("{}_pending_{event}_{uc}", entity(*e))),
                 VarKind::Owner {
                     child,
                     parent,
@@ -400,7 +407,7 @@ impl TlaNames {
     }
 
     /// A reached state as TLC prints it: slot key to value text.
-    pub fn canon(&self, ts: &TransitionSystem, state: &State) -> BTreeMap<String, String> {
+    pub fn canon(&self, ts: &TransitionSystem, state: &StateSlice) -> BTreeMap<String, String> {
         let r = ts.reduction();
         let mut out = BTreeMap::new();
         for var in ts.var_ids() {

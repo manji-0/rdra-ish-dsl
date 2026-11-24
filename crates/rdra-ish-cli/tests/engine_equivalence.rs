@@ -40,8 +40,8 @@ use rdra_ish_cli::tlc_output::{parse_dot, Outcome, TlcRun};
 use rdra_ish_cli::tlc_replay::{explain_property, explain_violation};
 use rdra_ish_core::lifecycle::{
     ActId, Bounds, Caps, ComponentRun, Cone, Fairness, LabelledEdges, Loop, Progress,
-    PropertyVerdict, Runs, Scope, Seed, State, StateDiag, StateModelFindings, Taken, Target,
-    TransitionSystem, Witness,
+    PropertyVerdict, Runs, Scope, Seed, State, StateDiag, StateModelFindings, StateSlice, Taken,
+    Target, TransitionSystem, Witness,
 };
 use rdra_ish_core::{load_project, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
@@ -294,7 +294,7 @@ fn run_tlc(tlc: &Path, dir: &Path, args: &[&str], tla: &str, cfg: &str) -> (bool
 /// BFS's.
 fn tlc_edges(dir: &Path, label: &str, run: &ComponentRun, names: &TlaNames) -> Vec<Move> {
     let ts = &run.system;
-    let index: HashMap<&State, u32> = run
+    let index: HashMap<&StateSlice, u32> = run
         .states
         .iter()
         .enumerate()
@@ -304,7 +304,7 @@ fn tlc_edges(dir: &Path, label: &str, run: &ComponentRun, names: &TlaNames) -> V
     let file = std::fs::File::open(dir.join("graph.dot")).expect("graph.dot");
     let dot = parse_dot(BufReader::new(file), |canon| {
         let state = decoder.decode(canon)?;
-        index.get(&state).copied()
+        index.get(&*state).copied()
     })
     .unwrap_or_else(|why| panic!("{label}: TLC's graph does not map onto the BFS's: {why}"));
     let at: Vec<u32> = dot.nodes.iter().map(|n| n.state).collect();
@@ -3582,6 +3582,46 @@ fn tlc_alone_finds_a_deadlock_beside_a_toggled_column() {
         found.into_iter().collect::<Vec<_>>(),
         ["Deadlock_Order_status_paid"]
     );
+}
+
+/// Post moves a Ledger only after Execute raised EvExecuted on the Ledger's Order. A ledger
+/// at `open` beside an Order still at `requested` is not stuck: Execute sets the event mark
+/// and Post can then run. Neither engine reports a deadlock (#261).
+const TRIGGERED_POST: &str = r#"
+entity Order "依頼" { id: Int @pk  status: Enum(requested, executed) @default(requested) }
+entity Ledger "台帳" { id: Int @pk  state: Enum(open, posted) @default(open) }
+relate(Ledger, Order, N:1)
+usecase Request "依頼"
+usecase OpenLedger "台帳作成"
+usecase Execute "実行"
+usecase Post "記帳"
+event EvExecuted "実行済"
+creates(Request, Order)
+creates(OpenLedger, Ledger)
+transitions(Execute, Order.status, requested -> executed)
+raises(Execute, EvExecuted)
+triggers(EvExecuted, Post)
+transitions(Post, Ledger.state, open -> posted)
+"#;
+
+#[test]
+fn tlc_alone_finds_no_deadlock_before_a_handler_s_event_is_raised() {
+    let Some(tlc) = require_tlc() else { return };
+    let scratch = std::env::temp_dir().join(format!("rdra-triggered-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&scratch);
+    std::fs::create_dir_all(&scratch).expect("scratch dir");
+    let file = scratch.join("triggered.rdra");
+    std::fs::write(&file, TRIGGERED_POST).expect("write model");
+    let exported = export_state_models(&scratch.join("tla"), "triggered", file.to_str().unwrap())
+        .expect("the model builds");
+    assert!(
+        exported.run.iter().any(|m| m == "StateModel_Ledger"),
+        "{:?}",
+        exported.run
+    );
+    let found = tlc_alone_and_bfs(&tlc, &[exported]).remove(0);
+    let _ = std::fs::remove_dir_all(&scratch);
+    assert!(found.is_empty(), "TLC alone: {found:?}");
 }
 
 /// `deadlock.rdra`'s shape with Ship guarded by a column that Flip and Flop move back and

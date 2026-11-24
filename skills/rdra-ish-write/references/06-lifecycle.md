@@ -57,7 +57,10 @@ Also ask:
 4. For downstream automation, model BUC-level causality first:
    `triggers(Event, TargetBuc)`. When the concrete entry action is known, refine with
    `contains(TargetBuc, EntryUseCase)` and `triggers(Event, EntryUseCase)` without
-   removing the BUC-level trigger.
+   removing the BUC-level trigger. The entry use case runs after a raise, as often as its
+   states allow. When it must run once per raise (each payment posted once, a queue of
+   capacity 2), write `triggers(Event, EntryUseCase).counted(2)`: `verify` then also
+   checks `EventOverflow_<E>_<Event>_<EntryUseCase>`, a raise with 2 already pending.
 5. Connect an external system through events: `raises(ExtSystem, Event)` inbound,
    `triggers(Event, ExtSystem)` outbound.
 6. Declare a `timer` and `triggers(Timer, UseCase)` for a schedule that starts a use
@@ -69,7 +72,7 @@ Also ask:
 7. Declare a `condition` for a business rule that selects when a use case applies.
    Without a body it is a trace link (`combines` its variation and lifecycle column);
    with `holds(Cond, Entity.col == value, ...)` it guards each use case it
-   `applies_to`, and `check` and TLC read the guard. When the rule holds back only one
+   `applies_to`, and `check` and `verify` read the guard. When the rule holds back only one
    outcome of a use case's choice, guard that arm instead:
    `transitions(UseCase, Entity.col, from -> to).when(Cond)`. The other arms stay free.
    When it holds back one value the actor picks, guard that value:
@@ -119,10 +122,10 @@ Also ask:
 9. Add `drives(UC, E.col op rhs, true|false)` when rules depend on a derived comparison and
    the model does not track the values. Prefer Int / Money / Decimal columns plus
    `sets(UC, E.col == N)` when the quantity itself must be checked: a comparison
-   reads those values in `states` and in TLA+.
+   reads those values in `states` and `verify`.
 10. Add `after(UseCase).assert(...)` for a postcondition of that use case, and
-    `property Name ["label"] always|eventually|leads_to(...)` for a temporal path
-    property (checked by `verify` only).
+    `property Name ["label"] always|eventually|leads_to|stable|unchanged|precedes|can_reach(...)`
+    for a temporal property (checked by `verify` only; `check` notes that it skipped it).
 
 ## Minimal Pattern
 
@@ -277,7 +280,9 @@ rdra-ish export src/ --kind asyncapi --out out/asyncapi.json
   blocks it.
 - `warning[Vacuous_<rule>]`: the rule holds and says nothing, because no reachable state
   has the rows it ranges over, the guards of its `.when`, or one of the conditions of a
-  `forbidden` of several. Check the value for a typo or a state no use case enters.
+  `forbidden` of several. An `after` assertion whose use case never runs to its last step,
+  and a `property` whose rows never exist together, warn the same way (`verify` too).
+  Check the value for a typo or a state no use case enters.
 
 Each prints the `transitions` arm or use case at fault with its `path:line:col`. The
 fix is usually in the model (a missing `creates`, `transitions` arm, or `sets`), not in

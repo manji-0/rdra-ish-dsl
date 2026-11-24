@@ -7,10 +7,10 @@ cross-entity rules, or a capped exploration.
 ## Concept
 
 `check` and `states` explore one transition system by breadth-first search, the same
-system `verify` hands to TLC. Each use case is one atomic action per transaction group
-it writes, and an entity that no use case creates starts present. State axes come from
-inline Enum, Bool, and nullable columns, and from Int columns that a `sets` or a rule
-names. A column typed by a `variation` is an attribute the actor chooses: an axis only
+system `verify` explores (and hands to TLC under `--with-tlc`). Each use case is one
+atomic action per transaction group it writes, and an entity that no use case creates
+starts present. State axes come from inline Enum, Bool, and nullable columns, and from
+Int columns that a `sets` or a rule names. A column typed by a `variation` is an attribute the actor chooses: an axis only
 when something names it, and its unreached values draw no warning.
 
 The output is executable feedback about what the modeled use cases can actually reach.
@@ -108,13 +108,13 @@ under it the values that step changed.
 | `error[Deadlock_<E>_<col>_<v>]` | An instance reaches a state that has a way out, and nothing ever moves it off | Read `leaves` and the `guard:` lines: fix the guard, or add the missing use case. If staying there is correct (a stock row waiting to be used), declare it with `@end(<v>)` on the column |
 | `warning[Deadlock_...]: deadlock at the bound` | The way out needs a free slot of an entity it creates | The instance bound, not the model; check with `verify` at two instances |
 | `warning[Runs_<UC>]` | The use case never runs; `needs:` or `guard:` lines say why | Fix the guard or the missing instance, or remove the use case |
-| `warning[Vacuous_<rule>]` | The rule holds and says nothing: no reachable state meets the premise the message names | Fix the value (a typo, a state no use case enters), or add the use case that reaches it |
+| `warning[Vacuous_<rule>]` | The rule, `after` assertion, or property holds and says nothing: no reachable state meets the premise the message names (an `after` whose use case never runs to its last step) | Fix the value (a typo, a state no use case enters), or add the use case that reaches it |
 | `error[<rule name>]` with a counterexample | A reachable state breaks the rule | Follow the steps: add the missing `sets` or transition, or fix the rule |
 | Enum/Bool/nullable column never appears in axes | No modeled lifecycle effect | Add `sets`, `transitions`, or accept that it is not stateful |
 | Enum variants reported unreachable that an actor simply chooses (payment method, channel) | The column is an attribute, not a lifecycle | Type it by a `variation`; `lint` `enum-attribute` finds these |
 | Unexpected terminal pattern | Missing exit use case | Add a transition or effect, or mark the end state as intentional with `@end(<v>)` on the column |
 | Too many combinations | Effects are too broad | Make `sets` more precise or add rules |
-| `PatternCapReached` / `StateCapReached` / `MemoryCapReached` error | The exploration stopped at a cap or the memory limit (`check` has no state cap unless `--max-states` is given), so no rule verdict is sound | Raise `--max-patterns`, `--max-states`, or `--memory` (a `MemoryCapReached` message estimates what the cone needs) on `check` or `states`, or narrow with `--entity` or `--buc`. The `StateCapReached` message names the columns the cone varies in and the use cases that reached the most states; a column of another entity there came in through a guard |
+| `PatternCapReached` / `MemoryCapReached` error, or `StateCapReached` under `--max-states` | The exploration stopped at a cap or the memory limit, so no rule verdict on that cone is sound. `check` and `states` have no state cap by default; the memory limit (`--memory`, else `memory` under `[check]` in `rdra.toml`, else 4GiB) stops a cone | Narrow with `--entity` or `--buc`, or raise `--max-patterns`, `--memory` (a `MemoryCapReached` message names a size when it can estimate one), or the `--max-states` you passed. The `StateCapReached` and `MemoryCapReached` messages name the columns the cone varies in and the use cases that reached the most states; a column of another entity there came in through a guard |
 | `not checked:` block | A scope or a cap left targets or findings undecided | Report them as not checked, never as passed |
 | `UnbindableScope` | `.along(...)` names entities that no `relate` binds | Error. Declare the `relate`, or drop `.along` for a rule over every pair |
 | `AmbiguousOwnerLink` | Two keys join a pair that a `.along`, a `.has/.none`, a `holds` body, or a copy joins | Error. Name one with `.role(role)` after that call |
@@ -131,15 +131,16 @@ under it the values that step changed.
 | `MinCardOfPreExistingParent` | The parent of a `1..*` key starts present but every child starts absent | Warning. `MinCard_*` fails at the start; add a `creates` for the parent, or relax the card |
 | `PreExistingChildOfCreatedParent` | No use case creates the entity, but some use case creates the parent of its mandatory `relate` | Warning. It starts owned by a parent that does not exist yet; add a `creates` for the child, or make the `relate` `.optional()` |
 
-## Formal verification (TLA+)
+## Formal verification
 
 For the dedicated workflow, load skill **`rdra-ish-verify`**. Use `verify` when the
 model has:
 
-- `property` (`always`, `eventually`, `leads_to`), which `check` and `states` do not
-  evaluate
+- `property` (`always`, `eventually`, `leads_to`, `stable`, `unchanged`, `precedes`,
+  `can_reach`), which `check` and `states` do not evaluate (`check` prints
+  `note: <n> temporal properties were not model-checked by check; use verify`)
 - rules that need two instances: quantifiers over several rows, `.along` between
-  entities with more than one linked row, and 1:1 keys (`Unique_*`)
+  entities with more than one linked row, and 1:1 keys and `@unique` sets (`Unique_*`)
 
 ```sh
 rdra-ish verify src/              # native, no JVM

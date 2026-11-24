@@ -1145,9 +1145,9 @@ fn checks(ts: &TransitionSystem, names: &TlaNames, latches: &[Latch], out: &mut 
 /// A `Witness_` and, for a state with a way out, a `Deadlock_` invariant per state of the
 /// state models `names` lists. A deadlock is a reached state with an instance at the state and
 /// no move left of the column's cone: no step of `Next` changes a var of it. The cone is
-/// closed, so the steps that change it read only it, and no other step changes whether the
-/// column can move; a move elsewhere, such as a column toggled back and forth, does not hide
-/// the deadlock.
+/// closed with every event mark its steps read (`closed_cone`), so the steps that change it
+/// read only it, and no other step changes whether the column can move; a move elsewhere,
+/// such as a column toggled back and forth, does not hide the deadlock.
 fn state_checks(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
     if names.states().is_empty() {
         return;
@@ -1178,7 +1178,7 @@ fn state_checks(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
         let ids = names.ids(s.entity);
         out.push_str(&format!("{} == \\A b0 \\in {ids} : ~({at})\n", s.witness));
         if let Some(deadlock) = &s.deadlock {
-            let cone = ts.cone(&[s.var, exists].into_iter().collect(), &BTreeSet::new());
+            let cone = ts.closed_cone(&[s.var, exists].into_iter().collect());
             // The class var stands for the S vars of a reduced cone; its move may leave the
             // cone's vars as they were, which counts it as a move and never adds a deadlock.
             let moved: Vec<&str> = ts

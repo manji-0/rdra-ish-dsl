@@ -539,7 +539,12 @@ fn event_fields(
 ) -> Vec<super::ir::EventField> {
     let mut out: Vec<super::ir::EventField> = Vec::new();
     for v in ts.var_ids() {
-        let VarKind::Raised { entity, event: ev } = &ts.var(v).kind else {
+        let VarKind::Raised {
+            entity,
+            event: ev,
+            handler: None,
+        } = &ts.var(v).kind
+        else {
             continue;
         };
         if ev != event {

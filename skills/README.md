@@ -56,7 +56,7 @@ gh skill install OWNER/REPO rdra-ish-verify --agent cursor --scope user
 | `rdra-ish-buc-analyze` | Analyze coverage, access, API boundaries, and lifecycle findings |
 | `rdra-ish-diagram` | Choose diagram / CSV / export views |
 | `rdra-ish-review` | `check` / `lint`-oriented model review checklist |
-| `rdra-ish-verify` | TLA+/TLC formal verification with `verify` (+ bundled samples) |
+| `rdra-ish-verify` | Formal verification with `verify`, a native checker; TLC only as a second opinion under `--with-tlc` (+ bundled samples) |
 
 ## Keeping the skills current
 

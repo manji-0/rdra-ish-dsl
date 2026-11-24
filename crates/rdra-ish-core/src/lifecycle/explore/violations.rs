@@ -2,7 +2,7 @@
 
 use crate::lifecycle::cone::VarSet;
 use crate::lifecycle::diag::{Diag, StateDiag};
-use crate::lifecycle::expr::State;
+use crate::lifecycle::expr::StateSlice;
 use crate::lifecycle::trace::Trace;
 use crate::lifecycle::types::{ActId, EntId, InvKind};
 use crate::lifecycle::view::describe_slot;
@@ -11,7 +11,7 @@ use crate::lifecycle::TransitionSystem;
 impl TransitionSystem {
     /// The violation of `invariants()[i]` in `s`, with an empty trace; `None` when it holds.
     /// BFS and the replay of a TLC trace both build the diagnostic here.
-    pub(crate) fn invariant_violation(&self, i: usize, s: &State) -> Option<Diag> {
+    pub(crate) fn invariant_violation(&self, i: usize, s: &StateSlice) -> Option<Diag> {
         let inv = &self.invariants[i];
         let binding = self.find_violation(&inv.binders, &inv.body, s, &[])?;
         let local = matches!(
@@ -52,7 +52,7 @@ impl TransitionSystem {
         i: usize,
         act: ActId,
         params: &[u8],
-        s2: &State,
+        s2: &StateSlice,
     ) -> Option<Diag> {
         let a = &self.after[i];
         let action = &self.actions[act.index()];

@@ -140,7 +140,7 @@ Order predicates as: `belongs` → `contains` → `performs` → per-UC blocks.
 
 Write `performs(Actor, Buc)` only for an actor who runs every use case of the BUC. A use
 case's actors are its direct performers plus the performers of every BUC that contains
-it, and `check` requires each of them to hold the use case's permissions; above, Clerk
+it or covers it from a flow step, and `check` requires each of them to hold the use case's permissions; above, Clerk
 cancels but does not place orders, so Clerk performs CancelOrder directly.
 
 When the order, branch, exception, or loop is part of the requirement, add business

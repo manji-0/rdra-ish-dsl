@@ -6,7 +6,7 @@ use std::fmt;
 
 use super::cone::{Cone, Target};
 use super::diag::StateDiag;
-use super::expr::State;
+use super::expr::{State, StateSlice};
 use super::reduce::Step;
 use super::types::{
     ActId, ActionOrigin, Domain, Effect, EntId, ParamRole, Site, Value, VarId, VarKind,
@@ -153,7 +153,16 @@ impl TransitionSystem {
                 )
             }
             VarKind::Run { usecase, .. } => format!("run of {usecase}"),
-            VarKind::Raised { event, .. } => format!("raised {event}"),
+            VarKind::Raised {
+                event,
+                handler: None,
+                ..
+            } => format!("raised {event}"),
+            VarKind::Raised {
+                event,
+                handler: Some(uc),
+                ..
+            } => format!("pending {event} for {uc}"),
             VarKind::Exists(_) | VarKind::Now => self.var_name(var),
         }
     }
@@ -172,8 +181,8 @@ impl TransitionSystem {
     /// names the effect that wrote a `(var, slot)`.
     fn changes(
         &self,
-        pre: &State,
-        post: &State,
+        pre: &StateSlice,
+        post: &StateSlice,
         cause: impl Fn(VarId, usize) -> Option<Site>,
     ) -> Vec<Change> {
         let mut out = Vec::new();
@@ -229,7 +238,7 @@ impl TransitionSystem {
     }
 
     /// The pre-existing instances of an initial state.
-    pub(crate) fn trace_start(&self, initial: &State) -> Vec<Change> {
+    pub(crate) fn trace_start(&self, initial: &StateSlice) -> Vec<Change> {
         self.changes(&self.base_state(), initial, |_, _| None)
     }
 
@@ -238,8 +247,8 @@ impl TransitionSystem {
         &self,
         act: ActId,
         params: &[u8],
-        pre: &State,
-        post: &State,
+        pre: &StateSlice,
+        post: &StateSlice,
     ) -> TraceStep {
         let action = &self.actions[act.index()];
         let slot = |p: &u8| usize::from(params[usize::from(*p)]);
@@ -384,7 +393,7 @@ impl TransitionSystem {
     }
 
     /// A path from `start` in model terms.
-    pub(crate) fn trace_from(&self, start: &State, steps: &[Step]) -> Trace {
+    pub(crate) fn trace_from(&self, start: &StateSlice, steps: &[Step]) -> Trace {
         let mut pre = start;
         Trace {
             start: self.trace_start(start),
@@ -423,8 +432,8 @@ impl TransitionSystem {
     }
 
     /// `lift`, flattened.
-    pub(crate) fn lifted(&self, start: &State, steps: &[Step]) -> (State, Vec<Step>) {
-        let (start, groups) = self.lift(start, steps);
+    pub(crate) fn lifted(&self, start: &StateSlice, steps: &[Step]) -> (State, Vec<Step>) {
+        let (start, groups) = self.lift(&start.to_owned(), steps);
         (start, groups.into_iter().flatten().collect())
     }
 

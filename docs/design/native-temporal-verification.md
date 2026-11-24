@@ -10,8 +10,10 @@
 Status: in progress. The plan started after
 [#165](https://github.com/manji-0/rdra-ish-dsl/issues/165),
 [#166](https://github.com/manji-0/rdra-ish-dsl/issues/166), and
-[#167](https://github.com/manji-0/rdra-ish-dsl/issues/167) landed, and phases 0 to 2 landed
-on 2026-11-23 (#176, #177, #178). The owner decided three
+[#167](https://github.com/manji-0/rdra-ish-dsl/issues/167) landed. Phases 0 to 3 have landed
+on `main` (#176, #177, #178, #179): `verify` decides every check natively by default, and
+TLC runs only under `--with-tlc`. The conservative divergence trial landed and was adopted
+(#227, [Decisions](#decisions)). Phases 4 to 6 have not landed. The owner decided three
 questions on 2026-11-23: `verify` defaults to the native checker and `--with-tlc` adds
 TLC, each phase lands on `main` when it passes while the next release waits until the
 native checker is stable, and `check` and `states` evaluate no `property`. The same day
@@ -138,7 +140,9 @@ Non-goals:
   the `bounds:` line. Proofs for any number of rows stay with `verify --prove`, which reads
   state rules only.
 - **`next`, real time, and counting.** There is no next-step operator, the clock `now` stays
-  a bounded counter, and a raised mark still counts no events.
+  a bounded counter, and a raised mark still counts no events. (Reopened for one opt-in form
+  by #220: `triggers(Ev, UC).counted(k)` counts the raises of that edge, with a bound and an
+  overflow rule, in [counted events](./counted-events.md). A latch edge is unchanged.)
 - **Symbolic or partial-order search.** The checker reads the graph BFS built. It adds no
   BDD, no SAT encoding, and no on-the-fly product.
 - **Removing the TLA+ export.** `export --kind tla` and its names stay covered by
@@ -161,7 +165,8 @@ graph:
   cone, so a cone is a system of its own.
 
 Three things are abstracted, and the native checker inherits each one unchanged. Int-like
-columns and `now` stop at the top of the range. A raised mark is a latch. A cone that does
+columns and `now` stop at the top of the range. A raised mark is a latch, unless its edge
+says `.counted(k)` ([counted events](./counted-events.md)). A cone that does
 not hold every raiser of an event runs the handler unordered, so a finding there can be a
 run the order prevents
 ([Known verification gaps](../formal-verification.md#known-verification-gaps)).

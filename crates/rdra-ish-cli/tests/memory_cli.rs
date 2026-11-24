@@ -39,24 +39,25 @@ fn project(test: &str, manifest: &str) -> PathBuf {
 #[test]
 fn a_cone_past_the_memory_limit_stops_as_at_the_state_cap() {
     for cmd in ["check", "states"] {
-        let out = run(&repo(), &[cmd, "--memory", "1KiB", ORDER]);
+        let out = run(&repo(), &[cmd, "--memory", "4KiB", FLAGS]);
         let stderr = String::from_utf8_lossy(&out.stderr);
         assert_eq!(out.status.code(), Some(1), "{cmd}\n{stderr}");
         assert!(
             stderr.contains(
-                "  whether DeliverOrder can run is not decided: the Order cone stopped at the \
-                 memory limit (1KiB; raise it with --memory or `memory` under [check] in rdra.toml)"
+                "  whether some Task can get stuck at status = open is not decided: the Task cone \
+                 stopped at the memory limit (4KiB; raise it with --memory or `memory` under \
+                 [check] in rdra.toml)"
             ),
             "{cmd}\n{stderr}"
         );
     }
     // `check` names the stop as an error; `states` on the view it cut, on stdout.
-    let out = run(&repo(), &["check", "--memory", "1KiB", ORDER]);
+    let out = run(&repo(), &["check", "--memory", "4KiB", FLAGS]);
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
         stderr.contains(
-            "error[MemoryCapReached_Order]: state derivation for entity 'Order': memory limit \
-             1KiB reached at 5 states; results are incomplete: the cone has 3 variables"
+            "error[MemoryCapReached_Task]: state derivation for entity 'Task': memory limit \
+             4KiB reached at 38 states; results are incomplete: the cone has 9 variables"
         ),
         "{stderr}"
     );
@@ -67,16 +68,16 @@ fn a_cone_past_the_memory_limit_stops_as_at_the_state_cap() {
         ),
         "{stderr}"
     );
-    let out = run(&repo(), &["states", "--memory", "1KiB", ORDER]);
+    let out = run(&repo(), &["states", "--memory", "4KiB", FLAGS]);
     assert!(
-        String::from_utf8_lossy(&out.stdout).contains("memory limit 1KiB reached at 5 states"),
+        String::from_utf8_lossy(&out.stdout).contains("memory limit 4KiB reached at 38 states"),
         "{}",
         String::from_utf8_lossy(&out.stdout)
     );
     for args in [
-        &["check", ORDER][..],
-        &["states", ORDER],
-        &["check", "--memory", "4KiB", ORDER],
+        &["check", FLAGS][..],
+        &["states", FLAGS],
+        &["check", "--memory", "1MiB", FLAGS],
     ] {
         let out = run(&repo(), args);
         assert!(
@@ -103,9 +104,9 @@ fn a_run_at_the_memory_limit_estimates_what_finishing_needs() {
     // One layer past the peak says nothing yet, so the cone's variables bound what it needs.
     assert!(
         stderr.contains(
-            "new states first reached by: CancelOrder 1, CapturePay 1, PlaceOrder 1, ShipOrder 1; \
-             held at 177 B per state; the frontier peaked at depth 2, but by depth 3 it has not \
-             fallen far enough to estimate the states left; the cone's variables allow at most 30 \
+            "new states first reached by: CapturePay 1, PlaceOrder 1; held at 101 B per state; the \
+             frontier peaked at depth 0, but by depth 1 it has not fallen far enough to estimate \
+             the states left; the cone's variables allow at most 30 \
              states, so if all are reachable this cone alone needs at least about 1MiB; raise it \
              to 1MiB or more with --memory"
         ),
@@ -115,12 +116,12 @@ fn a_run_at_the_memory_limit_estimates_what_finishing_needs() {
     // figure.
     let out = run(
         &repo(),
-        &["check", "--memory", "4MiB", "samples/insurance-claim-ops"],
+        &["check", "--memory", "2MiB", "samples/insurance-claim-ops"],
     );
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
         stderr.contains(
-            "the frontier still grows (346 new states at depth 11, 1.1x the depth before), so its \
+            "the frontier still grows (172 new states at depth 8, 1.3x the depth before), so its \
              layers give no estimate of the states left; raise it with --memory or `memory` under \
              [check] in rdra.toml, or narrow with --entity or --buc"
         ),
@@ -153,10 +154,10 @@ fn a_run_at_the_memory_limit_estimates_what_finishing_needs() {
 /// the `--memory` it names finishes the run.
 #[test]
 fn a_run_past_its_frontiers_peak_estimates_the_states_its_cone_reaches() {
-    let out = run(&repo(), &["check", "--memory", "56KiB", FLAGS]);
+    let out = run(&repo(), &["check", "--memory", "36KiB", FLAGS]);
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
-        stderr.contains("memory limit 56KiB reached at 256 states; results are incomplete"),
+        stderr.contains("memory limit 36KiB reached at 256 states; results are incomplete"),
         "{stderr}"
     );
     assert!(
@@ -336,6 +337,50 @@ fn verify_leaves_a_cone_past_its_bfs_share_undecided() {
     );
     assert!(String::from_utf8_lossy(&too_small.stderr)
         .contains("--memory 64MiB is too small for verify: a TLC run takes 64MiB"),);
+}
+
+/// `two_queues.rdra` at 4KiB: the entity cones fit and the `can_reach` cone, their product,
+/// does not. That `can_reach` is not decided, as at the state cap: listed under `not checked:`
+/// with the limit, `not decided` on the `result:` line, and an error under `--deny-undecided`
+/// (#246).
+#[test]
+fn a_can_reach_whose_cone_stops_at_the_memory_limit_is_not_decided() {
+    const TWO_QUEUES: &str = "crates/rdra-ish-cli/tests/fixtures/reach/two_queues.rdra";
+    let small = run(&repo(), &["verify", "--memory", "4KiB", TWO_QUEUES]);
+    let stdout = String::from_utf8_lossy(&small.stdout);
+    let stderr = String::from_utf8_lossy(&small.stderr);
+    assert!(small.status.success(), "{stdout}\n{stderr}");
+    assert!(
+        stdout.contains(
+            "\nnot checked: 1 finding not decided\n  can_reach BothCanFinish is not decided: the \
+             BothCanFinish cone stopped at the memory limit (4KiB; raise it with --memory or \
+             `memory` under [verify] in rdra.toml)\n"
+        ),
+        "{stdout}"
+    );
+    assert!(
+        stdout
+            .lines()
+            .any(|l| l == "can_reach (BFS on 1 cone): 1 checked, 0 violated, 1 not decided"),
+        "{stdout}"
+    );
+    assert!(
+        stderr.lines().any(|l| l == "result: not decided"),
+        "{stderr}"
+    );
+
+    let denied = run(
+        &repo(),
+        &["verify", "--memory", "4KiB", "--deny-undecided", TWO_QUEUES],
+    );
+    let stdout = String::from_utf8_lossy(&denied.stdout);
+    let stderr = String::from_utf8_lossy(&denied.stderr);
+    assert_eq!(denied.status.code(), Some(1), "{stdout}{stderr}");
+    assert!(
+        stderr.lines().any(|l| l == "result: not decided"),
+        "{stderr}"
+    );
+    assert!(!stdout.contains("OK:"), "{stdout}");
 }
 
 /// Three entities, one rule each: three TLC cones that could run side by side.

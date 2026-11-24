@@ -251,7 +251,7 @@ fn store_bytes_saturates_and_scales_the_edges_by_the_states_expanded() {
     use super::store::{store_bytes, Held};
 
     assert_eq!(store_bytes(u64::MAX, 16, u64::MAX), u64::MAX);
-    assert_eq!(store_bytes(0, 0, 0), 32 * 4 + 25 * 4 + 12 * 4);
+    assert_eq!(store_bytes(0, 0, 0), 12 * 4 + 5 * 4 + 12 * 4);
     // 10 states reached, 5 of them expanded: 4 edges per expanded state.
     let held = Held {
         bytes: 1000,
@@ -399,4 +399,69 @@ fn the_estimate_on_a_sample_cone_comes_within_a_third_of_its_states() {
             depth: 24
         }
     );
+}
+
+/// Rules SHOP breaks: a closed customer within two steps, and a shipped order with a line
+/// beside a closed customer within six (Join, Place, AddLine, Pay, Ship, Close).
+const BROKEN: &str = "forbidden(Customer, status == closed)\n\
+    forbidden(Order, Customer, Order.status == shipped, Order.qty == 2, Customer.status == closed)\n";
+
+/// A run told to stop once every check has failed stops right after the step that breaks
+/// the last one: a prefix of the run to the end, with the same violations and traces, the
+/// same on any number of threads.
+#[test]
+fn a_run_stops_once_every_check_has_failed() {
+    use super::RunEnd;
+
+    let bounds = Bounds {
+        instances: NonZeroU8::new(3).expect("3 instances"),
+        int_max: 5,
+    };
+    let src = format!("{SHOP}{BROKEN}");
+    let ts = TransitionSystem::build(&model_from(&src), bounds, &Scope::ALL).ts;
+    let whole = ts.clone().run_on(Caps::VERIFY, Threads::Fixed(0));
+    assert_eq!(whole.end(), RunEnd::Complete);
+    let caps = Caps::VERIFY.until_all_violated();
+    let stopped = ts.clone().run_on(caps, Threads::Fixed(0));
+    assert_eq!(stopped.end(), RunEnd::ChecksFailed);
+    assert!(!stopped.complete);
+    let n = stopped.states.len();
+    // Past two chunks of 128 states, so the runs on threads below hand chunks to workers.
+    assert!(
+        n >= 256 && n * 10 < whole.states.len(),
+        "{n} of {} states",
+        whole.states.len()
+    );
+    assert!(stopped.states.iter().eq(whole.states.iter().take(n)));
+    assert_eq!(stopped.parents[..], whole.parents[..n]);
+    assert_eq!(stopped.diags.len(), 2);
+    assert_eq!(stopped.diags, whole.diags);
+    for threads in [1, 2, 4] {
+        let many = ts.clone().run_on(caps, Threads::Fixed(threads));
+        assert_eq!(many.states, stopped.states, "{threads} threads");
+        assert_eq!(many.edges, stopped.edges, "{threads} threads");
+        assert_eq!(many.diags, stopped.diags, "{threads} threads");
+        assert_eq!(many.end(), RunEnd::ChecksFailed, "{threads} threads");
+    }
+}
+
+/// A check that never fails keeps the run going to the end, and so does a system with no
+/// check at all: neither stops early.
+#[test]
+fn a_run_with_a_check_that_holds_runs_to_the_end() {
+    use super::RunEnd;
+
+    // No order ever has no item: `qty` starts at 1 and is only ever set to 2.
+    for rules in [
+        "forbidden(Customer, status == closed)\nforbidden(Order, qty == 0)\n",
+        "",
+    ] {
+        let src = format!("{SHOP}{rules}");
+        let ts = TransitionSystem::build(&model_from(&src), Bounds::VERIFY, &Scope::ALL).ts;
+        let whole = ts.clone().run_on(Caps::VERIFY, Threads::Fixed(0));
+        let run = ts.run_on(Caps::VERIFY.until_all_violated(), Threads::Fixed(0));
+        assert_eq!(run.end(), RunEnd::Complete, "{rules}");
+        assert_eq!(run.states, whole.states, "{rules}");
+        assert_eq!(run.diags, whole.diags, "{rules}");
+    }
 }

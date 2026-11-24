@@ -2,12 +2,13 @@
 name: rdra-ish-verify
 description: >-
   Formal-verify RDRA-ish models with rdra-ish verify (native, no JVM; TLC as a
-  second opinion). Use when the user asks about
-  export --kind tla, verify, verify --with-tlc, temporal property / always /
-  eventually / leads_to, after.assert, invariant(E).when().none/has, Int/Money/Decimal/now
-  arithmetic, multi-entity forbidden/invariant with .along, whether verify
-  should complement rdra-ish states, or verify --prove (a rule for any number of
-  rows, a counterexample to induction, a .lemma()).
+  second opinion). Use when the user asks about export --kind tla, verify,
+  verify --with-tlc, temporal property / always / eventually / leads_to /
+  stable / unchanged / precedes / can_reach, after.assert,
+  invariant(E).when().none/has, Int/Money/Decimal/now arithmetic, multi-entity
+  forbidden/invariant with .along, whether verify should complement rdra-ish
+  states, a not decided result or the memory limit, or verify --prove (a rule
+  for any number of rows, a counterexample to induction, a .lemma()).
 license: MIT
 ---
 
@@ -27,6 +28,7 @@ after `npx skills add` / `gh skill install`. In the `rdra-ish-dsl` repository,
 | "states で足りる？ / TLA が必要？" | Compare `check` (one instance, no temporal properties) with `verify` (two instances, temporal) | `references/when-to-use.md` |
 | "property / after.assert / when / .along を書きたい" | Author the DSL surface correctly | `references/dsl-surface.md` |
 | "export / verify を回したい", "what does this output mean?" | Run check, then verify, and read the result | `references/workflow.md` |
+| "このガードは必要？ / which rules does this guard protect?" | Run `rdra-ish check <model> --guards` and read each guard's line | `references/workflow.md` |
 | "何行でも成り立つ？ / --prove / CTI / lemma" | Run `rdra-ish verify --prove`, read each `unproved:` CTI, and propose at most one `.lemma()` per CTI | `references/prove.md` |
 | "サンプルや制限は？" | Open a file under `samples/`; note the bounds and approximations | `references/limits-and-samples.md` |
 
@@ -41,7 +43,7 @@ after `npx skills add` / `gh skill install`. In the `rdra-ish-dsl` repository,
    loop. It evaluates no `property`.
 3. Decide whether `verify` is needed with `references/when-to-use.md`: temporal
    `property`, and rules that need two instances (quantifiers, `.along` over several rows,
-   1:1 keys).
+   1:1 keys and `@unique` sets).
 4. Run `rdra-ish verify <file>`. It needs no JVM and no TLC. For a second opinion on a
    result that matters, run `rdra-ish verify <file> --with-tlc` with `tlc` or `tlc2` on
    `PATH` (`nix develop` provides it in the repository; elsewhere
@@ -50,8 +52,11 @@ after `npx skills add` / `gh skill install`. In the `rdra-ish-dsl` repository,
 5. Report each failure by the name after its severity (`error[MultiForbidden_Order_0]`,
    `error[Deadlock_Order_status_paid]`, `error[NeverShipped]`) and its model-term
    counterexample, together with the `bounds:` line the result holds under. Paste the
-   `bounds:` line (with its BFS state cap), `result:` and the last line exactly as
-   printed, in a code block; do not paraphrase them.
+   `bounds:` line (with its state cap or memory limit), `result:` and the last line
+   exactly as printed, in a code block; do not paraphrase them. `result: not decided`
+   with exit 0 means a run stopped at the memory limit, a `--max-states` or
+   `--max-patterns` cap, or `--temporal-budget`: the findings listed under
+   `not checked:` and the cone lines that read `not decided` are open, not passed.
 
 A passing run names its bounds first and last:
 
@@ -79,6 +84,7 @@ rdra-ish check samples/order.rdra
 rdra-ish states samples/order.rdra
 rdra-ish verify samples/order.rdra
 rdra-ish verify samples/partial_scope.rdra --entity Order
+rdra-ish check samples/split_run_order.rdra --guards
 rdra-ish export samples/order.rdra --kind tla -o /tmp/rdra-tla
 ```
 
@@ -93,7 +99,8 @@ rdra-ish export samples/order.rdra --kind tla -o /tmp/rdra-tla
 
 - `references/when-to-use.md` — `check` / `states` vs `verify` decision table
 - `references/dsl-surface.md` — `property`, `after.assert`, quantifiers, `.along`
-- `references/workflow.md` — commands, output files, and how to read each finding
+- `references/workflow.md` — commands, output files, how to read each finding, and how
+  to read `check --guards`
 - `references/limits-and-samples.md` — bounds, approximations, and the bundled samples
 - `references/prove.md` — `verify --prove`: proved / unproved lines, reading a CTI, and
   writing a `.lemma()`

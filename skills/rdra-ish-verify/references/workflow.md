@@ -38,11 +38,17 @@ rdra-ish export samples/order.rdra --kind tla -o /tmp/rdra-tla   # the whole-mod
   the property a temporal counterexample violates, so each runs alone), `cones.txt`, and,
   when the model has temporal properties, the whole-model `RdraSpec` pair and a
   `RdraSpec_<Property>` pair for each property its cone leaves undecided. The run labels
-  name these modules, whichever engine runs them; the whole-model run stops at
-  `--temporal-budget`.
-- A finding `verify` leaves undecided (a temporal property past `--temporal-budget`, or a
-  state, deadlock, or use case a BFS cone left at its cap) prints a `warning:` and passes.
-  In CI, add `--deny-undecided` so it fails instead.
+  name these modules, whichever engine runs them. `stable`, `unchanged`, `precedes`, and
+  `can_reach` get no pair: BFS decides them on their cone. The native whole-model run
+  stops at `--temporal-budget` (default 300 s), at the memory limit, or at `--max-states`
+  when given; TLC's whole-model run under `--with-tlc` stops at the same budget or past
+  2,097,152 states (or `--max-states`).
+- A finding `verify` leaves undecided is open, not passed. A state, deadlock, or use case
+  whose BFS cone stopped at the memory limit or a `--max-states` / `--max-patterns` cap, and
+  a temporal property whose whole-model run stopped at `--temporal-budget`, are listed under
+  `not checked:`; a check or property its cone left open reads `not decided (...)` on its
+  cone line. The run prints `result: not decided` and a `warning:` that counts them, and
+  exits 0. In CI, add `--deny-undecided` so it fails instead.
 - Without `-o`, `verify` writes no spec. `verify --with-tlc` uses a temp dir: a passing
   run deletes it; a failed run ends with `specs: <dir> (kept because a check failed)`.
 - `verify --entity <E>` (repeatable) checks only `E`'s view and the invariants and
@@ -51,8 +57,8 @@ rdra-ish export samples/order.rdra --kind tla -o /tmp/rdra-tla   # the whole-mod
   not decided. Both list what they skip under `not checked:`, skip temporal properties,
   and end with `OK: no errors in the selected scope, within ...`.
 - To check what one actor can reach by their own use cases, when another actor's use case
-  (an operator's deletion, say) leaves every state and hides a deadlock, run
-  `check --actor <A>`, `--without-buc <B>`, or `--without-usecase <UC>`. These assume the
+  (an operator's deletion, say) leaves every state and hides a deadlock, run `check` or
+  `verify` with `--actor <A>`, `--without-buc <B>`, or `--without-usecase <UC>`. These assume the
   other use cases never run, decide deadlocks, witnesses, and use cases that never run
   under that assumption, and name the use cases left out on the `scope:` line.
 - Under `--with-tlc`, when TLC runs out of heap the result is `tool_error`: set
@@ -61,9 +67,13 @@ rdra-ish export samples/order.rdra --kind tla -o /tmp/rdra-tla   # the whole-mod
   runs at once as their heaps fit in half its memory limit (`--memory`, or `memory` under
   `[verify]` in `rdra.toml`; default `16GiB`).
 - A finding listed as `not decided: the <E> cone stopped at the memory limit (...)` means
-  the cone's states outgrew BFS's share of that limit (all of it, half under `--with-tlc`). Raise `--memory`, or narrow the cone
-  as for the state cap (`verify --max-states <N>` raises it); `check` reports the same stop as `MemoryCapReached_<E>` (default
-  limit `4GiB`, `memory` under `[check]`).
+  the cone's states outgrew BFS's share of that limit (all of it, half under `--with-tlc`).
+  Raise `--memory`, or narrow the run (`--entity`, `--buc`). `verify` has no state cap
+  unless `--max-states <N>` sets one; `--max-patterns <N>` raises the 256 patterns per
+  entity. `check` reports the same stop as the error `MemoryCapReached_<E>` (default limit
+  `4GiB`, `memory` under `[check]`), which says how many bytes each held state took,
+  estimates the states the cone reaches when its BFS layers allow it, and names the
+  `--memory` to raise it to.
 - `verify` explores the cones side by side on the machine's cores
   (at most 8). `RDRA_JOBS=2` lowers that when memory is short; the result does not change.
 
@@ -72,8 +82,22 @@ rdra-ish export samples/order.rdra --kind tla -o /tmp/rdra-tla   # the whole-mod
 Every result opens with its `bounds:` line, and `OK: no errors within ...` holds only
 inside those bounds. Every run carries one `result: ok|not decided|counterexample|tool_error` line, the verdict of
 the whole run: `ok` means exit 0 with nothing undecided, and a state-model error fails it as
-`counterexample` does. `--with-tlc` adds TLC's own `tlc_result:` line after it.
-Each finding prints its stable name after the severity, so cite that name.
+`counterexample` does. `--with-tlc` adds TLC's own `tlc_result:` line after it; `result:`
+stays the verdict. Each finding prints its stable name after the severity, so cite that
+name.
+
+**What a cone line says.** `Cone_<name> [<checks>]: ok (<n> states)` decides every check
+in the brackets. `ok (checked in Cone_<larger>)` means a larger cone that takes every step
+this one takes passed and holds these checks, so this cone did not run. A temporal
+property's line names its other runs in the parentheses: `Cone_P_WF: counterexample` (the
+violation holds on the whole model), `Cone_P_WF: ok on the reduced cone` or
+`counterexample on the reduced cone` (decided on the cone reduced by an independent
+sub-lifecycle), or `Cone_P_WF: ok, needs the whole model's
+WF_vars(Next)`, after which `not decided` is settled by the `RdraSpec_P [P]:` line that
+follows. `stable`, `unchanged`, and `precedes` print `property P (BFS on its cone): ok` or
+`violated`. A `warning[Vacuous_<name>]` means the check passed because what it ranges over
+never happens (no reachable row at its `.when`, a `leads_to` trigger that never holds, a use
+case that never runs); its `ok` says nothing about the model.
 
 **An invariant or `after` assertion fails.** Each cone line names the checks it answers.
 The failure prints first in model terms, the same renderer `check` uses: one step per
@@ -89,7 +113,7 @@ bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 
 cones: 1 for 1 invariant(s) and 0 after-assert(s)
 temporal properties: none
 state models (BFS on 2 entity cones): 2 state models, 5 states witnessed, 0 deadlocks, 0 use cases that never run
-Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: counterexample (31 states)
+Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: counterexample (7 states)
 error[MultiForbidden_Order_0]: invariant MultiForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order[1](status=cancelled); Payment[1](status=captured)
   rule: samples/cross_order_payment_split.rdra:44:1
   counterexample (3 steps):
@@ -157,7 +181,8 @@ Error: verification failed: 1 state-model error(s) from BFS on the entity cones
 `error[EngineDisagreement]: ...` (under `--with-tlc`), `error: TLC step <n> (label
 <action>) matches no move of the cone; BFS and TLC disagree (a tool bug)`, and
 `error[LassoFault]: ...` are bugs in rdra-ish, not model defects, and the run ends with
-`result: tool_error`. Report them with the output and the specs directory it names.
+`result: tool_error`. Report them with the output and, under `--with-tlc`, the specs
+directory it names.
 
 **Part of a model.** A scoped run lists what it left out, and a build error that no
 selected cone reads is deferred rather than failing the run:
@@ -171,6 +196,49 @@ not checked: 1 entity view (Audit), 1 invariant (Forbidden_Audit_1), 0 after-ass
   whether Record can run is not decided: no cone of a selected entity keeps it
 OK: no errors in the selected scope, within 1 instance per entity, Int 0..5
 ```
+
+## Which Rules a Guard Protects
+
+<!-- derived-from ../../../docs/cli-reference.md#guard-dependencies -->
+
+`check` passing says the rules hold; it does not say the rules are strong enough to notice a
+lost guard. `rdra-ish check <model> --guards` drops each guard in turn (a condition applied to
+a use case, or the `.when` conditions of one column's arms or values), explores again the
+cones of the rules that keep the use case, and prints on stdout which rules then fail. It
+adds no finding and keeps `check`'s exit status:
+
+```text
+$ rdra-ish check samples/split_run_order.rdra --guards
+...
+guards: 2 guards: 1 protect a rule, 1 no rule depends on; 4 cones explored again
+guard: condition Eligible on OpenSettlement   samples/split_run_order.rdra:48:1
+  protects: MultiForbidden_Claim_0
+guard: the .when arms of Claim.status on Close   samples/split_run_order.rdra:44:1
+  no rule depends on this guard; it is either a business rule nobody wrote as a rule, or not needed
+rules:
+  MultiForbidden_Claim_0 depends on condition Eligible on OpenSettlement
+  Unique_Settlement_Claim depends on no guard
+OK: no errors within 1 instance per entity, Int 0..5
+```
+
+Read it this way:
+
+- `protects:` names a rule that fails without the guard. The guard is load-bearing for that
+  rule; changing it needs the rule to change too.
+- `no rule depends on this guard` is the common answer and not a defect. Many guards are
+  the business rule itself. Ask the user which case it is: a rule nobody wrote (propose
+  the `forbidden` or `invariant` that the guard enforces, so `check` notices when the
+  guard is lost), or a guard the model does not need. A guard that only backs up another
+  guard or a trigger lands here too, as does a guard that serves a temporal `property`
+  only: the report reads `check`'s rules, not `verify`'s properties.
+- `not decided` means that without the guard the cone reached a cap before any
+  counterexample. Do not count it as protected; raise `--max-states` or `--memory` to
+  decide it.
+- In `rules:`, `depends on no guard` means the rule holds without any single guard: an
+  effect, a use case, a key, or two guards together keep it.
+
+Report the guards by the names the report prints, and never call a guard wrong because no
+rule depends on it.
 
 ## Reporting Tips
 

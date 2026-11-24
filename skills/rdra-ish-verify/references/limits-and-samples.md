@@ -29,7 +29,13 @@
   cases between its steps, so `cross_order_payment_split` fails and `split_run_order`
   passes; `quantifier_none` still fails.
 - **Int arithmetic**: `IntRange` default `0..5`. A literal outside it is
-  `IntLiteralOutOfBounds`, an error in `check` too.
+  `IntLiteralOutOfBounds`, an error in `check` too, and so is an integer `@default`
+  outside it on an Int, Money, Decimal, Date, or DateTime column a rule reads
+  (`IntLiteralOutOfBounds_<E>_<value>`): raise `--int-range-max` or lower the default.
+- **Defaults**: a created row starts at its columns' `@default` (a variation column
+  excepted: see `references/dsl-surface.md`). An `Enum` default that is
+  not one of its values (`invalid enum value`) or a `Bool` default other than `true` /
+  `false` (`invalid bool value`) stops the model from loading in every command.
 - **`now`**: a global Int clock with a `Tick` action. Nothing pins a column compared to
   `now`, so `verify` finds violations (`now_coupon` expected fail).
 - **Transitions and `sets`**: each use case is one operator `<UC>(p0, ...)`; its
@@ -38,7 +44,16 @@
   (`Forbidden_Order_0`), plus `INVARIANT TypeOK`.
 - **1:1 keys**: one `INVARIANT Unique_<Child>_<role>` per `relate(.., 1:1)` (role
   defaults to the parent id): no two present children own one parent slot. It holds
-  vacuously at one instance, so only `verify` (two or more) can fail it.
+  vacuously at one instance, so it fails only at two or more (`verify`, or
+  `check --instance-count 2`).
+- **Unique sets**: a `@unique` column, a `@unique(a, b)`, and the two keys of a
+  `relate(A, B, N:M).via(J)` junction each become one `INVARIANT Unique_<Entity>_<columns>` when
+  the lifecycle holds every column's value (an `Enum`, `Bool`, or variation column, a
+  compared `Int`, or a key, read as its owner): two present rows may not agree on every
+  column, and a null column exempts its row. A set with a `String` column, or on an entity
+  with a `@soft_delete` column, is not checked. Like a 1:1 key it needs two instances; keep
+  the set free with a guard such as `holds(AmFree, Room.open == true).none(Booking.slot == am)`.
+  The repository's `unique_double_booking` and `unique_booking_guarded` samples show both.
 - **Child-side minimum**: one `INVARIANT MinCard_<Child>_<role>` per
   `relate(.., 1..*:1)` or `1..1:1`: every present parent has a present child. A use
   case that creates the parent without a child in the same transaction fails it, at one
@@ -54,9 +69,9 @@
   is never a state var: a Bool one is read as its expression, and an arithmetic one
   cannot be read (`DerivedColumnRead`).
 - **Temporal `property`**: one lowering path. `export` lists every name in one `.cfg`;
-  `verify` checks each property alone, natively, and writes its own module
-  `<whole>_<Property>` for TLC, because TLC does not name the property its counterexample
-  violates. A violation prints its lasso in model terms.
+  `verify` checks each property alone, natively, and under `-o` or `--with-tlc` writes its
+  own module (`Cone_<Property>`, `RdraSpec_<Property>`) for TLC, because TLC does not name
+  the property its counterexample violates. A violation prints its lasso in model terms.
 - **`after.assert`**: independent `[][(\A p : UC(p) => post')]_vars` PROPERTY named
   `AfterAssert_<UC>_<n>` (not injected into the effects).
 - **`WF_vars(Next)`**: fairness on whole `Next`, not per action; another instance's loop
@@ -65,7 +80,7 @@
   its `.fair` use cases, where `WF_vars(Next)` does not restrict; a property without `.fair`
   reaches the whole model unless its cone holds every written var, and a whole-model run of
   patent-ops, food-permit-ops, or insurance-claim-ops at two instances stops at
-  `--temporal-budget` or at the state cap (`--max-states`) as not decided.
+  `--temporal-budget` or at the memory limit (or `--max-states`, when given) as not decided.
 - **State models**: witnesses, deadlocks, and use cases that never run come from BFS on
   each entity's cone, at `verify`'s bounds (no state cap; `--memory` stops a cone, `--max-states <N>` sets one, `--max-patterns <N>` the 256 patterns).
   TLC's own `CHECK_DEADLOCK` stays `FALSE`: every bounded model ends with no enabled
@@ -96,8 +111,9 @@
   cone of every sample at 1 and 2 instances and compares the reached and initial states, the
   edge sets `(from, to, use case)`, the witness, never-runs, and deadlock findings by name,
   and each check's verdict. A cone over 300,000 BFS states at 2 instances is compared at 1
-  instance only; the test pins those cones in `VERIFY_FALLBACK` (today 11 cones: 1 of
-  clinic-ops, 2 of patent-ops, 1 of food-permit-ops, and 7 of insurance-claim-ops).
+  instance only; the test pins those cones in `VERIFY_FALLBACK` (today 24 cones: 1 of
+  clinic-ops, 2 of patent-ops, 1 of food-permit-ops, 7 of insurance-claim-ops, and 13 of
+  oidc-auth).
 
 ## Bundled Samples
 

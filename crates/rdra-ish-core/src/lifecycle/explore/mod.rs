@@ -2,6 +2,7 @@
 //! the fly; per-entity view statistics are gathered from the edges as they are found. The run
 //! keeps every edge and, per state, the edge that first reached it.
 
+mod arena;
 mod bfs;
 mod graph;
 mod liveness;
@@ -13,13 +14,14 @@ mod store;
 mod views;
 mod violations;
 
+pub use arena::States;
 pub use graph::{Adjacency, LabelledEdges};
 pub use liveness::{LassoFault, ReducedVerdict, Spurious};
 pub use properties::PropertyVerdict;
 pub use reach::{Estimate, Layers};
 pub use store::{store_bytes, Held};
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 
 use std::time::Instant;
 
@@ -27,7 +29,7 @@ use crate::fasthash::FastMap;
 use crate::memory::{Charge, MemoryPool};
 
 use super::diag::Diag;
-use super::expr::State;
+use super::expr::{State, StateSlice};
 use super::types::ActId;
 use super::TransitionSystem;
 
@@ -43,6 +45,10 @@ pub struct Caps {
     /// When the run stops, with `StateDiag::TimeBudgetReached` (`verify --temporal-budget`);
     /// `None` runs until a cap or the end.
     pub deadline: Option<Instant>,
+    /// Stop once every invariant and after-assert of the system has a counterexample
+    /// (`RunEnd::ChecksFailed`). Only a run that decides nothing but those checks sets it: an
+    /// entity target, a property, or a `can_reach` reads the whole graph.
+    pub stop_when_all_violated: bool,
 }
 
 impl Caps {
@@ -69,6 +75,15 @@ impl Caps {
             states,
             memory: None,
             deadline: None,
+            stop_when_all_violated: false,
+        }
+    }
+
+    /// These caps, with a run stopped once every invariant and after-assert has failed.
+    pub const fn until_all_violated(self) -> Self {
+        Caps {
+            stop_when_all_violated: true,
+            ..self
         }
     }
 
@@ -93,9 +108,14 @@ pub struct ComponentRun {
     /// The system explored; `states` and the views index into it.
     pub system: TransitionSystem,
     /// Reached states in discovery order.
-    pub states: Vec<State>,
-    /// False when a cap stopped the BFS.
+    pub states: States,
+    /// False when the BFS stopped before it reached every reachable state: at a cap, or
+    /// once every check failed (`checks_failed`).
     pub complete: bool,
+    /// `Caps::stop_when_all_violated` stopped the run once every invariant and after-assert
+    /// had a counterexample. The run is not complete, so nothing that needs the whole graph
+    /// (vacuity, a covering cone's `ok`) reads it as one; its checks are decided.
+    pub checks_failed: bool,
     pub diags: Vec<Diag>,
     pub(crate) views: Vec<EntityView>,
     /// Parallel to `states`: the index in `edges` of the edge that first reached the state;
@@ -117,6 +137,29 @@ pub struct ComponentRun {
     pub layers: Layers,
     /// `kept`, charged to `Caps::memory` while the result is alive.
     _charge: Option<Charge>,
+}
+
+/// How a run ended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RunEnd {
+    /// Every reachable state was explored.
+    Complete,
+    /// A cap, the memory limit, or the time budget stopped the run.
+    Capped,
+    /// Every invariant and after-assert had a counterexample, so the run stopped
+    /// (`Caps::stop_when_all_violated`): each check is decided, the graph is not whole.
+    ChecksFailed,
+}
+
+impl ComponentRun {
+    /// How the run ended.
+    pub fn end(&self) -> RunEnd {
+        match (self.complete, self.checks_failed) {
+            (true, _) => RunEnd::Complete,
+            (false, true) => RunEnd::ChecksFailed,
+            (false, false) => RunEnd::Capped,
+        }
+    }
 }
 
 /// The worker threads a run computes moves on, beside the thread that reads them.
@@ -163,7 +206,7 @@ impl Moves {
         self.acts.len()
     }
 
-    pub fn push(&mut self, act: ActId, params: &[u8], next: &State) {
+    pub fn push(&mut self, act: ActId, params: &[u8], next: &StateSlice) {
         debug_assert!(self.acts.is_empty() || self.width == next.0.len());
         self.width = next.0.len();
         self.acts.push(act);
@@ -199,7 +242,7 @@ impl Moves {
 /// What both engines produce for one cone: the reached states in discovery order, initial
 /// ones first, and the moves between them. Findings read only this.
 pub struct Graph<'a> {
-    pub states: &'a [State],
+    pub states: &'a States,
     /// False when a cap stopped the exploration, so a state it did not reach may be reachable.
     pub complete: bool,
     edges: &'a [Edge],
@@ -254,6 +297,18 @@ pub(crate) enum Scan {
     Crowded(Vec<usize>),
 }
 
+/// The checks with a reported violation, as a bit per check name. Checks are numbered
+/// invariants first, then after-asserts; checks that share a name share its bit, as one
+/// violation reports for both.
+struct Violated {
+    /// Per check: the index of its name among the system's distinct check names.
+    name_of: Vec<u32>,
+    /// Per distinct name: a violation of it was reported.
+    reported: Vec<bool>,
+    /// Distinct names with no violation yet.
+    open: usize,
+}
+
 /// Interns each `(action, params)` an edge names, so an edge stores one index.
 #[derive(Default)]
 struct Bindings {
@@ -267,15 +322,17 @@ struct Bindings {
 struct Bfs<'t> {
     ts: &'t TransitionSystem,
     caps: Caps,
-    states: Vec<State>,
-    seen: FastMap<State, u32>,
+    states: States,
+    /// The index of each state in `states`.
+    seen: arena::Seen,
     /// Scratch for the pattern keys `observe` reads, so an edge allocates none.
     keys: (Vec<u8>, Vec<u8>),
     complete: bool,
+    checks_failed: bool,
     diags: Vec<Diag>,
     views: Vec<EntityView>,
     /// Invariants and asserts with a reported violation: each reports its first one only.
-    violated: HashSet<String>,
+    violated: Violated,
     /// Per reported violation: its index in `diags` and where it was seen.
     violations: Vec<(usize, Reach)>,
     parents: Vec<Option<u32>>,
@@ -308,6 +365,7 @@ impl TransitionSystem {
         let Bfs {
             states,
             complete,
+            checks_failed,
             diags,
             views,
             parents,
@@ -322,6 +380,7 @@ impl TransitionSystem {
             system: self,
             states,
             complete,
+            checks_failed,
             diags,
             views,
             parents,
