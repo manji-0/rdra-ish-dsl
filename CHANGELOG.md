@@ -405,6 +405,18 @@
   and a `-continue` run that prints many traces stops with an
   `ArrayIndexOutOfBoundsException` (#314); JDK 17 is 3 to 14% slower than 21 on runs past
   about 50,000 states.
+- The flake has a second launcher beside `tlc`, `tlc-batch`: one JVM that runs TLC jobs one
+  after another (#310), so that a small run does not pay for a JVM start and stop. Only the
+  `engine_equivalence` test uses it so far, for its small TLC runs (a cone of up to 5,000
+  states, a property's cone, a state model); `verify --with-tlc` still starts a process per
+  run. On an 18-core Mac the test went from 178 s to about 100 s of wall time and from
+  1,539 to about 650 CPU-s (two test threads, single runs beside other load), and its 734
+  sample cones of up to 5,000 states from 594 to 107 worker-seconds of TLC. On a 4-core CI
+  runner, in one job, the test took 637 and 633 s without the batch JVMs and 464 and 456 s with
+  them. A job a batch
+  JVM does not answer runs as a process, as every job does without `tlc-batch` on `PATH` or
+  with `RDRA_TLC_BATCH=0`. See
+  [Engine equivalence in batch JVMs](docs/formal-verification.md#engine-equivalence-in-batch-jvms).
 - `--max-patterns` caps only a run that builds an entity view (#251, #296): the cone of an
   entity view in `check` and `states`. Only those runs gather view patterns now. A cone of
   invariants, `after` assertions or `can_reach` alone, a run that quotients a sub-lifecycle,
