@@ -256,57 +256,76 @@ impl Scan<'_> {
         }
     }
 
-    /// An owner read through an `Earlier` param, which binds a row by its run mark and not
-    /// by its existence, of an entity some step deletes: the row may be deleted, its owner
-    /// then holds the base value, and the group does not relabel it, so the read names a
-    /// fixed row of the parent while the parent's rows move.
+    /// An owner read on a row that may not be present: an `Earlier` param, which binds a
+    /// row by its run mark and not by its existence, of an entity some step deletes; a `New`
+    /// param in the pre-state, where the row is absent; and a param the step deletes, in the
+    /// successor (or in an after-assert, which reads the successor). Such a row holds the
+    /// base value, which for a mandatory key is slot 0 and which the group does not relabel,
+    /// so the read names a fixed row of the parent while the parent's rows move. An optional
+    /// key whose base is `null` names no row there, and stays symmetric.
     fn deleted_row_owners(&mut self) {
         let ts = self.ts;
-        let deleted: BTreeSet<EntId> = ts
+        let deletes = |a: &crate::lifecycle::types::Action, p: u8| {
+            a.effects
+                .iter()
+                .any(|e| matches!(e, Effect::Delete { param } if *param == p))
+        };
+        let deletable: BTreeSet<EntId> = ts
             .actions()
             .iter()
             .flat_map(|a| {
-                a.effects.iter().filter_map(|e| match e {
-                    Effect::Delete { param } => a.params.get(usize::from(*param)).map(|p| p.entity),
-                    _ => None,
-                })
+                (0..a.params.len() as u8)
+                    .filter(move |p| deletes(a, *p))
+                    .map(move |p| a.params[usize::from(p)].entity)
             })
             .collect();
-        let reads = |params: &[Param], pred: &Pred, found: &mut BTreeSet<(EntId, Rule)>| {
+        let mut found = BTreeSet::new();
+        // `post`: the predicate reads `At::Param` in the successor, as an after-assert does.
+        let mut reads = |action: &crate::lifecycle::types::Action, pred: &Pred, post: bool| {
             for term in pred.terms() {
-                let Term::Slot {
-                    var,
-                    at: At::Param(p) | At::Next(p),
-                } = term
+                let (var, p, next) = match term {
+                    Term::Slot {
+                        var,
+                        at: At::Param(p),
+                    } => (var, *p, post),
+                    Term::Slot {
+                        var,
+                        at: At::Next(p),
+                    } => (var, *p, true),
+                    _ => continue,
+                };
+                let d = ts.var(*var);
+                let (VarKind::Owner { child, .. }, Domain::Instance { parent, optional }) =
+                    (&d.kind, &d.domain)
                 else {
                     continue;
                 };
-                let (VarKind::Owner { child, .. }, Domain::Instance { parent, .. }) =
-                    (&ts.var(*var).kind, &ts.var(*var).domain)
-                else {
+                if *optional && d.base == Value::NULL {
+                    continue;
+                }
+                let Some(param) = action.params.get(usize::from(p)) else {
                     continue;
                 };
-                let earlier = params
-                    .get(usize::from(*p))
-                    .is_some_and(|p| matches!(p.role, ParamRole::Earlier { .. }));
-                if earlier && deleted.contains(child) {
+                let maybe_gone = match param.role {
+                    ParamRole::Earlier { .. } => {
+                        deletable.contains(child) || (next && deletes(action, p))
+                    }
+                    ParamRole::New => !next,
+                    _ => next && deletes(action, p),
+                };
+                if maybe_gone {
                     found.insert((*parent, Rule::DeletedRowOwner));
                 }
             }
         };
-        let mut found = BTreeSet::new();
         for action in ts.actions() {
             for guard in &action.guards {
-                reads(&action.params, &guard.pred, &mut found);
+                reads(action, &guard.pred, false);
             }
         }
         for a in ts.after_asserts() {
             for step in &a.steps {
-                reads(
-                    &ts.actions()[step.act.index()].params,
-                    &step.post,
-                    &mut found,
-                );
+                reads(&ts.actions()[step.act.index()], &step.post, true);
             }
         }
         self.found.extend(found);

@@ -1,0 +1,35 @@
+// trap: identical pre-existing rows, some named by children and some not.
+// Doctors are master data with nothing to tell them apart until one leaves. Visits name a
+// doctor; a visit finishes only while its doctor is active, and a doctor can leave with a
+// visit still booked and finish it later as no one. Leaving after a visit finished is
+// allowed, so a finished visit of a departed doctor is reachable: the rule fails. Up to
+// instance symmetry the tied doctors that a visit names are the ones the canonical form must
+// try in each order, since the visits read their places; the ones no visit names give the
+// same form in any order and must not multiply the branches.
+// expect MultiForbidden_Visit_0: native=counterexample tlc=counterexample z3=unproved
+// expect Deadlock_Visit_status_booked: native=counterexample tlc=counterexample
+entity Doctor "医師" {
+  id: Int @pk
+  active: Bool @default(true)
+}
+
+entity Visit "受診" {
+  id: Int @pk
+  status: Enum(booked, done) @default(booked)
+}
+
+relate(Visit, Doctor, N:1)
+
+usecase Book "予約"
+usecase Finish "診察"
+usecase Leave "退職"
+
+creates(Book, Visit)
+transitions(Finish, Visit.status, booked -> done)
+sets(Leave, Doctor.active == false)
+
+condition Active "在籍中の医師"
+holds(Active, Doctor.active == true)
+applies_to(Active, Finish)
+
+forbidden(Visit, Doctor, Visit.status == done, Doctor.active == false).along(Visit, Doctor)

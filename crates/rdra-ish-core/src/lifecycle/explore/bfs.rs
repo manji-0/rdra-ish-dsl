@@ -387,6 +387,10 @@ impl<'t> Bfs<'t> {
                     binding,
                 });
                 self.orbit_self.push(edge);
+                // The step's after-asserts were read on its concrete successor above.
+                if self.stop_if_all_failed() {
+                    return false;
+                }
                 continue;
             }
             let to = match self.seen.find(&self.states, key) {

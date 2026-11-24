@@ -183,6 +183,19 @@ fn replays(ts: &TransitionSystem, start: &State, steps: &[Step]) {
     if let Err(e) = ts.replay(states, &actions) {
         panic!("symmetry: a lifted counterexample does not replay ({e:?}); a tool bug");
     }
+    // `replay` reads the actions only; the printed trace also names each step's rows.
+    let mut at = start;
+    for (i, (act, params, next)) in steps.iter().enumerate() {
+        let found = ts
+            .moves(at)
+            .any(|m| m.act == *act && *m.params == **params && m.next.0 == next.0);
+        assert!(
+            found,
+            "symmetry: step {} of a lifted counterexample does not bind the rows it names; a tool bug",
+            i + 1
+        );
+        at = next;
+    }
 }
 
 impl OrbitRun {

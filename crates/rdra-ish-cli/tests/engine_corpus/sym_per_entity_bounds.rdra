@@ -1,0 +1,38 @@
+// trap: per-entity bounds give two classes different slot counts, and a 1:1 child under a
+// parent with a different count cannot start in its parent's slot.
+// Rooms are master data, three of them; bookings are created, at most two, each naming a
+// room, and a room is booked at most once by its flag. A booked room is never free again,
+// and a booking is confirmed only while its room is booked: the rule holds. Up to instance
+// symmetry the rooms permute among three slots and the bookings among two, each class by
+// its own count; a group that used one count for both would read slots past a class's end.
+// flags: --instances Room=3 --instances Booking=2
+// expect MultiForbidden_Booking_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+entity Room "部屋" {
+  id: Int @pk
+  booked: Bool @default(false)
+}
+
+entity Booking "予約" {
+  id: Int @pk
+  status: Enum(held, confirmed) @default(held)
+}
+
+relate(Booking, Room, N:1)
+
+usecase Book "予約"
+usecase Confirm "確定"
+
+creates(Book, Booking)
+updates(Book, Room)
+sets(Book, Room.booked == true)
+transitions(Confirm, Booking.status, held -> confirmed)
+
+condition Free "空き部屋"
+holds(Free, Room.booked == false)
+applies_to(Free, Book)
+
+condition Taken "予約済みの部屋"
+holds(Taken, Booking.status == held).has(Room.booked == true)
+applies_to(Taken, Confirm)
+
+forbidden(Booking, Room, Booking.status == confirmed, Room.booked == false).along(Booking, Room)
