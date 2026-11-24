@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Known issues
+
+- `--memory` does not yet bound the whole process (#237, #242, #243). It bounds what the
+  state stores are counted to hold. When cones stop at the limit, the process has been
+  measured on macOS at up to 1.85 times it (`verify samples/oidc-auth --instance-count 2
+  --memory 2GiB`), and past 19.5 GB at the default `16GiB`. Set `--memory` to about half the
+  memory you can spare until the fixes land. Runs whose cones finish below the limit are not
+  affected. See [Memory limit](docs/cli-reference.md#memory-limit).
+
 ### Breaking
 
 - `verify --prove` decides an invariant cone that BFS stopped at the memory limit (#232).
