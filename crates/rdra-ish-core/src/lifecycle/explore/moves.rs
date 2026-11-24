@@ -295,7 +295,10 @@ impl TransitionSystem {
         for &p in &deleted {
             let e = action.params[usize::from(p)].entity;
             let decl = self.entity(e);
-            for &var in decl.columns.iter().chain(decl.owners.iter()) {
+            // A deleted row keeps its keys: it names the rows it named, so a later step that
+            // reads the key reads the parent the row had, and the key moves with that parent
+            // under instance symmetry (#212).
+            for &var in decl.columns.iter() {
                 next.set(self, var, slot(p), self.var(var).base);
             }
             next.set(self, decl.exists, slot(p), Value::DELETED);
