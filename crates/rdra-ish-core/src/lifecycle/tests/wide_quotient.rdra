@@ -1,0 +1,168 @@
+variation V1 "v1" {
+  a "a"
+  b "b"
+  c "c"
+}
+variation V4 "v4" {
+  a "a"
+  b "b"
+  c "c"
+}
+entity E0 "e0" {
+  id: Int @pk
+  status: Enum(s0, s1) @default(s0)
+  flag: Bool @default(false)
+}
+
+entity E1 "e1" {
+  id: Int @pk
+  status: Enum(s0, s1, s2) @default(s0)
+  kind: V1
+}
+
+entity E2 "e2" {
+  id: Int @pk
+  status: Enum(s0, s1) @default(s0)
+  flag: Bool @default(false)
+}
+
+entity E3 "e3" {
+  id: Int @pk
+  status: Enum(s0, s1, s2) @default(s0)
+  flag: Bool @default(false)
+}
+
+entity E4 "e4" {
+  id: Int @pk
+  status: Enum(s0, s1) @default(s0)
+  kind: V4
+}
+
+relate(E1, E0, N:1)
+relate(E2, E1, N:1)
+relate(E3, E2, N:1)
+relate(E4, E3, N:1)
+
+usecase New0 "New0"
+creates(New0, E0)
+usecase New1 "New1"
+creates(New1, E1)
+usecase New2 "New2"
+creates(New2, E2)
+usecase New3 "New3"
+creates(New3, E3)
+usecase New4 "New4"
+creates(New4, E4)
+usecase T0_0 "T0_0"
+updates(T0_0, E0)
+usecase T0_1 "T0_1"
+updates(T0_1, E0)
+usecase T0_2 "T0_2"
+updates(T0_2, E0)
+usecase T1_0 "T1_0"
+updates(T1_0, E1)
+usecase T1_1 "T1_1"
+updates(T1_1, E1)
+usecase T1_2 "T1_2"
+updates(T1_2, E1)
+usecase T2_0 "T2_0"
+updates(T2_0, E2)
+usecase T2_1 "T2_1"
+updates(T2_1, E2)
+usecase T2_2 "T2_2"
+updates(T2_2, E2)
+usecase T3_0 "T3_0"
+updates(T3_0, E3)
+usecase T3_1 "T3_1"
+updates(T3_1, E3)
+usecase T3_2 "T3_2"
+updates(T3_2, E3)
+usecase T4_0 "T4_0"
+updates(T4_0, E4)
+usecase T4_1 "T4_1"
+updates(T4_1, E4)
+usecase T4_2 "T4_2"
+updates(T4_2, E4)
+
+transitions(T0_0, E0.status, s0 -> s1)
+sets(T0_0, E0.flag == true)
+condition C0 "C0"
+holds(C0, E0.status == s0).has(E1.status == s1)
+transitions(T0_1, E0.status, s0 -> s1).when(C0)
+transitions(T0_1, E0.status, s0 -> s1)
+condition C1 "C1"
+holds(C1, E0.status == s0)
+sets(T0_1, E0.flag == true).when(C1)
+condition C2 "C2"
+holds(C2, E1.status == s2).has(E2.status == s1)
+applies_to(C2, T0_1)
+condition C3 "C3"
+holds(C3, E0.status == s0)
+transitions(T0_2, E0.status, s1 -> s0).when(C3)
+transitions(T1_0, E1.status, s1 -> s2)
+condition C4 "C4"
+holds(C4, E0.status == s1).none(E1.status == s2)
+applies_to(C4, T1_0)
+transitions(T1_1, E1.status, s1 -> s2)
+transitions(T1_2, E1.status, s0 -> s1)
+chooses(T1_2, E1.kind)
+condition C5 "C5"
+holds(C5, E3.status in (s2, s1)).has(E4)
+transitions(T2_0, E2.status, s0 -> s1).when(C5)
+transitions(T2_1, E2.status, s1 -> s0)
+transitions(T2_2, E2.status, s0 -> s1)
+transitions(T3_0, E3.status, s1 -> s2)
+transitions(T3_0, E3.status, s0 -> s1)
+sets(T3_0, E3.flag == true)
+transitions(T3_1, E3.status, s0 -> s1)
+condition C6 "C6"
+holds(C6, E3.status == s0)
+sets(T3_1, E3.flag == true).when(C6)
+condition C7 "C7"
+holds(C7, E2.status == s0)
+applies_to(C7, T3_1)
+transitions(T3_2, E3.status, s1 -> s2)
+condition C8 "C8"
+holds(C8, E3.status == s0)
+sets(T3_2, E3.flag == true).when(C8)
+transitions(T4_0, E4.status, s0 -> s1)
+condition C9 "C9"
+holds(C9, E3.status in (s0, s2))
+applies_to(C9, T4_0)
+transitions(T4_1, E4.status, s0 -> s1)
+transitions(T4_2, E4.status, s0 -> s1)
+chooses(T4_0, E4.kind)
+usecase S "S"
+api SA "SA"
+api SB "SB"
+invokes(S, SA)
+updates(SA, E1)
+invokes(S, SB)
+updates(SB, E4)
+transitions(S, E1.status, s2 -> s1)
+transitions(S, E4.status, s1 -> s0)
+usecase S_1 "S_1"
+updates(S_1, E2)
+transitions(S_1, E2.status, s1 -> s0)
+usecase S_2 "S_2"
+updates(S_2, E1)
+transitions(S_2, E1.status, s1 -> s0)
+condition C10 "C10"
+holds(C10, E4.status == s1)
+applies_to(C10, S)
+condition C11 "C11"
+holds(C11, E0.status == s0)
+applies_to(C11, New1)
+condition C12 "C12"
+holds(C12, E2.status == s0)
+applies_to(C12, New3)
+
+forbidden(E4, status == s1)
+after(T4_1).assert(E4.status == s0)
+property P0
+  leads_to(E0.status == s0, E0.status == s1).fair(T0_2, T0_1)
+property P1
+  always(E3.status != s1)
+event Ev0 "ev0"
+raises(T1_2, Ev0)
+triggers(Ev0, T2_1)
