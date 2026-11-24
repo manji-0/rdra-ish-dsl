@@ -83,7 +83,10 @@ jobs:
         run: RDRA_REQUIRE_CODEGEN_TOOLS=1 scripts/diff-test.sh --all
       - name: sample artifact snapshots
         if: needs.changes.outputs.code != 'false'
-        run: bash scripts/check-sample-artifacts.sh
+        run: nix build -L && bash scripts/check-sample-artifacts.sh ./result/bin/rdra-ish
+        # The release binary of the package, which `nix package` below builds anyway (it
+        # then finds it built). In debug the rows that explore the lifecycle took most of
+        # 15-21 minutes; the script writes the same files with either build.
       - name: prose checks
         # In place of the two steps above when every changed file is prose: the tests that read
         # Markdown. The rule ids in docs/language-reference.md and
