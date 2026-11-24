@@ -181,17 +181,9 @@ impl Jvm {
 }
 
 impl Drop for Jvm {
-    /// The driver exits at the end of its stdin; a job is never left running here, since
-    /// `run` returns only on an answer or after a kill.
+    /// A JVM is dropped between jobs, since `run` returns only on an answer or after a
+    /// kill, so there is nothing to wait for: TLC 1.7.4's JVM takes 0.3 s to exit by itself.
     fn drop(&mut self) {
-        self.stdin = None;
-        let until = Instant::now() + Duration::from_secs(5);
-        while Instant::now() < until {
-            if !matches!(self.child.try_wait(), Ok(None)) {
-                return;
-            }
-            std::thread::sleep(Duration::from_millis(5));
-        }
         self.kill();
     }
 }
@@ -205,6 +197,9 @@ pub struct Counts {
     pub answered: usize,
     /// Jobs given to a JVM and not answered, which the caller ran as processes.
     pub lost: usize,
+    /// Those of `lost` that passed the caller's time limit, the JVM killed under them: a
+    /// slow run, not a driver that fails.
+    pub timed_out: usize,
     /// The longest an answered job waited for its answer, in milliseconds.
     pub longest_ms: u64,
 }
@@ -221,6 +216,7 @@ pub struct Pool {
     started: AtomicUsize,
     answered: AtomicUsize,
     lost: AtomicUsize,
+    timed_out: AtomicUsize,
     longest_ms: AtomicU64,
 }
 
@@ -232,6 +228,8 @@ struct Jvms {
     lost_in_a_row: usize,
     /// Why the pool starts no more JVMs, once it does not.
     off: Option<String>,
+    /// Whether `off` came of a job past its time limit, not of a JVM that ended or failed.
+    off_by_time: bool,
 }
 
 impl Pool {
@@ -246,6 +244,7 @@ impl Pool {
             started: AtomicUsize::new(0),
             answered: AtomicUsize::new(0),
             lost: AtomicUsize::new(0),
+            timed_out: AtomicUsize::new(0),
             longest_ms: AtomicU64::new(0),
         }
     }
@@ -273,9 +272,13 @@ impl Pool {
             }
             Err(lost) => {
                 self.lost.fetch_add(1, Ordering::SeqCst);
+                if matches!(lost, Lost::TimedOut) {
+                    self.timed_out.fetch_add(1, Ordering::SeqCst);
+                }
                 jvms.live -= 1;
                 jvms.lost_in_a_row += 1;
                 if jvms.lost_in_a_row >= LOST_IN_A_ROW {
+                    jvms.off_by_time = jvms.off.is_none() && matches!(lost, Lost::TimedOut);
                     Self::turn_off(
                         &mut jvms,
                         format!("{LOST_IN_A_ROW} jobs in a row got no answer, the last: {lost:?}"),
@@ -334,11 +337,23 @@ impl Pool {
         self.jvms.lock().unwrap().off.clone()
     }
 
+    /// Whether every job the pool was given ran as the driver should run it: each got its
+    /// answer or passed its time limit, and the pool is on, or off only because
+    /// `LOST_IN_A_ROW` jobs in a row passed theirs. A job past its limit is a slow run, which
+    /// the caller runs as a process; a JVM that does not start, ends under a job, or fails
+    /// one is a driver that does not work.
+    pub fn sound(&self) -> bool {
+        let jvms = self.jvms.lock().unwrap();
+        let counts = self.counts();
+        counts.lost == counts.timed_out && (jvms.off.is_none() || jvms.off_by_time)
+    }
+
     pub fn counts(&self) -> Counts {
         Counts {
             jvms: self.started.load(Ordering::SeqCst),
             answered: self.answered.load(Ordering::SeqCst),
             lost: self.lost.load(Ordering::SeqCst),
+            timed_out: self.timed_out.load(Ordering::SeqCst),
             longest_ms: self.longest_ms.load(Ordering::SeqCst),
         }
     }
@@ -350,4 +365,113 @@ pub fn launcher() -> Option<PathBuf> {
         return None;
     }
     crate::verify::find_on_path(LAUNCHER)
+}
+
+/// `args` with the fingerprint function and seed the run of `log` drew (`-fp`, `-seed`). TLC
+/// draws both anew for a run that names neither, and they decide the order it stores states
+/// in, and with it which counterexample to a temporal property it prints.
+pub fn with_the_fingerprints_of(log: &str, args: &[OsString]) -> Vec<OsString> {
+    let drawn = |name: &str| {
+        let words: Vec<&str> = log
+            .lines()
+            .find(|l| l.starts_with("Running breadth-first search Model-Checking with fp "))?
+            .split(' ')
+            .collect();
+        let at = words.iter().position(|w| *w == name)?;
+        words.get(at + 1).map(|w| OsString::from(*w))
+    };
+    let (Some(fp), Some(seed)) = (drawn("fp"), drawn("seed")) else {
+        return args.to_vec();
+    };
+    let mut pinned = vec!["-fp".into(), fp, "-seed".into(), seed];
+    pinned.extend(args.iter().cloned());
+    pinned
+}
+
+/// A TLC log without what two runs of one job with one fingerprint function and seed do not
+/// share, whichever way they are started: the JVM's own first line, the dates, the time a
+/// run took, the process id, the directory the standard modules were unpacked into, and what
+/// TLC does on a timer, which is a progress line and, with a temporal property, a check of
+/// the states found until then (a run that ends before the timer has neither, and a slower
+/// one of the same job has them at whatever count it had reached; the check of the complete
+/// state space is always printed). One more differs between a batch JVM and a
+/// process: the heap TLC reports, since a batch JVM has a heap of its own and not the heap of a
+/// process (and at one `-Xmx` the two still report different sizes, 966MB and 981MB of
+/// 1 GiB: the figure is the JVM's `maxMemory`, which leaves out a survivor space that the
+/// parallel collector has resized in a JVM that has run jobs).
+pub fn without_run_noise(log: &str) -> Vec<String> {
+    let mut lines = Vec::new();
+    for line in log.lines() {
+        let interim = line.starts_with("Checking ")
+            && line.contains(" of temporal properties for the current state space ");
+        if line.starts_with("Picked up JAVA_TOOL_OPTIONS:")
+            || line.starts_with("Progress(")
+            || interim
+            || line.starts_with("Finished checking temporal properties in ")
+        {
+            continue;
+        }
+        let mut line = without_dates(line);
+        if line.starts_with("Running breadth-first search Model-Checking with fp ") {
+            let mut words: Vec<&str> = line.split(' ').collect();
+            for i in 1..words.len() {
+                if words[i - 1] == "[pid:" || words.get(i + 1) == Some(&"heap") {
+                    words[i] = "N";
+                }
+            }
+            line = words.join(" ");
+        }
+        if let (true, Some(from), Some(to)) = (
+            line.starts_with("Finished"),
+            line.find(" in "),
+            line.find(" at "),
+        ) {
+            line.replace_range(from..to, " in T");
+        }
+        // A standard module, unpacked into the run's or the batch JVM's java.io.tmpdir,
+        // which every caller names `...tmp`.
+        if let Some(module) = line.strip_prefix("Parsing file ") {
+            let unpacked = Path::new(module)
+                .parent()
+                .and_then(Path::file_name)
+                .is_some_and(|dir| dir.to_string_lossy().ends_with("tmp"));
+            if unpacked {
+                let name = Path::new(module).file_name().expect("a module file");
+                line = format!("Parsing file <tmp>/{}", name.to_string_lossy());
+            }
+        }
+        lines.push(line);
+    }
+    lines
+}
+
+/// `line` with each `2026-11-25 02:20:47` as `<date>`.
+fn without_dates(line: &str) -> String {
+    const SHAPE: &[u8] = b"dddd-dd-dd dd:dd:dd";
+    let bytes = line.as_bytes();
+    let is_date = |at: usize| {
+        bytes.len() >= at + SHAPE.len()
+            && SHAPE.iter().zip(&bytes[at..]).all(|(s, b)| {
+                if *s == b'd' {
+                    b.is_ascii_digit()
+                } else {
+                    s == b
+                }
+            })
+    };
+    let mut out = String::new();
+    let mut at = 0;
+    while at < bytes.len() {
+        if is_date(at) {
+            out.push_str("<date>");
+            at += SHAPE.len();
+        } else {
+            let next = (at + 1..=bytes.len())
+                .find(|i| line.is_char_boundary(*i))
+                .expect("a boundary");
+            out.push_str(&line[at..next]);
+            at = next;
+        }
+    }
+    out
 }

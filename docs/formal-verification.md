@@ -1590,7 +1590,8 @@ than about 2.1 GB. The `--with-tlc` mode adds the TLC runs. Each CI step has 20 
 states, and a TLC 1.7.4 process takes 0.6 to 0.8 s to start and stop around a run of a few
 milliseconds. The flake's `tlc-batch` (`nix/tlc-batch/RdraTlcBatch.java`, #310) keeps a JVM
 up and runs one TLC job after another in it; the test takes a JVM per thread that runs TLC
-from a pool (`crates/rdra-ish-cli/src/tlc_batch.rs`). `verify --with-tlc` does not use it.
+from a pool (`crates/rdra-ish-cli/src/tlc_batch.rs`). `verify --with-tlc` uses it for small
+state models; see [State models in batch JVMs](#state-models-in-batch-jvms) below.
 
 - **What a job shares with the one before it.** Nothing of TLC: each job loads TLC through
   a class loader of its own and runs in a thread of its own, and the driver removes TLC's
@@ -1608,7 +1609,9 @@ from a pool (`crates/rdra-ish-cli/src/tlc_batch.rs`). `verify --with-tlc` does n
   not start or did not find `tlc2.TLC`'s `handleParameters`, `setResolver`, and `process`;
   the JVM ended under the job (TLC called `System.exit`, or the heap ran out, which
   `-XX:+ExitOnOutOfMemoryError` turns into an exit); or the job took over 300 s (the
-  longest took 93 s on a CI runner). After
+  longest took 93 s on a CI runner). A job past the time limit is a slow run, not a driver
+  that fails: it runs as a process and does not fail the test under
+  `RDRA_REQUIRE_TLC_BATCH=1`, as the other losses do. After
   three jobs in a row without an answer, every later job is a process. A JVM is replaced
   after 400 jobs, or when its jobs have left 8 threads behind: TLC 1.7.4 never shuts down
   the executor it starts to print a liveness counterexample, and that thread keeps its job's
@@ -1633,6 +1636,55 @@ from a pool (`crates/rdra-ish-cli/src/tlc_batch.rs`). `verify --with-tlc` does n
 - **In CI.** The job sets `RDRA_REQUIRE_TLC_BATCH=1`: the test fails when no job ran in a
   batch JVM or one fell back, so a driver that stops working shows as a failure and not
   only as a slower job. `RDRA_TLC_BATCH=0` runs every job as a process.
+
+### State models in batch JVMs
+
+<!-- constrained-by ./cli-reference.md#memory-limit -->
+
+`verify --with-tlc` gives a batch JVM the runs of a `StateModel_` module that BFS found to
+have at most 10,000 states and whose text is at most 1 MiB, when the user names no TLC heap
+and the `tlc` it found has a `tlc-batch` in the same directory, as the flake's has. A TLC
+from `--tlc-jar` or `RDRA_TLC_JAR`, or a `tlc` alone on `PATH`, runs as before. Cone runs
+and whole-model runs are processes: batching cones is not decided (#309).
+
+- **Order and memory.** The batch JVMs and the process runs of the other state models hold
+  their charges of one budget, the TLC share of `--memory` (see
+  [Memory limit](cli-reference.md#memory-limit)), as the cone runs do of theirs. A batch
+  JVM has 512 MiB of heap, what the heap rule gives a module of 1 MiB before it rounds up
+  to 1 GiB, and is charged that and the 256 MiB every TLC JVM is charged beside its heap,
+  from before it starts until it ends: it holds its memory between runs too. There are at
+  most 8, at most one per core, and at most as many as that charge fits the share: a share
+  of 1 GiB runs one, and a share under 768 MiB none. The batch JVMs run first and are gone
+  before the first process run starts. The two do not run at once because of the cores, not
+  the memory: the JVMs are as many as the cores with one worker each, and a process run
+  divides the cores among its workers, so a large state model waits for the small ones.
+- **Workers.** A batch run has one worker. The JVMs are already as many as the cores
+  allow, and a state model this small gains nothing from more.
+- **Falling back.** A run with no answer makes its module run again from its first run as
+  processes, with the heap and the rerun at twice the heap that a process run has: the JVM
+  ran out of its 512 MiB or ended for another reason, or the run took over 120 s.
+- **The mode check.** `RDRA_TLC_BATCH=both` runs each batch run again as a process, with
+  the same arguments and the fingerprint function and seed of the batch run, and fails
+  `verify` when the exit status, the `InvariantScan` of the output, or the log up to what
+  two process runs differ in (above) is not the same; it prints `tlc batch: N runs in J
+  JVMs, C compared with a process run and the same, L without an answer` on stderr. The
+  comparison is exact because both runs have one worker. It says nothing about a process
+  run with several workers, which is what a module gets when it falls back or is too large
+  for a batch JVM: two such runs differ from each other in which trace they print, and
+  `verify` reads only the names of the violated checks from a state-model run. The check
+  run is a JVM of 512 MiB beside each batch JVM and is not counted against `--memory`, so a
+  `both` run holds about twice the batch JVMs' charge.
+
+Measured on an 18-core Mac beside other load, one build with `RDRA_TLC_BATCH=0` and without
+it, two runs each: the engine corpus, 337 TLC runs of which 175 go to batch JVMs, took 41
+and 41 s with processes only and 26 and 25 s with batch JVMs, at 172 and 139 CPU-s against
+158 and 135; the 45 `reduction-diff.py` seeds CI runs with TLC, 1,090 runs of which 713 go
+to batch JVMs, took 60 and 56 s and 869 and 788 CPU-s with processes only, and 52 and 54 s
+and 746 and 729 CPU-s with batch JVMs, the script's own runs taking the load past the
+cores each time. The corpus gains in wall time, since its `verify` runs wait for their
+state models one after another; the seeds gain little. All 175 and all 713 were the same
+as their process runs under `RDRA_TLC_BATCH=both`. Each `verify` starts its own JVMs, 78 over the corpus and 280 over
+the seeds, so a JVM runs two or three jobs.
 
 The driver is for TLC 1.7.4. TLC 1.8 starts and stops in 0.25 s (#309), and when it is the
 baseline the driver, the pool, and `tlc-batch` can be removed without touching a caller's

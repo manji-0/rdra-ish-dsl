@@ -69,6 +69,70 @@ fn verify_with_tlc(cwd: &Path, tmpdir: &Path, args: &[&str]) -> Output {
         .expect("rdra-ish runs")
 }
 
+/// `tlc-batch` beside the `tlc` on PATH, as the flake has it; `None` with the reason printed,
+/// and a failure under `RDRA_REQUIRE_TLC_BATCH=1`.
+fn have_tlc_batch() -> bool {
+    let tlc = Command::new("which").arg("tlc").output().expect("which");
+    let tlc = PathBuf::from(String::from_utf8_lossy(&tlc.stdout).trim());
+    let found = tlc.parent().is_some_and(|d| d.join("tlc-batch").is_file());
+    if !found {
+        let reason = "no tlc-batch beside tlc (run inside `nix develop`)";
+        assert!(
+            std::env::var("RDRA_REQUIRE_TLC_BATCH").as_deref() != Ok("1"),
+            "RDRA_REQUIRE_TLC_BATCH=1 but {reason}"
+        );
+        println!("skipped: {reason}");
+    }
+    found
+}
+
+/// Under `--with-tlc` the runs of a small state model go through a batch JVM when the `tlc`
+/// on PATH has a `tlc-batch` beside it (#310). `RDRA_TLC_BATCH=both` runs each of them as a
+/// process too, with the batch run's fingerprints and one worker, and fails the run when the
+/// two differ; `RDRA_TLC_BATCH=0` starts a process per run. The three print the same.
+#[test]
+fn small_state_models_run_in_a_batch_jvm_and_print_what_process_runs_print() {
+    if !have_tlc() || !have_tlc_batch() {
+        return;
+    }
+    let sample = repo().join("samples/ec-site");
+    let run = |name: &str, mode: Option<&str>| {
+        let tmp = scratch(name);
+        let mut command = Command::new(env!("CARGO_BIN_EXE_rdra-ish"));
+        command
+            .current_dir(repo())
+            .env("TMPDIR", &tmp)
+            .env_remove("RDRA_TLC_BATCH")
+            .env_remove("RDRA_TLC_HEAP")
+            .args(["verify", "--with-tlc", sample.to_str().unwrap()]);
+        if let Some(mode) = mode {
+            command.env("RDRA_TLC_BATCH", mode);
+        }
+        let output = command.output().expect("rdra-ish runs");
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+        assert!(output.status.success(), "{name}:\n{stdout}\n{stderr}");
+        (stdout, stderr)
+    };
+    let (both, check) = run("verify_cli_batch_both", Some("both"));
+    let said = check
+        .lines()
+        .find(|l| l.starts_with("tlc batch: "))
+        .unwrap_or_else(|| panic!("no batch run:\n{check}"));
+    let words: Vec<&str> = said.split(' ').collect();
+    let (runs, compared): (usize, usize) = (words[2].parse().unwrap(), words[7].parse().unwrap());
+    assert!(
+        runs > 0 && compared == runs && said.ends_with(", 0 without an answer"),
+        "{said}"
+    );
+    assert!(both.contains("tlc: StateModel_Order ("), "{both}");
+    let (batch, _) = run("verify_cli_batch_on", None);
+    let (process, quiet) = run("verify_cli_batch_off", Some("0"));
+    assert!(!quiet.contains("tlc batch: "), "{quiet}");
+    assert_eq!(batch, both);
+    assert_eq!(process, both);
+}
+
 /// `order_stability.rdra`: BFS decides `stable`, `unchanged`, and `precedes` on each one's
 /// cone, with no TLC run, and prints the shortest trace to the step or state that breaks each
 /// failing one. `check` evaluates none of them (#166).
@@ -1692,6 +1756,67 @@ fn liveness_is_decided_without_tlc_and_tlc_agrees() {
         }
         assert_eq!(error_names(&tlc_stderr), error_names(&stderr), "{tlc_stderr}");
     }
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// A state model whose batch JVM gives no answer runs as processes and prints what it prints
+/// with no batch JVM: here a `tlc-batch` that says `ready` and ends, beside a `tlc` that is
+/// the one on PATH.
+#[cfg(unix)]
+#[test]
+fn a_state_model_a_batch_jvm_does_not_answer_runs_as_processes() {
+    use std::os::unix::fs::PermissionsExt;
+    if !have_tlc() {
+        return;
+    }
+    let tmp = scratch("verify_cli_batch_lost");
+    let real = Command::new("which").arg("tlc").output().expect("which");
+    let real = String::from_utf8_lossy(&real.stdout).trim().to_string();
+    let bin = tmp.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    for (name, script) in [
+        ("tlc", format!("#!/bin/sh\nexec '{real}' \"$@\"\n")),
+        ("tlc-batch", "#!/bin/sh\necho ready\n".to_string()),
+    ] {
+        let path = bin.join(name);
+        std::fs::write(&path, script).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let path = format!(
+        "{}:{}",
+        bin.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let sample = repo().join("samples/ec-site");
+    let run = |mode: &str| {
+        let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+            .current_dir(repo())
+            .env("TMPDIR", &tmp)
+            .env("PATH", &path)
+            .env("RDRA_TLC_BATCH", mode)
+            .env_remove("RDRA_TLC_HEAP")
+            .env_remove("RDRA_TLC_JAR")
+            .args(["verify", "--with-tlc", sample.to_str().unwrap()])
+            .output()
+            .expect("rdra-ish runs");
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+        assert!(output.status.success(), "{mode}:\n{stdout}\n{stderr}");
+        (stdout, stderr)
+    };
+    let (lost, said) = run("both");
+    assert!(
+        said.contains("tlc batch: 0 runs in 1 JVMs, 0 compared with a process run and the same, 1 without an answer\n"),
+        "{said}"
+    );
+    assert!(
+        lost.contains(
+            "tlc: StateModel_Order (82 states): 4 deadlock and 6 witness checks; found none\n"
+        ),
+        "{lost}"
+    );
+    let (process, _) = run("0");
+    assert_eq!(lost, process);
     let _ = std::fs::remove_dir_all(&tmp);
 }
 

@@ -131,7 +131,7 @@ pub(crate) const JVM_OVERHEAD: u64 = 256 * MIB;
 /// Heap per byte of module text: 512 MiB per MiB. TLC was measured to need 183 to 269 MiB per
 /// MiB to parse and process a module (#309), and twice that also holds the 7,167,444 states
 /// of the 7.6 MB cone of #299, which checks at 4 GiB and not at 2.
-const HEAP_PER_MODULE_BYTE: u64 = 512;
+pub(crate) const HEAP_PER_MODULE_BYTE: u64 = 512;
 
 /// The heap of one TLC run.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
