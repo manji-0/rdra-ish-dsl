@@ -719,8 +719,9 @@ fn reject_errors_where(
     Ok(())
 }
 
-/// An output that prints no reachability result writes on lifecycle errors, with one note
-/// that counts them and ends in `why`, the reason the output is still worth writing.
+/// An output that is written on lifecycle errors, though a checker of it meets them, gets
+/// one note that counts them and ends in `why`, the reason the output is still worth
+/// writing.
 pub(crate) fn note_state_errors(findings: &[Finding], why: &str) {
     let errors = findings
         .iter()
@@ -730,9 +731,6 @@ pub(crate) fn note_state_errors(findings: &[Finding], why: &str) {
         eprintln!("note: the lifecycle has {errors} error(s) (see `rdra-ish check`); {why}");
     }
 }
-
-/// The reason a data-layer or declared-facts output writes on lifecycle errors.
-pub(crate) const READS_NO_LIFECYCLE: &str = "this output does not read the lifecycle";
 
 /// The reason the TLA+ export writes on lifecycle errors, and where TLC checks the deadlocks
 /// and missing witnesses.

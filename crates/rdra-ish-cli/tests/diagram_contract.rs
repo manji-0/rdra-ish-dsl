@@ -52,8 +52,8 @@ fn buc_ids(root: &str) -> Vec<String> {
 }
 
 /// The model at `root`, a samples.txt line or an absolute path, loaded once per test
-/// process: every test that draws it shares one parse and one lifecycle exploration, where
-/// a `diagram` process runs both again for each scope and kind.
+/// process: every test that draws it shares one parse and, for the state diagrams, one
+/// lifecycle exploration, where a `diagram` process runs both again for each scope.
 fn session(root: &str) -> &'static Session {
     static SESSIONS: Mutex<BTreeMap<String, &'static OnceLock<Session>>> =
         Mutex::new(BTreeMap::new());
