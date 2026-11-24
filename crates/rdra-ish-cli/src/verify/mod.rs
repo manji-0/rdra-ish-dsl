@@ -82,11 +82,8 @@ pub(super) struct WholeRun {
 impl WholeRun {
     /// `caps` for a run that starts now: this cap on states, and the time budget from now.
     pub(super) fn caps(self, caps: Caps) -> Caps {
-        Caps {
-            states: self.states.unwrap_or(usize::MAX),
-            ..caps
-        }
-        .until(Instant::now() + self.budget)
+        caps.with_states(self.states.unwrap_or(usize::MAX))
+            .until(Instant::now() + self.budget)
     }
 }
 
@@ -187,6 +184,9 @@ pub fn run(
         max_states.unwrap_or(usize::MAX),
     )
     .without_views()
+    // Under `retry` and `always`, a sub-lifecycle whose run stops at the memory limit runs
+    // again up to `H` (#212 phase 2): only a cone that stopped there changes.
+    .with_s_up_to_h(symmetry != Symmetry::Never)
     .charged_to(MemoryPool::share_of(
         memory.limit,
         memory.bfs,

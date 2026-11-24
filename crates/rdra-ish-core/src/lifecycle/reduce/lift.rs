@@ -26,7 +26,24 @@ impl TransitionSystem {
         let ext = Extended::rebuild(self, r);
         let mut sub = ext.system.clone();
         sub.reduction = r.inner.clone();
-        let run = sub.clone().run(Caps::new(usize::MAX, usize::MAX));
+        // S up to `H` when the quotient was (#212 phase 2): a plain run of it stopped at the
+        // memory limit. Its stored graph stands for S's as `Classes::of` read it, and the S
+        // path found on it is lifted to concrete S states before it is spliced in.
+        let orbits = r.up_to_h.then(|| {
+            sub.clone().run_orbits_fixing(
+                Caps::new(usize::MAX, usize::MAX),
+                crate::lifecycle::explore::Checks::none(),
+                &ext.fixed,
+            )
+        });
+        let plain;
+        let run = match &orbits {
+            Some(orbits) => orbits.quotient_graph(),
+            None => {
+                plain = sub.clone().run(Caps::new(usize::MAX, usize::MAX));
+                &plain
+            }
+        };
         let n = run.states.len();
         let key_vars: VarSet = ext.obs_local.union(&ext.inputs_local).copied().collect();
         let mut index: HashMap<State, u32> = HashMap::new();
@@ -39,7 +56,7 @@ impl TransitionSystem {
                 *index.entry(key).or_insert(len)
             })
             .collect();
-        let (silent, rise_edges) = split_edges(&run, &ext.rise);
+        let (silent, rise_edges) = split_edges(run, &ext.rise);
         let blocks = quotient_blocks(n, &silent, &rise_edges, &initial);
         let at: HashMap<&StateSlice, u32> = run
             .states
@@ -53,7 +70,7 @@ impl TransitionSystem {
             .enumerate()
             .filter_map(|(i, s)| r.class_of.get(&s.0).map(|c| (*c, blocks[i])))
             .collect();
-        let succ = Succ::new(&run, &ext.rise);
+        let succ = Succ::new(run, &ext.rise);
         // The concrete start: an initial S state in the start's class. The run reaches its
         // initial states first.
         let start_block = block_of_class[&r
@@ -74,6 +91,9 @@ impl TransitionSystem {
         let mut level: Vec<Lifted> = Vec::new();
         let mut s_steps: Vec<Step> = Vec::new();
         let mut s_at = at[&*s0];
+        // The stored edges the S path takes, for its lift up to `H`.
+        let s_first = s_at;
+        let mut s_edges = Vec::new();
         for (act, params, post) in steps {
             if !r.skips(*act) {
                 let after = run
@@ -97,6 +117,7 @@ impl TransitionSystem {
                     let (a, p) = run.step(&e);
                     s_steps.push((a, p.into(), run.states[e.to as usize].to_owned()));
                     s_at = e.to;
+                    s_edges.push(e);
                 }
                 level.push(Lifted::T(*act, params.clone(), post.clone(), stages.len()));
                 continue;
@@ -108,9 +129,17 @@ impl TransitionSystem {
                 let (a, p) = run.step(&e);
                 s_steps.push((a, p.into(), run.states[e.to as usize].to_owned()));
                 s_at = e.to;
+                s_edges.push(e);
                 count += 1;
             }
             level.push(Lifted::S(count));
+        }
+        // Up to `H` the S path runs through stored forms: lift it to concrete S states first.
+        // `H` keeps the inputs, so a rise's concrete step sets the inputs its stored edge does.
+        if let Some(orbits) = &orbits {
+            let (first, concrete) = orbits.lift_path(s_first, &s_edges);
+            debug_assert!(first == s0, "the S path starts at a stored initial state");
+            s_steps = concrete;
         }
         // The S path is a path of the extended sub-lifecycle under its own reduction: lift it
         // there and splice the concrete S parts back under the T steps.
