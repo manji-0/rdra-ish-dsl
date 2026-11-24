@@ -1202,7 +1202,8 @@ to add a case.
   compared unreduced, and reduced where they reduce. CI runs the test with `cargo test --release`
   and sets `RDRA_REQUIRE_TLC=1`, so a missing `tlc` fails the job. The debug build took
   315 s on the CI runner, over its 300 s budget; the release build takes 121 s locally
-  (Apple silicon, measured).
+  (Apple silicon, measured). Its small TLC runs share JVMs; see
+  [Engine equivalence in batch JVMs](#engine-equivalence-in-batch-jvms).
 
   `scripts/reduction-diff.py` is the differential test of the reduction on random models
   (#102). Per seed it generates a model of three to five entities: `relate` chains,
@@ -1582,3 +1583,57 @@ The script makes 80 runs of the 39 roots. In one local run (Apple silicon, 18 co
 with other jobs) the longest, the `verify` runs of insurance-claim-ops, food-permit-ops, and
 oidc-auth's `--instance-count 1 --prove`, took under a minute each, and no run held more
 than about 2.1 GB. The `--with-tlc` mode adds the TLC runs. Each CI step has 20 minutes.
+
+## Engine equivalence in batch JVMs
+
+`engine_equivalence` runs TLC over 800 times, mostly on cones of a few hundred
+states, and a TLC 1.7.4 process takes 0.6 to 0.8 s to start and stop around a run of a few
+milliseconds. The flake's `tlc-batch` (`nix/tlc-batch/RdraTlcBatch.java`, #310) keeps a JVM
+up and runs one TLC job after another in it; the test takes a JVM per thread that runs TLC
+from a pool (`crates/rdra-ish-cli/src/tlc_batch.rs`). `verify --with-tlc` does not use it.
+
+- **What a job shares with the one before it.** Nothing of TLC: each job loads TLC through
+  a class loader of its own and runs in a thread of its own, and the driver removes TLC's
+  MBeans and the RMI export of its fingerprint set after it. The JVM, its JIT-compiled JDK
+  code, and its `java.io.tmpdir` are shared, and one JVM runs one job at a time.
+- **Which runs.** A cone the BFS found to have at most 5,000 states, and the runs whose
+  size is not known when they start (a property's cone, state models, fixtures). A larger cone and a property run of the whole model are processes of
+  their own, as before.
+- **Memory.** A JVM that stays up commits its whole heap and about 300 MiB beside it, so
+  a batch JVM gets 256 MiB of heap, not the 1 GiB of a process, and the pool has at most
+  as many JVMs as one test has workers (the cores, up to 8); a job waits for a free one.
+  Eight held 5.6 GB together in one local run. Unbounded, and at 1 GiB each, 16 held
+  13.5 GB.
+- **When a job falls back.** A job with no answer runs again as a process: the driver did
+  not start or did not find `tlc2.TLC`'s `handleParameters`, `setResolver`, and `process`;
+  the JVM ended under the job (TLC called `System.exit`, or the heap ran out, which
+  `-XX:+ExitOnOutOfMemoryError` turns into an exit); or the job took over 300 s (the
+  longest took 93 s on a CI runner). After
+  three jobs in a row without an answer, every later job is a process. A JVM is replaced
+  after 400 jobs, or when its jobs have left 8 threads behind: TLC 1.7.4 never shuts down
+  the executor it starts to print a liveness counterexample, and that thread keeps its job's
+  classes and data in the heap, 5 MiB for a small cone. Over 432 jobs in one JVM nothing
+  else grew: the heap after a GC was 23 MiB plus 4.8 MiB per such thread, and the median job
+  stayed at 0.13 s. The JVM needs `-XX:SoftRefLRUPolicyMSPerMB=0`, because the RMI runtime
+  keeps the classes of every exported object behind a soft reference; without it or without
+  the unexport a 1 GiB JVM ran out of memory after about 100 jobs.
+- **How the two ways are compared.** `RDRA_TLC_BATCH=both` runs every such job in a batch
+  JVM and then as a process with the fingerprint function and seed the first run drew
+  (`-fp`, `-seed`), and fails on any difference in the exit status, the log, the parsed
+  run (`TlcRun::parse`, `InvariantScan::parse`), or the dumped state graph. The log
+  comparison leaves out only what two process runs of one job also differ in: dates, run
+  times, the process id, the tmpdir of the standard modules, the JVM's `Picked up
+  JAVA_TOOL_OPTIONS` line, and what TLC does on a timer (progress lines, and the interim
+  check of a temporal property). One more differs by the way a run is started: the heap
+  TLC prints, since a batch JVM has a smaller one.
+  Without the pinned fingerprints two process runs print different counterexamples to one
+  temporal property (2 or 3 distinct traces over `-fp 0..7` on the `fair_stop` cones), so an
+  unpinned comparison of traces would say nothing. `RDRA_TLC_BATCH=twice` compares two
+  process runs the same way.
+- **In CI.** The job sets `RDRA_REQUIRE_TLC_BATCH=1`: the test fails when no job ran in a
+  batch JVM or one fell back, so a driver that stops working shows as a failure and not
+  only as a slower job. `RDRA_TLC_BATCH=0` runs every job as a process.
+
+The driver is for TLC 1.7.4. TLC 1.8 starts and stops in 0.25 s (#309), and when it is the
+baseline the driver, the pool, and `tlc-batch` can be removed without touching a caller's
+fallback path, which is the process run.

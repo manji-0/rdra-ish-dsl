@@ -205,7 +205,10 @@ jobs:
       - uses: cachix/install-nix-action@v31
       - uses: Swatinem/rust-cache@v2
       - name: Lifecycle BFS and TLC agree on every sample
-        run: RDRA_REQUIRE_TLC=1 cargo test --release -p rdra-ish-cli --test engine_equivalence
+        # RDRA_REQUIRE_TLC_BATCH: the TLC runs of up to 5,000 states go through the batch
+        # JVMs (#310, the flake's `tlc-batch`), and the test fails when one of them falls
+        # back to a process of its own, which would otherwise only show as a slower job.
+        run: RDRA_REQUIRE_TLC=1 RDRA_REQUIRE_TLC_BATCH=1 cargo test --release -p rdra-ish-cli --test engine_equivalence
       - name: No rule z3 proves has a BFS counterexample at 1 to 3 instances
         run: RDRA_REQUIRE_Z3=1 cargo test --release -p rdra-ish-cli --test proof_equivalence
       - name: The adversarial corpus gives its stated verdicts, and native, TLC and z3 agree on it
