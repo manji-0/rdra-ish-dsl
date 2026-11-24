@@ -418,7 +418,8 @@ pub(crate) struct DiagramArgs {
     /// business, information, condition, er, screen, event, and state index diagrams, each
     /// BUC's usecase, robustness, flow, and sequence diagrams, and each entity's state
     /// models, as `<kind>.mmd` and `<kind>__<id>.mmd`. A diagram with nothing to draw is
-    /// left out. Not together with --kind or a scope.
+    /// left out. --kind is not read. Not together with --buc, --usecase, --entity, --actor,
+    /// --node-kind, or --edge-kind.
     #[arg(long)]
     pub(crate) all: bool,
     /// Output format: mermaid, the only one (prints Mermaid text)
@@ -577,7 +578,8 @@ pub(crate) enum DiagramKind {
     /// boundary -> control -> entity
     Robustness,
     /// シーケンス図: one use case in order, from the starter through the guards, the entity
-    /// writes, and the events it raises; needs exactly one --usecase
+    /// writes, and the events it raises. Takes one --usecase, or --buc for the BUC's use
+    /// cases one after another
     Sequence,
     /// 業務フロー: each flow with its steps in order, their branches, exceptions, and
     /// repeats, what each step covers, and a lane per actor when steps are performed
