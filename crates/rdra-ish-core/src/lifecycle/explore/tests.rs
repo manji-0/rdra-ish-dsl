@@ -5,7 +5,7 @@ use std::num::NonZeroU8;
 
 use crate::lifecycle::{Bounds, Caps, Scope, TransitionSystem};
 
-use super::Threads;
+use super::{Checks, Threads};
 
 const SHOP: &str = r#"
 entity Customer "Customer" {
@@ -83,12 +83,14 @@ fn a_run_is_the_same_on_any_number_of_threads() {
     };
     let ts = TransitionSystem::build(&model_from(SHOP), bounds, &Scope::ALL).ts;
     for (caps, complete) in [(Caps::VERIFY, true), (Caps::new(256, 5_000), false)] {
-        let one = ts.clone().run_on(caps, Threads::Fixed(0));
+        let one = ts.clone().run_on(caps, Checks::All, Threads::Fixed(0));
         assert_eq!(one.complete, complete);
         // Enough states that the workers take most of them.
         assert!(one.states.len() >= 5_000, "{} states", one.states.len());
         for threads in [1, 2, 4, 7] {
-            let many = ts.clone().run_on(caps, Threads::Fixed(threads));
+            let many = ts
+                .clone()
+                .run_on(caps, Checks::All, Threads::Fixed(threads));
             assert_eq!(many.states, one.states, "{threads} threads");
             assert_eq!(many.edges, one.edges, "{threads} threads");
             assert_eq!(many.bindings, one.bindings, "{threads} threads");
@@ -122,8 +124,10 @@ fn a_run_stops_at_the_memory_limit_at_the_same_state_on_any_number_of_threads() 
     let ts = TransitionSystem::build(&model_from(SHOP), bounds, &Scope::ALL).ts;
     let limit = MemorySize::from_bytes(512 << 10).expect("not zero");
     let charged = || Caps::VERIFY.charged_to(MemoryPool::for_command(limit, "--memory"));
-    let whole = ts.clone().run_on(Caps::VERIFY, Threads::Fixed(0));
-    let one = ts.clone().run_on(charged(), Threads::Fixed(0));
+    let whole = ts
+        .clone()
+        .run_on(Caps::VERIFY, Checks::All, Threads::Fixed(0));
+    let one = ts.clone().run_on(charged(), Checks::All, Threads::Fixed(0));
     assert!(!one.complete);
     assert!(
         one.states.len() > 100 && one.states.len() < whole.states.len(),
@@ -137,7 +141,9 @@ fn a_run_stops_at_the_memory_limit_at_the_same_state_on_any_number_of_threads() 
             if l == limit && states == one.states.len()
     )));
     for threads in [1, 2, 4] {
-        let many = ts.clone().run_on(charged(), Threads::Fixed(threads));
+        let many = ts
+            .clone()
+            .run_on(charged(), Checks::All, Threads::Fixed(threads));
         assert_eq!(many.states, one.states, "{threads} threads");
         assert_eq!(many.diags, one.diags, "{threads} threads");
     }
@@ -210,7 +216,9 @@ fn store_bytes_models_the_store_a_run_counts() {
             int_max: 5,
         };
         let ts = TransitionSystem::build(&model_from(SHOP), bounds, &Scope::ALL).ts;
-        let whole = ts.clone().run_on(Caps::VERIFY, Threads::Fixed(0));
+        let whole = ts
+            .clone()
+            .run_on(Caps::VERIFY, Checks::All, Threads::Fixed(0));
         assert!(whole.complete && whole.states.len() >= 1000);
         let n = whole.states.len() as u64;
         within(
@@ -221,7 +229,7 @@ fn store_bytes_models_the_store_a_run_counts() {
 
         let limit = MemorySize::from_bytes(whole.peak / 3).expect("not zero");
         let caps = Caps::VERIFY.charged_to(MemoryPool::for_command(limit, "--memory"));
-        let stopped = ts.run_on(caps, Threads::Fixed(0));
+        let stopped = ts.run_on(caps, Checks::All, Threads::Fixed(0));
         let held = stopped
             .diags
             .iter()
@@ -292,7 +300,7 @@ fn layers(new: &[u64], expanded: u64) -> super::Layers {
 #[test]
 fn a_run_counts_the_new_states_of_each_depth() {
     let ts = TransitionSystem::build(&model_from(SHOP), Bounds::VERIFY, &Scope::ALL).ts;
-    let run = ts.run_on(Caps::VERIFY, Threads::Fixed(0));
+    let run = ts.run_on(Caps::VERIFY, Checks::All, Threads::Fixed(0));
     assert!(run.complete);
     let layers = &run.layers;
     assert_eq!(layers.states(), run.states.len() as u64);
@@ -419,10 +427,12 @@ fn a_run_stops_once_every_check_has_failed() {
     };
     let src = format!("{SHOP}{BROKEN}");
     let ts = TransitionSystem::build(&model_from(&src), bounds, &Scope::ALL).ts;
-    let whole = ts.clone().run_on(Caps::VERIFY, Threads::Fixed(0));
+    let whole = ts
+        .clone()
+        .run_on(Caps::VERIFY, Checks::All, Threads::Fixed(0));
     assert_eq!(whole.end(), RunEnd::Complete);
     let caps = Caps::VERIFY.until_all_violated();
-    let stopped = ts.clone().run_on(caps, Threads::Fixed(0));
+    let stopped = ts.clone().run_on(caps, Checks::All, Threads::Fixed(0));
     assert_eq!(stopped.end(), RunEnd::ChecksFailed);
     assert!(!stopped.complete);
     let n = stopped.states.len();
@@ -437,7 +447,9 @@ fn a_run_stops_once_every_check_has_failed() {
     assert_eq!(stopped.diags.len(), 2);
     assert_eq!(stopped.diags, whole.diags);
     for threads in [1, 2, 4] {
-        let many = ts.clone().run_on(caps, Threads::Fixed(threads));
+        let many = ts
+            .clone()
+            .run_on(caps, Checks::All, Threads::Fixed(threads));
         assert_eq!(many.states, stopped.states, "{threads} threads");
         assert_eq!(many.edges, stopped.edges, "{threads} threads");
         assert_eq!(many.diags, stopped.diags, "{threads} threads");
@@ -458,10 +470,97 @@ fn a_run_with_a_check_that_holds_runs_to_the_end() {
     ] {
         let src = format!("{SHOP}{rules}");
         let ts = TransitionSystem::build(&model_from(&src), Bounds::VERIFY, &Scope::ALL).ts;
-        let whole = ts.clone().run_on(Caps::VERIFY, Threads::Fixed(0));
-        let run = ts.run_on(Caps::VERIFY.until_all_violated(), Threads::Fixed(0));
+        let whole = ts
+            .clone()
+            .run_on(Caps::VERIFY, Checks::All, Threads::Fixed(0));
+        let run = ts.run_on(
+            Caps::VERIFY.until_all_violated(),
+            Checks::All,
+            Threads::Fixed(0),
+        );
         assert_eq!(run.end(), RunEnd::Complete, "{rules}");
         assert_eq!(run.states, whole.states, "{rules}");
         assert_eq!(run.diags, whole.diags, "{rules}");
     }
+}
+
+/// A run that evaluates some checks is the run that evaluates all of them, with the
+/// violations of the others left out: the same states, edges, views, store, and end, and for
+/// each check it evaluates the same violation and trace. A run that evaluates none reports
+/// none.
+#[test]
+fn a_run_reports_the_checks_it_evaluates_and_nothing_else() {
+    use std::collections::BTreeSet;
+
+    use crate::lifecycle::StateDiag;
+
+    let after = "after(Pay).assert(Order.qty == 2)\n";
+    let src = format!("{SHOP}{BROKEN}{after}");
+    let ts = TransitionSystem::build(&model_from(&src), Bounds::VERIFY, &Scope::ALL).ts;
+    let all = ts
+        .clone()
+        .run_on(Caps::VERIFY, Checks::All, Threads::Fixed(0));
+    let names: BTreeSet<String> = ts
+        .invariants()
+        .iter()
+        .map(|i| i.name.clone())
+        .chain(ts.after_asserts().iter().map(|a| a.name.clone()))
+        .collect();
+    assert_eq!(names.len(), 3, "{names:?}");
+    let violation = |d: &StateDiag| match d {
+        StateDiag::ConstraintViolated { name, .. }
+        | StateDiag::AfterAssertViolated { name, .. } => Some(name.clone()),
+        _ => None,
+    };
+    let reported: BTreeSet<String> = all
+        .diags
+        .iter()
+        .filter_map(|d| violation(&d.diag))
+        .collect();
+    assert_eq!(reported, names, "every check fails on the whole run");
+    let subsets = names
+        .iter()
+        .map(|n| BTreeSet::from([n.clone()]))
+        .chain([BTreeSet::new(), names.clone()]);
+    for named in subsets {
+        let checks = Checks::Named(named.clone());
+        for threads in [0, 2] {
+            let run = ts
+                .clone()
+                .run_on(Caps::VERIFY, checks.clone(), Threads::Fixed(threads));
+            assert_eq!(run.checks(), &checks);
+            assert_eq!(run.states, all.states, "{named:?}");
+            assert_eq!(run.edges, all.edges, "{named:?}");
+            assert_eq!(run.parents, all.parents, "{named:?}");
+            assert_eq!(run.end(), all.end(), "{named:?}");
+            assert_eq!(run.kept, all.kept, "{named:?}");
+            let kept: Vec<_> = all
+                .diags
+                .iter()
+                .filter(|d| violation(&d.diag).is_none_or(|n| named.contains(&n)))
+                .cloned()
+                .collect();
+            assert_eq!(run.diags, kept, "{named:?}");
+            assert_eq!(run.views.len(), all.views.len());
+            for (v, w) in run.views.iter().zip(&all.views) {
+                assert_eq!(v.patterns, w.patterns, "{named:?}");
+                assert_eq!(v.initial, w.initial, "{named:?}");
+                assert_eq!(v.changes, w.changes, "{named:?}");
+                assert_eq!(v.deletable, w.deletable, "{named:?}");
+                assert_eq!(v.moves, w.moves, "{named:?}");
+                assert_eq!(v.via(), w.via(), "{named:?}");
+            }
+        }
+    }
+}
+
+/// The early stop reads every check the system holds, so a run that stops early evaluates
+/// them all: with fewer it would stop at another state.
+#[test]
+#[cfg(debug_assertions)]
+#[should_panic(expected = "evaluates every check")]
+fn a_run_that_stops_once_every_check_fails_evaluates_every_check() {
+    let src = format!("{SHOP}{BROKEN}");
+    let ts = TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL).ts;
+    ts.run_checking(Caps::VERIFY.until_all_violated(), Checks::none());
 }

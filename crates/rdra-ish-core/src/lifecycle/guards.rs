@@ -95,6 +95,11 @@ impl TransitionSystem {
                 deps.cones = run.cones.len();
                 for &(target, at) in &run.targets {
                     let cone = &run.cones[at].run;
+                    debug_assert!(
+                        self.check_name(target)
+                            .is_some_and(|name| cone.checks().reads(name)),
+                        "a rule's cone evaluates the rule"
+                    );
                     if cone.diags.iter().any(|d| self.reports(target, &d.diag)) {
                         deps.protects.push(target);
                     } else if !cone.complete {

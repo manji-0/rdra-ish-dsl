@@ -5,8 +5,8 @@ use super::WholeRun;
 use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_output::Outcome;
 use rdra_ish_core::lifecycle::{
-    Caps, ComponentRun, Diag, NotChecked, PropertyVerdict, RunEnd, Scope, Selection, Severity,
-    StateDiag, Target, TransitionSystem, Undecided,
+    Caps, Checks, ComponentRun, Diag, NotChecked, PropertyVerdict, RunEnd, Scope, Selection,
+    Severity, StateDiag, Target, TransitionSystem, Undecided,
 };
 use rdra_ish_core::{in_parallel, ResolvedProgram, SemanticModel};
 use std::collections::BTreeSet;
@@ -200,6 +200,11 @@ impl BfsCone {
     /// The verdict of `run`, a run of `cone`'s system.
     pub(super) fn of(ts: &TransitionSystem, cone: &ConeSystem, run: &ComponentRun) -> BfsCone {
         // The module checks every invariant and after-assert its system holds, as TLC does.
+        debug_assert_eq!(
+            run.checks(),
+            &Checks::All,
+            "a safety cone evaluates every check"
+        );
         let found = run
             .diags
             .iter()

@@ -18,7 +18,9 @@ use crate::memory::Charge;
 use crate::parallel::Helpers;
 
 use super::store::binding_bytes;
-use super::{Bfs, Bindings, Caps, Edge, EntityView, Moves, Reach, States, Threads, Violated};
+use super::{
+    Bfs, Bindings, Caps, Checks, Edge, EntityView, Moves, Reach, States, Threads, Violated,
+};
 
 /// States one worker expands at a time. Fewer than two chunks of waiting states are
 /// expanded on the caller's thread, so a small run starts no worker.
@@ -151,7 +153,8 @@ impl<'scope, 'env> Workers<'scope, 'env> {
 }
 
 impl Violated {
-    fn new(ts: &TransitionSystem) -> Self {
+    /// No violation yet; the names of `checks` are the open ones.
+    fn new(ts: &TransitionSystem, checks: &Checks) -> Self {
         let mut names: HashMap<&str, u32> = HashMap::new();
         let all = ts.invariants.iter().map(|i| i.name.as_str());
         let name_of: Vec<u32> = all
@@ -161,10 +164,11 @@ impl Violated {
                 *names.entry(name).or_insert(next)
             })
             .collect();
+        let open = names.keys().filter(|name| checks.reads(name)).count();
         Violated {
             name_of,
             reported: vec![false; names.len()],
-            open: names.len(),
+            open,
         }
     }
 
@@ -181,9 +185,9 @@ impl Violated {
         new
     }
 
-    /// The system has a check, and every one has a violation.
-    fn all(&self) -> bool {
-        self.open == 0 && !self.reported.is_empty()
+    /// The run evaluates a check, and every one it evaluates has a violation.
+    fn all(&self, evaluated: bool) -> bool {
+        self.open == 0 && evaluated
     }
 }
 
@@ -204,18 +208,27 @@ impl Bindings {
 }
 
 impl<'t> Bfs<'t> {
-    pub(super) fn new(ts: &'t TransitionSystem, caps: Caps) -> Self {
+    pub(super) fn new(ts: &'t TransitionSystem, caps: Caps, checks: &Checks) -> Self {
+        let invariants = (0..ts.invariants.len())
+            .filter(|&i| checks.reads(&ts.invariants[i].name))
+            .collect();
+        let after = (0..ts.after.len())
+            .filter(|&i| checks.reads(&ts.after[i].name))
+            .collect();
         Bfs {
             ts,
             caps,
+            invariants,
+            after,
             states: States::new(ts.width),
             seen: Default::default(),
             keys: Default::default(),
+            sources: vec![(usize::MAX, 0); ts.entities.len() * ts.bounds.slots()],
             complete: true,
             checks_failed: false,
             diags: Vec::new(),
             views: ts.entities.iter().map(|_| EntityView::default()).collect(),
-            violated: Violated::new(ts),
+            violated: Violated::new(ts, checks),
             violations: Vec::new(),
             parents: Vec::new(),
             edges: Vec::new(),
@@ -295,7 +308,7 @@ impl<'t> Bfs<'t> {
         for i in range {
             let (act, params, next) = moves.get(i);
             s2.0.copy_from_slice(next);
-            if !self.observe(act, params, &s, s2) {
+            if !self.observe(at, act, params, &s, s2) {
                 return false;
             }
             let binding = self.bindings.id(act, params);
@@ -332,7 +345,8 @@ impl<'t> Bfs<'t> {
     /// counterexamples are BFS's first, so the shortest, and any further state could only
     /// repeat a violation.
     fn stop_if_all_failed(&mut self) -> bool {
-        let stop = self.caps.stop_when_all_violated && self.violated.all();
+        let evaluated = !(self.invariants.is_empty() && self.after.is_empty());
+        let stop = self.caps.stop_when_all_violated && self.violated.all(evaluated);
         if stop {
             self.complete = false;
             self.checks_failed = true;
@@ -474,8 +488,38 @@ impl<'t> Bfs<'t> {
         Some(view.intern(key))
     }
 
-    /// Records what one edge says about each written slot's pattern.
-    fn observe(&mut self, act: ActId, params: &[u8], s: &StateSlice, s2: &StateSlice) -> bool {
+    /// The id of the pattern of `e`'s `slot` in `states[at]`, which is `s`: looked up on the
+    /// first edge from `s` that writes the slot, and kept for the others.
+    fn source(
+        &mut self,
+        at: usize,
+        s: &StateSlice,
+        e: EntId,
+        slot: usize,
+        key: &mut Vec<u8>,
+    ) -> usize {
+        let cached = &mut self.sources[e.index() * self.ts.bounds.slots() + slot];
+        if cached.0 == at {
+            return cached.1;
+        }
+        self.ts.pattern_key_into(s, e, slot, key);
+        let id = self.views[e.index()]
+            .id(key)
+            .expect("pre-state pattern interned");
+        *cached = (at, id);
+        id
+    }
+
+    /// Records what one edge from `states[at]`, which is `s`, says about each written slot's
+    /// pattern.
+    fn observe(
+        &mut self,
+        at: usize,
+        act: ActId,
+        params: &[u8],
+        s: &StateSlice,
+        s2: &StateSlice,
+    ) -> bool {
         let ts = self.ts;
         let action = &ts.actions[act.index()];
         let (mut before, mut after) = std::mem::take(&mut self.keys);
@@ -487,12 +531,18 @@ impl<'t> Bfs<'t> {
             }
             let (e, slot) = (param.entity, usize::from(params[p]));
             let (pre, post) = (s.is_present(ts, e, slot), s2.is_present(ts, e, slot));
-            let pre_id = pre.then(|| {
-                ts.pattern_key_into(s, e, slot, &mut before);
-                self.views[e.index()]
-                    .id(&before)
-                    .expect("pre-state pattern interned")
-            });
+            // A row present on both sides with the same columns has the same pattern after
+            // the move, already interned: the edge says nothing of it.
+            let columns = &ts.entity(e).columns;
+            if pre
+                && post
+                && columns
+                    .iter()
+                    .all(|v| s.get(ts, *v, slot) == s2.get(ts, *v, slot))
+            {
+                continue;
+            }
+            let pre_id = pre.then(|| self.source(at, s, e, slot, &mut before));
             if post {
                 ts.pattern_key_into(s2, e, slot, &mut after);
             }
@@ -540,7 +590,8 @@ impl<'t> Bfs<'t> {
 
     fn check_invariants(&mut self, s: &StateSlice, at: u32) {
         let ts = self.ts;
-        for i in 0..ts.invariants.len() {
+        for k in 0..self.invariants.len() {
+            let i = self.invariants[k];
             if self.violated.has(i) {
                 continue;
             }
@@ -553,7 +604,8 @@ impl<'t> Bfs<'t> {
     fn check_after(&mut self, from: u32, act: ActId, params: &[u8], s2: &StateSlice) {
         let ts = self.ts;
         let first = ts.invariants.len();
-        for i in 0..ts.after.len() {
+        for k in 0..self.after.len() {
+            let i = self.after[k];
             if self.violated.has(first + i) {
                 continue;
             }

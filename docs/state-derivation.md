@@ -602,6 +602,12 @@ vacuity, which a violated check does not have. Under `verify` its run line count
 states it reached before it stopped, so a failing cone prints fewer states than TLC's line
 for the same module.
 
+A cone evaluates only the checks something reads from it (#251). A cone of checks alone
+evaluates every check its system holds, since the stop above reads them all. A cone that
+answers an entity view or a `can_reach` evaluates only the checks among its own targets, so
+a cone of entity targets alone evaluates none. A check is always reported from its own
+cone, so this changes no finding.
+
 Two caps and the memory limit stop a cone, and `check` and `states` take all three:
 
 - `--max-patterns` caps the distinct patterns of one entity view within a cone. Default:

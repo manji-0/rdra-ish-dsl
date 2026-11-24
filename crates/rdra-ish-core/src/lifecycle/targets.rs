@@ -6,7 +6,7 @@ use std::fmt;
 
 use super::cone::{Cone, Target};
 use super::diag::{Diag, StateDiag, UnmetPremise};
-use super::explore::{Caps, ComponentRun};
+use super::explore::{Caps, Checks, ComponentRun};
 use super::expr::StateSlice;
 use super::findings::{Progress, Runs, Taken, Witness};
 use super::types::{
@@ -242,15 +242,16 @@ impl TransitionSystem {
             } else {
                 self.restrict_to(&cone.vars, &cone.keep)
             };
-            // A cone of checks alone is decided once each has failed; an entity target or a
-            // `can_reach` reads the whole graph.
+            // A cone of checks alone is decided once each has failed, which reads every check
+            // its system holds; an entity target or a `can_reach` reads the whole graph, and
+            // nothing reads the checks of such a cone but its own check targets.
             let checks = shared
                 .iter()
                 .all(|t| matches!(t, Target::Invariant(_) | Target::AfterAssert(_)));
-            system.run(match checks {
-                true => caps.until_all_violated(),
-                false => caps,
-            })
+            match checks {
+                true => system.run_checking(caps.until_all_violated(), Checks::All),
+                false => system.run_checking(caps, self.checks_of(shared)),
+            }
         };
         let ran = in_parallel(groups, jobs(), |(cone, shared)| {
             let (run, seen) = watch(|| explore(&cone, &shared, caps));
@@ -365,6 +366,27 @@ impl TransitionSystem {
         }
         out.targets = answered;
         out
+    }
+
+    /// The invariants and after-asserts among `targets`, by name: what a run of their cone
+    /// reads of its checks.
+    fn checks_of(&self, targets: &[Target]) -> Checks {
+        Checks::Named(
+            targets
+                .iter()
+                .filter_map(|t| self.check_name(*t))
+                .map(str::to_string)
+                .collect(),
+        )
+    }
+
+    /// The name of an invariant or an after-assert target: the name a run evaluates it by.
+    pub(super) fn check_name(&self, target: Target) -> Option<&str> {
+        match target {
+            Target::Invariant(i) => Some(&self.invariants[i].name),
+            Target::AfterAssert(i) => Some(&self.after[i].name),
+            Target::Entity(_) | Target::Reach(_) => None,
+        }
     }
 
     /// The entities action `i` writes.
@@ -708,6 +730,11 @@ impl TransitionSystem {
             }
             return Vec::new();
         }
+        debug_assert!(
+            self.check_name(target)
+                .is_some_and(|name| run.checks().reads(name)),
+            "the run of a check's cone evaluates the check"
+        );
         let mut out: Vec<Diag> = run
             .diags
             .iter()
@@ -778,6 +805,7 @@ impl TransitionSystem {
     /// or the cone does not hold it. When no state has the rows the rule ranges over, that
     /// alone is reported.
     fn unmet_of_rule(&self, inv: &Invariant, run: &ComponentRun) -> Option<Vec<UnmetPremise>> {
+        debug_assert!(run.checks().reads(&inv.name), "the run evaluates the rule");
         let violated = run.diags.iter().any(
             |d| matches!(&d.diag, StateDiag::ConstraintViolated { name, .. } if *name == inv.name),
         );
@@ -820,6 +848,7 @@ impl TransitionSystem {
     /// case takes its last step, into a state that has rows of the entities the step does not
     /// bind, when it reads any.
     fn unmet_of_assert(a: &AfterAssert, run: &ComponentRun) -> Option<Vec<UnmetPremise>> {
+        debug_assert!(run.checks().reads(&a.name), "the run evaluates the assert");
         let violated = run.diags.iter().any(
             |d| matches!(&d.diag, StateDiag::AfterAssertViolated { name, .. } if *name == a.name),
         );
