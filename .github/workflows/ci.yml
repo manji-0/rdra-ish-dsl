@@ -21,11 +21,14 @@ jobs:
     # cannot (prose, the editor and LSP, codegen, the diagram and data-layer exports). The
     # label `no-verify` skips them for a change a reviewer judged unable to reach them, such
     # as help text. A push to main runs every job. `kani` says whether the change can reach
-    # a Kani harness (scripts/kani-relevant.sh); the label does not skip it.
+    # a Kani harness (scripts/kani-relevant.sh); the label does not skip it. `code` is false
+    # when every changed file is prose (scripts/code-relevant.sh): `check` then runs the
+    # checks that read prose instead of its whole test suite and the sample artifacts.
     runs-on: ubuntu-latest
     outputs:
       verify: ${{ steps.decide.outputs.verify }}
       kani: ${{ steps.decide.outputs.kani }}
+      code: ${{ steps.decide.outputs.code }}
     defaults:
       run:
         shell: bash
@@ -42,9 +45,11 @@ jobs:
           if [ "$EVENT" != pull_request ]; then
             verify=true
             kani=true
+            code=true
           else
             git diff --name-only HEAD^1 HEAD | tee changed.txt
             kani=$(scripts/kani-relevant.sh < changed.txt)
+            code=$(scripts/code-relevant.sh < changed.txt)
             if [ "$NO_VERIFY" = true ]; then
               verify=false
             else
@@ -53,8 +58,13 @@ jobs:
           fi
           echo "verify=$verify" | tee -a "$GITHUB_OUTPUT"
           echo "kani=$kani" | tee -a "$GITHUB_OUTPUT"
+          echo "code=$code" | tee -a "$GITHUB_OUTPUT"
 
   check:
+    needs: changes
+    # Runs whatever `changes` concluded: if it failed, `code` is empty and every step runs.
+    # Skipping the job would report the required check as passed.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -65,13 +75,25 @@ jobs:
       - name: clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: test
+        if: needs.changes.outputs.code != 'false'
         # scripts/diff-test.sh holds the tests this step skips: the comparisons with TLC and z3
         # run in release in engine-equivalence, and the domain-sample reduction in formal-verify.
         # RDRA_REQUIRE_CODEGEN_TOOLS: the devShell has tsc and go, so the codegen build tests
         # may not skip a language here; portability.yml runs without them and skips.
         run: RDRA_REQUIRE_CODEGEN_TOOLS=1 scripts/diff-test.sh --all
       - name: sample artifact snapshots
+        if: needs.changes.outputs.code != 'false'
         run: bash scripts/check-sample-artifacts.sh
+      - name: prose checks
+        # In place of the two steps above when every changed file is prose: the tests that read
+        # Markdown. The rule ids in docs/language-reference.md and
+        # docs/rdra-ish-interpretation.md, the stage blocks in README.md, docs/, skills/ and
+        # samples/, and the lifecycle-error table in docs/cli-reference.md. The skill snippets
+        # step below checks skills/ either way.
+        if: needs.changes.outputs.code == 'false'
+        run: |
+          cargo test -p rdra-ish-core --lib -- --exact rdra_rules::tests::rule_ids_are_unique_and_in_the_docs refinement::docs::tests::stage_docs_are_in_sync
+          cargo test -p rdra-ish-cli --test export_gate
       - name: skill snippets
         # Debug binary; a verify transcript with --with-tlc needs the devShell's tlc.
         run: |

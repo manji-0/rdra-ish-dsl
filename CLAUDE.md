@@ -13,8 +13,10 @@ list. Run it only when an item says it is needed, and say which item that was.
    fmt, clippy, the tests (`scripts/diff-test.sh --all`), sample artifacts, skill snippets,
    `nix build`, `verify-samples.sh` with and without `--with-tlc`, reduced cones, the
    `reduction-diff.py` seeds, `engine_equivalence`, `proof_equivalence`, and
-   `engine_corpus`. The PR's checks, green on a head that contains the latest main, are the
-   merge gate. Do not run these locally to gate a merge. Locally run only what Actions
+   `engine_corpus`. A pull request whose files are all prose (`scripts/code-relevant.sh`)
+   runs fmt, clippy, the tests that read Markdown, and the skill snippets in place of the
+   whole suite and the sample artifacts. The PR's checks, green on a head that contains
+   the latest main, are the merge gate. Do not run these locally to gate a merge. Locally run only what Actions
    cannot: behaviour that differs on macOS (Actions runs on ubuntu), and the byte-identical
    output diff a performance change must show.
 2. **Can the change reach it?** Run a check only when a changed file can change its result:
