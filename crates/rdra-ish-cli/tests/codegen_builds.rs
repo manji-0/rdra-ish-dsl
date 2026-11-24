@@ -1,6 +1,7 @@
-//! `rdra-ish codegen` output builds as printed: on every `samples.txt` root, the TypeScript
-//! output passes `tsc --strict`, the Rust output compiles as a library, and the Go output
-//! passes `go vet`. A compiler missing from PATH skips its language, except under
+//! `rdra-ish codegen` output builds as printed: on every `samples.txt` root, and on
+//! `tests/fixtures/codegen/keywords.rdra`, whose names are keywords of the targets, the
+//! TypeScript output passes `tsc --strict`, the Rust output compiles as a library, and the
+//! Go output passes `go vet`. A compiler missing from PATH skips its language, except under
 //! `RDRA_REQUIRE_CODEGEN_TOOLS=1`, which CI sets in the dev shell that provides all three.
 
 use std::path::{Path, PathBuf};
@@ -18,6 +19,13 @@ fn samples() -> Vec<String> {
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
         .map(str::to_string)
         .collect()
+}
+
+/// The models every language builds: the samples, and a model whose names are keywords.
+fn models() -> Vec<String> {
+    let mut models = samples();
+    models.push("crates/rdra-ish-cli/tests/fixtures/codegen/keywords.rdra".to_string());
+    models
 }
 
 fn available(tool: &str) -> bool {
@@ -89,7 +97,7 @@ fn typescript_builds() {
     if !available("tsc") {
         return;
     }
-    for sample in samples() {
+    for sample in models() {
         let path = generate(&sample, "ts", &scratch("ts", &sample), "domain.ts");
         run(
             Command::new("tsc")
@@ -103,7 +111,7 @@ fn typescript_builds() {
 #[test]
 fn rust_builds() {
     let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
-    for sample in samples() {
+    for sample in models() {
         let dir = scratch("rust", &sample);
         let path = generate(&sample, "rust", &dir, "domain.rs");
         run(
@@ -129,7 +137,7 @@ fn go_builds() {
     if !available("go") {
         return;
     }
-    for sample in samples() {
+    for sample in models() {
         let dir = scratch("go", &sample);
         generate(&sample, "go", &dir, "domain.go");
         std::fs::write(dir.join("go.mod"), "module example.com/domain\n\ngo 1.21\n").unwrap();

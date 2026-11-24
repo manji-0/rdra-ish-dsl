@@ -467,6 +467,14 @@
 
 ### Fixed
 
+- `codegen` escapes a name that is a keyword of the target language (#265). A use case
+  named `Return` printed `pub fn return(...)` in Rust and `export function return(...)` in
+  TypeScript, and neither compiled. Rust now prints a raw identifier (`r#return`), or a
+  trailing `_` for the words a raw identifier cannot be (`self`, `super`, `crate`); an enum
+  value `self` is the variant `Self_` in the enum's declaration as well as in its uses.
+  TypeScript gives a reserved word a trailing `_` (`return_`) in function, parameter and
+  local names; property names stay as the model spells them. Go already escaped its
+  keywords. Names that are not keywords print as before.
 - `verify --prove` above one instance now offers every lemma candidate it would offer at
   one instance (#231). Candidates were mined only at the run's bounds, and each mining run
   stops at 50,000 states. On oidc-auth at two instances, 13 of 24 cones stopped there, and

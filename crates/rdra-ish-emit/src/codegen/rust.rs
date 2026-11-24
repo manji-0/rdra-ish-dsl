@@ -59,7 +59,7 @@ pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
             }
             lines.push(format!("`{}`", value.wire));
             out.push_str(&doc(&lines, "    "));
-            out.push_str(&format!("    {},\n", value.ident));
+            out.push_str(&format!("    {},\n", variant_ident(&value.ident)));
         }
         out.push_str("}\n\n");
         out.push_str(&format!("impl {} {{\n", decl.name));
@@ -69,7 +69,7 @@ pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
             decl.values.len(),
             decl.values
                 .iter()
-                .map(|v| format!("Self::{}", v.ident))
+                .map(|v| format!("Self::{}", variant_ident(&v.ident)))
                 .collect::<Vec<_>>()
                 .join(", ")
         ));
@@ -78,7 +78,7 @@ pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
         for value in &decl.values {
             out.push_str(&format!(
                 "            Self::{} => {},\n",
-                value.ident,
+                variant_ident(&value.ident),
                 string_literal(&value.wire)
             ));
         }
@@ -230,6 +230,11 @@ fn ident(name: &str) -> String {
     }
 }
 
+/// A function name: snake_case of the PascalCase name, escaped as [`ident`] escapes a field.
+fn fn_ident(pascal: &str) -> String {
+    ident(&super::actions::snake(pascal))
+}
+
 fn comment(line: &str) -> String {
     if line.is_empty() {
         "//\n".to_string()
@@ -305,7 +310,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
     out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
     out.push_str("pub struct Rejected {\n    pub condition: &'static str,\n    pub label: &'static str,\n    pub site: ::core::option::Option<&'static str>,\n}\n\n");
     for f in &domain.fns {
-        out.push_str(&format!("/// What `{}` returns.\n", snake(&f.name)));
+        out.push_str(&format!("/// What `{}` returns.\n", fn_ident(&f.name)));
         out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
         out.push_str(&format!("pub struct {} {{\n", f.result));
         for o in &f.outputs {
@@ -373,7 +378,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
         };
         out.push_str(&format!(
             "pub fn {}({}) -> {ret} {{\n",
-            snake(&f.name),
+            fn_ident(&f.name),
             params.join(", ")
         ));
         for check in &f.checks {
@@ -930,7 +935,7 @@ pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
             let mut args: Vec<String> = d.rows.iter().map(|(n, _)| ident(n)).collect();
             args.extend(d.marks.iter().map(|(n, _)| ident(n)));
             args.extend(c.inputs.iter().map(|i| ident(&d.inputs[*i].name)));
-            let call = format!("{}({})", snake(&c.function), args.join(", "));
+            let call = format!("{}({})", fn_ident(&c.function), args.join(", "));
             let body = if c.rejects {
                 format!(
                     "{call}.map({}::{}).map_err(Refused::Rejected)",

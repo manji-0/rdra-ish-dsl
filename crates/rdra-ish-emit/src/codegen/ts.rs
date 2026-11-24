@@ -170,6 +170,77 @@ fn property(name: &str) -> String {
     }
 }
 
+/// A function name: camelCase of the PascalCase name, with a reserved word given a trailing `_`.
+fn fn_name(pascal: &str) -> String {
+    binding(super::camel(pascal))
+}
+
+/// A parameter or local name: camelCase of the snake_case name, with a reserved word given
+/// a trailing `_`.
+fn local(snake_name: &str) -> String {
+    binding(super::camel(&super::type_ident(snake_name)))
+}
+
+/// A name a declaration binds: the words strict-mode TypeScript reserves there take a
+/// trailing `_`. A property name needs no escape (see [`property`]).
+fn binding(name: String) -> String {
+    const RESERVED: [&str; 46] = [
+        "break",
+        "case",
+        "catch",
+        "class",
+        "const",
+        "continue",
+        "debugger",
+        "default",
+        "delete",
+        "do",
+        "else",
+        "enum",
+        "export",
+        "extends",
+        "false",
+        "finally",
+        "for",
+        "function",
+        "if",
+        "import",
+        "in",
+        "instanceof",
+        "new",
+        "null",
+        "return",
+        "super",
+        "switch",
+        "this",
+        "throw",
+        "true",
+        "try",
+        "typeof",
+        "var",
+        "void",
+        "while",
+        "with",
+        // Reserved in strict mode, which a module is.
+        "implements",
+        "interface",
+        "let",
+        "package",
+        "private",
+        "protected",
+        "public",
+        "static",
+        "yield",
+        "await",
+    ];
+    // Strict mode forbids binding these two, though neither is a keyword.
+    if RESERVED.contains(&name.as_str()) || name == "arguments" || name == "eval" {
+        format!("{name}_")
+    } else {
+        name
+    }
+}
+
 fn comment(line: &str) -> String {
     if line.is_empty() {
         "//\n".to_string()
@@ -252,10 +323,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
     );
     for f in &domain.fns {
         // The result type.
-        out.push_str(&doc(
-            &[format!("What {} returns.", super::camel(&f.name))],
-            "",
-        ));
+        out.push_str(&doc(&[format!("What {} returns.", fn_name(&f.name))], ""));
         out.push_str(&format!("export interface {} {{\n", f.result));
         for o in &f.outputs {
             match &o.kind {
@@ -299,21 +367,13 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
         let mut params: Vec<String> = f
             .rows
             .iter()
-            .map(|r| format!("{}: {}", super::camel(&super::type_ident(&r.name)), r.ty))
+            .map(|r| format!("{}: {}", local(&r.name), r.ty))
             .collect();
         for m in &f.marks_in {
-            params.push(format!(
-                "{}: {}",
-                super::camel(&super::type_ident(&m.name)),
-                m.ty
-            ));
+            params.push(format!("{}: {}", local(&m.name), m.ty));
         }
         if let Some(ev) = &f.event_in {
-            params.push(format!(
-                "{}: {}",
-                super::camel(&super::type_ident(&ev.name)),
-                ev.ty
-            ));
+            params.push(format!("{}: {}", local(&ev.name), ev.ty));
         }
         for input in &f.inputs {
             let ty = field_type(&input.ty);
@@ -322,10 +382,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             } else {
                 ty
             };
-            params.push(format!(
-                "{}: {ty}",
-                super::camel(&super::type_ident(&input.name))
-            ));
+            params.push(format!("{}: {ty}", local(&input.name)));
         }
         let ret = if f.conditions.is_empty() {
             f.result.clone()
@@ -334,11 +391,11 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
         };
         out.push_str(&format!(
             "export function {}({}): {ret} {{\n",
-            super::camel(&f.name),
+            fn_name(&f.name),
             params.join(", ")
         ));
-        let row = |r: usize| super::camel(&super::type_ident(&f.row(r).name));
-        let input = |i: usize| super::camel(&super::type_ident(&f.inputs[i].name));
+        let row = |r: usize| local(&f.row(r).name);
+        let input = |i: usize| local(&f.inputs[i].name);
         for check in &f.checks {
             match check {
                 ArgCheck::Link {
@@ -371,7 +428,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                         "  if ({}.{} !== {}.{}) {{\n    throw new Error({});\n  }}\n",
                         row(*r),
                         property(&field.wire),
-                        super::camel(&super::type_ident(&ev.name)),
+                        local(&ev.name),
                         property(event_field),
                         string_literal(message)
                     ));
@@ -466,15 +523,12 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                             }
                             Assigned::EventId { field, .. } => format!(
                                 "{}.{}",
-                                super::camel(&super::type_ident(
-                                    &f.event_in.as_ref().expect("an event id has an event").name
-                                )),
+                                local(&f.event_in.as_ref().expect("an event id has an event").name),
                                 property(field)
                             ),
-                            Assigned::MarkId { mark, .. } => format!(
-                                "{}.id",
-                                super::camel(&super::type_ident(&f.marks_in[*mark].name))
-                            ),
+                            Assigned::MarkId { mark, .. } => {
+                                format!("{}.id", local(&f.marks_in[*mark].name))
+                            }
                             Assigned::Null => "null".to_string(),
                         };
                         out.push_str(&format!("      {}: {v},\n", property(&target.wire)));
@@ -504,10 +558,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                     format!("{}.{}", row(*r), property(&field.wire))
                 }
                 super::ir::MarkSource::Input(i) => input(*i),
-                super::ir::MarkSource::Mark(k) => format!(
-                    "{}.id",
-                    super::camel(&super::type_ident(&f.marks_in[*k].name))
-                ),
+                super::ir::MarkSource::Mark(k) => format!("{}.id", local(&f.marks_in[*k].name)),
             };
             out.push_str(&format!(
                 "    {}: {{ usecase: {}, step: {}, id: {id} }},\n",
@@ -524,10 +575,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                         format!("{}.{}", row(*r), property(&field.wire))
                     }
                     super::ir::MarkSource::Input(i) => input(*i),
-                    super::ir::MarkSource::Mark(k) => format!(
-                        "{}.id",
-                        super::camel(&super::type_ident(&f.marks_in[*k].name))
-                    ),
+                    super::ir::MarkSource::Mark(k) => format!("{}.id", local(&f.marks_in[*k].name)),
                 };
                 parts.push(format!("{}: {id}", property(&field.name)));
             }
@@ -843,14 +891,13 @@ pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
             )],
             "",
         ));
-        let var = |name: &str| super::camel(&super::type_ident(name));
         let mut params: Vec<String> = d
             .rows
             .iter()
-            .map(|(n, ty)| format!("{}: {ty}", var(n)))
+            .map(|(n, ty)| format!("{}: {ty}", local(n)))
             .collect();
         for (n, ty) in &d.marks {
-            params.push(format!("{}: {ty}", var(n)));
+            params.push(format!("{}: {ty}", local(n)));
         }
         for i in &d.inputs {
             let ty = field_type(&i.ty);
@@ -859,10 +906,10 @@ pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
             } else {
                 ty
             };
-            params.push(format!("{}: {ty}", var(&i.name)));
+            params.push(format!("{}: {ty}", local(&i.name)));
         }
         for (n, ty) in &d.choices {
-            params.push(format!("{}: {ty}", var(n)));
+            params.push(format!("{}: {ty}", local(n)));
         }
         let ret = if d.rejects {
             format!("{} | Rejected | NotEnabled", d.outcome)
@@ -883,19 +930,23 @@ pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
                     let (_, tag, value) = s.as_ref()?;
                     Some(format!(
                         "{}.{} === {}",
-                        var(n),
+                        local(n),
                         property(tag),
                         string_literal(&value.wire)
                     ))
                 })
                 .chain(c.choice.iter().map(|(i, v)| {
-                    format!("{} === {}", var(&d.choices[*i].0), string_literal(&v.wire))
+                    format!(
+                        "{} === {}",
+                        local(&d.choices[*i].0),
+                        string_literal(&v.wire)
+                    )
                 }))
                 .collect();
-            let mut args: Vec<String> = d.rows.iter().map(|(n, _)| var(n)).collect();
-            args.extend(d.marks.iter().map(|(n, _)| var(n)));
-            args.extend(c.inputs.iter().map(|i| var(&d.inputs[*i].name)));
-            let call = format!("{}({})", super::camel(&c.function), args.join(", "));
+            let mut args: Vec<String> = d.rows.iter().map(|(n, _)| local(n)).collect();
+            args.extend(d.marks.iter().map(|(n, _)| local(n)));
+            args.extend(c.inputs.iter().map(|i| local(&d.inputs[*i].name)));
+            let call = format!("{}({})", fn_name(&c.function), args.join(", "));
             if tests.is_empty() {
                 out.push_str(&format!("  return {call};\n"));
             } else {
