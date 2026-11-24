@@ -159,6 +159,15 @@ impl EdgeList {
         self.to.len()
     }
 
+    /// The first edge of the state after `states[at]`; `usize::MAX` past the last state read.
+    fn first_after(&self, at: u32) -> usize {
+        let next = at as usize + 1;
+        match next < self.first.len() {
+            true => self.first.get(next) as usize,
+            false => usize::MAX,
+        }
+    }
+
     /// The state edge `k` leaves: the last state read whose first edge is at or before it.
     fn source_of(&self, k: usize) -> u32 {
         let read = self.first.as_slice();
@@ -400,6 +409,7 @@ impl<'a> Edges<'a> {
             edges: *self,
             at,
             from,
+            next: self.list.first_after(from),
         }
     }
 
@@ -469,17 +479,19 @@ pub struct EdgeIter<'a> {
     at: std::ops::Range<usize>,
     /// The source of `at.start`, or a state at or before it.
     from: u32,
+    /// The first edge of the state after `from`: where the source changes.
+    next: usize,
 }
 
 impl Iterator for EdgeIter<'_> {
     type Item = Edge;
 
+    #[inline]
     fn next(&mut self) -> Option<Edge> {
         let k = self.at.next()?;
-        let first = self.edges.list.first.as_slice();
-        while (self.from as usize + 1) < first.len() && first[self.from as usize + 1] as usize <= k
-        {
+        while k >= self.next {
             self.from += 1;
+            self.next = self.edges.list.first_after(self.from);
         }
         let e = Edge {
             from: self.from,
@@ -493,6 +505,55 @@ impl Iterator for EdgeIter<'_> {
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.at.size_hint()
     }
+
+    /// The edges a state at a time, each state's targets and binding ids read as slices:
+    /// what `map`, `filter`, `for_each` and the folds over a whole graph call.
+    fn fold<B, F: FnMut(B, Edge) -> B>(self, init: B, mut f: F) -> B {
+        let EdgeIter {
+            edges,
+            at,
+            mut from,
+            mut next,
+        } = self;
+        let mut acc = init;
+        let mut k = at.start;
+        while k < at.end {
+            while k >= next {
+                from += 1;
+                next = edges.list.first_after(from);
+            }
+            let run = k..next.min(at.end);
+            acc = match &edges.list.binding {
+                Ids::One(b) => fold_state(edges, b.as_slice(), from, run.clone(), acc, &mut f),
+                Ids::Two(b) => fold_state(edges, b.as_slice(), from, run.clone(), acc, &mut f),
+                Ids::Four(b) => fold_state(edges, b.as_slice(), from, run.clone(), acc, &mut f),
+            };
+            k = run.end;
+        }
+        acc
+    }
+}
+
+/// `f` over the edges `at`, all of which leave `states[from]`.
+fn fold_state<T: Copy + Into<u32>, B>(
+    edges: Edges<'_>,
+    ids: &[T],
+    from: u32,
+    at: std::ops::Range<usize>,
+    mut acc: B,
+    f: &mut impl FnMut(B, Edge) -> B,
+) -> B {
+    let to = &edges.list.to.as_slice()[at.clone()];
+    for ((k, &to), &b) in at.clone().zip(to).zip(&ids[at]) {
+        let e = Edge {
+            from,
+            to,
+            binding: b.into(),
+        };
+        edges.check(k, e);
+        acc = f(acc, e);
+    }
+    acc
 }
 
 impl ExactSizeIterator for EdgeIter<'_> {}

@@ -10,14 +10,36 @@ use super::{AnEdge, ComponentRun, Edge, Edges, Ends, Graph, GraphEdges, Reach, S
 use crate::lifecycle::types::{EntId, Pred};
 
 impl<'a> GraphEdges<'a> {
-    fn iter(self) -> impl Iterator<Item = Edge> + 'a {
-        let (run, labelled) = match self {
-            GraphEdges::Run(edges) => (Some(edges.iter()), None),
-            GraphEdges::Labelled(edges) => (None, Some(edges.iter().copied())),
-        };
-        run.into_iter()
-            .flatten()
-            .chain(labelled.into_iter().flatten())
+    fn iter(self) -> GraphEdgeIter<'a> {
+        match self {
+            GraphEdges::Run(edges) => GraphEdgeIter::Run(edges.iter()),
+            GraphEdges::Labelled(edges) => GraphEdgeIter::Labelled(edges.iter()),
+        }
+    }
+}
+
+/// A graph's edges, from a run's list or a labelled list, each read on its own path so that
+/// a fold over the run's list takes `EdgeIter::fold`.
+enum GraphEdgeIter<'a> {
+    Run(super::EdgeIter<'a>),
+    Labelled(std::slice::Iter<'a, Edge>),
+}
+
+impl Iterator for GraphEdgeIter<'_> {
+    type Item = Edge;
+
+    fn next(&mut self) -> Option<Edge> {
+        match self {
+            GraphEdgeIter::Run(it) => it.next(),
+            GraphEdgeIter::Labelled(it) => it.next().copied(),
+        }
+    }
+
+    fn fold<B, F: FnMut(B, Edge) -> B>(self, init: B, f: F) -> B {
+        match self {
+            GraphEdgeIter::Run(it) => it.fold(init, f),
+            GraphEdgeIter::Labelled(it) => it.copied().fold(init, f),
+        }
     }
 }
 
@@ -129,18 +151,17 @@ impl Csr {
     /// From `n` states and the `(from, to)` pairs `pairs` yields, each time it is called.
     fn new<I: Iterator<Item = (u32, u32)>>(n: usize, pairs: impl Fn() -> I) -> Self {
         let mut start = vec![0u32; n + 1];
-        for (from, _) in pairs() {
-            start[from as usize + 1] += 1;
-        }
+        // `for_each`, not `for`: a run's edges fold a state at a time (`EdgeIter::fold`).
+        pairs().for_each(|(from, _)| start[from as usize + 1] += 1);
         for i in 0..n {
             start[i + 1] += start[i];
         }
         let mut fill = start.clone();
         let mut next = vec![0u32; start[n] as usize];
-        for (from, to) in pairs() {
+        pairs().for_each(|(from, to)| {
             next[fill[from as usize] as usize] = to;
             fill[from as usize] += 1;
-        }
+        });
         // Sort each row and drop repeats, closing the gaps in place.
         let mut kept = 0usize;
         let mut from = 0usize;
