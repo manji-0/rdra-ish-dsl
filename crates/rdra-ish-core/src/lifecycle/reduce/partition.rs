@@ -7,7 +7,7 @@ use super::extended::Extended;
 use super::*;
 use crate::fasthash::FastMap;
 use crate::lifecycle::cone::VarSet;
-use crate::lifecycle::explore::{Adjacency, Caps};
+use crate::lifecycle::explore::{Adjacency, Caps, Checks};
 use crate::lifecycle::expr::State;
 use crate::lifecycle::types::{ActId, VarId};
 use crate::lifecycle::TransitionSystem;
@@ -212,7 +212,8 @@ impl Classes {
         // The inputs stay on the nested T side: the rises are kept, and only `obs` anchors.
         let (sub, clean) =
             raw.reduced_in(&[(ext.obs_local.clone(), ext.rise_actions())], caps, cache);
-        let run = sub.clone().run(caps);
+        // The quotient reads the graph alone, so the run evaluates no check.
+        let run = sub.clone().run_checking(caps, Checks::none());
         if !run.complete {
             return (Classified::Nothing, false);
         }

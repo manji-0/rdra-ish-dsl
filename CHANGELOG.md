@@ -347,6 +347,15 @@
   fewer instructions on `insurance-claim-ops`, 9% fewer on `patent-ops` and 28% fewer on
   `oidc-auth` at one instance. `RDRA_ISH_NO_QUOTIENT_CACHE=1` turns the sharing off, and
   `RDRA_ISH_QUOTIENT_STATS=1` prints what it did.
+- A BFS run evaluates only the invariants and `after` assertions its caller reads (#251). An
+  entity cone and a `can_reach` cone evaluate the checks among their own targets, so a cone
+  of entity targets alone evaluates none, and the run that quotients a sub-lifecycle
+  evaluates none. A cone of checks alone and `verify`'s safety cones still evaluate every
+  check their system holds: the early stop of #213 reads them all. Each check is decided on
+  its own cone, as before, so no output changes. BFS also looks up the pattern a move
+  starts from once per expanded state instead of once per move, and skips a written row
+  whose columns the move leaves as they were. `rdra-ish-core` adds `Checks`,
+  `TransitionSystem::run_checking`, and `ComponentRun::checks`.
 - A safety cone stops once every invariant and `after` assertion on it has a
   counterexample (#213), in `verify` and in `check` and `states`. The counterexamples are
   BFS's first, so they stay the shortest, and the verdicts and traces do not change. A cone

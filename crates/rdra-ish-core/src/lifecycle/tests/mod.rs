@@ -3,6 +3,7 @@
 mod along_guards;
 mod arm_guards;
 mod bare_values;
+mod checks;
 mod choice;
 mod choice_guards;
 mod chooses;

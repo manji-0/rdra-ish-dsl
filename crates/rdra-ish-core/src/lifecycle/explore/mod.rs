@@ -1,6 +1,7 @@
-//! BFS over one system's flat states. Guards, invariants, and after-asserts are checked on
-//! the fly; per-entity view statistics are gathered from the edges as they are found. The run
-//! keeps every edge and, per state, the edge that first reached it.
+//! BFS over one system's flat states. Guards, and the invariants and after-asserts the caller
+//! reads (`Checks`), are checked on the fly; per-entity view statistics are gathered from the
+//! edges as they are found. The run keeps every edge and, per state, the edge that first
+//! reached it.
 
 mod arena;
 mod bfs;
@@ -33,6 +34,35 @@ use super::expr::{State, StateSlice};
 use super::types::ActId;
 use super::TransitionSystem;
 
+/// The invariants and after-asserts a run evaluates: the ones its caller reads. A check the
+/// run does not evaluate reports no violation, so a caller leaves out only checks it never
+/// reads. `TransitionSystem::run` evaluates all of them.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum Checks {
+    /// Every invariant and after-assert the system holds.
+    #[default]
+    All,
+    /// The invariants and after-asserts with one of these names. Checks that share a name
+    /// share one report (the first violation of any of them), so a name stands for all of
+    /// them.
+    Named(BTreeSet<String>),
+}
+
+impl Checks {
+    /// No check: for a caller that reads only the graph.
+    pub fn none() -> Self {
+        Checks::Named(BTreeSet::new())
+    }
+
+    /// The run evaluates the checks named `name`.
+    pub fn reads(&self, name: &str) -> bool {
+        match self {
+            Checks::All => true,
+            Checks::Named(names) => names.contains(name),
+        }
+    }
+}
+
 /// Where exploration stops.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Caps {
@@ -45,9 +75,11 @@ pub struct Caps {
     /// When the run stops, with `StateDiag::TimeBudgetReached` (`verify --temporal-budget`);
     /// `None` runs until a cap or the end.
     pub deadline: Option<Instant>,
-    /// Stop once every invariant and after-assert of the system has a counterexample
+    /// Stop once every invariant and after-assert the run evaluates has a counterexample
     /// (`RunEnd::ChecksFailed`). Only a run that decides nothing but those checks sets it: an
-    /// entity target, a property, or a `can_reach` reads the whole graph.
+    /// entity target, a property, or a `can_reach` reads the whole graph. The stop reads
+    /// every check the run evaluates, so a run that sets it evaluates `Checks::All`, as its
+    /// callers do: with fewer, it would stop at another state.
     pub stop_when_all_violated: bool,
 }
 
@@ -117,6 +149,8 @@ pub struct ComponentRun {
     /// (vacuity, a covering cone's `ok`) reads it as one; its checks are decided.
     pub checks_failed: bool,
     pub diags: Vec<Diag>,
+    /// The checks the run evaluated: `diags` holds no violation of any other.
+    checks: Checks,
     pub(crate) views: Vec<EntityView>,
     /// Parallel to `states`: the index in `edges` of the edge that first reached the state;
     /// `None` for an initial state.
@@ -152,6 +186,11 @@ pub enum RunEnd {
 }
 
 impl ComponentRun {
+    /// The invariants and after-asserts the run evaluated; `diags` says nothing of the rest.
+    pub fn checks(&self) -> &Checks {
+        &self.checks
+    }
+
     /// How the run ended.
     pub fn end(&self) -> RunEnd {
         match (self.complete, self.checks_failed) {
@@ -324,11 +363,20 @@ struct Bindings {
 struct Bfs<'t> {
     ts: &'t TransitionSystem,
     caps: Caps,
+    /// The invariants the run evaluates, by index, in order.
+    invariants: Vec<usize>,
+    /// The after-asserts the run evaluates, by index, in order.
+    after: Vec<usize>,
     states: States,
     /// The index of each state in `states`.
     seen: arena::Seen,
     /// Scratch for the pattern keys `observe` reads, so an edge allocates none.
     keys: (Vec<u8>, Vec<u8>),
+    /// Per `(entity, slot)`: the state being expanded, and the slot's pattern id in it, so
+    /// `observe` looks a source pattern up once per expanded state instead of once per edge.
+    sources: Vec<(usize, usize)>,
+    /// The slots `sources` holds per entity: the most any entity has.
+    source_slots: usize,
     complete: bool,
     checks_failed: bool,
     diags: Vec<Diag>,
@@ -348,15 +396,26 @@ struct Bfs<'t> {
 }
 
 impl TransitionSystem {
-    /// Explores this system.
+    /// Explores this system, evaluating every invariant and after-assert it holds.
     pub fn run(self, caps: Caps) -> ComponentRun {
-        self.run_on(caps, Threads::Shared)
+        self.run_checking(caps, Checks::All)
     }
 
-    /// `run` with `threads` workers. The run does not depend on the number: the states, the
-    /// edges, and the findings come out in the order one thread finds them.
-    fn run_on(self, caps: Caps, threads: Threads) -> ComponentRun {
-        let mut bfs = Bfs::new(&self, caps);
+    /// Explores this system, evaluating only `checks`. The states, the edges, the views, and
+    /// where a cap stops the run are those of `run`; `diags` holds the violations of `checks`
+    /// alone.
+    pub fn run_checking(self, caps: Caps, checks: Checks) -> ComponentRun {
+        self.run_on(caps, checks, Threads::Shared)
+    }
+
+    /// `run_checking` with `threads` workers. The run does not depend on the number: the
+    /// states, the edges, and the findings come out in the order one thread finds them.
+    fn run_on(self, caps: Caps, checks: Checks, threads: Threads) -> ComponentRun {
+        debug_assert!(
+            !caps.stop_when_all_violated || checks == Checks::All,
+            "a run that stops once every check fails evaluates every check"
+        );
+        let mut bfs = Bfs::new(&self, caps, &checks);
         bfs.go(threads);
         let kept = bfs.kept();
         let peak_admitted = bfs.peak_admitted;
@@ -384,6 +443,7 @@ impl TransitionSystem {
             complete,
             checks_failed,
             diags,
+            checks,
             views,
             parents,
             edges,
