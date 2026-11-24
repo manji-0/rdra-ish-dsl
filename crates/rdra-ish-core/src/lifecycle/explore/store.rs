@@ -42,8 +42,11 @@ pub(super) fn binding_bytes(params: &[u8]) -> u64 {
 pub fn store_bytes(states: u64, width: usize, edges: u64) -> u64 {
     let p2 = |x: u128| x.max(4).next_power_of_two();
     let n = u128::from(states);
-    let total =
-        (width as u128 + 8 + 4) * p2(n) + 5 * p2((n * 8).div_ceil(7)) + 12 * p2(u128::from(edges));
+    // Each term fits in u128; the product with a width near `usize::MAX` and the sums need not.
+    let total = (width as u128 + 8 + 4)
+        .saturating_mul(p2(n))
+        .saturating_add(5 * p2((n * 8).div_ceil(7)))
+        .saturating_add(12 * p2(u128::from(edges)));
     u64::try_from(total).unwrap_or(u64::MAX)
 }
 
