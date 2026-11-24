@@ -70,7 +70,7 @@ pub(super) fn add_validators(
     for inv in ts.invariants() {
         if matches!(
             inv.text.kind(),
-            InvKind::Unique | InvKind::MinCard | InvKind::MaxCard
+            InvKind::Unique | InvKind::MinCard | InvKind::DanglingKey | InvKind::MaxCard
         ) {
             continue; // obligations of the data layer
         }
@@ -193,6 +193,12 @@ fn text(t: &InvText) -> String {
         } => {
             format!("{parent} has a {child} ({role})")
         }
+        InvText::DanglingKey {
+            child,
+            parent,
+            role,
+            ..
+        } => format!("{child} names a present {parent} ({role})"),
         InvText::MaxCard {
             child,
             parent,

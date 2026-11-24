@@ -446,6 +446,17 @@ fn guard_text(model: &SemanticModel, why: GuardWhy, site: &Site) -> String {
             "event {} was raised on the bound row (triggers)",
             model.events[event].id
         ),
+        (GuardWhy::Restrict { fk }, _) => {
+            let fk = model.foreign_key(fk);
+            let (child, parent) = (&model.entities[fk.child].id, &model.entities[fk.parent].id);
+            let action = fk
+                .on_delete
+                .map_or("unset, the SQL default", |a| a.as_str());
+            format!(
+                "no {child} names the deleted {parent} through '{}' (.on_delete: {action}, so the database rejects the delete); delete the {child} rows first",
+                fk.role_or(parent)
+            )
+        }
     }
 }
 
@@ -781,6 +792,13 @@ fn violation_message(text: &InvText, p: &str) -> String {
                 role,
 } => format!(
             "minimum children unmet: a '{parent}' has no '{child}' through '{role}', witnessed by {p}"
+        ),
+        InvText::DanglingKey {
+                child,
+                parent,
+                role,
+} => format!(
+            "dangling key: a '{child}' names a '{parent}' through '{role}' that is not present, witnessed by {p}; the '{child}' row names a parent that was never created or is gone"
         ),
         InvText::MaxCard {
             child,

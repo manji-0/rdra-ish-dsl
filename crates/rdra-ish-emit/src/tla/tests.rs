@@ -153,6 +153,50 @@ fn a_one_to_one_key_is_a_unique_invariant_over_two_binders() {
         .contains("((b0 = b1) \\/ (B_owner_A[b0] # B_owner_A[b1]) \\/ (B_owner_A[b0] = 0))"));
 }
 
+/// A delete the key's children reject waits until no present child names the row, apart
+/// from a child the step deletes with it; the key gets `DanglingKey_<Child>_<role>`. A
+/// cascade key keeps its unguarded delete and gets no such rule (#199).
+#[test]
+fn a_restricted_delete_is_guarded_by_its_children_and_its_key_cannot_dangle() {
+    let src = |key: &str, extra: &str| {
+        format!(
+            "entity O \"O\" {{ id: Int @pk }}\nentity L \"L\" {{ id: Int @pk }}\nrelate(L, O, N:1){key}\nusecase Open \"o\"\nusecase Add \"a\"\nusecase Cancel \"c\"\ncreates(Open, O)\ncreates(Add, L)\ndeletes(Cancel, O)\n{extra}"
+        )
+    };
+    let guard =
+        "  /\\ \\A b0 \\in L_Ids : (L_exists[b0] = \"present\") => (~(L_owner_O[b0] = p0))\n";
+    let bundle = print(&system(&src("", "")), PrintMode::Check, "M");
+    assert!(bundle.tla.contains(guard), "{}", bundle.tla);
+    assert!(bundle.tla.contains(
+        "DanglingKey_L_O == \\A b0 \\in L_Ids : (L_exists[b0] = \"present\") => (\\E b1 \\in O_Ids : (O_exists[b1] = \"present\") /\\ (L_owner_O[b0] = b1))\n"
+    ), "{}", bundle.tla);
+    assert!(bundle.cfg.contains("INVARIANT DanglingKey_L_O\n"));
+    let together = print(
+        &system(&src("", "deletes(Cancel, L)")),
+        PrintMode::Check,
+        "M",
+    );
+    assert!(
+        together
+            .tla
+            .contains("(L_exists[b0] = \"present\") => ((b0 = p0) \\/ (~(L_owner_O[b0] = p1)))"),
+        "{}",
+        together.tla
+    );
+    let cascade = print(
+        &system(&src(".on_delete(cascade)", "")),
+        PrintMode::Check,
+        "M",
+    );
+    assert!(
+        !cascade.tla.contains("=> (~(L_owner_O[b0]"),
+        "{}",
+        cascade.tla
+    );
+    assert!(!cascade.tla.contains("DanglingKey_"), "{}", cascade.tla);
+    assert!(!cascade.cfg.contains("DanglingKey_"), "{}", cascade.cfg);
+}
+
 #[test]
 fn a_child_side_minimum_is_an_invariant_over_a_parent_and_a_witness_child() {
     let bundle = print(

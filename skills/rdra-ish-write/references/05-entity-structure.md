@@ -73,8 +73,13 @@ Also ask:
    the lifecycle checks it as `Unique_A_<role>` (at two instances, so `verify` finds a
    second child linked to one parent). Write `1..*:1` when every parent must have a
    child; the lifecycle checks it as `MinCard_<Child>_<role>`, so the use case that
-   creates the parent must create its first child in the same transaction. Write
-   `0..3:1` when a parent has at most three children; the lifecycle checks it as
+   creates the parent must create its first child in the same transaction.
+   A `deletes(UC, Parent)` under a key with no `.on_delete`, `restrict`, or `no_action`
+   waits until no present child names the row, as the database rejects it otherwise;
+   delete the children first; `DanglingKey_<Child>_<role>` checks that no child is left.
+   Under `cascade`, `set_null`, or `set_default` the lifecycle does not run the action yet:
+   it deletes the one row and leaves the children, with no guard and no `DanglingKey_*`.
+   Write `0..3:1` when a parent has at most three children; the lifecycle checks it as
    `MaxCard_<Child>_<role>`, so guard the use case that adds a child with a count such as
    `holds(Room, Member.status == active).at_most(2, Loan)`.
    Chain `.role(name)` when two relates join one child to one parent, or when a second

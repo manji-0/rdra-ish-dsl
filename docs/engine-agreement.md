@@ -237,6 +237,9 @@ under a load average of 30 to 60, measured.
 | `safety_can_reach_frees_slots` | `can_reach` where slots run out | counterexample; per-bill ok |
 | `safety_stable_frees_slots` | `stable` and `unchanged` on a cone that frees slots go to the whole model in both engines | ok (whole model) |
 | `safety_vacuity` | A trigger that never holds | ok; `always` counterexample |
+| `safety_delete_restrict` | A delete the key's children reject (no `.on_delete`, `restrict`) waits until no child names the row | ok, z3 proved |
+| `safety_delete_cascade` | `.on_delete(cascade)` keeps its unguarded one-row delete and gets no `DanglingKey_*`; the line the delete marks stays | counterexample, z3 unproved |
+| `safety_delete_set_null` | `.on_delete(set_null)` keeps its unguarded one-row delete and gets no `DanglingKey_*`; the linked line the delete marks stays | counterexample, z3 unproved |
 | `safety_counted_once_per_raise` | A counted handler runs once per raise; the latch runs twice after one | counted ok, z3 proved; latch counterexample |
 | `safety_event_overflow` | A raise past `k` is `EventOverflow`, and the raiser never waits | `k = 2` counterexample; `k = 3` ok, z3 proved |
 | `safety_unique_sets` | A unique column set over column vars, owner vars, and a nullable Int that two rows leave null | single column and junction counterexample; guarded set and null set ok, z3 proved |

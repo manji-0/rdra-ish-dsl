@@ -3,7 +3,7 @@
 `verify` checks a model at a fixed number of instances, so a rule that holds at two can
 still break at three. `verify --prove` is experimental. It asks z3 whether each state rule
 (`forbidden`, `invariant`, `required`, `@check`, quantifier rules, `Unique_*` of 1:1 keys
-and `@unique` sets, `MinCard_*`)
+and `@unique` sets, `MinCard_*`, `DanglingKey_*`)
 holds for **any** number of rows and **any** non-negative Int value, at any time (`now`
 has no top). It needs `z3` on `PATH`, or
 `--z3 <path>`, or `RDRA_Z3`. The repository's `nix develop` shell provides it.

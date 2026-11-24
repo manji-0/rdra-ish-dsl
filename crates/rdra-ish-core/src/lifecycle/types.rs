@@ -569,6 +569,10 @@ pub enum GuardWhy {
     /// `<E>._raised_<Ev>` of the bound row is `true`: the event was raised on it, so the use
     /// case `triggers(Ev, UC)` starts may run on it.
     Raised { event: EventKey },
+    /// `deletes(UC, Parent)` over a key whose `.on_delete` is `restrict`, `no_action`, or
+    /// unset (the SQL default): no present child the step does not delete names the row, as
+    /// the database rejects the delete otherwise.
+    Restrict { fk: FkId },
 }
 
 #[derive(Clone, Debug)]
@@ -757,6 +761,9 @@ pub enum InvKind {
     MaxCard,
     /// A column's `@check(expr)`: no present slot makes the expression false.
     Check,
+    /// A key whose parent a step deletes and whose database rejects that delete: every
+    /// present child names a present parent.
+    DanglingKey,
     /// A counted edge's counter is never past its `k` (`EventOverflow_<E>_<Ev>_<UC>`).
     Overflow,
 }
@@ -775,6 +782,7 @@ impl InvText {
             InvText::MinCard { .. } => InvKind::MinCard,
             InvText::MaxCard { .. } => InvKind::MaxCard,
             InvText::Check(_) => InvKind::Check,
+            InvText::DanglingKey { .. } => InvKind::DanglingKey,
             InvText::Overflow { .. } => InvKind::Overflow,
         }
     }
@@ -820,6 +828,13 @@ pub enum InvText {
     },
     /// `relate(child, parent, 1..*:1)`, by the key's role.
     MinCard {
+        child: String,
+        parent: String,
+        role: String,
+    },
+    /// A key whose parent a use case deletes and whose database rejects that delete
+    /// (`restrict`, `no_action`, or no `.on_delete`), by the key's role.
+    DanglingKey {
         child: String,
         parent: String,
         role: String,
