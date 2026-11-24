@@ -370,7 +370,9 @@
   states, a property's cone, a state model); `verify --with-tlc` still starts a process per
   run. On an 18-core Mac the test went from 178 s to about 100 s of wall time and from
   1,539 to about 650 CPU-s (two test threads, single runs beside other load), and its 734
-  sample cones of up to 5,000 states from 594 to 107 worker-seconds of TLC. A job a batch
+  sample cones of up to 5,000 states from 594 to 107 worker-seconds of TLC. On a 4-core CI
+  runner, in one job, the test took 637 and 633 s without the batch JVMs and 464 and 456 s with
+  them. A job a batch
   JVM does not answer runs as a process, as every job does without `tlc-batch` on `PATH` or
   with `RDRA_TLC_BATCH=0`. See
   [Engine equivalence in batch JVMs](docs/formal-verification.md#engine-equivalence-in-batch-jvms).

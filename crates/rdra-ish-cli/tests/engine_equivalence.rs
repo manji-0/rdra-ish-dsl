@@ -284,10 +284,9 @@ enum Route {
 const BATCH_STATES: usize = 5_000;
 
 /// How long a job may take in a batch JVM before the JVM is killed and the job runs as a
-/// process. The longest job the test gives a batch JVM took 1.9 s here, beside other load:
-/// the cones are held to [`BATCH_STATES`], the whole-model property runs are processes, and
-/// the other runs (a property's cone, a state model, a fixture) are small. The limit is
-/// there for a run that hangs.
+/// process. The cones are held to [`BATCH_STATES`] and the whole-model property runs are
+/// processes, but a state model's size is not known when its run starts: the longest job
+/// took 79 and 93 s in two runs on a 4-core CI runner, where 16 threads share the cores.
 const BATCH_LIMIT: Duration = Duration::from_secs(300);
 
 /// The heap of a batch JVM, unless the user names one (`RDRA_TLC_HEAP`, or `-Xmx` in

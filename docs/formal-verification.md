@@ -1592,8 +1592,7 @@ from a pool (`crates/rdra-ish-cli/src/tlc_batch.rs`). `verify --with-tlc` does n
   MBeans and the RMI export of its fingerprint set after it. The JVM, its JIT-compiled JDK
   code, and its `java.io.tmpdir` are shared, and one JVM runs one job at a time.
 - **Which runs.** A cone the BFS found to have at most 5,000 states, and the runs whose
-  size is not known when they start and is small in the test (a property's cone, state
-  models, fixtures). A larger cone and a property run of the whole model are processes of
+  size is not known when they start (a property's cone, state models, fixtures). A larger cone and a property run of the whole model are processes of
   their own, as before.
 - **Memory.** A JVM that stays up commits its whole heap and about 300 MiB beside it, so
   a batch JVM gets 256 MiB of heap, not the 1 GiB of a process, and the pool has at most
@@ -1604,7 +1603,7 @@ from a pool (`crates/rdra-ish-cli/src/tlc_batch.rs`). `verify --with-tlc` does n
   not start or did not find `tlc2.TLC`'s `handleParameters`, `setResolver`, and `process`;
   the JVM ended under the job (TLC called `System.exit`, or the heap ran out, which
   `-XX:+ExitOnOutOfMemoryError` turns into an exit); or the job took over 300 s (the
-  longest takes 2 s). After
+  longest took 93 s on a CI runner). After
   three jobs in a row without an answer, every later job is a process. A JVM is replaced
   after 400 jobs, or when its jobs have left 8 threads behind: TLC 1.7.4 never shuts down
   the executor it starts to print a liveness counterexample, and that thread keeps its job's
