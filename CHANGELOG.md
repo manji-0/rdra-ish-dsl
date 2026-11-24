@@ -351,8 +351,8 @@
   it printed. Each system works out once which guards read the successor, and turns each
   guard conjunct that reads one var of one param's row into a test of that byte, taken from
   the evaluator itself on every byte value; a slot that fails is no candidate, so no guard is
-  evaluated for it. `verify` at `RDRA_JOBS=1` retires 27% fewer instructions on
-  food-permit-ops and 28% fewer on patent-ops, and 18% fewer on oidc-auth at
+  evaluated for it. `verify` at `RDRA_JOBS=1` retires 29% fewer instructions on
+  food-permit-ops, 30% fewer on patent-ops, and 25% fewer on oidc-auth at
   `--instance-count 1`.
 - A safety cone stops once every invariant and `after` assertion on it has a
   counterexample (#213), in `verify` and in `check` and `states`. The counterexamples are
