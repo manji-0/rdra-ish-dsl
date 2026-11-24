@@ -137,6 +137,7 @@ pub fn run(
     }: Budget,
     with_tlc: Option<WithTlc>,
 ) -> Result<()> {
+    rdra_ish_core::perf::pass("build_ts");
     let built = checked_system(model, bounds.clone(), scope)?;
     let (ts, selection) = (built.ts, built.selection);
     let (out, whole_name) = out_names(out);
@@ -187,6 +188,7 @@ pub fn run(
     // The quotients the passes that reduce cones share: a sub-lifecycle many cones have is
     // explored and partitioned once (#252). The entity pass, the last of them, drops it.
     let quotients = QuotientCache::new();
+    rdra_ish_core::perf::pass("cone_jobs");
     let mut jobs = cone_jobs(&ts, &names, &targets, &mut modules, caps, &quotients);
     let cones = jobs.len();
     let line = print_plan(
@@ -200,6 +202,7 @@ pub fn run(
     );
     let mut whole_modules = Vec::new();
     if temporal {
+        rdra_ish_core::perf::pass("property_jobs");
         jobs.extend(property_jobs(&ts, &names, &mut modules, caps, &quotients));
         whole_modules = (0..ts.properties().len())
             .map(|i| modules.claim(&format!("{whole_stem}_{}", names.property(i))))
@@ -211,6 +214,7 @@ pub fn run(
         }
     }
     // The modules are written for `-o`, a run by hand, and for TLC under `--with-tlc`.
+    rdra_ish_core::perf::pass("emit_setup");
     let dir = match keep || with_tlc.is_some() {
         true => Some(spec_dir(out)?),
         false => None,
@@ -234,6 +238,7 @@ pub fn run(
     let (bfs, mut natives, explored, proof, cones_ran) = std::thread::scope(|threads| {
         let cones = start
             .map(|(tlc, dir)| threads.spawn(|| run_cones(tlc, dir, &modules, &jobs, memory.cones)));
+        rdra_ish_core::perf::pass("entity_pass");
         let bfs = state_models(
             program,
             model,
@@ -244,7 +249,9 @@ pub fn run(
             start.is_some(),
             quotients,
         );
+        rdra_ish_core::perf::pass("safety_pass");
         let (safety, mut vacuous) = bfs_cones(&ts, &jobs, caps);
+        rdra_ish_core::perf::pass("property_pass");
         let (properties, property_vacuous) = native_properties(&ts, &jobs, caps);
         // A `--buc` drops use cases that may reach a premise.
         if scope.bucs.is_empty() {
@@ -255,6 +262,7 @@ pub fn run(
                 }
             }
         }
+        rdra_ish_core::perf::pass("explored_props");
         let explored = match temporal {
             true => explored_properties(program, model, &ts, caps, budget),
             false => Explored::default(),
@@ -267,7 +275,9 @@ pub fn run(
                 _ => None,
             })
             .collect();
+        rdra_ish_core::perf::pass("wholes");
         let wholes = native_wholes(&ts, &open, caps, budget);
+        rdra_ish_core::perf::pass("proof");
         let proof = match (&prove, z3) {
             (Some(Prove { deny_unproved, .. }), Some(z3)) => z3.and_then(|z3| {
                 let marks = Marks::of(model, &ts);
@@ -287,6 +297,7 @@ pub fn run(
         };
         (bfs, natives, explored, proof, cones_ran)
     });
+    rdra_ish_core::perf::pass("report");
     let proof = proof?;
     // A cone BFS left open at the memory limit is decided by the rules the proof proved.
     if let Some((_, proved)) = &proof {

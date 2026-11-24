@@ -132,6 +132,16 @@
 
 ### Added
 
+- A `perf` cargo feature (#296): `cargo build --release -p rdra-ish-cli --features perf`
+  builds a CLI that, under `RDRA_PERF=1`, prints on stderr a `perf-pass` line per pass of
+  `verify` (wall and CPU time, allocations, the live heap and the memory pool at their
+  peaks) and a `perf-run` line per BFS run (its pass, states, edges, width, the bits its
+  domains need, what its store keeps, its thread CPU). `RDRA_PERF=2` adds the columns that
+  read every state or edge, hashes of the states, edges and bindings among them, which tell
+  two runs of one graph apart. Its global allocator counts every allocation.
+  `scripts/perf-tables.py <binary>` runs the five measured `verify` runs of #296 one at a
+  time at `RDRA_JOBS=1` and prints the totals, the passes, the BFS CPU per pass and the
+  largest runs. A build without the feature is unchanged.
 - A `shadow` cargo feature (#275): `cargo build --release -p rdra-ish-cli --features shadow`
   builds a CLI in which every fast function that has a reference twin also runs the twin and
   panics, naming the call, when the two differ. The twins are the enabled bindings

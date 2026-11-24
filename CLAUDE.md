@@ -76,6 +76,11 @@ mask of #251, the early stop of #213), changes scheduling or threads, or replace
 function whose reference would cost a second whole BFS. Say in the PR which part had no
 twin and why.
 
+To find what to speed up, build with `--features perf` and run `scripts/perf-tables.py
+target/release/rdra-ish [sample ...]`: the passes, the BFS CPU per pass and the largest runs
+of each `verify`, at `RDRA_JOBS=1` (#296). Under `RDRA_PERF=2` its run lines hash each run's
+graph, which shows two runs of the same graph.
+
 ## GitHub API
 
 Poll a workflow run every two minutes or more (`gh run view <id> --json status,conclusion`),

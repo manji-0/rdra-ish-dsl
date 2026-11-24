@@ -79,6 +79,7 @@ pub(super) fn state_models(
     // pool before the runs that follow, which see it as they would without the cache.
     drop(quotients);
     // Its own call, unreduced: a cone shared with an entity target would share its run.
+    rdra_ish_core::perf::pass("reach_pass");
     let reach_run = (!reach.is_empty()).then(|| ts.explore_targets(&reach, caps));
     if !scope.bucs.is_empty() {
         run.defer_progress();
