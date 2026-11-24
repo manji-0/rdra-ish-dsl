@@ -132,6 +132,16 @@
 
 ### Added
 
+- A `shadow` cargo feature (#275): `cargo build --release -p rdra-ish-cli --features shadow`
+  builds a CLI in which every fast function that has a reference twin also runs the twin and
+  panics, naming the call, when the two differ. The twins are the enabled bindings
+  (`bindings` filtered by the pre-guards, #253), the state index (`Seen`, against an ordered
+  map of the state bytes), the source pattern and the unchanged-row skip of a BFS edge
+  (#251), the quotient partition (the sweeps the worklist replaced, on quotients of up to
+  2,500,000 states), a quotient cache hit (computed again through an empty cache) and the
+  reduced step's class moves (#252). Each twin lives in a file of its own. A new CI job,
+  `shadow`, runs `verify-samples.sh` and the engine corpus on that build. A build without
+  the feature is unchanged.
 - `check --guards` reports which rules each guard protects (#198). A guard is a `holds`
   condition applied to a use case, or the `.when` conditions of one column's arms or
   values. For each guard, after a clean `check`, the run removes it from every action of

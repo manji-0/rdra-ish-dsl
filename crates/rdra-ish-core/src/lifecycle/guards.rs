@@ -95,7 +95,7 @@ impl TransitionSystem {
                 deps.cones = run.cones.len();
                 for &(target, at) in &run.targets {
                     let cone = &run.cones[at].run;
-                    debug_assert!(
+                    crate::shadow_assert!(
                         self.check_name(target)
                             .is_some_and(|name| cone.checks().reads(name)),
                         "a rule's cone evaluates the rule"

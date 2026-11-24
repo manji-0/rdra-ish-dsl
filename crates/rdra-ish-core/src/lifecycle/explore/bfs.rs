@@ -22,6 +22,9 @@ use super::{
     Bfs, Bindings, Caps, Checks, Edge, EntityView, Moves, Reach, States, Threads, Violated,
 };
 
+#[cfg(feature = "shadow")]
+mod reference;
+
 /// States one worker expands at a time. Fewer than two chunks of waiting states are
 /// expanded on the caller's thread, so a small run starts no worker.
 const CHUNK: usize = 128;
@@ -501,6 +504,17 @@ impl<'t> Bfs<'t> {
     ) -> usize {
         let cached = &mut self.sources[e.index() * self.source_slots + slot];
         if cached.0 == at {
+            #[cfg(feature = "shadow")]
+            {
+                let want = reference::source(self.ts, &self.views[e.index()], s, e, slot);
+                assert!(
+                    want == Some(cached.1),
+                    "shadow: Bfs::source(state {at}, {}, slot {slot}): kept {}, reference {want:?}",
+                    self.ts.entity(e).id,
+                    cached.1
+                );
+                crate::shadow::compared(crate::shadow::Twin::Source);
+            }
             return cached.1;
         }
         self.ts.pattern_key_into(s, e, slot, key);
@@ -541,6 +555,18 @@ impl<'t> Bfs<'t> {
                     .iter()
                     .all(|v| s.get(ts, *v, slot) == s2.get(ts, *v, slot))
             {
+                #[cfg(feature = "shadow")]
+                {
+                    let (pre_id, post_id) =
+                        reference::row_ids(ts, &self.views[e.index()], s, s2, e, slot);
+                    assert!(
+                        pre_id.is_some() && pre_id == post_id,
+                        "shadow: Bfs::observe({}, {}, slot {slot}) skipped a row the edge moves: pattern {pre_id:?} to {post_id:?}",
+                        action.name,
+                        ts.entity(e).id
+                    );
+                    crate::shadow::compared(crate::shadow::Twin::UnchangedRow);
+                }
                 continue;
             }
             let pre_id = pre.then(|| self.source(at, s, e, slot, &mut before));

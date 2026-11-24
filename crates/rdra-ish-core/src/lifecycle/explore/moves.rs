@@ -9,6 +9,9 @@ use crate::lifecycle::TransitionSystem;
 use super::plan::Plan;
 use super::{Move, Moves};
 
+#[cfg(any(debug_assertions, feature = "shadow"))]
+mod reference;
+
 impl TransitionSystem {
     pub(crate) fn pattern_key(&self, state: &StateSlice, e: EntId, slot: usize) -> Box<[u8]> {
         self.entity(e)
@@ -149,28 +152,33 @@ impl TransitionSystem {
     }
 
     /// Calls `found` with each of the `bindings` of `action` in `state` whose pre-guards hold,
-    /// in `bindings` order. A build with debug assertions checks the result against `bindings`
-    /// and `pre_guards_hold`, the definition.
+    /// in `bindings` order. A build with debug assertions or the `shadow` feature checks the
+    /// result against the reference twin: `bindings` filtered by `pre_guards_hold`.
     fn each_enabled(
         &self,
         action: &Action,
         plan: &Plan,
         state: &StateSlice,
-        mut found: impl FnMut(&[u8]),
+        found: impl FnMut(&[u8]),
     ) {
-        if !cfg!(debug_assertions) {
-            return self.each_planned(action, plan, state, found);
+        #[cfg(not(any(debug_assertions, feature = "shadow")))]
+        self.each_planned(action, plan, state, found);
+        #[cfg(any(debug_assertions, feature = "shadow"))]
+        {
+            let mut found = found;
+            let mut got: Vec<Box<[u8]>> = Vec::new();
+            self.each_planned(action, plan, state, |params| got.push(params.into()));
+            let want = reference::enabled_bindings(self, action, state);
+            assert!(
+                got == want,
+                "shadow: each_enabled({}) in state {:?}: planned {got:?}, reference {want:?}",
+                action.name,
+                &state.0
+            );
+            #[cfg(feature = "shadow")]
+            crate::shadow::compared(crate::shadow::Twin::EachEnabled);
+            got.iter().for_each(|params| found(params));
         }
-        let mut got: Vec<Box<[u8]>> = Vec::new();
-        self.each_planned(action, plan, state, |params| got.push(params.into()));
-        let want: Vec<Box<[u8]>> = self
-            .bindings(action, state)
-            .into_iter()
-            .filter(|params| self.pre_guards_hold(action, state, params))
-            .map(Vec::into_boxed_slice)
-            .collect();
-        assert_eq!(got, want, "the enabled bindings of {}", action.name);
-        got.iter().for_each(|params| found(params));
     }
 
     /// `each_enabled` as `plan` reads the guards: a slot that fails its param's row tests is

@@ -11,6 +11,10 @@ description.workspace = true
 name = "rdra-ish"
 path = "src/main.rs"
 
+[features]
+# `rdra-ish-core`'s `shadow`: every fast function with a reference twin is checked against it.
+shadow = ["rdra-ish-core/shadow"]
+
 [dependencies]
 rdra-ish-syntax = { path = "../rdra-ish-syntax" }
 rdra-ish-core   = { path = "../rdra-ish-core" }

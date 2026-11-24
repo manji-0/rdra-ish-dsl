@@ -24,6 +24,23 @@ pub mod refinement;
 pub mod resolver;
 pub mod rules;
 pub mod screen_flow;
+#[cfg(feature = "shadow")]
+pub mod shadow;
+
+/// Whether this build has the `shadow` feature (#275): every fast function with a reference
+/// twin also runs the twin, and `shadow_assert!` checks as in a debug build.
+pub const SHADOW: bool = cfg!(feature = "shadow");
+
+/// `assert!` in a build with debug assertions or the `shadow` feature, and nothing in a
+/// release build: a check that a fast path is used within what its argument covers.
+#[macro_export]
+macro_rules! shadow_assert {
+    ($($arg:tt)*) => {
+        if cfg!(debug_assertions) || $crate::SHADOW {
+            assert!($($arg)*);
+        }
+    };
+}
 pub mod surface;
 pub mod system;
 pub mod tx;

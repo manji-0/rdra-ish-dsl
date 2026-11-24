@@ -743,7 +743,7 @@ impl TransitionSystem {
             }
             return Vec::new();
         }
-        debug_assert!(
+        crate::shadow_assert!(
             self.check_name(target)
                 .is_some_and(|name| run.checks().reads(name)),
             "the run of a check's cone evaluates the check"
@@ -818,7 +818,7 @@ impl TransitionSystem {
     /// or the cone does not hold it. When no state has the rows the rule ranges over, that
     /// alone is reported.
     fn unmet_of_rule(&self, inv: &Invariant, run: &ComponentRun) -> Option<Vec<UnmetPremise>> {
-        debug_assert!(run.checks().reads(&inv.name), "the run evaluates the rule");
+        crate::shadow_assert!(run.checks().reads(&inv.name), "the run evaluates the rule");
         let violated = run.diags.iter().any(
             |d| matches!(&d.diag, StateDiag::ConstraintViolated { name, .. } if *name == inv.name),
         );
@@ -861,7 +861,7 @@ impl TransitionSystem {
     /// case takes its last step, into a state that has rows of the entities the step does not
     /// bind, when it reads any.
     fn unmet_of_assert(a: &AfterAssert, run: &ComponentRun) -> Option<Vec<UnmetPremise>> {
-        debug_assert!(run.checks().reads(&a.name), "the run evaluates the assert");
+        crate::shadow_assert!(run.checks().reads(&a.name), "the run evaluates the assert");
         let violated = run.diags.iter().any(
             |d| matches!(&d.diag, StateDiag::AfterAssertViolated { name, .. } if *name == a.name),
         );

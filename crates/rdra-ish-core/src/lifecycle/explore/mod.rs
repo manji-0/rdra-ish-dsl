@@ -413,7 +413,7 @@ impl TransitionSystem {
     /// `run_checking` with `threads` workers. The run does not depend on the number: the
     /// states, the edges, and the findings come out in the order one thread finds them.
     fn run_on(self, caps: Caps, checks: Checks, threads: Threads) -> ComponentRun {
-        debug_assert!(
+        crate::shadow_assert!(
             !caps.stop_when_all_violated || checks == Checks::All,
             "a run that stops once every check fails evaluates every check"
         );
