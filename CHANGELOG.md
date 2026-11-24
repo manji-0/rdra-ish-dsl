@@ -141,8 +141,10 @@
   traces. A trace through such a cone runs the sub-lifecycle up to `H` again and lifts its
   path to concrete states before it is replayed. Without the option nothing changes. At
   `--instance-count 3` the sub-lifecycle of clinic-ops' `Forbidden_ClinicalOrder_1`,
-  which stopped plain at the memory limit, takes 240,016 orbits for about 61.8M states and
-  yields #284's 20 classes. The `shadow` build adds the `s_up_to_h` twin, which holds the
+  whose plain run stopped at the memory limit after 25.3M states, takes 240,016 orbits for
+  about 61.8M states and yields #284's 20 classes, and the cone is decided (`ok`, 5,050
+  states; `verify --entity ClinicalOrder --memory 8GiB --symmetry retry` takes 72 s at
+  `RDRA_JOBS=4`, 6.2 GiB at the peak). The `shadow` build adds the `s_up_to_h` twin, which holds the
   classes up to `H` to those of the plain run of the same sub-lifecycle, up to 200,000
   states.
 
