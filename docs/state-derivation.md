@@ -593,6 +593,15 @@ cone of influence:
 BFS starts from every initial state, applies every enabled action, and stops when
 no new state appears or a cap is hit.
 
+A cone that answers only invariants and `after` assertions also stops once every check of
+its system has a counterexample (#213). Each counterexample is the first BFS found, so the
+shortest, and any further state could only repeat a violation. A cone that also answers an
+entity view, a `can_reach`, or a temporal property runs to the end, since those read the
+whole graph. A cone stopped this way is not complete: it reports no cap, and it reports no
+vacuity, which a violated check does not have. Under `verify` its run line counts the
+states it reached before it stopped, so a failing cone prints fewer states than TLC's line
+for the same module.
+
 Two caps and the memory limit stop a cone, and `check` and `states` take all three:
 
 - `--max-patterns` caps the distinct patterns of one entity view within a cone. Default:

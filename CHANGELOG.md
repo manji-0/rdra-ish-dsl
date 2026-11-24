@@ -252,6 +252,19 @@
 
 ### Changed
 
+- A safety cone stops once every invariant and `after` assertion on it has a
+  counterexample (#213), in `verify` and in `check` and `states`. The counterexamples are
+  BFS's first, so they stay the shortest, and the verdicts and traces do not change. A cone
+  that also answers an entity view, a `can_reach`, or a temporal property runs to the end. A
+  stopped cone counts as neither complete nor capped: it reports no vacuity, which a
+  violated check does not have, and no cap note. The `(N states)` of a failing
+  `Cone_<name>` run line now counts the states BFS reached before it stopped, so it can be
+  smaller than TLC's line for the same module (`samples/formal-verification-fail`: 7 to 3).
+  On `crates/rdra-ish-cli/tests/fixtures/early_stop/flags_fail.rdra` at
+  `--instance-count 3` the rule's cone stops at 3 of its 16,843,009 states; in one run on a
+  shared machine `verify` took 108 s where it took 206 s, the rest being the Task entity
+  cone, which runs to the end.
+  BFS also tracks violated checks as a bit per check name instead of a set of strings.
 - `verify` runs `Cone_<P>_WF` on the reduced cone first, with every class whose
   sub-lifecycle can loop taken as a place a behavior may stop. An `ok` there is the
   unreduced cone's `ok`, and a counterexample there prints only after it lifts to the

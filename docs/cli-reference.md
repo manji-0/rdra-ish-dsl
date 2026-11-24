@@ -1513,7 +1513,7 @@ properties:
 ```
 $ rdra-ish verify samples/formal-verification/cross_order_payment_split.rdra
 ...
-Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: counterexample (31 states)
+Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: counterexample (7 states)
 error[MultiForbidden_Order_0]: invariant MultiForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order[1](status=cancelled); Payment[1](status=captured)
   rule: skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:44:1
   counterexample (3 steps):

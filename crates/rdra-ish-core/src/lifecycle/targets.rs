@@ -242,7 +242,15 @@ impl TransitionSystem {
             } else {
                 self.restrict_to(&cone.vars, &cone.keep)
             };
-            system.run(caps)
+            // A cone of checks alone is decided once each has failed; an entity target or a
+            // `can_reach` reads the whole graph.
+            let checks = shared
+                .iter()
+                .all(|t| matches!(t, Target::Invariant(_) | Target::AfterAssert(_)));
+            system.run(match checks {
+                true => caps.until_all_violated(),
+                false => caps,
+            })
         };
         let ran = in_parallel(groups, jobs(), |(cone, shared)| {
             let (run, seen) = watch(|| explore(&cone, &shared, caps));
@@ -537,6 +545,7 @@ impl TransitionSystem {
         runs: &mut [RunsSoFar],
     ) {
         let run = &cone.run;
+        debug_assert!(!run.checks_failed, "an entity cone runs to the end");
         let decl = self.entity(e);
         let local = run.system.local_entity(decl.key);
         let why = stopped_at(run);
