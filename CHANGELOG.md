@@ -343,13 +343,35 @@
 
 ### Changed
 
+- `verify --with-tlc` sizes each TLC run's heap by its module and schedules the runs by
+  the memory they hold (#309).
+  - A run gets 512 MiB of heap per MiB of module text, in whole GiB: at least `1g` for a
+    cone and `2g` for a whole-model run, and at most TLC's share of `--memory`. Every
+    module under 2 MiB keeps the old heap. food-permit-ops'
+    `AfterAssert_SuspendBusiness_0` cone at `--instance-count 3` (a 7.6 MB module) now gets
+    `-Xmx4g` and passes with 7,167,444 states (`verify --instance-count 3 --entity
+    BusinessPermit --memory 16GiB --with-tlc`: 130 s). At the old `1g` TLC ran out of
+    memory on it.
+  - A run that runs out of memory runs once more at twice its heap when the share holds
+    that. Its line ends `rerun at -Xmx<2h> after -Xmx<h> ran out of memory`.
+  - A module that needs more heap than the share is not run. It is a `tool_error` whose
+    report names the heap it needs and says to raise `--memory` or set `RDRA_TLC_HEAP`.
+  - `RDRA_TLC_HEAP` and an `-Xmx` in `JAVA_TOOL_OPTIONS` still set every heap, with no
+    rerun.
+  - The runs go at once as long as their `-Xmx` plus 256 MiB per JVM fit the share, in
+    place of up to 8 at once. A run whose heap alone is past the share runs alone. At the
+    default `16GiB` that is six cone runs of `1g` at once, not eight, and at `4GiB` one,
+    not two.
+  - Each run's TLC workers are the cores divided by the runs going and queued, at most 8,
+    and 1 when the runs outnumber the cores. Before, it was at least 2 on 4 cores and up to
+    all the cores. Past 4 to 8 workers a run gained no time and spent 50 to 70% more CPU.
 - `verify` reduces a cone whose TLA+ tables print up to 530,000 cells, not 200,000 (#284),
   for the native checker and TLC alike, so both still check the same cones.
   food-permit-ops' `AfterAssert_SuspendBusiness_0` at `--instance-count 3` is now reduced
   to 7,167,444 states and decided (`verify --instance-count 3 --entity BusinessPermit
   --memory 8GiB` takes 158 s); unreduced, it stopped at the memory limit. TLC needs a larger heap for such a cone: the 520,704-cell module checks at
-  `RDRA_TLC_HEAP=4g` in 98 s, and at the default 1 GB heap TLC runs out of memory and
-  `--with-tlc` reports a tool error with that hint. No sample at 1 or 2 instances, no engine
+  `-Xmx4g` in 98 s and runs out of memory at `-Xmx1g`; `--with-tlc` now gives it that heap
+  (#309, below). No sample at 1 or 2 instances, no engine
   corpus case, and no `reduction-diff.py` seed CI runs has a cone in the new range, so their
   output is unchanged.
 - `verify` no longer runs a sub-lifecycle again for each cone that shares it after the run

@@ -71,6 +71,16 @@ impl Job {
             JobKind::Whole(_) => (true, usize::MAX),
         }
     }
+
+    /// The bytes of the largest module the job runs, the `_Full` and `_WF` ones of a
+    /// property included: TLC's heap follows it (`TlcHeap::of`).
+    pub(super) fn module_bytes(&self) -> u64 {
+        let extra = match &self.kind {
+            JobKind::PropertyCone(p) => p.full.iter().chain(&p.wf).map(|s| s.tla.len()).max(),
+            JobKind::Cone(_) | JobKind::Explored(_) | JobKind::Whole(_) => None,
+        };
+        self.tla.len().max(extra.unwrap_or(0)) as u64
+    }
 }
 
 /// A cone as TLC checks it: the whole system's cone, its restricted system, and the names

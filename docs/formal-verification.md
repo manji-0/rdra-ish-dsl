@@ -66,7 +66,7 @@ finds a counterexample or the engines disagree. The TLC heap settings (`RDRA_TLC
 [cli-reference.md](./cli-reference.md#verify). `verify` runs within a memory limit, `16GiB`
 unless `--memory` or `memory` under `[verify]` in `rdra.toml` says otherwise. BFS takes all
 of it; under `--with-tlc` BFS takes half, and TLC runs only as many cones at once as their
-`-Xmx` fit in the other half (see [Memory limit](./cli-reference.md#memory-limit)).
+`-Xmx` and 256 MiB each fit in the other half (see [Memory limit](./cli-reference.md#memory-limit)).
 
 The `.cfg` names `SPECIFICATION Spec`, `INVARIANT TypeOK`, one `INVARIANT` per
 constraint, one `PROPERTY` per `after` assertion and temporal property, and
@@ -333,10 +333,14 @@ naming the property, so under `--with-tlc` each property runs alone: module
 `Cone_<Property>` with a `.cfg` that names that one `PROPERTY`. The property cones run with
 the other cones, in parallel.
 
-Under `--with-tlc`, up to 8 TLC cone runs go at once, the property cones and the cones with the most variables
-first, since those tend to be the long ones. Each run gets the cores divided by the runs
-at once, and no fewer than 2 TLC workers on 4 cores or more: once the short cones are
-done, a long cone on one worker would leave the other cores idle. With several workers
+Under `--with-tlc`, TLC cone runs go at once as long as their heaps fit TLC's share of the
+[memory limit](./cli-reference.md#memory-limit), the cones with the largest module first,
+then the property cones and the cones with the most variables, since those tend to be the
+long ones. Each run gets the cores divided by the runs going and queued, at most 8 TLC
+workers, and 1 when the runs outnumber the cores: past 4 to 8 workers a run gains no time
+and spends 50 to 70% more CPU (#309). A run's heap follows its module, 512 MiB per MiB of
+module text, at least `1g`, and a run that runs out of memory runs once more at twice the
+heap when the share holds it. With several workers
 TLC reaches the same states, so an `ok` is the `ok` of one worker, but it no longer finds
 a violation by the shortest trace. A safety cone that does not pass is therefore run
 again on one worker, and `verify` reports only that run, so a counterexample is the one a
@@ -733,9 +737,10 @@ The cone's vars split into a target side T and the rest S:
   326,400 and ran out of heap. The budget was 200,000 until #284 raised it to take
   food-permit-ops' `AfterAssert_SuspendBusiness_0` cone at 3 instances: 28,928 classes,
   520,704 cells (a 7.6 MB module), 7,167,444 states, which TLC checks in 98 s at `-Xmx4g`
-  and runs out of heap on at `-Xmx1g` and `-Xmx2g`. A cone between 200,000 cells and the
-  budget therefore needs `RDRA_TLC_HEAP=4g` under `--with-tlc`; at the default heap TLC
-  stops on it with a tool error and that hint.
+  and runs out of heap on at `-Xmx1g` and `-Xmx2g`. Under `--with-tlc` a cone's heap
+  follows its module, 512 MiB per MiB of module text (#309), so that cone gets `-Xmx4g`
+  at the default `--memory`; a module that needs more than TLC's share of the memory limit
+  is a tool error with the hint to raise `--memory` or set `RDRA_TLC_HEAP`.
 
 With inputs, the module prints each bit group as an operator `In_<g>(c)` over the T vars, the
 `Rise` table (one cell per class, `:>` and `@@` from `TLC`, so such a module `EXTENDS TLC`),

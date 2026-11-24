@@ -84,7 +84,7 @@ fn jvm_size(text: &str) -> Option<u64> {
 }
 
 /// `-Xmx` in the largest unit that divides `bytes`.
-fn xmx(bytes: u64) -> String {
+pub(crate) fn xmx(bytes: u64) -> String {
     match bytes {
         b if b.is_multiple_of(GIB) => format!("{}g", b / GIB),
         b if b.is_multiple_of(MIB) => format!("{}m", b / MIB),
