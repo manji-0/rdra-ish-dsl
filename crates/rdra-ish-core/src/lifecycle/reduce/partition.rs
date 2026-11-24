@@ -5,6 +5,7 @@ use std::sync::Arc;
 use super::cache::QuotientCache;
 use super::extended::Extended;
 use super::*;
+use crate::fasthash::FastMap;
 use crate::lifecycle::cone::VarSet;
 use crate::lifecycle::explore::{Adjacency, Caps};
 use crate::lifecycle::expr::State;
@@ -80,28 +81,54 @@ pub(super) fn quotient_blocks(
     rises: &[(u32, u32)],
     initial: &[u32],
 ) -> Vec<u32> {
-    let mut block = stuttering_blocks(n, silent, initial);
+    let stutter = Stutter::new(n, silent);
+    let mut block = stutter.blocks(initial);
     if rises.is_empty() {
         return block;
     }
+    let by_source = Adj::new(n, rises);
+    // Each state's signature: the blocks its rises enter, ascending, end to end.
+    let mut signatures: Vec<u32> = Vec::with_capacity(rises.len());
+    let mut ends: Vec<usize> = Vec::with_capacity(n);
     loop {
-        let mut signature: Vec<BTreeSet<u32>> = vec![BTreeSet::new(); n];
-        for &(x, y) in rises {
-            signature[x as usize].insert(block[y as usize]);
+        signatures.clear();
+        ends.clear();
+        for x in 0..n as u32 {
+            let start = signatures.len();
+            signatures.extend(by_source.of(x).iter().map(|y| block[*y as usize]));
+            signatures[start..].sort_unstable();
+            let mut kept = start;
+            for k in start..signatures.len() {
+                if k == start || signatures[k] != signatures[kept - 1] {
+                    signatures[kept] = signatures[k];
+                    kept += 1;
+                }
+            }
+            signatures.truncate(kept);
+            ends.push(kept);
         }
-        let mut index: HashMap<(u32, &BTreeSet<u32>), u32> = HashMap::new();
+        let mut index: FastMap<(u32, &[u32]), u32> = FastMap::default();
         let refined: Vec<u32> = (0..n)
             .map(|i| {
+                let from = i.checked_sub(1).map_or(0, |i| ends[i]);
                 let len = index.len() as u32;
-                *index.entry((block[i], &signature[i])).or_insert(len)
+                *index
+                    .entry((block[i], &signatures[from..ends[i]]))
+                    .or_insert(len)
             })
             .collect();
-        let before = block.iter().collect::<BTreeSet<_>>().len();
-        if index.len() == before {
+        if index.len() == distinct(&block) {
             return block;
         }
-        block = stuttering_blocks(n, silent, &refined);
+        block = stutter.blocks(&refined);
     }
+}
+
+/// How many distinct values `block` holds.
+fn distinct(block: &[u32]) -> usize {
+    let mut seen = vec![false; block.iter().max().map_or(0, |b| *b as usize + 1)];
+    block.iter().for_each(|b| seen[*b as usize] = true);
+    seen.iter().filter(|s| **s).count()
 }
 
 impl Quotient {
@@ -208,18 +235,30 @@ impl Classes {
         {
             return (Classified::Nothing, clean);
         }
-        let mut rep_of_block: HashMap<u32, u32> = HashMap::new();
+        // Each block's class, numbered as the blocks first show in discovery order, so a
+        // class's representative is its block's first state.
+        let mut class_of_block: Vec<u32> =
+            vec![u32::MAX; blocks.iter().max().map_or(0, |b| *b as usize + 1)];
         let mut reps: Vec<Box<[u8]>> = Vec::new();
         let mut class_of: HashMap<Box<[u8]>, u32> = HashMap::new();
         let mut class: Vec<u32> = Vec::with_capacity(n);
         for (i, st) in run.states.iter().enumerate() {
-            let c = *rep_of_block.entry(blocks[i]).or_insert_with(|| {
+            let c = &mut class_of_block[blocks[i] as usize];
+            if *c == u32::MAX {
+                *c = reps.len() as u32;
                 reps.push(st.0.into());
-                class_of.insert(st.0.into(), reps.len() as u32 - 1);
-                reps.len() as u32 - 1
-            });
-            class.push(c);
+                class_of.insert(st.0.into(), *c);
+            }
+            class.push(*c);
         }
+        #[cfg(test)]
+        assert!(
+            tests::same_partition(
+                &blocks,
+                &reference::quotient_blocks(n, &silent, &rise_edges, &initial)
+            ),
+            "the worklist partition is the reference's"
+        );
         // Every cone this quotient would reduce prints a cell per class and observed var at
         // the least, so past the budget no cone takes it: its moves and divergence marks are
         // not worth building.
@@ -546,30 +585,56 @@ impl<'a> Succ<'a> {
     }
 }
 
-/// Divergence-blind stuttering equivalence of a graph whose moves are all silent, refining
-/// `initial`, the block of each state: the coarsest partition in which, for any two blocks
-/// B and B', either every state of B reaches B' through B or none does. Returns each state's
-/// block.
-pub(super) fn stuttering_blocks(n: usize, edges: &[(u32, u32)], initial: &[u32]) -> Vec<u32> {
-    let mut block: Vec<u32> = initial.to_vec();
-    let mut nblocks = block.iter().max().map_or(0, |b| *b as usize + 1);
-    let inter: Vec<(u32, u32)> = edges.iter().copied().filter(|(a, b)| a != b).collect();
-    let pred_pairs: Vec<(u32, u32)> = inter.iter().map(|&(a, b)| (b, a)).collect();
-    let pred = Adj::new(n, &pred_pairs);
-    let mut members: Vec<Vec<u32>> = vec![Vec::new(); nblocks];
-    for (i, &b) in block.iter().enumerate() {
-        members[b as usize].push(i as u32);
+/// The silent edges between distinct states, by target and by source: what
+/// `Stutter::blocks` refines a partition by.
+struct Stutter {
+    n: usize,
+    pred: Adj,
+    succ: Adj,
+}
+
+impl Stutter {
+    fn new(n: usize, edges: &[(u32, u32)]) -> Self {
+        let inter: Vec<(u32, u32)> = edges.iter().copied().filter(|(a, b)| a != b).collect();
+        let pred_pairs: Vec<(u32, u32)> = inter.iter().map(|&(a, b)| (b, a)).collect();
+        Stutter {
+            n,
+            pred: Adj::new(n, &pred_pairs),
+            succ: Adj::new(n, &inter),
+        }
     }
-    let mut marked = vec![false; n];
-    loop {
-        let mut changed = false;
-        let mut splitter = 0;
-        while splitter < nblocks {
-            let mut stack: Vec<u32> = Vec::new();
-            let mut touched: Vec<u32> = Vec::new();
-            for &t in &members[splitter] {
-                for &p in pred.of(t) {
-                    if block[p as usize] != splitter as u32 && !marked[p as usize] {
+
+    /// Divergence-blind stuttering equivalence refining `initial`, the block of each state:
+    /// the coarsest partition in which, for any two blocks B and B', either every state of B
+    /// reaches B' through B or none does. Returns each state's block.
+    ///
+    /// A worklist of splitters. A block C is stable under a splitter S when all or none of
+    /// its states reach S through C; that reads only C, S and the edges, so it changes only
+    /// when C or S splits. Every block is stable under every splitter not on the list: a
+    /// splitter's pass splits each block into the states that reach it and the rest, both
+    /// stable under it; the parts of a split block go on the list, as splitters of the
+    /// others, and so does every block an edge from them enters, the only splitters a part
+    /// can have become unstable under (a state reaches S only by an edge into S). An empty
+    /// list leaves a stable partition, and a pass splits only states that are not equivalent,
+    /// so it is the coarsest one, whatever order the splitters come in.
+    fn blocks(&self, initial: &[u32]) -> Vec<u32> {
+        let mut block: Vec<u32> = initial.to_vec();
+        let nblocks = block.iter().max().map_or(0, |b| *b as usize + 1);
+        let mut members: Vec<Vec<u32>> = vec![Vec::new(); nblocks];
+        for (i, &b) in block.iter().enumerate() {
+            members[b as usize].push(i as u32);
+        }
+        let mut queued = vec![true; nblocks];
+        let mut work: VecDeque<u32> = (0..nblocks as u32).collect();
+        let mut marked = vec![false; self.n];
+        let mut stack: Vec<u32> = Vec::new();
+        let mut touched: Vec<u32> = Vec::new();
+        while let Some(splitter) = work.pop_front() {
+            queued[splitter as usize] = false;
+            touched.clear();
+            for &t in &members[splitter as usize] {
+                for &p in self.pred.of(t) {
+                    if block[p as usize] != splitter && !marked[p as usize] {
                         marked[p as usize] = true;
                         stack.push(p);
                         touched.push(p);
@@ -577,7 +642,7 @@ pub(super) fn stuttering_blocks(n: usize, edges: &[(u32, u32)], initial: &[u32])
                 }
             }
             while let Some(x) = stack.pop() {
-                for &p in pred.of(x) {
+                for &p in self.pred.of(x) {
                     if block[p as usize] == block[x as usize] && !marked[p as usize] {
                         marked[p as usize] = true;
                         stack.push(p);
@@ -585,32 +650,43 @@ pub(super) fn stuttering_blocks(n: usize, edges: &[(u32, u32)], initial: &[u32])
                     }
                 }
             }
-            let mut by_block: HashMap<u32, Vec<u32>> = HashMap::new();
-            for &x in &touched {
-                by_block.entry(block[x as usize]).or_default().push(x);
-            }
-            let mut split: Vec<(u32, Vec<u32>)> = by_block.into_iter().collect();
-            split.sort_unstable();
-            for (b, xs) in split {
-                if xs.len() < members[b as usize].len() {
-                    let nb = nblocks as u32;
-                    nblocks += 1;
-                    for &x in &xs {
-                        block[x as usize] = nb;
-                    }
-                    members.push(xs);
-                    members[b as usize].retain(|m| block[*m as usize] == b);
-                    changed = true;
-                }
-            }
             for &x in &touched {
                 marked[x as usize] = false;
             }
-            splitter += 1;
+            touched.sort_unstable_by_key(|&x| (block[x as usize], x));
+            let mut k = 0;
+            while k < touched.len() {
+                let b = block[touched[k] as usize];
+                let end = k + touched[k..]
+                    .iter()
+                    .take_while(|x| block[**x as usize] == b)
+                    .count();
+                if end - k < members[b as usize].len() {
+                    let nb = members.len() as u32;
+                    for &x in &touched[k..end] {
+                        block[x as usize] = nb;
+                    }
+                    members.push(touched[k..end].to_vec());
+                    members[b as usize].retain(|m| block[*m as usize] == b);
+                    queued.push(false);
+                    let mut push = |c: u32| {
+                        if !queued[c as usize] {
+                            queued[c as usize] = true;
+                            work.push_back(c);
+                        }
+                    };
+                    push(b);
+                    push(nb);
+                    for &x in members[b as usize].iter().chain(&members[nb as usize]) {
+                        for &y in self.succ.of(x) {
+                            push(block[y as usize]);
+                        }
+                    }
+                }
+                k = end;
+            }
         }
-        if !changed {
-            return block;
-        }
+        block
     }
 }
 
@@ -660,6 +736,120 @@ impl Adj {
 
     pub(super) fn of(&self, at: u32) -> &[u32] {
         &self.list[self.start[at as usize] as usize..self.start[at as usize + 1] as usize]
+    }
+}
+
+/// The partition as it was computed before the worklist (#252): every block a splitter in
+/// each sweep, sweeps until one splits nothing, and the rises' signatures as sets. The
+/// tests hold the worklist to it.
+#[cfg(test)]
+pub(super) mod reference {
+    use std::collections::{BTreeSet, HashMap};
+
+    use super::Adj;
+
+    /// The partition of a run of the extended sub-lifecycle: the coarsest one that refines
+    /// `initial` (the states' `obs` and inputs), is divergence-blind stuttering stable under the
+    /// silent edges, and is strongly stable under the rise edges: two states of a block reach the
+    /// same blocks by a rise. The blocks refine the inputs, so the block a rise enters names the
+    /// inputs it set, and the second condition says that two equivalent states stay equivalent
+    /// under every rise. Returns each state's block.
+    pub(super) fn quotient_blocks(
+        n: usize,
+        silent: &[(u32, u32)],
+        rises: &[(u32, u32)],
+        initial: &[u32],
+    ) -> Vec<u32> {
+        let mut block = stuttering_blocks(n, silent, initial);
+        if rises.is_empty() {
+            return block;
+        }
+        loop {
+            let mut signature: Vec<BTreeSet<u32>> = vec![BTreeSet::new(); n];
+            for &(x, y) in rises {
+                signature[x as usize].insert(block[y as usize]);
+            }
+            let mut index: HashMap<(u32, &BTreeSet<u32>), u32> = HashMap::new();
+            let refined: Vec<u32> = (0..n)
+                .map(|i| {
+                    let len = index.len() as u32;
+                    *index.entry((block[i], &signature[i])).or_insert(len)
+                })
+                .collect();
+            let before = block.iter().collect::<BTreeSet<_>>().len();
+            if index.len() == before {
+                return block;
+            }
+            block = stuttering_blocks(n, silent, &refined);
+        }
+    }
+
+    /// Divergence-blind stuttering equivalence of a graph whose moves are all silent, refining
+    /// `initial`, the block of each state: the coarsest partition in which, for any two blocks
+    /// B and B', either every state of B reaches B' through B or none does. Returns each state's
+    /// block.
+    pub(super) fn stuttering_blocks(n: usize, edges: &[(u32, u32)], initial: &[u32]) -> Vec<u32> {
+        let mut block: Vec<u32> = initial.to_vec();
+        let mut nblocks = block.iter().max().map_or(0, |b| *b as usize + 1);
+        let inter: Vec<(u32, u32)> = edges.iter().copied().filter(|(a, b)| a != b).collect();
+        let pred_pairs: Vec<(u32, u32)> = inter.iter().map(|&(a, b)| (b, a)).collect();
+        let pred = Adj::new(n, &pred_pairs);
+        let mut members: Vec<Vec<u32>> = vec![Vec::new(); nblocks];
+        for (i, &b) in block.iter().enumerate() {
+            members[b as usize].push(i as u32);
+        }
+        let mut marked = vec![false; n];
+        loop {
+            let mut changed = false;
+            let mut splitter = 0;
+            while splitter < nblocks {
+                let mut stack: Vec<u32> = Vec::new();
+                let mut touched: Vec<u32> = Vec::new();
+                for &t in &members[splitter] {
+                    for &p in pred.of(t) {
+                        if block[p as usize] != splitter as u32 && !marked[p as usize] {
+                            marked[p as usize] = true;
+                            stack.push(p);
+                            touched.push(p);
+                        }
+                    }
+                }
+                while let Some(x) = stack.pop() {
+                    for &p in pred.of(x) {
+                        if block[p as usize] == block[x as usize] && !marked[p as usize] {
+                            marked[p as usize] = true;
+                            stack.push(p);
+                            touched.push(p);
+                        }
+                    }
+                }
+                let mut by_block: HashMap<u32, Vec<u32>> = HashMap::new();
+                for &x in &touched {
+                    by_block.entry(block[x as usize]).or_default().push(x);
+                }
+                let mut split: Vec<(u32, Vec<u32>)> = by_block.into_iter().collect();
+                split.sort_unstable();
+                for (b, xs) in split {
+                    if xs.len() < members[b as usize].len() {
+                        let nb = nblocks as u32;
+                        nblocks += 1;
+                        for &x in &xs {
+                            block[x as usize] = nb;
+                        }
+                        members.push(xs);
+                        members[b as usize].retain(|m| block[*m as usize] == b);
+                        changed = true;
+                    }
+                }
+                for &x in &touched {
+                    marked[x as usize] = false;
+                }
+                splitter += 1;
+            }
+            if !changed {
+                return block;
+            }
+        }
     }
 }
 
@@ -732,6 +922,67 @@ property JobStarts eventually(Job.status == running).fair(Start)
                 q.classes.loops,
                 vec![key_cycles],
                 "the class can loop exactly when the key's status cycles"
+            );
+        }
+    }
+
+    /// Two partitions are the same up to the numbering of their blocks.
+    pub(super) fn same_partition(a: &[u32], b: &[u32]) -> bool {
+        let mut ab: HashMap<u32, u32> = HashMap::new();
+        let mut ba: HashMap<u32, u32> = HashMap::new();
+        a.len() == b.len()
+            && a.iter().zip(b).all(|(x, y)| {
+                *ab.entry(*x).or_insert(*y) == *y && *ba.entry(*y).or_insert(*x) == *x
+            })
+    }
+
+    /// A small deterministic generator, so a failing graph can be named by its seed.
+    fn lcg(seed: &mut u64) -> u64 {
+        *seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        *seed >> 33
+    }
+
+    /// The worklist partition is the one the sweeps of the reference compute, on random graphs
+    /// with silent edges, self-loops, cycles, and rises.
+    #[test]
+    fn the_worklist_partition_is_the_partition_of_repeated_sweeps() {
+        for seed0 in 0..400u64 {
+            let mut seed = seed0;
+            let n = 1 + (lcg(&mut seed) % 40) as usize;
+            let silent: Vec<(u32, u32)> = (0..lcg(&mut seed) % (3 * n as u64 + 1))
+                .map(|_| {
+                    (
+                        (lcg(&mut seed) % n as u64) as u32,
+                        (lcg(&mut seed) % n as u64) as u32,
+                    )
+                })
+                .collect();
+            let rises: Vec<(u32, u32)> = (0..lcg(&mut seed) % (n as u64 + 1))
+                .map(|_| {
+                    (
+                        (lcg(&mut seed) % n as u64) as u32,
+                        (lcg(&mut seed) % n as u64) as u32,
+                    )
+                })
+                .collect();
+            let labels = 1 + lcg(&mut seed) % 4;
+            let initial: Vec<u32> = {
+                let raw: Vec<u64> = (0..n).map(|_| lcg(&mut seed) % labels).collect();
+                let mut index: HashMap<u64, u32> = HashMap::new();
+                raw.iter()
+                    .map(|l| {
+                        let len = index.len() as u32;
+                        *index.entry(*l).or_insert(len)
+                    })
+                    .collect()
+            };
+            let new = quotient_blocks(n, &silent, &rises, &initial);
+            let old = reference::quotient_blocks(n, &silent, &rises, &initial);
+            assert!(
+                same_partition(&new, &old),
+                "seed {seed0}: {new:?} vs {old:?}"
             );
         }
     }
