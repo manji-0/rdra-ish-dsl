@@ -60,7 +60,10 @@ pub(crate) fn arg_span(arg: &PredicateArg) -> Span {
             let right = expr_span(b);
             left.start..right.end
         }
-        PredicateArg::Lit(_) | PredicateArg::Transition { .. } | PredicateArg::Card(_) => 0..0,
+        PredicateArg::Lit(_)
+        | PredicateArg::Transition { .. }
+        | PredicateArg::Card(_)
+        | PredicateArg::Int(_) => 0..0,
     }
 }
 

@@ -57,7 +57,10 @@ Also ask:
 4. For downstream automation, model BUC-level causality first:
    `triggers(Event, TargetBuc)`. When the concrete entry action is known, refine with
    `contains(TargetBuc, EntryUseCase)` and `triggers(Event, EntryUseCase)` without
-   removing the BUC-level trigger.
+   removing the BUC-level trigger. The entry use case runs after a raise, as often as its
+   states allow. When it must run once per raise (each payment posted once, a queue of
+   capacity 2), write `triggers(Event, EntryUseCase).counted(2)`: `verify` then also
+   checks `EventOverflow_<E>_<Event>_<EntryUseCase>`, a raise with 2 already pending.
 5. Connect an external system through events: `raises(ExtSystem, Event)` inbound,
    `triggers(Event, ExtSystem)` outbound.
 6. Declare a `timer` and `triggers(Timer, UseCase)` for a schedule that starts a use

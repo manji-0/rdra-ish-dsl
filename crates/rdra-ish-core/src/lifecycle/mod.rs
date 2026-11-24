@@ -36,7 +36,7 @@ pub use diag::{
 };
 pub use explore::{
     store_bytes, Adjacency, Caps, ComponentRun, Edge, Estimate, Graph, Held, LabelledEdges,
-    LassoFault, Layers, PropertyVerdict, ReducedVerdict, Spurious, States,
+    LassoFault, Layers, PropertyVerdict, ReducedVerdict, RunEnd, Spurious, States,
 };
 pub use expr::{State, StateSlice};
 pub use findings::{
@@ -217,8 +217,19 @@ impl TransitionSystem {
             VarKind::Run { entity, usecase } => {
                 format!("{}._run_{usecase}", self.entity(*entity).id)
             }
-            VarKind::Raised { entity, event } => {
+            VarKind::Raised {
+                entity,
+                event,
+                handler: None,
+            } => {
                 format!("{}._raised_{event}", self.entity(*entity).id)
+            }
+            VarKind::Raised {
+                entity,
+                event,
+                handler: Some(uc),
+            } => {
+                format!("{}._pending_{event}_{uc}", self.entity(*entity).id)
             }
             VarKind::Now => "now".to_string(),
         }

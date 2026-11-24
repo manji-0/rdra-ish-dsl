@@ -1,6 +1,6 @@
 //! The BFS itself: interning bindings, admitting states, and checking each move.
 
-use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::ops::Range;
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -18,7 +18,7 @@ use crate::memory::Charge;
 use crate::parallel::Helpers;
 
 use super::store::binding_bytes;
-use super::{Bfs, Bindings, Caps, Edge, EntityView, Moves, Reach, States, Threads};
+use super::{Bfs, Bindings, Caps, Edge, EntityView, Moves, Reach, States, Threads, Violated};
 
 /// States one worker expands at a time. Fewer than two chunks of waiting states are
 /// expanded on the caller's thread, so a small run starts no worker.
@@ -150,6 +150,43 @@ impl<'scope, 'env> Workers<'scope, 'env> {
     }
 }
 
+impl Violated {
+    fn new(ts: &TransitionSystem) -> Self {
+        let mut names: HashMap<&str, u32> = HashMap::new();
+        let all = ts.invariants.iter().map(|i| i.name.as_str());
+        let name_of: Vec<u32> = all
+            .chain(ts.after.iter().map(|a| a.name.as_str()))
+            .map(|name| {
+                let next = names.len() as u32;
+                *names.entry(name).or_insert(next)
+            })
+            .collect();
+        Violated {
+            name_of,
+            reported: vec![false; names.len()],
+            open: names.len(),
+        }
+    }
+
+    fn has(&self, check: usize) -> bool {
+        self.reported[self.name_of[check] as usize]
+    }
+
+    /// Marks `check` violated; false when its name already was.
+    fn insert(&mut self, check: usize) -> bool {
+        let bit = &mut self.reported[self.name_of[check] as usize];
+        let new = !*bit;
+        *bit = true;
+        self.open -= usize::from(new);
+        new
+    }
+
+    /// The system has a check, and every one has a violation.
+    fn all(&self) -> bool {
+        self.open == 0 && !self.reported.is_empty()
+    }
+}
+
 impl Bindings {
     fn id(&mut self, act: ActId, params: &[u8]) -> u32 {
         if self.index.len() <= act.index() {
@@ -175,9 +212,10 @@ impl<'t> Bfs<'t> {
             seen: Default::default(),
             keys: Default::default(),
             complete: true,
+            checks_failed: false,
             diags: Vec::new(),
             views: ts.entities.iter().map(|_| EntityView::default()).collect(),
-            violated: HashSet::new(),
+            violated: Violated::new(ts),
             violations: Vec::new(),
             parents: Vec::new(),
             edges: Vec::new(),
@@ -204,7 +242,7 @@ impl<'t> Bfs<'t> {
                     }
                 }
             }
-            if !self.admit(&s, None) {
+            if !self.admit(&s, None) || self.stop_if_all_failed() {
                 return;
             }
         }
@@ -247,7 +285,8 @@ impl<'t> Bfs<'t> {
         }
     }
 
-    /// Reads `moves[range]`, the moves from `states[at]`; false when a cap stops the run.
+    /// Reads `moves[range]`, the moves from `states[at]`; false when a cap stops the run, or
+    /// the last open check fails under `Caps::stop_when_all_violated`.
     /// `s2` is a state of the system, overwritten with each successor in turn.
     fn take(&mut self, at: usize, moves: &Moves, range: Range<usize>, s2: &mut State) -> bool {
         self.layers.read(at);
@@ -281,8 +320,24 @@ impl<'t> Bfs<'t> {
                 }
             };
             self.edges.push(Edge { from, to, binding });
+            // After the edge, so the trace of a violation at `to` reaches it.
+            if self.stop_if_all_failed() {
+                return false;
+            }
         }
         true
+    }
+
+    /// Ends the run when it stops once every check has failed and every one now has: the
+    /// counterexamples are BFS's first, so the shortest, and any further state could only
+    /// repeat a violation.
+    fn stop_if_all_failed(&mut self) -> bool {
+        let stop = self.caps.stop_when_all_violated && self.violated.all();
+        if stop {
+            self.complete = false;
+            self.checks_failed = true;
+        }
+        stop
     }
 
     /// Adds a new state; false when the state cap or the memory limit stops the run.
@@ -476,8 +531,8 @@ impl<'t> Bfs<'t> {
 
     /// Reports the violation unless its rule already has one; the trace is filled in when the
     /// run ends.
-    fn violation(&mut self, name: &str, diag: Diag, reach: Reach) {
-        if self.violated.insert(name.to_string()) {
+    fn violation(&mut self, check: usize, diag: Diag, reach: Reach) {
+        if self.violated.insert(check) {
             self.violations.push((self.diags.len(), reach));
             self.diags.push(diag);
         }
@@ -485,20 +540,21 @@ impl<'t> Bfs<'t> {
 
     fn check_invariants(&mut self, s: &StateSlice, at: u32) {
         let ts = self.ts;
-        for (i, inv) in ts.invariants.iter().enumerate() {
-            if self.violated.contains(&inv.name) {
+        for i in 0..ts.invariants.len() {
+            if self.violated.has(i) {
                 continue;
             }
             if let Some(d) = ts.invariant_violation(i, s) {
-                self.violation(&inv.name, d, Reach::State { at, inv: i });
+                self.violation(i, d, Reach::State { at, inv: i });
             }
         }
     }
 
     fn check_after(&mut self, from: u32, act: ActId, params: &[u8], s2: &StateSlice) {
         let ts = self.ts;
-        for (i, a) in ts.after.iter().enumerate() {
-            if self.violated.contains(&a.name) {
+        let first = ts.invariants.len();
+        for i in 0..ts.after.len() {
+            if self.violated.has(first + i) {
                 continue;
             }
             if let Some(d) = ts.after_violation(i, act, params, s2) {
@@ -509,7 +565,7 @@ impl<'t> Bfs<'t> {
                     to: s2.to_owned(),
                     after: i,
                 };
-                self.violation(&a.name, d, reach);
+                self.violation(first + i, d, reach);
             }
         }
     }

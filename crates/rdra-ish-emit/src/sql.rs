@@ -984,6 +984,11 @@ fn inv_text(inv: &Invariant) -> String {
             role,
         } => format!("{child} -> {parent} ({role})"),
         InvText::UniqueSet { entity, columns } => format!("{entity} unique ({columns})"),
+        InvText::Overflow {
+            event,
+            usecase,
+            cap,
+        } => format!("{event} has at most {cap} raises pending for {usecase}"),
     }
 }
 

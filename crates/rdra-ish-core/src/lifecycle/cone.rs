@@ -260,10 +260,25 @@ impl TransitionSystem {
             .collect()
     }
 
+    /// Whether `v` is the counter of a counted edge (`triggers(Ev, UC).counted(k)`), which is
+    /// not monotone and so is never havocked or taken as an input of a sub-lifecycle
+    /// (docs/design/counted-events.md).
+    pub(crate) fn is_counted(&self, v: VarId) -> bool {
+        matches!(
+            self.var(v).kind,
+            VarKind::Raised {
+                handler: Some(_),
+                ..
+            }
+        )
+    }
+
     /// The smallest closed set holding `seed` and everything the `keep` actions read, except
-    /// that a mark is read exactly only by a `keep` action or when every action that sets it
+    /// that a latch is read exactly only by a `keep` action or when every action that sets it
     /// is in the set by its own writes; otherwise it stays out, with the raiser's lifecycle,
-    /// and `restrict_to` drops the guards on it (docs/state-derivation.md, "Triggers").
+    /// and `restrict_to` drops the guards on it (docs/state-derivation.md, "Triggers"). A
+    /// counter is always read exactly: dropping its guard would drop the handler's decrement
+    /// with it, and the handler's and the raisers' transitions read it anyway.
     pub fn cone(&self, seed: &VarSet, keep: &BTreeSet<ActId>) -> VarSet {
         let reads: Vec<VarSet> = self.actions.iter().map(|a| self.plain_reads(a)).collect();
         let marks: Vec<Vec<(VarId, VarSet)>> =
@@ -289,6 +304,7 @@ impl TransitionSystem {
             for i in (0..self.actions.len()).filter(|&i| taken[i]) {
                 for (mark, r) in &marks[i] {
                     let exact = keep.contains(&ActId::at(i))
+                        || self.is_counted(*mark)
                         || (0..self.actions.len())
                             .filter(|&j| writes[j].contains(mark))
                             .all(|j| taken[j]);
