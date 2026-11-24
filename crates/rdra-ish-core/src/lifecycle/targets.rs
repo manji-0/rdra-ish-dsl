@@ -14,7 +14,7 @@ use super::types::{
     Term, VarKind,
 };
 use super::view::{entity_view, AbstractValue, EntityStateResult};
-use super::TransitionSystem;
+use super::{QuotientCache, TransitionSystem};
 use crate::memory::{watch, MemorySize};
 use crate::model::{EntityKey, SemanticModel};
 use crate::parallel::{in_parallel, jobs};
@@ -204,20 +204,32 @@ struct ArmSoFar {
 impl TransitionSystem {
     /// Explores each target on its cone; targets with the same cone share one run.
     pub fn explore_targets(&self, targets: &[Target], caps: Caps) -> TargetExploration {
-        self.explore_targets_with(targets, caps, false)
+        self.explore_targets_with(targets, caps, None)
     }
 
     /// `explore_targets` with each cone reduced by its independent sub-lifecycle
     /// (`TransitionSystem::reduced`), as `verify` explores.
     pub fn explore_targets_reduced(&self, targets: &[Target], caps: Caps) -> TargetExploration {
-        self.explore_targets_with(targets, caps, true)
+        self.explore_targets_reduced_in(targets, caps, &QuotientCache::new())
     }
 
+    /// `explore_targets_reduced`, sharing quotients through `cache` with the other cones
+    /// reduced in it.
+    pub fn explore_targets_reduced_in(
+        &self,
+        targets: &[Target],
+        caps: Caps,
+        cache: &QuotientCache,
+    ) -> TargetExploration {
+        self.explore_targets_with(targets, caps, Some(cache))
+    }
+
+    /// `reduce` holds the quotients the cones are reduced with; `None` leaves them whole.
     fn explore_targets_with(
         &self,
         targets: &[Target],
         caps: Caps,
-        reduce: bool,
+        reduce: Option<&QuotientCache>,
     ) -> TargetExploration {
         let mut groups: Vec<(Cone, Vec<Target>)> = Vec::new();
         let mut index: HashMap<Cone, usize> = HashMap::new();
@@ -236,11 +248,12 @@ impl TransitionSystem {
         let explore = |cone: &Cone, shared: &[Target], caps: Caps| {
             // A reduction keeps what LTL reads, not `AG EF`: a `can_reach` cone stays whole.
             let reach = shared.iter().any(|t| matches!(t, Target::Reach(_)));
-            let system = if reduce && !reach {
-                let seeds = shared.iter().map(|t| self.target_seed(*t));
-                self.reduced_cone(cone, seeds, caps)
-            } else {
-                self.restrict_to(&cone.vars, &cone.keep)
+            let system = match reduce.filter(|_| !reach) {
+                Some(cache) => {
+                    let seeds = shared.iter().map(|t| self.target_seed(*t));
+                    self.reduced_cone_in(cone, seeds, caps, cache)
+                }
+                None => self.restrict_to(&cone.vars, &cone.keep),
             };
             // A cone of checks alone is decided once each has failed; an entity target or a
             // `can_reach` reads the whole graph.

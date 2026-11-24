@@ -45,7 +45,7 @@ pub use findings::{
 };
 pub use guards::{GuardDeps, GuardKind, GuardSubject};
 pub use lasso::{Fairness, LassoReplay, Loop, Unfair};
-pub use reduce::{ClassMove, Divergence, Fold, FoldKey, Reduction, Step};
+pub use reduce::{ClassMove, Divergence, Fold, FoldKey, QuotientCache, Reduction, Step};
 pub use select::{NotChecked, Scope, Selection, UnknownId, Without};
 pub use states::{derive_states, derive_states_built, BoundsLine, FindingTally, StatesReport};
 pub use targets::{ConeRun, Subject, Tally, TargetExploration, Undecided, UndecidedWhy};
@@ -75,7 +75,7 @@ pub struct Built {
     pub selection: Selection,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TransitionSystem {
     pub bounds: Bounds,
     entities: Vec<EntityDecl>,

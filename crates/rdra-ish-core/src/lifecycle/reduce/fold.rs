@@ -10,7 +10,7 @@ use crate::lifecycle::TransitionSystem;
 /// and guards and, in the extended sub-lifecycle, reads one bit per slot of its key in place
 /// of its guards on T. For a `Param` key the bit holds when, for some binding of the other T
 /// params, every folded guard holds, each T param whose binding needs a present row on one.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Fold {
     /// The cone's action.
     pub(super) act: ActId,

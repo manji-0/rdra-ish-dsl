@@ -173,6 +173,21 @@ impl MemoryPool {
         self.room
     }
 
+    /// What the pool holds now.
+    #[cfg(test)]
+    pub(crate) fn held(&self) -> u64 {
+        self.held.load(Ordering::Relaxed)
+    }
+
+    /// The command's pool this one is carved from, or this one.
+    pub(crate) fn root(&'static self) -> &'static MemoryPool {
+        let mut at = self;
+        while let Some(parent) = at.parent {
+            at = parent;
+        }
+        at
+    }
+
     /// Takes `bytes` from the pool; false, taking nothing, when the pool has less left.
     fn charge(&self, bytes: u64) -> bool {
         let taken = self
@@ -234,6 +249,14 @@ impl Charge {
         covered
     }
 
+    /// A charge of `bytes` to `pool` for data held outside a run; `None`, taking nothing, when
+    /// the pool has less left. Unlike `cover`, it leaves what `watch` sees alone: holding it is
+    /// not a run's growth.
+    pub(crate) fn hold(pool: &'static MemoryPool, bytes: u64) -> Option<Charge> {
+        let mut charge = Charge::new(pool);
+        charge.grow_to(bytes).then_some(charge)
+    }
+
     /// Lowers the charge to `bytes`, giving the rest back.
     pub(crate) fn shrink_to(&mut self, bytes: u64) {
         if bytes < self.bytes {
@@ -284,11 +307,17 @@ thread_local! {
 }
 
 /// `f()`, and what its runs on this thread met. Each run's bytes are the same on every
-/// machine; which run went first, and so what the others held, is not.
+/// machine; which run went first, and so what the others held, is not. A `watch` inside
+/// another one reports to both: the outer one sees what the inner one saw.
 pub(crate) fn watch<R>(f: impl FnOnce() -> R) -> (R, Watched) {
-    WATCH.set(Watched::default());
+    let outer = WATCH.replace(Watched::default());
     let r = f();
-    (r, WATCH.replace(Watched::default()))
+    let inner = WATCH.get();
+    WATCH.set(Watched {
+        crowded: outer.crowded || inner.crowded,
+        peak: outer.peak.max(inner.peak),
+    });
+    (r, inner)
 }
 
 #[cfg(test)]

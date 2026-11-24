@@ -5,8 +5,8 @@ use super::WholeRun;
 use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_output::Outcome;
 use rdra_ish_core::lifecycle::{
-    Caps, ComponentRun, Diag, EntId, NotChecked, PropertyVerdict, RunEnd, Scope, Selection,
-    Severity, StateDiag, Target, TargetExploration, TransitionSystem, Undecided,
+    Caps, ComponentRun, Diag, EntId, NotChecked, PropertyVerdict, QuotientCache, RunEnd, Scope,
+    Selection, Severity, StateDiag, Target, TargetExploration, TransitionSystem, Undecided,
 };
 use rdra_ish_core::{in_parallel, ResolvedProgram, SemanticModel};
 use std::collections::BTreeSet;
@@ -54,6 +54,7 @@ pub(super) const STATE_MODEL_TLC_STATES: usize = 100_000;
 /// `Deadlock`s (errors, or warnings at the bound), and the `NeverRuns` warnings, rendered;
 /// then BFS on each `can_reach` cone, unreduced; then the `not checked:` block and one
 /// summary line each. Every run is held to `caps`, the state cap and the memory limit.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn state_models(
     program: &ResolvedProgram,
     model: &SemanticModel,
@@ -62,6 +63,7 @@ pub(super) fn state_models(
     selection: &Selection,
     caps: Caps,
     with_tlc: bool,
+    quotients: QuotientCache,
 ) -> Bfs {
     let pick = |want: fn(&Target) -> bool| -> Vec<Target> {
         selection.targets.iter().copied().filter(want).collect()
@@ -72,7 +74,10 @@ pub(super) fn state_models(
         true => ts.reach_targets(),
         false => Vec::new(),
     };
-    let mut run = ts.explore_targets_reduced(&entities, caps);
+    let mut run = ts.explore_targets_reduced_in(&entities, caps, &quotients);
+    // The entity pass is the last that reduces a cone: what the cache holds goes back to the
+    // pool before the runs that follow, which see it as they would without the cache.
+    drop(quotients);
     // Its own call, unreduced: a cone shared with an entity target would share its run.
     let reach_run = (!reach.is_empty()).then(|| ts.explore_targets(&reach, caps));
     if !scope.bucs.is_empty() {
