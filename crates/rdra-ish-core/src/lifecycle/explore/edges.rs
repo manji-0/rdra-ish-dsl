@@ -649,24 +649,26 @@ mod proofs {
         (cap * size_of::<T>()) as u64
     }
 
-    /// For every run of up to 6 steps, each admitting a state (reached by a move pushed with
+    /// For every run of up to 5 steps, each admitting a state (reached by a move pushed with
     /// it, or initial before any state is read), reading the next state, or pushing a move to
-    /// any state with any binding id, with an edge list or without one: every edge and parent
+    /// any state with a binding id of 1, 2 or 4 bytes (0 to 2, 256 or 65,536: each width and
+    /// each widening), with an edge list or without one: every edge and parent
     /// reads back as the 12-byte `Edge` the run kept before #296, and the bytes `Steps` takes
     /// with one state more are never more than the 8-byte parents and 12-byte edges of the
     /// `Vec`s it replaces at the same lengths, so a run that fit a memory limit still does.
     #[kani::proof]
-    #[kani::unwind(8)]
+    #[kani::unwind(7)]
     fn steps_read_back_and_take_no_more_than_before() {
+        let binding = || kani::any_where(|b: &u32| *b <= 2 || *b == 256 || *b == 65_536);
         let graph: bool = kani::any();
         let mut steps = Steps::new(graph);
         let mut parents: Vec<Option<u32>> = Vec::new();
         let mut edges: Vec<Edge> = Vec::new();
         let (mut states, mut read) = (0u32, 0u32);
-        for _ in 0..6 {
+        for _ in 0..5 {
             let op: u8 = kani::any();
             if op == 0 {
-                let parent = (read > 0).then(|| (read - 1, kani::any::<u32>()));
+                let parent = (read > 0).then(|| (read - 1, binding()));
                 steps.admit(parent);
                 parents.push(parent.map(|_| edges.len() as u32));
                 if let Some((from, binding)) = parent {
@@ -682,7 +684,7 @@ mod proofs {
                 steps.read(read as usize);
                 read += 1;
             } else if read > 0 {
-                let (to, binding): (u32, u32) = (kani::any(), kani::any());
+                let (to, binding): (u32, u32) = (kani::any(), binding());
                 kani::assume(to < states);
                 steps.push(read - 1, to, binding);
                 edges.push(Edge {

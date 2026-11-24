@@ -803,11 +803,13 @@ Without an estimate from the layers, the message falls back on the cone's variab
 most states the cone can have is the product of their domains, and if finishing at that
 many takes no more than `1TiB` the message names that size as what finishing needs at the
 least, if all of them are reachable. The bound is loose: most of the product is never
-reached. A size is computed with `(w + 12)·p2(n) + 5·buckets(n) + 12·p2(e)` bytes for `n`
-states of `w` bytes and `e` edges (`p2` rounds up to a power of two, `buckets` to a power of
-two of at least `n·8/7`): the run keeps each state once, in one buffer, and indexes it by
-number. On the sample cones of a thousand states and more, at `check` and `verify` bounds, it
-stood 0.9% to 5.2% over what the run counts. `e` is the edges per
+reached. A size is computed with `(w + 12)·p2(n) + 5·buckets(n) + (4 + b)·p2(e)` bytes for
+`n` states of `w` bytes and `e` edges, where `b` is the 1, 2 or 4 bytes of a binding id
+(`p2` rounds up to a power of two, `buckets` to a power of two of at least `n·8/7`): the run
+keeps each state once, in one buffer, indexes it by number, and keeps an edge as its target
+and binding id. A cone that stops once every check fails keeps no edges, and its size is
+`(w + 8 + b)·p2(n) + 5·buckets(n)`. The size is never under what the run counts at its
+end. `e` is the edges per
 expanded state seen so far times `n`; early depths have fewer, so that part is low. Every
 figure is for the one cone; the cones share the limit, so allow more than it says.
 
