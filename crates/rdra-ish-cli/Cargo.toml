@@ -14,6 +14,8 @@ path = "src/main.rs"
 [features]
 # `rdra-ish-core`'s `shadow`: every fast function with a reference twin is checked against it.
 shadow = ["rdra-ish-core/shadow"]
+# `rdra-ish-core`'s `perf`, and a global allocator that counts what it hands out.
+perf = ["rdra-ish-core/perf"]
 
 [dependencies]
 rdra-ish-syntax = { path = "../rdra-ish-syntax" }

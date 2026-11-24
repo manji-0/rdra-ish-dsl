@@ -1,0 +1,36 @@
+// trap: a pre-existing 1:1 child starts at its own parent's slot, so the two permute together.
+// Accounts and their balances are master data: each balance starts linked to the account in
+// its own slot, at any tier and any amount. Freezing an account whose balance is high breaks
+// the rule after one step. Up to instance symmetry the account and its balance are one row
+// of one class; a group that sorted the accounts and the balances apart would store an
+// initial state whose balances name other slots, which is no initial state, and the lifted
+// counterexample would not start where the model starts.
+// expect MultiForbidden_Account_0: native=counterexample tlc=counterexample z3=unproved
+// expect Unique_Balance_Account: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+variation Tier "等級" {
+  basic "一般"
+  gold "上位"
+}
+
+variation Amount "金額" {
+  low "少額"
+  high "高額"
+}
+
+entity Account "口座" {
+  id: Int @pk
+  tier: Tier
+  state: Enum(open, frozen) @default(open)
+}
+
+entity Balance "残高" {
+  id: Int @pk
+  amount: Amount
+}
+
+relate(Balance, Account, 1:1)
+
+usecase Freeze "凍結"
+transitions(Freeze, Account.state, open -> frozen)
+
+forbidden(Account, Balance, Account.state == frozen, Balance.amount == high).along(Balance, Account)

@@ -482,7 +482,8 @@ not assign.
 
 `verify` also explores each entity's cone with BFS at the same bounds, with no state
 cap: `--memory` stops a cone, and `--max-states <N>` caps every BFS run (the `bounds:` line
-names the cap or says `no state cap`). The pattern cap is 256 per entity (`--max-patterns`). Each state of a
+names the cap or says `no state cap`). No run of `verify` builds an entity view, so
+`--max-patterns` stops none of them. Each state of a
 state model must have a witness there (see
 [state-derivation.md](./state-derivation.md#state-models-and-witnesses)). A `NoWitness`
 error fails `verify` even when every invariant and property holds: the run prints
@@ -1053,8 +1054,7 @@ Cone_Forbidden_CartLine_0 [Forbidden_CartLine_0, Check_CartLine_qty_0]: ok (8 st
 
 Such a cone counts as decided, so a run whose only open checks it decides prints
 `result: ok`. A cone that also checks an `after` assertion, or a rule z3 leaves unproved or
-out of scope, stays `not decided`, as does a cone stopped at `--max-states` or
-`--max-patterns`. Otherwise the proof does not change the exit status unless
+out of scope, stays `not decided`, as does a cone stopped at `--max-states`. Otherwise the proof does not change the exit status unless
 `--deny-unproved` is given. Every rule of
 the domain samples proves, insurance-claim-ops' with the lemma above.
 `tests/proof_equivalence.rs` checks on every sample that no rule it proves has a BFS

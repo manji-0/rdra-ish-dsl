@@ -5,8 +5,9 @@
 //!
 //! The key is everything `Classes::of` reads: the extended sub-lifecycle (`TransitionSystem`
 //! compared field by field, its bounds and each entity's slots included), its `obs`, inputs
-//! and rises, and the caps that can stop its runs (patterns, states, stopping once every
-//! check failed, and whether a pool is charged).
+//! and rises, and the caps that can stop its runs (states, stopping once every check failed,
+//! and whether a pool is charged). The pattern cap is not in it: the run of S gathers no
+//! view, so that cap cannot stop it (#251, #296).
 //! Two keys are equal only when `==` says so; nothing is matched by a hash alone.
 //!
 //! The memory limit is the one input not in the key, and a deadline is not either, so caps
@@ -82,7 +83,6 @@ struct Key {
     obs: VarSet,
     inputs: VarSet,
     rise: Vec<bool>,
-    patterns: usize,
     states: usize,
     stop_when_all_violated: bool,
     charged: bool,
@@ -95,7 +95,6 @@ impl Key {
             obs: ext.obs_local.clone(),
             inputs: ext.inputs_local.clone(),
             rise: ext.rise.clone(),
-            patterns: caps.patterns,
             states: caps.states,
             stop_when_all_violated: caps.stop_when_all_violated,
             charged: caps.memory.is_some(),
@@ -108,13 +107,11 @@ impl Key {
             obs,
             inputs,
             rise,
-            patterns,
             states,
             stop_when_all_violated,
             charged,
         } = self;
-        *patterns == caps.patterns
-            && *states == caps.states
+        *states == caps.states
             && *stop_when_all_violated == caps.stop_when_all_violated
             && *charged == caps.memory.is_some()
             && *rise == ext.rise
@@ -510,11 +507,6 @@ mod tests {
         e.rise[0] = !e.rise[0];
         near.push(("one rise flag", e, Caps::VERIFY));
         let caps = Caps::VERIFY;
-        let patterns = Caps {
-            patterns: caps.patterns - 1,
-            ..caps
-        };
-        near.push(("the pattern cap", job_ext(true), patterns));
         let states = Caps {
             states: 1 << 20,
             ..caps
@@ -535,6 +527,33 @@ mod tests {
         assert!(
             !computes(&cache, &ext, Caps::VERIFY),
             "the stored key still hits"
+        );
+        // The run of S gathers no view, so the pattern cap cannot change the classes.
+        let patterns = Caps {
+            patterns: 1,
+            ..Caps::VERIFY
+        };
+        assert!(
+            !computes(&cache, &ext, patterns),
+            "another pattern cap hits"
+        );
+    }
+
+    /// The run of S gathers no view (#251, #296), so a pattern cap of one stops nothing: the
+    /// classes are the uncapped ones, where a run that gathered views would stop at once.
+    #[test]
+    fn a_pattern_cap_does_not_stop_a_quotient() {
+        let ext = job_ext(true);
+        let one = Caps {
+            patterns: 1,
+            ..Caps::VERIFY
+        };
+        let capped = quotient(Classes::of(&ext, one, &QuotientCache::new()).0);
+        let whole = quotient(Classes::of(&ext, Caps::VERIFY, &QuotientCache::new()).0);
+        assert!(capped == whole);
+        assert!(
+            !ext.system.clone().run(one).complete,
+            "a run with views stops"
         );
     }
 

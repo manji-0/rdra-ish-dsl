@@ -12,6 +12,9 @@ description.workspace = true
 # when the two differ (#275). For a checking run over the samples and the corpus; a release
 # build leaves it off.
 shadow = []
+# A line per pass of `verify` and per BFS run on stderr under `RDRA_PERF=1`, for measuring
+# (#296, `src/perf.rs`); a release build leaves it off.
+perf = []
 
 [dependencies]
 rdra-ish-syntax = { path = "../rdra-ish-syntax" }

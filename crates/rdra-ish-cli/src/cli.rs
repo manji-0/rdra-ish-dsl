@@ -359,8 +359,9 @@ pub(crate) enum Commands {
         /// TLA+ `IntRange == 0..N` upper bound
         #[arg(long, default_value_t = 5)]
         int_range_max: u32,
-        /// Cap on each entity's distinct patterns within one cone; past it the cone is not
-        /// decided. Default: 256
+        /// Cap on each entity's distinct patterns in a run that builds an entity view, as
+        /// `check` and `states` do. No run of `verify` builds one, so it stops none of them;
+        /// kept for scripts that pass it. Default: 256
         #[arg(long)]
         max_patterns: Option<usize>,
         /// Cap on the joint states of every BFS run: each entity, safety, and property cone,
@@ -399,6 +400,13 @@ pub(crate) enum Commands {
         /// rest. Default: `memory` under [verify] in rdra.toml, else 16GiB
         #[arg(long, value_name = "SIZE")]
         memory: Option<MemorySize>,
+        /// Explore an invariant or after-assert cone, and an `always` property's cone, that
+        /// the sub-lifecycle reduction leaves whole up to instance symmetry, storing one
+        /// state per permutation of rows: `never`, `retry` (only a cone whose plain run
+        /// stopped at the memory limit), or `always`. Default: `symmetry` under [verify] in
+        /// rdra.toml, else never
+        #[arg(long, value_name = "MODE")]
+        symmetry: Option<rdra_ish_core::lifecycle::Symmetry>,
         #[command(flatten)]
         scope: ScopeArgs,
     },

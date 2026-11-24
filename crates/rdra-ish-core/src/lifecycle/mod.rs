@@ -34,9 +34,12 @@ pub use diag::{
     created_via_apis, has_errors, label_prefix, Blocked, CapGrowth, Diag, Entry, Exit, Need,
     Severity, StateDiag, UnmetPremise, VarSpread,
 };
+#[cfg(feature = "perf")]
+pub use explore::perf_evals_line;
 pub use explore::{
-    store_bytes, Adjacency, Caps, Checks, ComponentRun, Edge, Estimate, Graph, Held, LabelledEdges,
-    LassoFault, Layers, PropertyVerdict, ReducedVerdict, RunEnd, Spurious, States,
+    store_bytes, Adjacency, Caps, Checks, ComponentRun, Edge, Estimate, Graph, Held, LabelledEdge,
+    LabelledEdges, LassoFault, Layers, LeftOut, OrbitRun, PropertyVerdict, ReducedVerdict, RunEnd,
+    Spurious, States, StoredRun, Symmetry, SymmetryRule,
 };
 pub use expr::{State, StateSlice};
 pub use findings::{

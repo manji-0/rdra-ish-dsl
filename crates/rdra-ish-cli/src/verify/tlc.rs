@@ -8,7 +8,7 @@ use crate::export::Modules;
 use crate::memory::{tlc_workers, TlcHeap};
 use crate::property_cone::{AfterPlain, ConeRun, Verdict, Why};
 use crate::state_findings::{render_violation, Finding, TraceSource};
-use crate::tlc_env::{current_user_heap, tlc_env_sized, xmx, Heap};
+use crate::tlc_env::{current_user_heap, tlc_env_sized, xmx, Heap, Jit};
 use crate::tlc_output::{out_of_memory, progress, summarize, Outcome, TlcRun};
 use crate::tlc_replay::{explain_property, explain_violation};
 use anyhow::{Context, Result};
@@ -256,18 +256,20 @@ fn run_job(
     Ok(ran)
 }
 
+/// TLC on `module` in `dir`, with `heap` bytes of heap and `workers`, compiled as `jit` asks
+/// when the JVM takes it (`Tlc::jit`).
 pub(super) fn tlc_command(
     tlc: &Tlc,
     dir: &Path,
     module: &str,
-    heap: u64,
+    (heap, jit): (u64, Jit),
     workers: &str,
 ) -> Result<Command> {
     let meta = dir.join(format!("{module}.states"));
     // TLC unpacks its standard modules into java.io.tmpdir; parallel runs must not share it.
     let tmp = dir.join(format!("{module}.tmp"));
     fs::create_dir_all(&tmp).with_context(|| format!("failed to create {}", tmp.display()))?;
-    let (key, value) = tlc_env_sized(heap, &tmp);
+    let (key, value) = tlc_env_sized(heap, &tmp, tlc.jit(jit));
     let mut command = tlc.command();
     command
         .env(key, value)
@@ -295,7 +297,7 @@ fn run_cfg(
     safety: bool,
 ) -> Result<Ran> {
     let tla = format!("{module}.tla");
-    let mut command = tlc_command(tlc, dir, module, heap, workers)?;
+    let mut command = tlc_command(tlc, dir, module, (heap, Jit::Tiered), workers)?;
     if safety {
         command.arg("-continue");
     }
@@ -343,7 +345,7 @@ fn run_whole(
 ) -> Result<Ran> {
     let tla = format!("{}.tla", job.module);
     let cfg = format!("{}.cfg", job.module);
-    let mut child = tlc_command(tlc, dir, &job.module, heap, workers)?
+    let mut child = tlc_command(tlc, dir, &job.module, (heap, Jit::Tiered), workers)?
         .args(["-config", &cfg, &tla])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

@@ -231,14 +231,30 @@ jobs:
         # `cargo build` resolves other features and compiled every crate a second time.
         run: cargo test --release -p rdra-ish-cli --features shadow --test engine_corpus --no-run
       - name: Every twin compares calls
-        # How many calls each twin compared and skipped on one sample. patent-ops reaches all
-        # of them; the step fails when the line is missing (a build without the feature) or a
-        # twin compared none.
+        # How many calls each twin compared and skipped on three runs. `verify` of patent-ops
+        # reaches every twin but `Fold::holds`, which quantifier_guard reaches, and the two
+        # that read entity views, which no run of `verify` gathers (#251): `check` does. Both
+        # `verify` runs take `--symmetry always`, which the instance-symmetry twins (#212)
+        # need. The step fails when a line is missing (a build without the feature) or a twin
+        # compared none in all three.
         run: |
-          RDRA_ISH_SHADOW_STATS=1 target/release/rdra-ish verify samples/patent-ops 2> shadow-stats.txt
+          for run in "verify samples/patent-ops --symmetry always" \
+                     "verify samples/formal-verification/quantifier_guard.rdra --symmetry always" \
+                     "check samples/patent-ops"; do
+            RDRA_ISH_SHADOW_STATS=1 target/release/rdra-ish $run 2>&1 >/dev/null \
+              | grep '^shadow: compared/skipped ' >> shadow-stats.txt || true
+          done
           cat shadow-stats.txt
-          grep -q '^shadow: compared/skipped ' shadow-stats.txt
-          ! grep -qE '^shadow: compared/skipped .*=0/' shadow-stats.txt
+          test "$(wc -l < shadow-stats.txt)" -eq 3
+          python3 - <<'EOF'
+          import collections, re
+          compared = collections.Counter()
+          for line in open("shadow-stats.txt"):
+              for twin, n in re.findall(r"(\w+)=(\d+)/", line):
+                  compared[twin] += int(n)
+          none = [twin for twin, n in compared.items() if n == 0]
+          assert compared and not none, f"twins that compared no call: {none}"
+          EOF
       - name: Every sample against its expect header, each fast path held to its twin
         run: scripts/verify-samples.sh target/release/rdra-ish
         timeout-minutes: 20
@@ -254,7 +270,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.kani == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       KANI_VERSION: 0.68.0
     defaults:

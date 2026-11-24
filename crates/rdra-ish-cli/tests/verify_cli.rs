@@ -594,7 +594,7 @@ fn max_states_raises_the_cap_of_each_cone() {
         "the header names the cap in force: {stdout}"
     );
     assert!(
-        stdout.contains("Cone_Forbidden_Order_0 [Forbidden_Order_0, Inv_Order_0, AfterAssert_DeliverOrder_0]: not decided (10 states, stopped at the state or pattern cap (--max-states, --max-patterns) or the memory limit)"),
+        stdout.contains("Cone_Forbidden_Order_0 [Forbidden_Order_0, Inv_Order_0, AfterAssert_DeliverOrder_0]: not decided (10 states, stopped at the state cap (--max-states) or the memory limit)"),
         "{stdout}"
     );
     let stderr = String::from_utf8_lossy(&small.stderr);
@@ -666,29 +666,22 @@ transitions(ReceiveParcel, Parcel.status, sent -> received)
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// `--max-patterns` caps the distinct patterns per entity: `order.rdra` has five, so a cap of
-/// 3 leaves its findings undecided, and the default 256 decides them.
+/// `--max-patterns` caps a run that builds an entity view (#251, #296), and no run of
+/// `verify` builds one: `order.rdra`'s Order has five patterns, and a cap of 3 stops nothing,
+/// so `verify` decides what it decides at the default. `check` builds the views, and the
+/// cap stops it there (`check_cli`'s `PatternCapReached` test).
 #[test]
-fn max_patterns_caps_the_patterns_of_each_entity() {
+fn max_patterns_stops_no_run_of_verify() {
     let tmp = scratch("verify_cli_max_patterns");
     let sample = repo().join("samples/formal-verification/order.rdra");
     let sample = sample.to_str().unwrap();
     let capped = verify(&repo(), &tmp, &[sample, "--max-patterns", "3"]);
-    let stdout = String::from_utf8_lossy(&capped.stdout);
-    assert!(
-        stdout.contains("state Order.status = shipped is not decided: the Order cone stopped at the pattern cap (3 patterns)"),
-        "{stdout}"
-    );
-    let stderr = String::from_utf8_lossy(&capped.stderr);
-    assert!(
-        stderr.lines().any(|l| l == "result: not decided"),
-        "{stderr}"
-    );
-
     let default = verify(&repo(), &tmp, &[sample]);
-    let stdout = String::from_utf8_lossy(&default.stdout);
+    let stdout = String::from_utf8_lossy(&capped.stdout);
     assert!(!stdout.contains("pattern cap ("), "{stdout}");
     assert!(stdout.contains("\nresult: ok\n"), "{stdout}");
+    assert_eq!(capped.stdout, default.stdout);
+    assert_eq!(capped.status.code(), default.status.code());
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
@@ -1760,6 +1753,65 @@ fn an_engine_disagreement_fails_the_run_and_keeps_the_specs() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+/// The `JAVA_TOOL_OPTIONS` and the module of each TLC run of `verify --with-tlc order.rdra`,
+/// under a `tlc` that records them. With `refuse`, its `-help` prints what a JVM prints when
+/// it does not take a flag.
+#[cfg(unix)]
+fn jvm_options_per_run(test: &str, refuse: bool) -> Vec<(String, String)> {
+    use std::os::unix::fs::PermissionsExt;
+    let tmp = scratch(test);
+    let bin = tmp.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    let record = tmp.join("record");
+    let help = match refuse {
+        true => "echo \"Unrecognized VM option 'TieredStopAtLevel=1'\"\necho 'Error: Could not create the Java Virtual Machine.'\n",
+        false => "echo 'TLC - provides model checking'\n",
+    };
+    let script = format!(
+        "#!/bin/sh\nif [ \"$1\" = -help ]; then\n{help}exit 1\nfi\nfor a; do last=$a; done\necho \"$last|$JAVA_TOOL_OPTIONS\" >> '{}'\n",
+        record.display()
+    );
+    std::fs::write(bin.join("tlc"), script).unwrap();
+    std::fs::set_permissions(bin.join("tlc"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    let sample = repo().join("samples/formal-verification/order.rdra");
+    verify_on_path(
+        &repo(),
+        &tmp,
+        &bin,
+        &[sample.to_str().unwrap(), "--with-tlc"],
+    );
+    let runs = std::fs::read_to_string(&record).expect("tlc ran");
+    let _ = std::fs::remove_dir_all(&tmp);
+    runs.lines()
+        .map(|l| {
+            let (module, opts) = l.split_once('|').expect("module|options");
+            (module.to_string(), opts.to_string())
+        })
+        .collect()
+}
+
+/// A state-model run of at most 10,000 states by BFS compiles with C1 only, which saves CPU
+/// on a run that ends within a second; a cone run, whose size is not known when it starts,
+/// keeps the default JIT (#309). A JVM that does not take the flag gets none.
+#[cfg(unix)]
+#[test]
+fn only_a_small_state_model_run_compiles_with_c1_and_only_where_the_jvm_takes_it() {
+    const C1: &str = "-XX:TieredStopAtLevel=1";
+    let runs = jvm_options_per_run("verify_cli_jit", false);
+    let (models, cones): (Vec<_>, Vec<_>) =
+        runs.iter().partition(|(m, _)| m.starts_with("StateModel_"));
+    assert!(!models.is_empty() && !cones.is_empty(), "{runs:?}");
+    assert!(models.iter().all(|(_, o)| o.contains(C1)), "{runs:?}");
+    assert!(cones.iter().all(|(_, o)| !o.contains(C1)), "{runs:?}");
+
+    let runs = jvm_options_per_run("verify_cli_jit_refused", true);
+    assert!(
+        runs.iter().any(|(m, _)| m.starts_with("StateModel_")),
+        "{runs:?}"
+    );
+    assert!(runs.iter().all(|(_, o)| !o.contains(C1)), "{runs:?}");
+}
+
 /// `--backend tlc` still runs TLC, as `--with-tlc` does, and warns that it is deprecated.
 #[cfg(unix)]
 #[test]
@@ -1819,13 +1871,56 @@ fn with_tlc_needs_tlc_and_tlc_jar_needs_with_tlc() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+/// A safety cone whose system is an entity cone's is explored once, by the entity pass, with
+/// every check (#209): the run goes to the end for the entity's findings, so the failing
+/// cone's line counts the whole cone, 65,793 states, where a run of its own stops after 3
+/// (`a_safety_cone_stops_once_every_check_on_it_has_failed`). The counterexample is the one
+/// BFS finds first either way.
+#[test]
+fn a_safety_cone_shared_with_an_entity_cone_counts_the_whole_cone() {
+    let tmp = scratch("verify_cli_shared_cone");
+    let model = repo().join("crates/rdra-ish-cli/tests/fixtures/early_stop/flags_fail.rdra");
+    let output = verify(&repo(), &tmp, &[model.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
+    assert!(
+        stdout.contains(
+            "\nCone_Forbidden_Task_0 [Forbidden_Task_0]: counterexample (65793 states)\n"
+        ),
+        "{stdout}"
+    );
+    assert!(
+        stderr.contains("error[Forbidden_Task_0]: invariant Forbidden_Task_0 is violated"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("  counterexample (2 steps):"), "{stderr}");
+    // Up to instance symmetry the cone shares nothing (#212): it runs on its own and stops
+    // once its check has failed, where the entity pass's plain run would decide it.
+    let output = verify(
+        &repo(),
+        &tmp,
+        &[model.to_str().unwrap(), "--symmetry", "always"],
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(output.status.code(), Some(1), "{stdout}");
+    assert!(
+        stdout.contains(
+            "\nCone_Forbidden_Task_0 [Forbidden_Task_0]: counterexample (3 orbits, about 3 states)\n"
+        ),
+        "{stdout}"
+    );
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 /// A safety cone stops once every check on it has failed (#213): the flags rule's cone has
 /// 65,793 states at two instances, and BFS stops after 3 with the 2-step counterexample and
-/// no cap note. TLC, which explores the whole module, gives the same verdict.
+/// no cap note. TLC, which explores the whole module, gives the same verdict. Task's entity
+/// cone also holds `note`, which the rule does not read, so the two cones are apart.
 #[test]
 fn a_safety_cone_stops_once_every_check_on_it_has_failed() {
     let tmp = scratch("verify_cli_early_stop");
-    let model = repo().join("crates/rdra-ish-cli/tests/fixtures/early_stop/flags_fail.rdra");
+    let model = repo().join("crates/rdra-ish-cli/tests/fixtures/early_stop/flags_fail_apart.rdra");
     let output = verify(&repo(), &tmp, &[model.to_str().unwrap()]);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1852,4 +1947,87 @@ fn a_safety_cone_stops_once_every_check_on_it_has_failed() {
         assert!(!stderr.contains("EngineDisagreement"), "{stderr}");
     }
     let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// `--symmetry retry` runs a cone as before and, when the memory limit stops it, runs it
+/// again up to instance symmetry, which decides it; `never` leaves it undecided (#212).
+#[test]
+fn symmetry_retry_decides_a_cone_the_memory_limit_stopped() {
+    let tmp = scratch("verify_cli_symmetry_retry");
+    let case = repo().join("crates/rdra-ish-cli/tests/engine_corpus/sym_owner_coupled.rdra");
+    let run = |mode: &str| {
+        let out = verify(
+            &repo(),
+            &tmp,
+            &[
+                case.to_str().unwrap(),
+                "--instance-count",
+                "3",
+                "--memory",
+                "128KiB",
+                "--symmetry",
+                mode,
+            ],
+        );
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let line = "Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: ";
+    let never = run("never");
+    assert!(
+        never.contains(&format!("{line}not decided (1245 states, stopped")),
+        "{never}"
+    );
+    let retry = run("retry");
+    assert!(
+        retry.contains(&format!(
+            "{line}ok (251 orbits, about 2.2K states, retried up to instance symmetry after \
+             the memory limit at 1245 states)"
+        )),
+        "{retry}"
+    );
+}
+
+/// A counterexample found up to instance symmetry names concrete rows: the stored path,
+/// whose forms the canonicalizer sorted at several steps, is lifted back and replayed.
+#[test]
+fn symmetry_lifts_a_counterexample_to_the_rows_it_names() {
+    let tmp = scratch("verify_cli_symmetry_lift");
+    let case = repo().join("crates/rdra-ish-cli/tests/engine_corpus/sym_lift_compose.rdra");
+    let out = verify(
+        &repo(),
+        &tmp,
+        &[
+            case.to_str().unwrap(),
+            "--instances",
+            "Queue=1",
+            "--symmetry",
+            "always",
+        ],
+    );
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let line =
+        "Cone_Quantifier_Queue_0 [Quantifier_Queue_0]: counterexample (10 orbits, about 13 states)";
+    assert!(text.contains(line), "{text}");
+    let steps: Vec<&str> = text
+        .lines()
+        .filter_map(|l| l.trim_start().split_once(". "))
+        .filter(|(n, _)| n.parse::<u32>().is_ok())
+        .map(|(_, rest)| rest.split("  ").next().unwrap_or(rest))
+        .collect();
+    assert_eq!(
+        steps,
+        [
+            "Add [Job#1, Queue#1]",
+            "Start [Job#1]",
+            "Finish [Job#1]",
+            "Add [Job#2, Queue#1]",
+            "Start [Job#2]",
+            "Finish [Job#2]",
+        ],
+        "{text}"
+    );
 }
