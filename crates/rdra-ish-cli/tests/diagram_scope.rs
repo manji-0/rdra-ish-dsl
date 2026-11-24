@@ -293,3 +293,62 @@ fn all_writes_the_review_set() {
         );
     }
 }
+
+/// `diagram --help` says what the command does (#247): `--all` reads no `--kind` and refuses
+/// the scopes and the rdra filters, and `--kind sequence` takes one `--usecase` or `--buc`.
+#[test]
+fn help_says_what_all_and_sequence_take() {
+    let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .args(["diagram", "--help"])
+        .output()
+        .expect("rdra-ish runs");
+    let help = stdout(&output)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    for said in [
+        "--kind is not read. Not together with --buc, --usecase, --entity, --actor, --node-kind, or --edge-kind",
+        "Takes one --usecase, or --buc for the BUC's use cases one after another",
+    ] {
+        assert!(help.contains(said), "{said}\n{help}");
+    }
+    for stale in ["Not together with --kind", "needs exactly one --usecase"] {
+        assert!(!help.contains(stale), "{stale}\n{help}");
+    }
+
+    // The command does what the help says.
+    let (dir, shop) = model("diagram_scope_help");
+    let out = dir.join("set");
+    stdout(&diagram(
+        &shop,
+        &["--all", "--kind", "er", "--out", out.to_str().unwrap()],
+    ));
+    assert!(out.join("sequence__BucOrder.mmd").exists());
+    for args in [
+        vec!["--all", "--node-kind", "entity", "--out", "x"],
+        vec!["--all", "--edge-kind", "reads", "--out", "x"],
+        vec!["--all", "--actor", "Clerk", "--out", "x"],
+    ] {
+        assert!(!diagram(&shop, &args).status.success(), "{args:?}");
+    }
+    stdout(&diagram(
+        &shop,
+        &["--kind", "sequence", "--usecase", "Place"],
+    ));
+    stdout(&diagram(
+        &shop,
+        &["--kind", "sequence", "--buc", "BucOrder"],
+    ));
+    let two = diagram(
+        &shop,
+        &[
+            "--kind",
+            "sequence",
+            "--usecase",
+            "Place",
+            "--usecase",
+            "Ship",
+        ],
+    );
+    assert!(!two.status.success());
+}

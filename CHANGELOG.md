@@ -511,6 +511,11 @@
   `result: ok` and passed `--deny-undecided`, even where the full cone breaks the property.
   `stable`, `unchanged`, `precedes`, `always`, `eventually`, and `leads_to` already counted
   a stopped cone as undecided (#246).
+- `diagram --help` describes `--all` and `--kind sequence` as the command runs them
+  (#247). The help said `--all` could not be combined with `--kind`. In fact `--all` ignores
+  `--kind`, and refuses `--buc`, `--usecase`, `--entity`, `--actor`, `--node-kind`, and
+  `--edge-kind`. It also said the sequence diagram needs exactly one `--usecase`. It takes
+  one `--usecase`, or `--buc` for the BUC's use cases one after another.
 
 ## v2.3.0 - 2026-11-18
 
