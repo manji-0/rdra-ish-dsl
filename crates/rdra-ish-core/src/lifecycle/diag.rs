@@ -181,6 +181,15 @@ pub enum StateDiag {
     /// A pre-existing child's mandatory key names a parent that some use case creates, so at
     /// the start every child slot belongs to a parent slot that is still absent.
     PreExistingChildOfCreatedParent { parent: String, site: Site },
+    /// A pre-existing child that starts linked to the parent slot of its own index (a 1:1
+    /// key, or a `1..` range) has a slot count other than its parent's under the bounds
+    /// (`--instances`), so the start links no permutation of the parent's slots.
+    IdentityStartSlots {
+        parent: String,
+        child_slots: u8,
+        parent_slots: u8,
+        site: Site,
+    },
     /// A child-side range needs a child per parent, but the parent starts present and the
     /// child absent, so `MinCard_*` fails in the initial state.
     MinCardOfPreExistingParent { child: String, site: Site },
@@ -592,6 +601,7 @@ impl StateDiag {
             StateDiag::PreExistingChildOfCreatedParent { parent, .. } => {
                 with("PreExistingChildOfCreatedParent", &[parent])
             }
+            StateDiag::IdentityStartSlots { parent, .. } => with("IdentityStartSlots", &[parent]),
             StateDiag::MinCardOfPreExistingParent { child, .. } => {
                 with("MinCardOfPreExistingParent", &[child])
             }
@@ -732,6 +742,7 @@ impl StateDiag {
             | StateDiag::AssertOnInertUseCase { .. }
             | StateDiag::FairOnInertUseCase { .. }
             | StateDiag::IntLiteralOutOfBounds { .. }
+            | StateDiag::IdentityStartSlots { .. }
             | StateDiag::UnbindableScope { .. }
             | StateDiag::UnbindableCondition { .. }
             | StateDiag::UnboundCopySource { .. }
@@ -845,6 +856,15 @@ impl fmt::Display for StateDiag {
             StateDiag::PreExistingChildOfCreatedParent { parent, .. } => write!(
                 f,
                 "this entity starts present, but its parent {parent} starts absent; it starts owned by a {parent} that does not exist yet"
+            ),
+            StateDiag::IdentityStartSlots {
+                parent,
+                child_slots,
+                parent_slots,
+                ..
+            } => write!(
+                f,
+                "this entity starts present with each row linked to its own {parent}, so it needs as many slots as {parent}, but the bounds give it {child_slots} and {parent} {parent_slots}; give both the same count with --instances"
             ),
             StateDiag::MinCardOfPreExistingParent { child, .. } => write!(
                 f,

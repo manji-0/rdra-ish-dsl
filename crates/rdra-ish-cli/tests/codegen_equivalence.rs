@@ -131,7 +131,7 @@ impl Rows<'_> {
             .entity_ids()
             .find(|e| self.ts.entity(*e).id == entity)?;
         let mut out = Vec::new();
-        for slot in 0..self.ts.bounds.slots() {
+        for slot in 0..self.ts.slots(e) {
             if !self.state.is_present(self.ts, e, slot) {
                 continue;
             }
@@ -526,7 +526,7 @@ fn functions_agree_with_the_transition_system() {
                 continue;
             };
             for state in &run.states {
-                for slot in 0..ts.bounds.slots() {
+                for slot in 0..ts.slots(e) {
                     if !state.is_present(ts, e, slot) {
                         continue;
                     }
@@ -586,7 +586,7 @@ fn functions_agree_with_the_transition_system() {
             let e = action.params[0].entity;
             let entity = ts.entity(e).id.clone();
             for (at, state) in run.states.iter().enumerate() {
-                for slot in 0..ts.bounds.slots() {
+                for slot in 0..ts.slots(e) {
                     if !state.is_present(ts, e, slot) {
                         continue;
                     }

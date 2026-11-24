@@ -338,7 +338,7 @@ impl Builder<'_> {
                 })
                 .map(|&v| Pred::Cmp(slot(v, 0), CmpOp::Eq, Term::Lit(Value::NULL))),
         );
-        let premises = match self.ts.bounds.slots() {
+        let premises = match self.ts.slots(e) {
             1 => Vec::new(),
             _ => vec![premise(
                 vec![Pred::Cmp(index(0), CmpOp::Ne, index(1))],

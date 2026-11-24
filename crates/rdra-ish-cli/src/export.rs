@@ -61,8 +61,7 @@ pub(crate) fn run_export(
     inputs: &[PathBuf],
     kind: &ExportKind,
     out: &Path,
-    instance_count: u32,
-    int_range_max: u32,
+    (instance_count, instances, int_range_max): (u32, &[InstanceOverride], u32),
     dialect: SqlDialect,
 ) -> Result<()> {
     let (program, model, manifest) = load_clean(inputs)?;
@@ -87,7 +86,11 @@ pub(crate) fn run_export(
         Export::Tla => {
             let module_name =
                 tla_file(out).map_or_else(|| "RdraSpec".to_string(), |(_, stem)| stem);
-            let bounds = tla_bounds(instance_count, int_range_max)?;
+            let bounds = verify_bounds(
+                (instance_count, instances, int_range_max),
+                manifest.as_ref(),
+                &model,
+            )?;
             let TlaExport {
                 whole: bundle,
                 state_models,
@@ -160,10 +163,46 @@ fn write_tla(out: &Path, bundle: TlaBundle, state_models: Vec<(TlaBundle, String
     Ok(())
 }
 
-/// `--instance-count` and `--int-range-max` as the system's bounds.
-pub fn tla_bounds(instance_count: u32, int_range_max: u32) -> Result<Bounds> {
-    let bounds = checked_bounds(instance_count, int_range_max)?;
-    if bounds.instances.get() == 1 {
+/// `--instances <Entity>=<n>`: the slot count of one entity.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InstanceOverride {
+    pub entity: String,
+    pub count: NonZeroU8,
+}
+
+impl std::str::FromStr for InstanceOverride {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, String> {
+        let Some((entity, count)) = s.split_once('=') else {
+            return Err(format!("expected <Entity>=<n>, as Loan=4, not `{s}`"));
+        };
+        let entity = entity.trim();
+        if entity.is_empty() {
+            return Err(format!("no entity before `=` in `{s}`"));
+        }
+        let count = count
+            .trim()
+            .parse::<u8>()
+            .ok()
+            .and_then(NonZeroU8::new)
+            .ok_or_else(|| format!("the count of {entity} must be between 1 and 255"))?;
+        Ok(InstanceOverride {
+            entity: entity.to_string(),
+            count,
+        })
+    }
+}
+
+/// `--instance-count`, `--int-range-max`, and `--instances` as the system's bounds; a later
+/// `--instances` for one entity replaces an earlier one.
+pub fn tla_bounds(
+    instance_count: u32,
+    int_range_max: u32,
+    instances: &[InstanceOverride],
+) -> Result<Bounds> {
+    let bounds = checked_bounds(instance_count, int_range_max, instances)?;
+    if bounds.most().get() == 1 {
         eprintln!(
             "warning: --instance-count 1 yields singleton Entity_Ids; multi-entity .along / quantifiers cannot distinguish instances"
         );
@@ -171,8 +210,30 @@ pub fn tla_bounds(instance_count: u32, int_range_max: u32) -> Result<Bounds> {
     Ok(bounds)
 }
 
-/// `--instance-count` and `--int-range-max` as the system's bounds, validated and silent.
-pub fn checked_bounds(instance_count: u32, int_range_max: u32) -> Result<Bounds> {
+/// What `verify` and `export --kind tla` run at: the flags, with `instances` under [verify]
+/// in the manifest beneath them, checked against `model`.
+pub fn verify_bounds(
+    (instance_count, instances, int_range_max): (u32, &[InstanceOverride], u32),
+    manifest: Option<&rdra_ish_core::project::Manifest>,
+    model: &SemanticModel,
+) -> Result<Bounds> {
+    let flags = tla_bounds(instance_count, int_range_max, instances)?;
+    model_bounds(
+        flags,
+        manifest.map(|m| &m.verify.instances),
+        "verify",
+        model,
+    )
+}
+
+/// `--instance-count`, `--int-range-max`, and `--instances` as the system's bounds,
+/// validated and silent. The entity ids are checked once the model is loaded
+/// (`model_bounds`).
+pub fn checked_bounds(
+    instance_count: u32,
+    int_range_max: u32,
+    overrides: &[InstanceOverride],
+) -> Result<Bounds> {
     let Some(instances) = u8::try_from(instance_count).ok().and_then(NonZeroU8::new) else {
         bail!("--instance-count must be between 1 and 255");
     };
@@ -183,7 +244,44 @@ pub fn checked_bounds(instance_count: u32, int_range_max: u32) -> Result<Bounds>
         Ok(n) => n,
         Err(_) => bail!("--int-range-max must be at most 255"),
     };
-    Ok(Bounds { instances, int_max })
+    let mut bounds = Bounds::uniform(instances, int_max);
+    for o in overrides {
+        bounds.per_entity.insert(o.entity.clone(), o.count);
+    }
+    Ok(bounds)
+}
+
+/// `bounds` from the flags with `table`, the `instances` of the command's `rdra.toml`
+/// section (`section` names it), beneath them: a flag replaces the table's count of its
+/// entity. Every id the flags or the table name must be an entity of `model`.
+pub fn model_bounds(
+    mut bounds: Bounds,
+    table: Option<&std::collections::BTreeMap<String, NonZeroU8>>,
+    section: &str,
+    model: &SemanticModel,
+) -> Result<Bounds> {
+    let known = |id: &str| model.entities.values().any(|e| e.id == id);
+    let ids = || {
+        let mut ids: Vec<&str> = model.entities.values().map(|e| e.id.as_str()).collect();
+        ids.sort_unstable();
+        ids.join(", ")
+    };
+    if let Some(id) = bounds.per_entity.keys().find(|id| !known(id)) {
+        bail!(
+            "--instances names {id}, which is no entity of the model; the entities are {}",
+            ids()
+        );
+    }
+    for (id, n) in table.into_iter().flatten() {
+        if !known(id) {
+            bail!(
+                "rdra.toml: `instances` under [{section}] names {id}, which is no entity of the model; the entities are {}",
+                ids()
+            );
+        }
+        bounds.per_entity.entry(id.clone()).or_insert(*n);
+    }
+    Ok(bounds)
 }
 
 /// What `export --kind tla` writes: the whole system in Check mode, and a module per entity

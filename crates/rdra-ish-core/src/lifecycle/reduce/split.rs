@@ -49,7 +49,7 @@ impl TransitionSystem {
                 if creates.contains(param) {
                     vec![decl.base.0]
                 } else {
-                    (0..decl.domain.size(self.bounds) as u8).collect()
+                    (0..decl.domain.size(self) as u8).collect()
                 }
             };
             for eff in &a.effects {
@@ -70,7 +70,8 @@ impl TransitionSystem {
                     } => {
                         let tos: Vec<u8> = match rhs {
                             Rhs::Lit(v) => vec![v.0],
-                            Rhs::Param(_) => (0..self.bounds.slots() as u8)
+                            Rhs::Param(q) => (0..self.slots(a.params[usize::from(*q)].entity)
+                                as u8)
                                 .map(|c| self.var(*var).domain.of_slot(c).0)
                                 .collect(),
                         };

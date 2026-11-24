@@ -183,7 +183,7 @@ fn main() {
         let model = load_project(&[repo.join(sample)], None)
             .expect("sample loads")
             .model;
-        let built = TransitionSystem::build(&model, bounds, &Scope::ALL);
+        let built = TransitionSystem::build(&model, bounds.clone(), &Scope::ALL);
         let ts = &built.ts;
         println!("\n{sample}");
         println!(

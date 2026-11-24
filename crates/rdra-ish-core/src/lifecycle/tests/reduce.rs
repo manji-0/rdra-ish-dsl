@@ -566,7 +566,7 @@ fn a_sub_lifecycle_action_that_shares_a_name_with_a_target_step_keeps_its_identi
     ] {
         let model = model_from(src);
         for bounds in [Bounds::STATES, Bounds::VERIFY] {
-            let ts = TransitionSystem::build(&model, bounds, &Scope::ALL).ts;
+            let ts = TransitionSystem::build(&model, bounds.clone(), &Scope::ALL).ts;
             let targets = ts.targets();
             let plain = ts.explore_targets(&targets, Caps::VERIFY);
             let reduced = ts.explore_targets_reduced(&targets, Caps::VERIFY);
@@ -740,12 +740,12 @@ fn a_sub_lifecycle_that_reads_inputs_of_t_is_reduced_and_decides_the_same() {
     ] {
         let model = model_from(src);
         for bounds in [Bounds::STATES, Bounds::VERIFY] {
-            let reductions = assert_reduction_exact(name, &model, bounds);
+            let reductions = assert_reduction_exact(name, &model, bounds.clone());
             assert!(
                 reductions >= 1,
                 "{name} at {bounds:?}: {reductions} cones reduced"
             );
-            let ts = TransitionSystem::build(&model, bounds, &Scope::ALL).ts;
+            let ts = TransitionSystem::build(&model, bounds.clone(), &Scope::ALL).ts;
             let target = entity_target(&ts, anchor);
             let targets = ts.targets();
             let plain = ts.explore_targets(&targets, Caps::VERIFY);
@@ -785,9 +785,9 @@ fn a_sub_lifecycle_that_reads_inputs_of_t_is_reduced_and_decides_the_same() {
             let (a, b) = (diag_names(&plain), diag_names(&reduced));
             assert_eq!(a, b, "{name} at {bounds:?}: verdicts");
             // A claim stuck in a case another claim closed needs two claims.
-            let expected: Vec<&str> = match bounds {
-                Bounds::VERIFY => expected.clone(),
-                _ => expected
+            let expected: Vec<&str> = match bounds == Bounds::VERIFY {
+                true => expected.clone(),
+                false => expected
                     .iter()
                     .copied()
                     .filter(|e| !e.ends_with("_open"))

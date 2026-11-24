@@ -88,8 +88,7 @@ impl Bfs<'_> {
             .var_ids()
             .map(|v| {
                 let decl = self.ts.var(v);
-                (decl.domain.size(self.ts.bounds) as u64)
-                    .checked_pow(self.ts.slots_of(&decl.kind) as u32)
+                (decl.domain.size(self.ts) as u64).checked_pow(self.ts.slots_of(&decl.kind) as u32)
             })
             .try_fold(1u64, |bound, size| bound.checked_mul(size?));
         Held {

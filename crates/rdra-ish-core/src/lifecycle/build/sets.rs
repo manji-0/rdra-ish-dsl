@@ -59,9 +59,9 @@ impl<'m> Builder<'m> {
             if let Some(ck) = ce.guard {
                 let values = match rhs {
                     EffectRhs::Value(v) => vec![v],
-                    EffectRhs::AnyNonNull => (1..domain.size(self.bounds))
-                        .map(|i| Value(i as u8))
-                        .collect(),
+                    EffectRhs::AnyNonNull => {
+                        (1..domain.size(&self.ts)).map(|i| Value(i as u8)).collect()
+                    }
                     EffectRhs::None => continue,
                 };
                 self.guarded_set(a, uc, ce.entity, var, p, values, (ck, site));
@@ -73,7 +73,7 @@ impl<'m> Builder<'m> {
                     a.effects.push(Effect::Choose {
                         var,
                         param: p,
-                        values: (1..domain.size(self.bounds))
+                        values: (1..domain.size(&self.ts))
                             .map(|i| Choice {
                                 value: Value(i as u8),
                                 site: Some(site.clone()),
@@ -275,7 +275,7 @@ impl<'m> Builder<'m> {
                 );
                 continue;
             }
-            let size = self.ts.vars[var.index()].domain.size(self.bounds);
+            let size = self.ts.vars[var.index()].domain.size(&self.ts);
             a.effects.push(Effect::Choose {
                 var,
                 param: p,
@@ -553,7 +553,7 @@ impl<'m> Builder<'m> {
                 EffectRhs::Value(Value::PRESENT)
             }
             (Domain::Int | Domain::NullableInt, EffectValue::Int(n)) => {
-                match domain.of_number(*n, self.bounds) {
+                match domain.of_number(*n, &self.bounds) {
                     Some(v) => EffectRhs::Value(v),
                     None => {
                         self.out_of_bounds(*n, site, ek);

@@ -172,10 +172,21 @@ impl Case {
                     .expect("a number after the flag")
             })
         };
-        Bounds {
-            instances: NonZeroU8::new(flag("--instance-count").unwrap_or(2)).unwrap(),
-            int_max: flag("--int-range-max").unwrap_or(Bounds::VERIFY.int_max),
+        let mut bounds = Bounds::uniform(
+            NonZeroU8::new(flag("--instance-count").unwrap_or(2)).unwrap(),
+            flag("--int-range-max").unwrap_or(Bounds::VERIFY.int_max),
+        );
+        // `--instances <Entity>=<n>`, each.
+        for (i, f) in self.flags.iter().enumerate() {
+            if f == "--instances" {
+                let (entity, n) = self.flags[i + 1]
+                    .split_once('=')
+                    .expect("<Entity>=<n> after --instances");
+                let n = NonZeroU8::new(n.parse().expect("a count")).expect("not zero");
+                bounds.per_entity.insert(entity.to_string(), n);
+            }
         }
+        bounds
     }
 }
 

@@ -118,10 +118,7 @@ impl Enc<'_> {
         let domain = &self.ts.var(var).domain;
         match domain.is_numeric() {
             true => format!("(<= 0 {term})"),
-            false => format!(
-                "(and (<= 0 {term}) (< {term} {}))",
-                domain.size(self.ts.bounds)
-            ),
+            false => format!("(and (<= 0 {term}) (< {term} {}))", domain.size(self.ts)),
         }
     }
 
@@ -524,7 +521,7 @@ impl Enc<'_> {
     /// one), and with index 0 for every index.
     fn one_of(&self, var: VarId, values: &[Choice], terms: &[String], c: &str) -> String {
         let domain = &self.ts.var(var).domain;
-        let size = domain.size(self.ts.bounds);
+        let size = domain.size(self.ts);
         let has = |v: Value| values.iter().any(|c| c.value == v);
         let listed = |from: usize| (from..size).all(|i| has(Value(i as u8)));
         // The non-null numbers start at index 1 of a nullable domain; `present` on an Int

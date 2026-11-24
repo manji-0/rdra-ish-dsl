@@ -768,7 +768,7 @@ impl TransitionSystem {
                 name: name.clone(),
                 label: label.clone(),
                 unmet,
-                one_instance: self.bounds.slots() == 1,
+                one_instance: self.most_slots() == 1,
                 site: site.clone(),
             },
         })
@@ -933,7 +933,7 @@ impl TransitionSystem {
                 name: property.name.clone(),
                 label: None,
                 unmet: vec![unmet],
-                one_instance: self.bounds.slots() == 1,
+                one_instance: self.most_slots() == 1,
                 site: property.site.clone(),
             },
         })

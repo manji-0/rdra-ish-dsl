@@ -593,7 +593,7 @@ fn check_model(
     bounds: Bounds,
 ) -> ModelReport {
     let workers = std::thread::available_parallelism().map_or(4, |n| n.get().min(8));
-    let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
+    let ts = TransitionSystem::build(model, bounds.clone(), &Scope::ALL).ts;
     let mut cones: Vec<(Cone, String, Vec<Seed>)> = Vec::new();
     // `verify` runs no TLC cone for a `.lemma()` rule or a `can_reach`, so neither does the
     // comparison.
@@ -1857,14 +1857,7 @@ fn tla_names_cover_every_slot() {
             let keys = names.slot_keys(&ts);
             let unique: BTreeSet<&String> = keys.iter().collect();
             assert_eq!(unique.len(), keys.len(), "{sample}: two slots share a key");
-            let width: usize = ts
-                .vars()
-                .iter()
-                .map(|d| match d.kind {
-                    rdra_ish_core::lifecycle::VarKind::Now => 1,
-                    _ => bounds.slots(),
-                })
-                .sum();
+            let width: usize = ts.vars().iter().map(|d| ts.slots_of(&d.kind)).sum();
             assert_eq!(keys.len(), width, "{sample}: a slot has no key");
             // The declaration, a line per entity, up to the blank line that ends it.
             let declared: Vec<&str> = bundle

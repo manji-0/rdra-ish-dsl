@@ -185,6 +185,7 @@ violation_message(text, pattern_desc)
         | StateDiag::AmbiguousOwnerLink { .. }
         | StateDiag::UnwrittenConstrainedVar { .. }
         | StateDiag::PreExistingChildOfCreatedParent { .. }
+        | StateDiag::IdentityStartSlots { .. }
         | StateDiag::MinCardOfPreExistingParent { .. }
         | StateDiag::MinCardNeedsCreate { .. }
         | StateDiag::UnsupportedComparison { .. }

@@ -163,6 +163,14 @@ impl Reduction {
         &self.bits
     }
 
+    /// Per bit group, the slots of its key's entity in `ts`, the cone: one bit per slot.
+    pub fn bit_slots(&self, ts: &TransitionSystem) -> Vec<usize> {
+        self.bits
+            .iter()
+            .map(|group| ts.slots(group[0].key_entity(ts)))
+            .collect()
+    }
+
     /// The vars of the extended sub-lifecycle in its layout: S and the inputs, ascending; a
     /// var of a nested reduction indexes them.
     pub fn sub_vars(&self) -> &[VarId] {
@@ -224,8 +232,7 @@ impl Reduction {
                 out.extend_from_slice(&s.0[at..at + w]);
             }
         }
-        let slots = ts.bounds.slots();
-        for group in &self.bits {
+        for (group, slots) in self.bits.iter().zip(self.bit_slots(ts)) {
             for c in 0..slots as u8 {
                 out.push(u8::from(group.iter().any(|f| f.holds(ts, s, c))));
             }
@@ -235,10 +242,9 @@ impl Reduction {
     /// The input bits of a state: per bit group and slot of its key, whether some fold of
     /// the group holds there.
     fn bit_values(&self, ts: &TransitionSystem, s: &StateSlice) -> Vec<u8> {
-        let slots = ts.bounds.slots();
-        let mut out = Vec::with_capacity(self.bits.len() * slots);
+        let mut out = Vec::new();
         for group in &self.bits {
-            for c in 0..slots as u8 {
+            for c in 0..ts.slots(group[0].key_entity(ts)) as u8 {
                 out.push(u8::from(group.iter().any(|f| f.holds(ts, s, c))));
             }
         }
@@ -435,7 +441,11 @@ impl TransitionSystem {
         // After S and the raw inputs come the stubs, then the bit vars, whose values a
         // state's `key` computes.
         let first = &ext.system.initial_states()[0].0;
-        let bits_width = ext.bits.len() * self.bounds.slots();
+        let bits_width: usize = ext
+            .bits
+            .iter()
+            .map(|group| self.slots(group[0].key_entity(self)))
+            .sum();
         let tail = first[width..first.len() - bits_width].into();
         let mut skip = vec![false; self.actions.len()];
         for a in &split.s_actions {

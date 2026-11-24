@@ -30,6 +30,12 @@ fn one_of_each() -> Vec<StateDiag> {
             parent: "Order".into(),
             site: site(),
         },
+        StateDiag::IdentityStartSlots {
+            parent: "Order".into(),
+            child_slots: 2,
+            parent_slots: 1,
+            site: site(),
+        },
         StateDiag::MinCardOfPreExistingParent {
             child: "Line".into(),
             site: site(),
@@ -259,6 +265,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::DoubleModeledEnum { .. }
             | StateDiag::NoCreationPath
             | StateDiag::PreExistingChildOfCreatedParent { .. }
+            | StateDiag::IdentityStartSlots { .. }
             | StateDiag::MinCardOfPreExistingParent { .. }
             | StateDiag::MinCardNeedsCreate { .. }
             | StateDiag::PatternCapReached { .. }

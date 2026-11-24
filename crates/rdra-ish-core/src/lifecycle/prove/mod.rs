@@ -196,13 +196,10 @@ pub fn mining_twin(
     scope: &crate::lifecycle::Scope,
     ts: &TransitionSystem,
 ) -> Option<TransitionSystem> {
-    if ts.bounds.instances.get() == 1 {
+    if ts.most_slots() == 1 {
         return None;
     }
-    let bounds = crate::lifecycle::Bounds {
-        instances: std::num::NonZeroU8::MIN,
-        ..ts.bounds
-    };
+    let bounds = ts.bounds.at(std::num::NonZeroU8::MIN);
     let built = TransitionSystem::build(model, bounds, scope);
     let twin = built.ts;
     let same = !crate::lifecycle::has_errors(&built.diags)

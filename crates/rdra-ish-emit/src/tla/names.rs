@@ -399,7 +399,7 @@ impl TlaNames {
             let name = &self.vars[i];
             match d.kind {
                 VarKind::Now => out.push(name.clone()),
-                _ => out.extend((1..=ts.bounds.slots()).map(|k| format!("{name}[{k}]"))),
+                _ => out.extend((1..=ts.slots_of(&d.kind)).map(|k| format!("{name}[{k}]"))),
             }
         }
         out.extend(self.class.clone());
@@ -421,7 +421,7 @@ impl TlaNames {
                     out.insert(name.clone(), render_value(&d.domain, state.get(ts, var, 0)));
                 }
                 _ => {
-                    for slot in 0..ts.bounds.slots() {
+                    for slot in 0..ts.slots_of(&d.kind) {
                         out.insert(
                             format!("{name}[{}]", slot + 1),
                             render_value(&d.domain, state.get(ts, var, slot)),
@@ -455,12 +455,12 @@ impl TlaNames {
                 let name = &self.vars[var.index()];
                 let keys = match d.kind {
                     VarKind::Now => vec![name.clone()],
-                    _ => (1..=ts.bounds.slots())
+                    _ => (1..=ts.slots_of(&d.kind))
                         .map(|k| format!("{name}[{k}]"))
                         .collect(),
                 };
                 let mut values = HashMap::new();
-                for v in (0..d.domain.size(ts.bounds)).map(|v| Value(v as u8)) {
+                for v in (0..d.domain.size(ts)).map(|v| Value(v as u8)) {
                     values.entry(render_value(&d.domain, v)).or_insert(v);
                 }
                 (keys, values)

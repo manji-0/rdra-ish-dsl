@@ -143,7 +143,7 @@ impl TransitionSystem {
         env: &mut Env,
         all: bool,
     ) -> bool {
-        for slot in 0..self.bounds.slots() {
+        for slot in 0..self.slots(entity) {
             if !state.is_present(self, entity, slot) {
                 continue;
             }
@@ -184,7 +184,6 @@ impl TransitionSystem {
     /// on one entity of a rule over two is met by a row of that entity alone.
     pub(crate) fn meets(&self, binders: &[EntId], pred: &Pred, state: &StateSlice) -> bool {
         let read = Self::premise_rows(binders.len(), pred);
-        let slots = self.bounds.slots();
         let mut env = Env::new(&[]);
         env.bound = vec![0; binders.len()];
         loop {
@@ -196,7 +195,7 @@ impl TransitionSystem {
             // The next rows of the binders the premise reads; the others stay at slot 0.
             let Some(k) = (0..binders.len())
                 .rev()
-                .find(|&k| read[k] && usize::from(env.bound[k]) + 1 < slots)
+                .find(|&k| read[k] && usize::from(env.bound[k]) + 1 < self.slots(binders[k]))
             else {
                 return false;
             };
@@ -229,7 +228,7 @@ impl TransitionSystem {
         let Some((&first, rest)) = binders.split_first() else {
             return (!self.eval(body, state, env)).then(|| env.bound.clone());
         };
-        for slot in 0..self.bounds.slots() {
+        for slot in 0..self.slots(first) {
             if !state.is_present(self, first, slot) {
                 continue;
             }

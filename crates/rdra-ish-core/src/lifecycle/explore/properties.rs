@@ -114,7 +114,7 @@ impl ComponentRun {
     /// `always(x)`.
     fn unsafe_state(&self, p: &Property, x: &Pred) -> Option<(u32, Vec<Edge>)> {
         let ts = &self.system;
-        let bindings: Vec<Vec<u8>> = ts.binder_slots(p.binders.len()).collect();
+        let bindings: Vec<Vec<u8>> = ts.binder_slots(&p.binders).collect();
         let at = self.states.iter().position(|s| {
             bindings
                 .iter()
@@ -129,7 +129,7 @@ impl ComponentRun {
     /// shallower state breaks it.
     fn breaking_step(&self, p: &Property) -> Option<(u32, Vec<Edge>)> {
         let ts = &self.system;
-        let bindings: Vec<Vec<u8>> = ts.binder_slots(p.binders.len()).collect();
+        let bindings: Vec<Vec<u8>> = ts.binder_slots(&p.binders).collect();
         let edge = self.edges.iter().find(|e| {
             let (a, b) = (&self.states[e.from as usize], &self.states[e.to as usize]);
             e.from != e.to && bindings.iter().any(|bd| ts.step_breaks(p, bd, a, b))
@@ -150,7 +150,7 @@ impl ComponentRun {
             out[e.from as usize].push(k as u32);
         }
         let mut best: Option<(u32, Vec<Edge>)> = None;
-        for bd in ts.binder_slots(p.binders.len()) {
+        for bd in ts.binder_slots(&p.binders) {
             let on = |s: &StateSlice, pred: &Pred| {
                 ts.triggers(p, &bd, s) && ts.holds_bound(pred, s, &bd)
             };

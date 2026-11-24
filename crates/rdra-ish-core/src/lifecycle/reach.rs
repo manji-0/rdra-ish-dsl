@@ -25,7 +25,7 @@ impl TransitionSystem {
         let n = graph.states.len();
         let adjacency = graph.adjacency();
         let mut worst: Option<(u32, Vec<u8>, Vec<bool>)> = None;
-        for binding in self.slot_tuples(r.binders.len()) {
+        for binding in self.binder_slots(&r.binders) {
             let present: Vec<bool> = graph
                 .states
                 .iter()
@@ -77,25 +77,6 @@ impl TransitionSystem {
             trace: Trace::default(),
         };
         Some((at, diag))
-    }
-
-    /// Every binding of `binders` binders to slots, the first binder outermost.
-    fn slot_tuples(&self, binders: usize) -> Vec<Vec<u8>> {
-        let slots = self.bounds.slots() as u8;
-        let mut all = vec![Vec::new()];
-        for _ in 0..binders {
-            all = all
-                .into_iter()
-                .flat_map(|b| {
-                    (0..slots).map(move |slot| {
-                        let mut next = b.clone();
-                        next.push(slot);
-                        next
-                    })
-                })
-                .collect();
-        }
-        all
     }
 
     fn all_present(&self, binders: &[EntId], binding: &[u8], s: &StateSlice) -> bool {

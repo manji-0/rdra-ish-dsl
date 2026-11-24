@@ -24,6 +24,7 @@ pub(super) fn owning_stage(model: &SemanticModel, diag: &StateDiag) -> StageId {
         | StateDiag::DoubleModeledEnum { .. }
         | StateDiag::NoCreationPath
         | StateDiag::PreExistingChildOfCreatedParent { .. }
+        | StateDiag::IdentityStartSlots { .. }
         | StateDiag::MinCardOfPreExistingParent { .. }
         | StateDiag::MinCardNeedsCreate { .. }
         | StateDiag::PatternCapReached { .. }
