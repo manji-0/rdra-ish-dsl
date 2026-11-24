@@ -238,6 +238,11 @@ impl OrbitRun {
         &self.run
     }
 
+    /// Whether the run's group moves the rows of `e`.
+    pub(crate) fn moves(&self, e: EntId) -> bool {
+        self.group.moves(e)
+    }
+
     /// The canonical form of `s`, a state of the system, under the run's group.
     pub(crate) fn canonical(&self, s: &StateSlice) -> State {
         let mut out = vec![0u8; s.0.len()];

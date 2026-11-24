@@ -63,8 +63,15 @@ pub(super) fn check(
         .collect();
     // (1) Each plain class goes to one class up to `H`, and no two to the same one.
     let mut to_h: Vec<Option<u32>> = vec![None; p.reps.len()];
+    let key_vars: crate::lifecycle::cone::VarSet =
+        ext.obs_local.union(&ext.inputs_local).copied().collect();
     for (i, s) in run.states.iter().enumerate() {
         let form = orbits.canonical(s);
+        assert!(
+            sub.project(s, &key_vars) == sub.project(&form, &key_vars),
+            "{}",
+            name("a state's form moves what the quotient reads")
+        );
         let at = *stored
             .get(&form.0[..])
             .unwrap_or_else(|| panic!("{}", name("a plain state's form is not stored")));

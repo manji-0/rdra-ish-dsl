@@ -636,6 +636,60 @@ fn a_violation_behind_the_sub_lifecycle_lifts_to_a_longer_real_trace() {
     assert_eq!(a[0].name(&[]), b[0].name(&[]));
 }
 
+/// S up to `H` on a sub-lifecycle `H` permutes (#212 phase 2): at two instances the key's
+/// sub-lifecycle, nested in the gate's, holds two cards that nothing the quotient reads names,
+/// so `H` swaps them (the gate's own S holds a nested reduction and runs plain), and it
+/// stores fewer states than its plain run while its quotient has the same classes. The
+/// reduced cone decides the same, and every trace of it, the violation's included, lifts
+/// through both reductions and the permutations to a real path of the unreduced cone.
+#[test]
+fn a_sub_lifecycle_up_to_h_stores_fewer_states_and_lifts_its_traces() {
+    let model = model_from(GATE);
+    let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+    let job = entity_target(&ts, "Job");
+    let rule = Target::Invariant(0);
+    let caps = Caps::new(usize::MAX, 200_000);
+    let plain = ts.explore_targets_reduced(&[job, rule], caps);
+    let up = ts.explore_targets_reduced(&[job, rule], caps.with_s_up_to_h(Symmetry::Always));
+    let (p, u) = (plain.cone_of(rule), up.cone_of(rule));
+    let (pr, ur) = (
+        p.run
+            .system
+            .reduction()
+            .expect("the plain quotient reduces the gate"),
+        u.run
+            .system
+            .reduction()
+            .expect("the quotient up to H reduces the gate"),
+    );
+    let (pi, ui) = (
+        pr.inner().expect("the gate's S nests the key's reduction"),
+        ur.inner().expect("the gate's S nests the key's reduction"),
+    );
+    assert!(
+        ui.states < pi.states,
+        "H moves the cards: {} states up to H, {} plain",
+        ui.states,
+        pi.states
+    );
+    assert_eq!(ui.classes(), pi.classes(), "the same inner classes");
+    assert_eq!(ur.classes(), pr.classes(), "the same classes");
+    assert_eq!(
+        u.run.states.len(),
+        p.run.states.len(),
+        "the same reduced cone"
+    );
+    let (a, b) = (violated(&plain), violated(&up));
+    assert_eq!(a.len(), 1);
+    assert_eq!(b.len(), 1);
+    assert_eq!(a[0].name(&[]), b[0].name(&[]));
+    let unreduced = ts.restrict_to(&u.cone.vars, &u.cone.keep);
+    for at in 0..u.run.states.len() as u32 {
+        let (start, steps) = lifted_path(&u.run, at);
+        assert_real_path(&unreduced, &start, &steps);
+    }
+}
+
 /// Two actions of one name are two actions: the reduced cone relates the gate's action to
 /// itself, not to the job's first step, so it reaches what the cone reaches.
 #[test]

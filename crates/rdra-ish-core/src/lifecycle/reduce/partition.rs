@@ -9,7 +9,7 @@ use crate::fasthash::FastMap;
 use crate::lifecycle::cone::VarSet;
 use crate::lifecycle::explore::{Adjacency, Caps, Checks, ComponentRun, OrbitRun, Symmetry};
 use crate::lifecycle::expr::State;
-use crate::lifecycle::types::{ActId, VarId};
+use crate::lifecycle::types::{ActId, Domain, EntId, VarId};
 use crate::lifecycle::{StateDiag, TransitionSystem};
 use crate::memory::{watch, Watched};
 
@@ -320,18 +320,42 @@ impl Classes {
             sub.clone()
                 .run_orbits_fixing(caps, Checks::none(), &ext.fixed)
         };
+        // `H` keeps every var the quotient reads where it is: the entity that holds it, and
+        // for a key the entity it names, stay put.
+        for v in ext.obs_local.iter().chain(&ext.inputs_local) {
+            let d = sub.var(*v);
+            let named = match d.domain {
+                Domain::Instance { parent, .. } => Some(parent),
+                _ => None,
+            };
+            for e in d.kind.entity().into_iter().chain(named) {
+                assert!(
+                    !orbits.moves(e),
+                    "symmetry: H moves the rows of {}, which the quotient reads",
+                    sub.entity(e).id
+                );
+            }
+        }
         let stats = std::env::var_os("RDRA_ISH_S_UP_TO_H_STATS").is_some();
         if stats {
             let plain = stopped_at.map_or(String::from("no plain run"), |n| {
                 format!("plain stopped at {n} states")
             });
+            let left: Vec<String> = (orbits.left_out().iter())
+                .map(|l| format!("{} ({:?})", l.entity, l.rule))
+                .collect();
+            let moving: Vec<&str> = (0..sub.entities().len())
+                .map(EntId::at)
+                .filter(|e| orbits.moves(*e))
+                .map(|e| sub.entity(e).id.as_str())
+                .collect();
             eprintln!(
-                "s-up-to-h: {plain}; {} orbits (about {} states){}; {} of {} entities left out",
+                "s-up-to-h: {plain}; {} orbits (about {} states){}; left out: {}; moving: {}",
                 orbits.orbits(),
                 orbits.estimate(),
                 if orbits.complete() { "" } else { ", stopped" },
-                orbits.left_out().len(),
-                sub.entities().len()
+                left.join(", "),
+                moving.join(", ")
             );
         }
         if !orbits.complete() {

@@ -469,6 +469,11 @@ impl Group {
         self.class_of[e.index()]
     }
 
+    /// Whether the group moves the rows of `e`.
+    pub(crate) fn moves(&self, e: EntId) -> bool {
+        self.classes[self.class_of[e.index()]].moves
+    }
+
     /// `s` under the permutation `perm` (old slot to new position, per class at `first`), in
     /// the state's own layout: every var of a class moves with its slots, and an owner on a
     /// present row names its parent's new position.
