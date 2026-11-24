@@ -70,6 +70,15 @@ pub type Step = (ActId, Box<[u8]>, State);
 /// it enters.
 pub type ClassMove = (ActId, Box<[u8]>, u32);
 
+/// The buffers a reduced step reuses from state to state (`moves_of_into`): the key of the
+/// state's class, and its input bytes before and after a step.
+#[derive(Default)]
+pub(crate) struct StepBuffers {
+    key: Vec<u8>,
+    before: Vec<u8>,
+    after: Vec<u8>,
+}
+
 /// A cone's S side quotiented, in the cone system's ids.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Reduction {
@@ -85,7 +94,7 @@ pub struct Reduction {
     /// under those inputs.
     rises: BTreeMap<(u32, Box<[u8]>), u32>,
     /// The input bits: per group of S actions whose reads of T fold into one bit, the folds.
-    /// A bit is a function of the T state (`bit_values`); in the extended sub-lifecycle it is
+    /// A bit is a function of the T state (`push_bits`); in the extended sub-lifecycle it is
     /// a var that flips freely.
     bits: Vec<Vec<Fold>>,
     /// Per S action the extended sub-lifecycle keeps, the cone's actions it stands for: the
@@ -205,12 +214,18 @@ impl Reduction {
     /// their layout, the stubs, then the input bits.
     pub(crate) fn key(&self, ts: &TransitionSystem, s: &StateSlice) -> Vec<u8> {
         let mut key = Vec::new();
-        for &(at, w, _) in &self.spans {
-            key.extend_from_slice(&s.0[at..at + w]);
-        }
-        key.extend_from_slice(&self.tail);
-        key.extend(self.bit_values(ts, s));
+        self.key_into(ts, s, &mut key);
         key
+    }
+
+    /// `key` written into `out`, which keeps its allocation.
+    fn key_into(&self, ts: &TransitionSystem, s: &StateSlice, out: &mut Vec<u8>) {
+        out.clear();
+        for &(at, w, _) in &self.spans {
+            out.extend_from_slice(&s.0[at..at + w]);
+        }
+        out.extend_from_slice(&self.tail);
+        self.push_bits(ts, s, out);
     }
 
     /// The input bytes of a state, in the extended sub-lifecycle's order: the raw inputs,
@@ -234,23 +249,17 @@ impl Reduction {
                 out.extend_from_slice(&s.0[at..at + w]);
             }
         }
-        for (group, slots) in self.bits.iter().zip(self.bit_slots(ts)) {
-            for c in 0..slots as u8 {
-                out.push(u8::from(group.iter().any(|f| f.holds(ts, s, c))));
-            }
-        }
+        self.push_bits(ts, s, out);
     }
 
-    /// The input bits of a state: per bit group and slot of its key, whether some fold of
-    /// the group holds there.
-    fn bit_values(&self, ts: &TransitionSystem, s: &StateSlice) -> Vec<u8> {
-        let mut out = Vec::new();
+    /// Appends the input bits of a state to `out`: per bit group and slot of its key, whether
+    /// some fold of the group holds there.
+    fn push_bits(&self, ts: &TransitionSystem, s: &StateSlice, out: &mut Vec<u8>) {
         for group in &self.bits {
             for c in 0..ts.slots(group[0].key_entity(ts)) as u8 {
                 out.push(u8::from(group.iter().any(|f| f.holds(ts, s, c))));
             }
         }
-        out
     }
 
     /// Writes the S part of `bytes`, an extended sub-lifecycle state, into `s`.
@@ -266,7 +275,13 @@ impl Reduction {
 
     /// The class of a state whose S part is a representative.
     pub fn class(&self, ts: &TransitionSystem, s: &StateSlice) -> Option<u32> {
-        self.class_of.get(self.key(ts, s).as_slice()).copied()
+        self.class_into(ts, s, &mut Vec::new())
+    }
+
+    /// `class`, with the key built in `key`, which keeps its allocation.
+    fn class_into(&self, ts: &TransitionSystem, s: &StateSlice, key: &mut Vec<u8>) -> Option<u32> {
+        self.key_into(ts, s, key);
+        self.class_of.get(key.as_slice()).copied()
     }
 
     /// The representative's bytes, as the extended sub-lifecycle's state.
@@ -357,21 +372,6 @@ impl Reduction {
         let mut out = s.to_owned();
         self.write(&mut out, &self.reps[class as usize]);
         Some(out)
-    }
-
-    /// The class moves from `s`: the last action, its params, and the successor.
-    pub(crate) fn moves_from(&self, ts: &TransitionSystem, s: &StateSlice) -> Vec<Step> {
-        let class = self
-            .class(ts, s)
-            .expect("a reduced state holds a representative");
-        self.moves[class as usize]
-            .iter()
-            .map(|(act, params, to)| {
-                let mut s2 = s.to_owned();
-                self.write(&mut s2, &self.reps[*to as usize]);
-                (*act, params.clone(), s2)
-            })
-            .collect()
     }
 
     /// Whether a class move's `params` bind the cone action `act` as it is: the extended
@@ -635,7 +635,8 @@ impl TransitionSystem {
 
     /// The moves of `s`, with the reduction applied when the system has one and `reduced`: the
     /// S actions are left out, the class moves come last, and a T step that sets an input of
-    /// S moves the representative to the class the inputs put it in.
+    /// S moves the representative to the class the inputs put it in. The class of `s` is
+    /// looked up once, when a step or the class moves first need it, in buffers `out` keeps.
     pub(crate) fn moves_of_into(
         &self,
         s: &StateSlice,
@@ -644,10 +645,17 @@ impl TransitionSystem {
         out: &mut super::explore::Moves,
     ) {
         let r = self.reduction().filter(|_| reduced);
-        let rises = r
-            .filter(|r| !r.inputs.is_empty() || !r.bits.is_empty())
-            .map(|r| (r, r.input_bytes(self, s)));
-        let mut after = Vec::new();
+        let mut buffers = std::mem::take(&mut out.reduced);
+        let StepBuffers { key, before, after } = &mut buffers;
+        let rises = r.filter(|r| !r.inputs.is_empty() || !r.bits.is_empty());
+        if let Some(r) = rises {
+            r.input_bytes_into(self, s, before);
+        }
+        let mut class: Option<u32> = None;
+        let class_of = |r: &Reduction, key: &mut Vec<u8>| {
+            r.class_into(self, s, key)
+                .expect("a reduced state holds a representative")
+        };
         self.each_raw_move(
             s,
             |act| r.is_some_and(|r| r.skips(act)),
@@ -655,16 +663,12 @@ impl TransitionSystem {
             |act, params, next| {
                 // A steady action's step leaves the inputs as they were, so the class too.
                 debug_assert!(rises
-                    .as_ref()
-                    .is_none_or(|(r, before)| !r.is_steady(act)
-                        || r.input_bytes(self, next) == *before));
-                if let Some((r, before)) = rises.as_ref().filter(|(r, _)| !r.is_steady(act)) {
-                    r.input_bytes_into(self, next, &mut after);
-                    if after != *before {
-                        let class = r
-                            .class(self, s)
-                            .expect("a reduced state holds a representative");
-                        let to = r.recanon(class, before, &after).unwrap_or_else(|| {
+                    .is_none_or(|r| !r.is_steady(act) || r.input_bytes(self, next) == *before));
+                if let Some(r) = rises.filter(|r| !r.is_steady(act)) {
+                    r.input_bytes_into(self, next, after);
+                    if after != before {
+                        let class = *class.get_or_insert_with(|| class_of(r, key));
+                        let to = r.recanon(class, before, after).unwrap_or_else(|| {
                             panic!(
                                 "a T step's rise is a rise of the extended sub-lifecycle: {} from class {class} inputs {before:?} to {after:?}, known {:?}",
                                 self.actions[act.index()].name,
@@ -678,9 +682,13 @@ impl TransitionSystem {
             },
         );
         if let Some(r) = r {
-            for (act, params, next) in r.moves_from(self, s) {
-                out.push(act, &params, &next);
+            let class = class.unwrap_or_else(|| class_of(r, key));
+            for (act, params, to) in &r.moves[class as usize] {
+                scratch.0.copy_from_slice(&s.0);
+                r.write(scratch, &r.reps[*to as usize]);
+                out.push(*act, params, scratch);
             }
         }
+        out.reduced = buffers;
     }
 }
