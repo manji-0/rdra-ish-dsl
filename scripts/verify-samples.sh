@@ -2,23 +2,60 @@
 # Run `check` and `verify` on every sample root in samples.txt and compare each run with the
 # `// expect` headers in the root's first .rdra file in load order (`rdra-ish files`).
 # The header grammar is in docs/formal-verification.md ("Sample expectations").
-# Usage: scripts/verify-samples.sh [--with-tlc] <rdra-ish binary>
+# Usage: scripts/verify-samples.sh [--with-tlc [--tlc-roots FILE]] <rdra-ish binary>
 #
 # Without --with-tlc every run has no `tlc` or `tlc2` on PATH and no RDRA_TLC_JAR, so a
 # passing run proves that `verify` needs no JVM. With --with-tlc every `verify` run also
 # runs TLC beside the native checker: it must match the same header, print `tlc_result:`, and
 # report no engine disagreement, which would add an error name the header does not list.
+#
+# --tlc-roots FILE limits TLC to the roots FILE lists (one per line, `#` comments) and to
+# every header line that carries flags, whatever its root; every other `verify` runs native
+# alone and prints `(native)` after its label. CI passes scripts/tlc-roots.txt, which says
+# why those roots (#305).
 set -uo pipefail
 
+usage='usage: scripts/verify-samples.sh [--with-tlc [--tlc-roots FILE]] <rdra-ish binary>'
 with_tlc=false
-if [[ "${1:-}" == --with-tlc ]]; then
-  with_tlc=true
-  shift
+tlc_roots_file=""
+while [[ "${1:-}" == --* ]]; do
+  case "$1" in
+    --with-tlc)
+      with_tlc=true
+      shift
+      ;;
+    --tlc-roots)
+      tlc_roots_file="${2:?$usage}"
+      [[ "$tlc_roots_file" == /* ]] || tlc_roots_file="$PWD/$tlc_roots_file"
+      shift 2
+      ;;
+    *)
+      echo "verify-samples: unknown option $1; $usage" >&2
+      exit 2
+      ;;
+  esac
+done
+if [[ -n "$tlc_roots_file" ]] && ! $with_tlc; then
+  echo "verify-samples: --tlc-roots needs --with-tlc" >&2
+  exit 2
 fi
-bin="${1:?usage: scripts/verify-samples.sh [--with-tlc] <rdra-ish binary>}"
+bin="${1:?$usage}"
 [[ "$bin" == /* ]] || bin="$PWD/$bin"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root" || exit 2
+
+# The roots TLC runs on under --tlc-roots, one per line; each must be a samples.txt root, so
+# a renamed root cannot drop out of the TLC run unnoticed.
+tlc_roots=""
+if [[ -n "$tlc_roots_file" ]]; then
+  tlc_roots="$(sed -e 's/#.*//' -e 's/[[:space:]]*$//' "$tlc_roots_file" | sed '/^$/d')" || exit 2
+  while IFS= read -r r; do
+    if ! grep -qxF "$r" samples.txt; then
+      echo "verify-samples: $tlc_roots_file lists $r, which is not a samples.txt root" >&2
+      exit 2
+    fi
+  done <<<"$tlc_roots"
+fi
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -163,8 +200,13 @@ while IFS= read -r root; do
 
     rm -rf "$work/tla"
     extra=()
+    native=false
     if $with_tlc && [[ "$cmd" == verify && " $flags " != *" --with-tlc "* ]]; then
-      extra=(--with-tlc)
+      if [[ -z "$tlc_roots_file" || -n "$flags" ]] || grep -qxF "$root" <<<"$tlc_roots"; then
+        extra=(--with-tlc)
+      else
+        native=true
+      fi
     fi
     # shellcheck disable=SC2086 # header flags are CLI words
     if [[ "$cmd" == check ]]; then
@@ -192,6 +234,7 @@ while IFS= read -r root; do
     unnamed="$(grep -c '^error: ' "$work/out")"
 
     label="$cmd${flags:+ $flags}"
+    $native && label="$label (native)"
     if [[ "$status" == "$want_exit" && "$got_tlc" == "$want_tlc" && "$got_names" == "$want_names" && "$unnamed" == 0 ]] && $tlc_line; then
       verdict=ok
     else
