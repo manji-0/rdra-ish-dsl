@@ -252,13 +252,13 @@ under a load average of 30 to 60, measured.
 | `safety_counted_once_per_raise` | A counted handler runs once per raise; the latch runs twice after one | counted ok, z3 proved; latch counterexample |
 | `safety_event_overflow` | A raise past `k` is `EventOverflow`, and the raiser never waits | `k = 2` counterexample; `k = 3` ok, z3 proved |
 | `safety_unique_sets` | A unique column set over column vars, owner vars, and a nullable Int that two rows leave null | single column and junction counterexample; guarded set and null set ok, z3 proved |
-| `sym_owner_coupled` | A child's key moves with its parent's row; deleted children keep the base value | ok, z3 proved; BFS ok, ok, ok |
+| `sym_owner_coupled` | A child's key moves with its parent's row, a deleted child's too | ok, z3 proved; BFS ok, ok, ok |
 | `sym_identity_pair` | A pre-existing 1:1 child starts at its parent's slot, so the two permute as one class | counterexample |
 | `sym_master_ties` | Identical master rows, some named by children and some not | counterexample |
 | `sym_self_owned` | A key that names rows of its own entity, enumerated jointly | ok, z3 proved; BFS ok, ok, ok |
 | `sym_first_absent` | A creation takes the first absent slot, and the group fixes absent slots | ok, z3 proved; BFS ok, ok, ok |
 | `sym_per_entity_bounds` | Classes of different slot counts (`--instances`) | ok, z3 proved |
-| `sym_deleted_row_owner` | A later step reads the key of a row an earlier step deleted, which holds slot 0; the scan leaves the parent out | ok |
+| `sym_deleted_row_owner` | A later step reads the key of a row an earlier step deleted, which keeps its parent, so the key must move with that parent | counterexample |
 | `sym_lift_compose` | A counterexample the canonical form reorders at several steps; the lift composes every permutation | counterexample at 2 and 3 |
 | `cap_temporal_budget_zero` | `--temporal-budget 0` | not decided on both engines |
 | `cap_memory_limit` | `--memory 2KiB` stops runs partway (native only) | not decided |
@@ -306,18 +306,18 @@ and 3 instances on a `shadow` build. Each bug was reverted afterwards.
 
 | Planted bug | Where | Caught by |
 |---|---|---|
-| A deleted row's key is relabelled | `Group::apply` | three exhaustive tests; the `canonical` twin on `sym_owner_coupled` |
+| A deleted row's key is not relabelled | `Group::apply` | three exhaustive tests; rule 8 (`sym_deleted_row_owner` does not replay at 2 and 3 instances); the `canonical` twin on `sym_deleted_row_owner` and `sym_owner_coupled` |
 | An identity pair is not coupled into one class | `Group::of` | the exhaustive test `an_identity_pair` |
-| Absent slots are permuted | `Canon::canonical` | five exhaustive tests; rule 8 (`sym_deleted_row_owner` does not replay); the `canonical` twin on every `sym_` case |
+| Absent slots are permuted | `Canon::canonical` | five exhaustive tests; the `canonical` twin on every `sym_` case |
 | Ties that a child names are taken in slot order | `Canon::split` | the exhaustive test `a_parent_and_an_owner_child` |
 | The lift undoes only the last permutation | `lift` in `explore/orbit.rs` | rule 8 on `sym_lift_compose` (step 6 does not bind the row it names), release and `shadow` |
 | The scan's ordered-id rule is gone | `breaks.rs` | the unit test `a_guard_that_orders_row_ids_leaves_the_class_out` |
 | `compose` ignores its second permutation | `Group::compose` | the Kani harness `apply_of_a_composition_is_the_composition_of_applies` |
 | `compose` applies its arguments in the wrong order | `Group::compose` | the unit test `apply_compose_and_inverse_agree_on_three_slots`; not the Kani harness, whose 2-slot groups commute |
-| The scan's deleted-row-key rule is gone | `breaks.rs` | rule 8 on `sym_deleted_row_owner` (the lifted trace does not replay), release and `shadow` |
 
-Rule 8 alone misses the first two: the wrong canonical form there still gives the plain
-run's verdicts on every case, so only the exhaustive test and the `canonical` twin see it.
+Rule 8 misses the uncoupled identity pair and the permuted absent slots: the wrong
+canonical form there still gives the plain run's verdicts on every case, so only the
+exhaustive test and the `canonical` twin see it.
 
 ## Mutation run
 
@@ -365,7 +365,6 @@ compile it.
 | `compare_negates_and_mirrors` | `expr.rs` | `compare` does not panic, `!=` is the negation of `==`, and swapping the operands mirrors the operator | every operand kind, every domain, every value |
 | `a_block_rounds_up_to_16` | `explore/store.rs` | `block(n)` is a multiple of 16 that holds `n` and wastes under 16 bytes | every `n` up to `usize::MAX - 16` |
 | `a_buf_takes_what_bytes_with_said` | `explore/edges.rs` | what `Buf::bytes_with` says before a push is what the buffer takes after it, and it holds room for at most twice its items | up to 17 pushes |
-| `steps_read_back_and_take_no_more_than_before` | `explore/edges.rs` | every edge and parent of `Steps`, with an edge list or without, reads back as the 12-byte `Edge` a run kept before #296, and `Steps` never takes more bytes than the 8-byte parents and 12-byte edges it replaces | up to 5 admits, reads and pushes, binding ids 0 to 2, 256 and 65,536 (every width and widening) |
 | `store_bytes_never_overflows` | `explore/store.rs` | `store_bytes` neither overflows nor panics | every input, every shape |
 | `store_bytes_only_grows` | `explore/store.rs` | more states, wider states, more edges, wider binding ids, or an edge list never count as fewer bytes, so past `u64` the count stays at `u64::MAX` | every input |
 | `store_bytes_is_at_most_the_model_before` | `explore/store.rs` | the model never counts more than the one before #296 (8-byte parents, 12-byte edges) | every input, every shape |

@@ -64,7 +64,7 @@ pub(crate) fn elements(ts: &TransitionSystem, g: &Group, s: &StateSlice) -> Opti
 }
 
 /// `s` under `perm`: each var of an entity moves with its class's slots, and an owner on a
-/// present row names its parent's new slot.
+/// present or deleted row names its parent's new slot.
 pub(crate) fn apply(ts: &TransitionSystem, g: &Group, perm: &[u8], s: &StateSlice) -> Vec<u8> {
     let mut out = s.to_owned();
     for v in ts.var_ids() {
@@ -74,7 +74,7 @@ pub(crate) fn apply(ts: &TransitionSystem, g: &Group, perm: &[u8], s: &StateSlic
         for slot in 0..ts.slots(e) {
             let mut value = s.get(ts, v, slot);
             if let (VarKind::Owner { .. }, Domain::Instance { parent, .. }) = (&d.kind, &d.domain) {
-                if s.is_present(ts, e, slot) {
+                if s.get(ts, ts.entity(e).exists, slot) != Value::ABSENT {
                     if let Some(p) = d.domain.slot(value) {
                         let pc = &g.classes[g.class_of(*parent)];
                         value = d.domain.of_slot(perm[pc.first + usize::from(p)]);

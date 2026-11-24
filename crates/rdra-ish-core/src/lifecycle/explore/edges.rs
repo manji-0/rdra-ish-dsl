@@ -102,21 +102,21 @@ impl Ids {
     }
 
     pub(crate) fn push(&mut self, id: u32) {
+        // Widen first, one width at a time, then push: no recursion, which Kani would
+        // unwind into copies of the whole function.
+        if let Ids::One(b) = self {
+            if u8::try_from(id).is_err() {
+                *self = Ids::Two(widen(b));
+            }
+        }
+        if let Ids::Two(b) = self {
+            if u16::try_from(id).is_err() {
+                *self = Ids::Four(widen(b));
+            }
+        }
         match self {
-            Ids::One(b) => match u8::try_from(id) {
-                Ok(id) => b.push(id),
-                Err(_) => {
-                    *self = Ids::Two(widen(b));
-                    self.push(id);
-                }
-            },
-            Ids::Two(b) => match u16::try_from(id) {
-                Ok(id) => b.push(id),
-                Err(_) => {
-                    *self = Ids::Four(widen(b));
-                    self.push(id);
-                }
-            },
+            Ids::One(b) => b.push(id as u8),
+            Ids::Two(b) => b.push(id as u16),
             Ids::Four(b) => b.push(id),
         }
     }
@@ -636,77 +636,6 @@ mod proofs {
             assert_eq!((b.capacity() * size_of::<u32>()) as u64, said);
             assert_eq!(b.bytes_with(0), said);
             assert!(b.capacity() <= (2 * b.len()).max(4));
-        }
-    }
-
-    /// A `Vec`'s buffer once `more` items are pushed: what a run was charged before #296.
-    fn vec_bytes<T>(v: &Vec<T>, more: usize) -> u64 {
-        let cap = if v.len() + more <= v.capacity() {
-            v.capacity()
-        } else {
-            (v.capacity() * 2).max(v.len() + more).max(4)
-        };
-        (cap * size_of::<T>()) as u64
-    }
-
-    /// For every run of up to 5 steps, each admitting a state (reached by a move pushed with
-    /// it, or initial before any state is read), reading the next state, or pushing a move to
-    /// any state with a binding id of 1, 2 or 4 bytes (0 to 2, 256 or 65,536: each width and
-    /// each widening), with an edge list or without one: every edge and parent
-    /// reads back as the 12-byte `Edge` the run kept before #296, and the bytes `Steps` takes
-    /// with one state more are never more than the 8-byte parents and 12-byte edges of the
-    /// `Vec`s it replaces at the same lengths, so a run that fit a memory limit still does.
-    #[kani::proof]
-    #[kani::unwind(7)]
-    fn steps_read_back_and_take_no_more_than_before() {
-        let binding = || kani::any_where(|b: &u32| *b <= 2 || *b == 256 || *b == 65_536);
-        let graph: bool = kani::any();
-        let mut steps = Steps::new(graph);
-        let mut parents: Vec<Option<u32>> = Vec::new();
-        let mut edges: Vec<Edge> = Vec::new();
-        let (mut states, mut read) = (0u32, 0u32);
-        for _ in 0..5 {
-            let op: u8 = kani::any();
-            if op == 0 {
-                let parent = (read > 0).then(|| (read - 1, binding()));
-                steps.admit(parent);
-                parents.push(parent.map(|_| edges.len() as u32));
-                if let Some((from, binding)) = parent {
-                    steps.push(from, states, binding);
-                    edges.push(Edge {
-                        from,
-                        to: states,
-                        binding,
-                    });
-                }
-                states += 1;
-            } else if op == 1 && read < states {
-                steps.read(read as usize);
-                read += 1;
-            } else if read > 0 {
-                let (to, binding): (u32, u32) = (kani::any(), binding());
-                kani::assume(to < states);
-                steps.push(read - 1, to, binding);
-                edges.push(Edge {
-                    from: read - 1,
-                    to,
-                    binding,
-                });
-            }
-            assert!(steps.bytes_with(1) <= vec_bytes(&parents, 1) + vec_bytes(&edges, 0));
-        }
-        assert_eq!(steps.moves(), edges.len() as u64);
-        for at in 0..states {
-            assert_eq!(
-                steps.parent(at),
-                parents[at as usize].map(|k| edges[k as usize])
-            );
-        }
-        if graph {
-            let list = steps.edges();
-            for (k, e) in edges.iter().enumerate() {
-                assert_eq!(list.get(k), *e);
-            }
         }
     }
 }

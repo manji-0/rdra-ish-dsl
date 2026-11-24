@@ -11,8 +11,7 @@
 use std::collections::BTreeSet;
 
 use crate::lifecycle::types::{
-    At, Birth, CmpOp, Domain, Effect, EntId, Param, ParamRole, Pred, Rhs, Start, Term, Value,
-    VarKind,
+    At, Birth, CmpOp, Domain, Effect, EntId, Param, Pred, Rhs, Start, Term, Value, VarKind,
 };
 use crate::lifecycle::TransitionSystem;
 
@@ -72,7 +71,6 @@ pub(super) fn scan(ts: &TransitionSystem, class_of: &[usize]) -> BTreeSet<(EntId
         }
     }
     scan.starts();
-    scan.deleted_row_owners();
     scan.found
 }
 
@@ -254,83 +252,6 @@ impl Scan<'_> {
                 Effect::Delete { .. } | Effect::Tick => {}
             }
         }
-    }
-
-    /// An owner read on a row that may not be present: an `Earlier` param, which binds a
-    /// row by its run mark and not by its existence, of an entity some step deletes; a `New`
-    /// param in the pre-state, where the row is absent; and a param the step deletes, in the
-    /// successor (or in an after-assert, which reads the successor). Such a row holds the
-    /// base value, which for a mandatory key is slot 0 and which the group does not relabel,
-    /// so the read names a fixed row of the parent while the parent's rows move. An optional
-    /// key whose base is `null` names no row there, and stays symmetric. Guards and
-    /// after-asserts are the only reads to walk: an effect reads no slot (an `Rhs` is a
-    /// literal or a param's slot index), and a rule's binders range over present rows.
-    fn deleted_row_owners(&mut self) {
-        let ts = self.ts;
-        let deletes = |a: &crate::lifecycle::types::Action, p: u8| {
-            a.effects
-                .iter()
-                .any(|e| matches!(e, Effect::Delete { param } if *param == p))
-        };
-        let deletable: BTreeSet<EntId> = ts
-            .actions()
-            .iter()
-            .flat_map(|a| {
-                (0..a.params.len() as u8)
-                    .filter(move |p| deletes(a, *p))
-                    .map(move |p| a.params[usize::from(p)].entity)
-            })
-            .collect();
-        let mut found = BTreeSet::new();
-        // `post`: the predicate reads `At::Param` in the successor, as an after-assert does.
-        let mut reads = |action: &crate::lifecycle::types::Action, pred: &Pred, post: bool| {
-            for term in pred.terms() {
-                let (var, p, next) = match term {
-                    Term::Slot {
-                        var,
-                        at: At::Param(p),
-                    } => (var, *p, post),
-                    Term::Slot {
-                        var,
-                        at: At::Next(p),
-                    } => (var, *p, true),
-                    _ => continue,
-                };
-                let d = ts.var(*var);
-                let (VarKind::Owner { child, .. }, Domain::Instance { parent, optional }) =
-                    (&d.kind, &d.domain)
-                else {
-                    continue;
-                };
-                if *optional && d.base == Value::NULL {
-                    continue;
-                }
-                let Some(param) = action.params.get(usize::from(p)) else {
-                    continue;
-                };
-                let maybe_gone = match param.role {
-                    ParamRole::Earlier { .. } => {
-                        deletable.contains(child) || (next && deletes(action, p))
-                    }
-                    ParamRole::New => !next,
-                    _ => next && deletes(action, p),
-                };
-                if maybe_gone {
-                    found.insert((*parent, Rule::DeletedRowOwner));
-                }
-            }
-        };
-        for action in ts.actions() {
-            for guard in &action.guards {
-                reads(action, &guard.pred, false);
-            }
-        }
-        for a in ts.after_asserts() {
-            for step in &a.steps {
-                reads(&ts.actions()[step.act.index()], &step.post, true);
-            }
-        }
-        self.found.extend(found);
     }
 
     /// Starts that pin a slot: an identity start between unequal slot counts, and a present

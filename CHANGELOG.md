@@ -140,9 +140,10 @@
   sets the default; under `[check]` it warns and is not read. A counterexample is lifted to
   concrete slots and replayed, with the rows each step names, before it prints. A static
   scan leaves out an entity whose slots the model tells apart (an ordered id comparison, an
-  id against a literal, a key set to a literal row, and six more) and names it and the
+  id against a literal, a key set to a literal row, and five more) and names it and the
   reason under the line. A cone run up to symmetry gathers no entity view (#251) and shares
-  no run with the entity, safety and property passes (#209). Without the option nothing changes. At `--instance-count 3` the
+  no run with the entity, safety and property passes (#209). Without the option nothing
+  changes. At `--instance-count 3` the
   five clinic-ops and insurance-claim-ops lines that stopped at the memory limit are decided
   under `--memory 8GiB`. In `rdra-ish-core`, `TransitionSystem::run_orbits` returns an
   `OrbitRun`, which has no graph or adjacency to read, and the vacuity readers take any
@@ -392,6 +393,30 @@
   retires 2% to 7% more (317.0 G to 328.7 G on `insurance-claim-ops`, 32.9 G to 34.6 G on
   `patent-ops`); a `shadow` build compares every edge, parent and recorded `after` step
   with the 12-byte list kept beside them.
+- **Verdicts can change:** a deleted row keeps its keys (#212). `deletes(UC, E)` resets the
+  row's columns to their base values and no longer resets its keys to the first slot. The
+  only reader that sees the difference is a later step that binds the deleted row: a step
+  of a split use case whose earlier step deleted it (an `Earlier` parameter) and that reads
+  its key, in a guard or an `after` assertion. That step now reads the
+  parent the row had, where it read the first slot. The native checker, z3, and the TLA+
+  export (`<E>_owner_<P>` stays `UNCHANGED` on a delete) agree. No sample, skill example, or
+  engine-corpus case changes verdict except `sym_deleted_row_owner`, which reads that key
+  and now has a counterexample. A cone that deletes keyed rows can store more states,
+  since deleted rows that named different parents now differ; every sample's `verify`
+  output is unchanged, byte for byte. The TLA+
+  export changes text on 9 models (no verdict). Instance symmetry relabels a deleted row's
+  key with its parent, so a model that reads it is no longer left out of the group.
+- The flake's `tlc` (in `nix develop` and on the `PATH` of the flake's `rdra-ish`) runs TLC
+  1.7.4 on JDK 17 instead of JDK 8, with a class-data-sharing archive of TLC's classes built
+  with it (#309). `verify --with-tlc` also compiles a state-model run of at most 10,000
+  states by BFS with C1 only (`-XX:TieredStopAtLevel=1`), once TLC has started with that
+  flag; cone runs, whose size is not known when they start, keep the default JIT. The
+  engine corpus (306 TLC runs, 159 of them state models) went from 45 s wall and 275 CPU-s
+  to 33 s and 151 CPU-s on an 18-core Mac. Verdicts and the parsing of TLC's output are
+  unchanged. Not JDK 21: TLC 1.7.4 reads a trace record back wrongly on JDK 21 and later,
+  and a `-continue` run that prints many traces stops with an
+  `ArrayIndexOutOfBoundsException` (#314); JDK 17 is 3 to 14% slower than 21 on runs past
+  about 50,000 states.
 - `--max-patterns` caps only a run that builds an entity view (#251, #296): the cone of an
   entity view in `check` and `states`. Only those runs gather view patterns now. A cone of
   invariants, `after` assertions or `can_reach` alone, a run that quotients a sub-lifecycle,
