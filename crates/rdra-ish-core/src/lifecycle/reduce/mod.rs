@@ -48,14 +48,20 @@ pub use partition::Divergence;
 use partition::{NoQuotient, Quotient};
 use split::Split;
 
-/// The most cells (`Reduction::tla_cells`) a reduced cone may print for TLC. Measured with
-/// TLC's 1 GB heap (#112): the insurance-claim-ops cones of 2,428 classes print 72,840 cells
-/// and `verify` runs them; the `ClaimCase` view's of 4,368 classes prints 104,832 (a 1.6 MB
-/// module) and TLC run by hand on it checks 52,687 states in 21 s at a peak of 912 MB; a
-/// random model's cone of 24,000 classes printed 326,400 and ran out of heap while the
-/// module was processed. A cone past the budget is explored through the split without
-/// inputs, or unreduced.
-const TLA_CELL_BUDGET: usize = 200_000;
+/// The most cells (`Reduction::tla_cells`) a reduced cone may print for TLC; the native
+/// checker reduces under the same budget, so both check the same cones. A cone past it is
+/// explored through the split without inputs, or unreduced.
+///
+/// TLC's 1 GB cone heap (`Heap::Cone`) holds the modules up to about 200,000 cells (#112):
+/// the `ClaimCase` view's 104,832 (a 1.6 MB module) checks at a peak of 912 MB, and a random
+/// model's 326,400 ran out of heap while the module was processed. The budget was 200,000
+/// until #284 raised it past the largest module measured with a larger heap: food-permit-ops'
+/// `AfterAssert_SuspendBusiness_0` cone at 3 instances, 520,704 cells (a 7.6 MB module) and
+/// 7,167,444 states, which TLC checks in 98 s at `-Xmx4g` (4.1 GB peak) and not at `-Xmx1g`
+/// (out of heap in semantic processing) or `-Xmx2g` (out of heap after 5 minutes). A cone
+/// between 200,000 cells and this budget needs `RDRA_TLC_HEAP=4g` under `--with-tlc`;
+/// without it TLC stops with a tool error and that hint.
+pub(crate) const TLA_CELL_BUDGET: usize = 530_000;
 
 /// Why one attempt at `reduced` left the cone unreduced.
 enum Unreduced {
