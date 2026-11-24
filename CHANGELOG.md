@@ -139,7 +139,8 @@
   map of the state bytes), the source pattern and the unchanged-row skip of a BFS edge
   (#251), the quotient partition (the sweeps the worklist replaced, on quotients of up to
   2,500,000 states), a quotient cache hit (computed again through an empty cache) and the
-  reduced step's class moves (#252). Each twin lives in a file of its own. A new CI job,
+  reduced step's class moves (#252). Each twin lives in a file of its own, a `reference.rs`
+  beside its fast path; the cache hit's twin is `Classes::of` itself. A new CI job,
   `shadow`, runs `verify-samples.sh` and the engine corpus on that build. A build without
   the feature is unchanged.
 - `check --guards` reports which rules each guard protects (#198). A guard is a `holds`

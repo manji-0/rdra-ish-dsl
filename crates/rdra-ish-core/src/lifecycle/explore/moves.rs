@@ -9,7 +9,6 @@ use crate::lifecycle::TransitionSystem;
 use super::plan::Plan;
 use super::{Move, Moves};
 
-#[cfg(any(debug_assertions, feature = "shadow"))]
 mod reference;
 
 impl TransitionSystem {
@@ -82,56 +81,6 @@ impl TransitionSystem {
                 })
                 .filter(|s| seen.insert(s.clone()))
                 .collect();
-        }
-        out
-    }
-
-    /// Slot choices for each param: the lowest absent slot for `New`, every present slot
-    /// otherwise.
-    pub(super) fn bindings(&self, action: &Action, state: &StateSlice) -> Vec<Vec<u8>> {
-        self.bindings_for(action, state, false)
-    }
-
-    /// `bindings`, except that with `crowd` a `New` param with no free slot takes every slot,
-    /// as if the bound left one free.
-    pub(super) fn bindings_for(
-        &self,
-        action: &Action,
-        state: &StateSlice,
-        crowd: bool,
-    ) -> Vec<Vec<u8>> {
-        let mut out: Vec<Vec<u8>> = vec![Vec::new()];
-        for p in &action.params {
-            let exists = self.entity(p.entity).exists;
-            let n = self.slots(p.entity);
-            let slots: Vec<u8> = match p.role {
-                ParamRole::New => {
-                    match (0..n).find(|&s| state.get(self, exists, s) == Value::ABSENT) {
-                        Some(s) => vec![s as u8],
-                        None if crowd => (0..n as u8).collect(),
-                        None => Vec::new(),
-                    }
-                }
-                ParamRole::Existing | ParamRole::Parent { .. } | ParamRole::Triggered => (0..n)
-                    .filter(|&s| state.get(self, exists, s) == Value::PRESENT)
-                    .map(|s| s as u8)
-                    .collect(),
-                // Matched by its run mark, a guard, whether or not the slot is present.
-                ParamRole::Earlier { .. } => (0..n as u8).collect(),
-            };
-            out = out
-                .into_iter()
-                .flat_map(|prefix| {
-                    slots.iter().map(move |s| {
-                        let mut b = prefix.clone();
-                        b.push(*s);
-                        b
-                    })
-                })
-                .collect();
-            if out.is_empty() {
-                break;
-            }
         }
         out
     }
@@ -274,20 +223,6 @@ impl TransitionSystem {
     fn rest_holds(&self, plan: &Plan, state: &StateSlice, params: &[u8]) -> bool {
         let mut env = Env::new(params);
         plan.pre.iter().all(|pred| self.eval(pred, state, &mut env))
-    }
-
-    pub(super) fn pre_guards_hold(
-        &self,
-        action: &Action,
-        state: &StateSlice,
-        params: &[u8],
-    ) -> bool {
-        let mut env = Env::new(params);
-        action
-            .guards
-            .iter()
-            .filter(|g| !g.reads_successor())
-            .all(|g| self.eval(&g.pred, state, &mut env))
     }
 
     pub(super) fn successors(&self, action: &Action, params: &[u8], s: &StateSlice) -> Vec<State> {

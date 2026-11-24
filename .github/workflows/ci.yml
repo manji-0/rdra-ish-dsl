@@ -146,10 +146,15 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Build the shadow CLI
         run: cargo build -p rdra-ish-cli --release --features shadow
-      - name: The twins compared calls
-        # How many calls each twin compared and skipped on one sample, so a run that compares
-        # nothing shows as such.
-        run: RDRA_ISH_SHADOW_STATS=1 target/release/rdra-ish verify samples/patent-ops
+      - name: Every twin compares calls
+        # How many calls each twin compared and skipped on one sample. patent-ops reaches all
+        # of them; the step fails when the line is missing (a build without the feature) or a
+        # twin compared none.
+        run: |
+          RDRA_ISH_SHADOW_STATS=1 target/release/rdra-ish verify samples/patent-ops 2> shadow-stats.txt
+          cat shadow-stats.txt
+          grep -q '^shadow: compared/skipped ' shadow-stats.txt
+          ! grep -qE '^shadow: compared/skipped .*=0/' shadow-stats.txt
       - name: Every sample against its expect header, each fast path held to its twin
         run: scripts/verify-samples.sh target/release/rdra-ish
         timeout-minutes: 20
