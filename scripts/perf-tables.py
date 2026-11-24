@@ -12,7 +12,8 @@ of #296 are measured. Each run is `RDRA_PERF=1 RDRA_JOBS=1`, one at a time; `RDR
 in the environment passes through and adds the costly columns. `--from` reads the stderr of
 runs made by hand instead.
 
-Prints per run the totals (instructions retired where macOS `/usr/bin/time -l` reports them,
+Prints per run the totals, the system's guard conjuncts by what #253 makes of them and the
+evaluator calls per expanded state (#300), (instructions retired where macOS `/usr/bin/time -l` reports them,
 user CPU, peak RSS, BFS runs, states, edges), the passes, the BFS CPU per pass and label, and
 the largest runs with the bytes they keep per state.
 """
@@ -90,6 +91,14 @@ def report(title, lines, totals):
     if not passes and not runs:
         print("  no perf lines: is the binary built with --features perf?")
         return
+    for l in lines:
+        if l.startswith("perf-guards "):
+            print("  guards of the system: " + l.split(" ", 1)[1])
+        elif l.startswith("perf-evals "):
+            d = fields(l)
+            n = max(int(d.pop("expanded")), 1)
+            per = ", ".join(f"{k} {int(v) / n:.2f}" for k, v in d.items())
+            print(f"  eval calls per expanded state ({n:,} expanded): {per}")
     print("  passes:")
     for p in passes:
         print(

@@ -10,6 +10,8 @@ mod liveness;
 mod moves;
 #[cfg(feature = "perf")]
 mod perf;
+#[cfg(feature = "perf")]
+pub use perf::evals_line as perf_evals_line;
 mod plan;
 mod properties;
 mod reach;

@@ -18,6 +18,7 @@ fn perf_pass_at_exit() {
     rdra_ish_core::perf::pass("load");
     extern "C" fn last() {
         rdra_ish_core::perf::pass("exit");
+        rdra_ish_core::lifecycle::perf_evals_line();
     }
     extern "C" {
         fn atexit(f: extern "C" fn()) -> std::os::raw::c_int;

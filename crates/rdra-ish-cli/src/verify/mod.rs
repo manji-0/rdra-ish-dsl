@@ -140,6 +140,8 @@ pub fn run(
     rdra_ish_core::perf::pass("build_ts");
     let built = checked_system(model, bounds.clone(), scope)?;
     let (ts, selection) = (built.ts, built.selection);
+    #[cfg(feature = "perf")]
+    ts.perf_guards_line();
     let (out, whole_name) = out_names(out);
     let keep = out.is_some();
     let names = TlaNames::new(&ts);

@@ -19,6 +19,9 @@ pub(crate) struct Plan {
     /// The guards read on the pre-state and the successor together, as indices into
     /// `Action::guards`, in guard order.
     pub post: Box<[usize]>,
+    /// Per `pre` item, what it reads (`perf::Kind`), for the evaluator counts of #300.
+    #[cfg(feature = "perf")]
+    pub pre_kinds: Box<[super::perf::Kind]>,
 }
 
 /// A conjunct that reads one var of one param's row: it holds on a slot exactly when the
@@ -122,6 +125,8 @@ impl TransitionSystem {
         }
         Plan {
             rows: rows.into_iter().map(Vec::into_boxed_slice).collect(),
+            #[cfg(feature = "perf")]
+            pre_kinds: pre.iter().map(super::perf::Kind::of).collect(),
             pre: pre.into(),
             post: post.into(),
         }
