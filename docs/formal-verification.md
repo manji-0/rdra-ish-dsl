@@ -336,8 +336,8 @@ the other cones, in parallel.
 Under `--with-tlc`, TLC cone runs go at once as long as their heaps fit TLC's share of the
 [memory limit](./cli-reference.md#memory-limit), the cones with the largest module first,
 then the property cones and the cones with the most variables, since those tend to be the
-long ones. Each run gets the cores divided by the runs going and queued, at most 8 TLC
-workers, and 1 when the runs outnumber the cores: past 4 to 8 workers a run gains no time
+long ones. Each run gets the cores divided by the runs that can go at once (those going
+and queued, no more than fit the share), at most 8 TLC workers and at least 1: past 4 to 8 workers a run gains no time
 and spends 50 to 70% more CPU (#309). A run's heap follows its module, 512 MiB per MiB of
 module text, at least `1g`, and a run that runs out of memory runs once more at twice the
 heap when the share holds it. With several workers

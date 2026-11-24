@@ -362,8 +362,8 @@
     place of up to 8 at once. A run whose heap alone is past the share runs alone. At the
     default `16GiB` that is six cone runs of `1g` at once, not eight, and at `4GiB` one,
     not two.
-  - Each run's TLC workers are the cores divided by the runs going and queued, at most 8,
-    and 1 when the runs outnumber the cores. Before, it was at least 2 on 4 cores and up to
+  - Each run's TLC workers are the cores divided by the runs that can go at once (those
+    going and queued, no more than fit the share), at most 8, and at least 1. Before, it was at least 2 on 4 cores and up to
     all the cores. Past 4 to 8 workers a run gained no time and spent 50 to 70% more CPU.
 - `verify` reduces a cone whose TLA+ tables print up to 530,000 cells, not 200,000 (#284),
   for the native checker and TLC alike, so both still check the same cones.

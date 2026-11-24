@@ -612,8 +612,8 @@ fn run_wholes(
 /// Runs the jobs `only` names on up to `threads` threads, the largest heap first, then the
 /// heaviest (`Job::weight`). A run starts once its heap and those of the runs going fit the
 /// budget (`Budget`), or alone; it reruns once at twice the heap when it runs out of memory
-/// (`run_sized`). Its TLC workers divide the cores among the runs going and queued, at most 8
-/// (`tlc_workers`). The results come back in the order of `only`.
+/// (`run_sized`). Its TLC workers divide the cores among the runs that can go at once, at
+/// most 8 (`tlc_workers`). The results come back in the order of `only`.
 fn run_some(
     (jobs, only): (&[Job], &[usize]),
     (threads, cores): (usize, usize),
@@ -634,12 +634,10 @@ fn run_some(
         |at| heaps[only[at]].charge(),
         |at, hold, in_flight| {
             let (job, heap) = (&jobs[only[at]], heaps[only[at]]);
-            // The runs that can go at once: no more than the threads, nor than fit the share.
+            // The runs that can go at once: those going and queued, but no more than the
+            // threads, nor than fit the share, so cores the budget leaves idle go to workers.
             let fit = usize::try_from(share / heap.charge().max(1)).unwrap_or(usize::MAX);
-            let sharing = match in_flight > cores {
-                true => in_flight,
-                false => in_flight.min(threads).min(fit.max(1)),
-            };
+            let sharing = in_flight.min(threads).min(fit.max(1));
             let workers = tlc_workers(cores, sharing).to_string();
             run_sized(job, heap, (share, hold), |bytes| {
                 run(job, (&workers, bytes))

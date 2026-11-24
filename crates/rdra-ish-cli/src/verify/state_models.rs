@@ -218,7 +218,9 @@ pub(super) fn run_state_models(
         |k| heaps[k].charge(),
         |k, hold, in_flight| {
             let (job, heap) = (&jobs[k], heaps[k]);
-            let workers = tlc_workers(cores, in_flight).to_string();
+            // As in `tlc::run_some`: the runs that fit the share divide the cores.
+            let fit = usize::try_from(share / heap.charge().max(1)).unwrap_or(usize::MAX);
+            let workers = tlc_workers(cores, in_flight.min(fit.max(1))).to_string();
             let bytes = match heap {
                 TlcHeap::OverShare { need } => {
                     let (_, report) =

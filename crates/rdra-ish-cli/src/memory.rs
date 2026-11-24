@@ -335,6 +335,24 @@ mod tests {
         );
     }
 
+    /// A run over the share says what it needs, what TLC has, and what to change.
+    #[test]
+    fn a_run_over_the_share_names_the_heap_it_needs_and_the_hint() {
+        let (note, report) = TlcHeap::over_share("Cone_Big", 16_800_000, 9 * GIB, 8 * GIB);
+        assert_eq!(
+            note,
+            "not run: needs a 9GiB heap, more than the 8GiB TLC has of --memory"
+        );
+        assert!(
+            report.starts_with("not run: Cone_Big.tla is 16.8 MB, and TLC needs about 512 MiB of heap per MiB of module, so 9GiB; TLC's runs have 8GiB of --memory\nhint: "),
+            "{report}"
+        );
+        assert!(
+            report.ends_with("RDRA_TLC_HEAP=9g or JAVA_TOOL_OPTIONS=-Xmx9g"),
+            "{report}"
+        );
+    }
+
     /// The heap the user names is kept whatever the module and the share, and never doubled.
     #[test]
     fn a_heap_the_user_names_is_kept_and_not_doubled() {
