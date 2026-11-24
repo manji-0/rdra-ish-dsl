@@ -118,6 +118,7 @@ impl Bfs<'_> {
         self.states.bytes_with(more)
             + vec_bytes::<Option<u32>>(&self.parents, more)
             + vec_bytes::<Edge>(&self.edges, 0)
+            + vec_bytes::<u32>(&self.orbit_self, 0)
             + self.bindings.bytes
             + self.layers.bytes()
     }

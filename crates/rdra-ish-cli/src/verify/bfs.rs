@@ -6,8 +6,9 @@ use super::WholeRun;
 use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_output::Outcome;
 use rdra_ish_core::lifecycle::{
-    Caps, Checks, ComponentRun, Diag, EntId, NotChecked, PropertyVerdict, QuotientCache, RunEnd,
-    Scope, Selection, Severity, StateDiag, Target, TargetExploration, TransitionSystem, Undecided,
+    Caps, Checks, ComponentRun, Diag, EntId, LeftOut, NotChecked, OrbitRun, PropertyVerdict,
+    QuotientCache, RunEnd, Scope, Selection, Severity, StateDiag, StoredRun, Symmetry, Target,
+    TargetExploration, TransitionSystem, Undecided,
 };
 use rdra_ish_core::{in_parallel, ResolvedProgram, SemanticModel};
 use std::collections::BTreeSet;
@@ -311,6 +312,7 @@ pub(super) fn explored_properties(
 /// TLC would check, at verify's bounds and caps.
 pub(super) enum BfsCone {
     Ran {
+        /// The states stored: under symmetry, one per class.
         states: usize,
         /// The violated invariants and after-asserts, each with BFS's shortest trace.
         found: Vec<Diag>,
@@ -318,6 +320,8 @@ pub(super) enum BfsCone {
         end: RunEnd,
         /// The run stopped at the memory limit.
         memory: bool,
+        /// The run was up to instance symmetry (`--symmetry`).
+        orbits: Option<Box<Orbits>>,
     },
     /// The cone at this index of the jobs covers this one (`covering`) and passed.
     Covered(usize),
@@ -326,16 +330,84 @@ pub(super) enum BfsCone {
     Proved { states: usize },
 }
 
+/// What a run up to instance symmetry adds to its cone's line.
+pub(super) struct Orbits {
+    /// The states of the plain run the classes stand for: an estimate.
+    pub(super) estimate: u128,
+    /// Classes stored without their canonical form (`BRANCH_CAP`).
+    pub(super) cut: u64,
+    pub(super) left_out: Vec<LeftOut>,
+    /// The plain run stopped at the memory limit after this many states, and the cone ran
+    /// again up to symmetry (`--symmetry retry`).
+    pub(super) retried_at: Option<usize>,
+}
+
+/// `n` to two significant figures, as `62M`.
+pub(super) fn about(n: u128) -> String {
+    const UNITS: [&str; 7] = ["", "K", "M", "G", "T", "P", "E"];
+    if n < 1000 {
+        return n.to_string();
+    }
+    let digits = n.to_string().len();
+    // Round to two significant figures.
+    let scale = 10u128.pow(digits as u32 - 2);
+    let rounded = (n + scale / 2) / scale * scale;
+    let digits = rounded.to_string().len();
+    let unit = ((digits - 1) / 3).min(UNITS.len() - 1);
+    let base = 10u128.pow(3 * unit as u32);
+    let whole = rounded / base;
+    match whole < 10 {
+        true => {
+            format!("{}.{}{}", whole, (rounded % base) * 10 / base, UNITS[unit]).replace(".0", "")
+        }
+        false => format!("{whole}{}", UNITS[unit]),
+    }
+}
+
 impl BfsCone {
+    /// The verdict of `run`, a run of `cone`'s system up to instance symmetry; `retried_at`
+    /// is the plain run's states when it stopped at the memory limit first.
+    pub(super) fn of_orbits(
+        ts: &TransitionSystem,
+        cone: &ConeSystem,
+        run: &OrbitRun,
+        retried_at: Option<usize>,
+    ) -> BfsCone {
+        let mut out = Self::of_parts(ts, cone, run.checks(), run.diags(), run.end());
+        if let BfsCone::Ran { states, orbits, .. } = &mut out {
+            *states = run.orbits();
+            *orbits = Some(Box::new(Orbits {
+                estimate: run.estimate(),
+                cut: run.cut(),
+                left_out: run.left_out().to_vec(),
+                retried_at,
+            }));
+        }
+        out
+    }
+
     /// The verdict of `run`, a run of `cone`'s system.
     pub(super) fn of(ts: &TransitionSystem, cone: &ConeSystem, run: &ComponentRun) -> BfsCone {
+        let mut out = Self::of_parts(ts, cone, run.checks(), &run.diags, run.end());
+        if let BfsCone::Ran { states, .. } = &mut out {
+            *states = run.states.len();
+        }
+        out
+    }
+
+    fn of_parts(
+        ts: &TransitionSystem,
+        cone: &ConeSystem,
+        checks: &Checks,
+        diags: &[Diag],
+        end: RunEnd,
+    ) -> BfsCone {
         // The module checks every invariant and after-assert its system holds, as TLC does.
         rdra_ish_core::shadow_assert!(
-            run.checks() == &Checks::All,
+            checks == &Checks::All,
             "a safety cone evaluates every check"
         );
-        let found = run
-            .diags
+        let found = diags
             .iter()
             .filter(|d| {
                 matches!(
@@ -352,10 +424,11 @@ impl BfsCone {
             })
             .collect();
         BfsCone::Ran {
-            states: run.states.len(),
+            states: 0,
             found,
-            end: run.end(),
-            memory: crowded(run),
+            end,
+            memory: met_memory_limit(diags),
+            orbits: None,
         }
     }
 
@@ -375,6 +448,7 @@ impl BfsCone {
             found,
             end: RunEnd::Capped,
             memory: true,
+            ..
         } = &self
         else {
             return self;
@@ -419,14 +493,49 @@ impl BfsCone {
     pub(super) fn line(&self, module: &str, checks: &[String], jobs: &[Job]) -> String {
         let verdict = self.verdict().map_or("not decided", Outcome::as_str);
         match self {
-            BfsCone::Ran { states, end, .. } => {
-                let notes = match end {
-                    RunEnd::Complete | RunEnd::ChecksFailed => Vec::new(),
-                    RunEnd::Capped => vec![
+            BfsCone::Ran {
+                states,
+                end,
+                orbits,
+                ..
+            } => {
+                let mut notes = Vec::new();
+                let mut count = Some(*states as u64);
+                if let Some(o) = orbits {
+                    count = None;
+                    notes.push(format!(
+                        "{states} orbits, about {} states",
+                        about(o.estimate)
+                    ));
+                    if let Some(at) = o.retried_at {
+                        notes.push(format!(
+                            "retried up to instance symmetry after the memory limit at {at} states"
+                        ));
+                    }
+                }
+                if *end == RunEnd::Capped {
+                    notes.push(
                         "stopped at the state cap (--max-states) or the memory limit".to_string(),
-                    ],
-                };
-                run_line(module, checks, verdict, Some(*states as u64), &notes)
+                    );
+                }
+                let mut line = run_line(module, checks, verdict, count, &notes);
+                // The notes under the line: what the group left out, and what it cut.
+                if let Some(o) = orbits {
+                    for l in &o.left_out {
+                        line.push_str(&format!(
+                            "\n  note: instance symmetry leaves {} out: {}",
+                            l.entity,
+                            l.rule.text()
+                        ));
+                    }
+                    if o.cut > 0 {
+                        line.push_str(&format!(
+                            "\n  note: {} states stored without their canonical form (branch cap); the orbit count is an upper bound",
+                            o.cut
+                        ));
+                    }
+                }
+                line
             }
             BfsCone::Covered(by) => run_line(
                 module,
@@ -469,7 +578,12 @@ pub(super) fn decide_by_proof(
 
 /// The run met the memory limit, maybe only because the runs beside it held the rest.
 pub(super) fn crowded(run: &ComponentRun) -> bool {
-    run.diags
+    met_memory_limit(&run.diags)
+}
+
+/// Some diagnostic says the run met the memory limit.
+fn met_memory_limit(diags: &[Diag]) -> bool {
+    diags
         .iter()
         .any(|d| matches!(d.diag, StateDiag::MemoryCapReached { .. }))
 }
@@ -484,13 +598,27 @@ pub(super) fn safety_on(
     run: &ComponentRun,
 ) -> (BfsCone, Vec<Diag>) {
     let me = safety_cone(jobs, at).expect("a safety cone");
-    let vacuous: Vec<Diag> = std::iter::once(at)
+    (
+        BfsCone::of(ts, me, run),
+        vacuous_on(ts, jobs, covers, at, run),
+    )
+}
+
+/// The vacuous checks of the safety cone of `jobs[at]` and of the cones `covers` says it
+/// covers, read off `run`, a run of its system with or without symmetry.
+fn vacuous_on(
+    ts: &TransitionSystem,
+    jobs: &[Job],
+    covers: &[Option<usize>],
+    at: usize,
+    run: &impl StoredRun,
+) -> Vec<Diag> {
+    std::iter::once(at)
         .chain((0..jobs.len()).filter(|a| covers[*a] == Some(at)))
         .filter_map(|a| safety_cone(jobs, a))
         .flat_map(|c| c.targets.iter())
         .filter_map(|t| ts.vacuity(*t, run))
-        .collect();
-    (BfsCone::of(ts, me, run), vacuous)
+        .collect()
 }
 
 fn safety_cone(jobs: &[Job], at: usize) -> Option<&ConeSystem> {
@@ -510,31 +638,60 @@ fn safety_cone(jobs: &[Job], at: usize) -> Option<&ConeSystem> {
 /// cone whose system is a property's cone runs to the end, so that its run also gives the
 /// property's plain answer, which goes into `shared`; when that run stops at a cap the cone
 /// runs again as it would alone.
+///
+/// Under `--symmetry always` a cone the sub-lifecycle reduction leaves whole runs up to
+/// instance symmetry, alone (`Shared::up_to_symmetry`): `shared` holds no verdict for it, and
+/// its run gives no property its plain answer. Under `--symmetry retry` such a cone runs so
+/// only when its lone run also stopped at the memory limit; the plain run and its charge are
+/// gone by then.
 pub(super) fn bfs_cones(
     ts: &TransitionSystem,
     jobs: &[Job],
     caps: Caps,
     covers: &[Option<usize>],
     shared: &mut Shared,
+    symmetry: Symmetry,
 ) -> (Vec<Option<BfsCone>>, Vec<Diag>) {
     let cone = |at: usize| safety_cone(jobs, at);
-    // Per safety cone, the properties not yet decided whose reduced cone is its system.
+    let up_to_symmetry: Vec<bool> = (0..jobs.len())
+        .map(|at| shared.up_to_symmetry(at))
+        .collect();
+    let up_to_symmetry = |at: usize| up_to_symmetry[at];
+    // Per safety cone, the properties not yet decided whose reduced cone is its system. A
+    // cone that runs up to symmetry has none, and a property that does is no partner.
     let partners: Vec<Vec<usize>> = (0..jobs.len())
         .map(|at| match cone(at) {
-            None => Vec::new(),
-            Some(me) => (0..jobs.len())
-                .filter(|k| shared.plain[*k].is_none())
+            Some(me) if !up_to_symmetry(at) => (0..jobs.len())
+                .filter(|k| shared.plain[*k].is_none() && !up_to_symmetry(*k))
                 .filter(|k| matches!(&jobs[*k].kind, JobKind::PropertyCone(p) if p.cone.reduced == me.system))
                 .collect(),
+            Some(_) | None => Vec::new(),
         })
         .collect();
     let property = |k: usize| match &jobs[k].kind {
         JobKind::PropertyCone(p) => p.as_ref(),
         _ => unreachable!("a property's job"),
     };
+    // The cone at `at` up to instance symmetry, stopped once every check has failed;
+    // `retried_at` is the plain run's states when it stopped at the memory limit first.
+    let orbits = |at: usize, retried_at: Option<usize>| {
+        let me = cone(at).expect("a safety cone");
+        let run = me.system.clone().run_orbits(caps.until_all_violated());
+        let vacuous = vacuous_on(ts, jobs, covers, at, &run);
+        let memory = met_memory_limit(run.diags());
+        (
+            BfsCone::of_orbits(ts, me, &run, retried_at),
+            vacuous,
+            memory,
+            Vec::new(),
+        )
+    };
     // A safety cone decides its checks alone, so it stops once every one has failed: a check
     // it holds is then violated, so neither vacuous nor covering another.
     let alone = |at: usize| {
+        if up_to_symmetry(at) {
+            return orbits(at, None);
+        }
         let run = cone(at)
             .expect("a safety cone")
             .system
@@ -577,9 +734,28 @@ pub(super) fn bfs_cones(
         .collect();
     let decided = in_parallel(open.clone(), rdra_ish_core::jobs(), decide);
     for (&at, (verdict, vacuous, crowded, plains)) in open.iter().zip(decided) {
-        let (verdict, vacuous, _, plains) = match crowded {
-            true => decide(at),
+        let (verdict, vacuous, crowded, plains) = match crowded {
+            true => {
+                drop((verdict, vacuous, plains));
+                decide(at)
+            }
             false => (verdict, vacuous, crowded, plains),
+        };
+        let (verdict, vacuous) = match (&verdict, symmetry) {
+            (
+                BfsCone::Ran {
+                    states,
+                    orbits: None,
+                    ..
+                },
+                Symmetry::Retry,
+            ) if crowded && jobs[at].symmetric() => {
+                let states = *states;
+                drop((verdict, vacuous));
+                let (verdict, vacuous, _, _) = orbits(at, Some(states));
+                (verdict, vacuous)
+            }
+            _ => (verdict, vacuous),
         };
         for (k, plain) in plains {
             shared.plain[k] = Some(plain);
@@ -593,15 +769,12 @@ pub(super) fn bfs_cones(
         out[at] = Some(verdict);
     }
     for at in 0..jobs.len() {
-        if let (Some(by), Some(me)) = (covers[at], cone(at)) {
+        if let (Some(by), Some(_)) = (covers[at], cone(at)) {
             out[at] = Some(match out[by].as_ref().is_some_and(BfsCone::passed) {
                 true => BfsCone::Covered(by),
                 false => match shared.safety[at].take() {
                     Some((verdict, _)) => verdict,
-                    None => {
-                        let run = me.system.clone().run(caps.until_all_violated());
-                        BfsCone::of(ts, me, &run)
-                    }
+                    None => alone(at).0,
                 },
             });
         }

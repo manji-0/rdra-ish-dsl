@@ -1,7 +1,7 @@
 use crate::export::Modules;
 use crate::property_cone::{ConeRun, PropertyCone};
 use rdra_ish_core::lifecycle::{
-    ActId, Caps, Cone, QuotientCache, Target, TransitionSystem, VarSet,
+    ActId, Caps, Cone, LtlKind, QuotientCache, Target, TransitionSystem, VarSet,
 };
 use rdra_ish_core::{in_parallel, jobs};
 use rdra_ish_emit::tla::{self, PrintMode, TlaBundle, TlaNames};
@@ -70,6 +70,25 @@ impl Job {
             JobKind::Explored(e) => (true, e.system.var_ids().count()),
             JobKind::Whole(_) => (true, usize::MAX),
         }
+    }
+
+    /// Whether the job may run up to instance symmetry in phase 1 (#212): a safety cone, or
+    /// an `always` (`PropertyJob::symmetric`), on a cone the sub-lifecycle reduction leaves
+    /// whole.
+    pub(super) fn symmetric(&self) -> bool {
+        match &self.kind {
+            JobKind::Cone(cone) => cone.system.reduction().is_none(),
+            JobKind::PropertyCone(p) => p.symmetric(),
+            JobKind::Explored(_) | JobKind::Whole(_) => false,
+        }
+    }
+}
+
+impl PropertyJob {
+    /// Whether the property may run up to instance symmetry in phase 1: an `always`, whose
+    /// verdict reads one state at a time, on a cone the sub-lifecycle reduction leaves whole.
+    pub(super) fn symmetric(&self) -> bool {
+        self.cone.kind == LtlKind::Always && self.cone.reduced.reduction().is_none()
     }
 }
 
