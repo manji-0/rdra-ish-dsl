@@ -11,7 +11,7 @@
 //! | `observe`'s source pattern, looked up once per state (`explore/bfs.rs`, #251) | `explore/bfs/reference.rs`: the lookup on every edge |
 //! | `observe`'s skip of a row whose columns are unchanged (#251) | `explore/bfs/reference.rs`: what the edge would intern |
 //! | `quotient_blocks` (`reduce/partition.rs`, #252) | `reduce/partition/reference.rs`: the sweeps, on quotients of up to `SHADOW_CAP` states |
-//! | a `QuotientCache` hit (`reduce/cache.rs`, #252) | `Classes::of` itself, through a cache that holds nothing |
+//! | a `QuotientCache` hit (`reduce/cache.rs`, #252), a declined entry's included (#289) | `Classes::of` itself, through a cache that holds nothing |
 //! | the reduced step's class moves (`moves_of_into`, #252) | `reduce/reference.rs`: `moves_from` |
 //!
 //! A `shadow` build also runs the checks `shadow_assert!` makes, as a debug build does: each

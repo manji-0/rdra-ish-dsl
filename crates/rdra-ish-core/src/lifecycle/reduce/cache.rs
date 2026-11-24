@@ -16,6 +16,19 @@
 //! caller's thread and gives it back, as a run of that size would: it sees the same refusal
 //! and the same peak (`memory::watch`) as computing would, and a refusal computes after all.
 //!
+//! A declined computation is stored too (#289): one whose nested reduction was clean and
+//! whose run of S then stopped at the memory limit on a request past the room of the pool it
+//! charged (`Ended::Declined`), so that no other run's bytes decided where it stopped. Each
+//! request its runs were granted was at most `need`, and the one refused was more than that
+//! room. In a pool whose room is no larger and which covers `need` now, every granted request
+//! is granted again and the refused one is refused again, so the runs take the same steps:
+//! the computation stops at the same request, unclean, with the same peak and no crowding. A
+//! hit on a declined entry asks for exactly that: the caller's pool's room at most the room
+//! the entry was declined in, then `need` as for a clean entry. It answers what computing
+//! answers, `Classified::Nothing` and not clean, and never stands for a clean computation: a
+//! larger room computes, and a clean result there replaces the declined entry. A computation
+//! stopped any other way (a crowded pool, a cap, a nested run that stopped) is not stored.
+//!
 //! An entry stays charged to the command's pool while the cache holds it, in the bytes its
 //! tables take (`Classes::bytes`), and never to a room-limited child pool, so a cone that
 //! happened to fill it loses no room for its own run. What the cache holds is the same on any
@@ -31,7 +44,7 @@ use std::mem::size_of;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use super::extended::Extended;
-use super::partition::{Classes, Classified};
+use super::partition::{Classes, Classified, Ended};
 use super::{ClassMove, Reduction};
 use crate::lifecycle::cone::VarSet;
 use crate::lifecycle::explore::Caps;
@@ -111,11 +124,14 @@ impl Key {
     }
 }
 
-/// A clean computation's result.
+/// A clean or declined computation's result.
 struct Entry {
     classes: Classified,
     /// The most bytes a run of the computation asked its pool to cover.
     need: u64,
+    /// For a declined computation, the room of the pool it charged, which the request it was
+    /// refused passed; `None` for a clean one.
+    declined_in: Option<u64>,
     /// `classes`, charged to the command's pool while the cache holds it.
     _charge: Option<Charge>,
 }
@@ -135,10 +151,10 @@ impl QuotientCache {
         }
     }
 
-    /// The classes of `ext` under `caps`, and whether they came out clean: the entry when one
-    /// is stored and its runs fit the caller's pool, else `compute()`, stored when clean. Caps
-    /// with a deadline bypass the cache: whether a run beats the clock is not in the key.
-    /// `compute` is given the cache its nested reductions go through.
+    /// The classes of `ext` under `caps`, and how their runs ended: the entry when one is
+    /// stored and answers the caller's pool (`Entry::answers`), else `compute()`, stored when
+    /// clean or declined. Caps with a deadline bypass the cache: whether a run beats the clock
+    /// is not in the key. `compute` is given the cache its nested reductions go through.
     ///
     /// A `shadow` build holds each hit to its reference twin: the classes computed afresh,
     /// through a cache that holds nothing.
@@ -146,8 +162,8 @@ impl QuotientCache {
         &self,
         ext: &Extended,
         caps: Caps,
-        compute: impl FnOnce(&QuotientCache) -> (Classified, bool),
-    ) -> (Classified, bool) {
+        compute: impl FnOnce(&QuotientCache) -> (Classified, Ended),
+    ) -> (Classified, Ended) {
         if self.off || caps.deadline.is_some() {
             return compute(self);
         }
@@ -168,33 +184,47 @@ impl QuotientCache {
         // Held while computing, so a cone that asks meanwhile waits for the entry. A nested
         // key is a smaller system, so the locks are taken in one order.
         let mut entry = slot.entry.lock().unwrap_or_else(PoisonError::into_inner);
-        if let Some(e) = entry.as_ref().filter(|e| fits(e.need, caps)) {
+        if let Some(e) = entry.as_ref().filter(|e| e.answers(caps)) {
             self.note(|s| s.hits += 1);
+            let hit = (e.classes.clone(), e.ended());
             // The cache's own tests ask for a hit with a `compute` that must not run.
             #[cfg(all(feature = "shadow", not(test)))]
             {
-                let (fresh, clean) = compute(&QuotientCache::off());
-                // A recomputation that a limit stopped says nothing of the entry.
-                if !clean {
+                let ((fresh, ended), seen) =
+                    crate::memory::watch(|| compute(&QuotientCache::off()));
+                // A recomputation that a limit stopped says nothing of a clean entry, and one
+                // that met a pool others crowded says nothing of a declined one.
+                let telling = match e.declined_in {
+                    None => ended.is_clean(),
+                    Some(_) => !seen.crowded,
+                };
+                if !telling {
                     crate::shadow::skipped(crate::shadow::Twin::CacheHit);
                 } else {
                     assert!(
-                        fresh == e.classes,
-                        "shadow: QuotientCache::classes: the entry a hit took for the sub-lifecycle of {:?} is not what Classes::of computes afresh",
+                        fresh == hit.0 && ended.is_clean() == hit.1.is_clean(),
+                        "shadow: QuotientCache::classes: the entry a hit took for the sub-lifecycle of {:?} ({:?}) is not what Classes::of computes afresh ({ended:?})",
                         ext.system
                             .entities
                             .iter()
                             .map(|e| e.id.as_str())
-                            .collect::<Vec<_>>()
+                            .collect::<Vec<_>>(),
+                        hit.1,
                     );
                     crate::shadow::compared(crate::shadow::Twin::CacheHit);
                 }
             }
-            return (e.classes.clone(), true);
+            return hit;
         }
-        let ((classes, clean), seen) = crate::memory::watch(|| compute(self));
+        let ((classes, ended), seen) = crate::memory::watch(|| compute(self));
         self.note(|s| s.computed += 1);
-        if clean && entry.is_none() {
+        // A clean result replaces a declined one, which a larger room computed past.
+        let store = match ended {
+            Ended::Clean => entry.as_ref().is_none_or(|e| e.declined_in.is_some()),
+            Ended::Declined => entry.is_none(),
+            Ended::Stopped => false,
+        };
+        if store {
             let bytes = match &classes {
                 Classified::Classes(c) => c.bytes(),
                 Classified::Nothing | Classified::TooLarge => 0,
@@ -209,11 +239,15 @@ impl QuotientCache {
                 *entry = Some(Entry {
                     classes: classes.clone(),
                     need: seen.peak,
+                    declined_in: match ended {
+                        Ended::Declined => caps.memory.map(|pool| pool.room()),
+                        Ended::Clean | Ended::Stopped => None,
+                    },
                     _charge: charge.flatten(),
                 });
             }
         }
-        (classes, clean)
+        (classes, ended)
     }
 
     /// A cache that holds nothing: every cone computes its own.
@@ -246,6 +280,24 @@ impl Drop for QuotientCache {
                 s.stored,
                 s.bytes
             );
+        }
+    }
+}
+
+impl Entry {
+    /// Whether the entry is what computing would give under `caps`: a declined one only in a
+    /// pool of no more room than it was declined in, and either only when its runs fit the
+    /// pool now (`fits`, asked last, as it is what a computation's runs would ask).
+    fn answers(&self, caps: Caps) -> bool {
+        let room = |room: u64| caps.memory.is_some_and(|pool| pool.room() <= room);
+        self.declined_in.is_none_or(room) && fits(self.need, caps)
+    }
+
+    /// How the computation the entry stands for ended.
+    fn ended(&self) -> Ended {
+        match self.declined_in {
+            None => Ended::Clean,
+            Some(_) => Ended::Declined,
         }
     }
 }
@@ -356,7 +408,7 @@ mod tests {
     use crate::lifecycle::tests::model_from;
     use crate::lifecycle::types::Value;
     use crate::lifecycle::{Bounds, Scope};
-    use crate::memory::{MemoryPool, MemorySize};
+    use crate::memory::{MemoryPool, MemorySize, Watched};
 
     /// The extended sub-lifecycle of the job's cone: the gate and the key behind it.
     fn job_ext(key_cycles: bool) -> Extended {
@@ -405,7 +457,7 @@ mod tests {
         let (hit, clean) = cache.classes(&b, Caps::VERIFY, |_| unreachable!());
         let (fresh, _) = Classes::of(&b, Caps::VERIFY, &QuotientCache::new());
         let (hit, fresh) = (quotient(hit), quotient(fresh));
-        assert!(clean);
+        assert!(clean.is_clean());
         assert_eq!(hit.reps, fresh.reps);
         assert_eq!(hit.class_of, fresh.class_of);
         assert_eq!(hit.init, fresh.init);
@@ -476,7 +528,7 @@ mod tests {
             let ran = Cell::new(false);
             cache.classes(e, *caps, |_| {
                 ran.set(true);
-                (Classified::Nothing, false)
+                (Classified::Nothing, Ended::Stopped)
             });
             assert!(ran.get(), "{what}: a near miss computes");
         }
@@ -512,14 +564,110 @@ mod tests {
             Classes::of(&ext, short, &QuotientCache::new())
         });
         assert!(ran.get(), "a room short of `need` computes");
-        assert!(!clean, "and a run stops at the limit");
+        assert!(!clean.is_clean(), "and a run stops at the limit");
         let exact = Caps::VERIFY.charged_to(pool.with_room(need));
         let ((_, clean), seen) =
             crate::memory::watch(|| cache.classes(&ext, exact, |_| unreachable!()));
-        assert!(clean, "a room of `need` takes the entry");
+        assert!(clean.is_clean(), "a room of `need` takes the entry");
         assert_eq!(seen.peak, need, "a hit shows the peak computing shows");
         assert!(!seen.crowded);
         drop(cache);
         assert_eq!(pool.held(), 0, "dropping the cache gives the entry back");
+    }
+
+    /// Asks `cache` for `ext` under `caps`, and what `watch` saw; `None` for the result when
+    /// the cache answered without computing.
+    fn ask(cache: &QuotientCache, ext: &Extended, caps: Caps) -> (Option<Classified>, Watched) {
+        let ran = Cell::new(false);
+        let ((classes, ended), seen) = crate::memory::watch(|| {
+            cache.classes(ext, caps, |cache| {
+                ran.set(true);
+                Classes::of(ext, caps, cache)
+            })
+        });
+        let fresh = Classes::of(ext, caps, &QuotientCache::new());
+        assert!(
+            classes == fresh.0 && ended.is_clean() == fresh.1.is_clean(),
+            "the cache answers what computing does"
+        );
+        (ran.get().then_some(classes), seen)
+    }
+
+    /// A sub-lifecycle whose run of S stopped at the memory limit alone in its pool is stored
+    /// declined (#289): a cone with the same key in a pool of no more room that covers what
+    /// the runs were granted takes it without running S again, with what computing shows
+    /// `watch`. A larger room, or one that does not cover them, computes, and a clean result
+    /// replaces the declined entry. A decline that others' bytes decided is not stored.
+    #[test]
+    fn a_declined_sub_lifecycle_answers_a_pool_no_larger_that_fits_its_runs() {
+        let ext = job_ext(true);
+        let pool = MemoryPool::for_command(MemorySize::VERIFY, "--memory");
+        let whole = Caps::VERIFY.charged_to(pool);
+        let ((_, ended), alone) =
+            crate::memory::watch(|| Classes::of(&ext, whole, &QuotientCache::new()));
+        assert!(ended.is_clean());
+        let room = alone.peak / 2;
+        let half = Caps::VERIFY.charged_to(pool.with_room(room));
+        let (_, ended) = Classes::of(&ext, half, &QuotientCache::new());
+        assert_eq!(
+            ended,
+            Ended::Declined,
+            "half the room stops the run of S alone"
+        );
+
+        let cache = cache();
+        let (computed, declined) = ask(&cache, &ext, half);
+        assert!(matches!(computed, Some(Classified::Nothing)));
+        let need = {
+            let slots = cache.slots.lock().unwrap();
+            let entry = slots[0].entry.lock().unwrap();
+            let entry = entry.as_ref().expect("a declined computation is stored");
+            assert_eq!(entry.declined_in, Some(room));
+            entry.need
+        };
+        assert!(0 < need && need <= room);
+        let (hit, seen) = ask(&cache, &ext, half);
+        assert!(hit.is_none(), "an equal pool takes the declined entry");
+        assert_eq!(seen, declined, "and shows `watch` what computing shows");
+        let (hit, _) = ask(&cache, &ext, Caps::VERIFY.charged_to(pool.with_room(need)));
+        assert!(hit.is_none(), "a smaller room that covers `need` takes it");
+        assert_eq!(cache.hits(), 2);
+        let short = Caps::VERIFY.charged_to(pool.with_room(need - 1));
+        assert!(
+            ask(&cache, &ext, short).0.is_some(),
+            "a room short of `need` computes"
+        );
+        let larger = Caps::VERIFY.charged_to(pool.with_room(room + 1));
+        assert!(
+            ask(&cache, &ext, larger).0.is_some(),
+            "a larger room computes"
+        );
+        let (clean, _) = ask(&cache, &ext, whole);
+        assert!(
+            matches!(clean, Some(Classified::Classes(_))),
+            "the whole pool computes"
+        );
+        let (hit, _) = ask(&cache, &ext, whole);
+        assert!(
+            hit.is_none(),
+            "and its clean result replaced the declined one"
+        );
+        assert!(
+            ask(&cache, &ext, half).0.is_some(),
+            "which half the room does not fit"
+        );
+
+        // A pool with room for the whole run, of which others hold all but half: the run
+        // stops where the declined one did, but crowded, so nothing is stored.
+        let crowded_pool = pool.with_room(alone.peak);
+        let _others = Charge::hold(crowded_pool, alone.peak - room).expect("room to hold");
+        let crowded = Caps::VERIFY.charged_to(crowded_pool);
+        let empty = self::cache();
+        let (computed, seen) = ask(&empty, &ext, crowded);
+        assert!(matches!(computed, Some(Classified::Nothing)) && seen.crowded);
+        assert!(
+            ask(&empty, &ext, crowded).0.is_some(),
+            "a crowded decline is not stored"
+        );
     }
 }
