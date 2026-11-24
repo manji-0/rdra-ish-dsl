@@ -2778,8 +2778,9 @@ property ShippedAfterPaid
   set in `Init` and by every action whose successor has the instance present with `p`.
 
 Each form is a safety property: a finite run breaks it. `verify` decides each one by BFS on
-the property's cone, and starts no TLC run for it. `stable` and `unchanged` are checked on
-every edge of the explored graph, and `precedes` on every state the latch can reach unset.
+the property's cone, and under `--with-tlc` TLC checks it on the same cone. `stable` and
+`unchanged` are checked on every edge of the explored graph, and `precedes` on every state
+the latch can reach unset.
 A violation prints the shortest trace to the step (`stable`, `unchanged`) or the state
 (`precedes`) that breaks it, with no loop after it. `export --kind tla` writes the same
 formulas: `stable` and `unchanged` as action properties quantified inside `[]`, which TLC

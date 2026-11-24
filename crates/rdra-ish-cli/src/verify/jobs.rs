@@ -26,8 +26,23 @@ pub(super) enum JobKind {
     Cone(Box<ConeSystem>),
     /// `properties()[i]` on its cone.
     PropertyCone(Box<PropertyJob>),
+    /// A `stable`, `unchanged`, or `precedes` on its cone, under `--with-tlc` only.
+    Explored(Box<ExploredJob>),
     /// `properties()[i]` on the whole system, after its cone left it undecided.
     Whole(usize),
+}
+
+/// A form `LtlKind::is_explored` names, on its cone as the native checker decides it
+/// (`TransitionSystem::decide_property`): the unreduced cone, then the whole model when a
+/// counterexample there may create instances past the bound.
+pub(super) struct ExploredJob {
+    /// The property's index in the whole system.
+    pub(super) index: usize,
+    /// The cone as a system, and the property's index in it.
+    pub(super) system: TransitionSystem,
+    pub(super) cone_index: usize,
+    pub(super) names: TlaNames,
+    pub(super) frees_slots: bool,
 }
 
 /// A property on its cone; the `_Full` module beside it is the unreduced cone, run after a
@@ -50,6 +65,7 @@ impl Job {
         match &self.kind {
             JobKind::Cone(cone) => (false, cone.system.var_ids().count()),
             JobKind::PropertyCone(p) => (true, p.cone.reduced.var_ids().count()),
+            JobKind::Explored(e) => (true, e.system.var_ids().count()),
             JobKind::Whole(_) => (true, usize::MAX),
         }
     }
@@ -190,6 +206,46 @@ pub(super) fn property_jobs(
                     names,
                     full,
                     wf,
+                })),
+            }
+        })
+        .collect()
+}
+
+/// Under `--with-tlc`, one run per `stable`, `unchanged`, and `precedes` on its cone, module
+/// `Cone_<property>`. The native checker decides these on its own explored graph
+/// (`explored_properties`), so the default run builds none of them. Their names are claimed
+/// after every other cone's, so the other modules keep the names a run without TLC gives them.
+pub(super) fn explored_jobs(
+    ts: &TransitionSystem,
+    names: &TlaNames,
+    modules: &mut Modules,
+) -> Vec<Job> {
+    (0..ts.properties().len())
+        .filter(|&i| ts.properties()[i].formula.kind().is_explored())
+        .map(|i| {
+            let name = names.property(i);
+            let module = modules.claim(&format!("Cone_{name}"));
+            let cone = ts.property_cone(i);
+            let system = ts.restrict_to(&cone.vars, &cone.keep);
+            let property = &ts.properties()[i].name;
+            let cone_index = system
+                .properties()
+                .iter()
+                .position(|p| p.name == *property)
+                .expect("the cone holds what the property reads");
+            let bundle = tla::print(&system, PrintMode::ConeProperty(cone_index), &module);
+            Job {
+                module: bundle.module_name,
+                tla: bundle.tla,
+                cfg: bundle.cfg,
+                checks: vec![name.to_string()],
+                kind: JobKind::Explored(Box::new(ExploredJob {
+                    index: i,
+                    frees_slots: ts.cone_frees_slots(&cone),
+                    system,
+                    cone_index,
+                    names: bundle.names,
                 })),
             }
         })

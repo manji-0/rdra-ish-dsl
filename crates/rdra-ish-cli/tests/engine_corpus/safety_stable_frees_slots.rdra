@@ -1,0 +1,20 @@
+// trap: `stable` and `unchanged` on a cone that frees slots.
+// The model of cone_always_frees_slots.rdra: each Bump creates a receipt the properties do
+// not read, so the cone counts no receipt slots and bumps an order from c to d, which breaks
+// both. The whole model has 2 receipts and needs 3 bumps, so no order reaches d. The cone's
+// counterexample creates more receipts than the bound allows and must not be reported:
+// each engine sends the property to the whole model (TLC to RdraSpec_<P>), which decides ok.
+// expect StaysBeforeD: native=ok tlc=ok
+// expect CKept: native=ok tlc=ok
+entity Order "注文" { id: Int @pk  status: Enum(a, b, c, d) @default(a) }
+entity Receipt "領収書" { id: Int @pk }
+relate(Receipt, Order, N:1)
+usecase Place "注文"
+usecase Bump "進行"
+creates(Place, Order)
+transitions(Bump, Order.status, a -> b)
+transitions(Bump, Order.status, b -> c)
+transitions(Bump, Order.status, c -> d)
+creates(Bump, Receipt)
+property StaysBeforeD stable(Order.status != d)
+property CKept unchanged(Order.status).when(Order.status == c)

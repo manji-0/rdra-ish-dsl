@@ -1435,9 +1435,9 @@ rdra-ish verify <INPUTS...> [--with-tlc] [-o <OUT>] [--instance-count <N>] [--in
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--with-tlc` | flag | off | Also run TLC on every cone and property run the native checker makes, and fail the run (exit 1) when the two decide a check differently. Requires `tlc` or `tlc2` on `PATH`, or `tla2tools.jar` named by `--tlc-jar` (see [Getting TLC](#getting-tlc)); without one the run exits 1. |
+| `--with-tlc` | flag | off | Also run TLC on every cone and property run the native checker makes, on each `stable`, `unchanged`, and `precedes` on its cone, and on the state models (deadlocks and witnesses) of each entity cone BFS explored to the end, up to 100,000 states, and fail the run (exit 1) when the two decide a check differently. `can_reach` has no TLC run. Requires `tlc` or `tlc2` on `PATH`, or `tla2tools.jar` named by `--tlc-jar` (see [Getting TLC](#getting-tlc)); without one the run exits 1. |
 | `--backend` | `tlc` | none | Deprecated. `--backend tlc` is a spelling of `--with-tlc` that prints `warning: --backend tlc is deprecated: ...` on stderr. The next major release removes it. |
-| `-o`, `--out` | path | none; under `--with-tlc` a temp dir, deleted when TLC passes every check and kept when it does not | Directory for the specs, for a TLC run by hand: one `Cone_<check>.tla` / `.cfg` pair per cone, named after the first invariant or after-assert that reads it, one `Cone_<Property>.tla` / `.cfg` pair per `always`, `eventually`, and `leads_to` with a `Cone_<Property>_WF` pair beside it for an `eventually` or `leads_to` and a `Cone_<Property>_Full` pair for a reduced cone, `cones.txt` listing each module and the checks it answers, and, when the model declares temporal properties, the whole-model `RdraSpec.tla` / `.cfg` with every `PROPERTY` and a `RdraSpec_<Property>` pair for each property its cone leaves undecided. A path ending in `.tla` writes into its directory and names the whole-model module after its stem, and each whole-model property module `<stem>_<Property>`. With `-o`, stdout says `wrote <n> specs and <dir>/cones.txt`. The native checker reads none of these files. |
+| `-o`, `--out` | path | none; under `--with-tlc` a temp dir, deleted when TLC passes every check and kept when it does not | Directory for the specs, for a TLC run by hand: one `Cone_<check>.tla` / `.cfg` pair per cone, named after the first invariant or after-assert that reads it, one `Cone_<Property>.tla` / `.cfg` pair per `always`, `eventually`, and `leads_to` with a `Cone_<Property>_WF` pair beside it for an `eventually` or `leads_to` and a `Cone_<Property>_Full` pair for a reduced cone, under `--with-tlc` a `Cone_<Property>` pair per `stable`, `unchanged`, and `precedes` and the `StateModel_<E>` specs of each entity cone TLC checks, `cones.txt` listing each module and the checks it answers, and, when the model declares temporal properties, the whole-model `RdraSpec.tla` / `.cfg` with every `PROPERTY` and a `RdraSpec_<Property>` pair for each property its cone leaves undecided. A path ending in `.tla` writes into its directory and names the whole-model module after its stem, and each whole-model property module `<stem>_<Property>`. With `-o`, stdout says `wrote <n> specs and <dir>/cones.txt`. The native checker reads none of these files. |
 | `--instance-count` | unsigned integer | `2` | Multi-instance `InstanceCount` (`1..=255`; `1` warns). |
 | `--int-range-max` | unsigned integer | `5` | Upper bound for `IntRange == 0..N` (`1..=255`; `0` rejected). |
 | `--max-states` | unsigned integer | none | The state cap of every BFS run `verify` makes: each entity, safety, and property cone (`_Full` and `_WF` included) and the whole-model run. Without it BFS has no state cap: `--memory` stops a cone, and `--memory` and `--temporal-budget` stop the whole-model run, as `not decided`. The `bounds:` line says `no state cap per BFS cone, memory <limit>`, or the cap given. Under `--with-tlc` TLC's whole-model run needs a bound, and keeps 2,097,152 states unless `--max-states` is given; TLC's cone runs have no state cap. |
@@ -1474,6 +1474,9 @@ decides. The labels name the runs and the modules `-o` writes, whichever engine 
 their own: `verify` prints `order and stability properties: <n>, each decided by BFS on its
 cone` and a `property <P> (BFS on its cone): ok|violated|not decided: ...` line per property
 (see [formal-verification.md](./formal-verification.md#order-and-stability-properties)).
+Under `--with-tlc` TLC checks each one on the same cone, module `Cone_<P>`, and the state
+models of the entity cones, one `tlc: StateModel_<E> ...` line per cone (see
+[formal-verification.md](./formal-verification.md#state-models-with-tlc-alone)).
 `can_reach` is decided by BFS on its cone too, with no TLC run: `verify` prints
 `can_reach properties: <n>, decided natively by BFS on each one's cone (TLC cannot check AG
 EF)` and `can_reach (BFS on <k> cones): <n> checked, <v> violated`, with `, <u> not decided`
@@ -1580,6 +1583,8 @@ engines disagree)`. No other run prints a `specs:` line.
 $ rdra-ish verify samples/formal-verification/cross_order_payment_split.rdra --with-tlc
 ...
 tlc: Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: counterexample (31 states)
+tlc: StateModel_Order (31 states): 1 deadlock and 3 witness checks; found none
+tlc: StateModel_Payment (31 states): 1 deadlock and 2 witness checks; found none
 tlc: Cone_MultiForbidden_Order_0 (/tmp/rdra-ish-tlc-4242/Cone_MultiForbidden_Order_0.tla):
 error[MultiForbidden_Order_0]: invariant MultiForbidden_Order_0 is violated: ...
   rule: skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:44:1
