@@ -1,6 +1,9 @@
 //! What each output reads of the lifecycle, and so what a lifecycle error does to it. An
-//! output that prints a reachability result refuses while the lifecycle has errors; one
-//! that prints no such result writes, with one note.
+//! output that prints a reachability result refuses while the lifecycle has errors. The
+//! TLA+ export, which TLC checks for what the explorer finds, writes with one note. An
+//! output of declared facts writes without exploring the lifecycle at all: nothing it
+//! prints depends on what the explorer finds, so a search there would cost the run and say
+//! nothing about the output.
 //!
 //! A `list` or `csv` kind is classified here by an exhaustive match, so a new kind does not
 //! compile until it says what it reads. A `diagram` or `export` kind is not classified: it
@@ -20,14 +23,15 @@ use rdra_ish_emit::{EmitError, Emitter, Explored, OnDeadlock, StatesEmitter, Vie
 use crate::cli::{CsvKind, ListKind};
 use crate::state_findings::{
     findings_of, note_state_errors, reject_state_errors, reject_state_errors_except_deadlock,
-    Finding, READS_NO_LIFECYCLE, TLA_STATE_MODELS,
+    Finding, TLA_STATE_MODELS,
 };
 
 /// One exploration of the lifecycle: what it found, and the states it reached.
 pub(crate) type Exploration = OnceLock<(Vec<Finding>, Explored)>;
 
-/// The lifecycle at the `check` defaults, explored on first use and at most once, so a
-/// command that gates several outputs runs one search.
+/// The lifecycle at the `check` defaults, explored on the first gate that reads it and at
+/// most once, so a command that gates several outputs runs one search, and one that gates
+/// only outputs of declared facts runs none.
 pub(crate) struct Lifecycle<'a> {
     program: &'a ResolvedProgram,
     model: &'a SemanticModel,
@@ -86,7 +90,7 @@ impl<'a> Lifecycle<'a> {
 /// What an output reads of the lifecycle.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Reads {
-    /// Declared facts and the data layer only.
+    /// Declared facts and the data layer only. Its gate explores nothing.
     Declared,
     /// The transition system, printed for TLC to explore. Its build errors stop the output
     /// where it is built (`checked_system`); the explorer's findings are not in it.
@@ -150,14 +154,15 @@ impl CsvKind {
 }
 
 /// Refuses an output that prints explored states while the lifecycle has errors, and notes
-/// the errors for an output that does not.
+/// the errors for the TLA+ export. An output of declared facts passes without exploring.
 pub(crate) fn gate(lifecycle: &Lifecycle, reads: Reads) -> anyhow::Result<()> {
-    let (findings, _) = lifecycle.explored();
     match reads {
-        Reads::Declared => note_state_errors(findings, READS_NO_LIFECYCLE),
-        Reads::System => note_state_errors(findings, TLA_STATE_MODELS),
-        Reads::States => reject_state_errors(findings)?,
-        Reads::StatesDrawingDeadlocks => reject_state_errors_except_deadlock(findings)?,
+        Reads::Declared => {}
+        Reads::System => note_state_errors(&lifecycle.explored().0, TLA_STATE_MODELS),
+        Reads::States => reject_state_errors(&lifecycle.explored().0)?,
+        Reads::StatesDrawingDeadlocks => {
+            reject_state_errors_except_deadlock(&lifecycle.explored().0)?
+        }
     }
     Ok(())
 }

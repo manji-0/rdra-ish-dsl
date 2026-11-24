@@ -343,6 +343,14 @@
 
 ### Changed
 
+- `diagram`, `list`, `csv`, and `export` explore the lifecycle only for an output that
+  reads it: the state diagram and the TLA+ export (#285). Every other kind draws declared
+  facts and the data layer, and explored the whole lifecycle only to print the stderr note
+  `note: the lifecycle has N error(s) ...; this output does not read the lifecycle`. That
+  note is gone; run `check` for the lifecycle errors. The
+  outputs themselves are unchanged. On oidc-auth a debug `diagram --kind flow` takes 0.1 s
+  instead of 3.5 s, and `scripts/check-sample-artifacts.sh`'s commands take 120 s instead
+  of 429 s in a debug build.
 - `verify` reduces cones faster (#252). A sub-lifecycle's quotient is shared across the
   cones whose extended sub-lifecycles are equal: it is explored and partitioned once, and
   each cone maps its classes into its own ids. A shared quotient is matched by `==` on the

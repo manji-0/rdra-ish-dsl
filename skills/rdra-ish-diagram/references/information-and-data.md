@@ -68,8 +68,8 @@ rdra-ish export src/ --kind json-schema --out out/json-schema.json
   one column per key column of a composite parent `@pk`; do not add manual FK columns
   for the same relationship, or adopt yours with `.key(...)`.
 - These diagrams and the `dbml`, `sql`, and `json-schema` exports read only declared
-  facts and the data layer. They write when the lifecycle has errors and print a `note:` on
-  stderr.
+  facts and the data layer. They write when the lifecycle has errors, without exploring
+  it; run `check` for those errors.
 
 ## Tips
 

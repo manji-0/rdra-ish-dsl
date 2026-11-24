@@ -497,8 +497,7 @@ rules ────────► refinements ──┘                         
   this way. `--allow-failing` prints anyway and lists each failing invariant as an
   obligation the code does not meet.
 - The lifecycle gate (`crates/rdra-ish-cli/src/lifecycle_gate.rs`) classifies the
-  outputs by what they read. Data types read no reachability and write with the note, as
-  DBML does. State sums and functions refuse when the lifecycle has errors. Under
+  outputs by what they read. Data types read no reachability and write, as DBML does. State sums and functions refuse when the lifecycle has errors. Under
   `--refine reachable` they also refuse when a cone stopped at the state cap, because an
   undecided cone gives no complete set of patterns.
 

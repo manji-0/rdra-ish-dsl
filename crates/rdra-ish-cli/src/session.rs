@@ -1,7 +1,8 @@
-//! A model loaded once, with its lifecycle explored at most once, for every `diagram` and
-//! `list` output drawn from it. Each command loads one. The diagram contract tests
-//! (`tests/diagram_contract.rs`) keep one per sample and draw every scope and kind from
-//! it: a `diagram` process parses the model and explores its lifecycle again for each.
+//! A model loaded once, with its lifecycle explored at most once and only for an output
+//! that reads it (the state diagram), for every `diagram` and `list` output drawn from it.
+//! Each command loads one. The diagram contract tests (`tests/diagram_contract.rs`) keep one
+//! per sample and draw every scope and kind from it: a `diagram` process parses the model
+//! again for each, and explores the lifecycle again for each state diagram.
 
 use std::path::PathBuf;
 
