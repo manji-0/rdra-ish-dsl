@@ -18,6 +18,7 @@ mod plan;
 mod properties;
 mod reach;
 mod scan;
+mod segments;
 mod store;
 pub(crate) mod symmetry;
 mod views;

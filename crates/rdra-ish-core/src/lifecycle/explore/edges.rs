@@ -18,19 +18,21 @@ use crate::lifecycle::expr::StateSlice;
 use crate::lifecycle::types::{ActId, EntId, Pred};
 use crate::lifecycle::TransitionSystem;
 
+use super::segments::Rows;
 use super::Edge;
 
 #[cfg(feature = "shadow")]
 mod reference;
 
-/// Items in a buffer that grows to twice its items when full, four at the least, and to no
-/// more: it holds `capacity() * size_of::<T>()` bytes, which `bytes_with` says before a push.
+/// Items in fixed-size segments (`segments::Rows`, #296 2.2): the first doubles from four
+/// items up to a segment, and every later one is allocated whole, so growing copies no full
+/// buffer, and `bytes_with` says before a push what the buffer takes after it.
 #[derive(Clone, Debug)]
-pub(crate) struct Buf<T>(Vec<T>);
+pub(crate) struct Buf<T>(Rows<T>);
 
-impl<T> Default for Buf<T> {
+impl<T: Copy> Default for Buf<T> {
     fn default() -> Self {
-        Buf(Vec::new())
+        Buf(Rows::new(1))
     }
 }
 
@@ -40,38 +42,37 @@ impl<T: Copy> Buf<T> {
     }
 
     pub(crate) fn push(&mut self, x: T) {
-        if self.0.len() == self.0.capacity() {
-            let room = (self.0.len() * 2).max(4);
-            self.0.reserve_exact(room - self.0.len());
-        }
-        self.0.push(x);
+        self.0.push(&[x]);
     }
 
     pub(crate) fn get(&self, i: usize) -> T {
-        self.0[i]
+        self.0.row(i)[0]
     }
 
-    pub(crate) fn as_slice(&self) -> &[T] {
-        &self.0
+    /// The first index whose item `pred` rejects, the items being those it accepts first.
+    pub(crate) fn partition_point(&self, pred: impl Fn(T) -> bool) -> usize {
+        let (mut lo, mut hi) = (0, self.len());
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2;
+            match pred(self.get(mid)) {
+                true => lo = mid + 1,
+                false => hi = mid,
+            }
+        }
+        lo
     }
 
-    /// The buffer with room for `cap` items and none in it.
-    fn with_capacity(cap: usize) -> Self {
-        Buf(Vec::with_capacity(cap))
+    /// The bytes the buffer takes once `more` items are pushed: its segments, and with
+    /// `list` the list of them, which the harnesses leave out to compare the segments with
+    /// the one `Vec` each buffer was before #296.
+    pub(crate) fn bytes(&self, more: usize, list: bool) -> u64 {
+        let (items, segments) = self.0.parts_with(more);
+        items + if list { segments } else { 0 }
     }
 
-    fn capacity(&self) -> usize {
-        self.0.capacity()
-    }
-
-    /// The bytes the buffer takes once `more` items are pushed.
-    pub(crate) fn bytes_with(&self, more: usize) -> u64 {
-        let cap = if self.0.len() + more <= self.0.capacity() {
-            self.0.capacity()
-        } else {
-            (self.0.capacity() * 2).max(self.0.len() + more).max(4)
-        };
-        (cap * size_of::<T>()) as u64
+    /// The items as `W`, a segment at a time, in the room these had (`Rows::map`).
+    fn widen<W: Copy + From<T>>(self) -> Buf<W> {
+        Buf(self.0.map(W::from))
     }
 }
 
@@ -106,14 +107,14 @@ impl Ids {
             Ids::One(b) => match u8::try_from(id) {
                 Ok(id) => b.push(id),
                 Err(_) => {
-                    *self = Ids::Two(widen(b));
+                    *self = Ids::Two(std::mem::take(b).widen());
                     self.push(id);
                 }
             },
             Ids::Two(b) => match u16::try_from(id) {
                 Ok(id) => b.push(id),
                 Err(_) => {
-                    *self = Ids::Four(widen(b));
+                    *self = Ids::Four(std::mem::take(b).widen());
                     self.push(id);
                 }
             },
@@ -129,20 +130,13 @@ impl Ids {
         }
     }
 
-    pub(crate) fn bytes_with(&self, more: usize) -> u64 {
+    pub(crate) fn bytes(&self, more: usize, list: bool) -> u64 {
         match self {
-            Ids::One(b) => b.bytes_with(more),
-            Ids::Two(b) => b.bytes_with(more),
-            Ids::Four(b) => b.bytes_with(more),
+            Ids::One(b) => b.bytes(more, list),
+            Ids::Two(b) => b.bytes(more, list),
+            Ids::Four(b) => b.bytes(more, list),
         }
     }
-}
-
-/// `narrow`'s ids in a wider buffer with the same room.
-fn widen<N: Copy, W: Copy + From<N>>(narrow: &Buf<N>) -> Buf<W> {
-    let mut wide = Buf::with_capacity(narrow.capacity());
-    wide.0.extend(narrow.as_slice().iter().map(|&x| W::from(x)));
-    wide
 }
 
 /// Every move of a run, grouped by the state it leaves, in the order BFS found them.
@@ -161,8 +155,7 @@ impl EdgeList {
 
     /// The state edge `k` leaves: the last state read whose first edge is at or before it.
     fn source_of(&self, k: usize) -> u32 {
-        let read = self.first.as_slice();
-        (read.partition_point(|&f| f as usize <= k) - 1) as u32
+        (self.first.partition_point(|f| f as usize <= k) - 1) as u32
     }
 
     fn get(&self, k: usize) -> Edge {
@@ -188,8 +181,8 @@ impl EdgeList {
         }
     }
 
-    fn bytes_with(&self) -> u64 {
-        self.first.bytes_with(0) + self.to.bytes_with(0) + self.binding.bytes_with(0)
+    fn bytes(&self, list: bool) -> u64 {
+        self.first.bytes(0, list) + self.to.bytes(0, list) + self.binding.bytes(0, list)
     }
 }
 
@@ -332,11 +325,16 @@ impl Steps {
 
     /// The bytes the parents and the edges take once `more` states are admitted.
     pub(crate) fn bytes_with(&self, more: usize) -> u64 {
+        self.bytes(more, true)
+    }
+
+    /// `bytes_with`, with the lists of segments when `list`.
+    fn bytes(&self, more: usize, list: bool) -> u64 {
         let parents = match &self.parents {
-            Parents::Edge(parents) => parents.bytes_with(more),
-            Parents::Step { from, binding } => from.bytes_with(more) + binding.bytes_with(more),
+            Parents::Edge(parents) => parents.bytes(more, list),
+            Parents::Step { from, binding } => from.bytes(more, list) + binding.bytes(more, list),
         };
-        parents + self.edges.as_ref().map_or(0, EdgeList::bytes_with)
+        parents + self.edges.as_ref().map_or(0, |e| e.bytes(list))
     }
 
     /// The 12-byte edge list the shadow build keeps beside the run's own, on any run.
@@ -476,8 +474,8 @@ impl Iterator for EdgeIter<'_> {
 
     fn next(&mut self) -> Option<Edge> {
         let k = self.at.next()?;
-        let first = self.edges.list.first.as_slice();
-        while (self.from as usize + 1) < first.len() && first[self.from as usize + 1] as usize <= k
+        let first = &self.edges.list.first;
+        while (self.from as usize + 1) < first.len() && first.get(self.from as usize + 1) as usize <= k
         {
             self.from += 1;
         }
@@ -560,22 +558,27 @@ impl StepEnds {
 mod proofs {
     use super::*;
 
-    /// `Buf::bytes_with` is what the buffer grows to: what it says before a push is what the
-    /// buffer takes after it, and the buffer holds room for at most twice its items (four at
-    /// the least), for every run of up to 17 pushes.
+    /// `Buf::partition_point` is the slice's: for every ascending run of up to 9 items across
+    /// segments of 4, and every bound, the index of the first item past the bound.
     #[kani::proof]
-    #[kani::unwind(19)]
-    fn a_buf_takes_what_bytes_with_said() {
+    #[kani::unwind(11)]
+    fn a_buf_partition_point_is_the_slices() {
         let pushes: usize = kani::any();
-        kani::assume(pushes <= 17);
-        let mut b: Buf<u32> = Buf::default();
-        for i in 0..pushes {
-            let said = b.bytes_with(1);
-            b.push(i as u32);
-            assert_eq!((b.capacity() * size_of::<u32>()) as u64, said);
-            assert_eq!(b.bytes_with(0), said);
-            assert!(b.capacity() <= (2 * b.len()).max(4));
+        kani::assume(pushes <= 9);
+        let (mut b, mut v): (Buf<u32>, Vec<u32>) = (Buf::default(), Vec::new());
+        let mut last = 0u32;
+        for _ in 0..pushes {
+            let step: u32 = kani::any();
+            kani::assume(step <= 2);
+            last += step;
+            b.push(last);
+            v.push(last);
         }
+        let bound: u32 = kani::any();
+        assert_eq!(
+            b.partition_point(|x| x <= bound),
+            v.partition_point(|&x| x <= bound)
+        );
     }
 
     /// A `Vec`'s buffer once `more` items are pushed: what a run was charged before #296.
@@ -630,7 +633,8 @@ mod proofs {
                     binding,
                 });
             }
-            assert!(steps.bytes_with(1) <= vec_bytes(&parents, 1) + vec_bytes(&edges, 0));
+            // The segments, their lists left out, against the one `Vec` each buffer was.
+            assert!(steps.bytes(1, false) <= vec_bytes(&parents, 1) + vec_bytes(&edges, 0));
         }
         assert_eq!(steps.moves(), edges.len() as u64);
         for at in 0..states {

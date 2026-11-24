@@ -6,6 +6,7 @@ use std::mem::size_of;
 
 use crate::lifecycle::types::ActId;
 
+use super::segments::SEG;
 use super::{Bfs, ComponentRun, Layers};
 
 /// A heap block for `n` bytes: the allocator rounds up to 16.
@@ -42,9 +43,12 @@ pub struct Shape {
 
 /// The bytes the store of a run of `shape` takes once it holds `states` states of `width`
 /// bytes and `edges` edges, with `seen`. With `b` bytes in a binding id, a run that keeps its
-/// edge list takes `(w + 4 + 4 + 4) * p2(n) + 5 * buckets(n) + (4 + b) * p2(e)`, and one that
-/// keeps none `(w + 4 + b + 4) * p2(n) + 5 * buckets(n)`, where `p2(x)` is the least power of
-/// two of at least `x` (4 at the least) and `buckets(n)` the least power of two of at least
+/// edge list takes `(w + 4 + 4 + 4) * room(n) + 3 * list(n) + 5 * buckets(n) + (4 + b) *
+/// room(e) + 2 * list(e)`, and one that keeps none `(w + 4 + b + 4) * room(n) + 3 * list(n)
+/// + 5 * buckets(n)`. `room(x)` is what a buffer of fixed-size segments holds room for
+/// (`segments::Rows`): the least power of two of at least `x` (4 at the least) up to a
+/// segment of `SEG`, whole segments beyond; `list(x)` is the list of segments past the first,
+/// 24 bytes a slot, doubling from four; `buckets(n)` is the least power of two of at least
 /// `n * 8 / 7`. Each state is `w` bytes in `states`; with an edge list it has a 4-byte parent
 /// edge and the 4-byte index of its first edge, and an edge is a 4-byte target and a binding
 /// id; without one its parent is a 4-byte source and a binding id. `seen` holds a 4-byte
@@ -53,18 +57,34 @@ pub struct Shape {
 /// under what that counts (`store_bytes_models_the_store_a_run_counts`). Saturates at
 /// `u64::MAX`.
 pub fn store_bytes(states: u64, width: usize, edges: u64, shape: Shape) -> u64 {
-    let p2 = |x: u128| x.max(4).next_power_of_two();
+    store_bytes_in(SEG as u128, states, width, edges, shape)
+}
+
+/// `store_bytes` with segments of `seg` rows: what the harnesses read at the segment of a
+/// build, where Kani's own build has segments of 4.
+fn store_bytes_in(seg: u128, states: u64, width: usize, edges: u64, shape: Shape) -> u64 {
+    let room = |x: u128| match x <= seg {
+        true => x.max(4).next_power_of_two().min(seg.max(4)),
+        false => x.div_ceil(seg) * seg,
+    };
+    let list = |x: u128| match x <= seg {
+        true => 0,
+        false => 24 * (x.div_ceil(seg) - 1).max(4).next_power_of_two(),
+    };
     let n = u128::from(states);
+    let e = u128::from(edges);
     let b = shape.binding as u128;
-    let (per_state, per_edge) = match shape.graph {
-        true => (4 + 4, 4 + b),
-        false => (4 + b, 0),
+    let (per_state, per_edge, edge_buffers) = match shape.graph {
+        true => (4 + 4, 4 + b, 2),
+        false => (4 + b, 0, 0),
     };
     // Each term fits in u128; the product with a width near `usize::MAX` and the sums need not.
     let total = (width as u128 + per_state + 4)
-        .saturating_mul(p2(n))
-        .saturating_add(5 * p2((n * 8).div_ceil(7)))
-        .saturating_add(per_edge.saturating_mul(p2(u128::from(edges))));
+        .saturating_mul(room(n))
+        .saturating_add(3 * list(n))
+        .saturating_add(5 * (n * 8).div_ceil(7).max(4).next_power_of_two())
+        .saturating_add(per_edge.saturating_mul(room(e)))
+        .saturating_add(edge_buffers * list(e));
     u64::try_from(total).unwrap_or(u64::MAX)
 }
 
@@ -216,10 +236,15 @@ mod proofs {
     }
 
     /// The model of #296 never counts more than the one before it, which charged an 8-byte
-    /// parent per state and a 12-byte edge: a cone that the old model said fits still does.
+    /// parent per state and a 12-byte edge, for a run with at least as many edges as states
+    /// and binding ids of at most 2 bytes: a cone that the old model said fits still does. (A
+    /// run of more than a segment of states with fewer edges, or of 65,537 bindings without
+    /// an edge list, can take the 24-byte slots of its lists of segments more.)
     #[kani::proof]
     fn store_bytes_is_at_most_the_model_before() {
-        let (n, w, e) = (kani::any(), kani::any(), kani::any());
+        let (n, w, e): (u64, usize, u64) = (kani::any(), kani::any(), kani::any());
+        let shape = any_shape();
+        kani::assume(e >= n && shape.binding <= 2);
         let before = |n: u64, w: usize, e: u64| {
             let p2 = |x: u128| x.max(4).next_power_of_two();
             let n = u128::from(n);
@@ -229,7 +254,7 @@ mod proofs {
                 .saturating_add(12 * p2(u128::from(e)));
             u64::try_from(total).unwrap_or(u64::MAX)
         };
-        assert!(store_bytes(n, w, e, any_shape()) <= before(n, w, e));
+        assert!(store_bytes_in(1 << 14, n, w, e, shape) <= before(n, w, e));
     }
 
     /// A heap block holds what was asked, in whole 16-byte units, and wastes under 16 bytes.
