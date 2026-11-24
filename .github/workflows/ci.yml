@@ -1,7 +1,11 @@
 name: CI
 on:
-  push:
-    branches: [main]
+  # main is checked every three hours, not on every merge: a run whose commit the last
+  # scheduled run already checked is skipped (see `changes`). Start one by hand with
+  # `gh workflow run ci.yml --ref main`.
+  schedule:
+    - cron: '23 */3 * * *'
+  workflow_dispatch:
   pull_request:
     # labeled/unlabeled: adding or removing `no-verify` decides the verification jobs again.
     types: [opened, synchronize, reopened, labeled, unlabeled]
@@ -20,7 +24,7 @@ jobs:
     # engine-equivalence run only then. scripts/verify-relevant.sh lists the paths that
     # cannot (prose, the editor and LSP, codegen, the diagram and data-layer exports). The
     # label `no-verify` skips them for a change a reviewer judged unable to reach them, such
-    # as help text. A push to main runs every job. `kani` says whether the change can reach
+    # as help text. A run on main (scheduled or by hand) runs every job. `kani` says whether the change can reach
     # a Kani harness (scripts/kani-relevant.sh); the label does not skip it. `code` is false
     # when every changed file is prose (scripts/code-relevant.sh): `check` then runs the
     # checks that read prose instead of its whole test suite and the sample artifacts. `nix`
@@ -28,7 +32,11 @@ jobs:
     # takes the whole repository as its source, so only its own files, the manifests, the
     # lock file and this workflow can.
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
     outputs:
+      run: ${{ steps.decide.outputs.run }}
       verify: ${{ steps.decide.outputs.verify }}
       kani: ${{ steps.decide.outputs.kani }}
       code: ${{ steps.decide.outputs.code }}
@@ -43,10 +51,28 @@ jobs:
       - id: decide
         env:
           EVENT: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
           NO_VERIFY: ${{ contains(github.event.pull_request.labels.*.name, 'no-verify') }}
         # On a pull request HEAD is its merge into the base, so HEAD^1 is the base.
         run: |
-          if [ "$EVENT" != pull_request ]; then
+          run=true
+          if [ "$EVENT" = schedule ]; then
+            # Skip when the last scheduled run that finished checked this same commit. A
+            # cancelled run does not count, so its commit is checked again.
+            last=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?event=schedule&branch=main&status=completed&per_page=10" \
+              --jq '[.workflow_runs[] | select(.conclusion == "success" or .conclusion == "failure")][0].head_sha // ""')
+            if [ "$last" = "$GITHUB_SHA" ]; then
+              echo "main is still $GITHUB_SHA, which run $last checked; skipping"
+              run=false
+            fi
+          fi
+          if [ "$run" = false ]; then
+            verify=false
+            kani=false
+            code=false
+            nix=false
+          elif [ "$EVENT" != pull_request ]; then
             verify=true
             kani=true
             code=true
@@ -66,6 +92,7 @@ jobs:
               verify=$(scripts/verify-relevant.sh < changed.txt)
             fi
           fi
+          echo "run=$run" | tee -a "$GITHUB_OUTPUT"
           echo "verify=$verify" | tee -a "$GITHUB_OUTPUT"
           echo "kani=$kani" | tee -a "$GITHUB_OUTPUT"
           echo "code=$code" | tee -a "$GITHUB_OUTPUT"
@@ -74,8 +101,9 @@ jobs:
   check:
     needs: changes
     # Runs whatever `changes` concluded: if it failed, `code` is empty and every step runs.
-    # Skipping the job would report the required check as passed.
-    if: ${{ !cancelled() }}
+    # Skipping the job would report the required check as passed. A scheduled run of a
+    # commit already checked skips it.
+    if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -119,7 +147,7 @@ jobs:
       - name: nix package
         # The package `nix profile install github:manji-0/rdra-ish-dsl` installs. A release
         # build from scratch (about 4.5 minutes), so only when `nix` says a change can break it
-        # while cargo builds, and on every push to main.
+        # while cargo builds, and on every run on main.
         if: needs.changes.outputs.nix != 'false'
         run: nix build -L && ./result/bin/rdra-ish --help >/dev/null && test -x ./result/bin/rdra-ish-lsp
 
@@ -215,7 +243,7 @@ jobs:
 
   kani:
     # The Kani harnesses beside the code they prove (docs/engine-agreement.md#kani-harnesses),
-    # when a change can reach one, and on every push to main. Kani is not in nixpkgs, so the
+    # when a change can reach one, and on every run on main. Kani is not in nixpkgs, so the
     # job runs on the runner's rustup, outside the devShell: `cargo kani setup` installs the
     # nightly its version pins and links ~/.kani to it, so the cache holds both.
     needs: changes
