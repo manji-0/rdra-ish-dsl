@@ -14,7 +14,7 @@ use super::tlc::{clean_up, tlc_command};
 use super::tlc_tool::Tlc;
 use crate::export::Modules;
 use crate::memory::tlc_plan;
-use crate::tlc_env::{current_user_heap, Heap};
+use crate::tlc_env::{current_user_heap, Heap, Jit};
 use crate::tlc_output::{InvariantScan, Outcome};
 use anyhow::{Context, Result};
 use rdra_ish_core::lifecycle::TransitionSystem;
@@ -31,6 +31,11 @@ use std::sync::Mutex;
 /// state that violates a `Witness_`, so almost every state; above it each run stops at the
 /// first one, and the reruns find one witness each. `engine_equivalence` splits the same way.
 const CONTINUE_STATES: u64 = 1_000;
+
+/// Up to this many states by BFS a run compiles with C1 only (`Jit::C1`): it ends within a
+/// second or two, where C1 saves CPU and start-up time, and C2 would pay off only on a long
+/// run (#309). A cone run's states are not known when it starts, so this is for state models.
+const SMALL_RUN_STATES: usize = 10_000;
 
 /// One cone's `StateModel_` module, printed and written into the spec dir.
 pub(super) struct StateModelJob {
@@ -286,7 +291,11 @@ fn rerun(
                 name
             }
         };
-        let (scan, tail) = scan_run(tlc, dir, &job.module, &cfg, jvm, continued)?;
+        let jit = match job.states <= SMALL_RUN_STATES {
+            true => Jit::C1,
+            false => Jit::Tiered,
+        };
+        let (scan, tail) = scan_run(tlc, dir, (&job.module, &cfg), (jvm, jit), continued)?;
         let stopped_early = !continued && !scan.violated.is_empty();
         if scan.type_ok || !(scan.completed || stopped_early) {
             let why = match scan.type_ok {
@@ -316,12 +325,11 @@ fn rerun(
 fn scan_run(
     tlc: &Tlc,
     dir: &Path,
-    module: &str,
-    cfg: &str,
-    (workers, heap): (&str, u64),
+    (module, cfg): (&str, &str),
+    ((workers, heap), jit): ((&str, u64), Jit),
     continued: bool,
 ) -> Result<(InvariantScan, String)> {
-    let mut command = tlc_command(tlc, dir, module, heap, workers)?;
+    let mut command = tlc_command(tlc, dir, module, (heap, jit), workers)?;
     if continued {
         command.arg("-continue");
     }
