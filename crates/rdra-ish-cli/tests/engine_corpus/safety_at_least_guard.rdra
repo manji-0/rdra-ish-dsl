@@ -9,8 +9,8 @@
 // one estimate assess a claim.
 // expect Quantifier_Claim_0: native=counterexample tlc=counterexample z3=unproved bfs=ok,counterexample,counterexample
 // expect Quantifier_Order_1: native=ok tlc=ok z3=proved bfs=ok,ok,ok
-// expect Deadlock_Claim_status_open: native=counterexample tlc=none
-// expect Deadlock_Order_status_open: native=counterexample tlc=none
+// expect Deadlock_Claim_status_open: native=counterexample tlc=counterexample
+// expect Deadlock_Order_status_open: native=counterexample tlc=counterexample
 entity Claim "請求" {
   id: Int @pk
   status: Enum(open, assessed) @default(open)

@@ -7,7 +7,7 @@
 // with the same copy, and report a counterexample; one that counted the slots of other
 // shelves would let a shelf crowd on another's copies.
 // expect Forbidden_Shelf_0: native=ok tlc=ok z3=unproved bfs=ok,ok,ok
-// expect Deadlock_Shelf_status_open: native=counterexample tlc=none
+// expect Deadlock_Shelf_status_open: native=counterexample tlc=counterexample
 entity Shelf "棚" {
   id: Int @pk
   status: Enum(open, closed) @default(open)

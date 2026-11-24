@@ -10,7 +10,7 @@
 // expect Quantifier_Member_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 // expect Quantifier_Member_1: native=ok tlc=ok z3=unproved bfs=ok,ok,counterexample
 // expect Quantifier_Member_2: native=ok tlc=ok z3=unproved bfs=ok,ok,counterexample
-// expect Deadlock_Member_status_pending: native=counterexample tlc=none
+// expect Deadlock_Member_status_pending: native=counterexample tlc=counterexample
 entity Member "会員" {
   id: Int @pk
   status: Enum(pending, active) @default(pending)
