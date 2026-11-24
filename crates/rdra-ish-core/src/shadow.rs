@@ -14,6 +14,8 @@
 //! | a `QuotientCache` hit (`reduce/cache.rs`, #252), a declined entry's included (#289) | `Classes::of` itself, through a cache that holds nothing |
 //! | the reduced step's class moves (`moves_of_into`, #252) | `reduce/reference.rs`: `moves_from` |
 //! | a fold's input bit without allocations (`Fold::holds`, `reduce/fold.rs`, #296) | `reduce/fold/reference.rs`: the bit with its `Vec`s |
+//! | edges without their source, binding ids in 1 to 4 bytes, parents (`explore/edges.rs`, #296 2.1) | `explore/edges/reference.rs`: the 12-byte `Edge` list and the parent edges, as a run kept them before |
+//! | an after-assert step's ends recorded on a run without an edge list (`StepEnds`, #296 2.1) | `ComponentRun::step_ends`'s scan of that 12-byte list |
 //!
 //! A `shadow` build also runs the checks `shadow_assert!` makes, as a debug build does: each
 //! reader of a run's check results reads only checks the run evaluated (#251), and a steady
@@ -37,9 +39,11 @@ pub(crate) enum Twin {
     CacheHit,
     ClassMoves,
     FoldHolds,
+    Edges,
+    StepEnds,
 }
 
-const TWINS: [(Twin, &str); 8] = [
+const TWINS: [(Twin, &str); 10] = [
     (Twin::EachEnabled, "each_enabled"),
     (Twin::Seen, "seen"),
     (Twin::Source, "source"),
@@ -48,6 +52,8 @@ const TWINS: [(Twin, &str); 8] = [
     (Twin::CacheHit, "cache_hit"),
     (Twin::ClassMoves, "class_moves"),
     (Twin::FoldHolds, "fold_holds"),
+    (Twin::Edges, "edges"),
+    (Twin::StepEnds, "step_ends"),
 ];
 
 static COMPARED: [AtomicU64; TWINS.len()] = [const { AtomicU64::new(0) }; TWINS.len()];

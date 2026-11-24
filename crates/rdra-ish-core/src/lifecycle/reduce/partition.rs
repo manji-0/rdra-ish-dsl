@@ -574,7 +574,7 @@ impl<'a> Succ<'a> {
     ) -> impl Iterator<Item = crate::lifecycle::explore::Edge> + '_ {
         self.order[self.start[at as usize] as usize..self.start[at as usize + 1] as usize]
             .iter()
-            .map(|k| self.run.edges()[*k as usize])
+            .map(|k| self.run.edges().get(*k as usize))
     }
 
     pub(super) fn is_rise(&self, e: &crate::lifecycle::explore::Edge) -> bool {

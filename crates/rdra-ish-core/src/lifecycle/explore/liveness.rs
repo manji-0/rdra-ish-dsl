@@ -252,16 +252,12 @@ impl ComponentRun {
                 *ids.entry((*act, slots)).or_insert(next)
             })
             .collect();
-        debug_assert!(
-            self.edges.is_sorted_by_key(|e| e.from),
-            "edges_from reads runs"
-        );
         let count = ids.len();
         let words = count.div_ceil(64).max(1);
         let n = self.states.len();
         let mut enabled = vec![0u64; n * words];
         let mut moves_on = vec![false; n];
-        for e in self.edges.iter().filter(|e| e.from != e.to) {
+        for e in self.edges().iter().filter(|e| e.from != e.to) {
             moves_on[e.from as usize] = true;
             set(
                 &mut enabled[e.from as usize * words..],
@@ -283,7 +279,7 @@ impl ComponentRun {
     fn expanded(&self) -> usize {
         match self.complete {
             true => self.states.len(),
-            false => self.edges.last().map_or(0, |e| e.from as usize),
+            false => self.edges().last().map_or(0, |e| e.from as usize),
         }
     }
 
@@ -297,9 +293,9 @@ impl ComponentRun {
             .iter()
             .map(|s| !ts.holds_bound(goal, s, b))
             .collect();
-        let inside = |e: &&Edge| in_n[e.from as usize] && in_n[e.to as usize];
+        let inside = |e: &Edge| in_n[e.from as usize] && in_n[e.to as usize];
         let adjacency = Adjacency::new(n, || {
-            self.edges.iter().filter(inside).map(|e| (e.from, e.to))
+            self.edges().iter().filter(inside).map(|e| (e.from, e.to))
         });
         let (comp, count) = adjacency.components();
         let w = fair.words;
@@ -315,7 +311,7 @@ impl ComponentRun {
             }
         }
         let mut taken = vec![0u64; count * w];
-        for e in self.edges.iter().filter(inside) {
+        for e in self.edges().iter().filter(inside) {
             let c = comp[e.from as usize];
             if e.from != e.to && c == comp[e.to as usize] {
                 set(
@@ -507,11 +503,11 @@ impl ComponentRun {
                 if e.to == e.from || avoid.comp[e.to as usize] != c {
                     continue;
                 }
-                if wanted(Target::Edge(e)) {
-                    return path_to(&via, at, Some(*e));
+                if wanted(Target::Edge(&e)) {
+                    return path_to(&via, at, Some(e));
                 }
                 if let Entry::Vacant(slot) = via.entry(e.to) {
-                    slot.insert(Some(*e));
+                    slot.insert(Some(e));
                     queue.push_back(e.to);
                 }
             }
@@ -520,17 +516,13 @@ impl ComponentRun {
     }
 
     /// The moves from `at`, in the order BFS found them.
-    fn edges_from(&self, at: u32) -> &[Edge] {
-        let lo = self.edges.partition_point(|e| e.from < at);
-        let hi = self.edges.partition_point(|e| e.from <= at);
-        &self.edges[lo..hi]
+    fn edges_from(&self, at: u32) -> super::EdgeIter<'_> {
+        self.edges().from_state(at)
     }
 
     /// The first move from `from` to `to`.
     fn edge_between(&self, from: u32, to: u32) -> Edge {
-        *self
-            .edges_from(from)
-            .iter()
+        self.edges_from(from)
             .find(|e| e.to == to)
             .expect("the adjacency holds only recorded moves")
     }

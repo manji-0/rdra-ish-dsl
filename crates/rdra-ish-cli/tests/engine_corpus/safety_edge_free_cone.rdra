@@ -1,0 +1,45 @@
+// trap: a cone of checks alone keeps no edge list (#296 2.1). Deliver sets delivered_at, so
+// Order's after-assert holds, its cone runs to the end, and whether the assert is vacuous is
+// read from what the run recorded of Deliver's moves as it went. Refund never runs, as no
+// order is ever refunded into, so its assert is vacuous: a recorder that marked every
+// action, or none, gets one of the two wrong. Ticket's forbidden fails once a ticket
+// closes, so its cone stops at the failure and the trace is read through the parents alone:
+// a parent that lost its source or its binding prints another path.
+// expect AfterAssert_Deliver_0: native=ok tlc=ok
+// expect AfterAssert_Refund_1: native=ok tlc=ok
+// expect Forbidden_Ticket_0: native=counterexample tlc=counterexample z3=unproved
+// expect Witness_Order_status_refunded: native=counterexample tlc=counterexample
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, shipped, delivered, refunded) @default(pending)
+  delivered_at: DateTime @null
+}
+
+entity Ticket "問合せ" {
+  id: Int @pk
+  status: Enum(open, closed) @default(open)
+}
+
+usecase Place "注文"
+usecase Ship "発送"
+usecase Deliver "配達"
+usecase Refund "返金"
+usecase Open "起票"
+usecase Close "完了"
+
+creates(Place, Order)
+updates(Ship, Order)
+updates(Deliver, Order)
+updates(Refund, Order)
+creates(Open, Ticket)
+updates(Close, Ticket)
+
+transitions(Ship, Order.status, pending -> shipped)
+transitions(Deliver, Order.status, shipped -> delivered)
+transitions(Refund, Order.status, refunded -> pending)
+sets(Deliver, Order.delivered_at == present)
+transitions(Close, Ticket.status, open -> closed)
+
+after(Deliver).assert(Order.status == delivered, Order.delivered_at == present)
+after(Refund).assert(Order.status == pending)
+forbidden(Ticket, status == closed)

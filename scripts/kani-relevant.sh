@@ -17,6 +17,7 @@ while IFS= read -r path; do
     # The harnesses, next to the code they prove.
     crates/rdra-ish-core/src/lifecycle/expr.rs) relevant=true ;;
     crates/rdra-ish-core/src/lifecycle/explore/arena.rs) relevant=true ;;
+    crates/rdra-ish-core/src/lifecycle/explore/edges.rs) relevant=true ;;
     crates/rdra-ish-core/src/lifecycle/explore/store.rs) relevant=true ;;
     # What they run: `CmpOp`, `Domain`, `Value` and `EntId` (types.rs), `Edge` (explore/mod.rs).
     crates/rdra-ish-core/src/lifecycle/types.rs) relevant=true ;;

@@ -6,7 +6,20 @@ use crate::lifecycle::trace::Trace;
 use crate::lifecycle::types::ActId;
 use crate::lifecycle::TransitionSystem;
 
-use super::{ComponentRun, Edge, Graph, Reach, States};
+use super::{AnEdge, ComponentRun, Edge, Edges, Ends, Graph, GraphEdges, Reach, States};
+use crate::lifecycle::types::{EntId, Pred};
+
+impl<'a> GraphEdges<'a> {
+    fn iter(self) -> impl Iterator<Item = Edge> + 'a {
+        let (run, labelled) = match self {
+            GraphEdges::Run(edges) => (Some(edges.iter()), None),
+            GraphEdges::Labelled(edges) => (None, Some(edges.iter().copied())),
+        };
+        run.into_iter()
+            .flatten()
+            .chain(labelled.into_iter().flatten())
+    }
+}
 
 impl Graph<'_> {
     /// Every move as `(from, to, action)`, self-loops and repeats included.
@@ -182,46 +195,100 @@ impl LabelledEdges {
         Graph {
             states,
             complete,
-            edges: &self.edges,
+            edges: GraphEdges::Labelled(&self.edges),
             bindings: &self.bindings,
         }
     }
 }
 
 impl ComponentRun {
-    pub fn edges(&self) -> &[Edge] {
-        &self.edges
+    /// Every move from an expanded state, self-loops and repeats included, in discovery
+    /// order. Panics on a run that stopped once every check failed
+    /// (`Caps::stop_when_all_violated`), which keeps no edge list: nothing may read its graph.
+    pub fn edges(&self) -> Edges<'_> {
+        self.steps.edges()
     }
 
+    /// Whether the run keeps its edge list: every run but one that stops once every check
+    /// fails.
+    pub fn has_edges(&self) -> bool {
+        self.steps.has_edges()
+    }
+
+    /// Moves read, self-loops and repeats included: the length of the edge list on a run
+    /// that keeps one.
+    pub fn moves(&self) -> u64 {
+        self.steps.moves()
+    }
+
+    /// The graph findings read; panics on a run without an edge list, as `edges` does.
     pub fn graph(&self) -> Graph<'_> {
         Graph {
             states: &self.states,
             complete: self.complete,
-            edges: &self.edges,
+            edges: GraphEdges::Run(self.edges()),
             bindings: &self.bindings,
         }
     }
 
-    /// The action and its params on an edge.
-    pub fn step(&self, edge: &Edge) -> (ActId, &[u8]) {
-        let (act, params) = &self.bindings[edge.binding as usize];
+    /// The action and its params on an edge: an `&Edge`, or a `Listed` as a `for` loop over
+    /// `edges()` yields it.
+    pub fn step(&self, edge: impl AnEdge) -> (ActId, &[u8]) {
+        let (act, params) = &self.bindings[edge.edge().binding as usize];
         (*act, params)
     }
 
     /// The edge that first reached `states[at]`; `None` for an initial state.
-    pub fn parent(&self, at: u32) -> Option<&Edge> {
-        self.parents[at as usize].map(|e| &self.edges[e as usize])
+    pub fn parent(&self, at: u32) -> Option<Edge> {
+        self.steps.parent(at)
     }
 
     /// The BFS path from an initial state to `states[at]`, first edge first.
     pub fn path_to(&self, mut at: u32) -> Vec<Edge> {
         let mut path = Vec::new();
         while let Some(edge) = self.parent(at) {
-            path.push(*edge);
+            path.push(edge);
             at = edge.from;
         }
         path.reverse();
         path
+    }
+
+    /// What the run's moves of `act` reached: whether one was read, and whether the target
+    /// of one has a row of every entity in `binders`, the entities an after-assert step of
+    /// `act` leaves unbound. A run with an edge list scans it; a run without one recorded it
+    /// as it went, for every after-assert step of its system.
+    pub fn step_ends(&self, act: ActId, binders: &[EntId]) -> Ends {
+        let scan = |edges: &mut dyn Iterator<Item = Edge>| {
+            let mut ends = Ends::default();
+            for e in edges.filter(|e| self.step(e).0 == act) {
+                ends.ran = true;
+                if self
+                    .system
+                    .meets(binders, &Pred::True, &self.states[e.to as usize])
+                {
+                    ends.with_rows = true;
+                    break;
+                }
+            }
+            ends
+        };
+        match &self.ends {
+            None => scan(&mut self.edges().iter()),
+            Some(recorded) => {
+                let ends = recorded.of(act, binders);
+                #[cfg(feature = "shadow")]
+                {
+                    let want = scan(&mut self.steps.twin_edges().iter().copied());
+                    assert!(
+                        ends == want,
+                        "shadow: ComponentRun::step_ends({act:?}, {binders:?}): recorded {ends:?}, reference {want:?}"
+                    );
+                    crate::shadow::compared(crate::shadow::Twin::StepEnds);
+                }
+                ends
+            }
+        }
     }
 
     /// The BFS path to `states[at]` in model terms: a shortest one, since BFS reaches states

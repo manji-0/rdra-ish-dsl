@@ -5,6 +5,7 @@
 
 mod arena;
 mod bfs;
+mod edges;
 mod graph;
 mod liveness;
 mod moves;
@@ -21,12 +22,13 @@ mod views;
 mod violations;
 
 pub use arena::States;
+pub use edges::{AnEdge, EdgeIter, Edges, Ends, Listed};
 pub use graph::{Adjacency, LabelledEdges};
 pub use liveness::{LassoFault, ReducedVerdict, Spurious};
 pub(crate) use plan::Plans;
 pub use properties::PropertyVerdict;
 pub use reach::{Estimate, Layers};
-pub use store::{store_bytes, Held};
+pub use store::{store_bytes, Held, Shape};
 
 use std::collections::BTreeSet;
 
@@ -86,7 +88,10 @@ pub struct Caps {
     /// (`RunEnd::ChecksFailed`). Only a run that decides nothing but those checks sets it: an
     /// entity target, a property, or a `can_reach` reads the whole graph. The stop reads
     /// every check the run evaluates, so a run that sets it evaluates `Checks::All`, as its
-    /// callers do: with fewer, it would stop at another state.
+    /// callers do: with fewer, it would stop at another state. Since nothing reads the graph
+    /// of such a run, it keeps no edge list (`ComponentRun::edges` panics on it): each
+    /// state's parent holds the move that reached it, and the run records as it goes what
+    /// the vacuity of an after-assert reads (`ComponentRun::step_ends`).
     pub stop_when_all_violated: bool,
     /// Gather each entity's view patterns from the edges (`EntityView`), which only
     /// `entity_view` reads: `check`, `states` and the emitters, on an entity's cone. A run
@@ -176,11 +181,12 @@ pub struct ComponentRun {
     /// (`Caps::views`, `gathered_views`).
     pub(crate) views: Vec<EntityView>,
     gathered_views: bool,
-    /// Parallel to `states`: the index in `edges` of the edge that first reached the state;
-    /// `None` for an initial state.
-    parents: Vec<Option<u32>>,
-    /// Every move from an expanded state, self-loops and repeats included, in discovery order.
-    edges: Vec<Edge>,
+    /// Per state the move that first reached it, and, unless the run stopped once every
+    /// check failed (`Caps::stop_when_all_violated`), every move from an expanded state,
+    /// self-loops and repeats included, in discovery order.
+    steps: edges::Steps,
+    /// On a run that keeps no edge list: what the after-assert steps' moves reached.
+    ends: Option<edges::StepEnds>,
     /// `(action, params)` of each distinct binding an edge names.
     bindings: Vec<(ActId, Box<[u8]>)>,
     /// What the run's result holds, in the bytes `Caps::memory` counts.
@@ -242,6 +248,7 @@ enum Threads {
 }
 
 /// One move of the run: `states[from]` steps to `states[to]` under one `(action, params)`.
+/// A run stores it in fewer bytes (`Edges`) and yields it by value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Edge {
     pub from: u32,
@@ -316,8 +323,15 @@ pub struct Graph<'a> {
     pub states: &'a States,
     /// False when a cap stopped the exploration, so a state it did not reach may be reachable.
     pub complete: bool,
-    edges: &'a [Edge],
+    edges: GraphEdges<'a>,
     bindings: &'a [(ActId, Box<[u8]>)],
+}
+
+/// The moves of a `Graph`: a BFS run's list, or another engine's moves in its order.
+#[derive(Clone, Copy)]
+enum GraphEdges<'a> {
+    Run(Edges<'a>),
+    Labelled(&'a [Edge]),
 }
 
 /// Where a violation was seen.
@@ -415,8 +429,9 @@ struct Bfs<'t> {
     violated: Violated,
     /// Per reported violation: its index in `diags` and where it was seen.
     violations: Vec<(usize, Reach)>,
-    parents: Vec<Option<u32>>,
-    edges: Vec<Edge>,
+    steps: edges::Steps,
+    /// On a run that keeps no edge list: what the after-assert steps' moves reached.
+    ends: Option<edges::StepEnds>,
     bindings: Bindings,
     /// What the store is charged to `Caps::memory`, when the caps name a pool; the result
     /// keeps what it holds of it.
@@ -461,8 +476,8 @@ impl TransitionSystem {
             checks_failed,
             diags,
             views,
-            parents,
-            edges,
+            steps,
+            ends,
             bindings,
             violations,
             charge,
@@ -478,8 +493,8 @@ impl TransitionSystem {
             checks,
             views,
             gathered_views: caps.views,
-            parents,
-            edges,
+            steps,
+            ends,
             bindings: bindings.list,
             kept,
             peak_admitted,

@@ -46,17 +46,27 @@ pub(super) fn line(run: &ComponentRun, clock: Clock, early: bool) {
         .filter(|a| run.checks().reads(&a.name))
         .count();
     let n = run.states.len();
-    let loops = run.edges.iter().filter(|e| e.from == e.to).count();
+    // A run without an edge list (`Caps::stop_when_all_violated`) counts its moves only.
+    let loops = match run.has_edges() {
+        true => run
+            .edges()
+            .iter()
+            .filter(|e| e.from == e.to)
+            .count()
+            .to_string(),
+        false => "-".to_string(),
+    };
     let mut out = format!(
-        "perf-run pass={} label={} reduced={} early={early} complete={} vars={} cells={cells} width={} bits_exact={bits_exact:.1} bits_packed={bits_packed} log2n={:.1} states={n} edges={} loops={loops} bindings={} actions={} inv={invariants} after={after} kept={} peak={} wall_ms={wall_ms:.1} thread_cpu_ms={thread_ms:.1} proc_cpu_ms={process_ms:.1}",
+        "perf-run pass={} label={} reduced={} early={early} complete={} graph={} vars={} cells={cells} width={} bits_exact={bits_exact:.1} bits_packed={bits_packed} log2n={:.1} states={n} edges={} loops={loops} bindings={} actions={} inv={invariants} after={after} kept={} peak={} wall_ms={wall_ms:.1} thread_cpu_ms={thread_ms:.1} proc_cpu_ms={process_ms:.1}",
         pass_name(),
         label_name(),
         ts.reduction().is_some(),
         run.complete,
+        run.has_edges(),
         ts.var_ids().count(),
         run.states.width(),
         (n.max(1) as f64).log2(),
-        run.edges.len(),
+        run.moves(),
         run.bindings.len(),
         ts.actions().len(),
         run.kept,
@@ -83,33 +93,44 @@ fn costly(run: &ComponentRun) -> String {
         .sum();
     let const_cols = seen.iter().filter(|c| distinct(c) <= 1).count();
     let (mut delta, mut with_parent) = (0u64, 0u64);
-    for (i, p) in run.parents.iter().enumerate() {
-        if let Some(e) = p {
-            let from = run.edges[*e as usize].from as usize;
-            let (a, b) = (&run.states[from], &run.states[i]);
+    for i in 0..run.states.len() {
+        if let Some(e) = run.parent(i as u32) {
+            let (a, b) = (&run.states[e.from as usize], &run.states[i]);
             delta += a.0.iter().zip(b.0.iter()).filter(|(x, y)| x != y).count() as u64;
             with_parent += 1;
         }
     }
-    let mut pairs: Vec<u64> = (run.edges.iter())
-        .filter(|e| e.from != e.to)
-        .map(|e| (u64::from(e.from) << 32) | u64::from(e.to))
-        .collect();
-    pairs.sort_unstable();
-    pairs.dedup();
     let fx = |h: u64, w: u64| (h.rotate_left(5) ^ w).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
     let shash = (run.states.iter())
         .flat_map(|s| s.0.iter())
         .fold(0u64, |h, b| fx(h, u64::from(*b)));
-    let ehash = (run.edges.iter()).fold(0u64, |h, e| fx(fx(h, u64::from(e.from)), u64::from(e.to)));
-    let bhash = run.edges.iter().fold(0u64, |h, e| {
-        let (act, params) = &run.bindings[e.binding as usize];
-        (params.iter()).fold(fx(h, act.index() as u64), |h, b| fx(h, u64::from(*b)))
-    });
+    // A run without an edge list has no graph to hash.
+    let (pairs, ehash, bhash) = match run.has_edges() {
+        false => ("-".to_string(), "-".to_string(), "-".to_string()),
+        true => {
+            let edges = run.edges();
+            let mut pairs: Vec<u64> = (edges.iter())
+                .filter(|e| e.from != e.to)
+                .map(|e| (u64::from(e.from) << 32) | u64::from(e.to))
+                .collect();
+            pairs.sort_unstable();
+            pairs.dedup();
+            let ehash =
+                (edges.iter()).fold(0u64, |h, e| fx(fx(h, u64::from(e.from)), u64::from(e.to)));
+            let bhash = edges.iter().fold(0u64, |h, e| {
+                let (act, params) = &run.bindings[e.binding as usize];
+                (params.iter()).fold(fx(h, act.index() as u64), |h, b| fx(h, u64::from(*b)))
+            });
+            (
+                pairs.len().to_string(),
+                format!("{ehash:016x}"),
+                format!("{bhash:016x}"),
+            )
+        }
+    };
     format!(
-        " bits_reached={bits_reached} const_cols={const_cols} parent_delta={:.2} distinct_pairs={} shash={shash:016x} ehash={ehash:016x} bhash={bhash:016x}",
+        " bits_reached={bits_reached} const_cols={const_cols} parent_delta={:.2} distinct_pairs={pairs} shash={shash:016x} ehash={ehash} bhash={bhash}",
         delta as f64 / with_parent.max(1) as f64,
-        pairs.len(),
     )
 }
 
