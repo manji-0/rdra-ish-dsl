@@ -47,7 +47,7 @@ jobs:
             kani=true
             code=true
           else
-            git diff --name-only HEAD^1 HEAD | tee changed.txt
+            git diff --name-only --no-renames HEAD^1 HEAD | tee changed.txt
             kani=$(scripts/kani-relevant.sh < changed.txt)
             code=$(scripts/code-relevant.sh < changed.txt)
             if [ "$NO_VERIFY" = true ]; then

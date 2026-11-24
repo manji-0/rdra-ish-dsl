@@ -5,7 +5,9 @@
 # checks instead: the tests that read Markdown (`stage_docs_are_in_sync`,
 # `rule_ids_are_unique_and_in_the_docs`, `export_gate`) and the skill snippets.
 #
-#   git diff --name-only HEAD^1 HEAD | scripts/code-relevant.sh
+#   git diff --name-only --no-renames HEAD^1 HEAD | scripts/code-relevant.sh
+#
+# `--no-renames` lists both paths of a rename, so moving a code file under docs/ is code.
 #
 # Anything not listed as prose counts as code, so a new kind of file runs every check until
 # it is listed here. An empty list prints `true`.
