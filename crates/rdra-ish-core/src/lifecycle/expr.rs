@@ -377,3 +377,108 @@ fn ordered(ord: std::cmp::Ordering, op: CmpOp) -> bool {
         CmpOp::Ge => ord != Less,
     }
 }
+
+/// Kani harnesses (`cargo kani -p rdra-ish-core`): the comparison of two operands, for every
+/// value of both.
+#[cfg(kani)]
+mod proofs {
+    use super::*;
+
+    const OPS: [CmpOp; 6] = [
+        CmpOp::Eq,
+        CmpOp::Ne,
+        CmpOp::Lt,
+        CmpOp::Le,
+        CmpOp::Gt,
+        CmpOp::Ge,
+    ];
+
+    fn any_op() -> CmpOp {
+        let k: usize = kani::any();
+        kani::assume(k < OPS.len());
+        OPS[k]
+    }
+
+    /// The operator that holds exactly when the operands are swapped.
+    fn mirrored(op: CmpOp) -> CmpOp {
+        match op {
+            CmpOp::Eq => CmpOp::Eq,
+            CmpOp::Ne => CmpOp::Ne,
+            CmpOp::Lt => CmpOp::Gt,
+            CmpOp::Le => CmpOp::Ge,
+            CmpOp::Gt => CmpOp::Lt,
+            CmpOp::Ge => CmpOp::Le,
+        }
+    }
+
+    /// Any operand: an integer literal, a slot index, a literal value, or a value read from a
+    /// var of any domain.
+    fn any_operand(domains: &[Domain; 8]) -> Operand<'_> {
+        match kani::any::<u8>() % 4 {
+            0 => Operand::Number(kani::any()),
+            1 => Operand::Slot(kani::any()),
+            2 => Operand::Value(Value(kani::any()), None),
+            _ => {
+                let k: usize = kani::any();
+                kani::assume(k < domains.len());
+                Operand::Value(Value(kani::any()), Some(&domains[k]))
+            }
+        }
+    }
+
+    /// One of each domain. `compare` never reads an `Enum`'s names, so this one has none.
+    fn domains() -> [Domain; 8] {
+        [
+            Domain::Existence,
+            Domain::Enum(Vec::new()),
+            Domain::Bool,
+            Domain::Nullable,
+            Domain::Int,
+            Domain::NullableInt,
+            Domain::Instance {
+                parent: EntId::at(0),
+                optional: false,
+            },
+            Domain::Instance {
+                parent: EntId::at(0),
+                optional: true,
+            },
+        ]
+    }
+
+    /// Two numbers compare as `i64` orders them; `null` equals only `null`, differs from every
+    /// number, and is never ordered.
+    #[kani::proof]
+    fn numbers_compare_as_i64_and_null_is_never_ordered() {
+        let (a, b): (Option<i64>, Option<i64>) = (kani::any(), kani::any());
+        let op = any_op();
+        let want = match (a, b) {
+            (Some(a), Some(b)) => match op {
+                CmpOp::Eq => a == b,
+                CmpOp::Ne => a != b,
+                CmpOp::Lt => a < b,
+                CmpOp::Le => a <= b,
+                CmpOp::Gt => a > b,
+                CmpOp::Ge => a >= b,
+            },
+            (None, None) => matches!(op, CmpOp::Eq),
+            _ => matches!(op, CmpOp::Ne),
+        };
+        assert_eq!(compare_numbers(a, op, b), want);
+    }
+
+    /// For any two operands, of any kinds and domains: `compare` does not panic, `!=` is the
+    /// negation of `==`, and swapping the operands mirrors the operator.
+    #[kani::proof]
+    fn compare_negates_and_mirrors() {
+        let domains = domains();
+        let lhs = any_operand(&domains);
+        let rhs = any_operand(&domains);
+        let op = any_op();
+        assert_eq!(
+            compare(&lhs, CmpOp::Ne, &rhs),
+            !compare(&lhs, CmpOp::Eq, &rhs)
+        );
+        assert_eq!(compare(&lhs, op, &rhs), compare(&rhs, mirrored(op), &lhs));
+    }
+}

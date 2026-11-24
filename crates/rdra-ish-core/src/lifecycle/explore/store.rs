@@ -134,3 +134,55 @@ impl ComponentRun {
         self.states.width()
     }
 }
+
+/// Kani harnesses (`cargo kani -p rdra-ish-core`).
+#[cfg(kani)]
+mod proofs {
+    use super::*;
+
+    /// `vec_bytes` is the growth of a real `Vec` of edges: what it says before a push is what
+    /// the buffer takes after it, for every run of up to 17 pushes.
+    #[kani::proof]
+    #[kani::unwind(19)]
+    fn vec_bytes_is_what_a_vec_of_edges_grows_to() {
+        let pushes: usize = kani::any();
+        kani::assume(pushes <= 17);
+        let mut v: Vec<Edge> = Vec::new();
+        for _ in 0..pushes {
+            let said = vec_bytes(&v, 1);
+            v.push(Edge {
+                from: 0,
+                to: 0,
+                binding: 0,
+            });
+            assert_eq!((v.capacity() * size_of::<Edge>()) as u64, said);
+            assert_eq!(vec_bytes(&v, 0), said);
+        }
+    }
+
+    /// `store_bytes` neither overflows nor panics on any input.
+    #[kani::proof]
+    fn store_bytes_never_overflows() {
+        store_bytes(kani::any(), kani::any(), kani::any());
+    }
+
+    /// A store of more states, wider states, or more edges never counts as fewer bytes: past
+    /// `u64` the count stays at `u64::MAX` and does not wrap to a small one.
+    #[kani::proof]
+    fn store_bytes_only_grows() {
+        let (n, m): (u64, u64) = (kani::any(), kani::any());
+        let (w, v): (usize, usize) = (kani::any(), kani::any());
+        let (e, f): (u64, u64) = (kani::any(), kani::any());
+        kani::assume(n <= m && w <= v && e <= f);
+        assert!(store_bytes(n, w, e) <= store_bytes(m, v, f));
+    }
+
+    /// A heap block holds what was asked, in whole 16-byte units, and wastes under 16 bytes.
+    #[kani::proof]
+    fn a_block_rounds_up_to_16() {
+        let n: usize = kani::any();
+        kani::assume(n <= usize::MAX - 16);
+        let b = block(n);
+        assert!(b % 16 == 0 && b >= n as u64 && b - (n as u64) < 16);
+    }
+}
