@@ -23,12 +23,16 @@ jobs:
     # as help text. A push to main runs every job. `kani` says whether the change can reach
     # a Kani harness (scripts/kani-relevant.sh); the label does not skip it. `code` is false
     # when every changed file is prose (scripts/code-relevant.sh): `check` then runs the
-    # checks that read prose instead of its whole test suite and the sample artifacts.
+    # checks that read prose instead of its whole test suite and the sample artifacts. `nix`
+    # says whether the change can break the nix package while cargo still builds: the flake
+    # takes the whole repository as its source, so only its own files, the manifests, the
+    # lock file and this workflow can.
     runs-on: ubuntu-latest
     outputs:
       verify: ${{ steps.decide.outputs.verify }}
       kani: ${{ steps.decide.outputs.kani }}
       code: ${{ steps.decide.outputs.code }}
+      nix: ${{ steps.decide.outputs.nix }}
     defaults:
       run:
         shell: bash
@@ -46,10 +50,16 @@ jobs:
             verify=true
             kani=true
             code=true
+            nix=true
           else
             git diff --name-only --no-renames HEAD^1 HEAD | tee changed.txt
             kani=$(scripts/kani-relevant.sh < changed.txt)
             code=$(scripts/code-relevant.sh < changed.txt)
+            if grep -qE '^(flake\.(nix|lock)|Cargo\.(toml|lock)|crates/[^/]+/Cargo\.toml|\.github/workflows/ci\.yml)$' changed.txt; then
+              nix=true
+            else
+              nix=false
+            fi
             if [ "$NO_VERIFY" = true ]; then
               verify=false
             else
@@ -59,6 +69,7 @@ jobs:
           echo "verify=$verify" | tee -a "$GITHUB_OUTPUT"
           echo "kani=$kani" | tee -a "$GITHUB_OUTPUT"
           echo "code=$code" | tee -a "$GITHUB_OUTPUT"
+          echo "nix=$nix" | tee -a "$GITHUB_OUTPUT"
 
   check:
     needs: changes
@@ -81,12 +92,17 @@ jobs:
         # RDRA_REQUIRE_CODEGEN_TOOLS: the devShell has tsc and go, so the codegen build tests
         # may not skip a language here; portability.yml runs without them and skips.
         run: RDRA_REQUIRE_CODEGEN_TOOLS=1 scripts/diff-test.sh --all
+      - name: debug CLI
+        # The binary the test step built (`cargo test --all` builds it for the CLI tests), for
+        # the two steps below: a no-op after the test step, a build in prose mode. A separate
+        # `cargo build -p rdra-ish-cli` resolves other features and compiled every crate again.
+        run: cargo test --all --no-run --quiet
       - name: sample artifact snapshots
         if: needs.changes.outputs.code != 'false'
-        run: nix build -L && bash scripts/check-sample-artifacts.sh ./result/bin/rdra-ish
-        # The release binary of the package, which `nix package` below builds anyway (it
-        # then finds it built). In debug the rows that explore the lifecycle took most of
-        # 15-21 minutes; the script writes the same files with either build.
+        # The script writes the same files with a debug or a release binary. Since #285 no
+        # row explores the lifecycle only to print a note, so debug costs minutes, not the
+        # 15-21 it did, and saves the release build `nix build` made from scratch here.
+        run: bash scripts/check-sample-artifacts.sh target/debug/rdra-ish
       - name: prose checks
         # In place of the two steps above when every changed file is prose: the tests that read
         # Markdown. The rule ids in docs/language-reference.md and
@@ -99,11 +115,12 @@ jobs:
           cargo test -p rdra-ish-cli --test export_gate
       - name: skill snippets
         # Debug binary; a verify transcript with --with-tlc needs the devShell's tlc.
-        run: |
-          cargo build -p rdra-ish-cli
-          python3 -I scripts/check-skill-snippets.py target/debug/rdra-ish
+        run: python3 -I scripts/check-skill-snippets.py target/debug/rdra-ish
       - name: nix package
-        # The package `nix profile install github:manji-0/rdra-ish-dsl` installs.
+        # The package `nix profile install github:manji-0/rdra-ish-dsl` installs. A release
+        # build from scratch (about 4.5 minutes), so only when `nix` says a change can break it
+        # while cargo builds, and on every push to main.
+        if: needs.changes.outputs.nix != 'false'
         run: nix build -L && ./result/bin/rdra-ish --help >/dev/null && test -x ./result/bin/rdra-ish-lsp
 
   formal-verify:
@@ -177,7 +194,9 @@ jobs:
       - uses: cachix/install-nix-action@v31
       - uses: Swatinem/rust-cache@v2
       - name: Build the shadow CLI
-        run: cargo build -p rdra-ish-cli --release --features shadow
+        # Through the corpus test's build, so the last step finds it built: a separate
+        # `cargo build` resolves other features and compiled every crate a second time.
+        run: cargo test --release -p rdra-ish-cli --features shadow --test engine_corpus --no-run
       - name: Every twin compares calls
         # How many calls each twin compared and skipped on one sample. patent-ops reaches all
         # of them; the step fails when the line is missing (a build without the feature) or a
