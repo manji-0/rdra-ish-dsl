@@ -15,27 +15,49 @@ bin="target/debug/rdra-ish"
 # Every sample and skill fixture is in the layout `fmt` writes.
 "$bin" fmt --check samples skills
 
+# The rows write separate files and read only the samples, so they run in parallel, one
+# per core unless ARTIFACT_JOBS says otherwise. A row that fails makes xargs exit non-zero,
+# after the other rows finish.
+jobs="${ARTIFACT_JOBS:-$(getconf _NPROCESSORS_ONLN)}"
+
+# One manifest row: the output path, then the command and its arguments.
+write_row() {
+  local out="$1"
+  shift
+  mkdir -p "$(dirname "$out")"
+  case "$1" in
+    # `states` and `list` print to stdout.
+    states | list) "$bin" "$@" >"$out" ;;
+    # `diagram` appends the extension of its format to --out.
+    diagram) "$bin" "$@" --out "${out%.*}" ;;
+    *) "$bin" "$@" --out "$out" ;;
+  esac
+}
+export -f write_row
+export bin
+
 outputs=()
+rows=()
 while IFS=$'\t' read -r out cmd; do
   [[ -z "$out" || "$out" == \#* ]] && continue
   outputs+=("$out")
-  mkdir -p "$(dirname "$out")"
-  read -r -a args <<<"$cmd"
-  case "${args[0]}" in
-    # `states` and `list` print to stdout.
-    states | list) "$bin" "${args[@]}" >"$out" ;;
-    # `diagram` appends the extension of its format to --out.
-    diagram) "$bin" "${args[@]}" --out "${out%.*}" ;;
-    *) "$bin" "${args[@]}" --out "$out" ;;
-  esac
+  rows+=("$out $cmd")
 done <"$manifest"
+# xargs splits each row on blanks, as `read -a` did; a row holds no quotes.
+printf '%s\n' "${rows[@]}" | xargs -P "$jobs" -L 1 bash -c 'write_row "$@"' write_row
 
-# The documents that embed the artifacts above.
-python3 -I scripts/embed-sample-artifacts.py
-python3 -I scripts/gen-clinic-ops-docs.py "$bin" clinic-ops
-python3 -I scripts/gen-clinic-ops-docs.py "$bin" patent-ops
-python3 -I scripts/gen-clinic-ops-docs.py "$bin" food-permit-ops
-python3 -I scripts/gen-clinic-ops-docs.py "$bin" insurance-claim-ops
+# The documents that embed the artifacts above, once every row is written. Each writes its
+# own files, so they run side by side; each one's exit status is waited for.
+pids=()
+python3 -I scripts/embed-sample-artifacts.py &
+pids+=($!)
+for sample in clinic-ops patent-ops food-permit-ops insurance-claim-ops; do
+  python3 -I scripts/gen-clinic-ops-docs.py "$bin" "$sample" &
+  pids+=($!)
+done
+for pid in "${pids[@]}"; do
+  wait "$pid"
+done
 outputs+=(samples/incremental-order/step-*/design.md samples/clinic-ops/design-doc.md samples/clinic-ops/prd.md
   samples/patent-ops/design-doc.md samples/patent-ops/prd.md
   samples/food-permit-ops/design-doc.md samples/food-permit-ops/prd.md
