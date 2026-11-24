@@ -28,15 +28,18 @@
 //! state-model module with its sizes and wall times, to see where a run's time goes.
 
 use std::collections::{BTreeSet, HashMap};
+use std::ffi::OsString;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
+use std::time::Duration;
 
 use rdra_ish_cli::property_cone::{AfterPlain, ConeRun, PropertyCone, Verdict, Why};
-use rdra_ish_cli::tlc_env::{tlc_env, Heap};
-use rdra_ish_cli::tlc_output::{parse_dot, Outcome, TlcRun};
+use rdra_ish_cli::tlc_batch::{self, Job, Pool};
+use rdra_ish_cli::tlc_env::{current_user_heap, tlc_env, tlc_env_sized, Heap, Jit};
+use rdra_ish_cli::tlc_output::{parse_dot, CanonState, InvariantScan, Outcome, TlcRun};
 use rdra_ish_cli::tlc_replay::{explain_property, explain_violation};
 use rdra_ish_core::lifecycle::{
     ActId, Bounds, Caps, ComponentRun, Cone, Fairness, LabelledEdges, Loop, Progress,
@@ -265,19 +268,200 @@ struct ConeReport {
     violated: BTreeSet<String>,
 }
 
+/// Where a TLC run goes.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Route {
+    /// A JVM of [`batch_pool`], when there is one.
+    Batch,
+    /// A process of its own: a run known to be long, which gains nothing from a JVM already
+    /// up and would hold one of the pool's past [`BATCH_LIMIT`].
+    Process,
+}
+
+/// A cone of more states than this starts TLC as a process of its own. The 18 sample cones
+/// of 2,500 to 5,000 states take 1.1 s each in a JVM that is up (2.1 s at most) and 1.6 s as
+/// a process; past that, the 0.6 s a JVM start costs is a small part of the run.
+const BATCH_STATES: usize = 5_000;
+
+/// How long a job may take in a batch JVM before the JVM is killed and the job runs as a
+/// process. The longest job the test gives a batch JVM took 1.9 s here, beside other load:
+/// the cones are held to [`BATCH_STATES`], the whole-model property runs are processes, and
+/// the other runs (a property's cone, a state model, a fixture) are small. The limit is
+/// there for a run that hangs.
+const BATCH_LIMIT: Duration = Duration::from_secs(300);
+
+/// The heap of a batch JVM, unless the user names one (`RDRA_TLC_HEAP`, or `-Xmx` in
+/// `JAVA_TOOL_OPTIONS`). A JVM that stays up commits its whole `-Xmx`, whatever its jobs
+/// need, and about 300 MiB beside the heap: 16 JVMs of the 1 GiB a process gets held
+/// 13.5 GB together, and the 8 the pool is bounded to hold 5.6 GB at this. No job of the
+/// test ran out of it.
+const BATCH_HEAP: u64 = 256 << 20;
+
+/// The batch JVMs of this test binary (#310), or `None` without `tlc-batch` on PATH or with
+/// `RDRA_TLC_BATCH=0`: every run is then a process. `RDRA_TLC_BATCH=both` runs every job
+/// both ways and compares them ([`assert_same_run`]); `RDRA_TLC_BATCH=twice` runs it as a
+/// process twice and compares those, which shows what two runs of one job differ in with no
+/// batch JVM involved.
+fn batch_pool() -> Option<&'static Pool> {
+    static POOL: OnceLock<Option<Pool>> = OnceLock::new();
+    POOL.get_or_init(|| {
+        let launcher = tlc_batch::launcher()?;
+        // A pool in a static is never dropped, so the directories of a run stay; the next
+        // run removes those a day old.
+        let temp = std::env::temp_dir();
+        for old in std::fs::read_dir(&temp).into_iter().flatten().flatten() {
+            let stale = old
+                .file_name()
+                .to_string_lossy()
+                .starts_with("rdra-tlc-batch-")
+                && old
+                    .metadata()
+                    .and_then(|m| m.modified())
+                    .is_ok_and(|at| at.elapsed().is_ok_and(|age| age.as_secs() > 86_400));
+            if stale {
+                let _ = std::fs::remove_dir_all(old.path());
+            }
+        }
+        let root = temp.join(format!("rdra-tlc-batch-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let started = AtomicUsize::new(0);
+        // As many JVMs as one test's workers; a job waits a second or two for one at most.
+        let limit = std::thread::available_parallelism().map_or(4, |n| n.get().min(8));
+        Some(Pool::new(limit, move || {
+            // TLC unpacks its standard modules into java.io.tmpdir; the JVMs must not share it.
+            let tmp = root.join(started.fetch_add(1, Ordering::SeqCst).to_string());
+            std::fs::create_dir_all(&tmp).expect("java tmp dir");
+            let heap = current_user_heap().unwrap_or(BATCH_HEAP);
+            let (key, value) = tlc_env_sized(heap, &tmp, Jit::Tiered);
+            let log = std::fs::File::create(tmp.join("jvm.err")).expect("jvm log");
+            let mut command = Command::new(&launcher);
+            command.env(key, value).stderr(log);
+            command
+        }))
+    })
+    .as_ref()
+}
+
+/// Prints what the batch JVMs did so far. With `RDRA_REQUIRE_TLC_BATCH=1` (CI), a test
+/// binary that ran no TLC job in a batch JVM, or lost one, fails: a driver that stops
+/// working would otherwise only make the test slower.
+fn assert_batch_ran() {
+    let required = std::env::var("RDRA_REQUIRE_TLC_BATCH").as_deref() == Ok("1");
+    let Some(pool) = batch_pool() else {
+        assert!(
+            !required,
+            "RDRA_REQUIRE_TLC_BATCH=1 but tlc-batch is not on PATH"
+        );
+        return;
+    };
+    let counts = pool.counts();
+    println!(
+        "TLC batch JVMs: {counts:?}; jobs compared with a process: {}",
+        BOTH_WAYS.load(Ordering::SeqCst)
+    );
+    assert!(
+        !required || (counts.answered > 0 && counts.lost == 0 && pool.why_off().is_none()),
+        "TLC batch JVMs lost jobs: {counts:?}, {:?}",
+        pool.why_off()
+    );
+}
+
 fn run_tlc(tlc: &Path, dir: &Path, args: &[&str], tla: &str, cfg: &str) -> (bool, String) {
+    run_tlc_on(Route::Batch, batch_pool(), tlc, dir, args, tla, cfg)
+}
+
+/// One TLC run of `tla` under `cfg` in `dir`: whether TLC exited 0, and what it printed.
+/// Every path TLC gets is absolute, because a batch JVM does not run in `dir`. A job a batch
+/// JVM does not answer runs as a process.
+fn run_tlc_on(
+    route: Route,
+    pool: Option<&Pool>,
+    tlc: &Path,
+    dir: &Path,
+    args: &[&str],
+    tla: &str,
+    cfg: &str,
+) -> (bool, String) {
     std::fs::create_dir_all(dir).expect("work dir");
     std::fs::write(dir.join("Cone.tla"), tla).expect("write tla");
     std::fs::write(dir.join("Cone.cfg"), cfg).expect("write cfg");
+    let mut all: Vec<OsString> = vec!["-workers".into(), "1".into(), "-metadir".into()];
+    all.push(dir.join("meta").into());
+    all.extend(args.iter().map(OsString::from));
+    all.push("-config".into());
+    all.push(dir.join("Cone.cfg").into());
+    all.push(dir.join("Cone.tla").into());
+    tlc_run(route, pool, tlc, dir, &all)
+}
+
+/// TLC on `args`, whose files are in `dir`.
+fn tlc_run(
+    route: Route,
+    pool: Option<&Pool>,
+    tlc: &Path,
+    dir: &Path,
+    all: &[OsString],
+) -> (bool, String) {
+    let Some(pool) = pool.filter(|_| route == Route::Batch) else {
+        return tlc_process(tlc, dir, all);
+    };
+    if std::env::var(tlc_batch::BATCH_ENV).as_deref() == Ok("twice") {
+        let first = tlc_process(tlc, dir, all);
+        let graph = graph_shape(dir);
+        let alone = tlc_process(tlc, dir, &with_the_fingerprints_of(&first.1, all));
+        assert_same_run(dir, (&first, &graph), (&alone, &graph_shape(dir)));
+        return alone;
+    }
+    let batched = tlc_batched(pool, dir, all);
+    if std::env::var(tlc_batch::BATCH_ENV).as_deref() != Ok("both") {
+        return batched.unwrap_or_else(|| tlc_process(tlc, dir, all));
+    }
+    let Some(batched) = batched else {
+        return tlc_process(tlc, dir, all);
+    };
+    let graph = graph_shape(dir);
+    let alone = tlc_process(tlc, dir, &with_the_fingerprints_of(&batched.1, all));
+    assert_same_run(dir, (&batched, &graph), (&alone, &graph_shape(dir)));
+    alone
+}
+
+/// `args` with the fingerprint function and seed the run of `log` drew (`-fp`, `-seed`). TLC
+/// draws both anew for a run that names neither, and they decide the order it stores states
+/// in, and with it which counterexample to a temporal property it prints.
+fn with_the_fingerprints_of(log: &str, args: &[OsString]) -> Vec<OsString> {
+    let drawn = |name: &str| {
+        let words: Vec<&str> = log
+            .lines()
+            .find(|l| l.starts_with("Running breadth-first search Model-Checking with fp "))?
+            .split(' ')
+            .collect();
+        let at = words.iter().position(|w| *w == name)?;
+        words.get(at + 1).map(|w| OsString::from(*w))
+    };
+    let (Some(fp), Some(seed)) = (drawn("fp"), drawn("seed")) else {
+        return args.to_vec();
+    };
+    let mut pinned = vec!["-fp".into(), fp, "-seed".into(), seed];
+    pinned.extend(args.iter().cloned());
+    pinned
+}
+
+/// Removes what an earlier run of the job left, which a run that was killed may have half
+/// written.
+fn clear_run(dir: &Path) {
+    let _ = std::fs::remove_dir_all(dir.join("meta"));
+    let _ = std::fs::remove_file(dir.join("graph.dot"));
+}
+
+fn tlc_process(tlc: &Path, dir: &Path, args: &[OsString]) -> (bool, String) {
+    clear_run(dir);
     // TLC unpacks its standard modules into java.io.tmpdir; parallel runs must not share it.
     let tmp = dir.join("java-tmp");
     std::fs::create_dir_all(&tmp).expect("java tmp dir");
     let (key, value) = tlc_env(Heap::Cone, &tmp);
     let out = Command::new(tlc)
         .env(key, value)
-        .args(["-workers", "1", "-metadir", "meta"])
         .args(args)
-        .args(["-config", "Cone.cfg", "Cone.tla"])
         .current_dir(dir)
         .output()
         .expect("run tlc");
@@ -287,6 +471,417 @@ fn run_tlc(tlc: &Path, dir: &Path, args: &[&str], tla: &str, cfg: &str) -> (bool
         String::from_utf8_lossy(&out.stderr)
     );
     (out.status.success(), text)
+}
+
+/// The run in a JVM of `pool`, with TLC's stdout before its stderr as [`tlc_process`] has
+/// them; `None` when the job got no answer.
+fn tlc_batched(pool: &Pool, dir: &Path, args: &[OsString]) -> Option<(bool, String)> {
+    clear_run(dir);
+    let (stdout, stderr) = (dir.join("tlc.out"), dir.join("tlc.err"));
+    let job = Job {
+        stdout: &stdout,
+        stderr: &stderr,
+        args,
+    };
+    let status = pool.run(&job, BATCH_LIMIT)?;
+    let read = |path: &Path| {
+        String::from_utf8_lossy(&std::fs::read(path).expect("TLC's output")).into_owned()
+    };
+    Some((status == 0, format!("{}{}", read(&stdout), read(&stderr))))
+}
+
+/// The graph a run dumped, in an order of its own: the states with whether each is initial,
+/// and the edges between them. TLC names a state by its fingerprint, which is drawn anew on
+/// every run.
+type GraphShape = (Vec<(CanonState, bool)>, Vec<(usize, usize, String)>);
+
+fn graph_shape(dir: &Path) -> Option<GraphShape> {
+    let file = std::fs::File::open(dir.join("graph.dot")).ok()?;
+    let dot = parse_dot(BufReader::new(file), |canon| Some(canon.clone())).expect("graph.dot");
+    let mut order: Vec<usize> = (0..dot.nodes.len()).collect();
+    order.sort_by(|&a, &b| dot.nodes[a].state.cmp(&dot.nodes[b].state));
+    let mut at = vec![0; order.len()];
+    for (to, &from) in order.iter().enumerate() {
+        at[from] = to;
+    }
+    let mut edges: Vec<(usize, usize, String)> = dot
+        .edges
+        .iter()
+        .map(|&(a, b, l)| {
+            (
+                at[a as usize],
+                at[b as usize],
+                dot.labels[l as usize].clone(),
+            )
+        })
+        .collect();
+    edges.sort();
+    let nodes = order
+        .iter()
+        .map(|&i| (dot.nodes[i].state.clone(), dot.nodes[i].initial))
+        .collect();
+    Some((nodes, edges))
+}
+
+/// A TLC log without what two runs of one job with one fingerprint function and seed do not
+/// share, whichever way they are started: the JVM's own first line, the dates, the time a
+/// run took, the process id, the directory the standard modules were unpacked into, and what
+/// TLC does on a timer, which is a progress line and, with a temporal property, a check of
+/// the states found until then (a run that ends before the timer has neither, and a slower
+/// one of the same job has them at whatever count it had reached; the check of the complete
+/// state space is always printed). One more differs between a batch JVM and a
+/// process: the heap TLC reports, since a batch JVM has [`BATCH_HEAP`] and not the heap of a
+/// process (and at one `-Xmx` the two still report different sizes, 966MB and 981MB of
+/// 1 GiB: the figure is the JVM's `maxMemory`, which leaves out a survivor space that the
+/// parallel collector has resized in a JVM that has run jobs).
+fn without_run_noise(log: &str) -> Vec<String> {
+    let mut lines = Vec::new();
+    for line in log.lines() {
+        let interim = line.starts_with("Checking ")
+            && line.contains(" of temporal properties for the current state space ");
+        if line.starts_with("Picked up JAVA_TOOL_OPTIONS:")
+            || line.starts_with("Progress(")
+            || interim
+            || line.starts_with("Finished checking temporal properties in ")
+        {
+            continue;
+        }
+        let mut line = without_dates(line);
+        if line.starts_with("Running breadth-first search Model-Checking with fp ") {
+            let mut words: Vec<&str> = line.split(' ').collect();
+            for i in 1..words.len() {
+                if words[i - 1] == "[pid:" || words.get(i + 1) == Some(&"heap") {
+                    words[i] = "N";
+                }
+            }
+            line = words.join(" ");
+        }
+        if let (true, Some(from), Some(to)) = (
+            line.starts_with("Finished"),
+            line.find(" in "),
+            line.find(" at "),
+        ) {
+            line.replace_range(from..to, " in T");
+        }
+        // A standard module, unpacked into the run's or the batch JVM's java.io.tmpdir.
+        if let Some(module) = line.strip_prefix("Parsing file ") {
+            if module.contains("/java-tmp/") || module.contains("/rdra-tlc-batch-") {
+                let name = Path::new(module).file_name().expect("a module file");
+                line = format!("Parsing file <tmp>/{}", name.to_string_lossy());
+            }
+        }
+        lines.push(line);
+    }
+    lines
+}
+
+/// `line` with each `2026-11-25 02:20:47` as `<date>`.
+fn without_dates(line: &str) -> String {
+    const SHAPE: &[u8] = b"dddd-dd-dd dd:dd:dd";
+    let bytes = line.as_bytes();
+    let is_date = |at: usize| {
+        bytes.len() >= at + SHAPE.len()
+            && SHAPE.iter().zip(&bytes[at..]).all(|(s, b)| {
+                if *s == b'd' {
+                    b.is_ascii_digit()
+                } else {
+                    s == b
+                }
+            })
+    };
+    let mut out = String::new();
+    let mut at = 0;
+    while at < bytes.len() {
+        if is_date(at) {
+            out.push_str("<date>");
+            at += SHAPE.len();
+        } else {
+            let next = (at + 1..=bytes.len())
+                .find(|i| line.is_char_boundary(*i))
+                .expect("a boundary");
+            out.push_str(&line[at..next]);
+            at = next;
+        }
+    }
+    out
+}
+
+/// The jobs [`assert_same_run`] compared.
+static BOTH_WAYS: AtomicUsize = AtomicUsize::new(0);
+
+/// A job run in a batch JVM and as a process gave the same exit, the same log up to
+/// [`without_run_noise`], the same parsed run and invariant scan, and the same dumped graph.
+fn assert_same_run(
+    dir: &Path,
+    batched: (&(bool, String), &Option<GraphShape>),
+    alone: (&(bool, String), &Option<GraphShape>),
+) {
+    let ((b_ok, b_log), b_graph) = batched;
+    let ((a_ok, a_log), a_graph) = alone;
+    let at = dir.display();
+    assert_eq!(
+        b_ok, a_ok,
+        "{at}: exit differs (left batch, right process)\n{b_log}\n{a_log}"
+    );
+    let (b_lines, a_lines) = (without_run_noise(b_log), without_run_noise(a_log));
+    if b_lines != a_lines {
+        let differ: Vec<String> = b_lines
+            .iter()
+            .zip(&a_lines)
+            .filter(|(b, a)| b != a)
+            .take(5)
+            .map(|(b, a)| format!("batch:   {b}\nprocess: {a}"))
+            .collect();
+        panic!(
+            "{at}: logs differ ({} lines in batch, {} as a process)\n{}",
+            b_lines.len(),
+            a_lines.len(),
+            differ.join("\n")
+        );
+    }
+    assert_eq!(
+        format!("{:?}", TlcRun::parse(b_log)),
+        format!("{:?}", TlcRun::parse(a_log)),
+        "{at}: parsed runs differ (left batch, right process)"
+    );
+    assert_eq!(
+        InvariantScan::parse(b_log),
+        InvariantScan::parse(a_log),
+        "{at}: invariant scans differ (left batch, right process)"
+    );
+    assert!(b_graph == a_graph, "{at}: dumped graphs differ");
+    BOTH_WAYS.fetch_add(1, Ordering::SeqCst);
+}
+
+/// A module with one violated invariant, for the tests of the batch JVMs themselves.
+const COUNTER_TLA: &str = "---- MODULE Cone ----\nEXTENDS Naturals\nVARIABLE x\nInit == x = 0\n\
+    Next == x' = (x + 1) % 4\nSmall == x < 3\n====\n";
+const COUNTER_CFG: &str = "INIT Init\nNEXT Next\nINVARIANT Small\n";
+/// With the fingerprint function and seed named, so that two runs print the same log.
+const COUNTER_ARGS: [&str; 5] = ["-continue", "-fp", "0", "-seed", "0"];
+
+/// A pool whose driver, compiled from `nix/tlc-batch/RdraTlcBatch.java`, is given the classes
+/// of `fake` (file name and source) in place of `tla2tools.jar`. `None`, with the reason
+/// printed, without `javac` and `java` on PATH.
+fn pool_over_fake_tlc(dir: &Path, fake: &[(&str, &str)]) -> Option<Pool> {
+    let javac = |out: &Path, sources: &[PathBuf]| {
+        std::fs::create_dir_all(out).expect("class dir");
+        let done = Command::new("javac")
+            .arg("-d")
+            .arg(out)
+            .args(sources)
+            .output();
+        match done {
+            Ok(done) => assert!(
+                done.status.success(),
+                "javac: {}",
+                String::from_utf8_lossy(&done.stderr)
+            ),
+            Err(_) => return false,
+        }
+        true
+    };
+    let driver = dir.join("driver");
+    let source = repo().join("nix/tlc-batch/RdraTlcBatch.java");
+    if !javac(&driver, &[source]) {
+        let reason = "javac not on PATH (run inside `nix develop`)";
+        assert!(
+            std::env::var("RDRA_REQUIRE_TLC").as_deref() != Ok("1"),
+            "RDRA_REQUIRE_TLC=1 but {reason}"
+        );
+        println!("skipped: {reason}");
+        return None;
+    }
+    let sources: Vec<PathBuf> = fake
+        .iter()
+        .map(|(file, text)| {
+            let path = dir.join("fake-src").join(file);
+            std::fs::create_dir_all(path.parent().expect("a package dir")).expect("source dir");
+            std::fs::write(&path, text).expect("write source");
+            path
+        })
+        .collect();
+    let classes = dir.join("fake");
+    assert!(javac(&classes, &sources), "javac ran a moment ago");
+    Some(Pool::new(1, move || {
+        let mut command = Command::new("java");
+        command
+            .arg("-cp")
+            .arg(&driver)
+            .arg("RdraTlcBatch")
+            .arg(&classes)
+            .stderr(std::process::Stdio::null());
+        command
+    }))
+}
+
+/// The counter module through `pool`, whose jobs get no answer, and then as a process: the
+/// first must have become a process run with the second's result.
+fn falls_back_to_a_process(tlc: &Path, dir: &Path, pool: &Pool) {
+    let run = dir.join("run");
+    let fell_back = run_tlc_on(
+        Route::Batch,
+        Some(pool),
+        tlc,
+        &run,
+        &COUNTER_ARGS,
+        COUNTER_TLA,
+        COUNTER_CFG,
+    );
+    let alone = run_tlc_on(
+        Route::Process,
+        None,
+        tlc,
+        &run,
+        &COUNTER_ARGS,
+        COUNTER_TLA,
+        COUNTER_CFG,
+    );
+    assert_same_run(&run, (&fell_back, &None), (&alone, &None));
+    let parsed = TlcRun::parse(&fell_back.1);
+    assert!(parsed.completed, "{}", fell_back.1);
+    assert_eq!(
+        parsed.violated_names(),
+        BTreeSet::from(["Small".to_string()])
+    );
+    assert_eq!(pool.counts().answered, 0);
+}
+
+#[test]
+fn a_tlc_the_batch_driver_cannot_call_runs_as_a_process() {
+    let Some(tlc) = require_tlc() else { return };
+    let dir = std::env::temp_dir().join(format!("rdra-batch-unsupported-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    // A `tlc2.TLC` without `handleParameters`, `setResolver` and `process`.
+    let fake = [(
+        "tlc2/TLC.java",
+        "package tlc2; public class TLC { public static void main(String[] a) {} }",
+    )];
+    let Some(pool) = pool_over_fake_tlc(&dir, &fake) else {
+        return;
+    };
+    falls_back_to_a_process(&tlc, &dir, &pool);
+    let why = pool.why_off().expect("the pool is off");
+    assert!(
+        why.starts_with("unsupported ") && why.contains("handleParameters"),
+        "{why}"
+    );
+    assert_eq!(pool.counts(), tlc_batch::Counts::default());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_job_that_exits_the_batch_jvm_runs_as_a_process() {
+    let Some(tlc) = require_tlc() else { return };
+    let dir = std::env::temp_dir().join(format!("rdra-batch-exit-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    // Everything the driver asks for, and a `process` that exits 0: only the answer that
+    // does not come says the job was not run.
+    let fake = [
+        (
+            "tlc2/TLC.java",
+            "package tlc2; public class TLC { \
+             public boolean handleParameters(String[] a) { return true; } \
+             public void setResolver(util.FilenameToStream r) {} \
+             public String getMainFile() { return \"Cone\"; } \
+             public int process() { System.exit(0); return 0; } }",
+        ),
+        (
+            "tlc2/output/EC.java",
+            "package tlc2.output; public class EC { public static class ExitStatus { \
+             public static int errorConstantToExitStatus(int c) { return c; } } }",
+        ),
+        (
+            "util/FilenameToStream.java",
+            "package util; public interface FilenameToStream {}",
+        ),
+        (
+            "util/SimpleFilenameToStream.java",
+            "package util; public class SimpleFilenameToStream implements FilenameToStream { \
+             public SimpleFilenameToStream() {} public SimpleFilenameToStream(String d) {} }",
+        ),
+        (
+            "util/FileUtil.java",
+            "package util; public class FileUtil { \
+             public static String parseDirname(String f) { return \"\"; } }",
+        ),
+    ];
+    let Some(pool) = pool_over_fake_tlc(&dir, &fake) else {
+        return;
+    };
+    falls_back_to_a_process(&tlc, &dir, &pool);
+    assert_eq!(
+        pool.counts(),
+        tlc_batch::Counts {
+            jvms: 1,
+            answered: 0,
+            lost: 1,
+            longest_ms: 0
+        }
+    );
+    assert_eq!(pool.why_off(), None);
+    // The pool gives up after three jobs in a row without an answer.
+    falls_back_to_a_process(&tlc, &dir, &pool);
+    falls_back_to_a_process(&tlc, &dir, &pool);
+    let why = pool.why_off().expect("the pool is off");
+    assert!(why.contains("Died"), "{why}");
+    falls_back_to_a_process(&tlc, &dir, &pool);
+    assert_eq!(pool.counts().jvms, 3);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Not for CI: replays TLC runs recorded from another caller (`verify --with-tlc` under a
+/// `tlc` that saves each launch) in a batch JVM and as a process, and compares each pair.
+/// Reads `RDRA_TLC_REPLAY`, a directory of job directories, each with the run's `.tla` and
+/// `.cfg` files and `args`, one TLC argument per line as `verify` gave them. Every run is
+/// replayed with one worker: with several, two process runs of one job differ in the
+/// counterexample they print and in the graph statistics, whatever the fingerprints.
+#[test]
+#[ignore]
+fn recorded_tlc_runs_are_the_same_in_a_batch_jvm() {
+    let Some(tlc) = require_tlc() else { return };
+    let root = PathBuf::from(std::env::var("RDRA_TLC_REPLAY").expect("RDRA_TLC_REPLAY"));
+    let pool = batch_pool().expect("tlc-batch on PATH");
+    let mut jobs: Vec<PathBuf> = std::fs::read_dir(&root)
+        .expect("the recording")
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.join("args").is_file())
+        .collect();
+    jobs.sort();
+    let next = AtomicUsize::new(0);
+    std::thread::scope(|s| {
+        for _ in 0..4 {
+            s.spawn(|| {
+                while let Some(dir) = jobs.get(next.fetch_add(1, Ordering::SeqCst)) {
+                    let recorded = std::fs::read_to_string(dir.join("args")).expect("args");
+                    let mut all: Vec<OsString> = Vec::new();
+                    let mut before = "";
+                    let last = recorded.lines().count() - 1;
+                    for (i, arg) in recorded.lines().enumerate() {
+                        all.push(match before {
+                            "-metadir" => dir.join("meta").into(),
+                            "-workers" => "1".into(),
+                            "-config" => dir.join(arg).into(),
+                            _ if i == last => dir.join(arg).into(),
+                            _ => arg.into(),
+                        });
+                        before = arg;
+                    }
+                    let batched = tlc_batched(pool, dir, &all).expect("an answer");
+                    let pinned = with_the_fingerprints_of(&batched.1, &all);
+                    let alone = tlc_process(&tlc, dir, &pinned);
+                    assert_same_run(dir, (&batched, &None), (&alone, &None));
+                }
+            });
+        }
+    });
+    println!(
+        "{} recorded runs; TLC batch JVMs: {:?}; compared: {}",
+        jobs.len(),
+        pool.counts(),
+        BOTH_WAYS.load(Ordering::SeqCst)
+    );
 }
 
 /// TLC's state graph of the cone in BFS terms: its edges as BFS state indices and actions,
@@ -431,10 +1026,23 @@ fn check_cone(
     let ts = &run.system;
     let check = tla::print(ts, PrintMode::Safety, "Cone");
     let names = &check.names;
-    let (_, log) = run_tlc(
+    let route = if run.states.len() > BATCH_STATES {
+        Route::Process
+    } else {
+        Route::Batch
+    };
+    let graph = dir.join("graph");
+    let (_, log) = run_tlc_on(
+        route,
+        batch_pool(),
         tlc,
         dir,
-        &["-continue", "-dump", "dot,actionlabels", "graph"],
+        &[
+            "-continue",
+            "-dump",
+            "dot,actionlabels",
+            graph.to_str().expect("a UTF-8 temp dir"),
+        ],
         &check.tla,
         &check.cfg,
     );
@@ -490,7 +1098,15 @@ fn check_cone(
             break;
         }
         let cfg = tla::cfg_without(ts, names, PrintMode::Safety, &found);
-        let (_, more) = run_tlc(tlc, dir, &["-continue"], &check.tla, &cfg);
+        let (_, more) = run_tlc_on(
+            route,
+            batch_pool(),
+            tlc,
+            dir,
+            &["-continue"],
+            &check.tla,
+            &cfg,
+        );
         parsed.violations.extend(TlcRun::parse(&more).violations);
         if parsed.violated_names().len() == found.len() {
             break;
@@ -549,6 +1165,7 @@ fn a_bfs_and_tlc_reach_the_same_states_and_verdicts() {
     // runs beside the next sample's cones rather than before them.
     let reports = check_models(&tlc, &scratch, &plans);
     let _ = std::fs::remove_dir_all(&scratch);
+    assert_batch_ran();
     let mut fallback = Vec::new();
     for (plan, report) in plans.iter().zip(reports) {
         if plan.bounds == Bounds::STATES {
@@ -3000,8 +3617,13 @@ fn explored_agrees(
 }
 
 /// One property run of `bundle` in `dir`; the module is printed as `Cone`.
-fn run_property(tlc: &Path, dir: &Path, bundle: &tla::TlaBundle) -> (Outcome, TlcRun, String) {
-    let (ok, log) = run_tlc(tlc, dir, &[], &bundle.tla, &bundle.cfg);
+fn run_property(
+    route: Route,
+    tlc: &Path,
+    dir: &Path,
+    bundle: &tla::TlaBundle,
+) -> (Outcome, TlcRun, String) {
+    let (ok, log) = run_tlc_on(route, batch_pool(), tlc, dir, &[], &bundle.tla, &bundle.cfg);
     let run = TlcRun::parse(&log);
     (run.outcome(ok), run, log)
 }
@@ -3114,7 +3736,8 @@ fn a_property_cone_decides_what_the_whole_model_decides() {
                 !plain.tla.contains("WF_vars(Next)"),
                 "{label}: the plain cone run assumes WF_vars(Next)"
             );
-            let (mut first, mut run, mut log) = run_property(&tlc, &dir.join("plain"), &plain);
+            let (mut first, mut run, mut log) =
+                run_property(Route::Batch, &tlc, &dir.join("plain"), &plain);
             let mut names = plain.names.clone();
             native_agrees(
                 &label,
@@ -3136,7 +3759,7 @@ fn a_property_cone_decides_what_the_whole_model_decides() {
                     !full.tla.contains("S_class"),
                     "{label}: the Full run is reduced"
                 );
-                let (again, r, l) = run_property(&tlc, &dir.join("full"), &full);
+                let (again, r, l) = run_property(Route::Batch, &tlc, &dir.join("full"), &full);
                 native_agrees(
                     &label,
                     "full",
@@ -3162,7 +3785,7 @@ fn a_property_cone_decides_what_the_whole_model_decides() {
                         wf.tla.contains("WF_vars(Next)"),
                         "{label}: the WF cone run lacks WF_vars(Next)"
                     );
-                    let (second, r, l) = run_property(&tlc, &dir.join("wf"), &wf);
+                    let (second, r, l) = run_property(Route::Batch, &tlc, &dir.join("wf"), &wf);
                     native_agrees(
                         &label,
                         "wf",
@@ -3178,7 +3801,8 @@ fn a_property_cone_decides_what_the_whole_model_decides() {
             };
             let whole = tla::print(&ts, PrintMode::Property(i), "Cone");
             let (whole_outcome, whole_run, whole_log) =
-                run_property(&tlc, &dir.join("whole"), &whole);
+                // The whole model, the longest run of a property: a process of its own.
+                run_property(Route::Process, &tlc, &dir.join("whole"), &whole);
             assert_ne!(
                 whole_outcome,
                 Outcome::ToolError,

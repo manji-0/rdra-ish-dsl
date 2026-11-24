@@ -17,6 +17,7 @@ mod prove;
 mod session;
 mod state_findings;
 mod states;
+pub mod tlc_batch;
 pub mod tlc_env;
 pub mod tlc_output;
 pub mod tlc_replay;
