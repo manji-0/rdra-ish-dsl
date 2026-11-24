@@ -238,3 +238,102 @@ transitions(Turn, Item.st, a -> b)",
         "a class left out keeps its rows where they are"
     );
 }
+
+/// Every element of the group of every class's slots, absent or not.
+fn every_perm(g: &Group) -> Vec<Vec<u8>> {
+    let mut out = vec![Vec::new()];
+    for class in &g.classes {
+        let arrangements = super::canon::permutations(class.slots);
+        out = out
+            .iter()
+            .flat_map(|p| {
+                arrangements.iter().map(move |a| {
+                    let mut q = p.clone();
+                    q.extend_from_slice(a);
+                    q
+                })
+            })
+            .collect();
+    }
+    out
+}
+
+/// `apply` is an action of the group `compose` and `inverse` describe, at 3 slots, where the
+/// group is not abelian and a reversed `compose` shows.
+#[test]
+fn apply_compose_and_inverse_agree_on_three_slots() {
+    let ts = system(
+        "entity Shop \"店\" { id: Int @pk  kind: Enum(x, y) @default(x) }
+entity Order \"注文\" { id: Int @pk }
+relate(Order, Shop, N:1)
+usecase Open \"開\"
+usecase Place \"注\"
+usecase Kind \"種\"
+creates(Open, Shop)
+creates(Place, Order)
+transitions(Kind, Shop.kind, x -> y)",
+        bounds(2, &[("Shop", 3)]),
+    );
+    let g = Group::of(&ts);
+    let perms = every_perm(&g);
+    assert_eq!(perms.len(), 12);
+    let w = ts.width;
+    let (mut once, mut mid, mut twice) = (vec![0u8; w], vec![0u8; w], vec![0u8; w]);
+    for s in every_state(&ts).iter().step_by(7) {
+        for a in &perms {
+            g.apply(&g.inverse(a), &s.0, &mut mid);
+            g.apply(a, &mid, &mut twice);
+            assert_eq!(&twice[..], &s.0[..], "inverse({a:?}) undoes {a:?}");
+            for b in &perms {
+                g.apply(&g.compose(a, b), &s.0, &mut once);
+                g.apply(b, &s.0, &mut mid);
+                g.apply(a, &mid, &mut twice);
+                assert_eq!(once, twice, "compose({a:?}, {b:?}) on {:?}", s.0);
+            }
+        }
+    }
+}
+
+/// Past `BRANCH_CAP` the canonical form is still a member of the orbit, and the call says
+/// that it was cut, so the orbit size falls back to `|G_s|`.
+#[test]
+fn past_the_branch_cap_a_state_is_cut_and_stays_in_its_orbit() {
+    use crate::lifecycle::types::VarKind;
+    let ts = system(
+        "entity Shop \"店\" { id: Int @pk }
+entity Order \"注文\" { id: Int @pk }
+relate(Order, Shop, N:1)
+usecase Open \"開\"
+usecase Place \"注\"
+creates(Open, Shop)
+creates(Place, Order)",
+        bounds(8, &[]),
+    );
+    let g = Group::of(&ts);
+    // Eight identical shops, each named by one of eight identical orders: every placement of
+    // the shops ties, and 8! placements pass the cap.
+    let mut s = vec![0u8; ts.width];
+    for v in ts.var_ids() {
+        let off = ts.offset(v);
+        match ts.var(v).kind {
+            VarKind::Exists(_) => s[off..off + 8].fill(Value::PRESENT.0),
+            VarKind::Owner { .. } => {
+                for (i, b) in s[off..off + 8].iter_mut().enumerate() {
+                    *b = i as u8;
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut canon = Canon::default();
+    let mut out = vec![0u8; ts.width];
+    let found = canon.canonical(&g, &s, &mut out);
+    assert!(found.cut, "8! placements pass BRANCH_CAP");
+    assert_eq!(found.orbit, super::factorial(8) * super::factorial(8));
+    let mut image = vec![0u8; ts.width];
+    g.apply(canon.perm(), &s, &mut image);
+    assert_eq!(
+        image, out,
+        "the form is the image of the state under perm()"
+    );
+}

@@ -140,7 +140,7 @@
   sets the default; under `[check]` it warns and is not read. A counterexample is lifted to
   concrete slots and replayed, with the rows each step names, before it prints. A static
   scan leaves out an entity whose slots the model tells apart (an ordered id comparison, an
-  id against a literal, a key set to a literal row, and five more) and names it and the
+  id against a literal, a key set to a literal row, and six more) and names it and the
   reason under the line. Without the option nothing changes. At `--instance-count 3` the
   five clinic-ops and insurance-claim-ops lines that stopped at the memory limit are decided
   under `--memory 8GiB`. In `rdra-ish-core`, `TransitionSystem::run_orbits` returns an

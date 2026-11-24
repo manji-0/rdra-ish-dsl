@@ -542,7 +542,6 @@ pub(crate) fn factorial(n: usize) -> u128 {
 
 #[cfg(kani)]
 mod proofs {
-    use super::canon::Canon;
     use super::*;
 
     /// Shop: 2 slots, existence at 0..2. Order: 2 slots, existence at 2..4 and a mandatory
@@ -624,26 +623,5 @@ mod proofs {
         g.apply(&b, &s, &mut mid);
         g.apply(&a, &mid, &mut twice);
         assert_eq!(once, twice);
-    }
-
-    /// The canonical form is a function of the orbit: `canonical(g(s)) = canonical(s)` for
-    /// every `g` of `G_s`, which fixes the absent slots, and the orbit sizes agree.
-    #[kani::proof]
-    #[kani::unwind(8)]
-    fn the_canonical_form_is_constant_on_an_orbit() {
-        let g = group();
-        let p = any_perm();
-        let s = any_state();
-        // A class with an absent row has nothing to swap.
-        kani::assume(s[0] != 0 && s[1] != 0 || p[0] == 0);
-        kani::assume(s[2] != 0 && s[3] != 0 || p[2] == 0);
-        let mut moved = [0u8; 7];
-        g.apply(&p, &s, &mut moved);
-        let mut canon = Canon::default();
-        let (mut a, mut b) = ([0u8; 7], [0u8; 7]);
-        let x = canon.canonical(&g, &s, &mut a);
-        let y = canon.canonical(&g, &moved, &mut b);
-        assert_eq!(a, b);
-        assert_eq!(x.orbit, y.orbit);
     }
 }

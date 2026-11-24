@@ -262,7 +262,9 @@ impl Scan<'_> {
     /// successor (or in an after-assert, which reads the successor). Such a row holds the
     /// base value, which for a mandatory key is slot 0 and which the group does not relabel,
     /// so the read names a fixed row of the parent while the parent's rows move. An optional
-    /// key whose base is `null` names no row there, and stays symmetric.
+    /// key whose base is `null` names no row there, and stays symmetric. Guards and
+    /// after-asserts are the only reads to walk: an effect reads no slot (an `Rhs` is a
+    /// literal or a param's slot index), and a rule's binders range over present rows.
     fn deleted_row_owners(&mut self) {
         let ts = self.ts;
         let deletes = |a: &crate::lifecycle::types::Action, p: u8| {

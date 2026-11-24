@@ -312,6 +312,8 @@ and 3 instances on a `shadow` build. Each bug was reverted afterwards.
 | Ties that a child names are taken in slot order | `Canon::split` | the exhaustive test `a_parent_and_an_owner_child` |
 | The lift undoes only the last permutation | `lift` in `explore/orbit.rs` | rule 8 on `sym_lift_compose` (step 6 does not bind the row it names), release and `shadow` |
 | The scan's ordered-id rule is gone | `breaks.rs` | the unit test `a_guard_that_orders_row_ids_leaves_the_class_out` |
+| `compose` ignores its second permutation | `Group::compose` | the Kani harness `apply_of_a_composition_is_the_composition_of_applies` |
+| `compose` applies its arguments in the wrong order | `Group::compose` | the unit test `apply_compose_and_inverse_agree_on_three_slots`; not the Kani harness, whose 2-slot groups commute |
 | The scan's deleted-row-key rule is gone | `breaks.rs` | rule 8 on `sym_deleted_row_owner` (the lifted trace does not replay), release and `shadow` |
 
 Rule 8 alone misses the first two: the wrong canonical form there still gives the plain
@@ -366,8 +368,7 @@ compile it.
 | `store_bytes_never_overflows` | `explore/store.rs` | `store_bytes` neither overflows nor panics | every input |
 | `store_bytes_only_grows` | `explore/store.rs` | more states, wider states, or more edges never count as fewer bytes, so past `u64` the count stays at `u64::MAX` | every input |
 | `a_push_takes_the_bytes_bytes_with_said_and_reads_back` | `explore/arena.rs` | a pushed state reads back, no index leaves the buffer, and `bytes_with(1)` before a push is `bytes_with(0)` after it, from an empty store or a `slice` of one | width up to 2, up to 5 pushes |
-| `apply_of_a_composition_is_the_composition_of_applies` | `explore/symmetry/mod.rs` | `apply(g ∘ h) = apply(g) ∘ apply(h)`, keys relabelled on present rows only | a 3-slot parent and a 2-slot child with a key to it, every state, every pair of permutations |
-| `the_canonical_form_is_constant_on_an_orbit` | `explore/symmetry/mod.rs` | `canonical(g(s)) = canonical(s)` with the same orbit size, for every `g` that fixes the absent slots of `s` | the same layout, every state, every such permutation |
+| `apply_of_a_composition_is_the_composition_of_applies` | `explore/symmetry/mod.rs` | `apply(g ∘ h) = apply(g) ∘ apply(h)`, keys relabelled on present rows only | a 2-slot parent and a 2-slot child with a key to it, every state, every pair of permutations |
 
 A result holds up to its bound and no further, and for one thread.
 
@@ -385,9 +386,12 @@ cargo kani -p rdra-ish-core                                        # every harne
 cargo kani -p rdra-ish-core --harness compare_negates_and_mirrors  # one harness
 ```
 
-Two harnesses take most of the time. On an 18-core Mac `store_bytes_only_grows` takes about
-4 minutes, and the `States` harness in `explore/arena.rs` about a minute and 8 GB of
-memory; on the CI runner they take about 9 and 3.5 minutes. The others take under 20
+Three harnesses take most of the time. On an 18-core Mac `store_bytes_only_grows` takes about
+4 minutes, the `States` harness in `explore/arena.rs` about a minute and 8 GB of memory, and
+`apply_of_a_composition_is_the_composition_of_applies` about 7 minutes; on the CI runner the
+first two take about 9 and 3.5 minutes. The symmetry harness stays at 2 slots per class: at
+3 it did not finish in 20 minutes, and a harness of the canonical form itself did not finish
+in 30 at 2, so the exhaustive unit test and the `canonical` twin check the canonical form. The others take under 20
 seconds each. At width 3 and 9 pushes the `States` harness did not finish in
 10 minutes (#275), so its bound stays small.
 
