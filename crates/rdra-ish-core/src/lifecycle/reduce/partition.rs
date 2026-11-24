@@ -255,7 +255,10 @@ impl Classes {
         let (sub, clean) =
             raw.reduced_in(&[(ext.obs_local.clone(), ext.rise_actions())], caps, cache);
         // The quotient reads the graph alone, so the run evaluates no check.
-        let (run, seen) = watch(|| sub.clone().run_checking(caps, Checks::none()));
+        let (run, seen) = {
+            let _label = crate::perf::label("S");
+            watch(|| sub.clone().run_checking(caps, Checks::none()))
+        };
         if !run.complete {
             return (Classified::Nothing, Ended::stopped(clean, seen, &run));
         }

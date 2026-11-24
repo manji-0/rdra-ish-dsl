@@ -132,6 +132,16 @@
 
 ### Added
 
+- A `perf` cargo feature (#296): `cargo build --release -p rdra-ish-cli --features perf`
+  builds a CLI that, under `RDRA_PERF=1`, prints on stderr a `perf-pass` line per pass of
+  `verify` (wall and CPU time, allocations, the live heap and the memory pool at their
+  peaks) and a `perf-run` line per BFS run (its pass, states, edges, width, the bits its
+  domains need, what its store keeps, its thread CPU). `RDRA_PERF=2` adds the columns that
+  read every state or edge, hashes of the states, edges and bindings among them, which tell
+  two runs of one graph apart. Its global allocator counts every allocation.
+  `scripts/perf-tables.py <binary>` runs the five measured `verify` runs of #296 one at a
+  time at `RDRA_JOBS=1` and prints the totals, the passes, the BFS CPU per pass and the
+  largest runs. A build without the feature is unchanged.
 - A `shadow` cargo feature (#275): `cargo build --release -p rdra-ish-cli --features shadow`
   builds a CLI in which every fast function that has a reference twin also runs the twin and
   panics, naming the call, when the two differ. The twins are the enabled bindings
@@ -356,6 +366,11 @@
   pass explored the entity pass's two largest cones again, and 9% fewer on
   `insurance-claim-ops`, whose property `ClaimEventuallyDecided` explored the cone of
   `Forbidden_Claim_4` again.
+- A reduced cone computes the input bits it reads from T without allocating (#296):
+  `Fold::holds` allocated its params, the free T params and their radix on every call. The
+  output is unchanged; a `shadow` build holds every call to the old function. At
+  `RDRA_JOBS=1`, `verify` retires 21% fewer instructions on `insurance-claim-ops` (458.8 G
+  to 364.5 G); samples without folds are unchanged.
 - `verify` reduces a cone whose TLA+ tables print up to 530,000 cells, not 200,000 (#284),
   for the native checker and TLC alike, so both still check the same cones.
   food-permit-ops' `AfterAssert_SuspendBusiness_0` at `--instance-count 3` is now reduced
