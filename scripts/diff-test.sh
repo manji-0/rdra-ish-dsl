@@ -6,7 +6,7 @@
 #   scripts/diff-test.sh --all     every crate (CI's `test` step)
 #
 # A change to the root Cargo.toml or Cargo.lock runs every crate. A crate's dependents are
-# not run: CI runs the whole workspace on every push.
+# not run: CI's test step runs the whole workspace.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
