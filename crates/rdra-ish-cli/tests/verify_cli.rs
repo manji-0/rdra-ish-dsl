@@ -1836,6 +1836,21 @@ fn a_safety_cone_shared_with_an_entity_cone_counts_the_whole_cone() {
         "{stderr}"
     );
     assert!(stderr.contains("  counterexample (2 steps):"), "{stderr}");
+    // Up to instance symmetry the cone shares nothing (#212): it runs on its own and stops
+    // once its check has failed, where the entity pass's plain run would decide it.
+    let output = verify(
+        &repo(),
+        &tmp,
+        &[model.to_str().unwrap(), "--symmetry", "always"],
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(output.status.code(), Some(1), "{stdout}");
+    assert!(
+        stdout.contains(
+            "\nCone_Forbidden_Task_0 [Forbidden_Task_0]: counterexample (3 orbits, about 3 states)\n"
+        ),
+        "{stdout}"
+    );
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
