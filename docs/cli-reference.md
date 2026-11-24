@@ -676,8 +676,8 @@ Cone_Inv_Encounter_2 [Inv_Encounter_2]: ok (1696486 orbits, about 820M states)
   group, and the model need not reach each one, so it can exceed the states a plain run
   stores: on the samples it was exact on
   three cones and 5% and 83% over on two. A cone whose groups a
-  rule breaks names the entity under the line: `note: instance symmetry leaves Shop out: a
-  step reads the key of a row an earlier step may have deleted`. That entity's slots stay
+  rule breaks names the entity under the line: `note: instance symmetry leaves Item out: a
+  comparison orders its row ids`. That entity's slots stay
   fixed and the other entities still permute.
 - **Counterexamples** name concrete slots: the stored path is lifted back through every
   permutation the run applied, and the lifted trace is replayed through the step relation,
@@ -693,8 +693,9 @@ Cone_Inv_Encounter_2 [Inv_Encounter_2]: ok (1696486 orbits, about 820M states)
 - **What breaks the symmetry.** A comparison that orders row ids, a row id compared with a
   literal, a key set to a literal row or chosen among some rows, a start that pins a slot, a
   creation that leaves a key at its first row, a row id compared with another value, too
-  many arrangements of rows that name each other, and a key read on a row that may have been
-  deleted. Each leaves the entity's class out, and the note says which.
+  many arrangements of rows that name each other. Each leaves the entity's class out, and
+  the note says which. A deleted row's key moves with its parent like any other, since a
+  deleted row keeps the row it names.
 
 ### Memory limit
 <!-- constrained-by #project-manifest -->
