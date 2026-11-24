@@ -524,7 +524,10 @@ Expected: five undecided lines of clinic-ops and insurance-claim-ops decided (me
 the prototype), 16 to 108 times fewer stored states.
 
 **Phase 2: S up to `H`.** `Classes::of`, `init`, `lift`, and `QuotientCache` as in
-[Composition with #74](#composition-with-74), with the `Classes::of` twin. First unit: the
+[Composition with #74](#composition-with-74), with the `Classes::of` twin. As built, S runs
+up to `H` under `--symmetry retry` once its plain run stopped at the memory limit with the
+pool to itself (a run another run crowded out is no reason), and under `--symmetry always`
+at once, so that the samples at n≤2 exercise it and its twin; `never` runs S as before. First unit: the
 size of S under `H` for the three clinic-ops group-B cones and insurance-claim-ops
 `Forbidden_Claim_4`, reported before the code lands. Exit: clinic-ops
 `Forbidden_ClinicalOrder_1` reduced and decided at n=3 under 8 GiB with #284's 20 classes; a

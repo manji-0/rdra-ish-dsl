@@ -133,6 +133,10 @@ pub enum Rule {
     /// deleted: a deleted row's owner holds the base value, slot 0, which the group does
     /// not relabel.
     DeletedRowOwner,
+    /// The sub-lifecycle of a reduced cone runs up to `H` (#212 phase 2): its classes keep
+    /// what the quotient reads, so an entity that holds `obs`, an input or a fold bit, a stub
+    /// of a T parent, and an entity whose rows a T key can name stay where they are.
+    Observed,
 }
 
 impl Rule {
@@ -152,6 +156,7 @@ impl Rule {
             Rule::DeletedRowOwner => {
                 "a step reads the key of a row an earlier step may have deleted"
             }
+            Rule::Observed => "the reduction of its cone reads its rows",
         }
     }
 }
@@ -242,6 +247,12 @@ impl Group {
     /// The group of `ts`, with every class its scan finds a reason to leave out left out.
     /// A system #74 reduced is not one: its state holds class representatives.
     pub(crate) fn of(ts: &TransitionSystem) -> Group {
+        Self::fixing(ts, &[])
+    }
+
+    /// The group of `ts` with the classes of `fixed` left out as well (`Rule::Observed`):
+    /// the subgroup `H` the sub-lifecycle of a reduced cone runs up to (#212 phase 2).
+    pub(crate) fn fixing(ts: &TransitionSystem, fixed: &[EntId]) -> Group {
         debug_assert!(
             ts.reduction().is_none(),
             "a reduced system has no group here"
@@ -282,7 +293,8 @@ impl Group {
         }
         // What breaks the group, by entity; a class with one such entity is left out.
         let mut left_out: Vec<LeftOut> = Vec::new();
-        for (e, rule) in breaks::scan(ts, &class_of) {
+        let observed = fixed.iter().map(|e| (*e, Rule::Observed));
+        for (e, rule) in breaks::scan(ts, &class_of).into_iter().chain(observed) {
             classes[class_of[e.index()]].moves = false;
             left_out.push(LeftOut {
                 entity: ts.entity(e).id.clone(),

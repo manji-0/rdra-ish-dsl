@@ -132,6 +132,20 @@
 
 ### Added
 
+- `verify --symmetry` also covers the sub-lifecycle of a reduced cone (#212, phase 2):
+  under `retry`, a sub-lifecycle whose run stops at the memory limit, alone, runs again up
+  to `H`, the instance symmetry that keeps what the quotient reads, and the cone is reduced
+  where it was left whole; under `always` the sub-lifecycle runs up to `H` at once. The
+  classes are the same sets of states, so the verdicts are the same; their numbering and
+  representatives can differ, and so can a reduced cone's TLA+ tables and its lifted
+  traces. A trace through such a cone runs the sub-lifecycle up to `H` again and lifts its
+  path to concrete states before it is replayed. Without the option nothing changes. At
+  `--instance-count 3` the sub-lifecycle of clinic-ops' `Forbidden_ClinicalOrder_1`,
+  which stopped plain at the memory limit, takes 240,016 orbits for about 61.8M states and
+  yields #284's 20 classes. The `shadow` build adds the `s_up_to_h` twin, which holds the
+  classes up to `H` to those of the plain run of the same sub-lifecycle, up to 200,000
+  states.
+
 - `verify --symmetry never|retry|always` (#212, phase 1; experimental, default `never`):
   explore an unreduced safety cone, and the cone of an `always` property, up to instance
   symmetry, one stored state per orbit of states that differ only in which slot holds which

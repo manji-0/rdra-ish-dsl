@@ -186,6 +186,9 @@ pub fn run(
         max_states.unwrap_or(usize::MAX),
     )
     .without_views()
+    // A sub-lifecycle runs up to `H` (#212 phase 2): under `retry` again once its run stopped
+    // at the memory limit, so only a cone that stopped there changes; under `always` at once.
+    .with_s_up_to_h(symmetry)
     .charged_to(MemoryPool::share_of(
         memory.limit,
         memory.bfs,

@@ -7,7 +7,7 @@ use super::extended::Extended;
 use super::*;
 use crate::fasthash::FastMap;
 use crate::lifecycle::cone::VarSet;
-use crate::lifecycle::explore::{Adjacency, Caps, Checks, ComponentRun};
+use crate::lifecycle::explore::{Adjacency, Caps, Checks, ComponentRun, OrbitRun, Symmetry};
 use crate::lifecycle::expr::State;
 use crate::lifecycle::types::{ActId, VarId};
 use crate::lifecycle::{StateDiag, TransitionSystem};
@@ -15,6 +15,8 @@ use crate::memory::{watch, Watched};
 
 #[cfg(any(test, feature = "shadow"))]
 mod reference;
+#[cfg(any(test, feature = "shadow"))]
+mod up_to_h;
 
 /// What the quotient of an observed S comes to (`Classes::of`).
 #[derive(Clone, PartialEq)]
@@ -96,6 +98,9 @@ pub(super) struct Classes {
     /// Per class, whether it can loop inside itself (`can_loop`).
     pub(super) loops: Vec<bool>,
     pub(super) divergence: Divergence,
+    /// The run of S was up to `H` (#212 phase 2): the representatives are stored forms, and
+    /// a lift runs S up to `H` again to find its path.
+    pub(super) up_to_h: bool,
 }
 
 /// What the divergence marks of one reduction say, for measurement: how many classes can
@@ -245,6 +250,7 @@ impl Classes {
                 looping: usize::from(s_cycles(ext)),
                 ..Divergence::default()
             },
+            up_to_h: false,
         }
     }
 
@@ -254,6 +260,14 @@ impl Classes {
         // The inputs stay on the nested T side: the rises are kept, and only `obs` anchors.
         let (sub, clean) =
             raw.reduced_in(&[(ext.obs_local.clone(), ext.rise_actions())], caps, cache);
+        // Under `--symmetry always`, S runs up to `H` at once (#212 phase 2).
+        if caps.s_up_to_h == Symmetry::Always && sub.reduction().is_none() {
+            let ended = match clean {
+                true => Ended::Clean,
+                false => Ended::Stopped,
+            };
+            return Self::up_to_h(ext, caps, &sub, None, ended);
+        }
         // The quotient reads the graph alone, so the run evaluates no check.
         let (run, seen) = {
             let _label = crate::perf::label("S");
@@ -263,12 +277,92 @@ impl Classes {
             })
         };
         if !run.complete {
-            return (Classified::Nothing, Ended::stopped(clean, seen, &run));
+            let ended = Ended::stopped(clean, seen, &run);
+            let memory = run
+                .diags
+                .iter()
+                .any(|d| matches!(d.diag, StateDiag::MemoryCapReached { .. }));
+            // A run the pool refused because others held it is no reason: alone it may fit.
+            let alone = memory && !seen.crowded;
+            if !(caps.s_up_to_h == Symmetry::Retry && alone && sub.reduction().is_none()) {
+                return (Classified::Nothing, ended);
+            }
+            let stopped_at = Some(run.states.len());
+            drop(run);
+            return Self::up_to_h(ext, caps, &sub, stopped_at, Ended::Stopped);
         }
         let ended = match clean {
             true => Ended::Clean,
             false => Ended::Stopped,
         };
+        let (classified, ended, _) = Self::of_graph(ext, &sub, &run, ended, None);
+        (classified, ended)
+    }
+
+    /// The classes of S up to `H` (#212 phase 2, docs/design/instance-symmetry.md,
+    /// "Composition with #74"), after its plain run stopped at the memory limit after
+    /// `stopped_at` states under `--symmetry retry`, or at once under `always`. `H` leaves
+    /// `ext.fixed` where they are, so every element keeps `obs` and the inputs: the run's
+    /// orbits are a label-preserving bisimulation, finer than the stuttering partition, which
+    /// therefore comes out of the stored graph class for class. The classes are the same sets
+    /// of S states as a plain run's; their numbering and representatives are others. After a
+    /// retry the result depends on the memory room, so `ended` is then `Stopped` and it is
+    /// never cached.
+    fn up_to_h(
+        ext: &Extended,
+        caps: Caps,
+        sub: &TransitionSystem,
+        stopped_at: Option<usize>,
+        ended: Ended,
+    ) -> (Classified, Ended) {
+        let orbits = {
+            let _label = crate::perf::label("S up to H");
+            sub.clone()
+                .run_orbits_fixing(caps, Checks::none(), &ext.fixed)
+        };
+        let stats = std::env::var_os("RDRA_ISH_S_UP_TO_H_STATS").is_some();
+        if stats {
+            let plain = stopped_at.map_or(String::from("no plain run"), |n| {
+                format!("plain stopped at {n} states")
+            });
+            eprintln!(
+                "s-up-to-h: {plain}; {} orbits (about {} states){}; {} of {} entities left out",
+                orbits.orbits(),
+                orbits.estimate(),
+                if orbits.complete() { "" } else { ", stopped" },
+                orbits.left_out().len(),
+                sub.entities().len()
+            );
+        }
+        if !orbits.complete() {
+            return (Classified::Nothing, Ended::Stopped);
+        }
+        let (classified, ended, _class) =
+            Self::of_graph(ext, sub, orbits.quotient_graph(), ended, Some(&orbits));
+        #[cfg(any(test, feature = "shadow"))]
+        if let Classified::Classes(c) = &classified {
+            up_to_h::check(ext, sub, caps, &orbits, c, &_class);
+        }
+        let out = (classified, ended);
+        if stats {
+            if let (Classified::Classes(c), _) = &out {
+                eprintln!("s-up-to-h: {} classes", c.reps.len());
+            }
+        }
+        out
+    }
+
+    /// The classes read off `run`, a complete run of `sub`, the extended sub-lifecycle under
+    /// its own reduction, with each of its states' class when there are classes; `orbits` is
+    /// the run up to `H` whose graph `run` is, when it is one.
+    fn of_graph(
+        ext: &Extended,
+        sub: &TransitionSystem,
+        run: &ComponentRun,
+        ended: Ended,
+        orbits: Option<&OrbitRun>,
+    ) -> (Classified, Ended, Vec<u32>) {
+        let raw = &ext.system;
         let n = run.states.len();
         let key_vars: VarSet = ext.obs_local.union(&ext.inputs_local).copied().collect();
         let mut index: HashMap<State, u32> = HashMap::new();
@@ -281,14 +375,18 @@ impl Classes {
                 *index.entry(key).or_insert(len)
             })
             .collect();
-        let (silent, rise_edges) = split_edges(&run, &ext.rise);
+        let (silent, rise_edges) = split_edges(run, &ext.rise);
         let blocks = quotient_blocks(n, &silent, &rise_edges, &initial);
         #[cfg(any(test, feature = "shadow"))]
         reference::check(n, &silent, &rise_edges, &initial, &blocks);
-        if !sub.reduction().is_some_and(|r| r.shrinks())
+        // The identity on an S no inner reduction shrank reduces nothing (#101). Up to `H` a
+        // class is a union of orbits: it is the identity only when every orbit is one state.
+        let trivial = orbits.is_none_or(|o| o.estimate() == n as u128);
+        if trivial
+            && !sub.reduction().is_some_and(|r| r.shrinks())
             && blocks.iter().collect::<BTreeSet<_>>().len() == n
         {
-            return (Classified::Nothing, ended);
+            return (Classified::Nothing, ended, Vec::new());
         }
         // Each block's class, numbered as the blocks first show in discovery order, so a
         // class's representative is its block's first state.
@@ -310,18 +408,19 @@ impl Classes {
         // the least, so past the budget no cone takes it: its moves and divergence marks are
         // not worth building.
         if reps.len().saturating_mul(ext.obs_local.len()) > TLA_CELL_BUDGET {
-            return (Classified::TooLarge, ended);
+            return (Classified::TooLarge, ended, Vec::new());
         }
         // Initial S states, as the cone's initial states project them, to their classes. The
         // extended sub-lifecycle canonicalizes them for its own reduction first, as the run
         // did.
         let mut init: HashMap<Box<[u8]>, u32> = HashMap::new();
         for st in raw.initial_states() {
-            let canonical = match sub.reduction() {
-                Some(inner) => inner
-                    .canonical_initial(&sub, &st)
+            let canonical = match (sub.reduction(), orbits) {
+                (Some(inner), _) => inner
+                    .canonical_initial(sub, &st)
                     .expect("an initial S state canonicalizes"),
-                None => st.clone(),
+                (None, Some(orbits)) => orbits.canonical(&st),
+                (None, None) => st.clone(),
             };
             let at = run
                 .states
@@ -353,8 +452,25 @@ impl Classes {
                 moves[class[x] as usize].push((act, params.into(), class[y]));
             }
         }
+        // A silent orbit self-edge stands for a concrete cycle inside its class: a move into
+        // another state of its own orbit, repeated, comes back.
+        let orbit_loops: Vec<u32> = match orbits {
+            Some(orbits) => (orbits.labelled_edges())
+                .filter(|e| e.orbit_self && !ext.rise[e.act.index()])
+                .map(|e| e.from)
+                .collect(),
+            None => Vec::new(),
+        };
         let (loops, divergence) = match s_cycles(ext) {
-            true => divergence(&run, &sub, &silent, &rise_edges, &initial, &class),
+            true => divergence(
+                run,
+                sub,
+                &silent,
+                &rise_edges,
+                &initial,
+                &class,
+                &orbit_loops,
+            ),
             false => {
                 let classes = reps.len();
                 // Nothing loops, so a partition that tells divergence apart is this one.
@@ -376,8 +492,9 @@ impl Classes {
             states: n,
             loops,
             divergence,
+            up_to_h: orbits.is_some(),
         };
-        (Classified::Classes(Arc::new(classes)), ended)
+        (Classified::Classes(Arc::new(classes)), ended, class)
     }
 }
 
@@ -402,6 +519,7 @@ fn divergence(
     rises: &[(u32, u32)],
     initial: &[u32],
     class: &[u32],
+    orbit_loops: &[u32],
 ) -> (Vec<bool>, Divergence) {
     let n = run.states.len();
     let classes = class.iter().max().map_or(0, |c| *c as usize + 1);
@@ -420,6 +538,9 @@ fn divergence(
         if !loops[class[i] as usize] && inner_loops(i) {
             loops[class[i] as usize] = true;
         }
+    }
+    for &x in orbit_loops {
+        loops[class[x as usize] as usize] = true;
     }
     let succ = Adj::new(n, silent);
     let inside = |x: u32, y: u32| x != y && class[x as usize] == class[y as usize];

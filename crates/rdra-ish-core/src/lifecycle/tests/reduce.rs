@@ -4,6 +4,8 @@
 
 use std::collections::BTreeSet;
 
+use crate::lifecycle::Symmetry;
+
 use crate::memory::{MemoryPool, MemorySize};
 
 use super::cone::{load, SAMPLES};
@@ -411,13 +413,27 @@ fn assert_real_path(plain: &TransitionSystem, start: &State, steps: &[Step]) {
     }
 }
 
-/// The reduced cones of a model decide what its cones decide, and their traces lift.
+/// The reduced cones of a model decide what its cones decide, and their traces lift, with S
+/// run plainly and up to `H` (#212 phase 2). Returns the cones the plain quotient reduces.
 fn assert_reduction_exact(sample: &str, model: &SemanticModel, bounds: Bounds) -> usize {
+    let n = assert_reduction_exact_in(sample, model, bounds.clone(), Symmetry::Never);
+    assert_reduction_exact_in(sample, model, bounds, Symmetry::Always);
+    n
+}
+
+/// `assert_reduction_exact` with S run as `s_up_to_h` says.
+fn assert_reduction_exact_in(
+    sample: &str,
+    model: &SemanticModel,
+    bounds: Bounds,
+    s_up_to_h: Symmetry,
+) -> usize {
     let caps = Caps::new(usize::MAX, 200_000);
+    let reduce_caps = caps.with_s_up_to_h(s_up_to_h);
     let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
     let targets = ts.targets();
     let plain = ts.explore_targets(&targets, caps);
-    let reduced = ts.explore_targets_reduced(&targets, caps);
+    let reduced = ts.explore_targets_reduced(&targets, reduce_caps);
     let plain_views = plain.entity_views(&ts, model, &[]);
     let reduced_views = reduced.entity_views(&ts, model, &[]);
     let mut reductions = 0;
@@ -479,12 +495,12 @@ fn assert_reduction_exact(sample: &str, model: &SemanticModel, bounds: Bounds) -
     reductions
 }
 
-fn reductions_in(samples: &[&str]) -> usize {
+fn reductions_in(samples: &[&str], s_up_to_h: Symmetry) -> usize {
     let mut reductions = 0;
     for sample in samples {
         let model = load(sample);
         for bounds in [Bounds::STATES, Bounds::VERIFY] {
-            reductions += assert_reduction_exact(sample, &model, bounds);
+            reductions += assert_reduction_exact_in(sample, &model, bounds, s_up_to_h);
         }
     }
     reductions
@@ -493,14 +509,23 @@ fn reductions_in(samples: &[&str]) -> usize {
 /// Most bundled sample cones quotient to themselves and stay unreduced (#101); two reduce.
 #[test]
 fn reduced_cones_decide_what_the_cones_decide() {
-    let reductions = reductions_in(SAMPLES);
+    let reductions = reductions_in(SAMPLES, Symmetry::Never);
+    assert!(reductions >= 2, "{reductions} cones reduced");
+}
+
+/// With S run up to `H` (#212 phase 2), the reduced cones reach the same states on T and
+/// `obs`, decide the same, and their traces lift to real paths; the `Classes::of` twin holds
+/// each quotient to the plain one.
+#[test]
+fn reduced_cones_up_to_h_decide_what_the_cones_decide() {
+    let reductions = reductions_in(SAMPLES, Symmetry::Always);
     assert!(reductions >= 2, "{reductions} cones reduced");
 }
 
 /// The domain samples explore millions of states; CI runs this in release in formal-verify.
 #[test]
 fn reduced_domain_cones_decide_what_the_cones_decide() {
-    let reductions = reductions_in(DOMAIN_SAMPLES);
+    let reductions = reductions_in(DOMAIN_SAMPLES, Symmetry::Never);
     assert!(reductions >= 53, "{reductions} cones reduced");
 }
 

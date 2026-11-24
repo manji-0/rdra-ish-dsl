@@ -134,6 +134,9 @@ pub struct Reduction {
     loops: Vec<bool>,
     /// The divergence marks, counted.
     pub divergence: Divergence,
+    /// S was explored up to `H` (#212 phase 2), after its plain run stopped at the memory
+    /// limit: the lift explores it so again.
+    up_to_h: bool,
 }
 
 impl Reduction {
@@ -523,6 +526,7 @@ impl TransitionSystem {
             states: n,
             loops,
             divergence,
+            up_to_h: classes.up_to_h,
         };
         if reduction.tla_cells() > TLA_CELL_BUDGET {
             return Err(over_budget());
