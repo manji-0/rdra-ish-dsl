@@ -120,13 +120,15 @@ pub(crate) enum Kind {
     TwoVars,
     /// Three vars or more of one param's row.
     MoreVars,
-    /// One var of each of two params' rows: what an index across params would answer.
+    /// Two params' rows, one var or slot index of each (a link `row.owner = other` reads the
+    /// owner var of one and the slot index of the other): what an index across params would
+    /// answer.
     TwoParams,
     /// More vars of two params, or three params and more.
     MoreParams,
     /// A quantifier or a count over an entity's rows.
     Quantifier,
-    /// Anything else: `now`, a slot index, a bound row, no slot at all.
+    /// Anything else: `now`, a bound row's slot or index, a successor's slot, no slot at all.
     Other,
     /// A guard read on the pre-state and the successor together.
     Post,
@@ -163,15 +165,23 @@ impl Kind {
     }
 }
 
-/// The `(param, var)` slots `pred` reads, and whether it holds a quantifier or count, or reads
-/// anything else than a param's row and literals.
-fn walk(pred: &Pred, reads: &mut BTreeSet<(u8, VarId)>, quantifier: &mut bool, other: &mut bool) {
+/// The `(param, var)` slots `pred` reads (`None` for a param's slot index), and whether it
+/// holds a quantifier or count, or reads anything else than params' rows and literals.
+fn walk(
+    pred: &Pred,
+    reads: &mut BTreeSet<(u8, Option<VarId>)>,
+    quantifier: &mut bool,
+    other: &mut bool,
+) {
     let mut term = |t: &Term| match *t {
         Term::Slot {
             var,
             at: At::Param(p),
         } => {
-            reads.insert((p, var));
+            reads.insert((p, Some(var)));
+        }
+        Term::Index(At::Param(p)) => {
+            reads.insert((p, None));
         }
         Term::Slot { .. } | Term::Index(_) | Term::Now => *other = true,
         Term::Lit(_) | Term::Int(_) => {}
