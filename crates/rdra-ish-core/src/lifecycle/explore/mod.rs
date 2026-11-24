@@ -8,6 +8,8 @@ mod bfs;
 mod graph;
 mod liveness;
 mod moves;
+#[cfg(feature = "perf")]
+mod perf;
 mod plan;
 mod properties;
 mod reach;
@@ -417,6 +419,8 @@ impl TransitionSystem {
             !caps.stop_when_all_violated || checks == Checks::All,
             "a run that stops once every check fails evaluates every check"
         );
+        #[cfg(feature = "perf")]
+        let clock = perf::Clock::start();
         let mut bfs = Bfs::new(&self, caps, &checks);
         bfs.go(threads);
         let kept = bfs.kept();
@@ -474,6 +478,8 @@ impl TransitionSystem {
                 *t = trace;
             }
         }
+        #[cfg(feature = "perf")]
+        perf::line(&run, clock, caps.stop_when_all_violated);
         run
     }
 }
