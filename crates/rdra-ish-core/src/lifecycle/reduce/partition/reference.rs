@@ -13,7 +13,7 @@ use super::{distinct, Adj};
 /// every quotient.
 ///
 /// The cap sits just above the largest quotient `verify` computes on the samples at their
-/// header flags (2,153,635 states), measured on main at eca31dbf with the twins added, on an
+/// header flags (2,153,635 states), measured on main at 361ccec4 with the twins added, on an
 /// 18-core machine, release build: the sweeps took 105 ms on 633,787 states, 369 ms on 2,153,635
 /// and 1.2 s on 1,028,160 states with 388,928 blocks, against 135, 312 and 396 ms for the
 /// worklist. Their time follows the number of sweeps, which the state count does not

@@ -45,10 +45,10 @@ pub(super) fn check_class_moves(
         "shadow: moves_of_into({:?}): the class moves {:?}, reference moves_from {:?}",
         &s.0,
         got.iter()
-            .map(|(a, p, _)| (ts.actions[a.index()].name.as_str(), p))
+            .map(|(a, p, s2)| (ts.actions[a.index()].name.as_str(), p, &s2.0))
             .collect::<Vec<_>>(),
         want.iter()
-            .map(|(a, p, _)| (ts.actions[a.index()].name.as_str(), p))
+            .map(|(a, p, s2)| (ts.actions[a.index()].name.as_str(), p, &s2.0))
             .collect::<Vec<_>>()
     );
     crate::shadow::compared(crate::shadow::Twin::ClassMoves);
