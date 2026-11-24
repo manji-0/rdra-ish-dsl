@@ -4,7 +4,9 @@
 // order is ever refunded into, so its assert is vacuous: a recorder that marked every
 // action, or none, gets one of the two wrong. Ticket's forbidden fails once a ticket
 // closes, so its cone stops at the failure and the trace is read through the parents alone:
-// a parent that lost its source or its binding prints another path.
+// a parent that lost its source or its binding prints another path. Flag sets a column no
+// assert reads, so the asserts' cones leave it out and run on their own, not on the run of
+// Order's entity cone.
 // expect AfterAssert_Deliver_0: native=ok tlc=ok
 // expect AfterAssert_Refund_1: native=ok tlc=ok
 // expect Forbidden_Ticket_0: native=counterexample tlc=counterexample z3=unproved
@@ -13,6 +15,7 @@ entity Order "注文" {
   id: Int @pk
   status: Enum(pending, shipped, delivered, refunded) @default(pending)
   delivered_at: DateTime @null
+  flagged: Bool @default(false)
 }
 
 entity Ticket "問合せ" {
@@ -24,6 +27,7 @@ usecase Place "注文"
 usecase Ship "発送"
 usecase Deliver "配達"
 usecase Refund "返金"
+usecase Flag "要確認"
 usecase Open "起票"
 usecase Close "完了"
 
@@ -31,6 +35,7 @@ creates(Place, Order)
 updates(Ship, Order)
 updates(Deliver, Order)
 updates(Refund, Order)
+updates(Flag, Order)
 creates(Open, Ticket)
 updates(Close, Ticket)
 
@@ -38,6 +43,7 @@ transitions(Ship, Order.status, pending -> shipped)
 transitions(Deliver, Order.status, shipped -> delivered)
 transitions(Refund, Order.status, refunded -> pending)
 sets(Deliver, Order.delivered_at == present)
+sets(Flag, Order.flagged == true)
 transitions(Close, Ticket.status, open -> closed)
 
 after(Deliver).assert(Order.status == delivered, Order.delivered_at == present)
