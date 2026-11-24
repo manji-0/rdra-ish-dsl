@@ -676,8 +676,8 @@ Cone_Inv_Encounter_2 [Inv_Encounter_2]: ok (1696486 orbits, about 820M states)
   group, and the model need not reach each one, so it can exceed the states a plain run
   stores: on the samples it was exact on
   three cones and 5% and 83% over on two. A cone whose groups a
-  rule breaks names the entity under the line: `note: instance symmetry leaves Shop out: a
-  step reads the key of a row an earlier step may have deleted`. That entity's slots stay
+  rule breaks names the entity under the line: `note: instance symmetry leaves Item out: a
+  comparison orders its row ids`. That entity's slots stay
   fixed and the other entities still permute.
 - **Counterexamples** name concrete slots: the stored path is lifted back through every
   permutation the run applied, and the lifted trace is replayed through the step relation,
@@ -698,8 +698,9 @@ Cone_Inv_Encounter_2 [Inv_Encounter_2]: ok (1696486 orbits, about 820M states)
 - **What breaks the symmetry.** A comparison that orders row ids, a row id compared with a
   literal, a key set to a literal row or chosen among some rows, a start that pins a slot, a
   creation that leaves a key at its first row, a row id compared with another value, too
-  many arrangements of rows that name each other, and a key read on a row that may have been
-  deleted. Each leaves the entity's class out, and the note says which.
+  many arrangements of rows that name each other. Each leaves the entity's class out, and
+  the note says which. A deleted row's key moves with its parent like any other, since a
+  deleted row keeps the row it names.
 
 ### Memory limit
 <!-- constrained-by #project-manifest -->
@@ -803,32 +804,32 @@ Without an estimate from the layers, the message falls back on the cone's variab
 most states the cone can have is the product of their domains, and if finishing at that
 many takes no more than `1TiB` the message names that size as what finishing needs at the
 least, if all of them are reachable. The bound is loose: most of the product is never
-reached. A size is computed with `(w + 12)·p2(n) + 5·buckets(n) + 12·p2(e)` bytes for `n`
-states of `w` bytes and `e` edges (`p2` rounds up to a power of two, `buckets` to a power of
-two of at least `n·8/7`): the run keeps each state once, in one buffer, and indexes it by
-number. On the sample cones of a thousand states and more, at `check` and `verify` bounds, it
-stood 0.9% to 5.2% over what the run counts. `e` is the edges per
+reached. A size is computed with `(w + 12)·p2(n) + 5·buckets(n) + (4 + b)·p2(e)` bytes for
+`n` states of `w` bytes and `e` edges, where `b` is the 1, 2 or 4 bytes of a binding id
+(`p2` rounds up to a power of two, `buckets` to a power of two of at least `n·8/7`): the run
+keeps each state once, in one buffer, indexes it by number, and keeps an edge as its target
+and binding id. A cone that stops once every check fails keeps no edges, and its size is
+`(w + 8 + b)·p2(n) + 5·buckets(n)`. The size is never under what the run counts at its
+end. `e` is the edges per
 expanded state seen so far times `n`; early depths have fewer, so that part is low. Every
 figure is for the one cone; the cones share the limit, so allow more than it says.
 
 ```text
-error[MemoryCapReached_Task]: state derivation for entity 'Task': memory limit 36KiB reached at 256 states; results are incomplete: the cone has 9 variables, 9 of them vary (...); new states first reached by: Flip7 127, Flip6 64, Flip5 32, Flip4 16, Flip3 8, Flip2 4, Flip1 2, Close 1; held at 145 B per state; the frontier peaked at depth 5 and has shrunk for 3 layers since, so the cone probably holds about 258 states (its falling side taken to mirror its rising side: an estimate, not a bound); with a quarter to spare, this cone alone probably needs about 1MiB: try 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
-error[MemoryCapReached_Order]: state derivation for entity 'Order': memory limit 1KiB reached at 3 states; results are incomplete: the cone has 3 variables, 2 of them vary (values reached/domain: Order._exists 2/3, Order.status 2/5); new states first reached by: CapturePay 1, PlaceOrder 1; held at 101 B per state; the frontier peaked at depth 0, but by depth 1 it has not fallen far enough to estimate the states left; the cone's variables allow at most 30 states, so if all are reachable this cone alone needs at least about 1MiB; raise it to 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
+error[MemoryCapReached_Task]: state derivation for entity 'Task': memory limit 21KiB reached at 256 states; results are incomplete: the cone has 9 variables, 9 of them vary (...); new states first reached by: Flip7 127, Flip6 64, Flip5 32, Flip4 16, Flip3 8, Flip2 4, Flip1 2, Close 1; held at 85 B per state; the frontier peaked at depth 5 and has shrunk for 3 layers since, so the cone probably holds about 258 states (its falling side taken to mirror its rising side: an estimate, not a bound); with a quarter to spare, this cone alone probably needs about 1MiB: try 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
+error[MemoryCapReached_Order]: state derivation for entity 'Order': memory limit 1KiB reached at 4 states; results are incomplete: the cone has 3 variables, 2 of them vary (values reached/domain: Order.status 3/5, Order._exists 2/3); new states first reached by: CancelOrder 1, CapturePay 1, PlaceOrder 1; held at 91 B per state; the frontier still grows (2 new states at depth 2, 2.0x the depth before), so its layers give no estimate of the states left; the cone's variables allow at most 30 states, so if all are reachable this cone alone needs at least about 1MiB; raise it to 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
 ```
 
 The `Task` cone (`crates/rdra-ish-cli/tests/fixtures/memory/flags.rdra`) holds 257 states.
 
-`verify` lists what the cones leave undecided. `verify samples/patent-ops --memory 256MiB`
+`verify` lists what the cones leave undecided. `verify samples/patent-ops --memory 128MiB`
 prints (trimmed):
 
 ```text
 not checked: 10 findings not decided
-  whether some OfficeAction can get stuck at status = open is not decided: the OfficeAction cone stopped at the memory limit (256MiB; raise it with --memory or `memory` under [verify] in rdra.toml)
-...
-Cone_Forbidden_OfficeAction_3 [Forbidden_OfficeAction_3, Exclusive_OfficeAction_0]: not decided (939300 states, stopped at the state cap (--max-states) or the memory limit)
+  whether some OfficeAction can get stuck at status = open is not decided: the OfficeAction cone stopped at the memory limit (128MiB; raise it with --memory or `memory` under [verify] in rdra.toml)
 ...
 result: not decided
-warning: 11 findings a cone stopped at the state cap or the memory limit left undecided; the OK line holds only for what was decided (--deny-undecided fails the run)
+warning: 10 findings a cone stopped at the state cap or the memory limit left undecided; the OK line holds only for what was decided (--deny-undecided fails the run)
 ```
 
 Under `--with-tlc` the reason also names the share BFS has: `BFS has 256MiB of it` at
@@ -1721,7 +1722,7 @@ follows.` in place of the model-term block. TLC's lasso ends with `State N: Stut
 | `RDRA_TLC_JAR` | With `--with-tlc`: path to `tla2tools.jar`, used as `--tlc-jar` when the flag is absent. |
 | `RDRA_Z3` | Path to the z3 binary, used as `--z3` when the flag is absent. |
 | `RDRA_JOBS` | How many cones `check`, `states`, and `verify` explore at once by BFS, how many threads compute the moves of one large cone, and how many z3 processes `verify --prove` starts. It does not limit the TLC runs, which `verify --with-tlc` starts beside the BFS. Without it, the machine's cores, at most 8. Each cone holds its reached states, so a lower number uses less memory; `1` explores them one after another on one thread. The result does not depend on it. |
-| `JAVA_TOOL_OPTIONS` | Appended after the options `verify --with-tlc` sets (`-Xmx`, `-Djava.io.tmpdir`), so a `-Xmx` here wins. |
+| `JAVA_TOOL_OPTIONS` | Appended after the options `verify --with-tlc` sets (`-Xmx`, `-Djava.io.tmpdir`, and `-XX:TieredStopAtLevel=1` on a state-model run of at most 10,000 states by BFS), so a value here wins. `verify` adds `-XX:TieredStopAtLevel=1` only after TLC started once with it, so a JVM that does not take it runs without it. |
 
 A TLC run that runs out of memory is a `tool_error` whose message names both variables.
 
@@ -1733,10 +1734,17 @@ Only `--with-tlc` needs TLC. `verify` looks for it in this order: `--tlc-jar`,
 
 - Nix: run `nix shell nixpkgs#tlaplus`, then run `verify` in that shell. If flakes are not
   enabled, add `--extra-experimental-features 'nix-command flakes'`. In this repository,
-  `nix develop` provides `tlc`.
+  `nix develop` provides `tlc`, and the flake's package puts the same `tlc` on the `PATH` of
+  `rdra-ish`: TLC 1.7.4, as `nixpkgs#tlaplus` packages it, on JDK 17 in place of JDK 8 and
+  with a class-data-sharing archive of TLC's classes, which starts each run sooner.
 - The jar: download `tla2tools.jar` from the
   [TLA+ releases](https://github.com/tlaplus/tlaplus/releases), install a JDK, and pass
   `--tlc-jar <path>` or set `RDRA_TLC_JAR=<path>`.
+
+Run TLC 1.7.4 on JDK 17 or earlier. On JDK 21 and later, a `-continue` run that prints
+many traces stops with `java.lang.ArrayIndexOutOfBoundsException` (`arraycopy: length -N
+is negative`) and `verify` reports a `tool_error`: TLC's own buffered file reads a trace
+record back wrongly once the JDK's `RandomAccessFile.readLong` goes through it (#314).
 
 #### Getting z3
 

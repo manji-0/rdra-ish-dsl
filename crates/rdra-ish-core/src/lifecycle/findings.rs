@@ -373,16 +373,17 @@ impl TransitionSystem {
     ) -> Vec<bool> {
         let mut leave = vec![false; g.states.len()];
         let mut stack = Vec::new();
-        for (from, to, _) in g.edges() {
+        // `for_each` folds a run's edges a state at a time (`EdgeIter::fold`).
+        g.edges().for_each(|(from, to, _)| {
             let (s, t) = (&g.states[from as usize], &g.states[to as usize]);
             if leave[from as usize] || !s.is_present(self, e, k) {
-                continue;
+                return;
             }
             if !t.is_present(self, e, k) || t.get(self, var, k) != s.get(self, var, k) {
                 leave[from as usize] = true;
                 stack.push(from);
             }
-        }
+        });
         while let Some(at) = stack.pop() {
             for &p in adjacency.preds(at) {
                 if !leave[p as usize] && g.states[p as usize].is_present(self, e, k) {
@@ -449,9 +450,7 @@ impl TransitionSystem {
     /// self-loop as any other move, so a self-loop counts.
     fn runs(&self, e: EntId, g: &Graph) -> Vec<ActionRuns> {
         let mut fired = vec![false; self.actions.len()];
-        for (_, _, act) in g.edges() {
-            fired[act.index()] = true;
-        }
+        g.edges().for_each(|(_, _, act)| fired[act.index()] = true);
         self.action_ids()
             .filter(|act| {
                 let action = &self.actions[act.index()];

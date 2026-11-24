@@ -1,28 +1,63 @@
-//! Fixed-size segments for what a run keeps (#296 item 2.2): its states, parents and edges.
-//! A buffer that doubles holds room for up to as many items again as it has, and while it
-//! grows the old buffer and the new one are both alive. A segmented buffer holds whole
-//! segments of `SEG` rows: growing allocates one segment and copies nothing, and the room it
-//! holds unused is under one segment. The first segment still doubles from four rows up to a
-//! whole one, so a run of a few states takes the bytes it took before, and growing copies at
-//! most one segment.
+//! Segments for what a run keeps (#296 item 2.2): its states, parents and edges. A `Vec`
+//! that doubles copies its rows into a buffer twice the size, and while it does both are
+//! alive. `Rows` never copies a row: it holds rows in segments of 4, 4, 8, 16, ... rows up to
+//! `SEG`, then in segments of `SEG` rows each, and allocates a segment whole when the last
+//! one is full. So a row stays where it was pushed for as long as the buffer lives (the
+//! invariant phase 3, #320, builds on), growing allocates one segment and frees none, and up
+//! to `2 * SEG` rows the buffer holds the room a doubling `Vec` holds.
 
 use std::mem::size_of;
 
-/// Rows in a segment: 2^14, or 4 under Kani, so that a harness crosses segments.
+/// Rows in a segment past the doubling ones: 2^14, or 4 under Kani, so that a harness
+/// reaches them.
 #[cfg(not(kani))]
 pub(crate) const SHIFT: u32 = 14;
 #[cfg(kani)]
 pub(crate) const SHIFT: u32 = 2;
 pub(crate) const SEG: usize = 1 << SHIFT;
+/// The doubling segments (4, 4, 8, ... `SEG` rows) hold the first `DOUBLED` rows.
+const DOUBLED: usize = 2 * SEG;
+/// How many doubling segments there are: `log2(DOUBLED) - 1`.
+const HEAD: usize = SHIFT as usize;
 
-/// Rows of `width` items of `T` each: the first `SEG` in `first`, which doubles up to a whole
-/// segment, the rest in `rest`, a whole segment each.
+/// The segment that holds row `i`, and the row's place in it.
+pub(crate) fn locate(i: usize) -> (usize, usize) {
+    if i < 4 {
+        (0, i)
+    } else if i < DOUBLED {
+        let log = i.ilog2() as usize;
+        (log - 1, i - (1 << log))
+    } else {
+        let past = i - DOUBLED;
+        (HEAD + (past >> SHIFT), past & (SEG - 1))
+    }
+}
+
+/// The rows segment `k` holds.
+pub(crate) fn segment_rows(k: usize) -> usize {
+    match k {
+        0 => 4,
+        k if k < HEAD => 1 << (k + 1),
+        _ => SEG,
+    }
+}
+
+/// The rows the first `k` segments hold.
+fn rows_in(k: usize) -> usize {
+    match k {
+        0 => 0,
+        k if k <= HEAD => 1 << (k + 1),
+        k => DOUBLED + (k - HEAD) * SEG,
+    }
+}
+
+/// Rows of `width` items of `T`. The doubling segments live in the buffer itself, the rest in
+/// a list that doubles from four slots; only that list's slots, 24 bytes each, are heap
+/// bytes a doubling `Vec` would not take.
 #[derive(Clone, Debug)]
 pub(crate) struct Rows<T> {
     width: usize,
-    first: Vec<T>,
-    /// Rows `first` holds room for: kept apart, as a width of 0 has no capacity to read.
-    first_rows: usize,
+    head: [Vec<T>; HEAD],
     rest: Vec<Vec<T>>,
     len: usize,
 }
@@ -31,20 +66,7 @@ impl<T: Copy> Rows<T> {
     pub(crate) fn new(width: usize) -> Self {
         Rows {
             width,
-            first: Vec::new(),
-            first_rows: 0,
-            rest: Vec::new(),
-            len: 0,
-        }
-    }
-
-    /// No rows, with room for `rows` of them in the first segment when they fit one.
-    pub(crate) fn with_room(width: usize, rows: usize) -> Self {
-        let rows = rows.min(SEG);
-        Rows {
-            width,
-            first: Vec::with_capacity(rows * width),
-            first_rows: rows,
+            head: std::array::from_fn(|_| Vec::new()),
             rest: Vec::new(),
             len: 0,
         }
@@ -58,102 +80,188 @@ impl<T: Copy> Rows<T> {
         self.width
     }
 
+    /// The segments allocated so far.
+    #[cfg(kani)]
+    fn segments(&self) -> usize {
+        match self.len {
+            0 => 0,
+            n => locate(n - 1).0 + 1,
+        }
+    }
+
     /// The rows the buffer holds room for.
+    #[cfg(kani)]
     pub(crate) fn capacity(&self) -> usize {
-        self.first_rows + self.rest.len() * SEG
+        rows_in(self.segments())
+    }
+
+    fn segment(&self, k: usize) -> &Vec<T> {
+        match k < HEAD {
+            true => &self.head[k],
+            false => &self.rest[k - HEAD],
+        }
     }
 
     pub(crate) fn push(&mut self, row: &[T]) {
         debug_assert_eq!(row.len(), self.width);
-        if self.len < SEG {
-            if self.len == self.first_rows {
-                let rows = (self.len * 2).max(4).min(SEG);
-                self.first.reserve_exact((rows - self.len) * self.width);
-                self.first_rows = rows;
-            }
-            self.first.extend_from_slice(row);
-        } else {
-            if self.len == self.capacity() {
-                if self.rest.len() == self.rest.capacity() {
-                    let slots = (self.rest.len() * 2).max(4);
-                    self.rest.reserve_exact(slots - self.rest.len());
+        let (k, at) = locate(self.len);
+        if at == 0 {
+            let fresh = Vec::with_capacity(segment_rows(k) * self.width);
+            match k < HEAD {
+                true => self.head[k] = fresh,
+                false => {
+                    if self.rest.len() == self.rest.capacity() {
+                        let slots = (self.rest.len() * 2).max(4);
+                        self.rest.reserve_exact(slots - self.rest.len());
+                    }
+                    self.rest.push(fresh);
                 }
-                self.rest.push(Vec::with_capacity(SEG * self.width));
             }
-            let last = self.rest.last_mut().expect("a segment with room");
-            last.extend_from_slice(row);
         }
+        let seg = match k < HEAD {
+            true => &mut self.head[k],
+            false => self.rest.last_mut().expect("the segment just made"),
+        };
+        // Within its capacity: the segment's rows never move.
+        debug_assert!(seg.len() + self.width <= seg.capacity());
+        seg.extend_from_slice(row);
         self.len += 1;
     }
 
     pub(crate) fn row(&self, i: usize) -> &[T] {
         assert!(i < self.len, "row {i} of {}", self.len);
-        let (seg, at) = match i < SEG {
-            true => (&self.first, i),
-            false => (&self.rest[(i >> SHIFT) - 1], i & (SEG - 1)),
-        };
-        &seg[at * self.width..(at + 1) * self.width]
+        let (k, at) = locate(i);
+        &self.segment(k)[at * self.width..(at + 1) * self.width]
     }
 
-    /// The bytes the buffer takes once `more` rows are pushed: its segments, and once it has
-    /// more than one, the list of the others, which doubles from four slots.
+    /// Rows `at` as one slice of their items: `at` must lie in one segment, which
+    /// `segment_end` bounds.
+    pub(crate) fn run(&self, at: std::ops::Range<usize>) -> &[T] {
+        if at.is_empty() {
+            return &[];
+        }
+        let (k, start) = locate(at.start);
+        let end = start + at.len();
+        debug_assert!(end <= segment_rows(k), "rows {at:?} span segments");
+        &self.segment(k)[start * self.width..end * self.width]
+    }
+
+    /// The end of the segment that holds row `i`: the rows `i..segment_end(i)` are one slice.
+    pub(crate) fn segment_end(i: usize) -> usize {
+        let (k, at) = locate(i);
+        i - at + segment_rows(k)
+    }
+
+    /// The bytes the buffer takes once `more` rows are pushed: its segments' items and the
+    /// list of the segments past the doubling ones.
     pub(crate) fn bytes_with(&self, more: usize) -> u64 {
         let (items, list) = self.parts_with(more);
         items + list
     }
 
-    /// The bytes of the segments and of their list once `more` rows are pushed.
+    /// `bytes_with` as its two parts: the segments' items, never more than a doubling `Vec`
+    /// of the same rows holds, and the list's slots.
     pub(crate) fn parts_with(&self, more: usize) -> (u64, u64) {
         let n = self.len + more;
-        let (first, rest, slots) = match n <= self.capacity() {
-            true => (self.first_rows, self.rest.len(), self.rest.capacity()),
-            false => {
-                let first = match n <= SEG {
-                    true => (self.first_rows * 2).max(n).max(4).min(SEG),
-                    false => SEG,
-                };
-                let rest = n.saturating_sub(SEG).div_ceil(SEG);
-                let slots = match rest <= self.rest.capacity() {
-                    true => self.rest.capacity(),
-                    false => (self.rest.capacity() * 2).max(rest).max(4),
-                };
-                (first, rest, slots)
-            }
+        let segments = match n {
+            0 => 0,
+            n => locate(n - 1).0 + 1,
+        };
+        let listed = segments.saturating_sub(HEAD);
+        let slots = match listed <= self.rest.capacity() {
+            true => self.rest.capacity(),
+            false => (self.rest.capacity() * 2).max(listed).max(4),
         };
         let row = (self.width * size_of::<T>()) as u64;
         (
-            (first + rest * SEG) as u64 * row,
+            rows_in(segments) as u64 * row,
             (slots * size_of::<Vec<T>>()) as u64,
         )
     }
 
-    /// The bytes the buffer holds now, read from its `Vec`s: what `bytes_with(0)` says.
+    /// The heap bytes the buffer holds now, read from its `Vec`s: what `bytes_with(0)` says.
     #[cfg(any(kani, test))]
     pub(crate) fn allocated(&self) -> u64 {
-        let items = self.first.capacity() + self.rest.iter().map(Vec::capacity).sum::<usize>();
+        let items: usize = self.head.iter().chain(&self.rest).map(Vec::capacity).sum();
         (items * size_of::<T>() + self.rest.capacity() * size_of::<Vec<T>>()) as u64
     }
 
-    /// The rows as `U`, a segment at a time, so that the buffer and its copy are never both
-    /// whole: each segment is dropped once it is copied. The copy keeps the room the buffer
-    /// had.
+    /// The rows as `U`, a segment at a time, each segment dropped once it is copied, so the
+    /// buffer and its copy are never both whole. The copy has the same segments.
     pub(crate) fn map<U: Copy>(self, f: impl Fn(T) -> U) -> Rows<U> {
-        let segment = |s: Vec<T>, cap: usize| {
-            let mut out = Vec::with_capacity(cap);
+        let segment = |s: Vec<T>| {
+            let mut out = Vec::with_capacity(s.capacity());
             out.extend(s.into_iter().map(&f));
             out
         };
+        let mut head: [Vec<U>; HEAD] = std::array::from_fn(|_| Vec::new());
+        for (k, s) in self.head.into_iter().enumerate() {
+            head[k] = segment(s);
+        }
         let mut rest = Vec::with_capacity(self.rest.capacity());
-        let first = segment(self.first, self.first_rows * self.width);
         for s in self.rest {
-            rest.push(segment(s, SEG * self.width));
+            rest.push(segment(s));
         }
         Rows {
             width: self.width,
-            first,
-            first_rows: self.first_rows,
+            head,
             rest,
             len: self.len,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A row stays where it was pushed: past every doubling segment and into the fixed ones,
+    /// its address and bytes are the ones it had when it was pushed.
+    #[test]
+    fn a_pushed_row_never_moves() {
+        let n = DOUBLED + 3 * SEG + 5;
+        let mut rows: Rows<u32> = Rows::new(2);
+        let mut at = Vec::new();
+        for i in 0..n as u32 {
+            rows.push(&[i, !i]);
+            at.push(rows.row(i as usize).as_ptr());
+        }
+        for (i, &p) in at.iter().enumerate() {
+            assert_eq!(rows.row(i).as_ptr(), p, "row {i} moved");
+            assert_eq!(rows.row(i), &[i as u32, !(i as u32)]);
+        }
+        assert_eq!(rows.bytes_with(0), rows.allocated());
+    }
+
+    /// `map` keeps every row and the room, past the doubling segments.
+    #[test]
+    fn map_keeps_the_rows_and_the_room() {
+        let mut rows: Rows<u8> = Rows::new(1);
+        for i in 0..(DOUBLED + SEG + 3) {
+            rows.push(&[i as u8]);
+        }
+        let bytes = rows.bytes_with(0);
+        let wide = rows.map(u16::from);
+        for i in 0..wide.len() {
+            assert_eq!(wide.row(i), &[i as u8 as u16]);
+        }
+        assert_eq!(wide.allocated(), wide.bytes_with(0));
+        assert_eq!(wide.parts_with(0).0, 2 * (bytes - wide.parts_with(0).1));
+    }
+
+    /// Up to `DOUBLED` rows the segments hold what a doubling `Vec` holds; past it, the rows
+    /// hold less, and the list of segments 24 bytes a slot.
+    #[test]
+    fn the_room_is_a_doubling_vecs_or_less() {
+        let mut rows: Rows<u8> = Rows::new(1);
+        for n in 1..=(DOUBLED + 4 * SEG) {
+            rows.push(&[0]);
+            let doubling = n.max(4).next_power_of_two() as u64;
+            let (items, list) = rows.parts_with(0);
+            assert!(items <= doubling, "{n}: {items} > {doubling}");
+            if n <= DOUBLED {
+                assert_eq!((items, list), (doubling, 0), "{n}");
+            }
         }
     }
 }
@@ -163,60 +271,37 @@ impl<T: Copy> Rows<T> {
 mod proofs {
     use super::*;
 
-    /// For every width up to 2 and every run of up to 14 pushes, from an empty buffer or one
-    /// made with room for a few rows, across three segments of 4 rows: each row reads back as
-    /// pushed, `bytes_with(1)` before a push is `bytes_with(0)` after it, which is what the
-    /// buffer's `Vec`s hold, and the room it holds unused is under a segment past the first.
+    /// `locate` numbers rows in order: every row up to 40 falls in one segment, at a place
+    /// under that segment's rows, right after the row before it.
     #[kani::proof]
-    #[kani::unwind(16)]
-    fn rows_take_what_bytes_with_said_and_read_back() {
-        let width: usize = kani::any();
-        kani::assume(width <= 2);
-        let pushes: usize = kani::any();
-        kani::assume(pushes <= 14);
-        let room: usize = kani::any();
-        kani::assume(room <= 6);
-        let mut rows: Rows<u8> = match kani::any() {
-            true => Rows::new(width),
-            false => Rows::with_room(width, room),
-        };
-        let probe: usize = kani::any();
-        let mut probed = [0u8; 2];
-        for i in 0..pushes {
-            let r: [u8; 2] = kani::any();
-            let said = rows.bytes_with(1);
-            rows.push(&r[..width]);
-            assert_eq!(rows.bytes_with(0), said);
-            assert_eq!(rows.allocated(), said);
-            assert!(rows.len() <= rows.capacity());
-            if rows.len() > SEG {
-                assert!(rows.capacity() - rows.len() < SEG);
-            }
-            if i == probe {
-                probed = r;
-            }
-        }
-        if probe < pushes {
-            assert_eq!(rows.row(probe), &probed[..width]);
+    fn locate_numbers_rows_in_order() {
+        let i: usize = kani::any();
+        kani::assume(i > 0 && i < 40);
+        let (k, at) = locate(i);
+        assert!(at < segment_rows(k));
+        assert_eq!(rows_in(k) + at, i);
+        let (k0, at0) = locate(i - 1);
+        match at {
+            0 => assert_eq!((k0 + 1, at0 + 1), (k, segment_rows(k0))),
+            _ => assert_eq!((k0, at0 + 1), (k, at)),
         }
     }
 
-    /// `map` keeps every row and the room: it widens a buffer in place of rebuilding it.
+    /// The segments that hold `n` rows hold room for all of them, and never for more than a
+    /// doubling `Vec` of `n` rows (4 at the least) holds; up to `DOUBLED` rows, for exactly
+    /// as many. For every `n` up to 2^40. (A harness that pushes into the `Vec`s themselves
+    /// passed 8 GB in CBMC; `a_pushed_row_never_moves` and `the_room_is_a_doubling_vecs_or_less`
+    /// push them at the build's own segment size.)
     #[kani::proof]
-    #[kani::unwind(12)]
-    fn map_keeps_the_rows_and_the_room() {
-        let pushes: usize = kani::any();
-        kani::assume(pushes <= 10);
-        let mut rows: Rows<u8> = Rows::new(1);
-        for i in 0..pushes {
-            rows.push(&[i as u8]);
+    fn segments_hold_every_row_and_no_more_than_a_doubling_vec() {
+        let n: usize = kani::any();
+        kani::assume(n > 0 && n <= 1 << 40);
+        let room = rows_in(locate(n - 1).0 + 1);
+        let doubling = n.max(4).next_power_of_two();
+        assert!(n <= room);
+        assert!(room <= doubling);
+        if n <= DOUBLED {
+            assert_eq!(room, doubling);
         }
-        let probe: usize = kani::any();
-        kani::assume(probe < pushes);
-        let capacity = rows.capacity();
-        let wide = rows.map(u16::from);
-        assert_eq!(wide.row(probe), &[probe as u16]);
-        assert_eq!(wide.capacity(), capacity);
-        assert_eq!(wide.bytes_with(0), wide.allocated());
     }
 }

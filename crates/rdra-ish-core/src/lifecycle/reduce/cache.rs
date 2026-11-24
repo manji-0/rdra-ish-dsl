@@ -30,6 +30,19 @@
 //! larger room computes, and a clean result there replaces the declined entry. A computation
 //! stopped any other way (a crowded pool, a cap, a nested run that stopped) is not stored.
 //!
+//! The run of S is shared one level down (#296): keys that differ in `obs`, inputs or rises
+//! can explore the same sub-lifecycle, once the nested reduction is done (`Classes::of`'s
+//! `sub`). A complete run is held by the sub-lifecycle and the caps that can stop it, and
+//! the next key over them partitions it instead of exploring it again (`run_of_s`). Two
+//! sub-lifecycles share a run when they are equal but for the `source` of their actions,
+//! which names where an action came from and which no run reads (`same_runs`). Only a
+//! complete run is held, so a run another key stopped at a cap or the memory limit is never
+//! shared: what #289 stores of a declined computation stays with its own key. A held run
+//! asked for `need` bytes on the way, its peak, and a later key takes it only when its pool
+//! covers `need` now, as for a clean entry; else the held run is dropped and the key runs S
+//! itself. A held run is charged to the command's pool, in the bytes it keeps, as an entry
+//! is.
+//!
 //! An entry stays charged to the command's pool while the cache holds it, in the bytes its
 //! tables take (`Classes::bytes`), and never to a room-limited child pool, so a cone that
 //! happened to fill it loses no room for its own run. What the cache holds is the same on any
@@ -48,15 +61,17 @@ use super::extended::Extended;
 use super::partition::{Classes, Classified, Ended};
 use super::{ClassMove, Reduction};
 use crate::lifecycle::cone::VarSet;
-use crate::lifecycle::explore::Caps;
-use crate::lifecycle::TransitionSystem;
-use crate::memory::Charge;
+use crate::lifecycle::explore::{Caps, ComponentRun};
+use crate::lifecycle::{Action, TransitionSystem};
+use crate::memory::{watch, Charge, Watched};
 
 /// The quotients of one command's cones, by extended sub-lifecycle and caps. With
 /// `RDRA_ISH_NO_QUOTIENT_CACHE` set it holds nothing and every cone computes its own, for
 /// comparing the two.
 pub struct QuotientCache {
     slots: Mutex<Vec<Arc<Slot>>>,
+    /// The complete runs of S, by sub-lifecycle and caps (`run_of_s`).
+    runs: Mutex<Vec<Arc<RunSlot>>>,
     off: bool,
     stats: Mutex<Stats>,
 }
@@ -68,6 +83,110 @@ struct Stats {
     computed: usize,
     stored: usize,
     bytes: u64,
+    /// Runs of S held, and runs another key took.
+    runs_held: usize,
+    run_hits: usize,
+    run_bytes: u64,
+}
+
+/// A sub-lifecycle and caps, and the complete run of S held for them.
+struct RunSlot {
+    key: RunKey,
+    run: Mutex<Option<HeldRun>>,
+}
+
+/// What a run of S reads: the sub-lifecycle, and the caps that can stop it. The memory room
+/// is not in it, and the pattern cap is not either, as for `Key`.
+struct RunKey {
+    system: TransitionSystem,
+    states: usize,
+    stop_when_all_violated: bool,
+    charged: bool,
+}
+
+impl RunKey {
+    fn of(system: &TransitionSystem, caps: Caps) -> Self {
+        RunKey {
+            system: system.clone(),
+            states: caps.states,
+            stop_when_all_violated: caps.stop_when_all_violated,
+            charged: caps.memory.is_some(),
+        }
+    }
+
+    fn is(&self, system: &TransitionSystem, caps: Caps) -> bool {
+        let RunKey {
+            system: held,
+            states,
+            stop_when_all_violated,
+            charged,
+        } = self;
+        *states == caps.states
+            && *stop_when_all_violated == caps.stop_when_all_violated
+            && *charged == caps.memory.is_some()
+            && same_runs(held, system)
+    }
+}
+
+/// Whether a run of `a` is a run of `b`: the systems are equal field by field but for the
+/// `source` of each action, the action it was restricted from, which no run reads. Keys over
+/// one extended sub-lifecycle restricted from two cones can differ there alone.
+fn same_runs(a: &TransitionSystem, b: &TransitionSystem) -> bool {
+    let TransitionSystem {
+        bounds,
+        entities,
+        vars,
+        actions,
+        invariants,
+        after,
+        properties,
+        reach,
+        now,
+        offsets,
+        width,
+        api_ids,
+        reduction,
+        plans,
+    } = a;
+    let same_action = |(x, y): (&Action, &Action)| {
+        let Action {
+            name,
+            source: _,
+            origin,
+            site,
+            params,
+            guards,
+            effects,
+        } = x;
+        *name == y.name
+            && *origin == y.origin
+            && *site == y.site
+            && *params == y.params
+            && *guards == y.guards
+            && *effects == y.effects
+    };
+    *width == b.width
+        && *offsets == b.offsets
+        && *vars == b.vars
+        && actions.len() == b.actions.len()
+        && actions.iter().zip(&b.actions).all(same_action)
+        && *bounds == b.bounds
+        && *entities == b.entities
+        && *invariants == b.invariants
+        && *after == b.after
+        && *properties == b.properties
+        && *reach == b.reach
+        && *now == b.now
+        && *api_ids == b.api_ids
+        && *reduction == b.reduction
+        && *plans == b.plans
+}
+
+/// A complete run of S, charged to the command's pool while the cache holds it.
+struct HeldRun {
+    run: Arc<ComponentRun>,
+    /// The most bytes the run asked its pool to cover.
+    need: u64,
 }
 
 /// One key and, once a computation of it finished clean, its entry. A cone that asks for a
@@ -143,9 +262,92 @@ impl QuotientCache {
     pub fn new() -> Self {
         QuotientCache {
             slots: Mutex::new(Vec::new()),
+            runs: Mutex::new(Vec::new()),
             off: std::env::var_os("RDRA_ISH_NO_QUOTIENT_CACHE").is_some(),
             stats: Mutex::new(Stats::default()),
         }
+    }
+
+    /// The run of S of `sub` under `caps`, and what `watch` saw of it: the run another key
+    /// held when its pool covers the run's `need` now, else `run()`, held when complete. A
+    /// hit asks the pool for `need` as the run would, so `watch` sees what running shows.
+    /// Caps with a deadline bypass the holding, as they bypass the entries.
+    ///
+    /// A `shadow` build holds each hit to its reference twin: a fresh run of `sub`.
+    pub(super) fn run_of_s(
+        &self,
+        sub: &TransitionSystem,
+        caps: Caps,
+        run: impl Fn() -> ComponentRun,
+    ) -> (Arc<ComponentRun>, Watched) {
+        if self.off || caps.deadline.is_some() {
+            let (run, seen) = watch(run);
+            return (Arc::new(run), seen);
+        }
+        let slot = {
+            let mut slots = self.runs.lock().unwrap_or_else(PoisonError::into_inner);
+            match slots.iter().find(|s| s.key.is(sub, caps)) {
+                Some(slot) => Arc::clone(slot),
+                None => {
+                    let slot = Arc::new(RunSlot {
+                        key: RunKey::of(sub, caps),
+                        run: Mutex::new(None),
+                    });
+                    slots.push(Arc::clone(&slot));
+                    slot
+                }
+            }
+        };
+        // Held while running, so a key that asks meanwhile waits for the run. A run of S
+        // runs no reduction, so no other lock of the cache is taken under it.
+        let mut held = slot.run.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(h) = held.as_ref() {
+            let (fits, seen) = watch(|| fits(h.need, caps));
+            if fits {
+                self.note(|s| s.run_hits += 1);
+                #[cfg(feature = "shadow")]
+                {
+                    let fresh = run();
+                    if !fresh.complete {
+                        crate::shadow::skipped(crate::shadow::Twin::SharedRun);
+                    } else {
+                        assert!(
+                            fresh.same_graph(&h.run),
+                            "shadow: QuotientCache::run_of_s: the run of S another key held ({} states) is not a fresh run of the sub-lifecycle of {:?} ({} states)",
+                            h.run.states.len(),
+                            sub.entities.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(),
+                            fresh.states.len(),
+                        );
+                        crate::shadow::compared(crate::shadow::Twin::SharedRun);
+                    }
+                }
+                return (Arc::clone(&h.run), seen);
+            }
+            // The run does not fit the pool now: give its bytes back before running alone.
+            *held = None;
+        }
+        let (mut fresh, seen) = watch(run);
+        if fresh.complete {
+            // Moved to the command's pool, as an entry is; a pool too full to hold it leaves
+            // the run unheld, and the result is the same.
+            let charged = match caps.memory {
+                Some(pool) => fresh.charge_to(pool.root()),
+                None => true,
+            };
+            if charged {
+                let fresh = Arc::new(fresh);
+                self.note(|s| {
+                    s.runs_held += 1;
+                    s.run_bytes += fresh.kept;
+                });
+                *held = Some(HeldRun {
+                    run: Arc::clone(&fresh),
+                    need: seen.peak,
+                });
+                return (fresh, seen);
+            }
+        }
+        (Arc::new(fresh), seen)
     }
 
     /// The classes of `ext` under `caps`, and how their runs ended: the entry when one is
@@ -252,6 +454,7 @@ impl QuotientCache {
     fn off() -> Self {
         QuotientCache {
             slots: Mutex::new(Vec::new()),
+            runs: Mutex::new(Vec::new()),
             off: true,
             stats: Mutex::new(Stats::default()),
         }
@@ -267,7 +470,7 @@ impl Drop for QuotientCache {
         if std::env::var_os("RDRA_ISH_QUOTIENT_STATS").is_some() {
             let s = self.stats.get_mut().unwrap_or_else(PoisonError::into_inner);
             eprintln!(
-                "quotient-cache: keys={} computed={} hits={} stored={} bytes={}",
+                "quotient-cache: keys={} computed={} hits={} stored={} bytes={} runs_held={} run_hits={} run_bytes={}",
                 self.slots
                     .get_mut()
                     .unwrap_or_else(PoisonError::into_inner)
@@ -275,7 +478,10 @@ impl Drop for QuotientCache {
                 s.computed,
                 s.hits,
                 s.stored,
-                s.bytes
+                s.bytes,
+                s.runs_held,
+                s.run_hits,
+                s.run_bytes
             );
         }
     }
@@ -421,6 +627,7 @@ mod tests {
     fn cache() -> QuotientCache {
         QuotientCache {
             slots: Mutex::new(Vec::new()),
+            runs: Mutex::new(Vec::new()),
             off: false,
             stats: Mutex::new(Stats::default()),
         }
@@ -575,7 +782,13 @@ mod tests {
         assert!(need > 0, "its runs charged the pool");
         let stored = Classes::of(&ext, Caps::VERIFY, &QuotientCache::new()).0;
         let stored = quotient(stored).bytes();
-        assert_eq!(pool.held(), stored, "the entry is charged, and only it");
+        let run = cache.stats.lock().unwrap().run_bytes;
+        assert!(run > 0, "the run of S is held");
+        assert_eq!(
+            pool.held(),
+            stored + run,
+            "the entry and the run of S are charged, and only they"
+        );
         let short = Caps::VERIFY.charged_to(pool.with_room(need - 1));
         let ran = Cell::new(false);
         let (_, clean) = cache.classes(&ext, short, |_| {
@@ -592,6 +805,108 @@ mod tests {
         assert!(!seen.crowded);
         drop(cache);
         assert_eq!(pool.held(), 0, "dropping the cache gives the entry back");
+    }
+
+    /// The extended sub-lifecycle of `job_ext`, observing one var more: another key whose
+    /// nested reduction leaves the same sub-lifecycle to run.
+    fn other_key() -> Extended {
+        let mut e = job_ext(true);
+        let extra = e.system.var_ids().find(|v| !e.obs_local.contains(v));
+        e.obs_local.insert(extra.expect("an unobserved var"));
+        e
+    }
+
+    /// Two keys over one sub-lifecycle run S once (#296): the second partitions the run the
+    /// first held, gets what computing gives, and shows `watch` the peak running shows, so
+    /// its own entry answers the rooms a fresh computation's would.
+    #[test]
+    fn keys_over_one_sub_lifecycle_share_the_run_of_s() {
+        let (a, b) = (job_ext(true), other_key());
+        let pool = MemoryPool::for_command(MemorySize::VERIFY, "--memory");
+        let caps = Caps::VERIFY.charged_to(pool);
+        let cache = cache();
+        let (computed, _) = ask(&cache, &a, caps);
+        assert!(computed.is_some());
+        assert_eq!(cache.stats.lock().unwrap().runs_held, 1);
+        let (computed, seen) = ask(&cache, &b, caps);
+        assert!(computed.is_some(), "another key computes its own classes");
+        assert_eq!(cache.stats.lock().unwrap().run_hits, 1, "on the held run");
+        let (_, alone) = crate::memory::watch(|| Classes::of(&b, caps, &QuotientCache::new()));
+        assert_eq!(seen, alone, "with the peak running shows");
+        let need = |k: usize| {
+            let slots = cache.slots.lock().unwrap();
+            let entry = slots[k].entry.lock().unwrap();
+            entry.as_ref().expect("a clean quotient is stored").need
+        };
+        assert_eq!(
+            need(1),
+            alone.peak,
+            "so the entry's `need` is a fresh one's"
+        );
+        assert_eq!(need(0), need(1));
+    }
+
+    /// A held run answers only a pool that covers its peak now; in a smaller room the key
+    /// drops it and runs S alone, stopping where it would. A run a cap stopped is not held.
+    #[test]
+    fn a_held_run_answers_only_a_room_it_fits_and_a_stopped_run_is_not_held() {
+        let (a, b) = (job_ext(true), other_key());
+        let pool = MemoryPool::for_command(MemorySize::VERIFY, "--memory");
+        let cache = cache();
+        assert!(ask(&cache, &a, Caps::VERIFY.charged_to(pool)).0.is_some());
+        let held = cache.stats.lock().unwrap().run_bytes;
+        assert!(pool.held() > held, "the run and the entry are charged");
+        let need = {
+            let runs = cache.runs.lock().unwrap();
+            let held = runs[0].run.lock().unwrap();
+            held.as_ref().expect("a complete run is held").need
+        };
+        let short = Caps::VERIFY.charged_to(pool.with_room(need - 1));
+        let (computed, _) = ask(&cache, &b, short);
+        assert!(computed.is_some());
+        assert_eq!(
+            cache.stats.lock().unwrap().run_hits,
+            0,
+            "a short room runs S alone"
+        );
+        assert!(
+            cache.runs.lock().unwrap()[0].run.lock().unwrap().is_none(),
+            "and drops the held run first"
+        );
+
+        let capped = Caps {
+            states: 3,
+            ..Caps::VERIFY
+        };
+        let cache = self::cache();
+        ask(&cache, &a, capped);
+        ask(&cache, &b, capped);
+        let stats = cache.stats.lock().unwrap();
+        assert_eq!(
+            (stats.runs_held, stats.run_hits),
+            (0, 0),
+            "a capped run is not held"
+        );
+    }
+
+    /// A run of S is shared between sub-lifecycles that differ only in where their actions
+    /// came from (`Action::source`), and not between ones that differ in a guard.
+    #[test]
+    fn a_run_is_shared_across_action_sources_and_not_across_guards() {
+        let a = job_ext(true).system;
+        let mut b = a.clone();
+        b.actions[0].source = crate::lifecycle::types::ActId::at(b.actions.len() + 7);
+        assert!(a != b && same_runs(&a, &b));
+        let caps = Caps::VERIFY;
+        let ran = |s: &TransitionSystem| {
+            s.clone()
+                .run_checking(caps, crate::lifecycle::explore::Checks::none())
+        };
+        assert!(ran(&a).same_graph(&ran(&b)));
+        let mut c = a.clone();
+        let g = c.actions.iter().position(|x| !x.guards.is_empty());
+        c.actions[g.expect("a guarded action")].guards.pop();
+        assert!(!same_runs(&a, &c));
     }
 
     /// Asks `cache` for `ext` under `caps`, and what `watch` saw; `None` for the result when

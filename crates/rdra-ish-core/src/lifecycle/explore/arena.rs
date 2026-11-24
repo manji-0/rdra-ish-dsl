@@ -1,5 +1,5 @@
-//! A run's states, end to end in fixed-size segments (`segments::Rows`): each state is kept
-//! once, with no heap block or pointer of its own.
+//! A run's states, end to end in segments (`segments::Rows`): each state is kept once, with
+//! no heap block or pointer of its own, and stays where it was pushed.
 
 use std::hash::Hasher;
 use std::ops::{Index, Range};
@@ -73,22 +73,23 @@ impl States {
         }
     }
 
-    /// A copy of the states in `range`, in a buffer as long as they are when they fit one
-    /// segment.
+    /// A copy of the states in `range`.
     pub(crate) fn slice(&self, range: Range<usize>) -> States {
-        let mut rows = Rows::with_room(self.width(), range.len());
+        let mut rows = Rows::new(self.width());
         for i in range {
             rows.push(self.rows.row(i));
         }
         States { rows }
     }
 
-    /// Adds `s` at index `len()`, in the last segment, or in a new one when that is full.
+    /// Adds `s` at index `len()`, in the last segment, or in a new one when that is full. No
+    /// state already pushed moves.
     pub(crate) fn push(&mut self, s: &StateSlice) {
         self.rows.push(&s.0);
     }
 
     /// The states the buffer holds room for.
+    #[cfg(kani)]
     pub(crate) fn capacity(&self) -> usize {
         self.rows.capacity()
     }
@@ -96,6 +97,12 @@ impl States {
     /// The bytes the buffer takes once `more` states are pushed.
     pub(crate) fn bytes_with(&self, more: usize) -> u64 {
         self.rows.bytes_with(more)
+    }
+
+    /// The bytes of `bytes_with` that the list of segments takes.
+    #[cfg(feature = "shadow")]
+    pub(crate) fn list_bytes_with(&self, more: usize) -> u64 {
+        self.rows.parts_with(more).1
     }
 }
 
@@ -229,7 +236,8 @@ mod proofs {
     const WIDTH: usize = 2;
     const PUSHES: usize = 9;
 
-    /// For every width up to 2 and every run of up to 9 pushes, across segments of 4 states,
+    /// For every width up to 2 and every run of up to 9 pushes, past the doubling segments
+    /// (4 and 4 states under Kani) into a fixed one,
     /// from an empty store or from a `slice` of one: each state reads back as pushed, no
     /// index leaves the buffer, and `bytes_with(1)` before a push is `bytes_with(0)` after it,
     /// which is what the store's buffers hold and what the memory limit charges.

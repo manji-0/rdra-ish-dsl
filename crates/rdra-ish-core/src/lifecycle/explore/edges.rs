@@ -12,8 +12,6 @@
 //! recorded as it went (`StepEnds`). `edges()` on such a run panics: an empty list would read
 //! as "no moves".
 
-use std::mem::size_of;
-
 use crate::lifecycle::expr::StateSlice;
 use crate::lifecycle::types::{ActId, EntId, Pred};
 use crate::lifecycle::TransitionSystem;
@@ -24,9 +22,9 @@ use super::Edge;
 #[cfg(feature = "shadow")]
 mod reference;
 
-/// Items in fixed-size segments (`segments::Rows`, #296 2.2): the first doubles from four
-/// items up to a segment, and every later one is allocated whole, so growing copies no full
-/// buffer, and `bytes_with` says before a push what the buffer takes after it.
+/// Items in segments (`segments::Rows`, #296 2.2) of 4, 4, 8, ... items up to a fixed size:
+/// growing allocates a segment whole and copies no item, and `bytes` says before a push what
+/// the buffer takes after it.
 #[derive(Clone, Debug)]
 pub(crate) struct Buf<T>(Rows<T>);
 
@@ -47,6 +45,16 @@ impl<T: Copy> Buf<T> {
 
     pub(crate) fn get(&self, i: usize) -> T {
         self.0.row(i)[0]
+    }
+
+    /// Items `at`, which lie in one segment (`segment_end`), as a slice.
+    pub(crate) fn run(&self, at: std::ops::Range<usize>) -> &[T] {
+        self.0.run(at)
+    }
+
+    /// The end of the segment that holds item `i`.
+    pub(crate) fn segment_end(i: usize) -> usize {
+        Rows::<T>::segment_end(i)
     }
 
     /// The first index whose item `pred` rejects, the items being those it accepts first.
@@ -103,21 +111,21 @@ impl Ids {
     }
 
     pub(crate) fn push(&mut self, id: u32) {
+        // Widen first, one width at a time, then push: no recursion, which Kani would
+        // unwind into copies of the whole function.
+        if let Ids::One(b) = self {
+            if u8::try_from(id).is_err() {
+                *self = Ids::Two(std::mem::take(b).widen());
+            }
+        }
+        if let Ids::Two(b) = self {
+            if u16::try_from(id).is_err() {
+                *self = Ids::Four(std::mem::take(b).widen());
+            }
+        }
         match self {
-            Ids::One(b) => match u8::try_from(id) {
-                Ok(id) => b.push(id),
-                Err(_) => {
-                    *self = Ids::Two(std::mem::take(b).widen());
-                    self.push(id);
-                }
-            },
-            Ids::Two(b) => match u16::try_from(id) {
-                Ok(id) => b.push(id),
-                Err(_) => {
-                    *self = Ids::Four(std::mem::take(b).widen());
-                    self.push(id);
-                }
-            },
+            Ids::One(b) => b.push(id as u8),
+            Ids::Two(b) => b.push(id as u16),
             Ids::Four(b) => b.push(id),
         }
     }
@@ -151,6 +159,15 @@ pub(crate) struct EdgeList {
 impl EdgeList {
     fn len(&self) -> usize {
         self.to.len()
+    }
+
+    /// The first edge of the state after `states[at]`; `usize::MAX` past the last state read.
+    fn first_after(&self, at: u32) -> usize {
+        let next = at as usize + 1;
+        match next < self.first.len() {
+            true => self.first.get(next) as usize,
+            false => usize::MAX,
+        }
     }
 
     /// The state edge `k` leaves: the last state read whose first edge is at or before it.
@@ -187,6 +204,8 @@ impl EdgeList {
 }
 
 /// The parent of each state: the move that first reached it.
+// One per run: the doubling segments' headers sit inline in each buffer (`segments::Rows`).
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug)]
 enum Parents {
     /// On a run that keeps its edge list: the index of that edge, `INITIAL` for an initial
@@ -328,6 +347,12 @@ impl Steps {
         self.bytes(more, true)
     }
 
+    /// The bytes of `bytes_with` that the lists of segments take.
+    #[cfg(feature = "shadow")]
+    pub(crate) fn list_bytes_with(&self, more: usize) -> u64 {
+        self.bytes(more, true) - self.bytes(more, false)
+    }
+
     /// `bytes_with`, with the lists of segments when `list`.
     fn bytes(&self, more: usize, list: bool) -> u64 {
         let parents = match &self.parents {
@@ -398,6 +423,7 @@ impl<'a> Edges<'a> {
             edges: *self,
             at,
             from,
+            next: self.list.first_after(from),
         }
     }
 
@@ -467,17 +493,19 @@ pub struct EdgeIter<'a> {
     at: std::ops::Range<usize>,
     /// The source of `at.start`, or a state at or before it.
     from: u32,
+    /// The first edge of the state after `from`: where the source changes.
+    next: usize,
 }
 
 impl Iterator for EdgeIter<'_> {
     type Item = Edge;
 
+    #[inline]
     fn next(&mut self) -> Option<Edge> {
         let k = self.at.next()?;
-        let first = &self.edges.list.first;
-        while (self.from as usize + 1) < first.len() && first.get(self.from as usize + 1) as usize <= k
-        {
+        while k >= self.next {
             self.from += 1;
+            self.next = self.edges.list.first_after(self.from);
         }
         let e = Edge {
             from: self.from,
@@ -491,6 +519,62 @@ impl Iterator for EdgeIter<'_> {
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.at.size_hint()
     }
+
+    /// The edges a state at a time, each state's targets and binding ids read as slices:
+    /// what `map`, `filter`, `for_each` and the folds over a whole graph call.
+    fn fold<B, F: FnMut(B, Edge) -> B>(self, init: B, mut f: F) -> B {
+        let EdgeIter {
+            edges,
+            at,
+            mut from,
+            mut next,
+        } = self;
+        let mut acc = init;
+        let mut k = at.start;
+        while k < at.end {
+            while k >= next {
+                from += 1;
+                next = edges.list.first_after(from);
+            }
+            // A state's edges, cut where a segment of the buffers ends.
+            let run = k..next.min(at.end).min(Buf::<u32>::segment_end(k));
+            acc = match &edges.list.binding {
+                Ids::One(b) => {
+                    fold_state(edges, b.run(run.clone()), from, run.clone(), acc, &mut f)
+                }
+                Ids::Two(b) => {
+                    fold_state(edges, b.run(run.clone()), from, run.clone(), acc, &mut f)
+                }
+                Ids::Four(b) => {
+                    fold_state(edges, b.run(run.clone()), from, run.clone(), acc, &mut f)
+                }
+            };
+            k = run.end;
+        }
+        acc
+    }
+}
+
+/// `f` over the edges `at`, all of which leave `states[from]`.
+fn fold_state<T: Copy + Into<u32>, B>(
+    edges: Edges<'_>,
+    ids: &[T],
+    from: u32,
+    at: std::ops::Range<usize>,
+    mut acc: B,
+    f: &mut impl FnMut(B, Edge) -> B,
+) -> B {
+    let to = edges.list.to.run(at.clone());
+    for ((k, &to), &b) in at.zip(to).zip(ids) {
+        let e = Edge {
+            from,
+            to,
+            binding: b.into(),
+        };
+        edges.check(k, e);
+        acc = f(acc, e);
+    }
+    acc
 }
 
 impl ExactSizeIterator for EdgeIter<'_> {}
@@ -553,101 +637,25 @@ impl StepEnds {
     }
 }
 
-/// Kani harnesses (`cargo kani -p rdra-ish-core`).
-#[cfg(kani)]
-mod proofs {
+#[cfg(test)]
+mod tests {
     use super::*;
 
-    /// `Buf::partition_point` is the slice's: for every ascending run of up to 9 items across
-    /// segments of 4, and every bound, the index of the first item past the bound.
-    #[kani::proof]
-    #[kani::unwind(11)]
+    /// The binary search over a segmented buffer finds what `slice::partition_point` finds,
+    /// for an ascending run with repeats past the doubling segments, at every bound.
+    #[test]
     fn a_buf_partition_point_is_the_slices() {
-        let pushes: usize = kani::any();
-        kani::assume(pushes <= 9);
-        let (mut b, mut v): (Buf<u32>, Vec<u32>) = (Buf::default(), Vec::new());
-        let mut last = 0u32;
-        for _ in 0..pushes {
-            let step: u32 = kani::any();
-            kani::assume(step <= 2);
-            last += step;
-            b.push(last);
-            v.push(last);
+        let n = 3 * super::super::segments::SEG + 7;
+        let (mut b, mut v) = (Buf::<u32>::default(), Vec::new());
+        for i in 0..n as u32 {
+            b.push(i / 3);
+            v.push(i / 3);
         }
-        let bound: u32 = kani::any();
-        assert_eq!(
-            b.partition_point(|x| x <= bound),
-            v.partition_point(|&x| x <= bound)
-        );
-    }
-
-    /// A `Vec`'s buffer once `more` items are pushed: what a run was charged before #296.
-    fn vec_bytes<T>(v: &Vec<T>, more: usize) -> u64 {
-        let cap = if v.len() + more <= v.capacity() {
-            v.capacity()
-        } else {
-            (v.capacity() * 2).max(v.len() + more).max(4)
-        };
-        (cap * size_of::<T>()) as u64
-    }
-
-    /// For every run of up to 6 steps, each admitting a state (reached by a move pushed with
-    /// it, or initial before any state is read), reading the next state, or pushing a move to
-    /// any state with any binding id, with an edge list or without one: every edge and parent
-    /// reads back as the 12-byte `Edge` the run kept before #296, and the bytes `Steps` takes
-    /// with one state more are never more than the 8-byte parents and 12-byte edges of the
-    /// `Vec`s it replaces at the same lengths, so a run that fit a memory limit still does.
-    #[kani::proof]
-    #[kani::unwind(8)]
-    fn steps_read_back_and_take_no_more_than_before() {
-        let graph: bool = kani::any();
-        let mut steps = Steps::new(graph);
-        let mut parents: Vec<Option<u32>> = Vec::new();
-        let mut edges: Vec<Edge> = Vec::new();
-        let (mut states, mut read) = (0u32, 0u32);
-        for _ in 0..6 {
-            let op: u8 = kani::any();
-            if op == 0 {
-                let parent = (read > 0).then(|| (read - 1, kani::any::<u32>()));
-                steps.admit(parent);
-                parents.push(parent.map(|_| edges.len() as u32));
-                if let Some((from, binding)) = parent {
-                    steps.push(from, states, binding);
-                    edges.push(Edge {
-                        from,
-                        to: states,
-                        binding,
-                    });
-                }
-                states += 1;
-            } else if op == 1 && read < states {
-                steps.read(read as usize);
-                read += 1;
-            } else if read > 0 {
-                let (to, binding): (u32, u32) = (kani::any(), kani::any());
-                kani::assume(to < states);
-                steps.push(read - 1, to, binding);
-                edges.push(Edge {
-                    from: read - 1,
-                    to,
-                    binding,
-                });
-            }
-            // The segments, their lists left out, against the one `Vec` each buffer was.
-            assert!(steps.bytes(1, false) <= vec_bytes(&parents, 1) + vec_bytes(&edges, 0));
-        }
-        assert_eq!(steps.moves(), edges.len() as u64);
-        for at in 0..states {
+        for bound in 0..=(n as u32 / 3 + 1) {
             assert_eq!(
-                steps.parent(at),
-                parents[at as usize].map(|k| edges[k as usize])
+                b.partition_point(|x| x <= bound),
+                v.partition_point(|&x| x <= bound)
             );
-        }
-        if graph {
-            let list = steps.edges();
-            for (k, e) in edges.iter().enumerate() {
-                assert_eq!(list.get(k), *e);
-            }
         }
     }
 }

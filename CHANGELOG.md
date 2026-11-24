@@ -140,9 +140,10 @@
   sets the default; under `[check]` it warns and is not read. A counterexample is lifted to
   concrete slots and replayed, with the rows each step names, before it prints. A static
   scan leaves out an entity whose slots the model tells apart (an ordered id comparison, an
-  id against a literal, a key set to a literal row, and six more) and names it and the
+  id against a literal, a key set to a literal row, and five more) and names it and the
   reason under the line. A cone run up to symmetry gathers no entity view (#251) and shares
-  no run with the entity, safety and property passes (#209). Without the option nothing changes. At `--instance-count 3` the
+  no run with the entity, safety and property passes (#209). Without the option nothing
+  changes. At `--instance-count 3` the
   five clinic-ops and insurance-claim-ops lines that stopped at the memory limit are decided
   under `--memory 8GiB`. In `rdra-ish-core`, `TransitionSystem::run_orbits` returns an
   `OrbitRun`, which has no graph or adjacency to read, and the vacuity readers take any
@@ -371,6 +372,61 @@
 
 ### Changed
 
+- A run keeps fewer bytes per state (#296 item 2.1, #255). An edge is its 4-byte target
+  and a binding id in 1, 2 or 4 bytes (the fewest that the run's largest id needs, widened
+  at the same id on every machine), where it was 12 bytes with its source: the source is
+  the state whose first edge, kept per state read, comes at or before it. A parent is a
+  4-byte edge index where it was 8 bytes. A run that stops once every check has failed (a
+  safety cone of `verify` and `check`) keeps no edge list at all: its parent per state is
+  the source and the binding id, and it records per `after` step whether a move of its
+  action ran and whether one reached the rows the step reads, which is all its
+  vacuity check reads. On the largest cone of each run measured in #296, the bytes kept
+  per state fall from 159.4 to 115.7 on `patent-ops`, 288.7 to 187.7 on `food-permit-ops`
+  (`view BusinessPermit`), 179.9 to 127.4 on `clinic-ops`, 212.5 to 161.2 on
+  `insurance-claim-ops` and 234.6 to 120.3 on `oidc-auth --instance-count 1`, and peak
+  RSS falls by 13% to 23% (1,085 MB to 831 MB on `food-permit-ops`). `--memory` charges
+  these sizes, so a run that stopped at the limit now stops later: the stop point is still
+  computed from the counts, and the same on every machine and thread count. For example
+  `check --memory 4KiB` on `flags.rdra` stops at 64 states where it stopped at 38, and
+  `verify samples/patent-ops` completes its `OfficeAction` cones at `256MiB`. The output of
+  every run that completes is unchanged at every sample's and corpus case's header flags.
+  Reading an edge from three buffers costs instructions: at `RDRA_JOBS=1`, `verify`
+  retires 2% to 7% more (292.7 G to 304.1 G on `insurance-claim-ops`, 32.9 G to 34.6 G on
+  `patent-ops`, 90.4 G to 96.8 G on `food-permit-ops`). A `shadow` build compares every
+  edge, parent and recorded `after` step with the 12-byte list kept beside them.
+- Keys of the quotient cache that explore the same sub-lifecycle share its run of S (#296):
+  keys that differ in what T observes, the inputs or the rises, or only in where their
+  actions came from, partitioned one run each, which `verify` explored again per key. A
+  complete run is held by the sub-lifecycle and the caps that can stop it, charged to the
+  command's pool while the cache holds it, and taken only by a pool that covers its peak;
+  a run that a cap or the memory limit stopped is never shared. The output is unchanged;
+  a `shadow` build holds every shared run to a fresh one, and `RDRA_ISH_QUOTIENT_STATS`
+  counts them (`runs_held`, `run_hits`, `run_bytes`). At `RDRA_JOBS=1`, `verify` retires 8%
+  fewer instructions on `insurance-claim-ops` (312.4 G to 288.6 G).
+- **Verdicts can change:** a deleted row keeps its keys (#212). `deletes(UC, E)` resets the
+  row's columns to their base values and no longer resets its keys to the first slot. The
+  only reader that sees the difference is a later step that binds the deleted row: a step
+  of a split use case whose earlier step deleted it (an `Earlier` parameter) and that reads
+  its key, in a guard or an `after` assertion. That step now reads the
+  parent the row had, where it read the first slot. The native checker, z3, and the TLA+
+  export (`<E>_owner_<P>` stays `UNCHANGED` on a delete) agree. No sample, skill example, or
+  engine-corpus case changes verdict except `sym_deleted_row_owner`, which reads that key
+  and now has a counterexample. A cone that deletes keyed rows can store more states,
+  since deleted rows that named different parents now differ; every sample's `verify`
+  output is unchanged, byte for byte. The TLA+
+  export changes text on 9 models (no verdict). Instance symmetry relabels a deleted row's
+  key with its parent, so a model that reads it is no longer left out of the group.
+- The flake's `tlc` (in `nix develop` and on the `PATH` of the flake's `rdra-ish`) runs TLC
+  1.7.4 on JDK 17 instead of JDK 8, with a class-data-sharing archive of TLC's classes built
+  with it (#309). `verify --with-tlc` also compiles a state-model run of at most 10,000
+  states by BFS with C1 only (`-XX:TieredStopAtLevel=1`), once TLC has started with that
+  flag; cone runs, whose size is not known when they start, keep the default JIT. The
+  engine corpus (306 TLC runs, 159 of them state models) went from 45 s wall and 275 CPU-s
+  to 33 s and 151 CPU-s on an 18-core Mac. Verdicts and the parsing of TLC's output are
+  unchanged. Not JDK 21: TLC 1.7.4 reads a trace record back wrongly on JDK 21 and later,
+  and a `-continue` run that prints many traces stops with an
+  `ArrayIndexOutOfBoundsException` (#314); JDK 17 is 3 to 14% slower than 21 on runs past
+  about 50,000 states.
 - `--max-patterns` caps only a run that builds an entity view (#251, #296): the cone of an
   entity view in `check` and `states`. Only those runs gather view patterns now. A cone of
   invariants, `after` assertions or `can_reach` alone, a run that quotients a sub-lifecycle,

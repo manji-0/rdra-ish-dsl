@@ -257,13 +257,17 @@ impl ComponentRun {
         let n = self.states.len();
         let mut enabled = vec![0u64; n * words];
         let mut moves_on = vec![false; n];
-        for e in self.edges().iter().filter(|e| e.from != e.to) {
-            moves_on[e.from as usize] = true;
-            set(
-                &mut enabled[e.from as usize * words..],
-                instance[e.binding as usize],
-            );
-        }
+        // `for_each` folds the edges a state at a time (`EdgeIter::fold`).
+        self.edges()
+            .iter()
+            .filter(|e| e.from != e.to)
+            .for_each(|e| {
+                moves_on[e.from as usize] = true;
+                set(
+                    &mut enabled[e.from as usize * words..],
+                    instance[e.binding as usize],
+                );
+            });
         FairSteps {
             instance,
             count,
@@ -311,7 +315,7 @@ impl ComponentRun {
             }
         }
         let mut taken = vec![0u64; count * w];
-        for e in self.edges().iter().filter(inside) {
+        self.edges().iter().filter(inside).for_each(|e| {
             let c = comp[e.from as usize];
             if e.from != e.to && c == comp[e.to as usize] {
                 set(
@@ -319,7 +323,7 @@ impl ComponentRun {
                     fair.instance[e.binding as usize],
                 );
             }
-        }
+        });
         let fair_cycle: Vec<bool> = (0..count)
             .map(|c| {
                 let range = c * w..(c + 1) * w;

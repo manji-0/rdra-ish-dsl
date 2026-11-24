@@ -119,7 +119,7 @@ entity: a key between it and a row the step writes links the two as a written pa
 child are linked (a child is created under it, an updated child must belong to it), a
 condition atom on the entity reads it, a copy reads it, and an `after` assert reads it.
 It is matched by its mark, not by its existence, so a row step 1 deleted still finishes
-its run. A row carries one mark per use case, so one run per row is in flight at a time:
+its run, and its keys still name the rows they named before the delete. A row carries one mark per use case, so one run per row is in flight at a time:
 step 1 waits for a row in a run. A step whose guard fails when its turn comes waits too;
 the run is never abandoned, since its earlier transactions are committed, and a row that
 no step can move then shows as a `Deadlock` or a use case that never runs, with the mark
@@ -220,7 +220,7 @@ effects apply together to the pre-state:
 | Source | Effect and guard |
 |---|---|
 | `creates(UC, E)` | The slot becomes `present`, with the columns at their base values. The creating use case's `sets` and transitions then apply. |
-| `deletes(UC, E)` | The slot becomes `deleted` and its columns return to the base value. A deleted slot is never reused. Only that slot. Guard, per key to `E` whose `.on_delete` is unset, `restrict`, or `no_action` (the database rejects the delete): no present child names the slot, apart from a child the same step deletes, unlinks, or relinks. A child of a `cascade`, `set_null`, or `set_default` key stays present and still names the deleted slot, since the lifecycle does not run those actions, and every rule still sees it; such a key gets no `DanglingKey_*`. Info `DeleteLeavesChildren` names each use case that deletes a `cascade` parent and not the child. An `E` with a `@soft_delete` column gets no guard. |
+| `deletes(UC, E)` | The slot becomes `deleted` and its columns return to the base value; its keys keep the rows they name. A deleted slot is never reused. Only that slot. Guard, per key to `E` whose `.on_delete` is unset, `restrict`, or `no_action` (the database rejects the delete): no present child names the slot, apart from a child the same step deletes, unlinks, or relinks. A child of a `cascade`, `set_null`, or `set_default` key stays present and still names the deleted slot, since the lifecycle does not run those actions, and every rule still sees it; such a key gets no `DanglingKey_*`. Info `DeleteLeavesChildren` names each use case that deletes a `cascade` parent and not the child. An `E` with a `@soft_delete` column gets no guard. |
 | `sets(UC, E.col == val)` | `col := val`. A `sets` counts as a write even without a CRUD edge. |
 | `sets(UC, E.col == F.src)` | `col` takes the value of `F.src` in the row of `F` that the step binds (see [Copies](#actions)). |
 | `drives(UC, E.col op rhs, bool)` | The comparison variable becomes `bool`. |

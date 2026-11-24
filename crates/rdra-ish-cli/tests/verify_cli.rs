@@ -1753,6 +1753,65 @@ fn an_engine_disagreement_fails_the_run_and_keeps_the_specs() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+/// The `JAVA_TOOL_OPTIONS` and the module of each TLC run of `verify --with-tlc order.rdra`,
+/// under a `tlc` that records them. With `refuse`, its `-help` prints what a JVM prints when
+/// it does not take a flag.
+#[cfg(unix)]
+fn jvm_options_per_run(test: &str, refuse: bool) -> Vec<(String, String)> {
+    use std::os::unix::fs::PermissionsExt;
+    let tmp = scratch(test);
+    let bin = tmp.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    let record = tmp.join("record");
+    let help = match refuse {
+        true => "echo \"Unrecognized VM option 'TieredStopAtLevel=1'\"\necho 'Error: Could not create the Java Virtual Machine.'\n",
+        false => "echo 'TLC - provides model checking'\n",
+    };
+    let script = format!(
+        "#!/bin/sh\nif [ \"$1\" = -help ]; then\n{help}exit 1\nfi\nfor a; do last=$a; done\necho \"$last|$JAVA_TOOL_OPTIONS\" >> '{}'\n",
+        record.display()
+    );
+    std::fs::write(bin.join("tlc"), script).unwrap();
+    std::fs::set_permissions(bin.join("tlc"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    let sample = repo().join("samples/formal-verification/order.rdra");
+    verify_on_path(
+        &repo(),
+        &tmp,
+        &bin,
+        &[sample.to_str().unwrap(), "--with-tlc"],
+    );
+    let runs = std::fs::read_to_string(&record).expect("tlc ran");
+    let _ = std::fs::remove_dir_all(&tmp);
+    runs.lines()
+        .map(|l| {
+            let (module, opts) = l.split_once('|').expect("module|options");
+            (module.to_string(), opts.to_string())
+        })
+        .collect()
+}
+
+/// A state-model run of at most 10,000 states by BFS compiles with C1 only, which saves CPU
+/// on a run that ends within a second; a cone run, whose size is not known when it starts,
+/// keeps the default JIT (#309). A JVM that does not take the flag gets none.
+#[cfg(unix)]
+#[test]
+fn only_a_small_state_model_run_compiles_with_c1_and_only_where_the_jvm_takes_it() {
+    const C1: &str = "-XX:TieredStopAtLevel=1";
+    let runs = jvm_options_per_run("verify_cli_jit", false);
+    let (models, cones): (Vec<_>, Vec<_>) =
+        runs.iter().partition(|(m, _)| m.starts_with("StateModel_"));
+    assert!(!models.is_empty() && !cones.is_empty(), "{runs:?}");
+    assert!(models.iter().all(|(_, o)| o.contains(C1)), "{runs:?}");
+    assert!(cones.iter().all(|(_, o)| !o.contains(C1)), "{runs:?}");
+
+    let runs = jvm_options_per_run("verify_cli_jit_refused", true);
+    assert!(
+        runs.iter().any(|(m, _)| m.starts_with("StateModel_")),
+        "{runs:?}"
+    );
+    assert!(runs.iter().all(|(_, o)| !o.contains(C1)), "{runs:?}");
+}
+
 /// `--backend tlc` still runs TLC, as `--with-tlc` does, and warns that it is deprecated.
 #[cfg(unix)]
 #[test]
@@ -1921,7 +1980,7 @@ fn symmetry_retry_decides_a_cone_the_memory_limit_stopped() {
     let retry = run("retry");
     assert!(
         retry.contains(&format!(
-            "{line}ok (251 orbits, about 2.2K states, retried up to instance symmetry after \
+            "{line}ok (393 orbits, about 4.7K states, retried up to instance symmetry after \
              the memory limit at 2048 states)"
         )),
         "{retry}"

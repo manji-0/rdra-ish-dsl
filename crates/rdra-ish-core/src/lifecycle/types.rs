@@ -579,7 +579,7 @@ pub enum GuardWhy {
 pub enum Effect {
     /// exists := present; the slot's columns are already at base.
     Create { param: u8 },
-    /// exists := deleted; columns and owners reset to base.
+    /// exists := deleted; columns reset to base, and keys keep the rows they name.
     Delete { param: u8 },
     Assign {
         var: VarId,

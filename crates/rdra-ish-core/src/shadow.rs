@@ -12,6 +12,7 @@
 //! | `observe`'s skip of a row whose columns are unchanged (#251) | `explore/bfs/reference.rs`: what the edge would intern |
 //! | `quotient_blocks` (`reduce/partition.rs`, #252) | `reduce/partition/reference.rs`: the sweeps, on quotients of up to `SHADOW_CAP` states |
 //! | a `QuotientCache` hit (`reduce/cache.rs`, #252), a declined entry's included (#289) | `Classes::of` itself, through a cache that holds nothing |
+//! | a run of S another quotient key ran (`QuotientCache::run_of_s`, #296) | a fresh run of the sub-lifecycle |
 //! | the reduced step's class moves (`moves_of_into`, #252) | `reduce/reference.rs`: `moves_from` |
 //! | `Canon::canonical`, the canonical form under instance symmetry (`explore/symmetry/canon.rs`, #212) | `explore/symmetry/reference.rs`: the least layout over every element of `G_s`, when it has at most 6^4 |
 //! | `OrbitRun`, a run up to instance symmetry (`explore/orbit.rs`, #212) | `explore/orbit/reference.rs`: the plain run of the same cone, up to `SHADOW_CAP` states |
@@ -43,11 +44,12 @@ pub(crate) enum Twin {
     Canonical,
     OrbitRun,
     FoldHolds,
+    SharedRun,
     Edges,
     StepEnds,
 }
 
-const TWINS: [(Twin, &str); 12] = [
+const TWINS: [(Twin, &str); 13] = [
     (Twin::EachEnabled, "each_enabled"),
     (Twin::Seen, "seen"),
     (Twin::Source, "source"),
@@ -58,6 +60,7 @@ const TWINS: [(Twin, &str); 12] = [
     (Twin::Canonical, "canonical"),
     (Twin::OrbitRun, "orbit_run"),
     (Twin::FoldHolds, "fold_holds"),
+    (Twin::SharedRun, "shared_run"),
     (Twin::Edges, "edges"),
     (Twin::StepEnds, "step_ends"),
 ];

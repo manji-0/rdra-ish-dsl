@@ -252,13 +252,13 @@ under a load average of 30 to 60, measured.
 | `safety_counted_once_per_raise` | A counted handler runs once per raise; the latch runs twice after one | counted ok, z3 proved; latch counterexample |
 | `safety_event_overflow` | A raise past `k` is `EventOverflow`, and the raiser never waits | `k = 2` counterexample; `k = 3` ok, z3 proved |
 | `safety_unique_sets` | A unique column set over column vars, owner vars, and a nullable Int that two rows leave null | single column and junction counterexample; guarded set and null set ok, z3 proved |
-| `sym_owner_coupled` | A child's key moves with its parent's row; deleted children keep the base value | ok, z3 proved; BFS ok, ok, ok |
+| `sym_owner_coupled` | A child's key moves with its parent's row, a deleted child's too | ok, z3 proved; BFS ok, ok, ok |
 | `sym_identity_pair` | A pre-existing 1:1 child starts at its parent's slot, so the two permute as one class | counterexample |
 | `sym_master_ties` | Identical master rows, some named by children and some not | counterexample |
 | `sym_self_owned` | A key that names rows of its own entity, enumerated jointly | ok, z3 proved; BFS ok, ok, ok |
 | `sym_first_absent` | A creation takes the first absent slot, and the group fixes absent slots | ok, z3 proved; BFS ok, ok, ok |
 | `sym_per_entity_bounds` | Classes of different slot counts (`--instances`) | ok, z3 proved |
-| `sym_deleted_row_owner` | A later step reads the key of a row an earlier step deleted, which holds slot 0; the scan leaves the parent out | ok |
+| `sym_deleted_row_owner` | A later step reads the key of a row an earlier step deleted, which keeps its parent, so the key must move with that parent | counterexample |
 | `sym_lift_compose` | A counterexample the canonical form reorders at several steps; the lift composes every permutation | counterexample at 2 and 3 |
 | `cap_temporal_budget_zero` | `--temporal-budget 0` | not decided on both engines |
 | `cap_memory_limit` | `--memory 2KiB` stops runs partway (native only) | not decided |
@@ -306,18 +306,18 @@ and 3 instances on a `shadow` build. Each bug was reverted afterwards.
 
 | Planted bug | Where | Caught by |
 |---|---|---|
-| A deleted row's key is relabelled | `Group::apply` | three exhaustive tests; the `canonical` twin on `sym_owner_coupled` |
+| A deleted row's key is not relabelled | `Group::apply` | three exhaustive tests; rule 8 (`sym_deleted_row_owner` does not replay at 2 and 3 instances); the `canonical` twin on `sym_deleted_row_owner` and `sym_owner_coupled` |
 | An identity pair is not coupled into one class | `Group::of` | the exhaustive test `an_identity_pair` |
-| Absent slots are permuted | `Canon::canonical` | five exhaustive tests; rule 8 (`sym_deleted_row_owner` does not replay); the `canonical` twin on every `sym_` case |
+| Absent slots are permuted | `Canon::canonical` | five exhaustive tests; the `canonical` twin on every `sym_` case |
 | Ties that a child names are taken in slot order | `Canon::split` | the exhaustive test `a_parent_and_an_owner_child` |
 | The lift undoes only the last permutation | `lift` in `explore/orbit.rs` | rule 8 on `sym_lift_compose` (step 6 does not bind the row it names), release and `shadow` |
 | The scan's ordered-id rule is gone | `breaks.rs` | the unit test `a_guard_that_orders_row_ids_leaves_the_class_out` |
 | `compose` ignores its second permutation | `Group::compose` | the Kani harness `apply_of_a_composition_is_the_composition_of_applies` |
 | `compose` applies its arguments in the wrong order | `Group::compose` | the unit test `apply_compose_and_inverse_agree_on_three_slots`; not the Kani harness, whose 2-slot groups commute |
-| The scan's deleted-row-key rule is gone | `breaks.rs` | rule 8 on `sym_deleted_row_owner` (the lifted trace does not replay), release and `shadow` |
 
-Rule 8 alone misses the first two: the wrong canonical form there still gives the plain
-run's verdicts on every case, so only the exhaustive test and the `canonical` twin see it.
+Rule 8 misses the uncoupled identity pair and the permuted absent slots: the wrong
+canonical form there still gives the plain run's verdicts on every case, so only the
+exhaustive test and the `canonical` twin see it.
 
 ## Mutation run
 
@@ -364,14 +364,12 @@ compile it.
 | `numbers_compare_as_i64_and_null_is_never_ordered` | `expr.rs` | `compare_numbers` orders two numbers as `i64` does; `null` equals only `null` and is never ordered | every pair of `Option<i64>`, every operator |
 | `compare_negates_and_mirrors` | `expr.rs` | `compare` does not panic, `!=` is the negation of `==`, and swapping the operands mirrors the operator | every operand kind, every domain, every value |
 | `a_block_rounds_up_to_16` | `explore/store.rs` | `block(n)` is a multiple of 16 that holds `n` and wastes under 16 bytes | every `n` up to `usize::MAX - 16` |
-| `rows_take_what_bytes_with_said_and_read_back` | `explore/segments.rs` | a buffer of fixed-size segments reads each row back, `bytes_with(1)` before a push is `bytes_with(0)` after it and what its `Vec`s hold, and past the first segment it holds under a segment of unused room | width up to 2, up to 14 pushes over segments of 4 rows, from empty or with room for up to 6 |
-| `map_keeps_the_rows_and_the_room` | `explore/segments.rs` | widening a buffer a segment at a time keeps every row and the room, and its bytes are what its `Vec`s hold | up to 10 rows |
-| `a_buf_partition_point_is_the_slices` | `explore/edges.rs` | the binary search over a segmented buffer finds what `slice::partition_point` finds | ascending runs of up to 9 items, every bound |
-| `steps_read_back_and_take_no_more_than_before` | `explore/edges.rs` | every edge and parent of `Steps`, with an edge list or without, reads back as the 12-byte `Edge` a run kept before #296, and `Steps` never takes more bytes than the 8-byte parents and 12-byte edges it replaces | up to 6 admits, reads and pushes, any binding id |
+| `locate_numbers_rows_in_order` | `explore/segments.rs` | `locate` puts each row in one segment, right after the row before it, at a place under that segment's rows | every row up to 40, segments of 4, 4 and then 4 |
+| `segments_hold_every_row_and_no_more_than_a_doubling_vec` | `explore/segments.rs` | the segments that hold `n` rows hold room for all of them and never for more than a doubling `Vec` of `n` rows, and up to `2 * SEG` rows for exactly as many | every `n` up to 2^40, segments of 4 |
 | `store_bytes_never_overflows` | `explore/store.rs` | `store_bytes` neither overflows nor panics | every input, every shape |
 | `store_bytes_only_grows` | `explore/store.rs` | more states, wider states, more edges, wider binding ids, or an edge list never count as fewer bytes, so past `u64` the count stays at `u64::MAX` | every input |
-| `store_bytes_is_at_most_the_model_before` | `explore/store.rs` | at segments of 2^14 rows, the model never counts more than the one before #296 (8-byte parents, 12-byte edges, doubling buffers) | every input with at least as many edges as states and binding ids of at most 2 bytes |
-| `a_push_takes_the_bytes_bytes_with_said_and_reads_back` | `explore/arena.rs` | a pushed state reads back, no index leaves the buffer, and `bytes_with(1)` before a push is `bytes_with(0)` after it and what the store's buffers hold, from an empty store or a `slice` of one | width up to 2, up to 9 pushes over segments of 4 states |
+| `store_bytes_is_at_most_the_model_before` | `explore/store.rs` | at segments of 2^14 rows, the model without its lists of segments never counts more than the one before #296 (8-byte parents, 12-byte edges, doubling buffers) | every input, every shape |
+| `a_push_takes_the_bytes_bytes_with_said_and_reads_back` | `explore/arena.rs` | a pushed state reads back, no index leaves the buffer, and `bytes_with(1)` before a push is `bytes_with(0)` after it and what the store's buffers hold, from an empty store or a `slice` of one | width up to 2, up to 9 pushes, past the doubling segments |
 | `apply_of_a_composition_is_the_composition_of_applies` | `explore/symmetry/mod.rs` | `apply(g ∘ h) = apply(g) ∘ apply(h)`, keys relabelled on present rows only | a 2-slot parent and a 2-slot child with a key to it, every state, every pair of permutations |
 
 A result holds up to its bound and no further, and for one thread.
