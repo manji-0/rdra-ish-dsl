@@ -290,7 +290,7 @@ model does not need it. A guard that backs up another guard or a trigger lands h
 removing one of the two keeps the rule.
 
 The rule is `not decided` without a guard when, without the guard, its cone stops at
-`--max-states`, `--max-patterns`, or `--memory` before a counterexample. Such a guard is
+`--max-states` or `--memory` before a counterexample. Such a guard is
 neither protecting nor unprotected, and the `rules:` line names it after `not decided
 without`.
 

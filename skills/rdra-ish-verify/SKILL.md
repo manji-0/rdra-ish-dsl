@@ -54,8 +54,8 @@ after `npx skills add` / `gh skill install`. In the `rdra-ish-dsl` repository,
    counterexample, together with the `bounds:` line the result holds under. Paste the
    `bounds:` line (with its state cap or memory limit), `result:` and the last line
    exactly as printed, in a code block; do not paraphrase them. `result: not decided`
-   with exit 0 means a run stopped at the memory limit, a `--max-states` or
-   `--max-patterns` cap, or `--temporal-budget`: the findings listed under
+   with exit 0 means a run stopped at the memory limit, a `--max-states` cap, or
+   `--temporal-budget`: the findings listed under
    `not checked:` and the cone lines that read `not decided` are open, not passed.
 
 A passing run names its bounds first and last:

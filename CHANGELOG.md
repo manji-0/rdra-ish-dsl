@@ -348,7 +348,8 @@
   invariants, `after` assertions or `can_reach` alone, a run that quotients a sub-lifecycle,
   and every run of `verify` gather none, so the pattern cap no longer stops them: a cone that
   stopped there is now explored to its end, `--max-states` or `--memory`, and a sub-lifecycle
-  that failed to quotient at the cap can now quotient. `verify` still takes
+  that failed to quotient at the cap can now quotient (the quotient cache no longer keys on
+  the pattern cap). `verify` still takes
   `--max-patterns`, which stops none of its runs, and its run lines say `stopped at the state
   cap (--max-states) or the memory limit`. The output at every sample's and corpus case's
   header flags is unchanged. At `RDRA_JOBS=1`, `verify` retires 12% fewer instructions on

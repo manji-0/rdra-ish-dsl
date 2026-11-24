@@ -1049,8 +1049,7 @@ Cone_Forbidden_CartLine_0 [Forbidden_CartLine_0, Check_CartLine_qty_0]: ok (8 st
 
 Such a cone counts as decided, so a run whose only open checks it decides prints
 `result: ok`. A cone that also checks an `after` assertion, or a rule z3 leaves unproved or
-out of scope, stays `not decided`, as does a cone stopped at `--max-states` or
-`--max-patterns`. Otherwise the proof does not change the exit status unless
+out of scope, stays `not decided`, as does a cone stopped at `--max-states`. Otherwise the proof does not change the exit status unless
 `--deny-unproved` is given. Every rule of
 the domain samples proves, insurance-claim-ops' with the lemma above.
 `tests/proof_equivalence.rs` checks on every sample that no rule it proves has a BFS
