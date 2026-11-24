@@ -5,9 +5,12 @@
 //! between declared nodes, leaves an edge unlabelled exactly when its ends imply the relation
 //! (`rdra_ish_emit::implied_relation`), and lists in `kinds:` exactly the kinds its body draws.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::{Mutex, OnceLock};
+
+use rdra_ish_cli::Session;
 
 /// The diagram a `%% rdra-ish diagram=` line names.
 fn diagram_kind(name: &str) -> rdra_ish_emit::Diagram {
@@ -48,15 +51,28 @@ fn buc_ids(root: &str) -> Vec<String> {
     ids(root, "buc")
 }
 
+/// The model at `root`, a samples.txt line or an absolute path, loaded once per test
+/// process: every test that draws it shares one parse and one lifecycle exploration, where
+/// a `diagram` process runs both again for each scope and kind.
+fn session(root: &str) -> &'static Session {
+    static SESSIONS: Mutex<BTreeMap<String, &'static OnceLock<Session>>> =
+        Mutex::new(BTreeMap::new());
+    let once = *SESSIONS
+        .lock()
+        .unwrap()
+        .entry(root.to_string())
+        .or_insert_with(|| Box::leak(Box::default()));
+    once.get_or_init(|| {
+        Session::load_as(&[repo().join(root)], root.to_string())
+            .unwrap_or_else(|error| panic!("{root}: {error:#}"))
+    })
+}
+
 /// The ids `list --kind <kind>` prints for `root`.
 fn ids(root: &str, kind: &str) -> Vec<String> {
-    let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
-        .current_dir(repo())
-        .args(["list", root, "--kind", kind, "--format", "csv"])
-        .output()
-        .unwrap();
-    String::from_utf8(output.stdout)
-        .unwrap()
+    session(root)
+        .list(&["--kind", kind, "--format", "csv"])
+        .unwrap_or_else(|error| panic!("{root} list {kind}: {error:#}"))
         .lines()
         .skip(1)
         .filter_map(|line| line.split(',').next())
@@ -65,30 +81,44 @@ fn ids(root: &str, kind: &str) -> Vec<String> {
         .collect()
 }
 
-/// `rdra-ish diagram <root> --kind <kind> [--buc <id>]`, the written `.mmd`.
-fn diagram(root: &str, kind: &str, buc: Option<&str>, out: &Path) -> String {
+/// What `rdra-ish diagram <root> --kind <kind> [--buc <id>]` writes.
+fn diagram(root: &str, kind: &str, buc: Option<&str>) -> String {
     match buc {
-        Some(buc) => diagram_with(root, kind, &["--buc", buc], out),
-        None => diagram_with(root, kind, &[], out),
+        Some(buc) => diagram_with(root, kind, &["--buc", buc]),
+        None => diagram_with(root, kind, &[]),
     }
 }
 
-/// `rdra-ish diagram <root> --kind <kind> <args>`, the written `.mmd`.
-fn diagram_with(root: &str, kind: &str, args: &[&str], out: &Path) -> String {
-    let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+/// What `rdra-ish diagram <root> --kind <kind> <args>` writes, drawn in process.
+/// `the_cli_writes_what_the_library_draws` checks the CLI writes the same.
+fn diagram_with(root: &str, kind: &str, args: &[&str]) -> String {
+    let argv: Vec<&str> = ["--kind", kind].iter().chain(args).copied().collect();
+    session(root)
+        .diagram(&argv)
+        .unwrap_or_else(|error| panic!("{root} {kind} {args:?}: {error:#}"))
+}
+
+/// `rdra-ish diagram <root> --kind <kind> <args>` run as a process, from the repository root:
+/// what it writes to `--out` when `out` is given, else what it prints.
+fn cli_diagram(root: &str, kind: &str, args: &[&str], out: Option<&Path>) -> String {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_rdra-ish"));
+    command
         .current_dir(repo())
         .args(["diagram", root, "--kind", kind])
-        .args(args)
-        .arg("--out")
-        .arg(out)
-        .output()
-        .unwrap();
+        .args(args);
+    if let Some(out) = out {
+        command.arg("--out").arg(out);
+    }
+    let output = command.output().unwrap();
     assert!(
         output.status.success(),
         "{root} {kind} {args:?}: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    std::fs::read_to_string(out.with_extension("mmd")).unwrap()
+    match out {
+        Some(out) => std::fs::read_to_string(out.with_extension("mmd")).unwrap(),
+        None => String::from_utf8(output.stdout).unwrap(),
+    }
 }
 
 /// The scopes each flowchart kind is checked in: the whole model, then each BUC.
@@ -335,14 +365,13 @@ fn check_flowchart(chart: &Flowchart) -> Result<(), String> {
 
 #[test]
 fn every_rdra_diagram_of_every_sample_keeps_the_contract() {
-    let dir = scratch("diagram_contract_rdra");
     let mut checked = 0;
     for root in roots() {
         let scopes: Vec<Option<String>> = std::iter::once(None)
             .chain(buc_ids(&root).into_iter().map(Some))
             .collect();
         for buc in scopes {
-            let text = diagram(&root, "rdra", buc.as_deref(), &dir.join("out"));
+            let text = diagram(&root, "rdra", buc.as_deref());
             let chart = parse_flowchart("rdra", &text)
                 .and_then(|chart| check_flowchart(&chart).map(|()| chart))
                 .unwrap_or_else(|error| panic!("{root} {buc:?}: {error}\n{text}"));
@@ -408,12 +437,11 @@ const FLOWCHARTS: [&str; 10] = [
 
 #[test]
 fn every_drawn_kind_has_a_shape_and_every_unlabelled_edge_one_relation() {
-    let dir = scratch("diagram_contract_shapes");
     let mut kinds: BTreeSet<String> = BTreeSet::new();
     let mut unlabelled: BTreeSet<(String, String)> = BTreeSet::new();
     for root in roots() {
         for diagram in FLOWCHARTS.into_iter().chain(["screen"]) {
-            let text = diagram_with(&root, diagram, &[], &dir.join("out"));
+            let text = diagram_with(&root, diagram, &[]);
             let chart = checked(diagram, &text, &format!("{root} {diagram}"));
             for (id, kind) in &chart.nodes {
                 // A subgraph line names an element too; any other line is in its kind's shape.
@@ -478,12 +506,10 @@ fn every_drawn_kind_has_a_shape_and_every_unlabelled_edge_one_relation() {
 
 #[test]
 fn an_element_has_one_id_in_every_scope() {
-    let dir = scratch("diagram_contract_scopes");
     let root = "samples/ec-site";
-    let whole = parse_flowchart("rdra", &diagram(root, "rdra", None, &dir.join("w"))).unwrap();
+    let whole = parse_flowchart("rdra", &diagram(root, "rdra", None)).unwrap();
     for buc in buc_ids(root) {
-        let scoped =
-            parse_flowchart("rdra", &diagram(root, "rdra", Some(&buc), &dir.join("b"))).unwrap();
+        let scoped = parse_flowchart("rdra", &diagram(root, "rdra", Some(&buc))).unwrap();
         for id in scoped.nodes.keys() {
             assert!(whole.nodes.contains_key(id), "{buc}: {id} not in whole");
         }
@@ -768,14 +794,13 @@ fn indexed_entities(chart: &StateChart) -> Vec<String> {
 
 #[test]
 fn every_state_diagram_of_every_sample_keeps_the_contract() {
-    let dir = scratch("diagram_contract_state");
     let mut drawn = 0;
     for root in lifecycle_roots() {
         let scopes: Vec<Option<String>> = std::iter::once(None)
             .chain(buc_ids(&root).into_iter().map(Some))
             .collect();
         for buc in scopes {
-            let text = diagram(&root, "state", buc.as_deref(), &dir.join("out"));
+            let text = diagram(&root, "state", buc.as_deref());
             let chart = parse_state(&text)
                 .and_then(|chart| check_state(&chart).map(|()| chart))
                 .unwrap_or_else(|error| panic!("{root} {buc:?}: {error}\n{text}"));
@@ -787,16 +812,15 @@ fn every_state_diagram_of_every_sample_keeps_the_contract() {
 
 #[test]
 fn the_unscoped_state_diagram_is_an_index_and_each_entity_draws_its_models() {
-    let dir = scratch("diagram_contract_state_entity");
     let mut full = 0;
     for root in lifecycle_roots() {
-        let text = diagram(&root, "state", None, &dir.join("index"));
+        let text = diagram(&root, "state", None);
         let index = parse_state(&text)
             .and_then(|chart| check_state(&chart).map(|()| chart))
             .unwrap_or_else(|error| panic!("{root}: {error}\n{text}"));
         assert_eq!(index.index_notes.len(), index.models.len(), "{root}");
         for entity in indexed_entities(&index) {
-            let text = diagram_with(&root, "state", &["--entity", &entity], &dir.join("full"));
+            let text = diagram_with(&root, "state", &["--entity", &entity]);
             let chart = parse_state(&text)
                 .and_then(|chart| check_state(&chart).map(|()| chart))
                 .unwrap_or_else(|error| panic!("{root} {entity}: {error}\n{text}"));
@@ -835,10 +859,9 @@ fn header_columns(text: &str, prefix: &str) -> BTreeSet<String> {
 /// state diagram names it on `%% set-only:`, not on `omitted:` (#61).
 #[test]
 fn a_state_axis_set_by_sets_is_not_omitted() {
-    let dir = scratch("diagram_contract_state_set_only");
     let mut set_only = 0;
     for root in lifecycle_roots() {
-        let text = diagram(&root, "state", None, &dir.join("index"));
+        let text = diagram(&root, "state", None);
         let (omitted, set) = (
             header_columns(&text, "omitted"),
             header_columns(&text, "set-only"),
@@ -917,14 +940,13 @@ fn the_state_contract_check_rejects_a_broken_diagram() {
 
 #[test]
 fn a_state_and_its_use_cases_have_the_ids_the_rdra_diagram_gives_them() {
-    let dir = scratch("diagram_contract_state_ids");
     for root in lifecycle_roots() {
-        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
-        let index = parse_state(&diagram(&root, "state", None, &dir.join("i"))).unwrap();
+        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None)).unwrap();
+        let index = parse_state(&diagram(&root, "state", None)).unwrap();
         let ids: Vec<String> = indexed_entities(&index)
             .iter()
             .flat_map(|entity| {
-                let text = diagram_with(&root, "state", &["--entity", entity], &dir.join("s"));
+                let text = diagram_with(&root, "state", &["--entity", entity]);
                 let state = parse_state(&text).unwrap();
                 let usecases: Vec<String> = state.transitions.iter().map(|t| t.3.clone()).collect();
                 state.states.into_keys().chain(usecases).collect::<Vec<_>>()
@@ -938,14 +960,13 @@ fn a_state_and_its_use_cases_have_the_ids_the_rdra_diagram_gives_them() {
 
 #[test]
 fn every_event_diagram_of_every_sample_keeps_the_contract() {
-    let dir = scratch("diagram_contract_event");
     let mut drawn = 0;
     for root in roots() {
         let scopes: Vec<Option<String>> = std::iter::once(None)
             .chain(buc_ids(&root).into_iter().map(Some))
             .collect();
         for buc in scopes {
-            let text = diagram(&root, "event", buc.as_deref(), &dir.join("out"));
+            let text = diagram(&root, "event", buc.as_deref());
             let chart = parse_flowchart("event", &text)
                 .and_then(|chart| check_flowchart(&chart).map(|()| chart))
                 .unwrap_or_else(|error| panic!("{root} {buc:?}: {error}\n{text}"));
@@ -967,11 +988,9 @@ fn every_event_diagram_of_every_sample_keeps_the_contract() {
 
 #[test]
 fn an_event_diagram_node_has_the_id_the_rdra_diagram_gives_it() {
-    let dir = scratch("diagram_contract_event_ids");
     for root in roots() {
-        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
-        let event =
-            parse_flowchart("event", &diagram(&root, "event", None, &dir.join("e"))).unwrap();
+        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None)).unwrap();
+        let event = parse_flowchart("event", &diagram(&root, "event", None)).unwrap();
         for (id, kind) in &event.nodes {
             assert_eq!(rdra.nodes.get(id), Some(kind), "{root}: {id}");
         }
@@ -983,7 +1002,6 @@ fn an_event_diagram_node_has_the_id_the_rdra_diagram_gives_it() {
 
 #[test]
 fn every_usecase_diagram_of_every_sample_keeps_the_contract() {
-    let dir = scratch("diagram_contract_usecase");
     let mut derived = 0;
     for root in roots() {
         let mut scopes = scopes(&root);
@@ -995,7 +1013,7 @@ fn every_usecase_diagram_of_every_sample_keeps_the_contract() {
         );
         for scope in scopes {
             let args: Vec<&str> = scope.iter().map(String::as_str).collect();
-            let text = diagram_with(&root, "usecase", &args, &dir.join("out"));
+            let text = diagram_with(&root, "usecase", &args);
             let chart = checked("usecase", &text, &format!("{root} {scope:?}"));
             for (from, label, to) in &chart.edges {
                 let usecase_end = from.starts_with("usecase__") || to.starts_with("usecase__");
@@ -1020,11 +1038,9 @@ fn every_usecase_diagram_of_every_sample_keeps_the_contract() {
 
 #[test]
 fn a_usecase_diagram_draws_what_the_rdra_diagram_declares() {
-    let dir = scratch("diagram_contract_usecase_ids");
     for root in roots() {
-        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
-        let usecase =
-            parse_flowchart("usecase", &diagram(&root, "usecase", None, &dir.join("u"))).unwrap();
+        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None)).unwrap();
+        let usecase = parse_flowchart("usecase", &diagram(&root, "usecase", None)).unwrap();
         for (id, kind) in &usecase.nodes {
             assert_eq!(rdra.nodes.get(id), Some(kind), "{root}: {id}");
         }
@@ -1038,7 +1054,6 @@ fn a_usecase_diagram_draws_what_the_rdra_diagram_declares() {
 
 #[test]
 fn every_robustness_diagram_of_every_sample_keeps_the_contract_and_the_grammar() {
-    let dir = scratch("diagram_contract_robustness");
     let (mut edges, mut timers) = (0, 0);
     for root in roots() {
         let mut scopes = scopes(&root);
@@ -1050,7 +1065,7 @@ fn every_robustness_diagram_of_every_sample_keeps_the_contract_and_the_grammar()
         );
         for scope in scopes {
             let args: Vec<&str> = scope.iter().map(String::as_str).collect();
-            let text = diagram_with(&root, "robustness", &args, &dir.join("out"));
+            let text = diagram_with(&root, "robustness", &args);
             let chart = checked("robustness", &text, &format!("{root} {scope:?}"));
             let kind = |id: &String| chart.nodes[id].as_str();
             let control = |id: &String| matches!(kind(id), "api" | "usecase");
@@ -1170,17 +1185,11 @@ fn parse_sequence(text: &str, scope: &str) -> Result<Vec<String>, String> {
 
 #[test]
 fn every_sequence_diagram_of_every_sample_keeps_the_contract() {
-    let dir = scratch("diagram_contract_sequence");
     let mut drawn = 0;
     for root in roots() {
-        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
+        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None)).unwrap();
         for usecase in ids(&root, "usecase").into_iter().take(4) {
-            let text = diagram_with(
-                &root,
-                "sequence",
-                &["--usecase", &usecase],
-                &dir.join("out"),
-            );
+            let text = diagram_with(&root, "sequence", &["--usecase", &usecase]);
             let participants = parse_sequence(&text, &format!("usecase:{usecase}"))
                 .unwrap_or_else(|why| panic!("{root} {usecase}: {why}\n{text}"));
             for id in &participants {
@@ -1220,21 +1229,14 @@ fn a_sequence_diagram_needs_exactly_one_use_case() {
 /// in one diagram that keeps the sequence grammar and draws only nodes the rdra diagram has.
 #[test]
 fn a_sequence_diagram_of_a_buc_plays_its_use_cases_in_one_diagram() {
-    let dir = scratch("diagram_contract_sequence_buc");
     let mut played = 0;
     for root in roots() {
-        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
+        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None)).unwrap();
         for buc in buc_ids(&root).into_iter().take(2) {
-            let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
-                .current_dir(repo())
-                .args(["diagram", &root, "--kind", "sequence", "--buc", &buc])
-                .output()
-                .unwrap();
             // A BUC without use cases has no sequence to draw.
-            if !output.status.success() {
+            let Ok(text) = session(&root).diagram(&["--kind", "sequence", "--buc", &buc]) else {
                 continue;
-            }
-            let text = String::from_utf8_lossy(&output.stdout).into_owned();
+            };
             let participants = parse_sequence(&text, &format!("buc:{buc}"))
                 .unwrap_or_else(|why| panic!("{root} {buc}: {why}\n{text}"));
             for id in &participants {
@@ -1278,12 +1280,11 @@ fn the_contract_check_rejects_a_misplaced_derived_line() {
 
 #[test]
 fn every_business_diagram_of_every_sample_keeps_the_contract() {
-    let dir = scratch("diagram_contract_business");
     let mut drawn = 0;
     for root in roots() {
         for scope in scopes(&root) {
             let args: Vec<&str> = scope.iter().map(String::as_str).collect();
-            let text = diagram_with(&root, "business", &args, &dir.join("out"));
+            let text = diagram_with(&root, "business", &args);
             let chart = checked("business", &text, &format!("{root} {scope:?}"));
             // A business flow: businesses holding BUCs, and no actor, external system, or
             // layer.
@@ -1331,10 +1332,9 @@ fn every_business_diagram_of_every_sample_keeps_the_contract() {
 
 #[test]
 fn a_business_diagram_draws_what_the_rdra_diagram_declares() {
-    let dir = scratch("diagram_contract_business_ids");
     for root in roots() {
-        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
-        let text = diagram(&root, "business", None, &dir.join("b"));
+        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None)).unwrap();
+        let text = diagram(&root, "business", None);
         let business = parse_flowchart("business", &text).unwrap();
         for (id, kind) in &business.nodes {
             assert_eq!(rdra.nodes.get(id), Some(kind), "{root}: {id}");
@@ -1366,8 +1366,7 @@ fn a_business_diagram_draws_what_the_rdra_diagram_declares() {
 
 #[test]
 fn clinic_ops_business_flow_has_its_eight_hand_offs() {
-    let dir = scratch("diagram_contract_business_clinic_ops");
-    let text = diagram("samples/clinic-ops", "business", None, &dir.join("b"));
+    let text = diagram("samples/clinic-ops", "business", None);
     let chart = parse_flowchart("business", &text).unwrap();
     let handoffs = chart
         .edges
@@ -1413,12 +1412,11 @@ fn an_element_subgraph_is_a_node_of_its_kind() {
 
 #[test]
 fn every_information_diagram_of_every_sample_keeps_the_contract() {
-    let dir = scratch("diagram_contract_information");
     let mut drawn = 0;
     for root in roots() {
         for scope in scopes(&root) {
             let args: Vec<&str> = scope.iter().map(String::as_str).collect();
-            let text = diagram_with(&root, "information", &args, &dir.join("out"));
+            let text = diagram_with(&root, "information", &args);
             let chart = checked("information", &text, &format!("{root} {scope:?}"));
             for (from, label, to) in &chart.edges {
                 let fits = match label.as_str() {
@@ -1461,17 +1459,13 @@ fn er_relates(text: &str) -> BTreeSet<(String, String, String)> {
 
 #[test]
 fn an_information_diagram_draws_the_relates_of_the_er_diagram() {
-    let dir = scratch("diagram_contract_information_er");
     let mut relates = 0;
     for root in roots() {
         for scope in scopes(&root) {
             let args: Vec<&str> = scope.iter().map(String::as_str).collect();
-            let info = parse_flowchart(
-                "information",
-                &diagram_with(&root, "information", &args, &dir.join("i")),
-            )
-            .unwrap();
-            let er = er_relates(&diagram_with(&root, "er", &args, &dir.join("e")));
+            let info =
+                parse_flowchart("information", &diagram_with(&root, "information", &args)).unwrap();
+            let er = er_relates(&diagram_with(&root, "er", &args));
             let drawn: BTreeSet<(String, String, String)> = info
                 .edges
                 .iter()
@@ -1498,15 +1492,10 @@ fn an_information_diagram_draws_the_relates_of_the_er_diagram() {
 
 #[test]
 fn an_information_diagram_node_has_the_id_the_rdra_and_state_diagrams_give_it() {
-    let dir = scratch("diagram_contract_information_ids");
     for root in lifecycle_roots() {
-        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
-        let state = parse_state(&diagram(&root, "state", None, &dir.join("s"))).unwrap();
-        let info = parse_flowchart(
-            "information",
-            &diagram(&root, "information", None, &dir.join("i")),
-        )
-        .unwrap();
+        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None)).unwrap();
+        let state = parse_state(&diagram(&root, "state", None)).unwrap();
+        let info = parse_flowchart("information", &diagram(&root, "information", None)).unwrap();
         let state_models: BTreeSet<&String> = state.models.iter().map(|(id, _)| id).collect();
         let info_models: BTreeSet<&String> = info
             .nodes
@@ -1530,12 +1519,11 @@ fn an_information_diagram_node_has_the_id_the_rdra_and_state_diagrams_give_it() 
 
 #[test]
 fn every_condition_diagram_of_every_sample_keeps_the_contract() {
-    let dir = scratch("diagram_contract_condition");
     let (mut derived, mut values) = (0, 0);
     for root in roots() {
         for scope in scopes(&root) {
             let args: Vec<&str> = scope.iter().map(String::as_str).collect();
-            let text = diagram_with(&root, "condition", &args, &dir.join("out"));
+            let text = diagram_with(&root, "condition", &args);
             let chart = checked("condition", &text, &format!("{root} {scope:?}"));
             for (from, label, to) in &chart.edges {
                 let fits = match label.as_str() {
@@ -1572,7 +1560,6 @@ fn every_condition_diagram_of_every_sample_keeps_the_contract() {
 /// guards: the same edges in every kind.
 #[test]
 fn a_when_guard_is_a_labelled_derived_edge_wherever_applies_to_is_drawn() {
-    let dir = scratch("diagram_contract_when");
     let mut guards = 0;
     for root in roots() {
         let mut drawn: Vec<BTreeSet<(String, String, String)>> = Vec::new();
@@ -1582,7 +1569,7 @@ fn a_when_guard_is_a_labelled_derived_edge_wherever_applies_to_is_drawn() {
                 None,
                 "{kind}: a condition to a use case is `applies_to` or `when`"
             );
-            let text = diagram(&root, kind, None, &dir.join(kind));
+            let text = diagram(&root, kind, None);
             let chart = checked(kind, &text, &format!("{root} {kind}"));
             let when: BTreeSet<_> = chart
                 .edges
@@ -1638,15 +1625,10 @@ fn the_contract_check_rejects_a_misplaced_value() {
 
 #[test]
 fn a_condition_diagram_node_has_the_id_the_rdra_and_state_diagrams_give_it() {
-    let dir = scratch("diagram_contract_condition_ids");
     for root in lifecycle_roots() {
-        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
-        let state = parse_state(&diagram(&root, "state", None, &dir.join("s"))).unwrap();
-        let condition = parse_flowchart(
-            "condition",
-            &diagram(&root, "condition", None, &dir.join("c")),
-        )
-        .unwrap();
+        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None)).unwrap();
+        let state = parse_state(&diagram(&root, "state", None)).unwrap();
+        let condition = parse_flowchart("condition", &diagram(&root, "condition", None)).unwrap();
         for (id, kind) in &condition.nodes {
             match kind.as_str() {
                 "statemodel" => assert!(
@@ -1746,12 +1728,11 @@ fn check_flow(chart: &Flowchart) -> Result<(), String> {
 
 #[test]
 fn every_flow_diagram_of_every_sample_keeps_the_contract() {
-    let dir = scratch("diagram_contract_flow");
     let (mut drawn, mut orders) = (0, BTreeSet::new());
     for root in roots() {
         for scope in scopes(&root) {
             let args: Vec<&str> = scope.iter().map(String::as_str).collect();
-            let text = diagram_with(&root, "flow", &args, &dir.join("out"));
+            let text = diagram_with(&root, "flow", &args);
             let chart = checked("flow", &text, &format!("{root} {scope:?}"));
             check_flow(&chart).unwrap_or_else(|error| panic!("{root} {scope:?}: {error}\n{text}"));
             drawn += usize::from(chart.nodes.values().any(|kind| kind == "flow"));
@@ -1781,7 +1762,7 @@ fn a_flow_diagram_with_lanes_keeps_the_contract() {
     let model = dir.join("lanes.rdra");
     std::fs::write(&model, LANES).unwrap();
     let root = model.to_str().unwrap();
-    let text = diagram(root, "flow", None, &dir.join("out"));
+    let text = diagram(root, "flow", None);
     let chart = checked("flow", &text, "lanes");
     check_flow(&chart).unwrap_or_else(|error| panic!("{error}\n{text}"));
     let lanes: BTreeSet<&str> = chart
@@ -1799,7 +1780,7 @@ fn a_flow_diagram_with_lanes_keeps_the_contract() {
         text.contains("    subgraph lane__ShipFlow__Clerk[\"Clerk\"]\n      %% lane lane__ShipFlow__Clerk: actor__Clerk\n"),
         "{text}"
     );
-    let rdra = parse_flowchart("rdra", &diagram(root, "rdra", None, &dir.join("r"))).unwrap();
+    let rdra = parse_flowchart("rdra", &diagram(root, "rdra", None)).unwrap();
     for edge in &chart.edges {
         assert!(rdra.edges.contains(edge), "{edge:?} not in rdra");
     }
@@ -1812,10 +1793,9 @@ fn a_flow_diagram_with_lanes_keeps_the_contract() {
 
 #[test]
 fn a_flow_diagram_draws_what_the_rdra_diagram_declares() {
-    let dir = scratch("diagram_contract_flow_ids");
     for root in roots() {
-        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
-        let flow = parse_flowchart("flow", &diagram(&root, "flow", None, &dir.join("f"))).unwrap();
+        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None)).unwrap();
+        let flow = parse_flowchart("flow", &diagram(&root, "flow", None)).unwrap();
         for (id, kind) in flow.nodes.iter().filter(|(_, kind)| *kind != "lane") {
             assert_eq!(rdra.nodes.get(id), Some(kind), "{root}: {id}");
         }
@@ -1837,12 +1817,11 @@ fn derived_vias(text: &str, from: &str, to: &str) -> Vec<String> {
 
 #[test]
 fn every_context_diagram_of_every_sample_keeps_the_contract() {
-    let dir = scratch("diagram_contract_context");
     let mut edges = 0;
     for root in roots() {
         for scope in scopes(&root) {
             let args: Vec<&str> = scope.iter().map(String::as_str).collect();
-            let text = diagram_with(&root, "context", &args, &dir.join("out"));
+            let text = diagram_with(&root, "context", &args);
             let chart = checked("context", &text, &format!("{root} {scope:?}"));
             for kind in chart.nodes.values() {
                 assert!(
@@ -1894,10 +1873,9 @@ fn every_context_diagram_of_every_sample_keeps_the_contract() {
 
 #[test]
 fn a_context_diagram_node_has_the_id_the_rdra_diagram_gives_it() {
-    let dir = scratch("diagram_contract_context_ids");
     for root in roots() {
-        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
-        let text = diagram(&root, "context", None, &dir.join("c"));
+        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None)).unwrap();
+        let text = diagram(&root, "context", None);
         let context = parse_flowchart("context", &text).unwrap();
         for (id, kind) in &context.nodes {
             if id == "system__Model" {
@@ -1944,13 +1922,12 @@ fn apart_requirements(text: &str) -> BTreeSet<String> {
 
 #[test]
 fn every_requirement_diagram_of_every_sample_keeps_the_contract() {
-    let dir = scratch("diagram_contract_requirement");
     let mut labels = BTreeSet::new();
     let mut apart_seen = BTreeSet::new();
     for root in roots() {
         for scope in scopes(&root) {
             let args: Vec<&str> = scope.iter().map(String::as_str).collect();
-            let text = diagram_with(&root, "requirement", &args, &dir.join("out"));
+            let text = diagram_with(&root, "requirement", &args);
             let chart = checked("requirement", &text, &format!("{root} {scope:?}"));
             // A value tree: goals, requirements, and BUCs, and no layer subgraph.
             for kind in chart.nodes.values() {
@@ -2021,14 +1998,10 @@ fn every_requirement_diagram_of_every_sample_keeps_the_contract() {
 
 #[test]
 fn a_requirement_diagram_draws_what_the_rdra_diagram_declares() {
-    let dir = scratch("diagram_contract_requirement_ids");
     for root in roots() {
-        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
-        let requirement = parse_flowchart(
-            "requirement",
-            &diagram(&root, "requirement", None, &dir.join("q")),
-        )
-        .unwrap();
+        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None)).unwrap();
+        let requirement =
+            parse_flowchart("requirement", &diagram(&root, "requirement", None)).unwrap();
         for (id, kind) in &requirement.nodes {
             // The out-of-scope subgraph is no element; its members are.
             assert_eq!(rdra.nodes.get(id), Some(kind), "{root}: {id}");
@@ -2059,12 +2032,11 @@ fn arrow_of<'a>(chart: &'a Flowchart, edge: &(String, String, String)) -> &'a st
 
 #[test]
 fn every_screen_diagram_of_every_sample_keeps_the_contract() {
-    let dir = scratch("diagram_contract_screen");
     let (mut solid, mut dashed) = (0, 0);
     for root in roots() {
         for scope in scopes(&root) {
             let args: Vec<&str> = scope.iter().map(String::as_str).collect();
-            let text = diagram_with(&root, "screen", &args, &dir.join("out"));
+            let text = diagram_with(&root, "screen", &args);
             let chart = checked("screen", &text, &format!("{root} {scope:?}"));
             assert!(
                 chart.nodes.values().all(|kind| kind == "screen"),
@@ -2094,11 +2066,9 @@ fn every_screen_diagram_of_every_sample_keeps_the_contract() {
 
 #[test]
 fn a_screen_diagram_draws_the_screens_and_navigates_of_the_rdra_diagram() {
-    let dir = scratch("diagram_contract_screen_ids");
     for root in roots() {
-        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
-        let screen =
-            parse_flowchart("screen", &diagram(&root, "screen", None, &dir.join("s"))).unwrap();
+        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None)).unwrap();
+        let screen = parse_flowchart("screen", &diagram(&root, "screen", None)).unwrap();
         let rdra_screens: BTreeSet<&String> = rdra
             .nodes
             .iter()
@@ -2143,11 +2113,9 @@ fn lint_subjects(root: &str, rule: &str) -> BTreeSet<String> {
 
 #[test]
 fn lint_reports_each_screen_the_screen_diagram_leaves_unconnected() {
-    let dir = scratch("diagram_contract_screen_lint");
     let mut reported = 0;
     for root in roots() {
-        let chart =
-            parse_flowchart("screen", &diagram(&root, "screen", None, &dir.join("s"))).unwrap();
+        let chart = parse_flowchart("screen", &diagram(&root, "screen", None)).unwrap();
         let unconnected: BTreeSet<String> = chart
             .nodes
             .keys()
@@ -2168,8 +2136,7 @@ fn lint_reports_each_screen_the_screen_diagram_leaves_unconnected() {
 
 #[test]
 fn clinic_ops_screen_transitions_cover_check_in_encounter_and_payment() {
-    let dir = scratch("diagram_contract_screen_clinic_ops");
-    let text = diagram("samples/clinic-ops", "screen", None, &dir.join("s"));
+    let text = diagram("samples/clinic-ops", "screen", None);
     let chart = parse_flowchart("screen", &text).unwrap();
     for (from, label, to) in [
         ("CheckInScreen", "受付（初診・再診）", "EligibilityScreen"),
@@ -2189,4 +2156,51 @@ fn clinic_ops_screen_transitions_cover_check_in_encounter_and_payment() {
         assert_eq!(arrow_of(&chart, &edge), "-->", "{edge:?}");
     }
     assert!(!chart.derived.is_empty(), "{text}");
+}
+
+/// The tests above draw in process, from one load of each sample. The CLI, run from the
+/// repository root, writes the same text to `--out` and prints it to stdout: in every kind,
+/// and in each scope the tests above draw a kind in.
+#[test]
+fn the_cli_writes_what_the_library_draws() {
+    let dir = scratch("diagram_contract_cli");
+    let root = "samples/patent-ops";
+    let buc = buc_ids(root)[0].clone();
+    let usecase = ids(root, "usecase")[0].clone();
+    let entity = indexed_entities(&parse_state(&diagram(root, "state", None)).unwrap())[0].clone();
+    let whole: &[&str] = &[];
+    let (buc, usecase, entity) = (
+        &["--buc", buc.as_str()][..],
+        &["--usecase", usecase.as_str()][..],
+        &["--entity", entity.as_str()][..],
+    );
+    let cases = [
+        ("rdra", whole),
+        ("rdra", buc),
+        ("context", buc),
+        ("requirement", buc),
+        ("business", buc),
+        ("usecase", usecase),
+        ("robustness", buc),
+        ("sequence", usecase),
+        ("sequence", buc),
+        ("information", buc),
+        ("condition", buc),
+        ("flow", buc),
+        ("screen", buc),
+        ("er", buc),
+        ("state", whole),
+        ("state", buc),
+        ("state", entity),
+        ("event", buc),
+    ];
+    for (kind, args) in cases {
+        let drawn = diagram_with(root, kind, args);
+        let written = cli_diagram(root, kind, args, Some(&dir.join("out")));
+        assert_eq!(written, drawn, "{kind} {args:?}: --out");
+    }
+    for (kind, args) in [("sequence", buc), ("rdra", whole)] {
+        let printed = cli_diagram(root, kind, args, None);
+        assert_eq!(printed, diagram_with(root, kind, args), "{kind} {args:?}");
+    }
 }

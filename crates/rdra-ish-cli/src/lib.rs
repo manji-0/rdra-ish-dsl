@@ -14,6 +14,7 @@ mod memory;
 mod next;
 pub mod property_cone;
 mod prove;
+mod session;
 mod state_findings;
 mod states;
 pub mod tlc_env;
@@ -25,13 +26,14 @@ use csv_cmd::run_csv;
 use diagram::run_diagram;
 use export::run_export;
 use fmt_cmd::run_fmt;
-use lifecycle_gate::{gate, Lifecycle};
-use list_output::{format_lint_issues, format_rules, format_transitions, list_elements};
+use list_output::format_lint_issues;
 use load::{deny_deprecated, eprint_diagnostic, load_clean};
-use memory::{charged, generator_caps, memory_limit, Budgeted};
+use memory::{charged, memory_limit, Budgeted};
 use rdra_ish_core::lifecycle::{FindingTally, Severity};
 use rdra_ish_core::{collect_rdra_files, load_project, Project};
 use rdra_ish_core::{lint_issues, LintSeverity, RdraError};
+#[doc(hidden)]
+pub use session::Session;
 use state_findings::state_findings;
 use states::run_states;
 
@@ -171,18 +173,7 @@ pub fn run() -> Result<()> {
                     )
                     .exit();
             }
-            let (program, model, manifest) = load_clean(&inputs)?;
-            gate(
-                &Lifecycle::new(&program, &model, generator_caps(manifest.as_ref())),
-                kind.reads(),
-            )?;
-
-            let output = match kind {
-                ListKind::Rule => format_rules(&model, Some(&program), &format)?,
-                ListKind::Transition => format_transitions(&model, Some(&program), &format)?,
-                _ => list_elements(&model, &kind, &format)?,
-            };
-            print!("{}", output);
+            print!("{}", Session::load(&inputs)?.list_text(&kind, &format)?);
         }
 
         Commands::Lint { inputs, format } => {
