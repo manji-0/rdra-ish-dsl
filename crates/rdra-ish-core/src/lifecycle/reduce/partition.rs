@@ -257,7 +257,10 @@ impl Classes {
         // The quotient reads the graph alone, so the run evaluates no check.
         let (run, seen) = {
             let _label = crate::perf::label("S");
-            watch(|| sub.clone().run_checking(caps, Checks::none()))
+            watch(|| {
+                sub.clone()
+                    .run_checking(caps.without_views(), Checks::none())
+            })
         };
         if !run.complete {
             return (Classified::Nothing, Ended::stopped(clean, seen, &run));

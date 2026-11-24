@@ -100,7 +100,8 @@ pub struct WithTlc {
 pub struct Budget {
     /// Seconds a temporal property's whole-model run gets.
     pub temporal: Duration,
-    /// `--max-patterns`; default `Caps::VERIFY`'s.
+    /// `--max-patterns`; default `Caps::VERIFY`'s. It caps a run that builds an entity
+    /// view, and `verify` builds none (#251), so it stops none of its runs.
     pub max_patterns: Option<usize>,
     /// `--max-states`: the state cap of every BFS run, the whole-model one and TLC's included.
     /// Without it BFS has no state cap; TLC's whole-model run keeps `WHOLE_MODEL_STATE_CAP`.
@@ -175,11 +176,13 @@ pub fn run(
     } else {
         format!("{}; BFS has {} of it", Budgeted::Verify.raise(), memory.bfs)
     };
-    // No `--max-states`: no state cap, and the memory limit stops a cone.
+    // No `--max-states`: no state cap, and the memory limit stops a cone. No run of `verify`
+    // reads an entity view, so none gathers the patterns the pattern cap counts (#251).
     let caps = Caps::new(
         max_patterns.unwrap_or(Caps::VERIFY.patterns),
         max_states.unwrap_or(usize::MAX),
     )
+    .without_views()
     .charged_to(MemoryPool::share_of(
         memory.limit,
         memory.bfs,

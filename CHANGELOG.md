@@ -353,6 +353,17 @@
 
 ### Changed
 
+- `--max-patterns` caps only a run that builds an entity view (#251, #296): the cone of an
+  entity view in `check` and `states`. Only those runs gather view patterns now. A cone of
+  invariants, `after` assertions or `can_reach` alone, a run that quotients a sub-lifecycle,
+  and every run of `verify` gather none, so the pattern cap no longer stops them: a cone that
+  stopped there is now explored to its end, `--max-states` or `--memory`, and a sub-lifecycle
+  that failed to quotient at the cap can now quotient (the quotient cache no longer keys on
+  the pattern cap). `verify` still takes
+  `--max-patterns`, which stops none of its runs, and its run lines say `stopped at the state
+  cap (--max-states) or the memory limit`. The output at every sample's and corpus case's
+  header flags is unchanged. At `RDRA_JOBS=1`, `verify` retires 12% fewer instructions on
+  `patent-ops` and 5% fewer on `insurance-claim-ops`.
 - `verify` explores a cone once when its entity, safety and property passes reduce it to the
   same system (#209, #296). The pass that runs such a system first runs it with every check
   and to the end, and the later passes decide their cones on that run. Two cones share a run

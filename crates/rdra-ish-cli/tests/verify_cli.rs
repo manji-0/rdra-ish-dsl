@@ -594,7 +594,7 @@ fn max_states_raises_the_cap_of_each_cone() {
         "the header names the cap in force: {stdout}"
     );
     assert!(
-        stdout.contains("Cone_Forbidden_Order_0 [Forbidden_Order_0, Inv_Order_0, AfterAssert_DeliverOrder_0]: not decided (10 states, stopped at the state or pattern cap (--max-states, --max-patterns) or the memory limit)"),
+        stdout.contains("Cone_Forbidden_Order_0 [Forbidden_Order_0, Inv_Order_0, AfterAssert_DeliverOrder_0]: not decided (10 states, stopped at the state cap (--max-states) or the memory limit)"),
         "{stdout}"
     );
     let stderr = String::from_utf8_lossy(&small.stderr);
@@ -666,29 +666,22 @@ transitions(ReceiveParcel, Parcel.status, sent -> received)
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// `--max-patterns` caps the distinct patterns per entity: `order.rdra` has five, so a cap of
-/// 3 leaves its findings undecided, and the default 256 decides them.
+/// `--max-patterns` caps a run that builds an entity view (#251, #296), and no run of
+/// `verify` builds one: `order.rdra`'s Order has five patterns, and a cap of 3 stops nothing,
+/// so `verify` decides what it decides at the default. `check` builds the views, and the
+/// cap stops it there (`check_cli`'s `PatternCapReached` test).
 #[test]
-fn max_patterns_caps_the_patterns_of_each_entity() {
+fn max_patterns_stops_no_run_of_verify() {
     let tmp = scratch("verify_cli_max_patterns");
     let sample = repo().join("samples/formal-verification/order.rdra");
     let sample = sample.to_str().unwrap();
     let capped = verify(&repo(), &tmp, &[sample, "--max-patterns", "3"]);
-    let stdout = String::from_utf8_lossy(&capped.stdout);
-    assert!(
-        stdout.contains("state Order.status = shipped is not decided: the Order cone stopped at the pattern cap (3 patterns)"),
-        "{stdout}"
-    );
-    let stderr = String::from_utf8_lossy(&capped.stderr);
-    assert!(
-        stderr.lines().any(|l| l == "result: not decided"),
-        "{stderr}"
-    );
-
     let default = verify(&repo(), &tmp, &[sample]);
-    let stdout = String::from_utf8_lossy(&default.stdout);
+    let stdout = String::from_utf8_lossy(&capped.stdout);
     assert!(!stdout.contains("pattern cap ("), "{stdout}");
     assert!(stdout.contains("\nresult: ok\n"), "{stdout}");
+    assert_eq!(capped.stdout, default.stdout);
+    assert_eq!(capped.status.code(), default.status.code());
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
