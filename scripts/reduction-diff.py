@@ -18,6 +18,7 @@ is recorded. Such a seed is listed under `disagreed`, its model copied to
 `<work>/disagreed/seed<N>.rdra`, whatever the reduced and unreduced runs compare to.
 
   python3 -I scripts/reduction-diff.py run BIN --seeds 0:40 [--jobs N] [--fail-on-timeout] [--with-tlc] [--counted]
+  (--seeds @FILE reads the seeds and ranges from FILE, as scripts/reduction-diff-pr-seeds.txt)
   (--timeout S and --work DIR go before the subcommand)
   python3 -I scripts/reduction-diff.py gen SEED [--counted]
 
@@ -483,7 +484,11 @@ def compare_seed(args, seed):
 
 
 def seed_list(spec):
-    """`A:B` (B excluded), or seeds and ranges joined by commas."""
+    """`A:B` (B excluded), or seeds and ranges joined by commas; `@FILE` reads the same from
+    FILE, with commas or newlines between the parts and `#` starting a comment."""
+    if spec.startswith("@"):
+        lines = Path(spec[1:]).read_text().splitlines()
+        spec = ",".join(p for l in lines for p in l.split("#")[0].replace(",", " ").split())
     seeds = []
     for part in spec.split(","):
         a, _, b = part.partition(":")
@@ -606,7 +611,7 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("run")
     p.add_argument("bin")
-    p.add_argument("--seeds", required=True, help="A:B (B excluded), or seeds and ranges joined by commas")
+    p.add_argument("--seeds", required=True, help="A:B (B excluded), or seeds and ranges joined by commas; @FILE reads them from FILE")
     p.add_argument("--fail-on-timeout", action="store_true", help="exit 1 when a seed times out")
     p.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) // 2))
     p.add_argument("--with-tlc", action="store_true", help="run TLC beside the native checker and record where they differ")

@@ -1221,9 +1221,10 @@ to add a case.
   counterexample that fails its own check) or, with `--with-tlc`, which also runs TLC on both
   sides, `error[EngineDisagreement]` is listed under `disagreed`. `selfcheck` runs the comparison on saved output pairs under
   `scripts/reduction-diff-fixtures` and checks each gets the status its `expect` file names.
-  CI runs `selfcheck`, then a fixed set of quick seeds in formal-verify with
-  `--fail-on-timeout --with-tlc`, so a seed that slows down fails the job rather than leaving
-  the set; larger sweeps run locally under `nix develop`:
+  CI runs `selfcheck`, then seeds in formal-verify with `--fail-on-timeout`, so a seed that
+  slows down fails the job rather than leaving the set: on a pull request the 522 quick seeds
+  `scripts/reduction-diff-pr-seeds.txt` lists, without TLC, and on main's runs 45 quick seeds
+  with `--with-tlc` (#305). Larger sweeps run locally under `nix develop`:
 
   ```sh
   cargo build --release -p rdra-ish-cli
@@ -1503,8 +1504,15 @@ Each sample root in `samples.txt` states what `check` and `verify` must report i
 on every root, with no `tlc` or `tlc2` on `PATH` and no `RDRA_TLC_JAR`, and fails when a run
 differs from its header. `scripts/verify-samples.sh --with-tlc <rdra-ish binary>` runs every
 `verify` again with `--with-tlc`: each run must match the same header, print
-`tlc_result:`, and report no engine disagreement. CI runs both on the release binary in the
-`formal-verify` job.
+`tlc_result:`, and report no engine disagreement. With `--tlc-roots FILE` as well, TLC runs
+only on the roots FILE lists and on every header line that carries flags; the other `verify`
+runs are native alone and print `(native)` after their label.
+
+CI runs the script twice. The `shadow` job runs it with no JVM on a `shadow` build. The
+`formal-verify` job runs it on the release binary with `--with-tlc --tlc-roots
+scripts/tlc-roots.txt`, which lists the roots with a cone in `engine_equivalence`'s
+`VERIFY_FALLBACK`. That test compares every other root's cones with TLC's state graph at
+both its bounds (#305).
 
 The script reads the header from the root's first `.rdra` file in load order, which
 `rdra-ish files <root>` prints first. An `// expect` line in any other file of the root
