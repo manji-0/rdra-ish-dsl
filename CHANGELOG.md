@@ -634,6 +634,14 @@
 
 ### Fixed
 
+- `verify --with-tlc` names the cause when TLC 1.7.x fails reading a trace back on JDK 21
+  or later (#314). With `--tlc-jar`, `RDRA_TLC_JAR`, or a `tlc` that runs on such a JVM, a
+  `-continue` run that prints many traces stopped with an `ArrayIndexOutOfBoundsException`,
+  and `verify` reported a `counterexample` for what it had printed before, or a
+  `tool_error` with nothing that named the cause. `verify` now warns once when a run's
+  banner shows TLC 1.7.x on JDK 21 or later. A run that stops on the exception is a
+  `tool_error` whose report starts with a hint to run TLC on JDK 17 or earlier, or to use
+  TLC 1.8.0.
 - `codegen` escapes a name that is a keyword of the target language (#265). A use case
   named `Return` printed `pub fn return(...)` in Rust and `export function return(...)` in
   TypeScript, and neither compiled. Rust now prints a raw identifier (`r#return`), or a

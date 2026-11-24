@@ -1,4 +1,5 @@
 use crate::tlc_env::Jit;
+use crate::tlc_output::Banner;
 use anyhow::{bail, Result};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -9,6 +10,8 @@ pub(crate) struct Tlc {
     launch: Launch,
     /// Whether the JVM starts with `Jit::C1`'s flags; asked on the first run that wants them.
     c1: OnceLock<bool>,
+    /// Set once `verify` warned that this TLC fails reading traces back on its JVM (#314).
+    readback_warned: OnceLock<()>,
 }
 
 /// A `tlc` / `tlc2` launcher on PATH, or `java -cp <jar> tlc2.TLC` when `--tlc-jar` or
@@ -59,7 +62,18 @@ impl Tlc {
         Ok(Tlc {
             launch,
             c1: OnceLock::new(),
+            readback_warned: OnceLock::new(),
         })
+    }
+
+    /// Warns once per `verify` when a run's banner shows TLC 1.7.x on JDK 21 or later, which
+    /// stops a run that prints many traces (#314). The TLC and the JVM are whatever the
+    /// launcher or `java` on PATH gives, so a run's own banner is what names them.
+    pub(super) fn read_banner(&self, banner: &Banner) {
+        if let Some(warning) = banner.readback_warning() {
+            self.readback_warned
+                .get_or_init(|| eprintln!("warning: {warning}"));
+        }
     }
 
     pub(super) fn command(&self) -> Command {
