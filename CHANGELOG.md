@@ -384,15 +384,16 @@
   per state fall from 159.4 to 115.7 on `patent-ops`, 288.7 to 187.7 on `food-permit-ops`
   (`view BusinessPermit`), 179.9 to 127.4 on `clinic-ops`, 212.5 to 161.2 on
   `insurance-claim-ops` and 234.6 to 120.3 on `oidc-auth --instance-count 1`, and peak
-  RSS falls by 14% to 23% (1,079 MB to 835 MB on `food-permit-ops`). `--memory` charges
+  RSS falls by 13% to 23% (1,085 MB to 831 MB on `food-permit-ops`). `--memory` charges
   these sizes, so a run that stopped at the limit now stops later: the stop point is still
   computed from the counts, and the same on every machine and thread count. For example
-  `check --memory 4KiB` on `flags.rdra` stops at 64 states where it stopped at 38. The
-  output of every run that completes is unchanged at every sample's and corpus case's
-  header flags. Reading the edges costs more instructions: at `RDRA_JOBS=1`, `verify`
-  retires 2% to 7% more (317.0 G to 328.7 G on `insurance-claim-ops`, 32.9 G to 34.6 G on
-  `patent-ops`); a `shadow` build compares every edge, parent and recorded `after` step
-  with the 12-byte list kept beside them.
+  `check --memory 4KiB` on `flags.rdra` stops at 64 states where it stopped at 38, and
+  `verify samples/patent-ops` completes its `OfficeAction` cones at `256MiB`. The output of
+  every run that completes is unchanged at every sample's and corpus case's header flags.
+  Reading an edge from three buffers costs instructions: at `RDRA_JOBS=1`, `verify`
+  retires 2% to 7% more (292.7 G to 304.1 G on `insurance-claim-ops`, 32.9 G to 34.6 G on
+  `patent-ops`, 90.4 G to 96.8 G on `food-permit-ops`). A `shadow` build compares every
+  edge, parent and recorded `after` step with the 12-byte list kept beside them.
 - Keys of the quotient cache that explore the same sub-lifecycle share its run of S (#296):
   keys that differ in what T observes, the inputs or the rises, or only in where their
   actions came from, partitioned one run each, which `verify` explored again per key. A
