@@ -280,7 +280,7 @@ pub(super) fn explored_properties(
             PropertyVerdict::Holds => "ok",
             PropertyVerdict::Violated(_) => "violated",
             PropertyVerdict::Undecided => {
-                "not decided: BFS stopped at the state or pattern cap (--max-states, --max-patterns) or the memory limit"
+                "not decided: BFS stopped at the state cap (--max-states) or the memory limit"
             }
         };
         println!("property {} (BFS on its cone): {said}", p.name);
@@ -421,7 +421,9 @@ impl BfsCone {
             BfsCone::Ran { states, end, .. } => {
                 let notes = match end {
                     RunEnd::Complete | RunEnd::ChecksFailed => Vec::new(),
-                    RunEnd::Capped => vec!["stopped at the state or pattern cap (--max-states, --max-patterns) or the memory limit".to_string()],
+                    RunEnd::Capped => vec![
+                        "stopped at the state cap (--max-states) or the memory limit".to_string(),
+                    ],
                 };
                 run_line(module, checks, verdict, Some(*states as u64), &notes)
             }

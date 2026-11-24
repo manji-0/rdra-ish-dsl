@@ -305,7 +305,7 @@ impl Native {
 
     /// A cone run stopped at the state cap or the memory limit before it decided.
     pub(super) fn capped(mut self) -> Native {
-        let why = "stopped at the state or pattern cap (--max-states, --max-patterns) or the memory limit".to_string();
+        let why = "stopped at the state cap (--max-states) or the memory limit".to_string();
         self.notes.push(why.clone());
         self.decision = Decision::Undecided { why, stop: None };
         self.cone_capped = true;

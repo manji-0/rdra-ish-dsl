@@ -478,7 +478,8 @@ not assign.
 
 `verify` also explores each entity's cone with BFS at the same bounds, with no state
 cap: `--memory` stops a cone, and `--max-states <N>` caps every BFS run (the `bounds:` line
-names the cap or says `no state cap`). The pattern cap is 256 per entity (`--max-patterns`). Each state of a
+names the cap or says `no state cap`). No run of `verify` builds an entity view, so
+`--max-patterns` stops none of them. Each state of a
 state model must have a witness there (see
 [state-derivation.md](./state-derivation.md#state-models-and-witnesses)). A `NoWitness`
 error fails `verify` even when every invariant and property holds: the run prints

@@ -72,6 +72,30 @@ fn enabled_bindings_are_the_bindings_whose_pre_guards_hold() {
     }
 }
 
+/// The pattern cap stops only a run that gathers views (#251, #296): at a cap of one pattern
+/// the run with views stops at `PatternCapReached`, and the run without views explores the
+/// same graph as an uncapped run, gathers no pattern, and says so (`gathered_views`).
+#[test]
+fn the_pattern_cap_stops_only_a_run_that_gathers_views() {
+    let ts = TransitionSystem::build(&model_from(SHOP), Bounds::VERIFY, &Scope::ALL).ts;
+    let capped = Caps::new(1, usize::MAX);
+    let with = ts.clone().run(capped);
+    assert!(!with.complete);
+    assert!(with.gathered_views());
+    assert!(with.diags.iter().any(|d| matches!(
+        d.diag,
+        crate::lifecycle::StateDiag::PatternCapReached { cap: 1, .. }
+    )));
+    let without = ts.clone().run(capped.without_views());
+    let whole = ts.clone().run(Caps::VERIFY);
+    assert!(without.complete && whole.complete);
+    assert!(!without.gathered_views());
+    assert!(without.views.iter().all(|v| v.patterns.is_empty()));
+    assert_eq!(without.states, whole.states);
+    assert_eq!(without.edges, whole.edges);
+    assert_eq!(without.diags, whole.diags);
+}
+
 /// A run with worker threads is the run on one thread: the same states, edges, and bindings in the
 /// same order, the same parents, findings, and views. A run a cap stops is cut at the same
 /// state.

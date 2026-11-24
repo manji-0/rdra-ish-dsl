@@ -251,6 +251,12 @@ impl TransitionSystem {
         // Each cone is explored on its own system, so the cones run side by side; the runs
         // come back in cone order, and each is what it is alone.
         let explore = |cone: &Cone, shared: &[Target], caps: Caps| {
+            // Only an entity target's view reads the patterns (`entity_views`), so a cone of
+            // other targets gathers none and the pattern cap does not stop it (#251).
+            let caps = match shared.iter().any(|t| matches!(t, Target::Entity(_))) {
+                true => caps,
+                false => caps.without_views(),
+            };
             // A reduction keeps what LTL reads, not `AG EF`: a `can_reach` cone stays whole.
             let reach = shared.iter().any(|t| matches!(t, Target::Reach(_)));
             let system = match reduce.filter(|_| !reach) {
