@@ -1,17 +1,18 @@
 //! Rules of one entity: its invariants, driven columns, min cards, unique keys and column
-//! sets, and cascade deletes.
+//! sets, and what deleting a key's parent asks of its children.
 
 use super::display::{local_display, local_displays};
 use super::{forbidden_premises, implies, premise, Binding};
-use crate::lifecycle::build::Builder;
+use crate::lifecycle::build::{ActionDraft, Builder};
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::types::{
-    Action, ActionOrigin, At, Birth, CmpOp, Domain, Effect, InvText, Invariant, ModelRef,
-    ParamRole, Pred, Premise, Rhs, Site, Term, Value, VarId, VarKind,
+    Action, ActionOrigin, At, Birth, CmpOp, Domain, Effect, Guard, GuardWhy, InvText, Invariant,
+    ModelRef, ParamRole, Pred, Premise, Rhs, Site, Term, Value, VarId, VarKind,
 };
 use crate::lifecycle::EntId;
 use crate::model::{
-    CmpRhs, CountBound, EntityCondition, EntityKey, Min, RefAction, UniqueSource, UseCaseKey,
+    CmpRhs, CountBound, EntityCondition, EntityKey, ForeignKey, Min, RefAction, UniqueSource,
+    UseCaseKey,
 };
 
 impl Builder<'_> {
@@ -123,6 +124,7 @@ impl Builder<'_> {
         self.min_cards();
         self.max_cards();
         self.cascade_deletes();
+        self.dangling_keys();
         self.driven_columns_written();
     }
 
@@ -226,6 +228,165 @@ impl Builder<'_> {
                     },
                 );
             }
+        }
+    }
+
+    /// Whether deleting a row of the key's parent removes the row in the database, where the
+    /// key can reject it. A parent with a `@soft_delete` column is deleted by an update that
+    /// marks the row, which no key rejects and after which its children still name a row.
+    fn hard_deleted_parent(&self, fk: &ForeignKey) -> bool {
+        !self.model.entities[fk.parent]
+            .columns
+            .iter()
+            .any(|c| c.is_soft_delete)
+    }
+
+    /// A `Restrict` guard per row the draft deletes and per key of that row's entity whose
+    /// database rejects the delete (`ForeignKey::delete_rejected`): no present child names the
+    /// row, apart from the children the same step deletes or moves off the key (`unlinks`,
+    /// `relinks`). A child outside the system (a published entity) has no owner var, so no
+    /// guard reads it.
+    pub(in crate::lifecycle::build) fn restrict_guards(&self, a: &mut ActionDraft) {
+        let model = self.model;
+        let deleted: Vec<u8> = a
+            .effects
+            .iter()
+            .filter_map(|eff| match eff {
+                Effect::Delete { param } => Some(*param),
+                _ => None,
+            })
+            .collect();
+        let entity = |p: u8| a.params[usize::from(p)].entity;
+        let mut guards = Vec::new();
+        for &p in &deleted {
+            for (id, fk) in model.foreign_keys() {
+                if self.ent_of.get(&fk.parent) != Some(&entity(p))
+                    || !fk.delete_rejected()
+                    || !self.hard_deleted_parent(fk)
+                {
+                    continue;
+                }
+                let Some(owner) = self.owner_var(id) else {
+                    continue;
+                };
+                let child = self.ent_of[&fk.child];
+                // The child at the binder, so a self-relate reads the parent at the param.
+                let names = Pred::Cmp(
+                    Term::Slot {
+                        var: owner,
+                        at: At::Bound(0),
+                    },
+                    CmpOp::Eq,
+                    Term::Index(At::Param(p)),
+                );
+                // A child the step moves to another value of the key, before the parent goes.
+                let moved = a.effects.iter().filter_map(|eff| match eff {
+                    Effect::Assign {
+                        var, param, rhs, ..
+                    } if *var == owner && *rhs != Rhs::Param(p) => Some(*param),
+                    _ => None,
+                });
+                let mut body: Vec<Pred> = deleted
+                    .iter()
+                    .copied()
+                    .filter(|&q| entity(q) == child)
+                    .chain(moved)
+                    .map(|q| {
+                        Pred::Cmp(
+                            Term::Index(At::Bound(0)),
+                            CmpOp::Eq,
+                            Term::Index(At::Param(q)),
+                        )
+                    })
+                    .collect();
+                body.push(Pred::Not(Box::new(names)));
+                let body = match body.len() {
+                    1 => body.pop().expect("one part"),
+                    _ => Pred::Or(body),
+                };
+                guards.push(Guard {
+                    pred: Pred::Forall {
+                        entity: child,
+                        body: Box::new(body),
+                    },
+                    why: GuardWhy::Restrict { fk: id },
+                    site: Site::new(ModelRef::Relation(fk.relation), &fk.site),
+                });
+            }
+        }
+        a.guards.extend(guards);
+    }
+
+    /// `DanglingKey_{child}_{role}` per key whose parent some step deletes and whose database
+    /// rejects that delete (`ForeignKey::delete_rejected`): every present child names a present
+    /// parent, or none on an optional key. The `Restrict` guard keeps it. A `cascade`,
+    /// `set_null`, or `set_default` key gets no rule: the lifecycle does not run that action
+    /// yet and deletes the one row, so a failure would describe the engine, not the model
+    /// (`DeleteLeavesChildren` says so for `cascade`). A parent with a `@soft_delete` column
+    /// keeps its rows in the database, so its key has no such rule.
+    fn dangling_keys(&mut self) {
+        let model = self.model;
+        for (id, fk) in model.foreign_keys() {
+            let (Some(&p), Some(&c)) = (self.ent_of.get(&fk.parent), self.ent_of.get(&fk.child))
+            else {
+                continue;
+            };
+            let deleted = self.ts.actions.iter().any(|a| {
+                a.effects.iter().any(|eff| {
+                    matches!(eff, Effect::Delete { param } if a.params[usize::from(*param)].entity == p)
+                })
+            });
+            // A pre-existing child of a created parent starts naming a parent that does not
+            // exist yet (`PreExistingChildOfCreatedParent` says so), which no delete causes.
+            let birth = |e: EntId| self.ts.entities[e.index()].birth;
+            let starts_dangling =
+                birth(c) == Birth::PreExisting && birth(p) == Birth::Created && !fk.optional();
+            if !deleted || !fk.delete_rejected() || !self.hard_deleted_parent(fk) || starts_dangling
+            {
+                continue;
+            }
+            let Some(owner) = self.owner_var(id) else {
+                continue;
+            };
+            let at = |ek, b| (ek, At::Bound(b));
+            let Some(link) = self.key_link(id, at(fk.child, 0), at(fk.parent, 1)) else {
+                continue;
+            };
+            let mut body = vec![Pred::Exists {
+                entity: p,
+                body: Box::new(link),
+            }];
+            if fk.optional() {
+                body.insert(
+                    0,
+                    Pred::Cmp(
+                        Term::Slot {
+                            var: owner,
+                            at: At::Bound(0),
+                        },
+                        CmpOp::Eq,
+                        Term::Lit(Value::NULL),
+                    ),
+                );
+            }
+            let (child, parent) = (
+                model.entities[fk.child].id.clone(),
+                model.entities[fk.parent].id.clone(),
+            );
+            let role = fk.role_or(&parent).to_string();
+            self.ts.invariants.push(Invariant {
+                name: format!("DanglingKey_{child}_{role}"),
+                binders: vec![c],
+                premises: vec![Premise::rows()],
+                body: Pred::Or(body),
+                text: InvText::DanglingKey {
+                    child,
+                    parent,
+                    role,
+                },
+                label: None,
+                site: Site::new(ModelRef::Relation(fk.relation), &fk.site),
+            });
         }
     }
 

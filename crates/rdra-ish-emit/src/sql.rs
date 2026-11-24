@@ -984,6 +984,12 @@ fn inv_text(inv: &Invariant) -> String {
             parent,
             role,
         }
+        | InvText::DanglingKey {
+            child,
+            parent,
+            role,
+            ..
+        }
         | InvText::MaxCard {
             child,
             parent,

@@ -55,7 +55,7 @@ use crate::prove::{find_z3, run_proof, Marks};
 use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_output::Outcome;
 use anyhow::Result;
-use rdra_ish_core::lifecycle::{Caps, Scope, Target};
+use rdra_ish_core::lifecycle::{Caps, QuotientCache, Scope, Target};
 use rdra_ish_core::memory::MemoryPool;
 use rdra_ish_core::{ResolvedProgram, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
@@ -184,7 +184,10 @@ pub fn run(
         budget: whole_time,
         states: max_states,
     };
-    let mut jobs = cone_jobs(&ts, &names, &targets, &mut modules, caps);
+    // The quotients the passes that reduce cones share: a sub-lifecycle many cones have is
+    // explored and partitioned once (#252). The entity pass, the last of them, drops it.
+    let quotients = QuotientCache::new();
+    let mut jobs = cone_jobs(&ts, &names, &targets, &mut modules, caps, &quotients);
     let cones = jobs.len();
     let line = print_plan(
         model,
@@ -197,7 +200,7 @@ pub fn run(
     );
     let mut whole_modules = Vec::new();
     if temporal {
-        jobs.extend(property_jobs(&ts, &names, &mut modules, caps));
+        jobs.extend(property_jobs(&ts, &names, &mut modules, caps, &quotients));
         whole_modules = (0..ts.properties().len())
             .map(|i| modules.claim(&format!("{whole_stem}_{}", names.property(i))))
             .collect();
@@ -239,6 +242,7 @@ pub fn run(
             &selection,
             caps,
             start.is_some(),
+            quotients,
         );
         let (safety, mut vacuous) = bfs_cones(&ts, &jobs, caps);
         let (properties, property_vacuous) = native_properties(&ts, &jobs, caps);

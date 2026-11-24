@@ -58,6 +58,11 @@
   `relate(.., 1..*:1)` or `1..1:1`: every present parent has a present child. A use
   case that creates the parent without a child in the same transaction fails it, at one
   instance too, so `check` finds it.
+- **Dangling keys**: one `INVARIANT DanglingKey_<Child>_<role>` per key with no
+  `.on_delete`, `restrict`, or `no_action` whose parent a use case deletes: every present
+  child names a present parent. The key guards the delete, so it holds. `cascade`,
+  `set_null`, and `set_default` are not run yet: their delete removes the one row with no
+  guard, the children stay, and the key gets no `DanglingKey_*`.
 - **Child-side maximum and counts**: one `INVARIANT MaxCard_<Child>_<role>` per
   `relate(.., 0..3:1)` (a high end from 2 to 255), and a `Quantifier_*` per
   `.at_most/.at_least/.exactly(n, ..)`, printed with `Cardinality` (the module extends

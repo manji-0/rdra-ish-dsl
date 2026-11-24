@@ -201,6 +201,8 @@ pub(crate) struct Moves {
     /// The successor of every move, `width` bytes each.
     next: Vec<u8>,
     width: usize,
+    /// What the reduced step reuses from one state to the next.
+    pub(crate) reduced: super::reduce::StepBuffers,
 }
 
 impl Moves {

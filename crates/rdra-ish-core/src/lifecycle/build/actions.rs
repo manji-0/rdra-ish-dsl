@@ -275,6 +275,7 @@ impl<'m> Builder<'m> {
         let guards = self.condition_guards(bodies, &a.params);
         a.guards.extend(guards);
         self.arm_guards(uc, &mut a);
+        self.restrict_guards(&mut a);
         Action {
             name,
             source: crate::lifecycle::types::ActId::at(0),

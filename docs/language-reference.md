@@ -201,7 +201,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `reads` | `(UseCase \| Api, Entity)` | The use case or API reads the entity. Chain methods say how it finds the rows (see [Query shapes](#query-shapes)). |
 | `creates` | `(UseCase \| Api, Entity)` | The use case or API creates the entity. Seeds the initial state pattern. |
 | `updates` | `(UseCase \| Api, Entity)` | The use case or API updates the entity. Produces a transition operation in state derivation. |
-| `deletes` | `(UseCase \| Api, Entity)` | The use case or API deletes the entity. Marks the source pattern terminal. It removes one row; the children of a key with `.on_delete(cascade)` stay (info `DeleteLeavesChildren`), so a use case that removes them `deletes` the child too. |
+| `deletes` | `(UseCase \| Api, Entity)` | The use case or API deletes the entity. Marks the source pattern terminal. It removes one row. Under a key with no `.on_delete`, `restrict`, or `no_action`, it waits until no present child names the row (`DanglingKey_*`). The children of a `cascade`, `set_null`, or `set_default` key stay (info `DeleteLeavesChildren` for `cascade`). See [relate](#relate-and-fk-generation). |
 | `displays` | `(UseCase, Screen)` | The use case displays the screen. |
 | `shows` | `(Screen, Entity)` | The screen shows information from the entity. |
 | `navigates` | `(Screen, Screen)` | The user moves from the first screen to the second. `.via(UseCase)` names the use case whose operation causes the move. `diagram --kind screen` draws it. See [Screen transitions](#screen-transitions). |
@@ -243,13 +243,32 @@ With the default role (the parent id in lowercase) and a parent key `id`, that i
 With `.optional().on_delete(set_null).on_update(cascade)`, the generated column is
 nullable, marked `fk_optional`, and carries the delete/update actions for CSV/list
 review. An action other than `cascade`, `restrict`, `set_null`, `set_default`, or
-`no_action` is `UnknownRefAction`. The lifecycle does not read `.on_delete` or
-`.on_update`: `states`, `check`, and `verify` delete only the row a `deletes` names, and a
-child under an `.on_delete(cascade)` key stays present after its parent is deleted, where
-every rule still sees it. The info `DeleteLeavesChildren` names each use case that
-deletes such a parent and not the child; write `deletes(UC, Child)` too to remove a
-child with it, one row per run. [Keys and roles](#relate-and-fk-generation) covers
-`.role`, `.key`, and composite parent keys.
+`no_action` is `UnknownRefAction`.
+
+`states`, `check`, and `verify` read `.on_delete` as follows. A `deletes(UC, Parent)`
+removes only the row it names, and the action decides what happens to the children:
+
+| `.on_delete` | The lifecycle |
+|---|---|
+| none, `restrict`, `no_action` | The database rejects the delete while a child names the row (no `.on_delete` is the SQL default, which the export leaves in place). The delete is enabled only when no present child names the row. A child that the same step deletes, unlinks, or relinks does not count. |
+| `cascade`, `set_null`, `set_default` | The lifecycle does not run the action yet. The delete is enabled, and the children stay present and still name the deleted row, where every rule still sees them. The key gets no `DanglingKey_*`. |
+
+Each key with no `.on_delete`, `restrict`, or `no_action` whose parent some use case
+deletes gets the invariant `DanglingKey_<Child>_<role>`: every present child names a
+present parent, or no parent under `.optional()`. The guard keeps the rule. A `cascade`,
+`set_null`, or `set_default` key gets no such rule: the lifecycle deletes the one row and
+does not run the action, so a failure there would describe the missing action, not the
+model. The info `DeleteLeavesChildren` names each use case that deletes a `cascade` parent
+and not the child; write `deletes(UC, Child)` too to remove a child with it, one row per
+run. A step that deletes
+or unlinks a child in the same step as its parent leaves that child out of the guard. It
+removes one child row per run, so at two instances an Order with two lines still blocks
+the delete, where the database would accept one statement that removes both. A parent with
+a `@soft_delete` column is marked, not removed, so its keys get no guard and no
+`DanglingKey_*`. A pre-existing child of a created parent starts naming a parent that does
+not exist (`PreExistingChildOfCreatedParent`), so its key gets no `DanglingKey_*` either.
+`.on_update` is not read. [Keys and roles](#relate-and-fk-generation) covers `.role`, `.key`, and composite
+parent keys.
 
 ### Chain methods
 

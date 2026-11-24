@@ -13,6 +13,27 @@
 
 ### Breaking
 
+- A `deletes(UC, Parent)` waits until no present child names the row when the key's
+  `.on_delete` is `restrict`, `no_action`, or unset (#199). Unset is the SQL default, which
+  the export leaves in place, so the database rejects such a delete; the lifecycle used to
+  delete the row anyway and explore states the database never reaches. `check`, `states`,
+  `verify` (with its TLA+ export under `--with-tlc`), and `verify --prove` read the same
+  guard. A model that deletes a parent while its children stay now finds that delete
+  disabled, which can turn a passing liveness or `can_reach` property into a
+  counterexample, add a deadlock, or make the use case one that never runs. To migrate,
+  delete the children first, in a use case that `deletes(UC, Child)` or `unlinks` them. A
+  step that unlinks a child and deletes its parent is enabled. Each such key whose parent
+  some use case deletes also gets the invariant `DanglingKey_<Child>_<role>`: every present
+  child names a present parent. The guard keeps it, and z3 proves it. `DanglingKey_*`
+  covers these restrict-family keys only. The lifecycle does not run `cascade`, `set_null`,
+  or `set_default` deletes yet: they still remove the one row with no guard, as before, and
+  their keys get no `DanglingKey_*`, so a model that declares one gives the same verdict as
+  before, with the info `DeleteLeavesChildren` for `cascade`. A parent with a
+  `@soft_delete` column is marked, not removed, so its keys get no guard and no rule. A
+  pre-existing child of a created parent, which `PreExistingChildOfCreatedParent` already
+  reports, gets no rule. No sample changes verdict: no sample deletes a row that a key
+  names.
+
 - `verify --prove` decides an invariant cone that BFS stopped at the memory limit (#232).
   When z3 proves every rule the cone checks for any number of rows, the rules hold at the
   run's bounds too, so the cone's line reads `ok (<n> states, BFS stopped at the memory
@@ -311,6 +332,21 @@
 
 ### Changed
 
+- `verify` reduces cones faster (#252). A sub-lifecycle's quotient is shared across the
+  cones whose extended sub-lifecycles are equal: it is explored and partitioned once, and
+  each cone maps its classes into its own ids. A shared quotient is matched by `==` on the
+  extended sub-lifecycle, its `obs`, inputs and rises, and the caps that can stop its runs;
+  it is taken only where its runs fit the room the cone has, and it stays charged to
+  `--memory`, in the bytes its tables take, until the entity cones are reduced. The safety
+  and property cones are now reduced one at a time in order, so which of them are reduced
+  no longer depends on the number of threads under a tight limit (#244). A quotient with
+  more classes than any cone's TLA+ tables may print is no longer built in full. The
+  stuttering partition refines by a worklist of splitters instead of sweeping every block
+  until nothing splits, and a reduced state is stepped without allocating. The output is
+  unchanged on every sample and corpus case. At `RDRA_JOBS=1`, `verify` retires 33%
+  fewer instructions on `insurance-claim-ops`, 9% fewer on `patent-ops` and 28% fewer on
+  `oidc-auth` at one instance. `RDRA_ISH_NO_QUOTIENT_CACHE=1` turns the sharing off, and
+  `RDRA_ISH_QUOTIENT_STATS=1` prints what it did.
 - BFS finds a state's enabled bindings without walking every guard (#253), and prints what
   it printed. Each system works out once which guards read the successor, and turns each
   guard conjunct that reads one var of one param's row into a test of that byte, taken from

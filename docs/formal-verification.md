@@ -190,7 +190,7 @@ they print no `violated:` line, since a witnesses cfg violates every reached sta
 | A `Triggered` parameter | One more `\E p \in <E>_Ids` on the triggered operator with `<E>_exists[p] = "present"` and the mark conjunct, and, when the one direct key joins it to one of the operator's rows, `<Child>_owner_<Parent>[c] = p` (or `= c`). A cone that leaves the mark out prints the operator without the conjunct and without the parameter, and the var is not in the module. |
 | A use case several tracked events trigger | One operator per variant, `<UC>_by_<Ev>`, each in `Next`; `AfterAssert_<UC>_<n>` ranges over every variant's last step. |
 | `creates` | `FirstAbsent(<E>_exists, p)` and `<E>_exists' = ... "present"`. A deleted slot is never reused. |
-| `deletes` | `<E>_exists'` becomes `"deleted"`, columns and owners return to the base value. |
+| `deletes` | `<E>_exists'` becomes `"deleted"`, columns and owners return to the base value. Per key to `E` with no `.on_delete`, `restrict`, or `no_action`, a guard `\A b0 \in <Child>_Ids : (<Child>_exists[b0] = "present") => (~(<Child>_owner_<E>[b0] = p0))`: no present child names the row, so the step waits as the database's reject makes it. A child the same step deletes, unlinks, or relinks is left out. |
 | `sets`, `transitions(UC, E.col, a -> b)` | Primed assignments. A transition guards `col = a` and writes `b`; arms to several targets write through a `CASE` on the source. `UNCHANGED` lists every variable the action does not assign, an entity the action leaves alone by its tuple `<E>_vars`. |
 | Variation column of a created instance | `\E v0 \in {values} : col' = ...`, so TLC explores every value. `@default` does not pin it. |
 | `applies_to(Condition, UseCase \| Api)` with a `holds` body | A guard conjunct on the use case's operator. A condition on a created instance is evaluated on the primed variable, after the assignments and the `UNCHANGED` that bind every primed variable it reads. |
@@ -201,6 +201,7 @@ they print no `violated:` line, since a witnesses cfg violates every reached sta
 | `.along(...)` | Quantified over `<E>_Ids`, joined by `<Child>_owner_<Parent>` equalities. |
 | `col: T @check(expr)` | `INVARIANT Check_<Entity>_<column>_<n>` over the present instances. A nullable operand is guarded: `qty: Int @null @check(qty >= 1)` prints `(E_qty[b0] # -1 /\ E_qty[b0] >= 1)`, so a null `qty` violates it. |
 | `relate(Child, Parent, 1:1)` | `INVARIANT Unique_<Child>_<role>` (role defaults to the parent id): `\A b0, b1 \in <Child>_Ids`, two present children are the same or have different owners. An unlinked optional child owns nothing. |
+| `relate(Child, Parent, ..)` with no `.on_delete`, `restrict`, or `no_action`, whose parent a use case deletes | `INVARIANT DanglingKey_<Child>_<role>`: `\A b0 \in <Child>_Ids`, a present child has `\E b1 \in <Parent>_Ids` present with `<Child>_owner_<Parent>[b0] = b1`, or an unlinked owner under `.optional()`. The delete guard keeps it. A `cascade`, `set_null`, or `set_default` key gets no such invariant, since the lifecycle does not run that action yet. |
 | `@unique`, `@unique(a, b)`, the key pair of a `relate(A, B, N:M).via(J)` junction | `INVARIANT Unique_<Entity>_<columns>`, the columns joined by `_`: `\A b0, b1 \in <Entity>_Ids`, two present rows are the same or differ in some column of the set. A key column reads as `<Entity>_owner_<Parent>`. A null Int (`-1`) or an unlinked optional key (`0`) exempts its row. Only a set whose every column the lifecycle holds; see [Unique column sets](./state-derivation.md#unique-column-sets). |
 | `relate(Child, Parent, 1..*:1)` (child-side minimum) | `INVARIANT MinCard_<Child>_<role>`: `\A b0 \in <Parent>_Ids`, a present parent has `\E b1 \in <Child>_Ids` present with `<Child>_owner_<Parent>[b1] = b0`. Checked in every state, so a parent created without a child in the same transaction, or a deleted last child, is a counterexample. |
 | Pre-existing child of a `relate` | `Init` links the owner: `\in [<Child>_Ids -> <Parent>_Ids]` for N:1 (start `Any`), `[i \in <Child>_Ids \|-> i]` for 1:1 and for a child-side minimum (start `Identity`). An `.optional()` key under a created parent starts unlinked (`Base`). |
@@ -1061,6 +1062,20 @@ to add a case.
   `OK: no errors in the selected scope, within ...` and holds only for the selected
   targets. A deleted slot is never reused, so an entity is created at most
   `InstanceCount` times.
+- **`.on_delete` runs only as a reject.** A key with no `.on_delete`, `restrict`, or
+  `no_action` guards the parent's `deletes`: it waits until no present child names the row,
+  as the database's reject would. A child the same step deletes, unlinks, or relinks does
+  not count, but a step removes one child row per run, so a delete that the database would
+  accept after one statement removes every child stays disabled while a second child
+  exists. For that pattern the model reaches fewer states than the database, and an OK
+  says nothing about the states it misses. `DanglingKey_<Child>_<role>` covers these
+  rejecting keys only. The lifecycle does not run `cascade`, `set_null`, or `set_default`
+  yet: the delete removes the one row with no guard, and the children stay present and
+  name the deleted row, where every rule still sees them. Such a key gets no
+  `DanglingKey_*`, since its counterexample would describe the missing action, not the
+  model; the info `DeleteLeavesChildren` names each use case that deletes a `cascade`
+  parent and not the child. A child entity the lifecycle leaves out (a published entity) has
+  no key var, so no guard reads it and the delete runs as before.
 - **Conditions are checked.** A `holds` body is a guard on each use case it applies to.
   A body applied to a use case that writes nothing is `UnbindableCondition`, an error.
 - **One use case across entities.** A use case is one atomic action per transaction

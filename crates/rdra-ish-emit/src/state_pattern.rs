@@ -105,6 +105,14 @@ fn violation_message(text: &InvText, p: &str) -> String {
 } => format!(
             "minimum children unmet: a '{parent}' has no '{child}' through '{role}' in patterns ({p})"
         ),
+        InvText::DanglingKey {
+                child,
+                parent,
+                role,
+                ..
+} => format!(
+            "dangling key: a '{child}' names a '{parent}' through '{role}' that is not present in patterns ({p})"
+        ),
         InvText::MaxCard {
             child,
             parent,

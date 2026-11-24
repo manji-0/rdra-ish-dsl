@@ -1,0 +1,28 @@
+// trap: a delete the key's children reject waits until no present child names the row.
+// relate(OrderLine, Order) states no .on_delete, which the SQL export leaves at the
+// database's default, so Postgres rejects deleting an Order a line still names; the Payment
+// key says .on_delete(restrict) outright. CancelDraft is enabled only on an Order that no
+// present OrderLine and no present Payment names, so no step leaves a child naming a
+// deleted Order, and both DanglingKey rules hold at every bound and for any number of rows.
+// RemoveLine deletes a line first, after which the Order may go. An engine that dropped the
+// guard, as every engine did before #199, would reach Open, AddLine, CancelDraft and report
+// DanglingKey_OrderLine_Order violated.
+// expect DanglingKey_OrderLine_Order: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+// expect DanglingKey_Payment_Order: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+entity Order "注文" { id: Int @pk  status: Enum(draft, placed) @default(draft) }
+entity OrderLine "明細" { id: Int @pk }
+entity Payment "支払" { id: Int @pk }
+relate(OrderLine, Order, N:1)
+relate(Payment, Order, N:1).on_delete(restrict)
+usecase Open "起票"
+usecase AddLine "明細追加"
+usecase RemoveLine "明細削除"
+usecase Pay "支払"
+usecase CancelDraft "下書き取消"
+usecase Place "確定"
+creates(Open, Order)
+creates(AddLine, OrderLine)
+deletes(RemoveLine, OrderLine)
+creates(Pay, Payment)
+deletes(CancelDraft, Order)
+transitions(Place, Order.status, draft -> placed)
