@@ -20,10 +20,12 @@ jobs:
     # engine-equivalence run only then. scripts/verify-relevant.sh lists the paths that
     # cannot (prose, the editor and LSP, codegen, the diagram and data-layer exports). The
     # label `no-verify` skips them for a change a reviewer judged unable to reach them, such
-    # as help text. A push to main runs every job.
+    # as help text. A push to main runs every job. `kani` says whether the change can reach
+    # a Kani harness (scripts/kani-relevant.sh); the label does not skip it.
     runs-on: ubuntu-latest
     outputs:
       verify: ${{ steps.decide.outputs.verify }}
+      kani: ${{ steps.decide.outputs.kani }}
     defaults:
       run:
         shell: bash
@@ -39,13 +41,18 @@ jobs:
         run: |
           if [ "$EVENT" != pull_request ]; then
             verify=true
-          elif [ "$NO_VERIFY" = true ]; then
-            verify=false
+            kani=true
           else
             git diff --name-only HEAD^1 HEAD | tee changed.txt
-            verify=$(scripts/verify-relevant.sh < changed.txt)
+            kani=$(scripts/kani-relevant.sh < changed.txt)
+            if [ "$NO_VERIFY" = true ]; then
+              verify=false
+            else
+              verify=$(scripts/verify-relevant.sh < changed.txt)
+            fi
           fi
           echo "verify=$verify" | tee -a "$GITHUB_OUTPUT"
+          echo "kani=$kani" | tee -a "$GITHUB_OUTPUT"
 
   check:
     runs-on: ubuntu-latest
@@ -130,3 +137,36 @@ jobs:
         # docs/engine-agreement.md: each case under crates/rdra-ish-cli/tests/engine_corpus/
         # states every engine's verdict; about 45 s locally.
         run: RDRA_REQUIRE_TLC=1 RDRA_REQUIRE_Z3=1 cargo test --release -p rdra-ish-cli --test engine_corpus
+
+  kani:
+    # The Kani harnesses beside the code they prove (docs/engine-agreement.md#kani-harnesses),
+    # when a change can reach one, and on every push to main. Kani is not in nixpkgs, so the
+    # job runs on the runner's rustup, outside the devShell: `cargo kani setup` installs the
+    # nightly its version pins and links ~/.kani to it, so the cache holds both.
+    needs: changes
+    if: needs.changes.outputs.kani == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      KANI_VERSION: 0.68.0
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+      - id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/cargo-kani
+            ~/.cargo/bin/kani
+            ~/.kani
+            ~/.rustup/toolchains/nightly-*
+          key: kani-${{ env.KANI_VERSION }}-${{ runner.os }}-${{ runner.arch }}
+      - name: Install Kani
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          cargo install --locked kani-verifier --version "$KANI_VERSION"
+          cargo kani setup
+      - name: Prove the harnesses
+        run: cargo kani -p rdra-ish-core
