@@ -898,6 +898,35 @@ fn a_reduced_cone_counts_the_cells_its_tla_tables_print() {
     );
 }
 
+/// A cone whose tables print more than the old budget of 200,000 cells and no more than
+/// `TLA_CELL_BUDGET` keeps its reduction with inputs (#284). The model is reduction-diff seed
+/// 28 (`scripts/reduction-diff.py gen 28`): the `Forbidden_E4_0` cone at 2 instances reduces
+/// its 74,064 sub-lifecycle states to 23,376 classes that print 439,968 cells, where the old
+/// budget left the cone to the retry without inputs, which reduces nothing.
+#[test]
+fn a_cone_between_the_old_and_the_new_cell_budget_is_reduced() {
+    let model = model_from(include_str!("wide_quotient.rdra"));
+    let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+    let at = ts
+        .invariants()
+        .iter()
+        .position(|inv| inv.name == "Forbidden_E4_0")
+        .expect("the forbidden state of E4");
+    let target = Target::Invariant(at);
+    let (sys, seeds) = ts.cone_system(&ts.target_cone(target), [ts.target_seed(target)]);
+    let reduced = sys.reduced(&seeds, Caps::VERIFY);
+    let red = reduced.reduction().expect("the cone is reduced");
+    assert!(
+        !red.inputs().is_empty() || !red.bits().is_empty(),
+        "with inputs"
+    );
+    assert_eq!(red.classes(), 23_376);
+    assert_eq!(red.tla_cells(), 439_968);
+    assert!(
+        200_000 < red.tla_cells() && red.tla_cells() <= crate::lifecycle::reduce::TLA_CELL_BUDGET
+    );
+}
+
 /// A quantifier over T with no T param folds into a bit keyed by the linked row (#112), the
 /// sub-lifecycle has no raw input left, and the reduced cone decides what the cone decides:
 /// the deadlock at `closed` exists only because the bit fell when the case closed.

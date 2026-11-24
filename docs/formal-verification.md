@@ -725,11 +725,17 @@ The cone's vars split into a target side T and the rest S:
   stays correct even when a fold is not monotone.
 - The tables a reduced cone hands TLC are bounded. `Reduction::tla_cells` counts one cell per
   class for each observed var and each S action, plus one per rise, and a reduction past
-  `TLA_CELL_BUDGET` (200,000 cells) is not used: the split without inputs is tried, and the
-  cone stays unreduced when that fails too. Measured with TLC's 1 GB heap, a cone of 2,428
+  `TLA_CELL_BUDGET` (530,000 cells) is not used: the split without inputs is tried, and the
+  cone stays unreduced when that fails too. The native checker and TLC reduce under the same
+  budget, so they check the same cones. Measured with TLC's 1 GB cone heap, a cone of 2,428
   classes prints 72,840 cells and runs, the insurance-claim-ops `ClaimCase` view's 4,368
   classes print 104,832 at a peak of 912 MB, and a random model's 24,000 classes printed
-  326,400 and ran out of heap.
+  326,400 and ran out of heap. The budget was 200,000 until #284 raised it to take
+  food-permit-ops' `AfterAssert_SuspendBusiness_0` cone at 3 instances: 28,928 classes,
+  520,704 cells (a 7.6 MB module), 7,167,444 states, which TLC checks in 98 s at `-Xmx4g`
+  and runs out of heap on at `-Xmx1g` and `-Xmx2g`. A cone between 200,000 cells and the
+  budget therefore needs `RDRA_TLC_HEAP=4g` under `--with-tlc`; at the default heap TLC
+  stops on it with a tool error and that hint.
 
 With inputs, the module prints each bit group as an operator `In_<g>(c)` over the T vars, the
 `Rise` table (one cell per class, `:>` and `@@` from `TLC`, so such a module `EXTENDS TLC`),
