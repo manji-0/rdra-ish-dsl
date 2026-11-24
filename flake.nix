@@ -77,6 +77,11 @@
             # The archive must map: -Xshare:on stops the JVM where the default would skip it.
             train -Xshare:on -XX:SharedArchiveFile=$out/tla2tools.jsa
           '';
+          # The driver that runs many TLC jobs in one JVM (#310), for Java 8 as TLC 1.7.4 is.
+          batch = pkgs.runCommand "rdra-tlc-batch" { } ''
+            mkdir -p $out
+            ${jdk}/bin/javac --release 8 -Xlint:-options -d $out ${./nix/tlc-batch}/RdraTlcBatch.java
+          '';
         in
         pkgs.runCommand "tlaplus-${tlaplus.version}-jdk17"
           {
@@ -88,6 +93,13 @@
             ln -s ${tlaplus}/share $out/share
             makeWrapper ${jdk}/bin/java $out/bin/tlc \
               --add-flags "-XX:+UseParallelGC -XX:SharedArchiveFile=${archive}/tla2tools.jsa -cp ${jar} tlc2.TLC"
+            # The same JVM and collector as `tlc`. Without the archive: the driver loads TLC
+            # through a class loader per job, and the JVM shares archived classes with its
+            # own loaders only. A JVM out of memory ends at once, for its caller to see, and
+            # soft references are cleared at each GC, without which no job's classes unload
+            # (nix/tlc-batch/RdraTlcBatch.java).
+            makeWrapper ${jdk}/bin/java $out/bin/tlc-batch \
+              --add-flags "-XX:+UseParallelGC -XX:+ExitOnOutOfMemoryError -XX:SoftRefLRUPolicyMSPerMB=0 -cp ${batch} RdraTlcBatch ${jar}"
             for tool in tlasany pcal tlatex; do
               ln -s ${tlaplus}/bin/$tool $out/bin/$tool
             done

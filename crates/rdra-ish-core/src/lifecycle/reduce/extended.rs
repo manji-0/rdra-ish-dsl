@@ -30,6 +30,10 @@ pub(super) struct Extended {
     pub(super) variants: HashMap<ActId, Vec<ActId>>,
     /// Per cone action, its param index to `system`'s, when the restriction dropped one.
     pub(super) params: Vec<Option<Vec<Option<u8>>>>,
+    /// The entities of `system` that `H` leaves where they are (`Group::fixing`, #212 phase
+    /// 2): one that holds an `obs` var, an input, or a bit, or whose rows such a key names; a
+    /// stub of a T parent; and one whose rows a key of the cone's T can name.
+    pub(super) fixed: Vec<EntId>,
 }
 
 impl Extended {
@@ -122,15 +126,36 @@ impl Extended {
             .collect();
         let mut inputs_local: VarSet = inputs.iter().map(local).collect();
         inputs_local.extend(groups.vars);
+        let obs_local: VarSet = obs.iter().map(local).collect();
+        let mut fixed: BTreeSet<EntId> = BTreeSet::new();
+        for v in obs_local.iter().chain(&inputs_local) {
+            let d = &system.vars[v.index()];
+            fixed.extend(d.kind.entity());
+            if let Domain::Instance { parent, .. } = d.domain {
+                fixed.insert(parent);
+            }
+        }
+        // The stubs come after the entities whose existence is in S or the inputs.
+        fixed.extend(
+            (0..system.entities.len())
+                .map(EntId::at)
+                .filter(|e| system.entities[e.index()].exists.index() >= all.len()),
+        );
+        for v in &t {
+            if let Domain::Instance { parent, .. } = cone.vars[v.index()].domain {
+                fixed.extend(map.ent_of(parent));
+            }
+        }
         Extended {
             system,
             acts,
             rise,
-            obs_local: obs.iter().map(local).collect(),
+            obs_local,
             inputs_local,
             bits: groups.bits,
             variants: groups.variants,
             params: map.params,
+            fixed: fixed.into_iter().collect(),
         }
     }
 
