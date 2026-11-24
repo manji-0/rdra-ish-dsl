@@ -6,7 +6,7 @@ use std::fmt;
 
 use super::cone::{Cone, Target};
 use super::diag::{Diag, StateDiag, UnmetPremise};
-use super::explore::{Caps, Checks, ComponentRun};
+use super::explore::{Caps, Checks, ComponentRun, StoredRun};
 use super::expr::StateSlice;
 use super::findings::{Progress, Runs, Taken, Witness};
 use super::types::{
@@ -781,8 +781,8 @@ impl TransitionSystem {
     /// The `VacuousRule` of an invariant or an after-assert on a run of its cone: the check
     /// holds there, the run is complete, and no reached state meets one of its premises.
     /// `run` explores the target's cone, reduced or not, at this system's bounds.
-    pub fn vacuity(&self, target: Target, run: &ComponentRun) -> Option<Diag> {
-        if !run.complete {
+    pub fn vacuity(&self, target: Target, run: &impl StoredRun) -> Option<Diag> {
+        if !run.whole() {
             return None;
         }
         let (name, label, site, unmet) = match target {
@@ -817,19 +817,22 @@ impl TransitionSystem {
     /// The premises of `inv` no state of `run` meets; `None` when the rule is violated there
     /// or the cone does not hold it. When no state has the rows the rule ranges over, that
     /// alone is reported.
-    fn unmet_of_rule(&self, inv: &Invariant, run: &ComponentRun) -> Option<Vec<UnmetPremise>> {
-        crate::shadow_assert!(run.checks().reads(&inv.name), "the run evaluates the rule");
-        let violated = run.diags.iter().any(
+    fn unmet_of_rule(&self, inv: &Invariant, run: &impl StoredRun) -> Option<Vec<UnmetPremise>> {
+        crate::shadow_assert!(
+            run.evaluated().reads(&inv.name),
+            "the run evaluates the rule"
+        );
+        let violated = run.diagnostics().iter().any(
             |d| matches!(&d.diag, StateDiag::ConstraintViolated { name, .. } if *name == inv.name),
         );
         if violated {
             return None;
         }
         // The cone's copy of the rule reads the cone's vars.
-        let sys = &run.system;
+        let sys = run.system();
         let local = sys.invariants.iter().find(|x| x.name == inv.name)?;
         let met = |pred: &Pred| {
-            run.states
+            run.stored()
                 .iter()
                 .any(|s| sys.meets(&local.binders, pred, s))
         };
@@ -860,23 +863,20 @@ impl TransitionSystem {
     /// is violated there or the cone does not hold it. The assert says something once its use
     /// case takes its last step, into a state that has rows of the entities the step does not
     /// bind, when it reads any.
-    fn unmet_of_assert(a: &AfterAssert, run: &ComponentRun) -> Option<Vec<UnmetPremise>> {
-        crate::shadow_assert!(run.checks().reads(&a.name), "the run evaluates the assert");
-        let violated = run.diags.iter().any(
+    fn unmet_of_assert(a: &AfterAssert, run: &impl StoredRun) -> Option<Vec<UnmetPremise>> {
+        crate::shadow_assert!(
+            run.evaluated().reads(&a.name),
+            "the run evaluates the assert"
+        );
+        let violated = run.diagnostics().iter().any(
             |d| matches!(&d.diag, StateDiag::AfterAssertViolated { name, .. } if *name == a.name),
         );
         if violated {
             return None;
         }
-        let sys = &run.system;
+        let sys = run.system();
         let local = sys.after.iter().find(|x| x.name == a.name)?;
-        let steps = |step: &AfterStep| {
-            run.edges()
-                .iter()
-                .filter(|edge| run.step(edge).0 == step.act)
-                .map(|edge| &run.states[edge.to as usize])
-                .collect::<Vec<_>>()
-        };
+        let steps = |step: &AfterStep| run.targets_of(step.act);
         let ran: Vec<(&AfterStep, Vec<&StateSlice>)> = local
             .steps
             .iter()
@@ -919,11 +919,11 @@ impl TransitionSystem {
     }
 
     /// The `VacuousRule` of property `i` on a run of its cone, reduced or not.
-    pub fn property_vacuity(&self, i: usize, run: &ComponentRun) -> Option<Diag> {
+    pub fn property_vacuity(&self, i: usize, run: &impl StoredRun) -> Option<Diag> {
         let property = &self.properties[i];
-        let sys = &run.system;
+        let sys = run.system();
         let local = sys.properties.iter().find(|p| p.name == property.name)?;
-        if !run.complete {
+        if !run.whole() {
             return None;
         }
         // A formula the build could not express is `False` and has its own error.
@@ -935,7 +935,7 @@ impl TransitionSystem {
         // a trigger that holds only while another binder has no row never fires.
         let met = |pred: &Pred| {
             let absent = Pred::Not(Box::new(pred.clone()));
-            run.states.iter().any(|s| {
+            run.stored().iter().any(|s| {
                 sys.find_violation(&local.binders, &absent, s, &[])
                     .is_some()
             })

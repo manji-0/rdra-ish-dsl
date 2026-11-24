@@ -55,7 +55,7 @@ use crate::prove::{find_z3, run_proof, Marks};
 use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_output::Outcome;
 use anyhow::Result;
-use rdra_ish_core::lifecycle::{Caps, QuotientCache, Scope, Target};
+use rdra_ish_core::lifecycle::{Caps, QuotientCache, Scope, Symmetry, Target};
 use rdra_ish_core::memory::MemoryPool;
 use rdra_ish_core::{ResolvedProgram, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
@@ -109,6 +109,8 @@ pub struct Budget {
     pub prove: Option<Prove>,
     /// `--memory`, split between BFS and the TLC runs under `--with-tlc`.
     pub memory: VerifySplit,
+    /// `--symmetry`: which safety cones run up to instance symmetry.
+    pub symmetry: Symmetry,
 }
 
 /// `verify --prove`.
@@ -134,6 +136,7 @@ pub fn run(
         deny_undecided,
         prove,
         memory,
+        symmetry,
     }: Budget,
     with_tlc: Option<WithTlc>,
 ) -> Result<()> {
@@ -244,8 +247,8 @@ pub fn run(
             start.is_some(),
             quotients,
         );
-        let (safety, mut vacuous) = bfs_cones(&ts, &jobs, caps);
-        let (properties, property_vacuous) = native_properties(&ts, &jobs, caps);
+        let (safety, mut vacuous) = bfs_cones(&ts, &jobs, caps, symmetry);
+        let (properties, property_vacuous) = native_properties(&ts, &jobs, caps, symmetry);
         // A `--buc` drops use cases that may reach a premise.
         if scope.bucs.is_empty() {
             vacuous.extend(property_vacuous);
