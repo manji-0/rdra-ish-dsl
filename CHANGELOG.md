@@ -353,6 +353,11 @@
 
 ### Changed
 
+- A reduced cone computes the input bits it reads from T without allocating (#296):
+  `Fold::holds` allocated its params, the free T params and their radix on every call. The
+  output is unchanged; a `shadow` build holds every call to the old function. At
+  `RDRA_JOBS=1`, `verify` retires 21% fewer instructions on `insurance-claim-ops` (458.8 G
+  to 364.5 G); samples without folds are unchanged.
 - `verify` reduces a cone whose TLA+ tables print up to 530,000 cells, not 200,000 (#284),
   for the native checker and TLC alike, so both still check the same cones.
   food-permit-ops' `AfterAssert_SuspendBusiness_0` at `--instance-count 3` is now reduced
