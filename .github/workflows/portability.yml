@@ -2,9 +2,9 @@ name: Portability
 
 # Runs the same test step as release.yml on every release OS, with plain stable
 # Rust and no nix or TLC, so a tag does not meet a red build for the first time.
+# Started by hand before a release (`gh workflow run portability.yml`), not on every
+# push to main: release.yml runs the same test on the same OSes when the tag is pushed.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 env:
