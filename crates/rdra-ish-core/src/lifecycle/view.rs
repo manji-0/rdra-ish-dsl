@@ -185,6 +185,10 @@ fn axis(ts: &TransitionSystem, var: super::types::VarId) -> StateAxis {
 /// it.
 fn first_states(run: &ComponentRun, e: EntId) -> Vec<Option<u32>> {
     let ts = &run.system;
+    crate::shadow_assert!(
+        run.gathered_views(),
+        "a view is read off a run that gathered it"
+    );
     let view = &run.views[e.index()];
     let mut first = vec![None; view.patterns.len()];
     for (at, s) in run.states.iter().enumerate() {
@@ -222,6 +226,10 @@ pub(crate) fn entity_view(
     let ts = &run.system;
     let decl = ts.entity(e);
     let axes: Vec<StateAxis> = decl.columns.iter().map(|v| axis(ts, *v)).collect();
+    crate::shadow_assert!(
+        run.gathered_views(),
+        "a view is read off a run that gathered it"
+    );
     let view = &run.views[e.index()];
     let mut diagnostics: Vec<StateDiag> = build_diags
         .iter()

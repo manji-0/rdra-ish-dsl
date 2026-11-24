@@ -32,7 +32,8 @@ fn violated<'a>(diags: impl Iterator<Item = &'a StateDiag>) -> BTreeSet<String> 
 
 pub(super) fn check(orbits: &OrbitRun, caps: Caps) {
     let ts = orbits.system();
-    let mut plain_caps = Caps::new(caps.patterns, SHADOW_CAP);
+    // Neither run gathers views (`run_orbits`), so the pattern cap stops neither.
+    let mut plain_caps = Caps::new(caps.patterns, SHADOW_CAP).without_views();
     plain_caps.stop_when_all_violated = caps.stop_when_all_violated;
     let plain: ComponentRun = ts.clone().run_on(plain_caps, Checks::All, Threads::Shared);
     let stopped = |complete: bool, failed: bool| !complete && !failed;

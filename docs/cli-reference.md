@@ -161,7 +161,7 @@ E can get stuck at col = v is not decided: ...`. See [Deadlocks](./state-derivat
 |---|---|
 | `--strict` | Promote permission / access consistency gaps (`ActorPermissionMissing`, no-actor paths, etc.) from warnings to errors for exit. |
 | `--deny-deprecated` | Promote each `DeprecatedSyntax` warning (a [deprecated form](./language-reference.md#deprecated-and-removed-forms) that still loads) to an error, so `check` prints it as `error:` and exits `1`. Without the flag a deprecated form does not change the exit status. |
-| `--max-patterns <n>` | Cap on each entity's distinct patterns within one target cone. Default: 2^(10 + 8 * (n - 1)) for `n` = `--instance-count` (`1024` at one instance, `262144` at two). Past it, the run records a `PatternCapReached` **error**. Same as [`states`](#states). |
+| `--max-patterns <n>` | Cap on each entity's distinct patterns within the cone of its entity view; a cone of other targets gathers no pattern, so the cap does not stop it. Default: 2^(10 + 8 * (n - 1)) for `n` = `--instance-count` (`1024` at one instance, `262144` at two). Past it, the run records a `PatternCapReached` **error**. Same as [`states`](#states). |
 | `--max-states <n>` | Cap on the joint states of one target cone, printed in the `bounds:` line. Default: none; `--memory` stops a run that outgrows the machine, and the `bounds:` line says `no state cap per cone, memory 4GiB`. Past a cap you give, the run records a `StateCapReached` **error** that names what the cone's states vary in. A larger `--int-range-max` or `--instance-count` makes more states per cone, so it reaches the cap sooner. Same as [`states`](#states). |
 | `--memory <size>` | What the run may hold in memory: the states of the cones it explores at once. Default: `memory` under `[check]` in [`rdra.toml`](#project-manifest), else `4GiB`. A cone whose states pass it stops: the run records a `MemoryCapReached` **error** that names the limit, says how many states it held and what each took, and estimates what finishing needs; the findings the cone leaves are listed under `not checked:`. See [Memory limit](#memory-limit). Same as [`states`](#states). |
 | `--guards` | After a clean run, print on stdout which rules each guard protects. See [Guard dependencies](#guard-dependencies). It adds no finding and does not change the exit status. |
@@ -290,7 +290,7 @@ model does not need it. A guard that backs up another guard or a trigger lands h
 removing one of the two keeps the rule.
 
 The rule is `not decided` without a guard when, without the guard, its cone stops at
-`--max-states`, `--max-patterns`, or `--memory` before a counterexample. Such a guard is
+`--max-states` or `--memory` before a counterexample. Such a guard is
 neither protecting nor unprotected, and the `rules:` line names it after `not decided
 without`.
 
@@ -686,6 +686,11 @@ Cone_Inv_Encounter_2 [Inv_Encounter_2]: ok (1696486 orbits, about 820M states)
 - **`retry`** runs a cone as `never` does and runs it again up to symmetry only when it
   stopped at the memory limit; the line then adds `retried up to instance symmetry after the
   memory limit at <n> states`.
+- **Shared runs.** Under `always` a cone that runs up to symmetry shares no run with the
+  entity, safety, and property passes: none of them decides it on a plain run of the same
+  system, and its run decides nothing for them. A cone run up to symmetry stops once every
+  check has failed, and its run has no plain graph to read. `never` and `retry` share as
+  without the option.
 - **Branch cap.** The canonical form branches on rows it cannot tell apart that other rows
   name. Past 4096 branches a state is stored without its canonical form, which keeps the
   verdict and can store one orbit more than once; the line then adds `note: <n> states
@@ -821,7 +826,7 @@ prints (trimmed):
 not checked: 10 findings not decided
   whether some OfficeAction can get stuck at status = open is not decided: the OfficeAction cone stopped at the memory limit (256MiB; raise it with --memory or `memory` under [verify] in rdra.toml)
 ...
-Cone_Forbidden_OfficeAction_3 [Forbidden_OfficeAction_3, Exclusive_OfficeAction_0]: not decided (939300 states, stopped at the state or pattern cap (--max-states, --max-patterns) or the memory limit)
+Cone_Forbidden_OfficeAction_3 [Forbidden_OfficeAction_3, Exclusive_OfficeAction_0]: not decided (939300 states, stopped at the state cap (--max-states) or the memory limit)
 ...
 result: not decided
 warning: 11 findings a cone stopped at the state cap or the memory limit left undecided; the OK line holds only for what was decided (--deny-undecided fails the run)
@@ -841,7 +846,7 @@ Cone_Forbidden_CartLine_0 [Forbidden_CartLine_0, Check_CartLine_qty_0]: ok (8 st
 ```
 
 A cone with an `after` assertion, or with a rule z3 leaves unproved or out of scope, stays
-`not decided`, as does a cone stopped at `--max-states` or `--max-patterns`. See
+`not decided`, as does a cone stopped at `--max-states`. See
 [Proofs for any number of rows](./formal-verification.md#proofs-for-any-number-of-rows).
 
 ---
@@ -1545,7 +1550,7 @@ rdra-ish verify <INPUTS...> [--with-tlc] [-o <OUT>] [--instance-count <N>] [--in
 | `--instances` | `<entity>=<n>` (repeatable) | `instances` under `[verify]` in `rdra.toml` | One entity's slots in place of `--instance-count`, as `Loan=4` (see [Per-entity instance counts](#per-entity-instance-counts)). |
 | `--int-range-max` | unsigned integer | `5` | Upper bound for `IntRange == 0..N` (`1..=255`; `0` rejected). |
 | `--max-states` | unsigned integer | none | The state cap of every BFS run `verify` makes: each entity, safety, and property cone (`_Full` and `_WF` included) and the whole-model run. Without it BFS has no state cap: `--memory` stops a cone, and `--memory` and `--temporal-budget` stop the whole-model run, as `not decided`. The `bounds:` line says `no state cap per BFS cone, memory <limit>`, or the cap given. Under `--with-tlc` TLC's whole-model run needs a bound, and keeps 2,097,152 states unless `--max-states` is given; TLC's cone runs have no state cap. |
-| `--max-patterns` | unsigned integer | `256` | The cap on each entity's distinct patterns within one cone; a cone past it is `not decided`. |
+| `--max-patterns` | unsigned integer | `256` | The cap on each entity's distinct patterns in a run that builds an entity view, as `check` and `states` do. No run of `verify` builds one, so the flag stops none of them; it is accepted for scripts that pass it. |
 | `--temporal-budget` | unsigned integer | `300` | Seconds a temporal property's whole-model run gets when its cone does not decide it. Past them, or past `--max-states` states or `--memory`, the run stops and, unless it had already found a counterexample, the property is `not decided`, which warns and does not fail the run. Under `--with-tlc` TLC's whole-model run gets the same budget, and its state count is read from its progress lines (about one a minute). |
 | `--tlc-jar` | path | `RDRA_TLC_JAR`, else none | With `--with-tlc`: run TLC as `java -cp <PATH> tlc2.TLC` from `tla2tools.jar` instead of a `tlc` / `tlc2` launcher on `PATH`. Needs `java` on `PATH`. Without `--with-tlc` it prints a warning and starts no TLC. |
 | `--memory` | size | `memory` under `[verify]` in `rdra.toml`, else `16GiB` | What the run may hold in memory, such as `16GiB` or `512MiB` (`G` and `GB` also mean GiB). BFS takes all of it; under `--with-tlc` BFS takes half and the TLC cone runs going at once the other half, at least `64MiB`. A BFS cone past its share stops and leaves its findings undecided. See [Memory limit](#memory-limit). |
@@ -1631,7 +1636,7 @@ properties:
 ```
 $ rdra-ish verify samples/formal-verification/cross_order_payment_split.rdra
 ...
-Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: counterexample (7 states)
+Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: counterexample (31 states)
 error[MultiForbidden_Order_0]: invariant MultiForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order[1](status=cancelled); Payment[1](status=captured)
   rule: skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:44:1
   counterexample (3 steps):
@@ -1847,7 +1852,7 @@ rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns 
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--format` | `table` \| `csv` \| `json` | `table` | Output format. For TypeScript state types, use [`codegen --lang ts`](#codegen): `--format typescript` (also `type-script`) was removed, and is a usage error (exit 2) that names that rewrite. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Keep only the use cases reachable from the named BUCs. See [Partial runs](#partial-runs). |
-| `--max-patterns` | unsigned integer | 2^(10 + 8 * (n - 1)) for `n` = `--instance-count`: `1024`, `262144`, ... | Cap on each entity's distinct patterns within one target cone (an entity view, invariant, or after-assert is explored on the variables it reads). Only entities the target reads are bounded to one instance: a use case that also creates an entity outside the cone (an audit row, say) never runs out of slots for it. When the cap is hit, the result is marked `truncated` and a fail-closed `PatternCapReached` **error** is recorded (exit non-zero for all formats). |
+| `--max-patterns` | unsigned integer | 2^(10 + 8 * (n - 1)) for `n` = `--instance-count`: `1024`, `262144`, ... | Cap on each entity's distinct patterns within the cone of its entity view (each target is explored on the variables it reads; a cone of an invariant or after-assert alone gathers no pattern, so the cap does not stop it). Only entities the target reads are bounded to one instance: a use case that also creates an entity outside the cone (an audit row, say) never runs out of slots for it. When the cap is hit, the result is marked `truncated` and a fail-closed `PatternCapReached` **error** is recorded (exit non-zero for all formats). |
 | `--max-states` | unsigned integer | none | Cap on the joint states of one target cone, printed in the `bounds:` line (`no state cap per cone, memory 4GiB` without it). When the cap is hit, the result is marked `truncated` and a fail-closed `StateCapReached` **error** is recorded (exit non-zero for all formats). The message names what the reached states vary in, so you can see which entity's columns a guard pulled into the cone (see the example in [Exploration by cone of influence](./state-derivation.md#exploration-by-cone-of-influence)). |
 | `--memory` | size | `memory` under `[check]` in `rdra.toml`, else `4GiB` | What the run may hold in memory, such as `4GiB` or `512MiB` (`G` and `GB` also mean GiB). A cone whose states pass it stops, with a fail-closed `MemoryCapReached` error that estimates what finishing needs. See [Memory limit](#memory-limit). |
 | `--instance-count` | unsigned integer | `1` | Instances (slots) per entity, `1..=255`. The `bounds:` line prints the value used. A larger value makes more states per cone and raises the default `--max-patterns` (see it above); a run that outgrows the machine stops at `--memory`. |

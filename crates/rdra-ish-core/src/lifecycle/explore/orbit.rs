@@ -53,15 +53,26 @@ pub struct LabelledEdge<'a> {
 
 impl TransitionSystem {
     /// Explores this system up to instance symmetry under `caps`, evaluating every invariant
-    /// and after-assert. The system must not be #74-reduced (phase 1 of the design).
+    /// and after-assert. The system must not be #74-reduced (phase 1 of the design). The run
+    /// gathers no entity view, whatever `caps` asks: an `OrbitRun` has no view to read, and a
+    /// view gathered from representatives would miss the patterns of the other states of their
+    /// classes. So the pattern cap does not stop it (#251).
     pub fn run_orbits(self, caps: Caps) -> OrbitRun {
         assert!(
             self.reduction().is_none(),
             "a run up to symmetry takes a cone #74 left unreduced"
         );
         let group = Group::of(&self);
-        let (mut run, violations, parts) =
-            self.bfs_on(caps, Checks::All, Threads::Shared, Some(&group));
+        let (mut run, violations, parts) = self.bfs_on(
+            caps.without_views(),
+            Checks::All,
+            Threads::Shared,
+            Some(&group),
+        );
+        crate::shadow_assert!(
+            !run.gathered_views() && run.views.iter().all(|v| v.patterns.is_empty()),
+            "a run up to symmetry gathers no entity view"
+        );
         let mut canon = Canon::default();
         for (at, reach) in &violations {
             let (start, steps) = match reach {

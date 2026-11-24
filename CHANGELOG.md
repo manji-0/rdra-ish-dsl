@@ -141,12 +141,25 @@
   concrete slots and replayed, with the rows each step names, before it prints. A static
   scan leaves out an entity whose slots the model tells apart (an ordered id comparison, an
   id against a literal, a key set to a literal row, and five more) and names it and the
-  reason under the line. Without the option nothing changes. At `--instance-count 3` the
+  reason under the line. A cone run up to symmetry gathers no entity view (#251) and shares
+  no run with the entity, safety and property passes (#209). Without the option nothing
+  changes. At `--instance-count 3` the
   five clinic-ops and insurance-claim-ops lines that stopped at the memory limit are decided
   under `--memory 8GiB`. In `rdra-ish-core`, `TransitionSystem::run_orbits` returns an
   `OrbitRun`, which has no graph or adjacency to read, and the vacuity readers take any
   `StoredRun`. The `shadow` build adds two twins: `canonical` (against every element of the
   group, up to 1,296) and `orbit_run` (against the plain run, up to 200,000 states).
+
+- A `perf` cargo feature (#296): `cargo build --release -p rdra-ish-cli --features perf`
+  builds a CLI that, under `RDRA_PERF=1`, prints on stderr a `perf-pass` line per pass of
+  `verify` (wall and CPU time, allocations, the live heap and the memory pool at their
+  peaks) and a `perf-run` line per BFS run (its pass, states, edges, width, the bits its
+  domains need, what its store keeps, its thread CPU). `RDRA_PERF=2` adds the columns that
+  read every state or edge, hashes of the states, edges and bindings among them, which tell
+  two runs of one graph apart. Its global allocator counts every allocation.
+  `scripts/perf-tables.py <binary>` runs the five measured `verify` runs of #296 one at a
+  time at `RDRA_JOBS=1` and prints the totals, the passes, the BFS CPU per pass and the
+  largest runs. A build without the feature is unchanged.
 
 - A `shadow` cargo feature (#275): `cargo build --release -p rdra-ish-cli --features shadow`
   builds a CLI in which every fast function that has a reference twin also runs the twin and
@@ -372,7 +385,35 @@
   output is unchanged, byte for byte. The TLA+
   export changes text on 9 models (no verdict). Instance symmetry relabels a deleted row's
   key with its parent, so a model that reads it is no longer left out of the group.
-
+- `--max-patterns` caps only a run that builds an entity view (#251, #296): the cone of an
+  entity view in `check` and `states`. Only those runs gather view patterns now. A cone of
+  invariants, `after` assertions or `can_reach` alone, a run that quotients a sub-lifecycle,
+  and every run of `verify` gather none, so the pattern cap no longer stops them: a cone that
+  stopped there is now explored to its end, `--max-states` or `--memory`, and a sub-lifecycle
+  that failed to quotient at the cap can now quotient (the quotient cache no longer keys on
+  the pattern cap). `verify` still takes
+  `--max-patterns`, which stops none of its runs, and its run lines say `stopped at the state
+  cap (--max-states) or the memory limit`. The output at every sample's and corpus case's
+  header flags is unchanged. At `RDRA_JOBS=1`, `verify` retires 12% fewer instructions on
+  `patent-ops` and 5% fewer on `insurance-claim-ops`.
+- `verify` explores a cone once when its entity, safety and property passes reduce it to the
+  same system (#209, #296). The pass that runs such a system first runs it with every check
+  and to the end, and the later passes decide their cones on that run. Two cones share a run
+  only when their reduced systems are equal, and only a complete run is shared. A failing
+  safety cone that shares the run of an entity or property cone now prints the state count
+  of the whole cone, where a run of its own stops once every check has failed (#213): for
+  example `Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: counterexample (31 states)`
+  instead of `(7 states)` on `samples/formal-verification/cross_order_payment_split.rdra`.
+  The verdicts, the counterexamples and every other line are unchanged. At `RDRA_JOBS=1`,
+  `verify` retires 37% fewer instructions on `patent-ops` (59.0 G to 36.9 G), whose safety
+  pass explored the entity pass's two largest cones again, and 9% fewer on
+  `insurance-claim-ops`, whose property `ClaimEventuallyDecided` explored the cone of
+  `Forbidden_Claim_4` again.
+- A reduced cone computes the input bits it reads from T without allocating (#296):
+  `Fold::holds` allocated its params, the free T params and their radix on every call. The
+  output is unchanged; a `shadow` build holds every call to the old function. At
+  `RDRA_JOBS=1`, `verify` retires 21% fewer instructions on `insurance-claim-ops` (458.8 G
+  to 364.5 G); samples without folds are unchanged.
 - `verify` reduces a cone whose TLA+ tables print up to 530,000 cells, not 200,000 (#284),
   for the native checker and TLC alike, so both still check the same cones.
   food-permit-ops' `AfterAssert_SuspendBusiness_0` at `--instance-count 3` is now reduced

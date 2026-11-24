@@ -290,8 +290,9 @@ impl<'t> Bfs<'t> {
     /// Explores with `threads` workers; the run is the same with any number.
     pub(super) fn go(&mut self, threads: Threads) {
         let ts = self.ts;
+        let views = self.caps.views;
         for s in ts.initial_states() {
-            for (i, _) in ts.entities.iter().enumerate() {
+            for (i, _) in ts.entities.iter().enumerate().filter(|_| views) {
                 let e = EntId::at(i);
                 for slot in 0..ts.slots(e) {
                     if s.is_present(ts, e, slot) {
@@ -359,7 +360,7 @@ impl<'t> Bfs<'t> {
         for i in range {
             let (act, params, next) = moves.get(i);
             s2.0.copy_from_slice(next);
-            if !self.observe(at, act, params, &s, s2) {
+            if self.caps.views && !self.observe(at, act, params, &s, s2) {
                 return false;
             }
             let binding = self.bindings.id(act, params);

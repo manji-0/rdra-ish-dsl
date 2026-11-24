@@ -359,8 +359,9 @@ pub(crate) enum Commands {
         /// TLA+ `IntRange == 0..N` upper bound
         #[arg(long, default_value_t = 5)]
         int_range_max: u32,
-        /// Cap on each entity's distinct patterns within one cone; past it the cone is not
-        /// decided. Default: 256
+        /// Cap on each entity's distinct patterns in a run that builds an entity view, as
+        /// `check` and `states` do. No run of `verify` builds one, so it stops none of them;
+        /// kept for scripts that pass it. Default: 256
         #[arg(long)]
         max_patterns: Option<usize>,
         /// Cap on the joint states of every BFS run: each entity, safety, and property cone,
