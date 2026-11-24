@@ -23,21 +23,44 @@ impl Heap {
     }
 }
 
+/// How the JVM compiles TLC. C1 alone starts a run sooner and spends less CPU on one that
+/// ends within a second (on an 87-state cone on JDK 17, 0.61 s wall and 0.26 user CPU-s against
+/// 0.63 s and 0.38), and slows a long one by up to 67% (#309), so it is for runs known to be small.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Jit {
+    /// The JVM's default: C1, then C2 for the hot code.
+    Tiered,
+    /// C1 only.
+    C1,
+}
+
+impl Jit {
+    /// The JVM flags of this setting. Every HotSpot JVM since JDK 8 takes them, but an unknown
+    /// `-XX` flag stops a JVM, so a run gets them only once its TLC has been seen to start
+    /// with them (`Tlc::jit`).
+    pub fn flags(self) -> &'static str {
+        match self {
+            Jit::Tiered => "",
+            Jit::C1 => "-XX:TieredStopAtLevel=1",
+        }
+    }
+}
+
 /// `JAVA_TOOL_OPTIONS` for a TLC run of `heap`'s kind: the heap the user names
 /// (`user_heap`), else the kind's default.
 pub fn tlc_env(heap: Heap, tmpdir: &Path) -> (&'static str, String) {
     let user = current_user_heap().unwrap_or(heap.default_bytes());
-    tlc_env_sized(user, tmpdir)
+    tlc_env_sized(user, tmpdir, Jit::Tiered)
 }
 
 /// `JAVA_TOOL_OPTIONS` for a TLC run with a heap of `bytes`: the heap, a `java.io.tmpdir` of
-/// its own, then the user's `JAVA_TOOL_OPTIONS`. The JVM takes the last `-Xmx`, so the user's
-/// value wins.
-pub fn tlc_env_sized(bytes: u64, tmpdir: &Path) -> (&'static str, String) {
+/// its own, the flags of `jit`, then the user's `JAVA_TOOL_OPTIONS`. The JVM takes the last
+/// value of a flag, so the user's wins.
+pub fn tlc_env_sized(bytes: u64, tmpdir: &Path, jit: Jit) -> (&'static str, String) {
     let user = std::env::var("JAVA_TOOL_OPTIONS").ok();
     (
         "JAVA_TOOL_OPTIONS",
-        java_tool_options(bytes, tmpdir, user.as_deref()),
+        java_tool_options(bytes, tmpdir, jit, user.as_deref()),
     )
 }
 
@@ -93,8 +116,12 @@ fn xmx(bytes: u64) -> String {
     }
 }
 
-fn java_tool_options(bytes: u64, tmpdir: &Path, user: Option<&str>) -> String {
+fn java_tool_options(bytes: u64, tmpdir: &Path, jit: Jit, user: Option<&str>) -> String {
     let mut opts = format!("-Xmx{} -Djava.io.tmpdir={}", xmx(bytes), tmpdir.display());
+    if jit != Jit::Tiered {
+        opts.push(' ');
+        opts.push_str(jit.flags());
+    }
     if let Some(user) = user.map(str::trim).filter(|u| !u.is_empty()) {
         opts.push(' ');
         opts.push_str(user);
@@ -110,15 +137,15 @@ mod tests {
     fn defaults_per_run_kind() {
         let tmp = Path::new("/w/Cone_A.tmp");
         assert_eq!(
-            java_tool_options(Heap::Cone.default_bytes(), tmp, None),
+            java_tool_options(Heap::Cone.default_bytes(), tmp, Jit::Tiered, None),
             "-Xmx1g -Djava.io.tmpdir=/w/Cone_A.tmp"
         );
         assert_eq!(
-            java_tool_options(Heap::Temporal.default_bytes(), tmp, Some(" ")),
+            java_tool_options(Heap::Temporal.default_bytes(), tmp, Jit::Tiered, Some(" ")),
             "-Xmx2g -Djava.io.tmpdir=/w/Cone_A.tmp"
         );
         assert_eq!(
-            java_tool_options(768 * MIB, tmp, None),
+            java_tool_options(768 * MIB, tmp, Jit::Tiered, None),
             "-Xmx768m -Djava.io.tmpdir=/w/Cone_A.tmp"
         );
     }
@@ -127,8 +154,12 @@ mod tests {
     fn the_user_value_comes_last() {
         let tmp = Path::new("/w/t");
         assert_eq!(
-            java_tool_options(4 * GIB, tmp, Some("-Xmx8g -Dx=1")),
+            java_tool_options(4 * GIB, tmp, Jit::Tiered, Some("-Xmx8g -Dx=1")),
             "-Xmx4g -Djava.io.tmpdir=/w/t -Xmx8g -Dx=1"
+        );
+        assert_eq!(
+            java_tool_options(GIB, tmp, Jit::C1, Some("-XX:TieredStopAtLevel=4")),
+            "-Xmx1g -Djava.io.tmpdir=/w/t -XX:TieredStopAtLevel=1 -XX:TieredStopAtLevel=4"
         );
     }
 
