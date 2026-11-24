@@ -11,7 +11,7 @@ use crate::lifecycle::explore::{Adjacency, Caps, Checks, ComponentRun, OrbitRun}
 use crate::lifecycle::expr::State;
 use crate::lifecycle::types::{ActId, Domain, EntId, VarId};
 use crate::lifecycle::{StateDiag, TransitionSystem};
-use crate::memory::{watch, Watched};
+use crate::memory::Watched;
 
 #[cfg(any(test, feature = "shadow"))]
 mod reference;
@@ -260,7 +260,10 @@ impl Classes {
         // The inputs stay on the nested T side: the rises are kept, and only `obs` anchors.
         let (sub, clean) =
             raw.reduced_in(&[(ext.obs_local.clone(), ext.rise_actions())], caps, cache);
-        // A test or `shadow` build may force S up to `H` at once (`Caps::force_s_up_to_h`).
+        // A test or `shadow` build may force S up to `H` at once (`Caps::force_s_up_to_h`). A
+        // run up to `H` never goes through `QuotientCache::run_of_s`, which holds plain runs
+        // alone: neither this path nor the retry below reads a held run as one up to `H`, and
+        // a run up to `H` is never held for a plain request.
         if forced(caps) && sub.reduction().is_none() {
             let ended = match clean {
                 true => Ended::Clean,
@@ -268,14 +271,13 @@ impl Classes {
             };
             return Self::up_to_h(ext, caps, &sub, None, ended);
         }
-        // The quotient reads the graph alone, so the run evaluates no check.
-        let (run, seen) = {
+        // The quotient reads the graph alone, so the run evaluates no check. Another key over
+        // the same sub-lifecycle may have run it already (`QuotientCache::run_of_s`).
+        let (run, seen) = cache.run_of_s(&sub, caps, || {
             let _label = crate::perf::label("S");
-            watch(|| {
-                sub.clone()
-                    .run_checking(caps.without_views(), Checks::none())
-            })
-        };
+            sub.clone()
+                .run_checking(caps.without_views(), Checks::none())
+        });
         if !run.complete {
             let ended = Ended::stopped(clean, seen, &run);
             let memory = run
@@ -395,7 +397,7 @@ impl Classes {
             .states
             .iter()
             .map(|st| {
-                let key = run.system.project(st, &key_vars);
+                let key = sub.project(st, &key_vars);
                 let len = index.len() as u32;
                 *index.entry(key).or_insert(len)
             })
@@ -464,7 +466,7 @@ impl Classes {
                 // Every state of a block rises into the same blocks; the representative's
                 // edges are enough.
                 if *reps[class[x] as usize] == run.states[x].0 {
-                    let inputs = run.system.project(&run.states[y], &ext.inputs_local).0;
+                    let inputs = sub.project(&run.states[y], &ext.inputs_local).0;
                     let was = rises.insert((class[x], inputs), class[y]);
                     assert!(was.is_none_or(|c| c == class[y]), "a rise is a function");
                 }
