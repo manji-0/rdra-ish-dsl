@@ -30,6 +30,7 @@ mod end;
 mod jobs;
 mod native;
 mod report;
+mod shared;
 mod specs;
 mod state_models;
 mod tlc;
@@ -44,9 +45,10 @@ use self::end::{End, TlcEnd};
 use self::jobs::{cone_jobs, explored_jobs, property_jobs, Job, JobKind};
 use self::native::{native_properties, native_wholes, Natives};
 use self::report::{print_plan, report_properties, Temporal};
+use self::shared::Shared;
 use self::specs::{out_names, spec_dir, write_specs_and_index, write_whole_specs};
 use self::state_models::{run_state_models, state_model_disagreements, state_model_jobs};
-use self::tlc::{run_cones, run_tlc_wholes, tlc_failures, Ran};
+use self::tlc::{covering, run_cones, run_tlc_wholes, tlc_failures, Ran};
 pub(crate) use self::tlc_tool::find_on_path;
 use self::tlc_tool::Tlc;
 use crate::export::{checked_system, Modules};
@@ -240,6 +242,11 @@ pub fn run(
     let (bfs, mut natives, explored, proof, cones_ran) = std::thread::scope(|threads| {
         let cones = start
             .map(|(tlc, dir)| threads.spawn(|| run_cones(tlc, dir, &modules, &jobs, memory.cones)));
+        // A cone the entity, safety and property passes share runs once (#209): the pass that
+        // runs it first decides the later passes' jobs on its run.
+        let covers = covering(&jobs);
+        let mut shared = Shared::new(&jobs);
+        let wanted = Shared::wanted(&jobs);
         rdra_ish_core::perf::pass("entity_pass");
         let bfs = state_models(
             program,
@@ -250,11 +257,13 @@ pub fn run(
             caps,
             start.is_some(),
             quotients,
+            &wanted,
+            |run| shared.decide_on(&ts, &jobs, &covers, run),
         );
         rdra_ish_core::perf::pass("safety_pass");
-        let (safety, mut vacuous) = bfs_cones(&ts, &jobs, caps);
+        let (safety, mut vacuous) = bfs_cones(&ts, &jobs, caps, &covers, &mut shared);
         rdra_ish_core::perf::pass("property_pass");
-        let (properties, property_vacuous) = native_properties(&ts, &jobs, caps);
+        let (properties, property_vacuous) = native_properties(&ts, &jobs, caps, &mut shared);
         // A `--buc` drops use cases that may reach a premise.
         if scope.bucs.is_empty() {
             vacuous.extend(property_vacuous);

@@ -113,7 +113,7 @@ bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 
 cones: 1 for 1 invariant(s) and 0 after-assert(s)
 temporal properties: none
 state models (BFS on 2 entity cones): 2 state models, 5 states witnessed, 0 deadlocks, 0 use cases that never run
-Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: counterexample (7 states)
+Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: counterexample (31 states)
 error[MultiForbidden_Order_0]: invariant MultiForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order[1](status=cancelled); Payment[1](status=captured)
   rule: samples/cross_order_payment_split.rdra:44:1
   counterexample (3 steps):
