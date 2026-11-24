@@ -88,7 +88,7 @@
   patent-ops, food-permit-ops, or insurance-claim-ops at two instances stops at
   `--temporal-budget` or at the memory limit (or `--max-states`, when given) as not decided.
 - **State models**: witnesses, deadlocks, and use cases that never run come from BFS on
-  each entity's cone, at `verify`'s bounds (no state cap; `--memory` stops a cone, `--max-states <N>` sets one, `--max-patterns <N>` the 256 patterns).
+  each entity's cone, at `verify`'s bounds (no state cap; `--memory` stops a cone, `--max-states <N>` sets one; `--max-patterns` stops no run of `verify`).
   `--memory` does not yet bound the whole process (#242): when cones stop at it, the process
   can take up to about twice the limit, so give about half the memory you can spare.
   TLC's own `CHECK_DEADLOCK` stays `FALSE`: every bounded model ends with no enabled

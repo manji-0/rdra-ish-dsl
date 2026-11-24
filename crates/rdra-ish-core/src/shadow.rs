@@ -15,6 +15,7 @@
 //! | the reduced step's class moves (`moves_of_into`, #252) | `reduce/reference.rs`: `moves_from` |
 //! | `Canon::canonical`, the canonical form under instance symmetry (`explore/symmetry/canon.rs`, #212) | `explore/symmetry/reference.rs`: the least layout over every element of `G_s`, when it has at most 6^4 |
 //! | `OrbitRun`, a run up to instance symmetry (`explore/orbit.rs`, #212) | `explore/orbit/reference.rs`: the plain run of the same cone, up to `SHADOW_CAP` states |
+//! | a fold's input bit without allocations (`Fold::holds`, `reduce/fold.rs`, #296) | `reduce/fold/reference.rs`: the bit with its `Vec`s |
 //!
 //! A `shadow` build also runs the checks `shadow_assert!` makes, as a debug build does: each
 //! reader of a run's check results reads only checks the run evaluated (#251), and a steady
@@ -39,9 +40,10 @@ pub(crate) enum Twin {
     ClassMoves,
     Canonical,
     OrbitRun,
+    FoldHolds,
 }
 
-const TWINS: [(Twin, &str); 9] = [
+const TWINS: [(Twin, &str); 10] = [
     (Twin::EachEnabled, "each_enabled"),
     (Twin::Seen, "seen"),
     (Twin::Source, "source"),
@@ -51,6 +53,7 @@ const TWINS: [(Twin, &str); 9] = [
     (Twin::ClassMoves, "class_moves"),
     (Twin::Canonical, "canonical"),
     (Twin::OrbitRun, "orbit_run"),
+    (Twin::FoldHolds, "fold_holds"),
 ];
 
 static COMPARED: [AtomicU64; TWINS.len()] = [const { AtomicU64::new(0) }; TWINS.len()];

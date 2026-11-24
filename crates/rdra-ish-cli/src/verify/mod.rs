@@ -30,6 +30,7 @@ mod end;
 mod jobs;
 mod native;
 mod report;
+mod shared;
 mod specs;
 mod state_models;
 mod tlc;
@@ -44,9 +45,10 @@ use self::end::{End, TlcEnd};
 use self::jobs::{cone_jobs, explored_jobs, property_jobs, Job, JobKind};
 use self::native::{native_properties, native_wholes, Natives};
 use self::report::{print_plan, report_properties, Temporal};
+use self::shared::Shared;
 use self::specs::{out_names, spec_dir, write_specs_and_index, write_whole_specs};
 use self::state_models::{run_state_models, state_model_disagreements, state_model_jobs};
-use self::tlc::{run_cones, run_tlc_wholes, tlc_failures, Ran};
+use self::tlc::{covering, run_cones, run_tlc_wholes, tlc_failures, Ran};
 pub(crate) use self::tlc_tool::find_on_path;
 use self::tlc_tool::Tlc;
 use crate::export::{checked_system, Modules};
@@ -98,7 +100,8 @@ pub struct WithTlc {
 pub struct Budget {
     /// Seconds a temporal property's whole-model run gets.
     pub temporal: Duration,
-    /// `--max-patterns`; default `Caps::VERIFY`'s.
+    /// `--max-patterns`; default `Caps::VERIFY`'s. It caps a run that builds an entity
+    /// view, and `verify` builds none (#251), so it stops none of its runs.
     pub max_patterns: Option<usize>,
     /// `--max-states`: the state cap of every BFS run, the whole-model one and TLC's included.
     /// Without it BFS has no state cap; TLC's whole-model run keeps `WHOLE_MODEL_STATE_CAP`.
@@ -140,8 +143,11 @@ pub fn run(
     }: Budget,
     with_tlc: Option<WithTlc>,
 ) -> Result<()> {
+    rdra_ish_core::perf::pass("build_ts");
     let built = checked_system(model, bounds.clone(), scope)?;
     let (ts, selection) = (built.ts, built.selection);
+    #[cfg(feature = "perf")]
+    ts.perf_guards_line();
     let (out, whole_name) = out_names(out);
     let keep = out.is_some();
     let names = TlaNames::new(&ts);
@@ -173,11 +179,13 @@ pub fn run(
     } else {
         format!("{}; BFS has {} of it", Budgeted::Verify.raise(), memory.bfs)
     };
-    // No `--max-states`: no state cap, and the memory limit stops a cone.
+    // No `--max-states`: no state cap, and the memory limit stops a cone. No run of `verify`
+    // reads an entity view, so none gathers the patterns the pattern cap counts (#251).
     let caps = Caps::new(
         max_patterns.unwrap_or(Caps::VERIFY.patterns),
         max_states.unwrap_or(usize::MAX),
     )
+    .without_views()
     .charged_to(MemoryPool::share_of(
         memory.limit,
         memory.bfs,
@@ -190,6 +198,7 @@ pub fn run(
     // The quotients the passes that reduce cones share: a sub-lifecycle many cones have is
     // explored and partitioned once (#252). The entity pass, the last of them, drops it.
     let quotients = QuotientCache::new();
+    rdra_ish_core::perf::pass("cone_jobs");
     let mut jobs = cone_jobs(&ts, &names, &targets, &mut modules, caps, &quotients);
     let cones = jobs.len();
     let line = print_plan(
@@ -203,6 +212,7 @@ pub fn run(
     );
     let mut whole_modules = Vec::new();
     if temporal {
+        rdra_ish_core::perf::pass("property_jobs");
         jobs.extend(property_jobs(&ts, &names, &mut modules, caps, &quotients));
         whole_modules = (0..ts.properties().len())
             .map(|i| modules.claim(&format!("{whole_stem}_{}", names.property(i))))
@@ -214,6 +224,7 @@ pub fn run(
         }
     }
     // The modules are written for `-o`, a run by hand, and for TLC under `--with-tlc`.
+    rdra_ish_core::perf::pass("emit_setup");
     let dir = match keep || with_tlc.is_some() {
         true => Some(spec_dir(out)?),
         false => None,
@@ -237,6 +248,12 @@ pub fn run(
     let (bfs, mut natives, explored, proof, cones_ran) = std::thread::scope(|threads| {
         let cones = start
             .map(|(tlc, dir)| threads.spawn(|| run_cones(tlc, dir, &modules, &jobs, memory.cones)));
+        // A cone the entity, safety and property passes share runs once (#209): the pass that
+        // runs it first decides the later passes' jobs on its run.
+        let covers = covering(&jobs);
+        let mut shared = Shared::new(&jobs, symmetry);
+        let wanted = shared.wanted(&jobs);
+        rdra_ish_core::perf::pass("entity_pass");
         let bfs = state_models(
             program,
             model,
@@ -246,9 +263,14 @@ pub fn run(
             caps,
             start.is_some(),
             quotients,
+            &wanted,
+            |run| shared.decide_on(&ts, &jobs, &covers, run),
         );
-        let (safety, mut vacuous) = bfs_cones(&ts, &jobs, caps, symmetry);
-        let (properties, property_vacuous) = native_properties(&ts, &jobs, caps, symmetry);
+        rdra_ish_core::perf::pass("safety_pass");
+        let (safety, mut vacuous) = bfs_cones(&ts, &jobs, caps, &covers, &mut shared, symmetry);
+        rdra_ish_core::perf::pass("property_pass");
+        let (properties, property_vacuous) =
+            native_properties(&ts, &jobs, caps, &mut shared, symmetry);
         // A `--buc` drops use cases that may reach a premise.
         if scope.bucs.is_empty() {
             vacuous.extend(property_vacuous);
@@ -258,6 +280,7 @@ pub fn run(
                 }
             }
         }
+        rdra_ish_core::perf::pass("explored_props");
         let explored = match temporal {
             true => explored_properties(program, model, &ts, caps, budget),
             false => Explored::default(),
@@ -270,7 +293,9 @@ pub fn run(
                 _ => None,
             })
             .collect();
+        rdra_ish_core::perf::pass("wholes");
         let wholes = native_wholes(&ts, &open, caps, budget);
+        rdra_ish_core::perf::pass("proof");
         let proof = match (&prove, z3) {
             (Some(Prove { deny_unproved, .. }), Some(z3)) => z3.and_then(|z3| {
                 let marks = Marks::of(model, &ts);
@@ -290,6 +315,7 @@ pub fn run(
         };
         (bfs, natives, explored, proof, cones_ran)
     });
+    rdra_ish_core::perf::pass("report");
     let proof = proof?;
     // A cone BFS left open at the memory limit is decided by the rules the proof proved.
     if let Some((_, proved)) = &proof {

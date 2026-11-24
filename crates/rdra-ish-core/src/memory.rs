@@ -199,6 +199,14 @@ impl MemoryPool {
         if let (true, Some(parent)) = (taken, self.parent) {
             parent.held.fetch_add(bytes, Ordering::Relaxed);
         }
+        #[cfg(feature = "perf")]
+        if taken {
+            let mut root = self;
+            while let Some(parent) = root.parent {
+                root = parent;
+            }
+            crate::perf::pool_held(root.held.load(Ordering::Relaxed));
+        }
         taken
     }
 

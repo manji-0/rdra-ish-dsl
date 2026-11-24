@@ -602,19 +602,24 @@ entity view, a `can_reach`, or a temporal property runs to the end, since those 
 whole graph. A cone stopped this way is not complete: it reports no cap, and it reports no
 vacuity, which a violated check does not have. Under `verify` its run line counts the
 states it reached before it stopped, so a failing cone prints fewer states than TLC's line
-for the same module.
+for the same module. A safety cone whose system is also an entity cone's or a property
+cone's is explored once for all of them (#209), so it runs to the end and its line counts
+the whole cone.
 
 A cone evaluates only the checks something reads from it (#251). A cone of checks alone
 evaluates every check its system holds, since the stop above reads them all. A cone that
 answers an entity view or a `can_reach` evaluates only the checks among its own targets, so
-a cone of entity targets alone evaluates none. A check is always reported from its own
-cone, so this changes no finding.
+a cone of entity targets alone evaluates none, unless `verify` also explores its system as
+a safety or property cone: then the one run evaluates every check. A check is always
+reported from its own cone, so this changes no finding.
 
 Two caps and the memory limit stop a cone, and `check` and `states` take all three:
 
 - `--max-patterns` caps the distinct patterns of one entity view within a cone. Default:
   2^(10 + 8 * (n - 1)) for `n` = `--instance-count`: 1,024 at one instance, 2^18 at two,
-  2^26 at three.
+  2^26 at three. Only a run that builds an entity view gathers patterns (#251): the cone of
+  an entity view in `check` and `states`. A cone of other targets, a run that quotients a
+  sub-lifecycle, and every run of `verify` gather none, so the cap does not stop them.
 - `--max-states` caps the joint states of one cone. The `bounds:` line prints it. Default:
   none, and the line says `no state cap per cone, memory 4GiB`.
 - `--memory` (4GiB by default) stops a cone whose stored states pass the limit, which the

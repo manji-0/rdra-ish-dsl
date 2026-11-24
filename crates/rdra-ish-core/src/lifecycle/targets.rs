@@ -204,24 +204,28 @@ struct ArmSoFar {
 impl TransitionSystem {
     /// Explores each target on its cone; targets with the same cone share one run.
     pub fn explore_targets(&self, targets: &[Target], caps: Caps) -> TargetExploration {
-        self.explore_targets_with(targets, caps, None)
+        self.explore_targets_with(targets, caps, None, &[])
     }
 
     /// `explore_targets` with each cone reduced by its independent sub-lifecycle
     /// (`TransitionSystem::reduced`), as `verify` explores.
     pub fn explore_targets_reduced(&self, targets: &[Target], caps: Caps) -> TargetExploration {
-        self.explore_targets_reduced_in(targets, caps, &QuotientCache::new())
+        self.explore_targets_reduced_in(targets, caps, &QuotientCache::new(), &[])
     }
 
     /// `explore_targets_reduced`, sharing quotients through `cache` with the other cones
-    /// reduced in it.
+    /// reduced in it. A cone whose system is one of `every_check` evaluates every check its
+    /// system holds, whatever its targets read, so that a caller can decide on its run the
+    /// targets of a later pass that runs that system (#209): `verify`'s safety and property
+    /// cones.
     pub fn explore_targets_reduced_in(
         &self,
         targets: &[Target],
         caps: Caps,
         cache: &QuotientCache,
+        every_check: &[&TransitionSystem],
     ) -> TargetExploration {
-        self.explore_targets_with(targets, caps, Some(cache))
+        self.explore_targets_with(targets, caps, Some(cache), every_check)
     }
 
     /// `reduce` holds the quotients the cones are reduced with; `None` leaves them whole.
@@ -230,6 +234,7 @@ impl TransitionSystem {
         targets: &[Target],
         caps: Caps,
         reduce: Option<&QuotientCache>,
+        every_check: &[&TransitionSystem],
     ) -> TargetExploration {
         let mut groups: Vec<(Cone, Vec<Target>)> = Vec::new();
         let mut index: HashMap<Cone, usize> = HashMap::new();
@@ -246,6 +251,12 @@ impl TransitionSystem {
         // Each cone is explored on its own system, so the cones run side by side; the runs
         // come back in cone order, and each is what it is alone.
         let explore = |cone: &Cone, shared: &[Target], caps: Caps| {
+            // Only an entity target's view reads the patterns (`entity_views`), so a cone of
+            // other targets gathers none and the pattern cap does not stop it (#251).
+            let caps = match shared.iter().any(|t| matches!(t, Target::Entity(_))) {
+                true => caps,
+                false => caps.without_views(),
+            };
             // A reduction keeps what LTL reads, not `AG EF`: a `can_reach` cone stays whole.
             let reach = shared.iter().any(|t| matches!(t, Target::Reach(_)));
             let system = match reduce.filter(|_| !reach) {
@@ -257,13 +268,15 @@ impl TransitionSystem {
             };
             // A cone of checks alone is decided once each has failed, which reads every check
             // its system holds; an entity target or a `can_reach` reads the whole graph, and
-            // nothing reads the checks of such a cone but its own check targets.
+            // nothing reads the checks of such a cone but its own check targets, and the
+            // caller's later pass when the system is one of `every_check`.
             let checks = shared
                 .iter()
                 .all(|t| matches!(t, Target::Invariant(_) | Target::AfterAssert(_)));
-            match checks {
-                true => system.run_checking(caps.until_all_violated(), Checks::All),
-                false => system.run_checking(caps, self.checks_of(shared)),
+            match (checks, every_check.contains(&&system)) {
+                (true, _) => system.run_checking(caps.until_all_violated(), Checks::All),
+                (false, true) => system.run_checking(caps, Checks::All),
+                (false, false) => system.run_checking(caps, self.checks_of(shared)),
             }
         };
         let ran = in_parallel(groups, jobs(), |(cone, shared)| {
