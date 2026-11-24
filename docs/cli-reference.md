@@ -1762,10 +1762,18 @@ Only `--with-tlc` needs TLC. `verify` looks for it in this order: `--tlc-jar`,
   [TLA+ releases](https://github.com/tlaplus/tlaplus/releases), install a JDK, and pass
   `--tlc-jar <path>` or set `RDRA_TLC_JAR=<path>`.
 
-Run TLC 1.7.4 on JDK 17 or earlier. On JDK 21 and later, a `-continue` run that prints
-many traces stops with `java.lang.ArrayIndexOutOfBoundsException` (`arraycopy: length -N
-is negative`) and `verify` reports a `tool_error`: TLC's own buffered file reads a trace
-record back wrongly once the JDK's `RandomAccessFile.readLong` goes through it (#314).
+Run TLC 1.7.x on JDK 17 or earlier, or use TLC 1.8.0. On JDK 21 and later, TLC 1.7.x's
+own buffered file reads a trace record back wrongly once the JDK's
+`RandomAccessFile.readLong` goes through it, and a `-continue` run that prints many traces
+stops with `java.lang.ArrayIndexOutOfBoundsException` (`arraycopy: length -N is negative`
+or `Index N out of bounds for length M`) (#314).
+
+- `verify` prints `warning: TLC 2.19 (TLC 1.7.x) runs on Java 21.0.11; …` once, when the
+  first TLC run's banner names TLC 1.7.x (`TLC2 Version 2.x`) and a JVM of 21 or later.
+- A run that stops on that exception is a `tool_error`, even when it had printed
+  violations before it: it never reached the rest of the model. Its report starts with
+  `hint: TLC stopped with an ArrayIndexOutOfBoundsException while it read a trace back, …`
+  and says to run TLC on JDK 17 or earlier or to use TLC 1.8.0.
 
 #### Getting z3
 

@@ -1812,6 +1812,61 @@ fn only_a_small_state_model_run_compiles_with_c1_and_only_where_the_jvm_takes_it
     assert!(runs.iter().all(|(_, o)| !o.contains(C1)), "{runs:?}");
 }
 
+/// `verify` on `order.rdra` with a fake `tlc` that prints TLC 1.7.4's banner on Java `java`
+/// and, when `crash`, ends as TLC 1.7.x does on JDK 21 when it fails reading a trace back
+/// (#314). Returns stdout and stderr together.
+#[cfg(unix)]
+fn verify_on_banner(test: &str, java: &str, crash: bool) -> String {
+    use std::os::unix::fs::PermissionsExt;
+    let tmp = scratch(test);
+    let bin = tmp.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    let end = match crash {
+        true => "echo 'Error: Invariant Forbidden_0 is violated.'\necho 'arraycopy: length -1536 is negative'\necho 'Error: TLC threw an unexpected exception.'\necho 'The exception was a java.lang.RuntimeException'\necho ': java.lang.ArrayIndexOutOfBoundsException: arraycopy: length -1536 is negative'\necho '53565 states generated, 10179 distinct states found, 1356 states left on queue.'\nexit 75\n",
+        false => "echo '7 states generated, 7 distinct states found, 0 states left on queue.'\necho 'Model checking completed. No error has been found.'\n",
+    };
+    let script = format!(
+        "#!/bin/sh\nif [ \"$1\" = -help ]; then\necho 'TLC - provides model checking'\nexit 1\nfi\n\
+         echo 'TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)'\n\
+         echo 'Running breadth-first search Model-Checking with fp 6 and seed -1 with 1 worker on 4 cores with 1024MB heap and 64MB offheap memory [pid: 1] (Linux 6.8 amd64, Eclipse Adoptium {java} amd64, MSBDiskFPSet, DiskStateQueue).'\n{end}"
+    );
+    std::fs::write(bin.join("tlc"), script).unwrap();
+    std::fs::set_permissions(bin.join("tlc"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    let sample = repo().join("samples/formal-verification/order.rdra");
+    let out = verify_on_path(
+        &repo(),
+        &tmp,
+        &bin,
+        &[sample.to_str().unwrap(), "--with-tlc"],
+    );
+    let _ = std::fs::remove_dir_all(&tmp);
+    format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    )
+}
+
+/// TLC 1.7.x fails reading a trace back on JDK 21 and later (#314): `verify` warns once when
+/// a run's banner shows that pair, and a run that stopped on the failure is a `tool_error`
+/// whose hint names the cause and says to use JDK 17 or earlier. On JDK 17 neither appears.
+#[cfg(unix)]
+#[test]
+fn tlc_1_7_on_jdk_21_warns_once_and_its_read_back_failure_names_the_fix() {
+    const WARNING: &str = "warning: TLC 2.19 (TLC 1.7.x) runs on Java 21.0.11";
+    const HINT: &str =
+        "hint: TLC stopped with an ArrayIndexOutOfBoundsException while it read a trace back";
+    let out = verify_on_banner("verify_cli_readback_21", "21.0.11", true);
+    assert_eq!(out.matches(WARNING).count(), 1, "{out}");
+    assert!(out.contains("run TLC on JDK 17 or earlier"), "{out}");
+    assert!(out.contains(HINT), "{out}");
+    assert!(out.contains("tool_error"), "{out}");
+
+    let out = verify_on_banner("verify_cli_readback_17", "17.0.19", false);
+    assert!(!out.contains("warning: TLC"), "{out}");
+    assert!(!out.contains(HINT), "{out}");
+}
+
 /// `--backend tlc` still runs TLC, as `--with-tlc` does, and warns that it is deprecated.
 #[cfg(unix)]
 #[test]
