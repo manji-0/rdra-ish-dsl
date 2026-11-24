@@ -2,15 +2,26 @@
 # Check that every sample is formatted, regenerate every committed sample artifact listed in
 # scripts/sample-artifacts.tsv and the sample documents that embed them, and fail when the
 # result differs from what is committed.
+#
+#   scripts/check-sample-artifacts.sh [BIN]
+#
+# BIN is the `rdra-ish` to run; without it, the debug build, built first. CI passes the
+# release binary `nix build` makes: it writes the same files, and the rows that explore the
+# lifecycle run about 40 times faster than in debug.
 set -euo pipefail
+
+bin="${1:-}"
+[[ -n "$bin" ]] && bin="$(cd "$(dirname "$bin")" && pwd)/$(basename "$bin")"
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 manifest="scripts/sample-artifacts.tsv"
 
-cargo build --quiet --bin rdra-ish
-bin="target/debug/rdra-ish"
+if [[ -z "$bin" ]]; then
+  cargo build --quiet --bin rdra-ish
+  bin="target/debug/rdra-ish"
+fi
 
 # Every sample and skill fixture is in the layout `fmt` writes.
 "$bin" fmt --check samples skills

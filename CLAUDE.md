@@ -15,9 +15,12 @@ list. Run it only when an item says it is needed, and say which item that was.
    `reduction-diff.py` seeds, `engine_equivalence`, `proof_equivalence`, `engine_corpus`,
    the `shadow` run of the samples and the corpus, and the Kani harnesses (the last ones
    only when a change can reach them; see `scripts/verify-relevant.sh` and
-   `scripts/kani-relevant.sh`). The PR's checks, green on a head that contains the latest
-   main, are the merge gate. Do not run these locally to gate a merge. Locally run only
-   what Actions cannot: behaviour that differs on macOS (Actions runs on ubuntu).
+   `scripts/kani-relevant.sh`). A pull request whose files are all prose
+   (`scripts/code-relevant.sh`) runs fmt, clippy, the tests that read Markdown, and the
+   skill snippets in place of the whole suite and the sample artifacts. The PR's checks,
+   green on a head that contains the latest main, are the merge gate. Do not run these
+   locally to gate a merge. Locally run only what Actions cannot: behaviour that differs on
+   macOS (Actions runs on ubuntu).
 2. **Can the change reach it?** Run a check only when a changed file can change its result:
 
    | Changed | Worth running locally |

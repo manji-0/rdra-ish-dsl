@@ -7,7 +7,7 @@
 # The list below names the files that hold a harness, the files whose code a harness runs,
 # the crate manifests and the lockfile, and the workflow that pins the Kani version. A new
 # harness in another file adds that file here. A file not listed cannot change what a
-# harness proves, though it can break the core's build under Kani; the run on every push to
+# harness proves, though it can break the core's build under Kani; the scheduled run on
 # main catches that. An empty list prints `false`.
 set -euo pipefail
 

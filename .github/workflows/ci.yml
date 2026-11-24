@@ -1,7 +1,11 @@
 name: CI
 on:
-  push:
-    branches: [main]
+  # main is checked every three hours, not on every merge: a run whose commit the last
+  # scheduled run already checked is skipped (see `changes`). Start one by hand with
+  # `gh workflow run ci.yml --ref main`.
+  schedule:
+    - cron: '23 */3 * * *'
+  workflow_dispatch:
   pull_request:
     # labeled/unlabeled: adding or removing `no-verify` decides the verification jobs again.
     types: [opened, synchronize, reopened, labeled, unlabeled]
@@ -20,12 +24,23 @@ jobs:
     # engine-equivalence run only then. scripts/verify-relevant.sh lists the paths that
     # cannot (prose, the editor and LSP, codegen, the diagram and data-layer exports). The
     # label `no-verify` skips them for a change a reviewer judged unable to reach them, such
-    # as help text. A push to main runs every job. `kani` says whether the change can reach
-    # a Kani harness (scripts/kani-relevant.sh); the label does not skip it.
+    # as help text. A run on main (scheduled or by hand) runs every job. `kani` says whether the change can reach
+    # a Kani harness (scripts/kani-relevant.sh); the label does not skip it. `code` is false
+    # when every changed file is prose (scripts/code-relevant.sh): `check` then runs the
+    # checks that read prose instead of its whole test suite and the sample artifacts. `nix`
+    # says whether the change can break the nix package while cargo still builds: the flake
+    # takes the whole repository as its source, so only its own files, the manifests, the
+    # lock file and this workflow can.
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
     outputs:
+      run: ${{ steps.decide.outputs.run }}
       verify: ${{ steps.decide.outputs.verify }}
       kani: ${{ steps.decide.outputs.kani }}
+      code: ${{ steps.decide.outputs.code }}
+      nix: ${{ steps.decide.outputs.nix }}
     defaults:
       run:
         shell: bash
@@ -36,25 +51,59 @@ jobs:
       - id: decide
         env:
           EVENT: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
           NO_VERIFY: ${{ contains(github.event.pull_request.labels.*.name, 'no-verify') }}
         # On a pull request HEAD is its merge into the base, so HEAD^1 is the base.
         run: |
-          if [ "$EVENT" != pull_request ]; then
+          run=true
+          if [ "$EVENT" = schedule ]; then
+            # Skip when the last scheduled run that finished checked this same commit. A
+            # cancelled run does not count, so its commit is checked again.
+            last=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?event=schedule&branch=main&status=completed&per_page=10" \
+              --jq '[.workflow_runs[] | select(.conclusion == "success" or .conclusion == "failure")][0].head_sha // ""')
+            if [ "$last" = "$GITHUB_SHA" ]; then
+              echo "main is still $GITHUB_SHA, which run $last checked; skipping"
+              run=false
+            fi
+          fi
+          if [ "$run" = false ]; then
+            verify=false
+            kani=false
+            code=false
+            nix=false
+          elif [ "$EVENT" != pull_request ]; then
             verify=true
             kani=true
+            code=true
+            nix=true
           else
-            git diff --name-only HEAD^1 HEAD | tee changed.txt
+            git diff --name-only --no-renames HEAD^1 HEAD | tee changed.txt
             kani=$(scripts/kani-relevant.sh < changed.txt)
+            code=$(scripts/code-relevant.sh < changed.txt)
+            if grep -qE '^(flake\.(nix|lock)|Cargo\.(toml|lock)|crates/[^/]+/Cargo\.toml|\.github/workflows/ci\.yml)$' changed.txt; then
+              nix=true
+            else
+              nix=false
+            fi
             if [ "$NO_VERIFY" = true ]; then
               verify=false
             else
               verify=$(scripts/verify-relevant.sh < changed.txt)
             fi
           fi
+          echo "run=$run" | tee -a "$GITHUB_OUTPUT"
           echo "verify=$verify" | tee -a "$GITHUB_OUTPUT"
           echo "kani=$kani" | tee -a "$GITHUB_OUTPUT"
+          echo "code=$code" | tee -a "$GITHUB_OUTPUT"
+          echo "nix=$nix" | tee -a "$GITHUB_OUTPUT"
 
   check:
+    needs: changes
+    # Runs whatever `changes` concluded: if it failed, `code` is empty and every step runs.
+    # Skipping the job would report the required check as passed. A scheduled run of a
+    # commit already checked skips it.
+    if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -65,20 +114,41 @@ jobs:
       - name: clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: test
+        if: needs.changes.outputs.code != 'false'
         # scripts/diff-test.sh holds the tests this step skips: the comparisons with TLC and z3
         # run in release in engine-equivalence, and the domain-sample reduction in formal-verify.
         # RDRA_REQUIRE_CODEGEN_TOOLS: the devShell has tsc and go, so the codegen build tests
         # may not skip a language here; portability.yml runs without them and skips.
         run: RDRA_REQUIRE_CODEGEN_TOOLS=1 scripts/diff-test.sh --all
+      - name: debug CLI
+        # The binary the test step built (`cargo test --all` builds it for the CLI tests), for
+        # the two steps below: a no-op after the test step, a build in prose mode. A separate
+        # `cargo build -p rdra-ish-cli` resolves other features and compiled every crate again.
+        run: cargo test --all --no-run --quiet
       - name: sample artifact snapshots
-        run: bash scripts/check-sample-artifacts.sh
+        if: needs.changes.outputs.code != 'false'
+        # The script writes the same files with a debug or a release binary. Since #285 no
+        # row explores the lifecycle only to print a note, so debug costs minutes, not the
+        # 15-21 it did, and saves the release build `nix build` made from scratch here.
+        run: bash scripts/check-sample-artifacts.sh target/debug/rdra-ish
+      - name: prose checks
+        # In place of the two steps above when every changed file is prose: the tests that read
+        # Markdown. The rule ids in docs/language-reference.md and
+        # docs/rdra-ish-interpretation.md, the stage blocks in README.md, docs/, skills/ and
+        # samples/, and the lifecycle-error table in docs/cli-reference.md. The skill snippets
+        # step below checks skills/ either way.
+        if: needs.changes.outputs.code == 'false'
+        run: |
+          cargo test -p rdra-ish-core --lib -- --exact rdra_rules::tests::rule_ids_are_unique_and_in_the_docs refinement::docs::tests::stage_docs_are_in_sync
+          cargo test -p rdra-ish-cli --test export_gate
       - name: skill snippets
         # Debug binary; a verify transcript with --with-tlc needs the devShell's tlc.
-        run: |
-          cargo build -p rdra-ish-cli
-          python3 -I scripts/check-skill-snippets.py target/debug/rdra-ish
+        run: python3 -I scripts/check-skill-snippets.py target/debug/rdra-ish
       - name: nix package
-        # The package `nix profile install github:manji-0/rdra-ish-dsl` installs.
+        # The package `nix profile install github:manji-0/rdra-ish-dsl` installs. A release
+        # build from scratch (about 4.5 minutes), so only when `nix` says a change can break it
+        # while cargo builds, and on every run on main.
+        if: needs.changes.outputs.nix != 'false'
         run: nix build -L && ./result/bin/rdra-ish --help >/dev/null && test -x ./result/bin/rdra-ish-lsp
 
   formal-verify:
@@ -152,7 +222,9 @@ jobs:
       - uses: cachix/install-nix-action@v31
       - uses: Swatinem/rust-cache@v2
       - name: Build the shadow CLI
-        run: cargo build -p rdra-ish-cli --release --features shadow
+        # Through the corpus test's build, so the last step finds it built: a separate
+        # `cargo build` resolves other features and compiled every crate a second time.
+        run: cargo test --release -p rdra-ish-cli --features shadow --test engine_corpus --no-run
       - name: Every twin compares calls
         # How many calls each twin compared and skipped on one sample. patent-ops reaches all
         # of them; the step fails when the line is missing (a build without the feature) or a
@@ -171,7 +243,7 @@ jobs:
 
   kani:
     # The Kani harnesses beside the code they prove (docs/engine-agreement.md#kani-harnesses),
-    # when a change can reach one, and on every push to main. Kani is not in nixpkgs, so the
+    # when a change can reach one, and on every run on main. Kani is not in nixpkgs, so the
     # job runs on the runner's rustup, outside the devShell: `cargo kani setup` installs the
     # nightly its version pins and links ~/.kani to it, so the cache holds both.
     needs: changes

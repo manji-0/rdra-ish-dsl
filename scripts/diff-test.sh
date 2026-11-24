@@ -6,18 +6,21 @@
 #   scripts/diff-test.sh --all     every crate (CI's `test` step)
 #
 # A change to the root Cargo.toml or Cargo.lock runs every crate. A crate's dependents are
-# not run: CI runs the whole workspace on every push.
+# not run: CI's test step runs the whole workspace.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
-# Run in release by engine-equivalence, formal-verify, and engine-corpus. `--skip` matches
-# a part of the name, so a new `bfs_and_tlc_*` or `tlc_alone_*` test is skipped too.
+# Run in release by engine-equivalence, formal-verify, and engine-corpus; proof_equivalence
+# runs whole in engine-equivalence (in debug its solver-count test alone took 4 minutes).
+# `--skip` matches a part of the name, so a new `bfs_and_tlc_*` or `tlc_alone_*` test is
+# skipped too.
 skips=(
   --skip bfs_and_tlc_
   --skip tlc_alone_
   --skip a_property_cone_decides_what_the_whole_model_decides
   --skip reduced_domain_cones_decide_what_the_cones_decide
   --skip no_proved_rule_has_a_bounded_counterexample
+  --skip a_proof_is_the_same_on_any_number_of_solvers
 )
 
 packages=()
