@@ -164,9 +164,11 @@ mod tests {
             dependencies: Default::default(),
             check: CommandSection {
                 memory: check.map(size),
+                ..Default::default()
             },
             verify: CommandSection {
                 memory: verify.map(size),
+                ..Default::default()
             },
         }
     }

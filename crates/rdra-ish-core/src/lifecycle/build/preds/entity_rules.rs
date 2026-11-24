@@ -11,7 +11,8 @@ use crate::lifecycle::types::{
 };
 use crate::lifecycle::EntId;
 use crate::model::{
-    CmpRhs, EntityCondition, EntityKey, ForeignKey, Min, RefAction, UniqueSource, UseCaseKey,
+    CmpRhs, CountBound, EntityCondition, EntityKey, ForeignKey, Min, RefAction, UniqueSource,
+    UseCaseKey,
 };
 
 impl Builder<'_> {
@@ -121,6 +122,7 @@ impl Builder<'_> {
         self.unique_keys();
         self.unique_columns();
         self.min_cards();
+        self.max_cards();
         self.cascade_deletes();
         self.dangling_keys();
         self.driven_columns_written();
@@ -475,6 +477,51 @@ impl Builder<'_> {
         }
     }
 
+    /// `MaxCard_{child}_{role}` per child-side range `lo..hi` with `hi` from 2 to 255: no
+    /// present parent slot has more than `hi` present children through the key, a count as
+    /// `.at_most(hi, Child)` makes.
+    fn max_cards(&mut self) {
+        let model = self.model;
+        for (id, fk) in model.foreign_keys() {
+            let Some(most) = fk.children.most else {
+                continue;
+            };
+            let at = |ek, b| (ek, At::Bound(b));
+            let Some(link) = self.key_link(id, at(fk.child, 1), at(fk.parent, 0)) else {
+                continue;
+            };
+            let (child, parent) = (
+                model.entities[fk.child].id.clone(),
+                model.entities[fk.parent].id.clone(),
+            );
+            let role = fk.role_or(&parent).to_string();
+            let site = Site::new(ModelRef::Relation(fk.relation), &fk.site);
+            let premises = self
+                .count_premise(fk.child, CountBound::AtMost, most)
+                .into_iter()
+                .collect();
+            self.ts.invariants.push(Invariant {
+                name: format!("MaxCard_{child}_{role}"),
+                binders: vec![self.ent_of[&fk.parent]],
+                premises,
+                body: Pred::Count {
+                    entity: self.ent_of[&fk.child],
+                    body: Box::new(link),
+                    op: CmpOp::Le,
+                    n: most,
+                },
+                text: InvText::MaxCard {
+                    child,
+                    parent,
+                    role,
+                    most,
+                },
+                label: None,
+                site,
+            });
+        }
+    }
+
     /// Two present rows of one entity that agree on every var of `vars` break it. A row whose
     /// var of a null-capable domain is null agrees with none, as SQL's NULLs are distinct.
     /// Two rows exist only above one instance per entity, which the bounds say, so at one the
@@ -500,7 +547,7 @@ impl Builder<'_> {
                 })
                 .map(|&v| Pred::Cmp(slot(v, 0), CmpOp::Eq, Term::Lit(Value::NULL))),
         );
-        let premises = match self.ts.bounds.slots() {
+        let premises = match self.ts.slots(e) {
             1 => Vec::new(),
             _ => vec![premise(
                 vec![Pred::Cmp(index(0), CmpOp::Ne, index(1))],

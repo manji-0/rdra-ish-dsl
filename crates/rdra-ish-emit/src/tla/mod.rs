@@ -144,7 +144,7 @@ fn domain_set(ts: &TransitionSystem, names: &TlaNames, domain: &Domain) -> Strin
         format!("{{{}}}", items.join(", "))
     };
     match domain {
-        Domain::Existence | Domain::Enum(_) | Domain::Nullable => values(domain.size(ts.bounds)),
+        Domain::Existence | Domain::Enum(_) | Domain::Nullable => values(domain.size(ts)),
         Domain::Bool => "BOOLEAN".to_string(),
         Domain::Int => "IntRange".to_string(),
         Domain::NullableInt => format!("IntRange \\cup {{{NULL_INT}}}"),

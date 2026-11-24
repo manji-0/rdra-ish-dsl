@@ -79,6 +79,9 @@ Also ask:
    delete the children first; `DanglingKey_<Child>_<role>` checks that no child is left.
    Under `cascade`, `set_null`, or `set_default` the lifecycle does not run the action yet:
    it deletes the one row and leaves the children, with no guard and no `DanglingKey_*`.
+   Write `0..3:1` when a parent has at most three children; the lifecycle checks it as
+   `MaxCard_<Child>_<role>`, so guard the use case that adds a child with a count such as
+   `holds(Room, Member.status == active).at_most(2, Loan)`.
    Chain `.role(name)` when two relates join one child to one parent, or when a second
    relate joins the same two entities the other way. Every rule, guard, quantifier and copy
    that joins such a pair then names its key with `.role(name)` (`AmbiguousOwnerLink`

@@ -897,9 +897,11 @@ fn property_decl() -> impl Parser<Token, PropertyDecl, Error = Simple<Token>> + 
 /// - `performs(A, B)` → `PredicateArg::Ref`
 fn predicate_arg() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> + Clone {
     let expr = comparison().map(PredicateArg::Expr);
+    let int = select! { Token::IntLit(s) => PredicateArg::Int(s) };
     expr.or(transition_arg())
         .or(card_arg())
         .or(predicate_atom())
+        .or(int)
 }
 
 fn kind_word_arg() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> + Clone {
@@ -926,8 +928,6 @@ fn chain_call() -> impl Parser<Token, ChainCall, Error = Simple<Token>> + Clone 
             predicate_arg()
                 .map(|arg| (arg, false))
                 .or(kind_word_arg().map(|arg| (arg, true)))
-                // A bare integer (`.counted(2)`); a predicate's own arguments take none.
-                .or(select! { Token::IntLit(s) => PredicateArg::Int(s) }.map(|arg| (arg, false)))
                 .separated_by(just(Token::Comma))
                 .allow_trailing(),
         )
@@ -940,10 +940,12 @@ fn chain_call() -> impl Parser<Token, ChainCall, Error = Simple<Token>> + Clone 
                 ));
             }
             let int = |(arg, _): &(PredicateArg, bool)| matches!(arg, PredicateArg::Int(_));
-            if name != "counted" && args.iter().any(int) {
+            // A bare integer is the `k` of `.counted(k)` or the count of a counted quantifier.
+            let takes_int = matches!(name.as_str(), "counted" | "at_most" | "at_least" | "exactly");
+            if !takes_int && args.iter().any(int) {
                 return Err(Simple::custom(
                     span,
-                    "a bare number is an argument only of `.counted(k)`",
+                    "a bare number is an argument only of `.counted(k)`, `.at_most(n, ..)`, `.at_least(n, ..)`, and `.exactly(n, ..)`",
                 ));
             }
             let args = args.into_iter().map(|(arg, _)| arg).collect();

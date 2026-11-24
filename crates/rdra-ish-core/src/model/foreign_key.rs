@@ -22,6 +22,9 @@ impl FkId {
 pub struct Multiplicity {
     pub min: Min,
     pub max: Max,
+    /// At most this many: the high end of a child-side range `lo..hi` with `hi` from 2 to
+    /// 255, which the lifecycle checks as `MaxCard_*`. `None` for `*` and `1`.
+    pub most: Option<u8>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

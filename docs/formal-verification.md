@@ -36,7 +36,7 @@ rdra-ish verify <INPUTS...> [--with-tlc] [-o <OUT_DIR>] [--instance-count N] [--
 |---|---|
 | `export --kind tla` | Write `RdraSpec.tla` **and** sibling `RdraSpec.cfg` for the whole model, and the `StateModel_<E>` specs that check the deadlocks and witnesses |
 | `verify` | Decide every invariant, `after` assertion, and property on its own cone with the native checker; no JVM |
-| `verify --with-tlc` | The same, and run `tlc` / `tlc2` from `PATH` on one spec per cone and per property run beside it; a check the two decide differently fails the run |
+| `verify --with-tlc` | The same, and run `tlc` / `tlc2` from `PATH` on one spec per cone and per property run beside it, and on the state models of each entity cone up to 100,000 states; a check the two decide differently fails the run |
 | `states`, `check` | BFS on the same system; safety only, no `property` |
 
 `--instance-count` (default `2`) sets `InstanceCount` (`1..=255`; `1` warns that
@@ -55,7 +55,9 @@ module name. If `-o` is a directory (or has no extension), `export` writes
 answers. When the model has temporal properties it also writes the whole-model `RdraSpec`
 pair, whose `.cfg` names every property, for a run by hand, and a `RdraSpec_<Property>`
 pair for each property its cone leaves undecided, which the whole-model run decides (see
-[Temporal properties on a cone](#temporal-properties-on-a-cone)). The native checker reads
+[Temporal properties on a cone](#temporal-properties-on-a-cone)). Under `--with-tlc` it
+also writes a `Cone_<Property>` pair per `stable`, `unchanged`, and `precedes`, and the
+`StateModel_<E>` specs of the entity cones TLC checks. The native checker reads
 none of these files: they are for a TLC run by hand, and for TLC under `--with-tlc`.
 Without `-o`, `verify` writes nothing, and `verify --with-tlc` writes them to a temp dir. It
 deletes the dir when TLC passes every check, and keeps it and prints `specs: <dir>` when TLC
@@ -84,7 +86,9 @@ and prints one note with the error count that names the state-model specs and `v
 cone (see [What `verify` checks](#what-verify-checks)). `export --kind tla` writes the same
 cones as TLA+, so TLC alone reaches the states the BFS reaches. TLC finds the same missing
 witnesses, and a deadlock it reports is one `check` reports, but a TLC pass does not prove
-that no deadlock exists (see below). `check` and `verify` decide the deadlocks. For each
+that no deadlock exists (see below). One exception is open: the invariant leaves out an event
+mark that a step writing the column reads, so TLC can report a deadlock that does not exist
+([#261](https://github.com/manji-0/rdra-ish-dsl/issues/261)). `check` and `verify` decide the deadlocks. For each
 cone whose entities have a state model, `export` writes three files:
 
 | File | Checks |
@@ -152,8 +156,26 @@ The TLC reading differs from `check` in two cases:
 - `check` reports a deadlock as a warning when only the instance bound blocks its way out.
   TLC reports the invariant violated, as for an error.
 
-`verify` does not run these specs: its BFS reports the same findings, and its output
-stays as it was.
+`verify` decides the state models by BFS and runs these specs only under `--with-tlc`.
+There it prints each module and its checks in `cones.txt` and runs TLC on each entity cone
+that BFS explored to the end, up to 100,000 states, on the system BFS explored. It runs the
+deadlocks cfg with `-continue` and the witnesses cfg as described above: with `-continue`
+up to 1,000 states, and one witness per run above that. Each cfg reruns without the
+invariants it reported until a run reports no new one. One line per module says what TLC
+found:
+
+```
+tlc: StateModel_Order (13 states): 3 deadlock and 4 witness checks; found Deadlock_Order_status_shipped, Witness_Order_status_refunded
+```
+
+A module with no `Deadlock_` check has no deadlocks run to count its states, and its line
+shows BFS's count, `(<n> states by BFS)`. A larger cone prints `tlc: StateModel_<E> (<n>
+states by BFS): not run, over the limit of 100000 states`. TLC must name the same states without a witness as BFS, and each deadlock
+TLC reports must be one that BFS reports. A deadlock that only BFS finds is no disagreement,
+for the reason above. Any other difference prints `error[EngineDisagreement]:
+StateModel_<E> [<check>]: native <a>, TLC <b>; ...` and fails the run. These runs move
+`tlc_result:` only when one fails as a tool: the findings are BFS's, which they check, and
+they print no `violated:` line, since a witnesses cfg violates every reached state.
 
 ## Mapping
 
@@ -239,7 +261,7 @@ did not model-check them. Use `export` or `verify`.
 
 `stable`, `unchanged`, and `precedes` are safety properties that BFS decides on the graph it
 explores. `verify` runs BFS on each one's cone (`TransitionSystem::decide_property`), next to
-the BFS on the entity cones, and starts no TLC run for it. It prints
+the BFS on the entity cones. It prints
 `order and stability properties: <n>, each decided by BFS on its cone` under the bounds and
 one line per property:
 
@@ -278,6 +300,13 @@ and TLC on the whole model give the same verdict, and that a counterexample has 
 length and replays as the same violation. The latch is printed only in a module whose
 `.cfg` checks the property, so the cone modules of the rules and the entity cones keep the
 state graph the explorer reaches.
+
+Under `--with-tlc`, TLC checks each of these properties too, on the same unreduced cone,
+module `Cone_<Property>`, and prints `tlc: Cone_<Property> [<Property>]: <verdict>`. When the
+cone frees slots, TLC's counterexample there sends the property to the whole-model run
+`RdraSpec_<Property>`, as BFS's does. A final verdict the two decide differently prints
+`error[EngineDisagreement]` and fails the run. A run without `--with-tlc` writes no module
+for these properties.
 
 ## What `verify` checks
 
@@ -903,7 +932,10 @@ present)`, a copy) takes any number. Both add steps and remove none, so a proof 
 at every bound. Enum columns keep their declared values. A guard
 or write the encoding cannot state is widened the same way (the guard is dropped, the write
 takes any value) and printed as a `note:` line. A rule the encoding cannot state is
-`out of scope`, never approximated.
+`out of scope`, never approximated. A count (`.at_most`, `.at_least`, `.exactly`,
+`MaxCard_*`) is stated as "at least `k` distinct present rows", which is exact for `k` up
+to 8: `.at_most(7, ..)` is the largest `at_most` stated, and a larger count is a guard
+widened or a rule out of scope.
 
 Most true rules are not inductive alone: a step breaks them only from a state no run
 reaches. The prover therefore adds candidate **lemmas** and keeps the largest set of
@@ -1410,8 +1442,8 @@ Canonical files: `skills/rdra-ish-verify/samples/` (each file is **standalone** 
 do not `check` the whole directory; ids such as `Order` collide). In this repo,
 `samples/formal-verification/` and `samples/formal-verification-fail/` are
 symlinks to those skill-bundled files (CLI tests keep working after skill install), except
-`unique_double_booking.rdra` and `unique_booking_guarded.rdra`, which live only in
-`samples/formal-verification/`.
+`unique_double_booking.rdra`, `unique_booking_guarded.rdra`, and `counting_rules.rdra`,
+which live only in `samples/formal-verification/`.
 
 The second column gives `check`'s verdict, then `verify`'s on the cones of the rules,
 `after` assertions, and properties. A state with no witness or a deadlock fails both
@@ -1437,6 +1469,7 @@ commands even where every cone passes; the `// expect` headers state each exit s
 | `one_to_one_shared.rdra` | pass, fail | 0 of 1 | `relate(.., 1:1)` adds `Unique_Shipment_Order`; Ship and Reship each link a Shipment to the same Order, which takes two instances |
 | `unique_double_booking.rdra` | pass, fail | 0 of 1 | `@unique(room_id, slot)` adds `Unique_Booking_room_id_slot`, which reads the owner Room beside `slot`; BookAm books any room for the morning, so two Bookings take one room at `am`, which takes two instances |
 | `unique_booking_guarded.rdra` | pass, pass | 1 of 1 | The same model with a guard on each booking use case: `.none(Booking.slot == am)` on the Room it binds keeps the slot free |
+| `counting_rules.rdra` | pass, pass | 2 of 2 | `relate(Loan, Member, 0..3:1)` adds `MaxCard_Loan_Member`, and `invariant(Member).at_most(3, ..)` counts the open loans; Borrow's `holds(..).at_most(2, Loan)` keeps both. At the default bounds both hold vacuously, and the warning names `--instances Loan=4`, under which `verify` passes too |
 | `none_any_child.rdra` | pass, pass | 1 of 1 | `.none(Invoice)` on Issue says "no invoice yet" and reads the link only, so `Unique_Invoice_Order` holds on a cone without `Invoice.status` (25 states). The enumerating form `.none(Invoice.status in (<every value>))` builds the same cones |
 | `none_any_child_bypassed.rdra` | pass, fail | 0 of 1 | The same model with Reissue, which creates an Invoice under a closed Order without the guard; `Unique_Invoice_Order` fails at two instances on the cone without `Invoice.status` |
 | `min_card_unmet.rdra` | fail, fail | 0 of 1 | `relate(OrderLine, Order, 1..*:1)` adds `MinCard_OrderLine_Order`; Place creates an Order without a line |

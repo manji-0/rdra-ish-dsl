@@ -346,7 +346,7 @@ impl ActionCx<'_> {
                         return Err(unsupported("a choice of a value that is not a column"));
                     };
                     let domain = &ts.var(*var).domain;
-                    let all = values.len() == domain.size(ts.bounds);
+                    let all = values.len() == domain.size(ts);
                     let w = match domain {
                         Domain::Nullable if matches!(&values[..], [c] if c.value == Value::PRESENT) => {
                             Write::Input

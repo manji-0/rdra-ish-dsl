@@ -702,6 +702,78 @@ fn a_quantifier_path_off_the_anchor_or_the_counted_entity_is_an_error_with_the_r
     }
 }
 
+/// A counted quantifier keeps its bound and count, and prints as written.
+#[test]
+fn a_counted_quantifier_keeps_its_bound_and_count() {
+    for (method, bound) in [
+        ("at_most", CountBound::AtMost),
+        ("at_least", CountBound::AtLeast),
+        ("exactly", CountBound::Exactly),
+    ] {
+        let (model, errors) = library_rule(&format!(
+            "invariant(Member).when(status == active).{method}(3, Loan.status == open).along(Member, Card, Loan)"
+        ));
+        assert!(errors.is_empty(), "{method}: {errors:?}");
+        let [constraint] = model.quantifier_constraints.as_slice() else {
+            panic!("{method}: {:?}", model.quantifier_constraints);
+        };
+        assert_eq!(
+            constraint.quantifier.kind,
+            QuantifierKind::Count { bound, n: 3 },
+            "{method}"
+        );
+        let rules = crate::rules::business_rules(&model);
+        assert_eq!(
+            rules[0].text,
+            format!(
+                "when Member.status == active then {method} 3 Loan(Loan.status == open).along(Member, Card, Loan)"
+            )
+        );
+    }
+}
+
+/// A count a shorter form says is `QuantifierCountSpelling`, which names that form; a count
+/// that is not a whole number from 1 to 255 is `QuantifierCountInvalid`.
+#[test]
+fn a_count_with_a_shorter_spelling_or_no_number_is_an_error() {
+    for (call, want) in [
+        ("at_least(0, Loan)", "remove it"),
+        ("at_least(1, Loan)", "`.has(...)`"),
+        ("at_most(0, Loan)", "`.none(...)`"),
+        ("exactly(0, Loan)", "`.none(...)`"),
+    ] {
+        let (model, errors) = library_rule(&format!("invariant(Member).{call}"));
+        assert!(
+            matches!(
+                errors.as_slice(),
+                [RdraError::QuantifierCountSpelling { .. }]
+            ),
+            "{call}: {errors:?}"
+        );
+        assert!(
+            errors[0].to_string().contains(want),
+            "{call}: {}",
+            errors[0]
+        );
+        assert!(model.quantifier_constraints.is_empty(), "{call}");
+    }
+    for call in [
+        "at_most(256, Loan)",
+        "at_most(x, Loan)",
+        "at_most(Loan.status == open)",
+    ] {
+        let (model, errors) = library_rule(&format!("invariant(Member).{call}"));
+        assert!(
+            matches!(
+                errors.as_slice(),
+                [RdraError::QuantifierCountInvalid { .. }]
+            ),
+            "{call}: {errors:?}"
+        );
+        assert!(model.quantifier_constraints.is_empty(), "{call}");
+    }
+}
+
 /// The rule table of a model, as `list --kind rule` prints it: kind, entities, text.
 fn rule_rows(src: &str) -> Vec<String> {
     let (model, diags) = build_labelled(src);

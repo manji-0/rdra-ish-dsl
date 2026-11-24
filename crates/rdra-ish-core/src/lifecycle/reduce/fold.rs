@@ -65,6 +65,14 @@ impl Fold {
         &self.guards
     }
 
+    /// The entity whose slots index the bit: the key param's, or the node's.
+    pub fn key_entity(&self, ts: &TransitionSystem) -> EntId {
+        match &self.key {
+            FoldKey::Param(key) => ts.actions[self.act.index()].params[usize::from(*key)].entity,
+            FoldKey::Linked { entity, .. } => *entity,
+        }
+    }
+
     /// The vars `holds` reads: a step that writes none of them leaves the bit as it was.
     pub(super) fn reads(&self, ts: &TransitionSystem) -> VarSet {
         let a = &ts.actions[self.act.index()];
@@ -108,12 +116,15 @@ impl Fold {
             .map(|(p, _)| *p)
             .filter(|p| *p != key)
             .collect();
-        let slots = ts.bounds.slots();
-        (0..slots.pow(free.len() as u32)).any(|binding| {
+        let radix: Vec<usize> = free
+            .iter()
+            .map(|p| ts.slots(a.params[usize::from(*p)].entity))
+            .collect();
+        (0..radix.iter().product::<usize>()).any(|binding| {
             let mut rest = binding;
-            for p in &free {
-                params[usize::from(*p)] = (rest % slots) as u8;
-                rest /= slots;
+            for (p, n) in free.iter().zip(&radix) {
+                params[usize::from(*p)] = (rest % n) as u8;
+                rest /= n;
             }
             let present = self.t_params.iter().all(|(p, must)| {
                 !must
@@ -285,9 +296,9 @@ impl TransitionSystem {
     /// of the key agree; `None` otherwise, and the read stays raw (a bit var has one base).
     pub(super) fn fold_initial(&self, fold: &Fold) -> Option<bool> {
         let initial = self.initial_states();
-        let mut vals = initial
-            .iter()
-            .flat_map(|st| (0..self.bounds.slots() as u8).map(move |c| fold.holds(self, st, c)));
+        let mut vals = initial.iter().flat_map(|st| {
+            (0..self.slots(fold.key_entity(self)) as u8).map(move |c| fold.holds(self, st, c))
+        });
         let first = vals.next()?;
         vals.all(|v| v == first).then_some(first)
     }
@@ -499,6 +510,9 @@ impl TransitionSystem {
                     .map(|x| self.strip_links(x, t, link, false))
                     .collect::<Option<_>>()?,
             )),
+            // A node pulls an existential out to a param; a count is no existential, so a
+            // guard that reads T through one is never node-folded (docs/design/counting-rules.md).
+            Pred::Count { .. } => None,
             Pred::Forall { entity, body } | Pred::Exists { entity, body } => {
                 if !t.contains(&self.entity(*entity).exists) {
                     return None;

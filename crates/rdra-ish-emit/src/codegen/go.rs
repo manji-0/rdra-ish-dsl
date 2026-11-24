@@ -668,6 +668,19 @@ fn expr(
             input(*i),
             expr(body, row, input)
         ),
+        Expr::Count {
+            input: i,
+            elem,
+            body,
+            op,
+            n,
+        } => format!(
+            "func() bool {{ n := 0; for _, {} := range {} {{ if {} {{ n++ }} }}; return n {} {n} }}()",
+            row(*elem),
+            input(*i),
+            expr(body, row, input),
+            op.symbol()
+        ),
     }
 }
 

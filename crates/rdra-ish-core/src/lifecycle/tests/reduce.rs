@@ -566,7 +566,7 @@ fn a_sub_lifecycle_action_that_shares_a_name_with_a_target_step_keeps_its_identi
     ] {
         let model = model_from(src);
         for bounds in [Bounds::STATES, Bounds::VERIFY] {
-            let ts = TransitionSystem::build(&model, bounds, &Scope::ALL).ts;
+            let ts = TransitionSystem::build(&model, bounds.clone(), &Scope::ALL).ts;
             let targets = ts.targets();
             let plain = ts.explore_targets(&targets, Caps::VERIFY);
             let reduced = ts.explore_targets_reduced(&targets, Caps::VERIFY);
@@ -740,12 +740,12 @@ fn a_sub_lifecycle_that_reads_inputs_of_t_is_reduced_and_decides_the_same() {
     ] {
         let model = model_from(src);
         for bounds in [Bounds::STATES, Bounds::VERIFY] {
-            let reductions = assert_reduction_exact(name, &model, bounds);
+            let reductions = assert_reduction_exact(name, &model, bounds.clone());
             assert!(
                 reductions >= 1,
                 "{name} at {bounds:?}: {reductions} cones reduced"
             );
-            let ts = TransitionSystem::build(&model, bounds, &Scope::ALL).ts;
+            let ts = TransitionSystem::build(&model, bounds.clone(), &Scope::ALL).ts;
             let target = entity_target(&ts, anchor);
             let targets = ts.targets();
             let plain = ts.explore_targets(&targets, Caps::VERIFY);
@@ -785,9 +785,9 @@ fn a_sub_lifecycle_that_reads_inputs_of_t_is_reduced_and_decides_the_same() {
             let (a, b) = (diag_names(&plain), diag_names(&reduced));
             assert_eq!(a, b, "{name} at {bounds:?}: verdicts");
             // A claim stuck in a case another claim closed needs two claims.
-            let expected: Vec<&str> = match bounds {
-                Bounds::VERIFY => expected.clone(),
-                _ => expected
+            let expected: Vec<&str> = match bounds == Bounds::VERIFY {
+                true => expected.clone(),
+                false => expected
                     .iter()
                     .copied()
                     .filter(|e| !e.ends_with("_open"))
@@ -879,6 +879,31 @@ fn a_quantifier_over_t_folds_into_a_bit_keyed_by_the_linked_row() {
         cone.run.states.len() < plain.cone_of(target).run.states.len(),
         "the reduced cone is smaller"
     );
+}
+
+/// A count over T in a guard is read raw: no node pulls it out as it pulls an existential,
+/// so the reduced cones decide what the cones decide, whichever way the count points
+/// (docs/design/counting-rules.md). The case fold's `.none` becomes each count in turn.
+#[test]
+fn a_count_over_t_in_a_guard_reduces_exactly() {
+    for count in [
+        ".at_most(1, Claim.status == open)",
+        ".at_least(2, Claim.status == paid)",
+        ".exactly(1, Claim)",
+    ] {
+        let src = CASE_FOLD.replace(".none(Claim.status == open)", count);
+        assert_ne!(src, CASE_FOLD);
+        let model = model_from(&src);
+        let mut reductions = 0;
+        for bounds in [
+            Bounds::STATES,
+            Bounds::VERIFY,
+            Bounds::VERIFY.at(std::num::NonZeroU8::new(3).unwrap()),
+        ] {
+            reductions += assert_reduction_exact(count, &model, bounds);
+        }
+        assert!(reductions > 0, "{count}: some cone reduces");
+    }
 }
 
 /// A steady action (`Reduction::is_steady`) writes nothing the inputs of the sub-lifecycle

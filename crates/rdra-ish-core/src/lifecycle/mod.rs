@@ -133,12 +133,22 @@ impl TransitionSystem {
     }
 
     /// How many state bytes a var of this kind takes: `now` is one slot wide, the rest one
-    /// per instance slot.
-    pub(crate) fn slots_of(&self, kind: &VarKind) -> usize {
-        match kind {
-            VarKind::Now => 1,
-            _ => self.bounds.slots(),
+    /// per slot of their entity.
+    pub fn slots_of(&self, kind: &VarKind) -> usize {
+        match kind.entity() {
+            None => 1,
+            Some(e) => self.slots(e),
         }
+    }
+
+    /// The slots of entity `e` under the system's bounds.
+    pub fn slots(&self, e: EntId) -> usize {
+        usize::from(self.entity(e).slots.get())
+    }
+
+    /// The largest slot count of any entity, or 1 without entities.
+    pub fn most_slots(&self) -> usize {
+        self.entity_ids().map(|e| self.slots(e)).max().unwrap_or(1)
     }
 
     pub fn entities(&self) -> &[EntityDecl] {

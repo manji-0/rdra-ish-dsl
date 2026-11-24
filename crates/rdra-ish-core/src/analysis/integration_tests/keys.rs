@@ -460,11 +460,37 @@ fn a_child_side_range_sets_the_minimum_children_and_keeps_the_kind() {
     );
 }
 
+/// A high end from 2 to 255 is the many side with a maximum, `MaxCard_*`'s count.
+#[test]
+fn a_child_side_high_end_above_one_is_many_with_a_maximum() {
+    for (card, min, most) in [
+        ("0..3:1", Min::Zero, Some(3)),
+        ("1..5:1", Min::One, Some(5)),
+        ("0..255:1", Min::Zero, Some(255)),
+        ("0..*:1", Min::Zero, None),
+        ("N:1", Min::Zero, None),
+    ] {
+        let model = built(&format!("{LINES}relate(Line, Order, {card})\n"));
+        let line = entity_key(&model, "Line");
+        let (_, fk) = model
+            .foreign_keys()
+            .find(|(_, fk)| fk.child == line)
+            .unwrap_or_else(|| panic!("{card}: no key on Line"));
+        assert_eq!(
+            (fk.children.min, fk.children.max, fk.children.most),
+            (min, Max::Many, most),
+            "{card}"
+        );
+    }
+}
+
 #[test]
 fn a_range_out_of_bounds_on_the_parent_side_or_on_an_nm_is_an_error() {
     for (card, want) in [
         ("2..*:1", "range '2..*'"),
-        ("1..5:1", "range '1..5'"),
+        ("0..0:1", "range '0..0'"),
+        ("1..256:1", "range '1..256'"),
+        ("0..03:1", "range '0..03'"),
         ("N:0..1", ".optional()"),
         ("1..*:1..1", ".optional()"),
         ("1:0..1", ".optional()"),

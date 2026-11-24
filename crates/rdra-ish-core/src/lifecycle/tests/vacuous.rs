@@ -389,10 +389,7 @@ after(Make).assert(Tag.mark == b)
 /// view needs every state, and it runs to the end.
 #[test]
 fn a_cone_that_also_answers_an_entity_target_runs_to_the_end() {
-    let bounds = Bounds {
-        instances: NonZeroU8::new(3).expect("3 instances"),
-        int_max: 3,
-    };
+    let bounds = Bounds::uniform(NonZeroU8::new(3).expect("3 instances"), 3);
     let ts = TransitionSystem::build(&model_from(TAGS), bounds, &Scope::ALL).ts;
     let targets = ts.targets();
     let assert = *targets

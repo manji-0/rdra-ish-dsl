@@ -37,7 +37,7 @@ impl TransitionSystem {
                 };
                 let mut slots = match pin {
                     Some((q, k)) if q == p => usize::from(k)..usize::from(k) + 1,
-                    _ => 0..self.bounds.slots(),
+                    _ => 0..self.slots(param.entity),
                 };
                 bound[p] |= slots.any(|slot| s.get(self, exists, slot) == want);
             }
@@ -106,7 +106,7 @@ impl TransitionSystem {
     fn crowded_in(&self, action: &Action, s: &StateSlice, pin: Option<(usize, u8)>) -> Vec<usize> {
         let free = |p: &crate::lifecycle::types::Param| {
             let exists = self.entity(p.entity).exists;
-            (0..self.bounds.slots()).any(|slot| s.get(self, exists, slot) == Value::ABSENT)
+            (0..self.slots(p.entity)).any(|slot| s.get(self, exists, slot) == Value::ABSENT)
         };
         let missing: Vec<usize> = (0..action.params.len())
             .filter(|&p| action.params[p].role == ParamRole::New && !free(&action.params[p]))

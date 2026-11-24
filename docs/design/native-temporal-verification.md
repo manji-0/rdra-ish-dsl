@@ -784,7 +784,8 @@ rewrite here. The first one is not a choice any more.
   them, in the explorer, and only a run that `verify` starts receives the properties.
   `check` prints its note for these forms as for `always`. The TLC formula of `stable` and
   `unchanged` and the latch of `precedes` stay, because the tests compare them with TLC.
-  `--with-tlc` starts no TLC run for these forms (`verify/jobs.rs`).
+  `--with-tlc` started no TLC run for these forms until #201, which added one per
+  property on its cone (`verify/jobs.rs`, `explored_jobs`).
 
 - **#165: keep the link as its own field.** Store the `.along` link as one `Pred` on
   `Property`, beside the formula, and not inside the operands. The printer, `fails_at`, the

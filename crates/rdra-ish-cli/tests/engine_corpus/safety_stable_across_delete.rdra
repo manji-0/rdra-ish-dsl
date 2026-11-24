@@ -5,9 +5,10 @@
 // step of a present row. CapturedStays and AmountKept hold. PendingStays fails at Capture.
 // A checker that read a deleted row as present would see captured -> pending and report
 // CapturedStays and AmountKept violated.
-// expect CapturedStays: native=ok tlc=none
-// expect AmountKept: native=ok tlc=none
-// expect PendingStays: native=counterexample tlc=none
+// TLC checks each on the same cone under --with-tlc (#201), as an action property.
+// expect CapturedStays: native=ok tlc=ok
+// expect AmountKept: native=ok tlc=ok
+// expect PendingStays: native=counterexample tlc=counterexample
 entity Payment "支払" {
   id: Int @pk
   status: Enum(pending, captured) @default(pending)

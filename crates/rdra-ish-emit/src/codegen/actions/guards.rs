@@ -49,6 +49,17 @@ pub(super) fn fold_next(pred: &Pred, targets: &BTreeMap<usize, (VarId, Value)>) 
             entity: *entity,
             body: Box::new(rec(body)?),
         },
+        Pred::Count {
+            entity,
+            body,
+            op,
+            n,
+        } => Pred::Count {
+            entity: *entity,
+            body: Box::new(rec(body)?),
+            op: *op,
+            n: *n,
+        },
         other => other.clone(),
     })
 }
@@ -112,6 +123,6 @@ pub(super) fn reads_only_created(pred: &Pred, action: &Action) -> bool {
         Pred::In(a, vs) => created(a) && vs.iter().all(created),
         Pred::Not(p) => reads_only_created(p, action),
         Pred::And(ps) | Pred::Or(ps) => ps.iter().all(|p| reads_only_created(p, action)),
-        Pred::Forall { .. } | Pred::Exists { .. } => false,
+        Pred::Forall { .. } | Pred::Exists { .. } | Pred::Count { .. } => false,
     }
 }

@@ -223,7 +223,7 @@ fn untaken_arms(model: &SemanticModel, bounds: Bounds) -> Vec<usize> {
             };
             let (pre, post) = (&run.states[a as usize], &run.states[b as usize]);
             uc == st.usecase
-                && (0..bounds.slots())
+                && (0..ts.slots_of(&ts.var(var).kind))
                     .any(|k| pre.get(ts, var, k) == from && post.get(ts, var, k) == to)
         });
     }
@@ -271,7 +271,7 @@ fn unpicked_values(model: &SemanticModel, bounds: Bounds) -> Vec<(usize, usize)>
             let (pre, post) = (&run.states[a as usize], &run.states[b as usize]);
             uc == choice.origin
                 && pre != post
-                && (0..bounds.slots()).any(|k| post.get(ts, var, k) == v)
+                && (0..ts.slots_of(&ts.var(var).kind)).any(|k| post.get(ts, var, k) == v)
         });
     }
     listed

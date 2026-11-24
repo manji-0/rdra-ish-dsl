@@ -211,15 +211,12 @@ property OrderFinishes can_reach(Order.status == done)
 /// On the samples, at one instance and at two, the cone's verdict is the whole system's.
 #[test]
 fn the_cone_decides_what_the_whole_system_decides() {
-    let two = Bounds {
-        instances: std::num::NonZeroU8::new(2).unwrap(),
-        int_max: Bounds::STATES.int_max,
-    };
+    let two = Bounds::uniform(std::num::NonZeroU8::new(2).unwrap(), Bounds::STATES.int_max);
     for (sample, fails) in [(UNMET, true), (MET, false)] {
         let model = load(sample);
-        for bounds in [Bounds::STATES, two] {
+        for bounds in [Bounds::STATES, two.clone()] {
             assert_eq!(
-                fails_on_the_whole_system(&model, bounds, 0),
+                fails_on_the_whole_system(&model, bounds.clone(), 0),
                 fails,
                 "{sample}"
             );
@@ -258,14 +255,11 @@ property P can_reach((not (Payment.status == captured)) or (Order.status == paid
 "#
         )
     };
-    let two = Bounds {
-        instances: std::num::NonZeroU8::new(2).unwrap(),
-        int_max: Bounds::STATES.int_max,
-    };
+    let two = Bounds::uniform(std::num::NonZeroU8::new(2).unwrap(), Bounds::STATES.int_max);
     let along = model_from(&src(".along(Payment, Order)"));
-    assert!(!fails_on_the_whole_system(&along, two, 0));
-    assert!(!fails_on_its_cone(&along, two, 0));
+    assert!(!fails_on_the_whole_system(&along, two.clone(), 0));
+    assert!(!fails_on_its_cone(&along, two.clone(), 0));
     let global = model_from(&src(".global()"));
-    assert!(fails_on_the_whole_system(&global, two, 0));
+    assert!(fails_on_the_whole_system(&global, two.clone(), 0));
     assert!(fails_on_its_cone(&global, two, 0));
 }

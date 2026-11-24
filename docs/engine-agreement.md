@@ -14,6 +14,7 @@ says in its header why the verdict moved.
 
 <!-- constrained-by ./formal-verification.md#temporal-properties-on-a-cone -->
 <!-- constrained-by ./formal-verification.md#proofs-for-any-number-of-rows -->
+<!-- constrained-by ./formal-verification.md#state-models-with-tlc-alone -->
 
 The corpus harness (`crates/rdra-ish-cli/tests/engine_corpus.rs`) checks these rules on
 every case, whatever the case's header says.
@@ -22,10 +23,26 @@ every case, whatever the case's header says.
 
 1. Each check that both engines decide gets the same verdict. `not decided` from either
    engine is no disagreement, since that engine gave no verdict. `verify --with-tlc`
-   starts no TLC run for `stable`, `unchanged`, `precedes`, `can_reach`, or a state-model
-   finding, so those have no TLC verdict in the corpus. TLC can check the first three on
-   the specs `export` writes, and `engine_equivalence`'s `explored_agrees` compares them
-   there; the corpus's `safety_` cases rest on their stated verdicts.
+   starts no TLC run for `can_reach`, which TLC cannot state (`AG EF`), or for a use case
+   that never runs, so those have no TLC verdict in the corpus. The other checks that BFS
+   decides alone get a TLC run of their own:
+   - `stable`, `unchanged`, and `precedes` run on the unreduced cone the native checker
+     reads (`Cone_<Property>`). When that cone frees slots, a counterexample there goes to
+     the whole-model run (`RdraSpec_<Property>`), as it does natively. The final verdicts
+     must agree.
+   - The state models of each entity cone that BFS explored to the end, up to 100,000
+     states, run on the `StateModel_<E>` specs that `export` writes, on the system BFS
+     explored (see
+     [State models with TLC alone](./formal-verification.md#state-models-with-tlc-alone)).
+     TLC must name the same states without a witness as BFS. A deadlock that TLC reports
+     must be one that BFS reports, as an error or, when only the instance bound blocks it,
+     as a warning. A deadlock that TLC does not report has no TLC verdict: a cycle
+     anywhere in the column's cone keeps a move enabled and hides it from TLC. The corpus
+     states such a deadlock as `tlc=none`. Until
+     [#261](https://github.com/manji-0/rdra-ish-dsl/issues/261) is fixed, the `Deadlock_`
+     invariant can also report a deadlock that does not exist, when a step that writes the
+     column reads an event mark outside the column's cone; `verify --with-tlc` then fails
+     with `error[EngineDisagreement]` on a correct model.
 2. The rule holds per run as well as for the final verdict. Each property line names its
    runs (`Cone_P`, `Cone_P_Full`, `Cone_P_WF`, `RdraSpec_P`). The native and TLC lines must
    agree on each run that both decided. A final verdict can agree while two runs disagree
@@ -103,19 +120,25 @@ parse fails the suite. Other `//` lines are free text that explains the trap.
 // flags: <verify flags>                                 optional
 // tlc: skip, <why>                                      optional; the case never runs TLC
 // rejects: <text>                                       optional, repeatable
-// expect <Check>: native=<V> tlc=<V> [z3=<Z>] [bfs=<V>,<V>,<V>]
+// expect <Check>: native=<V> tlc=<V> [z3=<Z>] [bfs=<V>,<V>,<V>[,<V>]]
 // known <Check>: <engine>=<observed> <issue URL>
 ```
 
 - `<V>` is `ok`, `counterexample`, `not_decided`, or `none`. `none` means the engine prints
-  no verdict for the check. For `tlc`, that covers a form TLC does not check. For `native`,
-  it covers a check that should not exist, such as a rule that a build error should stop.
+  no verdict for the check. For `tlc`, that covers a form TLC does not check and a
+  deadlock TLC does not report. For `native`, it covers a check that should not exist,
+  such as a rule that a build error should stop, and a deadlock that BFS reports only as a
+  warning. A state-model check gets TLC's `counterexample` from its `StateModel_` line,
+  `tlc: StateModel_<E> (<n> states): <counts>; found <check>, ...`, which names only what
+  TLC found.
 - `<Z>` is `proved`, `unproved`, or `out_of_scope`. Every state rule that `--prove` reports
   needs a `z3=`. `z3=proved` also needs `bfs=`, because a proof must not contradict any of
   the bounded verdicts.
-- `bfs=` lists the native verdicts at 1, 2, and 3 instances per entity. The second entry
-  equals `native=`. The harness runs `verify --instance-count 1` and `3` only for a case
-  with a `bfs=`.
+- `bfs=` lists the native verdicts at 1, 2, and 3 instances per entity, and at 4 when it
+  has a fourth entry. The second entry equals `native=`. The harness runs `verify
+  --instance-count 1` and `3` only for a case with a `bfs=`, and `4` only for a case with
+  a four-entry `bfs=`. A count rule that needs four rows to fail states its verdict at 4
+  this way.
 - `<Check>` is the name the run prints: `error[<Check>]`, a `Cone_` line's bracket list, a
   `property <Check> (BFS on its cone)` line, or a `proved:` line. State-model findings
   (`Deadlock_*`, `Witness_*`) are checks too. Every check the run names needs an `expect`
@@ -157,9 +180,13 @@ The test prints one line per case: `ok`, `FAIL` with each reason, or `known`. Wi
 them in the `engine-equivalence` job. The main test's name starts with `bfs_and_tlc_`, so
 the debug `test` step skips it, as it skips the other TLC comparisons. The header check
 and the capped-graph test run in both steps.
+`RDRA_CORPUS_CASE=<text>` makes the main test run only the cases whose name contains
+`<text>`, for working on one case.
 
 The suite runs four cases at a time. Locally (Apple silicon, with a reduction sweep
-loading the machine) it takes about 25 s in release, measured.
+loading the machine) it took about 25 s in release, measured. With the `stable`,
+`unchanged`, `precedes`, and state-model runs of #201 it took 43 s on a shared machine
+under a load average of 30 to 60, measured.
 
 ### Adding a case
 
@@ -208,6 +235,7 @@ loading the machine) it takes about 25 s in release, measured.
 | `safety_precedes_latch` | `precedes` reads a latch | ok; never-set latch counterexample |
 | `safety_stable_across_delete` | `stable` and `unchanged` across delete and create | ok; `PendingStays` counterexample |
 | `safety_can_reach_frees_slots` | `can_reach` where slots run out | counterexample; per-bill ok |
+| `safety_stable_frees_slots` | `stable` and `unchanged` on a cone that frees slots go to the whole model in both engines | ok (whole model) |
 | `safety_vacuity` | A trigger that never holds | ok; `always` counterexample |
 | `safety_delete_restrict` | A delete the key's children reject (no `.on_delete`, `restrict`) waits until no child names the row | ok, z3 proved |
 | `safety_delete_cascade` | `.on_delete(cascade)` keeps its unguarded one-row delete and gets no `DanglingKey_*`; the line the delete marks stays | counterexample, z3 unproved |
@@ -234,7 +262,8 @@ checks on every case's whole model.
 <!-- derived-from #agreement-rules -->
 
 When the corpus was written, five deliberate bugs were planted in the checker, one at a
-time, and the suite was run on each. Each bug was reverted afterwards.
+time, and the suite was run on each. #201 added the sixth, once TLC checked `stable` and
+`unchanged`. Each bug was reverted afterwards.
 
 | Planted bug | Where | Cases that failed | Caught by |
 |---|---|---|---|
@@ -243,6 +272,7 @@ time, and the suite was run on each. Each bug was reverted afterwards.
 | A `_WF` ok is final on any cone, not only one that holds every written var | `after_wf` in `property_cone.rs` | 7 cases (receipt model, handler mark, independent loop, split use case, triggered handler, both cap cases) | the header only: native and TLC share the ladder and agree on the wrong ok |
 | A counterexample on a cone that frees slots is taken as the whole model's | `counterexample` in `property_cone.rs` | `cone_always_frees_slots` | the header only: both engines report the cone's counterexample |
 | On a capped graph, every state counts as expanded | `expanded` in `explore/liveness.rs` | `cap_memory_limit` and the capped-graph test | `LassoFault` and rule 7 |
+| `stable` and `unchanged` read only the edges back to an earlier state (#201) | `breaking_step` in `explore/properties.rs` | `safety_stable_across_delete` | the header, rule 1, and `EngineDisagreement` on `Cone_PendingStays` |
 
 The third and fourth rows are the reason every case states its verdicts. The shared ladder
 moved seven verdicts in both engines at once, and the shared frees-slots rule moved one.

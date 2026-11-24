@@ -275,6 +275,10 @@ pub(crate) enum Commands {
         /// TLA+ multi-instance `InstanceCount` (export --kind tla / verify only)
         #[arg(long, default_value_t = 2)]
         instance_count: u32,
+        /// One entity's slot count in place of --instance-count, as Loan=4; repeatable
+        /// (export --kind tla only). Default: `instances` under [verify] in rdra.toml
+        #[arg(long, value_name = "ENTITY=N")]
+        instances: Vec<crate::export::InstanceOverride>,
         /// TLA+ `IntRange == 0..N` upper bound (export --kind tla / verify only)
         #[arg(long, default_value_t = 5)]
         int_range_max: u32,
@@ -348,6 +352,10 @@ pub(crate) enum Commands {
         /// TLA+ multi-instance `InstanceCount`
         #[arg(long, default_value_t = 2)]
         instance_count: u32,
+        /// One entity's slot count in place of --instance-count, as Loan=4; repeatable.
+        /// Default: `instances` under [verify] in rdra.toml
+        #[arg(long, value_name = "ENTITY=N")]
+        instances: Vec<crate::export::InstanceOverride>,
         /// TLA+ `IntRange == 0..N` upper bound
         #[arg(long, default_value_t = 5)]
         int_range_max: u32,
@@ -461,23 +469,43 @@ pub(crate) struct BoundsArgs {
     /// Instances (slots) per entity
     #[arg(long, default_value_t = 1)]
     pub(crate) instance_count: u32,
+    /// One entity's slot count in place of --instance-count, as Loan=4; repeatable.
+    /// Default: `instances` under [check] in rdra.toml
+    #[arg(long, value_name = "ENTITY=N")]
+    pub(crate) instances: Vec<crate::export::InstanceOverride>,
     /// The Int domain is `0..=N`
     #[arg(long, default_value_t = 5)]
     pub(crate) int_range_max: u32,
 }
 
 impl BoundsArgs {
-    /// The BFS caps: the defaults for `--instance-count`, each replaced by the flag given.
-    pub(crate) fn caps(&self, max_patterns: Option<usize>, max_states: Option<usize>) -> Caps {
-        let default = Caps::for_instances(self.instance_count);
+    /// The BFS caps: the defaults for the largest slot count of `bounds`, each replaced by
+    /// the flag given.
+    pub(crate) fn caps(
+        bounds: &rdra_ish_core::lifecycle::Bounds,
+        max_patterns: Option<usize>,
+        max_states: Option<usize>,
+    ) -> Caps {
+        let default = Caps::for_instances(bounds.most().get().into());
         Caps::new(
             max_patterns.unwrap_or(default.patterns),
             max_states.unwrap_or(default.states),
         )
     }
 
-    pub(crate) fn bounds(&self) -> anyhow::Result<rdra_ish_core::lifecycle::Bounds> {
-        crate::export::checked_bounds(self.instance_count, self.int_range_max)
+    /// The bounds the flags give, with `instances` under [check] in the manifest beneath
+    /// them, checked against `model`.
+    pub(crate) fn bounds(
+        &self,
+        model: &rdra_ish_core::SemanticModel,
+        manifest: Option<&rdra_ish_core::project::Manifest>,
+    ) -> anyhow::Result<rdra_ish_core::lifecycle::Bounds> {
+        let flags = crate::export::checked_bounds(
+            self.instance_count,
+            self.int_range_max,
+            &self.instances,
+        )?;
+        crate::export::model_bounds(flags, manifest.map(|m| &m.check.instances), "check", model)
     }
 }
 
@@ -668,7 +696,13 @@ mod tests {
                     } => (bounds, max_patterns, max_states),
                     _ => panic!("expected check or states"),
                 };
-            let caps = bounds.caps(max_patterns, max_states);
+            let bounds = crate::export::checked_bounds(
+                bounds.instance_count,
+                bounds.int_range_max,
+                &bounds.instances,
+            )
+            .unwrap();
+            let caps = BoundsArgs::caps(&bounds, max_patterns, max_states);
             (caps.patterns, caps.states)
         }
         for command in ["check", "states"] {
@@ -692,6 +726,11 @@ mod tests {
             assert_eq!(
                 caps(&[command, "--instance-count", "255"]),
                 (usize::MAX, usize::MAX)
+            );
+            // The largest per-entity count sets the pattern cap.
+            assert_eq!(
+                caps(&[command, "--instances", "Loan=3", "--instances", "Member=2"]),
+                (1 << 26, usize::MAX)
             );
         }
     }

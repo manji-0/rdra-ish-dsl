@@ -220,7 +220,7 @@ impl ComponentRun {
         };
         let fair = self.fair_steps(i);
         let mut best: Option<(u32, Avoid)> = None;
-        for b in ts.binder_slots(p.binders.len()) {
+        for b in ts.binder_slots(&p.binders) {
             let avoid = self.avoid(&fair, goal, &b, rule);
             let found = (0..self.states.len() as u32).find(|&s| {
                 let st = &self.states[s as usize];

@@ -132,6 +132,21 @@ pub enum RdraError {
     #[error(".{method}(...) names no condition on a related entity\n  hint: write `.{method}(Related.column == value)`")]
     QuantifierWithoutCondition { method: String },
 
+    #[error(".{method}(...) needs a count first, a whole number from 1 to 255{}\n  hint: write `.{method}(3, Related.column == value)`", found.as_ref().map_or(String::new(), |f| format!(", not `{f}`")))]
+    QuantifierCountInvalid {
+        method: String,
+        /// The first argument as written, when there is one.
+        found: Option<String>,
+    },
+
+    #[error(".{written}(...) is {meaning}\n  hint: {fix}")]
+    QuantifierCountSpelling {
+        /// `at_least(1`, as written up to the count.
+        written: String,
+        meaning: String,
+        fix: String,
+    },
+
     #[error(".along({path}) does not run from {ends}, which `.{method}(...)` counts, each entity once\n  hint: write `.along({fix})`, the key path from the anchor to the counted entity, or drop `.along(...)` to count the rows one key joins to the anchor")]
     QuantifierAlongShape {
         method: String,

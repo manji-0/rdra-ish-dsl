@@ -52,10 +52,9 @@ fn ent(ts: &TransitionSystem, id: &str) -> EntId {
 fn reaches(run: &ComponentRun, order: Value, line: Value) -> bool {
     let ts = &run.system;
     let (o, l) = (ent(ts, "Order"), ent(ts, "OrderLine"));
-    let slots = ts.bounds.slots();
     run.states.iter().any(|s| {
-        (0..slots).all(|i| s.get(ts, ts.entity(o).exists, i) == order)
-            && (0..slots).all(|i| s.get(ts, ts.entity(l).exists, i) == line)
+        (0..ts.slots(o)).all(|i| s.get(ts, ts.entity(o).exists, i) == order)
+            && (0..ts.slots(l)).all(|i| s.get(ts, ts.entity(l).exists, i) == line)
     })
 }
 

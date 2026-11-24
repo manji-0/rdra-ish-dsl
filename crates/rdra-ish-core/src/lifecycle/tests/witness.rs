@@ -89,7 +89,7 @@ fn a_witness_state_holds_its_value() {
     for sample in SAMPLES {
         let model = load(sample);
         for bounds in [Bounds::STATES, Bounds::VERIFY] {
-            let built = TransitionSystem::build(&model, bounds, &Scope::ALL);
+            let built = TransitionSystem::build(&model, bounds.clone(), &Scope::ALL);
             let ts = &built.ts;
             let entities: Vec<Target> = ts
                 .targets()
@@ -109,7 +109,7 @@ fn a_witness_state_holds_its_value() {
                         Witness::At(i) => {
                             let s = &g.states[i as usize];
                             assert!(
-                                (0..bounds.slots()).any(|slot| s.is_present(
+                                (0..cone.system.slots(local)).any(|slot| s.is_present(
                                     &cone.system,
                                     local,
                                     slot

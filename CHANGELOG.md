@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Known issues
+
+- `--memory` does not yet bound the whole process (#237, #242, #243). It bounds what the
+  state stores are counted to hold. When cones stop at the limit, the process has been
+  measured on macOS at up to 1.85 times it (`verify samples/oidc-auth --instance-count 2
+  --memory 2GiB`), and past 19.5 GB at the default `16GiB`. Set `--memory` to about half the
+  memory you can spare until the fixes land. Runs whose cones finish below the limit are not
+  affected. See [Memory limit](docs/cli-reference.md#memory-limit).
+
 ### Breaking
 
 - A `deletes(UC, Parent)` waits until no present child names the row when the key's
@@ -152,6 +161,34 @@
   case that raises or handles a counted event as unsupported. Edges without `.counted` keep
   the latch, and every model without it builds the same transition system as before.
   Design: `docs/design/counted-events.md`.
+- Per-entity instance counts (#216). `--instances <Entity>=<n>`, repeatable, gives one
+  entity its own slots in place of `--instance-count` on `check`, `states`, `verify`, and
+  `export --kind tla`: `verify --instances Loan=4` explores four loans and two rows of every
+  other entity. `instances = { Loan = 4 }` under `[check]` or `[verify]` in `rdra.toml` sets
+  it for those commands (`[verify]` also for `export --kind tla`), and a flag replaces the
+  table's count of its entity. The `bounds:` line, the `OK:` line, and the TLA+ header name
+  each count (`2 instances per entity (Loan=4)`), and the TLA+ module's id set of the entity
+  is `Loan_Ids == 1..4`. An id that names no entity is an error. A pre-existing child that
+  starts linked one to one to its parent's slots needs the parent's count, else
+  `IdentityStartSlots`. Without the flag and the tables every output is unchanged. The
+  corpus case `presence_per_entity_slots` checks a child with more slots than its parent and
+  a parent with more than its child, with the native checker and TLC.
+- Counted quantifiers and cardinality maxima (#216). `invariant(E)` and a `holds` body take
+  `.at_most(n, Related...)`, `.at_least(n, Related...)`, and `.exactly(n, Related...)`
+  beside `.has` and `.none`, with the same rows, `.along`, and `.role`: the present linked
+  rows that match, each counted once, compared with `n` (1 to 255). A guard counts the rows
+  before its use case runs. `at_least(0)`, `at_least(1)`, `at_most(0)`, and `exactly(0)` are
+  `QuantifierCountSpelling`, which names the shorter form. A card's child side takes a high
+  end from 2 to 255, `relate(Loan, Member, 0..3:1)`, checked as `MaxCard_<Child>_<role>`.
+  `check`, `states`, `verify` (TLC through `Cardinality`, its module extending
+  `FiniteSets`), and `verify --prove` (counts of up to 8 rows, unrolled into distinct
+  witnesses) check both; generated code checks a counted guard over the related rows'
+  list. An `at_most` count or a maximum that needs more rows than the bounds give is
+  `Vacuous_<rule>`, naming the `--instances` that lifts it; `at_least` and `exactly` above
+  the bound warn `CountAboveBound`. The corpus cases
+  `safety_at_most_bound`, `safety_at_least_guard`, and `safety_count_per_entity` check it
+  with the native checker at 1 to 4 instances, TLC, and z3, and the sample
+  `formal-verification/counting_rules.rdra` shows it. No sample changes verdict.
 - A `MemoryCapReached` error of `check` and `states` says what the cone held and what
   finishing needs: the bytes each held state took, and an estimate of the states the cone
   reaches from its BFS layers. Once the frontier has shrunk for two depths past its peak,
@@ -178,6 +215,28 @@
   run when the two disagree on a check; a check one engine leaves `not decided` is no
   disagreement. `scripts/verify-samples.sh --with-tlc` and `scripts/reduction-diff.py
   --with-tlc` run the samples and random models that way.
+- `verify --with-tlc` also cross-checks `stable`, `unchanged`, `precedes`, and the state
+  models, which only the native checker decided before (#201):
+  - Each of those properties runs in TLC on the unreduced cone the native checker reads,
+    module `Cone_<Property>`, and on the whole model (`RdraSpec_<Property>`) when a
+    counterexample on a cone that frees slots asks for it. The final verdicts must agree.
+  - Each entity cone that BFS explored to the end, up to 100,000 states, runs its
+    `StateModel_<E>` deadlocks and witnesses cfgs on the system BFS explored, and prints
+    `tlc: StateModel_<E> (<n> states): <counts>; found <checks>`. TLC must name the same
+    states without a witness as BFS, and each deadlock TLC reports must be one BFS reports.
+    A deadlock only BFS finds is no disagreement, since a cycle in the column's cone hides
+    it from TLC. A larger cone prints `not run, over the limit of 100000 states`.
+  - Any other difference prints `error[EngineDisagreement]` and fails the run. A state-model
+    run moves `tlc_result:` only when it fails as a tool, since its findings are BFS's.
+  - `can_reach` and the use cases that never run stay native-only. A run without
+    `--with-tlc` builds none of these jobs, and its output does not change.
+
+  The cross-check found that the `Deadlock_` invariant `export --kind tla` prints leaves out
+  the vars a writing step reads outside the column's cone, such as an event mark, so TLC
+  can report a deadlock that does not exist (#261). Until it is fixed, `verify --with-tlc`
+  on a correct model of that shape prints `error[EngineDisagreement]` and exits 1 with
+  `result: tool_error`. The engine corpus records it as a known disagreement in
+  `fair_triggered_handler.rdra`.
 - `--temporal-budget` bounds the native whole-model run of a property its cone does not
   decide: past the budget, the memory limit, or `--max-states` when given, the run stops
   and the property is `not decided` unless the partial graph already holds a

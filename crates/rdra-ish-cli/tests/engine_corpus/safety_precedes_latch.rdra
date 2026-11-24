@@ -4,8 +4,9 @@
 // ShippedAfterPaid holds. A checker that read `p` in the current state only would report a
 // violation. ShippedAfterAudit waits for a column no use case sets, so its latch is never
 // set and the first Ship violates it.
-// expect ShippedAfterPaid: native=ok tlc=none
-// expect ShippedAfterAudit: native=counterexample tlc=none
+// TLC checks both on the same cone under --with-tlc (#201), the latch as a var of its module.
+// expect ShippedAfterPaid: native=ok tlc=ok
+// expect ShippedAfterAudit: native=counterexample tlc=counterexample
 entity Order "注文" {
   id: Int @pk
   status: Enum(pending, paid, shipped) @default(pending)

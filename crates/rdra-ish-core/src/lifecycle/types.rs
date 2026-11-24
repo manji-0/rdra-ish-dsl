@@ -1,37 +1,76 @@
 //! The transition system's data. Everything here is plain data that `build` fills in and that
 //! the explorer and a printer read; no item here reads the `SemanticModel`.
 
+use std::collections::BTreeMap;
 use std::num::NonZeroU8;
 
 use crate::location::LocatedSpan;
 use crate::model::{ApiKey, BucKey, ConditionKey, EntityKey, EventKey, FkId, UseCaseKey};
 
 /// Bounds are an input to the semantics, not a printer option. Every report states them.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Bounds {
-    /// Slots per entity.
+    /// Slots of every entity `per_entity` does not name.
     pub instances: NonZeroU8,
     /// Int domain is `0..=int_max`; `now` ticks inside it.
     pub int_max: u8,
+    /// Slots of one entity, by entity id (`--instances Loan=4`). The build resolves them
+    /// into `EntityDecl::slots`; an id no entity has is the caller's error to report.
+    pub per_entity: BTreeMap<String, NonZeroU8>,
 }
 
 impl Bounds {
     /// One abstract instance per entity, as `states` has always reported.
-    pub const STATES: Bounds = Bounds {
-        instances: NonZeroU8::MIN,
-        int_max: 5,
-    };
+    pub const STATES: Bounds = Bounds::uniform(NonZeroU8::MIN, 5);
     /// Two instances per entity, the TLA export default.
-    pub const VERIFY: Bounds = Bounds {
-        instances: match NonZeroU8::new(2) {
+    pub const VERIFY: Bounds = Bounds::uniform(
+        match NonZeroU8::new(2) {
             Some(n) => n,
             None => unreachable!(),
         },
-        int_max: 5,
-    };
+        5,
+    );
 
-    pub fn slots(self) -> usize {
-        usize::from(self.instances.get())
+    /// `instances` slots of every entity.
+    pub const fn uniform(instances: NonZeroU8, int_max: u8) -> Bounds {
+        Bounds {
+            instances,
+            int_max,
+            per_entity: BTreeMap::new(),
+        }
+    }
+
+    /// The slots of the entity with id `id`.
+    pub fn of(&self, id: &str) -> NonZeroU8 {
+        self.per_entity.get(id).copied().unwrap_or(self.instances)
+    }
+
+    /// The largest slot count of any entity.
+    pub fn most(&self) -> NonZeroU8 {
+        self.per_entity
+            .values()
+            .copied()
+            .fold(self.instances, std::cmp::max)
+    }
+
+    /// The same bounds at `instances` slots for every entity, without the per-entity counts.
+    pub fn at(&self, instances: NonZeroU8) -> Bounds {
+        Bounds::uniform(instances, self.int_max)
+    }
+
+    /// ` (Loan=4, Member=1)` after a bounds line, or nothing without per-entity counts.
+    pub fn per_entity_note(&self) -> String {
+        match self.per_entity.is_empty() {
+            true => String::new(),
+            false => format!(
+                " ({})",
+                self.per_entity
+                    .iter()
+                    .map(|(id, n)| format!("{id}={n}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        }
     }
 }
 
@@ -76,6 +115,8 @@ pub struct EntityDecl {
     pub id: String,
     pub label: String,
     pub birth: Birth,
+    /// The entity's slots under the system's bounds (`Bounds::of`).
+    pub slots: NonZeroU8,
     pub exists: VarId,
     /// View axes: state columns in declaration order, then proposition vars.
     pub columns: Vec<VarId>,
@@ -159,6 +200,21 @@ pub enum VarKind {
     Now,
 }
 
+impl VarKind {
+    /// The entity whose slots the var has one byte per; `None` for `now`.
+    pub fn entity(&self) -> Option<EntId> {
+        match *self {
+            VarKind::Exists(e) => Some(e),
+            VarKind::Column { entity, .. }
+            | VarKind::Prop { entity, .. }
+            | VarKind::Run { entity, .. }
+            | VarKind::Raised { entity, .. } => Some(entity),
+            VarKind::Owner { child, .. } => Some(child),
+            VarKind::Now => None,
+        }
+    }
+}
+
 /// Finite by construction: every domain has a size under `Bounds`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Domain {
@@ -181,15 +237,16 @@ pub enum Domain {
 }
 
 impl Domain {
-    pub fn size(&self, bounds: Bounds) -> usize {
-        let ints = usize::from(bounds.int_max) + 1;
+    /// How many values the domain has in `ts`: an owner's domain is its parent's slots.
+    pub fn size(&self, ts: &super::TransitionSystem) -> usize {
+        let ints = usize::from(ts.bounds.int_max) + 1;
         match self {
             Domain::Existence => 3,
             Domain::Enum(values) => values.len(),
             Domain::Bool | Domain::Nullable => 2,
             Domain::Int => ints,
             Domain::NullableInt => ints + 1,
-            Domain::Instance { optional, .. } => bounds.slots() + usize::from(*optional),
+            Domain::Instance { parent, optional } => ts.slots(*parent) + usize::from(*optional),
         }
     }
 
@@ -203,7 +260,7 @@ impl Domain {
     }
 
     /// The value standing for an integer, when the domain holds it under `bounds`.
-    pub fn of_number(&self, n: i64, bounds: Bounds) -> Option<Value> {
+    pub fn of_number(&self, n: i64, bounds: &Bounds) -> Option<Value> {
         let max = i64::from(bounds.int_max);
         if !(0..=max).contains(&n) {
             return None;
@@ -431,9 +488,10 @@ impl Pred {
             let pred = stack.pop()?;
             match pred {
                 Pred::True | Pred::False | Pred::Cmp(..) | Pred::In(..) => {}
-                Pred::Not(body) | Pred::Forall { body, .. } | Pred::Exists { body, .. } => {
-                    stack.push(body)
-                }
+                Pred::Not(body)
+                | Pred::Forall { body, .. }
+                | Pred::Exists { body, .. }
+                | Pred::Count { body, .. } => stack.push(body),
                 Pred::And(parts) | Pred::Or(parts) => stack.extend(parts.iter().rev()),
             }
             Some(pred)
@@ -469,9 +527,10 @@ impl Pred {
             Pred::True | Pred::False => false,
             Pred::Cmp(a, _, b) => next(a) || next(b),
             Pred::In(a, values) => next(a) || values.iter().any(next),
-            Pred::Not(body) | Pred::Forall { body, .. } | Pred::Exists { body, .. } => {
-                body.reads_next()
-            }
+            Pred::Not(body)
+            | Pred::Forall { body, .. }
+            | Pred::Exists { body, .. }
+            | Pred::Count { body, .. } => body.reads_next(),
             Pred::And(parts) | Pred::Or(parts) => parts.iter().any(Pred::reads_next),
         }
     }
@@ -633,6 +692,15 @@ pub enum Pred {
         entity: EntId,
         body: Box<Pred>,
     },
+    /// The present slots of `entity` for which `body` holds, counted: `count op n`. The body
+    /// sees the slot as the next `Bound`, as a `Forall`'s does. The build writes `Le`
+    /// (`.at_most`), `Ge` (`.at_least`), and `Eq` (`.exactly`).
+    Count {
+        entity: EntId,
+        body: Box<Pred>,
+        op: CmpOp,
+        n: u8,
+    },
 }
 
 /// What some reachable state must show for a rule's holding to say anything: present rows
@@ -688,6 +756,9 @@ pub enum InvKind {
     Unique,
     /// A child-side range `1..*` / `1..1`: every present parent slot has a present child.
     MinCard,
+    /// A child-side range `lo..hi`, `hi` from 2 to 255: no present parent slot has more
+    /// than `hi` present children.
+    MaxCard,
     /// A column's `@check(expr)`: no present slot makes the expression false.
     Check,
     /// A key whose parent a step deletes and whose database rejects that delete: every
@@ -709,6 +780,7 @@ impl InvText {
             InvText::Quantifier { .. } => InvKind::Quantifier,
             InvText::Unique { .. } | InvText::UniqueSet { .. } => InvKind::Unique,
             InvText::MinCard { .. } => InvKind::MinCard,
+            InvText::MaxCard { .. } => InvKind::MaxCard,
             InvText::Check(_) => InvKind::Check,
             InvText::DanglingKey { .. } => InvKind::DanglingKey,
             InvText::Overflow { .. } => InvKind::Overflow,
@@ -766,6 +838,13 @@ pub enum InvText {
         child: String,
         parent: String,
         role: String,
+    },
+    /// `relate(child, parent, 0..3:1)`, by the key's role: at most `most` children.
+    MaxCard {
+        child: String,
+        parent: String,
+        role: String,
+        most: u8,
     },
     /// `triggers(event, usecase).counted(cap)`: no row has more than `cap` raises pending.
     Overflow {

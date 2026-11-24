@@ -718,6 +718,7 @@ impl<'m> Script<'m> {
                     InvKind::CrossForbidden | InvKind::CrossInvariant => "several entities",
                     InvKind::Quantifier => "related rows",
                     InvKind::MinCard => "minimum cardinality",
+                    InvKind::MaxCard => "maximum cardinality",
                     _ => return None,
                 };
                 let ts_entity = inv
@@ -984,6 +985,12 @@ fn inv_text(inv: &Invariant) -> String {
             role,
         }
         | InvText::DanglingKey {
+            child,
+            parent,
+            role,
+            ..
+        }
+        | InvText::MaxCard {
             child,
             parent,
             role,

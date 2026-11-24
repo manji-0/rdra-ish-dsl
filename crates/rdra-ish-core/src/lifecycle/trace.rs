@@ -123,12 +123,7 @@ impl TransitionSystem {
     ) -> Option<State> {
         let mut state = State(vec![0u8; self.width].into_boxed_slice());
         for var in self.var_ids() {
-            let slots = if self.var(var).kind == VarKind::Now {
-                1
-            } else {
-                self.bounds.slots()
-            };
-            for slot in 0..slots {
+            for slot in 0..self.slots_of(&self.var(var).kind) {
                 state.set(self, var, slot, value(var, slot)?);
             }
         }
@@ -189,7 +184,7 @@ impl TransitionSystem {
         for (i, decl) in self.entities.iter().enumerate() {
             let e = EntId::at(i);
             let fields = || decl.columns.iter().chain(&decl.owners).copied();
-            for slot in 0..self.bounds.slots() {
+            for slot in 0..self.slots(e) {
                 let at = || self.inst(e, slot);
                 match (
                     pre.is_present(self, e, slot),
@@ -340,7 +335,7 @@ impl TransitionSystem {
         if !self.cone_frees_slots(cone) {
             return Vec::new();
         }
-        let mut creates: BTreeMap<String, usize> = BTreeMap::new();
+        let mut creates: BTreeMap<String, (usize, usize)> = BTreeMap::new();
         for step in &trace.steps {
             let Some(action) = self.actions.iter().find(|a| a.name == step.action) else {
                 continue;
@@ -348,13 +343,14 @@ impl TransitionSystem {
             for p in &action.params {
                 let decl = self.entity(p.entity);
                 if p.role == ParamRole::New && !cone.vars.contains(&decl.exists) {
-                    *creates.entry(decl.id.clone()).or_default() += 1;
+                    let slots = self.slots(p.entity);
+                    creates.entry(decl.id.clone()).or_insert((0, slots)).0 += 1;
                 }
             }
         }
         creates
             .into_iter()
-            .filter(|(_, n)| *n > self.bounds.slots())
+            .filter(|(_, (n, slots))| n > slots)
             .map(|(id, _)| id)
             .collect()
     }

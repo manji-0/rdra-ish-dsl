@@ -93,7 +93,7 @@ pub(crate) fn findings_of(
     });
     let violations = report.diags.iter().filter_map(|d| {
         let mut text = render_violation(program, model, &d.diag, TraceSource::Bfs)?;
-        if report.bounds.instances.get() == 1 {
+        if ts.most_slots() == 1 {
             text.push_str(&one_instance_note(&d.diag, ts));
         }
         Some(Finding::new(&d.diag, &[], text))
@@ -800,6 +800,14 @@ fn violation_message(text: &InvText, p: &str) -> String {
 } => format!(
             "dangling key: a '{child}' names a '{parent}' through '{role}' that is not present, witnessed by {p}; the '{child}' row names a parent that was never created or is gone"
         ),
+        InvText::MaxCard {
+            child,
+            parent,
+            role,
+            most,
+        } => format!(
+            "maximum children exceeded: a '{parent}' has more than {most} '{child}' through '{role}', witnessed by {p}"
+        ),
         InvText::Overflow {
                 event,
                 usecase,
@@ -941,6 +949,8 @@ violation_message(text, pattern_desc)
         | StateDiag::AmbiguousOwnerLink { .. }
         | StateDiag::UnwrittenConstrainedVar { .. }
         | StateDiag::PreExistingChildOfCreatedParent { .. }
+        | StateDiag::IdentityStartSlots { .. }
+        | StateDiag::CountAboveBound { .. }
         | StateDiag::MinCardOfPreExistingParent { .. }
         | StateDiag::MinCardNeedsCreate { .. }
         | StateDiag::UnsupportedComparison { .. }

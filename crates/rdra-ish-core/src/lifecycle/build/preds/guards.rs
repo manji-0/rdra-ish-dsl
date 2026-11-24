@@ -310,10 +310,7 @@ impl<'m> Builder<'m> {
             body.quantifiers
                 .iter()
                 .find(|q| q.related == ek)
-                .map(|q| match q.kind {
-                    QuantifierKind::Has => "has",
-                    QuantifierKind::None => "none",
-                })
+                .map(|q| q.kind.method())
         };
         let id = |ek: EntityKey| model.entities[ek].id.as_str();
         let mut roles: Vec<PathRole> = Vec::with_capacity(path.len());
@@ -418,7 +415,9 @@ impl<'m> Builder<'m> {
     /// to `q.related`, whose entities after the first are bound at `depth`, `depth + 1`, .. in
     /// path order. Every row of each entity between, and of `q.related`, that the hops' keys
     /// chain to the anchor's row is counted: `Forall` for `.none`, so no chain reaches a
-    /// matching row, and `Exists` for `.has`, so some chain does.
+    /// matching row, and `Exists` for `.has`, so some chain does. A count binds `q.related`
+    /// first, at `depth`, and the entities between after it: it counts the rows of
+    /// `q.related` that some chain reaches, each once however many chains reach it.
     pub(super) fn quantified_along(
         &mut self,
         q: &RelatedQuantifier,
@@ -434,29 +433,48 @@ impl<'m> Builder<'m> {
             site: path_site,
         } = chain;
         let rows = &segment[1..];
+        // The binder order: path order, or for a count the counted entity first.
+        let order: Vec<EntityKey> = match q.kind {
+            QuantifierKind::Count { .. } => std::iter::once(q.related)
+                .chain(rows.iter().copied().filter(|ek| *ek != q.related))
+                .collect(),
+            QuantifierKind::Has | QuantifierKind::None => rows.to_vec(),
+        };
         let mut inner: Binding = binding
             .iter()
             .filter(|(ek, _)| !rows.contains(ek))
             .copied()
             .collect();
-        for (i, &ek) in rows.iter().enumerate() {
+        for (i, &ek) in order.iter().enumerate() {
             inner.push((ek, At::Bound(depth + i as u8)));
         }
         let links = self.path_links(segment, keys, &inner, &owner, path_site);
         let conds = self.cross_all(&q.conditions, &inner, site);
         let link = Pred::And(links);
         let body = match q.kind {
-            QuantifierKind::Has => Pred::And(vec![link, conds]),
+            QuantifierKind::Has | QuantifierKind::Count { .. } => Pred::And(vec![link, conds]),
             QuantifierKind::None => implies(link, Pred::Not(Box::new(conds))),
         };
-        rows.iter().rev().fold(body, |body, ek| {
+        let (outer, between) = order.split_first().expect("a path past its anchor");
+        let body = between.iter().rev().fold(body, |body, ek| {
             let entity = self.ent_of[ek];
             let body = Box::new(body);
             match q.kind {
-                QuantifierKind::Has => Pred::Exists { entity, body },
+                QuantifierKind::Has | QuantifierKind::Count { .. } => Pred::Exists { entity, body },
                 QuantifierKind::None => Pred::Forall { entity, body },
             }
-        })
+        });
+        let (entity, body) = (self.ent_of[outer], Box::new(body));
+        match q.kind {
+            QuantifierKind::Has => Pred::Exists { entity, body },
+            QuantifierKind::None => Pred::Forall { entity, body },
+            QuantifierKind::Count { bound, n } => Pred::Count {
+                entity,
+                body,
+                op: super::cross_rules::count_op(bound),
+                n,
+            },
+        }
     }
 
     /// `UnjoinedGuardRead` for each entity the body compares that is a witness no chain of

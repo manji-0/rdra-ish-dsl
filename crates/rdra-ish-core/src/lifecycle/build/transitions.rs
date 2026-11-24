@@ -179,7 +179,7 @@ impl Builder<'_> {
             let fact = ModelRef::ColumnChoice(idx);
             let mut values: Vec<Choice> = Vec::new();
             if choice.values.is_empty() {
-                let size = self.ts.vars[var.index()].domain.size(self.bounds);
+                let size = self.ts.vars[var.index()].domain.size(&self.ts);
                 let site = Site::new(fact.clone(), &choice.site);
                 values = (0..size)
                     .map(|i| Choice {
@@ -237,7 +237,7 @@ impl Builder<'_> {
                 if a.writes(var, p as u8) {
                     continue;
                 }
-                let size = self.ts.vars[var.index()].domain.size(self.bounds);
+                let size = self.ts.vars[var.index()].domain.size(&self.ts);
                 a.effects.push(Effect::Choose {
                     var,
                     param: p as u8,
