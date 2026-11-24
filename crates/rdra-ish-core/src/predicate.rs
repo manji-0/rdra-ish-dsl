@@ -284,6 +284,7 @@ impl Predicate {
             Navigates => &["via"],
             Transitions | Chooses => &["when"],
             Creates | Updates | Deletes => &["apart"],
+            Triggers => &["counted"],
             Reads => &["by", "order", "page", "count", "sum"],
             _ => &[],
         }

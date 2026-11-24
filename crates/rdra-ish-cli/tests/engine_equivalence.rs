@@ -3540,6 +3540,46 @@ fn tlc_alone_finds_a_deadlock_beside_a_toggled_column() {
     );
 }
 
+/// Post moves a Ledger only after Execute raised EvExecuted on the Ledger's Order. A ledger
+/// at `open` beside an Order still at `requested` is not stuck: Execute sets the event mark
+/// and Post can then run. Neither engine reports a deadlock (#261).
+const TRIGGERED_POST: &str = r#"
+entity Order "依頼" { id: Int @pk  status: Enum(requested, executed) @default(requested) }
+entity Ledger "台帳" { id: Int @pk  state: Enum(open, posted) @default(open) }
+relate(Ledger, Order, N:1)
+usecase Request "依頼"
+usecase OpenLedger "台帳作成"
+usecase Execute "実行"
+usecase Post "記帳"
+event EvExecuted "実行済"
+creates(Request, Order)
+creates(OpenLedger, Ledger)
+transitions(Execute, Order.status, requested -> executed)
+raises(Execute, EvExecuted)
+triggers(EvExecuted, Post)
+transitions(Post, Ledger.state, open -> posted)
+"#;
+
+#[test]
+fn tlc_alone_finds_no_deadlock_before_a_handler_s_event_is_raised() {
+    let Some(tlc) = require_tlc() else { return };
+    let scratch = std::env::temp_dir().join(format!("rdra-triggered-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&scratch);
+    std::fs::create_dir_all(&scratch).expect("scratch dir");
+    let file = scratch.join("triggered.rdra");
+    std::fs::write(&file, TRIGGERED_POST).expect("write model");
+    let exported = export_state_models(&scratch.join("tla"), "triggered", file.to_str().unwrap())
+        .expect("the model builds");
+    assert!(
+        exported.run.iter().any(|m| m == "StateModel_Ledger"),
+        "{:?}",
+        exported.run
+    );
+    let found = tlc_alone_and_bfs(&tlc, &[exported]).remove(0);
+    let _ = std::fs::remove_dir_all(&scratch);
+    assert!(found.is_empty(), "TLC alone: {found:?}");
+}
+
 /// `deadlock.rdra`'s shape with Ship guarded by a column that Flip and Flop move back and
 /// forth: a paid Order is stuck, which the BFS reports, but every state keeps a move of the
 /// status's cone, so TLC alone passes the `Deadlock_` invariants. The known gap of the

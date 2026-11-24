@@ -807,6 +807,77 @@ fn verify_decides_a_can_reach_natively() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+/// `two_queues.rdra`: each entity cone finishes under `--max-states 40`, while the cone of the
+/// `can_reach`, the product of both, stops at it. That `can_reach` is not decided: it is listed
+/// under `not checked:` with the cap, the `result:` line says `not decided`, and
+/// `--deny-undecided` fails the run. Run to the end, its cone breaks it (#246).
+#[test]
+fn a_can_reach_whose_cone_stops_at_the_state_cap_is_not_decided() {
+    let tmp = scratch("verify_cli_can_reach_capped");
+    let fixture = repo().join("crates/rdra-ish-cli/tests/fixtures/reach/two_queues.rdra");
+    let fixture = fixture.to_str().unwrap();
+
+    let whole = verify(&repo(), &tmp, &[fixture]);
+    let stdout = String::from_utf8_lossy(&whole.stdout);
+    assert_eq!(whole.status.code(), Some(1), "{stdout}");
+    assert!(
+        stdout
+            .lines()
+            .any(|l| l == "can_reach (BFS on 1 cone): 1 checked, 1 violated"),
+        "{stdout}"
+    );
+
+    let capped = verify(&repo(), &tmp, &[fixture, "--max-states", "40"]);
+    let stdout = String::from_utf8_lossy(&capped.stdout);
+    let stderr = String::from_utf8_lossy(&capped.stderr);
+    assert_eq!(capped.status.code(), Some(0), "{stdout}{stderr}");
+    assert!(
+        stdout.contains(
+            "\nnot checked: 1 finding not decided\n  can_reach BothCanFinish is not decided: the \
+             BothCanFinish cone stopped at the state cap (40 states)\n"
+        ),
+        "{stdout}"
+    );
+    assert!(
+        stdout
+            .lines()
+            .any(|l| l == "can_reach (BFS on 1 cone): 1 checked, 0 violated, 1 not decided"),
+        "{stdout}"
+    );
+    assert!(
+        stderr.lines().any(|l| l == "result: not decided"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains(
+            "warning: 1 finding a cone stopped at the state cap or the memory limit left undecided"
+        ),
+        "{stderr}"
+    );
+
+    let denied = verify(
+        &repo(),
+        &tmp,
+        &[fixture, "--max-states", "40", "--deny-undecided"],
+    );
+    let stdout = String::from_utf8_lossy(&denied.stdout);
+    let stderr = String::from_utf8_lossy(&denied.stderr);
+    assert_eq!(denied.status.code(), Some(1), "{stdout}{stderr}");
+    assert!(
+        stderr.lines().any(|l| l == "result: not decided"),
+        "{stderr}"
+    );
+    assert!(!stdout.contains("OK:"), "{stdout}");
+    assert!(
+        stderr.contains(
+            "verification incomplete: 1 finding a cone stopped at the state cap or the memory \
+             limit left undecided (--deny-undecided)"
+        ),
+        "{stderr}"
+    );
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 /// `verify --entity Order` defers Audit's build error, decides Order's invariant cone, and
 /// passes in the selected scope; the whole run stops at the build gate.
 #[test]
@@ -1745,5 +1816,40 @@ fn with_tlc_needs_tlc_and_tlc_jar_needs_with_tlc() {
         "{stderr}"
     );
     assert!(!stdout.contains("tlc_result"), "{stdout}");
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// A safety cone stops once every check on it has failed (#213): the flags rule's cone has
+/// 65,793 states at two instances, and BFS stops after 3 with the 2-step counterexample and
+/// no cap note. TLC, which explores the whole module, gives the same verdict.
+#[test]
+fn a_safety_cone_stops_once_every_check_on_it_has_failed() {
+    let tmp = scratch("verify_cli_early_stop");
+    let model = repo().join("crates/rdra-ish-cli/tests/fixtures/early_stop/flags_fail.rdra");
+    let output = verify(&repo(), &tmp, &[model.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
+    assert!(
+        stdout.contains("\nCone_Forbidden_Task_0 [Forbidden_Task_0]: counterexample (3 states)\n"),
+        "{stdout}"
+    );
+    assert!(
+        stderr.contains("error[Forbidden_Task_0]: invariant Forbidden_Task_0 is violated"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("  counterexample (2 steps):"), "{stderr}");
+    if have_tlc() {
+        let output = verify_with_tlc(&repo(), &tmp, &[model.to_str().unwrap()]);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stdout.contains(
+                "\ntlc: Cone_Forbidden_Task_0 [Forbidden_Task_0]: counterexample (65793 states)\n"
+            ),
+            "{stdout}"
+        );
+        assert!(!stderr.contains("EngineDisagreement"), "{stderr}");
+    }
     let _ = std::fs::remove_dir_all(&tmp);
 }

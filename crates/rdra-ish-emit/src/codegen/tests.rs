@@ -382,6 +382,49 @@ creates(Dispatch, Shipment)
     }
 }
 
+/// A counted event (`triggers(..).counted(k)`, #220) is a runtime queue, not a fact the
+/// generator prints: its raiser and its handler are skipped with that reason, and no event
+/// type is half printed for it.
+#[test]
+fn a_counted_event_skips_its_raiser_and_handler() {
+    let src = r#"
+entity Order "O" {
+  id: Int @pk
+  status: Enum(open, shipped) @default(open)
+}
+usecase Place "Place"
+usecase Ship "Ship"
+usecase Reopen "Reopen"
+event EvShipped "shipped"
+creates(Place, Order)
+transitions(Ship, Order.status, open -> shipped)
+raises(Ship, EvShipped)
+triggers(EvShipped, Reopen).counted(2)
+transitions(Reopen, Order.status, shipped -> open)
+"#;
+    let domain = functions_of(src);
+    for action in ["Ship", "Reopen"] {
+        assert!(
+            !domain.fns.iter().any(|f| f.action == action),
+            "{action} gets no function"
+        );
+        let skipped = domain
+            .skipped
+            .iter()
+            .find(|s| s.action == action)
+            .unwrap_or_else(|| panic!("{action} is skipped: {:?}", domain.skipped));
+        assert!(skipped.reason.contains("counted"), "{}", skipped.reason);
+    }
+    assert!(
+        domain
+            .events
+            .iter()
+            .all(|e| !e.fields.is_empty() || e.name != "EvShipped"),
+        "no empty EvShipped type"
+    );
+    assert!(domain.fns.iter().any(|f| f.action == "Place"));
+}
+
 /// A choice among arms from one state is one function per target, each guarded by its
 /// arm's `.when`; a second lifecycle column is a branch on its value.
 #[test]

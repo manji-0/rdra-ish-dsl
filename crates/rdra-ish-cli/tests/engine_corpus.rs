@@ -437,7 +437,8 @@ struct Observed {
     z3: BTreeMap<String, Z3>,
     /// `error[EngineDisagreement]` and `error[LassoFault]` lines.
     faults: Vec<String>,
-    /// The `M` of `can_reach (BFS on N cones): N checked, M violated`.
+    /// The `M` of `can_reach (BFS on N cones): N checked, M violated`, which may end in
+    /// `, K not decided`.
     can_reach_violated: Option<usize>,
     /// Errors without a name: a load or build error.
     unnamed: Vec<String>,
@@ -448,7 +449,25 @@ impl Observed {
     fn parse(stdout: &str, stderr: &str) -> Observed {
         let mut out = Observed::default();
         for line in stdout.lines() {
-            if let Some(rest) = line.strip_prefix("tlc: ") {
+            if let Some(rest) = line.strip_prefix("tlc: StateModel_") {
+                // `StateModel_<E> (<n> states): <checks>; found <A>, <B>`: each named
+                // deadlock or state without a witness is TLC's counterexample to that check.
+                // A deadlock TLC does not report has no verdict, since a TLC pass proves no
+                // deadlock away; a state it witnesses needs no line.
+                out.tlc_ran = true;
+                match rest.rsplit_once("; ") {
+                    Some((_, said)) if said.starts_with("tool_error") => {
+                        out.faults.push(line.to_string());
+                    }
+                    Some((_, said)) => {
+                        let found = said.strip_prefix("found ").unwrap_or("none");
+                        if found != "none" {
+                            out.tlc_errors.extend(found.split(", ").map(str::to_string));
+                        }
+                    }
+                    None => {}
+                }
+            } else if let Some(rest) = line.strip_prefix("tlc: ") {
                 out.tlc_ran = true;
                 out.tlc_lines.extend(parse_run_line(rest));
             } else if let Some(run) = parse_run_line(line) {
@@ -460,9 +479,8 @@ impl Observed {
                 }
             } else if let Some(rest) = line.strip_prefix("can_reach (BFS on ") {
                 out.can_reach_violated = rest
-                    .rsplit(", ")
-                    .next()
-                    .and_then(|v| v.strip_suffix(" violated"))
+                    .split(", ")
+                    .find_map(|v| v.strip_suffix(" violated"))
                     .and_then(|n| n.parse().ok());
             } else if let Some(rest) = line.strip_prefix("proved: ") {
                 out.z3.insert(rule_name(rest), Z3::Proved);

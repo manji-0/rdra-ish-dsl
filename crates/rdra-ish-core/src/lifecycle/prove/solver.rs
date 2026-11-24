@@ -22,7 +22,7 @@ impl std::error::Error for SolverError {}
 pub enum Sat {
     Sat,
     Unsat,
-    /// The solver gave up: a timeout, or a quantifier it could not decide.
+    /// The solver gave up: it reached its resource limit, or a quantifier it could not decide.
     Unknown,
 }
 
@@ -32,8 +32,13 @@ pub trait Solver {
     /// `(error ...)` is an `Err`.
     fn exec(&mut self, commands: &str) -> Result<Vec<String>, SolverError>;
 
-    fn check_sat(&mut self) -> Result<Sat, SolverError> {
-        let out = self.exec("(check-sat)")?;
+    /// `check-sat`, which gives up once it has spent `rlimit` of z3's resource units. The
+    /// limit holds for this check only: z3 5.1.0 also holds a `push` to a limit left set, and
+    /// a `push` that runs out is an error.
+    fn check_sat(&mut self, rlimit: u32) -> Result<Sat, SolverError> {
+        let out = self.exec(&format!(
+            "(set-option :rlimit {rlimit})\n(check-sat)\n(set-option :rlimit 0)"
+        ))?;
         match out.first().map(|l| l.trim()) {
             Some("sat") => Ok(Sat::Sat),
             Some("unsat") => Ok(Sat::Unsat),

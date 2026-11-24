@@ -339,6 +339,50 @@ fn verify_leaves_a_cone_past_its_bfs_share_undecided() {
         .contains("--memory 64MiB is too small for verify: a TLC run takes 64MiB"),);
 }
 
+/// `two_queues.rdra` at 4KiB: the entity cones fit and the `can_reach` cone, their product,
+/// does not. That `can_reach` is not decided, as at the state cap: listed under `not checked:`
+/// with the limit, `not decided` on the `result:` line, and an error under `--deny-undecided`
+/// (#246).
+#[test]
+fn a_can_reach_whose_cone_stops_at_the_memory_limit_is_not_decided() {
+    const TWO_QUEUES: &str = "crates/rdra-ish-cli/tests/fixtures/reach/two_queues.rdra";
+    let small = run(&repo(), &["verify", "--memory", "4KiB", TWO_QUEUES]);
+    let stdout = String::from_utf8_lossy(&small.stdout);
+    let stderr = String::from_utf8_lossy(&small.stderr);
+    assert!(small.status.success(), "{stdout}\n{stderr}");
+    assert!(
+        stdout.contains(
+            "\nnot checked: 1 finding not decided\n  can_reach BothCanFinish is not decided: the \
+             BothCanFinish cone stopped at the memory limit (4KiB; raise it with --memory or \
+             `memory` under [verify] in rdra.toml)\n"
+        ),
+        "{stdout}"
+    );
+    assert!(
+        stdout
+            .lines()
+            .any(|l| l == "can_reach (BFS on 1 cone): 1 checked, 0 violated, 1 not decided"),
+        "{stdout}"
+    );
+    assert!(
+        stderr.lines().any(|l| l == "result: not decided"),
+        "{stderr}"
+    );
+
+    let denied = run(
+        &repo(),
+        &["verify", "--memory", "4KiB", "--deny-undecided", TWO_QUEUES],
+    );
+    let stdout = String::from_utf8_lossy(&denied.stdout);
+    let stderr = String::from_utf8_lossy(&denied.stderr);
+    assert_eq!(denied.status.code(), Some(1), "{stdout}{stderr}");
+    assert!(
+        stderr.lines().any(|l| l == "result: not decided"),
+        "{stderr}"
+    );
+    assert!(!stdout.contains("OK:"), "{stdout}");
+}
+
 /// Three entities, one rule each: three TLC cones that could run side by side.
 #[cfg(unix)]
 const THREE_CONES: &str = r#"

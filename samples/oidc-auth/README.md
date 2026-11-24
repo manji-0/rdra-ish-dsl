@@ -98,22 +98,29 @@ self-issued OPs, and the encodings of a request (request objects, `request_uri`,
 ## Rules
 
 `shared/rules.rdra` holds 13 labelled rules. Each fails `check` when what protects it is
-removed; the Logout Token rule needs both its guard and its trigger removed, since either
-alone keeps it:
+removed. Where a row names several guards, removing any one of them fails the rule. The
+Logout Token rule needs both its guard and its trigger removed, since either alone keeps it.
+`rdra-ish check samples/oidc-auth --guards` drops each guard in turn and lists the rules
+that then fail; `crates/rdra-ish-cli/tests/guards_cli.rs` reads this table and checks each
+row against that report. A rule protected by effects, a `links`, or a guard and a trigger
+together depends on no single guard, so the report lists no guard for it. Removing the
+`.when` arms or values of a use case leaves every arm or value of that column open.
 
 | Rule | Protected by |
 |---|---|
-| A public client gets no code without an S256 code challenge | the arms of `ValidateRequest` |
-| An ID Token from the authorization endpoint always answers a nonce | `sets(RequestAuthentication, nonce == present).when(FrontChannelIdToken)` |
+| A public client gets no code without an S256 code challenge | the `.when` arms of `ValidateRequest` |
+| An ID Token from the authorization endpoint always answers a nonce | the `.when` values of `sets(RequestAuthentication, AuthorizationRequest.nonce == ..)` |
 | prompt=none never shows the login page | `RequestValidated` on `AuthenticateEndUser` |
-| prompt=login never reuses the session without a login | `SessionMayServe` on `ReuseSession` |
-| A request is authorized only after the End-User is authenticated | `EndUserAuthenticated`, `ConsentOnRecord` |
-| A request asking for a second factor is served only by a multi-factor session | the arms of `AuthenticateEndUser`, `ReuseSession`, `SelectAccount` |
+| prompt=login never reuses the session without a login | `SessionMayServe` on `ReuseSession`, `AccountChoiceAsked` on `SelectAccount` |
+| A request is authorized only after the End-User is authenticated | `EndUserAuthenticated` on `GrantConsent` |
+| A request asking for a second factor is served only by a multi-factor session | the `.when` arms of `AuthenticateEndUser`, `ReuseSession`, and `SelectAccount` |
 | The Implicit Flow issues no refresh token | the token sets of the implicit responses |
-| A replayed code leaves its grant revoked | `RejectCodeReplay` |
+| A replayed code leaves its grant revoked | the `Grant.status` transitions of `RejectCodeReplay` |
 | An approved device authorization names the End-User who approved it | `links(ApproveDevice, DeviceAuthorization, UserAccount)` |
-| A poll-mode client is neither pinged nor pushed to (and the ping and push forms) | `PingMode`, `PushMode`, and the arms of `PollBackchannelToken` |
-| A Logout Token is sent only for a session that ended | `SessionEnded` and the order of `EvSessionEnded` |
+| A poll-mode client is neither pinged nor pushed to | `PingMode` on `SendPingCallback`, `PushMode` on `PushBackchannelTokens` |
+| A ping-mode client is not pushed the tokens | `PushMode` on `PushBackchannelTokens` |
+| A push-mode client is neither pinged nor polls | `PingMode` on `SendPingCallback`, the `.when` arms of `PollBackchannelToken` |
+| A Logout Token is sent only for a session that ended | `SessionEnded` on `SendBackchannelLogout` and `triggers(EvSessionEnded, SendBackchannelLogout)` together |
 
 ## Known gaps
 

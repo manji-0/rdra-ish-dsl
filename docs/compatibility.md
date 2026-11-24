@@ -183,8 +183,9 @@ written by hand can name them:
 
 - Invariants: `Forbidden_<E>_<n>`, `Inv_<E>_<n>`, `Required_<E>_<n>`, `Exclusive_<E>_<n>`,
   `MultiForbidden_<E>_<n>`, `MultiInv_<E>_<n>`, `Quantifier_<E>_<n>`, `Check_<E>_<column>_<n>`,
-  `Unique_<Child>_<role>`, `Unique_<Entity>_<columns>`, `MinCard_<Child>_<role>`, and
-  `TypeOK`.
+  `Unique_<Child>_<role>`, `Unique_<Entity>_<columns>`, `MinCard_<Child>_<role>`,
+  `EventOverflow_<E>_<Ev>_<UC>` (a
+  [counted trigger](./state-derivation.md#counted-triggers)), and `TypeOK`.
 - Properties: `AfterAssert_<UC>_<n>`, each temporal property under its declared name, and
   `Fair_<P>`. A `precedes` property adds the variable `<P>_seen` and the operator
   `<P>_latch` in a module whose `.cfg` checks it.

@@ -84,6 +84,8 @@
   `--temporal-budget` or at the memory limit (or `--max-states`, when given) as not decided.
 - **State models**: witnesses, deadlocks, and use cases that never run come from BFS on
   each entity's cone, at `verify`'s bounds (no state cap; `--memory` stops a cone, `--max-states <N>` sets one, `--max-patterns <N>` the 256 patterns).
+  `--memory` does not yet bound the whole process (#242): when cones stop at it, the process
+  can take up to about twice the limit, so give about half the memory you can spare.
   TLC's own `CHECK_DEADLOCK` stays `FALSE`: every bounded model ends with no enabled
   action, and TLC cannot see one instance stuck while others keep moving. `export --kind
   tla` writes the same cones as `StateModel_<E>.tla` with `Deadlock_` and `Witness_`

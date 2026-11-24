@@ -72,6 +72,10 @@ pub(super) fn function(
     })
 }
 
+/// Why a use case that raises or handles a counted event is not printed: a pending count is
+/// a runtime queue, not a fact of the model (docs/design/counted-events.md).
+const COUNTED: &str = "a counted event (triggers(..).counted(k))";
+
 fn unsupported(why: &str) -> Skip {
     Skip::Action(why.to_string())
 }
@@ -184,6 +188,14 @@ impl ActionCx<'_> {
             let GuardWhy::Raised { event } = guard.why else {
                 continue;
             };
+            if let Pred::Cmp(Term::Slot { var, .. }, ..) = &guard.pred {
+                if let VarKind::Raised {
+                    handler: Some(_), ..
+                } = &self.ts.var(*var).kind
+                {
+                    return Err(unsupported(COUNTED));
+                }
+            }
             let Pred::Cmp(
                 Term::Slot {
                     at: At::Param(p), ..
@@ -269,6 +281,12 @@ impl ActionCx<'_> {
                     ..
                 } => {
                     let p = usize::from(*param);
+                    if let VarKind::Raised {
+                        handler: Some(_), ..
+                    } = &ts.var(*var).kind
+                    {
+                        return Err(unsupported(COUNTED));
+                    }
                     let VarKind::Column { column, .. } = &ts.var(*var).kind else {
                         return Err(unsupported("a transition of a var that is not a column"));
                     };

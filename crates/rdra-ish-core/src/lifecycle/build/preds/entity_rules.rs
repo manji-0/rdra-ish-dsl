@@ -52,6 +52,12 @@ impl Builder<'_> {
         });
     }
 
+    /// The overflow rule of each counted mark, after the model's own rules.
+    pub(in crate::lifecycle::build) fn overflow_rules(&mut self) {
+        let overflows = std::mem::take(&mut self.overflows);
+        self.ts.invariants.extend(overflows);
+    }
+
     pub(in crate::lifecycle::build) fn invariants(&mut self) {
         let model = self.model;
         for (i, c) in model.forbidden_constraints.iter().enumerate() {

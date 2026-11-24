@@ -74,6 +74,9 @@ pub(super) fn add_validators(
         ) {
             continue; // obligations of the data layer
         }
+        if inv.text.kind() == InvKind::Overflow {
+            continue; // a counted event's pending raises are no column of a row
+        }
         let at = inv.site.span.as_ref().and_then(site);
         let [binder] = inv.binders.as_slice() else {
             obligations.push((inv.name.clone(), text(&inv.text), at));
@@ -196,5 +199,10 @@ fn text(t: &InvText) -> String {
             role,
             most,
         } => format!("{parent} has at most {most} {child} ({role})"),
+        InvText::Overflow {
+            event,
+            usecase,
+            cap,
+        } => format!("{event} has at most {cap} raises pending for {usecase}"),
     }
 }

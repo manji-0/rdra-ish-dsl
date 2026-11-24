@@ -12,6 +12,7 @@ mod diag;
 mod explore;
 mod expr;
 mod findings;
+mod guards;
 mod lasso;
 pub mod prove;
 mod reach;
@@ -35,13 +36,14 @@ pub use diag::{
 };
 pub use explore::{
     store_bytes, Adjacency, Caps, ComponentRun, Edge, Estimate, Graph, Held, LabelledEdges,
-    LassoFault, Layers, PropertyVerdict, ReducedVerdict, Spurious, States,
+    LassoFault, Layers, PropertyVerdict, ReducedVerdict, RunEnd, Spurious, States,
 };
 pub use expr::{State, StateSlice};
 pub use findings::{
     ActionRuns, ArmTaken, ModelState, Progress, Runs, StateModelFindings, Taken, ValueProgress,
     ValueWitness, Witness,
 };
+pub use guards::{GuardDeps, GuardKind, GuardSubject};
 pub use lasso::{Fairness, LassoReplay, Loop, Unfair};
 pub use reduce::{ClassMove, Divergence, Fold, FoldKey, Reduction, Step};
 pub use select::{NotChecked, Scope, Selection, UnknownId, Without};
@@ -225,8 +227,19 @@ impl TransitionSystem {
             VarKind::Run { entity, usecase } => {
                 format!("{}._run_{usecase}", self.entity(*entity).id)
             }
-            VarKind::Raised { entity, event } => {
+            VarKind::Raised {
+                entity,
+                event,
+                handler: None,
+            } => {
                 format!("{}._raised_{event}", self.entity(*entity).id)
+            }
+            VarKind::Raised {
+                entity,
+                event,
+                handler: Some(uc),
+            } => {
+                format!("{}._pending_{event}_{uc}", self.entity(*entity).id)
             }
             VarKind::Now => "now".to_string(),
         }

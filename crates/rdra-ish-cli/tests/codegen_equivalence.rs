@@ -362,7 +362,7 @@ fn functions_agree_with_the_transition_system() {
                         continue;
                     };
                     let raised = ts.var_ids().find(|v| {
-                        matches!(&ts.var(*v).kind, VarKind::Raised { entity, event: ev }
+                        matches!(&ts.var(*v).kind, VarKind::Raised { entity, event: ev, handler: None }
                             if *entity == e && type_name(ev) == event.ty)
                     });
                     let Some(p) = action.params.iter().position(|q| q.entity == e) else {

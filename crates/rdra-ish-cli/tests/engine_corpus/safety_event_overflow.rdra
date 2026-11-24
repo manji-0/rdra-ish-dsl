@@ -1,0 +1,46 @@
+// trap: a raise past k is the violation EventOverflow, and the raiser never waits for it.
+// Post writes a note to an inbox three times (s0 -> s1 -> s2 -> s3), raising EvNoted each
+// time; Read, which the event triggers with `.counted(2)`, reads one note per run. Three
+// posts before the first read pass k = 2, so EventOverflow_Inbox_EvNoted_Read fails at 1
+// instance already. The outbox is the same model with `.counted(3)`, which three posts
+// never pass. A checker that blocked the raise at k instead (a raiser that waits) would
+// find no overflow and a spurious ok; one that wrapped or saturated the counter at k would
+// lose the violation too.
+// expect EventOverflow_Inbox_EvNoted_Read: native=counterexample tlc=counterexample z3=unproved
+// expect EventOverflow_Outbox_EvQueued_Send: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+entity Inbox "受信箱" {
+  id: Int @pk
+  sent: Enum(s0, s1, s2, s3) @default(s0)
+  read: Enum(r0, r1, r2, r3) @default(r0)
+}
+entity Outbox "送信箱" {
+  id: Int @pk
+  queued: Enum(q0, q1, q2, q3) @default(q0)
+  done: Enum(d0, d1, d2, d3) @default(d0)
+}
+usecase OpenInbox "受信箱作成"
+usecase Post "投函"
+usecase Read "既読"
+usecase OpenOutbox "送信箱作成"
+usecase Queue "送信予約"
+usecase Send "送信"
+event EvNoted "投函済"
+event EvQueued "予約済"
+creates(OpenInbox, Inbox)
+transitions(Post, Inbox.sent, s0 -> s1)
+transitions(Post, Inbox.sent, s1 -> s2)
+transitions(Post, Inbox.sent, s2 -> s3)
+raises(Post, EvNoted)
+triggers(EvNoted, Read).counted(2)
+transitions(Read, Inbox.read, r0 -> r1)
+transitions(Read, Inbox.read, r1 -> r2)
+transitions(Read, Inbox.read, r2 -> r3)
+creates(OpenOutbox, Outbox)
+transitions(Queue, Outbox.queued, q0 -> q1)
+transitions(Queue, Outbox.queued, q1 -> q2)
+transitions(Queue, Outbox.queued, q2 -> q3)
+raises(Queue, EvQueued)
+triggers(EvQueued, Send).counted(3)
+transitions(Send, Outbox.done, d0 -> d1)
+transitions(Send, Outbox.done, d1 -> d2)
+transitions(Send, Outbox.done, d2 -> d3)

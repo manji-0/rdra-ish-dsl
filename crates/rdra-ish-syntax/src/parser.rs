@@ -939,6 +939,15 @@ fn chain_call() -> impl Parser<Token, ChainCall, Error = Simple<Token>> + Clone 
                     "`actor` and `system` are bare words only in `.caller(...)`",
                 ));
             }
+            let int = |(arg, _): &(PredicateArg, bool)| matches!(arg, PredicateArg::Int(_));
+            // A bare integer is the `k` of `.counted(k)` or the count of a counted quantifier.
+            let takes_int = matches!(name.as_str(), "counted" | "at_most" | "at_least" | "exactly");
+            if !takes_int && args.iter().any(int) {
+                return Err(Simple::custom(
+                    span,
+                    "a bare number is an argument only of `.counted(k)`, `.at_most(n, ..)`, `.at_least(n, ..)`, and `.exactly(n, ..)`",
+                ));
+            }
             let args = args.into_iter().map(|(arg, _)| arg).collect();
             Ok(ChainCall { name, args, span })
         })

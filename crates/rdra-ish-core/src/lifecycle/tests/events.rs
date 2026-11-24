@@ -356,3 +356,247 @@ forbidden(Doc, status == final, seen == true).label("確認したら確定しな
     assert_eq!(errors(&d), ["Forbidden_Doc_0"]);
     assert_eq!(trace_of(&d, "Forbidden_Doc_0").free_triggers, []);
 }
+
+/// A counted edge (#220): a box shipped twice, received once per shipment.
+const COUNTED: &str = r#"
+entity Box "箱" { id: Int @pk  sent: Enum(none, one, two) @default(none)  got: Enum(none, one, two) @default(none) }
+usecase Pack "箱詰め"
+usecase Ship "発送"
+usecase Receive "入庫"
+event EvShipped "発送済"
+creates(Pack, Box)
+transitions(Ship, Box.sent, none -> one)
+transitions(Ship, Box.sent, one -> two)
+raises(Ship, EvShipped)
+triggers(EvShipped, Receive){EDGE}
+transitions(Receive, Box.got, none -> one)
+transitions(Receive, Box.got, one -> two)
+forbidden(Box, sent == one, got == two)
+"#;
+
+/// The counter replaces the latch on its edge: the raiser adds one, the handler reads `!= 0`
+/// and takes one, and the overflow rule follows the model's rules. Without `.counted` the
+/// edge keeps the latch, and no counter or overflow rule exists.
+#[test]
+fn a_counted_edge_has_a_counter_in_place_of_the_latch() {
+    let latch = model_from(&COUNTED.replace("{EDGE}", ""));
+    let ts = TransitionSystem::build(&latch, Bounds::VERIFY, &Scope::ALL).ts;
+    let names: Vec<String> = ts.var_ids().map(|v| ts.var_name(v)).collect();
+    assert!(
+        names.contains(&"Box._raised_EvShipped".to_string()),
+        "{names:?}"
+    );
+    assert!(!names.iter().any(|n| n.contains("_pending_")), "{names:?}");
+    assert!(!ts
+        .invariants()
+        .iter()
+        .any(|i| i.name.starts_with("EventOverflow")));
+
+    let counted = model_from(&COUNTED.replace("{EDGE}", ".counted(2)"));
+    let ts = TransitionSystem::build(&counted, Bounds::VERIFY, &Scope::ALL).ts;
+    let names: Vec<String> = ts.var_ids().map(|v| ts.var_name(v)).collect();
+    assert!(!names.iter().any(|n| n.contains("_raised_")), "{names:?}");
+    let counter = ts
+        .var_ids()
+        .find(|v| ts.var_name(*v) == "Box._pending_EvShipped_Receive")
+        .expect("the counter");
+    assert_eq!(
+        ts.var(counter).domain,
+        crate::lifecycle::Domain::Enum(vec!["0".into(), "1".into(), "2".into(), "over".into()])
+    );
+    let rules: Vec<&str> = ts.invariants().iter().map(|i| i.name.as_str()).collect();
+    assert_eq!(
+        rules,
+        ["Forbidden_Box_0", "EventOverflow_Box_EvShipped_Receive"]
+    );
+    let d = derive_at_two(&COUNTED.replace("{EDGE}", ".counted(2)"));
+    assert!(errors(&d).is_empty(), "{:?}", errors(&d));
+    let d = derive_at_two(&COUNTED.replace("{EDGE}", ""));
+    assert_eq!(
+        errors(&d),
+        ["Forbidden_Box_0"],
+        "the latch runs Receive twice"
+    );
+}
+
+/// `.counted(1)` on three shipments: the third raise finds one pending and breaks the
+/// overflow rule, with a trace whose last step is the raise.
+#[test]
+fn a_raise_past_k_breaks_the_overflow_rule() {
+    let d = derive_at_two(&COUNTED.replace("{EDGE}", ".counted(1)"));
+    assert!(
+        errors(&d).contains(&"EventOverflow_Box_EvShipped_Receive".to_string()),
+        "{:?}",
+        errors(&d)
+    );
+    let trace = trace_of(&d, "EventOverflow_Box_EvShipped_Receive");
+    assert_eq!(
+        trace.steps.last().map(|s| s.action.as_str()),
+        Some("Ship"),
+        "the raise overflows"
+    );
+}
+
+/// A counted edge the order does not track is the error `UncountedTrigger`, naming why: an
+/// event an external system raises, a handler that raises its own event.
+#[test]
+fn a_counted_edge_the_order_does_not_track_is_an_error() {
+    let free = r#"
+entity Box "箱" { id: Int @pk  got: Enum(none, one) @default(none) }
+extsystem Carrier "運送"
+usecase Pack "箱詰め"
+usecase Receive "入庫"
+event EvShipped "発送済"
+creates(Pack, Box)
+raises(Carrier, EvShipped)
+triggers(EvShipped, Receive).counted(2)
+transitions(Receive, Box.got, none -> one)
+"#;
+    let own = r#"
+entity Box "箱" { id: Int @pk  got: Enum(none, one, two) @default(none) }
+usecase Pack "箱詰め"
+usecase Start "開始"
+usecase Receive "入庫"
+event EvShipped "発送済"
+creates(Pack, Box)
+transitions(Start, Box.got, none -> one)
+raises(Start, EvShipped)
+raises(Receive, EvShipped)
+triggers(EvShipped, Receive).counted(2)
+transitions(Receive, Box.got, one -> two)
+"#;
+    for (src, why) in [
+        (free, "EvShipped is free"),
+        (own, "Receive raises EvShipped itself"),
+    ] {
+        let d = derive_at_two(src);
+        let found = d
+            .diags
+            .iter()
+            .find(|x| matches!(x.diag, StateDiag::UncountedTrigger { .. }))
+            .unwrap_or_else(|| panic!("no UncountedTrigger: {:?}", errors(&d)));
+        assert_eq!(found.diag.severity(), Severity::Error);
+        let text = found.diag.to_string();
+        assert!(text.contains(why), "{text}");
+    }
+}
+
+/// `.counted` takes one whole number from 1 to 16, once, on an edge from an event to a use
+/// case; anything else is `CountedTriggerInvalid`.
+#[test]
+fn a_counted_argument_out_of_shape_is_rejected() {
+    let base = r#"
+entity Box "箱" { id: Int @pk  got: Enum(none, one) @default(none) }
+buc Flow "流れ"
+timer Daily "毎日"
+usecase Pack "箱詰め"
+usecase Receive "入庫"
+event EvShipped "発送済"
+creates(Pack, Box)
+raises(Pack, EvShipped)
+transitions(Receive, Box.got, none -> one)
+"#;
+    for line in [
+        "triggers(EvShipped, Receive).counted(0)",
+        "triggers(EvShipped, Receive).counted(17)",
+        "triggers(EvShipped, Receive).counted(two)",
+        "triggers(EvShipped, Receive).counted()",
+        "triggers(EvShipped, Receive).counted(1).counted(2)",
+        "triggers(EvShipped, Flow).counted(1)",
+        "triggers(Daily, Receive).counted(1)",
+    ] {
+        let (ast, errors) = parse(&format!("{base}{line}\n"));
+        assert!(errors.is_empty(), "{line}: {errors:?}");
+        let (_, diags) = build_model(&ast);
+        assert!(
+            diags.iter().any(|d| !d.is_warning
+                && matches!(
+                    d.error,
+                    crate::diagnostics::RdraError::CountedTriggerInvalid { .. }
+                )),
+            "{line}: {:?}",
+            diags
+                .iter()
+                .map(|d| d.error.to_string())
+                .collect::<Vec<_>>()
+        );
+    }
+    let (ast, _) = parse(&format!("{base}triggers(EvShipped, Receive).counted(16)\n"));
+    let (_, diags) = build_model(&ast);
+    assert!(
+        !diags.iter().any(|d| matches!(
+            d.error,
+            crate::diagnostics::RdraError::CountedTriggerInvalid { .. }
+        )),
+        "16 is allowed"
+    );
+}
+
+/// Mixed edges: one event with a counted and a latch handler, and one handler with a counted
+/// and a latch event. The latch handler keeps the shared latch; each `<UC>_by_<Ev>` variant
+/// reads its own edge's mark, and only the counted variant takes one off its counter.
+#[test]
+fn counted_and_latch_edges_mix_by_edge() {
+    let src = r#"
+entity Box "箱" { id: Int @pk  sent: Enum(none, one) @default(none)  got: Enum(none, one, two) @default(none)  log: Enum(empty, logged) @default(empty) }
+usecase Pack "箱詰め"
+usecase Ship "発送"
+usecase Return "返品"
+usecase Receive "入庫"
+usecase Log "記録"
+event EvShipped "発送済"
+event EvReturned "返品済"
+creates(Pack, Box)
+transitions(Ship, Box.sent, none -> one)
+raises(Ship, EvShipped)
+transitions(Return, Box.sent, one -> none)
+raises(Return, EvReturned)
+triggers(EvShipped, Receive).counted(1)
+triggers(EvReturned, Receive)
+triggers(EvShipped, Log)
+transitions(Receive, Box.got, none -> one)
+transitions(Receive, Box.got, one -> two)
+transitions(Log, Box.log, empty -> logged)
+"#;
+    let model = model_from(src);
+    let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+    let var = |name: &str| {
+        ts.var_ids()
+            .find(|v| ts.var_name(*v) == name)
+            .unwrap_or_else(|| panic!("no {name}"))
+    };
+    let pending = var("Box._pending_EvShipped_Receive");
+    let shipped = var("Box._raised_EvShipped");
+    let returned = var("Box._raised_EvReturned");
+    let action = |name: &str| {
+        ts.actions()
+            .iter()
+            .find(|a| a.name == name)
+            .unwrap_or_else(|| panic!("no {name}"))
+    };
+    let reads = |a: &crate::lifecycle::Action, v| {
+        a.guards.iter().any(|g| {
+            matches!(&g.pred, crate::lifecycle::Pred::Cmp(crate::lifecycle::Term::Slot { var, .. }, ..) if *var == v)
+        })
+    };
+    let writes = |a: &crate::lifecycle::Action, v| {
+        a.effects.iter().any(|e| {
+            matches!(e, crate::lifecycle::Effect::Transition { var, .. } | crate::lifecycle::Effect::Assign { var, .. } if *var == v)
+        })
+    };
+    let by_shipped = action("Receive_by_EvShipped");
+    let by_returned = action("Receive_by_EvReturned");
+    assert!(reads(by_shipped, pending) && writes(by_shipped, pending));
+    assert!(!reads(by_shipped, shipped));
+    assert!(reads(by_returned, returned) && !writes(by_returned, returned));
+    assert!(!reads(by_returned, pending) && !writes(by_returned, pending));
+    assert!(reads(action("Log"), shipped) && !writes(action("Log"), shipped));
+    let ship = action("Ship");
+    assert!(
+        writes(ship, pending) && writes(ship, shipped),
+        "Ship counts and latches"
+    );
+    // Ship, Return, Ship again before Receive: two raises against k = 1.
+    let d = derive_at_two(src);
+    assert_eq!(errors(&d), ["EventOverflow_Box_EvShipped_Receive"]);
+}

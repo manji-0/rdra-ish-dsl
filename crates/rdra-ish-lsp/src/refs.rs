@@ -206,8 +206,8 @@ fn collect_arg_references<'a>(arg: &'a PredicateArg, refs: &mut Vec<&'a QRef>) {
         PredicateArg::Expr(expr) => collect_expr_references(expr, refs),
         PredicateArg::Transition { .. }
         | PredicateArg::Card(_)
-        | PredicateArg::Int(_)
-        | PredicateArg::Lit(_) => {}
+        | PredicateArg::Lit(_)
+        | PredicateArg::Int(_) => {}
     }
 }
 

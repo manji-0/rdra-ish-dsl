@@ -341,3 +341,110 @@ invariant(Order).when(status == placed).none(Shipment).label("no shipment yet").
     assert!(cones.contains("Unique_Shipment_Order"), "{cones}");
     assert!(!cones.contains("Cone_Quantifier_Order_0"), "{cones}");
 }
+
+fn corpus(name: &str) -> String {
+    format!("crates/rdra-ish-cli/tests/engine_corpus/{name}.rdra")
+}
+
+/// The run line of the safety cone `module`.
+fn cone_line<'a>(stdout: &'a str, module: &str) -> &'a str {
+    stdout
+        .lines()
+        .find(|l| l.starts_with(&format!("{module} [")))
+        .unwrap_or_else(|| panic!("no {module} line\n{stdout}"))
+}
+
+const BY_PROOF: &str = " states, BFS stopped at the memory limit, decided by proof: --prove proved every check for any number of rows)";
+
+/// Whether `line` says its cone is not decided.
+fn not_decided(line: &str) -> bool {
+    line.contains("]: not decided (")
+}
+
+#[test]
+fn a_proof_decides_a_cone_that_stopped_at_the_memory_limit() {
+    if !have("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    // At four instances the cone has tens of states, and 1KiB stops BFS after a few. z3
+    // proves both of its rules for any number of rows, so they hold at the run's bounds too,
+    // and the run leaves nothing open.
+    let args = ["--instance-count", "4", "--memory", "1KiB"];
+    let out = verify(&[&args[..], &["--prove", &sample("check_met")]].concat());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(out.status.code(), Some(0), "{stdout}");
+    let line = cone_line(&stdout, "Cone_Forbidden_CartLine_0");
+    assert!(
+        line.starts_with(
+            "Cone_Forbidden_CartLine_0 [Forbidden_CartLine_0, Check_CartLine_qty_0]: ok ("
+        ) && line.ends_with(BY_PROOF),
+        "{stdout}"
+    );
+    assert!(stdout.contains("\nresult: ok\n"), "{stdout}");
+    // Without --prove the same cone is not decided.
+    let out = verify(&[&args[..], &[&sample("check_met")]].concat());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        not_decided(cone_line(&stdout, "Cone_Forbidden_CartLine_0")),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn a_cone_at_the_memory_limit_is_decided_only_when_every_rule_in_it_is_proved() {
+    if !have("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    // One true rule. Alone it is not inductive and stays unproved, so its cone, stopped at
+    // the memory limit, stays not decided. With the `.lemma()` that z3_lemma adds, z3 proves
+    // both checks of the cone, which decides it.
+    let out = verify(&["--memory", "1KiB", "--prove", &corpus("z3_cti_true_rule")]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("\nunproved: MultiForbidden_Light_0 "),
+        "{stdout}"
+    );
+    assert!(
+        not_decided(cone_line(&stdout, "Cone_MultiForbidden_Light_0")),
+        "{stdout}"
+    );
+    let out = verify(&["--memory", "1KiB", "--prove", &corpus("z3_lemma")]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let line = cone_line(&stdout, "Cone_MultiForbidden_Light_0");
+    assert!(
+        line.starts_with(
+            "Cone_MultiForbidden_Light_0 [MultiForbidden_Light_0, MultiForbidden_Light_1]: ok ("
+        ) && line.ends_with(BY_PROOF),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn a_proof_leaves_an_after_assert_and_a_state_cap_undecided() {
+    if !have("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    // z3 proves both rules of the cone, but the cone also checks an after-assert, which the
+    // proof does not state.
+    let out = verify(&["--memory", "1KiB", "--prove", &sample("order")]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("\nproof: 2 proved, 0 unproved, 0 out of scope\n"),
+        "{stdout}"
+    );
+    assert!(
+        not_decided(cone_line(&stdout, "Cone_Forbidden_Order_0")),
+        "{stdout}"
+    );
+    // check_met's cone holds only proved rules, but a state cap stops it, not the memory limit.
+    let out = verify(&["--max-states", "3", "--prove", &sample("check_met")]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("\nproof: 2 proved, 0 unproved, 0 out of scope\n"),
+        "{stdout}"
+    );
+    assert!(
+        not_decided(cone_line(&stdout, "Cone_Forbidden_CartLine_0")),
+        "{stdout}"
+    );
+}

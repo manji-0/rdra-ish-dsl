@@ -2,7 +2,35 @@
 
 ## Unreleased
 
+### Known issues
+
+- `--memory` does not yet bound the whole process (#237, #242, #243). It bounds what the
+  state stores are counted to hold. When cones stop at the limit, the process has been
+  measured on macOS at up to 1.85 times it (`verify samples/oidc-auth --instance-count 2
+  --memory 2GiB`), and past 19.5 GB at the default `16GiB`. Set `--memory` to about half the
+  memory you can spare until the fixes land. Runs whose cones finish below the limit are not
+  affected. See [Memory limit](docs/cli-reference.md#memory-limit).
+
 ### Breaking
+
+- `verify --prove` decides an invariant cone that BFS stopped at the memory limit (#232).
+  When z3 proves every rule the cone checks for any number of rows, the rules hold at the
+  run's bounds too, so the cone's line reads `ok (<n> states, BFS stopped at the memory
+  limit, decided by proof: --prove proved every check for any number of rows)` where it read
+  `not decided`. The cone no longer counts toward the closing warning or `--deny-undecided`,
+  and a run with nothing else open prints `result: ok`. A cone with an `after` assertion, or
+  with a rule z3 leaves unproved or out of scope, stays `not decided`, as does a cone stopped
+  at `--max-states` or `--max-patterns`. Without `--prove` nothing changes.
+
+- `verify --prove` gives each z3 check a budget of z3 resource units (`rlimit`) instead of
+  wall-clock time: 20,000,000 units for a check of a rule and 2,000,000 for a lemma, where
+  it gave 10 s and 0.5 s. Whether a rule is proved, and which lemmas it keeps, no longer
+  depends on the machine, its load, or `RDRA_JOBS`, so a proof can decide a verdict. No
+  flag sets the budgets. On every sample and engine-corpus case the proofs are the same as
+  with no practical limit, and a lemma check past its budget drops the lemma as a breaking
+  step does. In `rdra-ish-core`, `ProveOptions` has `rlimit` and `lemma_rlimit` in place of
+  `timeout_ms` and `lemma_timeout_ms`, and `Solver::check_sat` takes the check's budget.
+  `examples/prove_rlimit.rs` measures what each check spends.
 
 - The lifecycle checks unique column sets (#222). A `@unique` column, a `@unique(a, b)`,
   and the pair of keys of a `relate(A, B, N:M).via(J)` junction become the invariant
@@ -83,6 +111,35 @@
 
 ### Added
 
+- `check --guards` reports which rules each guard protects (#198). A guard is a `holds`
+  condition applied to a use case, or the `.when` conditions of one column's arms or
+  values. For each guard, after a clean `check`, the run removes it from every action of
+  the use case, explores again the cones of the rules that keep the use case, under the
+  same caps and `--memory`, and prints on stdout the rules that now fail (`protects:`), a
+  `rules:` block with the guards each rule depends on, and, for a guard no rule depends
+  on, `no rule depends on this guard; it is either a business rule nobody wrote as a rule,
+  or not needed`. A rule whose cone stops at a cap without the guard is `not decided`. The
+  report adds no finding and leaves the exit status to `check`. On `samples/oidc-auth` it
+  takes about 3 s (34 guards, 131 cones), and `tests/guards_cli.rs` reads the sample
+  README's table of rules and guards and checks each row against it. The table now has one
+  row per rule, also names `AccountChoiceAsked` on `SelectAccount` for the `prompt=login`
+  rule, and no longer names `ConsentOnRecord`, whose removal alone fails no rule.
+- `triggers(Event, UseCase).counted(k)` makes a handler run once per raise (#220). Each
+  counted edge has a counter per row of the event's entity, `<E>._pending_<Ev>_<UC>`
+  (`<E>_pending_<Ev>_<UC>` in TLA+), with the values `0` to `k` and `over`: the last step
+  of every raiser adds one, the handler runs only while a raise is pending and takes one,
+  and a raise with `k` already pending is the state rule `EventOverflow_<E>_<Ev>_<UC>`,
+  which `check`, `states`, `verify`, `verify --with-tlc`, and `verify --prove` report. The
+  raiser never waits, and after an overflow the handler runs as under the latch. `k` is a
+  whole number from 1 to 16; `.counted` on a timer, a BUC, or an external system, or with
+  any other argument, is the error `CountedTriggerInvalid`, and on an edge the event order
+  does not track (a free event, a handler a free trigger also starts, raisers with no entity
+  in common, a handler that raises the event itself, a raiser that binds the entity twice)
+  it is the error `UncountedTrigger`. A counted mark is never left out of a cone and never
+  reduced across, so a cone of its raiser holds the handler too. `codegen` reports a use
+  case that raises or handles a counted event as unsupported. Edges without `.counted` keep
+  the latch, and every model without it builds the same transition system as before.
+  Design: `docs/design/counted-events.md`.
 - Per-entity instance counts (#216). `--instances <Entity>=<n>`, repeatable, gives one
   entity its own slots in place of `--instance-count` on `check`, `states`, `verify`, and
   `export --kind tla`: `verify --instances Loan=4` explores four loans and two rows of every
@@ -137,6 +194,28 @@
   run when the two disagree on a check; a check one engine leaves `not decided` is no
   disagreement. `scripts/verify-samples.sh --with-tlc` and `scripts/reduction-diff.py
   --with-tlc` run the samples and random models that way.
+- `verify --with-tlc` also cross-checks `stable`, `unchanged`, `precedes`, and the state
+  models, which only the native checker decided before (#201):
+  - Each of those properties runs in TLC on the unreduced cone the native checker reads,
+    module `Cone_<Property>`, and on the whole model (`RdraSpec_<Property>`) when a
+    counterexample on a cone that frees slots asks for it. The final verdicts must agree.
+  - Each entity cone that BFS explored to the end, up to 100,000 states, runs its
+    `StateModel_<E>` deadlocks and witnesses cfgs on the system BFS explored, and prints
+    `tlc: StateModel_<E> (<n> states): <counts>; found <checks>`. TLC must name the same
+    states without a witness as BFS, and each deadlock TLC reports must be one BFS reports.
+    A deadlock only BFS finds is no disagreement, since a cycle in the column's cone hides
+    it from TLC. A larger cone prints `not run, over the limit of 100000 states`.
+  - Any other difference prints `error[EngineDisagreement]` and fails the run. A state-model
+    run moves `tlc_result:` only when it fails as a tool, since its findings are BFS's.
+  - `can_reach` and the use cases that never run stay native-only. A run without
+    `--with-tlc` builds none of these jobs, and its output does not change.
+
+  The cross-check found that the `Deadlock_` invariant `export --kind tla` prints leaves out
+  the vars a writing step reads outside the column's cone, such as an event mark, so TLC
+  can report a deadlock that does not exist (#261). Until it is fixed, `verify --with-tlc`
+  on a correct model of that shape prints `error[EngineDisagreement]` and exits 1 with
+  `result: tool_error`. The engine corpus records it as a known disagreement in
+  `fair_triggered_handler.rdra`.
 - `--temporal-budget` bounds the native whole-model run of a property its cone does not
   decide: past the budget, the memory limit, or `--max-states` when given, the run stops
   and the property is `not decided` unless the partial graph already holds a
@@ -232,6 +311,19 @@
 
 ### Changed
 
+- A safety cone stops once every invariant and `after` assertion on it has a
+  counterexample (#213), in `verify` and in `check` and `states`. The counterexamples are
+  BFS's first, so they stay the shortest, and the verdicts and traces do not change. A cone
+  that also answers an entity view, a `can_reach`, or a temporal property runs to the end. A
+  stopped cone counts as neither complete nor capped: it reports no vacuity, which a
+  violated check does not have, and no cap note. The `(N states)` of a failing
+  `Cone_<name>` run line now counts the states BFS reached before it stopped, so it can be
+  smaller than TLC's line for the same module (`samples/formal-verification-fail`: 7 to 3).
+  On `crates/rdra-ish-cli/tests/fixtures/early_stop/flags_fail.rdra` at
+  `--instance-count 3` the rule's cone stops at 3 of its 16,843,009 states; in one run on a
+  shared machine `verify` took 108 s where it took 206 s, the rest being the Task entity
+  cone, which runs to the end.
+  BFS also tracks violated checks as a bit per check name instead of a set of strings.
 - `verify` runs `Cone_<P>_WF` on the reduced cone first, with every class whose
   sub-lifecycle can loop taken as a place a behavior may stop. An `ok` there is the
   unreduced cone's `ok`, and a counterexample there prints only after it lifts to the
@@ -374,6 +466,15 @@
   permissions, actor inputs and the `TriggeredUseCaseUnreachable` warning too, as it
   already was for `next` and the BUC hand-offs. `performs(Actor, Buc)` now lends the actor
   to it, so its required permissions find the actor (#161).
+- `verify` no longer passes a `can_reach` whose cone stops at `--max-states`, the pattern
+  cap, or the `--memory` limit. Such a property is `not decided`: it is listed under
+  `not checked:` as `can_reach <P> is not decided: the <P> cone stopped at the state cap
+  (<n> states)` (or at the memory limit), the `can_reach (BFS on ...)` line adds
+  `, <n> not decided`, the `result:` line says `not decided`, and `--deny-undecided` fails
+  the run. The stop was dropped, so a run whose entity cones finished printed
+  `result: ok` and passed `--deny-undecided`, even where the full cone breaks the property.
+  `stable`, `unchanged`, `precedes`, `always`, `eventually`, and `leads_to` already counted
+  a stopped cone as undecided (#246).
 
 ## v2.3.0 - 2026-11-18
 

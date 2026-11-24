@@ -247,6 +247,12 @@ fn one_of_each() -> Vec<StateDiag> {
             path: vec!["Account".into(), "Device".into(), "Store".into()],
             site: site(),
         },
+        StateDiag::UncountedTrigger {
+            event: "EvPaid".into(),
+            usecase: "Post".into(),
+            why: "EvPaid is free".into(),
+            site: site(),
+        },
         StateDiag::VacuousRule {
             name: "Inv_Order_0".into(),
             label: None,
@@ -301,6 +307,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::UnanchoredTrigger { .. }
             | StateDiag::UnjoinedTrigger { .. }
             | StateDiag::TriggerNeverRuns { .. }
+            | StateDiag::UncountedTrigger { .. }
             | StateDiag::DeleteLeavesChildren { .. }
             | StateDiag::GuardReadsLaterStep { .. }
             | StateDiag::DrivenComparisonColumnWritten { .. }

@@ -371,6 +371,7 @@ performs(Staff, Book)
             ),
             ("exposes", "append" | "upsert" | "caller")
             | ("creates" | "updates" | "deletes", "apart")
+            | ("triggers", "counted")
             | ("reads", "by" | "order" | "page" | "count" | "sum")
             | ("forbidden" | "invariant", "global" | "lemma") => return None,
             ("navigates", "via") => (USECASE_TGT, "navigates(S1, S2).via(Tgt)"),

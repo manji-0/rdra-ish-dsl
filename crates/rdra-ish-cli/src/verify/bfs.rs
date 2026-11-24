@@ -5,8 +5,8 @@ use super::WholeRun;
 use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_output::Outcome;
 use rdra_ish_core::lifecycle::{
-    Caps, ComponentRun, Diag, NotChecked, PropertyVerdict, Scope, Selection, Severity, StateDiag,
-    Target, TransitionSystem,
+    Caps, ComponentRun, Diag, EntId, NotChecked, PropertyVerdict, RunEnd, Scope, Selection,
+    Severity, StateDiag, Target, TargetExploration, TransitionSystem, Undecided,
 };
 use rdra_ish_core::{in_parallel, ResolvedProgram, SemanticModel};
 use std::collections::BTreeSet;
@@ -15,11 +15,40 @@ use std::collections::BTreeSet;
 pub(super) struct Bfs {
     /// Errors of the entity cones.
     pub(super) errors: usize,
-    /// Errors of the `can_reach` cones: violations, and cones the state cap stopped.
+    /// Errors of the `can_reach` cones: their violations.
     pub(super) reach_errors: usize,
-    /// Findings an entity cone left undecided at the state cap.
+    /// Findings an entity cone, and `can_reach` properties their cone, left undecided at the
+    /// state cap or the memory limit.
     pub(super) capped: usize,
+    /// Under `--with-tlc`, what TLC checks again of the state models (`StateModels`).
+    pub(super) models: StateModels,
 }
+
+/// The entity cones whose state models TLC checks under `--with-tlc`, and the deadlocks and
+/// missing witnesses BFS found on any cone, errors and warnings alike.
+#[derive(Default)]
+pub(super) struct StateModels {
+    pub(super) cones: Vec<StateModelCone>,
+    /// Too large for TLC: each module's name and BFS's state count.
+    pub(super) skipped: Vec<(String, usize)>,
+    pub(super) found: BTreeSet<String>,
+}
+
+/// An entity cone BFS explored to the end, as TLC checks its state models: the system BFS
+/// explored (reduced as `verify` explores it), so TLC reaches the states BFS reached.
+pub(super) struct StateModelCone {
+    pub(super) system: TransitionSystem,
+    /// The entities of the cone with a state model, as ids of `system`.
+    pub(super) entities: Vec<EntId>,
+    /// `StateModel_<E>`, `E` the first of them, as `export --kind tla` names it.
+    pub(super) first: String,
+    pub(super) states: usize,
+}
+
+/// The largest entity cone, in BFS's states, whose state models TLC checks under
+/// `--with-tlc`. Each rerun explores the cone again, and a witnesses run above 1,000 states
+/// finds one witness per run.
+pub(super) const STATE_MODEL_TLC_STATES: usize = 100_000;
 
 /// BFS on each selected entity cone at the verify bounds: the `NoWitness` errors, the
 /// `Deadlock`s (errors, or warnings at the bound), and the `NeverRuns` warnings, rendered;
@@ -32,6 +61,7 @@ pub(super) fn state_models(
     scope: &Scope,
     selection: &Selection,
     caps: Caps,
+    with_tlc: bool,
 ) -> Bfs {
     let pick = |want: fn(&Target) -> bool| -> Vec<Target> {
         selection.targets.iter().copied().filter(want).collect()
@@ -48,14 +78,22 @@ pub(super) fn state_models(
     if !scope.bucs.is_empty() {
         run.defer_progress();
     }
+    // A `can_reach` whose cone stopped is listed beside the entity findings it left open.
+    let reach_undecided = reach_run.as_ref().map_or(&[][..], |r| r.undecided());
+    let undecided: Vec<Undecided> = run
+        .undecided()
+        .iter()
+        .chain(reach_undecided)
+        .cloned()
+        .collect();
     // A finding `--buc` leaves open is the scope's choice, not a bound's.
-    let capped = run.undecided().iter().filter(|u| u.cone.is_some()).count();
+    let capped = undecided.iter().filter(|u| u.cone.is_some()).count();
     let not_checked = NotChecked {
         ts,
         model,
         scope,
         selection,
-        undecided: run.undecided(),
+        undecided: &undecided,
         temporal: ts.properties().len() + ts.reach_properties().len(),
     };
     if !not_checked.is_empty() {
@@ -71,6 +109,10 @@ pub(super) fn state_models(
             }
         }
         errors
+    };
+    let models = match with_tlc && scope.is_whole() {
+        true => state_model_cones(ts, &run),
+        false => StateModels::default(),
     };
     let errors = report(run.verdicts());
     let reach_errors = reach_run.as_ref().map_or(0, |r| report(r.verdicts()));
@@ -91,8 +133,12 @@ pub(super) fn state_models(
     );
     if let Some(r) = &reach_run {
         let cones = r.cones.len();
+        let open = match reach_undecided.len() {
+            0 => String::new(),
+            n => format!(", {n} not decided"),
+        };
         println!(
-            "can_reach (BFS on {cones} cone{}): {} checked, {} violated",
+            "can_reach (BFS on {cones} cone{}): {} checked, {} violated{open}",
             if cones == 1 { "" } else { "s" },
             reach.len(),
             r.verdicts()
@@ -105,7 +151,69 @@ pub(super) fn state_models(
         errors,
         reach_errors,
         capped,
+        models,
     }
+}
+
+/// The entity cones of `run` with a state model that BFS explored to the end, the ones up to
+/// `STATE_MODEL_TLC_STATES` states for TLC and the rest named as skipped, and the deadlocks
+/// and missing witnesses BFS found. A cone the state cap or the memory limit stopped decides
+/// nothing to compare.
+fn state_model_cones(ts: &TransitionSystem, run: &TargetExploration) -> StateModels {
+    let mut out = StateModels::default();
+    let mut groups: Vec<(usize, Vec<EntId>)> = Vec::new();
+    for (target, at) in &run.targets {
+        let Target::Entity(e) = target else {
+            continue;
+        };
+        match groups.iter_mut().find(|(g, _)| g == at) {
+            Some((_, shared)) => shared.push(*e),
+            None => groups.push((*at, vec![*e])),
+        }
+    }
+    for (at, shared) in groups {
+        let cone = &run.cones[at].run;
+        let modelled: Vec<EntId> = shared
+            .into_iter()
+            .filter(|e| !ts.state_model_states(*e).is_empty())
+            .collect();
+        let Some(first) = modelled.first() else {
+            continue;
+        };
+        let first = format!("StateModel_{}", ts.entity(*first).id);
+        let states = cone.states.len();
+        if !cone.complete {
+            continue;
+        }
+        if states > STATE_MODEL_TLC_STATES {
+            out.skipped.push((first, states));
+            continue;
+        }
+        let system = cone.system.clone();
+        let entities = modelled
+            .iter()
+            .map(|e| {
+                let key = ts.entity(*e).key;
+                system
+                    .entity_ids()
+                    .find(|x| system.entity(*x).key == key)
+                    .expect("an entity is in its own cone")
+            })
+            .collect();
+        out.cones.push(StateModelCone {
+            system,
+            entities,
+            first,
+            states,
+        });
+    }
+    out.found = run
+        .verdicts()
+        .iter()
+        .map(|d| d.diag.name(&[]))
+        .filter(|n| n.starts_with("Deadlock_") || n.starts_with("Witness_"))
+        .collect();
+    out
 }
 
 /// What BFS decided of the `stable`, `unchanged`, and `precedes` properties.
@@ -116,6 +224,19 @@ pub(super) struct Explored {
     pub(super) violated: usize,
     /// Properties whose cone BFS stopped at the state cap or the memory limit before a violation.
     pub(super) capped: usize,
+    /// Each property's index and its verdict, `None` when not decided, for `--with-tlc` to
+    /// compare.
+    pub(super) verdicts: Vec<(usize, Option<Outcome>)>,
+}
+
+impl Explored {
+    /// The verdict of property `i`, when it is one of these and BFS decided it.
+    pub(super) fn verdict(&self, i: usize) -> Option<Outcome> {
+        self.verdicts
+            .iter()
+            .find(|(at, _)| *at == i)
+            .and_then(|(_, v)| *v)
+    }
 }
 
 /// Each property `LtlKind::is_explored` names, decided by BFS on its cone: a line per property,
@@ -150,6 +271,14 @@ pub(super) fn explored_properties(
             }
         };
         println!("property {} (BFS on its cone): {said}", p.name);
+        out.verdicts.push((
+            i,
+            match &verdict {
+                PropertyVerdict::Holds => Some(Outcome::Ok),
+                PropertyVerdict::Violated(_) => Some(Outcome::Counterexample),
+                PropertyVerdict::Undecided => None,
+            },
+        ));
         match verdict {
             PropertyVerdict::Holds => {}
             PropertyVerdict::Undecided => out.capped += 1,
@@ -171,11 +300,16 @@ pub(super) enum BfsCone {
         states: usize,
         /// The violated invariants and after-asserts, each with BFS's shortest trace.
         found: Vec<Diag>,
-        /// False when the run stopped at the state cap or the memory limit.
-        complete: bool,
+        /// How the run ended: a run stops once every check has failed.
+        end: RunEnd,
+        /// The run stopped at the memory limit.
+        memory: bool,
     },
     /// The cone at this index of the jobs covers this one (`covering`) and passed.
     Covered(usize),
+    /// BFS stopped at the memory limit after `states` states and before a violation, and
+    /// `--prove` proved every check of the cone for any number of rows (`decide_by_proof`).
+    Proved { states: usize },
 }
 
 impl BfsCone {
@@ -202,7 +336,48 @@ impl BfsCone {
         BfsCone::Ran {
             states: run.states.len(),
             found,
-            complete: run.complete,
+            end: run.end(),
+            memory: crowded(run),
+        }
+    }
+
+    /// The cone, decided by `--prove` when BFS stopped at the memory limit before a violation
+    /// and every check of it is an invariant in `proved` (indices into `ts.invariants()`).
+    /// The proof's encoding allows every step the explorer takes, at any number of rows and
+    /// any Int value, so a rule it proves holds at verify's bounds too. An after-assert,
+    /// which the proof does not state, leaves the cone undecided.
+    fn decided_by_proof(
+        self,
+        ts: &TransitionSystem,
+        cone: &ConeSystem,
+        proved: &BTreeSet<usize>,
+    ) -> BfsCone {
+        let BfsCone::Ran {
+            states,
+            found,
+            end: RunEnd::Capped,
+            memory: true,
+        } = &self
+        else {
+            return self;
+        };
+        // A cone's invariant is the whole system's of the same name; should two share a name,
+        // both must be proved.
+        let is_proved = |name: &str| {
+            let mut same = (0..ts.invariants().len())
+                .filter(|i| ts.invariants()[*i].name == name)
+                .peekable();
+            same.peek().is_some() && same.all(|i| proved.contains(&i))
+        };
+        let all_proved = cone.system.after_asserts().is_empty()
+            && cone
+                .system
+                .invariants()
+                .iter()
+                .all(|inv| is_proved(&inv.name));
+        match found.is_empty() && all_proved {
+            true => BfsCone::Proved { states: *states },
+            false => self,
         }
     }
 
@@ -213,14 +388,12 @@ impl BfsCone {
     /// The verdict, `None` when the run stopped before a violation.
     pub(super) fn verdict(&self) -> Option<Outcome> {
         match self {
-            BfsCone::Ran {
-                found, complete, ..
-            } => match (found.is_empty(), complete) {
+            BfsCone::Ran { found, end, .. } => match (found.is_empty(), end) {
                 (false, _) => Some(Outcome::Counterexample),
-                (true, true) => Some(Outcome::Ok),
-                (true, false) => None,
+                (true, RunEnd::Complete) => Some(Outcome::Ok),
+                (true, RunEnd::Capped | RunEnd::ChecksFailed) => None,
             },
-            BfsCone::Covered(_) => Some(Outcome::Ok),
+            BfsCone::Covered(_) | BfsCone::Proved { .. } => Some(Outcome::Ok),
         }
     }
 
@@ -228,12 +401,10 @@ impl BfsCone {
     pub(super) fn line(&self, module: &str, checks: &[String], jobs: &[Job]) -> String {
         let verdict = self.verdict().map_or("not decided", Outcome::as_str);
         match self {
-            BfsCone::Ran {
-                states, complete, ..
-            } => {
-                let notes = match complete {
-                    true => Vec::new(),
-                    false => vec!["stopped at the state or pattern cap (--max-states, --max-patterns) or the memory limit".to_string()],
+            BfsCone::Ran { states, end, .. } => {
+                let notes = match end {
+                    RunEnd::Complete | RunEnd::ChecksFailed => Vec::new(),
+                    RunEnd::Capped => vec!["stopped at the state or pattern cap (--max-states, --max-patterns) or the memory limit".to_string()],
                 };
                 run_line(module, checks, verdict, Some(*states as u64), &notes)
             }
@@ -244,8 +415,36 @@ impl BfsCone {
                 None,
                 &[format!("checked in {}", jobs[*by].module)],
             ),
+            BfsCone::Proved { states } => run_line(
+                module,
+                checks,
+                verdict,
+                Some(*states as u64),
+                &[
+                    "BFS stopped at the memory limit".to_string(),
+                    "decided by proof: --prove proved every check for any number of rows"
+                        .to_string(),
+                ],
+            ),
         }
     }
+}
+
+/// Each safety cone of `cones` that BFS left undecided at the memory limit, decided by the
+/// rules `--prove` proved (`BfsCone::decided_by_proof`).
+pub(super) fn decide_by_proof(
+    ts: &TransitionSystem,
+    jobs: &[Job],
+    cones: Vec<Option<BfsCone>>,
+    proved: &BTreeSet<usize>,
+) -> Vec<Option<BfsCone>> {
+    jobs.iter()
+        .zip(cones)
+        .map(|(job, cone)| match (&job.kind, cone) {
+            (JobKind::Cone(system), Some(cone)) => Some(cone.decided_by_proof(ts, system, proved)),
+            (_, cone) => cone,
+        })
+        .collect()
 }
 
 /// The run met the memory limit, maybe only because the runs beside it held the rest.
@@ -268,13 +467,15 @@ pub(super) fn bfs_cones(
     let covers = covering(jobs);
     let cone = |at: usize| match &jobs[at].kind {
         JobKind::Cone(cone) => Some(cone.as_ref()),
-        JobKind::PropertyCone(_) | JobKind::Whole(_) => None,
+        JobKind::PropertyCone(_) | JobKind::Explored(_) | JobKind::Whole(_) => None,
     };
     // The verdict of the cone at `at`, and the vacuous checks of it and of the cones it
     // covers, read off its run; the run is dropped here.
     let decide = |at: usize| {
         let me = cone(at).expect("a safety cone");
-        let run = me.system.clone().run(caps);
+        // A safety cone decides its checks alone, so it stops once every one has failed:
+        // a check it holds is then violated, so neither vacuous nor covering another.
+        let run = me.system.clone().run(caps.until_all_violated());
         let vacuous: Vec<Diag> = std::iter::once(at)
             .chain((0..jobs.len()).filter(|a| covers[*a] == Some(at)))
             .filter_map(cone)
@@ -301,7 +502,10 @@ pub(super) fn bfs_cones(
         if let (Some(by), Some(me)) = (covers[at], cone(at)) {
             out[at] = Some(match out[by].as_ref().is_some_and(BfsCone::passed) {
                 true => BfsCone::Covered(by),
-                false => BfsCone::of(ts, me, &me.system.clone().run(caps)),
+                false => {
+                    let run = me.system.clone().run(caps.until_all_violated());
+                    BfsCone::of(ts, me, &run)
+                }
             });
         }
     }
@@ -331,10 +535,7 @@ pub(super) fn report_bfs_cones(
             continue;
         };
         println!("{}", cone.line(&job.module, &job.checks, jobs));
-        let BfsCone::Ran {
-            found, complete, ..
-        } = cone
-        else {
+        let BfsCone::Ran { found, end, .. } = cone else {
             continue;
         };
         // A check several cones hold is reported once, from the first cone that breaks it, so
@@ -344,7 +545,7 @@ pub(super) fn report_bfs_cones(
                 .expect("a violation renders");
             eprintln!("{}", Finding::new(&d.diag, &[], text));
         }
-        out.capped += usize::from(found.is_empty() && !complete);
+        out.capped += usize::from(found.is_empty() && *end != RunEnd::Complete);
     }
     out.violated = reported.len();
     out

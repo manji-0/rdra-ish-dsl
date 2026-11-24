@@ -973,3 +973,104 @@ fn a_class_move_of_a_folded_action_binds_the_cones_params() {
         assert_real_path(&unreduced, &start, &steps);
     }
 }
+
+/// A job starts only at an open gate. Crack raises `EvCracked` and Swing, which the event
+/// triggers, opens the gate; `{EDGE}` is `.counted(1)` or nothing (the latch). The job's view
+/// observes the gate's status only, so under the latch the gate is the job cone's independent
+/// sub-lifecycle and its mark is an unobserved var of it.
+const COUNTED_GATE: &str = r#"
+entity Gate "門" { id: Int @pk  status: Enum(shut, half, open) @default(shut) }
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+relate(Job, Gate, N:1)
+usecase Build "設置"
+usecase Crack "少し開ける"
+usecase Swing "開く"
+usecase Submit "投入"
+usecase Start "開始"
+event EvCracked "少し開いた"
+creates(Build, Gate)
+transitions(Crack, Gate.status, shut -> half)
+raises(Crack, EvCracked)
+triggers(EvCracked, Swing){EDGE}
+transitions(Swing, Gate.status, half -> open)
+creates(Submit, Job)
+transitions(Start, Job.status, waiting -> running)
+condition GateOpen "門が開いている"
+holds(GateOpen, Gate.status == open)
+applies_to(GateOpen, Start)
+forbidden(Job, status == running).label("作業は始まらない")
+"#;
+
+/// A counted mark is never reduced across (docs/design/counted-events.md, "The reduction"):
+/// the split keeps the counter, its raiser, and its handler in T, names it in no input and
+/// no fold, and the reduced cones decide what the cones decide. The latch copy of the same
+/// model puts the gate in S, so it is the counted rule, not the model, that keeps it in T.
+#[test]
+fn a_counted_mark_keeps_its_raiser_and_handler_out_of_the_sub_lifecycle() {
+    let split_of = |edge: &str| {
+        let model = model_from(&COUNTED_GATE.replace("{EDGE}", edge));
+        let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+        let job = entity_target(&ts, "Job");
+        let (sys, seeds) = ts.cone_system(&ts.target_cone(job), [ts.target_seed(job)]);
+        let split = sys.split_with(&seeds, true);
+        let names =
+            |vars: &VarSet| -> Vec<String> { vars.iter().map(|v| sys.var_name(*v)).collect() };
+        let act = |a: crate::lifecycle::ActId| sys.actions()[a.index()].name.clone();
+        (
+            names(&split.s),
+            names(&split.inputs),
+            split.s_actions.iter().map(|a| act(*a)).collect::<Vec<_>>(),
+            split.folds.iter().map(|f| act(f.act())).collect::<Vec<_>>(),
+        )
+    };
+    let (s, _, actions, _) = split_of("");
+    assert!(
+        s.contains(&"Gate._raised_EvCracked".to_string()),
+        "under the latch the gate is the sub-lifecycle: {s:?}"
+    );
+    assert!(
+        actions.contains(&"Crack".to_string()) && actions.contains(&"Swing".to_string()),
+        "under the latch Crack and Swing are S: {actions:?}"
+    );
+    let (s, inputs, actions, folded) = split_of(".counted(1)");
+    assert!(
+        !s.iter().any(|v| v.contains("_pending_")),
+        "the counter is never in S: {s:?}"
+    );
+    for uc in ["Crack", "Swing"] {
+        assert!(
+            !actions.iter().any(|a| a == uc),
+            "{uc} writes the counter, so it is T: {actions:?}"
+        );
+        assert!(!folded.iter().any(|a| a == uc), "{uc} folds: {folded:?}");
+    }
+    assert!(
+        !inputs.iter().any(|v| v.contains("_pending_")),
+        "the counter is no input: {inputs:?}"
+    );
+    let model = model_from(&COUNTED_GATE.replace("{EDGE}", ".counted(1)"));
+    for bounds in [Bounds::STATES, Bounds::VERIFY] {
+        assert_reduction_exact("counted gate", &model, bounds);
+    }
+}
+
+/// A counted mark is not monotone even in a system that holds its raiser and not its
+/// handler, where its arms alone (`0 -> 1 -> over`) form no cycle; the latch there is.
+#[test]
+fn a_counted_mark_is_not_monotone_without_its_handler() {
+    for (edge, monotone) in [("", true), (".counted(1)", false)] {
+        let model = model_from(&COUNTED_GATE.replace("{EDGE}", edge));
+        let mut ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+        ts.actions.retain(|a| a.name != "Swing");
+        let mark = ts
+            .var_ids()
+            .find(|v| matches!(ts.var(*v).kind, crate::lifecycle::VarKind::Raised { .. }))
+            .expect("the gate's mark");
+        assert_eq!(
+            ts.monotone_vars()[mark.index()],
+            monotone,
+            "{edge:?}: {} monotone",
+            ts.var_name(mark)
+        );
+    }
+}

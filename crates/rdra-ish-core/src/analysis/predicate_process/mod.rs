@@ -189,6 +189,92 @@ pub(crate) fn process_predicate(
             }
         }
     }
+    if p == Triggers {
+        process_counted(model, pred, &resolved, ctx, diags);
+    }
+}
+
+/// The largest `k` of `.counted(k)`: each row holds one of `k + 2` values per counted edge.
+pub(crate) const MAX_COUNTED: u8 = 16;
+
+/// `triggers(Event, UseCase).counted(k)`: one integer from 1 to `MAX_COUNTED`, once, on an
+/// edge from an event to a use case.
+fn process_counted(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    resolved: &[Option<NodeRef>],
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) {
+    let calls: Vec<_> = pred.chain.iter().filter(|c| c.name == "counted").collect();
+    let Some(first) = calls.first() else {
+        return;
+    };
+    let fail = |span: &Span, detail: String, diags: &mut Vec<Diagnostic>| {
+        push_error(
+            ctx,
+            diags,
+            span.clone(),
+            RdraError::CountedTriggerInvalid {
+                detail,
+                max: MAX_COUNTED,
+            },
+        );
+    };
+    if let Some(second) = calls.get(1) {
+        fail(
+            &second.span,
+            "a `triggers` line takes one `.counted(k)`".to_string(),
+            diags,
+        );
+        return;
+    }
+    let (event, uc) = match resolved {
+        [Some(NodeRef::Event(ev)), Some(NodeRef::UseCase(uc))] => (*ev, *uc),
+        [Some(NodeRef::Timer(_)), _] => {
+            return fail(
+                &first.span,
+                "`.counted` counts the raises of an event; a timer is never raised".to_string(),
+                diags,
+            )
+        }
+        [_, Some(_)] => {
+            return fail(
+                &first.span,
+                "`.counted` needs a use case to run once per raise; a BUC or an external system runs nothing"
+                    .to_string(),
+                diags,
+            )
+        }
+        _ => return,
+    };
+    let k = match first.args.as_slice() {
+        [PredicateArg::Int(n)] => n
+            .parse::<u8>()
+            .ok()
+            .filter(|k| (1..=MAX_COUNTED).contains(k)),
+        _ => None,
+    };
+    let Some(k) = k else {
+        let written = first
+            .args
+            .iter()
+            .map(predicate_arg_display)
+            .collect::<Vec<_>>()
+            .join(", ");
+        return fail(
+            &first.span,
+            format!("`.counted({written})` is not a count of pending raises"),
+            diags,
+        );
+    };
+    if !model
+        .counted_triggers
+        .iter()
+        .any(|(e, u, _)| (*e, *u) == (event, uc))
+    {
+        model.counted_triggers.push((event, uc, k));
+    }
 }
 
 /// `maps_field(Dto.field, Entity.column)`: a screen field is one name, a DTO field two.
