@@ -311,6 +311,13 @@
 
 ### Changed
 
+- BFS finds a state's enabled bindings without walking every guard (#253), and prints what
+  it printed. Each system works out once which guards read the successor, and turns each
+  guard conjunct that reads one var of one param's row into a test of that byte, taken from
+  the evaluator itself on every byte value; a slot that fails is no candidate, so no guard is
+  evaluated for it. `verify` at `RDRA_JOBS=1` retires 27% fewer instructions on
+  food-permit-ops and 28% fewer on patent-ops, and 18% fewer on oidc-auth at
+  `--instance-count 1`.
 - A safety cone stops once every invariant and `after` assertion on it has a
   counterexample (#213), in `verify` and in `check` and `states`. The counterexamples are
   BFS's first, so they stay the shortest, and the verdicts and traces do not change. A cone

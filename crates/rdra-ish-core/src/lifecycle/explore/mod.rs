@@ -7,6 +7,7 @@ mod bfs;
 mod graph;
 mod liveness;
 mod moves;
+mod plan;
 mod properties;
 mod reach;
 mod scan;
@@ -17,6 +18,7 @@ mod violations;
 pub use arena::States;
 pub use graph::{Adjacency, LabelledEdges};
 pub use liveness::{LassoFault, ReducedVerdict, Spurious};
+pub(crate) use plan::Plans;
 pub use properties::PropertyVerdict;
 pub use reach::{Estimate, Layers};
 pub use store::{store_bytes, Held};
@@ -414,5 +416,7 @@ impl TransitionSystem {
     }
 }
 
+#[cfg(test)]
+mod plan_tests;
 #[cfg(test)]
 mod tests;
