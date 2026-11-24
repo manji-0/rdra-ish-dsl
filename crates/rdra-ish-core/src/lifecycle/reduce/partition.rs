@@ -7,10 +7,11 @@ use super::extended::Extended;
 use super::*;
 use crate::fasthash::FastMap;
 use crate::lifecycle::cone::VarSet;
-use crate::lifecycle::explore::{Adjacency, Caps, Checks};
+use crate::lifecycle::explore::{Adjacency, Caps, Checks, ComponentRun};
 use crate::lifecycle::expr::State;
 use crate::lifecycle::types::{ActId, VarId};
-use crate::lifecycle::TransitionSystem;
+use crate::lifecycle::{StateDiag, TransitionSystem};
+use crate::memory::{watch, Watched};
 
 #[cfg(any(test, feature = "shadow"))]
 mod reference;
@@ -25,6 +26,42 @@ pub(super) enum Classified {
     /// (`TLA_CELL_BUDGET`): a cone prints at least one cell per class and observed var.
     TooLarge,
     Classes(Arc<Classes>),
+}
+
+/// How the runs of one `Classes::of` ended, for `QuotientCache`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Ended {
+    /// No cap and no limit stopped a run.
+    Clean,
+    /// The run of S stopped at the memory limit, refused a request past the room of the pool
+    /// it charged, after a nested reduction that no cap or limit stopped. In a pool of no
+    /// more room, with room for every request the runs were granted, the runs go the same way
+    /// and stop at the same request (`QuotientCache`).
+    Declined,
+    /// Another stop: a state or pattern cap, a deadline, a crowded pool, or a nested run that
+    /// stopped.
+    Stopped,
+}
+
+impl Ended {
+    /// What `Classes::of` reports as its flag: whether no cap and no limit stopped a run.
+    pub(super) fn is_clean(self) -> bool {
+        self == Ended::Clean
+    }
+
+    /// How a computation ended whose run of S did not complete. `nested` says whether the
+    /// nested reduction was clean, `seen` is what the run met, and `run` the run.
+    fn stopped(nested: bool, seen: Watched, run: &ComponentRun) -> Ended {
+        let memory = run
+            .diags
+            .iter()
+            .any(|d| matches!(d.diag, StateDiag::MemoryCapReached { .. }));
+        // A refusal within the pool's room is a crowded one: what others held decided it.
+        match nested && memory && !seen.crowded {
+            true => Ended::Declined,
+            false => Ended::Stopped,
+        }
+    }
 }
 
 /// Why `Quotient::of` gives no quotient.
@@ -156,6 +193,7 @@ impl Quotient {
             return (Ok(Quotient { classes, moves }), true);
         }
         let (classified, clean) = cache.classes(ext, caps, |cache| Classes::of(ext, caps, cache));
+        let clean = clean.is_clean();
         let classes = match classified {
             Classified::Nothing => return (Err(NoQuotient::Nothing), clean),
             Classified::TooLarge => return (Err(NoQuotient::TooLarge), clean),
@@ -210,17 +248,21 @@ impl Classes {
         }
     }
 
-    /// The classes of an observed S (`Quotient::of`), and whether no run on the way stopped.
-    pub(super) fn of(ext: &Extended, caps: Caps, cache: &QuotientCache) -> (Classified, bool) {
+    /// The classes of an observed S (`Quotient::of`), and how the runs on the way ended.
+    pub(super) fn of(ext: &Extended, caps: Caps, cache: &QuotientCache) -> (Classified, Ended) {
         let raw = &ext.system;
         // The inputs stay on the nested T side: the rises are kept, and only `obs` anchors.
         let (sub, clean) =
             raw.reduced_in(&[(ext.obs_local.clone(), ext.rise_actions())], caps, cache);
         // The quotient reads the graph alone, so the run evaluates no check.
-        let run = sub.clone().run_checking(caps, Checks::none());
+        let (run, seen) = watch(|| sub.clone().run_checking(caps, Checks::none()));
         if !run.complete {
-            return (Classified::Nothing, false);
+            return (Classified::Nothing, Ended::stopped(clean, seen, &run));
         }
+        let ended = match clean {
+            true => Ended::Clean,
+            false => Ended::Stopped,
+        };
         let n = run.states.len();
         let key_vars: VarSet = ext.obs_local.union(&ext.inputs_local).copied().collect();
         let mut index: HashMap<State, u32> = HashMap::new();
@@ -240,7 +282,7 @@ impl Classes {
         if !sub.reduction().is_some_and(|r| r.shrinks())
             && blocks.iter().collect::<BTreeSet<_>>().len() == n
         {
-            return (Classified::Nothing, clean);
+            return (Classified::Nothing, ended);
         }
         // Each block's class, numbered as the blocks first show in discovery order, so a
         // class's representative is its block's first state.
@@ -262,7 +304,7 @@ impl Classes {
         // the least, so past the budget no cone takes it: its moves and divergence marks are
         // not worth building.
         if reps.len().saturating_mul(ext.obs_local.len()) > TLA_CELL_BUDGET {
-            return (Classified::TooLarge, clean);
+            return (Classified::TooLarge, ended);
         }
         // Initial S states, as the cone's initial states project them, to their classes. The
         // extended sub-lifecycle canonicalizes them for its own reduction first, as the run
@@ -329,7 +371,7 @@ impl Classes {
             loops,
             divergence,
         };
-        (Classified::Classes(Arc::new(classes)), clean)
+        (Classified::Classes(Arc::new(classes)), ended)
     }
 }
 
