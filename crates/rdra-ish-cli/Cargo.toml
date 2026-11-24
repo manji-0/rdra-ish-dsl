@@ -21,7 +21,7 @@ rdra-ish-core   = { path = "../rdra-ish-core" }
 rdra-ish-emit   = { path = "../rdra-ish-emit" }
 clap        = { workspace = true }
 anyhow      = { workspace = true }
-miette      = { workspace = true }
+miette      = { workspace = true, features = ["fancy"] }
 serde_json  = { workspace = true }
 dunce       = { workspace = true }
 

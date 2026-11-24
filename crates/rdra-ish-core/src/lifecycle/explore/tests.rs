@@ -264,6 +264,18 @@ fn store_bytes_saturates_and_scales_the_edges_by_the_states_expanded() {
     assert_eq!(held.bytes_per_state(9), 100);
 }
 
+/// States near `usize::MAX` bytes wide pass `u128` before the total passes `u64`, in the
+/// product and in the sum after it; the total still saturates.
+#[test]
+fn store_bytes_saturates_at_the_widest_states() {
+    use super::store::store_bytes;
+
+    // (2^64 + 11) * 2^64 passes u128.
+    assert_eq!(store_bytes(u64::MAX, usize::MAX, 0), u64::MAX);
+    // (2^64 - 1) * 2^64 fits; adding 5 * 2^65 for `seen` does not.
+    assert_eq!(store_bytes(u64::MAX, usize::MAX - 12, u64::MAX), u64::MAX);
+}
+
 /// The layers of a run stopped while it expands the next-to-last layer of `new`, after
 /// `expanded` of its states: every layer but the last is whole, and the last holds what that
 /// layer has found so far.

@@ -310,3 +310,54 @@ test process runs under a 2 GiB address-space cap. A mutant that makes the check
 allocate without end fails its test at the cap and counts as caught; without the cap it
 fills the runner and the whole shard is cancelled. A shard that uploads no results is
 named at the top of the summary, and its mutants are in none of the counts.
+
+## Kani harnesses
+
+Kani checks a few leaf functions of the checker on every input up to a bound. It runs the
+Rust code as written, with no model of it. Each harness is a `#[kani::proof]` in a
+`#[cfg(kani)] mod proofs` at the end of the file it proves, so builds and tests never
+compile it.
+
+| Harness | File under `lifecycle/` | Statement | Bound |
+|---|---|---|---|
+| `numbers_compare_as_i64_and_null_is_never_ordered` | `expr.rs` | `compare_numbers` orders two numbers as `i64` does; `null` equals only `null` and is never ordered | every pair of `Option<i64>`, every operator |
+| `compare_negates_and_mirrors` | `expr.rs` | `compare` does not panic, `!=` is the negation of `==`, and swapping the operands mirrors the operator | every operand kind, every domain, every value |
+| `a_block_rounds_up_to_16` | `explore/store.rs` | `block(n)` is a multiple of 16 that holds `n` and wastes under 16 bytes | every `n` up to `usize::MAX - 16` |
+| `vec_bytes_is_what_a_vec_of_edges_grows_to` | `explore/store.rs` | what `vec_bytes` says before a push is what a real `Vec<Edge>` takes after it | up to 17 pushes |
+| `store_bytes_never_overflows` | `explore/store.rs` | `store_bytes` neither overflows nor panics | every input |
+| `store_bytes_only_grows` | `explore/store.rs` | more states, wider states, or more edges never count as fewer bytes, so past `u64` the count stays at `u64::MAX` | every input |
+| `a_push_takes_the_bytes_bytes_with_said_and_reads_back` | `explore/arena.rs` | a pushed state reads back, no index leaves the buffer, and `bytes_with(1)` before a push is `bytes_with(0)` after it, from an empty store or a `slice` of one | width up to 2, up to 5 pushes |
+
+A result holds up to its bound and no further, and for one thread.
+
+### Running them
+
+Kani is not in the flake's nixpkgs. Install the version that `KANI_VERSION` in
+`.github/workflows/ci.yml` pins, with `cargo` and `rustup` on `PATH`. `cargo kani setup`
+downloads CBMC and the nightly toolchain that version needs, about 350 MB under `~/.kani`
+and 1.4 GB under `~/.rustup`:
+
+```sh
+cargo install --locked kani-verifier --version 0.68.0
+cargo kani setup
+cargo kani -p rdra-ish-core                                        # every harness
+cargo kani -p rdra-ish-core --harness compare_negates_and_mirrors  # one harness
+```
+
+Two harnesses take most of the time. On an 18-core Mac `store_bytes_only_grows` takes about
+4 minutes, and the `States` harness in `explore/arena.rs` about a minute and 8 GB of
+memory; on the CI runner they take about 9 and 3.5 minutes. The others take under 20
+seconds each. At width 3 and 9 pushes the `States` harness did not finish in
+10 minutes (#275), so its bound stays small.
+
+### In CI
+
+The `kani` job runs every harness on each push to `main`. On a pull request it runs when a
+changed file is on the list in `scripts/kani-relevant.sh`: the files that hold a harness,
+the files whose code the harnesses run, the manifests and the lockfile, and the workflow
+that pins Kani. A harness in a new file adds that file to the list.
+
+### Adding a harness
+
+Before a harness lands, plant a bug in the code it proves, check that Kani fails on it, and
+revert the bug. A harness that still passes says nothing about that bug.
