@@ -50,6 +50,16 @@ impl Clone for Plans {
     }
 }
 
+/// The plans are a function of the system's actions and vars, so two systems equal in
+/// those are equal whatever their cells hold.
+impl PartialEq for Plans {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl Eq for Plans {}
+
 impl std::fmt::Debug for Plans {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("Plans")
