@@ -195,3 +195,51 @@ impl Seen {
         (n * (size_of::<u32>() + 1)) as u64
     }
 }
+
+/// Kani harnesses (`cargo kani -p rdra-ish-core`).
+#[cfg(kani)]
+mod proofs {
+    use super::*;
+
+    const WIDTH: usize = 2;
+    const PUSHES: usize = 5;
+
+    /// For every width up to 2 and every run of up to 5 pushes, from an empty store or from a
+    /// `slice` of one: each state reads back as pushed, no index leaves the buffer (the
+    /// `unsafe` cast included), the buffer never holds room for more than `capacity()` states,
+    /// and `bytes_with(1)` before a push is `bytes_with(0)` after it, which is what the memory
+    /// limit charges.
+    #[kani::proof]
+    #[kani::unwind(7)]
+    fn a_push_takes_the_bytes_bytes_with_said_and_reads_back() {
+        let width: usize = kani::any();
+        kani::assume(width <= WIDTH);
+        let pushes: usize = kani::any();
+        kani::assume(pushes <= PUSHES);
+        let probe: usize = kani::any();
+        kani::assume(probe < pushes);
+        let mut states = States::new(width);
+        let mut probed = [0u8; WIDTH];
+        // A slice in the middle: its buffer is as long as its states, not a power of two.
+        let cut: usize = kani::any();
+        kani::assume(cut <= pushes);
+        let sliced: bool = kani::any();
+        for i in 0..pushes {
+            if sliced && i == cut {
+                states = states.slice(0..i);
+            }
+            let s: [u8; WIDTH] = kani::any();
+            let said = states.bytes_with(1);
+            states.push(StateSlice::new(&s[..width]));
+            assert_eq!(states.bytes_with(0), said);
+            assert_eq!(states.len(), i + 1);
+            assert!(states.len() <= states.capacity());
+            assert_eq!(states.bytes.capacity(), states.capacity() * width);
+            if i == probe {
+                probed = s;
+            }
+        }
+        assert_eq!(states[probe].0, probed[..width]);
+        assert!(states.get(pushes).is_none());
+    }
+}
