@@ -6,6 +6,9 @@ use crate::lifecycle::expr::StateSlice;
 use crate::lifecycle::types::{ActId, At, CmpOp, Effect, EntId, ParamRole, Pred, Rhs, Term, VarId};
 use crate::lifecycle::TransitionSystem;
 
+#[cfg(any(debug_assertions, feature = "shadow"))]
+mod reference;
+
 /// An S action's reads of T folded into one input bit (#112): the action keeps its S params
 /// and guards and, in the extended sub-lifecycle, reads one bit per slot of its key in place
 /// of its guards on T. For a `Param` key the bit holds when, for some binding of the other T
@@ -94,36 +97,51 @@ impl Fold {
         reads
     }
 
-    /// Whether the bit holds for slot `c` of the key in `s`.
+    /// Whether the bit holds for slot `c` of the key in `s`. A build with debug assertions or
+    /// the `shadow` feature checks the answer against the reference twin
+    /// (`fold/reference.rs`), which computes it with the allocations this one does without.
     pub(super) fn holds(&self, ts: &TransitionSystem, s: &StateSlice, c: u8) -> bool {
+        let held = self.holds_fast(ts, s, c);
+        #[cfg(any(debug_assertions, feature = "shadow"))]
+        reference::check_holds(self, ts, s, c, held);
+        held
+    }
+
+    /// `holds` without an allocation per call: the params in a buffer on the stack for up to
+    /// `MAX` of them, and each binding of the free T params decoded from its number by
+    /// walking `t_params`, with the radix of each read off its entity's slots.
+    fn holds_fast(&self, ts: &TransitionSystem, s: &StateSlice, c: u8) -> bool {
+        const MAX: usize = 16;
         let a = &ts.actions[self.act.index()];
-        let mut params = vec![0u8; a.params.len()];
+        let mut stack = [0u8; MAX];
+        let mut heap = Vec::new();
+        let params: &mut [u8] = match a.params.len() {
+            n if n <= MAX => &mut stack[..n],
+            n => {
+                heap.resize(n, 0);
+                &mut heap
+            }
+        };
         let key = match &self.key {
             FoldKey::Param(key) => *key,
             FoldKey::Linked { entity, body, .. } => {
                 if !s.is_present(ts, *entity, usize::from(c)) {
                     return false;
                 }
-                let mut env = crate::lifecycle::expr::Env::new(&params);
+                let mut env = crate::lifecycle::expr::Env::new(params);
                 env.bound.push(c);
                 return ts.eval(body, s, &mut env);
             }
         };
         params[usize::from(key)] = c;
-        let free: Vec<u8> = self
-            .t_params
-            .iter()
-            .map(|(p, _)| *p)
-            .filter(|p| *p != key)
-            .collect();
-        let radix: Vec<usize> = free
-            .iter()
-            .map(|p| ts.slots(a.params[usize::from(*p)].entity))
-            .collect();
-        (0..radix.iter().product::<usize>()).any(|binding| {
+        let radix = |p: u8| ts.slots(a.params[usize::from(p)].entity);
+        let free = || self.t_params.iter().map(|(p, _)| *p).filter(|p| *p != key);
+        let bindings: usize = free().map(radix).product();
+        (0..bindings).any(|binding| {
             let mut rest = binding;
-            for (p, n) in free.iter().zip(&radix) {
-                params[usize::from(*p)] = (rest % n) as u8;
+            for p in free() {
+                let n = radix(p);
+                params[usize::from(p)] = (rest % n) as u8;
                 rest /= n;
             }
             let present = self.t_params.iter().all(|(p, must)| {
@@ -134,7 +152,7 @@ impl Fold {
                         usize::from(params[usize::from(*p)]),
                     )
             });
-            let mut env = crate::lifecycle::expr::Env::new(&params);
+            let mut env = crate::lifecycle::expr::Env::new(params);
             present
                 && self
                     .guards

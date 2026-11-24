@@ -226,14 +226,25 @@ jobs:
         # `cargo build` resolves other features and compiled every crate a second time.
         run: cargo test --release -p rdra-ish-cli --features shadow --test engine_corpus --no-run
       - name: Every twin compares calls
-        # How many calls each twin compared and skipped on one sample. patent-ops reaches all
-        # of them; the step fails when the line is missing (a build without the feature) or a
-        # twin compared none.
+        # How many calls each twin compared and skipped on two samples. patent-ops reaches
+        # every twin but `Fold::holds`, which quantifier_guard reaches; the step fails when a
+        # line is missing (a build without the feature) or a twin compared none in both.
         run: |
-          RDRA_ISH_SHADOW_STATS=1 target/release/rdra-ish verify samples/patent-ops 2> shadow-stats.txt
+          for sample in samples/patent-ops samples/formal-verification/quantifier_guard.rdra; do
+            RDRA_ISH_SHADOW_STATS=1 target/release/rdra-ish verify "$sample" 2>&1 >/dev/null \
+              | grep '^shadow: compared/skipped ' >> shadow-stats.txt || true
+          done
           cat shadow-stats.txt
-          grep -q '^shadow: compared/skipped ' shadow-stats.txt
-          ! grep -qE '^shadow: compared/skipped .*=0/' shadow-stats.txt
+          test "$(wc -l < shadow-stats.txt)" -eq 2
+          python3 - <<'EOF'
+          import collections, re
+          compared = collections.Counter()
+          for line in open("shadow-stats.txt"):
+              for twin, n in re.findall(r"(\w+)=(\d+)/", line):
+                  compared[twin] += int(n)
+          none = [twin for twin, n in compared.items() if n == 0]
+          assert compared and not none, f"twins that compared no call: {none}"
+          EOF
       - name: Every sample against its expect header, each fast path held to its twin
         run: scripts/verify-samples.sh target/release/rdra-ish
         timeout-minutes: 20
