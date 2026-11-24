@@ -1,0 +1,25 @@
+// trap: a card's high end above 1. `relate(Copy, Shelf, 0..2:1)` adds MaxCard_Copy_Shelf,
+// a count of the shelf's copies through the key. Stock puts a copy on any shelf without
+// counting, so a shelf can take a third copy, which takes three Copy slots: ok at one and
+// two instances, a counterexample at three. Retire deletes a copy, so the count can also
+// fall. An engine that counted absent slots, or read the range as `*`, would report the
+// counterexample at two instances or never.
+// expect MaxCard_Copy_Shelf: native=ok tlc=ok z3=unproved bfs=ok,ok,counterexample
+entity Shelf "棚" {
+  id: Int @pk
+}
+
+entity Copy "蔵書" {
+  id: Int @pk
+}
+
+usecase Build "棚設置"
+usecase Stock "入架"
+usecase Retire "除籍"
+
+creates(Build, Shelf)
+creates(Stock, Copy)
+updates(Stock, Shelf)
+deletes(Retire, Copy)
+
+relate(Copy, Shelf, 0..2:1)

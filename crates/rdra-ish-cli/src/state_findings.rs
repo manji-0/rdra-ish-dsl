@@ -782,6 +782,14 @@ fn violation_message(text: &InvText, p: &str) -> String {
 } => format!(
             "minimum children unmet: a '{parent}' has no '{child}' through '{role}', witnessed by {p}"
         ),
+        InvText::MaxCard {
+            child,
+            parent,
+            role,
+            most,
+        } => format!(
+            "maximum children exceeded: a '{parent}' has more than {most} '{child}' through '{role}', witnessed by {p}"
+        ),
         InvText::Overflow {
                 event,
                 usecase,
@@ -924,6 +932,7 @@ violation_message(text, pattern_desc)
         | StateDiag::UnwrittenConstrainedVar { .. }
         | StateDiag::PreExistingChildOfCreatedParent { .. }
         | StateDiag::IdentityStartSlots { .. }
+        | StateDiag::CountAboveBound { .. }
         | StateDiag::MinCardOfPreExistingParent { .. }
         | StateDiag::MinCardNeedsCreate { .. }
         | StateDiag::UnsupportedComparison { .. }

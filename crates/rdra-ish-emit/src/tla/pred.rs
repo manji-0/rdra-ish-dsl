@@ -52,7 +52,38 @@ impl Ctx<'_> {
             Pred::Or(xs) => self.join(xs, "\\/", "FALSE"),
             Pred::Forall { entity, body } => self.quantify(*entity, body, true),
             Pred::Exists { entity, body } => self.quantify(*entity, body, false),
+            Pred::Count {
+                entity,
+                body,
+                op,
+                n,
+            } => self.count(*entity, body, *op, *n),
         }
+    }
+
+    /// `Cardinality({b \in E_Ids : present /\ body}) <= n`; the module extends `FiniteSets`.
+    fn count(
+        &mut self,
+        e: rdra_ish_core::lifecycle::EntId,
+        body: &Pred,
+        op: CmpOp,
+        n: u8,
+    ) -> String {
+        let b = format!("b{}", self.depth);
+        self.depth += 1;
+        let inner = self.pred(body);
+        self.depth -= 1;
+        let ids = self.names.ids(e);
+        let present = self.present(e, &b);
+        let sym = match op {
+            CmpOp::Eq => "=",
+            CmpOp::Ne => "#",
+            CmpOp::Lt => "<",
+            CmpOp::Le => "<=",
+            CmpOp::Gt => ">",
+            CmpOp::Ge => ">=",
+        };
+        format!("Cardinality({{{b} \\in {ids} : ({present}) /\\ ({inner})}}) {sym} {n}")
     }
 
     fn join(&mut self, xs: &[Pred], op: &str, empty: &str) -> String {

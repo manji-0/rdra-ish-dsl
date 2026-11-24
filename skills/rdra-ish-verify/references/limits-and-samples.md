@@ -58,6 +58,12 @@
   `relate(.., 1..*:1)` or `1..1:1`: every present parent has a present child. A use
   case that creates the parent without a child in the same transaction fails it, at one
   instance too, so `check` finds it.
+- **Child-side maximum and counts**: one `INVARIANT MaxCard_<Child>_<role>` per
+  `relate(.., 0..3:1)` (a high end from 2 to 255), and a `Quantifier_*` per
+  `.at_most/.at_least/.exactly(n, ..)`, printed with `Cardinality` (the module extends
+  `FiniteSets`). `at_most(n)` needs `n + 1` rows of the counted entity, more than the
+  default two instances: `verify --instances Loan=4` gives one entity more slots. Below it
+  the rule is `Vacuous_*`. The repository's `counting_rules` sample shows both forms.
 - **`@check`**: one `INVARIANT Check_<Entity>_<column>_<n>` per `@check(expr)`. A null
   operand satisfies no comparison but `!=`, as in every rule; `@check(qty == null or qty
   >= 1)` admits null. A `@derived` column

@@ -152,6 +152,22 @@
   `IdentityStartSlots`. Without the flag and the tables every output is unchanged. The
   corpus case `presence_per_entity_slots` checks a child with more slots than its parent and
   a parent with more than its child, with the native checker and TLC.
+- Counted quantifiers and cardinality maxima (#216). `invariant(E)` and a `holds` body take
+  `.at_most(n, Related...)`, `.at_least(n, Related...)`, and `.exactly(n, Related...)`
+  beside `.has` and `.none`, with the same rows, `.along`, and `.role`: the present linked
+  rows that match, each counted once, compared with `n` (1 to 255). A guard counts the rows
+  before its use case runs. `at_least(0)`, `at_least(1)`, `at_most(0)`, and `exactly(0)` are
+  `QuantifierCountSpelling`, which names the shorter form. A card's child side takes a high
+  end from 2 to 255, `relate(Loan, Member, 0..3:1)`, checked as `MaxCard_<Child>_<role>`.
+  `check`, `states`, `verify` (TLC through `Cardinality`, its module extending
+  `FiniteSets`), and `verify --prove` (counts of up to 8 rows, unrolled into distinct
+  witnesses) check both; generated code checks a counted guard over the related rows'
+  list. An `at_most` count or a maximum that needs more rows than the bounds give is
+  `Vacuous_<rule>`, naming the `--instances` that lifts it; `at_least` and `exactly` above
+  the bound warn `CountAboveBound`. The corpus cases
+  `safety_at_most_bound`, `safety_at_least_guard`, and `safety_count_per_entity` check it
+  with the native checker at 1 to 4 instances, TLC, and z3, and the sample
+  `formal-verification/counting_rules.rdra` shows it. No sample changes verdict.
 - A `MemoryCapReached` error of `check` and `states` says what the cone held and what
   finishing needs: the bytes each held state took, and an estimate of the states the cone
   reaches from its BFS layers. Once the frontier has shrunk for two depths past its peak,

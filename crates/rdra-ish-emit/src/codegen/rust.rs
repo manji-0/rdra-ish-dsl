@@ -685,6 +685,19 @@ fn expr(
             row(*elem),
             expr(body, row, input)
         ),
+        Expr::Count {
+            input: i,
+            elem,
+            body,
+            op,
+            n,
+        } => format!(
+            "{}.iter().filter(|{}| {}).count() {} {n}",
+            input(*i),
+            row(*elem),
+            expr(body, row, input),
+            op.symbol()
+        ),
     }
 }
 

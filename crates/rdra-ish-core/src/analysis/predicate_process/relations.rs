@@ -141,15 +141,16 @@ fn resolve_relate_via(
     (via, had_via)
 }
 
-/// A card's kind and its child-side minimum. A side is `1`, `N`/`M`, or `lo..hi` with `lo`
-/// in {0, 1} and `hi` in {1, *}; a range stands for the side `1` (hi 1) or `N`/`M` (hi *),
-/// and only the child side, the many side of N:1 / 1:N and the left of 1:1, may carry one.
+/// A card's kind and its child-side minimum and maximum. A side is `1`, `N`/`M`, or `lo..hi`
+/// with `lo` in {0, 1} and `hi` in {1, 2..=255, *}; a range stands for the side `1` (hi 1)
+/// or `N`/`M` (hi above 1 or *), and only the child side, the many side of N:1 / 1:N and the
+/// left of 1:1, may carry one. The maximum is `hi` from 2 to 255, `None` for 1 and `*`.
 /// `Ok(None)` for a card no relate kind names, which today's forms drop silently.
-fn parse_card(card: &str) -> Result<Option<(RelKind, Min)>, RdraError> {
+fn parse_card(card: &str) -> Result<Option<(RelKind, Min, Option<u8>)>, RdraError> {
     let Some((left, right)) = card.split_once(':') else {
         return Ok(None);
     };
-    let range = |side: &str| -> Result<Option<(Min, bool)>, RdraError> {
+    let range = |side: &str| -> Result<Option<(Min, bool, Option<u8>)>, RdraError> {
         let Some((lo, hi)) = side.split_once("..") else {
             return Ok(None);
         };
@@ -161,17 +162,20 @@ fn parse_card(card: &str) -> Result<Option<(RelKind, Min)>, RdraError> {
             "1" => Min::One,
             _ => return Err(out_of_range()),
         };
-        let many = match hi {
-            "1" => false,
-            "*" => true,
-            _ => return Err(out_of_range()),
+        let (many, most) = match hi {
+            "1" => (false, None),
+            "*" => (true, None),
+            n => match n.parse::<u8>() {
+                Ok(n) if n >= 2 && n.to_string() == hi => (true, Some(n)),
+                _ => return Err(out_of_range()),
+            },
         };
-        Ok(Some((min, many)))
+        Ok(Some((min, many, most)))
     };
     let (l, r) = (range(left)?, range(right)?);
-    let base = |side: &'static str, written: &str, r: Option<(Min, bool)>| match r {
-        Some((_, true)) => side,
-        Some((_, false)) => "1",
+    let base = |side: &'static str, written: &str, r: Option<(Min, bool, Option<u8>)>| match r {
+        Some((_, true, _)) => side,
+        Some((_, false, _)) => "1",
         None => match written {
             "1" => "1",
             "N" => "N",
@@ -202,7 +206,8 @@ fn parse_card(card: &str) -> Result<Option<(RelKind, Min)>, RdraError> {
             card: card.to_string(),
         });
     }
-    Ok(Some((kind, child.map_or(Min::Zero, |(min, _)| min))))
+    let (min, most) = child.map_or((Min::Zero, None), |(min, _, most)| (min, most));
+    Ok(Some((kind, min, most)))
 }
 
 /// The relate card argument's span, or the whole call's when the card has none.
@@ -242,7 +247,7 @@ pub(super) fn process_relate_predicate(
     let (via, had_via) = resolve_relate_via(model, pred, ctx, diags);
     let mut options = crate::analysis::fk::relation_options(pred, ctx, diags);
 
-    let (kind, children_min) = match parse_card(card_str) {
+    let (kind, children_min, children_most) = match parse_card(card_str) {
         Ok(Some(card)) => card,
         Ok(None) => return,
         Err(err) => {
@@ -251,6 +256,7 @@ pub(super) fn process_relate_predicate(
         }
     };
     options.children_min = children_min;
+    options.children_most = children_most;
 
     let many_to_many = kind == RelKind::RelateManyToMany;
     if had_via && !many_to_many {

@@ -79,6 +79,12 @@ Also ask:
    list of every value of a column. When two keys join the two entities, name the one the rule
    follows after the call: `.none(Permit).role(Application)` (the role, or the parent id of a key
    without `.role`).
+   For a number of related rows, count them: `invariant(Member).at_most(3, Loan.status ==
+   open)`, `.at_least(2, Estimate)`, `.exactly(1, ..)`. They take the same rows, `.along`,
+   and `.role` as `.has`, and a `holds` body takes them too, counting the rows before the use
+   case runs. `.at_least(1, ..)` is `.has`, and `.at_most(0, ..)` and `.exactly(0, ..)` are
+   `.none`: write the short form. A count of `n` fails only with `n + 1` rows, so verify it
+   with `--instances Loan=4` (skill `rdra-ish-verify`).
 10. Add `after(...).assert(...)` for a postcondition (`check` evaluates it after the
     last step of the use case, on the run's rows) and `property` for a temporal rule (only `verify` evaluates
     it; see skill `rdra-ish-verify`).

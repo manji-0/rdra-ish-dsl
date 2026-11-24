@@ -203,6 +203,12 @@ impl Rows<'_> {
             }
             Expr::Exists { elem, body, .. } => self.over(*elem, body)?.iter().any(|v| *v),
             Expr::Forall { elem, body, .. } => self.over(*elem, body)?.iter().all(|v| *v),
+            Expr::Count {
+                elem, body, op, n, ..
+            } => {
+                let count = self.over(*elem, body)?.iter().filter(|v| **v).count();
+                compare(i64::try_from(count).ok()?, *op, i64::from(*n))
+            }
             Expr::IntCmp {
                 row,
                 field,
@@ -211,14 +217,7 @@ impl Rows<'_> {
             } => {
                 let (var, v) = self.get(*row, &field.wire)?;
                 let n = self.ts.var(var).domain.number(v)?;
-                match op {
-                    CmpOp::Eq => n == *value,
-                    CmpOp::Ne => n != *value,
-                    CmpOp::Lt => n < *value,
-                    CmpOp::Le => n <= *value,
-                    CmpOp::Gt => n > *value,
-                    CmpOp::Ge => n >= *value,
-                }
+                compare(n, *op, *value)
             }
         })
     }
@@ -665,4 +664,15 @@ fn type_name(id: &str) -> String {
         }
     }
     out
+}
+
+fn compare(a: i64, op: CmpOp, b: i64) -> bool {
+    match op {
+        CmpOp::Eq => a == b,
+        CmpOp::Ne => a != b,
+        CmpOp::Lt => a < b,
+        CmpOp::Le => a <= b,
+        CmpOp::Gt => a > b,
+        CmpOp::Ge => a >= b,
+    }
 }

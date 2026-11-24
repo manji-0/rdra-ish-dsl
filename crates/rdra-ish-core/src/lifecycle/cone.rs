@@ -97,7 +97,10 @@ impl TransitionSystem {
 
     pub(crate) fn pred_reads(&self, pred: &Pred, out: &mut VarSet) {
         for node in pred.nodes() {
-            if let Pred::Forall { entity, .. } | Pred::Exists { entity, .. } = node {
+            if let Pred::Forall { entity, .. }
+            | Pred::Exists { entity, .. }
+            | Pred::Count { entity, .. } = node
+            {
                 out.insert(self.entity(*entity).exists);
             }
         }

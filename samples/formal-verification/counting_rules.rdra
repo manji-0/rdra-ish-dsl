@@ -1,0 +1,39 @@
+// Counted rules: `relate(Loan, Member, 0..3:1)` adds MaxCard_Loan_Member, so a member has at
+// most three loans, open or returned; `invariant(Member).at_most(3, ...)` says the same of
+// the open ones. Borrow runs only while the member has two loans or fewer
+// (`.at_most(2, Loan)` on the guard counts the loans before the step), so the third loan is
+// the last and both rules hold. Either rule fails only with four loans of one member, which
+// the default two instances per entity never have: `verify` warns that both hold
+// vacuously and names `--instances Loan=4`, which gives Loan four slots and checks them.
+// Without the guard, `verify --instances Loan=4` finds a member with four loans.
+// expect check: ok
+// expect verify: ok
+// expect verify --instances Loan=4: ok
+entity Member "会員" {
+  id: Int @pk
+  status: Enum(active, withdrawn) @default(active)
+}
+
+entity Loan "貸出" {
+  id: Int @pk
+  status: Enum(open, closed) @default(open)
+}
+
+usecase Join "入会"
+usecase Withdraw "退会"
+usecase Borrow "貸出"
+usecase GiveBack "返却"
+
+creates(Join, Member)
+transitions(Withdraw, Member.status, active -> withdrawn)
+creates(Borrow, Loan)
+updates(Borrow, Member)
+transitions(GiveBack, Loan.status, open -> closed)
+
+relate(Loan, Member, 0..3:1)
+
+condition RoomForLoan "貸出が2件以下の会員だけ借りられる"
+holds(RoomForLoan, Member.status == active).at_most(2, Loan)
+applies_to(RoomForLoan, Borrow)
+
+invariant(Member).at_most(3, Loan.status == open).label("a member holds at most 3 open loans")

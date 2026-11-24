@@ -166,8 +166,8 @@ pub fn business_rules(model: &SemanticModel) -> Vec<BusinessRule> {
     for c in &model.quantifier_constraints {
         let q = &c.quantifier;
         let method = match q.kind {
-            QuantifierKind::Has => "has",
-            QuantifierKind::None => "none",
+            QuantifierKind::Count { n, .. } => format!("{} {n}", q.kind.method()),
+            kind => kind.method().to_string(),
         };
         let mut text = format!(
             "when {} then {method} {}",

@@ -226,9 +226,9 @@ children.
 
 ### Vacuity
 
-`at_most(n)` and `exactly(n)` can fail only in a state with `n + 1` rows of the counted
-entity. Each gets the premise "`n + 1` rows of the counted entity", a count over every
-present row with no link or condition. When no reachable state meets it, the rule is
+`at_most(n)` can fail only in a state with `n + 1` rows of the counted entity. It gets the
+premise "`n + 1` rows of the counted entity", a count over every present row with no link
+or condition. When no reachable state meets it, the rule is
 `Vacuous_<rule>` (`VacuousRule`, a warning), as `Unique_*` is when no state has two rows.
 `MaxCard_*` gets the same premise. When the counted entity's count is `n` or less, the
 premise text names the bound and the flag that lifts it:
@@ -237,9 +237,12 @@ premise text names the bound and the flag that lifts it:
 warning[Vacuous_Quantifier_Member_0]: Quantifier_Member_0 holds vacuously: no reachable state has a row of Member with 4 rows of Loan (Loan has 2 slots; --instances Loan=4 gives it 4)
 ```
 
-`at_least(n)` with fewer than `n` slots of the counted entity is the opposite: the rule
-fails in every state where it applies, and its counterexample is an artifact of the
-bound. The build reports `CountAboveBound`, a warning, naming the entity, `n`, and the
+`exactly(n)` fails with fewer rows too, so it gets no premise: a premise of `n + 1` rows
+would call a rule vacuous that the states below `n` exercise.
+
+`at_least(n)` and `exactly(n)` with fewer than `n` slots of the counted entity are the
+opposite: the rule fails in every state where it applies, and its counterexample is an
+artifact of the bound. The build reports `CountAboveBound`, a warning, naming the entity, `n`, and the
 flag. The counterexample is still reported; the warning says why it is not the domain's.
 
 Rejected: **reporting nothing at one instance, as `Unique_*` does.** `Unique_*` drops its
@@ -253,7 +256,8 @@ premise at one instance because the bounds line says "one instance". A count's b
 ### IR
 
 ```rust
-pub enum QuantifierKind { Has, None, AtMost(u8), AtLeast(u8), Exactly(u8) }
+pub enum CountBound { AtMost, AtLeast, Exactly }
+pub enum QuantifierKind { Has, None, Count { bound: CountBound, n: u8 } }
 
 pub enum Pred {
     // ...
@@ -273,8 +277,8 @@ never emits, but each engine would then map it to the comparison it already prin
 ### Native checker
 
 `eval` counts the present slots of the entity, over that entity's own slot count, for
-which the body holds, and compares the count with `n`. It stops early once the comparison
-is settled.
+which the body holds, and compares the count with `n`. It counts every slot: an entity has
+at most 255, and a count that stops early is one more place for an off-by-one.
 
 ### TLA+
 
@@ -327,9 +331,12 @@ The reduction must not treat a count like an `Exists` when it rewrites one:
   polarity of a count in the guard does not matter.
 
 So a count is read raw: its reads are those of an `Exists`, and nothing rewrites it. The
-generator of `scripts/reduction-diff.py` emits no counts, so a corpus case
-`cone_count_guard_outside.rdra` puts a count guard that reads outside the cone, and
-reduced and unreduced runs must agree on it.
+generator of `scripts/reduction-diff.py` emits no counts, and the corpus cannot test the
+reduction: TLC reads the reduced cone's tables too. The unit test
+`a_count_over_t_in_a_guard_reduces_exactly` takes the case fold of the reduction tests,
+whose guard over the sub-lifecycle reduces, puts `at_most`, `at_least`, and `exactly` in
+place of its `.none`, and checks that each reduced cone decides what the plain cone decides
+at 1, 2, and 3 instances.
 
 ### Code generation
 
@@ -344,16 +351,21 @@ A guard lowers to `Expr::Count { input, elem, body, op, n }`:
 ## Tests
 
 - Corpus `safety_at_most_bound.rdra`: an unguarded `at_most(3)` is ok at 1, 2, and 3
-  instances and a counterexample at 4. The corpus reads verdicts at 1 to 3 instances, so
-  the case runs with `--instances Loan=4` for the counterexample, beside a guarded rule
-  that holds at every count and that z3 proves.
+  instances and a counterexample at 4, beside a guarded rule that holds at every count and
+  that z3 proves. The corpus read verdicts at 1 to 3 instances; a `bfs=` of four entries
+  now adds a run at 4 (`docs/engine-agreement.md`).
 - Corpus `safety_at_least_guard.rdra`: an `at_least` guard on a use case and the rule it
-  keeps.
-- Corpus cases with unequal counts through TLC, a child with more slots than its parent and
-  a parent with more slots than its child.
+  keeps, against a delete, and the same pair with nothing deleted, which z3 proves.
+- Corpus `safety_count_per_entity.rdra`: counts under `--instances Loan=4 --instances
+  Shelf=3` through TLC, a counted entity with more slots than its anchor and an anchor
+  with more slots than the counted entity.
+- Corpus `safety_count_guard_order.rdra`: an `at_most` and an `at_least` guard on one row
+  that only the exact counts keep apart.
+- Corpus `safety_max_card_range.rdra`: `0..2:1`, ok at 1 and 2 instances and a
+  counterexample at 3.
 - A count bug planted once in `eval` must fail the corpus.
 - `samples/formal-verification/counting_rules.rdra` with its `// expect` header, run at
-  `--instances Loan=4`.
+  the default bounds and at `--instances Loan=4`.
 
 ## Decisions to review
 
@@ -372,3 +384,6 @@ A guard lowers to `Expr::Count { input, elem, body, op, n }`:
 9. Vacuity premise of `n + 1` rows; `CountAboveBound` warning for `at_least` above the
    bound.
 10. z3 unrolls up to 8 witnesses.
+11. The corpus header's `bfs=` takes a fourth entry, the native verdict at 4 instances,
+    so a count that needs four rows states its counterexample at the uniform bound rather
+    than through `--instances`.

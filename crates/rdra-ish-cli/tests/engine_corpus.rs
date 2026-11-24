@@ -99,8 +99,8 @@ struct Expect {
     native: V,
     tlc: V,
     z3: Option<Z3>,
-    /// The native verdict at 1, 2, and 3 instances per entity.
-    bfs: Option<[V; 3]>,
+    /// The native verdict at 1, 2, and 3 instances per entity, and at 4 when it has four.
+    bfs: Option<Vec<V>>,
 }
 
 /// The engines a `// known` line may name.
@@ -121,6 +121,7 @@ impl Engine {
             "bfs1" => Engine::Bfs(1),
             "bfs2" => Engine::Bfs(2),
             "bfs3" => Engine::Bfs(3),
+            "bfs4" => Engine::Bfs(4),
             _ => return None,
         })
     }
@@ -269,7 +270,7 @@ fn parse_case(path: &Path) -> Result<Case, String> {
         if case.tlc_skip && e.tlc != V::None {
             return Err(format!("{check}: tlc={} on a case that skips TLC", e.tlc));
         }
-        if e.bfs.is_some_and(|b| b[1] != e.native) {
+        if e.bfs.as_ref().is_some_and(|b| b[1] != e.native) {
             return Err(format!("{check}: bfs at 2 instances differs from native"));
         }
         if e.z3 == Some(Z3::Proved) && e.bfs.is_none() {
@@ -301,7 +302,7 @@ fn can_reach_properties(text: &str) -> BTreeSet<String> {
     out
 }
 
-/// `<Check>: native=V tlc=V [z3=Z] [bfs=V,V,V]`
+/// `<Check>: native=V tlc=V [z3=Z] [bfs=V,V,V[,V]]`
 fn parse_expect(rest: &str) -> Option<(String, Expect)> {
     let (check, fields) = rest.split_once(": ")?;
     let mut map: BTreeMap<&str, &str> = BTreeMap::new();
@@ -320,7 +321,10 @@ fn parse_expect(rest: &str) -> Option<(String, Expect)> {
     let bfs = match map.remove("bfs") {
         Some(b) => {
             let v: Vec<V> = b.split(',').map(V::parse).collect::<Option<_>>()?;
-            Some(<[V; 3]>::try_from(v).ok()?)
+            if !(3..=4).contains(&v.len()) {
+                return None;
+            }
+            Some(v)
         }
         None => None,
     };
@@ -637,9 +641,14 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
     }
     let main = verify(case, &args);
     let needs_bounds = case.expects.values().any(|e| e.bfs.is_some());
+    let needs_four = case
+        .expects
+        .values()
+        .any(|e| e.bfs.as_ref().is_some_and(|b| b.len() == 4));
     let bounded: BTreeMap<u8, Observed> = match needs_bounds {
         true => [1u8, 3]
             .into_iter()
+            .chain(needs_four.then_some(4))
             .map(|n| (n, verify(case, &["--instance-count", &n.to_string()])))
             .collect(),
         false => BTreeMap::new(),
@@ -752,8 +761,11 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
             judge(&mut report, check, Engine::Z3, want, got);
         }
         let mut at_bounds = vec![(2u8, native)];
-        if let Some(bfs) = e.bfs {
-            for (n, run) in &bounded {
+        if let Some(bfs) = &e.bfs {
+            for (n, run) in bounded
+                .iter()
+                .filter(|(n, _)| usize::from(**n) <= bfs.len())
+            {
                 let got = run.verdict(false, check, can_reach(check));
                 judge(
                     &mut report,
@@ -822,7 +834,11 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
 #[test]
 fn bfs_and_tlc_and_z3_agree_on_the_adversarial_corpus() {
     let tools = tools();
-    let cases = cases();
+    let mut cases = cases();
+    // `RDRA_CORPUS_CASE=<text>` runs only the cases whose name contains it.
+    if let Ok(only) = std::env::var("RDRA_CORPUS_CASE") {
+        cases.retain(|c| c.name.contains(&only));
+    }
     let next = AtomicUsize::new(0);
     let reports: Mutex<Vec<(String, Report)>> = Mutex::new(Vec::new());
     let workers = std::thread::available_parallelism().map_or(2, |n| n.get().clamp(1, 4));

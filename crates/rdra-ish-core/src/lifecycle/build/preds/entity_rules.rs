@@ -10,7 +10,9 @@ use crate::lifecycle::types::{
     ParamRole, Pred, Premise, Rhs, Site, Term, Value, VarId, VarKind,
 };
 use crate::lifecycle::EntId;
-use crate::model::{CmpRhs, EntityCondition, EntityKey, Min, RefAction, UniqueSource, UseCaseKey};
+use crate::model::{
+    CmpRhs, CountBound, EntityCondition, EntityKey, Min, RefAction, UniqueSource, UseCaseKey,
+};
 
 impl Builder<'_> {
     fn local_binding(ek: EntityKey) -> Binding {
@@ -119,6 +121,7 @@ impl Builder<'_> {
         self.unique_keys();
         self.unique_columns();
         self.min_cards();
+        self.max_cards();
         self.cascade_deletes();
         self.driven_columns_written();
     }
@@ -306,6 +309,51 @@ impl Builder<'_> {
                     child,
                     parent,
                     role,
+                },
+                label: None,
+                site,
+            });
+        }
+    }
+
+    /// `MaxCard_{child}_{role}` per child-side range `lo..hi` with `hi` from 2 to 255: no
+    /// present parent slot has more than `hi` present children through the key, a count as
+    /// `.at_most(hi, Child)` makes.
+    fn max_cards(&mut self) {
+        let model = self.model;
+        for (id, fk) in model.foreign_keys() {
+            let Some(most) = fk.children.most else {
+                continue;
+            };
+            let at = |ek, b| (ek, At::Bound(b));
+            let Some(link) = self.key_link(id, at(fk.child, 1), at(fk.parent, 0)) else {
+                continue;
+            };
+            let (child, parent) = (
+                model.entities[fk.child].id.clone(),
+                model.entities[fk.parent].id.clone(),
+            );
+            let role = fk.role_or(&parent).to_string();
+            let site = Site::new(ModelRef::Relation(fk.relation), &fk.site);
+            let premises = self
+                .count_premise(fk.child, CountBound::AtMost, most)
+                .into_iter()
+                .collect();
+            self.ts.invariants.push(Invariant {
+                name: format!("MaxCard_{child}_{role}"),
+                binders: vec![self.ent_of[&fk.parent]],
+                premises,
+                body: Pred::Count {
+                    entity: self.ent_of[&fk.child],
+                    body: Box::new(link),
+                    op: CmpOp::Le,
+                    n: most,
+                },
+                text: InvText::MaxCard {
+                    child,
+                    parent,
+                    role,
+                    most,
                 },
                 label: None,
                 site,

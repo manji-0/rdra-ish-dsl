@@ -59,9 +59,13 @@ pub(in crate::codegen) fn expr(
             Expr::Or(out)
         }
         Pred::Cmp(a, op, b) => atom(ts, a, *op, b, rows, bind, quant)?,
-        Pred::Forall { entity, body } | Pred::Exists { entity, body } => {
+        Pred::Forall { entity, body }
+        | Pred::Exists { entity, body }
+        | Pred::Count { entity, body, .. } => {
             let Some(q) = quant.as_deref_mut() else {
-                return Err("a condition over related rows, `.has` or `.none` (phase 5)".into());
+                return Err(
+                    "a condition over related rows, `.has`, `.none` or a count (phase 5)".into(),
+                );
             };
             let id = ts.entity(*entity).id.clone();
             let (ty, fields) = (q.row_type)(&id)
@@ -93,6 +97,13 @@ pub(in crate::codegen) fn expr(
             let body = Box::new(inner?);
             match pred {
                 Pred::Exists { .. } => Expr::Exists { input, elem, body },
+                Pred::Count { op, n, .. } => Expr::Count {
+                    input,
+                    elem,
+                    body,
+                    op: ir_op(*op),
+                    n: *n,
+                },
                 _ => Expr::Forall { input, elem, body },
             }
         }
@@ -249,14 +260,7 @@ pub(super) fn atom(
                 Term::Lit(v) => domain.number(*v).ok_or_else(unsupported)?,
                 _ => unreachable!(),
             };
-            let op = match op {
-                TsCmp::Eq => CmpOp::Eq,
-                TsCmp::Ne => CmpOp::Ne,
-                TsCmp::Lt => CmpOp::Lt,
-                TsCmp::Le => CmpOp::Le,
-                TsCmp::Gt => CmpOp::Gt,
-                TsCmp::Ge => CmpOp::Ge,
-            };
+            let op = ir_op(op);
             Ok(Expr::IntCmp {
                 row: r,
                 field: field.clone(),
@@ -286,6 +290,19 @@ pub(in crate::codegen) fn simplify(e: Expr) -> Expr {
                 elem,
                 body: Box::new(body),
             },
+        },
+        Expr::Count {
+            input,
+            elem,
+            body,
+            op,
+            n,
+        } => Expr::Count {
+            input,
+            elem,
+            body: Box::new(simplify(*body)),
+            op,
+            n,
         },
         Expr::Not(inner) => match simplify(*inner) {
             Expr::True => Expr::False,
@@ -332,10 +349,24 @@ pub(super) fn remap_lists(e: &mut Expr, to: &[usize]) {
     match e {
         Expr::Not(x) => remap_lists(x, to),
         Expr::And(xs) | Expr::Or(xs) => xs.iter_mut().for_each(|x| remap_lists(x, to)),
-        Expr::Exists { input, body, .. } | Expr::Forall { input, body, .. } => {
+        Expr::Exists { input, body, .. }
+        | Expr::Forall { input, body, .. }
+        | Expr::Count { input, body, .. } => {
             *input = to[*input];
             remap_lists(body, to);
         }
         _ => {}
+    }
+}
+
+/// A lifecycle comparison as the generated code's.
+fn ir_op(op: TsCmp) -> CmpOp {
+    match op {
+        TsCmp::Eq => CmpOp::Eq,
+        TsCmp::Ne => CmpOp::Ne,
+        TsCmp::Lt => CmpOp::Lt,
+        TsCmp::Le => CmpOp::Le,
+        TsCmp::Gt => CmpOp::Gt,
+        TsCmp::Ge => CmpOp::Ge,
     }
 }

@@ -120,7 +120,7 @@ parse fails the suite. Other `//` lines are free text that explains the trap.
 // flags: <verify flags>                                 optional
 // tlc: skip, <why>                                      optional; the case never runs TLC
 // rejects: <text>                                       optional, repeatable
-// expect <Check>: native=<V> tlc=<V> [z3=<Z>] [bfs=<V>,<V>,<V>]
+// expect <Check>: native=<V> tlc=<V> [z3=<Z>] [bfs=<V>,<V>,<V>[,<V>]]
 // known <Check>: <engine>=<observed> <issue URL>
 ```
 
@@ -134,9 +134,11 @@ parse fails the suite. Other `//` lines are free text that explains the trap.
 - `<Z>` is `proved`, `unproved`, or `out_of_scope`. Every state rule that `--prove` reports
   needs a `z3=`. `z3=proved` also needs `bfs=`, because a proof must not contradict any of
   the bounded verdicts.
-- `bfs=` lists the native verdicts at 1, 2, and 3 instances per entity. The second entry
-  equals `native=`. The harness runs `verify --instance-count 1` and `3` only for a case
-  with a `bfs=`.
+- `bfs=` lists the native verdicts at 1, 2, and 3 instances per entity, and at 4 when it
+  has a fourth entry. The second entry equals `native=`. The harness runs `verify
+  --instance-count 1` and `3` only for a case with a `bfs=`, and `4` only for a case with
+  a four-entry `bfs=`. A count rule that needs four rows to fail states its verdict at 4
+  this way.
 - `<Check>` is the name the run prints: `error[<Check>]`, a `Cone_` line's bracket list, a
   `property <Check> (BFS on its cone)` line, or a `proved:` line. State-model findings
   (`Deadlock_*`, `Witness_*`) are checks too. Every check the run names needs an `expect`
@@ -178,6 +180,8 @@ The test prints one line per case: `ok`, `FAIL` with each reason, or `known`. Wi
 them in the `engine-equivalence` job. The main test's name starts with `bfs_and_tlc_`, so
 the debug `test` step skips it, as it skips the other TLC comparisons. The header check
 and the capped-graph test run in both steps.
+`RDRA_CORPUS_CASE=<text>` makes the main test run only the cases whose name contains
+`<text>`, for working on one case.
 
 The suite runs four cases at a time. Locally (Apple silicon, with a reduction sweep
 loading the machine) it took about 25 s in release, measured. With the `stable`,

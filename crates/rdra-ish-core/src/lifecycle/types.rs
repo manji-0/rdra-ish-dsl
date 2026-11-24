@@ -488,9 +488,10 @@ impl Pred {
             let pred = stack.pop()?;
             match pred {
                 Pred::True | Pred::False | Pred::Cmp(..) | Pred::In(..) => {}
-                Pred::Not(body) | Pred::Forall { body, .. } | Pred::Exists { body, .. } => {
-                    stack.push(body)
-                }
+                Pred::Not(body)
+                | Pred::Forall { body, .. }
+                | Pred::Exists { body, .. }
+                | Pred::Count { body, .. } => stack.push(body),
                 Pred::And(parts) | Pred::Or(parts) => stack.extend(parts.iter().rev()),
             }
             Some(pred)
@@ -526,9 +527,10 @@ impl Pred {
             Pred::True | Pred::False => false,
             Pred::Cmp(a, _, b) => next(a) || next(b),
             Pred::In(a, values) => next(a) || values.iter().any(next),
-            Pred::Not(body) | Pred::Forall { body, .. } | Pred::Exists { body, .. } => {
-                body.reads_next()
-            }
+            Pred::Not(body)
+            | Pred::Forall { body, .. }
+            | Pred::Exists { body, .. }
+            | Pred::Count { body, .. } => body.reads_next(),
             Pred::And(parts) | Pred::Or(parts) => parts.iter().any(Pred::reads_next),
         }
     }
@@ -686,6 +688,15 @@ pub enum Pred {
         entity: EntId,
         body: Box<Pred>,
     },
+    /// The present slots of `entity` for which `body` holds, counted: `count op n`. The body
+    /// sees the slot as the next `Bound`, as a `Forall`'s does. The build writes `Le`
+    /// (`.at_most`), `Ge` (`.at_least`), and `Eq` (`.exactly`).
+    Count {
+        entity: EntId,
+        body: Box<Pred>,
+        op: CmpOp,
+        n: u8,
+    },
 }
 
 /// What some reachable state must show for a rule's holding to say anything: present rows
@@ -741,6 +752,9 @@ pub enum InvKind {
     Unique,
     /// A child-side range `1..*` / `1..1`: every present parent slot has a present child.
     MinCard,
+    /// A child-side range `lo..hi`, `hi` from 2 to 255: no present parent slot has more
+    /// than `hi` present children.
+    MaxCard,
     /// A column's `@check(expr)`: no present slot makes the expression false.
     Check,
     /// A counted edge's counter is never past its `k` (`EventOverflow_<E>_<Ev>_<UC>`).
@@ -759,6 +773,7 @@ impl InvText {
             InvText::Quantifier { .. } => InvKind::Quantifier,
             InvText::Unique { .. } | InvText::UniqueSet { .. } => InvKind::Unique,
             InvText::MinCard { .. } => InvKind::MinCard,
+            InvText::MaxCard { .. } => InvKind::MaxCard,
             InvText::Check(_) => InvKind::Check,
             InvText::Overflow { .. } => InvKind::Overflow,
         }
@@ -808,6 +823,13 @@ pub enum InvText {
         child: String,
         parent: String,
         role: String,
+    },
+    /// `relate(child, parent, 0..3:1)`, by the key's role: at most `most` children.
+    MaxCard {
+        child: String,
+        parent: String,
+        role: String,
+        most: u8,
     },
     /// `triggers(event, usecase).counted(cap)`: no row has more than `cap` raises pending.
     Overflow {

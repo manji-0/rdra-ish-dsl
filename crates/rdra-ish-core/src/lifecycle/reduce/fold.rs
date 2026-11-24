@@ -510,6 +510,9 @@ impl TransitionSystem {
                     .map(|x| self.strip_links(x, t, link, false))
                     .collect::<Option<_>>()?,
             )),
+            // A node pulls an existential out to a param; a count is no existential, so a
+            // guard that reads T through one is never node-folded (docs/design/counting-rules.md).
+            Pred::Count { .. } => None,
             Pred::Forall { entity, body } | Pred::Exists { entity, body } => {
                 if !t.contains(&self.entity(*entity).exists) {
                     return None;

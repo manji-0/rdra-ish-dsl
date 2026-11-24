@@ -881,6 +881,31 @@ fn a_quantifier_over_t_folds_into_a_bit_keyed_by_the_linked_row() {
     );
 }
 
+/// A count over T in a guard is read raw: no node pulls it out as it pulls an existential,
+/// so the reduced cones decide what the cones decide, whichever way the count points
+/// (docs/design/counting-rules.md). The case fold's `.none` becomes each count in turn.
+#[test]
+fn a_count_over_t_in_a_guard_reduces_exactly() {
+    for count in [
+        ".at_most(1, Claim.status == open)",
+        ".at_least(2, Claim.status == paid)",
+        ".exactly(1, Claim)",
+    ] {
+        let src = CASE_FOLD.replace(".none(Claim.status == open)", count);
+        assert_ne!(src, CASE_FOLD);
+        let model = model_from(&src);
+        let mut reductions = 0;
+        for bounds in [
+            Bounds::STATES,
+            Bounds::VERIFY,
+            Bounds::VERIFY.at(std::num::NonZeroU8::new(3).unwrap()),
+        ] {
+            reductions += assert_reduction_exact(count, &model, bounds);
+        }
+        assert!(reductions > 0, "{count}: some cone reduces");
+    }
+}
+
 /// A steady action (`Reduction::is_steady`) writes nothing the inputs of the sub-lifecycle
 /// read, so its steps skip the class lookup in BFS and print `UNCHANGED` for the class in
 /// TLA+. On every reduced cone of the case fold and of insurance-claim-ops, each step of a
