@@ -443,16 +443,19 @@
 - `verify --with-tlc` runs the small state models in batch JVMs when the `tlc` it found has a
   `tlc-batch` beside it, as the flake's has (#310): a `StateModel_` module of at most 10,000
   states by BFS and 1 MiB of text, when no heap is named. The engine corpus (337 TLC runs,
-  175 of them such state-model runs) went from 41 s to 26 s of wall time and from 172 to 158
-  CPU-s on an 18-core Mac, and the 45 `reduction-diff.py` seeds CI runs with TLC (1,090 TLC
-  runs, 713 of them such) from 60 s and 869 CPU-s to 52 s and 746. The output is unchanged.
+  175 of them such state-model runs) went from 41 s to 25 s of wall time on an 18-core Mac,
+  and the 45 `reduction-diff.py` seeds CI runs with TLC (1,090 TLC runs, 713 of them such)
+  from 56 to 60 s to 52 to 54 s (two runs each beside other load, against the same build
+  with `RDRA_TLC_BATCH=0`). The output is unchanged.
   The batch JVMs run before the other state models, at most 8 and as many as fit the TLC
   share of `--memory` at 512 MiB of heap and 256 MiB beside it each; cone and whole-model
   runs are processes as before. A run with no answer from its JVM, or none within 120 s,
   makes its module run as processes. `RDRA_TLC_BATCH=0` turns the batch JVMs off, and
   `RDRA_TLC_BATCH=both` checks each batch run against a process run; a TLC from `--tlc-jar`,
-  or a `tlc` with no `tlc-batch` beside it, runs as before. See
-  [Engine equivalence in batch JVMs](docs/formal-verification.md#engine-equivalence-in-batch-jvms).
+  or a `tlc` with no `tlc-batch` beside it, runs as before. In `engine_equivalence`, a batch
+  job past its time limit no longer fails the test under `RDRA_REQUIRE_TLC_BATCH=1`: it
+  runs as a process, as before, and is counted apart from a JVM that ends or fails. See
+  [State models in batch JVMs](docs/formal-verification.md#state-models-in-batch-jvms).
 - `--max-patterns` caps only a run that builds an entity view (#251, #296): the cone of an
   entity view in `check` and `states`. Only those runs gather view patterns now. A cone of
   invariants, `after` assertions or `can_reach` alone, a run that quotients a sub-lifecycle,

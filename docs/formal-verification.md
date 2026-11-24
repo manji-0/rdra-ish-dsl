@@ -1639,20 +1639,25 @@ state models; see [State models in batch JVMs](#state-models-in-batch-jvms) belo
 
 ### State models in batch JVMs
 
+<!-- constrained-by ./cli-reference.md#memory-limit -->
+
 `verify --with-tlc` gives a batch JVM the runs of a `StateModel_` module that BFS found to
 have at most 10,000 states and whose text is at most 1 MiB, when the user names no TLC heap
 and the `tlc` it found has a `tlc-batch` in the same directory, as the flake's has. A TLC
 from `--tlc-jar` or `RDRA_TLC_JAR`, or a `tlc` alone on `PATH`, runs as before. Cone runs
 and whole-model runs are processes: batching cones is not decided (#309).
 
-- **Order and memory.** The batch JVMs run first and are gone before the other state
-  models start as processes, so each of the two has the whole TLC share of `--memory` (see
-  [Memory limit](cli-reference.md#memory-limit)) and neither waits on the other. A batch
+- **Order and memory.** The batch JVMs and the process runs of the other state models hold
+  their charges of one budget, the TLC share of `--memory` (see
+  [Memory limit](cli-reference.md#memory-limit)), as the cone runs do of theirs. A batch
   JVM has 512 MiB of heap, what the heap rule gives a module of 1 MiB before it rounds up
-  to 1 GiB, and is charged that and the 256 MiB every TLC JVM is charged beside its heap.
-  There are at most 8, at most one per core, and at most as many as that charge fits the
-  share: a share of 1 GiB runs one, and a share under 768 MiB none. A JVM is charged
-  whether it has a run or not, since it holds its memory either way.
+  to 1 GiB, and is charged that and the 256 MiB every TLC JVM is charged beside its heap,
+  from before it starts until it ends: it holds its memory between runs too. There are at
+  most 8, at most one per core, and at most as many as that charge fits the share: a share
+  of 1 GiB runs one, and a share under 768 MiB none. The batch JVMs run first and are gone
+  before the first process run starts. The two do not run at once because of the cores, not
+  the memory: the JVMs are as many as the cores with one worker each, and a process run
+  divides the cores among its workers, so a large state model waits for the small ones.
 - **Workers.** A batch run has one worker. The JVMs are already as many as the cores
   allow, and a state model this small gains nothing from more.
 - **Falling back.** A run with no answer makes its module run again from its first run as
@@ -1667,14 +1672,19 @@ and whole-model runs are processes: batching cones is not decided (#309).
   run with several workers, which is what a module gets when it falls back or is too large
   for a batch JVM: two such runs differ from each other in which trace they print, and
   `verify` reads only the names of the violated checks from a state-model run. The check
-  run is not counted against `--memory`.
+  run is a JVM of 512 MiB beside each batch JVM and is not counted against `--memory`, so a
+  `both` run holds about twice the batch JVMs' charge.
 
-Measured on an 18-core Mac, single runs: the engine corpus, 337 TLC runs of which 175 go to
-batch JVMs, took 41 s and 172 CPU-s with processes only and 26 s and 158 CPU-s with batch
-JVMs; the 45 `reduction-diff.py` seeds CI runs with TLC, 1,090 runs of which 713 go to batch
-JVMs, took 60 s and 869 CPU-s, and 52 s and 746 CPU-s. All 175 and all 713 were the same as
-their process runs under `RDRA_TLC_BATCH=both`. A `verify` starts its own JVMs, 78 over the
-corpus's 54 runs and 280 over the seeds, so a JVM runs two or three jobs.
+Measured on an 18-core Mac beside other load, one build with `RDRA_TLC_BATCH=0` and without
+it, two runs each: the engine corpus, 337 TLC runs of which 175 go to batch JVMs, took 41
+and 41 s with processes only and 26 and 25 s with batch JVMs, at 172 and 139 CPU-s against
+158 and 135; the 45 `reduction-diff.py` seeds CI runs with TLC, 1,090 runs of which 713 go
+to batch JVMs, took 60 and 56 s and 869 and 788 CPU-s with processes only, and 52 and 54 s
+and 746 and 729 CPU-s with batch JVMs, the script's own runs taking the load past the
+cores each time. The corpus gains in wall time, since its `verify` runs wait for their
+state models one after another; the seeds gain little. All 175 and all 713 were the same
+as their process runs under `RDRA_TLC_BATCH=both`. Each `verify` starts its own JVMs, 78 over the corpus and 280 over
+the seeds, so a JVM runs two or three jobs.
 
 The driver is for TLC 1.7.4. TLC 1.8 starts and stops in 0.25 s (#309), and when it is the
 baseline the driver, the pool, and `tlc-batch` can be removed without touching a caller's

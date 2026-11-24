@@ -773,6 +773,10 @@ What the limit counts:
   - A module that needs more heap than the share holds is not run: a `tool_error` whose
     report names the heap it needs and the hint.
 
+  The small state models that run in batch JVMs (see
+  [State models in batch JVMs](formal-verification.md#state-models-in-batch-jvms)) are
+  charged per JVM, not per run: 512 MiB of heap and the 256 MiB, held while the JVM is up.
+
   `RDRA_TLC_HEAP` and an `-Xmx` in `JAVA_TOOL_OPTIONS` still set the heap as given, with no
   rerun; the runs then queue so that their heaps fit, and run one at a time when one heap
   alone is past the share. Under `--with-tlc`, a `--memory` that leaves no BFS beside
@@ -1731,7 +1735,7 @@ follows.` in place of the model-term block. TLC's lasso ends with `State N: Stut
 |---|---|
 | `RDRA_TLC_HEAP` | With `--with-tlc`: heap of every TLC JVM, such as `4g`. Without it a run's heap follows its module: 512 MiB per MiB of module text in whole GiB, at least `1g` for a cone and `2g` for a whole-model run, at most what the [memory limit](#memory-limit) gives TLC, and twice that once after the run runs out of memory. The runs queue so that their heaps fit the limit. |
 | `RDRA_TLC_JAR` | With `--with-tlc`: path to `tla2tools.jar`, used as `--tlc-jar` when the flag is absent. |
-| `RDRA_TLC_BATCH` | With `--with-tlc`, when the `tlc` on `PATH` has a `tlc-batch` beside it (the flake's has): `0` runs every state model as processes, not the small ones in batch JVMs; `both` also runs each batch run as a process and fails the run when the two differ, and prints a `tlc batch:` line with the counts on stderr. See [Engine equivalence in batch JVMs](formal-verification.md#engine-equivalence-in-batch-jvms). |
+| `RDRA_TLC_BATCH` | With `--with-tlc`, when the `tlc` on `PATH` has a `tlc-batch` beside it (the flake's has): `0` runs every state model as processes, not the small ones in batch JVMs; `both` also runs each batch run as a process and fails the run when the two differ, and prints a `tlc batch:` line with the counts on stderr. See [State models in batch JVMs](formal-verification.md#state-models-in-batch-jvms). |
 | `RDRA_Z3` | Path to the z3 binary, used as `--z3` when the flag is absent. |
 | `RDRA_JOBS` | How many cones `check`, `states`, and `verify` explore at once by BFS, how many threads compute the moves of one large cone, and how many z3 processes `verify --prove` starts. It does not limit the TLC runs, which `verify --with-tlc` starts beside the BFS. Without it, the machine's cores, at most 8. Each cone holds its reached states, so a lower number uses less memory; `1` explores them one after another on one thread. The result does not depend on it. |
 | `JAVA_TOOL_OPTIONS` | Appended after the options `verify --with-tlc` sets (`-Xmx`, `-Djava.io.tmpdir`, and `-XX:TieredStopAtLevel=1` on a state-model run of at most 10,000 states by BFS), so a value here wins. `verify` adds `-XX:TieredStopAtLevel=1` only after TLC started once with it, so a JVM that does not take it runs without it. |

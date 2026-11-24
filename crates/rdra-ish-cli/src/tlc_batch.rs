@@ -228,6 +228,8 @@ struct Jvms {
     lost_in_a_row: usize,
     /// Why the pool starts no more JVMs, once it does not.
     off: Option<String>,
+    /// Whether `off` came of a job past its time limit, not of a JVM that ended or failed.
+    off_by_time: bool,
 }
 
 impl Pool {
@@ -276,6 +278,7 @@ impl Pool {
                 jvms.live -= 1;
                 jvms.lost_in_a_row += 1;
                 if jvms.lost_in_a_row >= LOST_IN_A_ROW {
+                    jvms.off_by_time = jvms.off.is_none() && matches!(lost, Lost::TimedOut);
                     Self::turn_off(
                         &mut jvms,
                         format!("{LOST_IN_A_ROW} jobs in a row got no answer, the last: {lost:?}"),
@@ -332,6 +335,17 @@ impl Pool {
     /// Why the pool stopped starting JVMs, when it did.
     pub fn why_off(&self) -> Option<String> {
         self.jvms.lock().unwrap().off.clone()
+    }
+
+    /// Whether every job the pool was given ran as the driver should run it: each got its
+    /// answer or passed its time limit, and the pool is on, or off only because
+    /// `LOST_IN_A_ROW` jobs in a row passed theirs. A job past its limit is a slow run, which
+    /// the caller runs as a process; a JVM that does not start, ends under a job, or fails
+    /// one is a driver that does not work.
+    pub fn sound(&self) -> bool {
+        let jvms = self.jvms.lock().unwrap();
+        let counts = self.counts();
+        counts.lost == counts.timed_out && (jvms.off.is_none() || jvms.off_by_time)
     }
 
     pub fn counts(&self) -> Counts {

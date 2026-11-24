@@ -1759,6 +1759,67 @@ fn liveness_is_decided_without_tlc_and_tlc_agrees() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+/// A state model whose batch JVM gives no answer runs as processes and prints what it prints
+/// with no batch JVM: here a `tlc-batch` that says `ready` and ends, beside a `tlc` that is
+/// the one on PATH.
+#[cfg(unix)]
+#[test]
+fn a_state_model_a_batch_jvm_does_not_answer_runs_as_processes() {
+    use std::os::unix::fs::PermissionsExt;
+    if !have_tlc() {
+        return;
+    }
+    let tmp = scratch("verify_cli_batch_lost");
+    let real = Command::new("which").arg("tlc").output().expect("which");
+    let real = String::from_utf8_lossy(&real.stdout).trim().to_string();
+    let bin = tmp.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    for (name, script) in [
+        ("tlc", format!("#!/bin/sh\nexec '{real}' \"$@\"\n")),
+        ("tlc-batch", "#!/bin/sh\necho ready\n".to_string()),
+    ] {
+        let path = bin.join(name);
+        std::fs::write(&path, script).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let path = format!(
+        "{}:{}",
+        bin.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    let sample = repo().join("samples/ec-site");
+    let run = |mode: &str| {
+        let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+            .current_dir(repo())
+            .env("TMPDIR", &tmp)
+            .env("PATH", &path)
+            .env("RDRA_TLC_BATCH", mode)
+            .env_remove("RDRA_TLC_HEAP")
+            .env_remove("RDRA_TLC_JAR")
+            .args(["verify", "--with-tlc", sample.to_str().unwrap()])
+            .output()
+            .expect("rdra-ish runs");
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+        assert!(output.status.success(), "{mode}:\n{stdout}\n{stderr}");
+        (stdout, stderr)
+    };
+    let (lost, said) = run("both");
+    assert!(
+        said.contains("tlc batch: 0 runs in 1 JVMs, 0 compared with a process run and the same, 1 without an answer\n"),
+        "{said}"
+    );
+    assert!(
+        lost.contains(
+            "tlc: StateModel_Order (82 states): 4 deadlock and 6 witness checks; found none\n"
+        ),
+        "{lost}"
+    );
+    let (process, _) = run("0");
+    assert_eq!(lost, process);
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 /// A `tlc` on PATH that passes every module whatever it holds: a stand-in for a TLC that
 /// disagrees with the native checker.
 #[cfg(unix)]

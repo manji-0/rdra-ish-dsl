@@ -10,7 +10,7 @@
 //! keeps a move enabled: a deadlock only BFS finds is no disagreement.
 
 use super::bfs::{StateModelCone, StateModels};
-use super::schedule::{run_budgeted, Budget};
+use super::schedule::{run_budgeted, Budget, Hold};
 use super::tlc::{clean_up, tlc_command};
 use super::tlc_tool::Tlc;
 use crate::export::Modules;
@@ -215,8 +215,10 @@ pub(super) fn state_model_jobs(
 
 /// Runs every job. First the small ones in batch JVMs (`Batch`), when this TLC has a batch
 /// driver; then the others, and any a batch JVM did not answer, as processes
-/// (`run_as_processes`). The two do not overlap, so each has the whole of `share`. The
-/// results come back in job order.
+/// (`run_as_processes`). Both hold what they are charged of one `Budget` of `share`. They do
+/// not overlap: a batch JVM's runs have one worker and the JVMs are as many as the cores, and
+/// a process run divides the cores among its workers (`tlc_workers`), so the two at once
+/// would run more threads than cores. The results come back in job order.
 pub(super) fn run_state_models(
     tlc: &Tlc,
     dir: &Path,
@@ -225,17 +227,18 @@ pub(super) fn run_state_models(
     share: u64,
 ) -> Result<Vec<StateModelRan>> {
     let set = current_user_heap();
+    let budget = Budget::new(share);
     let mut ran: Vec<Option<StateModelRan>> = jobs.iter().map(|_| None).collect();
     let small: Vec<usize> = (0..jobs.len())
         .filter(|k| Batch::takes(&jobs[*k], set))
         .collect();
     if let Some(batch) = Batch::start(tlc, dir, small.len(), share)? {
-        for (k, answered) in batch.run((tlc, dir, modules), jobs, &small)? {
+        for (k, answered) in batch.run((tlc, dir, modules), jobs, &small, &budget)? {
             ran[k] = answered;
         }
     }
     let rest: Vec<usize> = (0..jobs.len()).filter(|k| ran[*k].is_none()).collect();
-    for (k, r) in run_as_processes(tlc, dir, modules, jobs, &rest, (share, set))? {
+    for (k, r) in run_as_processes(tlc, dir, modules, jobs, &rest, (&budget, set))? {
         ran[k] = Some(r);
     }
     Ok(ran
@@ -317,19 +320,25 @@ impl Batch {
         }))
     }
 
-    /// Runs the jobs `small` names, one thread per JVM, and ends the JVMs. A job comes back
+    /// Runs the jobs `small` names, one thread per JVM, and ends the JVMs. A thread holds a
+    /// JVM's heap and `JVM_OVERHEAD` of `budget` from before it starts its JVM until the
+    /// JVMs end: a JVM that stays up holds its memory between runs too. A job comes back
     /// `None` when one of its runs got no answer; it then runs whole as processes.
     fn run(
         self,
         (tlc, dir, modules): (&Tlc, &Path, &Modules),
         jobs: &[StateModelJob],
         small: &[usize],
+        budget: &Budget,
     ) -> Result<Vec<(usize, Option<StateModelRan>)>> {
         let next = AtomicUsize::new(0);
         let done: Mutex<Vec<(usize, Result<Option<StateModelRan>>)>> = Mutex::new(Vec::new());
+        let held: Mutex<Vec<Hold>> = Mutex::new(Vec::new());
         std::thread::scope(|s| {
             for _ in 0..self.jvms {
                 s.spawn(|| {
+                    let hold = budget.hold(BATCH_HEAP + JVM_OVERHEAD);
+                    held.lock().expect("lock").push(hold);
                     while let Some(&k) = small.get(next.fetch_add(1, Ordering::SeqCst)) {
                         let ran = run_one(tlc, dir, modules, &jobs[k], Jvm::Batch(&self));
                         done.lock().expect("lock").push((k, ran));
@@ -349,8 +358,10 @@ impl Batch {
         }
         let tmps = counts.jvms;
         let root = self.dir.clone();
-        // The JVMs end here, before their tmpdirs go and before any process run starts.
+        // The JVMs end here, before their tmpdirs go and before any process run starts, and
+        // then let go of what they held.
         drop(self);
+        drop(held);
         for n in 0..tmps {
             let _ = fs::remove_dir_all(root.join(format!("batch-{n}.tmp")));
         }
@@ -445,8 +456,9 @@ fn run_as_processes(
     modules: &Modules,
     jobs: &[StateModelJob],
     rest: &[usize],
-    (share, set): (u64, Option<u64>),
+    (budget, set): (&Budget, Option<u64>),
 ) -> Result<Vec<(usize, StateModelRan)>> {
+    let share = budget.bytes();
     let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
     let heaps: Vec<TlcHeap> = jobs
         .iter()
@@ -454,11 +466,10 @@ fn run_as_processes(
         .collect();
     let mut order: Vec<usize> = rest.to_vec();
     order.sort_by_key(|k| std::cmp::Reverse((heaps[*k].charge(), jobs[*k].states)));
-    let budget = Budget::new(share);
     let done = run_budgeted(
         &order,
         cores,
-        &budget,
+        budget,
         |k| heaps[k].charge(),
         |k, hold, in_flight| {
             let (job, heap) = (&jobs[k], heaps[k]);
