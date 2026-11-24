@@ -52,11 +52,13 @@
             cp ${./nix/tlc-cds}/Train.tla ${./nix/tlc-cds}/Train.cfg work/
             cd work
             # Runs TLC on the training spec with the JVM flags given; TLC exits 13 on the
-            # violated property, as intended.
+            # violated property, as intended. -Xmx1g as `verify` gives a cone: an archive
+            # holds one compressed-oops mode, and a builder's default heap past 32 GiB would
+            # record the one a `verify` run never maps.
             train() {
               rm -rf states
               status=0
-              ${jdk}/bin/java -XX:+UseParallelGC -XX:-UsePerfData "$@" -Djava.io.tmpdir=$PWD \
+              ${jdk}/bin/java -XX:+UseParallelGC -XX:-UsePerfData -Xmx1g "$@" -Djava.io.tmpdir=$PWD \
                 -cp ${jar} tlc2.TLC -workers 1 -metadir $PWD/states \
                 -config Train.cfg Train.tla > train.log 2>&1 || status=$?
               if [ $status -ne 13 ] || ! grep -q '^Error: Temporal properties were violated.$' train.log; then
