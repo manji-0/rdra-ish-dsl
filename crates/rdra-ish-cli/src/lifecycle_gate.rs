@@ -11,7 +11,7 @@
 //! change its trait, and with it the gate. `states` is not gated: its report is the
 //! lifecycle, findings included, and it exits 1 on an error after printing it.
 
-use std::cell::OnceCell;
+use std::sync::OnceLock;
 
 use rdra_ish_core::lifecycle::{derive_states_built, Bounds, Caps, Scope};
 use rdra_ish_core::{ResolvedProgram, SemanticModel};
@@ -23,6 +23,9 @@ use crate::state_findings::{
     Finding, READS_NO_LIFECYCLE, TLA_STATE_MODELS,
 };
 
+/// One exploration of the lifecycle: what it found, and the states it reached.
+pub(crate) type Exploration = OnceLock<(Vec<Finding>, Explored)>;
+
 /// The lifecycle at the `check` defaults, explored on first use and at most once, so a
 /// command that gates several outputs runs one search.
 pub(crate) struct Lifecycle<'a> {
@@ -30,7 +33,14 @@ pub(crate) struct Lifecycle<'a> {
     model: &'a SemanticModel,
     /// `memory::generator_caps`: what `check` explores at by default.
     caps: Caps,
-    explored: OnceCell<(Vec<Finding>, Explored)>,
+    explored: Held<'a>,
+}
+
+/// The exploration a [`Lifecycle`] runs for itself, or the one a
+/// [`crate::session::Session`] keeps for every output it draws.
+enum Held<'a> {
+    Own(Exploration),
+    Shared(&'a Exploration),
 }
 
 impl<'a> Lifecycle<'a> {
@@ -39,12 +49,32 @@ impl<'a> Lifecycle<'a> {
             program,
             model,
             caps,
-            explored: OnceCell::new(),
+            explored: Held::Own(OnceLock::new()),
+        }
+    }
+
+    /// A lifecycle whose exploration is `explored`: the first lifecycle sharing it to be
+    /// gated runs it, and the rest read it.
+    pub(crate) fn sharing(
+        program: &'a ResolvedProgram,
+        model: &'a SemanticModel,
+        caps: Caps,
+        explored: &'a Exploration,
+    ) -> Self {
+        Lifecycle {
+            program,
+            model,
+            caps,
+            explored: Held::Shared(explored),
         }
     }
 
     fn explored(&self) -> &(Vec<Finding>, Explored) {
-        self.explored.get_or_init(|| {
+        let once = match &self.explored {
+            Held::Own(once) => once,
+            Held::Shared(once) => once,
+        };
+        once.get_or_init(|| {
             let (report, ts) =
                 derive_states_built(self.model, &Scope::ALL, Bounds::STATES, self.caps);
             let findings = findings_of(self.program, self.model, &report, &ts).findings;

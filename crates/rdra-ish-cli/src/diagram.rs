@@ -17,10 +17,8 @@ use rdra_ish_emit::{
 use std::fs;
 
 use crate::cli::{DiagramArgs, DiagramKind};
-use crate::lifecycle_gate::{Gated, Lifecycle, Output};
-use crate::load::load_clean;
-use crate::memory::generator_caps;
-use rdra_ish_core::lifecycle::Caps;
+use crate::lifecycle_gate::{Gated, Output};
+use crate::session::Session;
 
 /// Mermaid's default `maxTextSize`: a diagram with more characters is not rendered.
 const MERMAID_MAX_TEXT: usize = 50_000;
@@ -35,8 +33,18 @@ struct Shot {
 }
 
 pub fn run_diagram(args: DiagramArgs) -> Result<()> {
+    let session = Session::load(&args.inputs)?;
+    if let Some(text) = draw(&session, args)? {
+        print!("{text}");
+    }
+    Ok(())
+}
+
+/// `diagram` on a loaded model: writes the diagram to `--out`, or every diagram under it
+/// for `--all`, and returns `None`; without `--out`, returns the diagram's text.
+pub(crate) fn draw(session: &Session, args: DiagramArgs) -> Result<Option<String>> {
     let DiagramArgs {
-        inputs,
+        inputs: _,
         kind,
         all,
         buc,
@@ -50,14 +58,8 @@ pub fn run_diagram(args: DiagramArgs) -> Result<()> {
         out,
         format: _,
     } = args;
-    let inputs = inputs.as_slice();
-    let (program, model, manifest) = load_clean(inputs)?;
-    let caps = generator_caps(manifest.as_ref());
-    let model_path = inputs
-        .iter()
-        .map(|input| input.display().to_string())
-        .collect::<Vec<_>>()
-        .join(",");
+    let model = &session.model;
+    let model_path = session.model_path.as_str();
     let dress = Dress { title, legend };
 
     if all {
@@ -70,7 +72,8 @@ pub fn run_diagram(args: DiagramArgs) -> Result<()> {
         let Some(dir) = out else {
             anyhow::bail!("--all writes one file per diagram; pass --out <directory>");
         };
-        return write_all(&program, &model, caps, &model_path, dress, &dir);
+        write_all(session, dress, &dir)?;
+        return Ok(None);
     }
 
     if matches!(kind, DiagramKind::Sequence) {
@@ -165,13 +168,13 @@ pub fn run_diagram(args: DiagramArgs) -> Result<()> {
 
     // What the diagram is about, for its title.
     let about = if !actor.is_empty() {
-        labels(&model, &actor, actor_label)
+        labels(model, &actor, actor_label)
     } else if !entity.is_empty() {
-        labels(&model, &entity, entity_label)
+        labels(model, &entity, entity_label)
     } else if !usecase.is_empty() {
-        labels(&model, &usecase, usecase_label)
+        labels(model, &usecase, usecase_label)
     } else if !buc.is_empty() {
-        labels(&model, &buc, buc_label)
+        labels(model, &buc, buc_label)
     } else {
         String::new()
     };
@@ -187,7 +190,7 @@ pub fn run_diagram(args: DiagramArgs) -> Result<()> {
             entities: Vec::new(),
         }
     } else if !actor.is_empty() {
-        let performed = use_cases_of_actors(&model, &actor);
+        let performed = use_cases_of_actors(model, &actor);
         if performed.is_empty() {
             anyhow::bail!("{} performs no use case", actor.join(", "));
         }
@@ -196,7 +199,7 @@ pub fn run_diagram(args: DiagramArgs) -> Result<()> {
             entities: Vec::new(),
         }
     } else if !entity.is_empty() && by_usecase {
-        let touching = use_cases_touching(&model, &entity);
+        let touching = use_cases_touching(model, &entity);
         if touching.is_empty() {
             anyhow::bail!("no use case reads or writes {}", entity.join(", "));
         }
@@ -212,36 +215,25 @@ pub fn run_diagram(args: DiagramArgs) -> Result<()> {
     };
 
     if matches!(kind, DiagramKind::Event) {
-        for diag in rdra_ish_core::event_diagnostics(&model) {
+        for diag in rdra_ish_core::event_diagnostics(model) {
             eprintln!("warning: {}", diag.error);
         }
     }
-    let lifecycle = Lifecycle::new(&program, &model, caps);
+    let lifecycle = session.lifecycle();
     let gated = diagram_output(&kind).gate(&lifecycle)?;
-    let text = render(
-        &gated,
-        &model,
-        &kind,
-        shot,
-        &model_path,
-        node_kind,
-        edge_kind,
-    )?;
+    let text = render(&gated, model, &kind, shot, model_path, node_kind, edge_kind)?;
     if let Some(finding) = Finding::of(&text) {
         eprintln!("{}", finding.message(&kind));
     }
     let text = dress.apply(text, &kind, &about);
-    match out {
-        Some(out) => {
-            let out_path = out.with_extension("mmd");
-            fs::write(&out_path, &text)
-                .with_context(|| format!("failed to write {}", out_path.display()))?;
-            println!("wrote {}", out_path.display());
-        }
-        None => print!("{text}"),
-    }
-
-    Ok(())
+    let Some(out) = out else {
+        return Ok(Some(text));
+    };
+    let out_path = out.with_extension("mmd");
+    fs::write(&out_path, &text)
+        .with_context(|| format!("failed to write {}", out_path.display()))?;
+    println!("wrote {}", out_path.display());
+    Ok(None)
 }
 
 fn render(
@@ -273,14 +265,9 @@ fn render(
 /// `--all`: the review set, one file per diagram under `dir`. The whole-model kinds that
 /// stay readable at any size, each BUC's use case, robustness, flow, and sequence diagrams,
 /// and each entity's state models. A diagram with nothing to draw is left out.
-fn write_all(
-    program: &rdra_ish_core::ResolvedProgram,
-    model: &SemanticModel,
-    caps: Caps,
-    model_path: &str,
-    dress: Dress,
-    dir: &Path,
-) -> Result<()> {
+fn write_all(session: &Session, dress: Dress, dir: &Path) -> Result<()> {
+    let model = &session.model;
+    let model_path = session.model_path.as_str();
     fs::create_dir_all(dir).with_context(|| format!("failed to create {}", dir.display()))?;
     let mut bucs: Vec<&str> = model.bucs.values().map(|b| b.id.as_str()).collect();
     bucs.sort_unstable();
@@ -313,7 +300,7 @@ fn write_all(
         DiagramKind::Flow,
         DiagramKind::Sequence,
     ];
-    let lifecycle = Lifecycle::new(program, model, caps);
+    let lifecycle = session.lifecycle();
     let mut written = 0;
     let mut empty = 0;
     let mut write = |kind: &DiagramKind, gated: &Gated, name: String, shot: Shot, about: &str| {
