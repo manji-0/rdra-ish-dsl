@@ -395,6 +395,15 @@
     going and queued, no more than fit the share), at most 8, and at least 1. Before, it
     was at least 2 on 4 cores and up to all the cores. Past 4 to 8 workers a run gained no
     time and spent 50 to 70% more CPU.
+- Keys of the quotient cache that explore the same sub-lifecycle share its run of S (#296):
+  keys that differ in what T observes, the inputs or the rises, or only in where their
+  actions came from, partitioned one run each, which `verify` explored again per key. A
+  complete run is held by the sub-lifecycle and the caps that can stop it, charged to the
+  command's pool while the cache holds it, and taken only by a pool that covers its peak;
+  a run that a cap or the memory limit stopped is never shared. The output is unchanged;
+  a `shadow` build holds every shared run to a fresh one, and `RDRA_ISH_QUOTIENT_STATS`
+  counts them (`runs_held`, `run_hits`, `run_bytes`). At `RDRA_JOBS=1`, `verify` retires 8%
+  fewer instructions on `insurance-claim-ops` (312.4 G to 288.6 G).
 - **Verdicts can change:** a deleted row keeps its keys (#212). `deletes(UC, E)` resets the
   row's columns to their base values and no longer resets its keys to the first slot. The
   only reader that sees the difference is a later step that binds the deleted row: a step
