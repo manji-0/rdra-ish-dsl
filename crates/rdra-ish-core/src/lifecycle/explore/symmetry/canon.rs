@@ -2,13 +2,13 @@
 //!
 //! The layout is block by block in `Group::blocks` order (parents first), each class row by
 //! row in slot order, a row being every var of the class's entities, with an owner on a
-//! present row written as its parent's new position. The least layout over `G_s` is found
+//! row that is not absent written as its parent's new position. The least layout over `G_s` is found
 //! block by block. In a block of one class:
 //!
 //! 1. The rows that move are sorted, each read with its parents' new positions, which the
 //!    blocks before it have fixed. With no ties that order is the block's part of the least
 //!    layout.
-//! 2. Tied rows that no present child row names give the same layout in any order: they keep
+//! 2. Tied rows that no child row names give the same layout in any order: they keep
 //!    slot order, and the run does not branch on them.
 //! 3. The canonicalizer branches on the other ties, one branch per placement of the named
 //!    rows, carries each branch to the later blocks, keeps the branches whose layout is
@@ -47,7 +47,7 @@ impl Canonical {
 /// A worker's scratch for canonical forms: every buffer is kept between calls.
 #[derive(Default)]
 pub(crate) struct Canon {
-    /// Per slot of every class: some present child row names it.
+    /// Per slot of every class: some present or deleted child row names it.
     named: Vec<bool>,
     /// Per slot: the row is not absent, so it moves within its class.
     movable: Vec<bool>,
@@ -107,7 +107,7 @@ impl Canon {
             let class = &g.classes[c];
             for r in refs {
                 for slot in 0..r.slots {
-                    if s[r.exists + slot] != Value::PRESENT.0 {
+                    if s[r.exists + slot] == Value::ABSENT.0 {
                         continue;
                     }
                     let v = s[r.off + slot];
@@ -175,7 +175,7 @@ impl Canon {
         let col = &class.cols[col];
         let v = s[col.off + slot];
         match col.owner {
-            Some((pc, optional)) if s[class.exists[col.ent] + slot] == Value::PRESENT.0 => {
+            Some((pc, optional)) if s[class.exists[col.ent] + slot] != Value::ABSENT.0 => {
                 g.relabel(pos, pc, optional, v)
             }
             _ => v,

@@ -253,6 +253,30 @@ removes only the row it names, and the action decides what happens to the childr
 | none, `restrict`, `no_action` | The database rejects the delete while a child names the row (no `.on_delete` is the SQL default, which the export leaves in place). The delete is enabled only when no present child names the row. A child that the same step deletes, unlinks, or relinks does not count. |
 | `cascade`, `set_null`, `set_default` | The lifecycle does not run the action yet. The delete is enabled, and the children stay present and still name the deleted row, where every rule still sees them. The key gets no `DanglingKey_*`. |
 
+**A deleted row keeps its keys.** A `deletes(UC, E)` resets the row's columns to their
+base values and leaves each of its keys naming the row it named. The row no longer counts
+anywhere a rule reads present rows, so only a later step that binds the deleted row reads
+the key: a step of a split use case whose earlier step deleted it (an `Earlier` parameter,
+see [Runs of a split use case](./state-derivation.md#runs)). That step reads the parent
+the row had, not the first slot:
+
+```rdra
+entity Shop "Shop" { id: Int @pk  st: Enum(open, flagged) @default(open) }
+entity Item "Item" { id: Int @pk }
+relate(Item, Shop, N:1)
+usecase Cancel "Cancel an item and flag its shop"
+api ItemApi "Item API"
+api ShopApi "Shop API"
+invokes(Cancel, ItemApi)
+deletes(ItemApi, Item)
+invokes(Cancel, ShopApi)
+updates(ShopApi, Shop)
+transitions(Cancel, Shop.st, open -> flagged)
+```
+
+`Cancel_2` flags the shop the deleted item belonged to. The native checker, z3, and the
+TLA+ export read the key the same way.
+
 Each key with no `.on_delete`, `restrict`, or `no_action` whose parent some use case
 deletes gets the invariant `DanglingKey_<Child>_<role>`: every present child names a
 present parent, or no parent under `.optional()`. The guard keeps the rule. A `cascade`,
