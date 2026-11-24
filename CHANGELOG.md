@@ -329,7 +329,8 @@
   kernel and give it back when it is freed; a stopped cone describes its variables in one
   pass that allocates nothing per state; and a store's buffer of edges is counted at its
   next size before it grows, as its states already were, rather than at the next state.
-  The same run now peaks at 1956MiB, 0.96 times the limit, with the same output. `check
+  The same run now peaks at 1956MiB, 0.96 times the limit, with the same output, and at the
+  default `16GiB`, where it used to pass 19GB, it peaks at 15387MiB, 0.94 times. `check
   --instance-count 2` at `4GiB` on `clinic-ops`, `patent-ops`, `food-permit-ops`,
   `insurance-claim-ops`, and `oidc-auth` peaked at 0.96 to 1.16 times the limit and now at
   0.80 to 0.96 (one run each, macOS).

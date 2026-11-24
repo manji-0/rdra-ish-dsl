@@ -592,8 +592,8 @@ What the limit counts:
   allocator. Measured once each on macOS, where the peak resident set size and the peak
   footprint agree within 1%: `check --instance-count 2` on `clinic-ops`, `patent-ops`,
   `food-permit-ops`, `insurance-claim-ops`, and `oidc-auth` peaked at 0.80 to 0.96 times
-  the default `4GiB`, and `verify --instance-count 2 --memory 2GiB` on `oidc-auth` at 0.96
-  times the limit. Not measured on Linux.
+  the default `4GiB`, and `verify --instance-count 2` on `oidc-auth` at 0.96 times
+  `--memory 2GiB` and 0.94 times the default `16GiB`. Not measured on Linux.
   The default limits stop no cone of the samples at the bounds their `// expect` headers
   name. `RDRA_ISH_MEMORY_STATS=1` prints a `memory:` line on stderr at each phase, with the
   bytes the stores hold then (`held=`) and have held at most (`peak=`).
