@@ -8,6 +8,10 @@ mod bfs;
 mod graph;
 mod liveness;
 mod moves;
+#[cfg(feature = "perf")]
+mod perf;
+#[cfg(feature = "perf")]
+pub use perf::evals_line as perf_evals_line;
 mod plan;
 mod properties;
 mod reach;
@@ -68,7 +72,8 @@ impl Checks {
 /// Where exploration stops.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Caps {
-    /// Distinct view patterns per entity (`--max-patterns`).
+    /// Distinct view patterns per entity (`--max-patterns`), in a run that gathers them
+    /// (`views`).
     pub patterns: usize,
     /// Joint states per run (`--max-states`).
     pub states: usize,
@@ -83,6 +88,10 @@ pub struct Caps {
     /// every check the run evaluates, so a run that sets it evaluates `Checks::All`, as its
     /// callers do: with fewer, it would stop at another state.
     pub stop_when_all_violated: bool,
+    /// Gather each entity's view patterns from the edges (`EntityView`), which only
+    /// `entity_view` reads: `check`, `states` and the emitters, on an entity's cone. A run
+    /// that gathers none has no pattern to count, so `patterns` does not stop it (#251).
+    pub views: bool,
 }
 
 impl Caps {
@@ -110,6 +119,16 @@ impl Caps {
             memory: None,
             deadline: None,
             stop_when_all_violated: false,
+            views: true,
+        }
+    }
+
+    /// These caps, for a run whose caller reads no entity view: it gathers no pattern, so the
+    /// pattern cap does not stop it.
+    pub const fn without_views(self) -> Self {
+        Caps {
+            views: false,
+            ..self
         }
     }
 
@@ -153,7 +172,10 @@ pub struct ComponentRun {
     pub diags: Vec<Diag>,
     /// The checks the run evaluated: `diags` holds no violation of any other.
     checks: Checks,
+    /// Per entity, the patterns the edges showed; empty patterns when the run gathered none
+    /// (`Caps::views`, `gathered_views`).
     pub(crate) views: Vec<EntityView>,
+    gathered_views: bool,
     /// Parallel to `states`: the index in `edges` of the edge that first reached the state;
     /// `None` for an initial state.
     parents: Vec<Option<u32>>,
@@ -191,6 +213,12 @@ impl ComponentRun {
     /// The invariants and after-asserts the run evaluated; `diags` says nothing of the rest.
     pub fn checks(&self) -> &Checks {
         &self.checks
+    }
+
+    /// Whether the run gathered the entities' view patterns (`Caps::views`): a reader of
+    /// `views` reads only a run that did.
+    pub fn gathered_views(&self) -> bool {
+        self.gathered_views
     }
 
     /// How the run ended.
@@ -417,6 +445,8 @@ impl TransitionSystem {
             !caps.stop_when_all_violated || checks == Checks::All,
             "a run that stops once every check fails evaluates every check"
         );
+        #[cfg(feature = "perf")]
+        let clock = perf::Clock::start();
         let mut bfs = Bfs::new(&self, caps, &checks);
         bfs.go(threads);
         let kept = bfs.kept();
@@ -447,6 +477,7 @@ impl TransitionSystem {
             diags,
             checks,
             views,
+            gathered_views: caps.views,
             parents,
             edges,
             bindings: bindings.list,
@@ -474,6 +505,8 @@ impl TransitionSystem {
                 *t = trace;
             }
         }
+        #[cfg(feature = "perf")]
+        perf::line(&run, clock, caps.stop_when_all_violated);
         run
     }
 }

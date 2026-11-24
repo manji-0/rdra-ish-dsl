@@ -1,6 +1,7 @@
 use super::bfs::{crowded, BfsCone};
 use super::jobs::{Job, JobKind, PropertyJob};
 use super::report::run_line;
+use super::shared::Shared;
 use super::tlc::{undecided_hint, Decision, Stop};
 use super::WholeRun;
 use crate::property_cone::{AfterPlain, ConeRun, Verdict};
@@ -98,16 +99,71 @@ fn explore(system: &TransitionSystem, caps: Caps, crowded_run: &mut bool) -> Com
     run
 }
 
+/// What the `Plain` run of a property's reduced cone says: read off a run of
+/// `p.cone.reduced`, the property's own or another pass's run of the same system (#209).
+pub(super) struct Plain {
+    vacuous: Option<Diag>,
+    states: u64,
+    answer: Answer,
+    /// The run with `WF_vars(Next)` on the reduced graph, when the plain one asks for it.
+    reduced_wf: Option<ReducedVerdict>,
+    crowded: bool,
+}
+
+impl Plain {
+    /// What `run`, a complete or stopped run of `p.cone.reduced` under the verify caps,
+    /// says of `p`.
+    pub(super) fn of(ts: &TransitionSystem, p: &PropertyJob, run: &ComponentRun) -> Plain {
+        let cone = &p.cone;
+        rdra_ish_core::shadow_assert!(
+            run.system == cone.reduced,
+            "a property's plain answer is read off a run of its reduced cone"
+        );
+        let answer = Answer::of(run, cone.reduced_index, Fairness::Plain);
+        // A liveness counterexample on the reduced cone asks for the run with `WF_vars(Next)`.
+        // It runs first on the reduced graph, with every class that can loop taken as a place
+        // to stop: its `ok` is the unreduced cone's, and a counterexample that lifts and
+        // certifies on the unreduced cone is real. Anything else falls back to the unreduced
+        // cone (`native_property_after`).
+        let reduced_wf = match (&answer, &p.wf) {
+            (Answer::Verdict(Outcome::Counterexample, _), Some(_))
+                if cone.is_reduced()
+                    && cone.after_plain(Outcome::Counterexample) == AfterPlain::NeedsWfNext
+                    && std::env::var_os("RDRA_ISH_NO_WF_REDUCED").is_none() =>
+            {
+                Some(run.decide_liveness_reduced(cone.reduced_index, &cone.system, cone.index))
+            }
+            _ => None,
+        };
+        if let Some(verdict) = &reduced_wf {
+            wf_reduced_stats(ts, p, &cone.reduced, verdict);
+        }
+        Plain {
+            vacuous: ts.property_vacuity(p.index, run),
+            states: run.states.len() as u64,
+            answer,
+            reduced_wf,
+            crowded: crowded(run),
+        }
+    }
+}
+
 /// `p` on its cone by the runs `property_cone` defines, each on a graph BFS explores: `Plain`
 /// on the reduced cone, then, when `after_plain` asks for `WfNext`, `WfNext` on the same
 /// reduced graph with the classes that can loop marked. When that does not decide, `Full` on
 /// the unreduced cone after the counterexample, and `WfNext` on the same unreduced graph.
 /// Also returns the vacuity the plain run shows.
 fn native_property(ts: &TransitionSystem, p: &PropertyJob, caps: Caps) -> (Native, Option<Diag>) {
+    let plain = Plain::of(ts, p, &p.cone.reduced.clone().run(caps));
+    native_property_after(p, caps, plain)
+}
+
+/// `native_property` from what its `Plain` run said, once that run is dropped.
+fn native_property_after(p: &PropertyJob, caps: Caps, plain: Plain) -> (Native, Option<Diag>) {
     let cone = &p.cone;
     let mut out = Native {
         decision: Decision::Decided(Outcome::Ok),
-        states: None,
+        states: Some(plain.states),
         notes: Vec::new(),
         runs: Vec::new(),
         found: None,
@@ -115,31 +171,11 @@ fn native_property(ts: &TransitionSystem, p: &PropertyJob, caps: Caps) -> (Nativ
         cone_capped: false,
         crowded: false,
     };
-    let mut crowded_run = false;
-    let plain_run = explore(&cone.reduced, caps, &mut crowded_run);
-    let vacuous = ts.property_vacuity(p.index, &plain_run);
-    out.states = Some(plain_run.states.len() as u64);
-    let mut last = Answer::of(&plain_run, cone.reduced_index, Fairness::Plain);
+    let mut crowded_run = plain.crowded;
+    let vacuous = plain.vacuous;
+    let mut last = plain.answer;
     out.runs.push((ConeRun::Plain, last.outcome()));
-    // A liveness counterexample on the reduced cone asks for the run with `WF_vars(Next)`.
-    // It runs first on the reduced graph, with every class that can loop taken as a place
-    // to stop: its `ok` is the unreduced cone's, and a counterexample that lifts and
-    // certifies on the unreduced cone is real. Anything else falls back to the unreduced
-    // cone below.
-    let reduced_wf = match (&last, &p.wf) {
-        (Answer::Verdict(Outcome::Counterexample, _), Some(_))
-            if cone.is_reduced()
-                && cone.after_plain(Outcome::Counterexample) == AfterPlain::NeedsWfNext
-                && std::env::var_os("RDRA_ISH_NO_WF_REDUCED").is_none() =>
-        {
-            Some(plain_run.decide_liveness_reduced(cone.reduced_index, &cone.system, cone.index))
-        }
-        _ => None,
-    };
-    if let Some(verdict) = &reduced_wf {
-        wf_reduced_stats(ts, p, &cone.reduced, verdict);
-    }
-    drop(plain_run);
+    let reduced_wf = plain.reduced_wf;
     let reduced_wf = match reduced_wf {
         Some(ReducedVerdict::Holds) => Some((Outcome::Ok, None)),
         Some(ReducedVerdict::Violated(d)) => Some((Outcome::Counterexample, Some(d))),
@@ -269,7 +305,7 @@ impl Native {
 
     /// A cone run stopped at the state cap or the memory limit before it decided.
     pub(super) fn capped(mut self) -> Native {
-        let why = "stopped at the state or pattern cap (--max-states, --max-patterns) or the memory limit".to_string();
+        let why = "stopped at the state cap (--max-states) or the memory limit".to_string();
         self.notes.push(why.clone());
         self.decision = Decision::Undecided { why, stop: None };
         self.cone_capped = true;
@@ -289,28 +325,33 @@ impl Native {
 }
 
 /// `native_property` for every property job, side by side, `None` for a safety cone. A
-/// property whose runs met the memory limit beside others is decided again alone. Also
-/// returns the vacuous properties.
+/// property whose plain answer `shared` holds, read off an earlier pass's run of its reduced
+/// cone (#209), goes on from there. A property whose runs met the memory limit beside others
+/// is decided again alone. Also returns the vacuous properties.
 pub(super) fn native_properties(
     ts: &TransitionSystem,
     jobs: &[Job],
     caps: Caps,
+    shared: &mut Shared,
 ) -> (Vec<Option<Native>>, Vec<Diag>) {
-    let at: Vec<usize> = (0..jobs.len())
+    let at: Vec<(usize, Option<Plain>)> = (0..jobs.len())
         .filter(|&k| matches!(jobs[k].kind, JobKind::PropertyCone(_)))
+        .map(|k| (k, shared.plain[k].take()))
         .collect();
-    let decide = |k: usize| match &jobs[k].kind {
-        JobKind::PropertyCone(p) => native_property(ts, p, caps),
-        JobKind::Cone(_) | JobKind::Explored(_) | JobKind::Whole(_) => {
+    let decide = |(k, plain): (usize, Option<Plain>)| match (&jobs[k].kind, plain) {
+        (JobKind::PropertyCone(p), Some(plain)) => native_property_after(p, caps, plain),
+        (JobKind::PropertyCone(p), None) => native_property(ts, p, caps),
+        (JobKind::Cone(_) | JobKind::Explored(_) | JobKind::Whole(_), _) => {
             unreachable!("a property's job")
         }
     };
-    let ran = in_parallel(at.clone(), rdra_ish_core::jobs(), decide);
+    let ks: Vec<usize> = at.iter().map(|(k, _)| *k).collect();
+    let ran = in_parallel(at, rdra_ish_core::jobs(), decide);
     let mut out: Vec<Option<Native>> = jobs.iter().map(|_| None).collect();
     let mut vacuous = Vec::new();
-    for (k, (native, vacuity)) in at.into_iter().zip(ran) {
+    for (k, (native, vacuity)) in ks.into_iter().zip(ran) {
         let (native, vacuity) = match native.crowded {
-            true => decide(k),
+            true => decide((k, None)),
             false => (native, vacuity),
         };
         vacuous.extend(vacuity);

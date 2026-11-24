@@ -16,6 +16,7 @@ pub mod memory;
 pub mod model;
 mod parallel;
 pub use parallel::{in_parallel, jobs};
+pub mod perf;
 pub mod predicate;
 pub mod project;
 pub mod publication;

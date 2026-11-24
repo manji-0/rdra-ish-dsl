@@ -13,6 +13,7 @@
 //! | `quotient_blocks` (`reduce/partition.rs`, #252) | `reduce/partition/reference.rs`: the sweeps, on quotients of up to `SHADOW_CAP` states |
 //! | a `QuotientCache` hit (`reduce/cache.rs`, #252), a declined entry's included (#289) | `Classes::of` itself, through a cache that holds nothing |
 //! | the reduced step's class moves (`moves_of_into`, #252) | `reduce/reference.rs`: `moves_from` |
+//! | a fold's input bit without allocations (`Fold::holds`, `reduce/fold.rs`, #296) | `reduce/fold/reference.rs`: the bit with its `Vec`s |
 //!
 //! A `shadow` build also runs the checks `shadow_assert!` makes, as a debug build does: each
 //! reader of a run's check results reads only checks the run evaluated (#251), and a steady
@@ -35,9 +36,10 @@ pub(crate) enum Twin {
     Partition,
     CacheHit,
     ClassMoves,
+    FoldHolds,
 }
 
-const TWINS: [(Twin, &str); 7] = [
+const TWINS: [(Twin, &str); 8] = [
     (Twin::EachEnabled, "each_enabled"),
     (Twin::Seen, "seen"),
     (Twin::Source, "source"),
@@ -45,6 +47,7 @@ const TWINS: [(Twin, &str); 7] = [
     (Twin::Partition, "quotient_blocks"),
     (Twin::CacheHit, "cache_hit"),
     (Twin::ClassMoves, "class_moves"),
+    (Twin::FoldHolds, "fold_holds"),
 ];
 
 static COMPARED: [AtomicU64; TWINS.len()] = [const { AtomicU64::new(0) }; TWINS.len()];

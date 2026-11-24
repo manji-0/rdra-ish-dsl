@@ -44,7 +44,7 @@ rdra-ish export samples/order.rdra --kind tla -o /tmp/rdra-tla   # the whole-mod
   when given; TLC's whole-model run under `--with-tlc` stops at the same budget or past
   2,097,152 states (or `--max-states`).
 - A finding `verify` leaves undecided is open, not passed. A state, deadlock, or use case
-  whose BFS cone stopped at the memory limit or a `--max-states` / `--max-patterns` cap, and
+  whose BFS cone stopped at the memory limit or a `--max-states` cap, and
   a temporal property whose whole-model run stopped at `--temporal-budget`, are listed under
   `not checked:`; a check or property its cone left open reads `not decided (...)` on its
   cone line. The run prints `result: not decided` and a `warning:` that counts them, and
@@ -69,8 +69,8 @@ rdra-ish export samples/order.rdra --kind tla -o /tmp/rdra-tla   # the whole-mod
 - A finding listed as `not decided: the <E> cone stopped at the memory limit (...)` means
   the cone's states outgrew BFS's share of that limit (all of it, half under `--with-tlc`).
   Raise `--memory`, or narrow the run (`--entity`, `--buc`). `verify` has no state cap
-  unless `--max-states <N>` sets one; `--max-patterns <N>` raises the 256 patterns per
-  entity. `check` reports the same stop as the error `MemoryCapReached_<E>` (default limit
+  unless `--max-states <N>` sets one; `--max-patterns` caps only `check` and `states`,
+  which build entity views. `check` reports the same stop as the error `MemoryCapReached_<E>` (default limit
   `4GiB`, `memory` under `[check]`), which says how many bytes each held state took,
   estimates the states the cone reaches when its BFS layers allow it, and names the
   `--memory` to raise it to.
@@ -113,7 +113,7 @@ bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 
 cones: 1 for 1 invariant(s) and 0 after-assert(s)
 temporal properties: none
 state models (BFS on 2 entity cones): 2 state models, 5 states witnessed, 0 deadlocks, 0 use cases that never run
-Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: counterexample (7 states)
+Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: counterexample (31 states)
 error[MultiForbidden_Order_0]: invariant MultiForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order[1](status=cancelled); Payment[1](status=captured)
   rule: samples/cross_order_payment_split.rdra:44:1
   counterexample (3 steps):

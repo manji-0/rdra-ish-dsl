@@ -1,0 +1,16 @@
+# The roots on which formal-verify's `verify-samples.sh --with-tlc --tlc-roots` step runs TLC
+# beside the native checker. The step also runs TLC on every header line that carries flags,
+# on any root, so a new flagged line runs with TLC without an entry here (#305).
+#
+# engine_equivalence compares every other root's cones with TLC's state graph at
+# `Bounds::STATES` and `Bounds::VERIFY`, and `a_property_cone_decides_what_the_whole_model_decides`
+# runs their temporal properties under TLC. Each root below has a cone in that test's
+# `VERIFY_FALLBACK`, compared at STATES only, so only this step runs TLC on it at its header
+# bounds; the domain roots' temporal properties are in no other TLC run either.
+# `every_fallback_root_runs_tlc_in_formal_verify` fails when a root gains a fallback cone and
+# is missing here.
+samples/clinic-ops
+samples/patent-ops
+samples/food-permit-ops
+samples/insurance-claim-ops
+samples/oidc-auth
