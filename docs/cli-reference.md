@@ -576,7 +576,9 @@ auth = { path = "../auth-model" }
 
 `[model] name` is required. The `[dependencies]` table is parsed and not used yet. The
 `[check]` and `[verify]` tables set the [memory limit](#memory-limit) and the
-[per-entity instance counts](#per-entity-instance-counts) of those commands:
+[per-entity instance counts](#per-entity-instance-counts) of those commands, and
+`[verify]` sets [instance symmetry](#instance-symmetry) (`symmetry`, read by `verify` only;
+under `[check]` it warns and is not read):
 
 ```toml
 [check]           # check, states, and (memory only) the generators
@@ -585,6 +587,7 @@ memory = "4GiB"
 [verify]          # verify and export --kind tla
 memory = "16GiB"
 instances = { Loan = 4 }
+symmetry = "retry"
 ```
 
 A malformed manifest, one without `[model] name`, an unknown key in `[check]` or `[verify]`,
@@ -649,6 +652,46 @@ ends `(Loan has 2 slots; --instances Loan=4 gives it 4)`. `.at_least(3, Loan)` a
 `.exactly(3, Loan)` with fewer slots fail wherever they apply, and the
 `CountAboveBound` warning names the same flag (see
 [Counted quantifiers](./language-reference.md#counted-quantifiers)).
+
+### Instance symmetry
+<!-- constrained-by ./design/instance-symmetry.md -->
+
+The slots of an entity are interchangeable unless the model tells them apart: two states that
+differ only in which slot holds which row reach the same verdicts. `verify --symmetry always`
+stores one state per class of such states, an orbit, so a cone that outgrows the memory limit
+slot by slot can finish. Phase 1 of [instance symmetry](./design/instance-symmetry.md) covers
+the cones `verify` leaves unreduced (no shared sub-lifecycle is quotiented): the safety cones
+(`Cone_<check>`) and the cones of `always` properties. Every other cone runs as before.
+
+```sh
+rdra-ish verify samples/clinic-ops --instance-count 3 --memory 8GiB --symmetry always
+```
+
+```text
+Cone_Inv_Encounter_2 [Inv_Encounter_2]: ok (1696486 orbits, about 140M states)
+```
+
+- **The line.** `(<n> orbits, about <m> states)`: the orbits stored, and the states they
+  stand for, the sum of each orbit's size, rounded to two figures. A cone whose groups a
+  rule breaks names the entity under the line: `note: instance symmetry leaves Shop out: a
+  step reads the key of a row an earlier step may have deleted`. That entity's slots stay
+  fixed and the other entities still permute.
+- **Counterexamples** name concrete slots: the stored path is lifted back through every
+  permutation the run applied, and the lifted trace is replayed through the step relation,
+  with the rows each step names, before it prints. A trace that does not replay is a tool bug
+  and stops the run.
+- **`retry`** runs a cone as `never` does and runs it again up to symmetry only when it
+  stopped at the memory limit; the line then adds `retried up to instance symmetry after the
+  memory limit at <n> states`.
+- **Branch cap.** The canonical form branches on rows it cannot tell apart that other rows
+  name. Past 4096 branches a state is stored without its canonical form, which keeps the
+  verdict and can store one orbit more than once; the line then adds `note: <n> states
+  stored without their canonical form (branch cap); the orbit count is an upper bound`.
+- **What breaks the symmetry.** A comparison that orders row ids, a row id compared with a
+  literal, a key set to a literal row or chosen among some rows, a start that pins a slot, a
+  creation that leaves a key at its first row, a row id compared with another value, too
+  many arrangements of rows that name each other, and a key read on a row that may have been
+  deleted. Each leaves the entity's class out, and the note says which.
 
 ### Memory limit
 <!-- constrained-by #project-manifest -->
@@ -1485,7 +1528,7 @@ with the native checker. No JVM starts. `--with-tlc` runs TLC beside it as a sec
 opinion. See [formal-verification.md](./formal-verification.md).
 
 ```
-rdra-ish verify <INPUTS...> [--with-tlc] [-o <OUT>] [--instance-count <N>] [--instances <ENTITY=N>]... [--int-range-max <N>] [--max-patterns <N>] [--max-states <N>] [--temporal-budget <SECS>] [--deny-undecided] [--prove [--deny-unproved] [--z3 <PATH>]] [--tlc-jar <PATH>] [--memory <SIZE>] [--buc <ID>]... [--entity <ID>]... [--without-usecase <ID>]... [--without-buc <ID>]... [--actor <ID>]...
+rdra-ish verify <INPUTS...> [--with-tlc] [-o <OUT>] [--instance-count <N>] [--instances <ENTITY=N>]... [--int-range-max <N>] [--max-patterns <N>] [--max-states <N>] [--temporal-budget <SECS>] [--deny-undecided] [--prove [--deny-unproved] [--z3 <PATH>]] [--tlc-jar <PATH>] [--memory <SIZE>] [--symmetry <MODE>] [--buc <ID>]... [--entity <ID>]... [--without-usecase <ID>]... [--without-buc <ID>]... [--actor <ID>]...
 ```
 
 | Option | Type | Default | Description |
@@ -1502,6 +1545,7 @@ rdra-ish verify <INPUTS...> [--with-tlc] [-o <OUT>] [--instance-count <N>] [--in
 | `--temporal-budget` | unsigned integer | `300` | Seconds a temporal property's whole-model run gets when its cone does not decide it. Past them, or past `--max-states` states or `--memory`, the run stops and, unless it had already found a counterexample, the property is `not decided`, which warns and does not fail the run. Under `--with-tlc` TLC's whole-model run gets the same budget, and its state count is read from its progress lines (about one a minute). |
 | `--tlc-jar` | path | `RDRA_TLC_JAR`, else none | With `--with-tlc`: run TLC as `java -cp <PATH> tlc2.TLC` from `tla2tools.jar` instead of a `tlc` / `tlc2` launcher on `PATH`. Needs `java` on `PATH`. Without `--with-tlc` it prints a warning and starts no TLC. |
 | `--memory` | size | `memory` under `[verify]` in `rdra.toml`, else `16GiB` | What the run may hold in memory, such as `16GiB` or `512MiB` (`G` and `GB` also mean GiB). BFS takes all of it; under `--with-tlc` BFS takes half and the TLC cone runs going at once the other half, at least `64MiB`. A BFS cone past its share stops and leaves its findings undecided. See [Memory limit](#memory-limit). |
+| `--symmetry` | `never`, `retry`, `always` | `symmetry` under `[verify]` in `rdra.toml`, else `never` | Experimental. Explore an unreduced safety cone, and the cone of an `always` property, up to instance symmetry: one stored state per class of states that differ only in which slots hold which rows. `always` does it on every such cone; `retry` runs each cone as before and runs again up to symmetry only a cone that stopped at the memory limit; `never` changes nothing. A cone run up to symmetry prints `(<n> orbits, about <m> states)`. See [Instance symmetry](#instance-symmetry). |
 | `--deny-undecided` | flag | off | Fail the run (exit 1) when it leaves a finding undecided: a temporal property past `--temporal-budget`, or a check, state, deadlock, or use case a BFS cone left at its state cap or the memory limit. Findings a `--buc` or `--entity` scope leaves open do not count. Without it, `verify` prints `warning: <what> undecided; the OK line holds only for what was decided (--deny-undecided fails the run)` on stderr and passes. |
 | `--prove` | flag | off | Experimental. Beside the cones, try to prove each selected state rule (`forbidden`, `invariant`, `required`, `@check`, quantifier rules, `Unique_*`, `MinCard_*`) for any number of rows and any non-negative Int value (`now` has no top) with z3, and print one `proved:`, `unproved:`, or `out of scope:` line per rule. The `OK:` line gains `; <n> of <m> rules proved for any number of rows and any Int value`. A rule the SQL export's schema does not enforce is marked `[not enforced by the SQL schema: <why>]`, and a `proof: the SQL schema leaves ...` line counts those rules. An invariant cone BFS stopped at the memory limit is `ok` when z3 proves every rule in it (see [Memory limit](#memory-limit)). Each z3 check has a fixed budget of z3 resource units, not of time, so the verdicts do not depend on the machine or its load. Needs z3 (see [Getting z3](#getting-z3)). See [Proofs for any number of rows](./formal-verification.md#proofs-for-any-number-of-rows). |
 | `--deny-unproved` | flag | off | With `--prove`: fail the run (exit 1) when a rule is unproved. A rule out of scope does not count. |

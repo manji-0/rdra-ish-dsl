@@ -227,10 +227,10 @@ jobs:
         run: cargo test --release -p rdra-ish-cli --features shadow --test engine_corpus --no-run
       - name: Every twin compares calls
         # How many calls each twin compared and skipped on one sample. patent-ops reaches all
-        # of them; the step fails when the line is missing (a build without the feature) or a
-        # twin compared none.
+        # of them, the instance-symmetry twins (#212) under `--symmetry always`; the step fails
+        # when the line is missing (a build without the feature) or a twin compared none.
         run: |
-          RDRA_ISH_SHADOW_STATS=1 target/release/rdra-ish verify samples/patent-ops 2> shadow-stats.txt
+          RDRA_ISH_SHADOW_STATS=1 target/release/rdra-ish verify samples/patent-ops --symmetry always 2> shadow-stats.txt
           cat shadow-stats.txt
           grep -q '^shadow: compared/skipped ' shadow-stats.txt
           ! grep -qE '^shadow: compared/skipped .*=0/' shadow-stats.txt

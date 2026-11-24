@@ -2,20 +2,28 @@
 # Run `check` and `verify` on every sample root in samples.txt and compare each run with the
 # `// expect` headers in the root's first .rdra file in load order (`rdra-ish files`).
 # The header grammar is in docs/formal-verification.md ("Sample expectations").
-# Usage: scripts/verify-samples.sh [--with-tlc] <rdra-ish binary>
+# Usage: scripts/verify-samples.sh [--with-tlc] [--symmetry MODE] <rdra-ish binary>
 #
 # Without --with-tlc every run has no `tlc` or `tlc2` on PATH and no RDRA_TLC_JAR, so a
 # passing run proves that `verify` needs no JVM. With --with-tlc every `verify` run also
 # runs TLC beside the native checker: it must match the same header, print `tlc_result:`, and
 # report no engine disagreement, which would add an error name the header does not list.
+# --symmetry MODE passes `--symmetry MODE` to every `verify` run, which must still match the
+# same header (#212: a run up to instance symmetry gives the verdicts of a plain run).
 set -uo pipefail
 
 with_tlc=false
-if [[ "${1:-}" == --with-tlc ]]; then
-  with_tlc=true
-  shift
-fi
-bin="${1:?usage: scripts/verify-samples.sh [--with-tlc] <rdra-ish binary>}"
+symmetry=()
+while [[ "${1:-}" == --with-tlc || "${1:-}" == --symmetry ]]; do
+  if [[ "$1" == --with-tlc ]]; then
+    with_tlc=true
+    shift
+  else
+    symmetry=(--symmetry "${2:?--symmetry needs never, retry, or always}")
+    shift 2
+  fi
+done
+bin="${1:?usage: scripts/verify-samples.sh [--with-tlc] [--symmetry MODE] <rdra-ish binary>}"
 [[ "$bin" == /* ]] || bin="$PWD/$bin"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root" || exit 2
@@ -166,6 +174,7 @@ while IFS= read -r root; do
     if $with_tlc && [[ "$cmd" == verify && " $flags " != *" --with-tlc "* ]]; then
       extra=(--with-tlc)
     fi
+    [[ "$cmd" == verify ]] && extra+=(${symmetry[@]+"${symmetry[@]}"})
     # shellcheck disable=SC2086 # header flags are CLI words
     if [[ "$cmd" == check ]]; then
       measure env -u RDRA_TLC_JAR PATH="$run_path" "$bin" check "$root" $flags
@@ -179,7 +188,7 @@ while IFS= read -r root; do
     if [[ "$want_tlc" == none ]]; then
       want_tlc="$got_tlc"
       # A run that states its result under --with-tlc states TLC's beside it.
-      if [[ ${#extra[@]} -gt 0 && "$got_tlc" == none ]] && grep -q '^result: ' "$work/out"; then
+      if [[ " ${extra[*]-} " == *" --with-tlc "* && "$got_tlc" == none ]] && grep -q '^result: ' "$work/out"; then
         want_tlc=printed
       fi
     fi

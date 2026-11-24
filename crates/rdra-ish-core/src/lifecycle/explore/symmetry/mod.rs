@@ -538,3 +538,131 @@ impl Group {
 pub(crate) fn factorial(n: usize) -> u128 {
     (2..=n as u128).fold(1u128, u128::saturating_mul)
 }
+
+#[cfg(kani)]
+mod proofs {
+    use super::canon::Canon;
+    use super::*;
+
+    /// Shop: 3 slots, existence at 0..3 and a two-valued column at 3..6. Order: 2 slots,
+    /// existence at 6..8 and a mandatory key to Shop at 8..10. `now` at 10.
+    fn group() -> Group {
+        let col = |off, owner| Col { off, ent: 0, owner };
+        Group {
+            classes: vec![
+                Class {
+                    slots: 3,
+                    entities: vec![EntId::at(0)],
+                    exists: vec![0],
+                    cols: vec![col(0, None), col(3, None)],
+                    moves: true,
+                    first: 0,
+                },
+                Class {
+                    slots: 2,
+                    entities: vec![EntId::at(1)],
+                    exists: vec![6],
+                    cols: vec![col(6, None), col(8, Some((0, false)))],
+                    moves: true,
+                    first: 3,
+                },
+            ],
+            blocks: vec![
+                Block {
+                    classes: vec![0],
+                    joint: false,
+                    later: vec![0],
+                },
+                Block {
+                    classes: vec![1],
+                    joint: false,
+                    later: vec![],
+                },
+            ],
+            children: vec![
+                vec![ChildRef {
+                    off: 8,
+                    exists: 6,
+                    slots: 2,
+                    optional: false,
+                }],
+                vec![],
+            ],
+            class_of: vec![0, 1],
+            free: vec![10],
+            slots: 5,
+            left_out: vec![],
+        }
+    }
+
+    const THREE: [[u8; 3]; 6] = [
+        [0, 1, 2],
+        [0, 2, 1],
+        [1, 0, 2],
+        [1, 2, 0],
+        [2, 0, 1],
+        [2, 1, 0],
+    ];
+
+    /// Any element of the group of every class's slots.
+    fn any_perm() -> Vec<u8> {
+        let (a, b): (u8, bool) = (kani::any(), kani::any());
+        kani::assume(a < 6);
+        let mut p = THREE[usize::from(a)].to_vec();
+        p.extend(if b { [1, 0] } else { [0, 1] });
+        p
+    }
+
+    /// Any state of the layout: absent, present or deleted rows, any column value, keys
+    /// that name a slot of Shop.
+    fn any_state() -> [u8; 11] {
+        let s: [u8; 11] = kani::any();
+        for i in 0..11 {
+            let top = match i {
+                0..=2 | 6..=7 => 2,
+                8..=9 => 2,
+                _ => 1,
+            };
+            kani::assume(s[i] <= top);
+        }
+        s
+    }
+
+    /// `apply` is an action: applying `g` after `h` is applying their composition.
+    #[kani::proof]
+    #[kani::unwind(12)]
+    fn apply_of_a_composition_is_the_composition_of_applies() {
+        let g = group();
+        let (a, b) = (any_perm(), any_perm());
+        let s = any_state();
+        let (mut once, mut mid, mut twice) = ([0u8; 11], [0u8; 11], [0u8; 11]);
+        g.apply(&g.compose(&a, &b), &s, &mut once);
+        g.apply(&b, &s, &mut mid);
+        g.apply(&a, &mid, &mut twice);
+        assert_eq!(once, twice);
+    }
+
+    /// The canonical form is a function of the orbit: `canonical(g(s)) = canonical(s)` for
+    /// every `g` of `G_s`, which fixes the absent slots, and the orbit sizes agree.
+    #[kani::proof]
+    #[kani::unwind(12)]
+    fn the_canonical_form_is_constant_on_an_orbit() {
+        let g = group();
+        let p = any_perm();
+        let s = any_state();
+        for (slot, exists) in [(0, 0), (1, 1), (2, 2), (3, 6), (4, 7)] {
+            if s[exists] == Value::ABSENT.0 {
+                let first = if slot < 3 { 0 } else { 3 };
+                kani::assume(usize::from(p[slot]) + first == slot);
+            }
+        }
+        let mut moved = [0u8; 11];
+        g.apply(&p, &s, &mut moved);
+        let mut canon = Canon::default();
+        let (mut a, mut b) = ([0u8; 11], [0u8; 11]);
+        let x = canon.canonical(&g, &s, &mut a);
+        let y = canon.canonical(&g, &moved, &mut b);
+        assert_eq!(a, b);
+        assert_eq!(x.orbit, y.orbit);
+    }
+}
