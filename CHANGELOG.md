@@ -343,6 +343,11 @@
 
 ### Changed
 
+- A reduced cone computes the input bits it reads from T without allocating (#296):
+  `Fold::holds` allocated its params, the free T params and their radix on every call. The
+  output is unchanged; a `shadow` build holds every call to the old function. At
+  `RDRA_JOBS=1`, `verify` retires 21% fewer instructions on `insurance-claim-ops` (458.8 G
+  to 364.5 G); samples without folds are unchanged.
 - `diagram`, `list`, `csv`, and `export` explore the lifecycle only for an output that
   reads it: the state diagram and the TLA+ export (#285). Every other kind draws declared
   facts and the data layer, and explored the whole lifecycle only to print the stderr note
