@@ -19,6 +19,7 @@ use crate::parallel::Helpers;
 
 use super::edges::{StepEnds, Steps};
 use super::store::binding_bytes;
+use super::symmetry::{Canon, Canonical, Group};
 use super::{Bfs, Bindings, Caps, Checks, EntityView, Moves, Reach, States, Threads, Violated};
 
 #[cfg(feature = "shadow")]
@@ -34,17 +35,27 @@ const AHEAD: usize = 4;
 /// The moves from a run of states, in state order, and where each state's moves end.
 type Expanded = (Moves, Vec<usize>);
 
-fn expand(ts: &TransitionSystem, states: &States, range: Range<usize>) -> Expanded {
+/// The moves from a run of states, and under symmetry (`sym`) each successor's canonical
+/// form beside it: a worker canonicalizes, so the reader only looks the forms up.
+fn expand(
+    ts: &TransitionSystem,
+    states: &States,
+    range: Range<usize>,
+    mut sym: Option<(&Group, &mut Canon)>,
+) -> Expanded {
     let mut moves = Moves::default();
     let Some(mut scratch) = states.get(range.start).map(ToOwned::to_owned) else {
         return (moves, Vec::new());
     };
-    let ends = range
-        .map(|i| {
-            ts.moves_into(&states[i], &mut scratch, &mut moves);
-            moves.len()
-        })
-        .collect();
+    let mut ends = Vec::with_capacity(range.len());
+    for i in range {
+        let from = moves.len();
+        ts.moves_into(&states[i], &mut scratch, &mut moves);
+        if let Some((group, canon)) = &mut sym {
+            moves.canonicalize(ts, group, canon, from);
+        }
+        ends.push(moves.len());
+    }
     (moves, ends)
 }
 
@@ -54,6 +65,8 @@ fn expand(ts: &TransitionSystem, states: &States, range: Range<usize>) -> Expand
 struct Workers<'scope, 'env> {
     scope: &'scope Scope<'scope, 'env>,
     ts: &'env TransitionSystem,
+    /// The group a run up to symmetry canonicalizes successors under.
+    group: Option<&'env Group>,
     /// How many workers the run starts; `None` until `Threads::Shared` has taken some.
     threads: Option<usize>,
     /// The helpers a `Threads::Shared` run holds, given back when the run ends.
@@ -72,12 +85,14 @@ impl<'scope, 'env> Workers<'scope, 'env> {
     fn new(
         scope: &'scope Scope<'scope, 'env>,
         ts: &'env TransitionSystem,
+        group: Option<&'env Group>,
         threads: Threads,
     ) -> Self {
         let (done_tx, done) = mpsc::channel();
         Workers {
             scope,
             ts,
+            group,
             threads: match threads {
                 Threads::Fixed(n) => Some(n),
                 Threads::Shared => None,
@@ -118,19 +133,25 @@ impl<'scope, 'env> Workers<'scope, 'env> {
                 .expect("a chunk is handed out once there are workers")
             {
                 let (queue, done, ts) = (queue.clone(), self.done_tx.clone(), self.ts);
-                self.scope.spawn(move || loop {
-                    // The chunk and its number are taken together, so the numbers are the
-                    // order the chunks were handed out in.
-                    let (number, states) = {
-                        let mut queue = queue.lock().expect("the chunk queue");
-                        let Ok(states) = queue.1.recv() else { break };
-                        queue.0 += 1;
-                        (queue.0 - 1, states)
-                    };
-                    let expanded =
-                        catch_unwind(AssertUnwindSafe(|| expand(ts, &states, 0..states.len())));
-                    if done.send((number, expanded)).is_err() {
-                        break;
+                let group = self.group;
+                self.scope.spawn(move || {
+                    let mut canon = Canon::default();
+                    loop {
+                        // The chunk and its number are taken together, so the numbers are the
+                        // order the chunks were handed out in.
+                        let (number, states) = {
+                            let mut queue = queue.lock().expect("the chunk queue");
+                            let Ok(states) = queue.1.recv() else { break };
+                            queue.0 += 1;
+                            (queue.0 - 1, states)
+                        };
+                        let sym = group.map(|g| (g, &mut canon));
+                        let expanded = catch_unwind(AssertUnwindSafe(|| {
+                            expand(ts, &states, 0..states.len(), sym)
+                        }));
+                        if done.send((number, expanded)).is_err() {
+                            break;
+                        }
                     }
                 });
             }
@@ -210,7 +231,12 @@ impl Bindings {
 }
 
 impl<'t> Bfs<'t> {
-    pub(super) fn new(ts: &'t TransitionSystem, caps: Caps, checks: &Checks) -> Self {
+    pub(super) fn new(
+        ts: &'t TransitionSystem,
+        caps: Caps,
+        checks: &Checks,
+        group: Option<&'t Group>,
+    ) -> Self {
         let invariants = (0..ts.invariants.len())
             .filter(|&i| checks.reads(&ts.invariants[i].name))
             .collect();
@@ -240,7 +266,25 @@ impl<'t> Bfs<'t> {
             charge: caps.memory.map(Charge::new),
             peak_admitted: 0,
             layers: Default::default(),
+            group,
+            canon: Canon::default(),
+            orbit_self: Vec::new(),
+            orbits: Default::default(),
         }
+    }
+
+    /// `s` as the run stores it: its canonical form under symmetry, else itself.
+    fn stored(&mut self, s: &StateSlice) -> (State, Canonical) {
+        let mut out = s.to_owned();
+        let found = match self.group {
+            Some(g) => {
+                let found = self.canon.canonical(g, &s.0, &mut out.0);
+                super::symmetry::check(self.ts, g, &s.0, &out.0, found);
+                found
+            }
+            None => Canonical::PLAIN,
+        };
+        (out, found)
     }
 
     /// Explores with `threads` workers; the run is the same with any number.
@@ -260,11 +304,13 @@ impl<'t> Bfs<'t> {
                     }
                 }
             }
-            if !self.admit(&s, None) || self.stop_if_all_failed() {
+            let (s, found) = self.stored(&s);
+            if !self.admit(&s, None, found) || self.stop_if_all_failed() {
                 return;
             }
         }
-        std::thread::scope(|scope| self.explore(Workers::new(scope, ts, threads)));
+        let group = self.group;
+        std::thread::scope(|scope| self.explore(Workers::new(scope, ts, group, threads)));
     }
 
     /// Expands the states in discovery order and reads their moves in that order, until none
@@ -285,7 +331,8 @@ impl<'t> Bfs<'t> {
                 workers.next()
             } else if sent < self.states.len() {
                 let end = self.states.len().min(sent + CHUNK);
-                let expanded = expand(self.ts, &self.states, sent..end);
+                let sym = self.group.map(|g| (g, &mut self.canon));
+                let expanded = expand(self.ts, &self.states, sent..end, sym);
                 sent = end;
                 expanded
             } else {
@@ -323,17 +370,36 @@ impl<'t> Bfs<'t> {
                 continue;
             }
             self.check_after(from, act, params, s2);
-            let to = match self.seen.find(&self.states, s2) {
+            // Under symmetry the run stores the successor's canonical form; a move into the
+            // class of its own source is an orbit self-edge, a real step stored as a loop.
+            let (key, found) = match self.group {
+                Some(_) => moves.canonical(i),
+                None => (&s2.0[..], Canonical::PLAIN),
+            };
+            let key = StateSlice::new(key);
+            if self.group.is_some() && *key == *s {
+                let edge = u32::try_from(self.steps.moves()).expect("edges fit in u32");
+                self.push(from, from, act, binding, &s);
+                self.orbit_self.push(edge);
+                // The step's after-asserts were read on its concrete successor above.
+                if self.stop_if_all_failed() {
+                    return false;
+                }
+                continue;
+            }
+            let to = match self.seen.find(&self.states, key) {
                 Some(to) => to,
                 None => {
                     let to = self.states.len() as u32;
-                    if !self.admit(s2, Some((from, binding))) {
+                    if !self.admit(key, Some((from, binding)), found) {
                         return false;
                     }
                     to
                 }
             };
-            self.push(from, to, act, binding, s2);
+            // The stored target: under symmetry the canonical form, which an after-assert
+            // step's rows read as they read the concrete one.
+            self.push(from, to, act, binding, key);
             // After the edge, so the trace of a violation at `to` reaches it.
             if self.stop_if_all_failed() {
                 return false;
@@ -342,12 +408,12 @@ impl<'t> Bfs<'t> {
         true
     }
 
-    /// Records the move from `states[from]` to `states[to]`, which is `s2`, under `act` and
-    /// its `binding`.
-    fn push(&mut self, from: u32, to: u32, act: ActId, binding: u32, s2: &StateSlice) {
+    /// Records the move from `states[from]` to `states[to]`, which is `stored`, under `act`
+    /// and its `binding`.
+    fn push(&mut self, from: u32, to: u32, act: ActId, binding: u32, stored: &StateSlice) {
         self.steps.push(from, to, binding);
         if let Some(ends) = &mut self.ends {
-            ends.read(self.ts, act, s2);
+            ends.read(self.ts, act, stored);
         }
     }
 
@@ -366,7 +432,7 @@ impl<'t> Bfs<'t> {
 
     /// Adds a new state; false when the state cap or the memory limit stops the run.
     /// `parent` is the source and the binding of the move that reaches it, pushed next.
-    fn admit(&mut self, s: &StateSlice, parent: Option<(u32, u32)>) -> bool {
+    fn admit(&mut self, s: &StateSlice, parent: Option<(u32, u32)>, found: Canonical) -> bool {
         if self.seen.find(&self.states, s).is_some() {
             return true;
         }
@@ -427,6 +493,7 @@ impl<'t> Bfs<'t> {
             }
         }
         self.check_invariants(s, self.states.len() as u32);
+        self.orbits.admit(found);
         self.states.push(s);
         self.seen.insert(&self.states, self.states.len() as u32 - 1);
         self.steps.admit(parent);

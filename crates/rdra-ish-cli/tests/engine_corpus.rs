@@ -442,6 +442,8 @@ struct Observed {
     can_reach_violated: Option<usize>,
     /// Errors without a name: a load or build error.
     unnamed: Vec<String>,
+    /// A panic's line: a tool bug, such as a lifted counterexample that does not replay.
+    panics: Vec<String>,
     tlc_ran: bool,
 }
 
@@ -490,6 +492,11 @@ impl Observed {
                 out.z3.insert(rule_name(rest), Z3::OutOfScope);
             }
         }
+        out.panics = stderr
+            .lines()
+            .filter(|l| l.contains("panicked at"))
+            .map(str::to_string)
+            .collect();
         // An error block is its `error[Name]:` line and the indented lines under it; TLC's
         // counterexamples say `from TLC`.
         for text in [stdout, stderr] {
@@ -609,7 +616,12 @@ fn tools() -> Tools {
 }
 
 fn verify(case: &Case, extra: &[&str]) -> Observed {
+    verify_with(case, extra, &[])
+}
+
+fn verify_with(case: &Case, extra: &[&str], env: &[(&str, &str)]) -> Observed {
     let out = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .envs(env.iter().copied())
         .arg("verify")
         .arg(&case.path)
         .args(extra)
@@ -823,6 +835,44 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
         match covered {
             true => report.known.push(line.clone()),
             false => fail(&mut report, line.clone()),
+        }
+    }
+    // Rule 8: up to instance symmetry, the native checker gives the verdict it gives without,
+    // for every check both runs decide, at every bound the case runs, and prints no fault and
+    // no panic: a lifted counterexample that does not replay panics. Each run takes the
+    // flags of the plain run it is compared with, less `--with-tlc`, and runs unreduced, so
+    // that every cone goes through the orbit run (phase 1 leaves a reduced cone plain).
+    let counts: Vec<u8> = std::iter::once(2).chain(bounded.keys().copied()).collect();
+    for n in counts {
+        let count = n.to_string();
+        let mut args = vec!["--symmetry", "always"];
+        match n {
+            2 if tools.z3 => args.push("--prove"),
+            2 => {}
+            _ => args.extend(["--instance-count", count.as_str()]),
+        }
+        let sym = verify_with(case, &args, &[("RDRA_ISH_NO_REDUCE", "1")]);
+        let plain = match n {
+            2 => &main,
+            n => &bounded[&n],
+        };
+        for line in sym.panics.iter().chain(&sym.faults) {
+            fail(
+                &mut report,
+                format!("rule 8, --symmetry always at {n} instances: {line}"),
+            );
+        }
+        for check in case.expects.keys() {
+            let a = plain.verdict(false, check, can_reach(check));
+            let b = sym.verdict(false, check, can_reach(check));
+            if a.decided() && b.decided() && a != b {
+                fail(
+                    &mut report,
+                    format!(
+                        "rule 8: {check} at {n} instances: {a}, and {b} up to instance symmetry"
+                    ),
+                );
+            }
         }
     }
     report

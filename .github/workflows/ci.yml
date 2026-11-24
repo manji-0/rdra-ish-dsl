@@ -231,19 +231,24 @@ jobs:
         # `cargo build` resolves other features and compiled every crate a second time.
         run: cargo test --release -p rdra-ish-cli --features shadow --test engine_corpus --no-run
       - name: Every twin compares calls
-        # How many calls each twin compared and skipped on three models. patent-ops reaches
-        # every twin but `Fold::holds`, which quantifier_guard reaches, and the ends of an
-        # after-assert step on a run without an edge list, which safety_edge_free_cone
-        # reaches; the step fails when a line is missing (a build without the feature) or a
-        # twin compared none in all three.
+        # How many calls each twin compared and skipped on four runs. `verify` of patent-ops
+        # reaches every twin but `Fold::holds`, which quantifier_guard reaches, the two that
+        # read entity views, which no run of `verify` gathers (#251): `check` does, and the
+        # ends of an after-assert step on a run without an edge list, which
+        # safety_edge_free_cone reaches (#296). Both `verify` runs of samples take
+        # `--symmetry always`, which the instance-symmetry twins (#212) need. The step fails
+        # when a line is missing (a build without the feature) or a twin compared none in all
+        # four.
         run: |
-          for sample in samples/patent-ops samples/formal-verification/quantifier_guard.rdra \
-            crates/rdra-ish-cli/tests/engine_corpus/safety_edge_free_cone.rdra; do
-            RDRA_ISH_SHADOW_STATS=1 target/release/rdra-ish verify "$sample" 2>&1 >/dev/null \
+          for run in "verify samples/patent-ops --symmetry always" \
+                     "verify samples/formal-verification/quantifier_guard.rdra --symmetry always" \
+                     "check samples/patent-ops" \
+                     "verify crates/rdra-ish-cli/tests/engine_corpus/safety_edge_free_cone.rdra"; do
+            RDRA_ISH_SHADOW_STATS=1 target/release/rdra-ish $run 2>&1 >/dev/null \
               | grep '^shadow: compared/skipped ' >> shadow-stats.txt || true
           done
           cat shadow-stats.txt
-          test "$(wc -l < shadow-stats.txt)" -eq 3
+          test "$(wc -l < shadow-stats.txt)" -eq 4
           python3 - <<'EOF'
           import collections, re
           compared = collections.Counter()
@@ -268,7 +273,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.kani == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       KANI_VERSION: 0.68.0
     defaults:

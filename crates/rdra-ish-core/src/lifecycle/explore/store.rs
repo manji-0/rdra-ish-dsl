@@ -13,6 +13,16 @@ fn block(n: usize) -> u64 {
     n.div_ceil(16) as u64 * 16
 }
 
+/// A `Vec`'s buffer once `more` items are pushed: it doubles when full.
+fn vec_bytes<T>(v: &Vec<T>, more: usize) -> u64 {
+    let cap = if v.len() + more <= v.capacity() {
+        v.capacity()
+    } else {
+        (v.capacity() * 2).max(v.len() + more).max(4)
+    };
+    (cap * size_of::<T>()) as u64
+}
+
 /// One binding: its entry in `Bindings::list` and its key in `Bindings::index`.
 pub(super) fn binding_bytes(params: &[u8]) -> u64 {
     2 * block(params.len())
@@ -132,6 +142,7 @@ impl Bfs<'_> {
     fn kept_with(&self, more: usize) -> u64 {
         self.states.bytes_with(more)
             + self.steps.bytes_with(more)
+            + vec_bytes::<u32>(&self.orbit_self, 0)
             + self.bindings.bytes
             + self.layers.bytes()
     }
@@ -142,6 +153,7 @@ impl Bfs<'_> {
     pub(super) fn bytes_before_with_one_more(&self) -> u64 {
         self.states.bytes_with(1)
             + self.steps.bytes_before_with(1)
+            + vec_bytes::<u32>(&self.orbit_self, 0)
             + self.bindings.bytes
             + self.layers.bytes()
             + self.seen.bytes_with(1)

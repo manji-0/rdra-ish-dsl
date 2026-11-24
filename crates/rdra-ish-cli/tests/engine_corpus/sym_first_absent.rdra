@@ -1,0 +1,31 @@
+// trap: a created row takes the first absent slot, and the group fixes absent slots.
+// Tickets are opened into the first free slot and closed by deletion, so the present rows
+// are not always a prefix: closing the first of two leaves a hole that the next ticket
+// fills. A ticket escalates only from open, and an escalated ticket cannot be closed, so an
+// escalated ticket is never closed: the rule holds. Up to instance symmetry the present
+// tickets are sorted among their own slots and the absent ones stay where they are, so the
+// next creation lands in the slot it lands in concretely; a group that moved absent slots
+// would send a creation to a slot that is taken.
+// expect Forbidden_Ticket_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+entity Ticket "問合せ" {
+  id: Int @pk
+  status: Enum(open, escalated, closed) @default(open)
+  raised: Bool @default(false)
+}
+
+usecase Open "受付"
+usecase Escalate "上申"
+usecase Close "完了"
+usecase Remove "削除"
+
+creates(Open, Ticket)
+transitions(Escalate, Ticket.status, open -> escalated)
+sets(Escalate, Ticket.raised == true)
+transitions(Close, Ticket.status, open -> closed)
+deletes(Remove, Ticket)
+
+condition Closed "完了済み"
+holds(Closed, Ticket.status == closed)
+applies_to(Closed, Remove)
+
+forbidden(Ticket, Ticket.raised == true, Ticket.status == closed)
