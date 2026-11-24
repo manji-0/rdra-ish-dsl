@@ -4,8 +4,9 @@
 //! own ids (`Quotient::of`).
 //!
 //! The key is everything `Classes::of` reads: the extended sub-lifecycle (`TransitionSystem`
-//! compared field by field), its `obs`, inputs and rises, and the caps that can stop its
-//! runs (patterns, states, stopping once every check failed, and whether a pool is charged).
+//! compared field by field, its bounds and each entity's slots included), its `obs`, inputs
+//! and rises, and the caps that can stop its runs (patterns, states, stopping once every
+//! check failed, and whether a pool is charged).
 //! Two keys are equal only when `==` says so; nothing is matched by a hash alone.
 //!
 //! The memory limit is the one input not in the key, and a deadline is not either, so caps
@@ -314,6 +315,7 @@ impl QuotientCache {
 #[cfg(test)]
 mod tests {
     use std::cell::Cell;
+    use std::num::NonZeroU8;
 
     use super::*;
     use crate::lifecycle::reduce::partition::tests::model;
@@ -400,6 +402,15 @@ mod tests {
         let g = e.system.actions.iter().position(|a| !a.guards.is_empty());
         e.system.actions[g.expect("a guarded action")].guards.pop();
         near.push(("one guard fewer", e, Caps::VERIFY));
+        let mut e = job_ext(true);
+        let slots = e.system.entities[0].slots.get();
+        e.system.entities[0].slots = NonZeroU8::new(slots + 1).expect("a slot more");
+        near.push(("one entity's instance count", e, Caps::VERIFY));
+        let mut e = job_ext(true);
+        let id = e.system.entities[0].id.clone();
+        let n = NonZeroU8::new(3).expect("three");
+        e.system.bounds.per_entity.insert(id, n);
+        near.push(("one entity's count in the bounds", e, Caps::VERIFY));
         let mut e = job_ext(true);
         let extra = e.system.var_ids().find(|v| !e.obs_local.contains(v));
         e.obs_local.insert(extra.expect("an unobserved var"));
