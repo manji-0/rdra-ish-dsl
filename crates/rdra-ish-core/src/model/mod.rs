@@ -326,6 +326,9 @@ pub struct SemanticModel {
     /// `creates/updates/deletes(UseCase, Entity).apart()`: the use case writes a row of the
     /// entity that need not be joined to the other rows it writes.
     pub apart_writes: Vec<(UseCaseKey, EntityKey)>,
+    /// `triggers(Event, UseCase).counted(k)`: the use case runs once per raise of the event,
+    /// with at most `k` raises pending per row (docs/design/counted-events.md).
+    pub counted_triggers: Vec<(EventKey, UseCaseKey, u8)>,
     /// `reads(Source, Entity).by(...).order(...)`: declared query shapes, in source order.
     pub queries: Vec<Query>,
     pub state_transitions: Vec<StateTransition>,

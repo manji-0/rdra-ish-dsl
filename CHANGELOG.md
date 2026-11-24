@@ -115,6 +115,22 @@
   README's table of rules and guards and checks each row against it. The table now has one
   row per rule, also names `AccountChoiceAsked` on `SelectAccount` for the `prompt=login`
   rule, and no longer names `ConsentOnRecord`, whose removal alone fails no rule.
+- `triggers(Event, UseCase).counted(k)` makes a handler run once per raise (#220). Each
+  counted edge has a counter per row of the event's entity, `<E>._pending_<Ev>_<UC>`
+  (`<E>_pending_<Ev>_<UC>` in TLA+), with the values `0` to `k` and `over`: the last step
+  of every raiser adds one, the handler runs only while a raise is pending and takes one,
+  and a raise with `k` already pending is the state rule `EventOverflow_<E>_<Ev>_<UC>`,
+  which `check`, `states`, `verify`, `verify --with-tlc`, and `verify --prove` report. The
+  raiser never waits, and after an overflow the handler runs as under the latch. `k` is a
+  whole number from 1 to 16; `.counted` on a timer, a BUC, or an external system, or with
+  any other argument, is the error `CountedTriggerInvalid`, and on an edge the event order
+  does not track (a free event, a handler a free trigger also starts, raisers with no entity
+  in common, a handler that raises the event itself, a raiser that binds the entity twice)
+  it is the error `UncountedTrigger`. A counted mark is never left out of a cone and never
+  reduced across, so a cone of its raiser holds the handler too. `codegen` reports a use
+  case that raises or handles a counted event as unsupported. Edges without `.counted` keep
+  the latch, and every model without it builds the same transition system as before.
+  Design: `docs/design/counted-events.md`.
 - A `MemoryCapReached` error of `check` and `states` says what the cone held and what
   finishing needs: the bytes each held state took, and an estimate of the states the cone
   reaches from its BFS layers. Once the frontier has shrunk for two depths past its peak,
