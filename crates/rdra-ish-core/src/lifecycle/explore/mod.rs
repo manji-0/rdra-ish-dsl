@@ -280,6 +280,39 @@ pub enum RunEnd {
 }
 
 impl ComponentRun {
+    /// Charges what the run keeps to `pool` instead of the pool it ran in, for a result held
+    /// past its cone (`QuotientCache`); false, leaving the charge where it was, when `pool`
+    /// has less left.
+    pub(crate) fn charge_to(&mut self, pool: &'static crate::memory::MemoryPool) -> bool {
+        match Charge::hold(pool, self.kept) {
+            Some(charge) => {
+                self._charge = Some(charge);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Whether `other` is the same run of the same graph: the states, parents, edges,
+    /// bindings and findings in the same order, and the same end. The system is not compared.
+    #[cfg(any(test, feature = "shadow"))]
+    pub(crate) fn same_graph(&self, other: &ComponentRun) -> bool {
+        let parents = |run: &ComponentRun| -> Vec<Option<Edge>> {
+            (0..run.states.len() as u32)
+                .map(|k| run.parent(k))
+                .collect()
+        };
+        self.states == other.states
+            && parents(self) == parents(other)
+            && self.has_edges() == other.has_edges()
+            && self.moves() == other.moves()
+            && (!self.has_edges() || self.edges() == other.edges())
+            && self.bindings == other.bindings
+            && self.diags == other.diags
+            && self.complete == other.complete
+            && self.checks_failed == other.checks_failed
+    }
+
     /// The invariants and after-asserts the run evaluated; `diags` says nothing of the rest.
     pub fn checks(&self) -> &Checks {
         &self.checks
