@@ -17,9 +17,12 @@ line, or an `error[LassoFault]` line for a native counterexample that fails its 
 is recorded. Such a seed is listed under `disagreed`, its model copied to
 `<work>/disagreed/seed<N>.rdra`, whatever the reduced and unreduced runs compare to.
 
-  python3 -I scripts/reduction-diff.py run BIN --seeds 0:40 [--jobs N] [--fail-on-timeout] [--with-tlc]
+  python3 -I scripts/reduction-diff.py run BIN --seeds 0:40 [--jobs N] [--fail-on-timeout] [--with-tlc] [--counted]
   (--timeout S and --work DIR go before the subcommand)
-  python3 -I scripts/reduction-diff.py gen SEED
+  python3 -I scripts/reduction-diff.py gen SEED [--counted]
+
+`--counted` puts `.counted(k)`, k of 1 or 2, on every `triggers` line the seed draws (#220),
+so the reduced and unreduced runs also compare a model whose handler runs once per raise.
   python3 -I scripts/reduction-diff.py compare BIN MODEL.rdra [--instance-count N] [--with-tlc]
   python3 -I scripts/reduction-diff.py minimize BIN MODEL.rdra OUT.rdra [--instance-count N] [--with-tlc]
   python3 -I scripts/reduction-diff.py selfcheck
@@ -51,8 +54,9 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 
-def gen(seed):
-    """The model for a seed, and the instance count to verify it at."""
+def gen(seed, counted=False):
+    """The model for a seed, and the instance count to verify it at. With `counted`, each
+    `triggers` line counts its raises, with a k drawn from a third generator."""
     r = random.Random(seed)
     instances = r.choice([2, 2, 3])
     # Three instances of larger models pass most timeouts.
@@ -255,13 +259,15 @@ def gen(seed):
     # handler reads the raiser's mark across the split. Drawn from a second generator, so
     # every seed keeps the model it had before events.
     re_ = random.Random(seed * 7919 + 1)
+    rc = random.Random(seed * 104729 + 2)
     for k in range(re_.choice([0, 1, 1, 2]) if n >= 2 else 0):
         j = re_.randrange(1, n)
         i = parent[j]
         src, dst = (j, i) if re_.random() < 0.6 else (i, j)
         raiser = re_.choice(arms[src])
         handler = re_.choice(arms[dst] + ([creates[dst]] if dst == j else []))
-        out.append(f'event Ev{k} "ev{k}"\nraises({raiser}, Ev{k})\ntriggers(Ev{k}, {handler})')
+        count = f".counted({rc.choice([1, 2])})" if counted else ""
+        out.append(f'event Ev{k} "ev{k}"\nraises({raiser}, Ev{k})\ntriggers(Ev{k}, {handler}){count}')
     return "\n".join(out) + "\n", instances
 
 
@@ -449,7 +455,7 @@ def one(args, seed):
 def compare_seed(args, seed):
     work = Path(args.work) / f"seed{seed}"
     work.mkdir(parents=True, exist_ok=True)
-    text, instances = gen(seed)
+    text, instances = gen(seed, args.counted)
     model = work / "m.rdra"
     model.write_text(text)
     res = dict(seed=seed, instances=instances)
@@ -524,7 +530,7 @@ def cmd_run(args):
 
 
 def cmd_gen(args):
-    text, instances = gen(args.seed)
+    text, instances = gen(args.seed, args.counted)
     sys.stdout.write(f"// instance count {instances}\n{text}")
     return 0
 
@@ -604,8 +610,10 @@ def main():
     p.add_argument("--fail-on-timeout", action="store_true", help="exit 1 when a seed times out")
     p.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) // 2))
     p.add_argument("--with-tlc", action="store_true", help="run TLC beside the native checker and record where they differ")
+    p.add_argument("--counted", action="store_true", help="count the raises of every triggers line (#220)")
     p = sub.add_parser("gen")
     p.add_argument("seed", type=int)
+    p.add_argument("--counted", action="store_true", help="count the raises of every triggers line (#220)")
     sub.add_parser("selfcheck")
     for name in ("compare", "minimize"):
         p = sub.add_parser(name)

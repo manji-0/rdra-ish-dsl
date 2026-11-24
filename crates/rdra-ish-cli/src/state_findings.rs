@@ -449,7 +449,7 @@ fn guard_text(model: &SemanticModel, why: GuardWhy, site: &Site) -> String {
     }
 }
 
-fn location(program: &ResolvedProgram, site: &Site) -> Option<String> {
+pub(crate) fn location(program: &ResolvedProgram, site: &Site) -> Option<String> {
     format_location(program, site.span.as_ref()?)
 }
 
@@ -782,6 +782,13 @@ fn violation_message(text: &InvText, p: &str) -> String {
 } => format!(
             "minimum children unmet: a '{parent}' has no '{child}' through '{role}', witnessed by {p}"
         ),
+        InvText::Overflow {
+                event,
+                usecase,
+                cap,
+} => format!(
+            "event overflow: a raise of {event} finds {cap} raises already pending for {usecase}, witnessed by {p}; raise `.counted({cap})` if {cap} is not the real capacity"
+        ),
     }
 }
 
@@ -927,6 +934,7 @@ violation_message(text, pattern_desc)
         | StateDiag::UnanchoredTrigger { .. }
         | StateDiag::UnjoinedTrigger { .. }
         | StateDiag::TriggerNeverRuns { .. }
+        | StateDiag::UncountedTrigger { .. }
         | StateDiag::DeleteLeavesChildren { .. }
         | StateDiag::GuardReadsLaterStep { .. }
         | StateDiag::DrivenComparisonColumnWritten { .. }

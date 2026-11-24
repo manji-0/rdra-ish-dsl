@@ -66,7 +66,9 @@ every case, whatever the case's header says.
    also a counterexample on the full graph. The test
    `a_capped_graph_decides_nothing_the_full_graph_contradicts` explores the whole model of
    every case under every state cap from 1 up to its size. It decides each `always`,
-   `eventually`, and `leads_to` under both fairness readings.
+   `eventually`, and `leads_to` under both fairness readings. Under `verify --prove` an
+   invariant cone that the memory limit stopped prints `ok` when z3 proves every rule in
+   it. That `ok` is z3's verdict, held to rule 4, not the stopped graph's.
 
 **Each engine against the header.** Every case states its expected verdict per engine, so
 the corpus also catches a drift that all engines share. Two parts are shared. The cone
@@ -205,6 +207,7 @@ under a load average of 30 to 60, measured.
 | `fair_enabled_disabled_forever` | Enabled and disabled forever, alternately, is not forced | counterexample |
 | `fair_stop_vs_wf_next` | A stop Fair_P allows and WF_vars(Next) forbids | `PaidShips` ok via `_WF`; `ShippedReopens` counterexample |
 | `fair_triggered_handler` | A fair handler keyed by its `Triggered` row | fair ok; unfair counterexample (whole model) |
+| `fair_counted_exposes_lost_run` | The latch hides a missing raise that a counted handler exposes | counted counterexample, deadlock, no witness; latch ok |
 | `fair_split_use_case` | A split use case is fair per step (`Earlier`) | fair ok; unfair counterexample (whole model) |
 | `fair_creating_use_case` | A fair use case that creates (`New`) and runs out of slots | counterexample; voucher-per-bill ok |
 | `fair_same_edge_two_bindings` | One edge with a fair and a non-fair label | counterexample |
@@ -230,6 +233,8 @@ under a load average of 30 to 60, measured.
 | `safety_can_reach_frees_slots` | `can_reach` where slots run out | counterexample; per-bill ok |
 | `safety_stable_frees_slots` | `stable` and `unchanged` on a cone that frees slots go to the whole model in both engines | ok (whole model) |
 | `safety_vacuity` | A trigger that never holds | ok; `always` counterexample |
+| `safety_counted_once_per_raise` | A counted handler runs once per raise; the latch runs twice after one | counted ok, z3 proved; latch counterexample |
+| `safety_event_overflow` | A raise past `k` is `EventOverflow`, and the raiser never waits | `k = 2` counterexample; `k = 3` ok, z3 proved |
 | `safety_unique_sets` | A unique column set over column vars, owner vars, and a nullable Int that two rows leave null | single column and junction counterexample; guarded set and null set ok, z3 proved |
 | `cap_temporal_budget_zero` | `--temporal-budget 0` | not decided on both engines |
 | `cap_memory_limit` | `--memory 2KiB` stops runs partway (native only) | not decided |

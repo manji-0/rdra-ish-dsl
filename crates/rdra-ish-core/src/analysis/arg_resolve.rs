@@ -15,7 +15,7 @@ pub(crate) fn resolve_arg(
 ) -> Option<NodeRef> {
     match arg {
         PredicateArg::Lit(_) => None,
-        PredicateArg::Transition { .. } | PredicateArg::Card(_) => None,
+        PredicateArg::Transition { .. } | PredicateArg::Card(_) | PredicateArg::Int(_) => None,
         PredicateArg::Expr(_) => None,
         PredicateArg::Ref(qref) => resolve_qref(model, qref, ctx, diags),
     }

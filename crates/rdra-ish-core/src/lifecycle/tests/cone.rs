@@ -112,7 +112,24 @@ pub(super) fn assert_cones_exact(
             .iter()
             .map(|s| sub.project(s, &cr.cone.vars))
             .collect();
-        let reached: BTreeSet<State> = cr.run.states.iter().map(ToOwned::to_owned).collect();
+        // A cone of checks alone stops once they have all failed (#213): its run is a
+        // prefix of the cone's run to the end, and that run reaches what the cone reaches.
+        let rerun;
+        let run = match cr.run.checks_failed {
+            true => {
+                rerun = cr.run.system.clone().run(caps);
+                // The last violation may come on an edge to a state already reached, so a
+                // stopped run can hold every state and still miss edges.
+                let n = cr.run.states.len();
+                assert!(
+                    cr.run.states.iter().eq(rerun.states.iter().take(n)),
+                    "{sample} {target:?}: a stopped cone is a prefix"
+                );
+                &rerun
+            }
+            false => &cr.run,
+        };
+        let reached: BTreeSet<State> = run.states.iter().map(ToOwned::to_owned).collect();
         if sub.cone_frees_slots(&cr.cone) {
             // An entity the target does not read never runs out of slots.
             assert!(
@@ -204,7 +221,8 @@ fn an_entity_the_view_does_not_read_never_runs_out_of_slots() {
 }
 
 /// The run's edges are exactly the moves of each expanded state, in order, and every state's
-/// parent path replays through `moves` from an initial state to that state.
+/// parent path replays through `moves` from an initial state to that state. A cone stopped
+/// once its checks have all failed holds a prefix of those edges.
 #[test]
 fn every_state_replays_from_its_parent_path_through_moves() {
     let caps = Caps::new(usize::MAX, 200_000);
@@ -216,11 +234,17 @@ fn every_state_replays_from_its_parent_path_through_moves() {
             for cr in &built.ts.explore_targets(&built.ts.targets(), caps).cones {
                 let run = &cr.run;
                 let ts = &run.system;
-                assert!(run.complete, "{sample}: cone does not finish");
+                assert!(
+                    run.complete || run.checks_failed,
+                    "{sample}: cone does not finish"
+                );
                 let mut edges = run.edges().iter();
-                for (from, s) in run.states.iter().enumerate() {
+                'states: for (from, s) in run.states.iter().enumerate() {
                     for m in ts.moves(s) {
-                        let e = edges.next().expect("an edge per move");
+                        let Some(e) = edges.next() else {
+                            assert!(run.checks_failed, "{sample}: an edge per move");
+                            break 'states;
+                        };
                         assert_eq!(e.from as usize, from, "{sample}: edge source");
                         assert_eq!(run.step(e), (m.act, &m.params[..]), "{sample}: binding");
                         assert_eq!(run.states[e.to as usize], m.next, "{sample}: successor");

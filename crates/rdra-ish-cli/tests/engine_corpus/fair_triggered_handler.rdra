@@ -7,9 +7,8 @@
 // expect PostedFair: native=ok tlc=ok
 // expect PostedUnfair: native=counterexample tlc=counterexample
 // No ledger is stuck at open: Execute raises the event, and Post moves the ledger. TLC's
-// Deadlock_ invariant leaves the event mark out of the cone it watches, so it reports one.
+// Deadlock_ invariant watches the event mark Post reads, so it reports none either (#261).
 // expect Deadlock_Ledger_state_open: native=none tlc=none
-// known Deadlock_Ledger_state_open: tlc=counterexample https://github.com/manji-0/rdra-ish-dsl/issues/261
 entity Order "依頼" { id: Int @pk  status: Enum(requested, executed) @default(requested) }
 entity Ledger "台帳" { id: Int @pk  state: Enum(open, posted) @default(open) }
 entity Bell "呼び鈴" { id: Int @pk  state: Enum(idle, ringing) @default(idle) }

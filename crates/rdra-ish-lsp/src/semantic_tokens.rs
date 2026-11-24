@@ -108,7 +108,7 @@ fn tokenize_predicate_arg(source: &str, raw: &mut Vec<RawToken>, arg: &Predicate
     match arg {
         PredicateArg::Ref(qref) => tokenize_qref(source, raw, qref),
         PredicateArg::Lit(_) => {}
-        PredicateArg::Transition { .. } | PredicateArg::Card(_) => {}
+        PredicateArg::Transition { .. } | PredicateArg::Card(_) | PredicateArg::Int(_) => {}
         PredicateArg::Expr(expr) => tokenize_expr(source, raw, expr),
     }
 }

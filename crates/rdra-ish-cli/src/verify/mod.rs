@@ -36,8 +36,8 @@ mod tlc;
 mod tlc_tool;
 
 use self::bfs::{
-    bfs_cones, explored_properties, report_bfs_cones, state_models, Explored, Safety,
-    STATE_MODEL_TLC_STATES,
+    bfs_cones, decide_by_proof, explored_properties, report_bfs_cones, state_models, Explored,
+    Safety, STATE_MODEL_TLC_STATES,
 };
 use self::compare::disagreements;
 use self::end::{End, TlcEnd};
@@ -229,7 +229,7 @@ pub fn run(
         (Some(dir), Some(Ok(_)), Some(Ok(tlc)), None | Some(Ok(_))) => Some((tlc, dir)),
         _ => None,
     };
-    let (bfs, natives, explored, proof, cones_ran) = std::thread::scope(|threads| {
+    let (bfs, mut natives, explored, proof, cones_ran) = std::thread::scope(|threads| {
         let cones = start
             .map(|(tlc, dir)| threads.spawn(|| run_cones(tlc, dir, &modules, &jobs, memory.cones)));
         let bfs = state_models(
@@ -284,6 +284,11 @@ pub fn run(
         };
         (bfs, natives, explored, proof, cones_ran)
     });
+    let proof = proof?;
+    // A cone BFS left open at the memory limit is decided by the rules the proof proved.
+    if let Some((_, proved)) = &proof {
+        natives.safety = decide_by_proof(&ts, &jobs, natives.safety, proved);
+    }
     let mut end = End {
         bfs,
         explored,
@@ -291,7 +296,7 @@ pub fn run(
         temporal: Temporal::default(),
         tlc: TlcEnd::default(),
         deny_undecided,
-        proof: proof?,
+        proof: proof.map(|(tally, _)| tally),
     };
 
     let mut index = match written {

@@ -1375,3 +1375,19 @@ fn a_column_type_takes_arguments_and_columns_take_computed_defaults() {
         ]
     );
 }
+
+#[test]
+fn a_bare_number_is_an_argument_of_counted_only() {
+    let ast = parse_ok("triggers(EvPaid, Post).counted(2)");
+    let Some(Item::Predicate(pred)) = ast.items.first() else {
+        panic!("a predicate");
+    };
+    assert!(matches!(&pred.chain[0].args[..], [PredicateArg::Int(n)] if n == "2"));
+    for src in [
+        "forbidden(Order, status == b).label(2)",
+        "relate(Line, Order, N:1).role(2)",
+    ] {
+        let (_, errors) = parse(src);
+        assert!(!errors.is_empty(), "must reject: {src}");
+    }
+}

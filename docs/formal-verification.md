@@ -81,6 +81,7 @@ and prints one note with the error count that names the state-model specs and `v
 ### State models with TLC alone
 
 <!-- constrained-by #what-verify-checks -->
+<!-- constrained-by ./state-derivation.md#triggers -->
 `check` and `verify` find a deadlock or a state with no witness by BFS on each entity's
 cone (see [What `verify` checks](#what-verify-checks)). `export --kind tla` writes the same
 cones as TLA+, so TLC alone reaches the states the BFS reaches. TLC finds the same missing
@@ -103,8 +104,11 @@ spec of an entity cone that no longer exists stays there. Export into an empty d
 
 `Deadlock_<E>_<col>_<s>` says that wherever an instance is at `s`, some step can still
 change the column's cone: the column, its entity's existence, and every variable that the
-steps writing them read. It is `ENABLED (Next /\ c' # c)`, with `c` the tuple of those
-variables. A step outside that cone cannot move the column or open its way out, so a column
+steps writing them read, and so on until no step that writes the cone reads a variable
+outside it. That includes the raised mark a triggered use case waits on, the link to the
+row its event was raised on, and what the use case that raises it reads
+([Triggers](./state-derivation.md#triggers)). It is `ENABLED (Next /\ c' # c)`, with `c`
+the tuple of those variables. A step outside that cone cannot move the column or open its way out, so a column
 that another use case toggles back and forth does not hide the deadlock. TLC reports the
 invariant violated in a state with an instance at `s` and no move of the cone left, which
 is a deadlock `check` reports. A pass does not prove that the model has no deadlock: a
@@ -600,11 +604,15 @@ cone's verdict is the whole model's at the same bounds. A reduced cone (the next
 keeps stuttering equivalence, which says nothing of `AG EF`, so no `can_reach` cone is
 reduced. A cone that stops at `--max-states` or the memory limit decides nothing, since a
 state it did not expand has no edges and would look stuck: no violation is read from it.
+`verify` lists such a property under `not checked:` as `can_reach <P> is not decided: the <P>
+cone stopped at the state cap (<n> states)` (or at the memory limit), counts it toward
+`--deny-undecided`, and prints `result: not decided`.
 A scoped `verify` checks no property, `can_reach` included.
 
 `verify` prints `can_reach properties: N, decided natively by BFS on each one's cone (TLC
 cannot check AG EF)` in its header, explores those cones beside the entity cones, and ends
-the BFS pass with `can_reach (BFS on N cones): N checked, M violated`. A violation fails the
+the BFS pass with `can_reach (BFS on N cones): N checked, M violated`, followed by
+`, K not decided` when the cones of K of them stopped. A violation fails the
 run with `result: counterexample`:
 
 ```
@@ -688,7 +696,13 @@ The cone's vars split into a target side T and the rest S:
   a choice starts from the base value in the creating action and from any value elsewhere, a
   transition is its arms, and the clock ticks up. A raised mark, an existence, an owner key,
   and a status whose arms all point forward are monotone. The rule is checked on the cone,
-  so a model that adds a backward arm loses the reduction and nothing else. The quotient is
+  so a model that adds a backward arm loses the reduction and nothing else. The counter of a
+  [counted trigger](./state-derivation.md#counted-triggers) is never monotone, whatever arms
+  the cone holds, and the split puts every counter in T, with its raisers and its handler,
+  which write it: a counted edge is never reduced across. Every action that reads a counter
+  also writes it, so a counter in S could only be internal to S, which the argument below
+  allows; T is the simpler rule, and the one #220 asked for
+  ([design](./design/counted-events.md#the-reduction)). The quotient is
   then computed on S *extended* with its inputs (`restrict_to` of S and the inputs, without
   the havoc of a `Triggered` parameter): the S actions are silent, and every T action that
   writes an input is a *rise*, kept with the guards it has on S and the inputs. The
@@ -993,10 +1007,15 @@ unproved: Unique_Shipment_Order: not inductive; Ship(Order#1, Shipment#1) breaks
 ```
 
 Here the CTI is also a real run: `one_to_one_shared` links two Shipments to one Order, and
-`verify` at two instances reports the violation with its trace. A rule z3 gives up on
-(each check of a rule has 10 s, of a lemma 0.5 s) is `unproved` with `z3 gave up on <action>`. The checks of one
-step are shared out over several z3 processes (`RDRA_JOBS`); the proof and its CTIs do not
-depend on how many. A rule that fails in an
+`verify` at two instances reports the violation with its trace. A rule z3 gives up on is
+`unproved` with `z3 gave up on <action>`. Each check has a budget of z3 resource units
+(`rlimit`), a count of solver steps, not of time: 20,000,000 for a check of a rule and
+2,000,000 for a lemma. So the proof is the same on a busy machine and an idle one. The
+units are z3's own and may count differently in another z3 version; the budgets were set on
+z3 5.1.0, where no check that keeps a candidate spent more than about a twentieth of its
+budget on any sample. A lemma check that runs out drops the lemma, as a step that breaks it
+does. The checks of one step are shared out over several z3 processes (`RDRA_JOBS`); the
+proof and its CTIs do not depend on how many. A rule that fails in an
 initial state is `unproved` too; the bounded engines report that violation.
 
 Some rules have no `CHECK` in the schema `export --kind sql` writes: a rule over several
@@ -1008,7 +1027,20 @@ application has to keep them. `--prove` marks each such rule with
 an obligation the use cases already discharge, for any number of rows.
 
 `--prove` reads the state rules only. After-asserts and temporal properties are not tried.
-The result does not change the exit status unless `--deny-unproved` is given. Every rule of
+A proof decides one kind of verdict: an invariant cone that BFS stopped at the memory limit
+before a violation. When z3 proves every rule the cone checks, the rules hold at the run's
+bounds too, since the encoding allows every step the explorer takes at any bound. The
+cone's line then reads `ok`, and still says where BFS stopped:
+
+```
+Cone_Forbidden_CartLine_0 [Forbidden_CartLine_0, Check_CartLine_qty_0]: ok (8 states, BFS stopped at the memory limit, decided by proof: --prove proved every check for any number of rows)
+```
+
+Such a cone counts as decided, so a run whose only open checks it decides prints
+`result: ok`. A cone that also checks an `after` assertion, or a rule z3 leaves unproved or
+out of scope, stays `not decided`, as does a cone stopped at `--max-states` or
+`--max-patterns`. Otherwise the proof does not change the exit status unless
+`--deny-unproved` is given. Every rule of
 the domain samples proves, insurance-claim-ops' with the lemma above.
 `tests/proof_equivalence.rs` checks on every sample that no rule it proves has a BFS
 counterexample at one, two, or three instances.
@@ -1189,10 +1221,14 @@ names each gap that 2.0 keeps, how to see it in a run, and what you can do about
 [compatibility contract](./compatibility.md#bounds) promises results only within these
 gaps.
 
-- **The order is by row and the mark counts no events.** A use case that a use case's
-  event triggers runs only after a raise on its rows (#112), but the record of the raise is
-  a latch: after the first raise the handler runs as often as its states and guards allow,
-  a second raise queues nothing, and a raiser never waits for its handler. The order ties
+- **The order is by row and the mark counts no events, unless the edge says `.counted`.** A
+  use case that a use case's event triggers runs only after a raise on its rows (#112), but
+  the record of the raise is a latch: after the first raise the handler runs as often as its
+  states and guards allow, a second raise queues nothing, and a raiser never waits for its
+  handler. `triggers(Ev, UC).counted(k)` counts the raises of that one edge instead: the
+  handler runs once per raise, and a raise with `k` pending is the violation
+  `EventOverflow_<E>_<Ev>_<UC>`, which is a limit of the model unless `k` is the real
+  capacity ([Counted triggers](./state-derivation.md#counted-triggers)). The order ties
   the handler to the raiser's row only through a parameter that is that row or its parent
   through the raiser's key; a handler that binds the entity otherwise runs on any raised
   row (`UnjoinedTrigger`), and raisers with no entity in common order nothing
@@ -1205,7 +1241,8 @@ gaps.
   raised`, which names each step that ran without its event. What you can do: a handler
   that must run once per event takes a from-state the raiser sets and the handler leaves,
   as a `transitions` arm; a rule that must be checked with the order reads something the
-  raiser writes, which pulls the raiser into its cone. [`triggers` and event-driven BUC
+  raiser writes, which pulls the raiser into its cone; a handler that must run once per
+  event can also take `.counted(k)`. [`triggers` and event-driven BUC
   chaining](./language-reference.md#triggers-and-event-driven-buc-chaining) has the rules
   from the model's side.
 - **Some cones are compared with TLC at 1 instance only.** `engine_equivalence` checks that

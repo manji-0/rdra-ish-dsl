@@ -361,9 +361,14 @@ impl Remap {
                 entity: self.e(*entity),
                 usecase: usecase.clone(),
             },
-            VarKind::Raised { entity, event } => VarKind::Raised {
+            VarKind::Raised {
+                entity,
+                event,
+                handler,
+            } => VarKind::Raised {
                 entity: self.e(*entity),
                 event: event.clone(),
+                handler: handler.clone(),
             },
             VarKind::Owner {
                 child,
