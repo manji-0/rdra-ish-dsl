@@ -332,6 +332,18 @@
 
 ### Changed
 
+- `verify` shares a sub-lifecycle's quotient across the cones whose extended sub-lifecycles
+  are equal (#252): it is explored and partitioned once, and each cone maps its classes into
+  its own ids. A shared quotient is matched by `==` on the extended sub-lifecycle, its `obs`,
+  inputs and rises, and the caps that can stop its runs; it is taken only where its runs fit
+  the room the cone has, and it stays charged to `--memory`, in the bytes its tables take,
+  until the entity cones are reduced. The safety and property cones are now reduced one at
+  a time in order, so which of them are reduced no longer depends on the number of threads
+  under a tight limit (#244). A quotient with more classes than any cone's TLA+ tables may
+  print is no longer built in full. The output is unchanged on every sample and corpus
+  case; on `insurance-claim-ops`, at `RDRA_JOBS=1`, `verify` retires 22% fewer
+  instructions. `RDRA_ISH_NO_QUOTIENT_CACHE=1` turns the sharing off, and
+  `RDRA_ISH_QUOTIENT_STATS=1` prints what it did.
 - A safety cone stops once every invariant and `after` assertion on it has a
   counterexample (#213), in `verify` and in `check` and `states`. The counterexamples are
   BFS's first, so they stay the shortest, and the verdicts and traces do not change. A cone

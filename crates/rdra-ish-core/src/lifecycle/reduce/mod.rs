@@ -32,16 +32,18 @@ use super::expr::{State, StateSlice};
 use super::types::{ActId, EntId, Pred, Value, VarId};
 use super::TransitionSystem;
 
+mod cache;
 mod extended;
 mod fold;
 mod lift;
 mod partition;
 mod split;
 
+pub use cache::QuotientCache;
 use extended::Extended;
 pub use fold::{Fold, FoldKey};
 pub use partition::Divergence;
-use partition::Quotient;
+use partition::{NoQuotient, Quotient};
 use split::Split;
 
 /// The most cells (`Reduction::tla_cells`) a reduced cone may print for TLC. Measured with
@@ -69,7 +71,7 @@ pub type Step = (ActId, Box<[u8]>, State);
 pub type ClassMove = (ActId, Box<[u8]>, u32);
 
 /// A cone's S side quotiented, in the cone system's ids.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Reduction {
     /// S, ascending.
     vars: Vec<VarId>,
@@ -393,21 +395,37 @@ impl TransitionSystem {
     /// `caps`, and the tables TLC would get fit under `TLA_CELL_BUDGET`; otherwise unchanged.
     /// `seeds` are what each target that shares the cone reads and keeps.
     pub fn reduced(&self, seeds: &[Seed], caps: Caps) -> TransitionSystem {
-        match self.reduced_with(seeds, caps, true) {
-            Ok(out) => out,
-            Err(Unreduced::OverBudgetWithInputs) => self
-                .reduced_with(seeds, caps, false)
-                .unwrap_or_else(|_| self.clone()),
-            Err(Unreduced::Nothing) => self.clone(),
-        }
+        self.reduced_in(seeds, caps, &QuotientCache::new()).0
     }
 
-    /// One attempt at `reduced`, with or without the inputs of S.
+    /// `reduced`, with the quotients `cache` holds; the flag says whether no cap and no limit
+    /// stopped a run of the reduction, nested ones included.
+    pub(super) fn reduced_in(
+        &self,
+        seeds: &[Seed],
+        caps: Caps,
+        cache: &QuotientCache,
+    ) -> (TransitionSystem, bool) {
+        let mut clean = true;
+        let out = match self.reduced_with(seeds, caps, true, cache, &mut clean) {
+            Ok(out) => out,
+            Err(Unreduced::OverBudgetWithInputs) => self
+                .reduced_with(seeds, caps, false, cache, &mut clean)
+                .unwrap_or_else(|_| self.clone()),
+            Err(Unreduced::Nothing) => self.clone(),
+        };
+        (out, clean)
+    }
+
+    /// One attempt at `reduced`, with or without the inputs of S. `clean` turns false when a
+    /// cap or a limit stopped a run of the quotient.
     fn reduced_with(
         &self,
         seeds: &[Seed],
         caps: Caps,
         inputs: bool,
+        cache: &QuotientCache,
+        clean: &mut bool,
     ) -> Result<TransitionSystem, Unreduced> {
         let split = self.split_with(seeds, inputs);
         // Every S var observed by T makes the quotient the identity, whatever the inputs do.
@@ -415,20 +433,30 @@ impl TransitionSystem {
             return Err(Unreduced::Nothing);
         }
         let ext = Extended::of(self, &split);
-        let Some(quotient) = Quotient::of(&ext, self, caps) else {
-            return Err(Unreduced::Nothing);
+        // Past the budget, the split without inputs is worth a try when this one had any.
+        let over_budget = || match split.inputs.is_empty() && split.folds.is_empty() {
+            true => Unreduced::Nothing,
+            false => Unreduced::OverBudgetWithInputs,
         };
-        let Quotient {
-            reps,
-            class_of,
-            init,
-            moves,
-            rises,
-            inner,
-            states: n,
-            loops,
-            divergence,
-        } = quotient;
+        let (quotient, quotient_clean) = Quotient::of(&ext, self, caps, cache);
+        *clean &= quotient_clean;
+        let Quotient { classes, moves } = match quotient {
+            Ok(quotient) => quotient,
+            Err(NoQuotient::Nothing) => return Err(Unreduced::Nothing),
+            Err(NoQuotient::TooLarge) => return Err(over_budget()),
+        };
+        let n = classes.states;
+        let (reps, class_of, init) = (
+            classes.reps.clone(),
+            classes.class_of.clone(),
+            classes.init.clone(),
+        );
+        let (rises, inner, loops, divergence) = (
+            classes.rises.clone(),
+            classes.inner.clone(),
+            classes.loops.clone(),
+            classes.divergence,
+        );
         let all: Vec<VarId> = split.s.union(&split.inputs).copied().collect();
         let spans: Vec<(usize, usize, bool)> = all
             .iter()
@@ -489,11 +517,7 @@ impl TransitionSystem {
             divergence,
         };
         if reduction.tla_cells() > TLA_CELL_BUDGET {
-            return Err(if split.inputs.is_empty() && split.folds.is_empty() {
-                Unreduced::Nothing
-            } else {
-                Unreduced::OverBudgetWithInputs
-            });
+            return Err(over_budget());
         }
         let mut out = self.clone();
         out.reduction = Some(Arc::new(reduction));
@@ -552,11 +576,22 @@ impl TransitionSystem {
         seeds: impl IntoIterator<Item = Seed>,
         caps: Caps,
     ) -> TransitionSystem {
+        self.reduced_cone_in(cone, seeds, caps, &QuotientCache::new())
+    }
+
+    /// `reduced_cone`, sharing quotients through `cache` with the other cones reduced in it.
+    pub fn reduced_cone_in(
+        &self,
+        cone: &Cone,
+        seeds: impl IntoIterator<Item = Seed>,
+        caps: Caps,
+        cache: &QuotientCache,
+    ) -> TransitionSystem {
         let (sys, local) = self.cone_system(cone, seeds);
         if std::env::var_os("RDRA_ISH_NO_REDUCE").is_some() {
             return sys;
         }
-        sys.reduced(&local, caps)
+        sys.reduced_in(&local, caps, cache).0
     }
 
     /// The cone as a system, and the seeds in its ids.

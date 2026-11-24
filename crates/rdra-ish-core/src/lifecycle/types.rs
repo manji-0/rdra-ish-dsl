@@ -109,7 +109,7 @@ pub enum Birth {
     PreExisting,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EntityDecl {
     pub key: EntityKey,
     pub id: String,
@@ -124,7 +124,7 @@ pub struct EntityDecl {
     pub owners: Vec<VarId>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VarDecl {
     pub kind: VarKind,
     pub domain: Domain,
@@ -360,7 +360,7 @@ impl Site {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Action {
     /// The use case id, `<id>_<n>` for the n-th transaction group of a split use case, or
     /// `Tick`.
@@ -449,7 +449,7 @@ impl ParamRole {
 
 /// A guard holds on the pre-state, or, when it reads `At::Next`, on the pre-state and the
 /// successor together: such a guard filters the successors after the effects.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Guard {
     pub pred: Pred,
     pub why: GuardWhy,
@@ -575,7 +575,7 @@ pub enum GuardWhy {
     Restrict { fk: FkId },
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Effect {
     /// exists := present; the slot's columns are already at base.
     Create { param: u8 },
@@ -607,7 +607,7 @@ pub enum Effect {
 }
 
 /// One `transitions` arm of an `Effect::Transition`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Arm {
     pub from: Value,
     pub to: Value,
@@ -618,7 +618,7 @@ pub struct Arm {
 }
 
 /// One value of an `Effect::Choose`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Choice {
     pub value: Value,
     /// The `sets(.., col == present)`, copy or `chooses` line that asks for the value. A
@@ -726,7 +726,7 @@ impl Premise {
 }
 
 /// A state constraint, closed over present slots of its binders.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Invariant {
     pub name: String,
     /// Universally bound entities, outermost first.
@@ -856,7 +856,7 @@ pub enum InvText {
 
 /// `after(UC).assert(..)`: a post-state predicate checked after the last action of the use
 /// case, so once per run of a split one, on the run's rows.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AfterAssert {
     pub name: String,
     /// The use case id.
@@ -869,7 +869,7 @@ pub struct AfterAssert {
 }
 
 /// The assert as one action's post-state reads it.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AfterStep {
     pub act: ActId,
     /// Scope entities the action does not bind, universally bound in the post-state.
@@ -882,7 +882,7 @@ pub struct AfterStep {
 /// evaluates it on a lasso another engine found, `ComponentRun::decide_property` decides
 /// `always` and the forms `LtlKind::is_explored` names on an explored graph, and
 /// `ComponentRun::decide_liveness` decides `eventually` and `leads_to` there.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Property {
     pub name: String,
     /// Entities the formula is quantified over per instance, outermost first.
@@ -931,7 +931,7 @@ impl Property {
 /// (and linked, under `.along`), some path on which it stays present reaches `goal`. That is
 /// CTL `AG (present => E[present U (present /\ goal)])`, which no LTL formula states, so TLC
 /// never checks it: BFS decides it on its cone's graph (`reach.rs`).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Reach {
     pub name: String,
     /// Entities the goal is quantified over per instance, outermost first.
@@ -951,7 +951,7 @@ impl Reach {
 }
 
 /// A property's formula per binding; the trigger of each form is `present /\ link`.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Ltl {
     Always(Pred),
     Eventually(Pred),

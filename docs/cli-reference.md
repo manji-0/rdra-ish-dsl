@@ -682,6 +682,18 @@ What the limit counts:
   stay counted, and the next cone has the rest of the limit. The cones run side by side,
   yet each stops where it would stop if they ran one at a time in order: a cone that met a
   pool the others had filled, or that grew past the room left to it, runs again on its own.
+- **Shared quotients** (`verify`). Cones whose sub-lifecycles are equal share one quotient
+  (#252): the first cone that needs it explores and partitions the sub-lifecycle, and the
+  others reuse its classes. The classes stay counted while `verify` holds them, in the bytes
+  their tables take, and are given back after the last cone is reduced. A cone reuses them
+  only when the runs that computed them fit the room it has, asking the limit for that room
+  as those runs did; otherwise it computes its own and stops where it would without the
+  cache. The safety and property cones are reduced one at a time in order, so the classes
+  held, and their count, are the same with any number of threads; the entity cones are
+  reduced side by side, where each still stops as it would alone in its turn. The classes
+  held shrink the room of the safety and property cones' quotient runs that come after
+  them, so under a tight limit such a cone can stay unreduced where it would be reduced
+  without the sharing. `RDRA_ISH_NO_QUOTIENT_CACHE=1` turns the sharing off.
 - **What the count leaves out.** The transition system, the per-entity views, the states a
   worker holds while it expands them, and the memory that reading the findings of a cone
   takes. On `insurance-claim-ops` at two instances, where most cones stop at the limit, the

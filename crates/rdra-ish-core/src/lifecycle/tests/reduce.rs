@@ -4,11 +4,13 @@
 
 use std::collections::BTreeSet;
 
+use crate::memory::{MemoryPool, MemorySize};
+
 use super::cone::{load, SAMPLES};
 use super::*;
 use crate::lifecycle::{
-    Action, ActionOrigin, ComponentRun, Fold, FoldKey, State, Step, Target, TargetExploration,
-    VarSet,
+    Action, ActionOrigin, ComponentRun, Fold, FoldKey, QuotientCache, State, Step, Target,
+    TargetExploration, VarSet,
 };
 
 const DOMAIN_SAMPLES: &[&str] = &[
@@ -500,6 +502,60 @@ fn reduced_cones_decide_what_the_cones_decide() {
 fn reduced_domain_cones_decide_what_the_cones_decide() {
     let reductions = reductions_in(DOMAIN_SAMPLES);
     assert!(reductions >= 53, "{reductions} cones reduced");
+}
+
+/// Every target and property cone of the samples, reduced through one shared quotient cache,
+/// is the system a fresh reduction gives, its reduction's tables included; returns the cache's
+/// hits.
+fn shared_quotients_reduce_as_fresh_ones(models: &[(&str, SemanticModel)]) -> usize {
+    let cache = QuotientCache::new();
+    for (sample, model) in models {
+        for bounds in [Bounds::STATES, Bounds::VERIFY] {
+            let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
+            let pool = MemoryPool::for_command(MemorySize::VERIFY, "--memory");
+            let capped = Caps::new(usize::MAX, 200_000);
+            for caps in [capped, capped.charged_to(pool)] {
+                let cones = ts.targets().into_iter().map(|t| {
+                    let seed = ts.target_seed(t);
+                    (ts.target_cone(t), seed)
+                });
+                let properties =
+                    (0..ts.properties().len()).map(|i| (ts.property_cone(i), ts.property_seed(i)));
+                for (cone, seed) in cones.chain(properties) {
+                    let shared = ts.reduced_cone_in(&cone, [seed.clone()], caps, &cache);
+                    let fresh = ts.reduced_cone(&cone, [seed], caps);
+                    assert!(shared == fresh, "{sample}: a cone of {:?}", cone.vars);
+                }
+            }
+        }
+    }
+    cache.hits()
+}
+
+#[test]
+fn reduced_cones_through_a_shared_cache_are_fresh_ones() {
+    let mut models: Vec<(&str, SemanticModel)> = SAMPLES.iter().map(|s| (*s, load(s))).collect();
+    let counted = COUNTED_GATE.replace("{EDGE}", ".counted(1)");
+    for (name, src) in [
+        ("GATE", GATE),
+        ("CLAIM_CASE", CLAIM_CASE),
+        ("ORDER_SHIP", ORDER_SHIP),
+        ("CASE_FOLD", CASE_FOLD),
+        ("COUNTED_GATE", &counted),
+    ] {
+        models.push((name, model_from(src)));
+    }
+    let hits = shared_quotients_reduce_as_fresh_ones(&models);
+    assert!(hits > 0, "some cones share a quotient");
+}
+
+/// CI runs this in release beside `reduced_domain_cones_decide_what_the_cones_decide`, whose
+/// name it extends.
+#[test]
+fn reduced_domain_cones_decide_what_the_cones_decide_through_a_shared_cache() {
+    let models: Vec<(&str, SemanticModel)> = DOMAIN_SAMPLES.iter().map(|s| (*s, load(s))).collect();
+    let hits = shared_quotients_reduce_as_fresh_ones(&models);
+    assert!(hits > 0, "some cones share a quotient");
 }
 
 #[test]

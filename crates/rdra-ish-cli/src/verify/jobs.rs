@@ -1,6 +1,8 @@
 use crate::export::Modules;
 use crate::property_cone::{ConeRun, PropertyCone};
-use rdra_ish_core::lifecycle::{ActId, Caps, Cone, Target, TransitionSystem, VarSet};
+use rdra_ish_core::lifecycle::{
+    ActId, Caps, Cone, QuotientCache, Target, TransitionSystem, VarSet,
+};
 use rdra_ish_core::{in_parallel, jobs};
 use rdra_ish_emit::tla::{self, PrintMode, TlaBundle, TlaNames};
 use std::collections::BTreeMap;
@@ -95,6 +97,7 @@ pub(super) fn cone_jobs(
     targets: &[Target],
     modules: &mut Modules,
     caps: Caps,
+    quotients: &QuotientCache,
 ) -> Vec<Job> {
     let mut at: BTreeMap<VarSet, usize> = BTreeMap::new();
     let mut order: Vec<(Cone, String, Vec<Target>)> = Vec::new();
@@ -117,15 +120,20 @@ pub(super) fn cone_jobs(
             }
         }
     }
-    // The names are claimed in target order; reducing and printing a cone reads nothing of
-    // another, so the cones are prepared side by side.
-    let named: Vec<(Cone, String, Vec<Target>)> = order
+    // The names are claimed in target order. The cones are reduced one at a time in that
+    // order, so the quotients `quotients` holds, and what it is charged, are the same on any
+    // number of threads, and each quotient run has the room it has alone; printing a cone
+    // reads nothing of another, so the cones are printed side by side.
+    let named: Vec<(Cone, String, Vec<Target>, TransitionSystem)> = order
         .into_iter()
-        .map(|(cone, first, shared)| (cone, modules.claim(&format!("Cone_{first}")), shared))
+        .map(|(cone, first, shared)| {
+            let module = modules.claim(&format!("Cone_{first}"));
+            let seeds = shared.iter().map(|t| ts.target_seed(*t));
+            let sub = ts.reduced_cone_in(&cone, seeds, caps, quotients);
+            (cone, module, shared, sub)
+        })
         .collect();
-    in_parallel(named, jobs(), |(cone, module, shared)| {
-        let seeds = shared.iter().map(|t| ts.target_seed(*t));
-        let sub = ts.reduced_cone(&cone, seeds, caps);
+    in_parallel(named, jobs(), |(cone, module, shared, sub)| {
         let bundle = tla::print(&sub, PrintMode::Safety, &module);
         let n = &bundle.names;
         let checks = (0..sub.invariants().len())
@@ -162,6 +170,7 @@ pub(super) fn property_jobs(
     names: &TlaNames,
     modules: &mut Modules,
     caps: Caps,
+    quotients: &QuotientCache,
 ) -> Vec<Job> {
     // The forms `LtlKind::is_explored` names are decided on their cones by
     // `explored_properties`, with no run of their own.
@@ -172,9 +181,12 @@ pub(super) fn property_jobs(
         .iter()
         .map(|&i| modules.claim(&format!("Cone_{}", names.property(i))))
         .collect();
-    // Reducing a property's cone reads nothing of another's; the `_Full` and `_WF` names are
-    // claimed afterwards, in property order.
-    let cones = in_parallel(tlc.clone(), jobs(), |i| PropertyCone::under(ts, i, caps));
+    // The cones are reduced one at a time in property order, as `cone_jobs` reduces its own;
+    // the `_Full` and `_WF` names are claimed afterwards, in property order.
+    let cones: Vec<PropertyCone> = tlc
+        .iter()
+        .map(|&i| PropertyCone::under(ts, i, caps, quotients))
+        .collect();
     tlc.into_iter()
         .zip(plain.into_iter().zip(cones))
         .map(|(i, (module, cone))| {

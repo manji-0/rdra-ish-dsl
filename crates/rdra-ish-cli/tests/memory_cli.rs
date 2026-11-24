@@ -206,6 +206,54 @@ fn cones_side_by_side_stop_where_they_stop_one_at_a_time() {
     assert_eq!(run_on("3"), one);
 }
 
+/// Cones with equal sub-lifecycles share one quotient, which stays counted while `verify`
+/// holds it (#252). Under limits where cones stop, the run is the same on one thread as on
+/// eight: a cone takes a shared quotient only where computing its own would have fit, and the
+/// shared quotients come and are charged in cone order. At these limits the quotients held
+/// leave every cone where it stops with the sharing off.
+#[test]
+fn shared_quotients_stop_no_cone_elsewhere_on_any_number_of_threads() {
+    let dir = scratch("memory_cli_shared_quotients");
+    let run_on = |jobs: &str, memory: &str, sharing: bool| {
+        let spec = dir.join("spec");
+        let _ = std::fs::remove_dir_all(&spec);
+        let mut command = Command::new(env!("CARGO_BIN_EXE_rdra-ish"));
+        command
+            .current_dir(repo())
+            .env("RDRA_JOBS", jobs)
+            .env("RDRA_ISH_QUOTIENT_STATS", "1")
+            .args(["verify", "--memory", memory, "samples/patent-ops", "-o"])
+            .arg(&spec);
+        if !sharing {
+            command.env("RDRA_ISH_NO_QUOTIENT_CACHE", "1");
+        }
+        let out = command.output().expect("rdra-ish runs");
+        let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+        let hits = stderr
+            .lines()
+            .find_map(|l| l.strip_prefix("quotient-cache: "))
+            .and_then(|l| l.split(' ').find_map(|kv| kv.strip_prefix("hits=")))
+            .map_or(0, |h| h.parse::<usize>().unwrap());
+        let text = String::from_utf8_lossy(&out.stdout).into_owned()
+            + &stderr
+                .lines()
+                .filter(|l| !l.starts_with("quotient-cache: "))
+                .collect::<Vec<_>>()
+                .join("\n");
+        (text, hits)
+    };
+    for memory in ["2MiB", "3MiB", "8MiB"] {
+        let (one, hits) = run_on("1", memory, true);
+        assert!(
+            one.contains("not decided"),
+            "{memory}: some cone stops\n{one}"
+        );
+        assert!(hits > 0, "{memory}: some cone takes a shared quotient");
+        assert_eq!(run_on("8", memory, true).0, one, "{memory}: eight threads");
+        assert_eq!(run_on("1", memory, false).0, one, "{memory}: no sharing");
+    }
+}
+
 #[test]
 fn the_flag_overrides_rdra_toml_which_overrides_the_default() {
     let dir = project(

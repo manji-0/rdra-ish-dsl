@@ -2,6 +2,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::sync::Arc;
 
+use super::cache::QuotientCache;
 use super::extended::Extended;
 use super::*;
 use crate::lifecycle::cone::VarSet;
@@ -10,11 +11,42 @@ use crate::lifecycle::expr::State;
 use crate::lifecycle::types::{ActId, VarId};
 use crate::lifecycle::TransitionSystem;
 
-/// The classes of S, with the initial states' and the moves' classes.
+/// What the quotient of an observed S comes to (`Classes::of`).
+#[derive(Clone)]
+pub(super) enum Classified {
+    /// A run stopped at a cap or a limit, or the quotient is the identity on an S that no
+    /// inner reduction shrank (#101): it reduces nothing.
+    Nothing,
+    /// More classes than the tables of any cone it would reduce may print for TLC
+    /// (`TLA_CELL_BUDGET`): a cone prints at least one cell per class and observed var.
+    TooLarge,
+    Classes(Arc<Classes>),
+}
+
+/// Why `Quotient::of` gives no quotient.
+pub(super) enum NoQuotient {
+    Nothing,
+    /// `Classified::TooLarge`.
+    TooLarge,
+}
+
+/// The classes of S, with the initial states' and the moves' classes, in the cone's ids.
 pub(super) struct Quotient {
+    pub(super) classes: Arc<Classes>,
+    /// Per class, its moves with the cone's action and params.
+    pub(super) moves: Vec<Vec<ClassMove>>,
+}
+
+/// What a quotient holds that does not depend on the cone it reduces: the classes, and each
+/// class move with the extended sub-lifecycle's action and params. It is a function of the
+/// extended sub-lifecycle, its `obs`, inputs and rises, and the caps, so cones whose
+/// extended sub-lifecycles are equal share it (`QuotientCache`).
+pub(super) struct Classes {
     pub(super) reps: Vec<Box<[u8]>>,
     pub(super) class_of: HashMap<Box<[u8]>, u32>,
     pub(super) init: HashMap<Box<[u8]>, u32>,
+    /// Per class, its moves in the extended sub-lifecycle's ids, each `(class, action,
+    /// params, class)` once, in the order the run's edges first show it.
     pub(super) moves: Vec<Vec<ClassMove>>,
     pub(super) rises: BTreeMap<(u32, Box<[u8]>), u32>,
     pub(super) inner: Option<Arc<Reduction>>,
@@ -74,37 +106,88 @@ pub(super) fn quotient_blocks(
 
 impl Quotient {
     /// The quotient of the extended sub-lifecycle `ext` by stuttering equivalence with
-    /// respect to `obs` and the inputs; `None` when it does not fit under `caps`, or when the
-    /// quotient is the identity on an S that no inner reduction shrank, which would reduce
-    /// nothing (#101). An unobserved S is one class, held at an initial S state, with no
+    /// respect to `obs` and the inputs; `NoQuotient::Nothing` when it does not fit under
+    /// `caps`, or when the quotient is the identity on an S that no inner reduction shrank,
+    /// which would reduce nothing (#101), and `NoQuotient::TooLarge` when it has more classes
+    /// than the cone's TLA+ tables may print. An unobserved S is one class, held at an initial S state, with no
     /// moves: nothing on T reads it, so no path through it is told from staying put, whatever
-    /// its inputs do.
-    pub(super) fn of(ext: &Extended, cone: &TransitionSystem, caps: Caps) -> Option<Self> {
-        let raw = &ext.system;
+    /// its inputs do. The flag says whether no cap and no limit stopped a run on the way, so
+    /// that the result is what the same call computes under any memory room it fits in.
+    pub(super) fn of(
+        ext: &Extended,
+        cone: &TransitionSystem,
+        caps: Caps,
+        cache: &QuotientCache,
+    ) -> (Result<Self, NoQuotient>, bool) {
         if ext.obs_local.is_empty() {
-            let initial = raw.initial_states();
-            let rep = initial.first().expect("an initial state").0.clone();
-            return Some(Quotient {
-                class_of: HashMap::from([(rep.clone(), 0)]),
-                reps: vec![rep],
-                init: initial.iter().map(|st| (st.0.clone(), 0)).collect(),
-                moves: vec![Vec::new()],
-                rises: BTreeMap::new(),
-                inner: None,
-                states: initial.len(),
-                loops: vec![s_cycles(ext)],
-                divergence: Divergence {
-                    classes: 1,
-                    looping: usize::from(s_cycles(ext)),
-                    ..Divergence::default()
-                },
-            });
+            let classes = Arc::new(Classes::unobserved(ext));
+            let moves = vec![Vec::new()];
+            return (Ok(Quotient { classes, moves }), true);
         }
+        let (classified, clean) = cache.classes(ext, caps, || Classes::of(ext, caps, cache));
+        let classes = match classified {
+            Classified::Nothing => return (Err(NoQuotient::Nothing), clean),
+            Classified::TooLarge => return (Err(NoQuotient::TooLarge), clean),
+            Classified::Classes(classes) => classes,
+        };
+        {
+            // A class move in the cone's ids. Two of the extended sub-lifecycle's can be one
+            // of the cone's, which is kept once, where it first shows.
+            let mut seen: BTreeSet<(u32, ActId, Box<[u8]>, u32)> = BTreeSet::new();
+            let moves = classes
+                .moves
+                .iter()
+                .enumerate()
+                .map(|(x, from)| {
+                    from.iter()
+                        .filter_map(|(act, params, y)| {
+                            let act = ext.acts[act.index()]
+                                .expect("a silent step is an S action of the cone");
+                            // The BFS of the cone reads a class move's params by the cone
+                            // action's params.
+                            let params = ext.cone_params(cone, act, params);
+                            seen.insert((x as u32, act, params.clone(), *y))
+                                .then_some((act, params, *y))
+                        })
+                        .collect()
+                })
+                .collect();
+            (Ok(Quotient { classes, moves }), clean)
+        }
+    }
+}
+
+impl Classes {
+    /// The one class of an unobserved S (`Quotient::of`).
+    fn unobserved(ext: &Extended) -> Self {
+        let initial = ext.system.initial_states();
+        let rep = initial.first().expect("an initial state").0.clone();
+        Classes {
+            class_of: HashMap::from([(rep.clone(), 0)]),
+            reps: vec![rep],
+            init: initial.iter().map(|st| (st.0.clone(), 0)).collect(),
+            moves: vec![Vec::new()],
+            rises: BTreeMap::new(),
+            inner: None,
+            states: initial.len(),
+            loops: vec![s_cycles(ext)],
+            divergence: Divergence {
+                classes: 1,
+                looping: usize::from(s_cycles(ext)),
+                ..Divergence::default()
+            },
+        }
+    }
+
+    /// The classes of an observed S (`Quotient::of`), and whether no run on the way stopped.
+    pub(super) fn of(ext: &Extended, caps: Caps, cache: &QuotientCache) -> (Classified, bool) {
+        let raw = &ext.system;
         // The inputs stay on the nested T side: the rises are kept, and only `obs` anchors.
-        let sub = raw.reduced(&[(ext.obs_local.clone(), ext.rise_actions())], caps);
+        let (sub, clean) =
+            raw.reduced_in(&[(ext.obs_local.clone(), ext.rise_actions())], caps, cache);
         let run = sub.clone().run(caps);
         if !run.complete {
-            return None;
+            return (Classified::Nothing, false);
         }
         let n = run.states.len();
         let key_vars: VarSet = ext.obs_local.union(&ext.inputs_local).copied().collect();
@@ -123,7 +206,7 @@ impl Quotient {
         if !sub.reduction().is_some_and(|r| r.shrinks())
             && blocks.iter().collect::<BTreeSet<_>>().len() == n
         {
-            return None;
+            return (Classified::Nothing, clean);
         }
         let mut rep_of_block: HashMap<u32, u32> = HashMap::new();
         let mut reps: Vec<Box<[u8]>> = Vec::new();
@@ -136,6 +219,12 @@ impl Quotient {
                 reps.len() as u32 - 1
             });
             class.push(c);
+        }
+        // Every cone this quotient would reduce prints a cell per class and observed var at
+        // the least, so past the budget no cone takes it: its moves and divergence marks are
+        // not worth building.
+        if reps.len().saturating_mul(ext.obs_local.len()) > TLA_CELL_BUDGET {
+            return (Classified::TooLarge, clean);
         }
         // Initial S states, as the cone's initial states project them, to their classes. The
         // extended sub-lifecycle canonicalizes them for its own reduction first, as the run
@@ -157,7 +246,7 @@ impl Quotient {
         }
         let mut moves: Vec<Vec<ClassMove>> = vec![Vec::new(); reps.len()];
         let mut rises: BTreeMap<(u32, Box<[u8]>), u32> = BTreeMap::new();
-        let mut seen: BTreeSet<(u32, ActId, Box<[u8]>, u32)> = BTreeSet::new();
+        let mut seen: BTreeSet<(u32, ActId, &[u8], u32)> = BTreeSet::new();
         for e in run.edges() {
             let (x, y) = (e.from as usize, e.to as usize);
             let (act, params) = run.step(e);
@@ -174,11 +263,8 @@ impl Quotient {
             if class[x] == class[y] {
                 continue;
             }
-            let act = ext.acts[act.index()].expect("a silent step is an S action of the cone");
-            // The BFS of the cone reads a class move's params by the cone action's params.
-            let params = ext.cone_params(cone, act, params);
-            if seen.insert((class[x], act, params.clone(), class[y])) {
-                moves[class[x] as usize].push((act, params, class[y]));
+            if seen.insert((class[x], act, params, class[y])) {
+                moves[class[x] as usize].push((act, params.into(), class[y]));
             }
         }
         let (loops, divergence) = match s_cycles(ext) {
@@ -194,7 +280,7 @@ impl Quotient {
                 (vec![false; classes], d)
             }
         };
-        Some(Quotient {
+        let classes = Classes {
             reps,
             class_of,
             init,
@@ -204,7 +290,8 @@ impl Quotient {
             states: n,
             loops,
             divergence,
-        })
+        };
+        (Classified::Classes(Arc::new(classes)), clean)
     }
 }
 
@@ -577,13 +664,13 @@ impl Adj {
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
     use crate::lifecycle::tests::model_from;
     use crate::lifecycle::{Bounds, Scope};
 
     /// A job behind a gate behind a key, the key's status cycling or only rising.
-    fn model(key_cycles: bool) -> String {
+    pub(in crate::lifecycle::reduce) fn model(key_cycles: bool) -> String {
         let back = match key_cycles {
             true => {
                 "usecase Relock \"施錠\"\ntransitions(Relock, Key.status, unlocked -> locked)\n"
@@ -632,10 +719,17 @@ property JobStarts eventually(Job.status == running).fair(Start)
             split.obs.clear();
             let ext = Extended::of(&sys, &split);
             assert!(ext.obs_local.is_empty());
-            let q = Quotient::of(&ext, &sys, Caps::VERIFY).expect("one class");
-            assert_eq!(q.reps.len(), 1, "an unobserved sub-lifecycle is one class");
+            let cache = QuotientCache::new();
+            let Ok(q) = Quotient::of(&ext, &sys, Caps::VERIFY, &cache).0 else {
+                panic!("one class");
+            };
             assert_eq!(
-                q.loops,
+                q.classes.reps.len(),
+                1,
+                "an unobserved sub-lifecycle is one class"
+            );
+            assert_eq!(
+                q.classes.loops,
                 vec![key_cycles],
                 "the class can loop exactly when the key's status cycles"
             );
