@@ -97,7 +97,7 @@ fn an_entity_cone_reports_no_check_and_the_rule_cone_reports_its_own() {
 /// among a cone's targets), or a run of `Checks::All` (`TransitionSystem::run`, verify's
 /// safety cones). A new reader belongs here once it does; it fails this test until then.
 const CHECK_READERS: &[(&str, &str)] = &[
-    ("rdra-ish-cli/src/verify/bfs.rs", "of"),
+    ("rdra-ish-cli/src/verify/bfs.rs", "of_parts"),
     (
         "rdra-ish-core/src/lifecycle/explore/bfs.rs",
         "stop_if_all_failed",
@@ -112,7 +112,7 @@ const CHECK_READERS: &[(&str, &str)] = &[
 ];
 
 /// Every function outside tests that reads a run's check results: one that reads `.diags`
-/// and names a violation (`ConstraintViolated`, `AfterAssertViolated`, or `reports(`), or
+/// (or `.diagnostics()`, or takes `diags: &[Diag]`) and names a violation (`ConstraintViolated`, `AfterAssertViolated`, or `reports(`), or
 /// asks whether every check has failed (`violated.all(`).
 #[test]
 fn the_readers_of_check_results_are_pinned() {
@@ -131,7 +131,11 @@ fn the_readers_of_check_results_are_pinned() {
             .replace('\\', "/");
         let text = std::fs::read_to_string(&file).expect("a source file");
         for (name, body) in functions(&text) {
-            let diags = body.contains(".diags");
+            // `.diags` on a run, `.diagnostics()` on a `StoredRun`, or the diags a caller
+            // hands in.
+            let diags = [".diags", ".diagnostics()", "diags: &[Diag]"]
+                .iter()
+                .any(|k| body.contains(k));
             let names = ["ConstraintViolated", "AfterAssertViolated", "reports("]
                 .iter()
                 .any(|k| body.contains(k));

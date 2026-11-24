@@ -1,0 +1,44 @@
+// trap: an entity whose key names its own rows, so its rows and the values they hold are one
+// block that the canonical form enumerates jointly.
+// A created task's key names the task itself, and closing or keeping a task reads that key.
+// A task is closed or kept, never both: Close needs it not kept, Keep needs it open, and
+// neither undoes. The rule holds at every count. Up to instance symmetry the tasks are
+// sorted; a canonical form that moved the tasks but not the values of the key would leave a
+// moved task naming another row, its Close guard would fail, and the run would store fewer
+// forms than the tasks reach, which the orbit twin of a shadow run reports. A split use case
+// adds run marks on the same rows.
+// expect Forbidden_Task_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+// expect Deadlock_Task_status_open: native=counterexample tlc=counterexample
+entity Task "作業" {
+  id: Int @pk
+  status: Enum(open, closed) @default(open)
+  kept: Bool @default(false)
+}
+
+relate(Task, Task, N:1).optional()
+
+usecase Add "追加"
+usecase Spawn "子作業"
+usecase Close "完了"
+usecase Keep "保留"
+
+api ParentApi "親 API"
+api ChildApi "子 API"
+
+creates(Add, Task)
+invokes(Spawn, ParentApi)
+updates(ParentApi, Task)
+invokes(Spawn, ChildApi)
+creates(ChildApi, Task)
+transitions(Close, Task.status, open -> closed)
+sets(Keep, Task.kept == true)
+
+condition NotKept "保留していない"
+holds(NotKept, Task.kept == false)
+applies_to(NotKept, Close)
+
+condition Open "未完了"
+holds(Open, Task.status == open)
+applies_to(Open, Keep)
+
+forbidden(Task, Task.status == closed, Task.kept == true)

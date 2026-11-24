@@ -1836,6 +1836,21 @@ fn a_safety_cone_shared_with_an_entity_cone_counts_the_whole_cone() {
         "{stderr}"
     );
     assert!(stderr.contains("  counterexample (2 steps):"), "{stderr}");
+    // Up to instance symmetry the cone shares nothing (#212): it runs on its own and stops
+    // once its check has failed, where the entity pass's plain run would decide it.
+    let output = verify(
+        &repo(),
+        &tmp,
+        &[model.to_str().unwrap(), "--symmetry", "always"],
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(output.status.code(), Some(1), "{stdout}");
+    assert!(
+        stdout.contains(
+            "\nCone_Forbidden_Task_0 [Forbidden_Task_0]: counterexample (3 orbits, about 3 states)\n"
+        ),
+        "{stdout}"
+    );
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
@@ -1873,4 +1888,87 @@ fn a_safety_cone_stops_once_every_check_on_it_has_failed() {
         assert!(!stderr.contains("EngineDisagreement"), "{stderr}");
     }
     let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// `--symmetry retry` runs a cone as before and, when the memory limit stops it, runs it
+/// again up to instance symmetry, which decides it; `never` leaves it undecided (#212).
+#[test]
+fn symmetry_retry_decides_a_cone_the_memory_limit_stopped() {
+    let tmp = scratch("verify_cli_symmetry_retry");
+    let case = repo().join("crates/rdra-ish-cli/tests/engine_corpus/sym_owner_coupled.rdra");
+    let run = |mode: &str| {
+        let out = verify(
+            &repo(),
+            &tmp,
+            &[
+                case.to_str().unwrap(),
+                "--instance-count",
+                "3",
+                "--memory",
+                "128KiB",
+                "--symmetry",
+                mode,
+            ],
+        );
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let line = "Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: ";
+    let never = run("never");
+    assert!(
+        never.contains(&format!("{line}not decided (1245 states, stopped")),
+        "{never}"
+    );
+    let retry = run("retry");
+    assert!(
+        retry.contains(&format!(
+            "{line}ok (251 orbits, about 2.2K states, retried up to instance symmetry after \
+             the memory limit at 1245 states)"
+        )),
+        "{retry}"
+    );
+}
+
+/// A counterexample found up to instance symmetry names concrete rows: the stored path,
+/// whose forms the canonicalizer sorted at several steps, is lifted back and replayed.
+#[test]
+fn symmetry_lifts_a_counterexample_to_the_rows_it_names() {
+    let tmp = scratch("verify_cli_symmetry_lift");
+    let case = repo().join("crates/rdra-ish-cli/tests/engine_corpus/sym_lift_compose.rdra");
+    let out = verify(
+        &repo(),
+        &tmp,
+        &[
+            case.to_str().unwrap(),
+            "--instances",
+            "Queue=1",
+            "--symmetry",
+            "always",
+        ],
+    );
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let line =
+        "Cone_Quantifier_Queue_0 [Quantifier_Queue_0]: counterexample (10 orbits, about 13 states)";
+    assert!(text.contains(line), "{text}");
+    let steps: Vec<&str> = text
+        .lines()
+        .filter_map(|l| l.trim_start().split_once(". "))
+        .filter(|(n, _)| n.parse::<u32>().is_ok())
+        .map(|(_, rest)| rest.split("  ").next().unwrap_or(rest))
+        .collect();
+    assert_eq!(
+        steps,
+        [
+            "Add [Job#1, Queue#1]",
+            "Start [Job#1]",
+            "Finish [Job#1]",
+            "Add [Job#2, Queue#1]",
+            "Start [Job#2]",
+            "Finish [Job#2]",
+        ],
+        "{text}"
+    );
 }
