@@ -138,6 +138,37 @@ jobs:
         # states every engine's verdict; about 45 s locally.
         run: RDRA_REQUIRE_TLC=1 RDRA_REQUIRE_Z3=1 cargo test --release -p rdra-ish-cli --test engine_corpus
 
+  shadow:
+    # Every fast function that has a reference twin checked against the twin on every call
+    # (#275): the `shadow` build of the CLI over the samples and the engine corpus. A fast
+    # path that returns what its twin does not panics with the call's name. A job of its own
+    # beside formal-verify and engine-equivalence, gated as they are.
+    needs: changes
+    if: needs.changes.outputs.verify == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: cachix/install-nix-action@v31
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the shadow CLI
+        run: cargo build -p rdra-ish-cli --release --features shadow
+      - name: Every twin compares calls
+        # How many calls each twin compared and skipped on one sample. patent-ops reaches all
+        # of them; the step fails when the line is missing (a build without the feature) or a
+        # twin compared none.
+        run: |
+          RDRA_ISH_SHADOW_STATS=1 target/release/rdra-ish verify samples/patent-ops 2> shadow-stats.txt
+          cat shadow-stats.txt
+          grep -q '^shadow: compared/skipped ' shadow-stats.txt
+          ! grep -qE '^shadow: compared/skipped .*=0/' shadow-stats.txt
+      - name: Every sample against its expect header, each fast path held to its twin
+        run: scripts/verify-samples.sh target/release/rdra-ish
+        timeout-minutes: 20
+      - name: The adversarial corpus, each fast path held to its twin
+        run: RDRA_REQUIRE_TLC=1 RDRA_REQUIRE_Z3=1 cargo test --release -p rdra-ish-cli --features shadow --test engine_corpus
+        timeout-minutes: 20
+
   kani:
     # The Kani harnesses beside the code they prove (docs/engine-agreement.md#kani-harnesses),
     # when a change can reach one, and on every push to main. Kani is not in nixpkgs, so the

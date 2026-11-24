@@ -9,6 +9,8 @@ use crate::lifecycle::TransitionSystem;
 use super::plan::Plan;
 use super::{Move, Moves};
 
+mod reference;
+
 impl TransitionSystem {
     pub(crate) fn pattern_key(&self, state: &StateSlice, e: EntId, slot: usize) -> Box<[u8]> {
         self.entity(e)
@@ -83,56 +85,6 @@ impl TransitionSystem {
         out
     }
 
-    /// Slot choices for each param: the lowest absent slot for `New`, every present slot
-    /// otherwise.
-    pub(super) fn bindings(&self, action: &Action, state: &StateSlice) -> Vec<Vec<u8>> {
-        self.bindings_for(action, state, false)
-    }
-
-    /// `bindings`, except that with `crowd` a `New` param with no free slot takes every slot,
-    /// as if the bound left one free.
-    pub(super) fn bindings_for(
-        &self,
-        action: &Action,
-        state: &StateSlice,
-        crowd: bool,
-    ) -> Vec<Vec<u8>> {
-        let mut out: Vec<Vec<u8>> = vec![Vec::new()];
-        for p in &action.params {
-            let exists = self.entity(p.entity).exists;
-            let n = self.slots(p.entity);
-            let slots: Vec<u8> = match p.role {
-                ParamRole::New => {
-                    match (0..n).find(|&s| state.get(self, exists, s) == Value::ABSENT) {
-                        Some(s) => vec![s as u8],
-                        None if crowd => (0..n as u8).collect(),
-                        None => Vec::new(),
-                    }
-                }
-                ParamRole::Existing | ParamRole::Parent { .. } | ParamRole::Triggered => (0..n)
-                    .filter(|&s| state.get(self, exists, s) == Value::PRESENT)
-                    .map(|s| s as u8)
-                    .collect(),
-                // Matched by its run mark, a guard, whether or not the slot is present.
-                ParamRole::Earlier { .. } => (0..n as u8).collect(),
-            };
-            out = out
-                .into_iter()
-                .flat_map(|prefix| {
-                    slots.iter().map(move |s| {
-                        let mut b = prefix.clone();
-                        b.push(*s);
-                        b
-                    })
-                })
-                .collect();
-            if out.is_empty() {
-                break;
-            }
-        }
-        out
-    }
-
     /// The `bindings` of `action` in `state` whose pre-guards hold, in `bindings` order.
     #[cfg(test)]
     pub(super) fn enabled_bindings(&self, action: &Action, state: &StateSlice) -> Vec<Box<[u8]>> {
@@ -149,28 +101,33 @@ impl TransitionSystem {
     }
 
     /// Calls `found` with each of the `bindings` of `action` in `state` whose pre-guards hold,
-    /// in `bindings` order. A build with debug assertions checks the result against `bindings`
-    /// and `pre_guards_hold`, the definition.
+    /// in `bindings` order. A build with debug assertions or the `shadow` feature checks the
+    /// result against the reference twin: `bindings` filtered by `pre_guards_hold`.
     fn each_enabled(
         &self,
         action: &Action,
         plan: &Plan,
         state: &StateSlice,
-        mut found: impl FnMut(&[u8]),
+        found: impl FnMut(&[u8]),
     ) {
-        if !cfg!(debug_assertions) {
-            return self.each_planned(action, plan, state, found);
+        #[cfg(not(any(debug_assertions, feature = "shadow")))]
+        self.each_planned(action, plan, state, found);
+        #[cfg(any(debug_assertions, feature = "shadow"))]
+        {
+            let mut found = found;
+            let mut got: Vec<Box<[u8]>> = Vec::new();
+            self.each_planned(action, plan, state, |params| got.push(params.into()));
+            let want = reference::enabled_bindings(self, action, state);
+            assert!(
+                got == want,
+                "shadow: each_enabled({}) in state {:?}: planned {got:?}, reference {want:?}",
+                action.name,
+                &state.0
+            );
+            #[cfg(feature = "shadow")]
+            crate::shadow::compared(crate::shadow::Twin::EachEnabled);
+            got.iter().for_each(|params| found(params));
         }
-        let mut got: Vec<Box<[u8]>> = Vec::new();
-        self.each_planned(action, plan, state, |params| got.push(params.into()));
-        let want: Vec<Box<[u8]>> = self
-            .bindings(action, state)
-            .into_iter()
-            .filter(|params| self.pre_guards_hold(action, state, params))
-            .map(Vec::into_boxed_slice)
-            .collect();
-        assert_eq!(got, want, "the enabled bindings of {}", action.name);
-        got.iter().for_each(|params| found(params));
     }
 
     /// `each_enabled` as `plan` reads the guards: a slot that fails its param's row tests is
@@ -266,20 +223,6 @@ impl TransitionSystem {
     fn rest_holds(&self, plan: &Plan, state: &StateSlice, params: &[u8]) -> bool {
         let mut env = Env::new(params);
         plan.pre.iter().all(|pred| self.eval(pred, state, &mut env))
-    }
-
-    pub(super) fn pre_guards_hold(
-        &self,
-        action: &Action,
-        state: &StateSlice,
-        params: &[u8],
-    ) -> bool {
-        let mut env = Env::new(params);
-        action
-            .guards
-            .iter()
-            .filter(|g| !g.reads_successor())
-            .all(|g| self.eval(&g.pred, state, &mut env))
     }
 
     pub(super) fn successors(&self, action: &Action, params: &[u8], s: &StateSlice) -> Vec<State> {

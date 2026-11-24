@@ -7,6 +7,12 @@ license.workspace = true
 repository.workspace = true
 description.workspace = true
 
+[features]
+# Each fast function that has a reference twin also runs the twin and panics, naming the call,
+# when the two differ (#275). For a checking run over the samples and the corpus; a release
+# build leaves it off.
+shadow = []
+
 [dependencies]
 rdra-ish-syntax = { path = "../rdra-ish-syntax" }
 miette      = { workspace = true }

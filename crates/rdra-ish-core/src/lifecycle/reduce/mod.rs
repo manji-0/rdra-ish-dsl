@@ -37,6 +37,8 @@ mod extended;
 mod fold;
 mod lift;
 mod partition;
+#[cfg(feature = "shadow")]
+mod reference;
 mod split;
 
 pub use cache::QuotientCache;
@@ -662,7 +664,7 @@ impl TransitionSystem {
             scratch,
             |act, params, next| {
                 // A steady action's step leaves the inputs as they were, so the class too.
-                debug_assert!(rises
+                crate::shadow_assert!(rises
                     .is_none_or(|r| !r.is_steady(act) || r.input_bytes(self, next) == *before));
                 if let Some(r) = rises.filter(|r| !r.is_steady(act)) {
                     r.input_bytes_into(self, next, after);
@@ -682,12 +684,16 @@ impl TransitionSystem {
             },
         );
         if let Some(r) = r {
+            #[cfg(feature = "shadow")]
+            let from = out.len();
             let class = class.unwrap_or_else(|| class_of(r, key));
             for (act, params, to) in &r.moves[class as usize] {
                 scratch.0.copy_from_slice(&s.0);
                 r.write(scratch, &r.reps[*to as usize]);
                 out.push(*act, params, scratch);
             }
+            #[cfg(feature = "shadow")]
+            reference::check_class_moves(r, self, s, out, from);
         }
         out.reduced = buffers;
     }

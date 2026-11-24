@@ -9,6 +9,9 @@ use hashbrown::HashTable;
 use crate::fasthash::FastHasher;
 use crate::lifecycle::expr::{State, StateSlice};
 
+#[cfg(feature = "shadow")]
+mod reference;
+
 /// States of `width` bytes each, numbered in the order pushed.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct States {
@@ -164,20 +167,46 @@ fn hash(s: &StateSlice) -> u64 {
 }
 
 /// The index of each state in a `States`, found by its bytes: the table holds the index alone.
+/// Under the `shadow` feature it keeps its reference twin beside the table.
 #[derive(Default)]
-pub(super) struct Seen(HashTable<u32>);
+pub(super) struct Seen {
+    table: HashTable<u32>,
+    #[cfg(feature = "shadow")]
+    twin: reference::Seen,
+}
 
 impl Seen {
     /// The index of `s` in `states`, if it is there.
     pub fn find(&self, states: &States, s: &StateSlice) -> Option<u32> {
-        self.0.find(hash(s), |&i| states[i as usize] == *s).copied()
+        let found = self
+            .table
+            .find(hash(s), |&i| states[i as usize] == *s)
+            .copied();
+        #[cfg(feature = "shadow")]
+        {
+            let want = self.twin.find(s);
+            assert!(
+                found == want,
+                "shadow: Seen::find({:?}): table {found:?}, reference {want:?}",
+                &s.0
+            );
+            crate::shadow::compared(crate::shadow::Twin::Seen);
+        }
+        found
     }
 
     /// Notes that `states[at]` is not yet in the table and now is.
     pub fn insert(&mut self, states: &States, at: u32) {
-        self.0.insert_unique(hash(&states[at as usize]), at, |&i| {
-            hash(&states[i as usize])
-        });
+        self.table
+            .insert_unique(hash(&states[at as usize]), at, |&i| {
+                hash(&states[i as usize])
+            });
+        #[cfg(feature = "shadow")]
+        assert!(
+            self.twin.insert(&states[at as usize], at),
+            "shadow: Seen::insert({at}): the reference holds {:?} already",
+            &states[at as usize].0
+        );
     }
 
     /// The bytes the table takes once `more` indices are inserted: one control byte and one
@@ -188,8 +217,8 @@ impl Seen {
             c if c < 8 => (c + 1).next_power_of_two(),
             c => (c * 8 / 7).next_power_of_two(),
         };
-        let mut n = buckets(self.0.capacity());
-        if self.0.len() + more > self.0.capacity() {
+        let mut n = buckets(self.table.capacity());
+        if self.table.len() + more > self.table.capacity() {
             n = (n * 2).max(4);
         }
         (n * (size_of::<u32>() + 1)) as u64

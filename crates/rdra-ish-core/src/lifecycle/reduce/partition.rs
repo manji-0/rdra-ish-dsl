@@ -12,8 +12,11 @@ use crate::lifecycle::expr::State;
 use crate::lifecycle::types::{ActId, VarId};
 use crate::lifecycle::TransitionSystem;
 
+#[cfg(any(test, feature = "shadow"))]
+mod reference;
+
 /// What the quotient of an observed S comes to (`Classes::of`).
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub(super) enum Classified {
     /// A run stopped at a cap or a limit, or the quotient is the identity on an S that no
     /// inner reduction shrank (#101): it reduces nothing.
@@ -42,6 +45,7 @@ pub(super) struct Quotient {
 /// class move with the extended sub-lifecycle's action and params. It is a function of the
 /// extended sub-lifecycle, its `obs`, inputs and rises, and the caps, so cones whose
 /// extended sub-lifecycles are equal share it (`QuotientCache`).
+#[derive(PartialEq)]
 pub(super) struct Classes {
     pub(super) reps: Vec<Box<[u8]>>,
     pub(super) class_of: HashMap<Box<[u8]>, u32>,
@@ -151,7 +155,7 @@ impl Quotient {
             let moves = vec![Vec::new()];
             return (Ok(Quotient { classes, moves }), true);
         }
-        let (classified, clean) = cache.classes(ext, caps, || Classes::of(ext, caps, cache));
+        let (classified, clean) = cache.classes(ext, caps, |cache| Classes::of(ext, caps, cache));
         let classes = match classified {
             Classified::Nothing => return (Err(NoQuotient::Nothing), clean),
             Classified::TooLarge => return (Err(NoQuotient::TooLarge), clean),
@@ -231,6 +235,8 @@ impl Classes {
             .collect();
         let (silent, rise_edges) = split_edges(&run, &ext.rise);
         let blocks = quotient_blocks(n, &silent, &rise_edges, &initial);
+        #[cfg(any(test, feature = "shadow"))]
+        reference::check(n, &silent, &rise_edges, &initial, &blocks);
         if !sub.reduction().is_some_and(|r| r.shrinks())
             && blocks.iter().collect::<BTreeSet<_>>().len() == n
         {
@@ -252,14 +258,6 @@ impl Classes {
             }
             class.push(*c);
         }
-        #[cfg(test)]
-        assert!(
-            tests::same_partition(
-                &blocks,
-                &reference::quotient_blocks(n, &silent, &rise_edges, &initial)
-            ),
-            "the worklist partition is the reference's"
-        );
         // Every cone this quotient would reduce prints a cell per class and observed var at
         // the least, so past the budget no cone takes it: its moves and divergence marks are
         // not worth building.
@@ -740,120 +738,6 @@ impl Adj {
     }
 }
 
-/// The partition as it was computed before the worklist (#252): every block a splitter in
-/// each sweep, sweeps until one splits nothing, and the rises' signatures as sets. The
-/// tests hold the worklist to it.
-#[cfg(test)]
-pub(super) mod reference {
-    use std::collections::{BTreeSet, HashMap};
-
-    use super::Adj;
-
-    /// The partition of a run of the extended sub-lifecycle: the coarsest one that refines
-    /// `initial` (the states' `obs` and inputs), is divergence-blind stuttering stable under the
-    /// silent edges, and is strongly stable under the rise edges: two states of a block reach the
-    /// same blocks by a rise. The blocks refine the inputs, so the block a rise enters names the
-    /// inputs it set, and the second condition says that two equivalent states stay equivalent
-    /// under every rise. Returns each state's block.
-    pub(super) fn quotient_blocks(
-        n: usize,
-        silent: &[(u32, u32)],
-        rises: &[(u32, u32)],
-        initial: &[u32],
-    ) -> Vec<u32> {
-        let mut block = stuttering_blocks(n, silent, initial);
-        if rises.is_empty() {
-            return block;
-        }
-        loop {
-            let mut signature: Vec<BTreeSet<u32>> = vec![BTreeSet::new(); n];
-            for &(x, y) in rises {
-                signature[x as usize].insert(block[y as usize]);
-            }
-            let mut index: HashMap<(u32, &BTreeSet<u32>), u32> = HashMap::new();
-            let refined: Vec<u32> = (0..n)
-                .map(|i| {
-                    let len = index.len() as u32;
-                    *index.entry((block[i], &signature[i])).or_insert(len)
-                })
-                .collect();
-            let before = block.iter().collect::<BTreeSet<_>>().len();
-            if index.len() == before {
-                return block;
-            }
-            block = stuttering_blocks(n, silent, &refined);
-        }
-    }
-
-    /// Divergence-blind stuttering equivalence of a graph whose moves are all silent, refining
-    /// `initial`, the block of each state: the coarsest partition in which, for any two blocks
-    /// B and B', either every state of B reaches B' through B or none does. Returns each state's
-    /// block.
-    pub(super) fn stuttering_blocks(n: usize, edges: &[(u32, u32)], initial: &[u32]) -> Vec<u32> {
-        let mut block: Vec<u32> = initial.to_vec();
-        let mut nblocks = block.iter().max().map_or(0, |b| *b as usize + 1);
-        let inter: Vec<(u32, u32)> = edges.iter().copied().filter(|(a, b)| a != b).collect();
-        let pred_pairs: Vec<(u32, u32)> = inter.iter().map(|&(a, b)| (b, a)).collect();
-        let pred = Adj::new(n, &pred_pairs);
-        let mut members: Vec<Vec<u32>> = vec![Vec::new(); nblocks];
-        for (i, &b) in block.iter().enumerate() {
-            members[b as usize].push(i as u32);
-        }
-        let mut marked = vec![false; n];
-        loop {
-            let mut changed = false;
-            let mut splitter = 0;
-            while splitter < nblocks {
-                let mut stack: Vec<u32> = Vec::new();
-                let mut touched: Vec<u32> = Vec::new();
-                for &t in &members[splitter] {
-                    for &p in pred.of(t) {
-                        if block[p as usize] != splitter as u32 && !marked[p as usize] {
-                            marked[p as usize] = true;
-                            stack.push(p);
-                            touched.push(p);
-                        }
-                    }
-                }
-                while let Some(x) = stack.pop() {
-                    for &p in pred.of(x) {
-                        if block[p as usize] == block[x as usize] && !marked[p as usize] {
-                            marked[p as usize] = true;
-                            stack.push(p);
-                            touched.push(p);
-                        }
-                    }
-                }
-                let mut by_block: HashMap<u32, Vec<u32>> = HashMap::new();
-                for &x in &touched {
-                    by_block.entry(block[x as usize]).or_default().push(x);
-                }
-                let mut split: Vec<(u32, Vec<u32>)> = by_block.into_iter().collect();
-                split.sort_unstable();
-                for (b, xs) in split {
-                    if xs.len() < members[b as usize].len() {
-                        let nb = nblocks as u32;
-                        nblocks += 1;
-                        for &x in &xs {
-                            block[x as usize] = nb;
-                        }
-                        members.push(xs);
-                        members[b as usize].retain(|m| block[*m as usize] == b);
-                        changed = true;
-                    }
-                }
-                for &x in &touched {
-                    marked[x as usize] = false;
-                }
-                splitter += 1;
-            }
-            if !changed {
-                return block;
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 pub(super) mod tests {
     use super::*;
@@ -927,16 +811,6 @@ property JobStarts eventually(Job.status == running).fair(Start)
         }
     }
 
-    /// Two partitions are the same up to the numbering of their blocks.
-    pub(super) fn same_partition(a: &[u32], b: &[u32]) -> bool {
-        let mut ab: HashMap<u32, u32> = HashMap::new();
-        let mut ba: HashMap<u32, u32> = HashMap::new();
-        a.len() == b.len()
-            && a.iter().zip(b).all(|(x, y)| {
-                *ab.entry(*x).or_insert(*y) == *y && *ba.entry(*y).or_insert(*x) == *x
-            })
-    }
-
     /// A small deterministic generator, so a failing graph can be named by its seed.
     fn lcg(seed: &mut u64) -> u64 {
         *seed = seed
@@ -982,7 +856,7 @@ property JobStarts eventually(Job.status == running).fair(Start)
             let new = quotient_blocks(n, &silent, &rises, &initial);
             let old = reference::quotient_blocks(n, &silent, &rises, &initial);
             assert!(
-                same_partition(&new, &old),
+                reference::same_partition(&new, &old),
                 "seed {seed0}: {new:?} vs {old:?}"
             );
         }

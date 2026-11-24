@@ -321,9 +321,8 @@ impl BfsCone {
     /// The verdict of `run`, a run of `cone`'s system.
     pub(super) fn of(ts: &TransitionSystem, cone: &ConeSystem, run: &ComponentRun) -> BfsCone {
         // The module checks every invariant and after-assert its system holds, as TLC does.
-        debug_assert_eq!(
-            run.checks(),
-            &Checks::All,
+        rdra_ish_core::shadow_assert!(
+            run.checks() == &Checks::All,
             "a safety cone evaluates every check"
         );
         let found = run

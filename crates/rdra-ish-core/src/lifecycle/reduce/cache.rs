@@ -138,14 +138,18 @@ impl QuotientCache {
     /// The classes of `ext` under `caps`, and whether they came out clean: the entry when one
     /// is stored and its runs fit the caller's pool, else `compute()`, stored when clean. Caps
     /// with a deadline bypass the cache: whether a run beats the clock is not in the key.
+    /// `compute` is given the cache its nested reductions go through.
+    ///
+    /// A `shadow` build holds each hit to its reference twin: the classes computed afresh,
+    /// through a cache that holds nothing.
     pub(super) fn classes(
         &self,
         ext: &Extended,
         caps: Caps,
-        compute: impl FnOnce() -> (Classified, bool),
+        compute: impl FnOnce(&QuotientCache) -> (Classified, bool),
     ) -> (Classified, bool) {
         if self.off || caps.deadline.is_some() {
-            return compute();
+            return compute(self);
         }
         let slot = {
             let mut slots = self.slots.lock().unwrap_or_else(PoisonError::into_inner);
@@ -166,9 +170,29 @@ impl QuotientCache {
         let mut entry = slot.entry.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(e) = entry.as_ref().filter(|e| fits(e.need, caps)) {
             self.note(|s| s.hits += 1);
+            // The cache's own tests ask for a hit with a `compute` that must not run.
+            #[cfg(all(feature = "shadow", not(test)))]
+            {
+                let (fresh, clean) = compute(&QuotientCache::off());
+                // A recomputation that a limit stopped says nothing of the entry.
+                if !clean {
+                    crate::shadow::skipped(crate::shadow::Twin::CacheHit);
+                } else {
+                    assert!(
+                        fresh == e.classes,
+                        "shadow: QuotientCache::classes: the entry a hit took for the sub-lifecycle of {:?} is not what Classes::of computes afresh",
+                        ext.system
+                            .entities
+                            .iter()
+                            .map(|e| e.id.as_str())
+                            .collect::<Vec<_>>()
+                    );
+                    crate::shadow::compared(crate::shadow::Twin::CacheHit);
+                }
+            }
             return (e.classes.clone(), true);
         }
-        let ((classes, clean), seen) = crate::memory::watch(compute);
+        let ((classes, clean), seen) = crate::memory::watch(|| compute(self));
         self.note(|s| s.computed += 1);
         if clean && entry.is_none() {
             let bytes = match &classes {
@@ -190,6 +214,16 @@ impl QuotientCache {
             }
         }
         (classes, clean)
+    }
+
+    /// A cache that holds nothing: every cone computes its own.
+    #[cfg(all(feature = "shadow", not(test)))]
+    fn off() -> Self {
+        QuotientCache {
+            slots: Mutex::new(Vec::new()),
+            off: true,
+            stats: Mutex::new(Stats::default()),
+        }
     }
 
     fn note(&self, f: impl FnOnce(&mut Stats)) {
@@ -353,7 +387,7 @@ mod tests {
     /// Asks `cache` for `ext` under `caps`; true when it computed.
     fn computes(cache: &QuotientCache, ext: &Extended, caps: Caps) -> bool {
         let ran = Cell::new(false);
-        cache.classes(ext, caps, || {
+        cache.classes(ext, caps, |_| {
             ran.set(true);
             Classes::of(ext, caps, cache)
         });
@@ -368,7 +402,7 @@ mod tests {
         let (a, b) = (job_ext(true), job_ext(true));
         assert!(computes(&cache, &a, Caps::VERIFY));
         assert!(!computes(&cache, &b, Caps::VERIFY), "an equal key is a hit");
-        let (hit, clean) = cache.classes(&b, Caps::VERIFY, || unreachable!());
+        let (hit, clean) = cache.classes(&b, Caps::VERIFY, |_| unreachable!());
         let (fresh, _) = Classes::of(&b, Caps::VERIFY, &QuotientCache::new());
         let (hit, fresh) = (quotient(hit), quotient(fresh));
         assert!(clean);
@@ -440,7 +474,7 @@ mod tests {
         near.push(("a charged pool", job_ext(true), caps.charged_to(pool)));
         for (what, e, caps) in &near {
             let ran = Cell::new(false);
-            cache.classes(e, *caps, || {
+            cache.classes(e, *caps, |_| {
                 ran.set(true);
                 (Classified::Nothing, false)
             });
@@ -473,7 +507,7 @@ mod tests {
         assert_eq!(pool.held(), stored, "the entry is charged, and only it");
         let short = Caps::VERIFY.charged_to(pool.with_room(need - 1));
         let ran = Cell::new(false);
-        let (_, clean) = cache.classes(&ext, short, || {
+        let (_, clean) = cache.classes(&ext, short, |_| {
             ran.set(true);
             Classes::of(&ext, short, &QuotientCache::new())
         });
@@ -481,7 +515,7 @@ mod tests {
         assert!(!clean, "and a run stops at the limit");
         let exact = Caps::VERIFY.charged_to(pool.with_room(need));
         let ((_, clean), seen) =
-            crate::memory::watch(|| cache.classes(&ext, exact, || unreachable!()));
+            crate::memory::watch(|| cache.classes(&ext, exact, |_| unreachable!()));
         assert!(clean, "a room of `need` takes the entry");
         assert_eq!(seen.peak, need, "a hit shows the peak computing shows");
         assert!(!seen.crowded);
