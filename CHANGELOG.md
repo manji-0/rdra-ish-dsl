@@ -343,6 +343,14 @@
 
 ### Changed
 
+- The flake's `tlc` (in `nix develop` and on the `PATH` of the flake's `rdra-ish`) runs TLC
+  1.7.4 on JDK 21 instead of JDK 8, with a class-data-sharing archive of TLC's classes built
+  with it (#309). `verify --with-tlc` also compiles a state-model run of at most 10,000
+  states by BFS with C1 only (`-XX:TieredStopAtLevel=1`), once TLC has started with that
+  flag; cone runs, whose size is not known when they start, keep the default JIT. The
+  engine corpus (306 TLC runs, 159 of them state models) went from 45.5 s wall and 267
+  CPU-s to 37.3 s and 171 CPU-s on an 18-core Mac. Verdicts, traces, and the parsing of TLC's
+  output are unchanged; the devShell's `java` is JDK 21 too.
 - `verify` reduces a cone whose TLA+ tables print up to 530,000 cells, not 200,000 (#284),
   for the native checker and TLC alike, so both still check the same cones.
   food-permit-ops' `AfterAssert_SuspendBusiness_0` at `--instance-count 3` is now reduced

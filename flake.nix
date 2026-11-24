@@ -33,6 +33,56 @@
             }
           )
         );
+      # TLC 1.7.4 as nixpkgs packages it, on JDK 21 instead of JDK 8, with a class-data-sharing
+      # archive of the classes TLC loads (#309). Each `verify --with-tlc` starts many short
+      # TLC runs, and both cut what a run costs before it reaches the model: 0.80 to 0.63 s
+      # wall and 0.70 to 0.59 CPU-s for an 87-state cone. The archive is recorded from one run of
+      # nix/tlc-cds/Train.tla against the jar's store path. The JVM checks that the jar and
+      # the JDK are the ones it was recorded with and ignores it when they are not, so the
+      # archive can only go unused, not change a run. `-XX:+UseParallelGC` stays as nixpkgs
+      # sets it: TLC asks for it, and a second GC flag stops the JVM.
+      tlcFor =
+        pkgs:
+        let
+          jdk = pkgs.jdk21_headless;
+          tlaplus = pkgs.tlaplus.override { jre8 = jdk; };
+          jar = "${tlaplus}/share/java/tla2tools.jar";
+          archive = pkgs.runCommand "tla2tools-${tlaplus.version}-cds" { } ''
+            mkdir -p $out work
+            cp ${./nix/tlc-cds}/Train.tla ${./nix/tlc-cds}/Train.cfg work/
+            cd work
+            # Runs TLC on the training spec with the JVM flags given; TLC exits 13 on the
+            # violated property, as intended.
+            train() {
+              rm -rf states
+              status=0
+              ${jdk}/bin/java -XX:+UseParallelGC -XX:-UsePerfData "$@" -Djava.io.tmpdir=$PWD \
+                -cp ${jar} tlc2.TLC -workers 1 -metadir $PWD/states \
+                -config Train.cfg Train.tla > train.log 2>&1 || status=$?
+              if [ $status -ne 13 ] || ! grep -q '^Error: Temporal properties were violated.$' train.log; then
+                cat train.log
+                exit 1
+              fi
+            }
+            train -XX:ArchiveClassesAtExit=$out/tla2tools.jsa
+            # The archive must map: -Xshare:on stops the JVM where the default would skip it.
+            train -Xshare:on -XX:SharedArchiveFile=$out/tla2tools.jsa
+          '';
+        in
+        pkgs.runCommand "tlaplus-${tlaplus.version}-jdk21"
+          {
+            nativeBuildInputs = [ pkgs.makeWrapper ];
+            inherit (tlaplus) meta;
+          }
+          ''
+            mkdir -p $out/bin
+            ln -s ${tlaplus}/share $out/share
+            makeWrapper ${jdk}/bin/java $out/bin/tlc \
+              --add-flags "-XX:+UseParallelGC -XX:SharedArchiveFile=${archive}/tla2tools.jsa -cp ${jar} tlc2.TLC"
+            for tool in tlasany pcal tlatex; do
+              ln -s ${tlaplus}/bin/$tool $out/bin/$tool
+            done
+          '';
     in
     {
       packages = forAllSystems (pkgs: {
@@ -56,7 +106,7 @@
             wrapProgram $out/bin/rdra-ish \
               --suffix PATH : ${
                 pkgs.lib.makeBinPath [
-                  pkgs.tlaplus
+                  (tlcFor pkgs)
                   pkgs.z3
                 ]
               }
@@ -88,8 +138,8 @@
             pkgs.python3
 
             # Formal verification (TLC)
-            pkgs.jdk17_headless
-            pkgs.tlaplus
+            pkgs.jdk21_headless
+            (tlcFor pkgs)
             # `verify --prove` (tests/prove_cli.rs, tests/proof_equivalence.rs)
             pkgs.z3
 
@@ -107,7 +157,7 @@
           # GNU time for scripts/verify-samples.sh (macOS has BSD /usr/bin/time).
           ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.time ];
 
-          JAVA_HOME = "${pkgs.jdk17_headless}";
+          JAVA_HOME = "${pkgs.jdk21_headless}";
 
           # A GOROOT from the user's shell (a version manager's Go, say) points the flake's
           # `go` at another toolchain's standard library, and the codegen build tests then
