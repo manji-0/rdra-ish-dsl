@@ -343,6 +343,19 @@
 
 ### Changed
 
+- `verify` explores a cone once when its entity, safety and property passes reduce it to the
+  same system (#209, #296). The pass that runs such a system first runs it with every check
+  and to the end, and the later passes decide their cones on that run. Two cones share a run
+  only when their reduced systems are equal, and only a complete run is shared. A failing
+  safety cone that shares the run of an entity or property cone now prints the state count
+  of the whole cone, where a run of its own stops once every check has failed (#213): for
+  example `Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: counterexample (31 states)`
+  instead of `(7 states)` on `samples/formal-verification/cross_order_payment_split.rdra`.
+  The verdicts, the counterexamples and every other line are unchanged. At `RDRA_JOBS=1`,
+  `verify` retires 37% fewer instructions on `patent-ops` (59.0 G to 36.9 G), whose safety
+  pass explored the entity pass's two largest cones again, and 9% fewer on
+  `insurance-claim-ops`, whose property `ClaimEventuallyDecided` explored the cone of
+  `Forbidden_Claim_4` again.
 - `verify` no longer runs a sub-lifecycle again for each cone that shares it after the run
   stopped at the memory limit (#289). The declined quotient is shared through the quotient
   cache of #252 when no other run's bytes decided the stop: a cone with the same extended

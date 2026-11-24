@@ -1,6 +1,7 @@
 use super::jobs::{ConeSystem, Job, JobKind};
+use super::native::Plain;
 use super::report::run_line;
-use super::tlc::covering;
+use super::shared::Shared;
 use super::WholeRun;
 use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_output::Outcome;
@@ -54,6 +55,8 @@ pub(super) const STATE_MODEL_TLC_STATES: usize = 100_000;
 /// `Deadlock`s (errors, or warnings at the bound), and the `NeverRuns` warnings, rendered;
 /// then BFS on each `can_reach` cone, unreduced; then the `not checked:` block and one
 /// summary line each. Every run is held to `caps`, the state cap and the memory limit.
+/// An entity cone whose system is one of `every_check` evaluates every check, and
+/// `on_cone` sees each entity cone's run while the pass holds it (#209).
 #[allow(clippy::too_many_arguments)]
 pub(super) fn state_models(
     program: &ResolvedProgram,
@@ -64,6 +67,8 @@ pub(super) fn state_models(
     caps: Caps,
     with_tlc: bool,
     quotients: QuotientCache,
+    every_check: &[&TransitionSystem],
+    mut on_cone: impl FnMut(&ComponentRun),
 ) -> Bfs {
     let pick = |want: fn(&Target) -> bool| -> Vec<Target> {
         selection.targets.iter().copied().filter(want).collect()
@@ -74,7 +79,10 @@ pub(super) fn state_models(
         true => ts.reach_targets(),
         false => Vec::new(),
     };
-    let mut run = ts.explore_targets_reduced_in(&entities, caps, &quotients);
+    let mut run = ts.explore_targets_reduced_in(&entities, caps, &quotients, every_check);
+    for cone in &run.cones {
+        on_cone(&cone.run);
+    }
     // The entity pass is the last that reduces a cone: what the cache holds goes back to the
     // pool before the runs that follow, which see it as they would without the cache.
     drop(quotients);
@@ -463,47 +471,121 @@ pub(super) fn crowded(run: &ComponentRun) -> bool {
         .any(|d| matches!(d.diag, StateDiag::MemoryCapReached { .. }))
 }
 
+/// The safety cone of `jobs[at]`, decided on `run`, a run of its system: its verdict, and the
+/// vacuous checks of it and of the cones `covers` says it covers.
+pub(super) fn safety_on(
+    ts: &TransitionSystem,
+    jobs: &[Job],
+    covers: &[Option<usize>],
+    at: usize,
+    run: &ComponentRun,
+) -> (BfsCone, Vec<Diag>) {
+    let me = safety_cone(jobs, at).expect("a safety cone");
+    let vacuous: Vec<Diag> = std::iter::once(at)
+        .chain((0..jobs.len()).filter(|a| covers[*a] == Some(at)))
+        .filter_map(|a| safety_cone(jobs, a))
+        .flat_map(|c| c.targets.iter())
+        .filter_map(|t| ts.vacuity(*t, run))
+        .collect();
+    (BfsCone::of(ts, me, run), vacuous)
+}
+
+fn safety_cone(jobs: &[Job], at: usize) -> Option<&ConeSystem> {
+    match &jobs[at].kind {
+        JobKind::Cone(cone) => Some(cone.as_ref()),
+        JobKind::PropertyCone(_) | JobKind::Explored(_) | JobKind::Whole(_) => None,
+    }
+}
+
 /// Each safety cone of `jobs` decided by BFS, `None` for a property's job, and the vacuous
 /// checks their runs show. As `run_cones` does for TLC, a cone another cone covers waits for
 /// it: it is `ok` when that one passes and runs itself when it does not. Its vacuous checks
 /// are read off the cone that covers it. A run that met the memory limit beside others runs
 /// again alone, so that a crowded pool does not leave it undecided.
+///
+/// A cone `shared` holds was decided on the entity pass's run of the same system (#209). A
+/// cone whose system is a property's cone runs to the end, so that its run also gives the
+/// property's plain answer, which goes into `shared`; when that run stops at a cap the cone
+/// runs again as it would alone.
 pub(super) fn bfs_cones(
     ts: &TransitionSystem,
     jobs: &[Job],
     caps: Caps,
+    covers: &[Option<usize>],
+    shared: &mut Shared,
 ) -> (Vec<Option<BfsCone>>, Vec<Diag>) {
-    let covers = covering(jobs);
-    let cone = |at: usize| match &jobs[at].kind {
-        JobKind::Cone(cone) => Some(cone.as_ref()),
-        JobKind::PropertyCone(_) | JobKind::Explored(_) | JobKind::Whole(_) => None,
+    let cone = |at: usize| safety_cone(jobs, at);
+    // Per safety cone, the properties not yet decided whose reduced cone is its system.
+    let partners: Vec<Vec<usize>> = (0..jobs.len())
+        .map(|at| match cone(at) {
+            None => Vec::new(),
+            Some(me) => (0..jobs.len())
+                .filter(|k| shared.plain[*k].is_none())
+                .filter(|k| matches!(&jobs[*k].kind, JobKind::PropertyCone(p) if p.cone.reduced == me.system))
+                .collect(),
+        })
+        .collect();
+    let property = |k: usize| match &jobs[k].kind {
+        JobKind::PropertyCone(p) => p.as_ref(),
+        _ => unreachable!("a property's job"),
     };
-    // The verdict of the cone at `at`, and the vacuous checks of it and of the cones it
-    // covers, read off its run; the run is dropped here.
-    let decide = |at: usize| {
-        let me = cone(at).expect("a safety cone");
-        // A safety cone decides its checks alone, so it stops once every one has failed:
-        // a check it holds is then violated, so neither vacuous nor covering another.
-        let run = me.system.clone().run(caps.until_all_violated());
-        let vacuous: Vec<Diag> = std::iter::once(at)
-            .chain((0..jobs.len()).filter(|a| covers[*a] == Some(at)))
-            .filter_map(cone)
-            .flat_map(|c| c.targets.iter())
-            .filter_map(|t| ts.vacuity(*t, &run))
+    // A safety cone decides its checks alone, so it stops once every one has failed: a check
+    // it holds is then violated, so neither vacuous nor covering another.
+    let alone = |at: usize| {
+        let run = cone(at)
+            .expect("a safety cone")
+            .system
+            .clone()
+            .run(caps.until_all_violated());
+        let (verdict, vacuous) = safety_on(ts, jobs, covers, at, &run);
+        (verdict, vacuous, crowded(&run), Vec::new())
+    };
+    // The verdict of the cone at `at`, the vacuous checks of it and of the cones it covers,
+    // and the plain answers of the properties on its system, read off its run; the run is
+    // dropped here.
+    let decide = |at: usize| -> (BfsCone, Vec<Diag>, bool, Vec<(usize, Plain)>) {
+        if partners[at].is_empty() {
+            return alone(at);
+        }
+        let run = cone(at).expect("a safety cone").system.clone().run(caps);
+        if !run.complete {
+            drop(run);
+            return alone(at);
+        }
+        let plains = (partners[at].iter())
+            .map(|&k| (k, Plain::of(ts, property(k), &run)))
             .collect();
-        (BfsCone::of(ts, me, &run), vacuous, crowded(&run))
+        let (verdict, vacuous) = safety_on(ts, jobs, covers, at, &run);
+        (verdict, vacuous, false, plains)
     };
+    let mut out: Vec<Option<BfsCone>> = jobs.iter().map(|_| None).collect();
+    let mut found = Vec::new();
     let first: Vec<usize> = (0..jobs.len())
         .filter(|a| cone(*a).is_some() && covers[*a].is_none())
         .collect();
-    let ran = in_parallel(first.clone(), rdra_ish_core::jobs(), decide);
-    let mut out: Vec<Option<BfsCone>> = jobs.iter().map(|_| None).collect();
-    let mut found = Vec::new();
-    for (&at, (verdict, vacuous, crowded)) in first.iter().zip(ran) {
-        let (verdict, vacuous, _) = match crowded {
+    let mut ran = Vec::new();
+    for &at in &first {
+        if let Some((verdict, vacuous)) = shared.safety[at].take() {
+            ran.push((at, verdict, vacuous));
+        }
+    }
+    let open: Vec<usize> = (first.iter().copied())
+        .filter(|at| !ran.iter().any(|(a, _, _)| a == at))
+        .collect();
+    let decided = in_parallel(open.clone(), rdra_ish_core::jobs(), decide);
+    for (&at, (verdict, vacuous, crowded, plains)) in open.iter().zip(decided) {
+        let (verdict, vacuous, _, plains) = match crowded {
             true => decide(at),
-            false => (verdict, vacuous, crowded),
+            false => (verdict, vacuous, crowded, plains),
         };
+        for (k, plain) in plains {
+            shared.plain[k] = Some(plain);
+        }
+        ran.push((at, verdict, vacuous));
+    }
+    // In job order, as the cones were before some came decided.
+    ran.sort_by_key(|(at, _, _)| *at);
+    for (at, verdict, vacuous) in ran {
         found.extend(vacuous);
         out[at] = Some(verdict);
     }
@@ -511,10 +593,13 @@ pub(super) fn bfs_cones(
         if let (Some(by), Some(me)) = (covers[at], cone(at)) {
             out[at] = Some(match out[by].as_ref().is_some_and(BfsCone::passed) {
                 true => BfsCone::Covered(by),
-                false => {
-                    let run = me.system.clone().run(caps.until_all_violated());
-                    BfsCone::of(ts, me, &run)
-                }
+                false => match shared.safety[at].take() {
+                    Some((verdict, _)) => verdict,
+                    None => {
+                        let run = me.system.clone().run(caps.until_all_violated());
+                        BfsCone::of(ts, me, &run)
+                    }
+                },
             });
         }
     }
