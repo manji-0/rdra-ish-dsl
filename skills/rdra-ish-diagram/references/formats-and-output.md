@@ -28,14 +28,15 @@ Only the output that prints reachable states (`diagram --kind state`) refuses to
 while `check` reports a lifecycle error, unless every error is a deadlock, which it
 colours. The outputs of declared facts and the data layer (`diagram` of every other kind,
 `csv` and `list` of every kind, and the `dbml`, `sql`, `json-schema`, `openapi`, `asyncapi`,
-ER, and `tla` exports) still write and print one note. TLC on the `tla` export finds no
-deadlock and no state without a witness, so run `verify` for those.
+and ER exports) still write; they do not explore the lifecycle, so they say nothing about
+its errors. The `tla` export writes too and prints one note with the error count: TLC on it
+finds no deadlock and no state without a witness, so run `verify` for those.
 
-These outputs, `codegen`, and `next` explore the lifecycle at the bounds `check` runs at by
-default: no state cap, 1,024 patterns per entity, and `memory` under `[check]` in
+The state diagram, the `tla` export, `codegen`, and `next` explore the lifecycle at the
+bounds `check` runs at by default: no state cap, 1,024 patterns per entity, and `memory` under `[check]` in
 `rdra.toml` (4GiB unless set). They take no `--memory` flag. A cone past the limit is
-`MemoryCapReached`: it refuses `diagram --kind state` and `codegen` (exit 1); the other
-diagrams, `list`, `csv`, and `export` still write and print a note. Raise `memory` under
+`MemoryCapReached`: it refuses `diagram --kind state` and `codegen` (exit 1); the `tla`
+export still writes and counts it in its note. Raise `memory` under
 `[check]`, or narrow the model.
 
 ## Commands

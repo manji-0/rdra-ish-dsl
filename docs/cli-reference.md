@@ -32,29 +32,31 @@ Diagnostics are written to stderr. A load or consistency diagnostic is `error: .
 ## Lifecycle errors
 
 An output that prints a reachability result is **fail-closed**: it refuses while `check`
-reports a lifecycle error. An output that prints none is written, and the command prints
-one stderr note that gives the error count and points to `rdra-ish check`. The exit status
-is then 0. `crates/rdra-ish-cli/src/lifecycle_gate.rs` classifies every `--kind` by what it
-reads, and `crates/rdra-ish-cli/tests/export_gate.rs` runs every kind against this table.
+reports a lifecycle error. An output that prints none is written, and the exit status is 0.
+An output of declared facts or the data layer does not explore the lifecycle, so it prints
+nothing about it: run `rdra-ish check` for the lifecycle errors. The TLA+ export explores
+it and prints one stderr note that gives the error count and points to `rdra-ish check`.
+`crates/rdra-ish-cli/src/lifecycle_gate.rs` classifies every `--kind` by what it reads, and
+`crates/rdra-ish-cli/tests/export_gate.rs` runs every kind against this table.
 
 | Output | Reads | On a lifecycle error |
 |---|---|---|
-| `list`, every kind | declared facts | writes, with a note |
-| `csv`, every kind | declared facts and the data layer | writes, with a note |
+| `list`, every kind | declared facts | writes |
+| `csv`, every kind | declared facts and the data layer | writes |
 | `diagram --kind state` | each state model's start states and reachable states | refuses, unless every error is a deadlock, which it colours |
-| `diagram`, every other kind | declared facts, `sequence` included | writes, with a note |
+| `diagram`, every other kind | declared facts, `sequence` included | writes |
 | `export --kind tla` | the transition system, built at `--instance-count` / `--int-range-max` | writes, with a note that the whole-model `.cfg` checks the rules only and names the `StateModel_` specs, which check the deadlocks and witnesses with TLC, and `verify`; a build error of the system refuses |
-| `export`, every other kind | the data layer | writes, with a note |
+| `export`, every other kind | the data layer | writes |
 | `states` | the derivation, which is its output | prints the report with its `[error]` rows and exits 1 |
 
 [`codegen`](#codegen) refuses (exit 1) while `check` reports an error, lifecycle errors
 included, unless `--allow-failing` is given.
 
-The generators (`codegen`, `next`, and the lifecycle gate of `diagram`, `export`, `list`, and
-`csv`) explore the lifecycle at the caps `check` runs at by default, within `memory` under
+The generators that explore the lifecycle (`codegen`, `next`, `diagram --kind state`, and
+`export --kind tla`) explore it at the caps `check` runs at by default, within `memory` under
 `[check]` (see [Memory limit](#memory-limit)). A cone past that limit is the lifecycle error
-`MemoryCapReached_<E>`: it refuses `codegen` and the outputs above that read the explored
-states, and is counted in the note of the others.
+`MemoryCapReached_<E>`: it refuses `codegen` and the state diagram, and is counted in the
+note of the TLA+ export.
 
 `verify` refuses on a build error of the transition system it checks and reports every
 other finding itself.
@@ -663,9 +665,9 @@ ends `(Loan has 2 slots; --instances Loan=4 gives it 4)`. `.at_least(3, Loan)` a
 the command's `rdra.toml` table (`[check]` for `check` and `states`, `[verify]` for
 `verify`), else `4GiB` for `check` and `states` and `16GiB` for `verify`.
 
-The generators explore within the limit of `check`: `codegen`, `next`, and the lifecycle
-gate of `diagram`, `export`, `list`, and `csv` take `memory` under `[check]`, else `4GiB`,
-and no `--memory` flag. They run at the other caps of `check` at its defaults too, so a
+The generators explore within the limit of `check`: `codegen`, `next`, `diagram --kind
+state`, and `export --kind tla` take `memory` under `[check]`, else `4GiB`, and no
+`--memory` flag. The other outputs of `diagram`, `export`, `list`, and `csv` do not explore. They run at the other caps of `check` at its defaults too, so a
 model `check` passes with no flags explores the same in them.
 
 A size is a whole number and a binary unit: `4GiB`, `512MiB`, `64KiB`, `1TiB`. `G` and `GB`
@@ -882,7 +884,7 @@ relation, from which the RDRAGraph views can be derived.
 
 `state` is the one kind that reads the lifecycle (for its start states and the colours of
 its states). It refuses to write while the lifecycle has errors other than a deadlock,
-which it colours; every other kind draws declared facts and writes with one stderr note.
+which it colours; every other kind draws declared facts, explores nothing, and writes.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
