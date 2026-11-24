@@ -20,6 +20,7 @@ expression: "generated_from(KEYWORDS_SRC, \"keywords.rdra\", Lang::Go)"
 // O1 Match.function_id names a present Function.
 // O2 Match.func_id names a present Func.
 // O3 Match.mod_id names a present Mod.
+// O4 every row the code writes keeps its rules: its RuleViolations is empty.
 package domain
 
 // ── Scalars: replace with the project's own types if it has them ──
@@ -415,7 +416,11 @@ type SuperResult struct {
 }
 
 // Super runs Super (Super). One run of the use case, from the states of the arguments' types. It requires what `Super` requires and writes what it writes; the values the model leaves open are the inputs.
-func Super(match MatchSelf) SuperResult {
+// Requires the condition Small (Small default).
+func Super(match MatchSelf) (SuperResult, error) {
+	if !(match.Default <= 4) {
+		return SuperResult{}, &Rejected{Condition: "Small", Label: "Small default", Site: ""}
+	}
 	return SuperResult{
 		Match: MatchSuper{
 			Id: match.Id,
@@ -431,7 +436,7 @@ func Super(match MatchSelf) SuperResult {
 			FuncId: match.FuncId,
 			ModId: match.ModId,
 		},
-	}
+	}, nil
 }
 
 // CrateResult is what Crate returns.
@@ -445,7 +450,7 @@ func Crate(match MatchSuper) CrateResult {
 		Match: MatchCrate{
 			Id: match.Id,
 			Type: match.Type,
-			Default: match.Default,
+			Default: int64(2),
 			New: match.New,
 			Func: match.Func,
 			Self: match.Self,
@@ -518,12 +523,12 @@ type NewFromNewResult struct {
 }
 
 // NewFromNew runs New (New). One run of the use case, from the states of the arguments' types. It requires what `New` requires and writes what it writes; the values the model leaves open are the inputs.
-func NewFromNew(parentFunction Function, parentFunc FuncNew, parentMod Mod, matchId MatchId, matchType string, matchDefault int64, matchNew string, matchFunc string, matchSelf string, matchCrate string, matchSuper string, matchKind Kind) NewFromNewResult {
+func NewFromNew(parentFunction Function, parentFunc FuncNew, parentMod Mod, matchId MatchId, matchType string, matchNew string, matchFunc string, matchSelf string, matchCrate string, matchSuper string, matchKind Kind) NewFromNewResult {
 	return NewFromNewResult{
 		Match: MatchNew{
 			Id: matchId,
 			Type: matchType,
-			Default: matchDefault,
+			Default: int64(0),
 			New: matchNew,
 			Func: matchFunc,
 			Self: matchSelf,
@@ -543,12 +548,12 @@ type NewFromReturnResult struct {
 }
 
 // NewFromReturn runs New (New). One run of the use case, from the states of the arguments' types. It requires what `New` requires and writes what it writes; the values the model leaves open are the inputs.
-func NewFromReturn(parentFunction Function, parentFunc FuncReturn, parentMod Mod, matchId MatchId, matchType string, matchDefault int64, matchNew string, matchFunc string, matchSelf string, matchCrate string, matchSuper string, matchKind Kind) NewFromReturnResult {
+func NewFromReturn(parentFunction Function, parentFunc FuncReturn, parentMod Mod, matchId MatchId, matchType string, matchNew string, matchFunc string, matchSelf string, matchCrate string, matchSuper string, matchKind Kind) NewFromReturnResult {
 	return NewFromReturnResult{
 		Match: MatchNew{
 			Id: matchId,
 			Type: matchType,
-			Default: matchDefault,
+			Default: int64(0),
 			New: matchNew,
 			Func: matchFunc,
 			Self: matchSelf,
@@ -568,12 +573,12 @@ type NewFromFuncResult struct {
 }
 
 // NewFromFunc runs New (New). One run of the use case, from the states of the arguments' types. It requires what `New` requires and writes what it writes; the values the model leaves open are the inputs.
-func NewFromFunc(parentFunction Function, parentFunc FuncFunc, parentMod Mod, matchId MatchId, matchType string, matchDefault int64, matchNew string, matchFunc string, matchSelf string, matchCrate string, matchSuper string, matchKind Kind) NewFromFuncResult {
+func NewFromFunc(parentFunction Function, parentFunc FuncFunc, parentMod Mod, matchId MatchId, matchType string, matchNew string, matchFunc string, matchSelf string, matchCrate string, matchSuper string, matchKind Kind) NewFromFuncResult {
 	return NewFromFuncResult{
 		Match: MatchNew{
 			Id: matchId,
 			Type: matchType,
-			Default: matchDefault,
+			Default: int64(0),
 			New: matchNew,
 			Func: matchFunc,
 			Self: matchSelf,
@@ -637,36 +642,64 @@ func (row FuncFunc) RuleViolations() []string {
 // RuleViolations returns the rules row breaks, by the names `check` reports: empty when it keeps them all.
 func (row MatchNew) RuleViolations() []string {
 	var out []string
+	// default > 4
+	if row.Default > 4 {
+		out = append(out, "Forbidden_Match_0")
+	}
 	return out
 }
 
 // RuleViolations returns the rules row breaks, by the names `check` reports: empty when it keeps them all.
 func (row MatchReturn) RuleViolations() []string {
 	var out []string
+	// default > 4
+	if row.Default > 4 {
+		out = append(out, "Forbidden_Match_0")
+	}
 	return out
 }
 
 // RuleViolations returns the rules row breaks, by the names `check` reports: empty when it keeps them all.
 func (row MatchSelf) RuleViolations() []string {
 	var out []string
+	// default > 4
+	if row.Default > 4 {
+		out = append(out, "Forbidden_Match_0")
+	}
+	// when status=self then default <= 4
+	if !(row.Default <= 4) {
+		out = append(out, "Inv_Match_0")
+	}
 	return out
 }
 
 // RuleViolations returns the rules row breaks, by the names `check` reports: empty when it keeps them all.
 func (row MatchSuper) RuleViolations() []string {
 	var out []string
+	// default > 4
+	if row.Default > 4 {
+		out = append(out, "Forbidden_Match_0")
+	}
 	return out
 }
 
 // RuleViolations returns the rules row breaks, by the names `check` reports: empty when it keeps them all.
 func (row MatchCrate) RuleViolations() []string {
 	var out []string
+	// default > 4
+	if row.Default > 4 {
+		out = append(out, "Forbidden_Match_0")
+	}
 	return out
 }
 
 // RuleViolations returns the rules row breaks, by the names `check` reports: empty when it keeps them all.
 func (row MatchDefault) RuleViolations() []string {
 	var out []string
+	// default > 4
+	if row.Default > 4 {
+		out = append(out, "Forbidden_Match_0")
+	}
 	return out
 }
 
@@ -819,7 +852,10 @@ type SuperOutcome struct {
 // RunSuper runs Super from whatever states its rows are in: the transition function of those states, or NotEnabled.
 func RunSuper(match Match) (SuperOutcome, error) {
 	if match, ok := match.(MatchSelf); ok {
-		r := Super(match)
+		r, err := Super(match)
+		if err != nil {
+			return SuperOutcome{}, err
+		}
 		return SuperOutcome{Ran: &r}, nil
 	}
 	return SuperOutcome{}, &NotEnabled{UseCase: "Super"}
@@ -889,17 +925,17 @@ type NewOutcome struct {
 }
 
 // RunNew runs New from whatever states its rows are in: the transition function of those states, or NotEnabled.
-func RunNew(parentFunction Function, parentFunc Func, parentMod Mod, matchId MatchId, matchType string, matchDefault int64, matchNew string, matchFunc string, matchSelf string, matchCrate string, matchSuper string, matchKind Kind) (NewOutcome, error) {
+func RunNew(parentFunction Function, parentFunc Func, parentMod Mod, matchId MatchId, matchType string, matchNew string, matchFunc string, matchSelf string, matchCrate string, matchSuper string, matchKind Kind) (NewOutcome, error) {
 	if parentFunc, ok := parentFunc.(FuncNew); ok {
-		r := NewFromNew(parentFunction, parentFunc, parentMod, matchId, matchType, matchDefault, matchNew, matchFunc, matchSelf, matchCrate, matchSuper, matchKind)
+		r := NewFromNew(parentFunction, parentFunc, parentMod, matchId, matchType, matchNew, matchFunc, matchSelf, matchCrate, matchSuper, matchKind)
 		return NewOutcome{FromNew: &r}, nil
 	}
 	if parentFunc, ok := parentFunc.(FuncReturn); ok {
-		r := NewFromReturn(parentFunction, parentFunc, parentMod, matchId, matchType, matchDefault, matchNew, matchFunc, matchSelf, matchCrate, matchSuper, matchKind)
+		r := NewFromReturn(parentFunction, parentFunc, parentMod, matchId, matchType, matchNew, matchFunc, matchSelf, matchCrate, matchSuper, matchKind)
 		return NewOutcome{FromReturn: &r}, nil
 	}
 	if parentFunc, ok := parentFunc.(FuncFunc); ok {
-		r := NewFromFunc(parentFunction, parentFunc, parentMod, matchId, matchType, matchDefault, matchNew, matchFunc, matchSelf, matchCrate, matchSuper, matchKind)
+		r := NewFromFunc(parentFunction, parentFunc, parentMod, matchId, matchType, matchNew, matchFunc, matchSelf, matchCrate, matchSuper, matchKind)
 		return NewOutcome{FromFunc: &r}, nil
 	}
 	return NewOutcome{}, &NotEnabled{UseCase: "New"}

@@ -18,6 +18,7 @@ expression: "generated_from(KEYWORDS_SRC, \"keywords.rdra\", Lang::Rust)"
 // O1 Match.function_id names a present Function.
 // O2 Match.func_id names a present Func.
 // O3 Match.mod_id names a present Mod.
+// O4 every row the code writes keeps its rules: its RuleViolations is empty.
 
 #![allow(dead_code, unused_variables, non_camel_case_types, non_snake_case, clippy::all)]
 
@@ -502,8 +503,12 @@ pub struct SuperResult {
 
 /// Super (Super).
 /// One run of the use case, from the states of the arguments' types. It requires what `Super` requires and writes what it writes; the values the model leaves open are the inputs.
-pub fn super_(r#match: MatchSelf) -> SuperResult {
-    SuperResult {
+/// Requires the condition Small (Small default).
+pub fn super_(r#match: MatchSelf) -> ::core::result::Result<SuperResult, Rejected> {
+    if !(r#match.default <= 4) {
+        return ::core::result::Result::Err(Rejected { condition: "Small", label: "Small default", site: None });
+    }
+    ::core::result::Result::Ok(SuperResult {
         r#match: MatchSuper {
             id: r#match.id,
             r#type: r#match.r#type,
@@ -518,7 +523,7 @@ pub fn super_(r#match: MatchSelf) -> SuperResult {
             func_id: r#match.func_id,
             mod_id: r#match.mod_id,
         },
-    }
+    })
 }
 
 /// What `crate_` returns.
@@ -534,7 +539,7 @@ pub fn crate_(r#match: MatchSuper) -> CrateResult {
         r#match: MatchCrate {
             id: r#match.id,
             r#type: r#match.r#type,
-            default: r#match.default,
+            default: 2,
             new: r#match.new,
             func: r#match.func,
             self_: r#match.self_,
@@ -615,12 +620,12 @@ pub struct NewFromNewResult {
 
 /// New (New).
 /// One run of the use case, from the states of the arguments' types. It requires what `New` requires and writes what it writes; the values the model leaves open are the inputs.
-pub fn new_from_new(parent_function: Function, parent_func: FuncNew, parent_mod: Mod, match_id: MatchId, match_type: ::std::string::String, match_default: i64, match_new: ::std::string::String, match_func: ::std::string::String, match_self: ::std::string::String, match_crate: ::std::string::String, match_super: ::std::string::String, match_kind: Kind) -> NewFromNewResult {
+pub fn new_from_new(parent_function: Function, parent_func: FuncNew, parent_mod: Mod, match_id: MatchId, match_type: ::std::string::String, match_new: ::std::string::String, match_func: ::std::string::String, match_self: ::std::string::String, match_crate: ::std::string::String, match_super: ::std::string::String, match_kind: Kind) -> NewFromNewResult {
     NewFromNewResult {
         r#match: MatchNew {
             id: match_id,
             r#type: match_type,
-            default: match_default,
+            default: 0,
             new: match_new,
             func: match_func,
             self_: match_self,
@@ -642,12 +647,12 @@ pub struct NewFromReturnResult {
 
 /// New (New).
 /// One run of the use case, from the states of the arguments' types. It requires what `New` requires and writes what it writes; the values the model leaves open are the inputs.
-pub fn new_from_return(parent_function: Function, parent_func: FuncReturn, parent_mod: Mod, match_id: MatchId, match_type: ::std::string::String, match_default: i64, match_new: ::std::string::String, match_func: ::std::string::String, match_self: ::std::string::String, match_crate: ::std::string::String, match_super: ::std::string::String, match_kind: Kind) -> NewFromReturnResult {
+pub fn new_from_return(parent_function: Function, parent_func: FuncReturn, parent_mod: Mod, match_id: MatchId, match_type: ::std::string::String, match_new: ::std::string::String, match_func: ::std::string::String, match_self: ::std::string::String, match_crate: ::std::string::String, match_super: ::std::string::String, match_kind: Kind) -> NewFromReturnResult {
     NewFromReturnResult {
         r#match: MatchNew {
             id: match_id,
             r#type: match_type,
-            default: match_default,
+            default: 0,
             new: match_new,
             func: match_func,
             self_: match_self,
@@ -669,12 +674,12 @@ pub struct NewFromFuncResult {
 
 /// New (New).
 /// One run of the use case, from the states of the arguments' types. It requires what `New` requires and writes what it writes; the values the model leaves open are the inputs.
-pub fn new_from_func(parent_function: Function, parent_func: FuncFunc, parent_mod: Mod, match_id: MatchId, match_type: ::std::string::String, match_default: i64, match_new: ::std::string::String, match_func: ::std::string::String, match_self: ::std::string::String, match_crate: ::std::string::String, match_super: ::std::string::String, match_kind: Kind) -> NewFromFuncResult {
+pub fn new_from_func(parent_function: Function, parent_func: FuncFunc, parent_mod: Mod, match_id: MatchId, match_type: ::std::string::String, match_new: ::std::string::String, match_func: ::std::string::String, match_self: ::std::string::String, match_crate: ::std::string::String, match_super: ::std::string::String, match_kind: Kind) -> NewFromFuncResult {
     NewFromFuncResult {
         r#match: MatchNew {
             id: match_id,
             r#type: match_type,
-            default: match_default,
+            default: 0,
             new: match_new,
             func: match_func,
             self_: match_self,
@@ -745,42 +750,76 @@ impl FuncFunc {
 impl MatchNew {
     /// The rules this row breaks, by the names `check` reports: empty when it keeps them all.
     pub fn rule_violations(&self) -> ::std::vec::Vec<&'static str> {
-        ::std::vec::Vec::new()
+        let mut out = ::std::vec::Vec::new();
+        // default > 4
+        if self.default > 4 {
+            out.push("Forbidden_Match_0");
+        }
+        out
     }
 }
 
 impl MatchReturn {
     /// The rules this row breaks, by the names `check` reports: empty when it keeps them all.
     pub fn rule_violations(&self) -> ::std::vec::Vec<&'static str> {
-        ::std::vec::Vec::new()
+        let mut out = ::std::vec::Vec::new();
+        // default > 4
+        if self.default > 4 {
+            out.push("Forbidden_Match_0");
+        }
+        out
     }
 }
 
 impl MatchSelf {
     /// The rules this row breaks, by the names `check` reports: empty when it keeps them all.
     pub fn rule_violations(&self) -> ::std::vec::Vec<&'static str> {
-        ::std::vec::Vec::new()
+        let mut out = ::std::vec::Vec::new();
+        // default > 4
+        if self.default > 4 {
+            out.push("Forbidden_Match_0");
+        }
+        // when status=self then default <= 4
+        if !(self.default <= 4) {
+            out.push("Inv_Match_0");
+        }
+        out
     }
 }
 
 impl MatchSuper {
     /// The rules this row breaks, by the names `check` reports: empty when it keeps them all.
     pub fn rule_violations(&self) -> ::std::vec::Vec<&'static str> {
-        ::std::vec::Vec::new()
+        let mut out = ::std::vec::Vec::new();
+        // default > 4
+        if self.default > 4 {
+            out.push("Forbidden_Match_0");
+        }
+        out
     }
 }
 
 impl MatchCrate {
     /// The rules this row breaks, by the names `check` reports: empty when it keeps them all.
     pub fn rule_violations(&self) -> ::std::vec::Vec<&'static str> {
-        ::std::vec::Vec::new()
+        let mut out = ::std::vec::Vec::new();
+        // default > 4
+        if self.default > 4 {
+            out.push("Forbidden_Match_0");
+        }
+        out
     }
 }
 
 impl MatchDefault {
     /// The rules this row breaks, by the names `check` reports: empty when it keeps them all.
     pub fn rule_violations(&self) -> ::std::vec::Vec<&'static str> {
-        ::std::vec::Vec::new()
+        let mut out = ::std::vec::Vec::new();
+        // default > 4
+        if self.default > 4 {
+            out.push("Forbidden_Match_0");
+        }
+        out
     }
 }
 
@@ -960,7 +999,7 @@ pub enum SuperOutcome {
 /// Runs Super from whatever states its rows are in: the transition function of those states, or `NotEnabled`.
 pub fn run_super(r#match: Match) -> ::core::result::Result<SuperOutcome, Refused> {
     match (r#match,) {
-        (Match::Self_(r#match),) => ::core::result::Result::Ok(SuperOutcome::Ran(super_(r#match))),
+        (Match::Self_(r#match),) => super_(r#match).map(SuperOutcome::Ran).map_err(Refused::Rejected),
         _ => ::core::result::Result::Err(Refused::NotEnabled(NotEnabled { usecase: "Super" })),
     }
 }
@@ -1030,10 +1069,10 @@ pub enum NewOutcome {
 }
 
 /// Runs New from whatever states its rows are in: the transition function of those states, or `NotEnabled`.
-pub fn run_new(parent_function: Function, parent_func: Func, parent_mod: Mod, match_id: MatchId, match_type: ::std::string::String, match_default: i64, match_new: ::std::string::String, match_func: ::std::string::String, match_self: ::std::string::String, match_crate: ::std::string::String, match_super: ::std::string::String, match_kind: Kind) -> ::core::result::Result<NewOutcome, Refused> {
+pub fn run_new(parent_function: Function, parent_func: Func, parent_mod: Mod, match_id: MatchId, match_type: ::std::string::String, match_new: ::std::string::String, match_func: ::std::string::String, match_self: ::std::string::String, match_crate: ::std::string::String, match_super: ::std::string::String, match_kind: Kind) -> ::core::result::Result<NewOutcome, Refused> {
     match (parent_function, parent_func, parent_mod,) {
-        (parent_function, Func::New(parent_func), parent_mod,) => ::core::result::Result::Ok(NewOutcome::FromNew(new_from_new(parent_function, parent_func, parent_mod, match_id, match_type, match_default, match_new, match_func, match_self, match_crate, match_super, match_kind))),
-        (parent_function, Func::Return(parent_func), parent_mod,) => ::core::result::Result::Ok(NewOutcome::FromReturn(new_from_return(parent_function, parent_func, parent_mod, match_id, match_type, match_default, match_new, match_func, match_self, match_crate, match_super, match_kind))),
-        (parent_function, Func::Func(parent_func), parent_mod,) => ::core::result::Result::Ok(NewOutcome::FromFunc(new_from_func(parent_function, parent_func, parent_mod, match_id, match_type, match_default, match_new, match_func, match_self, match_crate, match_super, match_kind))),
+        (parent_function, Func::New(parent_func), parent_mod,) => ::core::result::Result::Ok(NewOutcome::FromNew(new_from_new(parent_function, parent_func, parent_mod, match_id, match_type, match_new, match_func, match_self, match_crate, match_super, match_kind))),
+        (parent_function, Func::Return(parent_func), parent_mod,) => ::core::result::Result::Ok(NewOutcome::FromReturn(new_from_return(parent_function, parent_func, parent_mod, match_id, match_type, match_new, match_func, match_self, match_crate, match_super, match_kind))),
+        (parent_function, Func::Func(parent_func), parent_mod,) => ::core::result::Result::Ok(NewOutcome::FromFunc(new_from_func(parent_function, parent_func, parent_mod, match_id, match_type, match_new, match_func, match_self, match_crate, match_super, match_kind))),
     }
 }

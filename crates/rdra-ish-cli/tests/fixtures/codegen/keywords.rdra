@@ -50,3 +50,10 @@ transitions(Default, Match.status, crate -> default)
 transitions(Type, Func.type, new -> return)
 transitions(Class, Func.type, return -> func)
 sets(Static, Function.default == present)
+// Rules, a condition and a literal write read the keyword columns in function bodies.
+forbidden(Match, default > 4)
+condition Small "Small default"
+holds(Small, Match.default <= 4)
+applies_to(Small, Super)
+sets(Crate, Match.default == 2)
+invariant(Match).when(status == self).then(default <= 4)

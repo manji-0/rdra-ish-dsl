@@ -18,6 +18,7 @@ expression: "generated_from(KEYWORDS_SRC, \"keywords.rdra\", Lang::TypeScript)"
 // O1 Match.function_id names a present Function.
 // O2 Match.func_id names a present Func.
 // O3 Match.mod_id names a present Mod.
+// O4 every row the code writes keeps its rules: its RuleViolations is empty.
 
 // ── Scalars: replace with the project's own types if it has them ──
 
@@ -342,8 +343,12 @@ export interface SuperResult {
 /**
  * Super (Super).
  * One run of the use case, from the states of the arguments' types. It requires what `Super` requires and writes what it writes; the values the model leaves open are the inputs.
+ * Requires the condition Small (Small default).
  */
-export function super_(match: MatchSelf): SuperResult {
+export function super_(match: MatchSelf): SuperResult | Rejected {
+  if (!(match.default <= 4)) {
+    return { rejected: "Small", label: "Small default", site: null };
+  }
   return {
     match: {
       status: "super",
@@ -378,7 +383,7 @@ export function crate(match: MatchSuper): CrateResult {
       status: "crate",
       id: match.id,
       type: match.type,
-      default: match.default,
+      default: 2,
       new: match.new,
       func: match.func,
       self: match.self,
@@ -466,13 +471,13 @@ export interface NewFromNewResult {
  * New (New).
  * One run of the use case, from the states of the arguments' types. It requires what `New` requires and writes what it writes; the values the model leaves open are the inputs.
  */
-export function newFromNew(parentFunction: Function, parentFunc: FuncNew, parentMod: Mod, matchId: MatchId, matchType: string, matchDefault: number, matchNew: string, matchFunc: string, matchSelf: string, matchCrate: string, matchSuper: string, matchKind: Kind): NewFromNewResult {
+export function newFromNew(parentFunction: Function, parentFunc: FuncNew, parentMod: Mod, matchId: MatchId, matchType: string, matchNew: string, matchFunc: string, matchSelf: string, matchCrate: string, matchSuper: string, matchKind: Kind): NewFromNewResult {
   return {
     match: {
       status: "new",
       id: matchId,
       type: matchType,
-      default: matchDefault,
+      default: 0,
       new: matchNew,
       func: matchFunc,
       self: matchSelf,
@@ -495,13 +500,13 @@ export interface NewFromReturnResult {
  * New (New).
  * One run of the use case, from the states of the arguments' types. It requires what `New` requires and writes what it writes; the values the model leaves open are the inputs.
  */
-export function newFromReturn(parentFunction: Function, parentFunc: FuncReturn, parentMod: Mod, matchId: MatchId, matchType: string, matchDefault: number, matchNew: string, matchFunc: string, matchSelf: string, matchCrate: string, matchSuper: string, matchKind: Kind): NewFromReturnResult {
+export function newFromReturn(parentFunction: Function, parentFunc: FuncReturn, parentMod: Mod, matchId: MatchId, matchType: string, matchNew: string, matchFunc: string, matchSelf: string, matchCrate: string, matchSuper: string, matchKind: Kind): NewFromReturnResult {
   return {
     match: {
       status: "new",
       id: matchId,
       type: matchType,
-      default: matchDefault,
+      default: 0,
       new: matchNew,
       func: matchFunc,
       self: matchSelf,
@@ -524,13 +529,13 @@ export interface NewFromFuncResult {
  * New (New).
  * One run of the use case, from the states of the arguments' types. It requires what `New` requires and writes what it writes; the values the model leaves open are the inputs.
  */
-export function newFromFunc(parentFunction: Function, parentFunc: FuncFunc, parentMod: Mod, matchId: MatchId, matchType: string, matchDefault: number, matchNew: string, matchFunc: string, matchSelf: string, matchCrate: string, matchSuper: string, matchKind: Kind): NewFromFuncResult {
+export function newFromFunc(parentFunction: Function, parentFunc: FuncFunc, parentMod: Mod, matchId: MatchId, matchType: string, matchNew: string, matchFunc: string, matchSelf: string, matchCrate: string, matchSuper: string, matchKind: Kind): NewFromFuncResult {
   return {
     match: {
       status: "new",
       id: matchId,
       type: matchType,
-      default: matchDefault,
+      default: 0,
       new: matchNew,
       func: matchFunc,
       self: matchSelf,
@@ -597,36 +602,57 @@ export function funcFuncRuleViolations(row: FuncFunc): string[] {
 /** The rules a MatchNew row breaks, by the names `check` reports: empty when it keeps them all. */
 export function matchNewRuleViolations(row: MatchNew): string[] {
   const out: string[] = [];
+  if (row.default > 4) {
+    out.push("Forbidden_Match_0"); // default > 4
+  }
   return out;
 }
 
 /** The rules a MatchReturn row breaks, by the names `check` reports: empty when it keeps them all. */
 export function matchReturnRuleViolations(row: MatchReturn): string[] {
   const out: string[] = [];
+  if (row.default > 4) {
+    out.push("Forbidden_Match_0"); // default > 4
+  }
   return out;
 }
 
 /** The rules a MatchSelf row breaks, by the names `check` reports: empty when it keeps them all. */
 export function matchSelfRuleViolations(row: MatchSelf): string[] {
   const out: string[] = [];
+  if (row.default > 4) {
+    out.push("Forbidden_Match_0"); // default > 4
+  }
+  if (!(row.default <= 4)) {
+    out.push("Inv_Match_0"); // when status=self then default <= 4
+  }
   return out;
 }
 
 /** The rules a MatchSuper row breaks, by the names `check` reports: empty when it keeps them all. */
 export function matchSuperRuleViolations(row: MatchSuper): string[] {
   const out: string[] = [];
+  if (row.default > 4) {
+    out.push("Forbidden_Match_0"); // default > 4
+  }
   return out;
 }
 
 /** The rules a MatchCrate row breaks, by the names `check` reports: empty when it keeps them all. */
 export function matchCrateRuleViolations(row: MatchCrate): string[] {
   const out: string[] = [];
+  if (row.default > 4) {
+    out.push("Forbidden_Match_0"); // default > 4
+  }
   return out;
 }
 
 /** The rules a MatchDefault row breaks, by the names `check` reports: empty when it keeps them all. */
 export function matchDefaultRuleViolations(row: MatchDefault): string[] {
   const out: string[] = [];
+  if (row.default > 4) {
+    out.push("Forbidden_Match_0"); // default > 4
+  }
   return out;
 }
 
@@ -884,7 +910,7 @@ export function runDelete(match: Match, switch_: Switch): DeleteOutcome | NotEna
 export type SuperOutcome = SuperResult;
 
 /** Runs Super from whatever states its rows are in: the transition function of those states, or NotEnabled. */
-export function runSuper(match: Match): SuperOutcome | NotEnabled {
+export function runSuper(match: Match): SuperOutcome | Rejected | NotEnabled {
   if (match.status === "self") {
     return super_(match);
   }
@@ -939,15 +965,15 @@ export function runClass(func: Func): ClassOutcome | NotEnabled {
 export type NewOutcome = NewFromNewResult | NewFromReturnResult | NewFromFuncResult;
 
 /** Runs New from whatever states its rows are in: the transition function of those states, or NotEnabled. */
-export function runNew(parentFunction: Function, parentFunc: Func, parentMod: Mod, matchId: MatchId, matchType: string, matchDefault: number, matchNew: string, matchFunc: string, matchSelf: string, matchCrate: string, matchSuper: string, matchKind: Kind): NewOutcome | NotEnabled {
+export function runNew(parentFunction: Function, parentFunc: Func, parentMod: Mod, matchId: MatchId, matchType: string, matchNew: string, matchFunc: string, matchSelf: string, matchCrate: string, matchSuper: string, matchKind: Kind): NewOutcome | NotEnabled {
   if (parentFunc.type === "new") {
-    return newFromNew(parentFunction, parentFunc, parentMod, matchId, matchType, matchDefault, matchNew, matchFunc, matchSelf, matchCrate, matchSuper, matchKind);
+    return newFromNew(parentFunction, parentFunc, parentMod, matchId, matchType, matchNew, matchFunc, matchSelf, matchCrate, matchSuper, matchKind);
   }
   if (parentFunc.type === "return") {
-    return newFromReturn(parentFunction, parentFunc, parentMod, matchId, matchType, matchDefault, matchNew, matchFunc, matchSelf, matchCrate, matchSuper, matchKind);
+    return newFromReturn(parentFunction, parentFunc, parentMod, matchId, matchType, matchNew, matchFunc, matchSelf, matchCrate, matchSuper, matchKind);
   }
   if (parentFunc.type === "func") {
-    return newFromFunc(parentFunction, parentFunc, parentMod, matchId, matchType, matchDefault, matchNew, matchFunc, matchSelf, matchCrate, matchSuper, matchKind);
+    return newFromFunc(parentFunction, parentFunc, parentMod, matchId, matchType, matchNew, matchFunc, matchSelf, matchCrate, matchSuper, matchKind);
   }
   return { notEnabled: "New" };
 }
