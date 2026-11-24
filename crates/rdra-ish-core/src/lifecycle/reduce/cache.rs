@@ -48,7 +48,7 @@ use super::extended::Extended;
 use super::partition::{Classes, Classified, Ended};
 use super::{ClassMove, Reduction};
 use crate::lifecycle::cone::VarSet;
-use crate::lifecycle::explore::{Caps, Symmetry};
+use crate::lifecycle::explore::Caps;
 use crate::lifecycle::TransitionSystem;
 use crate::memory::Charge;
 
@@ -88,7 +88,8 @@ struct Key {
     charged: bool,
     /// The group is part of the key: a quotient from a plain run of S is never served to a
     /// call that may run S up to `H`, or the reverse.
-    s_up_to_h: Symmetry,
+    s_up_to_h: bool,
+    force_s_up_to_h: bool,
 }
 
 impl Key {
@@ -102,6 +103,7 @@ impl Key {
             stop_when_all_violated: caps.stop_when_all_violated,
             charged: caps.memory.is_some(),
             s_up_to_h: caps.s_up_to_h,
+            force_s_up_to_h: caps.force_s_up_to_h,
         }
     }
 
@@ -115,9 +117,11 @@ impl Key {
             stop_when_all_violated,
             charged,
             s_up_to_h,
+            force_s_up_to_h,
         } = self;
         *states == caps.states
             && *s_up_to_h == caps.s_up_to_h
+            && *force_s_up_to_h == caps.force_s_up_to_h
             && *stop_when_all_violated == caps.stop_when_all_violated
             && *charged == caps.memory.is_some()
             && *rise == ext.rise
@@ -522,11 +526,7 @@ mod tests {
         near.push(("stopping at failed checks", job_ext(true), failed));
         let pool = MemoryPool::for_command(MemorySize::VERIFY, "--memory");
         near.push(("a charged pool", job_ext(true), caps.charged_to(pool)));
-        near.push((
-            "S up to H",
-            job_ext(true),
-            caps.with_s_up_to_h(Symmetry::Retry),
-        ));
+        near.push(("S up to H", job_ext(true), caps.with_s_up_to_h(true)));
         for (what, e, caps) in &near {
             let ran = Cell::new(false);
             cache.classes(e, *caps, |_| {

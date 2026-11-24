@@ -4,8 +4,6 @@
 
 use std::collections::BTreeSet;
 
-use crate::lifecycle::Symmetry;
-
 use crate::memory::{MemoryPool, MemorySize};
 
 use super::cone::{load, SAMPLES};
@@ -416,20 +414,23 @@ fn assert_real_path(plain: &TransitionSystem, start: &State, steps: &[Step]) {
 /// The reduced cones of a model decide what its cones decide, and their traces lift, with S
 /// run plainly and up to `H` (#212 phase 2). Returns the cones the plain quotient reduces.
 fn assert_reduction_exact(sample: &str, model: &SemanticModel, bounds: Bounds) -> usize {
-    let n = assert_reduction_exact_in(sample, model, bounds.clone(), Symmetry::Never);
-    assert_reduction_exact_in(sample, model, bounds, Symmetry::Always);
+    let n = assert_reduction_exact_in(sample, model, bounds.clone(), false);
+    assert_reduction_exact_in(sample, model, bounds, true);
     n
 }
 
-/// `assert_reduction_exact` with S run as `s_up_to_h` says.
+/// `assert_reduction_exact`, with S forced up to `H` at once when `up_to_h` says so.
 fn assert_reduction_exact_in(
     sample: &str,
     model: &SemanticModel,
     bounds: Bounds,
-    s_up_to_h: Symmetry,
+    up_to_h: bool,
 ) -> usize {
     let caps = Caps::new(usize::MAX, 200_000);
-    let reduce_caps = caps.with_s_up_to_h(s_up_to_h);
+    let reduce_caps = match up_to_h {
+        true => caps.forcing_s_up_to_h(),
+        false => caps,
+    };
     let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
     let targets = ts.targets();
     let plain = ts.explore_targets(&targets, caps);
@@ -495,12 +496,12 @@ fn assert_reduction_exact_in(
     reductions
 }
 
-fn reductions_in(samples: &[&str], s_up_to_h: Symmetry) -> usize {
+fn reductions_in(samples: &[&str], up_to_h: bool) -> usize {
     let mut reductions = 0;
     for sample in samples {
         let model = load(sample);
         for bounds in [Bounds::STATES, Bounds::VERIFY] {
-            reductions += assert_reduction_exact_in(sample, &model, bounds, s_up_to_h);
+            reductions += assert_reduction_exact_in(sample, &model, bounds, up_to_h);
         }
     }
     reductions
@@ -509,7 +510,7 @@ fn reductions_in(samples: &[&str], s_up_to_h: Symmetry) -> usize {
 /// Most bundled sample cones quotient to themselves and stay unreduced (#101); two reduce.
 #[test]
 fn reduced_cones_decide_what_the_cones_decide() {
-    let reductions = reductions_in(SAMPLES, Symmetry::Never);
+    let reductions = reductions_in(SAMPLES, false);
     assert!(reductions >= 2, "{reductions} cones reduced");
 }
 
@@ -518,14 +519,14 @@ fn reduced_cones_decide_what_the_cones_decide() {
 /// each quotient to the plain one.
 #[test]
 fn reduced_cones_up_to_h_decide_what_the_cones_decide() {
-    let reductions = reductions_in(SAMPLES, Symmetry::Always);
+    let reductions = reductions_in(SAMPLES, true);
     assert!(reductions >= 2, "{reductions} cones reduced");
 }
 
 /// The domain samples explore millions of states; CI runs this in release in formal-verify.
 #[test]
 fn reduced_domain_cones_decide_what_the_cones_decide() {
-    let reductions = reductions_in(DOMAIN_SAMPLES, Symmetry::Never);
+    let reductions = reductions_in(DOMAIN_SAMPLES, false);
     assert!(reductions >= 53, "{reductions} cones reduced");
 }
 
@@ -650,7 +651,7 @@ fn a_sub_lifecycle_up_to_h_stores_fewer_states_and_lifts_its_traces() {
     let rule = Target::Invariant(0);
     let caps = Caps::new(usize::MAX, 200_000);
     let plain = ts.explore_targets_reduced(&[job, rule], caps);
-    let up = ts.explore_targets_reduced(&[job, rule], caps.with_s_up_to_h(Symmetry::Always));
+    let up = ts.explore_targets_reduced(&[job, rule], caps.forcing_s_up_to_h());
     let (p, u) = (plain.cone_of(rule), up.cone_of(rule));
     let (pr, ur) = (
         p.run

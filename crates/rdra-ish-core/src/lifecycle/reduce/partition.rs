@@ -7,7 +7,7 @@ use super::extended::Extended;
 use super::*;
 use crate::fasthash::FastMap;
 use crate::lifecycle::cone::VarSet;
-use crate::lifecycle::explore::{Adjacency, Caps, Checks, ComponentRun, OrbitRun, Symmetry};
+use crate::lifecycle::explore::{Adjacency, Caps, Checks, ComponentRun, OrbitRun};
 use crate::lifecycle::expr::State;
 use crate::lifecycle::types::{ActId, Domain, EntId, VarId};
 use crate::lifecycle::{StateDiag, TransitionSystem};
@@ -260,8 +260,8 @@ impl Classes {
         // The inputs stay on the nested T side: the rises are kept, and only `obs` anchors.
         let (sub, clean) =
             raw.reduced_in(&[(ext.obs_local.clone(), ext.rise_actions())], caps, cache);
-        // Under `--symmetry always`, S runs up to `H` at once (#212 phase 2).
-        if caps.s_up_to_h == Symmetry::Always && sub.reduction().is_none() {
+        // A test or `shadow` build may force S up to `H` at once (`Caps::force_s_up_to_h`).
+        if forced(caps) && sub.reduction().is_none() {
             let ended = match clean {
                 true => Ended::Clean,
                 false => Ended::Stopped,
@@ -284,7 +284,7 @@ impl Classes {
                 .any(|d| matches!(d.diag, StateDiag::MemoryCapReached { .. }));
             // A run the pool refused because others held it is no reason: alone it may fit.
             let alone = memory && !seen.crowded;
-            if !(caps.s_up_to_h == Symmetry::Retry && alone && sub.reduction().is_none()) {
+            if !(caps.s_up_to_h && alone && sub.reduction().is_none()) {
                 return (Classified::Nothing, ended);
             }
             let stopped_at = Some(run.states.len());
@@ -301,7 +301,8 @@ impl Classes {
 
     /// The classes of S up to `H` (#212 phase 2, docs/design/instance-symmetry.md,
     /// "Composition with #74"), after its plain run stopped at the memory limit after
-    /// `stopped_at` states under `--symmetry retry`, or at once under `always`. `H` leaves
+    /// `stopped_at` states under `--symmetry retry` or `always`, or at once when a test forces
+    /// it. `H` leaves
     /// `ext.fixed` where they are, so every element keeps `obs` and the inputs: the run's
     /// orbits are a label-preserving bisimulation, finer than the stuttering partition, which
     /// therefore comes out of the stored graph class for class. The classes are the same sets
@@ -520,6 +521,18 @@ impl Classes {
         };
         (Classified::Classes(Arc::new(classes)), ended, class)
     }
+}
+
+/// Whether S runs up to `H` at once: a test-only switch (`Caps::force_s_up_to_h`, or
+/// `RDRA_ISH_FORCE_S_UP_TO_H` in a `shadow` build) that lets the samples at small bounds,
+/// whose S never stops at the memory limit, reach the path and its twin. A release build
+/// never forces it.
+fn forced(caps: Caps) -> bool {
+    #[cfg(feature = "shadow")]
+    if caps.s_up_to_h && std::env::var_os("RDRA_ISH_FORCE_S_UP_TO_H").is_some() {
+        return true;
+    }
+    caps.force_s_up_to_h
 }
 
 /// Whether some S var is not monotone. When every S var is monotone, each changes finitely

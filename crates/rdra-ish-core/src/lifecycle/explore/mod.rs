@@ -96,10 +96,15 @@ pub struct Caps {
     /// `entity_view` reads: `check`, `states` and the emitters, on an entity's cone. A run
     /// that gathers none has no pattern to count, so `patterns` does not stop it (#251).
     pub views: bool,
-    /// When the sub-lifecycle of a reduced cone runs up to `H`, the instance symmetry that
-    /// keeps what the quotient reads (#212 phase 2): `Retry`, again once its plain run stopped
-    /// at the memory limit, where `Classes::of` reduces nothing otherwise; `Always`, at once.
-    pub s_up_to_h: Symmetry,
+    /// The sub-lifecycle of a reduced cone whose plain run stops at the memory limit runs
+    /// again up to `H`, the instance symmetry that keeps what the quotient reads (#212 phase
+    /// 2; `verify --symmetry retry` and `always`), where `Classes::of` reduces nothing
+    /// otherwise.
+    pub s_up_to_h: bool,
+    /// Test-only: such a sub-lifecycle runs up to `H` at once, with no plain run first, so
+    /// that the samples at small bounds reach the path and its twin. Only a test build or a
+    /// `shadow` build can set it (`forcing_s_up_to_h`, `RDRA_ISH_FORCE_S_UP_TO_H`).
+    pub(crate) force_s_up_to_h: bool,
 }
 
 impl Caps {
@@ -128,15 +133,33 @@ impl Caps {
             deadline: None,
             stop_when_all_violated: false,
             views: true,
-            s_up_to_h: Symmetry::Never,
+            s_up_to_h: false,
+            force_s_up_to_h: false,
         }
+    }
+
+    /// These caps, with `states` as the state cap.
+    pub const fn with_states(self, states: usize) -> Self {
+        Caps { states, ..self }
     }
 
     /// These caps, with a run of a sub-lifecycle that stops at the memory limit run again up
     /// to `H` (`s_up_to_h`).
-    pub const fn with_s_up_to_h(self, when: Symmetry) -> Self {
+    pub const fn with_s_up_to_h(self, on: bool) -> Self {
         Caps {
-            s_up_to_h: when,
+            s_up_to_h: on,
+            ..self
+        }
+    }
+
+    /// Test-only: these caps, with a sub-lifecycle run up to `H` at once (`force_s_up_to_h`).
+    /// A `shadow` build also reads `RDRA_ISH_FORCE_S_UP_TO_H` for it; a release build has
+    /// neither.
+    #[cfg(any(test, feature = "shadow"))]
+    pub const fn forcing_s_up_to_h(self) -> Self {
+        Caps {
+            s_up_to_h: true,
+            force_s_up_to_h: true,
             ..self
         }
     }
