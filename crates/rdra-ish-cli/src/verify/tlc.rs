@@ -9,7 +9,7 @@ use crate::memory::{tlc_workers, TlcHeap};
 use crate::property_cone::{AfterPlain, ConeRun, Verdict, Why};
 use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_env::{current_user_heap, tlc_env_sized, xmx, Heap, Jit};
-use crate::tlc_output::{out_of_memory, progress, summarize, Outcome, TlcRun};
+use crate::tlc_output::{out_of_memory, progress, summarize, Banner, Outcome, TlcRun};
 use crate::tlc_replay::{explain_property, explain_violation};
 use anyhow::{Context, Result};
 use rdra_ish_core::lifecycle::{StateDiag, TransitionSystem};
@@ -311,6 +311,7 @@ fn run_cfg(
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+    tlc.read_banner(&Banner::read(&log));
     let run = TlcRun::parse(&log);
     Ok(Ran {
         decision: Decision::Decided(run.outcome(output.status.success())),
@@ -425,6 +426,7 @@ fn run_whole(
         log.push('\n');
     }
     clean_up(dir, &job.module);
+    tlc.read_banner(&Banner::read(&log));
     let run = TlcRun::parse(&log);
     let exit_ok = status.is_some_and(|s| s.success());
     // A kill that lands after TLC printed its verdict stops nothing that decides.

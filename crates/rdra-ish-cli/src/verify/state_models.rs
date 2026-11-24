@@ -16,7 +16,17 @@ use super::tlc_tool::Tlc;
 use crate::export::Modules;
 use crate::memory::{tlc_workers, TlcHeap};
 use crate::tlc_env::{current_user_heap, Heap, Jit};
-use crate::tlc_output::{out_of_memory, InvariantScan, Outcome};
+use crate::tlc_output::{
+    out_of_memory, readback_failed, Banner, InvariantScan, Outcome, READBACK_HINT,
+};
+
+/// The lines of a TLC log that `readback_failed` looks for.
+const EXCEPTION_LINES: [&str; 4] = [
+    "unexpected exception",
+    "ArrayIndexOutOfBoundsException",
+    "arraycopy: length -",
+    "out of bounds for length",
+];
 use anyhow::{Context, Result};
 use rdra_ish_core::lifecycle::TransitionSystem;
 use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
@@ -377,9 +387,19 @@ fn scan_run(
     });
     let mut scan = InvariantScan::default();
     let mut tail: VecDeque<String> = VecDeque::new();
+    let mut banner = Banner::default();
+    // The lines `readback_failed` reads, which can fall before the tail.
+    let mut exception = String::new();
     let stdout = child.stdout.take().expect("piped");
     for line in BufReader::new(stdout).lines().map_while(Result::ok) {
         scan.line(&line);
+        if !banner.complete() {
+            banner.line(&line);
+        }
+        if exception.len() < 4096 && EXCEPTION_LINES.iter().any(|m| line.contains(m)) {
+            exception.push_str(&line);
+            exception.push('\n');
+        }
         if tail.len() == 20 {
             tail.pop_front();
         }
@@ -388,7 +408,12 @@ fn scan_run(
     child.wait().context("failed to wait for TLC")?;
     let err = err.join().unwrap_or_default();
     clean_up(dir, module);
-    let mut tail: Vec<String> = tail.into_iter().map(|l| format!("  {l}")).collect();
+    tlc.read_banner(&banner);
+    let hint = readback_failed(&exception).then(|| READBACK_HINT.to_string());
+    let mut tail: Vec<String> = hint
+        .into_iter()
+        .chain(tail.into_iter().map(|l| format!("  {l}")))
+        .collect();
     tail.extend(err.lines().map(|l| format!("  {l}")));
     Ok((scan, tail.join("\n")))
 }
