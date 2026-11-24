@@ -10,7 +10,7 @@ Status: design, not built. It answers
 [#284](https://github.com/manji-0/rdra-ish-dsl/issues/284)'s analysis of why the #74 reduction
 is lost at 3 instances
 ([comment](https://github.com/manji-0/rdra-ish-dsl/issues/284#issuecomment-7132476872)).
-No decision in [Open questions](#open-questions) has an answer from the owner yet.
+The owner answered its open questions on 2026-11-24; [Decisions](#decisions) records them.
 
 At `--instance-count 3`, many cones of the domain samples do not fit in 8 GiB. Most of
 their states differ only in which slot holds which row. This document plans a BFS that
@@ -57,7 +57,8 @@ Goals:
   rule 3).
 - Run S up to symmetry inside #74, so the group-B cones whose S is a group-A cone are
   reduced again.
-- Change nothing a run without the reduction prints.
+- A cone `verify` decides today prints what it prints today. Only a cone that stops at the
+  memory limit is run again up to symmetry ([Decisions](#decisions)).
 
 Non-goals:
 
@@ -134,7 +135,7 @@ permuted among themselves) when any of these touches one of its entities:
    today; checked anyway), or any start the scan cannot classify.
 
 The scan never refuses a model. Leaving a class out keeps every run sound and only loses
-reduction. `verify --symmetry` prints one note per cone that leaves a class out, naming the
+reduction. A run up to symmetry prints one note per cone that leaves a class out, naming the
 entity and the rule. Today the builder emits none of the five (its `Choose` and `Transition` effects write
 columns and marks, and it writes an owner only from a param's slot or `null`), so no sample
 and no corpus model loses a class; the scan guards against a later builder change. Because the DSL cannot
@@ -181,8 +182,11 @@ canonicalizer, which the [shadow twin](#verifying-the-reduction) relies on.
    may only prune branches it proves equal, never pick one.
 4. Past `BRANCH_CAP` branches (4,096 in the prototype, never reached in #212), keep the
    first branch. The result is still a member of the class, so the run stays sound, but two
-   members may then be stored twice. The run counts these states and prints the count; the
-   owner decides whether such a cone counts as decided ([Open questions](#open-questions)).
+   members may then be stored twice. The cone keeps its verdict (owner decision,
+   [Decisions](#decisions)): the verdict is sound, and only the stored count may then depend
+   on the canonicalizer. The run counts the states stored this way and reports them in a
+   note under the cone line, `note: N states stored without their canonical form (branch
+   cap); the orbit count is an upper bound`, and in the `RDRA_ISH_SHADOW_STATS` line.
 
 **Fast path.** A move writes one to three rows of a state that is already canonical. When
 the written rows tie with no other row and no owner value moves, re-sorting those rows alone
@@ -337,8 +341,8 @@ What changes in `reduce/`:
 The classes are the same sets, but their numbering follows discovery order and the
 representatives are other states. The printed TLA+ module (`Rep_` tables) and the lifted
 traces therefore change. Applied at n≤2, this would move outputs that are stable today,
-which #284 forbids. That is why S runs up to `H` only when symmetry is on
-([Open questions](#open-questions)).
+which #284 forbids. That is why S runs up to `H` only when the plain run of S stops at the
+memory limit ([Decisions](#decisions)), which no sample's S does at n≤2.
 
 Expected gain (estimated). In clinic-ops `Forbidden_ClinicalOrder_1`, `obs` is
 `Encounter._exists`, so `H` leaves out `Encounter`. Each orbit of #212's group splits into at
@@ -347,8 +351,9 @@ most 3! = 6 classes of `H`, so S has at most 6 × 240,016 ≈ 1.44M stored state
 The two other clinic-ops group-B lines (`Inv_Prescription_4`,
 `Unique_FollowUpMessage_CarePlan`) are probably the same shape; phase 2 measures them. For
 insurance-claim-ops `Forbidden_Claim_4`, `H` leaves out the case's side that holds the fold
-bits; neither the size of S under `H` nor whether its classes pass `TLA_CELL_BUDGET` is
-known. The budget is already an owner decision on #284.
+bits; the size of S under `H` is not known. Its classes at n=3 would very likely pass
+today's `TLA_CELL_BUDGET`; #284 decided to raise the budget for the native checker and TLC
+alike, which is done there and not here.
 
 **T up to `G_T` on a reduced cone.** patent-ops' four undecided cones are reduced cones. On
 them the group of [The group](#the-group) acts on T entities only, with the exclusions of
@@ -373,7 +378,7 @@ under symmetry can miss violations. TLC keeps exploring the cone it is given, un
 #74-reduced, by its own algorithm. That makes it an independent second opinion for the
 native symmetric run, not a copy of it.
 
-**Comparable cones.** `cone_jobs` prints the same module with or without `--symmetry`, apart
+**Comparable cones.** `cone_jobs` prints the same module with or without symmetry, apart
 from the class numbering and `Rep_` bytes of a cone whose S ran up to `H`. Rule 1 compares
 the verdict and the set of violated checks; rule 3 requires the lifted counterexample to
 replay. Neither reads a state count. On a cone TLC cannot finish at n=3, TLC gives no
@@ -384,7 +389,7 @@ z3 under `--prove` for state rules (rules 4 and 5), and the verdicts the corpus 
 **Changes to `docs/engine-agreement.md`**, made in phase 1:
 
 - A rule 8 under "The native checker against itself": on every corpus case at 1, 2, and 3
-  instances, a run with `--symmetry` gives the same verdict and the same violated checks as
+  instances, a run with `--symmetry always` gives the same verdict and the same violated checks as
   a run without it, and every counterexample it prints replays. The harness runs each case
   both ways at each `bfs=` bound; the header grammar needs no new field.
 - A `sym_` family in the corpus, with the cases listed below.
@@ -396,8 +401,8 @@ z3 under `--prove` for state rules (rules 4 and 5), and the verdicts the corpus 
 <!-- constrained-by #soundness-per-check -->
 <!-- constrained-by ../engine-agreement.md#kani-harnesses -->
 
-The speed-up rule of [#282](https://github.com/manji-0/rdra-ish-dsl/pull/282) (a fast path
-keeps its replaced function as a reference twin under the `shadow` feature) is necessary here
+The rule of [A speed-up change](../../CLAUDE.md#a-speed-up-change) (a fast path keeps its
+replaced function as a reference twin under the `shadow` feature) is necessary here
 but not enough: the reduction changes what a run prints (counts, slots in traces), so no twin
 can show an identical output. What each check holds instead:
 
@@ -447,7 +452,7 @@ runs in `cargo test` in seconds.
 | Absent slots permuted (#212's group) | the replay of `sym_first_absent`'s trace (rule 3) |
 | Ties broken in slot order with no branching | the canonicalizer twin, the exhaustive test |
 | `obs` entity left in `H` | the `Classes::of` twin, then the reduced cone's verdicts |
-| Orbit self-edges dropped from `divergence` | the `Classes::of` twin (`loops`), `cone_reduced_class_loops` run with `--symmetry` |
+| Orbit self-edges dropped from `divergence` | the `Classes::of` twin (`loops`), `cone_reduced_class_loops` run with `--symmetry always` |
 | Trace lift applying only the last `σ` | replay (rule 3), `sym_owner_coupled` |
 | Scan rule 1 removed, with a hand-built `<` on `Term::Index` | the unit test that stands for `sym_index_named` |
 
@@ -477,33 +482,43 @@ runs in `cargo test` in seconds.
 
 <!-- constrained-by #tlc-and-engine-agreement -->
 
-- `verify --symmetry` (and `symmetry = true` under `[check]` in `rdra.toml`) turns it on. Off
-  by default until the owner decides otherwise.
-- A cone line run up to symmetry says so: `... (N states up to instance symmetry)`. A cone
-  that left a class out prints the note of [The group](#the-group).
-- `check`, `states`, `export`, and `--prove` do not read the flag.
+- `verify --symmetry <never|retry|always>`, and `symmetry = "..."` under `[check]` in
+  `rdra.toml`. `retry` runs a cone up to symmetry only after its plain run stopped at the
+  memory limit ([Decisions](#decisions)); `always` runs every cone the current phase covers
+  up to symmetry, for rule 8 and the tests; `never` is today's `verify`. The default is
+  `never` until phase 5 makes it `retry`.
+- A cone line run up to symmetry shows the stored count as orbits and an estimate of the
+  plain state count, `(240,016 orbits, about 62M states)`, and a retried cone says why:
+  `retried up to instance symmetry after the memory limit at 25,266,745 states`. The
+  estimate is described under [Decisions](#decisions).
+- The notes under a cone line: a class the scan left out ([The group](#the-group)), and states
+  stored without their canonical form ([The canonical form](#the-canonical-form)).
+- `check`, `states`, `export`, and `--prove` do not read the option.
 
 ## Phases
 
 <!-- derived-from #soundness-per-check -->
 <!-- derived-from #composition-with-74 -->
 
-Each phase lands when its exit check passes. Without `--symmetry`, no phase changes any
-output.
+Each phase lands when its exit check passes. Phases 1 to 4 change no output under the
+default `--symmetry never`; phase 5 changes only cones that stop at the memory limit.
 
 **Phase 1: safety cones #74 leaves unreduced.** The group, the scan, the canonicalizer with
 its fast path, canonicalization in the workers, `OrbitRun` with its orbit self-edge list,
-the trace lift, the flag, the
+the trace lift, the orbit-size estimate, `--symmetry always|retry|never`, the
 twins, the exhaustive test, the Kani harness, the `sym_` cases, and rule 8. Exit:
 
 - the four group-A cones give #212's counts exactly: 240,016 (`Inv_Appointment_0`, `_1`),
   240,016 (`Unique_Encounter_Appointment`), 1,696,486 (`Inv_Encounter_2`), 682,640
   (`Forbidden_ClaimCase_3`), and their five lines are decided at n=3 under `--memory 8GiB`;
-- with `--symmetry`, the samples at their `// expect` flags and the corpus at n=1, 2, 3 give
+- with `--symmetry always`, the samples at their `// expect` flags and the corpus at n=1, 2, 3 give
   the verdicts they give without it;
 - the canonicalizer's cost per successor on `Inv_Encounter_2`, in instructions at
   `RDRA_JOBS=1`, is reported beside #212's prototype; the target is a fifth of it;
-- a `shadow` run of the samples and the corpus shows every new twin's count above zero.
+- a `shadow` run of the samples and the corpus shows every new twin's count above zero;
+- the orbit-size estimate is reported against the exact plain counts of #212's complete
+  n=3 cones (§3b, 29,680,875 states on patent-ops `Forbidden_PatentApplication_1` the
+  largest).
 
 Expected: five undecided lines of clinic-ops and insurance-claim-ops decided (measured on
 the prototype), 16 to 108 times fewer stored states.
@@ -522,23 +537,54 @@ factor recorded as why not.
 **Phase 4: the annotated quotient.** Edge permutations, the slot-wise and per-binding
 readers of [Soundness per check](#soundness-per-check), lasso unrolling, and entity cones.
 Exit: rule 8 holds for every check kind, `presence_first_absent_asymmetry` reports
-`Order#2` only with `--symmetry`, and `verify --with-tlc` reports no disagreement on the
+`Order#2` only with `--symmetry always`, and `verify --with-tlc` reports no disagreement on the
 samples at their `// expect` flags.
 
-**Phase 5: the default.** No code until the owner decides it ([Open questions](#open-questions)).
+**Phase 5: retry by default.** `--symmetry` defaults to `retry`. It needs only phase 1's
+exit, so it may land before phases 2 to 4; each of those then widens which cones a retry
+covers. Exit: `verify-samples.sh` at the `// expect` flags prints what it printed before on
+every root, and the group-A lines are decided at n=3 under `--memory 8GiB` with no option.
 
-## Open questions
+## Decisions
 
 <!-- derived-from #phases -->
 
-For the owner:
+The owner decided these on 2026-11-24.
 
-1. **The default.** Off (as planned), on at n≥3 only, or a retry with symmetry when a plain
-   cone stops at the memory limit. The retry spends the plain run's time first; on at n≥3
-   moves outputs only where most cones are undecided today.
-2. **A cut canonical form.** When `BRANCH_CAP` cuts, keep the cone's verdict (sound, but the
-   stored count depends on the canonicalizer) or report the cone `not decided`.
-3. **The cone line.** The wording of the stored count under symmetry, and whether the plain
-   count's estimate is printed beside it.
-4. **`TLA_CELL_BUDGET`** (from #284) for insurance-claim-ops `Forbidden_Claim_4` and
-   food-permit-ops `SuspendBusiness_0`. Symmetry alone does not decide them.
+- **The default is a retry.** A cone that `verify` decides today keeps today's output. A
+  cone that stops at the memory limit is run again up to symmetry; nothing else is.
+  - When: after the plain attempts `verify` already makes. `bfs_cones`
+    (`crates/rdra-ish-cli/src/verify/bfs.rs`) reruns a cone alone when it met the limit
+    beside others (`crowded`); the retry follows only if that lone rerun also stops at the
+    limit, so a cone the lone rerun decides keeps today's output.
+  - Memory: the retry runs alone, as the lone rerun does, after the plain run's result and
+    its `Charge` are dropped, so it has the whole `--memory` pool, minus what the quotient
+    cache holds, as today.
+  - Time: safety cones have no time budget today, and the retry gets none either. Its cost
+    is the plain attempts' time plus the orbit run; for scale, the runs of S that #284 saw
+    stop at the limit at n=3 took 35 and 61 s. A property
+    run keeps its `--temporal-budget` deadline, and a retry in a later phase runs within
+    what is left of it, not a fresh one.
+  - S: the same rule inside `Classes::of`. A run of S that stops at the memory limit is run
+    again up to `H` instead of returning `Classified::Nothing`.
+  - The cone line says so, as [Interface](#interface) shows.
+- **A cut canonical form keeps the verdict.** When `BRANCH_CAP` cuts, the cone's verdict
+  stands; it is sound, and only the stored count may then depend on the canonicalizer. The
+  count of such states goes to a note under the cone line and to the shadow stats
+  ([The canonical form](#the-canonical-form)).
+- **The cone line shows orbits and an estimate of the plain count**, as `(240,016 orbits,
+  about 62M states)`.
+  - How: the size of a stored state's orbit is `|G_r| / |Aut(r)|`. `|G_r|` is the product,
+    over classes, of the factorial of the movable slot count. `|Aut(r)|`, the elements of
+    `G_r` that leave `r` as it is, is counted once per stored state at `admit`: the factorials
+    of the tie groups no child names, times the branches that reach the least key, counted
+    with their multiplicity rather than deduplicated. The sizes are summed in a `u128`, and
+    the line prints two significant figures.
+  - Cost: one more pass of the canonicalizer per *stored* state, where the run already makes
+    one per successor; at the 11 edges per state of clinic-ops' S (#284), about a tenth more
+    canonicalization work.
+  - Label: `about`, and the docs call it an estimate. It is high, not exact: some members of
+    an orbit are states no run reaches (the `FirstAbsent` asymmetry of [The group](#the-group)),
+    and a state the branch cap cut counts with `|G_r|` alone. Phase 1 reports its error.
+- **`TLA_CELL_BUDGET` is decided in #284**: it is raised for the native checker and TLC
+  alike, in a change of its own. It is not part of this plan.
