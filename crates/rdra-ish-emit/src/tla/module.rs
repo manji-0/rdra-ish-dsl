@@ -844,10 +844,8 @@ fn effects(ts: &TransitionSystem, names: &TlaNames, a: &Action) -> (Vec<String>,
     }
     for &p in &deleted {
         let decl = ts.entity(a.params[usize::from(p)].entity);
-        for &v in std::iter::once(&decl.exists)
-            .chain(&decl.columns)
-            .chain(&decl.owners)
-        {
+        // A deleted row keeps its keys, as in the native step.
+        for &v in std::iter::once(&decl.exists).chain(&decl.columns) {
             let d = ts.var(v);
             let value = if v == decl.exists {
                 Value::DELETED
