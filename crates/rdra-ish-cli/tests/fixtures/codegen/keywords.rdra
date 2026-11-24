@@ -1,0 +1,52 @@
+// Fixture of tests/codegen_builds.rs and the keyword snapshots of rdra-ish-emit (#265): use
+// cases, entities, columns, enum values and an event named after keywords of the target
+// languages, which the generated code escapes.
+// Rust: `return`, `match`, `type`, `self`, `Self`, `super`, `crate`, `static`.
+// TypeScript: `return`, `delete`, `new`, `class`, `static`, `function`, `switch`, `default`.
+// Go: `func`, `type`, `default`, `switch`.
+variation Kind "K" { self super crate type default func }
+entity Function "F" {
+  id: Int @pk
+  default: String @null
+}
+entity Func "G" {
+  id: Int @pk
+  type: Enum(new, return, func) @default(new)
+}
+entity Mod "D" { id: Int @pk }
+entity Match "M" {
+  id: Int @pk
+  status: Enum(new, return, self, super, crate, default) @default(new)
+  type: String
+  default: Int
+  new: String
+  func: String
+  self: String
+  crate: String
+  super: String
+  kind: Kind
+}
+relate(Match, Function, N:1)
+relate(Match, Func, N:1)
+relate(Match, Mod, N:1)
+usecase New "New"
+usecase Return "Return"
+usecase Delete "Delete"
+usecase Super "Super"
+usecase Crate "Crate"
+usecase Type "Type"
+usecase Default "Default"
+usecase Class "Class"
+usecase Static "Static"
+event Switch "Switch"
+creates(New, Match)
+transitions(Return, Match.status, new -> return)
+raises(Return, Switch)
+triggers(Switch, Delete)
+transitions(Delete, Match.status, return -> self)
+transitions(Super, Match.status, self -> super)
+transitions(Crate, Match.status, super -> crate)
+transitions(Default, Match.status, crate -> default)
+transitions(Type, Func.type, new -> return)
+transitions(Class, Func.type, return -> func)
+sets(Static, Function.default == present)

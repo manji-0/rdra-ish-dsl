@@ -53,11 +53,15 @@ dto CreateOrderRequest "Create order request" {
 "#;
 
 fn generated(lang: Lang) -> String {
-    let model = model_from(SRC);
+    generated_from(SRC, "order.rdra", lang)
+}
+
+fn generated_from(src: &str, path: &str, lang: Lang) -> String {
+    let model = model_from(src);
     let options = Options {
         lang,
         package: "domain".to_string(),
-        model_path: "order.rdra".to_string(),
+        model_path: path.to_string(),
         version: "x.y.z".to_string(),
         check: CheckStatus::Passed {
             bounds: "1 instance per entity, Int 0..5".to_string(),
@@ -80,6 +84,29 @@ fn rust_snapshot() {
 #[test]
 fn go_snapshot() {
     insta::assert_snapshot!(generated(Lang::Go));
+}
+
+/// Names that are keywords of a target: the CLI's `codegen_builds.rs` compiles this output.
+const KEYWORDS_SRC: &str =
+    include_str!("../../../rdra-ish-cli/tests/fixtures/codegen/keywords.rdra");
+
+#[test]
+fn keywords_typescript_snapshot() {
+    insta::assert_snapshot!(generated_from(
+        KEYWORDS_SRC,
+        "keywords.rdra",
+        Lang::TypeScript
+    ));
+}
+
+#[test]
+fn keywords_rust_snapshot() {
+    insta::assert_snapshot!(generated_from(KEYWORDS_SRC, "keywords.rdra", Lang::Rust));
+}
+
+#[test]
+fn keywords_go_snapshot() {
+    insta::assert_snapshot!(generated_from(KEYWORDS_SRC, "keywords.rdra", Lang::Go));
 }
 
 /// A key column takes its parent's id type, and the obligations name the invariants the
