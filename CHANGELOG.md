@@ -385,6 +385,17 @@
   output is unchanged, byte for byte. The TLA+
   export changes text on 9 models (no verdict). Instance symmetry relabels a deleted row's
   key with its parent, so a model that reads it is no longer left out of the group.
+- The flake's `tlc` (in `nix develop` and on the `PATH` of the flake's `rdra-ish`) runs TLC
+  1.7.4 on JDK 17 instead of JDK 8, with a class-data-sharing archive of TLC's classes built
+  with it (#309). `verify --with-tlc` also compiles a state-model run of at most 10,000
+  states by BFS with C1 only (`-XX:TieredStopAtLevel=1`), once TLC has started with that
+  flag; cone runs, whose size is not known when they start, keep the default JIT. The
+  engine corpus (306 TLC runs, 159 of them state models) went from 45 s wall and 275 CPU-s
+  to 33 s and 151 CPU-s on an 18-core Mac. Verdicts and the parsing of TLC's output are
+  unchanged. Not JDK 21: TLC 1.7.4 reads a trace record back wrongly on JDK 21 and later,
+  and a `-continue` run that prints many traces stops with an
+  `ArrayIndexOutOfBoundsException` (#314); JDK 17 is 3 to 14% slower than 21 on runs past
+  about 50,000 states.
 - `--max-patterns` caps only a run that builds an entity view (#251, #296): the cone of an
   entity view in `check` and `states`. Only those runs gather view patterns now. A cone of
   invariants, `after` assertions or `can_reach` alone, a run that quotients a sub-lifecycle,
