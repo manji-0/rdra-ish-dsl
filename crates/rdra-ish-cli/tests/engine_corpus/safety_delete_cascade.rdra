@@ -1,13 +1,16 @@
-// trap: .on_delete(cascade) keeps its one-row delete, and DanglingKey reports what it leaves.
+// trap: .on_delete(cascade) keeps its one-row delete, with no guard and no DanglingKey rule.
 // The lifecycle does not run a cascade yet: CancelDraft deletes the Order and no line, and
-// no guard waits for the lines, since the database would remove them. The line that stays
-// names an Order that is gone, so DanglingKey_OrderLine_Order fails after Open, AddLine,
-// CancelDraft. The info DeleteLeavesChildren names the use case. An engine that put the
-// restrict guard on a cascade key would find no counterexample. z3 meets the same step from
-// a state where the rule holds, so the rule is unproved.
-// expect DanglingKey_OrderLine_Order: native=counterexample tlc=counterexample z3=unproved
+// no guard waits for the lines, since the database would remove them. CancelDraft marks the
+// line it binds, which the Order's key names, as orphaned in the same step, so the line is
+// left present and orphaned after Open, AddLine, CancelDraft, and Forbidden_OrderLine_0
+// fails. The key gets no DanglingKey_* rule: the engine does not run the cascade, so a
+// counterexample there would describe the engine, not the model. The info
+// DeleteLeavesChildren names the use case. An engine that put the restrict guard on a
+// cascade key would never run CancelDraft while the line names the Order and would answer
+// ok. z3 meets the same step from a state where the rule holds, so the rule is unproved.
+// expect Forbidden_OrderLine_0: native=counterexample tlc=counterexample z3=unproved
 entity Order "注文" { id: Int @pk }
-entity OrderLine "明細" { id: Int @pk }
+entity OrderLine "明細" { id: Int @pk  orphaned: Bool @default(false) }
 relate(OrderLine, Order, N:1).on_delete(cascade)
 usecase Open "起票"
 usecase AddLine "明細追加"
@@ -15,3 +18,5 @@ usecase CancelDraft "下書き取消"
 creates(Open, Order)
 creates(AddLine, OrderLine)
 deletes(CancelDraft, Order)
+sets(CancelDraft, OrderLine.orphaned == true)
+forbidden(OrderLine, OrderLine.orphaned == true)

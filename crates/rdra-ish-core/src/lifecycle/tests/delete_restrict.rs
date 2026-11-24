@@ -1,7 +1,8 @@
 //! `deletes(UC, Parent)` over a key whose database rejects the delete (`restrict`,
 //! `no_action`, or no `.on_delete`, the SQL default): the step waits until no present child
-//! names the row (#199). `cascade` and `set_null` still delete the one row, and
-//! `DanglingKey_<Child>_<role>` reports the children such a delete leaves.
+//! names the row (#199), and `DanglingKey_<Child>_<role>` checks that no child is left
+//! naming a gone row. `cascade`, `set_null`, and `set_default` still delete the one row with
+//! no guard and no such rule, as before #199.
 
 use super::*;
 use crate::lifecycle::types::{EntId, GuardWhy, Value};
@@ -136,21 +137,28 @@ fn deleting_the_children_first_lets_the_parent_go() {
     assert!(!dangling, "a line names a deleted Order");
 }
 
-/// `cascade` and `set_null` keep today's step: the delete removes the one row and the
-/// children stay. `DanglingKey_OrderLine_Order` reports them, beside the info that names
-/// the use case.
+/// `cascade`, `set_null`, and `set_default` keep the step they had before #199: the delete
+/// removes the one row with no guard, and the children stay. The lifecycle does not run
+/// those actions yet, so the key gets no `DanglingKey_*` and nothing fails; `cascade` keeps
+/// the info `DeleteLeavesChildren`. Deleting the lines in another use case changes nothing.
 #[test]
-fn a_cascade_or_set_null_delete_leaves_its_children_and_dangling_key_says_so() {
+fn a_cascade_set_null_or_set_default_delete_keeps_its_one_row_step() {
     // An optional line starts unlinked, so Attach links it before the Order goes.
     let attach = "usecase Attach \"紐付け\"\nlinks(Attach, OrderLine, Order)";
+    let remove = "usecase RemoveLine \"明細削除\"\ndeletes(RemoveLine, OrderLine)";
     for (key, extra) in [
         (".on_delete(cascade)", ""),
+        (".on_delete(cascade)", remove),
         (".optional().on_delete(set_null)", attach),
+        (".on_delete(set_default)", ""),
     ] {
         let src = order(key, extra);
-        assert_eq!(
-            restrict_guards(&system(&src, Bounds::STATES), "CancelDraft"),
-            0,
+        let ts = system(&src, Bounds::STATES);
+        assert_eq!(restrict_guards(&ts, "CancelDraft"), 0, "{key}");
+        assert!(
+            ts.invariants()
+                .iter()
+                .all(|i| !i.name.starts_with("DanglingKey_")),
             "{key}"
         );
         assert!(
@@ -161,7 +169,17 @@ fn a_cascade_or_set_null_delete_leaves_its_children_and_dangling_key_says_so() {
             ),
             "{key}"
         );
-        assert!(dangling_violated(&src), "{key}");
+        let diags = derive_scoped(&model_from(&src), Bounds::VERIFY, &Scope::ALL).diags;
+        assert!(
+            !diags
+                .iter()
+                .any(|x| matches!(x.diag, StateDiag::ConstraintViolated { .. })),
+            "{key}"
+        );
+        let leaves = diags
+            .iter()
+            .any(|x| matches!(x.diag, StateDiag::DeleteLeavesChildren { .. }));
+        assert_eq!(leaves, key.contains("cascade"), "{key}");
     }
 }
 
@@ -190,6 +208,7 @@ fn only_a_deleted_hard_parent_has_a_guard_and_a_rule() {
     );
     assert!(soft.contains("@soft_delete"));
     assert_eq!(rules(&soft), (0, Vec::new()));
+    assert_eq!(rules(&order(".on_delete(cascade)", "")), (0, Vec::new()));
     let no_delete = order("", "").replace("deletes(CancelDraft, Order)", "");
     let ts = system(&no_delete, Bounds::STATES);
     assert!(ts
@@ -200,27 +219,6 @@ fn only_a_deleted_hard_parent_has_a_guard_and_a_rule() {
     // which `PreExistingChildOfCreatedParent` reports; no delete causes it, so no rule.
     let pre = order("", "").replace("creates(AddLine, OrderLine)", "");
     assert_eq!(rules(&pre).1, Vec::<String>::new());
-}
-
-/// Deleting the lines in an earlier step does not clear `DanglingKey_*` on a cascade key,
-/// since its delete has no guard; a condition that no line remains does, at two slots too.
-#[test]
-fn a_cascade_delete_needs_its_own_guard_to_leave_no_child() {
-    let remove = "usecase RemoveLine \"明細削除\"\ndeletes(RemoveLine, OrderLine)";
-    let violated = |src: &str| {
-        derive_scoped(&model_from(src), Bounds::VERIFY, &Scope::ALL)
-            .diags
-            .iter()
-            .any(|x| {
-                matches!(&x.diag, StateDiag::ConstraintViolated { name, .. }
-                    if name == "DanglingKey_OrderLine_Order")
-            })
-    };
-    assert!(violated(&order(".on_delete(cascade)", remove)));
-    let guarded = format!(
-        "{remove}\ncondition NoLines \"明細なし\"\nholds(NoLines, Order.status == draft).none(OrderLine)\napplies_to(NoLines, CancelDraft)"
-    );
-    assert!(!violated(&order(".on_delete(cascade)", &guarded)));
 }
 
 /// A step that unlinks a line and deletes its Order is what the database accepts: the line

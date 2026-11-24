@@ -690,7 +690,8 @@ pub enum InvKind {
     MinCard,
     /// A column's `@check(expr)`: no present slot makes the expression false.
     Check,
-    /// A key whose parent a step deletes: every present child names a present parent.
+    /// A key whose parent a step deletes and whose database rejects that delete: every
+    /// present child names a present parent.
     DanglingKey,
     /// A counted edge's counter is never past its `k` (`EventOverflow_<E>_<Ev>_<UC>`).
     Overflow,
@@ -759,13 +760,12 @@ pub enum InvText {
         parent: String,
         role: String,
     },
-    /// A key whose parent a use case deletes, by the key's role and its `.on_delete` as
-    /// written (`cascade`, `set_null`, ...; empty when unset).
+    /// A key whose parent a use case deletes and whose database rejects that delete
+    /// (`restrict`, `no_action`, or no `.on_delete`), by the key's role.
     DanglingKey {
         child: String,
         parent: String,
         role: String,
-        on_delete: String,
     },
     /// `triggers(event, usecase).counted(cap)`: no row has more than `cap` raises pending.
     Overflow {

@@ -76,9 +76,9 @@ Also ask:
    creates the parent must create its first child in the same transaction.
    A `deletes(UC, Parent)` under a key with no `.on_delete`, `restrict`, or `no_action`
    waits until no present child names the row, as the database rejects it otherwise;
-   delete the children first. Under `cascade` or `set_null` the lifecycle leaves the
-   children, and `DanglingKey_<Child>_<role>` reports them unless a condition such as
-   `.none(Child)` guards the deleting use case.
+   delete the children first; `DanglingKey_<Child>_<role>` checks that no child is left.
+   Under `cascade`, `set_null`, or `set_default` the lifecycle does not run the action yet:
+   it deletes the one row and leaves the children, with no guard and no `DanglingKey_*`.
    Chain `.role(name)` when two relates join one child to one parent, or when a second
    relate joins the same two entities the other way. Every rule, guard, quantifier and copy
    that joins such a pair then names its key with `.role(name)` (`AmbiguousOwnerLink`

@@ -13,19 +13,17 @@
   disabled, which can turn a passing liveness or `can_reach` property into a
   counterexample, add a deadlock, or make the use case one that never runs. To migrate,
   delete the children first, in a use case that `deletes(UC, Child)` or `unlinks` them. A
-  step that unlinks a child and deletes its parent is enabled. Each key whose parent some
-  use case deletes also gets the invariant `DanglingKey_<Child>_<role>`: every present
-  child names a present parent. The lifecycle does not run `cascade`, `set_null`, or
-  `set_default` yet. Their delete removes the one row with no guard, so the rule fails as
-  soon as the delete can run while a child names the row, and deleting the children in
-  another use case does not prevent that. Declaring `.on_delete(cascade)` therefore trades
-  the disabled delete for a `DanglingKey_*` counterexample, and a model that only had the
-  info `DeleteLeavesChildren` now fails. To clear it, guard the deleting use case with a
-  condition that no child remains, such as
-  `holds(NoLines, Order.status == draft).none(OrderLine)`. A parent with a `@soft_delete`
-  column is marked, not removed, so its keys get no guard and no rule. A pre-existing child
-  of a created parent, which `PreExistingChildOfCreatedParent` already reports, gets no
-  rule. No sample changes verdict: no sample deletes a row that a key names.
+  step that unlinks a child and deletes its parent is enabled. Each such key whose parent
+  some use case deletes also gets the invariant `DanglingKey_<Child>_<role>`: every present
+  child names a present parent. The guard keeps it, and z3 proves it. `DanglingKey_*`
+  covers these restrict-family keys only. The lifecycle does not run `cascade`, `set_null`,
+  or `set_default` deletes yet: they still remove the one row with no guard, as before, and
+  their keys get no `DanglingKey_*`, so a model that declares one gives the same verdict as
+  before, with the info `DeleteLeavesChildren` for `cascade`. A parent with a
+  `@soft_delete` column is marked, not removed, so its keys get no guard and no rule. A
+  pre-existing child of a created parent, which `PreExistingChildOfCreatedParent` already
+  reports, gets no rule. No sample changes verdict: no sample deletes a row that a key
+  names.
 
 - `verify --prove` decides an invariant cone that BFS stopped at the memory limit (#232).
   When z3 proves every rule the cone checks for any number of rows, the rules hold at the

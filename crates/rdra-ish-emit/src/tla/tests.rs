@@ -155,7 +155,7 @@ fn a_one_to_one_key_is_a_unique_invariant_over_two_binders() {
 
 /// A delete the key's children reject waits until no present child names the row, apart
 /// from a child the step deletes with it; the key gets `DanglingKey_<Child>_<role>`. A
-/// cascade key keeps its unguarded delete (#199).
+/// cascade key keeps its unguarded delete and gets no such rule (#199).
 #[test]
 fn a_restricted_delete_is_guarded_by_its_children_and_its_key_cannot_dangle() {
     let src = |key: &str, extra: &str| {
@@ -193,7 +193,8 @@ fn a_restricted_delete_is_guarded_by_its_children_and_its_key_cannot_dangle() {
         "{}",
         cascade.tla
     );
-    assert!(cascade.cfg.contains("INVARIANT DanglingKey_L_O\n"));
+    assert!(!cascade.tla.contains("DanglingKey_"), "{}", cascade.tla);
+    assert!(!cascade.cfg.contains("DanglingKey_"), "{}", cascade.cfg);
 }
 
 #[test]

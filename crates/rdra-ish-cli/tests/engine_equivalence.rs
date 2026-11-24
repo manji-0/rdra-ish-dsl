@@ -1726,8 +1726,9 @@ fn bfs_and_tlc_agree_on_two_keys_to_one_parent() {
 /// `deletes` over keys with different `.on_delete` (#199): the lines' key states none, the
 /// SQL default, so Cancel waits until no present line names the Order, and a line Cancel
 /// deletes in the same step does not count; the notes' key says cascade, which the
-/// lifecycle does not run, so a note outlives its Order. Both engines reach the same states,
-/// and only `DanglingKey_Note_Order` fails.
+/// lifecycle does not run, so a note outlives its Order with no guard and no rule. Both
+/// engines reach the same states, and `DanglingKey_OrderLine_Order`, the only such rule,
+/// holds.
 const DELETE_ACTIONS: &str = r#"
 entity Order "注文" { id: Int @pk  status: Enum(draft, placed) @default(draft) }
 entity OrderLine "明細" { id: Int @pk }
@@ -1752,11 +1753,7 @@ transitions(Place, Order.status, draft -> placed)
 #[test]
 fn bfs_and_tlc_agree_on_a_delete_its_children_restrict() {
     if let Some(violated) = check_fixture("delete_actions", DELETE_ACTIONS) {
-        assert!(violated.contains("DanglingKey_Note_Order"), "{violated:?}");
-        assert!(
-            !violated.contains("DanglingKey_OrderLine_Order"),
-            "{violated:?}"
-        );
+        assert!(violated.is_empty(), "{violated:?}");
     }
 }
 

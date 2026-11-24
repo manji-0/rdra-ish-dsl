@@ -315,11 +315,13 @@ impl Builder<'_> {
         a.guards.extend(guards);
     }
 
-    /// `DanglingKey_{child}_{role}` per key whose parent some step deletes: every present
-    /// child names a present parent, or none on an optional key. A `restrict` key holds it
-    /// by its guard; a `cascade`, `set_null`, or `set_default` key, whose action the lifecycle
-    /// does not run, breaks it when a delete leaves children behind. A parent with a
-    /// `@soft_delete` column keeps its rows in the database, so its key has no such rule.
+    /// `DanglingKey_{child}_{role}` per key whose parent some step deletes and whose database
+    /// rejects that delete (`ForeignKey::delete_rejected`): every present child names a present
+    /// parent, or none on an optional key. The `Restrict` guard keeps it. A `cascade`,
+    /// `set_null`, or `set_default` key gets no rule: the lifecycle does not run that action
+    /// yet and deletes the one row, so a failure would describe the engine, not the model
+    /// (`DeleteLeavesChildren` says so for `cascade`). A parent with a `@soft_delete` column
+    /// keeps its rows in the database, so its key has no such rule.
     fn dangling_keys(&mut self) {
         let model = self.model;
         for (id, fk) in model.foreign_keys() {
@@ -337,7 +339,8 @@ impl Builder<'_> {
             let birth = |e: EntId| self.ts.entities[e.index()].birth;
             let starts_dangling =
                 birth(c) == Birth::PreExisting && birth(p) == Birth::Created && !fk.optional();
-            if !deleted || !self.hard_deleted_parent(fk) || starts_dangling {
+            if !deleted || !fk.delete_rejected() || !self.hard_deleted_parent(fk) || starts_dangling
+            {
                 continue;
             }
             let Some(owner) = self.owner_var(id) else {
@@ -378,11 +381,6 @@ impl Builder<'_> {
                     child,
                     parent,
                     role,
-                    on_delete: fk
-                        .on_delete
-                        .map(RefAction::as_str)
-                        .unwrap_or_default()
-                        .to_string(),
                 },
                 label: None,
                 site: Site::new(ModelRef::Relation(fk.relation), &fk.site),
