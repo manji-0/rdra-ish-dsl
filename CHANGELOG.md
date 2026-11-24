@@ -332,17 +332,20 @@
 
 ### Changed
 
-- `verify` shares a sub-lifecycle's quotient across the cones whose extended sub-lifecycles
-  are equal (#252): it is explored and partitioned once, and each cone maps its classes into
-  its own ids. A shared quotient is matched by `==` on the extended sub-lifecycle, its `obs`,
-  inputs and rises, and the caps that can stop its runs; it is taken only where its runs fit
-  the room the cone has, and it stays charged to `--memory`, in the bytes its tables take,
-  until the entity cones are reduced. The safety and property cones are now reduced one at
-  a time in order, so which of them are reduced no longer depends on the number of threads
-  under a tight limit (#244). A quotient with more classes than any cone's TLA+ tables may
-  print is no longer built in full. The output is unchanged on every sample and corpus
-  case; on `insurance-claim-ops`, at `RDRA_JOBS=1`, `verify` retires 22% fewer
-  instructions. `RDRA_ISH_NO_QUOTIENT_CACHE=1` turns the sharing off, and
+- `verify` reduces cones faster (#252). A sub-lifecycle's quotient is shared across the
+  cones whose extended sub-lifecycles are equal: it is explored and partitioned once, and
+  each cone maps its classes into its own ids. A shared quotient is matched by `==` on the
+  extended sub-lifecycle, its `obs`, inputs and rises, and the caps that can stop its runs;
+  it is taken only where its runs fit the room the cone has, and it stays charged to
+  `--memory`, in the bytes its tables take, until the entity cones are reduced. The safety
+  and property cones are now reduced one at a time in order, so which of them are reduced
+  no longer depends on the number of threads under a tight limit (#244). A quotient with
+  more classes than any cone's TLA+ tables may print is no longer built in full. The
+  stuttering partition refines by a worklist of splitters instead of sweeping every block
+  until nothing splits, and a reduced state is stepped without allocating. The output is
+  unchanged on every sample and corpus case. At `RDRA_JOBS=1`, `verify` retires 33%
+  fewer instructions on `insurance-claim-ops`, 9% fewer on `patent-ops` and 28% fewer on
+  `oidc-auth` at one instance. `RDRA_ISH_NO_QUOTIENT_CACHE=1` turns the sharing off, and
   `RDRA_ISH_QUOTIENT_STATS=1` prints what it did.
 - A safety cone stops once every invariant and `after` assertion on it has a
   counterexample (#213), in `verify` and in `check` and `states`. The counterexamples are
