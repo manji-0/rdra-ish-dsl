@@ -234,27 +234,29 @@ jobs:
         # `cargo build` resolves other features and compiled every crate a second time.
         run: cargo test --release -p rdra-ish-cli --features shadow --test engine_corpus --no-run
       - name: Every twin compares calls
-        # How many calls each twin compared and skipped on five runs. `verify` of patent-ops
+        # How many calls each twin compared and skipped on six runs. `verify` of patent-ops
         # reaches every twin but `Fold::holds`, which quantifier_guard reaches, a shared run
-        # of S, which `verify` of clinic-ops reaches, and the two that read entity views,
-        # which no run of `verify` gathers (#251): `check` does. The other `verify` runs take
-        # `--symmetry always`, which the instance-symmetry twins (#212) need, and the
-        # test-only `RDRA_ISH_FORCE_S_UP_TO_H`, which runs each sub-lifecycle up to `H` at once:
-        # no sample's stops at the memory limit at these bounds. clinic-ops is where `H` moves
-        # rows of a sub-lifecycle the `s_up_to_h` twin can hold. The variable changes nothing
-        # without `--symmetry`. The step fails when a line is missing (a build without the
-        # feature) or a twin compared none in all five.
+        # of S, which `verify` of clinic-ops reaches, the two that read entity views, which no
+        # run of `verify` gathers (#251): `check` does, and the ends of an after-assert step on
+        # a run without an edge list, which safety_edge_free_cone reaches (#296). The other
+        # `verify` runs take `--symmetry always`, which the instance-symmetry twins (#212)
+        # need, and the test-only `RDRA_ISH_FORCE_S_UP_TO_H`, which runs each sub-lifecycle up
+        # to `H` at once: no sample's stops at the memory limit at these bounds. clinic-ops is
+        # where `H` moves rows of a sub-lifecycle the `s_up_to_h` twin can hold. The variable
+        # changes nothing without `--symmetry`. The step fails when a line is missing (a build
+        # without the feature) or a twin compared none in all six.
         run: |
           for run in "verify samples/patent-ops --symmetry always" \
                      "verify samples/clinic-ops --symmetry always" \
                      "verify samples/formal-verification/quantifier_guard.rdra --symmetry always" \
                      "verify samples/clinic-ops" \
-                     "check samples/patent-ops"; do
+                     "check samples/patent-ops" \
+                     "verify crates/rdra-ish-cli/tests/engine_corpus/safety_edge_free_cone.rdra"; do
             RDRA_ISH_SHADOW_STATS=1 RDRA_ISH_FORCE_S_UP_TO_H=1 target/release/rdra-ish $run 2>&1 >/dev/null \
               | grep '^shadow: compared/skipped ' >> shadow-stats.txt || true
           done
           cat shadow-stats.txt
-          test "$(wc -l < shadow-stats.txt)" -eq 5
+          test "$(wc -l < shadow-stats.txt)" -eq 6
           python3 - <<'EOF'
           import collections, re
           compared = collections.Counter()

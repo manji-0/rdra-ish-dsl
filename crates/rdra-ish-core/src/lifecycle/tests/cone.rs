@@ -222,7 +222,7 @@ fn an_entity_the_view_does_not_read_never_runs_out_of_slots() {
 
 /// The run's edges are exactly the moves of each expanded state, in order, and every state's
 /// parent path replays through `moves` from an initial state to that state. A cone stopped
-/// once its checks have all failed holds a prefix of those edges.
+/// once its checks have all failed keeps no edge list; its parent paths replay all the same.
 #[test]
 fn every_state_replays_from_its_parent_path_through_moves() {
     let caps = Caps::new(usize::MAX, 200_000);
@@ -238,19 +238,19 @@ fn every_state_replays_from_its_parent_path_through_moves() {
                     run.complete || run.checks_failed,
                     "{sample}: cone does not finish"
                 );
-                let mut edges = run.edges().iter();
-                'states: for (from, s) in run.states.iter().enumerate() {
-                    for m in ts.moves(s) {
-                        let Some(e) = edges.next() else {
-                            assert!(run.checks_failed, "{sample}: an edge per move");
-                            break 'states;
-                        };
-                        assert_eq!(e.from as usize, from, "{sample}: edge source");
-                        assert_eq!(run.step(e), (m.act, &m.params[..]), "{sample}: binding");
-                        assert_eq!(run.states[e.to as usize], m.next, "{sample}: successor");
+                // A cone of checks alone stops once they all fail and keeps no edge list.
+                if run.has_edges() {
+                    let mut edges = run.edges().iter();
+                    for (from, s) in run.states.iter().enumerate() {
+                        for m in ts.moves(s) {
+                            let e = edges.next().expect("an edge per move");
+                            assert_eq!(e.from as usize, from, "{sample}: edge source");
+                            assert_eq!(run.step(&e), (m.act, &m.params[..]), "{sample}: binding");
+                            assert_eq!(run.states[e.to as usize], m.next, "{sample}: successor");
+                        }
                     }
+                    assert!(edges.next().is_none(), "{sample}: an edge with no move");
                 }
-                assert!(edges.next().is_none(), "{sample}: an edge with no move");
                 for at in 0..run.states.len() as u32 {
                     let path = run.path_to(at);
                     let start = path.first().map_or(at, |e| e.from);

@@ -130,13 +130,13 @@ impl ComponentRun {
     fn breaking_step(&self, p: &Property) -> Option<(u32, Vec<Edge>)> {
         let ts = &self.system;
         let bindings: Vec<Vec<u8>> = ts.binder_slots(&p.binders).collect();
-        let edge = self.edges.iter().find(|e| {
+        let edge = self.edges().iter().find(|e| {
             let (a, b) = (&self.states[e.from as usize], &self.states[e.to as usize]);
             e.from != e.to && bindings.iter().any(|bd| ts.step_breaks(p, bd, a, b))
         })?;
         let mut path = self.path_to(edge.from);
         let first = path.first().map_or(edge.from, |e| e.from);
-        path.push(*edge);
+        path.push(edge);
         Some((first, path))
     }
 
@@ -146,7 +146,8 @@ impl ComponentRun {
     fn unlatched_state(&self, p: &Property, x: &Pred, y: &Pred) -> Option<(u32, Vec<Edge>)> {
         let ts = &self.system;
         let mut out: Vec<Vec<u32>> = vec![Vec::new(); self.states.len()];
-        for (k, e) in self.edges.iter().enumerate() {
+        let edges = self.edges();
+        for (k, e) in edges.iter().enumerate() {
             out[e.from as usize].push(k as u32);
         }
         let mut best: Option<(u32, Vec<Edge>)> = None;
@@ -158,8 +159,8 @@ impl ComponentRun {
             // Per reached state: the edge into it, or `None` for an initial state.
             let mut via: Vec<Option<Option<u32>>> = vec![None; self.states.len()];
             let mut queue: VecDeque<u32> = VecDeque::new();
-            for (k, parent) in self.parents.iter().enumerate() {
-                if parent.is_none() && open[k] {
+            for k in 0..self.states.len() {
+                if self.parent(k as u32).is_none() && open[k] {
                     via[k] = Some(None);
                     queue.push_back(k as u32);
                 }
@@ -171,7 +172,7 @@ impl ComponentRun {
                     break;
                 }
                 for &ek in &out[k as usize] {
-                    let to = self.edges[ek as usize].to as usize;
+                    let to = edges.get(ek as usize).to as usize;
                     if open[to] && via[to].is_none() {
                         via[to] = Some(Some(ek));
                         queue.push_back(to as u32);
@@ -183,7 +184,7 @@ impl ComponentRun {
             };
             let mut path = Vec::new();
             while let Some(Some(ek)) = via[at as usize] {
-                let e = self.edges[ek as usize];
+                let e = edges.get(ek as usize);
                 path.push(e);
                 at = e.from;
             }

@@ -57,7 +57,7 @@ fn a_cone_past_the_memory_limit_stops_as_at_the_state_cap() {
     assert!(
         stderr.contains(
             "error[MemoryCapReached_Task]: state derivation for entity 'Task': memory limit \
-             4KiB reached at 38 states; results are incomplete: the cone has 9 variables"
+             4KiB reached at 64 states; results are incomplete: the cone has 9 variables"
         ),
         "{stderr}"
     );
@@ -70,7 +70,7 @@ fn a_cone_past_the_memory_limit_stops_as_at_the_state_cap() {
     );
     let out = run(&repo(), &["states", "--memory", "4KiB", FLAGS]);
     assert!(
-        String::from_utf8_lossy(&out.stdout).contains("memory limit 4KiB reached at 38 states"),
+        String::from_utf8_lossy(&out.stdout).contains("memory limit 4KiB reached at 64 states"),
         "{}",
         String::from_utf8_lossy(&out.stdout)
     );
@@ -101,14 +101,14 @@ fn a_run_at_the_memory_limit_estimates_what_finishing_needs() {
         ),
         "{stderr}"
     );
-    // One layer past the peak says nothing yet, so the cone's variables bound what it needs.
+    // A frontier still growing says nothing yet, so the cone's variables bound what it needs.
     assert!(
         stderr.contains(
-            "new states first reached by: CapturePay 1, PlaceOrder 1; held at 101 B per state; the \
-             frontier peaked at depth 0, but by depth 1 it has not fallen far enough to estimate \
-             the states left; the cone's variables allow at most 30 \
-             states, so if all are reachable this cone alone needs at least about 1MiB; raise it \
-             to 1MiB or more with --memory"
+            "new states first reached by: CancelOrder 1, CapturePay 1, PlaceOrder 1; held at 91 B \
+             per state; the frontier still grows (2 new states at depth 2, 2.0x the depth before), \
+             so its layers give no estimate of the states left; the cone's variables allow at most \
+             30 states, so if all are reachable this cone alone needs at least about 1MiB; raise \
+             it to 1MiB or more with --memory"
         ),
         "{stderr}"
     );
@@ -121,7 +121,7 @@ fn a_run_at_the_memory_limit_estimates_what_finishing_needs() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
         stderr.contains(
-            "the frontier still grows (172 new states at depth 8, 1.3x the depth before), so its \
+            "the frontier still grows (176 new states at depth 8, 1.3x the depth before), so its \
              layers give no estimate of the states left; raise it with --memory or `memory` under \
              [check] in rdra.toml, or narrow with --entity or --buc"
         ),
@@ -154,10 +154,10 @@ fn a_run_at_the_memory_limit_estimates_what_finishing_needs() {
 /// the `--memory` it names finishes the run.
 #[test]
 fn a_run_past_its_frontiers_peak_estimates_the_states_its_cone_reaches() {
-    let out = run(&repo(), &["check", "--memory", "36KiB", FLAGS]);
+    let out = run(&repo(), &["check", "--memory", "21KiB", FLAGS]);
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
-        stderr.contains("memory limit 36KiB reached at 256 states; results are incomplete"),
+        stderr.contains("memory limit 21KiB reached at 256 states; results are incomplete"),
         "{stderr}"
     );
     assert!(
@@ -194,7 +194,7 @@ fn cones_side_by_side_stop_where_they_stop_one_at_a_time() {
         let out = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
             .current_dir(repo())
             .env("RDRA_JOBS", jobs)
-            .args(["check", "--memory", "4MiB", "samples/insurance-claim-ops"])
+            .args(["check", "--memory", "2MiB", "samples/insurance-claim-ops"])
             .output()
             .expect("rdra-ish runs");
         String::from_utf8_lossy(&out.stderr).into_owned()

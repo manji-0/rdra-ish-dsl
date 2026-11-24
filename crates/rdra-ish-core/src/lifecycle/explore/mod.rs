@@ -5,6 +5,7 @@
 
 mod arena;
 mod bfs;
+mod edges;
 mod graph;
 mod liveness;
 mod moves;
@@ -23,13 +24,14 @@ mod views;
 mod violations;
 
 pub use arena::States;
+pub use edges::{AnEdge, EdgeIter, Edges, Ends, Listed};
 pub use graph::{Adjacency, LabelledEdges};
 pub use liveness::{LassoFault, ReducedVerdict, Spurious};
 pub use orbit::{LabelledEdge, OrbitRun};
 pub(crate) use plan::Plans;
 pub use properties::PropertyVerdict;
 pub use reach::{Estimate, Layers};
-pub use store::{store_bytes, Held};
+pub use store::{store_bytes, Held, Shape};
 pub use symmetry::{LeftOut, Rule as SymmetryRule, Symmetry};
 
 use std::collections::BTreeSet;
@@ -41,7 +43,7 @@ use crate::memory::{Charge, MemoryPool};
 
 use super::diag::Diag;
 use super::expr::{State, StateSlice};
-use super::types::ActId;
+use super::types::{ActId, EntId};
 use super::TransitionSystem;
 
 /// The invariants and after-asserts a run evaluates: the ones its caller reads. A check the
@@ -90,7 +92,10 @@ pub struct Caps {
     /// (`RunEnd::ChecksFailed`). Only a run that decides nothing but those checks sets it: an
     /// entity target, a property, or a `can_reach` reads the whole graph. The stop reads
     /// every check the run evaluates, so a run that sets it evaluates `Checks::All`, as its
-    /// callers do: with fewer, it would stop at another state.
+    /// callers do: with fewer, it would stop at another state. Since nothing reads the graph
+    /// of such a run, it keeps no edge list (`ComponentRun::edges` panics on it): each
+    /// state's parent holds the move that reached it, and the run records as it goes what
+    /// the vacuity of an after-assert reads (`ComponentRun::step_ends`).
     pub stop_when_all_violated: bool,
     /// Gather each entity's view patterns from the edges (`EntityView`), which only
     /// `entity_view` reads: `check`, `states` and the emitters, on an entity's cone. A run
@@ -217,11 +222,12 @@ pub struct ComponentRun {
     /// (`Caps::views`, `gathered_views`).
     pub(crate) views: Vec<EntityView>,
     gathered_views: bool,
-    /// Parallel to `states`: the index in `edges` of the edge that first reached the state;
-    /// `None` for an initial state.
-    parents: Vec<Option<u32>>,
-    /// Every move from an expanded state, self-loops and repeats included, in discovery order.
-    edges: Vec<Edge>,
+    /// Per state the move that first reached it, and, unless the run stopped once every
+    /// check failed (`Caps::stop_when_all_violated`), every move from an expanded state,
+    /// self-loops and repeats included, in discovery order.
+    steps: edges::Steps,
+    /// On a run that keeps no edge list: what the after-assert steps' moves reached.
+    ends: Option<edges::StepEnds>,
     /// `(action, params)` of each distinct binding an edge names.
     bindings: Vec<(ActId, Box<[u8]>)>,
     /// What the run's result holds, in the bytes `Caps::memory` counts.
@@ -240,7 +246,7 @@ pub struct ComponentRun {
 
 /// What a reader of state predicates and action labels reads of a run, plain or up to
 /// symmetry (`OrbitRun`): the stored states, whether the run reached all of them, its
-/// diagnostics, and the targets of the edges an action labels. Each such reader is sound on
+/// diagnostics, and what the edges an action labels reach. Each such reader is sound on
 /// a run up to symmetry, since a state predicate that reads every row has one value on a
 /// whole class, and an action labels an edge of the stored graph exactly when it labels one
 /// of the plain graph.
@@ -251,8 +257,9 @@ pub trait StoredRun {
     fn whole(&self) -> bool;
     fn diagnostics(&self) -> &[Diag];
     fn evaluated(&self) -> &Checks;
-    /// The stored target of each edge `act` labels, in discovery order.
-    fn targets_of(&self, act: ActId) -> Vec<&StateSlice>;
+    /// What the edges `act` labels reach: whether there is one, and whether the stored target
+    /// of one has a row of every entity in `binders` (`ComponentRun::step_ends`).
+    fn step_ends(&self, act: ActId, binders: &[EntId]) -> Ends;
 }
 
 impl StoredRun for ComponentRun {
@@ -271,12 +278,8 @@ impl StoredRun for ComponentRun {
     fn evaluated(&self) -> &Checks {
         &self.checks
     }
-    fn targets_of(&self, act: ActId) -> Vec<&StateSlice> {
-        self.edges
-            .iter()
-            .filter(|e| self.step(e).0 == act)
-            .map(|e| &self.states[e.to as usize])
-            .collect()
+    fn step_ends(&self, act: ActId, binders: &[EntId]) -> Ends {
+        ComponentRun::step_ends(self, act, binders)
     }
 }
 
@@ -296,11 +299,8 @@ impl StoredRun for OrbitRun {
     fn evaluated(&self) -> &Checks {
         self.checks()
     }
-    fn targets_of(&self, act: ActId) -> Vec<&StateSlice> {
-        self.labelled_edges()
-            .filter(|e| e.act == act)
-            .map(|e| &self.states()[e.to as usize])
-            .collect()
+    fn step_ends(&self, act: ActId, binders: &[EntId]) -> Ends {
+        OrbitRun::step_ends(self, act, binders)
     }
 }
 
@@ -334,9 +334,16 @@ impl ComponentRun {
     /// bindings and findings in the same order, and the same end. The system is not compared.
     #[cfg(any(test, feature = "shadow"))]
     pub(crate) fn same_graph(&self, other: &ComponentRun) -> bool {
+        let parents = |run: &ComponentRun| -> Vec<Option<Edge>> {
+            (0..run.states.len() as u32)
+                .map(|k| run.parent(k))
+                .collect()
+        };
         self.states == other.states
-            && self.parents == other.parents
-            && self.edges == other.edges
+            && parents(self) == parents(other)
+            && self.has_edges() == other.has_edges()
+            && self.moves() == other.moves()
+            && (!self.has_edges() || self.edges() == other.edges())
             && self.bindings == other.bindings
             && self.diags == other.diags
             && self.complete == other.complete
@@ -375,6 +382,7 @@ enum Threads {
 }
 
 /// One move of the run: `states[from]` steps to `states[to]` under one `(action, params)`.
+/// A run stores it in fewer bytes (`Edges`) and yields it by value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Edge {
     pub from: u32,
@@ -484,8 +492,15 @@ pub struct Graph<'a> {
     pub states: &'a States,
     /// False when a cap stopped the exploration, so a state it did not reach may be reachable.
     pub complete: bool,
-    edges: &'a [Edge],
+    edges: GraphEdges<'a>,
     bindings: &'a [(ActId, Box<[u8]>)],
+}
+
+/// The moves of a `Graph`: a BFS run's list, or another engine's moves in its order.
+#[derive(Clone, Copy)]
+enum GraphEdges<'a> {
+    Run(Edges<'a>),
+    Labelled(&'a [Edge]),
 }
 
 /// Where a violation was seen.
@@ -583,8 +598,9 @@ struct Bfs<'t> {
     violated: Violated,
     /// Per reported violation: its index in `diags` and where it was seen.
     violations: Vec<(usize, Reach)>,
-    parents: Vec<Option<u32>>,
-    edges: Vec<Edge>,
+    steps: edges::Steps,
+    /// On a run that keeps no edge list: what the after-assert steps' moves reached.
+    ends: Option<edges::StepEnds>,
     bindings: Bindings,
     /// What the store is charged to `Caps::memory`, when the caps name a pool; the result
     /// keeps what it holds of it.
@@ -658,8 +674,8 @@ impl TransitionSystem {
             checks_failed,
             diags,
             views,
-            parents,
-            edges,
+            steps,
+            ends,
             bindings,
             violations,
             charge,
@@ -677,8 +693,8 @@ impl TransitionSystem {
             checks,
             views,
             gathered_views: caps.views,
-            parents,
-            edges,
+            steps,
+            ends,
             bindings: bindings.list,
             kept,
             peak_admitted,

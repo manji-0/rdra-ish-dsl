@@ -5,7 +5,14 @@ use std::num::NonZeroU8;
 
 use crate::lifecycle::{Bounds, Caps, Scope, TransitionSystem};
 
-use super::{Checks, Threads};
+use super::{Checks, ComponentRun, Edge, Threads};
+
+/// Each state's parent: the move that first reached it, `None` for an initial state.
+fn parents(run: &ComponentRun) -> Vec<Option<Edge>> {
+    (0..run.states.len() as u32)
+        .map(|at| run.parent(at))
+        .collect()
+}
 
 const SHOP: &str = r#"
 entity Customer "Customer" {
@@ -92,7 +99,7 @@ fn the_pattern_cap_stops_only_a_run_that_gathers_views() {
     assert!(!without.gathered_views());
     assert!(without.views.iter().all(|v| v.patterns.is_empty()));
     assert_eq!(without.states, whole.states);
-    assert_eq!(without.edges, whole.edges);
+    assert_eq!(without.edges(), whole.edges());
     assert_eq!(without.diags, whole.diags);
 }
 
@@ -113,9 +120,9 @@ fn a_run_is_the_same_on_any_number_of_threads() {
                 .clone()
                 .run_on(caps, Checks::All, Threads::Fixed(threads));
             assert_eq!(many.states, one.states, "{threads} threads");
-            assert_eq!(many.edges, one.edges, "{threads} threads");
+            assert_eq!(many.edges(), one.edges(), "{threads} threads");
             assert_eq!(many.bindings, one.bindings, "{threads} threads");
-            assert_eq!(many.parents, one.parents, "{threads} threads");
+            assert_eq!(parents(&many), parents(&one), "{threads} threads");
             assert_eq!(many.complete, one.complete, "{threads} threads");
             assert_eq!(many.diags, one.diags, "{threads} threads");
             for (a, b) in many.views.iter().zip(&one.views) {
@@ -237,7 +244,7 @@ fn store_bytes_models_the_store_a_run_counts() {
         assert!(whole.complete && whole.states.len() >= 1000);
         let n = whole.states.len() as u64;
         within(
-            store_bytes(n, whole.state_width(), whole.edges().len() as u64),
+            store_bytes(n, whole.state_width(), whole.moves(), whole.shape()),
             whole.peak,
             &format!("{instances} instances, {n} states"),
         );
@@ -255,8 +262,18 @@ fn store_bytes_models_the_store_a_run_counts() {
             .expect("a run at a third of its peak stops at the limit");
         let states = stopped.states.len() as u64;
         assert!(states >= 1000, "{states} states");
+        // The model counts a first-edge index for every state, as a complete run holds; a
+        // stopped run holds one for the states it read only, so the model is over by at most
+        // those of the states it did not read.
+        let model = store_bytes(states + 1, held.width, held.edges, held.shape);
+        let unread = 4 * (states + 1).next_power_of_two();
+        assert!(
+            model >= held.bytes,
+            "model {model} B under {} B",
+            held.bytes
+        );
         within(
-            store_bytes(states + 1, held.width, held.edges),
+            model - unread.min(model - held.bytes),
             held.bytes,
             &format!("{instances} instances, stopped at {states} states"),
         );
@@ -271,20 +288,31 @@ fn store_bytes_models_the_store_a_run_counts() {
 
 #[test]
 fn store_bytes_saturates_and_scales_the_edges_by_the_states_expanded() {
-    use super::store::{store_bytes, Held};
+    use super::store::{store_bytes, Held, Shape};
 
-    assert_eq!(store_bytes(u64::MAX, 16, u64::MAX), u64::MAX);
-    assert_eq!(store_bytes(0, 0, 0), 12 * 4 + 5 * 4 + 12 * 4);
+    let graph = Shape {
+        binding: 1,
+        graph: true,
+    };
+    let checks = Shape {
+        binding: 2,
+        graph: false,
+    };
+    assert_eq!(store_bytes(u64::MAX, 16, u64::MAX, graph), u64::MAX);
+    assert_eq!(store_bytes(0, 0, 0, graph), 12 * 4 + 5 * 4 + 5 * 4);
+    // Without an edge list a state is a source and a 2-byte id more, and an edge nothing.
+    assert_eq!(store_bytes(0, 0, 1 << 30, checks), 10 * 4 + 5 * 4);
     // 10 states reached, 5 of them expanded: 4 edges per expanded state.
     let held = Held {
         bytes: 1000,
         width: 10,
+        shape: graph,
         edges: 20,
         bound: None,
         layers: layers(&[1, 4, 5], 4),
     };
     assert_eq!(held.layers.expanded_states(), 5);
-    assert_eq!(held.bytes_for(1024), store_bytes(1024, 10, 4096));
+    assert_eq!(held.bytes_for(1024), store_bytes(1024, 10, 4096, graph));
     assert_eq!(held.bytes_per_state(9), 100);
 }
 
@@ -292,12 +320,19 @@ fn store_bytes_saturates_and_scales_the_edges_by_the_states_expanded() {
 /// product and in the sum after it; the total still saturates.
 #[test]
 fn store_bytes_saturates_at_the_widest_states() {
-    use super::store::store_bytes;
+    use super::store::{store_bytes, Shape};
 
+    let shape = Shape {
+        binding: 4,
+        graph: true,
+    };
     // (2^64 + 11) * 2^64 passes u128.
-    assert_eq!(store_bytes(u64::MAX, usize::MAX, 0), u64::MAX);
+    assert_eq!(store_bytes(u64::MAX, usize::MAX, 0, shape), u64::MAX);
     // (2^64 - 1) * 2^64 fits; adding 5 * 2^65 for `seen` does not.
-    assert_eq!(store_bytes(u64::MAX, usize::MAX - 12, u64::MAX), u64::MAX);
+    assert_eq!(
+        store_bytes(u64::MAX, usize::MAX - 12, u64::MAX, shape),
+        u64::MAX
+    );
 }
 
 /// The layers of a run stopped while it expands the next-to-last layer of `new`, after
@@ -338,9 +373,9 @@ fn a_run_counts_the_new_states_of_each_depth() {
     );
     // A state's depth is one past its parent's.
     let mut depth = vec![0usize; run.states.len()];
-    for (i, parent) in run.parents.iter().enumerate() {
+    for (i, parent) in parents(&run).iter().enumerate() {
         if let Some(edge) = parent {
-            depth[i] = depth[run.edges[*edge as usize].from as usize] + 1;
+            depth[i] = depth[edge.from as usize] + 1;
         }
     }
     let mut counted = vec![0u64; layers.new.len()];
@@ -467,7 +502,10 @@ fn a_run_stops_once_every_check_has_failed() {
         whole.states.len()
     );
     assert!(stopped.states.iter().eq(whole.states.iter().take(n)));
-    assert_eq!(stopped.parents[..], whole.parents[..n]);
+    // It keeps no edge list; its parents are the whole run's, as the source and binding of
+    // the move that reached each state.
+    assert!(!stopped.has_edges() && whole.has_edges());
+    assert_eq!(parents(&stopped)[..], parents(&whole)[..n]);
     assert_eq!(stopped.diags.len(), 2);
     assert_eq!(stopped.diags, whole.diags);
     for threads in [1, 2, 4] {
@@ -475,7 +513,8 @@ fn a_run_stops_once_every_check_has_failed() {
             .clone()
             .run_on(caps, Checks::All, Threads::Fixed(threads));
         assert_eq!(many.states, stopped.states, "{threads} threads");
-        assert_eq!(many.edges, stopped.edges, "{threads} threads");
+        assert_eq!(parents(&many), parents(&stopped), "{threads} threads");
+        assert_eq!(many.moves(), stopped.moves(), "{threads} threads");
         assert_eq!(many.diags, stopped.diags, "{threads} threads");
         assert_eq!(many.end(), RunEnd::ChecksFailed, "{threads} threads");
     }
@@ -554,8 +593,8 @@ fn a_run_reports_the_checks_it_evaluates_and_nothing_else() {
                 .run_on(Caps::VERIFY, checks.clone(), Threads::Fixed(threads));
             assert_eq!(run.checks(), &checks);
             assert_eq!(run.states, all.states, "{named:?}");
-            assert_eq!(run.edges, all.edges, "{named:?}");
-            assert_eq!(run.parents, all.parents, "{named:?}");
+            assert_eq!(run.edges(), all.edges(), "{named:?}");
+            assert_eq!(parents(&run), parents(&all), "{named:?}");
             assert_eq!(run.end(), all.end(), "{named:?}");
             assert_eq!(run.kept, all.kept, "{named:?}");
             let kept: Vec<_> = all

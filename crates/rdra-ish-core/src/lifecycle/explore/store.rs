@@ -6,7 +6,7 @@ use std::mem::size_of;
 
 use crate::lifecycle::types::ActId;
 
-use super::{Bfs, ComponentRun, Edge, Layers};
+use super::{Bfs, ComponentRun, Layers};
 
 /// A heap block for `n` bytes: the allocator rounds up to 16.
 fn block(n: usize) -> u64 {
@@ -30,23 +30,41 @@ pub(super) fn binding_bytes(params: &[u8]) -> u64 {
         + size_of::<(Box<[u8]>, u32)>() as u64
 }
 
-/// The bytes the store of a run takes once it holds `states` states of `width` bytes and
-/// `edges` edges, with `seen`: `(w + 8 + 4) * p2(n) + 5 * buckets(n) + 12 * p2(e)`, where `p2(x)`
-/// is the least power of two of at least `x` (4 at the least) and `buckets(n)` the least power
-/// of two of at least `n * 8 / 7`. Each state is `w` bytes in `states` and an 8-byte parent,
-/// `seen` holds a 4-byte index and a control byte per bucket, and an edge is 12 bytes; the 4
-/// bytes per state more stand for the bindings and the layers. It models
-/// `Bfs::bytes_with_one_more` at a run's end; on the sample cones of a thousand states and
-/// more, at `check` and `verify` bounds, it stood 0.9% to 5.2% over what that counts and never
-/// under. Saturates at `u64::MAX`.
-pub fn store_bytes(states: u64, width: usize, edges: u64) -> u64 {
+/// How a run keeps its moves (`edges::Steps`), beside the bytes of its states.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Shape {
+    /// Bytes in one binding id: 1 while the run has at most 256 bindings, 2 up to 65,536,
+    /// else 4.
+    pub binding: usize,
+    /// The run keeps its edge list: every run but one that stops once every check fails.
+    pub graph: bool,
+}
+
+/// The bytes the store of a run of `shape` takes once it holds `states` states of `width`
+/// bytes and `edges` edges, with `seen`. With `b` bytes in a binding id, a run that keeps its
+/// edge list takes `(w + 4 + 4 + 4) * p2(n) + 5 * buckets(n) + (4 + b) * p2(e)`, and one that
+/// keeps none `(w + 4 + b + 4) * p2(n) + 5 * buckets(n)`, where `p2(x)` is the least power of
+/// two of at least `x` (4 at the least) and `buckets(n)` the least power of two of at least
+/// `n * 8 / 7`. Each state is `w` bytes in `states`; with an edge list it has a 4-byte parent
+/// edge and the 4-byte index of its first edge, and an edge is a 4-byte target and a binding
+/// id; without one its parent is a 4-byte source and a binding id. `seen` holds a 4-byte
+/// index and a control byte per bucket, and the 4 bytes per state more stand for the
+/// bindings and the layers. It models `Bfs::bytes_with_one_more` at a run's end and is never
+/// under what that counts (`store_bytes_models_the_store_a_run_counts`). Saturates at
+/// `u64::MAX`.
+pub fn store_bytes(states: u64, width: usize, edges: u64, shape: Shape) -> u64 {
     let p2 = |x: u128| x.max(4).next_power_of_two();
     let n = u128::from(states);
+    let b = shape.binding as u128;
+    let (per_state, per_edge) = match shape.graph {
+        true => (4 + 4, 4 + b),
+        false => (4 + b, 0),
+    };
     // Each term fits in u128; the product with a width near `usize::MAX` and the sums need not.
-    let total = (width as u128 + 8 + 4)
+    let total = (width as u128 + per_state + 4)
         .saturating_mul(p2(n))
         .saturating_add(5 * p2((n * 8).div_ceil(7)))
-        .saturating_add(12 * p2(u128::from(edges)));
+        .saturating_add(per_edge.saturating_mul(p2(u128::from(edges))));
     u64::try_from(total).unwrap_or(u64::MAX)
 }
 
@@ -57,6 +75,8 @@ pub struct Held {
     pub bytes: u64,
     /// Bytes in one state.
     pub width: usize,
+    /// How the run keeps its moves.
+    pub shape: Shape,
     /// Moves found so far.
     pub edges: u64,
     /// The most states the system can have: the product of its variables' domains. `None`
@@ -79,7 +99,8 @@ impl Held {
     pub fn bytes_for(&self, states: u64) -> u64 {
         let expanded = self.layers.expanded_states().max(1);
         let edges = (u128::from(self.edges) * u128::from(states)).div_ceil(u128::from(expanded));
-        store_bytes(states, self.width, u64::try_from(edges).unwrap_or(u64::MAX))
+        let edges = u64::try_from(edges).unwrap_or(u64::MAX);
+        store_bytes(states, self.width, edges, self.shape)
     }
 }
 
@@ -97,7 +118,11 @@ impl Bfs<'_> {
         Held {
             bytes,
             width: self.ts.width,
-            edges: self.edges.len() as u64,
+            shape: Shape {
+                binding: self.steps.binding_width(),
+                graph: self.steps.has_edges(),
+            },
+            edges: self.steps.moves(),
             bound,
             layers: self.layers.clone(),
         }
@@ -116,11 +141,22 @@ impl Bfs<'_> {
 
     fn kept_with(&self, more: usize) -> u64 {
         self.states.bytes_with(more)
-            + vec_bytes::<Option<u32>>(&self.parents, more)
-            + vec_bytes::<Edge>(&self.edges, 0)
+            + self.steps.bytes_with(more)
             + vec_bytes::<u32>(&self.orbit_self, 0)
             + self.bindings.bytes
             + self.layers.bytes()
+    }
+
+    /// `bytes_with_one_more` with the parents and the edges as a run kept them before #296:
+    /// what the shadow build holds the store to.
+    #[cfg(feature = "shadow")]
+    pub(super) fn bytes_before_with_one_more(&self) -> u64 {
+        self.states.bytes_with(1)
+            + self.steps.bytes_before_with(1)
+            + vec_bytes::<u32>(&self.orbit_self, 0)
+            + self.bindings.bytes
+            + self.layers.bytes()
+            + self.seen.bytes_with(1)
     }
 }
 
@@ -134,6 +170,14 @@ impl ComponentRun {
     pub fn state_width(&self) -> usize {
         self.states.width()
     }
+
+    /// How the run keeps its moves.
+    pub fn shape(&self) -> Shape {
+        Shape {
+            binding: self.steps.binding_width(),
+            graph: self.steps.has_edges(),
+        }
+    }
 }
 
 /// Kani harnesses (`cargo kani -p rdra-ish-core`).
@@ -141,41 +185,51 @@ impl ComponentRun {
 mod proofs {
     use super::*;
 
-    /// `vec_bytes` is the growth of a real `Vec` of edges: what it says before a push is what
-    /// the buffer takes after it, for every run of up to 17 pushes.
-    #[kani::proof]
-    #[kani::unwind(19)]
-    fn vec_bytes_is_what_a_vec_of_edges_grows_to() {
-        let pushes: usize = kani::any();
-        kani::assume(pushes <= 17);
-        let mut v: Vec<Edge> = Vec::new();
-        for _ in 0..pushes {
-            let said = vec_bytes(&v, 1);
-            v.push(Edge {
-                from: 0,
-                to: 0,
-                binding: 0,
-            });
-            assert_eq!((v.capacity() * size_of::<Edge>()) as u64, said);
-            assert_eq!(vec_bytes(&v, 0), said);
+    /// A shape a run can have: a binding id of 1, 2 or 4 bytes, with or without edges.
+    fn any_shape() -> Shape {
+        let binding: usize = kani::any();
+        kani::assume(binding == 1 || binding == 2 || binding == 4);
+        Shape {
+            binding,
+            graph: kani::any(),
         }
     }
 
     /// `store_bytes` neither overflows nor panics on any input.
     #[kani::proof]
     fn store_bytes_never_overflows() {
-        store_bytes(kani::any(), kani::any(), kani::any());
+        store_bytes(kani::any(), kani::any(), kani::any(), any_shape());
     }
 
-    /// A store of more states, wider states, or more edges never counts as fewer bytes: past
-    /// `u64` the count stays at `u64::MAX` and does not wrap to a small one.
+    /// A store of more states, wider states, more edges, wider binding ids, or with an edge
+    /// list where the other has none never counts as fewer bytes: past `u64` the count stays
+    /// at `u64::MAX` and does not wrap to a small one.
     #[kani::proof]
     fn store_bytes_only_grows() {
         let (n, m): (u64, u64) = (kani::any(), kani::any());
         let (w, v): (usize, usize) = (kani::any(), kani::any());
         let (e, f): (u64, u64) = (kani::any(), kani::any());
+        let (s, t) = (any_shape(), any_shape());
         kani::assume(n <= m && w <= v && e <= f);
-        assert!(store_bytes(n, w, e) <= store_bytes(m, v, f));
+        kani::assume(s.binding <= t.binding && (!s.graph || t.graph));
+        assert!(store_bytes(n, w, e, s) <= store_bytes(m, v, f, t));
+    }
+
+    /// The model of #296 never counts more than the one before it, which charged an 8-byte
+    /// parent per state and a 12-byte edge: a cone that the old model said fits still does.
+    #[kani::proof]
+    fn store_bytes_is_at_most_the_model_before() {
+        let (n, w, e) = (kani::any(), kani::any(), kani::any());
+        let before = |n: u64, w: usize, e: u64| {
+            let p2 = |x: u128| x.max(4).next_power_of_two();
+            let n = u128::from(n);
+            let total = (w as u128 + 8 + 4)
+                .saturating_mul(p2(n))
+                .saturating_add(5 * p2((n * 8).div_ceil(7)))
+                .saturating_add(12 * p2(u128::from(e)));
+            u64::try_from(total).unwrap_or(u64::MAX)
+        };
+        assert!(store_bytes(n, w, e, any_shape()) <= before(n, w, e));
     }
 
     /// A heap block holds what was asked, in whole 16-byte units, and wastes under 16 bytes.

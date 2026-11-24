@@ -17,6 +17,8 @@
 //! | `Canon::canonical`, the canonical form under instance symmetry (`explore/symmetry/canon.rs`, #212) | `explore/symmetry/reference.rs`: the least layout over every element of `G_s`, when it has at most 6^4 |
 //! | `OrbitRun`, a run up to instance symmetry (`explore/orbit.rs`, #212) | `explore/orbit/reference.rs`: the plain run of the same cone, up to `SHADOW_CAP` states |
 //! | a fold's input bit without allocations (`Fold::holds`, `reduce/fold.rs`, #296) | `reduce/fold/reference.rs`: the bit with its `Vec`s |
+//! | edges without their source, binding ids in 1 to 4 bytes, parents (`explore/edges.rs`, #296 2.1) | `explore/edges/reference.rs`: the 12-byte `Edge` list and the parent edges, as a run kept them before |
+//! | an after-assert step's ends recorded on a run without an edge list (`StepEnds`, #296 2.1) | `ComponentRun::step_ends`'s scan of that 12-byte list |
 //! | `Classes::of` on a run of S up to `H` (`reduce/partition.rs`, #212 phase 2) | `reduce/partition/up_to_h.rs`: the classes of the plain run of S, up to `SHADOW_CAP` states |
 //!
 //! A `shadow` build also runs the checks `shadow_assert!` makes, as a debug build does: each
@@ -45,9 +47,11 @@ pub(crate) enum Twin {
     FoldHolds,
     SharedRun,
     SUpToH,
+    Edges,
+    StepEnds,
 }
 
-const TWINS: [(Twin, &str); 12] = [
+const TWINS: [(Twin, &str); 14] = [
     (Twin::EachEnabled, "each_enabled"),
     (Twin::Seen, "seen"),
     (Twin::Source, "source"),
@@ -60,6 +64,8 @@ const TWINS: [(Twin, &str); 12] = [
     (Twin::FoldHolds, "fold_holds"),
     (Twin::SharedRun, "shared_run"),
     (Twin::SUpToH, "s_up_to_h"),
+    (Twin::Edges, "edges"),
+    (Twin::StepEnds, "step_ends"),
 ];
 
 static COMPARED: [AtomicU64; TWINS.len()] = [const { AtomicU64::new(0) }; TWINS.len()];

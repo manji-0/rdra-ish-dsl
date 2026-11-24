@@ -7,7 +7,6 @@ use std::fmt;
 use super::cone::{Cone, Target};
 use super::diag::{Diag, StateDiag, UnmetPremise};
 use super::explore::{Caps, Checks, ComponentRun, StoredRun};
-use super::expr::StateSlice;
 use super::findings::{Progress, Runs, Taken, Witness};
 use super::types::{
     ActionOrigin, AfterAssert, AfterStep, EntId, GuardWhy, Invariant, Ltl, Pred, Premise, Site,
@@ -889,21 +888,19 @@ impl TransitionSystem {
         }
         let sys = run.system();
         let local = sys.after.iter().find(|x| x.name == a.name)?;
-        let steps = |step: &AfterStep| run.targets_of(step.act);
-        let ran: Vec<(&AfterStep, Vec<&StateSlice>)> = local
+        // Per step whose action some move takes: whether the target of one has its rows.
+        let ran: Vec<(&AfterStep, bool)> = local
             .steps
             .iter()
-            .map(|step| (step, steps(step)))
-            .filter(|(_, ends)| !ends.is_empty())
+            .map(|step| (step, run.step_ends(step.act, &step.binders)))
+            .filter(|(_, ends)| ends.ran)
+            .map(|(step, ends)| (step, ends.with_rows))
             .collect();
         let usecase = a.anchor.clone();
         if ran.is_empty() {
             return Some(vec![UnmetPremise::NeverRuns { usecase }]);
         }
-        let with_rows = ran.iter().any(|(step, ends)| {
-            ends.iter()
-                .any(|s| sys.meets(&step.binders, &Pred::True, s))
-        });
+        let with_rows = ran.iter().any(|(_, with_rows)| *with_rows);
         Some(match with_rows {
             true => Vec::new(),
             false => {

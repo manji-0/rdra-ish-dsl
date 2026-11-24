@@ -364,9 +364,10 @@ compile it.
 | `numbers_compare_as_i64_and_null_is_never_ordered` | `expr.rs` | `compare_numbers` orders two numbers as `i64` does; `null` equals only `null` and is never ordered | every pair of `Option<i64>`, every operator |
 | `compare_negates_and_mirrors` | `expr.rs` | `compare` does not panic, `!=` is the negation of `==`, and swapping the operands mirrors the operator | every operand kind, every domain, every value |
 | `a_block_rounds_up_to_16` | `explore/store.rs` | `block(n)` is a multiple of 16 that holds `n` and wastes under 16 bytes | every `n` up to `usize::MAX - 16` |
-| `vec_bytes_is_what_a_vec_of_edges_grows_to` | `explore/store.rs` | what `vec_bytes` says before a push is what a real `Vec<Edge>` takes after it | up to 17 pushes |
-| `store_bytes_never_overflows` | `explore/store.rs` | `store_bytes` neither overflows nor panics | every input |
-| `store_bytes_only_grows` | `explore/store.rs` | more states, wider states, or more edges never count as fewer bytes, so past `u64` the count stays at `u64::MAX` | every input |
+| `a_buf_takes_what_bytes_with_said` | `explore/edges.rs` | what `Buf::bytes_with` says before a push is what the buffer takes after it, and it holds room for at most twice its items | up to 17 pushes |
+| `store_bytes_never_overflows` | `explore/store.rs` | `store_bytes` neither overflows nor panics | every input, every shape |
+| `store_bytes_only_grows` | `explore/store.rs` | more states, wider states, more edges, wider binding ids, or an edge list never count as fewer bytes, so past `u64` the count stays at `u64::MAX` | every input |
+| `store_bytes_is_at_most_the_model_before` | `explore/store.rs` | the model never counts more than the one before #296 (8-byte parents, 12-byte edges) | every input, every shape |
 | `a_push_takes_the_bytes_bytes_with_said_and_reads_back` | `explore/arena.rs` | a pushed state reads back, no index leaves the buffer, and `bytes_with(1)` before a push is `bytes_with(0)` after it, from an empty store or a `slice` of one | width up to 2, up to 5 pushes |
 | `apply_of_a_composition_is_the_composition_of_applies` | `explore/symmetry/mod.rs` | `apply(g ∘ h) = apply(g) ∘ apply(h)`, keys relabelled on present rows only | a 2-slot parent and a 2-slot child with a key to it, every state, every pair of permutations |
 

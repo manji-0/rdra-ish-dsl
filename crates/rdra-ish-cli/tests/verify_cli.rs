@@ -2019,7 +2019,7 @@ fn symmetry_retry_decides_a_cone_the_memory_limit_stopped() {
                 "--instance-count",
                 "3",
                 "--memory",
-                "128KiB",
+                "96KiB",
                 "--symmetry",
                 mode,
             ],
@@ -2029,14 +2029,14 @@ fn symmetry_retry_decides_a_cone_the_memory_limit_stopped() {
     let line = "Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: ";
     let never = run("never");
     assert!(
-        never.contains(&format!("{line}not decided (1540 states, stopped")),
+        never.contains(&format!("{line}not decided (2048 states, stopped")),
         "{never}"
     );
     let retry = run("retry");
     assert!(
         retry.contains(&format!(
             "{line}ok (393 orbits, about 4.7K states, retried up to instance symmetry after \
-             the memory limit at 1540 states)"
+             the memory limit at 2048 states)"
         )),
         "{retry}"
     );

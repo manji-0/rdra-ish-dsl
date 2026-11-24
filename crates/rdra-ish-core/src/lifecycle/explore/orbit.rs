@@ -16,7 +16,9 @@
 //! predicates, and the edges' labels.
 
 use super::symmetry::{Canon, Group, LeftOut, Orbits};
-use super::{Caps, Checks, ComponentRun, Edge, PropertyVerdict, Reach, RunEnd, States, Threads};
+use super::{
+    Caps, Checks, ComponentRun, Edge, Ends, PropertyVerdict, Reach, RunEnd, States, Threads,
+};
 use crate::lifecycle::diag::{Diag, StateDiag};
 use crate::lifecycle::expr::{State, StateSlice};
 use crate::lifecycle::reduce::Step;
@@ -321,10 +323,16 @@ impl OrbitRun {
 
     /// Every edge, in discovery order, as its labels: sound for a reader of which actions
     /// label an edge and of state predicates of its ends.
+    /// What the edges `act` labels reach, orbit self-edges included: those of the stored
+    /// graph (`ComponentRun::step_ends`).
+    pub fn step_ends(&self, act: ActId, binders: &[EntId]) -> Ends {
+        self.run.step_ends(act, binders)
+    }
+
     pub fn labelled_edges(&self) -> impl Iterator<Item = LabelledEdge<'_>> {
         let mut orbit_self = self.orbit_self.iter().peekable();
         self.run.edges().iter().enumerate().map(move |(k, e)| {
-            let (act, params) = self.run.step(e);
+            let (act, params) = self.run.step(&e);
             let is_orbit = orbit_self.next_if(|&&o| o as usize == k).is_some();
             LabelledEdge {
                 from: e.from,

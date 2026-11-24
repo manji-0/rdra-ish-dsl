@@ -17,11 +17,10 @@ use crate::lifecycle::TransitionSystem;
 use crate::memory::Charge;
 use crate::parallel::Helpers;
 
+use super::edges::{StepEnds, Steps};
 use super::store::binding_bytes;
 use super::symmetry::{Canon, Canonical, Group};
-use super::{
-    Bfs, Bindings, Caps, Checks, Edge, EntityView, Moves, Reach, States, Threads, Violated,
-};
+use super::{Bfs, Bindings, Caps, Checks, EntityView, Moves, Reach, States, Threads, Violated};
 
 #[cfg(feature = "shadow")]
 mod reference;
@@ -260,8 +259,9 @@ impl<'t> Bfs<'t> {
             views: ts.entities.iter().map(|_| EntityView::default()).collect(),
             violated: Violated::new(ts, checks),
             violations: Vec::new(),
-            parents: Vec::new(),
-            edges: Vec::new(),
+            // A run that stops once every check fails decides nothing that reads its graph.
+            steps: Steps::new(!caps.stop_when_all_violated),
+            ends: caps.stop_when_all_violated.then(|| StepEnds::new(ts)),
             bindings: Bindings::default(),
             charge: caps.memory.map(Charge::new),
             peak_admitted: 0,
@@ -355,6 +355,7 @@ impl<'t> Bfs<'t> {
     /// `s2` is a state of the system, overwritten with each successor in turn.
     fn take(&mut self, at: usize, moves: &Moves, range: Range<usize>, s2: &mut State) -> bool {
         self.layers.read(at);
+        self.steps.read(at);
         let from = at as u32;
         let s = self.states[at].to_owned();
         for i in range {
@@ -364,13 +365,8 @@ impl<'t> Bfs<'t> {
                 return false;
             }
             let binding = self.bindings.id(act, params);
-            let edge = self.edges.len() as u32;
             if *s2 == s {
-                self.edges.push(Edge {
-                    from,
-                    to: from,
-                    binding,
-                });
+                self.push(from, from, act, binding, s2);
                 continue;
             }
             self.check_after(from, act, params, s2);
@@ -382,11 +378,8 @@ impl<'t> Bfs<'t> {
             };
             let key = StateSlice::new(key);
             if self.group.is_some() && *key == *s {
-                self.edges.push(Edge {
-                    from,
-                    to: from,
-                    binding,
-                });
+                let edge = u32::try_from(self.steps.moves()).expect("edges fit in u32");
+                self.push(from, from, act, binding, &s);
                 self.orbit_self.push(edge);
                 // The step's after-asserts were read on its concrete successor above.
                 if self.stop_if_all_failed() {
@@ -398,19 +391,30 @@ impl<'t> Bfs<'t> {
                 Some(to) => to,
                 None => {
                     let to = self.states.len() as u32;
-                    if !self.admit(key, Some(edge), found) {
+                    if !self.admit(key, Some((from, binding)), found) {
                         return false;
                     }
                     to
                 }
             };
-            self.edges.push(Edge { from, to, binding });
+            // The stored target: under symmetry the canonical form, which an after-assert
+            // step's rows read as they read the concrete one.
+            self.push(from, to, act, binding, key);
             // After the edge, so the trace of a violation at `to` reaches it.
             if self.stop_if_all_failed() {
                 return false;
             }
         }
         true
+    }
+
+    /// Records the move from `states[from]` to `states[to]`, which is `stored`, under `act`
+    /// and its `binding`.
+    fn push(&mut self, from: u32, to: u32, act: ActId, binding: u32, stored: &StateSlice) {
+        self.steps.push(from, to, binding);
+        if let Some(ends) = &mut self.ends {
+            ends.read(self.ts, act, stored);
+        }
     }
 
     /// Ends the run when it stops once every check has failed and every one now has: the
@@ -427,8 +431,8 @@ impl<'t> Bfs<'t> {
     }
 
     /// Adds a new state; false when the state cap or the memory limit stops the run.
-    /// `parent` is the index in `edges` that the edge reaching it takes.
-    fn admit(&mut self, s: &StateSlice, parent: Option<u32>, found: Canonical) -> bool {
+    /// `parent` is the source and the binding of the move that reaches it, pushed next.
+    fn admit(&mut self, s: &StateSlice, parent: Option<(u32, u32)>, found: Canonical) -> bool {
         if self.seen.find(&self.states, s).is_some() {
             return true;
         }
@@ -460,6 +464,15 @@ impl<'t> Bfs<'t> {
             }
         }
         let bytes = self.bytes_with_one_more();
+        #[cfg(feature = "shadow")]
+        {
+            let before = self.bytes_before_with_one_more();
+            assert!(
+                bytes <= before,
+                "shadow: Bfs::bytes_with_one_more at {} states: {bytes} B, {before} B before #296",
+                self.states.len()
+            );
+        }
         self.peak_admitted = bytes;
         if let Some(charge) = &mut self.charge {
             if !charge.cover(bytes) {
@@ -483,7 +496,7 @@ impl<'t> Bfs<'t> {
         self.orbits.admit(found);
         self.states.push(s);
         self.seen.insert(&self.states, self.states.len() as u32 - 1);
-        self.parents.push(parent);
+        self.steps.admit(parent);
         self.layers.admit(parent.is_none());
         true
     }
@@ -525,8 +538,9 @@ impl<'t> Bfs<'t> {
             .collect();
         vars.sort_by(|a, b| b.reached.cmp(&a.reached).then(a.name.cmp(&b.name)));
         let mut counts: HashMap<&str, usize> = HashMap::new();
-        for edge in self.parents.iter().flatten() {
-            let (act, _) = self.bindings.list[self.edges[*edge as usize].binding as usize];
+        let parents = (0..self.states.len() as u32).filter_map(|at| self.steps.parent(at));
+        for edge in parents {
+            let (act, _) = self.bindings.list[edge.binding as usize];
             *counts
                 .entry(ts.actions[act.index()].name.as_str())
                 .or_default() += 1;
