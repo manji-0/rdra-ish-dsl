@@ -24,8 +24,8 @@ impl Heap {
 }
 
 /// How the JVM compiles TLC. C1 alone starts a run sooner and spends less CPU on one that
-/// ends within a second (on an 87-state cone, 0.60 s wall and 0.28 CPU-s against 0.63 s and
-/// 0.50 CPU-s), and slows a long one by up to 67% (#309), so it is for runs known to be small.
+/// ends within a second (on an 87-state cone on JDK 17, 0.61 s wall and 0.26 user CPU-s against
+/// 0.63 s and 0.38), and slows a long one by up to 67% (#309), so it is for runs known to be small.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Jit {
     /// The JVM's default: C1, then C2 for the hot code.

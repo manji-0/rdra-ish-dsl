@@ -1682,11 +1682,16 @@ Only `--with-tlc` needs TLC. `verify` looks for it in this order: `--tlc-jar`,
 - Nix: run `nix shell nixpkgs#tlaplus`, then run `verify` in that shell. If flakes are not
   enabled, add `--extra-experimental-features 'nix-command flakes'`. In this repository,
   `nix develop` provides `tlc`, and the flake's package puts the same `tlc` on the `PATH` of
-  `rdra-ish`: TLC 1.7.4, as `nixpkgs#tlaplus` packages it, on JDK 21 in place of JDK 8 and
+  `rdra-ish`: TLC 1.7.4, as `nixpkgs#tlaplus` packages it, on JDK 17 in place of JDK 8 and
   with a class-data-sharing archive of TLC's classes, which starts each run sooner.
 - The jar: download `tla2tools.jar` from the
   [TLA+ releases](https://github.com/tlaplus/tlaplus/releases), install a JDK, and pass
   `--tlc-jar <path>` or set `RDRA_TLC_JAR=<path>`.
+
+Run TLC 1.7.4 on JDK 17 or earlier. On JDK 19 and later, a `-continue` run that prints
+many traces stops with `java.lang.ArrayIndexOutOfBoundsException` (`arraycopy: length -N
+is negative`) and `verify` reports a `tool_error`: TLC's own buffered file reads a trace
+record back wrongly once the JDK's `RandomAccessFile.readLong` goes through it (#314).
 
 #### Getting z3
 

@@ -35,19 +35,19 @@
         );
       # TLC 1.7.4 as nixpkgs packages it, on JDK 17 instead of JDK 8, with a class-data-sharing
       # archive of the classes TLC loads (#309). Each `verify --with-tlc` starts many short
-      # TLC runs, and both cut what a run costs before it reaches the model: 0.80 to 0.64 s
-      # wall and 0.70 to 0.50 CPU-s for an 87-state cone.
+      # TLC runs, and both cut what a run costs before it reaches the model: 0.80 to 0.63 s
+      # wall and 0.68 to 0.38 user CPU-s for an 87-state cone.
       #
       # Not JDK 19 or later: TLC 1.7.4's BufferedRandomAccessFile.read(byte[], int, int) breaks
       # when it reads back a record still in its write buffer, and from JDK 19 on
       # RandomAccessFile.readLong reads through it (JDK 17 reads byte by byte), so a `-continue`
       # run that prints many traces dies with an ArrayIndexOutOfBoundsException.
       #
-      # The archive is recorded from one run of
-      # nix/tlc-cds/Train.tla against the jar's store path. The JVM checks that the jar and
-      # the JDK are the ones it was recorded with and ignores it when they are not, so the
-      # archive can only go unused, not change a run. `-XX:+UseParallelGC` stays as nixpkgs
-      # sets it: TLC asks for it, and a second GC flag stops the JVM.
+      # The archive is recorded from one run of nix/tlc-cds/Train.tla against the jar's store
+      # path. The JVM checks that the jar and the JDK are the ones it was recorded with and
+      # ignores it when they are not, so the archive can only go unused, not change a run.
+      # `-XX:+UseParallelGC` stays as nixpkgs sets it: TLC asks for it, and a second GC flag
+      # stops the JVM.
       tlcFor =
         pkgs:
         let
