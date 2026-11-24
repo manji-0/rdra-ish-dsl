@@ -73,6 +73,20 @@ impl Tlc {
         }
     }
 
+    /// The batch driver of this TLC (#310): `tlc-batch` in the directory of the `tlc`
+    /// launcher, as the flake builds the two from one jar and one JDK. `None` for a jar
+    /// the user names, for a `tlc` with no such neighbour, and with `RDRA_TLC_BATCH=0`.
+    pub(super) fn batch_launcher(&self) -> Option<PathBuf> {
+        let Launch::Launcher(tlc) = &self.launch else {
+            return None;
+        };
+        if std::env::var(crate::tlc_batch::BATCH_ENV).as_deref() == Ok("0") {
+            return None;
+        }
+        let batch = tlc.parent()?.join(crate::tlc_batch::LAUNCHER);
+        batch.is_file().then_some(batch)
+    }
+
     pub(super) fn display(&self) -> String {
         match &self.launch {
             Launch::Launcher(path) => path.display().to_string(),

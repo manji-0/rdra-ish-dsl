@@ -37,7 +37,7 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use rdra_ish_cli::property_cone::{AfterPlain, ConeRun, PropertyCone, Verdict, Why};
-use rdra_ish_cli::tlc_batch::{self, Job, Pool};
+use rdra_ish_cli::tlc_batch::{self, with_the_fingerprints_of, without_run_noise, Job, Pool};
 use rdra_ish_cli::tlc_env::{current_user_heap, tlc_env, tlc_env_sized, Heap, Jit};
 use rdra_ish_cli::tlc_output::{parse_dot, CanonState, InvariantScan, Outcome, TlcRun};
 use rdra_ish_cli::tlc_replay::{explain_property, explain_violation};
@@ -328,7 +328,8 @@ fn batch_pool() -> Option<&'static Pool> {
         let limit = std::thread::available_parallelism().map_or(4, |n| n.get().min(8));
         Some(Pool::new(limit, move || {
             // TLC unpacks its standard modules into java.io.tmpdir; the JVMs must not share it.
-            let tmp = root.join(started.fetch_add(1, Ordering::SeqCst).to_string());
+            let n = started.fetch_add(1, Ordering::SeqCst);
+            let tmp = root.join(format!("{n}.tmp"));
             std::fs::create_dir_all(&tmp).expect("java tmp dir");
             let heap = current_user_heap().unwrap_or(BATCH_HEAP);
             let (key, value) = tlc_env_sized(heap, &tmp, Jit::Tiered);
@@ -343,7 +344,8 @@ fn batch_pool() -> Option<&'static Pool> {
 
 /// Prints what the batch JVMs did so far. With `RDRA_REQUIRE_TLC_BATCH=1` (CI), a test
 /// binary that ran no TLC job in a batch JVM, or lost one, fails: a driver that stops
-/// working would otherwise only make the test slower.
+/// working would otherwise only make the test slower. A job that passed [`BATCH_LIMIT`] is
+/// not such a loss: it ran as a process, as a slow run on a loaded runner should.
 fn assert_batch_ran() {
     let required = std::env::var("RDRA_REQUIRE_TLC_BATCH").as_deref() == Ok("1");
     let Some(pool) = batch_pool() else {
@@ -359,7 +361,8 @@ fn assert_batch_ran() {
         BOTH_WAYS.load(Ordering::SeqCst)
     );
     assert!(
-        !required || (counts.answered > 0 && counts.lost == 0 && pool.why_off().is_none()),
+        !required
+            || (counts.answered > 0 && counts.lost == counts.timed_out && pool.why_off().is_none()),
         "TLC batch JVMs lost jobs: {counts:?}, {:?}",
         pool.why_off()
     );
@@ -422,27 +425,6 @@ fn tlc_run(
     let alone = tlc_process(tlc, dir, &with_the_fingerprints_of(&batched.1, all));
     assert_same_run(dir, (&batched, &graph), (&alone, &graph_shape(dir)));
     alone
-}
-
-/// `args` with the fingerprint function and seed the run of `log` drew (`-fp`, `-seed`). TLC
-/// draws both anew for a run that names neither, and they decide the order it stores states
-/// in, and with it which counterexample to a temporal property it prints.
-fn with_the_fingerprints_of(log: &str, args: &[OsString]) -> Vec<OsString> {
-    let drawn = |name: &str| {
-        let words: Vec<&str> = log
-            .lines()
-            .find(|l| l.starts_with("Running breadth-first search Model-Checking with fp "))?
-            .split(' ')
-            .collect();
-        let at = words.iter().position(|w| *w == name)?;
-        words.get(at + 1).map(|w| OsString::from(*w))
-    };
-    let (Some(fp), Some(seed)) = (drawn("fp"), drawn("seed")) else {
-        return args.to_vec();
-    };
-    let mut pinned = vec!["-fp".into(), fp, "-seed".into(), seed];
-    pinned.extend(args.iter().cloned());
-    pinned
 }
 
 /// Removes what an earlier run of the job left, which a run that was killed may have half
@@ -520,89 +502,6 @@ fn graph_shape(dir: &Path) -> Option<GraphShape> {
         .map(|&i| (dot.nodes[i].state.clone(), dot.nodes[i].initial))
         .collect();
     Some((nodes, edges))
-}
-
-/// A TLC log without what two runs of one job with one fingerprint function and seed do not
-/// share, whichever way they are started: the JVM's own first line, the dates, the time a
-/// run took, the process id, the directory the standard modules were unpacked into, and what
-/// TLC does on a timer, which is a progress line and, with a temporal property, a check of
-/// the states found until then (a run that ends before the timer has neither, and a slower
-/// one of the same job has them at whatever count it had reached; the check of the complete
-/// state space is always printed). One more differs between a batch JVM and a
-/// process: the heap TLC reports, since a batch JVM has [`BATCH_HEAP`] and not the heap of a
-/// process (and at one `-Xmx` the two still report different sizes, 966MB and 981MB of
-/// 1 GiB: the figure is the JVM's `maxMemory`, which leaves out a survivor space that the
-/// parallel collector has resized in a JVM that has run jobs).
-fn without_run_noise(log: &str) -> Vec<String> {
-    let mut lines = Vec::new();
-    for line in log.lines() {
-        let interim = line.starts_with("Checking ")
-            && line.contains(" of temporal properties for the current state space ");
-        if line.starts_with("Picked up JAVA_TOOL_OPTIONS:")
-            || line.starts_with("Progress(")
-            || interim
-            || line.starts_with("Finished checking temporal properties in ")
-        {
-            continue;
-        }
-        let mut line = without_dates(line);
-        if line.starts_with("Running breadth-first search Model-Checking with fp ") {
-            let mut words: Vec<&str> = line.split(' ').collect();
-            for i in 1..words.len() {
-                if words[i - 1] == "[pid:" || words.get(i + 1) == Some(&"heap") {
-                    words[i] = "N";
-                }
-            }
-            line = words.join(" ");
-        }
-        if let (true, Some(from), Some(to)) = (
-            line.starts_with("Finished"),
-            line.find(" in "),
-            line.find(" at "),
-        ) {
-            line.replace_range(from..to, " in T");
-        }
-        // A standard module, unpacked into the run's or the batch JVM's java.io.tmpdir.
-        if let Some(module) = line.strip_prefix("Parsing file ") {
-            if module.contains("/java-tmp/") || module.contains("/rdra-tlc-batch-") {
-                let name = Path::new(module).file_name().expect("a module file");
-                line = format!("Parsing file <tmp>/{}", name.to_string_lossy());
-            }
-        }
-        lines.push(line);
-    }
-    lines
-}
-
-/// `line` with each `2026-11-25 02:20:47` as `<date>`.
-fn without_dates(line: &str) -> String {
-    const SHAPE: &[u8] = b"dddd-dd-dd dd:dd:dd";
-    let bytes = line.as_bytes();
-    let is_date = |at: usize| {
-        bytes.len() >= at + SHAPE.len()
-            && SHAPE.iter().zip(&bytes[at..]).all(|(s, b)| {
-                if *s == b'd' {
-                    b.is_ascii_digit()
-                } else {
-                    s == b
-                }
-            })
-    };
-    let mut out = String::new();
-    let mut at = 0;
-    while at < bytes.len() {
-        if is_date(at) {
-            out.push_str("<date>");
-            at += SHAPE.len();
-        } else {
-            let next = (at + 1..=bytes.len())
-                .find(|i| line.is_char_boundary(*i))
-                .expect("a boundary");
-            out.push_str(&line[at..next]);
-            at = next;
-        }
-    }
-    out
 }
 
 /// The jobs [`assert_same_run`] compared.
@@ -815,6 +714,7 @@ fn a_job_that_exits_the_batch_jvm_runs_as_a_process() {
             jvms: 1,
             answered: 0,
             lost: 1,
+            timed_out: 0,
             longest_ms: 0
         }
     );

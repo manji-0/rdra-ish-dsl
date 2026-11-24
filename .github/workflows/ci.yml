@@ -119,7 +119,9 @@ jobs:
         # run in release in engine-equivalence, and the domain-sample reduction in formal-verify.
         # RDRA_REQUIRE_CODEGEN_TOOLS: the devShell has tsc and go, so the codegen build tests
         # may not skip a language here; portability.yml runs without them and skips.
-        run: RDRA_REQUIRE_CODEGEN_TOOLS=1 scripts/diff-test.sh --all
+        # RDRA_REQUIRE_TLC_BATCH: the devShell's `tlc` has `tlc-batch` beside it, so the
+        # verify_cli test of the batch JVMs (#310) may not skip.
+        run: RDRA_REQUIRE_CODEGEN_TOOLS=1 RDRA_REQUIRE_TLC_BATCH=1 scripts/diff-test.sh --all
       - name: debug CLI
         # The binary the test step built (`cargo test --all` builds it for the CLI tests), for
         # the two steps below: a no-op after the test step, a build in prose mode. A separate
