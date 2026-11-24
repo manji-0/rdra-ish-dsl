@@ -1,15 +1,13 @@
-// trap: a deleted row holds its key's base value, slot 0, which names no row and does not
-// move with its parent; a split use case that reads that key in a later step reads slot 0.
-// Cancel deletes an item in its first step and flags, in its second, the shop the item's key
-// names: after the delete that is always the first shop's slot, so only that shop is ever
-// flagged and the mall never has two flagged shops. The group would move the shops while the
-// deleted item's key stays at slot 0, so the second step would flag whichever shop the
-// canonical form puts first: two flagged shops, a counterexample the model does not have,
-// whose lifted trace does not replay. The scan finds the read (a key of a row an earlier
-// step may have deleted) and leaves Shop out of the group, which a note under the cone line
-// says; the items still permute.
+// trap: a deleted row keeps its key, and a later step reads it, so the key must move with
+// its parent's row.
+// Cancel deletes an item in its first step and flags, in its second, the shop the deleted
+// item's key names, which is the shop the item belonged to. Two items in two shops cancelled
+// flag two shops, and the mall allows one: the rule fails. Up to instance symmetry the shops
+// are sorted; a group that moved the shops but left a deleted item's key where it was would
+// flag whichever shop took that slot, store forms no run reaches, and lift a trace whose
+// second step does not flag the shop it names.
 // flags: --instances Mall=1
-// expect Quantifier_Mall_0: native=ok tlc=ok z3=unproved
+// expect Quantifier_Mall_0: native=counterexample tlc=counterexample z3=unproved
 // expect DanglingKey_Item_Shop: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 entity Mall "館" {
   id: Int @pk

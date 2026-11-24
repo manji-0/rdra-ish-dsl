@@ -81,9 +81,10 @@ columns, propositions, owners, run marks, raised marks) move with its slots. Ent
   (`build/vars.rs`, `owner_vars`), so the starts are closed only under the coupled
   permutation. The two entities have the same slot count, or the build already fails with
   `IdentityStartSlots`.
-- Any other owner couples nothing. Its value on a *present* child row is relabelled by the
-  parent's permutation. On an absent or deleted row it holds the base value, which names no
-  row and is not relabelled. #212's harness relabelled it at first, which was a bug.
+- Any other owner couples nothing. Its value on a present or deleted child row is
+  relabelled by the parent's permutation: a deleted row keeps the key it had (the owner's
+  decision after phase 1; see below). On an absent row it holds the base value, which names
+  no row and is not relabelled.
 - `now` belongs to no class and stays.
 
 **The group of a state fixes absent slots.** For a state `s`, `G_s` is the product, over
@@ -142,12 +143,13 @@ and no corpus model loses a class; the scan guards against a later builder chang
 name a slot, the trap #212 called `sym_index_named` cannot be a corpus case. It is a unit
 test on a hand-built `TransitionSystem` with a `Term::Index` under `<`.
 
-One shape the scan cannot see: a guard that reads the owner of a deleted row. Such a row
-holds the base value 0, which a non-optional owner reads as slot 0, and the relabelling
-skips it. The `Earlier` role binds rows by run mark, not by existence, so this needs a split
-use case that deletes a row in one step and reads its key in a later one. The bisimulation
-check of the [shadow twin](#verifying-the-reduction) catches it, and a corpus case
-(`sym_deleted_row_owner`) pins it.
+A guard can read the owner of a deleted row: the `Earlier` role binds rows by run mark, not
+by existence, so a split use case can delete a row in one step and read its key in a later
+one. Phase 1 found that a delete which reset the key to its base value made that read name
+slot 0 of a parent class the group moves, so no group that moves the parent was a
+bisimulation. The owner decided that a deleted row keeps its keys, in the native checker,
+z3, and the TLA+ export alike; the group then relabels a deleted row's key with its parent,
+and the corpus case `sym_deleted_row_owner` pins it.
 
 **Entities of a #74 reduction.** In a reduced system the state holds a class representative
 for the S side. Permuting an S entity's slots does not map a representative to a
@@ -436,7 +438,7 @@ runs in `cargo test` in seconds.
 |---|---|
 | `sym_owner_coupled` | A rule that holds only if a child's owner is relabelled with its parent; a canonicalizer that permutes children alone merges states that differ |
 | `sym_identity_pair` | A `Start::Identity` pair; permuting child and parent apart reaches starts the model does not have |
-| `sym_deleted_row_owner` | A deleted row holds base owner 0; relabelling it makes a deleted row look linked to another parent |
+| `sym_deleted_row_owner` | A deleted row keeps its key and a later step reads it; a group that does not relabel it flags the wrong parent |
 | `sym_master_ties` | Identical pre-existing rows named by children; the tie path must branch on named rows and not on others |
 | `sym_self_owned` | An entity that owns itself (a tree); one block, enumerated jointly |
 | `sym_first_absent` | A safety violation whose representative differs from the state BFS reaches first; the lifted trace must create at the lowest absent slots to replay |
@@ -447,7 +449,7 @@ runs in `cargo test` in seconds.
 
 | Planted bug | Caught by |
 |---|---|
-| Owners relabelled on deleted rows too | `sym_deleted_row_owner`, twin (2) |
+| Owners not relabelled on deleted rows | the exhaustive test, the `canonical` twin, rule 8 on `sym_deleted_row_owner` |
 | `Start::Identity` pair not coupled | `sym_identity_pair`, twin (1) |
 | Absent slots permuted (#212's group) | the replay of `sym_first_absent`'s trace (rule 3) |
 | Ties broken in slot order with no branching | the canonicalizer twin, the exhaustive test |

@@ -6,8 +6,9 @@
 //! (`Start::Identity`) couples its child and its parent. The group of a state `s`, `G_s`,
 //! permutes the slots of each class that are not absent in `s` and fixes the absent ones,
 //! so the lowest absent slot a creation takes is the same in every member of a class. An
-//! owner value on a present row is relabelled by its parent's permutation; on an absent or
-//! deleted row it holds the base value, which names no row, and stays.
+//! owner value on a present or deleted row is relabelled by its parent's permutation (a
+//! deleted row keeps the key it had, which a later step of a split use case can read); on
+//! an absent row it holds the base value, which names no row, and stays.
 //!
 //! `breaks` scans the system for what would break the group and leaves those classes out:
 //! their slots stay where they are, so every run stays sound and loses only reduction.
@@ -129,10 +130,6 @@ pub enum Rule {
     /// A block of classes that name each other's rows has more arrangements than the
     /// canonicalizer enumerates.
     JointTooLarge,
-    /// A step reads the owner of a row bound by its run mark, which a step may have
-    /// deleted: a deleted row's owner holds the base value, slot 0, which the group does
-    /// not relabel.
-    DeletedRowOwner,
 }
 
 impl Rule {
@@ -148,9 +145,6 @@ impl Rule {
             Rule::MixedIds => "a row id is compared with or written into another value",
             Rule::JointTooLarge => {
                 "its rows and the rows that name them have too many arrangements"
-            }
-            Rule::DeletedRowOwner => {
-                "a step reads the key of a row an earlier step may have deleted"
             }
         }
     }
@@ -205,7 +199,7 @@ pub(crate) struct Block {
 #[derive(Clone, Debug)]
 pub(crate) struct ChildRef {
     pub(crate) off: usize,
-    /// Where the child's existence var starts: only a present row names its parent.
+    /// Where the child's existence var starts: an absent row names no parent.
     pub(crate) exists: usize,
     pub(crate) slots: usize,
     pub(crate) optional: bool,
@@ -459,7 +453,7 @@ impl Group {
 
     /// `s` under the permutation `perm` (old slot to new position, per class at `first`), in
     /// the state's own layout: every var of a class moves with its slots, and an owner on a
-    /// present row names its parent's new position.
+    /// row that is not absent names its parent's new position.
     pub(crate) fn apply(&self, perm: &[u8], s: &[u8], out: &mut [u8]) {
         for &off in &self.free {
             out[off] = s[off];
@@ -471,7 +465,7 @@ impl Group {
                 for (old, &new) in p.iter().enumerate() {
                     let v = s[col.off + old];
                     let v = match col.owner {
-                        Some((pc, optional)) if s[exists + old] == Value::PRESENT.0 => {
+                        Some((pc, optional)) if s[exists + old] != Value::ABSENT.0 => {
                             self.relabel(perm, pc, optional, v)
                         }
                         _ => v,
