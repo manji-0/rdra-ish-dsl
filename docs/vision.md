@@ -324,7 +324,10 @@ The maintainer decided these questions on 2026-10-28, during phase 5:
   Every CSV kind and every `list` kind reads declared facts only, and since 1.1.0 they
   write with the note. Only `export --kind typescript-states` and the state diagram refuse.
   `crates/rdra-ish-cli/src/lifecycle_gate.rs` classifies each kind by what it reads, and
-  [Lifecycle errors](./cli-reference.md#lifecycle-errors) lists the result.
+  [Lifecycle errors](./cli-reference.md#lifecycle-errors) lists the result. Since #285
+  (2026-11-24) these outputs do not explore the lifecycle and print no note: the search
+  cost every `diagram`, `list`, `csv`, and `export` run and said nothing about the output.
+  Only the TLA+ export keeps its note.
 - A minimum cardinality is always checked. `1..*:1` adds `MinCard_*` with no switch.
 - A 1:1 key is unique as an invariant, `Unique_*`, not as a guard on the use case that
   links.

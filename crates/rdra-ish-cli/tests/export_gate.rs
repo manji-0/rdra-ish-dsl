@@ -1,5 +1,6 @@
-//! A lifecycle error stops only the outputs that print a reachability result. Every other
-//! output writes, with one note on stderr. `EXPECTED` classifies every `--kind` of `list`,
+//! A lifecycle error stops only the outputs that print a reachability result. The TLA+
+//! export writes with one note on stderr; every other output writes without exploring the
+//! lifecycle, so it says nothing about it. `EXPECTED` classifies every `--kind` of `list`,
 //! `csv`, `diagram`, and `export`; the table in docs/cli-reference.md#lifecycle-errors must
 //! say the same.
 
@@ -12,6 +13,9 @@ const FAILING: &str = "samples/formal-verification-fail/order.rdra";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Gate {
+    /// Exits 0, writes the output, and prints no `note: the lifecycle has` line: it explores
+    /// nothing, so it knows of no error.
+    Writes,
     /// Exits 0, writes the output, and prints one `note: the lifecycle has` line.
     Note,
     /// Exits 1 and writes nothing.
@@ -20,85 +24,85 @@ enum Gate {
     Report,
 }
 
-use Gate::{Note, Stop};
+use Gate::{Note, Stop, Writes};
 
 const EXPECTED: &[(&str, &[(&str, Gate)])] = &[
     (
         "list",
         &[
-            ("actor", Note),
-            ("entity", Note),
-            ("requirement", Note),
-            ("adr", Note),
-            ("adr-impact", Note),
-            ("goal", Note),
-            ("nfr", Note),
-            ("quality", Note),
-            ("constraint", Note),
-            ("buc", Note),
-            ("flow", Note),
-            ("step", Note),
-            ("usecase", Note),
-            ("field", Note),
-            ("system", Note),
-            ("api", Note),
-            ("dto", Note),
-            ("variation", Note),
-            ("screen", Note),
-            ("event", Note),
-            ("timer", Note),
-            ("condition", Note),
-            ("rule", Note),
-            ("permission-callables", Note),
-            ("actor-permission-audit", Note),
-            ("business-inputs", Note),
-            ("buc-roles", Note),
-            ("transition", Note),
-            ("surface", Note),
+            ("actor", Writes),
+            ("entity", Writes),
+            ("requirement", Writes),
+            ("adr", Writes),
+            ("adr-impact", Writes),
+            ("goal", Writes),
+            ("nfr", Writes),
+            ("quality", Writes),
+            ("constraint", Writes),
+            ("buc", Writes),
+            ("flow", Writes),
+            ("step", Writes),
+            ("usecase", Writes),
+            ("field", Writes),
+            ("system", Writes),
+            ("api", Writes),
+            ("dto", Writes),
+            ("variation", Writes),
+            ("screen", Writes),
+            ("event", Writes),
+            ("timer", Writes),
+            ("condition", Writes),
+            ("rule", Writes),
+            ("permission-callables", Writes),
+            ("actor-permission-audit", Writes),
+            ("business-inputs", Writes),
+            ("buc-roles", Writes),
+            ("transition", Writes),
+            ("surface", Writes),
         ],
     ),
     (
         "csv",
         &[
-            ("actor", Note),
-            ("entity", Note),
-            ("matrix", Note),
-            ("api", Note),
-            ("api-matrix", Note),
-            ("screen-constraints", Note),
-            ("permission-callables", Note),
-            ("actor-permission-audit", Note),
-            ("business-inputs", Note),
+            ("actor", Writes),
+            ("entity", Writes),
+            ("matrix", Writes),
+            ("api", Writes),
+            ("api-matrix", Writes),
+            ("screen-constraints", Writes),
+            ("permission-callables", Writes),
+            ("actor-permission-audit", Writes),
+            ("business-inputs", Writes),
         ],
     ),
     (
         "diagram",
         &[
-            ("rdra", Note),
-            ("context", Note),
-            ("requirement", Note),
-            ("business", Note),
-            ("usecase", Note),
-            ("robustness", Note),
-            ("sequence", Note),
-            ("flow", Note),
-            ("screen", Note),
-            ("information", Note),
-            ("condition", Note),
-            ("er", Note),
+            ("rdra", Writes),
+            ("context", Writes),
+            ("requirement", Writes),
+            ("business", Writes),
+            ("usecase", Writes),
+            ("robustness", Writes),
+            ("sequence", Writes),
+            ("flow", Writes),
+            ("screen", Writes),
+            ("information", Writes),
+            ("condition", Writes),
+            ("er", Writes),
             ("state", Stop),
-            ("event", Note),
+            ("event", Writes),
         ],
     ),
     (
         "export",
         &[
-            ("openapi", Note),
-            ("asyncapi", Note),
-            ("dbml", Note),
-            ("sql", Note),
-            ("json-schema", Note),
-            ("mermaid-er", Note),
+            ("openapi", Writes),
+            ("asyncapi", Writes),
+            ("dbml", Writes),
+            ("sql", Writes),
+            ("json-schema", Writes),
+            ("mermaid-er", Writes),
             ("tla", Note),
         ],
     ),
@@ -178,6 +182,7 @@ fn observe(dir: &Path, command: &str, kind: &str) -> Gate {
         }),
     };
     match (output.status.code(), written, note_count(&output)) {
+        (Some(0), true, 0) => Writes,
         (Some(0), true, 1) => Note,
         (Some(1), false, 0) => Stop,
         other => panic!("{command} --kind {kind}: {other:?} {output:?}"),
@@ -221,6 +226,25 @@ fn the_state_diagram_draws_a_model_whose_only_error_is_a_deadlock() {
     ]);
     assert!(output.status.success(), "{output:?}");
     assert!(out.with_extension("mmd").is_file());
+}
+
+/// `diagram --all` explores the lifecycle for its state diagrams only: on a model with a
+/// lifecycle error it says once that they are left out, and writes the rest with no note
+/// of its own.
+#[test]
+fn diagram_all_notes_the_lifecycle_only_where_it_leaves_the_state_diagrams_out() {
+    let dir = scratch("export_gate_all");
+    let output = run(&["diagram", FAILING, "--all", "--out", dir.to_str().unwrap()]);
+    assert!(output.status.success(), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let notes: Vec<&str> = stderr.lines().filter(|l| l.starts_with("note:")).collect();
+    assert_eq!(notes.len(), 1, "{stderr}");
+    assert!(
+        notes[0].starts_with("note: --kind state is left out"),
+        "{stderr}"
+    );
+    assert!(dir.join("context.mmd").is_file());
+    assert!(!dir.join("state.mmd").exists());
 }
 
 /// The whole-model cfg checks the rules, so the note sends a hand-run TLC user to the
@@ -283,6 +307,8 @@ fn doc_rows() -> Vec<(String, Option<String>, Gate)> {
             let last = cells.last().unwrap();
             let gate = if last.starts_with("writes, with a note") {
                 Note
+            } else if last.starts_with("writes") {
+                Writes
             } else if last.starts_with("refuses") {
                 Stop
             } else if last.starts_with("prints the report") {
