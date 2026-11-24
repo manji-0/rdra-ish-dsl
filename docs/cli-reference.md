@@ -610,6 +610,14 @@ a diagnostic on an open `.rdra` file.
 ### Memory limit
 <!-- constrained-by #project-manifest -->
 
+> **Known issue: the limit does not yet bound the whole process** (#237, #242, #243).
+> The limit bounds what the state stores are counted to hold, not what the process takes.
+> On macOS the process has been measured well past it: `verify samples/oidc-auth
+> --instance-count 2` peaked at 1.85 times a `2GiB` limit, and at the default `16GiB` it passed
+> 19.5 GB. Until the fixes land, set `--memory` (or `memory` in `rdra.toml`) to about half the
+> memory you can spare when cones stop at the limit. Runs whose cones finish below the limit,
+> as every sample does at the default limits, are not affected.
+
 `check`, `states`, and `verify` each run within a memory limit: `--memory`, else `memory` in
 the command's `rdra.toml` table (`[check]` for `check` and `states`, `[verify]` for
 `verify`), else `4GiB` for `check` and `states` and `16GiB` for `verify`.
@@ -637,8 +645,10 @@ What the limit counts:
   worker holds while it expands them, and the memory that reading the findings of a cone
   takes. On `insurance-claim-ops` at two instances, where most cones stop at the limit, the
   process peaked at 1.2 to 1.4 times the limit run one cone at a time (`RDRA_JOBS=1`) and at
-  up to twice the limit with eight; a single large cone peaked within 20% of it. The
-  default limits stop no cone of the samples.
+  up to twice the limit with eight. A single cone that stops at the limit can take 1.35 to
+  1.6 times what it is counted while it grows (on macOS, memory the allocator keeps after a
+  buffer is freed), and the cones that run again alone after a crowded pool can be counted
+  past the limit together (#242, #237). The default limits stop no cone of the samples.
 - **TLC** (`verify --with-tlc` only). Each TLC run's `-Xmx`. Without `--with-tlc` BFS has
   the whole limit. With it, `verify` gives the TLC cone runs half the limit (at least
   `64MiB`) and BFS the rest; it starts no more cone runs at once than their
