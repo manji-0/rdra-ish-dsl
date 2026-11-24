@@ -1,9 +1,15 @@
 //! The `perf-run` line of a `perf` build (`crate::perf`): what one BFS run cost and what its
-//! store holds.
+//! store holds; and the guard counts of #300: the `perf-guards` line of a system, and the
+//! `perf-evals` line of what the move generator left to `eval`.
 
+use std::collections::BTreeSet;
+use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
+use std::sync::OnceLock;
 use std::time::Instant;
 
 use super::ComponentRun;
+use crate::lifecycle::types::{At, Pred, Term, VarId};
+use crate::lifecycle::TransitionSystem;
 use crate::perf::{cpu_ns, label_name, level, pass_name};
 
 /// When a run started: wall, thread CPU and process CPU.
@@ -105,4 +111,170 @@ fn costly(run: &ComponentRun) -> String {
         delta as f64 / with_parent.max(1) as f64,
         pairs.len(),
     )
+}
+
+/// What a guard conjunct the move generator leaves to `eval` reads (#300), or a post-guard.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Kind {
+    /// Two vars of one param's row in the pre-state, and literals.
+    TwoVars,
+    /// Three vars or more of one param's row.
+    MoreVars,
+    /// Two params' rows, one var or slot index of each (a link `row.owner = other` reads the
+    /// owner var of one and the slot index of the other): what an index across params would
+    /// answer.
+    TwoParams,
+    /// More vars of two params, or three params and more.
+    MoreParams,
+    /// A quantifier or a count over an entity's rows.
+    Quantifier,
+    /// Anything else: `now`, a bound row's slot or index, a successor's slot, no slot at all.
+    Other,
+    /// A guard read on the pre-state and the successor together.
+    Post,
+}
+
+const KINDS: [(Kind, &str); 7] = [
+    (Kind::TwoVars, "two_vars"),
+    (Kind::MoreVars, "more_vars"),
+    (Kind::TwoParams, "two_params"),
+    (Kind::MoreParams, "more_params"),
+    (Kind::Quantifier, "quantifier"),
+    (Kind::Other, "other"),
+    (Kind::Post, "post"),
+];
+
+static EXPANDED: AtomicU64 = AtomicU64::new(0);
+static EVALS: [AtomicU64; KINDS.len()] = [const { AtomicU64::new(0) }; KINDS.len()];
+
+impl Kind {
+    /// The kind of a pre-state guard conjunct `one_row` does not take.
+    pub(crate) fn of(pred: &Pred) -> Kind {
+        let mut reads = BTreeSet::new();
+        let (mut quantifier, mut other) = (false, false);
+        walk(pred, &mut reads, &mut quantifier, &mut other);
+        let params: BTreeSet<u8> = reads.iter().map(|(p, _)| *p).collect();
+        match (quantifier, other, params.len(), reads.len()) {
+            (true, _, _, _) => Kind::Quantifier,
+            (false, true, _, _) | (false, false, 0, _) => Kind::Other,
+            (false, false, 1, 2) => Kind::TwoVars,
+            (false, false, 1, _) => Kind::MoreVars,
+            (false, false, 2, 2) => Kind::TwoParams,
+            (false, false, _, _) => Kind::MoreParams,
+        }
+    }
+}
+
+/// The `(param, var)` slots `pred` reads (`None` for a param's slot index), and whether it
+/// holds a quantifier or count, or reads anything else than params' rows and literals.
+fn walk(
+    pred: &Pred,
+    reads: &mut BTreeSet<(u8, Option<VarId>)>,
+    quantifier: &mut bool,
+    other: &mut bool,
+) {
+    let mut term = |t: &Term| match *t {
+        Term::Slot {
+            var,
+            at: At::Param(p),
+        } => {
+            reads.insert((p, Some(var)));
+        }
+        Term::Index(At::Param(p)) => {
+            reads.insert((p, None));
+        }
+        Term::Slot { .. } | Term::Index(_) | Term::Now => *other = true,
+        Term::Lit(_) | Term::Int(_) => {}
+    };
+    match pred {
+        Pred::True | Pred::False => {}
+        Pred::Cmp(a, _, b) => {
+            term(a);
+            term(b);
+        }
+        Pred::In(a, values) => {
+            term(a);
+            values.iter().for_each(term);
+        }
+        Pred::Not(body) => walk(body, reads, quantifier, other),
+        Pred::And(parts) | Pred::Or(parts) => {
+            for p in parts {
+                walk(p, reads, quantifier, other);
+            }
+        }
+        Pred::Forall { .. } | Pred::Exists { .. } | Pred::Count { .. } => *quantifier = true,
+    }
+}
+
+/// `RDRA_PERF_EVAL_TWICE`: each guard the move generator leaves to `eval` is evaluated a
+/// second time, so the instructions a run gains are what those evaluations cost.
+fn twice() -> bool {
+    static TWICE: OnceLock<bool> = OnceLock::new();
+    *TWICE.get_or_init(|| std::env::var_os("RDRA_PERF_EVAL_TWICE").is_some())
+}
+
+/// Counts one evaluation of a guard of `kind`, and returns what `eval` says.
+pub(crate) fn evaluated(kind: Kind, mut eval: impl FnMut() -> bool) -> bool {
+    EVALS[kind as usize].fetch_add(1, Relaxed);
+    if twice() {
+        std::hint::black_box(eval());
+    }
+    eval()
+}
+
+/// Counts one state whose moves are generated.
+pub(crate) fn expanded() {
+    EXPANDED.fetch_add(1, Relaxed);
+}
+
+/// Prints the `perf-evals` line: the states whose moves were generated, and the guards the
+/// move generator left to `eval`, evaluated by kind.
+pub fn evals_line() {
+    if level() == 0 {
+        return;
+    }
+    let counts: Vec<String> = (KINDS.iter())
+        .map(|(kind, name)| format!("{name}={}", EVALS[*kind as usize].load(Relaxed)))
+        .collect();
+    eprintln!(
+        "perf-evals expanded={} {}",
+        EXPANDED.load(Relaxed),
+        counts.join(" ")
+    );
+}
+
+impl TransitionSystem {
+    /// Prints the `perf-guards` line of this system (#300): its pre-state guard conjuncts that
+    /// #253 turns into byte tests, those it leaves to `eval` by kind, and its post-guards.
+    pub fn perf_guards_line(&self) {
+        if level() == 0 {
+            return;
+        }
+        let (mut conjuncts, mut tests, mut post) = (0, 0, 0);
+        let mut left = [0usize; KINDS.len()];
+        for action in &self.actions {
+            for guard in &action.guards {
+                if guard.reads_successor() {
+                    post += 1;
+                    continue;
+                }
+                for part in super::plan::conjuncts(&guard.pred) {
+                    conjuncts += 1;
+                    match super::plan::one_row(part) {
+                        Some(_) => tests += 1,
+                        None => left[Kind::of(part) as usize] += 1,
+                    }
+                }
+            }
+        }
+        let left: Vec<String> = (KINDS.iter())
+            .filter(|(kind, _)| *kind != Kind::Post)
+            .map(|(kind, name)| format!("{name}={}", left[*kind as usize]))
+            .collect();
+        eprintln!(
+            "perf-guards actions={} conjuncts={conjuncts} byte_tests={tests} {} post_guards={post}",
+            self.actions.len(),
+            left.join(" ")
+        );
+    }
 }

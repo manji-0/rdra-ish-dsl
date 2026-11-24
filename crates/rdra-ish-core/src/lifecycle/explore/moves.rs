@@ -222,6 +222,11 @@ impl TransitionSystem {
     /// Whether the pre-state guards `plan` leaves to `eval` hold.
     fn rest_holds(&self, plan: &Plan, state: &StateSlice, params: &[u8]) -> bool {
         let mut env = Env::new(params);
+        #[cfg(feature = "perf")]
+        return (plan.pre.iter().zip(&plan.pre_kinds)).all(|(pred, kind)| {
+            super::perf::evaluated(*kind, || self.eval(pred, state, &mut env))
+        });
+        #[cfg(not(feature = "perf"))]
         plan.pre.iter().all(|pred| self.eval(pred, state, &mut env))
     }
 
@@ -332,6 +337,8 @@ impl TransitionSystem {
 
     /// `moves`, appended to `out`. `scratch` is any state of this system; it is overwritten.
     pub(crate) fn moves_into(&self, s: &StateSlice, scratch: &mut State, out: &mut Moves) {
+        #[cfg(feature = "perf")]
+        super::perf::expanded();
         self.moves_of_into(s, true, scratch, out);
     }
 
@@ -357,9 +364,14 @@ impl TransitionSystem {
                             next: Some(next),
                             ..Env::new(params)
                         };
-                        plan.post
-                            .iter()
-                            .all(|&g| self.eval(&action.guards[g].pred, s, &mut env))
+                        plan.post.iter().all(|&g| {
+                            #[cfg(feature = "perf")]
+                            return super::perf::evaluated(super::perf::Kind::Post, || {
+                                self.eval(&action.guards[g].pred, s, &mut env)
+                            });
+                            #[cfg(not(feature = "perf"))]
+                            self.eval(&action.guards[g].pred, s, &mut env)
+                        })
                     };
                     if holds {
                         found(act, params, next);
