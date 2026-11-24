@@ -353,6 +353,21 @@
 
 ### Changed
 
+- `verify` reduces a cone whose TLA+ tables print up to 530,000 cells, not 200,000 (#284),
+  for the native checker and TLC alike, so both still check the same cones.
+  food-permit-ops' `AfterAssert_SuspendBusiness_0` at `--instance-count 3` is now reduced
+  to 7,167,444 states and decided (`verify --instance-count 3 --entity BusinessPermit
+  --memory 8GiB` takes 158 s); unreduced, it stopped at the memory limit. TLC needs a larger heap for such a cone: the 520,704-cell module checks at
+  `RDRA_TLC_HEAP=4g` in 98 s, and at the default 1 GB heap TLC runs out of memory and
+  `--with-tlc` reports a tool error with that hint. No sample at 1 or 2 instances, no engine
+  corpus case, and no `reduction-diff.py` seed CI runs has a cone in the new range, so their
+  output is unchanged.
+- `verify` no longer runs a sub-lifecycle again for each cone that shares it after the run
+  stopped at the memory limit (#289). The declined quotient is shared through the quotient
+  cache of #252 when no other run's bytes decided the stop: a cone with the same extended
+  sub-lifecycle and caps takes it when its pool has no more room than the one the run was
+  refused in and covers what the run was granted, and computes otherwise. The output is
+  unchanged.
 - `diagram`, `list`, `csv`, and `export` explore the lifecycle only for an output that
   reads it: the state diagram and the TLA+ export (#285). Every other kind draws declared
   facts and the data layer, and explored the whole lifecycle only to print the stderr note

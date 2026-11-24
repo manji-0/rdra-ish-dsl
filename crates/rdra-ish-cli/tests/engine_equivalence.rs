@@ -519,8 +519,13 @@ fn check_cone(
     }
 }
 
+/// Named to sort first: libtest starts tests in name order, and this one is the longest in the
+/// file, so it starts at once and the others fill the threads beside it (#305). On a runner's
+/// 4 test threads, `a_corrupted_tlc_trace_does_not_replay`, `a_property_cone_decides_what_the_whole_model_decides`
+/// and `a_tlc_alone_finds_the_deadlocks_and_missing_witnesses_bfs_finds`, the next longest,
+/// start beside it.
 #[test]
-fn bfs_and_tlc_reach_the_same_states_and_verdicts() {
+fn a_bfs_and_tlc_reach_the_same_states_and_verdicts() {
     let Some(tlc) = find_tlc() else {
         let reason = "tlc not on PATH (run inside `nix develop`)";
         assert!(
@@ -532,20 +537,30 @@ fn bfs_and_tlc_reach_the_same_states_and_verdicts() {
     };
     let scratch = std::env::temp_dir().join(format!("rdra-equivalence-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&scratch);
+    let samples = samples();
+    let plans: Vec<ModelPlan> = samples
+        .iter()
+        .flat_map(|sample| {
+            let model = load(sample);
+            [Bounds::STATES, Bounds::VERIFY].map(|bounds| plan_model(sample, &model, bounds))
+        })
+        .collect();
+    // Every cone of every sample at both bounds in one queue, so a sample's longest cone
+    // runs beside the next sample's cones rather than before them.
+    let reports = check_models(&tlc, &scratch, &plans);
+    let _ = std::fs::remove_dir_all(&scratch);
     let mut fallback = Vec::new();
-    for sample in samples() {
-        let model = load(&sample);
-        assert!(
-            check_model(&tlc, &scratch, &sample, &model, Bounds::STATES)
-                .capped
-                .is_empty(),
-            "{sample}: a cone passes the state cap at STATES"
-        );
-        for cone in check_model(&tlc, &scratch, &sample, &model, Bounds::VERIFY).capped {
-            fallback.push((sample.clone(), cone));
+    for (plan, report) in plans.iter().zip(reports) {
+        if plan.bounds == Bounds::STATES {
+            assert!(
+                report.capped.is_empty(),
+                "{}: a cone passes the state cap at STATES",
+                plan.sample
+            );
+        } else {
+            fallback.extend(report.capped.into_iter().map(|c| (plan.sample.clone(), c)));
         }
     }
-    let _ = std::fs::remove_dir_all(&scratch);
     let expected: Vec<(String, String)> = VERIFY_FALLBACK
         .iter()
         .map(|(s, c)| (s.to_string(), c.to_string()))
@@ -553,6 +568,28 @@ fn bfs_and_tlc_reach_the_same_states_and_verdicts() {
     assert_eq!(
         fallback, expected,
         "the cones past the state cap at VERIFY are not VERIFY_FALLBACK (docs/formal-verification.md lists them)"
+    );
+}
+
+/// A root with a cone this file compares at `Bounds::STATES` only runs TLC at its header bounds
+/// in formal-verify's `verify-samples.sh --with-tlc --tlc-roots scripts/tlc-roots.txt` step,
+/// which runs TLC on the roots that file lists (#305).
+#[test]
+fn every_fallback_root_runs_tlc_in_formal_verify() {
+    let listed: BTreeSet<String> = std::fs::read_to_string(repo().join("scripts/tlc-roots.txt"))
+        .expect("scripts/tlc-roots.txt")
+        .lines()
+        .map(|l| l.split('#').next().unwrap_or("").trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect();
+    let missing: BTreeSet<&str> = VERIFY_FALLBACK
+        .iter()
+        .map(|(sample, _)| *sample)
+        .filter(|sample| !listed.contains(*sample))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "{missing:?} have a cone in VERIFY_FALLBACK but are not in scripts/tlc-roots.txt"
     );
 }
 
@@ -582,17 +619,16 @@ struct ConeRuns {
     decided: bool,
 }
 
-/// Every cone of the model at these bounds, explored and checked in parallel, unreduced and
-/// reduced; returns the cones whose BFS as `verify` runs it passes `STATE_CAP`, which are
-/// not compared.
-fn check_model(
-    tlc: &Path,
-    scratch: &Path,
-    sample: &str,
-    model: &SemanticModel,
+/// A model at one bounds: its system, and its cones as `verify` groups the targets, each named
+/// by the first target that reads it, with the seeds of the targets that read it.
+struct ModelPlan {
+    sample: String,
     bounds: Bounds,
-) -> ModelReport {
-    let workers = std::thread::available_parallelism().map_or(4, |n| n.get().min(8));
+    ts: TransitionSystem,
+    cones: Vec<(Cone, String, Vec<Seed>)>,
+}
+
+fn plan_model(sample: &str, model: &SemanticModel, bounds: Bounds) -> ModelPlan {
     let ts = TransitionSystem::build(model, bounds.clone(), &Scope::ALL).ts;
     let mut cones: Vec<(Cone, String, Vec<Seed>)> = Vec::new();
     // `verify` runs no TLC cone for a `.lemma()` rule or a `can_reach`, so neither does the
@@ -610,84 +646,153 @@ fn check_model(
             None => cones.push((cone, target_label(&ts, t), vec![ts.target_seed(t)])),
         }
     }
-    let caps = Caps::new(usize::MAX, STATE_CAP);
+    ModelPlan {
+        sample: sample.to_string(),
+        bounds,
+        ts,
+        cones,
+    }
+}
+
+/// Every cone of the model at these bounds, explored and checked in parallel, unreduced and
+/// reduced; returns the cones whose BFS as `verify` runs it passes `STATE_CAP`, which are
+/// not compared.
+fn check_model(
+    tlc: &Path,
+    scratch: &Path,
+    sample: &str,
+    model: &SemanticModel,
+    bounds: Bounds,
+) -> ModelReport {
+    let plans = [plan_model(sample, model, bounds)];
+    check_models(tlc, scratch, &plans)
+        .pop()
+        .expect("one report per plan")
+}
+
+/// [`check_model`] on each plan, with the cones of all of them in one queue: those at
+/// `Bounds::VERIFY`, the larger, first. Returns one report per plan, in `plans` order.
+fn check_models(tlc: &Path, scratch: &Path, plans: &[ModelPlan]) -> Vec<ModelReport> {
+    let workers = std::thread::available_parallelism().map_or(4, |n| n.get().min(8));
+    let jobs: Vec<(usize, usize)> = [true, false]
+        .into_iter()
+        .flat_map(|verify| {
+            plans
+                .iter()
+                .enumerate()
+                .filter(move |(_, p)| (p.bounds == Bounds::VERIFY) == verify)
+                .flat_map(|(at, p)| (0..p.cones.len()).map(move |i| (at, i)))
+        })
+        .collect();
     let next = AtomicUsize::new(0);
-    let reports: Mutex<Vec<(usize, ConeRuns)>> = Mutex::new(Vec::new());
+    let runs: Mutex<Vec<(usize, usize, ConeRuns)>> = Mutex::new(Vec::new());
     std::thread::scope(|s| {
         for _ in 0..workers {
-            s.spawn(|| loop {
-                let i = next.fetch_add(1, Ordering::SeqCst);
-                let Some((cone, name, seeds)) = cones.get(i) else {
-                    break;
-                };
-                let label = format!("{sample} at {bounds:?}, cone {i} ({name})");
-                let dir = scratch.join(format!(
-                    "{}-{}-{i}",
-                    sample.replace('/', "_"),
-                    bounds.instances
-                ));
-                let t0 = std::time::Instant::now();
-                let run = ts.restrict_to(&cone.vars, &cone.keep).run(caps);
-                let t_bfs = t0.elapsed().as_secs_f64();
-                let plain = run
-                    .complete
-                    .then(|| check_cone(tlc, &dir, &label, &run, &run.system));
-                let t_plain = t0.elapsed().as_secs_f64();
-                // The sub-lifecycle is explored by BFS alone, under `verify`'s cap.
-                let system = ts.reduced_cone(cone, seeds.iter().cloned(), Caps::VERIFY);
-                let t_reduce = t0.elapsed().as_secs_f64();
-                let reduction = system
-                    .reduction()
-                    .map(|r| (r.classes(), r.inputs().len(), r.bits().len(), r.tla_cells()));
-                let reduced_run = reduction.is_some().then(|| system.run(caps));
-                let t_rbfs = t0.elapsed().as_secs_f64();
-                let reduced = reduced_run.as_ref().filter(|r| r.complete).map(|r| {
-                    check_cone(
-                        tlc,
-                        &dir.join("reduced"),
-                        &format!("{label}, reduced"),
-                        r,
-                        &run.system,
-                    )
-                });
-                trace(|| {
-                    let sizes = |r: &ComponentRun| {
-                        format!("{} states{}", r.states.len(), if r.complete { "" } else { " CAPPED" })
-                    };
-                    format!(
-                        "{label}: plain {} (bfs {t_bfs:.1}s, tlc {:.1}s); reduction {reduction:?} (classes, inputs, bits, cells; {:.1}s); reduced run {} ({:.1}s); reduced tlc {:.1}s",
-                        sizes(&run),
-                        t_plain - t_bfs,
-                        t_reduce - t_plain,
-                        reduced_run.as_ref().map_or("none".to_string(), sizes),
-                        t_rbfs - t_reduce,
-                        t0.elapsed().as_secs_f64() - t_rbfs,
-                    )
-                });
-                // The reduced cone keeps the checks that read its target side and what it
-                // observes of the sub-lifecycle; each of those has the cone's verdict.
-                if let (Some(a), Some(b)) = (&plain, &reduced) {
-                    let kept: BTreeSet<String> =
-                        a.violated.intersection(&b.checks).cloned().collect();
-                    assert_eq!(
-                        b.violated, kept,
-                        "{label}: the reduced cone's verdicts differ from the cone's"
-                    );
+            s.spawn(|| {
+                while let Some(&(at, i)) = jobs.get(next.fetch_add(1, Ordering::SeqCst)) {
+                    let found = check_one_cone(tlc, scratch, &plans[at], i);
+                    runs.lock().unwrap().push((at, i, found));
                 }
-                let decided = reduced_run.as_ref().map_or(run.complete, |r| r.complete);
-                reports.lock().unwrap().push((
-                    i,
-                    ConeRuns {
-                        plain,
-                        reduced,
-                        decided,
-                    },
-                ));
             });
         }
     });
-    let mut reports = reports.into_inner().unwrap();
-    reports.sort_by_key(|(i, _)| *i);
+    let mut runs = runs.into_inner().unwrap();
+    runs.sort_by_key(|(at, i, _)| (*at, *i));
+    let mut by_plan: Vec<Vec<(usize, ConeRuns)>> = plans.iter().map(|_| Vec::new()).collect();
+    for (at, i, found) in runs {
+        by_plan[at].push((i, found));
+    }
+    plans
+        .iter()
+        .zip(by_plan)
+        .map(|(plan, reports)| model_report(plan, reports))
+        .collect()
+}
+
+/// Cone `i` of `plan`, explored and compared with TLC unreduced and, where it reduces,
+/// reduced as `verify` explores it.
+fn check_one_cone(tlc: &Path, scratch: &Path, plan: &ModelPlan, i: usize) -> ConeRuns {
+    let ModelPlan {
+        sample,
+        bounds,
+        ts,
+        cones,
+    } = plan;
+    let (cone, name, seeds) = &cones[i];
+    let caps = Caps::new(usize::MAX, STATE_CAP);
+    let label = format!("{sample} at {bounds:?}, cone {i} ({name})");
+    let dir = scratch.join(format!(
+        "{}-{}-{i}",
+        sample.replace('/', "_"),
+        bounds.instances
+    ));
+    let t0 = std::time::Instant::now();
+    let run = ts.restrict_to(&cone.vars, &cone.keep).run(caps);
+    let t_bfs = t0.elapsed().as_secs_f64();
+    let plain = run
+        .complete
+        .then(|| check_cone(tlc, &dir, &label, &run, &run.system));
+    let t_plain = t0.elapsed().as_secs_f64();
+    // The sub-lifecycle is explored by BFS alone, under `verify`'s cap.
+    let system = ts.reduced_cone(cone, seeds.iter().cloned(), Caps::VERIFY);
+    let t_reduce = t0.elapsed().as_secs_f64();
+    let reduction = system
+        .reduction()
+        .map(|r| (r.classes(), r.inputs().len(), r.bits().len(), r.tla_cells()));
+    let reduced_run = reduction.is_some().then(|| system.run(caps));
+    let t_rbfs = t0.elapsed().as_secs_f64();
+    let reduced = reduced_run.as_ref().filter(|r| r.complete).map(|r| {
+        check_cone(
+            tlc,
+            &dir.join("reduced"),
+            &format!("{label}, reduced"),
+            r,
+            &run.system,
+        )
+    });
+    trace(|| {
+        let sizes = |r: &ComponentRun| {
+            format!(
+                "{} states{}",
+                r.states.len(),
+                if r.complete { "" } else { " CAPPED" }
+            )
+        };
+        format!(
+            "{label}: plain {} (bfs {t_bfs:.1}s, tlc {:.1}s); reduction {reduction:?} (classes, inputs, bits, cells; {:.1}s); reduced run {} ({:.1}s); reduced tlc {:.1}s",
+            sizes(&run),
+            t_plain - t_bfs,
+            t_reduce - t_plain,
+            reduced_run.as_ref().map_or("none".to_string(), sizes),
+            t_rbfs - t_reduce,
+            t0.elapsed().as_secs_f64() - t_rbfs,
+        )
+    });
+    // The reduced cone keeps the checks that read its target side and what it observes of
+    // the sub-lifecycle; each of those has the cone's verdict.
+    if let (Some(a), Some(b)) = (&plain, &reduced) {
+        let kept: BTreeSet<String> = a.violated.intersection(&b.checks).cloned().collect();
+        assert_eq!(
+            b.violated, kept,
+            "{label}: the reduced cone's verdicts differ from the cone's"
+        );
+    }
+    let decided = reduced_run.as_ref().map_or(run.complete, |r| r.complete);
+    ConeRuns {
+        plain,
+        reduced,
+        decided,
+    }
+}
+
+/// The plan's [`ModelReport`] from its cones' runs, in cone order, with its summary line.
+fn model_report(plan: &ModelPlan, reports: Vec<(usize, ConeRuns)>) -> ModelReport {
+    let ModelPlan {
+        sample,
+        bounds,
+        cones,
+        ..
+    } = plan;
     let checked: Vec<&ConeReport> = reports
         .iter()
         .filter_map(|(_, r)| r.plain.as_ref())
@@ -3499,8 +3604,10 @@ fn require_tlc() -> Option<PathBuf> {
     tlc
 }
 
+/// Named to sort among the first tests, as `a_bfs_and_tlc_reach_the_same_states_and_verdicts`
+/// is: the second longest in the file, it starts at once rather than after the fixtures (#305).
 #[test]
-fn tlc_alone_finds_the_deadlocks_and_missing_witnesses_bfs_finds() {
+fn a_tlc_alone_finds_the_deadlocks_and_missing_witnesses_bfs_finds() {
     let Some(tlc) = require_tlc() else { return };
     let scratch = std::env::temp_dir().join(format!("rdra-state-models-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&scratch);

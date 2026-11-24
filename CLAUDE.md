@@ -11,8 +11,9 @@ list. Run it only when an item says it is needed, and say which item that was.
 
 1. **GitHub Actions already runs it?** `.github/workflows/ci.yml` runs on every pull request:
    fmt, clippy, the tests (`scripts/diff-test.sh --all`), sample artifacts, skill snippets,
-   `nix build`, `verify-samples.sh` with and without `--with-tlc`, reduced cones, the
-   `reduction-diff.py` seeds, `engine_equivalence`, `proof_equivalence`, `engine_corpus`,
+   `nix build`, `verify-samples.sh --with-tlc --tlc-roots scripts/tlc-roots.txt`, reduced
+   cones, the `reduction-diff.py` seeds (without TLC on a PR, with it on main),
+   `engine_equivalence`, `proof_equivalence`, `engine_corpus`,
    the `shadow` run of the samples and the corpus, and the Kani harnesses (the last ones
    only when a change can reach them; see `scripts/verify-relevant.sh` and
    `scripts/kani-relevant.sh`). A pull request whose files are all prose
