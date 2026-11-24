@@ -38,9 +38,9 @@
       # TLC runs, and both cut what a run costs before it reaches the model: 0.80 to 0.63 s
       # wall and 0.68 to 0.38 user CPU-s for an 87-state cone.
       #
-      # Not JDK 19 or later: TLC 1.7.4's BufferedRandomAccessFile.read(byte[], int, int) breaks
-      # when it reads back a record still in its write buffer, and from JDK 19 on
-      # RandomAccessFile.readLong reads through it (JDK 17 reads byte by byte), so a `-continue`
+      # Not JDK 21 or later: TLC 1.7.4's BufferedRandomAccessFile.read(byte[], int, int) breaks
+      # when it reads back a record still in its write buffer, and from JDK 21 on
+      # RandomAccessFile.readLong reads through it (JDK 20 read byte by byte), so a `-continue`
       # run that prints many traces dies with an ArrayIndexOutOfBoundsException.
       #
       # The archive is recorded from one run of nix/tlc-cds/Train.tla against the jar's store

@@ -1688,7 +1688,7 @@ Only `--with-tlc` needs TLC. `verify` looks for it in this order: `--tlc-jar`,
   [TLA+ releases](https://github.com/tlaplus/tlaplus/releases), install a JDK, and pass
   `--tlc-jar <path>` or set `RDRA_TLC_JAR=<path>`.
 
-Run TLC 1.7.4 on JDK 17 or earlier. On JDK 19 and later, a `-continue` run that prints
+Run TLC 1.7.4 on JDK 17 or earlier. On JDK 21 and later, a `-continue` run that prints
 many traces stops with `java.lang.ArrayIndexOutOfBoundsException` (`arraycopy: length -N
 is negative`) and `verify` reports a `tool_error`: TLC's own buffered file reads a trace
 record back wrongly once the JDK's `RandomAccessFile.readLong` goes through it (#314).

@@ -360,7 +360,7 @@
   flag; cone runs, whose size is not known when they start, keep the default JIT. The
   engine corpus (306 TLC runs, 159 of them state models) went from 45 s wall and 275 CPU-s
   to 33 s and 151 CPU-s on an 18-core Mac. Verdicts and the parsing of TLC's output are
-  unchanged. Not JDK 21: TLC 1.7.4 reads a trace record back wrongly on JDK 19 and later,
+  unchanged. Not JDK 21: TLC 1.7.4 reads a trace record back wrongly on JDK 21 and later,
   and a `-continue` run that prints many traces stops with an
   `ArrayIndexOutOfBoundsException` (#314); JDK 17 is 3 to 14% slower than 21 on runs past
   about 50,000 states.
