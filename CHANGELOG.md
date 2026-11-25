@@ -212,7 +212,7 @@ No sample changes verdict.
 
 **Memory and speed** (#296)
 
-- A run keeps far fewer bytes per state: states packed into the bits their domains need,
+- A run keeps fewer bytes per state: states packed into the bits their domains need,
   compact edges, and segmented buffers (#207, #255). `--memory` counts those bytes, so a run
   that stopped at the limit now stops later or finishes. The stop point is still the same on
   every machine.
@@ -293,8 +293,8 @@ No sample changes verdict.
   inputs, the `VIA` column of `states`, and the `TimerTriggeredUseCaseUnreachable` and
   `TriggeredUseCaseUnreachable` warnings (#161).
 - A BUC whose id another kind also uses reaches its use cases (#158).
-- `invokes(UseCase, Entity)` with the wrong kinds adds no relation, so no follow-on
-  diagnostics (#159).
+- `invokes(UseCase, Entity)` with the wrong kinds adds no relation, so it draws no
+  follow-on diagnostics (#159).
 - Warnings print in id order (#152); ER relations sort by entity id (#153); a duplicate
   definition leaves no ghost node (#154); a copied enum key column keeps its labels (#155).
 - `diagram --all` fails on an emitter error (#156), and `diagram --help` describes `--all`
