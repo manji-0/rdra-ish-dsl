@@ -6,30 +6,9 @@
 
 use super::conformance::TRACES_FORMAT;
 use super::ir::{DomainModel, Field, FieldType, PortMethod, Scalar, Track};
+use super::probe::{Probe, ProbeWriter};
 use super::string_literal;
 use super::ts::{column_type, doc, doc1, local, property};
-
-/// The contract type of the use case `usecase` (provisional: the IR will name it).
-pub(super) fn contract_name(usecase: &str) -> String {
-    format!("{}UseCase", super::type_ident(usecase))
-}
-
-/// The use cases of the port, in the order of their first method.
-fn usecases(methods: &[PortMethod]) -> Vec<&str> {
-    let mut out: Vec<&str> = Vec::new();
-    for m in methods {
-        if !out.contains(&m.usecase.as_str()) {
-            out.push(&m.usecase);
-        }
-    }
-    out
-}
-
-fn error_type(domain: &DomainModel, usecase: &str) -> String {
-    domain
-        .error_of(usecase)
-        .map_or_else(|| "never".to_string(), |e| e.name.clone())
-}
 
 /// `name: type` per argument of a method's `prepare`.
 fn params(m: &PortMethod) -> Vec<(String, String)> {
@@ -56,28 +35,28 @@ pub(super) fn print_contracts(domain: &DomainModel, out: &mut String) {
     let Some(port) = &domain.port else {
         return;
     };
-    if port.methods.is_empty() {
+    if port.contracts.is_empty() {
         return;
     }
     out.push_str("// ── Contracts: one per use case, which the service implements ──\n\n");
-    for uc in usecases(&port.methods) {
-        let decl = domain.usecases.iter().find(|u| u.id == uc);
+    for c in &port.contracts {
         let mut lines = vec![format!(
-            "What a service offers for the use case {uc}{}: per action, `prepare*` loads its rows by id",
-            decl.and_then(|d| d.site.as_ref())
+            "What a service offers for the use case {} \"{}\"{}: per action, `prepare*` loads its rows",
+            c.usecase,
+            c.label,
+            c.site
+                .as_ref()
                 .map(|s| format!(" ({s})"))
                 .unwrap_or_default()
         )];
-        lines.push("and returns what the core returns, writing nothing; `commit*` stores that result in one".to_string());
-        lines.push("transaction, each row only where it still is what the result expects. Either returns an".to_string());
-        lines.push("error and changes nothing when the use case does not run.".to_string());
+        lines.push("by id and returns what the core returns, writing nothing; `commit*` stores that result in".to_string());
+        lines.push("one transaction, each row only where it still is what the result expects. Either returns".to_string());
+        lines.push("an error and changes nothing when the use case does not run. Async: a TypeScript store is.".to_string());
         out.push_str(&doc(&lines, ""));
-        let error = error_type(domain, uc);
-        out.push_str(&format!(
-            "export type {} = Readonly<{{\n",
-            contract_name(uc)
-        ));
-        for m in port.methods.iter().filter(|m| m.usecase == uc) {
+        // `readonly` members rather than `Readonly<{..}>`: tsc then names the contract in its
+        // messages ("missing ... from type 'ShipUseCase'"), which `check --code` reads.
+        out.push_str(&format!("export type {} = {{\n", c.name));
+        for m in c.methods.iter().map(|&i| &port.methods[i]) {
             out.push_str(&doc1_indent(&format!(
                 "Runs {} (the action {}).",
                 m.usecase, m.action
@@ -87,27 +66,132 @@ pub(super) fn print_contracts(domain: &DomainModel, out: &mut String) {
                 .map(|(n, ty)| format!("{n}: {ty}"))
                 .collect();
             out.push_str(&format!(
-                "  prepare{}: ({}) => Promise<Result<{}, {error}>>;\n",
+                "  readonly prepare{}: ({}) => Promise<Result<{}, {}>>;\n",
                 m.name,
                 ps.join(", "),
-                m.write
+                m.write,
+                c.error
             ));
             out.push_str(&format!(
-                "  commit{}: (write: {}) => Promise<Result<void, {error}>>;\n",
-                m.name, m.write
+                "  readonly commit{}: (write: {}) => Promise<Result<void, {}>>;\n",
+                m.name, m.write, c.error
             ));
         }
-        out.push_str("}>;\n\n");
+        for e in &c.entries {
+            out.push_str(&doc1_indent(&format!(
+                "Runs the action {} of {} whole, by the ids of its rows: the generator printed no function for it (#335), so the service writes it and keeps the obligations.",
+                e.action, c.usecase
+            )));
+            let ps: Vec<String> = e
+                .rows
+                .iter()
+                .map(|(n, ty)| format!("{}: {ty}", local(n)))
+                .collect();
+            out.push_str(&format!(
+                "  readonly {}: ({}) => Promise<Result<void, {}>>;\n",
+                entry_name(&e.name),
+                ps.join(", "),
+                c.error
+            ));
+        }
+        out.push_str("};\n\n");
     }
+}
+
+/// The member of an entry point (#335): `run<Action>`.
+pub(super) fn entry_name(name: &str) -> String {
+    format!("run{name}")
+}
+
+/// The probe of `check --code` (docs/design/code-check.md): one line per contract, a function
+/// that takes the service and returns it as the contract, so tsc reports a missing or
+/// mistyped member on that line; and with `binding.conformance`, the conformance test, which
+/// Node runs as it is (type stripping). In TypeScript `binding.service` is
+/// `<import specifier>#<exported type>` and `binding.module` the domain file's specifier, both
+/// relative to the probe; the `new` expression sees the service module as `service`.
+pub(super) fn probe(domain: &DomainModel, binding: &super::ProbeBinding) -> Option<Probe> {
+    let port = domain.port.as_ref()?;
+    if port.contracts.is_empty() {
+        return None;
+    }
+    let (specifier, ty) = binding.service.rsplit_once('#')?;
+    let test = binding.conformance.as_ref().filter(|_| domain.harness);
+    // Type-only imports unless the test runs: the probe alone loads nothing.
+    let import = if test.is_some() {
+        "import"
+    } else {
+        "import type"
+    };
+    let mut w = ProbeWriter::new(
+        "// Generated by rdra-ish codegen (experimental): the contract probe of `check --code`.",
+    );
+    w.line("// Never edited by hand: `rdra-ish codegen --code` writes it again. A type error on a");
+    w.line("// use case's line is that use case not implemented by the service.");
+    w.line(&format!(
+        "{import} * as domain from {};",
+        string_literal(&binding.module)
+    ));
+    w.line(&format!(
+        "{import} * as service from {};",
+        string_literal(specifier)
+    ));
+    w.line("");
+    w.line(&format!("type Service = service.{ty};"));
+    w.line("");
+    for c in &port.contracts {
+        w.usecase(
+            &format!(
+                "export const _{} = (it: Service): domain.{} => it; // usecase {}",
+                c.usecase, c.name, c.usecase
+            ),
+            c,
+        );
+    }
+    if let Some((new, traces)) = test {
+        w.line("");
+        w.line(
+            "// The service against the model's traces, by the generated harness. What it needs of",
+        );
+        w.line("// Node is declared here, so the probe builds with or without @types/node.");
+        w.line("declare const process: {");
+        w.line("  exitCode: number | undefined;");
+        w.line(
+            "  getBuiltinModule: (id: \"node:fs\") => { readFileSync: (path: string, encoding: \"utf8\") => string };",
+        );
+        w.line("};");
+        w.line("declare const console: { log: (line: string) => void; error: (line: string) => void };");
+        w.line(&format!(
+            "const traces = process.getBuiltinModule(\"node:fs\").readFileSync({}, \"utf8\");",
+            string_literal(traces)
+        ));
+        w.line(&format!(
+            "domain.conform((): Service => {new}, traces).then("
+        ));
+        w.line("  (r) => {");
+        w.line("    if (r.ok) {");
+        w.line("      const { traces: t, calls, refusals, interleavings } = r.value;");
+        w.line("      console.log(`rdra-ish conformance: ok ${t} traces, ${calls} calls, ${refusals} refusals, ${interleavings} interleavings`);");
+        w.line("    } else {");
+        w.line("      console.error(`rdra-ish conformance: ${r.error}`);");
+        w.line("      process.exitCode = 1;");
+        w.line("    }");
+        w.line("  },");
+        w.line("  (e: unknown) => {");
+        w.line("    console.error(`rdra-ish conformance: the service threw: ${String(e)}`);");
+        w.line("    process.exitCode = 1;");
+        w.line("  },");
+        w.line(");");
+    }
+    Some(w.finish())
 }
 
 fn doc1_indent(line: &str) -> String {
     doc(&[line.to_string()], "  ")
 }
 
-/// The port and the harness.
+/// The port and the harness, with `--conformance` only.
 pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
-    let Some(port) = &domain.port else {
+    let (Some(port), true) = (&domain.port, domain.harness) else {
         return;
     };
     let mut p = String::new();
@@ -156,8 +240,8 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
         "",
     ));
     p.push_str("export type ConformancePort = Readonly<{\n  seed: (rows: StoreSnapshot) => Promise<void>;\n  snapshot: () => Promise<StoreSnapshot>;\n}>");
-    for uc in usecases(&port.methods) {
-        p.push_str(&format!(" &\n  {}", contract_name(uc)));
+    for c in &port.contracts {
+        p.push_str(&format!(" &\n  {}", c.name));
     }
     p.push_str(";\n\n");
 

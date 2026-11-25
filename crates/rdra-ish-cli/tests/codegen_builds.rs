@@ -320,6 +320,94 @@ fn rust_probes_name_every_contract() {
     assert!(checked > 100, "only {checked} probe lines checked");
 }
 
+/// The TypeScript probe of every sample `check` passes names each contract on its own line:
+/// checked against the generated module with a service type that has no member of any
+/// contract, tsc reports a missing member (TS2739, TS2740 or TS2741) on every use case line of
+/// the line map, and nothing else.
+#[test]
+fn typescript_probes_name_every_contract() {
+    if !available("tsc") {
+        return;
+    }
+    let mut checked = 0;
+    for sample in samples() {
+        if !codegen_cases::check_passes(&sample) {
+            continue;
+        }
+        let project = rdra_ish_core::load_project(&[repo().join(&sample)], None).expect("loads");
+        let domain = rdra_ish_emit::codegen::build_with(
+            &project.model,
+            Some(codegen_cases::caps()),
+            false,
+            &|_| None,
+        )
+        .expect("builds");
+        let binding = rdra_ish_emit::codegen::ProbeBinding {
+            service: "./nothing.ts#Nothing".to_string(),
+            module: "./domain.ts".to_string(),
+            conformance: None,
+        };
+        let Some(probe) = rdra_ish_emit::codegen::probe_for(
+            rdra_ish_emit::codegen::Lang::TypeScript,
+            &domain,
+            &binding,
+        ) else {
+            continue;
+        };
+        let dir = scratch("ts-probe", &sample);
+        generate(&sample, "ts", &dir, "domain.ts");
+        std::fs::write(
+            dir.join("nothing.ts"),
+            "/** A service that implements no contract. */\nexport type Nothing = Readonly<{ nothing: true }>;\n",
+        )
+        .unwrap();
+        // The file as written: the fingerprint is its second line.
+        let (first, rest) = probe.text.split_once('\n').expect("a first line");
+        std::fs::write(
+            dir.join("probe.ts"),
+            format!("{first}\n// fingerprint\n{rest}"),
+        )
+        .unwrap();
+        let out = Command::new("tsc")
+            .args([
+                "--strict",
+                "--noEmit",
+                "--pretty",
+                "false",
+                "--target",
+                "es2022",
+                "--module",
+                "nodenext",
+                "--allowImportingTsExtensions",
+                "--noUnusedLocals",
+            ])
+            .arg(dir.join("probe.ts"))
+            .output()
+            .expect("runs tsc");
+        let mut lines = std::collections::BTreeSet::new();
+        for line in String::from_utf8_lossy(&out.stdout).lines() {
+            let Some((head, text)) = line.split_once("): error ") else {
+                continue;
+            };
+            assert!(head.contains("probe.ts("), "{sample}: {line}");
+            let code = text.split(':').next().unwrap_or_default();
+            assert!(
+                ["TS2739", "TS2740", "TS2741"].contains(&code),
+                "{sample}: {line}"
+            );
+            let at = head.rsplit_once('(').unwrap().1;
+            lines.insert(at.split(',').next().unwrap().parse::<usize>().unwrap());
+        }
+        let want: std::collections::BTreeSet<usize> = probe.lines.iter().map(|l| l.line).collect();
+        assert_eq!(
+            lines, want,
+            "{sample}: missing-member lines against the line map"
+        );
+        checked += want.len();
+    }
+    assert!(checked > 100, "only {checked} probe lines checked");
+}
+
 #[test]
 fn go_builds() {
     if !available("go") {

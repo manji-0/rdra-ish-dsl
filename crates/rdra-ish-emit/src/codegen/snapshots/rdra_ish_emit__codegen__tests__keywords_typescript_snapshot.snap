@@ -1383,3 +1383,113 @@ export function runNew(parentFunction: Function, parentFunc: Func, parentMod: Mo
   }
   return { ok: false, error: { kind: "NotEnabled", usecase: "New" } };
 }
+
+// ── Contracts: one per use case, which the service implements ──
+
+/**
+ * What a service offers for the use case Return "Return": per action, `prepare*` loads its rows
+ * by id and returns what the core returns, writing nothing; `commit*` stores that result in
+ * one transaction, each row only where it still is what the result expects. Either returns
+ * an error and changes nothing when the use case does not run. Async: a TypeScript store is.
+ */
+export type ReturnUseCase = {
+  /** Runs Return (the action Return). */
+  readonly prepareReturn: (match: MatchId) => Promise<Result<ReturnOutcome, ReturnError>>;
+  readonly commitReturn: (write: ReturnOutcome) => Promise<Result<void, ReturnError>>;
+};
+
+/**
+ * What a service offers for the use case Delete "Delete": per action, `prepare*` loads its rows
+ * by id and returns what the core returns, writing nothing; `commit*` stores that result in
+ * one transaction, each row only where it still is what the result expects. Either returns
+ * an error and changes nothing when the use case does not run. Async: a TypeScript store is.
+ */
+export type DeleteUseCase = {
+  /** Runs Delete (the action Delete). */
+  readonly prepareDelete: (match: MatchId, switch_: Switch) => Promise<Result<DeleteOutcome, DeleteError>>;
+  readonly commitDelete: (write: DeleteOutcome) => Promise<Result<void, DeleteError>>;
+};
+
+/**
+ * What a service offers for the use case Super "Super": per action, `prepare*` loads its rows
+ * by id and returns what the core returns, writing nothing; `commit*` stores that result in
+ * one transaction, each row only where it still is what the result expects. Either returns
+ * an error and changes nothing when the use case does not run. Async: a TypeScript store is.
+ */
+export type SuperUseCase = {
+  /** Runs Super (the action Super). */
+  readonly prepareSuper: (match: MatchId) => Promise<Result<SuperOutcome, SuperError>>;
+  readonly commitSuper: (write: SuperOutcome) => Promise<Result<void, SuperError>>;
+};
+
+/**
+ * What a service offers for the use case Crate "Crate": per action, `prepare*` loads its rows
+ * by id and returns what the core returns, writing nothing; `commit*` stores that result in
+ * one transaction, each row only where it still is what the result expects. Either returns
+ * an error and changes nothing when the use case does not run. Async: a TypeScript store is.
+ */
+export type CrateUseCase = {
+  /** Runs Crate (the action Crate). */
+  readonly prepareCrate: (match: MatchId) => Promise<Result<CrateOutcome, CrateError>>;
+  readonly commitCrate: (write: CrateOutcome) => Promise<Result<void, CrateError>>;
+};
+
+/**
+ * What a service offers for the use case Default "Default": per action, `prepare*` loads its rows
+ * by id and returns what the core returns, writing nothing; `commit*` stores that result in
+ * one transaction, each row only where it still is what the result expects. Either returns
+ * an error and changes nothing when the use case does not run. Async: a TypeScript store is.
+ */
+export type DefaultUseCase = {
+  /** Runs Default (the action Default). */
+  readonly prepareDefault: (match: MatchId) => Promise<Result<DefaultOutcome, DefaultError>>;
+  readonly commitDefault: (write: DefaultOutcome) => Promise<Result<void, DefaultError>>;
+};
+
+/**
+ * What a service offers for the use case Type "Type": per action, `prepare*` loads its rows
+ * by id and returns what the core returns, writing nothing; `commit*` stores that result in
+ * one transaction, each row only where it still is what the result expects. Either returns
+ * an error and changes nothing when the use case does not run. Async: a TypeScript store is.
+ */
+export type TypeUseCase = {
+  /** Runs Type (the action Type). */
+  readonly prepareType: (func: FuncId) => Promise<Result<TypeOutcome, TypeError>>;
+  readonly commitType: (write: TypeOutcome) => Promise<Result<void, TypeError>>;
+};
+
+/**
+ * What a service offers for the use case Class "Class": per action, `prepare*` loads its rows
+ * by id and returns what the core returns, writing nothing; `commit*` stores that result in
+ * one transaction, each row only where it still is what the result expects. Either returns
+ * an error and changes nothing when the use case does not run. Async: a TypeScript store is.
+ */
+export type ClassUseCase = {
+  /** Runs Class (the action Class). */
+  readonly prepareClass: (func: FuncId) => Promise<Result<ClassOutcome, ClassError>>;
+  readonly commitClass: (write: ClassOutcome) => Promise<Result<void, ClassError>>;
+};
+
+/**
+ * What a service offers for the use case New "New": per action, `prepare*` loads its rows
+ * by id and returns what the core returns, writing nothing; `commit*` stores that result in
+ * one transaction, each row only where it still is what the result expects. Either returns
+ * an error and changes nothing when the use case does not run. Async: a TypeScript store is.
+ */
+export type NewUseCase = {
+  /** Runs New (the action New). */
+  readonly prepareNew: (parentFunction: FunctionId, parentFunc: FuncId, parentMod: ModId, matchId: MatchId, matchType: string, matchNew: string, matchFunc: string, matchSelf: string, matchCrate: string, matchSuper: string, matchKind: Kind) => Promise<Result<NewOutcome, NewError>>;
+  readonly commitNew: (write: NewOutcome) => Promise<Result<void, NewError>>;
+};
+
+/**
+ * What a service offers for the use case Static "Static": per action, `prepare*` loads its rows
+ * by id and returns what the core returns, writing nothing; `commit*` stores that result in
+ * one transaction, each row only where it still is what the result expects. Either returns
+ * an error and changes nothing when the use case does not run. Async: a TypeScript store is.
+ */
+export type StaticUseCase = {
+  /** Runs Static (the action Static). */
+  readonly prepareStatic: (function_: FunctionId, functionDefault: string) => Promise<Result<StaticResult, StaticError>>;
+  readonly commitStatic: (write: StaticResult) => Promise<Result<void, StaticError>>;
+};

@@ -69,6 +69,9 @@
   The output builds under `tsc --strict` with `noUnusedLocals`, `noUnusedParameters`,
   `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess` and
   `noPropertyAccessFromIndexSignature`; it needs TypeScript 4.9 or later (`satisfies`).
+  `Symbol` joins `Result` and `assertNever` as a name the TypeScript output writes, so a model
+  type of that name is a `NameCollision`; a model name that takes `parse<Row>` moves the
+  parser to `parse<Row>_`.
 
 - Two `@null` columns that both hold null are no longer equal (#355). `col == other` between
   two columns holds only when both are present and equal, and `col != other` holds whenever
@@ -231,7 +234,23 @@
   contracts, one `<UseCase>UseCase` type per use case with `prepare*` / `commit*` function
   properties that return `Promise<Result<..>>`, the `ConformancePort` that composes them with
   `seed` and `snapshot`, and `conform(newPort, traces)`, the harness the Rust and Go output
-  already had. It reports the same differences, refusals, and interleaved commits.
+  already had. It reports the same differences, refusals, and interleaved commits. The
+  contracts are printed without `--conformance` too, as `type <UseCase>UseCase = { readonly
+  ... }`, so tsc names them in its messages; an action with no printed function is a
+  `run<Action>` member (#335).
+- `check --code=build` and `--code=run` for TypeScript (#363, experimental): `[code.ts]`
+  `probe` and `service` (`<file>#<ExportedType>`) bind the service, and `codegen --code`
+  writes the probe and a `tsconfig.rdra.json` that extends the project's tsconfig
+  (`[code.ts] tsconfig`, else the root's `tsconfig.json`) and holds only the probe. `build`
+  runs `tsc --noEmit -p tsconfig.rdra.json` and maps TS2739 / TS2740 / TS2741 / TS2322 to
+  `CodeMissingUseCase_*`, `CodeIncomplete_*` and `CodeSignature_*`; `run` runs the probe's
+  conformance test with `node <probe>`, which needs Node 22.18 or later (type stripping) or a
+  `run` command in the table.
+- `codegen --lang ts --seal` and `[code.ts] seal = true` (#363, experimental): each state type
+  carries a property keyed by a `unique symbol` the module does not export, so code outside it
+  cannot build a state from an object literal (TS2741); a type assertion still can.
+  `--seal` with another language is a usage error (exit 2), and `seal` or `tsconfig` under
+  `[code.rust]` or `[code.go]` makes `--code` exit 1.
 - `check --code[=fresh|build|run]` (#363, experimental; [design](docs/design/code-check.md)):
   does the service code have what the model requires? `[code.rust]`, `[code.go]` and
   `[code.ts]` in `rdra.toml` name the generated files, `codegen <INPUTS> --code` writes them

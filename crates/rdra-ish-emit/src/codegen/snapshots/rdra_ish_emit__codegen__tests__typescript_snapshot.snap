@@ -668,3 +668,41 @@ export function runCancelOrder(order: Order): Result<CancelOrderOutcome, CancelO
   }
   return { ok: false, error: { kind: "NotEnabled", usecase: "CancelOrder" } };
 }
+
+// ── Contracts: one per use case, which the service implements ──
+
+/**
+ * What a service offers for the use case Pay "Pay": per action, `prepare*` loads its rows
+ * by id and returns what the core returns, writing nothing; `commit*` stores that result in
+ * one transaction, each row only where it still is what the result expects. Either returns
+ * an error and changes nothing when the use case does not run. Async: a TypeScript store is.
+ */
+export type PayUseCase = {
+  /** Runs Pay (the action Pay). */
+  readonly preparePay: (order: OrderId, orderPaidAt: DateTime) => Promise<Result<PayOutcome, PayError>>;
+  readonly commitPay: (write: PayOutcome) => Promise<Result<void, PayError>>;
+};
+
+/**
+ * What a service offers for the use case CancelOrder "Cancel": per action, `prepare*` loads its rows
+ * by id and returns what the core returns, writing nothing; `commit*` stores that result in
+ * one transaction, each row only where it still is what the result expects. Either returns
+ * an error and changes nothing when the use case does not run. Async: a TypeScript store is.
+ */
+export type CancelOrderUseCase = {
+  /** Runs CancelOrder (the action CancelOrder). */
+  readonly prepareCancelOrder: (order: OrderId) => Promise<Result<CancelOrderOutcome, CancelOrderError>>;
+  readonly commitCancelOrder: (write: CancelOrderOutcome) => Promise<Result<void, CancelOrderError>>;
+};
+
+/**
+ * What a service offers for the use case Place "Place": per action, `prepare*` loads its rows
+ * by id and returns what the core returns, writing nothing; `commit*` stores that result in
+ * one transaction, each row only where it still is what the result expects. Either returns
+ * an error and changes nothing when the use case does not run. Async: a TypeScript store is.
+ */
+export type PlaceUseCase = {
+  /** Runs Place (the action Place). */
+  readonly preparePlace: (parentCustomer: CustomerId, orderId: OrderId, orderMethod: PaymentMethod) => Promise<Result<PlaceResult, PlaceError>>;
+  readonly commitPlace: (write: PlaceResult) => Promise<Result<void, PlaceError>>;
+};

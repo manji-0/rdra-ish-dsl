@@ -9,7 +9,12 @@ use super::{header_lines, obligation_lines, one_line, string_literal, Options};
 /// What the printers below read of the model.
 struct Cx<'a> {
     domain: &'a DomainModel,
+    /// `--seal`: the state types carry the module's brand.
+    seal: bool,
 }
+
+/// The property a sealed state has and only this module can write (`--seal`).
+const SEAL: &str = "[$sealed]: true";
 
 impl Cx<'_> {
     /// The property a column `wire` has on a value of type `ty`: its domain name
@@ -44,7 +49,10 @@ pub(super) fn print(
     options: &Options,
     traces: Option<&super::conformance::Traces>,
 ) -> String {
-    let cx = Cx { domain };
+    let cx = Cx {
+        domain,
+        seal: options.seal,
+    };
     let mut head = String::new();
     for line in header_lines(options) {
         head.push_str(&comment(&line));
@@ -498,16 +506,25 @@ fn reader(ty: &FieldType, nullable: bool) -> String {
     }
 }
 
+/// `parse<Row>`: the name `derived_names` claimed for the parser of the row type `ty`.
+pub(super) fn parser_name(domain: &DomainModel, ty: &str) -> String {
+    fn_name(
+        domain
+            .derived(&format!("ts:parse:{ty}"))
+            .unwrap_or(&format!("Parse{ty}")),
+    )
+}
+
 /// `parse<Type>(value: unknown): Result<Type, InvalidRow>`: the boundary check of a row from a
 /// store or the wire, each column read by its value type's parser.
-fn row_parser(ty: &str, entity: &str, fields: &[Field]) -> String {
+fn row_parser(cx: &Cx<'_>, ty: &str, entity: &str, fields: &[Field]) -> String {
     let mut out = doc(
         &[format!(
             "Reads a {ty} from outside (a store, the wire): the row, or InvalidRow naming the first column that is not of its type."
         )],
         "",
     );
-    let name = binding(format!("parse{ty}"));
+    let name = parser_name(cx.domain, ty);
     out.push_str(&format!(
         "export function {name}(value: unknown): Result<{ty}, InvalidRow> {{\n"
     ));
@@ -562,7 +579,7 @@ fn print_records(cx: &Cx<'_>, out: &mut String) {
             out.push_str(&format!("export type {} = Readonly<{{\n", record.name));
             out.push_str(&properties(&record.fields));
             out.push_str("}>;\n\n");
-            out.push_str(&row_parser(&record.name, &record.id, &record.fields));
+            out.push_str(&row_parser(cx, &record.name, &record.id, &record.fields));
         }
     }
 }
@@ -577,6 +594,17 @@ fn print_sums(cx: &Cx<'_>, out: &mut String) {
         return;
     }
     out.push_str("// ── Entities with states ──\n\n");
+    if cx.seal {
+        out.push_str(&doc(
+            &[
+                "The brand of the state types (`--seal`): the module does not export it, so code outside".to_string(),
+                "cannot write a state as an object literal; only `fromRow` and the transition functions".to_string(),
+                "make one. A type assertion (`as`) still gets around it.".to_string(),
+            ],
+            "",
+        ));
+        out.push_str("const $sealed: unique symbol = Symbol(\"rdra-ish state\");\n\n");
+    }
     for sum in &cx.domain.sums {
         let kind = &sum.kind;
         out.push_str(&doc1(&format!(
@@ -597,6 +625,9 @@ fn print_sums(cx: &Cx<'_>, out: &mut String) {
                 "  kind: {};\n",
                 string_literal(&variant.value.ident)
             ));
+            if cx.seal {
+                out.push_str(&format!("  {SEAL};\n"));
+            }
             out.push_str(&properties(&variant.fields));
             for field in &variant.always_null {
                 out.push_str(&doc(&field.doc, "  "));
@@ -682,6 +713,9 @@ fn print_sums(cx: &Cx<'_>, out: &mut String) {
                 "            kind: {},\n",
                 string_literal(&v.value.ident)
             ));
+            if cx.seal {
+                out.push_str(&format!("            {SEAL},\n"));
+            }
             for f in &v.fields {
                 out.push_str(&format!(
                     "            {}: row.{},\n",
@@ -740,7 +774,7 @@ fn print_rows(cx: &Cx<'_>, out: &mut String) {
             ));
         }
         out.push_str("}>;\n\n");
-        out.push_str(&row_parser(&sum.row, &sum.entity, &sum.row_fields));
+        out.push_str(&row_parser(cx, &sum.row, &sum.entity, &sum.row_fields));
     }
 }
 
@@ -1064,6 +1098,9 @@ fn print_functions(cx: &Cx<'_>, out: &mut String) {
                             "        kind: {},\n",
                             string_literal(&value.ident)
                         ));
+                        if cx.seal {
+                            out.push_str(&format!("        {SEAL},\n"));
+                        }
                     }
                     for (target, assigned) in fields {
                         let v = match assigned {

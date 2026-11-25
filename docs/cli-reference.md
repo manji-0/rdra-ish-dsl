@@ -210,7 +210,14 @@ The last line on stdout, after the model check's `OK:` line, is
 At `build`, each compiler error goes back to a use case: by the probe line it is on (the
 probe has one line per use case), or by the generated method or contract it names. In Rust
 the build is `cargo check --test <probe> --message-format=json` in the table's `root`, and
-`run` is `cargo test --test <probe> -- rdra_conformance`. One block per use case and kind:
+`run` is `cargo test --test <probe> -- rdra_conformance`. In TypeScript the build is
+`tsc --noEmit --pretty false -p tsconfig.rdra.json` in the root, a generated file that
+extends the project's tsconfig and holds only the probe, and `run` is `node <probe>`: Node
+runs the probe and the service as they are, by its type stripping, so it needs Node 22.18 or
+later and the service's imports name the `.ts` files (`import * as d from "./domain.ts"`).
+An older Node fails `run` with a `CodeConformance` that says so; a project that runs
+TypeScript another way gives `run` in its table (`["npx", "tsx", "src/rdra_contract.ts"]`).
+One block per use case and kind:
 
 ```
 error[CodeMissingUseCase_Ship]: use case Ship has no implementation in svc::service::Service
@@ -221,9 +228,9 @@ error[CodeMissingUseCase_Ship]: use case Ship has no implementation in svc::serv
 
 | Name | When |
 |---|---|
-| `CodeMissingUseCase_<UseCase>` | The service does not implement the use case's contract (Rust E0277). |
-| `CodeIncomplete_<UseCase>` | It implements the contract without some of its methods (E0046). |
-| `CodeSignature_<UseCase>` | A method takes or returns other types than the contract's (E0053, E0050). |
+| `CodeMissingUseCase_<UseCase>` | The service does not implement the use case's contract (Rust E0277; TypeScript TS2739 / TS2740 / TS2741 naming every member). |
+| `CodeIncomplete_<UseCase>` | It implements the contract without some of its methods (E0046; TS2739 / TS2740 / TS2741). |
+| `CodeSignature_<UseCase>` | A method takes or returns other types than the contract's (E0053, E0050; TS2322). |
 | `CodeError_<UseCase>` | Another error on the use case's probe line or naming its methods. |
 | `CodeUnmapped` | The count of the errors that belong to no use case, the first one quoted. |
 | `CodeBuildFailed` | The build failed with no error rdra-ish reads. |
@@ -706,6 +713,13 @@ domain = "../service/src/domain.rs"        # the codegen output
 traces = "../service/tests/traces.txt"     # with it, domain holds the conformance harness
 conformance_states = 65536                 # --conformance-states of the traces
 
+[code.ts]
+domain = "../web/src/domain.ts"
+traces = "../web/src/traces.txt"
+probe = "../web/src/rdra_contract.ts"
+service = "../web/src/order_service.ts#OrderService"
+seal = true
+
 [code.obligations]
 Unique_Payment_Order = "../service/migrations/003_payment.sql"
 ```
@@ -713,18 +727,21 @@ Unique_Payment_Order = "../service/migrations/003_payment.sql"
 | Key | Description |
 |---|---|
 | `domain` | The domain code `codegen` prints for the language. |
-| `traces` | Rust and Go: the conformance traces. With it, `domain` also holds the conformance port and harness (`--conformance`). |
+| `traces` | The conformance traces. With it, `domain` also holds the conformance port and harness (`--conformance`). |
 | `conformance_states` | The states the BFS behind the traces explores at most. Default `65536`. |
 | `package` | Go: the package name of `domain` (`--package`). Default `domain`. |
-| `probe` | The probe `codegen --code` (or `--probe`) writes: in Rust a file under the service crate's `tests/`, one line per use case stating that `service` implements that use case's contract (`<UseCase>UseCase`). `build` needs it. |
-| `service` | The service type, as the probe names it: `svc::service::Service`. |
-| `module` | The path of the generated module in the service's crate: `svc::domain`. |
-| `new` | An expression that makes a fresh service. With `traces`, the probe also holds the conformance test, `rdra_conformance`, which `run` runs. |
+| `probe` | The probe `codegen --code` (or `--probe`) writes: in Rust a file under the service crate's `tests/`, in TypeScript a `.ts` file anywhere in the project; one line per use case stating that `service` implements that use case's contract (`<UseCase>UseCase`). `build` needs it. In TypeScript `codegen --code` also writes `tsconfig.rdra.json` in `root`. |
+| `service` | The service type, as the probe names it. Rust: its path, `svc::service::Service`. TypeScript: its file, relative to `rdra.toml`, and the exported type or class after `#`, `../web/src/order_service.ts#OrderService`. |
+| `module` | Rust: the path of the generated module in the service's crate: `svc::domain`. |
+| `new` | An expression that makes a fresh service. With `traces`, the probe also holds the conformance test, `rdra_conformance` in Rust, which `run` runs. Rust: required for the test. TypeScript: default `new service.<Type>()`, where `service` is the service's module. |
+| `seal` | TypeScript: `true` writes `domain` as `codegen --seal` does. Default `false`. |
+| `tsconfig` | TypeScript: the tsconfig `tsconfig.rdra.json` extends. Default: `tsconfig.json` in `root` when it exists; without one, `tsconfig.rdra.json` sets `strict` itself. |
 | `root` | The directory the build command runs in. Default: the nearest directory above `domain` that holds `Cargo.toml`, `go.mod`, `package.json` or `tsconfig.json`. |
 | `build`, `run` | The command `check --code=build` / `--code=run` runs in place of the language's default, as a list of arguments. It runs only when that level is given on the command line, never from the LSP. |
 
 An unknown key under `[code]` or one of its tables makes every loading command exit `1`, as
-under `[check]`.
+under `[check]`. `seal` or `tsconfig` under `[code.rust]` or `[code.go]` makes `--code` exit
+`1`.
 
 The LSP does not run `codegen` or a build. When the model's source text is not the text a
 file under `[code]` was generated from (its fingerprint's model hash), or the file is missing
@@ -2076,7 +2093,7 @@ describes where `codegen` is going.
 
 ```
 rdra-ish codegen <INPUTS...> --lang <LANG> [-o <FILE> | --check <FILE>] [--package <NAME>] [--allow-failing]
-                 [--conformance <FILE> [--conformance-states <N>]]
+                 [--conformance <FILE> [--conformance-states <N>]] [--seal]
 rdra-ish codegen <INPUTS...> --format json [-o <FILE>] [--allow-failing]
 rdra-ish codegen <INPUTS...> --code
 ```
@@ -2093,6 +2110,7 @@ rdra-ish codegen <INPUTS...> --code
 | `--allow-failing` | flag | off | Generate even when `check` reports errors. The state types then narrow no column, and each error is listed as an obligation the model does not meet. |
 | `--conformance` | path | — (no harness) | On a model `check` passes: also print the conformance port and harness, and write to this file the traces the harness drives a finished service along. |
 | `--conformance-states` | integer | `65536` | The states the BFS behind the traces explores at most. |
+| `--seal` | flag | off | `--lang ts` only (another language is a usage error, exit `2`): every state type gets a property keyed by a `unique symbol` the module does not export, so code outside the module cannot write a state as an object literal (TS2741); only `fromRow` and the transition functions make one. A type assertion (`as`) still gets around it. Experimental, outside the compatibility contract. |
 | `--check` | path | — | Generate again and compare the result with this file instead of printing it. Exit 1 when they differ. Not with `-o`. With `--conformance <TRACES>`, the traces in `TRACES` are compared too, by hash. |
 
 The output is one compilation unit: a TypeScript module, a Rust module file, or a Go file.

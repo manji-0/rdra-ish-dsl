@@ -55,6 +55,9 @@ pub struct Options {
     /// Print the conformance port and harness, and write the traces of a BFS
     /// that stops at this many states.
     pub conformance: Option<usize>,
+    /// TypeScript: brand the state types with a symbol only the module can name, so only its
+    /// functions make a state (decision 9 of docs/design/code-check.md: opt-in).
+    pub seal: bool,
 }
 
 /// The result of the `check` the generator ran before printing.
@@ -154,7 +157,8 @@ pub struct ProbeBinding {
 pub fn probe_for(lang: Lang, domain: &DomainModel, binding: &ProbeBinding) -> Option<probe::Probe> {
     match lang {
         Lang::Rust => rust_port::probe(domain, binding),
-        Lang::Go | Lang::TypeScript => None,
+        Lang::TypeScript => ts_port::probe(domain, binding),
+        Lang::Go => None,
     }
 }
 
@@ -388,7 +392,8 @@ pub fn build_with(
 /// model type of that name is a collision ([`build_for`]).
 pub fn reserved_names(lang: Lang) -> &'static [&'static str] {
     match lang {
-        Lang::TypeScript => &["Result", "assertNever"],
+        // `Symbol`: the sealed state types need the global one (`--seal`).
+        Lang::TypeScript => &["Result", "assertNever", "Symbol"],
         Lang::Rust | Lang::Go => &[],
     }
 }
@@ -410,12 +415,26 @@ pub struct DerivedName {
 /// The names `lang`'s printer derives from the IR's names, beyond the IR's own fields.
 /// Each language's pull request fills in its arm.
 pub fn derived_names(lang: Lang, domain: &DomainModel) -> Vec<DerivedName> {
-    let _ = domain;
     match lang {
         // Every name the Rust output declares in the module scope is a field of the IR:
         // the Rust printer derives none.
         Lang::Rust => Vec::new(),
-        Lang::Go | Lang::TypeScript => Vec::new(),
+        Lang::Go => Vec::new(),
+        // The boundary parser of each row type, `parse<Row>`, claimed in PascalCase as the
+        // functions are (the printer writes it in camelCase).
+        Lang::TypeScript => {
+            let rows = domain
+                .records
+                .iter()
+                .map(|r| r.name.as_str())
+                .chain(domain.sums.iter().map(|s| s.row.as_str()));
+            rows.map(|row| DerivedName {
+                key: format!("ts:parse:{row}"),
+                name: format!("Parse{row}"),
+                by: format!("the parser of {row}"),
+            })
+            .collect()
+        }
     }
 }
 

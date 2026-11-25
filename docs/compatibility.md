@@ -207,7 +207,12 @@ The contract does not cover the following:
   `Rejected`, `InvalidArgument`, `<UseCase>Error`, `ExpectedSource`, and dispatchers;
 - the types of entities that are not state types, and of DTOs, and their parsers;
 - which models fail with a `NameCollision`: the experimental declarations share the
-  namespace, so a new one can collide with a model's name;
+  namespace, so a new one can collide with a model's name. A model type named `Result`,
+  `assertNever` or `Symbol` (which `--seal` calls) fails with one, and a model name that
+  takes a derived name (`parse<Row>`) pushes that name to a trailing `_`;
+- the contracts (`<UseCase>UseCase`), the conformance port and harness, and the probe and
+  `tsconfig.rdra.json` that `codegen --code` writes;
+- the output of `--seal`;
 - the output of `--allow-failing`, `--package`, and `--lang rust` or `--lang go`.
 
 ### The TLA+ export

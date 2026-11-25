@@ -232,21 +232,34 @@ pub fn run() -> Result<()> {
             allow_failing,
             conformance,
             conformance_states,
+            seal,
             check,
-        } => codegen_cmd::run_codegen(codegen_cmd::CodegenArgs {
-            inputs: &inputs,
-            lang,
-            json: format == cli::CodegenFormat::Json,
-            out: out.as_deref(),
-            package: &package,
-            allow_failing,
-            conformance: conformance
-                .as_deref()
-                .map(|path| (path, conformance_states)),
-            check_file: check.as_deref(),
-            code,
-            probe,
-        })?,
+        } => {
+            if seal && !matches!(lang, Some(cli::CodegenLang::Ts) | None) {
+                use clap::CommandFactory;
+                Cli::command()
+                    .error(
+                        clap::error::ErrorKind::ArgumentConflict,
+                        "--seal is for --lang ts only",
+                    )
+                    .exit();
+            }
+            codegen_cmd::run_codegen(codegen_cmd::CodegenArgs {
+                inputs: &inputs,
+                lang,
+                json: format == cli::CodegenFormat::Json,
+                out: out.as_deref(),
+                package: &package,
+                allow_failing,
+                conformance: conformance
+                    .as_deref()
+                    .map(|path| (path, conformance_states)),
+                seal,
+                check_file: check.as_deref(),
+                code,
+                probe,
+            })?
+        }
 
         Commands::Files { inputs } => {
             let files = collect_rdra_files(&inputs, None)?;

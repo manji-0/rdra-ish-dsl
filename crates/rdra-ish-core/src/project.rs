@@ -84,6 +84,11 @@ pub struct CodeTarget {
     pub build: Option<Vec<String>>,
     /// The command `check --code=run` runs in place of the language's default, as argv.
     pub run: Option<Vec<String>>,
+    /// TypeScript: generate the state types sealed (`codegen --seal`).
+    pub seal: Option<bool>,
+    /// TypeScript: the project's tsconfig that the generated `tsconfig.rdra.json` extends.
+    /// Default: `tsconfig.json` in `root`, when it exists.
+    pub tsconfig: Option<PathBuf>,
 }
 
 impl Manifest {

@@ -36,6 +36,8 @@ pub(crate) struct Request {
     pub allow_failing: bool,
     /// The states the BFS behind the traces explores at most, when the harness is asked for.
     pub conformance: Option<usize>,
+    /// TypeScript: seal the state types (`--seal`, `[code.ts] seal`).
+    pub seal: bool,
     /// The inputs as the header names them.
     pub model_path: String,
     /// Sites print relative to this directory; the working directory when `None`.
@@ -82,6 +84,7 @@ pub(crate) struct CodegenArgs<'a> {
     pub package: &'a str,
     pub allow_failing: bool,
     pub conformance: Option<(&'a Path, usize)>,
+    pub seal: bool,
     pub check_file: Option<&'a Path>,
     pub code: bool,
     pub probe: bool,
@@ -108,12 +111,16 @@ pub fn run_codegen(args: CodegenArgs<'_>) -> Result<()> {
         (None, true) => Lang::TypeScript,
         (None, false) => bail!("--lang is required, except with --code or --format json"),
     };
+    if args.seal && lang != Lang::TypeScript {
+        bail!("--seal is for --lang ts only");
+    }
     let request = Request {
         lang,
         json: args.json,
         package: args.package.to_string(),
         allow_failing: args.allow_failing,
         conformance: args.conformance.map(|(_, states)| states),
+        seal: args.seal,
         model_path: args
             .inputs
             .iter()
@@ -194,6 +201,7 @@ pub(crate) fn generate(loaded: &Loaded, request: &Request) -> Result<Generated> 
         version: env!("CARGO_PKG_VERSION").to_string(),
         check,
         conformance: request.conformance,
+        seal: request.seal,
     };
     let bases = bases(request.base.as_deref());
     let site = |loc: &_| Some(relative(format_location(program, loc)?, &bases));
@@ -313,6 +321,7 @@ pub(crate) fn configured_request(
             .traces
             .as_ref()
             .map(|_| target.conformance_states.unwrap_or(DEFAULT_STATES)),
+        seal: lang == Lang::TypeScript && target.seal.unwrap_or(false),
         model_path: inputs
             .iter()
             .map(|p| label(p, manifest.dir()))
@@ -352,7 +361,17 @@ pub(crate) fn code_manifest(manifest: Option<&Manifest>) -> Result<&Manifest> {
         bail!("--code needs an rdra.toml with a [code.rust], [code.go] or [code.ts] table; this model has no rdra.toml");
     };
     match &manifest.code {
-        Some(code) if !code.targets().is_empty() => Ok(manifest),
+        Some(code) if !code.targets().is_empty() => {
+            for (name, target) in code.targets() {
+                if name != "ts" && (target.seal.is_some() || target.tsconfig.is_some()) {
+                    bail!(
+                        "[code.{name}] in {}: `seal` and `tsconfig` are for [code.ts] only",
+                        shown(&manifest.path)
+                    );
+                }
+            }
+            Ok(manifest)
+        }
         _ => bail!(
             "--code needs a [code.rust], [code.go] or [code.ts] table in {}",
             shown(&manifest.path)
