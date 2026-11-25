@@ -35,9 +35,7 @@ pub enum Symmetry {
     /// Never: every cone runs as it always has.
     #[default]
     Never,
-    /// Only a cone whose plain run stopped at the memory limit, run again alone.
-    Retry,
-    /// Every cone the current phase covers.
+    /// Every cone the current phase covers that no plain run decides.
     Always,
 }
 
@@ -47,11 +45,8 @@ impl std::str::FromStr for Symmetry {
     fn from_str(s: &str) -> Result<Self, String> {
         match s {
             "never" => Ok(Symmetry::Never),
-            "retry" => Ok(Symmetry::Retry),
             "always" => Ok(Symmetry::Always),
-            other => Err(format!(
-                "`{other}` is not a symmetry mode: never, retry, or always"
-            )),
+            other => Err(format!("`{other}` is not a symmetry mode: never or always")),
         }
     }
 }
@@ -257,25 +252,31 @@ impl Group {
                 .collect(),
             None => Vec::new(),
         };
-        let g = Self::leaving_out(ts, &fixed);
-        if let Some(r) = ts.reduction() {
-            if std::env::var_os("RDRA_ISH_G_T_STATS").is_some() {
-                let why = r.fixed_why(ts);
-                let ents: Vec<String> = (0..ts.entities().len())
-                    .map(EntId::at)
-                    .map(|e| {
-                        let state = match (g.moves(e), why.get(&e)) {
-                            (true, _) => "moves".to_string(),
-                            (false, Some(w)) => format!("fixed: {}", w.join(", ")),
-                            (false, None) => "fixed by the scan or one slot".to_string(),
-                        };
-                        format!("{}[{}] {state}", ts.entity(e).id, ts.slots(e))
-                    })
-                    .collect();
-                eprintln!("g-t: {}", ents.join("; "));
-            }
+        Self::leaving_out(ts, &fixed)
+    }
+
+    /// Under `RDRA_ISH_G_T_STATS`, one line on stderr for a run of `ts`, a reduced cone, up
+    /// to this group: per entity, whether it moves, and why `Reduction::fixed` leaves it out.
+    pub(crate) fn g_t_stats(&self, ts: &TransitionSystem) {
+        let Some(r) = ts.reduction() else {
+            return;
+        };
+        if std::env::var_os("RDRA_ISH_G_T_STATS").is_none() {
+            return;
         }
-        g
+        let why = r.fixed_why(ts);
+        let ents: Vec<String> = (0..ts.entities().len())
+            .map(EntId::at)
+            .map(|e| {
+                let state = match (self.moves(e), why.get(&e)) {
+                    (true, _) => "moves".to_string(),
+                    (false, Some(w)) => format!("fixed: {}", w.join(", ")),
+                    (false, None) => "fixed by the scan or one slot".to_string(),
+                };
+                format!("{}[{}] {state}", ts.entity(e).id, ts.slots(e))
+            })
+            .collect();
+        eprintln!("g-t: {}", ents.join("; "));
     }
 
     /// The group of `ts` with the classes of `fixed` left out as well (`Rule::Observed`):
@@ -494,8 +495,7 @@ impl Group {
         &self.left_out
     }
 
-    /// Whether the group moves anything: some class joins and has more than one slot.
-    #[cfg(test)]
+    /// Whether the group moves nothing: no class joins with more than one slot.
     pub(crate) fn is_trivial(&self) -> bool {
         !self.classes.iter().any(|c| c.moves)
     }

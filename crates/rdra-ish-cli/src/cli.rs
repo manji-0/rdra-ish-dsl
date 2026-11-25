@@ -408,9 +408,8 @@ pub(crate) enum Commands {
         /// Explore an invariant or after-assert cone, and an `always` property's cone that
         /// the sub-lifecycle reduction leaves whole, up to instance symmetry, storing one
         /// state per permutation of rows (on a reduced cone, of the rows its reduced
-        /// sub-lifecycle does not key on): `never`, `retry` (only a cone whose plain run
-        /// stopped at the memory limit), or `always`. Default: `symmetry` under [verify] in
-        /// rdra.toml, else never
+        /// sub-lifecycle does not key on) when no plain run of the entity pass decides it:
+        /// `never` or `always`. Default: `symmetry` under [verify] in rdra.toml, else never
         #[arg(long, value_name = "MODE")]
         symmetry: Option<rdra_ish_core::lifecycle::Symmetry>,
         #[command(flatten)]

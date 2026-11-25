@@ -84,10 +84,12 @@ impl Job {
 
     /// Whether the job may run up to instance symmetry (#212): a safety cone, whole (phase 1)
     /// or reduced, up to `G_T` (phase 3), or an `always` (`PropertyJob::symmetric`) on a cone
-    /// the sub-lifecycle reduction leaves whole.
+    /// the sub-lifecycle reduction leaves whole, when its group moves some rows. A cone whose
+    /// group moves nothing runs plainly, so it costs and prints what it does without
+    /// `--symmetry` (docs/design/instance-symmetry.md, "Always by default", 2(a)).
     pub(super) fn symmetric(&self) -> bool {
         match &self.kind {
-            JobKind::Cone(_) => true,
+            JobKind::Cone(cone) => cone.system.has_instance_symmetry(),
             JobKind::PropertyCone(p) => p.symmetric(),
             JobKind::Explored(_) | JobKind::Whole(_) => false,
         }
@@ -98,7 +100,9 @@ impl PropertyJob {
     /// Whether the property may run up to instance symmetry in phase 1: an `always`, whose
     /// verdict reads one state at a time, on a cone the sub-lifecycle reduction leaves whole.
     pub(super) fn symmetric(&self) -> bool {
-        self.cone.kind == LtlKind::Always && self.cone.reduced.reduction().is_none()
+        self.cone.kind == LtlKind::Always
+            && self.cone.reduced.reduction().is_none()
+            && self.cone.reduced.has_instance_symmetry()
     }
 }
 

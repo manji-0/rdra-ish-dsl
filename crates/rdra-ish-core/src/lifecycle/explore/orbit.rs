@@ -65,6 +65,14 @@ impl TransitionSystem {
         self.run_orbits_in(caps, Checks::All, group)
     }
 
+    /// Whether a run up to instance symmetry could store fewer states than a plain run: its
+    /// group (`G_T` on a reduced cone) moves some rows. `verify` runs a cone whose group moves
+    /// nothing plainly, so it costs and prints what it does without `--symmetry`
+    /// (docs/design/instance-symmetry.md, "Always by default", 2(a)).
+    pub fn has_instance_symmetry(&self) -> bool {
+        !Group::of(self).is_trivial()
+    }
+
     /// `run_orbits` with the classes of `fixed` left out of the group as well, evaluating
     /// `checks`: the run of the sub-lifecycle of a reduced cone up to `H` (`Group::fixing`,
     /// #212 phase 2), which evaluates none.
@@ -74,6 +82,7 @@ impl TransitionSystem {
     }
 
     fn run_orbits_in(self, caps: Caps, checks: Checks, group: Group) -> OrbitRun {
+        group.g_t_stats(&self);
         let (mut run, violations, parts) =
             self.bfs_on(caps.without_views(), checks, Threads::Shared, Some(&group));
         crate::shadow_assert!(
