@@ -14,7 +14,7 @@ fn parents(run: &ComponentRun) -> Vec<Option<Edge>> {
         .collect()
 }
 
-const SHOP: &str = r#"
+pub(super) const SHOP: &str = r#"
 entity Customer "Customer" {
   id: Int @pk
   status: Enum(active, closed) @default(active)
@@ -103,6 +103,63 @@ fn the_pattern_cap_stops_only_a_run_that_gathers_views() {
     assert_eq!(without.diags, whole.diags);
 }
 
+/// Tickets that move between desks alike, and a flag set again where it is set: a run has
+/// self-loops (`Mark` on a marked ticket) and, up to instance symmetry, orbit self-edges
+/// (`Reassign` to a desk like the one the ticket left, as in `sym_relink_loop`).
+pub(super) const DESKS: &str = r#"
+entity Desk "Desk" { id: Int @pk  open: Bool @default(true) }
+entity Ticket "Ticket" {
+  id: Int @pk
+  status: Enum(open, closed) @default(open)
+  flag: Bool @default(false)
+}
+relate(Ticket, Desk, N:1)
+usecase Staff "Staff"
+usecase Raise "Raise"
+usecase Reassign "Reassign"
+usecase Close "Close"
+usecase Mark "Mark"
+creates(Staff, Desk)
+creates(Raise, Ticket)
+relinks(Reassign, Ticket, Desk)
+transitions(Close, Ticket.status, open -> closed)
+sets(Mark, Ticket.flag == true)
+"#;
+
+/// The worker counts the any-thread tests compare with a run on the caller's thread alone:
+/// one, a few, and more than the chunks a layer of the test systems has.
+const THREADS: [usize; 6] = [1, 2, 3, 4, 7, 17];
+
+/// A run up to instance symmetry with worker threads is the run on one thread: workers
+/// canonicalize, pack and probe each successor (#296 item 3.1), and the reader numbers the
+/// states, so the states, edges, orbit self-edges and orbit counts are the same.
+#[test]
+fn a_run_up_to_symmetry_is_the_same_on_any_number_of_threads() {
+    let bounds = Bounds::uniform(NonZeroU8::new(4).expect("4 instances"), 5);
+    let ts = TransitionSystem::build(&model_from(DESKS), bounds, &Scope::ALL).ts;
+    let group = super::symmetry::Group::of(&ts);
+    let caps = Caps::VERIFY.without_views();
+    let run = |threads| {
+        ts.clone()
+            .bfs_on(caps, Checks::All, threads, Some(&group), true)
+    };
+    let (one, _, one_parts) = run(Threads::Fixed(0));
+    // Enough states that the workers take most of them.
+    assert!(one.states.len() >= 1_000, "{} states", one.states.len());
+    assert!(!one_parts.orbit_self.is_empty());
+    for threads in THREADS {
+        let (many, _, parts) = run(Threads::Fixed(threads));
+        assert_eq!(many.states, one.states, "{threads} threads");
+        assert_eq!(many.edges(), one.edges(), "{threads} threads");
+        assert_eq!(many.bindings, one.bindings, "{threads} threads");
+        assert_eq!(parents(&many), parents(&one), "{threads} threads");
+        assert_eq!(many.diags, one.diags, "{threads} threads");
+        assert_eq!(many.peak, one.peak, "{threads} threads");
+        assert_eq!(parts.orbit_self, one_parts.orbit_self, "{threads} threads");
+        assert_eq!(parts.orbits, one_parts.orbits, "{threads} threads");
+    }
+}
+
 /// A run with worker threads is the run on one thread: the same states, edges, and bindings in the
 /// same order, the same parents, findings, and views. A run a cap stops is cut at the same
 /// state.
@@ -115,7 +172,7 @@ fn a_run_is_the_same_on_any_number_of_threads() {
         assert_eq!(one.complete, complete);
         // Enough states that the workers take most of them.
         assert!(one.states.len() >= 5_000, "{} states", one.states.len());
-        for threads in [1, 2, 4, 7] {
+        for threads in THREADS {
             let many = ts
                 .clone()
                 .run_on(caps, Checks::All, Threads::Fixed(threads));
@@ -125,6 +182,9 @@ fn a_run_is_the_same_on_any_number_of_threads() {
             assert_eq!(parents(&many), parents(&one), "{threads} threads");
             assert_eq!(many.complete, one.complete, "{threads} threads");
             assert_eq!(many.diags, one.diags, "{threads} threads");
+            assert_eq!(many.kept, one.kept, "{threads} threads");
+            assert_eq!(many.peak, one.peak, "{threads} threads");
+            assert_eq!(many.layers, one.layers, "{threads} threads");
             for (a, b) in many.views.iter().zip(&one.views) {
                 assert_eq!(a.patterns, b.patterns, "{threads} threads");
                 assert_eq!(a.initial, b.initial, "{threads} threads");
@@ -165,12 +225,13 @@ fn a_run_stops_at_the_memory_limit_at_the_same_state_on_any_number_of_threads() 
         StateDiag::MemoryCapReached { limit: l, states, .. }
             if l == limit && states == one.states.len()
     )));
-    for threads in [1, 2, 4] {
+    for threads in [1, 3, 17] {
         let many = ts
             .clone()
             .run_on(charged(), Checks::All, Threads::Fixed(threads));
         assert_eq!(many.states, one.states, "{threads} threads");
         assert_eq!(many.diags, one.diags, "{threads} threads");
+        assert_eq!(many.peak, one.peak, "{threads} threads");
     }
 }
 
@@ -508,7 +569,7 @@ fn a_run_stops_once_every_check_has_failed() {
     assert_eq!(parents(&stopped)[..], parents(&whole)[..n]);
     assert_eq!(stopped.diags.len(), 2);
     assert_eq!(stopped.diags, whole.diags);
-    for threads in [1, 2, 4] {
+    for threads in [1, 3, 17] {
         let many = ts
             .clone()
             .run_on(caps, Checks::All, Threads::Fixed(threads));
@@ -587,7 +648,7 @@ fn a_run_reports_the_checks_it_evaluates_and_nothing_else() {
         .chain([BTreeSet::new(), names.clone()]);
     for named in subsets {
         let checks = Checks::Named(named.clone());
-        for threads in [0, 2] {
+        for threads in [0, 2, 7] {
             let run = ts
                 .clone()
                 .run_on(Caps::VERIFY, checks.clone(), Threads::Fixed(threads));
