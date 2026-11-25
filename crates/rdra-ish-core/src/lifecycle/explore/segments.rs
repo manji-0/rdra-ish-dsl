@@ -79,6 +79,22 @@ impl<T: Copy> Rows<T> {
         self.len
     }
 
+    /// The segments that hold a row.
+    pub(crate) fn segments_used(&self) -> usize {
+        match self.len {
+            0 => 0,
+            n => locate(n - 1).0 + 1,
+        }
+    }
+
+    /// The address of each segment that holds a row, in order: where the segment's rows stay
+    /// for as long as the buffer lives.
+    pub(crate) fn segment_ptrs(&self) -> Vec<*const T> {
+        (0..self.segments_used())
+            .map(|k| self.segment(k).as_ptr())
+            .collect()
+    }
+
     /// The segments allocated so far.
     #[cfg(kani)]
     fn segments(&self) -> usize {
@@ -135,8 +151,10 @@ impl<T: Copy> Rows<T> {
     pub(crate) fn push(&mut self, row: &[T]) {
         debug_assert_eq!(row.len(), self.width);
         let seg = self.last();
-        // Within its capacity: the segment's rows never move.
-        debug_assert!(seg.len() + row.len() <= seg.capacity());
+        // Within its capacity: the segment's rows never move. Workers read the rows of a
+        // run's states through the segments' addresses (`arena::Published`), so this holds in
+        // a release build too.
+        assert!(seg.len() + row.len() <= seg.capacity(), "a segment grew");
         seg.extend_from_slice(row);
         self.len += 1;
     }
