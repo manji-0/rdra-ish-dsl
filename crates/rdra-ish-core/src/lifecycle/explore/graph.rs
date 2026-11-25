@@ -53,15 +53,32 @@ impl Graph<'_> {
 
     /// The distinct successors and predecessors of every state, self-loops left out, for the
     /// passes that walk the graph rather than replay a run (`can_reach`, deadlock).
+    ///
+    /// The two directions are built side by side when the process has a helper to spare
+    /// (`parallel::Helpers`): on the largest cone of food-permit-ops this runs after the BFS
+    /// on its own, on the run's critical path (#296 item 3.1 part 3). A `shadow` build holds
+    /// the result to the one built a direction after the other.
     pub fn adjacency(&self) -> Adjacency {
-        Adjacency::new(self.states.len(), || {
-            self.edges.iter().map(|e| (e.from, e.to))
-        })
+        let moves = || self.edges.iter().map(|e| (e.from, e.to));
+        let helpers = crate::parallel::Helpers::take();
+        let adjacency = Adjacency::side_by_side(self.states.len(), moves, helpers.count() > 0);
+        drop(helpers);
+        #[cfg(feature = "shadow")]
+        {
+            assert!(
+                adjacency == Adjacency::new(self.states.len(), moves),
+                "shadow: Graph::adjacency of {} states: the directions built side by side differ",
+                self.states.len()
+            );
+            crate::shadow::compared(crate::shadow::Twin::SideBySideAdjacency);
+        }
+        adjacency
     }
 }
 
 /// A graph's moves by state, in both directions, self-loops and repeats left out. Compressed:
 /// 4 bytes per move for each direction.
+#[cfg_attr(feature = "shadow", derive(PartialEq))]
 pub struct Adjacency {
     succs: Csr,
     preds: Csr,
@@ -75,6 +92,29 @@ impl Adjacency {
             succs: Csr::new(n, moves),
             preds: Csr::new(n, || moves().map(|(from, to)| (to, from))),
         }
+    }
+
+    /// `new`, the predecessors built on a thread of their own beside the successors when
+    /// `split`.
+    fn side_by_side<I: Iterator<Item = (u32, u32)>>(
+        n: usize,
+        moves: impl Fn() -> I + Sync,
+        split: bool,
+    ) -> Self {
+        if !split {
+            return Adjacency::new(n, moves);
+        }
+        let moves = || moves().filter(|(from, to)| from != to);
+        std::thread::scope(|scope| {
+            let preds = scope.spawn(|| Csr::new(n, || moves().map(|(from, to)| (to, from))));
+            let succs = Csr::new(n, moves);
+            Adjacency {
+                succs,
+                preds: preds
+                    .join()
+                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic)),
+            }
+        })
     }
 
     /// The states one move from `at` reaches, in ascending order.
@@ -142,6 +182,7 @@ impl Adjacency {
 }
 
 /// One direction of the moves: `next[start[at]..start[at + 1]]` are the targets of `at`.
+#[cfg_attr(feature = "shadow", derive(PartialEq))]
 struct Csr {
     start: Vec<u32>,
     next: Vec<u32>,

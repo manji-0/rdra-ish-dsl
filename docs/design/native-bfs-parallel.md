@@ -11,8 +11,8 @@ Status (2026-11-26): 3.1 is being built in parts.
   and never more than the cores (#371). Part 2 of 3.1: the shared table and the workers'
   probe, which a release build leaves off
   ([Part 2: the shared table](#part-2-the-shared-table)).
-- **Open on #296.** Part 3 of 3.1: the serial findings tail of the largest cone, and
-  whether the probes go on. 3.1's exit is not met: food-permit-ops at 8 jobs took 35% of
+- **Open on #296.** Part 3 of 3.1, the serial findings tail of the largest cone
+  ([Part 3: the findings tail](#part-3-the-findings-tail)), and whether the probes go on. 3.1's exit is not met: food-permit-ops at 8 jobs took 35% of
   its one-job time, against 30%. 3.2's shared helper pool and its sweep (`Helpers::take`
   still gives one run every free helper). 3.3.
 - **Superseded.** The helper default `available_parallelism() - 1` of
@@ -792,6 +792,73 @@ of which the table insert is 10% to 16%. The edge push takes 14% to 19%, `Moves:
 and `check_after` 2% to 4.5%. A second thread then runs `state_model_findings` for the big
 cone for 0.5 to 0.6 s after its BFS ends (`read_entity` in `targets.rs`), on one thread.
 That tail is a third of the 1.86 s 8-job run. Part 3 takes it off the critical path.
+
+### Part 3: the findings tail
+
+<!-- constrained-by #part-2-the-shared-table -->
+
+Once the largest cone of food-permit-ops has finished its BFS, its thread computes the
+state-model findings on its own (`state_model_findings`, from `read_entity` in
+`targets.rs`). That work took 0.52 s of a 1.93 s run at 8 jobs (**measured**, `sample`):
+
+- Most of it went to the deadlock pass's per-column, per-slot `can_leave` sweeps, about
+  0.29 s.
+- Building the graph's adjacency took about 0.17 s.
+
+Both parts are independent work, so part 3 runs them side by side on the helpers that the
+process has free (`parallel::Helpers`), which the BFS gave back when it ended:
+
+- **Adjacency.** `Graph::adjacency` builds its two directions side by side.
+- **Leave columns.** The deadlock pass computes the `can_leave` of every column and slot up
+  front (`leave_columns`). It does so with `parallel::in_parallel`, which returns the results
+  in item order.
+
+The result does not depend on the thread count. In a `shadow` build each change has a twin
+that checks it on every call: `side_by_side_adjacency` against `Adjacency::new`, and
+`leave_columns` against `can_leave` on each column and slot in turn. Two planted bugs were
+caught, on clinic-ops at 4 jobs:
+
+- The predecessors built as successors: `shadow: Graph::adjacency of 242015 states: the
+  directions built side by side differ`.
+- The columns rotated by a slot: `shadow: leave_columns(EntId(1)): column VarId(3) at slot 0
+  differs`.
+
+After part 3 the tail is about 0.31 s, made up of three pieces:
+
+- `leave_columns`' own share, about 0.15 s.
+- The adjacency, about 0.09 s.
+- The per-value scan for a stuck state, and `runs`.
+
+**Measured** (part 3 against main cfe781d4, RDRA_JOBS set, interleaved, 1-minute load 2.4
+to 4.5; 8 jobs median of five, else of three):
+
+| food-permit-ops, jobs | 1 | 2 | 4 | 6 | 8 |
+|---|---:|---:|---:|---:|---:|
+| Main | 5.54 s | 3.15 s | 2.04 s | 1.93 s | 2.10 s |
+| Part 3 | 5.58 s | **2.91 s** | **1.81 s** | **1.65 s** | **1.81 s** |
+| Part 3, share of main's 1 job | | 53% | 33% | 30% | 33% |
+
+| | clinic-ops | insurance-claim-ops |
+|---|---:|---:|
+| Main, 1 job | 5.67 s | 14.44 s |
+| Main, 8 jobs | 1.74 s | 4.23 s |
+| Part 3, 1 job | 5.75 s | 14.54 s |
+| Part 3, 8 jobs | **1.58 s, 28%** | **3.52 s, 24%** |
+
+Instructions rise 0.3% to 0.8%; one job takes the time it took. food-permit-ops at 8 jobs
+stays at 33% of main's 1-job time, short of the ≤30% exit; at 6 jobs it reaches 30%. The
+reader of the largest cone is now what the run waits on; items (a) and (b) of the owner's
+follow-ups (the table rebuilt in store order, and the reader's look-ups prefetched) aim at
+it.
+
+With the probes of part 2 turned on as well, in a build made for this measurement only:
+
+| | food-permit-ops | clinic-ops | insurance-claim-ops |
+|---|---:|---:|---:|
+| Part 3 | 1.80 s | 1.82 s | 3.72 s |
+| Part 3, probes on | 1.71 s | 1.83 s | 3.92 s |
+
+The probes still cost insurance-claim-ops 5%, so they stay off.
 
 ## Beyond 3.1: in-flight dedup
 

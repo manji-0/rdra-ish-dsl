@@ -251,6 +251,12 @@ No sample changes verdict.
   decides. Unit tests and one run of the CI's shadow job turn it on. Output, `--memory` stop points
   and what a run charges do not change.
 
+- `verify` finishes the largest cone sooner on several threads (#296 item 3.1, part 3). Once
+  a cone's BFS ends, its deadlock findings now build the graph's two directions side by side
+  and check each column and slot side by side, on the threads the BFS gave back. At 8 jobs:
+  food-permit-ops 2.10 s to 1.81 s, clinic-ops 1.74 s to 1.58 s, insurance-claim-ops 4.23 s
+  to 3.52 s. One job takes the time it took, and the output does not change.
+
 - `verify` gives back what an entity cone held once the cone stops at the memory limit
   (#284). The entity pass runs its cones one at a time in cone order, each in the room the
   results before it leave. A stopped cone used to keep everything it stored until the pass

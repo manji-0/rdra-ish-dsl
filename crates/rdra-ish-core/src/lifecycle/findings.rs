@@ -349,15 +349,9 @@ impl TransitionSystem {
         let exists = self.offset(self.entity(e).exists);
         let present = |at: usize, k: usize| g.states.cell(at, exists + k) == Value::PRESENT.0;
         let mut out = Vec::new();
-        let mut columns: Vec<(VarId, Vec<Vec<bool>>)> = Vec::new();
+        let columns = self.leave_columns(e, &open, g, &adjacency);
         for (var, value, exits) in open {
-            if !columns.iter().any(|(v, _)| *v == var) {
-                let leave = (0..self.slots(e))
-                    .map(|k| self.can_leave(e, var, k, g, &adjacency))
-                    .collect();
-                columns.push((var, leave));
-            }
-            let (_, leave) = columns.iter().find(|(v, _)| *v == var).expect("just added");
+            let (_, leave) = columns.iter().find(|(v, _)| *v == var).expect("a column");
             let stuck = |at: usize, k: usize| {
                 present(at, k)
                     && g.states.cell(at, self.offset(var) + k) == value.0
@@ -386,6 +380,54 @@ impl TransitionSystem {
             });
         }
         out
+    }
+
+    /// Per column of `open`, in the order they first appear, and per slot `k` of `e`: which
+    /// states can leave the column's value at `k` (`can_leave`). The columns and slots are
+    /// independent, so they run side by side on the helpers the process has to spare
+    /// (`parallel::Helpers`): on the largest cone of food-permit-ops this runs after the BFS
+    /// on its own, on the run's critical path (#296 item 3.1 part 3). A `shadow` build holds
+    /// the result to the one computed a column and slot after another.
+    fn leave_columns(
+        &self,
+        e: EntId,
+        open: &[(VarId, Value, Vec<ExitArm>)],
+        g: &Graph,
+        adjacency: &Adjacency,
+    ) -> Vec<(VarId, Vec<Vec<bool>>)> {
+        let mut vars: Vec<VarId> = Vec::new();
+        for &(var, _, _) in open {
+            if !vars.contains(&var) {
+                vars.push(var);
+            }
+        }
+        let slots = self.slots(e);
+        let pairs: Vec<(VarId, usize)> = (vars.iter())
+            .flat_map(|&var| (0..slots).map(move |k| (var, k)))
+            .collect();
+        let helpers = crate::parallel::Helpers::take();
+        let threads = helpers.count() + 1;
+        let mut leave = crate::parallel::in_parallel(pairs, threads, |(var, k)| {
+            self.can_leave(e, var, k, g, adjacency)
+        })
+        .into_iter();
+        drop(helpers);
+        let columns: Vec<(VarId, Vec<Vec<bool>>)> = (vars.into_iter())
+            .map(|var| (var, leave.by_ref().take(slots).collect()))
+            .collect();
+        #[cfg(feature = "shadow")]
+        {
+            for (var, column) in &columns {
+                for (k, states) in column.iter().enumerate() {
+                    assert!(
+                        *states == self.can_leave(e, *var, k, g, adjacency),
+                        "shadow: leave_columns({e:?}): column {var:?} at slot {k} differs"
+                    );
+                }
+            }
+            crate::shadow::compared(crate::shadow::Twin::LeaveColumns);
+        }
+        columns
     }
 
     /// Which states have a path that changes `var` at slot `k` of `e` or deletes `k`: the
