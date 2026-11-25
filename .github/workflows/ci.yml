@@ -218,6 +218,10 @@ jobs:
         # docs/engine-agreement.md: each case under crates/rdra-ish-cli/tests/engine_corpus/
         # states every engine's verdict; about 45 s locally.
         run: RDRA_REQUIRE_TLC=1 RDRA_REQUIRE_Z3=1 cargo test --release -p rdra-ish-cli --test engine_corpus
+      - name: The printed Rust and Go agree with BFS on the domain samples
+        # The check job runs the small samples (scripts/diff-test.sh skips this test). A
+        # codegen-only pull request does not run this job; main runs it every three hours.
+        run: RDRA_REQUIRE_CODEGEN_TOOLS=1 cargo test --release -p rdra-ish-cli --test codegen_differential printed_code_agrees_on_the_domain_samples
 
   shadow:
     # Every fast function that has a reference twin checked against the twin on every call
