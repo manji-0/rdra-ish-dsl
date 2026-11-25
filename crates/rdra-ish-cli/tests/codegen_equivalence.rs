@@ -17,7 +17,9 @@
 //!   entity, and a key between two rows holds when the child's owner var names the parent.
 //! - **Rule checks.** No row of a reached state breaks a rule of its type's validator.
 //!
-//! The printers print this IR, and `codegen_builds.rs` compiles what they print.
+//! The printers print this IR, and `codegen_builds.rs` compiles what they print. The
+//! evaluator it reads the functions' conditions with (`codegen::conformance::eval`) is the one
+//! the conformance traces pick each move's function with.
 
 mod codegen_cases;
 

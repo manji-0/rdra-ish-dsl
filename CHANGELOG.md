@@ -132,6 +132,47 @@
 
 ### Added
 
+- `codegen --lang rust|go` makes a state only in the generated code (#331). A state type's
+  fields are private in Rust and unexported in Go, read by methods of the same name
+  (`paid_at()`, `PaidAt()`), so only a transition function and `from_row` /
+  `<Entity>FromRow` build one, and code outside the module or package can neither build
+  `OrderPaid { .. }` nor change a field. In Go, a function or `<Entity>ToRow` given the zero
+  value of a state panics, `<Entity>FromRow` refuses a value outside a value set in any
+  column, a function panics on one as an input, and each value set gets `Parse<Enum>`, which
+  returns an `InvalidValue` error. The Go file belongs in its own package (`--package`).
+  Code that read a state's fields reads the methods instead; records and `<Entity>Row` keep
+  public fields. See [Who makes a state](./docs/design/algebraic-codegen.md#who-makes-a-state).
+
+- `codegen` asks for one transaction per function (#332). The header gains the obligation
+  that each function runs in one transaction with its reads, and each result (Rust, Go, and
+  TypeScript) gains, per row it writes, `<row>_expected` / `<Row>Expected`: an
+  `ExpectedSource` naming what the row must still be when the write commits (`Absent` for a
+  created row, the tag column and the state read, or `Present`), so a store can write
+  conditionally and return `NotEnabled` when the write matches no row. The `--conformance`
+  port splits each `run_*` / `Run*` method into `prepare_*` (read and call the core) and
+  `commit_*` (write), the traces file is format 2, and its new `I` records prepare a call,
+  run another that changes a row it writes, and require the commit to fail and change
+  nothing. `tests/codegen_conformance.rs` shows that a service whose commits write
+  unconditionally fails. See
+  [One transaction per function](./docs/design/algebraic-codegen.md#atomicity).
+
+- `codegen --lang rust|go --conformance <FILE>` (experimental) prints a conformance port
+  and harness after the core, and writes to `FILE` the traces the harness drives a finished
+  service along (#330). The service implements `ConformancePort`: it seeds an empty store,
+  returns a `StoreSnapshot` of every row, pending run mark, and raised event, and runs each
+  use case by the ids of its rows. `conform` (Rust) or `Conform` (Go) seeds each trace's
+  initial state, makes each call, and after each compares the store, abstracted to the
+  columns the model tracks, with the state BFS reaches. A call the model refuses must fail
+  and change nothing. The traces come from a BFS of the whole system at `check`'s bounds
+  and take every move of a printed use case between the states it reaches, up to
+  `--conformance-states` (default 65,536); the header says how many. On
+  `tests/fixtures/codegen/conformance.rdra`, `tests/codegen_conformance.rs` shows that a
+  service built on the generated core passes in both languages, and that one which writes
+  the tag itself, drops a returned row, or runs a refused call fails. See
+  [The conformance harness](./docs/design/algebraic-codegen.md#conformance).
+
+- `verify --symmetry` also covers a reduced safety cone (#212, phase 3): under `always`, and
+  under `retry` once its plain run stopped at the memory limit, it runs up to `G_T`, the
 - `codegen --check <FILE>` (experimental) generates again with the same options and exits 1
   when `<FILE>` differs (#333), for CI. The second line of the output is now a fingerprint
   (`// rdra-ish codegen fingerprint: model=<hash> code=<hash>`). From it the summary on

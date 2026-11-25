@@ -299,6 +299,35 @@ func UnmarshalOrder(data []byte) (Order, error) { /* reads "status", then the va
 The JSON form is the same in all three: the record's columns with the tag column inline,
 the row shape DBML and JSON Schema describe.
 
+### Who makes a state
+
+<!-- constrained-by #decisions -->
+
+The examples above show public fields, as the first output had. Code could then build
+`OrderPaid { .. }` without running the transition that leads there, or change a field a
+transition keeps, and Go also took `OrderStatus("bogus")` and the zero value `OrderPaid{}`.
+Since #331, Rust and Go make a state only in the generated code:
+
+- A variant's fields are private in Rust and unexported in Go, and methods of the same name
+  read them (`paid_at()` returns `&DateTime`, or `Option<&T>` for a nullable column;
+  `PaidAt()` returns a copy, so a pointer does not reach into the state). The only
+  constructors are the transition functions (whose created rows take the inputs the model
+  leaves open) and `from_row` / `<Entity>FromRow`, which checks the row against the state's
+  rules. A test outside the module or package (`codegen_behaviour.rs`) shows that the
+  compiler refuses a struct literal of a state and a write to its field.
+- Go cannot forbid the zero value of a struct, nor a conversion to a `string` type, from
+  another package. A state therefore carries an unexported mark that only the package sets:
+  a transition function or `<Entity>ToRow` given the zero value panics. `<Entity>FromRow`
+  refuses a value outside a value set in any column, a function panics on one as an input,
+  and each value set has `Parse<Enum>(s)`.
+- Go keeps this only when the code that finishes the output is in another package, so the
+  generated file goes in a directory of its own, named by `--package`.
+
+Records, row types, ids, and DTOs keep public fields: they are the shapes a store and the
+wire hold, and a state is made from them only through `from_row`. Decision 4 stands:
+the Rust encoding is still an enum of per-state structs whose transitions consume their
+source.
+
 <a id="split"></a>
 ## Use cases split into transactions
 
@@ -462,10 +491,126 @@ agent can split it into files wherever the project wants:
 5. **Conformance tests.** Each `forbidden`, `invariant`, `@check`, and `after(UC).assert`
    as a property for `fast-check`, `proptest`, or `rapid`, run against the core and,
    through the scaffold's ports, against the finished services. When an agent edit breaks
-   one, the code has left what was verified.
+   one, the code has left what was verified. As built, the core's part is the rule checks,
+   and the finished service's part is [the conformance harness](#conformance), for Rust
+   and Go.
 
 `--format json` prints the same intermediate form and obligations as data, for an agent
 that wants to generate in another language or check its work against the list.
+
+<a id="conformance"></a>
+### The conformance harness
+
+<!-- derived-from #the-agent-contract -->
+
+Item 5 as built (#330). The rule checks and `codegen_equivalence.rs` show that the core does
+what the model does. Nothing showed that the service an agent writes around the core does:
+a service that writes the store directly, stores only some of the rows a function returns,
+or runs a use case from a state the model refuses passes every other check.
+`codegen --lang rust|go --conformance <FILE>` prints a port and a harness after the core,
+and writes the traces the harness runs to `FILE`.
+
+**The port.** The service implements `ConformancePort`: `seed` empties the store and stores
+the rows of an initial state, `snapshot` returns everything the store holds (each entity's
+rows in its `<Entity>Row` or record type, each pending run mark as `<UseCase><Entity>Run {
+id, step }`, each event a triggered use case reads), and two methods per action run the
+use case by the ids of its rows, the ids of its run marks, its event, its inputs, and its
+choices: `prepare_<action>` / `Prepare<Action>` loads the rows and returns what the
+dispatcher (or the one function) returns, writing nothing, and `commit_<action>` /
+`Commit<Action>` stores that result in one transaction (since #332; #330 had one `run_*`
+method). A list of related rows is not an argument: the service loads it. Either method
+returns an error when the use case does not run. The port is how the harness drives and
+reads the service, not a persistence layer: the service still decides how it stores rows.
+
+**The oracle.** The expected values come from BFS, never from the generated core. `traces`
+in `codegen/conformance` explores the whole transition system at `check`'s bounds
+(`Bounds::STATES`), from its initial states, and keeps each move of a use case with a printed
+function. It picks the move's function with the same evaluator `codegen_equivalence.rs`
+checks the functions with (`codegen::conformance::eval`), and reads every argument the move
+leaves open from the successor: the id of a created row is its slot plus one, a chosen value
+is the value the successor holds, a column `present` gets a default value. A greedy walk then
+takes every move between the states the moves reach, starting a new trace (a fresh port,
+seeded) when it runs out of moves where it stands. After each call the harness cuts the
+store down to what the system tracks (an enum's value, null or set, an integer, a key's
+parent id, a pending mark, a raise a triggered use case reads), sorts the lines, and compares
+them with the successor's. In each state reached first, the traces also try every use case
+over one row that the model does not run on a present row, where BFS has no move and the
+functions allow none (a source state no function takes, a condition that fails); the call
+must fail and change nothing. A use case that creates a row is never tried as refused: at
+one row per entity, BFS has no free slot after the first, but a real store does.
+
+The traces also try what [one transaction per function](#atomicity) rules out. In a reached
+state with two moves A and B (B may be A again), when B leaves a row A writes in another
+state than A read it in, deletes it, or creates the row A creates, and the model has no move
+of A after B, an `I` record prepares A, runs B, and commits A: the commit must fail and leave
+the store in B's successor. One such trace is written per pair of A's function and B's use
+case.
+
+**Where the traces live: a data file, not code.** The traces are a line-oriented text file
+that the generated harness parses, and the code stream holds no trace. Three reasons:
+
+- *Size.* At `check`'s bounds, ec-site has 189 moves, but clinic-ops, patent-ops,
+  food-permit-ops and oidc-auth reach the 65,536-state cap with 177,000 to 309,000 moves
+  (clinic-ops' traces are 178 MB). Code of that size would not be read, reviewed, or
+  compiled in reasonable time, and `codegen_builds.rs` compiles every sample's output.
+- *The code stays the code.* The core, the port and the harness are the same at any trace
+  bound; `--conformance-states` changes only the file. The agent regenerates the traces at
+  other bounds without a code diff, and a diff of the code still shows a change of the model.
+- *No library.* Each line is a record of whitespace-separated tokens (`S`/`A` a state and
+  its rows, `T` a trace, `R` a seed row, `G` seeding done, `C` a call and the state it
+  reaches, `X` a call that must be refused, `I` a prepared call, the call run before its
+  commit, and the state it reaches), so the harness parses it with the standard
+  library of Rust and Go, as the rest of the output builds without one.
+
+The cost is a second file the agent keeps beside the code and reads in its test; the first
+line names the format, and the harness refuses another.
+
+**What it proves.** On `tests/fixtures/codegen/conformance.rdra`,
+`tests/codegen_conformance.rs` runs an in-memory service built on the generated core in Rust
+and in Go (the Go one from outside the package). It passes. Each of four planted faults
+fails at the call that shows it: Pay writing the tag itself (`paid_at` and `qty` differ),
+Ship dropping the shipment the core returns (the shipment row is missing), Cancel
+running from `shipped` (a refused call ran), and every commit writing without its condition
+(a second Place, prepared before the first committed, commits over it).
+
+**What it does not prove.** The harness checks what is stored, not how: a service that
+computes the same rows without calling the core passes. A column the system does not track
+(a string, a `present` timestamp's value) is not compared. The traces cover the bounds of
+`check`, one row per entity, so a service that is wrong only with two rows passes. A BFS
+stopped at the cap covers the states it reached and tries no refused call, and the header
+says so. A counted trigger, a comparison proposition, and the clock are not compared, and no
+trace takes a tick, so a move after one is left out; the header lists these. An
+interleaving is tried only where B changes the state of a row A writes, so a service that
+does not hold a non-tag column a condition read, a row it reads and does not write, or a run
+mark or event it consumes still passes; and the harness is one thread, so it shows the
+condition on the write, not the locks of a real store.
+
+<a id="atomicity"></a>
+### One transaction per function
+
+<!-- derived-from #use-cases-split-into-transactions -->
+
+`check` and `verify` explore each use case, and each step of a split one, as one atomic
+action: they never see a state where another use case ran between a function's read and its
+write. A service that reads a row, calls the core, and writes the result in a later
+transaction can write over another call's change, such as `paid` over `cancelled`, a move no
+`transitions` has. Since #332 the header states the obligation, and the results carry what a
+store needs to keep it:
+
+- Each function runs in one transaction with its reads. The store holds what the function
+  read until the write commits (`SELECT .. FOR UPDATE`, or serializable isolation).
+- Each result carries, per row it writes, `<row>_expected` (`<Row>Expected` in Go): the
+  source the row must still have, `Absent` for a row the function creates, `In { column,
+  value }` (the tag column and the state it read) for a state type, and `Present` for a
+  record. The store writes the row only where it still is that (`UPDATE .. WHERE id = ? AND
+  status = ?`, an `INSERT` that fails on a present id), and when a write matches no row, it
+  rolls back and returns `NotEnabled`, the answer the model gives in the state the other call
+  left.
+
+The condition covers a row another call created, deleted, or moved to another state, which
+is the race the model's tag guards. It does not cover another column a condition read (Big
+reads `qty`), a row read and not written (a parent, a `.has` list), or a consumed run mark or
+event; the held reads keep those, and the obligation says so.
 
 ## Architecture
 
@@ -525,6 +670,10 @@ sample. For this generator:
 - **The split runs agree.** On the three split samples, the test also runs interleavings
   of steps and other actions, and checks that `Blocked` is returned exactly where BFS has
   no successor for the step.
+- **The harness tells a faulty service apart.** `crates/rdra-ish-cli/tests/codegen_conformance.rs`
+  runs a reference service and three planted faults through the Rust and Go harness
+  ([The conformance harness](#conformance)), and `codegen_builds.rs` compiles the harness of
+  every sample.
 - **The keys agree.** `key_facts` (`crates/rdra-ish-cli/tests/key_facts.rs`) gains the
   generated key fields as one more consumer of the `ForeignKey` fact set.
 

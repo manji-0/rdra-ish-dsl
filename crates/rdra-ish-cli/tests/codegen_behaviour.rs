@@ -1,7 +1,9 @@
 //! The code `codegen` prints behaves as the model says, run in each language: on
 //! `tests/fixtures/codegen/order.rdra`, a driver per language converts rows to states and
 //! back, refuses a row that breaks its state's refinement, dispatches the use cases by state
-//! (`NotEnabled`, `Rejected`, the writes, the raised event), and runs the rule checks. A
+//! (`NotEnabled`, `Rejected`, the writes, the raised event), and runs the rule checks. Code
+//! outside the generated module or package cannot build a state or change one of its fields
+//! (#331): the compiler refuses it. A
 //! compiler or runtime missing from PATH skips its language, except under
 //! `RDRA_REQUIRE_CODEGEN_TOOLS=1`, which CI sets in the dev shell.
 
@@ -112,4 +114,74 @@ fn go_behaves() {
         Command::new("go").args(["test", "./..."]).current_dir(&dir),
         "go test on the driver",
     );
+}
+
+/// Code outside the generated module that builds a state, or writes a field of one, and what
+/// rustc says.
+const RUST_FORGERIES: [(&str, &str); 2] = [
+    (
+        "let o = OrderPaid { id: OrderId(1), paid_at: DateTime(String::new()), method: Method::Card, qty: 9, note: String::new(), customer_id: CustomerId(1) }; let _ = o;",
+        "E0451",
+    ),
+    (
+        "let mut o = Order::from_row(OrderRow { id: OrderId(1), status: OrderStatus::Pending, paid_at: None, method: Method::Card, qty: 1, note: String::new(), customer_id: CustomerId(1) }).unwrap(); if let Order::Pending(p) = &mut o { p.qty = 7; }",
+        "E0616",
+    ),
+];
+
+/// The same in Go, outside the generated package, and what the compiler says.
+const GO_FORGERIES: [(&str, &str); 2] = [
+    ("o := domain.OrderPaid{Qty: 9}; _ = o", "unknown field Qty"),
+    (
+        "var o domain.OrderPaid; o.qty = 7; _ = o",
+        "o.qty undefined",
+    ),
+];
+
+#[test]
+fn rust_states_are_not_built_outside() {
+    let dir = scratch("rust-forge");
+    generate("rust", &dir.join("domain.rs"));
+    let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
+    for (body, code) in RUST_FORGERIES {
+        std::fs::write(
+            dir.join("forge.rs"),
+            format!("#[path = \"domain.rs\"]\nmod domain;\nuse domain::*;\nfn main() {{\n    {body}\n}}\n"),
+        )
+        .unwrap();
+        let output = Command::new(&rustc)
+            .args(["--edition", "2021", "-o"])
+            .arg(dir.join("forge"))
+            .arg(dir.join("forge.rs"))
+            .output()
+            .expect("runs rustc");
+        let err = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success(), "rustc builds {body}");
+        assert!(err.contains(code), "{body}: {err}");
+    }
+}
+
+#[test]
+fn go_states_are_not_built_outside() {
+    if !available("go", "version") {
+        return;
+    }
+    let dir = scratch("go-forge");
+    generate("go", &dir.join("domain.go"));
+    std::fs::write(dir.join("go.mod"), "module example.com/domain\n\ngo 1.21\n").unwrap();
+    for (body, says) in GO_FORGERIES {
+        std::fs::write(
+            dir.join("forge_test.go"),
+            format!("package domain_test\n\nimport (\n\t\"testing\"\n\n\t\"example.com/domain\"\n)\n\nfunc TestForge(t *testing.T) {{\n\t{body}\n}}\n"),
+        )
+        .unwrap();
+        let output = Command::new("go")
+            .args(["vet", "./..."])
+            .current_dir(&dir)
+            .output()
+            .expect("runs go");
+        let err = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success(), "go builds {body}");
+        assert!(err.contains(says), "{body}: {err}");
+    }
 }

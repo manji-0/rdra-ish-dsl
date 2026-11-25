@@ -4,16 +4,23 @@
 use super::ir::{DomainModel, FieldType, RecordKind, Scalar};
 use super::{header_lines, obligation_lines, one_line, string_literal, Options};
 
-const OPTION: &str = "::core::option::Option";
-const STRING: &str = "::std::string::String";
+pub(super) const OPTION: &str = "::core::option::Option";
+pub(super) const STRING: &str = "::std::string::String";
 
-pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
+pub(super) fn print(
+    domain: &DomainModel,
+    options: &Options,
+    traces: Option<&super::conformance::Traces>,
+) -> String {
     let mut out = String::new();
     for line in header_lines(options) {
         out.push_str(&comment(&line));
     }
     out.push_str("//\n");
     for line in obligation_lines(domain) {
+        out.push_str(&comment(&line));
+    }
+    for line in super::conformance_lines(domain, traces, "conform", "ConformancePort") {
         out.push_str(&comment(&line));
     }
     out.push_str("\n#![allow(dead_code, unused_variables, non_camel_case_types, non_snake_case, clippy::all)]\n\n");
@@ -132,6 +139,9 @@ pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
                     field.doc.last().cloned().unwrap_or_default()
                 ));
             }
+            lines.push(
+                "Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.".to_string(),
+            );
             out.push_str(&doc(&lines, ""));
             out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
             out.push_str(&format!("pub struct {} {{\n", variant.name));
@@ -143,9 +153,29 @@ pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
                 } else {
                     ty
                 };
-                out.push_str(&format!("    pub {}: {ty},\n", ident(&field.wire)));
+                out.push_str(&format!("    {}: {ty},\n", ident(&field.wire)));
             }
             out.push_str("}\n\n");
+            if !variant.fields.is_empty() {
+                out.push_str(&format!("impl {} {{\n", variant.name));
+                for field in &variant.fields {
+                    let ty = field_type(&field.ty);
+                    let (ret, body) = if field.nullable {
+                        (
+                            format!("{OPTION}<&{ty}>"),
+                            format!("self.{}.as_ref()", ident(&field.wire)),
+                        )
+                    } else {
+                        (format!("&{ty}"), format!("&self.{}", ident(&field.wire)))
+                    };
+                    out.push_str(&format!(
+                        "    /// `{}`.\n    pub fn {}(&self) -> {ret} {{\n        {body}\n    }}\n",
+                        field.wire,
+                        ident(&field.wire)
+                    ));
+                }
+                out.push_str("}\n\n");
+            }
         }
         let mut lines = sum.doc.clone();
         lines.push(format!(
@@ -187,13 +217,14 @@ pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
     print_validators(domain, &mut out);
     print_rows(domain, &mut out);
     print_dispatchers(domain, &mut out);
+    super::rust_port::print_port(domain, &mut out);
     while out.ends_with("\n\n") {
         out.pop();
     }
     out
 }
 
-fn field_type(ty: &FieldType) -> String {
+pub(super) fn field_type(ty: &FieldType) -> String {
     match ty {
         FieldType::Scalar(s) => scalar(*s).to_string(),
         FieldType::Enum(name) | FieldType::Id(name) => name.clone(),
@@ -201,7 +232,7 @@ fn field_type(ty: &FieldType) -> String {
     }
 }
 
-fn scalar(s: Scalar) -> &'static str {
+pub(super) fn scalar(s: Scalar) -> &'static str {
     match s {
         Scalar::Int => "i64",
         Scalar::String => STRING,
@@ -212,7 +243,7 @@ fn scalar(s: Scalar) -> &'static str {
 
 /// A field name: a keyword is raw (`r#type`), and the keywords a raw identifier cannot be
 /// get a trailing `_`.
-fn ident(name: &str) -> String {
+pub(super) fn ident(name: &str) -> String {
     const NOT_RAW: [&str; 5] = ["self", "Self", "super", "crate", "_"];
     const KEYWORDS: [&str; 46] = [
         "as", "async", "await", "break", "const", "continue", "dyn", "else", "enum", "extern",
@@ -243,7 +274,7 @@ fn comment(line: &str) -> String {
     }
 }
 
-fn doc(lines: &[String], indent: &str) -> String {
+pub(super) fn doc(lines: &[String], indent: &str) -> String {
     lines
         .iter()
         .map(|l| one_line(l))
@@ -253,7 +284,7 @@ fn doc(lines: &[String], indent: &str) -> String {
 }
 
 /// An enum variant: `Self` is the one PascalCase word Rust does not take.
-fn variant_ident(name: &str) -> String {
+pub(super) fn variant_ident(name: &str) -> String {
     if name == "Self" {
         "Self_".to_string()
     } else {
@@ -309,6 +340,9 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
     out.push_str("/// A condition of the use case did not hold: the use case does not run.\n");
     out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
     out.push_str("pub struct Rejected {\n    pub condition: &'static str,\n    pub label: &'static str,\n    pub site: ::core::option::Option<&'static str>,\n}\n\n");
+    out.push_str("/// What a row a result writes must still be when the write commits, so the store can write\n/// it conditionally and take a write that matches no row as `NotEnabled` (see the obligations).\n");
+    out.push_str("#[derive(Debug, Clone, Copy, PartialEq, Eq)]\n");
+    out.push_str("pub enum ExpectedSource {\n    /// The row is created: no row has its id.\n    Absent,\n    /// The row exists.\n    Present,\n    /// The row exists, and its `column` holds `value`.\n    In { column: &'static str, value: &'static str },\n}\n\n");
     for f in &domain.fns {
         out.push_str(&format!("/// What `{}` returns.\n", fn_ident(&f.name)));
         out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
@@ -323,6 +357,13 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                 } => out.push_str(&format!("    pub {}: {ty},\n", ident(&o.name))),
                 OutKind::Deleted { id: None, .. } => {}
             }
+        }
+        for o in &f.outputs {
+            out.push_str(&format!(
+                "    /// What `{}` must still be when it is written.\n    pub {}: ExpectedSource,\n",
+                o.name,
+                ident(&format!("{}_expected", o.name))
+            ));
         }
         for m in &f.marks_out {
             out.push_str(&format!("    pub {}: {},\n", ident(&m.name), m.ty));
@@ -579,6 +620,21 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                 }
                 OutKind::Deleted { id: None, .. } => {}
             }
+        }
+        for o in &f.outputs {
+            let expected = match f.expected(o) {
+                super::ir::Expected::Absent => "ExpectedSource::Absent".to_string(),
+                super::ir::Expected::Present => "ExpectedSource::Present".to_string(),
+                super::ir::Expected::In { column, value } => format!(
+                    "ExpectedSource::In {{ column: {}, value: {} }}",
+                    string_literal(&column),
+                    string_literal(&value)
+                ),
+            };
+            body.push_str(&format!(
+                "        {}: {expected},\n",
+                ident(&format!("{}_expected", o.name))
+            ));
         }
         for m in &f.marks_out {
             body.push_str(&format!("        {}: out_{},\n", ident(&m.name), m.name));

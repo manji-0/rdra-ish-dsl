@@ -1941,6 +1941,7 @@ describes where `codegen` is going.
 
 ```
 rdra-ish codegen <INPUTS...> --lang <LANG> [-o <FILE> | --check <FILE>] [--package <NAME>] [--allow-failing]
+                 [--conformance <FILE> [--conformance-states <N>]]
 ```
 
 | Option | Type | Default | Description |
@@ -1948,9 +1949,11 @@ rdra-ish codegen <INPUTS...> --lang <LANG> [-o <FILE> | --check <FILE>] [--packa
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--lang` | `ts` \| `rust` \| `go` | — (required) | Language. `typescript` is an alias of `ts`. |
 | `-o`, `--out` | path | — (stdout) | Write to this file instead of stdout. |
-| `--package` | string | `domain` | The Go package name (`--lang go` only). |
+| `--package` | string | `domain` | The Go package name (`--lang go` only). Put the file in a directory of its own, as this package, and write the code that finishes it in another package: the fields of a state type are unexported, so only code outside the package is kept from building a state. |
 | `--allow-failing` | flag | off | Generate even when `check` reports errors. The state types then narrow no column, and each error is listed as an obligation the model does not meet. |
-| `--check` | path | — | Generate again and compare the result with this file instead of printing it. Exit 1 when they differ. Not with `-o`. |
+| `--conformance` | path | — (no harness) | `--lang rust` and `go` only, on a model `check` passes: also print the conformance port and harness, and write to this file the traces the harness drives a finished service along. |
+| `--conformance-states` | integer | `65536` | The states the BFS behind the traces explores at most. |
+| `--check` | path | — | Generate again and compare the result with this file instead of printing it. Exit 1 when they differ. Not with `-o` or `--conformance`. |
 
 The output is one compilation unit: a TypeScript module, a Rust module file, or a Go file.
 It opens with a header and the numbered **obligations**: what `check` and `verify` assume of
@@ -1971,7 +1974,16 @@ present in `v`, `forbidden(E, status == v, x == present)` makes it null there, a
 `required(E, x == present)` makes it present in every state. A rule with another atom or a
 `.when(Cond)` narrows nothing. A null column is `null` in TypeScript and left out of the
 Rust and Go structs, with a doc line naming the rule. The Rust and Go variants hold no tag
-field: the variant is the tag, and writing it to a row is the code's job. An entity whose
+field: the variant is the tag, and writing it to a row is the code's job. A variant's fields are
+private in Rust and unexported in Go, and methods of the same name read them (`paid_at()`,
+`PaidAt()`). Only a transition function and `from_row` (`<Entity>FromRow` in Go) make a
+state, from the rows and the inputs the model leaves open, so code outside the generated
+module or package can neither build a state by hand nor change a field a transition keeps.
+In Go, a transition function or `<Entity>ToRow` given the zero value of a state (`OrderPaid{}`)
+panics, `<Entity>FromRow` refuses a value outside a value set, a function refuses such a
+value as an input, and every value set has `Parse<Enum>(s)`, which returns an
+`InvalidValue` error for text that is no value. Records and `<Entity>Row` row types keep
+public fields. An entity whose
 `Enum` only `sets` writes, with no `transitions` (ec-site's `Payment`), is a plain record.
 
 Each use case of one transaction gets **transition functions**, read from the transition
@@ -2023,12 +2035,49 @@ Go, `json` tags). `orderFromRow(row)` / `Order::from_row(row)` / `OrderFromRow(r
 the state of a row, or `InvalidRow` naming the column whose value its state rules out;
 `orderToRow` / `into_row` / `OrderToRow` returns the flat row of a state.
 
+Each function's result also carries, per row it writes, the source that row must still have
+when the write commits: `order_expected` / `OrderExpected`, an `ExpectedSource` that is
+`Absent` for a created row, `In { column, value }` (the tag column and the state the function
+read) for a state type, and `Present` for a record. The header's obligations ask the code to
+run each function in one transaction with its reads and to write each row only where it
+still is what the result expects (`UPDATE .. WHERE id = ? AND status = ?`); a write that
+matches no row rolls the transaction back and is `NotEnabled`.
+
 Each use case whose functions take a state type gets a **dispatcher**, `runCancel` /
 `run_cancel` / `RunCancel`, over the entity types: it calls the transition function of the
 rows' states and returns its result as a `CancelOutcome` case, or `NotEnabled` when the use
 case does not run from those states (in Rust, `Refused::NotEnabled`, beside
 `Refused::Rejected`). The code that finishes the output loads rows, converts them, calls the
 dispatcher, and stores the rows it returns.
+
+With `--conformance <FILE>` (Rust and Go), the output ends with a **conformance harness**
+for the service that finishes it, and `FILE` gets the traces it runs. The service
+implements `ConformancePort`: `seed` empties its store and stores the rows of an initial
+state, `snapshot` returns a `StoreSnapshot` of every row (the `<Entity>Row` of a state type,
+the record otherwise), every pending run mark (`<UseCase><Entity>Run { id, step }`), and
+every event a triggered use case reads, and two methods per action run the use case by the
+ids of its rows and its inputs: `prepare_pay` / `PreparePay` loads the rows and returns the
+dispatcher's result, writing nothing, and `commit_pay` / `CommitPay` stores that result in one
+transaction. Either returns an error when the use case does not run. The agent's test calls `conform(|| MyService::new(), &traces)` in Rust or
+`Conform(func() ConformancePort { return newService() }, traces)` in Go. The harness starts
+a fresh port per trace, seeds the trace's initial state, makes each call, and after each
+compares the store, cut down to the columns the model tracks (an enum's value, null or not,
+an integer, a key's parent id), with the state BFS reached. A call the model refuses must
+fail and leave the store as it was, and so must a commit after another call changed the
+state of a row it writes (the harness prepares one call, runs another, then commits the
+first). It returns the first difference, naming the traces line and the rows only the model
+or only the store holds.
+
+The traces are a text file, not code. They come from a BFS of the whole transition system
+at `check`'s bounds (one row per entity), from its initial states, and take every move of a
+use case with a printed function between the states those moves reach, in as few traces as
+a greedy walk finds. In each state they also try every use case over one row that the model
+does not run on a present row, as a call that must be refused. A BFS that stops at
+`--conformance-states` covers only the states it reached and tries no refused call. The
+header of the code says how many moves the traces take, and what the harness does not
+compare (a counted trigger, a comparison proposition, the clock). A service whose store
+abstracts to the model's state after every call passes even when it does not call the core;
+the harness checks what is stored, not how.
 
 The header also lists **candidate rules**: a nullable column that every reachable row of a
 state holds present (or null) with no rule saying so, printed as the `invariant` or
