@@ -40,7 +40,7 @@ pub struct CommandSection {
     /// `instances = { Loan = 4 }`: the slot count of each entity it names (`--instances`).
     #[serde(default)]
     pub instances: BTreeMap<String, std::num::NonZeroU8>,
-    /// `symmetry = "retry"`: when `verify` explores a safety cone up to instance symmetry
+    /// `symmetry = "always"`: when `verify` explores a safety cone up to instance symmetry
     /// (`--symmetry`). Only `[verify]` reads it.
     pub symmetry: Option<crate::lifecycle::Symmetry>,
 }

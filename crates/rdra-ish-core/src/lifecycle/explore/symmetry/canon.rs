@@ -97,11 +97,30 @@ impl Canon {
         self.named.resize(n, false);
         self.movable.clear();
         self.movable.resize(n, false);
+        // A class with fewer than two rows that may move has nothing to sort: when every class
+        // is so, `G_s` is the identity and `s` is its own canonical form, its orbit itself
+        // ("Always by default", 2(b)).
+        let mut sorts = false;
         for class in &g.classes {
+            let mut m = 0;
             for slot in 0..class.slots {
-                self.movable[class.first + slot] =
+                let movable =
                     class.moves && class.exists.iter().all(|&e| s[e + slot] != Value::ABSENT.0);
+                self.movable[class.first + slot] = movable;
+                m += usize::from(movable);
             }
+            sorts |= m > 1;
+        }
+        if !sorts {
+            self.pos.clear();
+            for class in &g.classes {
+                self.pos.extend((0..class.slots).map(|s| s as u8));
+            }
+            self.mult.clear();
+            self.mult.push(1);
+            self.width = n;
+            out.copy_from_slice(s);
+            return Canonical::PLAIN;
         }
         for (c, refs) in g.children.iter().enumerate() {
             let class = &g.classes[c];

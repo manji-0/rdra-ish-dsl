@@ -72,9 +72,11 @@ every case, whatever the case's header says.
 
 **The native checker up to instance symmetry**, on `verify --symmetry always`:
 
-8. With `--symmetry always`, once with reduction off (`RDRA_ISH_NO_REDUCE=1`, so that every
-   safety cone and `always` cone goes through the orbit run) and once with it on (so that a
-   reduced safety cone goes through the run up to `G_T`), each check that both runs decide
+8. With `--symmetry always` and the test-only `RDRA_ISH_FORCE_ORBITS=1`, which runs up to
+   symmetry each cone a plain run of the entity pass would otherwise decide, once with
+   reduction off (`RDRA_ISH_NO_REDUCE=1`, so that every safety cone and `always` cone goes
+   through the orbit run) and once with it on (so that a reduced safety cone goes through the
+   run up to `G_T`), each check that both runs decide
    gets the verdict the plain run gives, at 2 instances and at every bound the case runs BFS
    at.
    The run prints no fault and does not panic: a lifted counterexample that does not replay

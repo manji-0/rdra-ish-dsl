@@ -498,17 +498,16 @@ runs in `cargo test` in seconds.
 
 <!-- constrained-by #tlc-and-engine-agreement -->
 
-- `verify --symmetry <never|retry|always>`, and `symmetry = "..."` under `[check]` in
-  `rdra.toml`. `retry` runs a cone up to symmetry only after its plain run stopped at the
-  memory limit ([Decisions](#decisions)); `always` runs every cone the current phase covers
-  up to symmetry, for rule 8 and the tests; `never` is today's `verify`. The default is
-  `never` until phase 5 makes it `retry`.
-- A cone line run up to symmetry shows the stored count as orbits and an estimate of the
-  plain state count, `(240,016 orbits, about 62M states)`, and a retried cone says why:
-  `retried up to instance symmetry after the memory limit at 25,266,745 states`. The
-  estimate is described under [Decisions](#decisions).
-- The notes under a cone line: a class the scan left out ([The group](#the-group)), and states
-  stored without their canonical form ([The canonical form](#the-canonical-form)).
+- `verify --symmetry <never|always>`, and `symmetry = "..."` under `[verify]` in
+  `rdra.toml`. `always` runs up to symmetry each cone the current phase covers that no plain
+  run decides ([Always by default](#always-by-default), 1); `never` is today's `verify`. The
+  default is `never` until the flip makes it `always`. `retry` was removed in step 1.
+- A cone line run up to symmetry keeps `never`'s shape and prints an estimate of the plain
+  state count, `(about 62M states)`, described under [Decisions](#decisions).
+  `RDRA_ISH_SYMMETRY_STATS` prints the orbits stored, the estimate, the states the branch cap
+  cut, and the classes the scan left out ([The group](#the-group)).
+- The note under a cone line: states stored without their canonical form
+  ([The canonical form](#the-canonical-form)).
 - `check`, `states`, `export`, and `--prove` do not read the option.
 
 ## Phases
@@ -521,7 +520,8 @@ default `--symmetry never`; phase 5 changes only cones that stop at the memory l
 
 **Phase 1: safety cones #74 leaves unreduced.** The group, the scan, the canonicalizer with
 its fast path, canonicalization in the workers, `OrbitRun` with its orbit self-edge list,
-the trace lift, the orbit-size estimate, `--symmetry always|retry|never`, the
+the trace lift, the orbit-size estimate, `--symmetry always|retry|never` (`retry` removed
+in step 1 of [Always by default](#always-by-default)), the
 twins, the exhaustive test, the Kani harness, the `sym_` cases, and rule 8. Exit:
 
 - the four group-A cones give #212's counts exactly: 240,016 (`Inv_Appointment_0`, `_1`),
@@ -541,7 +541,7 @@ the prototype), 16 to 108 times fewer stored states.
 
 **Phase 2: S up to `H`.** `Classes::of`, `init`, `lift`, and `QuotientCache` as in
 [Composition with #74](#composition-with-74), with the `Classes::of` twin. As built, S runs
-up to `H` under `--symmetry retry` and `always` once its plain run stopped at the memory
+up to `H` under `--symmetry always` (and `retry` until step 1) once its plain run stopped at the memory
 limit with the pool to itself (a run another run crowded out is no reason); `never` runs S
 as before. No sample's S stops at n≤2, so a test-only switch runs S up to `H` at once:
 `Caps::forcing_s_up_to_h` in tests, and `RDRA_ISH_FORCE_S_UP_TO_H` in a `shadow` build,
@@ -555,8 +555,8 @@ lifted counterexample on a seeded violation of that cone replays.
 undecided cones with the S side fixed. Exit: those cones decided at n=3, or the measured
 factor recorded as why not.
 
-As built, a reduced safety cone runs up to `G_T` under `--symmetry always`, and under
-`retry` once its lone plain run stopped at the memory limit, as a whole cone does; an
+As built, a reduced safety cone runs up to `G_T` under `--symmetry always`, and, until step 1
+removed it, under `retry` once its lone plain run stopped at the memory limit, as a whole cone does; an
 `always` property on a reduced cone still runs plain. The table below is `always`'s. Under
 `retry`, `Forbidden_Patent_4` has not been seen to get that far at n=3: a run of
 `verify --entity Patent --symmetry retry` at `RDRA_JOBS=4` was stopped after 2,400 s, still

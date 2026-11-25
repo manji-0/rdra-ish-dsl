@@ -184,7 +184,7 @@ pub fn run(
         max_states.unwrap_or(usize::MAX),
     )
     .without_views()
-    // Under `retry` and `always`, a sub-lifecycle whose run stops at the memory limit runs
+    // Under `always`, a sub-lifecycle whose run stops at the memory limit runs
     // again up to `H` (#212 phase 2): only a cone that stopped there changes.
     .with_s_up_to_h(symmetry != Symmetry::Never)
     .charged_to(MemoryPool::share_of(
@@ -268,10 +268,9 @@ pub fn run(
             |run| shared.decide_on(&ts, &jobs, &covers, run),
         );
         rdra_ish_core::perf::pass("safety_pass");
-        let (safety, mut vacuous) = bfs_cones(&ts, &jobs, caps, &covers, &mut shared, symmetry);
+        let (safety, mut vacuous) = bfs_cones(&ts, &jobs, caps, &covers, &mut shared);
         rdra_ish_core::perf::pass("property_pass");
-        let (properties, property_vacuous) =
-            native_properties(&ts, &jobs, caps, &mut shared, symmetry);
+        let (properties, property_vacuous) = native_properties(&ts, &jobs, caps, &mut shared);
         // A `--buc` drops use cases that may reach a premise.
         if scope.bucs.is_empty() {
             vacuous.extend(property_vacuous);

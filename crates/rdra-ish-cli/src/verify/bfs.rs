@@ -6,9 +6,9 @@ use super::WholeRun;
 use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_output::Outcome;
 use rdra_ish_core::lifecycle::{
-    Caps, Checks, ComponentRun, Diag, EntId, LeftOut, NotChecked, OrbitRun, PropertyVerdict,
-    QuotientCache, RunEnd, Scope, Selection, Severity, StateDiag, StoredRun, Symmetry, Target,
-    TargetExploration, TransitionSystem, Undecided,
+    Caps, Checks, ComponentRun, Diag, EntId, NotChecked, OrbitRun, PropertyVerdict, QuotientCache,
+    RunEnd, Scope, Selection, Severity, StateDiag, StoredRun, Target, TargetExploration,
+    TransitionSystem, Undecided,
 };
 use rdra_ish_core::{in_parallel, ResolvedProgram, SemanticModel};
 use std::collections::BTreeSet;
@@ -336,10 +336,6 @@ pub(super) struct Orbits {
     pub(super) estimate: u128,
     /// Classes stored without their canonical form (`BRANCH_CAP`).
     pub(super) cut: u64,
-    pub(super) left_out: Vec<LeftOut>,
-    /// The plain run stopped at the memory limit after this many states, and the cone ran
-    /// again up to symmetry (`--symmetry retry`).
-    pub(super) retried_at: Option<usize>,
 }
 
 /// `n` to two significant figures, as `62M`.
@@ -365,22 +361,14 @@ pub(super) fn about(n: u128) -> String {
 }
 
 impl BfsCone {
-    /// The verdict of `run`, a run of `cone`'s system up to instance symmetry; `retried_at`
-    /// is the plain run's states when it stopped at the memory limit first.
-    pub(super) fn of_orbits(
-        ts: &TransitionSystem,
-        cone: &ConeSystem,
-        run: &OrbitRun,
-        retried_at: Option<usize>,
-    ) -> BfsCone {
+    /// The verdict of `run`, a run of `cone`'s system up to instance symmetry.
+    pub(super) fn of_orbits(ts: &TransitionSystem, cone: &ConeSystem, run: &OrbitRun) -> BfsCone {
         let mut out = Self::of_parts(ts, cone, run.checks(), run.diags(), run.end());
         if let BfsCone::Ran { states, orbits, .. } = &mut out {
             *states = run.orbits();
             *orbits = Some(Box::new(Orbits {
                 estimate: run.estimate(),
                 cut: run.cut(),
-                left_out: run.left_out().to_vec(),
-                retried_at,
             }));
         }
         out
@@ -503,15 +491,7 @@ impl BfsCone {
                 let mut count = Some(*states as u64);
                 if let Some(o) = orbits {
                     count = None;
-                    notes.push(format!(
-                        "{states} orbits, about {} states",
-                        about(o.estimate)
-                    ));
-                    if let Some(at) = o.retried_at {
-                        notes.push(format!(
-                            "retried up to instance symmetry after the memory limit at {at} states"
-                        ));
-                    }
+                    notes.push(format!("about {} states", about(o.estimate)));
                 }
                 if *end == RunEnd::Capped {
                     notes.push(
@@ -519,21 +499,13 @@ impl BfsCone {
                     );
                 }
                 let mut line = run_line(module, checks, verdict, count, &notes);
-                // The notes under the line: what the group left out, and what it cut.
-                if let Some(o) = orbits {
-                    for l in &o.left_out {
-                        line.push_str(&format!(
-                            "\n  note: instance symmetry leaves {} out: {}",
-                            l.entity,
-                            l.rule.text()
-                        ));
-                    }
-                    if o.cut > 0 {
-                        line.push_str(&format!(
-                            "\n  note: {} states stored without their canonical form (branch cap); the orbit count is an upper bound",
-                            o.cut
-                        ));
-                    }
+                // The note under the line: what the canonicalizer cut. What the group left
+                // out goes to `RDRA_ISH_SYMMETRY_STATS` (`symmetry_stats`).
+                if let Some(o) = orbits.as_ref().filter(|o| o.cut > 0) {
+                    line.push_str(&format!(
+                        "\n  note: {} states stored without their canonical form (branch cap); the count is an upper bound",
+                        o.cut
+                    ));
                 }
                 line
             }
@@ -621,6 +593,29 @@ fn vacuous_on(
         .collect()
 }
 
+/// Under `RDRA_ISH_SYMMETRY_STATS`, one line on stderr per run up to instance symmetry: the
+/// orbits it stored, the states they stand for, and the classes its group left out, which
+/// the cone line does not print (docs/design/instance-symmetry.md, "Always by default", 3 and
+/// 4).
+pub(super) fn symmetry_stats(module: &str, run: &OrbitRun) {
+    if std::env::var_os("RDRA_ISH_SYMMETRY_STATS").is_none() {
+        return;
+    }
+    let left: Vec<String> = (run.left_out().iter())
+        .map(|l| format!("{} ({})", l.entity, l.rule.text()))
+        .collect();
+    eprintln!(
+        "symmetry: {module}: {} orbits, about {} states, {} cut; leaves out: {}",
+        run.orbits(),
+        run.estimate(),
+        run.cut(),
+        match left.is_empty() {
+            true => "nothing".to_string(),
+            false => left.join(", "),
+        }
+    );
+}
+
 fn safety_cone(jobs: &[Job], at: usize) -> Option<&ConeSystem> {
     match &jobs[at].kind {
         JobKind::Cone(cone) => Some(cone.as_ref()),
@@ -639,22 +634,19 @@ fn safety_cone(jobs: &[Job], at: usize) -> Option<&ConeSystem> {
 /// property's plain answer, which goes into `shared`; when that run stops at a cap the cone
 /// runs again as it would alone.
 ///
-/// Under `--symmetry always` a cone runs up to instance symmetry, a reduced one up to `G_T`
-/// (#212 phase 3), alone (`Shared::up_to_symmetry`): `shared` holds no verdict for it, and
-/// its run gives no property its plain answer. Under `--symmetry retry` such a cone runs so
-/// only when its lone run also stopped at the memory limit; the plain run and its charge are
-/// gone by then.
+/// Under `--symmetry always` a cone that no plain run decides runs up to instance symmetry,
+/// a reduced one up to `G_T` (#212 phase 3), alone (`Shared::up_to_symmetry`), and its run
+/// gives no property its plain answer.
 pub(super) fn bfs_cones(
     ts: &TransitionSystem,
     jobs: &[Job],
     caps: Caps,
     covers: &[Option<usize>],
     shared: &mut Shared,
-    symmetry: Symmetry,
 ) -> (Vec<Option<BfsCone>>, Vec<Diag>) {
     let cone = |at: usize| safety_cone(jobs, at);
     let up_to_symmetry: Vec<bool> = (0..jobs.len())
-        .map(|at| shared.up_to_symmetry(at))
+        .map(|at| shared.up_to_symmetry(jobs, at))
         .collect();
     let up_to_symmetry = |at: usize| up_to_symmetry[at];
     // Per safety cone, the properties not yet decided whose reduced cone is its system. A
@@ -672,15 +664,15 @@ pub(super) fn bfs_cones(
         JobKind::PropertyCone(p) => p.as_ref(),
         _ => unreachable!("a property's job"),
     };
-    // The cone at `at` up to instance symmetry, stopped once every check has failed;
-    // `retried_at` is the plain run's states when it stopped at the memory limit first.
-    let orbits = |at: usize, retried_at: Option<usize>| {
+    // The cone at `at` up to instance symmetry, stopped once every check has failed.
+    let orbits = |at: usize| {
         let me = cone(at).expect("a safety cone");
         let run = me.system.clone().run_orbits(caps.until_all_violated());
+        symmetry_stats(&jobs[at].module, &run);
         let vacuous = vacuous_on(ts, jobs, covers, at, &run);
         let memory = met_memory_limit(run.diags());
         (
-            BfsCone::of_orbits(ts, me, &run, retried_at),
+            BfsCone::of_orbits(ts, me, &run),
             vacuous,
             memory,
             Vec::new(),
@@ -690,7 +682,7 @@ pub(super) fn bfs_cones(
     // it holds is then violated, so neither vacuous nor covering another.
     let alone = |at: usize| {
         if up_to_symmetry(at) {
-            return orbits(at, None);
+            return orbits(at);
         }
         let run = cone(at)
             .expect("a safety cone")
@@ -734,28 +726,12 @@ pub(super) fn bfs_cones(
         .collect();
     let decided = in_parallel(open.clone(), rdra_ish_core::jobs(), decide);
     for (&at, (verdict, vacuous, crowded, plains)) in open.iter().zip(decided) {
-        let (verdict, vacuous, crowded, plains) = match crowded {
+        let (verdict, vacuous, _, plains) = match crowded {
             true => {
                 drop((verdict, vacuous, plains));
                 decide(at)
             }
             false => (verdict, vacuous, crowded, plains),
-        };
-        let (verdict, vacuous) = match (&verdict, symmetry) {
-            (
-                BfsCone::Ran {
-                    states,
-                    orbits: None,
-                    ..
-                },
-                Symmetry::Retry,
-            ) if crowded && jobs[at].symmetric() => {
-                let states = *states;
-                drop((verdict, vacuous));
-                let (verdict, vacuous, _, _) = orbits(at, Some(states));
-                (verdict, vacuous)
-            }
-            _ => (verdict, vacuous),
         };
         for (k, plain) in plains {
             shared.plain[k] = Some(plain);
