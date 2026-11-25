@@ -2125,11 +2125,16 @@ private in Rust and unexported in Go, and methods of the same name read them (`p
 `PaidAt()`). Only a transition function and `from_row` (`<Entity>FromRow` in Go) make a
 state, from the rows and the inputs the model leaves open, so code outside the generated
 module or package can neither build a state by hand nor change a field a transition keeps.
-In Go, a transition function or `<Entity>ToRow` given the zero value of a state (`OrderPaid{}`)
-panics, `<Entity>FromRow` refuses a value outside a value set, a function refuses such a
-value as an input, and every value set has `Parse<Enum>(s)`, which returns an
-`InvalidValue` error for text that is no value. Records and `<Entity>Row` row types keep
-public fields. An entity whose
+In Go, each state (`OrderPaid`) is an interface of its own, implemented by one unexported
+struct, so code outside the package cannot write `OrderPaid{}`: a state variable that holds
+nothing is `nil`. A transition function refuses a `nil` state with an `InvalidArgument` error,
+`<Entity>ToRow(nil)` is the zero row, and `Kind()` returns the state's `<Entity>Kind`
+(`OrderKindPaid`); the tag column is only in `<Entity>Row`, and a column named `kind` is read
+by `Kind_()`. `<Entity>FromRow` refuses a value outside a value set or a `Money`, `Decimal`,
+`Date` or `DateTime` outside its shape, a function refuses such a value as an input, and every
+value set, id and scalar has `Parse<Type>(s)`, which returns an `InvalidValue` error for text
+that is no value. No Go function panics. Records and `<Entity>Row` row types keep public
+fields. An entity whose
 `Enum` only `sets` writes, with no `transitions` (ec-site's `Payment`), is a plain record.
 
 Each use case of one transaction gets **transition functions**, read from the transition
@@ -2141,10 +2146,13 @@ rows it reads, then an input for each value the model leaves open (a column `set
 returns a `<Name>Result` record with the rows it writes or creates, the id of each row it
 deletes, and a value of each event the use case raises. A condition applied to the use case
 is checked first: when it does not hold, the function returns `Rejected` (TypeScript), an
-`Err(Rejected)` (Rust), or a `*Rejected` error (Go). A row that breaks a rule the verified
-model keeps (a column the target state keeps null that has a value, a column it keeps
-present that is null) or a parent that is not the child's makes the function throw or
-panic. A use case split into transactions gets one function per step (`openSettlement1`,
+`Err(Rejected)` (Rust), or a `*<UseCase>Error` whose `Kind` is `<UseCase>ErrorRejected` and
+whose detail, which `errors.As` reaches, is a `*Rejected` (Go). A row that breaks a rule the
+verified model keeps (a column the target state keeps null that has a value, a column it keeps
+present that is null) or a parent that is not the child's makes the function throw
+(TypeScript) or return its `InvalidArgument` case (Rust, and `<UseCase>ErrorInvalidArgument`
+in Go).
+A use case split into transactions gets one function per step (`openSettlement1`,
 `openSettlement2`), linked by **run marks**: a step that leaves a row for the next one
 returns a mark, `OpenSettlementClaimMark1 { id }`, and the next step takes it as an argument,
 so it cannot be called without the step before it. A later step reads an earlier step's row
@@ -2195,11 +2203,16 @@ rows' states and returns its result as a `CancelOutcome` case, or `NotEnabled` w
 case does not run from those states. In Rust every transition function and dispatcher returns
 `Result<_, <UseCase>Error>` (`PayError`), an enum of `NotEnabled`, `Rejected` (when a condition
 applies), and `InvalidArgument` (when the arguments can break what the model keeps), each a type
-that implements `std::error::Error`; the generated Rust never panics. The code that finishes
+that implements `std::error::Error`; the generated Rust never panics. In Go they return
+`(<Result>, error)`, the error a `*PayError` whose `Kind` is `PayErrorNotEnabled`,
+`PayErrorRejected` or `PayErrorInvalidArgument` and whose detail (`*NotEnabled`, ...)
+`errors.As` reaches and `errors.Is` matches with `ErrNotEnabled`, `ErrRejected` and
+`ErrInvalidArgument`; the generated Go never panics either. The code that finishes
 the output loads rows, converts them, calls the dispatcher, and stores the rows it returns.
 The Rust ids and scalars are opaque: `OrderId::from(7)`, `"12.50".parse::<Money>()`,
 `"2026-01-01".parse::<Date>()`, which refuse text of another shape with `InvalidValue`
-([Generated code style](design/algebraic-codegen.md#generated-code-style)).
+([Generated code style](design/algebraic-codegen.md#generated-code-style)). In Go,
+`ParseMoney("12.50")` and the like do the same.
 
 In Rust, each use case with a function or an entry point also gets a **contract**, the trait
 `<UseCase>UseCase` with its `prepare_*` / `commit_*` methods (and `run_<action>` for an action

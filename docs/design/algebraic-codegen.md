@@ -319,10 +319,15 @@ Since #331, Rust and Go make a state only in the generated code:
   rules. A test outside the module or package (`codegen_behaviour.rs`) shows that the
   compiler refuses a struct literal of a state and a write to its field.
 - Go cannot forbid the zero value of a struct, nor a conversion to a `string` type, from
-  another package. A state therefore carries an unexported mark that only the package sets:
-  a transition function or `<Entity>ToRow` given the zero value panics. `<Entity>FromRow`
-  refuses a value outside a value set in any column, a function panics on one as an input,
-  and each value set has `Parse<Enum>(s)`.
+  another package. Since #363 a Go state type (`OrderPaid`) is therefore an interface, whose
+  one implementation is an unexported struct (`orderPaidState`): code outside the package
+  cannot write a literal of it, so its zero value is `nil`, which is no state. A transition
+  function refuses `nil`, or a value of a type of its own that embeds the interface, with
+  `InvalidArgument`; `<Entity>ToRow(nil)` is the zero row. `<Entity>FromRow` refuses a value
+  outside a value set and a scalar outside its shape in any column, a function refuses one as
+  an input with `InvalidArgument`, and each value set and scalar has `Parse<Type>(s)`. Nothing
+  panics. (Until #363 a state carried an unexported mark, and a function given the zero value
+  panicked.)
 - Go keeps this only when the code that finishes the output is in another package, so the
   generated file goes in a directory of its own, named by `--package`.
 
@@ -444,17 +449,31 @@ CHANGELOG gives the migration):
 
 The same principles, with the standard library only:
 
-- Sum types as sealed interfaces: `type Order interface { Kind() OrderKind; isOrder() }`, the
-  unexported marker method implemented only by the generated state structs, and the visitor of
-  P7 of [code-check.md](./code-check.md#phases) for exhaustiveness.
-- Unexported fields with constructors `New<Type>(...) (<Type>, error)` and accessors; ids and
-  scalars as defined types made by `Parse<Type>(...) (<Type>, error)`.
+- Sum types as sealed interfaces: `type Order interface { Kind() OrderKind; isOrder(); row()
+  OrderRow }`, the unexported methods implemented only by the generated state structs, and the
+  visitor of P7 of [code-check.md](./code-check.md#phases) for exhaustiveness. Each state is
+  an interface too (`OrderPaid`: `Order`, its accessors, and `isOrderPaid()`), implemented by
+  one unexported struct ([Who makes a state](#who-makes-a-state)); a type switch on the state
+  interfaces tells them apart. `<Entity>Kind` is a `string` type with one constant per state
+  (`OrderKindPaid = "Paid"`).
+- Unexported fields read by accessors of the column's name (`PaidAt()`, `Kind_()` for a
+  column `kind`); a nullable column's accessor returns a copy. Ids and scalars are defined
+  types made by `Parse<Type>(...) (<Type>, error)`; a scalar's `Valid()` checks the same shape.
+  Records, rows, DTOs, events and marks keep exported fields.
 - `<Entity>FromRow(row) (<Entity>, error)` validates the row structs (`<Entity>Row`, exported
-  fields with `json` tags), which stay separate from the domain types.
-- Typed errors (`*PayError` with a `Kind`, `*InvalidRow`, `*InvalidValue`) usable with
-  `errors.Is` / `errors.As`, and no `panic`.
+  fields with `json` tags), which stay separate from the domain types; `<Entity>ToRow(state)`
+  cannot fail. A state shares no pointer with a row.
+- Typed errors usable with `errors.Is` / `errors.As`, and no `panic`. Every transition
+  function and dispatcher returns `(<Result>, error)`, the error a `*PayError{Kind, Err}`:
+  `Kind` is a `PayErrorKind` constant (`PayErrorNotEnabled`, `PayErrorRejected`,
+  `PayErrorInvalidArgument`, only the ones the use case has), and `Err` the case's detail
+  (`*NotEnabled`, `*Rejected`, `*InvalidArgument`), which `Unwrap` returns, so
+  `errors.As(err, &rejected)` reaches it and `errors.Is(err, ErrRejected)` matches it. Go adds
+  `InvalidArgument` where Rust's types already rule the argument out: a nil state, a value
+  outside a value set, a scalar outside its shape. `*InvalidRow` and `*InvalidValue` likewise.
 - Value semantics: a transition returns new values and changes none of its arguments.
-- A doc comment on every exported item; `gofmt` and `go vet` clean.
+- A doc comment on every exported item; the file starts with `// Code generated ... DO NOT
+  EDIT.`, and is `gofmt` and `go vet` clean (`codegen_builds.rs` checks both on every sample).
 
 Not covered: personal data (`Sensitive<T>`, `secrecy`). The language has no annotation that
 marks a column as personal, so the generator cannot know which to wrap; tracked separately.
@@ -465,7 +484,9 @@ marks a column as personal, so the generator cannot know which to wrap; tracked 
   `clippy-driver -D warnings -D missing_docs` on the output of every sample, so no lint is
   allowed crate-wide; the few per-item allows name their reason (a function of more than seven
   arguments, an accessor named after a column such as `new`, the model's spelling of a name).
-- TypeScript, Go: the output keeps its earlier shape until their pull requests of #363 land.
+- Go: in these shapes since the Go pull request of #363. `codegen_builds.rs` runs `go vet` and
+  `gofmt -l` on the output of every sample and checks that it calls no `panic`.
+- TypeScript: the output keeps its earlier shape until its pull request of #363 lands.
 
 ## Use cases split into transactions
 

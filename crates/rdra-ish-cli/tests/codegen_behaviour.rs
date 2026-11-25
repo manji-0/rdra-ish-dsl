@@ -131,12 +131,25 @@ const RUST_FORGERIES: [(&str, &str); 4] = [
     ("let id = OrderId(1); let _ = id;", "E0423"),
 ];
 
-/// The same in Go, outside the generated package, and what the compiler says.
-const GO_FORGERIES: [(&str, &str); 2] = [
-    ("o := domain.OrderPaid{Qty: 9}; _ = o", "unknown field Qty"),
+/// The same in Go, outside the generated package, and what the compiler says. A state type is
+/// an interface whose one implementation is unexported, so not even its zero value is a state
+/// (#363, P7): the zero value of the interface is nil, which every function refuses.
+const GO_FORGERIES: [(&str, &str); 4] = [
+    (
+        "o := domain.OrderPaid{}; _ = o",
+        "invalid composite literal type domain.OrderPaid",
+    ),
     (
         "var o domain.OrderPaid; o.qty = 7; _ = o",
         "o.qty undefined",
+    ),
+    (
+        "o := domain.orderPaidState{}; _ = o",
+        "undefined: domain.orderPaidState",
+    ),
+    (
+        "var o domain.Order = struct{ domain.OrderKind }{}; _ = o",
+        "does not implement domain.Order",
     ),
 ];
 

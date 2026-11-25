@@ -392,7 +392,9 @@ pub fn build_with(
 pub fn reserved_names(lang: Lang) -> &'static [&'static str] {
     match lang {
         Lang::TypeScript => &["Result", "assertNever"],
-        Lang::Rust | Lang::Go => &[],
+        // The sentinels errors.Is matches each case of a `<UseCase>Error` with.
+        Lang::Go => &["ErrNotEnabled", "ErrRejected", "ErrInvalidArgument"],
+        Lang::Rust => &[],
     }
 }
 

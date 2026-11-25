@@ -2,13 +2,12 @@
 //! which drives a port along the traces `conformance::traces` writes.
 
 use super::conformance::TRACES_FORMAT;
-use super::go::{doc, field_type, local};
+use super::go::{doc, field_type, local, struct_decl, Line};
 use super::ir::{DomainModel, Field, FieldType, Scalar, Track};
 use super::{string_literal, type_ident};
 
-/// The imports the harness uses, printed after the package clause.
-pub(super) const IMPORTS: &str =
-    "import (\n\t\"errors\"\n\t\"fmt\"\n\t\"sort\"\n\t\"strconv\"\n\t\"strings\"\n)\n\n";
+/// The packages the harness imports.
+pub(super) const IMPORTS: [&str; 5] = ["errors", "fmt", "sort", "strconv", "strings"];
 
 pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
     let Some(port) = domain.port.as_ref().filter(|_| domain.harness) else {
@@ -32,17 +31,23 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
         ));
     }
     out.push_str("// StoreSnapshot is everything a store holds, as the conformance harness reads it: the rows of\n// each entity, the pending run marks, and the events raised on rows that a triggered use case reads.\n");
-    out.push_str("type StoreSnapshot struct {\n");
+    let mut lines = Vec::new();
     for e in &port.entities {
-        out.push_str(&format!("\t{} []{}\n", type_ident(&e.entity), e.ty));
+        lines.push(Line::Cells(vec![
+            type_ident(&e.entity),
+            format!("[]{}", e.ty),
+        ]));
     }
     for r in &port.runs {
-        out.push_str(&format!("\t{}s []{}\n", r.name, r.name));
+        lines.push(Line::Cells(vec![
+            format!("{}s", r.name),
+            format!("[]{}", r.name),
+        ]));
     }
     for ev in &port.events {
-        out.push_str(&format!("\t{} []{}\n", ev.ty, ev.ty));
+        lines.push(Line::Cells(vec![ev.ty.clone(), format!("[]{}", ev.ty)]));
     }
-    out.push_str("}\n\n");
+    out.push_str(&struct_decl("StoreSnapshot", &lines));
 
     out.push_str("// ConformancePort is what a finished service offers the conformance harness. A use case is two\n// calls: each Prepare* method loads its rows by id and calls the dispatcher or transition\n// function, writing nothing; the matching Commit* stores the rows, marks, and events the result\n// holds in one transaction, each row only where it still is what the result's <Row>Expected\n// names. Either returns an error and changes nothing when the use case does not run.\n");
     out.push_str("type ConformancePort interface {\n");
@@ -417,25 +422,25 @@ func confSet[T any](p *T) string {{
             type_ident(&e.entity)
         ));
         let mut parts = vec![format!(
-            "{} + {}",
+            "{}+{}",
             string_literal(&format!("{} ", e.entity)),
             text(domain, &format!("row.{}", e.id.pascal), &e.id.ty)
         )];
         for (field, how) in &e.tracked {
             parts.push(format!(
-                "{} + {}",
+                "{}+{}",
                 string_literal(&format!(" {}=", field.wire)),
                 abstracted(domain, field, *how)
             ));
         }
         out.push_str(&format!(
             "\t\tout = append(out, {})\n\t}}\n",
-            parts.join(" + ")
+            parts.join("+")
         ));
     }
     for r in &port.runs {
         out.push_str(&format!(
-            "\tfor _, m := range s.{}s {{\n\t\tout = append(out, {} + {} + \" \" + strconv.Itoa(m.Step))\n\t}}\n",
+            "\tfor _, m := range s.{}s {{\n\t\tout = append(out, {}+{}+\" \"+strconv.Itoa(m.Step))\n\t}}\n",
             r.name,
             string_literal(&format!("mark {} {} ", r.usecase, r.entity)),
             text(domain, "m.Id", &FieldType::Id(r.id_ty.clone()))
@@ -446,7 +451,7 @@ func confSet[T any](p *T) string {{
         for (field, tracked) in &ev.ids {
             if *tracked {
                 out.push_str(&format!(
-                    "\t\tout = append(out, {} + {})\n",
+                    "\t\tout = append(out, {}+{})\n",
                     string_literal(&format!("raised {} {} ", ev.ty, field.entity)),
                     text(
                         domain,

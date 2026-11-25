@@ -10,6 +10,7 @@
 package domain_test
 
 import (
+	"errors"
 	"os"
 	"sort"
 	"testing"
@@ -106,7 +107,7 @@ func (s *service) PreparePlace(parent domain.CustomerId, id domain.OrderId, meth
 	if !ok {
 		return domain.PlaceResult{}, notEnabled("Place")
 	}
-	return domain.Place(customer, id, method, note), nil
+	return domain.Place(customer, id, method, note)
 }
 
 func (s *service) CommitPlace(r domain.PlaceResult) error {
@@ -194,7 +195,7 @@ func (s *service) PrepareCancel(id domain.OrderId) (domain.CancelOutcome, error)
 		return domain.CancelOutcome{}, err
 	}
 	out, err := domain.RunCancel(state)
-	if _, refused := err.(*domain.NotEnabled); refused && s.fault == "accept-disabled" {
+	if errors.Is(err, domain.ErrNotEnabled) && s.fault == "accept-disabled" {
 		row := domain.OrderToRow(state)
 		row.Status = domain.OrderStatusPaid
 		paid, err := domain.OrderFromRow(row)
