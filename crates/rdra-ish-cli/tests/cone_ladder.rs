@@ -33,8 +33,8 @@ const CASES: &[Case] = &[
     (
         Model::File("samples/formal-verification/order.rdra"),
         &[
-            ("PaidLeadsToShipped", "none"),
-            ("EventuallyTerminal", "none"),
+            ("PaidLeadsToShipped", "Monotone"),
+            ("EventuallyTerminal", "Monotone"),
         ],
     ),
     (
@@ -67,7 +67,10 @@ const CASES: &[Case] = &[
     ),
     (
         Model::File("crates/rdra-ish-cli/tests/engine_corpus/cone_outside_monotone.rdra"),
-        &[("PaidShipsStamp", "none"), ("PaidShipsNotes", "none")],
+        &[
+            ("PaidShipsStamp", "Monotone"),
+            ("PaidShipsNotes", "Monotone"),
+        ],
     ),
     (
         Model::File("crates/rdra-ish-cli/tests/engine_corpus/cone_copy_from_parent.rdra"),
@@ -75,7 +78,7 @@ const CASES: &[Case] = &[
     ),
     (
         Model::Source("guard_reads_other", GUARD_READS_OTHER),
-        &[("PaidShipsHalfFair", "none")],
+        &[("PaidShipsHalfFair", "Monotone")],
     ),
     (
         Model::Source("quantifier_chain", QUANTIFIER_CHAIN),

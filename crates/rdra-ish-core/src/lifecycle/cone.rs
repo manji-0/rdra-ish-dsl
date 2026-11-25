@@ -509,6 +509,20 @@ impl TransitionSystem {
             .all(|a| self.action_writes(a).is_subset(vars))
     }
 
+    /// The vars outside `vars` that some action writes and that are not monotone
+    /// (`monotone_vars`): the ones that can change forever outside a cone. Empty when every
+    /// write outside the cone is monotone, so each such var changes finitely often in any
+    /// behavior, and no behavior changes only outside the cone forever (step 4 of
+    /// docs/design/native-temporal-verification.md, "Modes and the cone").
+    pub fn cyclic_outside(&self, vars: &VarSet) -> VarSet {
+        let monotone = self.monotone_vars();
+        self.actions
+            .iter()
+            .flat_map(|a| self.action_writes(a))
+            .filter(|v| !vars.contains(v) && !monotone[v.index()])
+            .collect()
+    }
+
     /// Some action of the cone takes a new slot of an entity outside it. That entity is
     /// unbounded in the cone, so the cone reaches a superset of the whole system's projection.
     pub fn cone_frees_slots(&self, cone: &Cone) -> bool {

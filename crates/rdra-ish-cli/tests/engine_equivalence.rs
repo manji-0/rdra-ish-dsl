@@ -3318,14 +3318,7 @@ fn bfs_and_tlc_agree_on_a_sub_lifecycle_of_many_classes() {
 type TemporalCase = (&'static str, &'static str, &'static [(&'static str, Why)]);
 
 const TEMPORAL_CASES: &[TemporalCase] = &[
-    (
-        "samples/formal-verification/order.rdra",
-        "",
-        &[
-            ("PaidLeadsToShipped", Why::WfNext),
-            ("EventuallyTerminal", Why::WfNext),
-        ],
-    ),
+    ("samples/formal-verification/order.rdra", "", &[]),
     ("samples/formal-verification/int_stock.rdra", "", &[]),
     ("samples/formal-verification/temporal_fair.rdra", "", &[]),
     ("samples/formal-verification/temporal_along.rdra", "", &[]),
@@ -3341,11 +3334,7 @@ const TEMPORAL_CASES: &[TemporalCase] = &[
         INDEPENDENT_LOOP,
         &[("PaidShipsUnfair", Why::WfNext)],
     ),
-    (
-        "guard_reads_other",
-        GUARD_READS_OTHER,
-        &[("PaidShipsHalfFair", Why::WfNext)],
-    ),
+    ("guard_reads_other", GUARD_READS_OTHER, &[]),
     ("guard_toggles", GUARD_TOGGLES, &[]),
     ("frees_slots", FREES_SLOTS, &[]),
     ("whole_cone", WHOLE_CONE, &[]),

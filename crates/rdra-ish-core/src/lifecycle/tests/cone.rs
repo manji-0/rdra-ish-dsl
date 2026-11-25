@@ -474,3 +474,57 @@ after(Decide).assert(Doc.status != drop)
     let (exact, _) = assert_cones_exact("inline", &model, Bounds::STATES);
     assert!(exact > 0);
 }
+
+/// Step 4 of phase 4 (#168): a flag set once outside the cone is monotone, and so is an
+/// existence that rises and falls, since a deleted slot is never reused; a column a delete
+/// resets, or a status that toggles, can change forever and is named.
+#[test]
+fn cyclic_outside_names_the_writes_that_can_change_forever() {
+    let model = super::model_from(
+        r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, shipped) @default(pending)
+  stamped: Bool @default(false)
+}
+entity Note "メモ" { id: Int @pk  state: Enum(open, done) @default(open) }
+entity Ticket "問い合わせ" { id: Int @pk  status: Enum(open, closed) @default(open) }
+usecase Place "注文"
+usecase Ship "出荷"
+usecase Stamp "押印"
+usecase Write "メモ作成"
+usecase Finish "メモ完了"
+usecase Erase "メモ削除"
+usecase Open "起票"
+usecase Close "完了"
+usecase Reopen "再開"
+creates(Place, Order)
+transitions(Ship, Order.status, pending -> shipped)
+sets(Stamp, Order.stamped == true)
+creates(Write, Note)
+transitions(Finish, Note.state, open -> done)
+deletes(Erase, Note)
+creates(Open, Ticket)
+transitions(Close, Ticket.status, open -> closed)
+transitions(Reopen, Ticket.status, closed -> open)
+property Ships leads_to(Order.status == pending, Order.status == shipped)
+"#,
+    );
+    let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+    let cone = ts.property_cone(0);
+    let name = |v: &crate::lifecycle::VarId| match &ts.var(*v).kind {
+        crate::lifecycle::VarKind::Exists(e) => ts.entity(*e).id.clone(),
+        crate::lifecycle::VarKind::Column { entity, column, .. } => {
+            format!("{}.{column}", ts.entity(*entity).id)
+        }
+        other => format!("{other:?}"),
+    };
+    let cyclic: BTreeSet<String> = ts.cyclic_outside(&cone.vars).iter().map(name).collect();
+    assert_eq!(
+        cyclic,
+        BTreeSet::from(["Note.state".to_string(), "Ticket.status".to_string()]),
+        "the stamp and the note's existence change finitely often"
+    );
+    let all: crate::lifecycle::VarSet = ts.var_ids().collect();
+    assert!(ts.cyclic_outside(&all).is_empty());
+}

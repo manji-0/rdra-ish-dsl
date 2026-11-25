@@ -126,8 +126,8 @@ No sample changes verdict.
 - A property its cone left to the whole model is decided on a wider cone first (#168
   phase 4). A cone that creates rows of an entity it does not count is made exact, with that
   entity's slots, and its verdict is final there; a `stable`, `unchanged`, or `precedes`
-  goes to that cone instead of the whole model. The line reads `decided on the cone made
-  exact (N more vars, M states)`. Expected, not yet run: patent-ops `GrantEnds`, whose cone
+  goes to that cone instead of the whole model. The line reads `on the cone made exact (N
+  more vars, M states)`. Expected, not yet run: patent-ops `GrantEnds`, whose cone
   frees slots and whose whole model did not finish, may move off `not decided`.
 - The cone made exact also holds each raised mark its handlers read, with the raisers, so a
   property's counterexample that ran a handler before its event is decided there (#168
@@ -139,6 +139,12 @@ No sample changes verdict.
   events it ran without: ...`. Under `--with-tlc` TLC still checks the cone as it is; its
   verdict is compared with the cone's own run. Expected, not yet run: a sample whose `verify`
   printed that `note:` row may now pass.
+- A property whose cone's `WF_vars(Next)` run says `ok` is `ok` when every var an action
+  writes outside the exact cone is monotone, so nothing outside runs forever (#168 phase 4,
+  step 4). The line ends `nothing outside the cone runs forever`, and no `RdraSpec_` line
+  follows. `order.rdra` decides `PaidLeadsToShipped` and `EventuallyTerminal` this way (run;
+  the verdicts stay `ok`). Expected, not yet run: a domain sample whose property needed the
+  whole model and whose outside writes are monotone moves from `not decided` to `ok`.
 - Invalid `Enum` and `Bool` defaults (#187) and out-of-range Int defaults (#180) fail to
   load. `UnresolvedPropertyAtom` is renamed `UnresolvedPropertyColumn` (#160).
 - `export --kind typescript-states` and `states --format typescript` are removed. Unknown

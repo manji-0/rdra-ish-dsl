@@ -2,11 +2,11 @@
 // The property has no `.fair`, and Stamp writes the order's stamp outside the cone, so the
 // cone does not decide and the whole model does. Stamp only goes from false to true, so it
 // changes finitely often and cannot meet WF_vars(Next) forever: the whole model says ok.
-// The note's existence rises and falls (Write creates, Erase deletes), so a static
-// monotonicity rule sees a cycle there; without slot reuse the notes still run out, and
-// the whole model is ok as well. Phase 4's "nothing outside can run forever" must accept
-// the first and either decide the second ok or leave it to a wider cone, never call it a
-// counterexample.
+// The note's existence rises and falls (Write creates, Erase deletes); without slot reuse
+// the notes run out, and the whole model is ok as well. Phase 4's "nothing outside can run
+// forever" must accept the first and either decide the second ok or leave it to a wider
+// cone, never call it a counterexample. It decides both: an existence goes absent, present,
+// deleted, and never back, so `monotone_vars` takes it as monotone.
 // expect PaidShipsStamp: native=ok tlc=ok
 // expect PaidShipsNotes: native=ok tlc=ok
 entity Order "注文" {

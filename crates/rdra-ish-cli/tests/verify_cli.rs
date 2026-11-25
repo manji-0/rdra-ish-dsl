@@ -486,6 +486,27 @@ fn a_property_along_reads_only_linked_rows() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+/// An order that pays and ships, and a flag that each of them flips: the flag changes outside
+/// the properties' cones, and nothing but a run of the whole model shows that it cannot keep
+/// the model moving while an order waits (docs/design/native-temporal-verification.md,
+/// "Modes and the cone").
+const WHOLE_MODEL_ORDER: &str = r#"entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid, shipped) @default(pending)
+  open: Bool @default(true)
+}
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Ship "出荷"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+sets(Pay, Order.open == false)
+transitions(Ship, Order.status, paid -> shipped)
+sets(Ship, Order.open == true)
+property PaidLeadsToShipped leads_to(Order.status == paid, Order.status == shipped)
+property EventuallyTerminal eventually(Order.status == shipped)
+"#;
+
 /// A property without `.fair` rests on the whole model's `WF_vars(Next)`, which the cone
 /// does not keep: the cone's two runs leave it undecided, and the whole-model run decides it
 /// under the budget. With a budget of 0 s the whole-model run is stopped, the property is
@@ -493,7 +514,8 @@ fn a_property_along_reads_only_linked_rows() {
 #[test]
 fn a_property_the_cone_cannot_decide_runs_on_the_whole_model_under_the_budget() {
     let tmp = scratch("verify_cli_whole_model");
-    let sample = repo().join("samples/formal-verification/order.rdra");
+    let sample = tmp.join("m.rdra");
+    std::fs::write(&sample, WHOLE_MODEL_ORDER).unwrap();
     let output = verify(&repo(), &tmp, &[sample.to_str().unwrap()]);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -503,11 +525,11 @@ fn a_property_the_cone_cannot_decide_runs_on_the_whole_model_under_the_budget() 
         "{stdout}"
     );
     assert!(
-        stdout.contains("\nCone_PaidLeadsToShipped [PaidLeadsToShipped]: not decided (31 states, Cone_PaidLeadsToShipped_WF: ok, needs the whole model's WF_vars(Next))\n"),
+        stdout.contains("\nCone_PaidLeadsToShipped [PaidLeadsToShipped]: not decided (13 states, Cone_PaidLeadsToShipped_WF: ok, needs the whole model's WF_vars(Next))\n"),
         "{stdout}"
     );
     assert!(
-        stdout.contains("\nRdraSpec_PaidLeadsToShipped [PaidLeadsToShipped]: ok (31 states)\n"),
+        stdout.contains("\nRdraSpec_PaidLeadsToShipped [PaidLeadsToShipped]: ok (13 states)\n"),
         "{stdout}"
     );
     assert!(!stdout.contains("not checked:"), "{stdout}");
@@ -522,7 +544,7 @@ fn a_property_the_cone_cannot_decide_runs_on_the_whole_model_under_the_budget() 
     assert_eq!(output.status.code(), Some(0), "{stdout}{stderr}");
     assert!(
         stdout.contains("\nRdraSpec_PaidLeadsToShipped [PaidLeadsToShipped]: not decided (stopped at the time budget of 0 s)\n")
-            || stdout.contains("\nRdraSpec_PaidLeadsToShipped [PaidLeadsToShipped]: not decided (31 states, stopped at the time budget of 0 s)\n"),
+            || stdout.contains("\nRdraSpec_PaidLeadsToShipped [PaidLeadsToShipped]: not decided (13 states, stopped at the time budget of 0 s)\n"),
         "{stdout}"
     );
     assert!(
@@ -631,13 +653,12 @@ fn max_states_raises_the_cap_of_each_cone() {
 }
 
 /// The whole-model run takes the same `--max-states`: with a second entity the whole model
-/// has 403 states, though each cone has 31. At 100 the run is stopped and the hint names the
-/// flag; at 403 it decides. Without the flag it stays under 2^21 and decides.
+/// has 169 states, though each cone has 13. At 100 the run is stopped and the hint names the
+/// flag; at 169 it decides. Without the flag it stays under 2^21 and decides.
 #[test]
 fn max_states_raises_the_cap_of_the_whole_model_run() {
     let tmp = scratch("verify_cli_max_states_whole");
-    let mut src =
-        std::fs::read_to_string(repo().join("samples/formal-verification/order.rdra")).unwrap();
+    let mut src = WHOLE_MODEL_ORDER.to_string();
     src.push_str(
         r#"
 entity Parcel "Parcel" {
@@ -647,10 +668,6 @@ entity Parcel "Parcel" {
 usecase PackParcel "Pack"
 usecase SendParcel "Send"
 usecase ReceiveParcel "Receive"
-buc BucParcel "Parcel"
-contains(BucParcel, PackParcel)
-contains(BucParcel, SendParcel)
-contains(BucParcel, ReceiveParcel)
 creates(PackParcel, Parcel)
 updates(SendParcel, Parcel)
 updates(ReceiveParcel, Parcel)
@@ -670,12 +687,12 @@ transitions(ReceiveParcel, Parcel.status, sent -> received)
     );
     assert!(stdout.contains("so raise --max-states ("), "{stdout}");
 
-    for args in [&["--max-states", "403"][..], &[]] {
+    for args in [&["--max-states", "169"][..], &[]] {
         let large = verify(&repo(), &tmp, &[&[model][..], args].concat());
         let stdout = String::from_utf8_lossy(&large.stdout);
         assert!(
             stdout
-                .contains("\nRdraSpec_PaidLeadsToShipped [PaidLeadsToShipped]: ok (403 states)\n"),
+                .contains("\nRdraSpec_PaidLeadsToShipped [PaidLeadsToShipped]: ok (169 states)\n"),
             "{args:?}: {stdout}"
         );
     }
@@ -960,8 +977,8 @@ fn a_buc_scope_skips_temporal_properties_and_leaves_progress_undecided() {
 }
 
 /// A condition on the use case that creates a row reads a column the creation leaves at its
-/// default, so the guard reads a successor only `UNCHANGED` binds: the invariant's cone, the
-/// property's cone, and the whole model all decide.
+/// default, so the guard reads a successor only `UNCHANGED` binds: the invariant's cone and the
+/// property's cone decide, the property's because nothing outside its cone runs forever.
 #[test]
 fn a_creation_guard_on_an_unassigned_column_is_decided() {
     let tmp = scratch("verify_cli_guard_on_unassigned");
@@ -991,7 +1008,12 @@ property P eventually(E.status == b)
         lines.contains(&"Cone_Forbidden_E_0 [Forbidden_E_0]: ok (7 states)"),
         "{stdout}"
     );
-    assert!(lines.contains(&"RdraSpec_P [P]: ok (7 states)"), "{stdout}");
+    assert!(
+        lines.contains(
+            &"Cone_P [P]: ok (7 states, Cone_P_WF: ok, nothing outside the cone runs forever)"
+        ),
+        "{stdout}"
+    );
     assert!(lines.contains(&"result: ok"), "{stdout}");
     let _ = std::fs::remove_dir_all(&tmp);
 }
@@ -1165,12 +1187,15 @@ fn a_rerun_cfg_named_like_a_property_module_leaves_that_cfg() {
 /// spec is left as it ran.
 #[test]
 fn a_whole_model_run_named_like_a_cone_leaves_the_cone_spec() {
+    // `Flip` sets `seen` and `Unsee` clears it, outside the cone: only the whole model decides.
     let src = r#"entity E "E" { id: Int @pk  status: Enum(a, b) @default(a)  seen: Bool @default(false) }
 usecase Make "作成"
 usecase Flip "切替"
+usecase Unsee "未読"
 creates(Make, E)
 transitions(Flip, E.status, a -> b)
 sets(Flip, E.seen == true)
+sets(Unsee, E.seen == false)
 condition Fresh "新規"
 holds(Fresh, E.status == a)
 applies_to(Fresh, Make)
@@ -1666,24 +1691,29 @@ invariant(Order).when(status == placed).none(Shipment).label("no shipment yet").
 #[test]
 fn liveness_is_decided_without_tlc_and_tlc_agrees() {
     let tmp = scratch("verify_cli_native_liveness");
-    for (sample, code, lines) in [
+    // Per sample: the exit code, the native lines, and TLC's, which differ where the native
+    // checker decides on its cone what TLC leaves to the whole model (phase 4, step 4).
+    for (sample, code, lines, tlc_lines) in [
         (
             "temporal_unmet.rdra",
             1,
             &["Cone_PendingLeadsToDelivered [PendingLeadsToDelivered]: counterexample (31 states, Cone_PendingLeadsToDelivered_WF: counterexample)"][..],
+            None,
         ),
         (
             "temporal_fair.rdra",
             1,
             &["Cone_GrantEnds [GrantEnds]: ok (43 states)"][..],
+            None,
         ),
         (
             "order.rdra",
             0,
-            &[
+            &["Cone_EventuallyTerminal [EventuallyTerminal]: ok (31 states, Cone_EventuallyTerminal_WF: ok, nothing outside the cone runs forever)"][..],
+            Some(&[
                 "Cone_EventuallyTerminal [EventuallyTerminal]: not decided (31 states, Cone_EventuallyTerminal_WF: ok, needs the whole model's WF_vars(Next))",
                 "RdraSpec_EventuallyTerminal [EventuallyTerminal]: ok (31 states)",
-            ][..],
+            ][..]),
         ),
     ] {
         let sample = repo().join("samples/formal-verification").join(sample);
@@ -1707,7 +1737,7 @@ fn liveness_is_decided_without_tlc_and_tlc_agrees() {
         let tlc_stderr = String::from_utf8_lossy(&tlc.stderr);
         assert_eq!(tlc.status.code(), Some(code), "{tlc_stdout}{tlc_stderr}");
         assert!(!tlc_stderr.contains("EngineDisagreement"), "{tlc_stderr}");
-        for line in lines {
+        for line in tlc_lines.unwrap_or(lines) {
             assert!(
                 tlc_stdout.lines().any(|l| l == format!("tlc: {line}")),
                 "tlc: {line}\n{tlc_stdout}"

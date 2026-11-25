@@ -121,10 +121,13 @@ impl Why {
 pub enum Step {
     /// The cone made exact (`TransitionSystem::exact_cone`) decided it by its own runs.
     Exact,
+    /// Step 4: the exact cone's `WF_vars(Next)` run said `ok`, and every var an action writes
+    /// outside it is monotone (`cyclic_outside` is empty), so nothing outside runs forever.
+    Monotone,
 }
 
 impl Step {
-    const ALL: [Step; 1] = [Step::Exact];
+    const ALL: [Step; 2] = [Step::Exact, Step::Monotone];
 }
 
 /// How often each step decided a property in this process, for measuring how often each one
@@ -294,19 +297,22 @@ impl PropertyCone {
     /// model has no slot for. Its reachable states are then the projection of the whole
     /// model's, so its `Plain` run's `ok` and any counterexample of an `always`, or of the run
     /// with `WF_vars(Next)`, are the whole model's. A `WF_vars(Next)` `ok` there is final when
-    /// the exact cone holds every var an action writes; otherwise the property stays the whole
-    /// model's.
+    /// the exact cone holds every var an action writes. What is left is a `Plain`
+    /// counterexample whose every stop has a step of the cone enabled, and an `ok` with
+    /// `WF_vars(Next)`, both on the exact cone, which the steps after it decide (`beyond`).
     pub fn settle(&self, ts: &TransitionSystem, caps: Caps) -> Settled {
         let (seed, keep) = ts.property_seed(self.at);
         let exact = ts.exact_cone(&seed, &keep);
         debug_assert!(exact.vars.is_superset(&self.vars), "widening only adds");
+        debug_assert!(ts.is_exact(&exact));
+        // The cone was exact already: its own runs said what the exact cone's would.
         if exact.vars == self.vars {
-            return Settled::open(Vec::new());
+            return self.beyond(ts, &exact, Settled::open(Vec::new()));
         }
         let (system, i) = cone_system(ts, &exact, self.at);
         let run = system.run(caps);
         let mut out = Settled::open(vec![format!(
-            "decided on the cone made exact ({} more vars, {} states)",
+            "on the cone made exact ({} more vars, {} states)",
             exact.vars.len() - self.vars.len(),
             run.states.len()
         )]);
@@ -328,8 +334,30 @@ impl PropertyCone {
             Ok(PropertyVerdict::Holds) if ts.cone_keeps_every_write(&exact.vars) => {
                 out.decided(Step::Exact, None)
             }
-            Ok(PropertyVerdict::Holds) => Settled::open(Vec::new()),
+            Ok(PropertyVerdict::Holds) => {
+                drop(run);
+                self.beyond(ts, &exact, out)
+            }
         }
+    }
+
+    /// Steps 4 to 6 on `exact`, an exact cone where the `Plain` run found a counterexample
+    /// and the run with `WF_vars(Next)` found none: a behavior of the whole model that
+    /// violates the property must, from some point on, change only vars outside the cone.
+    ///
+    /// Step 4: when every var an action writes outside the cone is monotone, each changes
+    /// finitely often, so no behavior changes only outside vars forever. Every fair behavior
+    /// of the whole model then keeps moving the cone or ends with no step enabled, and both
+    /// project to behaviors the run with `WF_vars(Next)` on the exact cone covers: its `ok`
+    /// is the whole model's.
+    fn beyond(&self, ts: &TransitionSystem, exact: &Cone, out: Settled) -> Settled {
+        if ts.cyclic_outside(&exact.vars).is_empty() {
+            let mut out = out;
+            out.notes
+                .push("nothing outside the cone runs forever".to_string());
+            return out.decided(Step::Monotone, None);
+        }
+        out
     }
 }
 
