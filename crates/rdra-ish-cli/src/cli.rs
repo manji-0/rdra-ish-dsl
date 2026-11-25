@@ -305,6 +305,11 @@ pub(crate) enum Commands {
         /// and each error is listed as an obligation the model does not meet
         #[arg(long)]
         allow_failing: bool,
+        /// Generate again with the same options and compare with FILE instead of printing:
+        /// exit 1 with a short summary on stderr when it differs (file edited, model changed,
+        /// or generator changed)
+        #[arg(long, value_name = "FILE", conflicts_with = "out")]
+        check: Option<PathBuf>,
     },
     /// Derive reachable state patterns per entity (aggregated across BUCs)
     States {
