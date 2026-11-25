@@ -60,6 +60,8 @@ pub(crate) struct Rows<T> {
     head: [Vec<T>; HEAD],
     rest: Vec<Vec<T>>,
     len: usize,
+    /// The rows the segments so far hold room for: a push at `len == room` allocates one.
+    room: usize,
 }
 
 impl<T: Copy> Rows<T> {
@@ -69,6 +71,7 @@ impl<T: Copy> Rows<T> {
             head: std::array::from_fn(|_| Vec::new()),
             rest: Vec::new(),
             len: 0,
+            room: 0,
         }
     }
 
@@ -102,36 +105,82 @@ impl<T: Copy> Rows<T> {
         }
     }
 
-    pub(crate) fn push(&mut self, row: &[T]) {
-        debug_assert_eq!(row.len(), self.width);
-        let (k, at) = locate(self.len);
-        if at == 0 {
-            let fresh = Vec::with_capacity(segment_rows(k) * self.width);
-            match k < HEAD {
-                true => self.head[k] = fresh,
-                false => {
-                    if self.rest.len() == self.rest.capacity() {
-                        let slots = (self.rest.len() * 2).max(4);
-                        self.rest.reserve_exact(slots - self.rest.len());
-                    }
-                    self.rest.push(fresh);
+    /// The segment rows go to next, allocated when the last one is full.
+    #[inline]
+    fn last(&mut self) -> &mut Vec<T> {
+        if self.len == self.room {
+            self.grow();
+        }
+        match self.rest.last_mut() {
+            Some(seg) => seg,
+            None => &mut self.head[locate(self.len).0],
+        }
+    }
+
+    /// Allocates the next segment whole.
+    #[cold]
+    fn grow(&mut self) {
+        let k = locate(self.len).0;
+        let fresh = Vec::with_capacity(segment_rows(k) * self.width);
+        match k < HEAD {
+            true => self.head[k] = fresh,
+            false => {
+                if self.rest.len() == self.rest.capacity() {
+                    let slots = (self.rest.len() * 2).max(4);
+                    self.rest.reserve_exact(slots - self.rest.len());
                 }
+                self.rest.push(fresh);
             }
         }
-        let seg = match k < HEAD {
-            true => &mut self.head[k],
-            false => self.rest.last_mut().expect("the segment just made"),
-        };
+        self.room = rows_in(k + 1);
+    }
+
+    #[inline]
+    pub(crate) fn push(&mut self, row: &[T]) {
+        debug_assert_eq!(row.len(), self.width);
+        let seg = self.last();
         // Within its capacity: the segment's rows never move.
-        debug_assert!(seg.len() + self.width <= seg.capacity());
+        debug_assert!(seg.len() + row.len() <= seg.capacity());
         seg.extend_from_slice(row);
         self.len += 1;
     }
 
-    pub(crate) fn row(&self, i: usize) -> &[T] {
+    /// `push` of a row of one item.
+    #[inline]
+    pub(crate) fn push_item(&mut self, x: T) {
+        debug_assert_eq!(self.width, 1);
+        let seg = self.last();
+        debug_assert!(seg.len() < seg.capacity());
+        seg.push(x);
+        self.len += 1;
+    }
+
+    /// The segment that holds row `i` and the row's place in it, a fixed segment first: in a
+    /// large buffer most rows are there.
+    #[inline]
+    fn place(&self, i: usize) -> (&Vec<T>, usize) {
         assert!(i < self.len, "row {i} of {}", self.len);
-        let (k, at) = locate(i);
-        &self.segment(k)[at * self.width..(at + 1) * self.width]
+        match i.checked_sub(DOUBLED) {
+            Some(past) => (&self.rest[past >> SHIFT], past & (SEG - 1)),
+            None => {
+                let (k, at) = locate(i);
+                (&self.head[k], at)
+            }
+        }
+    }
+
+    #[inline]
+    pub(crate) fn row(&self, i: usize) -> &[T] {
+        let (seg, at) = self.place(i);
+        &seg[at * self.width..(at + 1) * self.width]
+    }
+
+    /// Row `i` of a buffer of rows of one item.
+    #[inline]
+    pub(crate) fn item(&self, i: usize) -> T {
+        debug_assert_eq!(self.width, 1);
+        let (seg, at) = self.place(i);
+        seg[at]
     }
 
     /// Rows `at` as one slice of their items: `at` must lie in one segment, which
@@ -207,6 +256,7 @@ impl<T: Copy> Rows<T> {
             head,
             rest,
             len: self.len,
+            room: self.room,
         }
     }
 }

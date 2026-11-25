@@ -39,12 +39,14 @@ impl<T: Copy> Buf<T> {
         self.0.len()
     }
 
+    #[inline]
     pub(crate) fn push(&mut self, x: T) {
-        self.0.push(&[x]);
+        self.0.push_item(x);
     }
 
+    #[inline]
     pub(crate) fn get(&self, i: usize) -> T {
-        self.0.row(i)[0]
+        self.0.item(i)
     }
 
     /// Items `at`, which lie in one segment (`segment_end`), as a slice.
