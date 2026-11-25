@@ -1,7 +1,8 @@
 name: CI
 on:
-  # main is checked every three hours, not on every merge: a run whose commit the last
-  # scheduled run already checked is skipped (see `changes`). Start one by hand with
+  # main is checked every three hours, not on every merge: a scheduled run whose commit the
+  # last finished run on main, scheduled or by hand, already checked is skipped (see
+  # `changes`). GitHub may start a scheduled run hours late or drop it under load. Start one by hand with
   # `gh workflow run ci.yml --ref main`.
   schedule:
     - cron: '23 */3 * * *'
@@ -58,12 +59,14 @@ jobs:
         run: |
           run=true
           if [ "$EVENT" = schedule ]; then
-            # Skip when the last scheduled run that finished checked this same commit. A
-            # cancelled run does not count, so its commit is checked again.
-            last=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?event=schedule&branch=main&status=completed&per_page=10" \
-              --jq '[.workflow_runs[] | select(.conclusion == "success" or .conclusion == "failure")][0].head_sha // ""')
-            if [ "$last" = "$GITHUB_SHA" ]; then
-              echo "main is still $GITHUB_SHA, which run $last checked; skipping"
+            # Skip when the last run on main that finished, scheduled or started by hand,
+            # checked this same commit. A cancelled run does not count, so its commit is
+            # checked again.
+            last=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?branch=main&status=completed&per_page=20" \
+              --jq '[.workflow_runs[] | select(.event == "schedule" or .event == "workflow_dispatch")
+                     | select(.conclusion == "success" or .conclusion == "failure")][0] | "\(.head_sha) \(.id)"' || true)
+            if [ "${last%% *}" = "$GITHUB_SHA" ]; then
+              echo "main is still $GITHUB_SHA, which run ${last##* } checked; skipping"
               run=false
             fi
           fi
