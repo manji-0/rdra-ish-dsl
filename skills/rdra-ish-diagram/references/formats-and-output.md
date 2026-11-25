@@ -1,75 +1,49 @@
-# Formats and Output
+# Output, rendering, and exports
 
-Use this reference when choosing diagram output, filtered views, or
-machine-readable exports.
+<!-- derived-from ../../../docs/cli-reference.md#export -->
 
-## Format Guide
+## Diagram output
 
-| Format | Output | Requirement |
+- `diagram` prints Mermaid text to stdout. `--out <path>` writes `<path>.mmd`.
+- `diagram --all --title --out docs/diagrams` writes the review set: the whole-model
+  `context`, `requirement`, `business`, `information`, `condition`, `er`, `screen`,
+  `event`, and `state` index, and per BUC `usecase`, `robustness`, `flow`, `sequence`, and
+  per entity `state`. Empty diagrams are left out.
+- Every flowchart writes each description as a `%% desc <id>: <text>` line.
+- To get an image, render the `.mmd` with `mmdc` or hand it to a tool that redraws it
+  (`reading-diagrams.md` says what a redrawing keeps).
+
+## Exports
+
+| Kind | Output | Needs |
 |---|---|---|
-| `mermaid` | `.mmd` text | None |
-| `openapi` | OpenAPI 3.0 JSON | API method/path and DTO request/response/error links |
-| `asyncapi` | AsyncAPI 3.1 JSON | events, `raises`/`triggers`, and the external systems that publish or receive them |
-| `dbml` | DBML schema text | logical entities, variations, and `relate` keys; a table's `Note` lists its rules by the names `check` gives them |
-| `sql` | SQL DDL (`--dialect postgres` or `sqlite`) | logical entities and `relate` keys; entity-local rules become named `CHECK` constraints; `reads` query shapes add suggested indexes and `SELECT`s as comments |
-| `json-schema` | JSON Schema | DTOs and entities under `$defs`; a mapped DTO field carries `x-rdra-ish-maps-to` |
-| `mermaid-er` | Mermaid ER `.er.mmd` | logical entities and `relate` keys, as `diagram --kind er` draws them |
-| `tla` | TLA+ `.tla` + `.cfg` | the lifecycle transition system, for reading or a TLC run by hand |
-
-For TypeScript types of the entities and their lifecycle states, run
-`rdra-ish codegen src/ --lang ts -o out/domain.ts`. It is not an `export` kind, and it
-refuses a model that `check` rejects.
-
-`diagram` writes Mermaid text only, and `mermaid` is the default `--format`. The text
-is meant to be redrawn: render the `.mmd` with Mermaid CLI (`mmdc`), or hand it to a tool
-that draws SVG from it. `references/reading-diagrams.md` says what a redrawing must keep.
-
-Only the output that prints reachable states (`diagram --kind state`) refuses to write
-while `check` reports a lifecycle error, unless every error is a deadlock, which it
-colours. The outputs of declared facts and the data layer (`diagram` of every other kind,
-`csv` and `list` of every kind, and the `dbml`, `sql`, `json-schema`, `openapi`, `asyncapi`,
-and ER exports) still write; they do not explore the lifecycle, so they say nothing about
-its errors. The `tla` export writes too and prints one note with the error count: TLC on it
-finds no deadlock and no state without a witness, so run `verify` for those.
-
-The state diagram, the `tla` export, `codegen`, and `next` explore the lifecycle at the
-bounds `check` runs at by default: no state cap, 1,024 patterns per entity, and `memory` under `[check]` in
-`rdra.toml` (4GiB unless set). They take no `--memory` flag. A cone past the limit is
-`MemoryCapReached`: it refuses `diagram --kind state` and `codegen` (exit 1); the `tla`
-export still writes and counts it in its note. Raise `memory` under
-`[check]`, or narrow the model.
-
-## Commands
+| `openapi` | OpenAPI 3.0 JSON | API `method` / `path` and DTO `request` / `response` / `error_response` |
+| `asyncapi` | AsyncAPI 3.1 JSON | events, `raises` / `triggers`, the external systems that send or receive them |
+| `dbml` | DBML | entities, variations, `relate` keys; each table's `Note` lists its rules by name |
+| `sql` | SQL DDL (`--dialect postgres` or `sqlite`) | entities and keys; entity-local rules become named `CHECK`s; `reads` shapes add suggested indexes and `SELECT`s as comments |
+| `json-schema` | JSON Schema | DTOs and entities; a mapped DTO field carries `x-rdra-ish-maps-to` |
+| `mermaid-er` | Mermaid ER | the text `diagram --kind er` draws |
+| `tla` | TLA+ `.tla` and `.cfg` | the lifecycle, for reading or a TLC run by hand |
 
 ```sh
-# Mermaid text
-rdra-ish diagram src/ --kind rdra --format mermaid --out docs/rdra
-
-# Focused graph views
-rdra-ish diagram src/ --kind rdra --format mermaid --node-kind api --node-kind dto --edge-kind request
-
-# The review set, one file per diagram, with a title on each rendered image
-rdra-ish diagram src/ --all --title --out docs/diagrams
-
-# Contract exports
 rdra-ish export src/ --kind openapi --out out/openapi.json
-rdra-ish export src/ --kind asyncapi --out out/asyncapi.json
-rdra-ish export src/ --kind dbml --out out/schema.dbml
 rdra-ish export src/ --kind sql --dialect postgres --out out/schema.sql
-rdra-ish export src/ --kind json-schema --out out/json-schema.json
-rdra-ish export src/ --kind tla -o out/
-
-# Golden/sample artifact regeneration
-bash scripts/check-sample-artifacts.sh
 ```
 
-## Notes
+Without `--out`, `export` writes `out.<kind file>` in the current directory
+(`out.schema.dbml`). Use an export, not diagram labels, for downstream contract review.
+For typed domain code, use `rdra-ish codegen`, which is no `export` kind.
 
-- `diagram` prints to stdout without `--out`; with it, `.mmd` is appended to the path.
-- Prefer scoped diagrams (`--buc`) before rendering images.
-- Every flowchart kind writes each description as a `%% desc <id>: <text>` comment
-  line; there is no flag for it.
-- Use `--buc`, and on `rdra` `--node-kind` and `--edge-kind`, before accepting a
-  too-large diagram.
-- Use export output for downstream contract review rather than hand-copying diagram
-  labels.
+## When an output refuses to write
+
+- Every output except `diagram --kind state` reads declared facts, explores nothing, and
+  writes even when the lifecycle has errors. It says nothing about those errors; run
+  `check`.
+- `diagram --kind state` refuses while `check` reports a lifecycle error other than a
+  deadlock.
+- `export --kind tla` writes anyway and prints a note with the error count.
+- `diagram --kind state`, `export --kind tla`, `codegen`, and `next` explore at `check`'s
+  default bounds, within `memory` under `[check]` in `rdra.toml` (4GiB unless set). They
+  take no `--memory` flag. A cone past the limit is `MemoryCapReached`: `diagram --kind
+  state` and `codegen` refuse; the `tla` export writes and counts it in its note. Raise
+  `memory` under `[check]`, or narrow the model.

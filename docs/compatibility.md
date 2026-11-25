@@ -1,17 +1,13 @@
 # Compatibility
 
-This page states what rdra-ish keeps stable across releases. The contract takes effect at
-1.0.0. Until then a minor release may break any part of it, and the `### Breaking` section
-of the [changelog](../CHANGELOG.md) records each break with its rewrite.
+This page states what rdra-ish keeps stable across releases. rdra-ish follows semantic
+versioning: a change that breaks a covered item needs a major release, a minor release adds
+to the covered surface and fixes bugs, and a patch release fixes bugs only. The `### Breaking`
+section of the [changelog](../CHANGELOG.md) records each break with its rewrite.
 
-From 1.0.0 on, rdra-ish follows semantic versioning. A change that breaks a covered item
-needs a major release. A minor release adds to the covered surface and fixes bugs. A patch
-release fixes bugs only.
-
-The page covers releases. Between two releases, `main` may change a default, an output
-line, or a verdict, and the `Unreleased` section of the changelog lists each such change.
-This page states what the next release keeps, so it changes on `main` in the same change as
-the behavior it describes.
+The page covers releases. Between two releases, `main` may change a default, an output line
+or a verdict, and the `Unreleased` section of the changelog lists each such change. This
+page describes `main`, so it changes in the same change as the behavior it describes.
 
 ## What a major release protects
 
@@ -30,9 +26,8 @@ the behavior it describes.
   a lint error, is a breaking change. A new warning or info finding is not.
 - **`// expect` headers.** The header grammar in
   [Sample expectations](./formal-verification.md#sample-expectations) and the names it
-  matches are stable, so a sample's expectation keeps holding. The next release changes the
-  grammar: a `verify` line reads `ok` or `fail <Names>`, and `tlc=` stays only on a line
-  whose flags hold `--with-tlc`.
+  matches are stable, so a sample's expectation keeps holding. A `verify` line reads `ok` or
+  `fail <Names>`; `tlc=` is allowed only on a line whose flags hold `--with-tlc`.
 
 ### The command line
 
@@ -41,22 +36,20 @@ the behavior it describes.
   [CLI reference](./cli-reference.md) keeps its name, its meaning, and the values it takes,
   such as each `--kind` and `--format`. Of `codegen`, only `--lang ts` and `-o` are
   covered, as [The TypeScript types of `codegen`](#the-typescript-types-of-codegen) states.
-  The next release removes `export --kind typescript-states` and
-  `states --format typescript`, so it is a major release. Each now fails as a usage error
-  that names its rewrite, `codegen <INPUTS> --lang ts -o <FILE>.ts`.
+  `export --kind typescript-states` and `states --format typescript` are removed: each is a
+  usage error that names `codegen <INPUTS> --lang ts -o <FILE>.ts`.
 - **The default of `verify`.** `verify` decides every check with its native checker and
   starts no JVM. `--with-tlc` runs TLC beside it and fails the run when the two decide a
   check differently. `--backend tlc` is a deprecated spelling of `--with-tlc` that prints a
-  warning, and the major release after the one that changed the default removes it. The
-  next release makes these changes, so it is a major release.
+  warning; the next major release removes it.
 - **Exit status.** `0` is a clean run. `1` is a run that found errors, failed to load a
   model, or could not run a tool it needs (such as `verify --with-tlc` without `tlc`). `2`
   is a usage error: an unknown subcommand or flag, or a `--format` the kind does not take.
 - **Machine-readable output.** The `--format json` keys of `lint`, `next`, `list`, and
   `states`, and the `--format csv` columns of `lint`, `list`, `states`, and `csv`, as the
-  CLI reference and [Output formats](./state-derivation.md#output-formats) document them. A release may add a key or append a column. It does not
-  rename, remove, or reorder one.
-  In `next`, a stage's `slug` is its stable id. Its `stage` value (`"2"`, `"7A"`) is a
+  CLI reference and [Output formats](./state-derivation.md#output-formats) document them. A
+  release may add a key or append a column. It does not rename, remove, or reorder one. In
+  `next`, a stage's `slug` is its stable id. Its `stage` value (`"2"`, `"7A"`) is a
   display label that a change to the stage order renumbers.
 - **The `bounds:`, `result:`, and `tlc_result:` lines.** Their form stays parseable as the
   CLI reference shows it. Every `verify` run that reaches its checks prints `result:` with
@@ -101,13 +94,8 @@ not covered below). The module declares the types and the companion objects belo
 these names and shapes. `crates/rdra-ish-cli/tests/codegen_contract.rs` pins them for a
 model that uses every column type, every naming rule, and every rule form below.
 
-The next release changes this contract to the shapes of
-[Generated code style](./design/algebraic-codegen.md#generated-code-style) (#363): `type`
-aliases with `Readonly` properties instead of interfaces, a `kind` discriminant instead of
-the tag column, companion objects, and a `Result` from every conversion that can fail. It is
-a major release for that reason as well. The CHANGELOG has the migration.
-
-Every type is a `type` alias, and every object type is `Readonly<{ ... }>`. A companion
+The types take the shapes of
+[Generated code style](./design/algebraic-codegen.md#generated-code-style). Every type is a `type` alias, and every object type is `Readonly<{ ... }>`. A companion
 object has the name of its type and is declared `as const`; a member that is a function is
 written as a property (`parse: (value: unknown) => ...`).
 
@@ -224,7 +212,7 @@ written by hand can name them:
 - Invariants: `Forbidden_<E>_<n>`, `Inv_<E>_<n>`, `Required_<E>_<n>`, `Exclusive_<E>_<n>`,
   `MultiForbidden_<E>_<n>`, `MultiInv_<E>_<n>`, `Quantifier_<E>_<n>`, `Check_<E>_<column>_<n>`,
   `Unique_<Child>_<role>`, `Unique_<Entity>_<columns>`, `MinCard_<Child>_<role>`,
-  `DanglingKey_<Child>_<role>`, `EventOverflow_<E>_<Ev>_<UC>` (a
+  `MaxCard_<Child>_<role>`, `DanglingKey_<Child>_<role>`, `EventOverflow_<E>_<Ev>_<UC>` (a
   [counted trigger](./state-derivation.md#counted-triggers)), and `TypeOK`.
 - Properties: `AfterAssert_<UC>_<n>`, each temporal property under its declared name, and
   `Fair_<P>`. A `precedes` property adds the variable `<P>_seen` and the operator
@@ -253,8 +241,9 @@ with no collision keeps every name above:
   `Job_status` beside the column `Job.status` keeps its name, and the variable is
   `Job_status_2`. A use case's id does not move a rule's or a property's name.
 - Among the rest, an `<E>_Ids` set comes before a variable, a variable before a later
-  variable, a variable before an action, and an action before a `<P>_seen` or `<P>_latch`. A column `run_Go` beside the run mark of a
-  split use case `Go` gives `Job_run_Go` and `Job_run_Go_2`.
+  variable, a variable before an action, and an action before a `<P>_seen` or `<P>_latch`.
+  A column `run_Go` beside the run mark of a split use case `Go` gives `Job_run_Go` and
+  `Job_run_Go_2`.
 - The `Rep_<var>` and `Succ_<action>` tables of a reduced cone, and its `S_class`, yield to
   every other name but a state-model spec's `Deadlock_` and `Witness_` invariants, which
   yield to every other name.
@@ -287,18 +276,20 @@ minor release.
 - **Performance and state counts.** Run time, memory, and the number of states a run
   explores or prints.
 - **Diagram layout.** Where a renderer places the nodes, as above.
-- **The rest of `codegen`.** All of `codegen` except
-  [its TypeScript types](#the-typescript-types-of-codegen) is experimental. Its other
-  flags, its Rust and Go output, and the parts of the TypeScript output that the section
-  excludes (names, shapes, the obligation list) may change or be removed in any release.
+- **The rest of `codegen`, and `check --code`.** All of `codegen` except
+  [its TypeScript types](#the-typescript-types-of-codegen) is experimental: its other flags,
+  its Rust and Go output, the parts of the TypeScript output that the section excludes, and
+  `--format json`. So are `check --code`, the `[code]` tables of `rdra.toml`, and the
+  `Code*` findings. Any of them may change or be removed in any release.
 - **`verify --prove` and `.lemma()`.** The flag and its companions `--deny-unproved` and
   `--z3` are experimental: the `proved:` / `unproved:` / `lemma:` lines, which rules prove,
   and the clause the `OK:` line gains may change or go away in any release. So is the
-  `.lemma()` marker on a rule: `check` checks a lemma like any rule, but `verify` runs no
-  cone of its own for one and checks it only in a cone another check runs, so a lemma that
-  only fails at two instances can pass `verify`. Do not mark
-  a rule the model must keep as a lemma. Apart from lemmas, `verify` without `--prove` is
-  unchanged.
+  `.lemma()` marker: `check` checks a lemma like any rule, but `verify` runs no cone of its
+  own for one, so a lemma that only fails at two instances can pass `verify`. Do not mark a
+  rule the model must keep as a lemma.
+- **`verify --symmetry`.** Experimental. Which cones run up to symmetry, and the
+  `(about <m> states)` they print, may change. The verdicts follow [Bounds](#bounds) as any
+  other run's do.
 
 ## Bounds
 
@@ -307,18 +298,13 @@ Every result holds within the bounds its `bounds:` line prints: the instances pe
 the Int range, the state cap (none unless `--max-states` gives one), and the memory limit.
 A release may change a default bound, cap, or memory limit. That is not a breaking
 change, and the changelog records it. A result that changes for a model within the same
-printed bounds is a breaking change, unless it fixes a bug that the changelog names. 2.0.0
-is such a change: for a model with `raises` and `triggers` between use cases, `check` and
-`verify` order the triggered use case after its event within the same bounds, so a verdict
-can move while the `bounds:` line stays as it was. The `### Breaking` entry for #112 in the [changelog](../CHANGELOG.md)
-names which verdicts move and how to migrate.
+printed bounds is a breaking change, unless it fixes a bug that the changelog names.
 
 To keep a result reproducible across releases, pass the bounds a command takes as flags
 instead of relying on the defaults: `--instance-count`, `--int-range-max`,
 `--max-patterns`, and `--max-states` for `check`, `states`, and `verify`. The default of
 `--max-patterns` follows `--instance-count` in `check` and `states`; it caps only a run that
-builds an entity view, and no run of `verify` builds one;
-`--max-states` has no default. The [Bounds](./state-derivation.md#bounds) table lists each
+builds an entity view, and no run of `verify` builds one. `--max-states` has no default. The [Bounds](./state-derivation.md#bounds) table lists each
 command's defaults. The [memory limit](./cli-reference.md#memory-limit) (`--memory`) can
 leave a cone undecided as `--max-states` does; its count of a cone's bytes is the same on
 every machine, but a release may change it.
@@ -336,7 +322,3 @@ A form that a later major release removes goes through these steps:
    rewrite, turns each use into the new form.
 4. A major release removes it. A removed form fails to load with a message that names its
    rewrite.
-
-Before 1.0.0 there is no deprecation period: a removed form fails to load at once, and the
-message names the rewrite, as `writes` and the top-level `when(...)` rule do in 0.4.0 and
-`sets(UseCase, Entity, column == value)` does in 1.0.0.

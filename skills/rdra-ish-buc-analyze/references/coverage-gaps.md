@@ -1,108 +1,43 @@
-# Coverage Gap Analysis
+# Coverage Gaps
 
-Use this reference when the user asks what is missing or inconsistent in a BUC or the
-whole model before getting into access, API boundaries, or lifecycle details.
-
-## Concept
-
-Coverage analysis asks whether the business story is connected enough to review:
-actors perform use cases (directly, or every use case of a BUC through
-`performs(Actor, Buc)`), BUCs belong to a business domain, requirements
-motivate BUCs, flow steps cover behavior, use cases belong to BUCs, fields belong to
-screens, and use cases touch the business objects they are responsible for. Missing
-coverage is often a modeling gap, but the severity depends on the current stage.
-
-Good coverage does not mean the model is complete. It means the reviewer can follow
-who does what, in which business area, against which data objects, and which fields
-each actor is expected to supply once entities have reviewable columns.
+Ask whether the business story is connected enough to review: who does what, in which
+business, against which data, and which fields each actor supplies. Severity depends on
+the stage ([stage-readiness.md](stage-readiness.md)).
 
 ## Commands
 
 ```sh
 rdra-ish check src/
 rdra-ish lint src/ --format table
-rdra-ish list src/ --kind buc --format table
 rdra-ish list src/ --kind usecase --format table
-rdra-ish list src/ --kind actor --format table
 rdra-ish list src/ --kind requirement --format table
-rdra-ish list src/ --kind nfr --format table
-rdra-ish list src/ --kind flow --format table
-rdra-ish list src/ --kind step --format table
-rdra-ish list src/ --kind field --format table
-rdra-ish list src/ --kind api --format table
-rdra-ish list src/ --kind entity --format json
 rdra-ish csv src/ --kind matrix
 rdra-ish csv src/ --kind business-inputs
-rdra-ish diagram src/ --kind rdra --format mermaid --buc <BucId>
 ```
 
-## What To Look For
+## Signals
 
-| Signal | Likely cause | Action |
+| Signal | Cause | Action |
 |---|---|---|
-| Use case has no performer, directly or through its BUC, and no triggering event or timer | Actor assignment is missing | Add `performs(Actor, UseCase)`, or `performs(Actor, Buc)` only when the actor runs every use case of the BUC |
-| `lint` `rdra-actor-no-buc`, `rdra-extsystem-no-buc`, `rdra-entity-no-buc`, `rdra-condition-no-buc`, `rdra-variation-no-buc`, `rdra-timer-no-buc` | The element is declared but no BUC reaches it (an RDRA 不整合 column) | Connect it (`performs`, an event, CRUD through a use case, `applies_to`, a column type, `triggers`) or delete it |
-| `lint` `rdra-transition-uc-no-buc` | A use case that `transitions` names belongs to no BUC | Add `contains(Buc, UseCase)` |
-| BUC has no `belongs` | Business domain is unclear | Add `business` and `belongs(Buc, Business)` |
-| Use case has no `contains` | UC is orphaned | Attach it to the owning BUC or remove it |
-| Flow step has no `covers` | Business flow is not connected to model behavior | Link the step to a UC/API/event or remove it |
-| Field has no containing screen | UI field is orphaned | Add `contains(Screen, Field)` or remove the field |
-| Actor-entered field has no `maps_field` | Input/output mapping is missing or external | Add `maps_field` or justify the external field |
-| Requirement has no `motivates` target | Traceability is disconnected | Link it to a BUC or keep it out of the model until scoped |
-| Requirement has no `achieves` goal (`requirement-no-goal`) | Nobody can say what outcome it serves | Link it to a `goal`, or mark a non-goal `status "out-of-scope"` with a `rationale` |
-| Goal has no `metric` or `target` (`goal-unmeasured`) | The outcome cannot be measured | Add `metric` and `target`, and `baseline` and `window` when known |
-| NFR/quality/constraint has no target | Non-functional scope is unclear | Add `applies_to`, `qualifies`, or `constrains` |
-| API has method/path but no DTO links | Contract is incomplete | Add request/response/error DTOs or defer export |
-| Use case has no CRUD predicate | Data touchpoint is missing or stage is still skeleton | Ask which entity the action touches |
-| CRUD matrix has a row with all blanks | UC is declared but not connected to data | Add CRUD or defer with an explicit open question |
-| CRUD matrix has overloaded rows | UC may combine multiple user-visible actions | Split UC or explain the transaction boundary |
-| Entity appears in no CRUD matrix column | Entity may be premature or missing use cases | Add use-case touchpoints or remove the entity |
-| `business-inputs` has no rows after entity columns are modeled | No actor path, no C/U operation, or all fields are derived | Check `performs`, CRUD/API CRUD, defaults, FK generation, and `sets` |
-| `business-inputs` lists too many columns for one use case | CRUD is too coarse for field-level review | Add more precise use cases/API boundaries or model derived values with defaults/`sets` |
-| BUC-local predicate appears in `shared/` | Ownership is blurred | Move the predicate to `buc/buc_<name>.rdra` |
-| Module name does not match path | File layout drift | Fix `module` or move file |
-| Same actor/entity/event is redeclared | Shared vocabulary duplication | Keep one declaration and import it |
+| A use case with no performer, event, or timer | No actor assigned | `performs(Actor, UseCase)`; `performs(Actor, Buc)` only when the actor runs every use case |
+| `lint` `rdra-actor-no-buc`, `rdra-extsystem-no-buc`, `rdra-entity-no-buc`, `rdra-condition-no-buc`, `rdra-variation-no-buc`, `rdra-timer-no-buc` | Declared, but no BUC reaches it | Connect it (`performs`, an event, CRUD, `applies_to`, a column type, `triggers`) or delete it |
+| `lint` `rdra-transition-uc-no-buc` | A transitioning use case is in no BUC | `contains(Buc, UseCase)` |
+| A BUC with no `belongs`, a use case with no `contains` | Orphan | Attach it, or remove it |
+| A step with no `covers` | The flow is not tied to behavior | Link it to a use case, API, event, or timer |
+| A field outside a screen, or actor-entered and unmapped | Missing UI link | `contains(Screen, Field)`, `maps_field`, or say it is external |
+| `requirement-no-goal`, `goal-unmeasured`, an unscoped NFR | Broken traceability | `achieves`, a goal's `metric` and `target`, `applies_to` / `qualifies` / `constrains` |
+| A blank CRUD row | The use case touches no data | Ask which entity it touches |
+| An overloaded CRUD row | Several actions in one use case | Split it, or explain the transaction |
+| An entity in no CRUD column | Premature, or a use case is missing | Add the touchpoint, or remove the entity |
+| No `business-inputs` row once columns exist | No actor path, no write, or every column derived | Check `performs`, CRUD, defaults, generated keys, `sets` |
+| Too many `business-inputs` columns for one use case | CRUD too coarse | Split the use case or API, or derive values with defaults and `sets` |
+| A BUC-local predicate in `shared/`, a `module` that does not match its path, a redeclared symbol | Layout drift | Move it, fix `module`, or import ([layout](../../rdra-ish-write/references/layout.md)) |
 
-## Directory Layout Checks
+## Next questions
 
-Small models usually start with:
-
-```text
-src/
-  shared/
-    actors.rdra
-    biz.rdra
-    entities.rdra
-  buc/
-    buc_<name>.rdra
-```
-
-Larger models may split shared files by responsibility, such as
-`shared/entities/order.rdra`, `shared/lifecycle/order.rdra`, and `shared/rules.rdra`.
-The important invariant is path/module correspondence and clear ownership.
-
-## Severity Heuristics
-
-- High: orphaned BUC/use case, type errors, duplicate definitions, or path/module
-  mismatch blocking all analysis.
-- Medium: missing `belongs`, missing actor assignment, empty CRUD row after the model has
-  reached data touchpoints.
-- Medium: unexpected or missing `business-inputs`/`maps_field` rows after the model
-  has reached data touchpoints or entity structure and the team is reviewing actor-entered information.
-- Medium: unscoped requirement/NFR/ADR or API method/path without DTOs after the
-  model claims traceability or contract readiness.
-- Low: intentionally deferred screens, APIs, lifecycle, or rules in an early-stage BUC.
-
-## Next Actions
-
-- For missing actor/BUC links, ask who performs the business capability.
-- For empty CRUD, ask which business object the use case creates, reads, updates, or
-  deletes.
-- For surprising actor inputs, ask which listed fields are entered by the actor versus
-  supplied by defaults, APIs, relations, events, or `sets`.
-- For unmapped fields, ask whether the field is actor-entered, system-derived, or an
-  external-only display value.
-- For unscoped NFRs or requirements, ask what BUC/use case/API/system/entity they
-  constrain.
-- For layout issues, propose the smallest file move or import change.
-- For premature detail, recommend deferring it rather than inventing a deeper model.
+- No performer: who performs this capability?
+- Empty CRUD: which object does the use case create, read, update, or delete?
+- Surprising inputs: which fields does the actor enter, and which come from defaults, keys,
+  APIs, events, or `sets`?
+- Unscoped NFR or requirement: which BUC, use case, API, system, or entity does it bind?
+- Premature detail: defer it instead of inventing a deeper model.

@@ -140,8 +140,7 @@ the model checks, so `raises` alone draws `EventNeverConsumed`.
 
 A `timer` is an RDRA タイマー. It starts a use case on a schedule, so
 `triggers(Timer, UseCase)` is its only consumer. A timer never triggers an external
-system. `timing` and `belongs(...).when(...)` are gone: nothing read that context, and a
-window in which a BUC applies is not a schedule.
+system. A window in which a BUC applies is not a schedule, so a BUC carries none.
 
 An `extsystem` meets the model through events, as the RDRA rule 「外部システム」は
 「イベント」で「UC」と連携する says. `raises(ExtSystem, Event)` is inbound and
@@ -150,7 +149,7 @@ as consumed. There is no `uses(actor, extsystem)`, because the actor reaches the
 world through a use case, and the use case reaches it through an event.
 
 Layer placement follows the decision in [vision.md](./vision.md#decisions). `extsystem`
-moves to the system-value layer of the RDRA diagram. `timer` stays in the
+sits in the system-value layer of the RDRA diagram. `timer` stays in the
 external-environment layer with `business`, `buc`, `flow`, `step`, `medium`, and
 `permission`. The remaining placements are rdra-ish's own reading of the four layers
 and may differ from RDRA; the layers are a reading aid for review, not a claim about the
@@ -206,8 +205,7 @@ rdra-ish adds three rows of its own. `rdra-variation-no-buc` and `rdra-timer-no-
 the same check to the two kinds RDRA has no unconnected column for, and
 `rdra-transition-uc-no-buc` says a transition's use case must be one a BUC defines, as the
 sheet's 遷移UC column does. An element that a rule owns is no longer reported by
-`orphan-node`. Phase 3 of [vision.md](./vision.md) requires the clinic-ops sample to pass
-every rule.
+`orphan-node`. The clinic-ops sample passes every rule.
 
 ## Reading The Three Together
 
@@ -257,8 +255,8 @@ The UC複合図 and the whole RDRA diagram stay available for an RDRA review, bu
 reader starts from them. Every diagram a document embeds is scoped (by BUC, entity, use
 case, or actor) and stays under Mermaid's default limits, which `diagram` warns about. The
 skill `rdra-ish-diagram` (`references/documents.md`) gives the section-by-section base
-structure of both documents; a project's own document instructions take precedence. `samples/clinic-ops/design-doc.md`
-and `samples/clinic-ops/prd.md` follow these two orders.
+structure of both documents; a project's own document instructions take precedence.
+`samples/clinic-ops/design-doc.md` and `samples/clinic-ops/prd.md` follow these two orders.
 
 ## Modeling Heuristics
 
@@ -284,13 +282,3 @@ and `samples/clinic-ops/prd.md` follow these two orders.
   meaningful consistency, transaction, ownership, or integration boundary.
 - Do not attach permission or device constraints directly to a screen. Declare them on
   the UC/API path and derive screen patterns through `displays` and `invokes`.
-
-## Summary
-
-<!-- derived-from #basic-stance -->
-<!-- derived-from #reading-the-three-together -->
-
-RDRA-ish is RDRA-inspired, not RDRA-equivalent. BUCs are business-value containers,
-business flow is the concrete realization of a BUC through first-class flows, steps,
-UCs, and events, and UCs are effect-bearing interactions. This keeps the model useful
-both for requirements discussion and for implementation-oriented review.

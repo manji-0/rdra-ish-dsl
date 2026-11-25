@@ -1,15 +1,11 @@
 # Step 3: Data Touchpoints
 
-Use this context when use cases and their screens are stable enough to ask which
-business objects each action touches and each screen shows.
+<!-- derived-from ../../../docs/incremental-modeling.md#stage-3-data-touchpoints -->
 
-## Goal
+Add coarse entities, CRUD, and what each screen shows, so reviewers see which object each
+action is responsible for. Commit to no columns, APIs, or persistence design yet.
 
-Add coarse entities and CRUD predicates, and join screens to the entities they show,
-so reviewers can see object responsibility without forcing final columns, APIs, or
-persistence design.
-
-## Ask For
+## Ask
 
 <!-- stage-spec: asks data-touchpoints -->
 - Which business objects are created, read, updated, or deleted by each use case?
@@ -18,30 +14,18 @@ persistence design.
 - Which entities should be shared across multiple BUCs?
 <!-- /stage-spec -->
 
-Also ask:
+Also ask which operations will need an API or a transaction boundary later.
 
-- Which operations are likely to require an API or transaction boundary later?
+## Do
 
-## Procedure
-
-1. Add coarse `entity` declarations for the logical data structures, usually with
-   only an `id: Int @pk` column. Business nouns that do not need persistence stay
-   in labels and descriptions; there is no separate conceptual-model kind.
-2. Add direct UC CRUD predicates: `creates`, `reads`, `updates`, or
-   `deletes`.
-3. Prefer direct use-case CRUD here. Delay `api` until the boundary is meaningful.
-4. Keep column details, FK relations, `system`, and `coordinates` out unless already
-   stable and necessary for review. When two business objects are linked twice (a renewal
-   application and the permit it renews, beside the permit and the application it was
-   granted on), note both links now: each later `relate` gets a `.role(...)`, and rules
-   name the link they follow with `.role(...)`.
-5. Add `shows(Screen, Entity)` for the entities each screen of Step 2 presents, and
-   `maps_field(Field, Entity.column)` for a field whose target column already exists.
-6. Use the CRUD matrix to spot overloaded or empty use cases.
-7. Do not rely on `business-inputs` yet unless entity columns already exist; at this
-   stage it is usually enough to confirm actor/use-case/entity responsibility.
-
-## Minimal Pattern
+1. Declare an `entity` per logical data structure, usually `id: Int @pk` only. A noun
+   nothing stores or exchanges stays in labels.
+2. Add `creates`, `reads`, `updates`, or `deletes` on the use case. Add an `api` later.
+3. Add `shows(Screen, Entity)`, and `maps_field(Field, Entity.column)` where the column
+   exists.
+4. When two objects are linked twice (a renewal and the permit it renews, beside the permit
+   and the application it was granted on), note both links: each later `relate` takes a
+   `.role(...)`.
 
 ```rdra
 entity Order "Order" {
@@ -59,7 +43,7 @@ shows(CheckoutScreen, Order)
 shows(CartScreen, Cart)
 ```
 
-## Validation
+## Validate
 
 <!-- stage-spec: review data-touchpoints -->
 ```sh
@@ -69,25 +53,12 @@ rdra-ish diagram src/ --kind er --format mermaid --buc BucOrder
 ```
 <!-- /stage-spec -->
 
-Also run:
+## Done when
 
-```sh
-rdra-ish lint src/ --format table
-rdra-ish list src/ --kind entity --format table
-```
+- The CRUD matrix tells a plausible story: each data-changing use case touches an entity,
+  and a read-only one is read-only on purpose.
+- Each screen shows what the actor sees there, or is data-free on purpose.
+- Entities are logical structures, not tables designed early.
 
-## Achievement Conditions
-
-- The CRUD matrix tells a plausible business story.
-- Every data-changing use case has at least one entity touchpoint.
-- Read-only use cases are intentionally read-only, not accidentally empty.
-- Each screen shows the entities the actor sees there, or is data-free on purpose.
-- Business nouns are not forced into `entity` just because they exist in the
-  language of the business.
-- Entity names represent logical data structures, not tables designed too early.
-- API and system boundaries are either not needed yet or noted for Step 4.
-
-## Next Step
-
-Load `references/04-api-access-boundary.md` when the team needs API paths,
-permission/media constraints, or implementation boundary discussion.
+Next: `references/04-api-access-boundary.md`, when the team needs API paths, permissions,
+or media.
