@@ -7,6 +7,13 @@
 - `verify --with-tlc`: each `tlc:` run line of a cone, property or whole-model job ends with
   what its TLC launches cost: their wall time added up, the `-Xmx` of the last and the
   workers of the first, as `(31 states, 0.3 s, -Xmx1g, 8 workers)` (#384).
+- `verify --with-tlc` schedules its TLC runs by cores as well as memory: a run gets one
+  worker per 50,000 states BFS counted in its module, from 1 to 8 (more when memory, not the
+  queue, bounds the runs), the largest runs start first, and the cone runs may hold all of
+  `--memory` once BFS ends; a heap is still sized by the half, so no verdict depends on when
+  a run starts. `--tlc-jobs` / `RDRA_TLC_JOBS` and `--tlc-workers` / `RDRA_TLC_WORKERS` set
+  the runs at once and every run's workers ([design](./docs/design/tlc-scheduling.md),
+  #384).
 
 ## v3.0.0 - 2026-11-26
 
