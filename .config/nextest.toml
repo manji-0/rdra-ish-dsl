@@ -21,7 +21,7 @@ not (
         test(=printed_code_agrees_on_the_domain_samples)
       | test(=printed_code_agrees_on_the_small_samples)))
   | (binary_id(rdra-ish-cli::codegen_builds) & (test(=go_builds) | test(=rust_builds) | test(=typescript_builds)))
-  | (binary_id(rdra-ish-cli::codegen_behaviour) & test(=go_behaves))
+  | (binary_id(rdra-ish-cli::codegen_behaviour) & (test(=go_behaves) | test(=go_states_are_not_built_outside)))
   | (binary_id(rdra-ish-cli::memory_cli) & (
         test(=shared_quotients_stop_no_cone_elsewhere_on_any_number_of_threads)
       | test(=the_generators_finish_a_cone_check_finishes)
@@ -65,6 +65,7 @@ not (
       | test(=lifecycle::explore::tests::store_bytes_models_the_store_a_run_counts)
       | test(=lifecycle::explore::plan_tests::planned_enabled_bindings_agree_with_eval_on_every_shipped_model)
       | test(=lifecycle::explore::symmetry::tests::a_parent_and_an_owner_child)
+      | test(=lifecycle::explore::symmetry::witnesses::past_the_branch_cap_the_verdict_stands)
       | test(=lifecycle::tests::reduce::a_count_over_t_in_a_guard_reduces_exactly)
       | test(=lifecycle::tests::reduce::a_sub_lifecycle_that_reads_inputs_of_t_is_reduced_and_decides_the_same)
       | test(=lifecycle::tests::reduce::a_cone_between_the_old_and_the_new_cell_budget_is_reduced)))
