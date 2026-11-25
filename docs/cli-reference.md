@@ -1476,7 +1476,11 @@ finding about the model)`; both result lines read `tool_error`, and the run fail
 check(s) the native checker and TLC decide differently (a tool bug)`.
 
 **TLC's output** prints after the native lines. Each TLC run prints a `tlc: ` line, and a
-`tlc_result: ok|counterexample|tool_error` line follows `result:`. A failed run prints under
+`tlc_result: ok|counterexample|tool_error` line follows `result:`. The line of a cone,
+property, or whole-model run ends with what its TLC launches cost: their wall time added up
+(the reruns, `_rest<n>`, `_Full`, and `_WF` included), the `-Xmx` of the last launch, and the
+workers of the first, as `(31 states, 0.9 s, -Xmx1g, 8 workers)`. A cone checked in another
+cone's run, and a module over the share, launch nothing and print no cost. A failed run prints under
 `tlc: <module> (<path>):` the counterexample decoded and replayed through BFS's step relation
 (the lowest binding when several give the same state), marked `from TLC`, then TLC's
 `violated: ...` line and raw trace. A TLC step that matches no move prints `error: TLC step <n>
@@ -1489,7 +1493,7 @@ violation`. When TLC does not pass or the engines disagree, the run ends `specs:
 ```
 $ rdra-ish verify samples/formal-verification/cross_order_payment_split.rdra --with-tlc
 ...
-tlc: Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: counterexample (31 states)
+tlc: Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: counterexample (31 states, 1.6 s, -Xmx1g, 8 workers)
 tlc: StateModel_Order (31 states): 1 deadlock and 3 witness checks; found none
 tlc: StateModel_Payment (31 states): 1 deadlock and 2 witness checks; found none
 tlc: Cone_MultiForbidden_Order_0 (/tmp/rdra-ish-tlc-4242/Cone_MultiForbidden_Order_0.tla):

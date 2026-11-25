@@ -79,12 +79,69 @@ pub(super) struct Ran {
     pub(super) runs: Vec<(ConeRun, Outcome)>,
     /// Why the job did not run, with the hint, printed in place of TLC's output.
     unrun: Option<String>,
+    /// What the job's TLC launches cost, printed at the end of its line.
+    pub(super) cost: Cost,
+}
+
+/// What the TLC launches of one job cost (#384): their wall time added up, the heap of the
+/// last, and the workers of the first. A job with no launch costs nothing and prints nothing.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(super) struct Cost {
+    pub(super) secs: f64,
+    pub(super) heap: u64,
+    pub(super) workers: usize,
+    pub(super) launches: usize,
+}
+
+impl Cost {
+    /// One launch of `secs` seconds at `heap` bytes and `workers`.
+    pub(super) fn launch(secs: f64, heap: u64, workers: &str) -> Cost {
+        Cost {
+            secs,
+            heap,
+            workers: workers.parse().unwrap_or(1),
+            launches: 1,
+        }
+    }
+
+    /// This cost, then `later`'s launches.
+    pub(super) fn then(self, later: Cost) -> Cost {
+        match (self.launches, later.launches) {
+            (0, _) => later,
+            (_, 0) => self,
+            _ => Cost {
+                secs: self.secs + later.secs,
+                heap: later.heap,
+                workers: self.workers,
+                launches: self.launches + later.launches,
+            },
+        }
+    }
+
+    /// The notes a run line ends with: `<secs> s`, `-Xmx<heap>`, `<n> workers`.
+    pub(super) fn notes(&self) -> Vec<String> {
+        if self.launches == 0 {
+            return Vec::new();
+        }
+        let workers = match self.workers {
+            1 => "1 worker".to_string(),
+            n => format!("{n} workers"),
+        };
+        vec![
+            format!("{:.1} s", self.secs),
+            format!("-Xmx{}", xmx(self.heap)),
+            workers,
+        ]
+    }
 }
 
 impl Ran {
     pub(super) fn line(&self, module: &str, checks: &[String]) -> String {
         let states = self.run.distinct_states;
-        run_line(module, checks, self.decision.as_str(), states, &self.notes)
+        let notes: Vec<String> = (self.notes.iter().cloned())
+            .chain(self.cost.notes())
+            .collect();
+        run_line(module, checks, self.decision.as_str(), states, &notes)
     }
 
     /// A job whose module needs more heap than the share holds: a tool error with no run.
@@ -97,6 +154,7 @@ impl Ran {
             notes: vec![note],
             runs: Vec::new(),
             unrun: Some(report),
+            cost: Cost::default(),
         }
     }
 }
@@ -121,6 +179,7 @@ fn run_sized(
     hold.regrow(more.charge());
     let doubled = more.bytes().expect("a doubled heap is sized");
     let mut again = run(doubled)?;
+    again.cost = ran.cost.then(again.cost);
     again.notes.push(format!(
         "rerun at -Xmx{} after -Xmx{} ran out of memory",
         xmx(doubled),
@@ -150,17 +209,18 @@ fn run_job(
     // only that run is reported. A property's lasso differs from run to run on one worker too.
     // A run that ran out of memory is not run again on one worker: `run_sized` reruns the job
     // at twice the heap, or reports it.
-    let workers = match (safety, workers) {
+    let (workers, first) = match (safety, workers) {
         (true, many) if many != "1" => {
             let ran = run_cfg(tlc, dir, &job.module, heap, &cfg, many, safety)?;
             if ran.decision.outcome() == Outcome::Ok || out_of_memory(&ran.log) {
                 return Ok(ran);
             }
-            "1"
+            ("1", ran.cost)
         }
-        _ => workers,
+        _ => (workers, Cost::default()),
     };
     let mut ran = run_cfg(tlc, dir, &job.module, heap, &cfg, workers, safety)?;
+    ran.cost = first.then(ran.cost);
     match &job.kind {
         JobKind::Cone(cs) => {
             let mut reruns = 0;
@@ -176,6 +236,7 @@ fn run_job(
                 fs::write(&path, cfg)
                     .with_context(|| format!("failed to write {}", path.display()))?;
                 let more = run_cfg(tlc, dir, &job.module, heap, &cfg_name, workers, true)?;
+                ran.cost = ran.cost.then(more.cost);
                 ran.log.push_str(&more.log);
                 ran.run.violations.extend(more.run.violations);
                 if ran.run.violated_names().len() == found.len() {
@@ -192,6 +253,7 @@ fn run_job(
             if let (Outcome::Counterexample, Some(full)) = (plain, &p.full) {
                 let cfg = format!("{}.cfg", full.module);
                 let more = run_cfg(tlc, dir, &full.module, heap, &cfg, workers, false)?;
+                ran.cost = ran.cost.then(more.cost);
                 ran.notes.push(format!(
                     "{}: {}",
                     full.module,
@@ -219,6 +281,7 @@ fn run_job(
                         .expect("an eventually or leads_to has a WF module");
                     let cfg = format!("{}.cfg", wf.module);
                     let more = run_cfg(tlc, dir, &wf.module, heap, &cfg, workers, false)?;
+                    ran.cost = ran.cost.then(more.cost);
                     let wf_outcome = more.decision.outcome();
                     ran.runs.push((ConeRun::WfNext, wf_outcome));
                     ran.notes
@@ -301,10 +364,12 @@ fn run_cfg(
     if safety {
         command.arg("-continue");
     }
+    let start = Instant::now();
     let output = command
         .args(["-config", cfg, &tla])
         .output()
         .with_context(|| format!("failed to execute {}", tlc.display()))?;
+    let cost = Cost::launch(start.elapsed().as_secs_f64(), heap, workers);
     clean_up(dir, module);
     let log = format!(
         "{}{}",
@@ -320,6 +385,7 @@ fn run_cfg(
         notes: Vec::new(),
         runs: Vec::new(),
         unrun: None,
+        cost,
     })
 }
 
@@ -418,6 +484,7 @@ fn run_whole(
             std::thread::sleep(Duration::from_millis(200));
         }
     }
+    let cost = Cost::launch(start.elapsed().as_secs_f64(), heap, workers);
     for reader in readers {
         let _ = reader.join();
     }
@@ -451,6 +518,7 @@ fn run_whole(
         notes,
         runs: Vec::new(),
         unrun: None,
+        cost,
     })
 }
 
@@ -513,6 +581,7 @@ pub(super) fn run_cones(
                 )],
                 runs: Vec::new(),
                 unrun: None,
+                cost: Cost::default(),
             })
         })
         .collect())
@@ -798,5 +867,37 @@ mod hint_tests {
         let hint = undecided_hint(Stop::Memory);
         assert!(hint.starts_with("raise --memory"), "{hint}");
         assert!(hint.contains(".fair(UseCase, ...)"), "{hint}");
+    }
+}
+
+#[cfg(test)]
+mod cost_tests {
+    use super::super::report::run_line;
+    use super::Cost;
+
+    const GIB: u64 = 1 << 30;
+
+    /// A job's launches add up their seconds, keep the first launch's workers and the last
+    /// one's heap, and print last on the line; a job with no launch prints nothing more.
+    #[test]
+    fn a_jobs_launches_add_up_on_its_line() {
+        let many = Cost::launch(2.25, GIB, "8");
+        let one = Cost::launch(1.0, GIB, "1");
+        let doubled = Cost::launch(3.0, 2 * GIB, "1");
+        let cost = many.then(one).then(doubled);
+        assert_eq!(cost.launches, 3);
+        assert_eq!(cost.notes(), ["6.2 s", "-Xmx2g", "8 workers"]);
+        assert_eq!(Cost::default().then(one), one);
+        assert_eq!(one.then(Cost::default()), one);
+        assert_eq!(one.notes(), ["1.0 s", "-Xmx1g", "1 worker"]);
+        assert!(Cost::default().notes().is_empty());
+        let notes: Vec<String> = ["Cone_P_WF: ok".to_string()]
+            .into_iter()
+            .chain(many.notes())
+            .collect();
+        assert_eq!(
+            run_line("Cone_P", &["P".to_string()], "ok", Some(12), &notes),
+            "Cone_P [P]: ok (12 states, Cone_P_WF: ok, 2.2 s, -Xmx1g, 8 workers)"
+        );
     }
 }

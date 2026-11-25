@@ -85,6 +85,38 @@ fn verify_with_tlc(cwd: &Path, tmpdir: &Path, args: &[&str]) -> Output {
         .expect("rdra-ish runs")
 }
 
+/// The `tlc:` lines of `stdout`, each without what its TLC runs cost (`<secs> s, -Xmx<h>,
+/// <n> workers` at the end of its parentheses, #384), so it reads as the native line does.
+/// Every run line of a job TLC launched ends with the cost.
+fn tlc_lines_without_cost(stdout: &str) -> Vec<String> {
+    let cost = |notes: &[&str]| {
+        let [secs, heap, workers] = notes else {
+            return false;
+        };
+        secs.strip_suffix(" s")
+            .is_some_and(|s| s.parse::<f64>().is_ok())
+            && heap.starts_with("-Xmx")
+            && (workers.ends_with(" worker") || workers.ends_with(" workers"))
+    };
+    stdout
+        .lines()
+        .filter(|l| l.starts_with("tlc: "))
+        .map(|line| {
+            let Some((head, inside)) = line.strip_suffix(')').and_then(|l| l.rsplit_once(" ("))
+            else {
+                return line.to_string();
+            };
+            let notes: Vec<&str> = inside.split(", ").collect();
+            let keep = notes.len().saturating_sub(3);
+            match cost(&notes[keep..]) {
+                true if keep == 0 => head.to_string(),
+                true => format!("{head} ({})", notes[..keep].join(", ")),
+                false => line.to_string(),
+            }
+        })
+        .collect()
+}
+
 /// `order_stability.rdra`: BFS decides `stable`, `unchanged`, and `precedes` on each one's
 /// cone, with no TLC run, and prints the shortest trace to the step or state that breaks each
 /// failing one. `check` evaluates none of them (#166).
@@ -1700,9 +1732,10 @@ fn liveness_is_decided_without_tlc_and_tlc_agrees() {
         let tlc_stderr = String::from_utf8_lossy(&tlc.stderr);
         assert_eq!(tlc.status.code(), Some(code), "{tlc_stdout}{tlc_stderr}");
         assert!(!tlc_stderr.contains("EngineDisagreement"), "{tlc_stderr}");
+        let tlc_lines = tlc_lines_without_cost(&tlc_stdout);
         for line in lines {
             assert!(
-                tlc_stdout.lines().any(|l| l == format!("tlc: {line}")),
+                tlc_lines.contains(&format!("tlc: {line}")),
                 "tlc: {line}\n{tlc_stdout}"
             );
         }
@@ -1905,7 +1938,9 @@ fn backend_tlc_warns_and_runs_tlc_beside_the_native_checker() {
         "{stderr}"
     );
     assert!(
-        stdout.contains("\ntlc: Cone_Forbidden_CartLine_0 [Forbidden_CartLine_0, Check_CartLine_qty_0]: ok (7 states)\n"),
+        tlc_lines_without_cost(&stdout).contains(
+            &"tlc: Cone_Forbidden_CartLine_0 [Forbidden_CartLine_0, Check_CartLine_qty_0]: ok (7 states)".to_string()
+        ),
         "{stdout}"
     );
     assert!(
@@ -2011,8 +2046,9 @@ fn a_safety_cone_stops_once_every_check_on_it_has_failed() {
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
-            stdout.contains(
-                "\ntlc: Cone_Forbidden_Task_0 [Forbidden_Task_0]: counterexample (65793 states)\n"
+            tlc_lines_without_cost(&stdout).contains(
+                &"tlc: Cone_Forbidden_Task_0 [Forbidden_Task_0]: counterexample (65793 states)"
+                    .to_string()
             ),
             "{stdout}"
         );

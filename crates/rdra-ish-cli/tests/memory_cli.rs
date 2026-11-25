@@ -670,13 +670,21 @@ fn a_run_out_of_memory_reruns_once_at_twice_the_heap_within_the_share() {
         runs.heaps
     );
     assert!(runs.over.is_empty(), "{:?}", runs.over);
-    let rerun = "(2 states, rerun at -Xmx2g after -Xmx1g ran out of memory)";
-    assert_eq!(
-        runs.stdout.lines().filter(|l| l.ends_with(rerun)).count(),
-        3,
-        "{}",
-        runs.stdout
-    );
+    // The line ends with what both launches cost (#384): the fake TLC sleeps a second in
+    // each, the heap is the rerun's, and the workers the first launch's.
+    let rerun = "(2 states, rerun at -Xmx2g after -Xmx1g ran out of memory, ";
+    let reruns: Vec<&str> = runs.stdout.lines().filter(|l| l.contains(rerun)).collect();
+    assert_eq!(reruns.len(), 3, "{}", runs.stdout);
+    for line in reruns {
+        let cost = line.split_once(rerun).unwrap().1;
+        let (secs, rest) = cost.split_once(" s, ").expect("seconds");
+        assert!(secs.parse::<f64>().unwrap() >= 2.0, "{line}");
+        assert!(rest.starts_with("-Xmx2g, "), "{line}");
+        assert!(
+            rest.ends_with(" workers)") || rest.ends_with(" worker)"),
+            "{line}"
+        );
+    }
     assert!(
         runs.stdout.contains("\ntlc_result: ok"),
         "{}{}",
