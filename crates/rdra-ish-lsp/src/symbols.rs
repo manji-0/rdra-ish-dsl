@@ -5,7 +5,7 @@ use rdra_ish_syntax::ast::{Ast, Item};
 use tower_lsp::lsp_types::{DocumentSymbol, Location, SymbolInformation, SymbolKind};
 
 use crate::convert::span_to_range;
-use crate::uri::path_to_uri;
+use crate::uri::ClientUris;
 
 pub fn document_symbols(ast: &Ast) -> Vec<DocumentSymbol> {
     let mut symbols = Vec::new();
@@ -27,7 +27,11 @@ pub fn document_symbols(ast: &Ast) -> Vec<DocumentSymbol> {
     symbols
 }
 
-pub fn workspace_symbols(analysis: &WorkspaceAnalysis, query: &str) -> Vec<SymbolInformation> {
+pub fn workspace_symbols(
+    analysis: &WorkspaceAnalysis,
+    uris: &ClientUris,
+    query: &str,
+) -> Vec<SymbolInformation> {
     let query = query.to_lowercase();
     let mut symbols = Vec::new();
 
@@ -41,7 +45,7 @@ pub fn workspace_symbols(analysis: &WorkspaceAnalysis, query: &str) -> Vec<Symbo
         let Some((path, text, _)) = analysis.program.sources.get(site.source_id) else {
             continue;
         };
-        let Ok(uri) = path_to_uri(path) else {
+        let Ok(uri) = uris.uri(path) else {
             continue;
         };
         symbols.push(SymbolInformation {
@@ -75,15 +79,15 @@ mod tests {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/purchase");
         let entry = root.join("buc/buc_purchase.rdra");
         let analysis = analyze_workspace(&[entry], &[root], &Default::default());
-        let all = workspace_symbols(&analysis, "");
+        let all = workspace_symbols(&analysis, &ClientUris::default(), "");
         assert!(!all.is_empty());
 
-        let actors = workspace_symbols(&analysis, "actor");
+        let actors = workspace_symbols(&analysis, &ClientUris::default(), "actor");
         assert!(actors
             .iter()
             .any(|symbol| symbol.container_name.as_deref() == Some("actor")));
 
-        let misses = workspace_symbols(&analysis, "zzzznotfound");
+        let misses = workspace_symbols(&analysis, &ClientUris::default(), "zzzznotfound");
         assert!(misses.is_empty());
     }
 }

@@ -853,6 +853,12 @@
 
 ### Fixed
 
+- The language server sends its results under the paths the editor opened the files by.
+  In a workspace opened through a symlink, diagnostics, definitions, references, renames,
+  code lenses and workspace symbols used to name each file by the path the symlink points
+  to, a document the editor did not have open, so the open file showed no diagnostics. A
+  document is named as the editor opened it, and another file under a workspace root as
+  the root the editor named.
 - An unfinished declaration at the end of a file, as while it is typed (`actor ` on the last
   line), no longer empties that file's syntax tree. The parser recovered from a broken
   declaration in the middle of a file but not at its end, so the whole file was dropped:
