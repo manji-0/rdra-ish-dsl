@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Changed
+
+- `verify --with-tlc`: each `tlc:` run line of a cone, property or whole-model job ends with
+  what its TLC launches cost: their wall time added up, the `-Xmx` of the last and the
+  workers of the first, as `(31 states, 0.3 s, -Xmx1g, 8 workers)` (#384).
+
 ## v3.0.0 - 2026-11-26
 
 This is a major release. `verify` decides every check with its own checker and needs no JVM;
