@@ -257,6 +257,11 @@ No sample changes verdict.
   food-permit-ops 2.10 s to 1.81 s, clinic-ops 1.74 s to 1.58 s, insurance-claim-ops 4.23 s
   to 3.52 s. One job takes the time it took, and the output does not change.
 
+- When a BFS run's table of reached states grows, it files the states again in the order the
+  run stored them, so it reads them in order (#296 item 3.1, follow-up (a)). food-permit-ops
+  at 1 job takes 1% fewer cycles. Output, `--memory` stop points and what a run charges do not
+  change.
+
 - `verify` gives back what an entity cone held once the cone stops at the memory limit
   (#284). The entity pass runs its cones one at a time in cone order, each in the room the
   results before it leave. A stopped cone used to keep everything it stored until the pass

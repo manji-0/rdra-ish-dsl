@@ -860,6 +860,24 @@ With the probes of part 2 turned on as well, in a build made for this measuremen
 
 The probes still cost insurance-claim-ops 5%, so they stay off.
 
+### Follow-up (a): the table grown in store order
+
+<!-- constrained-by #part-2-the-shared-table -->
+
+hashbrown 0.17's growth walks the old buckets and hashes each state again, which reads the
+store's rows at random. When a run's own table (`Index::Local`) is full, `Seen` now builds
+the next one as `with_capacity(len + 1)` and files the states `0..len` in store order
+(`grown_in_store_order`), reading the rows as they lie. hashbrown's growth gives the same
+capacity, and the `seen_growth` twin, now on every insert of every run, holds the two equal,
+so `bytes_with` and the `--memory` stop points do not change. A planted capacity of
+`2 * len + 1` was caught: `shadow: Seen::insert(7): capacity 28, hashbrown's 14`.
+
+**Measured** (against part 3, food-permit-ops, RDRA_JOBS set, interleaved, 1-minute load
+3.5 to 4.8): at 1 job 5.64 s against 5.69 s and 24.31 G cycles against 24.55 G (-1%), at
+the same instructions; at 8 jobs 1.72 s against 1.72 s (median of five), below the noise. A
+microbenchmark of synthetic rows had put the rebuild at about 70 cycles a state against about
+125 (the owner's second opinion); the rebuilds are a small share of a run.
+
 ## Beyond 3.1: in-flight dedup
 
 <!-- constrained-by #hits-loops-and-stale-misses -->
