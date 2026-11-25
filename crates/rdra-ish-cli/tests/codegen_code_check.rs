@@ -53,8 +53,10 @@ fn generated(name: &str) -> PathBuf {
     let dir = project(name, MANIFEST);
     let (code, _, stderr) = text(&rdra(&dir, &["codegen", "model", "--code"]));
     assert_eq!(code, Some(0), "{stderr}");
-    assert!(stderr.contains("wrote svc/src/domain.rs"), "{stderr}");
-    assert!(stderr.contains("wrote svc/tests/traces.txt"), "{stderr}");
+    // The paths print with the platform's separator.
+    let wrote = stderr.replace('\\', "/");
+    assert!(wrote.contains("wrote svc/src/domain.rs"), "{stderr}");
+    assert!(wrote.contains("wrote svc/tests/traces.txt"), "{stderr}");
     dir
 }
 

@@ -84,7 +84,10 @@ fn project(name: &str) -> PathBuf {
     let out = rdra(&dir, &["codegen", "model", "--code"], "");
     assert!(out.status.success(), "{}", text(&out));
     assert!(
-        text(&out).contains("wrote svc/tests/rdra_contract.rs"),
+        // The paths print with the platform's separator.
+        text(&out)
+            .replace('\\', "/")
+            .contains("wrote svc/tests/rdra_contract.rs"),
         "{}",
         text(&out)
     );

@@ -31,7 +31,9 @@ not (
       | test(=a_prepare_takes_the_caller_of_its_use_case)
       | test(=each_fault_fails_the_conformance_run)
       | test(=a_build_command_in_rdra_toml_replaces_the_default)
-      | test(=each_planted_omission_is_named)))
+      | test(=each_planted_omission_is_named)
+      | test(=the_probe_names_the_domain_package_by_its_package_clause)
+      | test(=the_reference_service_builds_and_conforms)))
   | (binary_id(rdra-ish-cli::memory_cli) & (
         test(=shared_quotients_stop_no_cone_elsewhere_on_any_number_of_threads)
       | test(=the_generators_finish_a_cone_check_finishes)
