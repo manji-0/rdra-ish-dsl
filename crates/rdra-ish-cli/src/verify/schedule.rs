@@ -130,6 +130,13 @@ pub(super) const STATES_PER_WORKER: u64 = 50_000;
 /// time and spent 50 to 70% more CPU (#309).
 pub(super) const WORKER_CAP: usize = 8;
 
+/// From this many cores up, a job BFS has not counted yet is taken to be large and gets the
+/// cap; below it, it gets the cores divided among the runs left, as before #384. On a 4-core
+/// CI runner the cap made the `--with-tlc` samples 17% slower (5 min 13 s against 6 min 7 s,
+/// one run each), since BFS counts nothing until its entity pass ends. A guess between 4 and
+/// 64.
+const MANY_CORES: usize = 16;
+
 /// When memory, not the queue, bounds the runs, a run may get up to this many times
 /// `WORKER_CAP`: two runs of 32 workers kept 25 to 30 of 64 cores busy (#384). A guess.
 const UNCAPPED: usize = 4;
@@ -207,8 +214,8 @@ fn priority(want: &Want) -> (u8, u64, Rank) {
 ///
 /// - `--tlc-workers N`: `N`.
 /// - Counted, `s` states: `by_states`.
-/// - Not counted while BFS runs: the cap, as if it were large.
-/// - Not counted once BFS has ended: the cores divided among the runs left, as before #384.
+/// - Not counted while BFS runs, on `MANY_CORES` or more: the cap, as if it were large.
+/// - Not counted otherwise: the cores divided among the runs left, as before #384.
 ///
 /// A job that asks for the cap gets more when memory, not the queue, bounds the runs: the
 /// cores divided among the runs of its charge that fit the share, up to `UNCAPPED` times the
@@ -226,8 +233,8 @@ pub(super) fn target(want: &Want, machine: &Machine, free: &Free, waiting: usize
         .clamp(1, at_once);
     let workers = match (want.states, free.counted) {
         (Some(s), _) => by_states(s, cap),
-        (None, false) => cap,
-        (None, true) => (cores / (waiting + free.running).clamp(1, fit)).clamp(1, cap),
+        (None, false) if cores >= MANY_CORES => cap,
+        (None, _) => (cores / (waiting + free.running).clamp(1, fit)).clamp(1, cap),
     };
     if workers < cap {
         return workers;
@@ -756,65 +763,45 @@ mod pick_tests {
         }
     }
 
-    /// A sample in CI on 4 cores: BFS counts every cone within a second, and the small cones
-    /// then go 4 at once on one worker each. The one that started before the counts went
-    /// alone on 4.
+    /// A sample in CI on 4 cores, where BFS counts nothing until its entity pass ends (here at
+    /// 5 s): jobs it has not counted share the cores as before #384, 4 at once on one worker
+    /// each, and so do the counted small ones after (`MANY_CORES`).
     #[test]
-    fn a_small_machine_runs_counted_small_jobs_on_one_worker_each() {
+    fn a_small_machine_shares_its_cores_among_uncounted_jobs() {
         let m = machine(4);
         let jobs: Vec<Sim> = (0..15)
             .map(|k| Sim {
                 bytes: GIB + OVERHEAD,
                 states: 300,
-                counted_at: Some(1),
+                counted_at: Some(5),
                 work: 1 + (k % 3),
             })
             .collect();
-        let runs = simulate(m, (8 * GIB, 16 * GIB, 2), &jobs);
+        let runs = simulate(m, (8 * GIB, 16 * GIB, 5), &jobs);
         assert_eq!(runs.len(), 15);
-        let first = runs.iter().min_by_key(|r| r.start).unwrap();
-        assert_eq!((first.start, first.workers), (0, 4));
-        assert!(
-            runs.iter()
-                .filter(|r| r.job != first.job)
-                .all(|r| r.workers == 1),
-            "{runs:?}"
-        );
-        // 30 worker-seconds on 4 cores: 8 s one worker each from the start, 1 s more for the
-        // run that went alone before BFS counted the rest.
+        assert!(runs.iter().all(|r| r.workers == 1), "{runs:?}");
+        assert_eq!(runs.iter().filter(|r| r.start == 0).count(), 4, "{runs:?}");
+        // 30 worker-seconds on 4 cores.
         let end = runs.iter().map(|r| r.end).max().unwrap();
         assert!(end <= 9, "{end}: {runs:?}");
     }
 
-    /// The cost of ranking uncounted jobs as large: when BFS counts nothing until its entity
-    /// pass ends (here at 5 s), a 4-core machine runs one job at a time on 4 workers until
-    /// then, where `tlc_workers` ran 4 at once on 1. Counted from then on, the rest go 4 at
-    /// once. This is owner decision 6 of docs/design/tlc-scheduling.md.
+    /// On 16 cores or more a job BFS has not counted starts on the cap, as if it were large.
     #[test]
-    fn until_bfs_counts_a_small_machine_runs_one_uncounted_job_at_a_time() {
-        let m = machine(4);
-        let jobs: Vec<Sim> = (0..15)
-            .map(|_| Sim {
-                bytes: GIB + OVERHEAD,
-                states: 300,
-                counted_at: Some(5),
-                work: 2,
-            })
-            .collect();
-        let runs = simulate(m, (8 * GIB, 16 * GIB, 5), &jobs);
-        let early: Vec<&Run> = runs.iter().filter(|r| r.start < 5).collect();
-        assert!(early.iter().all(|r| r.workers == 4), "{runs:?}");
-        for t in 0..5 {
-            let going = early.iter().filter(|r| r.start <= t && t < r.end).count();
-            assert!(going <= 1, "{going} at {t}: {runs:?}");
-        }
-        assert!(
-            runs.iter().filter(|r| r.start >= 5).all(|r| r.workers == 1),
-            "{runs:?}"
-        );
-        // 30 worker-seconds: 8 s on 4 cores one worker each, 11 s here.
-        let end = runs.iter().map(|r| r.end).max().unwrap();
-        assert!(end <= 11, "{end}: {runs:?}");
+    fn a_many_core_machine_starts_uncounted_jobs_on_the_cap() {
+        let free = |cores: usize| Free {
+            cores,
+            bytes: 8 * GIB,
+            share: 8 * GIB,
+            running: 0,
+            holding: 0,
+            counted: false,
+        };
+        let w = want(GIB + OVERHEAD, None, 0);
+        assert_eq!(target(&w, &machine(16), &free(16), 15), 8);
+        // Below 16: the 15 cores among the 6 runs of 1.25 GiB that fit 8 GiB.
+        assert_eq!(target(&w, &machine(15), &free(15), 15), 2);
+        assert_eq!(target(&w, &machine(4), &free(4), 2), 2);
     }
 
     /// #384's model on 64 cores: two giants and property cones of 2M to 6.7M states that BFS
