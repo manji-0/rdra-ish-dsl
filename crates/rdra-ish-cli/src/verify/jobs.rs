@@ -97,12 +97,16 @@ impl Job {
 }
 
 impl PropertyJob {
-    /// Whether the property may run up to instance symmetry in phase 1: an `always`, whose
-    /// verdict reads one state at a time, on a cone the sub-lifecycle reduction leaves whole.
+    /// Whether the property may run up to instance symmetry: an `always`, whose verdict reads
+    /// one state at a time, on a cone the sub-lifecycle reduction leaves whole (phase 1), or
+    /// an `eventually` or `leads_to` on any cone, read per binding on the annotated quotient
+    /// (phase 4), when the cone's group moves some rows.
     pub(super) fn symmetric(&self) -> bool {
-        self.cone.kind == LtlKind::Always
-            && self.cone.reduced.reduction().is_none()
-            && self.cone.reduced.has_instance_symmetry()
+        let form = match self.cone.kind {
+            LtlKind::Always => self.cone.reduced.reduction().is_none(),
+            kind => kind.is_liveness(),
+        };
+        form && self.cone.reduced.has_instance_symmetry()
     }
 }
 

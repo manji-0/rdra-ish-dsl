@@ -51,9 +51,10 @@ pub(crate) enum Twin {
     SUpToH,
     Edges,
     StepEnds,
+    OrbitLiveness,
 }
 
-const TWINS: [(Twin, &str); 15] = [
+const TWINS: [(Twin, &str); 16] = [
     (Twin::EachEnabled, "each_enabled"),
     (Twin::Seen, "seen"),
     (Twin::Source, "source"),
@@ -69,6 +70,7 @@ const TWINS: [(Twin, &str); 15] = [
     (Twin::SUpToH, "s_up_to_h"),
     (Twin::Edges, "edges"),
     (Twin::StepEnds, "step_ends"),
+    (Twin::OrbitLiveness, "orbit_liveness"),
 ];
 
 static COMPARED: [AtomicU64; TWINS.len()] = [const { AtomicU64::new(0) }; TWINS.len()];

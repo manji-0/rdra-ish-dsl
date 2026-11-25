@@ -419,6 +419,11 @@ impl<'a> Edges<'a> {
         self.within(self.list.range_of(at), at)
     }
 
+    /// The indices of the moves from `states[at]`: those `from_state` yields, in order.
+    pub(crate) fn range_of(&self, at: u32) -> std::ops::Range<usize> {
+        self.list.range_of(at)
+    }
+
     /// The edges `at`, whose first leaves `states[from]`.
     fn within(&self, at: std::ops::Range<usize>, from: u32) -> EdgeIter<'a> {
         EdgeIter {

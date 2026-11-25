@@ -132,6 +132,18 @@
 
 ### Added
 
+- `verify --symmetry` also covers `eventually` and `leads_to` properties, `.fair` included,
+  on reduced and unreduced cones (#212, phase 4). Under `always` such a cone runs up to
+  instance symmetry with each edge's permutation kept, and the fair components are read on
+  pairs of a stored state and a binding, each edge moving the binding and the fair instances
+  by its permutation. A counterexample is lifted to concrete states, its loop repeated until
+  it closes, and it must replay, fail the property, and be fair before it prints. At
+  `--instance-count 3 --memory 8GiB` patent-ops' `GrantEnds`, whose plain run stopped at
+  40.0M states, takes 7,346,935 orbits for about 87M states and is decided (`ok`). On a
+  reduced cone whose run up to symmetry finds a counterexample, the property is decided as
+  under `never`, which must find one too. Without the option nothing changes. The `shadow`
+  build holds the pairs to a plain run as `orbit_liveness`.
+
 - `verify --symmetry` also covers a reduced safety cone (#212, phase 3): under `always` it
   runs up to `G_T`, the
   instance symmetry of its T rows, which leaves every S entity, and with it the class

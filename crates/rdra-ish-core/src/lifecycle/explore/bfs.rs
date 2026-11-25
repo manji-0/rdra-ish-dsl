@@ -270,6 +270,7 @@ impl<'t> Bfs<'t> {
             canon: Canon::default(),
             orbit_self: Vec::new(),
             orbits: Default::default(),
+            perms: None,
         }
     }
 
@@ -366,6 +367,10 @@ impl<'t> Bfs<'t> {
             }
             let binding = self.bindings.id(act, params);
             if *s2 == s {
+                // A concrete self-loop: its permutation is the identity.
+                if let Some(perms) = &mut self.perms {
+                    perms.push_identity();
+                }
                 self.push(from, from, act, binding, s2);
                 continue;
             }
@@ -379,6 +384,9 @@ impl<'t> Bfs<'t> {
             let key = StateSlice::new(key);
             if self.group.is_some() && *key == *s {
                 let edge = u32::try_from(self.steps.moves()).expect("edges fit in u32");
+                if let Some(perms) = &mut self.perms {
+                    perms.push(moves.perm(i));
+                }
                 self.push(from, from, act, binding, &s);
                 self.orbit_self.push(edge);
                 // The step's after-asserts were read on its concrete successor above.
@@ -399,6 +407,9 @@ impl<'t> Bfs<'t> {
             };
             // The stored target: under symmetry the canonical form, which an after-assert
             // step's rows read as they read the concrete one.
+            if let Some(perms) = &mut self.perms {
+                perms.push(moves.perm(i));
+            }
             self.push(from, to, act, binding, key);
             // After the edge, so the trace of a violation at `to` reaches it.
             if self.stop_if_all_failed() {

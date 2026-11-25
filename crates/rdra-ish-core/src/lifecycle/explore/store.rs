@@ -200,6 +200,7 @@ impl Bfs<'_> {
         self.states.bytes_with(more)
             + self.steps.bytes_with(more)
             + vec_bytes::<u32>(&self.orbit_self, 0)
+            + self.perms.as_ref().map_or(0, |p| p.bytes())
             + self.bindings.bytes
             + self.layers.bytes()
     }
@@ -213,6 +214,7 @@ impl Bfs<'_> {
         states as u64
             + self.steps.bytes_before_with(1)
             + vec_bytes::<u32>(&self.orbit_self, 0)
+            + self.perms.as_ref().map_or(0, |p| p.bytes())
             + self.bindings.bytes
             + self.layers.bytes()
             + self.seen.bytes_with(1)
