@@ -15,6 +15,9 @@ permissions:
 jobs:
   build:
     name: Build ${{ matrix.target }}
+    # Only a release of rdra-ish itself (a tag v*) publishes. Other releases of this
+    # repository, such as the pinned copy of a tool the flake downloads, do not.
+    if: ${{ github.event_name != 'release' || startsWith(github.event.release.tag_name, 'v') }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
