@@ -167,6 +167,8 @@
               ];
             })
             pkgs.cargo-insta
+            # The workspace tests (scripts/diff-test.sh, .config/nextest.toml)
+            pkgs.cargo-nextest
 
             # Python packaging (maturin bin bindings, uv publish flow)
             pkgs.maturin
