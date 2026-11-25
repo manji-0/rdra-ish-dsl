@@ -227,17 +227,15 @@ pub fn event_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
         }
     }
 
-    // timer が triggers する UseCase がどの BUC にも contains されていない
+    // timer が triggers する UseCase がどの BUC にも属さない（直接の contains も、フローの
+    // ステップの covers も、business_flow::buc_use_cases と同じ読みで数える）
     for rel in &model.relations {
         let (RelKind::Triggers, NodeRef::Timer(timer_key), NodeRef::UseCase(uc_key)) =
             (&rel.kind, &rel.from, &rel.to)
         else {
             continue;
         };
-        let belongs_to_buc = model
-            .relations
-            .iter()
-            .any(|r| r.kind == RelKind::Contains && r.to == NodeRef::UseCase(*uc_key));
+        let belongs_to_buc = !crate::business_flow::bucs_of_use_case(model, *uc_key).is_empty();
         if belongs_to_buc {
             continue;
         }
@@ -430,6 +428,29 @@ triggers(Nightly, Book)
             .iter()
             .any(|e| matches!(e, RdraError::TimerTriggeredUseCaseUnreachable { .. })));
         assert_eq!(collect_timer_flows(&model).len(), 1);
+    }
+
+    /// A use case a BUC holds only through a step of one of its flows belongs to that BUC,
+    /// as `business_flow::buc_use_cases` reads it (#161): its timer draws no warning.
+    #[test]
+    fn a_timer_use_case_a_buc_holds_through_a_flow_step_is_not_flagged() {
+        let model = model_from(
+            "buc B \"b\"\nflow F \"f\"\nstep S1 \"s1\"\nstep S2 \"s2\"\n\
+             usecase ByTimer \"t\"\nusecase ByEvent \"e\"\nusecase Raiser \"r\"\n\
+             timer Nightly \"n\"\nevent Ev \"ev\"\n\
+             contains(B, F)\ncontains(B, Raiser)\ncontains(F, S1)\ncontains(F, S2)\n\
+             precedes(S1, S2)\ncovers(S1, ByTimer)\ncovers(S2, ByEvent)\n\
+             triggers(Nightly, ByTimer)\nraises(Raiser, Ev)\ntriggers(Ev, ByEvent)\n",
+        );
+        let w = warnings(&model);
+        assert!(
+            !w.iter().any(|e| matches!(
+                e,
+                RdraError::TimerTriggeredUseCaseUnreachable { .. }
+                    | RdraError::TriggeredUseCaseUnreachable { .. }
+            )),
+            "{w:?}"
+        );
     }
 
     #[test]

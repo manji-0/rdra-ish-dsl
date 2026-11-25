@@ -18,7 +18,7 @@ use super::types::{
     VarId, VarKind,
 };
 use super::{Built, Scope, TransitionSystem};
-use crate::model::{ConditionKey, EntityKey, FkId, NodeRef, RelKind, SemanticModel, UseCaseKey};
+use crate::model::{ConditionKey, EntityKey, FkId, SemanticModel, UseCaseKey};
 use naming::Named;
 
 pub(super) fn build(model: &SemanticModel, bounds: Bounds, scope: &Scope) -> Built {
@@ -239,14 +239,12 @@ fn prior_write(a: &mut ActionDraft, var: VarId, p: u8) -> Option<Site> {
     }
 }
 
+/// The BUC a use case's actions name in `states` provenance: of the BUCs that hold it,
+/// directly or through a step of one of their flows, the first by id.
 fn first_buc(model: &SemanticModel, uc: UseCaseKey) -> Option<crate::model::BucKey> {
-    model
-        .relations
-        .iter()
-        .find_map(|rel| match (&rel.kind, &rel.from, &rel.to) {
-            (RelKind::Contains, NodeRef::Buc(b), NodeRef::UseCase(u)) if *u == uc => Some(*b),
-            _ => None,
-        })
+    crate::business_flow::bucs_of_use_case(model, uc)
+        .into_iter()
+        .next()
 }
 
 /// Declared casing wins: exact match first, then case-insensitive.

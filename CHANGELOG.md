@@ -853,6 +853,13 @@
 
 ### Fixed
 
+- A use case that a BUC holds only through a step of one of its flows (`covers(Step, UC)`)
+  no longer draws the `TimerTriggeredUseCaseUnreachable` warning ("belongs to no BUC") when a
+  timer triggers it, as an event-triggered one already did not (#161). The warning failed
+  a gate that treats warnings as errors. The `VIA` column of `states` names that BUC for
+  such a use case too, where it used to print the use case without one. When several BUCs
+  hold a use case, `VIA` names the first by id, where it used to name the first whose
+  `contains` was declared.
 - The language server no longer crashes on hover, signature help, or completion right after
   a multi-byte character (#356), as inside `actor A "受付(窓口)"`, after `// 受付(`, or after
   an unclosed `"受付`. The server used to stop at a panic there. A request whose handler
