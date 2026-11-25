@@ -397,7 +397,7 @@ impl Classes {
             .states
             .iter()
             .map(|st| {
-                let key = sub.project(st, &key_vars);
+                let key = sub.project(&st, &key_vars);
                 let len = index.len() as u32;
                 *index.entry(key).or_insert(len)
             })
@@ -465,8 +465,8 @@ impl Classes {
             if ext.rise[act.index()] {
                 // Every state of a block rises into the same blocks; the representative's
                 // edges are enough.
-                if *reps[class[x] as usize] == run.states[x].0 {
-                    let inputs = sub.project(&run.states[y], &ext.inputs_local).0;
+                if *reps[class[x] as usize] == run.states.at(x).0 {
+                    let inputs = sub.project(&run.states.at(y), &ext.inputs_local).0;
                     let was = rises.insert((class[x], inputs), class[y]);
                     assert!(was.is_none_or(|c| c == class[y]), "a rise is a function");
                 }
@@ -569,7 +569,7 @@ fn divergence(
     let inner_loops = |i: usize| {
         inner.is_some_and(|inner| {
             inner
-                .class(sub, &run.states[i])
+                .class(sub, &run.states.at(i))
                 .is_some_and(|c| inner.can_loop(c))
         })
     };

@@ -10,6 +10,7 @@ mod graph;
 mod liveness;
 mod moves;
 mod orbit;
+mod packing;
 #[cfg(feature = "perf")]
 mod perf;
 #[cfg(feature = "perf")]
@@ -24,7 +25,7 @@ pub(crate) mod symmetry;
 mod views;
 mod violations;
 
-pub use arena::States;
+pub use arena::{States, Unpacked};
 pub use edges::{AnEdge, EdgeIter, Edges, Ends, Listed};
 pub use graph::{Adjacency, LabelledEdges};
 pub use liveness::{LassoFault, ReducedVerdict, Spurious};

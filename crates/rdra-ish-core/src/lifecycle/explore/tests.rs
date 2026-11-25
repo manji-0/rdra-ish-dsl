@@ -63,12 +63,12 @@ fn enabled_bindings_are_the_bindings_whose_pre_guards_hold() {
             for state in &run.states {
                 for action in system.actions() {
                     let want: Vec<Box<[u8]>> = system
-                        .bindings(action, state)
+                        .bindings(action, &state)
                         .into_iter()
-                        .filter(|params| system.pre_guards_hold(action, state, params))
+                        .filter(|params| system.pre_guards_hold(action, &state, params))
                         .map(Vec::into_boxed_slice)
                         .collect();
-                    let got = system.enabled_bindings(action, state);
+                    let got = system.enabled_bindings(action, &state);
                     assert_eq!(got, want, "{} in {state:?}", action.name);
                     checked += 1;
                     kept += got.len();

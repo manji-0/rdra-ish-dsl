@@ -43,8 +43,8 @@ use rdra_ish_cli::tlc_output::{parse_dot, CanonState, InvariantScan, Outcome, Tl
 use rdra_ish_cli::tlc_replay::{explain_property, explain_violation};
 use rdra_ish_core::lifecycle::{
     ActId, Bounds, Caps, ComponentRun, Cone, Fairness, LabelledEdges, Loop, Progress,
-    PropertyVerdict, Runs, Scope, Seed, State, StateDiag, StateModelFindings, StateSlice, Taken,
-    Target, TransitionSystem, Witness,
+    PropertyVerdict, Runs, Scope, Seed, State, StateDiag, StateModelFindings, Taken, Target,
+    TransitionSystem, Witness,
 };
 use rdra_ish_core::{load_project, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
@@ -888,11 +888,11 @@ fn recorded_tlc_runs_are_the_same_in_a_batch_jvm() {
 /// BFS's.
 fn tlc_edges(dir: &Path, label: &str, run: &ComponentRun, names: &TlaNames) -> Vec<Move> {
     let ts = &run.system;
-    let index: HashMap<&StateSlice, u32> = run
+    let index: HashMap<State, u32> = run
         .states
         .iter()
         .enumerate()
-        .map(|(i, s)| (s, i as u32))
+        .map(|(i, s)| (s.into_state(), i as u32))
         .collect();
     let decoder = names.decoder(ts);
     let file = std::fs::File::open(dir.join("graph.dot")).expect("graph.dot");
@@ -907,7 +907,7 @@ fn tlc_edges(dir: &Path, label: &str, run: &ComponentRun, names: &TlaNames) -> V
         let only_bfs: Vec<_> = (0..run.states.len() as u32)
             .filter(|i| !distinct.contains(i))
             .take(3)
-            .map(|i| names.canon(ts, &run.states[i as usize]))
+            .map(|i| names.canon(ts, &run.states.at(i as usize)))
             .collect();
         panic!(
             "{label}: reachable sets differ (TLC {} nodes, {} distinct; BFS {})\nonly BFS: {only_bfs:#?}",
@@ -969,8 +969,8 @@ fn describe_moves(run: &ComponentRun, names: &TlaNames, moves: &[&Move]) -> Stri
         .iter()
         .take(3)
         .map(|&&(from, to, act)| {
-            let pre = names.canon(ts, &run.states[from as usize]);
-            let post = names.canon(ts, &run.states[to as usize]);
+            let pre = names.canon(ts, &run.states.at(from as usize));
+            let post = names.canon(ts, &run.states.at(to as usize));
             let changed: Vec<String> = post
                 .iter()
                 .filter(|(k, v)| pre.get(*k) != Some(v))
@@ -2636,7 +2636,7 @@ fn tla_names_cover_every_slot() {
                 "{sample}: VARIABLES does not list the names"
             );
             let run = ts.clone().run(Caps::new(usize::MAX, 1));
-            let canon = names.canon(&run.system, &run.states[0]);
+            let canon = names.canon(&run.system, &run.states.at(0));
             let canon_keys: BTreeSet<&String> = canon.keys().collect();
             assert_eq!(
                 canon_keys, unique,

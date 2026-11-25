@@ -282,8 +282,8 @@ fn functions_agree_with_the_transition_system() {
             if domain.skipped.iter().any(|s| s.action == action.name) {
                 continue;
             }
-            let pre = &run.states[edge.from as usize];
-            let post = &run.states[edge.to as usize];
+            let pre = &run.states.at(edge.from as usize);
+            let post = &run.states.at(edge.to as usize);
             let row_slots = |f: &FnDecl| -> Vec<(String, usize)> {
                 f.rows
                     .iter()
@@ -532,7 +532,7 @@ fn functions_agree_with_the_transition_system() {
                     let rows = Rows::new(
                         ts,
                         &model,
-                        state,
+                        &state,
                         vec![(v.entity.clone(), slot)],
                         Vec::new(),
                     );
@@ -592,7 +592,7 @@ fn functions_agree_with_the_transition_system() {
                     let rows = Rows::new(
                         ts,
                         &model,
-                        state,
+                        &state,
                         vec![(entity.clone(), slot)],
                         f.elems.iter().map(|e| e.entity.clone()).collect(),
                     );

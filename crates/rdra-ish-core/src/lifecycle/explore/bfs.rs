@@ -20,7 +20,9 @@ use crate::parallel::Helpers;
 use super::edges::{StepEnds, Steps};
 use super::store::binding_bytes;
 use super::symmetry::{Canon, Canonical, Group};
-use super::{Bfs, Bindings, Caps, Checks, EntityView, Moves, Reach, States, Threads, Violated};
+use super::{
+    Bfs, Bindings, Caps, Checks, EntityView, Moves, Reach, States, Threads, Unpacked, Violated,
+};
 
 #[cfg(feature = "shadow")]
 mod reference;
@@ -44,13 +46,16 @@ fn expand(
     mut sym: Option<(&Group, &mut Canon)>,
 ) -> Expanded {
     let mut moves = Moves::default();
-    let Some(mut scratch) = states.get(range.start).map(ToOwned::to_owned) else {
+    let Some(mut scratch) = states.get(range.start).map(Unpacked::into_state) else {
         return (moves, Vec::new());
     };
+    // The state being expanded, unpacked from the store.
+    let mut at = scratch.clone();
     let mut ends = Vec::with_capacity(range.len());
     for i in range {
         let from = moves.len();
-        ts.moves_into(&states[i], &mut scratch, &mut moves);
+        states.read_into(i, &mut at.0);
+        ts.moves_into(&at, &mut scratch, &mut moves);
         if let Some((group, canon)) = &mut sym {
             moves.canonicalize(ts, group, canon, from);
         }
@@ -248,7 +253,7 @@ impl<'t> Bfs<'t> {
             caps,
             invariants,
             after,
-            states: States::new(ts.width),
+            states: States::packed(std::sync::Arc::new(super::packing::Packing::of(ts))),
             seen: Default::default(),
             keys: Default::default(),
             sources: vec![(usize::MAX, 0); ts.entities.len() * ts.most_slots()],
@@ -317,7 +322,7 @@ impl<'t> Bfs<'t> {
     /// is left or a cap stops the run.
     fn explore(&mut self, mut workers: Workers) {
         // The successor being read, copied out of the worker's buffer.
-        let Some(mut s2) = self.states.first().map(ToOwned::to_owned) else {
+        let Some(mut s2) = self.states.first().map(Unpacked::into_state) else {
             return;
         };
         // States before `next` are read; states before `sent` are read or handed out.
@@ -357,7 +362,7 @@ impl<'t> Bfs<'t> {
         self.layers.read(at);
         self.steps.read(at);
         let from = at as u32;
-        let s = self.states[at].to_owned();
+        let s = self.states.at(at).into_state();
         for i in range {
             let (act, params, next) = moves.get(i);
             s2.0.copy_from_slice(next);

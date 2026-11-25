@@ -163,15 +163,15 @@ fn lift_path(
     path: &[Edge],
 ) -> (State, Vec<Step>, Vec<u8>) {
     let ts = &run.system;
-    let start = run.states[first as usize].to_owned();
+    let start = run.states.at(first as usize).into_state();
     let mut tau = g.identity();
     let mut out = vec![0u8; ts.width];
     let mut steps = Vec::with_capacity(path.len() + 1);
     for e in path {
         let (act, params) = run.step(e);
-        let target = &run.states[e.to as usize];
+        let target = &run.states.at(e.to as usize);
         let t = ts
-            .moves(&run.states[e.from as usize])
+            .moves(&run.states.at(e.from as usize))
             .find(|m| {
                 m.act == act && *m.params == *params && {
                     canon.canonical(g, &m.next.0, &mut out);
@@ -363,7 +363,7 @@ impl OrbitRun {
         let found = self.run.states.iter().position(|s| {
             bindings
                 .iter()
-                .any(|bd| ts.triggers(p, bd, s) && !ts.holds_bound(x, s, bd))
+                .any(|bd| ts.triggers(p, bd, &s) && !ts.holds_bound(x, &s, bd))
         });
         let Some(at) = found else {
             return Some(match self.run.complete {

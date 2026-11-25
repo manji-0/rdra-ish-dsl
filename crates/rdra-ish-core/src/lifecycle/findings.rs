@@ -2,7 +2,7 @@
 //! the graph, so any engine that produces the graph gets the same findings.
 
 use super::diag::{Blocked, Entry, Exit, StateDiag};
-use super::explore::{Adjacency, Graph, Scan};
+use super::explore::{Adjacency, Graph, Scan, Unpacked};
 use super::expr::StateSlice;
 use super::trace::Trace;
 use super::types::{
@@ -323,7 +323,7 @@ impl TransitionSystem {
         }
         let n = g.states.len();
         let adjacency = g.adjacency();
-        let present = |at: usize, k: usize| g.states[at].is_present(self, e, k);
+        let present = |at: usize, k: usize| g.states.at(at).is_present(self, e, k);
         let mut out = Vec::new();
         let mut columns: Vec<(VarId, Vec<Vec<bool>>)> = Vec::new();
         for (var, value, exits) in open {
@@ -335,7 +335,7 @@ impl TransitionSystem {
             }
             let (_, leave) = columns.iter().find(|(v, _)| *v == var).expect("just added");
             let stuck = |at: usize, k: usize| {
-                present(at, k) && g.states[at].get(self, var, k) == value && !leave[k][at]
+                present(at, k) && g.states.at(at).get(self, var, k) == value && !leave[k][at]
             };
             let first = (0..self.slots(e))
                 .filter_map(|k| (0..n).find(|&at| stuck(at, k)).map(|at| (at, k)))
@@ -344,8 +344,8 @@ impl TransitionSystem {
                 None => Progress::Leaves,
                 Some((at, k)) => {
                     let held = Self::forward(&adjacency, at as u32);
-                    let held: Vec<&StateSlice> =
-                        held.iter().map(|&i| &g.states[i as usize]).collect();
+                    let held: Vec<Unpacked> =
+                        held.iter().map(|&i| g.states.at(i as usize)).collect();
                     Progress::Stuck {
                         at: at as u32,
                         diag: Box::new(self.deadlock(e, var, value, k, &exits, &held)),
@@ -375,7 +375,7 @@ impl TransitionSystem {
         let mut stack = Vec::new();
         // `for_each` folds a run's edges a state at a time (`EdgeIter::fold`).
         g.edges().for_each(|(from, to, _)| {
-            let (s, t) = (&g.states[from as usize], &g.states[to as usize]);
+            let (s, t) = (&g.states.at(from as usize), &g.states.at(to as usize));
             if leave[from as usize] || !s.is_present(self, e, k) {
                 return;
             }
@@ -386,7 +386,7 @@ impl TransitionSystem {
         });
         while let Some(at) = stack.pop() {
             for &p in adjacency.preds(at) {
-                if !leave[p as usize] && g.states[p as usize].is_present(self, e, k) {
+                if !leave[p as usize] && g.states.at(p as usize).is_present(self, e, k) {
                     leave[p as usize] = true;
                     stack.push(p);
                 }
@@ -420,13 +420,14 @@ impl TransitionSystem {
         value: Value,
         k: usize,
         exits: &[ExitArm],
-        held: &[&StateSlice],
+        held: &[Unpacked],
     ) -> StateDiag {
         let exits = exits
             .iter()
             .map(|x| {
                 let action = &self.actions[x.act.index()];
-                let scan = self.scan_guards(x.act, held.iter().copied(), Some((x.param, k as u8)));
+                let scan =
+                    self.scan_guards(x.act, held.iter().map(|s| &**s), Some((x.param, k as u8)));
                 Exit {
                     action: action.name.clone(),
                     origin: action.origin.clone(),
@@ -536,7 +537,7 @@ impl TransitionSystem {
                             continue;
                         }
                         fired = true;
-                        if moves(&g.states[a as usize], &g.states[b as usize]) {
+                        if moves(&g.states.at(a as usize), &g.states.at(b as usize)) {
                             taken = true;
                             break;
                         }
@@ -596,7 +597,7 @@ impl TransitionSystem {
     /// The `NeverRuns` of `act`: only the checks of `moves` that hold in no state of `g`.
     fn never_runs(&self, act: ActId, g: &Graph) -> StateDiag {
         let action = &self.actions[act.index()];
-        let why = self.blocked(act, self.scan_guards(act, g.states, None));
+        let why = self.blocked(act, self.scan_guards(act, g.states.iter(), None));
         let unlinked = match why {
             Blocked::Guards(_) => self.unlinked_parents(act),
             _ => Vec::new(),

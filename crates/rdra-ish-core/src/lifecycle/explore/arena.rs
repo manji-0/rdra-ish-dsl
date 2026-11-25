@@ -1,23 +1,31 @@
-//! A run's states, end to end in segments (`segments::Rows`): each state is kept once, with
-//! no heap block or pointer of its own, and stays where it was pushed.
+//! A run's states, end to end in segments (`segments::Rows`): each state is kept once, packed
+//! into the bits its cells' domains need (`packing`, #296 2.3), with no heap block or pointer
+//! of its own, and stays where it was pushed. A reader gets a state unpacked, by value
+//! (`Unpacked`), never a borrow of the store.
 
 use std::hash::Hasher;
-use std::ops::{Index, Range};
+use std::ops::{Deref, Range};
+use std::sync::Arc;
 
 use hashbrown::HashTable;
 
 use crate::fasthash::FastHasher;
 use crate::lifecycle::expr::{State, StateSlice};
 
+use super::packing::Packing;
 use super::segments::Rows;
 
 #[cfg(feature = "shadow")]
 mod reference;
 
-/// States of `width` bytes each, numbered in the order pushed.
+/// States of `width` bytes each, numbered in the order pushed, kept packed.
 #[derive(Clone, Debug)]
 pub struct States {
+    packing: Arc<Packing>,
     rows: Rows<u8>,
+    /// Under the `shadow` feature: the states unpacked, which every read is compared with.
+    #[cfg(feature = "shadow")]
+    twin: Rows<u8>,
 }
 
 impl Default for States {
@@ -34,10 +42,122 @@ impl PartialEq for States {
 
 impl Eq for States {}
 
+/// The bytes of a state an `Unpacked` holds in place; every sample's state is narrower.
+const INLINE: usize = 96;
+
+/// A state of a `States`, unpacked: up to `INLINE` bytes in place, more on the heap.
+#[derive(Clone)]
+pub enum Unpacked {
+    Inline(u8, [u8; INLINE]),
+    Heap(Box<[u8]>),
+}
+
+impl Unpacked {
+    fn zeroed(width: usize) -> Unpacked {
+        match u8::try_from(width) {
+            Ok(w) if width <= INLINE => Unpacked::Inline(w, [0; INLINE]),
+            _ => Unpacked::Heap(vec![0; width].into_boxed_slice()),
+        }
+    }
+
+    /// The state, as an owned `State`.
+    pub fn into_state(self) -> State {
+        (*self).to_owned()
+    }
+
+    fn bytes_mut(&mut self) -> &mut [u8] {
+        match self {
+            Unpacked::Inline(w, b) => &mut b[..usize::from(*w)],
+            Unpacked::Heap(b) => b,
+        }
+    }
+}
+
+impl Deref for Unpacked {
+    type Target = StateSlice;
+
+    #[inline]
+    fn deref(&self) -> &StateSlice {
+        StateSlice::new(match self {
+            Unpacked::Inline(w, b) => &b[..usize::from(*w)],
+            Unpacked::Heap(b) => b,
+        })
+    }
+}
+
+impl std::borrow::Borrow<StateSlice> for Unpacked {
+    fn borrow(&self) -> &StateSlice {
+        self
+    }
+}
+
+impl AsRef<StateSlice> for Unpacked {
+    fn as_ref(&self) -> &StateSlice {
+        self
+    }
+}
+
+impl PartialEq for Unpacked {
+    fn eq(&self, other: &Self) -> bool {
+        **self == **other
+    }
+}
+
+impl Eq for Unpacked {}
+
+impl PartialEq<StateSlice> for Unpacked {
+    fn eq(&self, other: &StateSlice) -> bool {
+        **self == *other
+    }
+}
+
+impl PartialEq<State> for Unpacked {
+    fn eq(&self, other: &State) -> bool {
+        **self == **other
+    }
+}
+
+impl PartialEq<Unpacked> for State {
+    fn eq(&self, other: &Unpacked) -> bool {
+        **self == **other
+    }
+}
+
+impl std::fmt::Debug for Unpacked {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        (**self).fmt(f)
+    }
+}
+
+impl From<Unpacked> for State {
+    fn from(s: Unpacked) -> State {
+        (*s).to_owned()
+    }
+}
+
+/// Runs `f` on a buffer of `n` zero bytes, on the stack when it fits `INLINE`.
+#[inline]
+fn with_scratch<R>(n: usize, f: impl FnOnce(&mut [u8]) -> R) -> R {
+    if n <= INLINE {
+        f(&mut [0u8; INLINE][..n])
+    } else {
+        f(&mut vec![0u8; n])
+    }
+}
+
 impl States {
+    /// States of `width` bytes, each byte kept whole.
     pub fn new(width: usize) -> Self {
+        States::packed(Arc::new(Packing::new(std::iter::repeat_n(256, width))))
+    }
+
+    /// States packed as `packing` says.
+    pub(crate) fn packed(packing: Arc<Packing>) -> Self {
         States {
-            rows: Rows::new(width),
+            rows: Rows::new(packing.bytes()),
+            #[cfg(feature = "shadow")]
+            twin: Rows::new(packing.width()),
+            packing,
         }
     }
 
@@ -49,21 +169,64 @@ impl States {
         self.rows.len() == 0
     }
 
-    /// Bytes in one state.
+    /// Bytes in one state, unpacked.
     pub fn width(&self) -> usize {
-        self.rows.width()
+        self.packing.width()
     }
 
-    pub fn get(&self, i: usize) -> Option<&StateSlice> {
-        (i < self.len()).then(|| &self[i])
+    /// Bytes in one state as the store keeps it.
+    pub(crate) fn packed_width(&self) -> usize {
+        self.packing.bytes()
     }
 
-    pub fn first(&self) -> Option<&StateSlice> {
+    /// State `i`, unpacked. Panics when there is none.
+    #[inline]
+    pub fn at(&self, i: usize) -> Unpacked {
+        let mut out = Unpacked::zeroed(self.width());
+        self.packing.unpack(self.rows.row(i), out.bytes_mut());
+        #[cfg(feature = "shadow")]
+        {
+            let want = self.twin.row(i);
+            let got: &[u8] = &out.0;
+            assert!(
+                got == want,
+                "shadow: States::at({i}): unpacked {got:?}, reference {want:?}"
+            );
+            crate::shadow::compared(crate::shadow::Twin::Packed);
+        }
+        out
+    }
+
+    /// State `i` unpacked into `out`, which is `width()` long.
+    #[inline]
+    pub(crate) fn read_into(&self, i: usize, out: &mut [u8]) {
+        self.packing.unpack(self.rows.row(i), out);
+        #[cfg(feature = "shadow")]
+        {
+            let want = self.twin.row(i);
+            assert!(
+                *out == *want,
+                "shadow: States::read_into({i}): unpacked {out:?}, reference {want:?}"
+            );
+            crate::shadow::compared(crate::shadow::Twin::Packed);
+        }
+    }
+
+    /// State `i`'s packed bytes.
+    fn packed_row(&self, i: usize) -> &[u8] {
+        self.rows.row(i)
+    }
+
+    pub fn get(&self, i: usize) -> Option<Unpacked> {
+        (i < self.len()).then(|| self.at(i))
+    }
+
+    pub fn first(&self) -> Option<Unpacked> {
         self.get(0)
     }
 
-    pub fn last(&self) -> Option<&StateSlice> {
-        self.len().checked_sub(1).map(|i| &self[i])
+    pub fn last(&self) -> Option<Unpacked> {
+        self.len().checked_sub(1).map(|i| self.at(i))
     }
 
     pub fn iter(&self) -> Iter<'_> {
@@ -73,19 +236,26 @@ impl States {
         }
     }
 
-    /// A copy of the states in `range`.
+    /// A copy of the states in `range`, packed alike.
     pub(crate) fn slice(&self, range: Range<usize>) -> States {
-        let mut rows = Rows::new(self.width());
+        let mut out = States::packed(self.packing.clone());
         for i in range {
-            rows.push(self.rows.row(i));
+            out.rows.push(self.rows.row(i));
+            #[cfg(feature = "shadow")]
+            out.twin.push(self.twin.row(i));
         }
-        States { rows }
+        out
     }
 
-    /// Adds `s` at index `len()`, in the last segment, or in a new one when that is full. No
-    /// state already pushed moves.
+    /// Adds `s` at index `len()`, packed, in the last segment, or in a new one when that is
+    /// full. No state already pushed moves.
     pub(crate) fn push(&mut self, s: &StateSlice) {
-        self.rows.push(&s.0);
+        with_scratch(self.packing.bytes(), |packed| {
+            self.packing.pack(&s.0, packed);
+            self.rows.push(packed);
+        });
+        #[cfg(feature = "shadow")]
+        self.twin.push(&s.0);
     }
 
     /// The states the buffer holds room for.
@@ -106,26 +276,18 @@ impl States {
     }
 }
 
-impl Index<usize> for States {
-    type Output = StateSlice;
-
-    fn index(&self, i: usize) -> &StateSlice {
-        StateSlice::new(self.rows.row(i))
-    }
-}
-
-/// The states of a `States` in order.
+/// The states of a `States` in order, unpacked.
 #[derive(Clone)]
 pub struct Iter<'a> {
     states: &'a States,
     at: Range<usize>,
 }
 
-impl<'a> Iterator for Iter<'a> {
-    type Item = &'a StateSlice;
+impl Iterator for Iter<'_> {
+    type Item = Unpacked;
 
-    fn next(&mut self) -> Option<&'a StateSlice> {
-        self.at.next().map(|i| &self.states[i])
+    fn next(&mut self) -> Option<Unpacked> {
+        self.at.next().map(|i| self.states.at(i))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -135,14 +297,14 @@ impl<'a> Iterator for Iter<'a> {
 
 impl DoubleEndedIterator for Iter<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.at.next_back().map(|i| &self.states[i])
+        self.at.next_back().map(|i| self.states.at(i))
     }
 }
 
 impl ExactSizeIterator for Iter<'_> {}
 
 impl<'a> IntoIterator for &'a States {
-    type Item = &'a StateSlice;
+    type Item = Unpacked;
     type IntoIter = Iter<'a>;
 
     fn into_iter(self) -> Iter<'a> {
@@ -151,7 +313,7 @@ impl<'a> IntoIterator for &'a States {
 }
 
 impl FromIterator<State> for States {
-    /// The states in order; they must all have the first one's width.
+    /// The states in order, each byte kept whole; they must all have the first one's width.
     fn from_iter<I: IntoIterator<Item = State>>(states: I) -> Self {
         let mut states = states.into_iter().peekable();
         let width = states.peek().map_or(0, |s| s.0.len());
@@ -163,14 +325,15 @@ impl FromIterator<State> for States {
     }
 }
 
-fn hash(s: &StateSlice) -> u64 {
+fn hash(packed: &[u8]) -> u64 {
     let mut hasher = FastHasher::default();
-    hasher.write(&s.0);
+    hasher.write(packed);
     hasher.finish()
 }
 
-/// The index of each state in a `States`, found by its bytes: the table holds the index alone.
-/// Under the `shadow` feature it keeps its reference twin beside the table.
+/// The index of each state in a `States`, found by its packed bytes: the table holds the index
+/// alone. Under the `shadow` feature it keeps its reference twin, keyed on the unpacked bytes,
+/// beside the table, so a packing that makes two states alike shows.
 #[derive(Default)]
 pub(super) struct Seen {
     table: HashTable<u32>,
@@ -181,10 +344,13 @@ pub(super) struct Seen {
 impl Seen {
     /// The index of `s` in `states`, if it is there.
     pub fn find(&self, states: &States, s: &StateSlice) -> Option<u32> {
-        let found = self
-            .table
-            .find(hash(s), |&i| states[i as usize] == *s)
-            .copied();
+        let found = with_scratch(states.packing.bytes(), |packed| {
+            states.packing.pack(&s.0, packed);
+            let packed = &*packed;
+            self.table
+                .find(hash(packed), |&i| states.packed_row(i as usize) == packed)
+                .copied()
+        });
         #[cfg(feature = "shadow")]
         {
             let want = self.twin.find(s);
@@ -198,17 +364,17 @@ impl Seen {
         found
     }
 
-    /// Notes that `states[at]` is not yet in the table and now is.
+    /// Notes that state `at` of `states` is not yet in the table and now is.
     pub fn insert(&mut self, states: &States, at: u32) {
         self.table
-            .insert_unique(hash(&states[at as usize]), at, |&i| {
-                hash(&states[i as usize])
+            .insert_unique(hash(states.packed_row(at as usize)), at, |&i| {
+                hash(states.packed_row(i as usize))
             });
         #[cfg(feature = "shadow")]
         assert!(
-            self.twin.insert(&states[at as usize], at),
+            self.twin.insert(&states.at(at as usize), at),
             "shadow: Seen::insert({at}): the reference holds {:?} already",
-            &states[at as usize].0
+            &states.at(at as usize).0
         );
     }
 
@@ -259,11 +425,11 @@ mod proofs {
             assert!(states.len() <= states.capacity());
             assert_eq!(states.rows.allocated(), said);
             if i == probe {
-                probed = (s, states[i].0.as_ptr());
+                probed = (s, states.packed_row(i).as_ptr());
             }
         }
-        assert_eq!(states[probe].0, [probed.0]);
-        assert_eq!(states[probe].0.as_ptr(), probed.1);
+        assert_eq!(states.at(probe).0, [probed.0]);
+        assert_eq!(states.packed_row(probe).as_ptr(), probed.1);
         assert!(states.get(pushes).is_none());
     }
 }
