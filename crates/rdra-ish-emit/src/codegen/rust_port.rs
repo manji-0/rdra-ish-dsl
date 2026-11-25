@@ -60,7 +60,7 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
     }
     out.push_str("}\n\n");
 
-    out.push_str("/// What a finished service offers the conformance harness. Each `run_*` loads its rows by id,\n/// calls the dispatcher or transition function, and stores the rows, marks, and events it\n/// returns in one transaction; it returns `Err` and changes nothing when the use case does not run.\n");
+    out.push_str("/// What a finished service offers the conformance harness. A use case is two calls: each\n/// `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing\n/// nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one\n/// transaction, each row only where it still is what the result's `<row>_expected` names. Either\n/// returns `Err` and changes nothing when the use case does not run.\n");
     out.push_str("pub trait ConformancePort {\n");
     out.push_str(
         "    /// Empties the store and stores these rows: the initial state of a trace.\n",
@@ -74,25 +74,37 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
             "    ",
         ));
         out.push_str(&format!(
-            "    fn {}(&mut self{}) -> {RESULT}<(), Refused>;\n",
-            method_ident(&m.name),
+            "    fn prepare_{}(&mut self{}) -> {RESULT}<{}, Refused>;\n",
+            snake(&m.name),
             params(m)
                 .iter()
                 .map(|p| format!(", {p}"))
-                .collect::<String>()
+                .collect::<String>(),
+            m.write
+        ));
+        out.push_str(&format!(
+            "    fn commit_{}(&mut self, write: {}) -> {RESULT}<(), Refused>;\n",
+            snake(&m.name),
+            m.write
         ));
     }
     out.push_str("}\n\n");
 
     out.push_str("/// What `conform` checked.\n");
     out.push_str("#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]\n");
-    out.push_str("pub struct ConformanceReport {\n    pub traces: usize,\n    pub calls: usize,\n    pub refusals: usize,\n}\n\n");
+    out.push_str("pub struct ConformanceReport {\n    pub traces: usize,\n    pub calls: usize,\n    pub refusals: usize,\n    pub interleavings: usize,\n}\n\n");
+    out.push_str("/// A prepared write of any use case.\nenum ConfWrite {\n");
+    for m in &port.methods {
+        out.push_str(&format!("    {}({}),\n", m.name, m.write));
+    }
+    out.push_str("}\n\n");
 
     out.push_str(&format!(
         r##"/// Drives a fresh port per trace along `traces` (the file `codegen --conformance` writes): seeds
 /// each trace's initial state, makes each call, and after each compares what the store holds
 /// with the state the model reaches. A call the model refuses must return `Err` and change
-/// nothing. Returns the first difference.
+/// nothing, and so must a commit whose rows another call changed after its prepare. Returns the
+/// first difference.
 pub fn conform<P: ConformancePort>(mut new_port: impl FnMut() -> P, traces: &str) -> {RESULT}<ConformanceReport, {STRING}> {{
     let mut lines = traces.lines().enumerate();
     match lines.next() {{
@@ -141,7 +153,7 @@ pub fn conform<P: ConformancePort>(mut new_port: impl FnMut() -> P, traces: &str
                 let next = state(rest.first())?;
                 let call = rest.get(1..).unwrap_or_default();
                 let p = conf_port.as_mut().ok_or_else(|| at("a call outside a trace".to_string()))?;
-                if let {RESULT}::Err(why) = conf_call(p, call).map_err(at)? {{
+                if let {RESULT}::Err(why) = conf_run(p, call).map_err(at)? {{
                     return {RESULT}::Err(at(format!("the model runs `{{}}` here, and the service refused it: {{why:?}}", call.join(" "))));
                 }}
                 conf_compare(&conf_abstract(&p.snapshot()), &next, &format!("after `{{}}`", call.join(" "))).map_err(at)?;
@@ -150,11 +162,31 @@ pub fn conform<P: ConformancePort>(mut new_port: impl FnMut() -> P, traces: &str
             }}
             "X" => {{
                 let p = conf_port.as_mut().ok_or_else(|| at("a call outside a trace".to_string()))?;
-                if conf_call(p, rest).map_err(at)?.is_ok() {{
+                if conf_run(p, rest).map_err(at)?.is_ok() {{
                     return {RESULT}::Err(at(format!("the model refuses `{{}}` here, and the service ran it", rest.join(" "))));
                 }}
                 conf_compare(&conf_abstract(&p.snapshot()), &want, &format!("after the refused `{{}}`", rest.join(" "))).map_err(at)?;
                 report.refusals += 1;
+            }}
+            "I" => {{
+                let next = state(rest.first())?;
+                let split = rest.iter().position(|t| *t == "|").ok_or_else(|| at("an interleaving without `|`".to_string()))?;
+                let (first, second) = (rest.get(1..split).unwrap_or_default(), rest.get(split + 1..).unwrap_or_default());
+                let p = conf_port.as_mut().ok_or_else(|| at("a call outside a trace".to_string()))?;
+                let early = match conf_prepare(p, first).map_err(at)? {{
+                    {RESULT}::Ok(w) => w,
+                    {RESULT}::Err(why) => return {RESULT}::Err(at(format!("the model runs `{{}}` here, and the service refused it: {{why:?}}", first.join(" ")))),
+                }};
+                if let {RESULT}::Err(why) = conf_run(p, second).map_err(at)? {{
+                    return {RESULT}::Err(at(format!("the model runs `{{}}` here, and the service refused it: {{why:?}}", second.join(" "))));
+                }}
+                conf_compare(&conf_abstract(&p.snapshot()), &next, &format!("after `{{}}`", second.join(" "))).map_err(at)?;
+                if conf_commit(p, early).is_ok() {{
+                    return {RESULT}::Err(at(format!("the service committed `{{}}`, prepared before `{{}}` changed a row it writes: the write must be conditional on what the row was", first.join(" "), second.join(" "))));
+                }}
+                conf_compare(&conf_abstract(&p.snapshot()), &next, &format!("after the refused commit of `{{}}`", first.join(" "))).map_err(at)?;
+                want = next;
+                report.interleavings += 1;
             }}
             other => return {RESULT}::Err(at(format!("unknown record {{other}}"))),
         }}
@@ -175,6 +207,14 @@ fn conf_compare(got: &[{STRING}], want: &[{STRING}], when: &str) -> {RESULT}<(),
         out.push_str(&format!("\n  store only: {{line}}"));
     }}
     {RESULT}::Err(out)
+}}
+
+/// Prepares and commits a call.
+fn conf_run<P: ConformancePort>(conf_port: &mut P, call: &[&str]) -> {RESULT}<{RESULT}<(), Refused>, {STRING}> {{
+    {RESULT}::Ok(match conf_prepare(conf_port, call)? {{
+        {RESULT}::Ok(w) => conf_commit(conf_port, w),
+        {RESULT}::Err(why) => {RESULT}::Err(why),
+    }})
 }}
 
 fn conf_next<'a>(args: &mut impl ::core::iter::Iterator<Item = &'a str>) -> {RESULT}<&'a str, {STRING}> {{
@@ -199,7 +239,7 @@ fn conf_bool(t: &str) -> {RESULT}<bool, {STRING}> {{
 
     // The calls.
     out.push_str(&format!(
-        "#[allow(unused_mut)]\nfn conf_call<P: ConformancePort>(conf_port: &mut P, call: &[&str]) -> {RESULT}<{RESULT}<(), Refused>, {STRING}> {{\n"
+        "#[allow(unused_mut)]\nfn conf_prepare<P: ConformancePort>(conf_port: &mut P, call: &[&str]) -> {RESULT}<{RESULT}<ConfWrite, Refused>, {STRING}> {{\n"
     ));
     out.push_str("    let ::core::option::Option::Some((&action, values)) = call.split_first() else {\n        return ::core::result::Result::Err(\"a call names no use case\".to_string());\n    };\n");
     out.push_str("    let mut conf_args = values.iter().copied();\n");
@@ -257,14 +297,26 @@ fn conf_bool(t: &str) -> {RESULT}<bool, {STRING}> {{
             args.push(ident(&format!("conf_{name}")));
         }
         out.push_str(&format!(
-            "            {RESULT}::Ok(conf_port.{}({}))\n        }}\n",
-            method_ident(&m.name),
-            args.join(", ")
+            "            {RESULT}::Ok(conf_port.prepare_{}({}).map(ConfWrite::{}))\n        }}\n",
+            snake(&m.name),
+            args.join(", "),
+            m.name
         ));
     }
     out.push_str(&format!(
         "        other => {RESULT}::Err(format!(\"no use case {{other}} in this port\")),\n    }}\n}}\n\n"
     ));
+    out.push_str(&format!(
+        "fn conf_commit<P: ConformancePort>(conf_port: &mut P, write: ConfWrite) -> {RESULT}<(), Refused> {{\n    match write {{\n"
+    ));
+    for m in &port.methods {
+        out.push_str(&format!(
+            "        ConfWrite::{}(w) => conf_port.commit_{}(w),\n",
+            m.name,
+            snake(&m.name)
+        ));
+    }
+    out.push_str("    }\n}\n\n");
 
     // The rows of an initial state.
     out.push_str(&format!(
@@ -339,10 +391,6 @@ fn conf_bool(t: &str) -> {RESULT}<bool, {STRING}> {{
         out.push_str("    }\n");
     }
     out.push_str("    out.sort();\n    out.dedup();\n    out\n}\n\n");
-}
-
-fn method_ident(pascal: &str) -> String {
-    format!("run_{}", snake(pascal))
 }
 
 fn params(m: &super::ir::PortMethod) -> Vec<String> {

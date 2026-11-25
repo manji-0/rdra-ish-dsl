@@ -18,7 +18,8 @@ expression: "generated_from(KEYWORDS_SRC, \"keywords.rdra\", Lang::Rust)"
 // O1 Match.function_id names a present Function.
 // O2 Match.func_id names a present Func.
 // O3 Match.mod_id names a present Mod.
-// O4 every row the code writes keeps its rules: its RuleViolations is empty.
+// O4 each function runs in one transaction with the reads of its rows, marks, and events: `check` and `verify` explore every use case, and every step of a split one, as one atomic action, and a run of another use case between the read and the write is a state they never explored. Hold what the function read until the write commits (SELECT .. FOR UPDATE, or serializable isolation), and write each row only where it still is what the result's `<row>_expected` (`<Row>Expected` in Go) names (UPDATE .. WHERE id = ? AND <tag> = ?; INSERT a created row only where none has its id; DELETE likewise); when a write matches no row, roll the transaction back and treat the call as NotEnabled. The condition catches a row another call created, deleted, or moved to another state; it does not catch a change to another column a condition read, to a row the function reads and does not write, or to a run mark or event it consumes, which only the held reads keep.
+// O5 every row the code writes keeps its rules: its RuleViolations is empty.
 
 #![allow(dead_code, unused_variables, non_camel_case_types, non_snake_case, clippy::all)]
 
@@ -771,10 +772,24 @@ pub struct Rejected {
     pub site: ::core::option::Option<&'static str>,
 }
 
+/// What a row a result writes must still be when the write commits, so the store can write
+/// it conditionally and take a write that matches no row as `NotEnabled` (see the obligations).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExpectedSource {
+    /// The row is created: no row has its id.
+    Absent,
+    /// The row exists.
+    Present,
+    /// The row exists, and its `column` holds `value`.
+    In { column: &'static str, value: &'static str },
+}
+
 /// What `r#return` returns.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReturnResult {
     pub r#match: MatchReturn,
+    /// What `match` must still be when it is written.
+    pub match_expected: ExpectedSource,
     pub switch: Switch,
 }
 
@@ -797,6 +812,7 @@ pub fn r#return(r#match: MatchNew) -> ReturnResult {
             func_id: r#match.func_id,
             mod_id: r#match.mod_id,
         },
+        match_expected: ExpectedSource::In { column: "status", value: "new" },
         switch: out_switch,
     }
 }
@@ -805,6 +821,8 @@ pub fn r#return(r#match: MatchNew) -> ReturnResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeleteResult {
     pub r#match: MatchSelf,
+    /// What `match` must still be when it is written.
+    pub match_expected: ExpectedSource,
 }
 
 /// Delete (Delete).
@@ -828,6 +846,7 @@ pub fn delete(r#match: MatchReturn, switch: Switch) -> DeleteResult {
             func_id: r#match.func_id,
             mod_id: r#match.mod_id,
         },
+        match_expected: ExpectedSource::In { column: "status", value: "return" },
     }
 }
 
@@ -835,6 +854,8 @@ pub fn delete(r#match: MatchReturn, switch: Switch) -> DeleteResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SuperResult {
     pub r#match: MatchSuper,
+    /// What `match` must still be when it is written.
+    pub match_expected: ExpectedSource,
 }
 
 /// Super (Super).
@@ -859,6 +880,7 @@ pub fn super_(r#match: MatchSelf) -> ::core::result::Result<SuperResult, Rejecte
             func_id: r#match.func_id,
             mod_id: r#match.mod_id,
         },
+        match_expected: ExpectedSource::In { column: "status", value: "self" },
     })
 }
 
@@ -866,6 +888,8 @@ pub fn super_(r#match: MatchSelf) -> ::core::result::Result<SuperResult, Rejecte
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CrateResult {
     pub r#match: MatchCrate,
+    /// What `match` must still be when it is written.
+    pub match_expected: ExpectedSource,
 }
 
 /// Crate (Crate).
@@ -886,6 +910,7 @@ pub fn crate_(r#match: MatchSuper) -> CrateResult {
             func_id: r#match.func_id,
             mod_id: r#match.mod_id,
         },
+        match_expected: ExpectedSource::In { column: "status", value: "super" },
     }
 }
 
@@ -893,6 +918,8 @@ pub fn crate_(r#match: MatchSuper) -> CrateResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DefaultResult {
     pub r#match: MatchDefault,
+    /// What `match` must still be when it is written.
+    pub match_expected: ExpectedSource,
 }
 
 /// Default (Default).
@@ -913,6 +940,7 @@ pub fn default(r#match: MatchCrate) -> DefaultResult {
             func_id: r#match.func_id,
             mod_id: r#match.mod_id,
         },
+        match_expected: ExpectedSource::In { column: "status", value: "crate" },
     }
 }
 
@@ -920,6 +948,8 @@ pub fn default(r#match: MatchCrate) -> DefaultResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypeResult {
     pub func: FuncReturn,
+    /// What `func` must still be when it is written.
+    pub func_expected: ExpectedSource,
 }
 
 /// Type (Type).
@@ -929,6 +959,7 @@ pub fn r#type(func: FuncNew) -> TypeResult {
         func: FuncReturn {
             id: func.id,
         },
+        func_expected: ExpectedSource::In { column: "type", value: "new" },
     }
 }
 
@@ -936,6 +967,8 @@ pub fn r#type(func: FuncNew) -> TypeResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClassResult {
     pub func: FuncFunc,
+    /// What `func` must still be when it is written.
+    pub func_expected: ExpectedSource,
 }
 
 /// Class (Class).
@@ -945,6 +978,7 @@ pub fn class(func: FuncReturn) -> ClassResult {
         func: FuncFunc {
             id: func.id,
         },
+        func_expected: ExpectedSource::In { column: "type", value: "return" },
     }
 }
 
@@ -952,6 +986,8 @@ pub fn class(func: FuncReturn) -> ClassResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewFromNewResult {
     pub r#match: MatchNew,
+    /// What `match` must still be when it is written.
+    pub match_expected: ExpectedSource,
 }
 
 /// New (New).
@@ -972,6 +1008,7 @@ pub fn new_from_new(parent_function: Function, parent_func: FuncNew, parent_mod:
             func_id: parent_func.id.clone(),
             mod_id: parent_mod.id.clone(),
         },
+        match_expected: ExpectedSource::Absent,
     }
 }
 
@@ -979,6 +1016,8 @@ pub fn new_from_new(parent_function: Function, parent_func: FuncNew, parent_mod:
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewFromReturnResult {
     pub r#match: MatchNew,
+    /// What `match` must still be when it is written.
+    pub match_expected: ExpectedSource,
 }
 
 /// New (New).
@@ -999,6 +1038,7 @@ pub fn new_from_return(parent_function: Function, parent_func: FuncReturn, paren
             func_id: parent_func.id.clone(),
             mod_id: parent_mod.id.clone(),
         },
+        match_expected: ExpectedSource::Absent,
     }
 }
 
@@ -1006,6 +1046,8 @@ pub fn new_from_return(parent_function: Function, parent_func: FuncReturn, paren
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewFromFuncResult {
     pub r#match: MatchNew,
+    /// What `match` must still be when it is written.
+    pub match_expected: ExpectedSource,
 }
 
 /// New (New).
@@ -1026,6 +1068,7 @@ pub fn new_from_func(parent_function: Function, parent_func: FuncFunc, parent_mo
             func_id: parent_func.id.clone(),
             mod_id: parent_mod.id.clone(),
         },
+        match_expected: ExpectedSource::Absent,
     }
 }
 
@@ -1033,6 +1076,8 @@ pub fn new_from_func(parent_function: Function, parent_func: FuncFunc, parent_mo
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StaticResult {
     pub function: Function,
+    /// What `function` must still be when it is written.
+    pub function_expected: ExpectedSource,
 }
 
 /// Static (Static).
@@ -1043,6 +1088,7 @@ pub fn r#static(function: Function, function_default: ::std::string::String) -> 
             id: function.id,
             default: Some(function_default),
         },
+        function_expected: ExpectedSource::Present,
     }
 }
 

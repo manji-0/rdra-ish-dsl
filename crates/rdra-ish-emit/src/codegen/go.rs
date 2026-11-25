@@ -360,6 +360,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
     out.push_str(
         "type Rejected struct {\n\tCondition string\n\tLabel     string\n\tSite      string\n}\n\n",
     );
+    out.push_str("// ExpectedSource is what a row a result writes must still be when the write commits, so the\n// store can write it conditionally and take a write that matches no row as NotEnabled (see the\n// obligations). Absent: the row is created, and no row has its id. Otherwise the row exists,\n// and when Column is set, it holds Value.\ntype ExpectedSource struct {\n\tAbsent bool\n\tColumn string\n\tValue  string\n}\n\n");
     out.push_str("// Error names the condition.\nfunc (r *Rejected) Error() string {\n\treturn \"rejected by the condition \" + r.Condition + \": \" + r.Label\n}\n\n");
     for f in &domain.fns {
         out.push_str(&format!("// {} is what {} returns.\n", f.result, f.name));
@@ -374,6 +375,12 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                 } => out.push_str(&format!("\t{} {ty}\n", super::type_ident(&o.name))),
                 OutKind::Deleted { id: None, .. } => {}
             }
+        }
+        for o in &f.outputs {
+            out.push_str(&format!(
+                "\t{} ExpectedSource\n",
+                super::type_ident(&format!("{}_expected", o.name))
+            ));
         }
         for m in &f.marks_out {
             out.push_str(&format!("\t{} {}\n", super::type_ident(&m.name), m.ty));
@@ -602,6 +609,21 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                 }
                 OutKind::Deleted { id: None, .. } => {}
             }
+        }
+        for o in &f.outputs {
+            let expected = match f.expected(o) {
+                super::ir::Expected::Absent => "ExpectedSource{Absent: true}".to_string(),
+                super::ir::Expected::Present => "ExpectedSource{}".to_string(),
+                super::ir::Expected::In { column, value } => format!(
+                    "ExpectedSource{{Column: {}, Value: {}}}",
+                    string_literal(&column),
+                    string_literal(&value)
+                ),
+            };
+            body.push_str(&format!(
+                "\t\t{}: {expected},\n",
+                super::type_ident(&format!("{}_expected", o.name))
+            ));
         }
         for m in &f.marks_out {
             let id = match &m.source {

@@ -44,7 +44,7 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
     }
     out.push_str("}\n\n");
 
-    out.push_str("// ConformancePort is what a finished service offers the conformance harness. Each Run* method\n// loads its rows by id, calls the dispatcher or transition function, and stores the rows, marks,\n// and events it returns in one transaction; it returns an error and changes nothing when the use\n// case does not run.\n");
+    out.push_str("// ConformancePort is what a finished service offers the conformance harness. A use case is two\n// calls: each Prepare* method loads its rows by id and calls the dispatcher or transition\n// function, writing nothing; the matching Commit* stores the rows, marks, and events the result\n// holds in one transaction, each row only where it still is what the result's <Row>Expected\n// names. Either returns an error and changes nothing when the use case does not run.\n");
     out.push_str("type ConformancePort interface {\n");
     out.push_str(
         "\t// Seed empties the store and stores these rows: the initial state of a trace.\n",
@@ -54,24 +54,27 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
     out.push_str("\tSnapshot() StoreSnapshot\n");
     for m in &port.methods {
         out.push_str(&format!(
-            "\t// Run{} runs {} (the action {}).\n",
+            "\t// Prepare{0} reads what {1} (the action {2}) writes; Commit{0} writes it.\n",
             m.name, m.usecase, m.action
         ));
         out.push_str(&format!(
-            "\tRun{}({}) error\n",
+            "\tPrepare{}({}) ({}, error)\n",
             m.name,
-            params(m).join(", ")
+            params(m).join(", "),
+            m.write
         ));
+        out.push_str(&format!("\tCommit{}(write {}) error\n", m.name, m.write));
     }
     out.push_str("}\n\n");
 
-    out.push_str("// ConformanceReport is what Conform checked.\ntype ConformanceReport struct {\n\tTraces   int\n\tCalls    int\n\tRefusals int\n}\n\n");
+    out.push_str("// ConformanceReport is what Conform checked.\ntype ConformanceReport struct {\n\tTraces        int\n\tCalls         int\n\tRefusals      int\n\tInterleavings int\n}\n\n");
 
     out.push_str(&format!(
         r##"// Conform drives a fresh port per trace along traces (the file `codegen --conformance` writes):
 // it seeds each trace's initial state, makes each call, and after each compares what the store
 // holds with the state the model reaches. A call the model refuses must return an error and
-// change nothing. It returns the first difference.
+// change nothing, and so must a commit whose rows another call changed after its prepare. It
+// returns the first difference.
 func Conform(newPort func() ConformancePort, traces string) (ConformanceReport, error) {{
 	var report ConformanceReport
 	lines := strings.Split(traces, "\n")
@@ -139,7 +142,7 @@ func Conform(newPort func() ConformancePort, traces string) (ConformanceReport, 
 				return report, at(errors.New("a call outside a trace"))
 			}}
 			call := rest[1:]
-			refused, err := confCall(port, call)
+			refused, err := confRun(port, call)
 			if err != nil {{
 				return report, at(err)
 			}}
@@ -155,7 +158,7 @@ func Conform(newPort func() ConformancePort, traces string) (ConformanceReport, 
 			if port == nil {{
 				return report, at(errors.New("a call outside a trace"))
 			}}
-			refused, err := confCall(port, rest)
+			refused, err := confRun(port, rest)
 			if err != nil {{
 				return report, at(err)
 			}}
@@ -166,11 +169,61 @@ func Conform(newPort func() ConformancePort, traces string) (ConformanceReport, 
 				return report, at(err)
 			}}
 			report.Refusals++
+		case "I":
+			next, err := state(0)
+			if err != nil {{
+				return report, err
+			}}
+			split := -1
+			for i, t := range rest {{
+				if t == "|" {{
+					split = i
+					break
+				}}
+			}}
+			if port == nil || split < 1 {{
+				return report, at(errors.New("an interleaving outside a trace, or without `|`"))
+			}}
+			first, second := rest[1:split], rest[split+1:]
+			commit, refused, err := confPrepare(port, first)
+			if err != nil {{
+				return report, at(err)
+			}}
+			if refused != nil {{
+				return report, at(fmt.Errorf("the model runs `%s` here, and the service refused it: %v", strings.Join(first, " "), refused))
+			}}
+			refused, err = confRun(port, second)
+			if err != nil {{
+				return report, at(err)
+			}}
+			if refused != nil {{
+				return report, at(fmt.Errorf("the model runs `%s` here, and the service refused it: %v", strings.Join(second, " "), refused))
+			}}
+			if err := confCompare(confAbstract(port.Snapshot()), next, "after `"+strings.Join(second, " ")+"`"); err != nil {{
+				return report, at(err)
+			}}
+			if commit() == nil {{
+				return report, at(fmt.Errorf("the service committed `%s`, prepared before `%s` changed a row it writes: the write must be conditional on what the row was", strings.Join(first, " "), strings.Join(second, " ")))
+			}}
+			if err := confCompare(confAbstract(port.Snapshot()), next, "after the refused commit of `"+strings.Join(first, " ")+"`"); err != nil {{
+				return report, at(err)
+			}}
+			want = next
+			report.Interleavings++
 		default:
 			return report, at(fmt.Errorf("unknown record %s", toks[0]))
 		}}
 	}}
 	return report, nil
+}}
+
+// confRun prepares and commits a call: the refusal, or an error in the trace.
+func confRun(confP ConformancePort, call []string) (error, error) {{
+	commit, refused, err := confPrepare(confP, call)
+	if err != nil || refused != nil {{
+		return refused, err
+	}}
+	return commit(), nil
 }}
 
 // confCompare reports every line the store and the model's state do not share.
@@ -267,10 +320,12 @@ func confSet[T any](p *T) string {{
         format = string_literal(TRACES_FORMAT),
     ));
 
-    // The calls: the refusal, or an error in the trace.
-    out.push_str("func confCall(confP ConformancePort, call []string) (error, error) {\n");
+    // The calls: the commit, the refusal, or an error in the trace.
     out.push_str(
-        "\tif len(call) == 0 {\n\t\treturn nil, errors.New(\"a call names no use case\")\n\t}\n",
+        "func confPrepare(confP ConformancePort, call []string) (func() error, error, error) {\n",
+    );
+    out.push_str(
+        "\tif len(call) == 0 {\n\t\treturn nil, nil, errors.New(\"a call names no use case\")\n\t}\n",
     );
     out.push_str("\tconfA := &confArgs{toks: call[1:]}\n\t_ = confA\n");
     out.push_str("\tswitch call[0] {\n");
@@ -321,14 +376,16 @@ func confSet[T any](p *T) string {{
             ));
             args.push(v);
         }
-        out.push_str("\t\tif confA.err != nil {\n\t\t\treturn nil, confA.err\n\t\t}\n");
+        out.push_str("\t\tif confA.err != nil {\n\t\t\treturn nil, nil, confA.err\n\t\t}\n");
         out.push_str(&format!(
-            "\t\treturn confP.Run{}({}), nil\n",
+            "\t\tw, refused := confP.Prepare{0}({1})\n\t\treturn func() error {{ return confP.Commit{0}(w) }}, refused, nil\n",
             m.name,
             args.join(", ")
         ));
     }
-    out.push_str("\t}\n\treturn nil, fmt.Errorf(\"no use case %s in this port\", call[0])\n}\n\n");
+    out.push_str(
+        "\t}\n\treturn nil, nil, fmt.Errorf(\"no use case %s in this port\", call[0])\n}\n\n",
+    );
 
     // The rows of an initial state.
     out.push_str("func confSeedRow(seed *StoreSnapshot, toks []string) error {\n");

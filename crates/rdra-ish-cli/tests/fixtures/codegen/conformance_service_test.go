@@ -1,10 +1,12 @@
 // Service of tests/codegen_conformance.rs: an in-memory store around the Go that `codegen`
 // prints for conformance.rdra, run through the generated harness from outside its package.
-// FAULT plants one bug:
+// Each Prepare reads and calls the core; each Commit writes a row only where it still is what
+// the result expects. FAULT plants one bug:
 //
-//	skip-core        Pay writes the tag itself instead of calling the core
+//	skip-core        Pay stores the tag itself instead of the row the core returns
 //	drop-row         Ship stores the order but not the shipment the core returns
-//	accept-disabled  Cancel cancels from any state when the core refuses
+//	accept-disabled  Cancel cancels an order the core refuses, as if it were paid, unconditionally
+//	unconditional    every commit writes without checking what the row still is
 package domain_test
 
 import (
@@ -33,6 +35,29 @@ func newService(fault string) *service {
 }
 
 func notEnabled(usecase string) error { return &domain.NotEnabled{UseCase: usecase} }
+
+// holds tells whether a row, by its tag ("" and absent when there is none), is still what a
+// result expects.
+func holds(tag string, present bool, e domain.ExpectedSource) bool {
+	switch {
+	case e.Absent:
+		return !present
+	case e.Column == "":
+		return present
+	default:
+		return present && e.Column == "status" && tag == e.Value
+	}
+}
+
+func (s *service) orderHolds(id domain.OrderId, e domain.ExpectedSource) bool {
+	row, ok := s.orders[id]
+	return s.fault == "unconditional" || holds(string(row.Status), ok, e)
+}
+
+func (s *service) shipmentHolds(id domain.ShipmentId, e domain.ExpectedSource) bool {
+	row, ok := s.shipments[id]
+	return s.fault == "unconditional" || holds(string(row.Status), ok, e)
+}
 
 func (s *service) order(id domain.OrderId, usecase string) (domain.Order, error) {
 	row, ok := s.orders[id]
@@ -76,97 +101,125 @@ func (s *service) Snapshot() domain.StoreSnapshot {
 	return snap
 }
 
-func (s *service) RunPlace(parent domain.CustomerId, id domain.OrderId, method domain.Method, note string) error {
+func (s *service) PreparePlace(parent domain.CustomerId, id domain.OrderId, method domain.Method, note string) (domain.PlaceResult, error) {
 	customer, ok := s.customers[parent]
 	if !ok {
+		return domain.PlaceResult{}, notEnabled("Place")
+	}
+	return domain.Place(customer, id, method, note), nil
+}
+
+func (s *service) CommitPlace(r domain.PlaceResult) error {
+	id := r.Order.Id()
+	if !s.orderHolds(id, r.OrderExpected) {
 		return notEnabled("Place")
 	}
-	r := domain.Place(customer, id, method, note)
 	s.orders[id] = domain.OrderToRow(r.Order)
 	return nil
 }
 
-func (s *service) RunPay(id domain.OrderId, paidAt domain.DateTime) error {
+func (s *service) PreparePay(id domain.OrderId, paidAt domain.DateTime) (domain.PayOutcome, error) {
 	state, err := s.order(id, "Pay")
 	if err != nil {
-		return err
+		return domain.PayOutcome{}, err
+	}
+	return domain.RunPay(state, paidAt)
+}
+
+func (s *service) CommitPay(out domain.PayOutcome) error {
+	id := out.Ran.Order.Id()
+	if !s.orderHolds(id, out.Ran.OrderExpected) {
+		return notEnabled("Pay")
 	}
 	if s.fault == "skip-core" {
-		row := domain.OrderToRow(state)
-		if row.Status != domain.OrderStatusPending {
-			return notEnabled("Pay")
-		}
+		row := s.orders[id]
 		row.Status = domain.OrderStatusPaid
 		s.orders[id] = row
 		return nil
 	}
-	out, err := domain.RunPay(state, paidAt)
-	if err != nil {
-		return err
-	}
 	s.orders[id] = domain.OrderToRow(out.Ran.Order)
 	return nil
 }
 
-func (s *service) RunShip(id domain.OrderId, shipmentID domain.ShipmentId) error {
+func (s *service) PrepareShip(id domain.OrderId, shipmentID domain.ShipmentId) (domain.ShipOutcome, error) {
 	state, err := s.order(id, "Ship")
 	if err != nil {
-		return err
+		return domain.ShipOutcome{}, err
 	}
-	out, err := domain.RunShip(state, shipmentID)
-	if err != nil {
-		return err
+	return domain.RunShip(state, shipmentID)
+}
+
+func (s *service) CommitShip(out domain.ShipOutcome) error {
+	r := out.Ran
+	order, shipment := r.Order.Id(), r.Shipment.Id()
+	if !s.orderHolds(order, r.OrderExpected) || !s.shipmentHolds(shipment, r.ShipmentExpected) {
+		return notEnabled("Ship")
 	}
-	s.orders[id] = domain.OrderToRow(out.Ran.Order)
+	s.orders[order] = domain.OrderToRow(r.Order)
 	if s.fault != "drop-row" {
-		s.shipments[shipmentID] = domain.ShipmentToRow(out.Ran.Shipment)
+		s.shipments[shipment] = domain.ShipmentToRow(r.Shipment)
 	}
-	s.evShipped = append(s.evShipped, out.Ran.EvShipped)
+	s.evShipped = append(s.evShipped, r.EvShipped)
 	return nil
 }
 
-func (s *service) RunSend(id domain.ShipmentId, ev domain.EvShipped) error {
+func (s *service) PrepareSend(id domain.ShipmentId, ev domain.EvShipped) (domain.SendOutcome, error) {
 	raised := false
 	for _, e := range s.evShipped {
 		raised = raised || e == ev
 	}
 	row, ok := s.shipments[id]
 	if !raised || !ok {
-		return notEnabled("Send")
+		return domain.SendOutcome{}, notEnabled("Send")
 	}
 	state, err := domain.ShipmentFromRow(row)
 	if err != nil {
 		panic(err)
 	}
-	out, err := domain.RunSend(state, ev)
-	if err != nil {
-		return err
+	return domain.RunSend(state, ev)
+}
+
+func (s *service) CommitSend(out domain.SendOutcome) error {
+	id := out.Ran.Shipment.Id()
+	if !s.shipmentHolds(id, out.Ran.ShipmentExpected) {
+		return notEnabled("Send")
 	}
 	s.shipments[id] = domain.ShipmentToRow(out.Ran.Shipment)
 	return nil
 }
 
-func (s *service) RunCancel(id domain.OrderId) error {
+func (s *service) PrepareCancel(id domain.OrderId) (domain.CancelOutcome, error) {
 	state, err := s.order(id, "Cancel")
 	if err != nil {
-		return err
+		return domain.CancelOutcome{}, err
 	}
 	out, err := domain.RunCancel(state)
 	if _, refused := err.(*domain.NotEnabled); refused && s.fault == "accept-disabled" {
 		row := domain.OrderToRow(state)
-		row.Status = domain.OrderStatusCancelled
-		s.orders[id] = row
-		return nil
+		row.Status = domain.OrderStatusPaid
+		paid, err := domain.OrderFromRow(row)
+		if err != nil {
+			panic(err)
+		}
+		return domain.RunCancel(paid)
 	}
-	if err != nil {
-		return err
-	}
+	return out, err
+}
+
+func (s *service) CommitCancel(out domain.CancelOutcome) error {
+	var order domain.OrderCancelled
+	var expected domain.ExpectedSource
 	switch {
 	case out.FromPending != nil:
-		s.orders[id] = domain.OrderToRow(out.FromPending.Order)
+		order, expected = out.FromPending.Order, out.FromPending.OrderExpected
 	case out.FromPaid != nil:
-		s.orders[id] = domain.OrderToRow(out.FromPaid.Order)
+		order, expected = out.FromPaid.Order, out.FromPaid.OrderExpected
 	}
+	id := order.Id()
+	if s.fault != "accept-disabled" && !s.orderHolds(id, expected) {
+		return notEnabled("Cancel")
+	}
+	s.orders[id] = domain.OrderToRow(order)
 	return nil
 }
 
@@ -180,5 +233,5 @@ func TestConformance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FAIL %v", err)
 	}
-	t.Logf("ok %d traces, %d calls, %d refusals", report.Traces, report.Calls, report.Refusals)
+	t.Logf("ok %d traces, %d calls, %d refusals, %d interleavings", report.Traces, report.Calls, report.Refusals, report.Interleavings)
 }

@@ -20,7 +20,8 @@ expression: "generated(Lang::Rust)"
 // O3 [Check_Order_total_0] every Order row satisfies total >= 0 (@check on total).
 // O4 OrderLine.order_id names a present Order.
 // O5 [MinCard_OrderLine_Order] every present Order has at least one OrderLine through OrderLine.order_id.
-// O6 [Check_Order_total_0] holds in every state (total >= 0); no one-row check prints it.
+// O6 each function runs in one transaction with the reads of its rows, marks, and events: `check` and `verify` explore every use case, and every step of a split one, as one atomic action, and a run of another use case between the read and the write is a state they never explored. Hold what the function read until the write commits (SELECT .. FOR UPDATE, or serializable isolation), and write each row only where it still is what the result's `<row>_expected` (`<Row>Expected` in Go) names (UPDATE .. WHERE id = ? AND <tag> = ?; INSERT a created row only where none has its id; DELETE likewise); when a write matches no row, roll the transaction back and treat the call as NotEnabled. The condition catches a row another call created, deleted, or moved to another state; it does not catch a change to another column a condition read, to a row the function reads and does not write, or to a run mark or event it consumes, which only the held reads keep.
+// O7 [Check_Order_total_0] holds in every state (total >= 0); no one-row check prints it.
 //
 // Candidate rules: every reachable row of the state agrees, and no rule says so. A rule
 // the business holds narrows the state type; one that is an accident of the model is a gap:
@@ -333,10 +334,24 @@ pub struct Rejected {
     pub site: ::core::option::Option<&'static str>,
 }
 
+/// What a row a result writes must still be when the write commits, so the store can write
+/// it conditionally and take a write that matches no row as `NotEnabled` (see the obligations).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExpectedSource {
+    /// The row is created: no row has its id.
+    Absent,
+    /// The row exists.
+    Present,
+    /// The row exists, and its `column` holds `value`.
+    In { column: &'static str, value: &'static str },
+}
+
 /// What `pay` returns.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PayResult {
     pub order: OrderPaid,
+    /// What `order` must still be when it is written.
+    pub order_expected: ExpectedSource,
 }
 
 /// Pay (Pay).
@@ -352,6 +367,7 @@ pub fn pay(order: OrderPending, order_paid_at: DateTime) -> PayResult {
             r#type: order.r#type,
             customer_id: order.customer_id,
         },
+        order_expected: ExpectedSource::In { column: "status", value: "pending" },
     }
 }
 
@@ -359,6 +375,8 @@ pub fn pay(order: OrderPending, order_paid_at: DateTime) -> PayResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CancelOrderResult {
     pub order: OrderCancelled,
+    /// What `order` must still be when it is written.
+    pub order_expected: ExpectedSource,
 }
 
 /// Cancel (CancelOrder).
@@ -374,6 +392,7 @@ pub fn cancel_order(order: OrderPending) -> CancelOrderResult {
             r#type: order.r#type,
             customer_id: order.customer_id,
         },
+        order_expected: ExpectedSource::In { column: "status", value: "pending" },
     }
 }
 
@@ -381,6 +400,8 @@ pub fn cancel_order(order: OrderPending) -> CancelOrderResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlaceResult {
     pub order: OrderPending,
+    /// What `order` must still be when it is written.
+    pub order_expected: ExpectedSource,
 }
 
 /// Place (Place).
@@ -395,6 +416,7 @@ pub fn place(parent_customer: Customer, order_id: OrderId, order_method: Payment
             r#type: None,
             customer_id: parent_customer.id.clone(),
         },
+        order_expected: ExpectedSource::Absent,
     }
 }
 

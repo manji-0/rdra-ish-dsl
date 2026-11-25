@@ -317,6 +317,8 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
     out.push_str("// ── Use cases ──\n\n");
     out.push_str("/** A condition of the use case did not hold: the use case does not run. */\n");
     out.push_str("export interface Rejected {\n  readonly rejected: string;\n  readonly label: string;\n  readonly site: string | null;\n}\n\n");
+    out.push_str("/**\n * What a row a result writes must still be when the write commits, so the store can write it\n * conditionally and take a write that matches no row as NotEnabled (see the obligations).\n */\n");
+    out.push_str("export type ExpectedSource =\n  | { readonly kind: \"absent\" }\n  | { readonly kind: \"present\" }\n  | { readonly kind: \"in\"; readonly column: string; readonly value: string };\n\n");
     out.push_str("/** A state the verified model does not reach: the arguments break a rule. */\n");
     out.push_str(
         "function unreachable(message: string): never {\n  throw new Error(message);\n}\n\n",
@@ -337,6 +339,12 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                 }
                 OutKind::Deleted { id: None, .. } => {}
             }
+        }
+        for o in &f.outputs {
+            out.push_str(&format!(
+                "  {}: ExpectedSource;\n",
+                property(&format!("{}_expected", o.name))
+            ));
         }
         for m in &f.marks_out {
             out.push_str(&format!("  {}: {};\n", property(&m.name), m.ty));
@@ -551,6 +559,21 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                 }
                 OutKind::Deleted { id: None, .. } => {}
             }
+        }
+        for o in &f.outputs {
+            let expected = match f.expected(o) {
+                super::ir::Expected::Absent => "{ kind: \"absent\" }".to_string(),
+                super::ir::Expected::Present => "{ kind: \"present\" }".to_string(),
+                super::ir::Expected::In { column, value } => format!(
+                    "{{ kind: \"in\", column: {}, value: {} }}",
+                    string_literal(&column),
+                    string_literal(&value)
+                ),
+            };
+            out.push_str(&format!(
+                "    {}: {expected},\n",
+                property(&format!("{}_expected", o.name))
+            ));
         }
         for m in &f.marks_out {
             let id = match &m.source {

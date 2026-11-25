@@ -94,12 +94,13 @@ pub fn run_codegen(
         fs::write(path, &traces.text)
             .with_context(|| format!("failed to write {}", path.display()))?;
         eprintln!(
-            "wrote {}: {} of {} moves in {} traces, {} refused calls{}",
+            "wrote {}: {} of {} moves in {} traces, {} refused calls, {} interleaved commits{}",
             path.display(),
             traces.covered,
             traces.moves,
             traces.traces,
             traces.refusals,
+            traces.interleavings,
             if traces.complete {
                 ""
             } else {

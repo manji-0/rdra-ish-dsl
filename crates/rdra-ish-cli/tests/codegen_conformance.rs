@@ -7,6 +7,8 @@
 //!   holds after Pay.
 //! - `drop-row`: Ship stores the order but not the shipment the core returns.
 //! - `accept-disabled`: Cancel cancels a shipped order, a call the model refuses.
+//! - `unconditional`: every commit writes without checking what its rows still are, so a
+//!   second Place prepared before the first commits overwrites the order (#332).
 //!
 //! A compiler missing from PATH skips its language, except under
 //! `RDRA_REQUIRE_CODEGEN_TOOLS=1`, which CI sets in the dev shell.
@@ -67,7 +69,7 @@ fn text(output: &Output) -> String {
 }
 
 /// Each fault, and what the harness reports for it.
-const FAULTS: [(&str, &str); 3] = [
+const FAULTS: [(&str, &str); 4] = [
     (
         "skip-core",
         "after `Pay 1 2026-01-01T00:00:00Z`, the store differs from the model:\n  model only: Order 1 status=paid paid_at=+ qty=2 customer_id=1",
@@ -76,6 +78,10 @@ const FAULTS: [(&str, &str); 3] = [
     (
         "accept-disabled",
         "the model refuses `Cancel 1` here, and the service ran it",
+    ),
+    (
+        "unconditional",
+        "the service committed `Place 1 1 card s`, prepared before `Place 1 1 card s` changed a row it writes",
     ),
 ];
 
@@ -87,7 +93,7 @@ fn check(lang: &str, run: impl Fn(&str) -> Output) {
         "{lang}: the reference service fails:\n{out}"
     );
     assert!(
-        out.contains("ok 2 traces, 7 calls, 9 refusals"),
+        out.contains("ok 9 traces, 19 calls, 9 refusals, 7 interleavings"),
         "{lang}: the reference service checked less than expected:\n{out}"
     );
     for (fault, report) in FAULTS {

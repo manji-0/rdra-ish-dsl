@@ -219,6 +219,36 @@ impl FnDecl {
             .get(r)
             .unwrap_or_else(|| &self.elems[r - self.rows.len()])
     }
+
+    /// What the row `o` writes must still be when the write commits: the state the function
+    /// read it in, present, or absent for a row it creates.
+    pub fn expected(&self, o: &RowOut) -> Expected {
+        if let Some(row) = self.rows.iter().find(|r| r.param == Some(o.param)) {
+            return match &row.state {
+                Some((column, value)) => Expected::In {
+                    column: column.clone(),
+                    value: value.clone(),
+                },
+                None => Expected::Present,
+            };
+        }
+        if self.marks_in.iter().any(|m| m.param == o.param) {
+            return Expected::Present;
+        }
+        Expected::Absent
+    }
+}
+
+/// The source a written row must still have when the write commits, so a store can write it
+/// conditionally (`UPDATE .. WHERE id = ? AND status = ?`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Expected {
+    /// A row the function creates: no row with its id exists.
+    Absent,
+    /// A row of a record type: it exists.
+    Present,
+    /// A row of a state type: its tag column holds the value the function read.
+    In { column: String, value: String },
 }
 
 /// A run mark: the id of a row step `step` of a split use case wrote, which the next step
@@ -673,6 +703,9 @@ pub struct PortMethod {
     pub inputs: Vec<FnInput>,
     /// `(name, tag enum)` per choice among arms.
     pub choices: Vec<(String, String)>,
+    /// What the read returns and the write takes: the dispatcher's outcome, or the one
+    /// function's result.
+    pub write: String,
 }
 
 #[derive(Clone, Debug)]

@@ -243,16 +243,22 @@ fn conformance_lines(
     let mut lines = vec![
         String::new(),
         format!("Conformance: the service that finishes this output implements {port}: it seeds"),
-        "an empty store, reads the store back, and runs each use case by the ids of its rows,"
+        "an empty store, reads the store back, and runs each use case by the ids of its rows in"
         .to_string(),
-        format!("in one transaction. It must pass {conform} with the traces written with this file."),
+        "two calls, a prepare that reads and a commit that writes in one transaction. It must pass"
+        .to_string(),
+        format!("{conform} with the traces written with this file."),
         format!(
             "The traces take {} of the {} moves of the printed use cases between the {} states",
             t.covered, t.moves, t.states
         ),
         format!(
-            "they reach at `check`'s bounds, in {} traces of {} calls, and try {} calls the model refuses.",
+            "they reach at `check`'s bounds, in {} traces of {} calls, and try {} calls the model refuses",
             t.traces, t.calls, t.refusals
+        ),
+        format!(
+            "and {} commits after another call changed a row they write.",
+            t.interleavings
         ),
     ];
     if !t.complete {

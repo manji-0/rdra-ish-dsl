@@ -27,7 +27,7 @@ use super::{type_ident, CodegenError, Names};
 use eval::{column_var, enum_name, matching, Rows};
 
 /// The format line every traces file starts with; the harness refuses another.
-pub const TRACES_FORMAT: &str = "# rdra-ish conformance traces 1";
+pub const TRACES_FORMAT: &str = "# rdra-ish conformance traces 2";
 
 /// The states the traces explore at most by default.
 pub const DEFAULT_STATES: usize = 1 << 16;
@@ -46,6 +46,7 @@ pub(super) fn port(
         "ConformancePort",
         "ConformanceReport",
         "Conform",
+        "ConfWrite",
     ] {
         names.claim(name.to_string(), "the conformance harness".to_string())?;
     }
@@ -223,7 +224,14 @@ pub(super) fn port(
                 }
             }
         }
+        let pascal = type_ident(action);
+        let write = domain
+            .dispatchers
+            .iter()
+            .find(|d| d.name == format!("Run{pascal}"))
+            .map_or_else(|| first.result.clone(), |d| d.outcome.clone());
         port.methods.push(PortMethod {
+            write,
             action: action.to_string(),
             name: type_ident(action),
             usecase: first.usecase.clone(),
@@ -287,6 +295,8 @@ pub struct Traces {
     pub traces: usize,
     pub calls: usize,
     pub refusals: usize,
+    /// Calls whose write the traces try after another call changed a row it writes.
+    pub interleavings: usize,
 }
 
 /// One move of a printed use case: the call that makes it.
@@ -294,6 +304,10 @@ struct Call {
     from: u32,
     to: u32,
     action: String,
+    act: usize,
+    /// The function the move takes, and the slot of each param.
+    function: String,
+    params: Vec<u8>,
     args: Vec<String>,
 }
 
@@ -350,6 +364,9 @@ pub fn traces(
             from: edge.from,
             to: edge.to,
             action: action.name.clone(),
+            act: act.index(),
+            function: f.name.clone(),
+            params: params.to_vec(),
             args: cx.args(method, f, params, post),
         });
     }
@@ -501,6 +518,67 @@ pub fn traces(
             ));
             here = call.to;
             arrive(here, &mut body, &mut visited, &mut out, &mut used_states);
+        }
+    }
+    // Interleavings: in a reached state, call B between the read and the write of A (B may be
+    // A again). When B leaves a row A writes in another state than A read it in, deletes it,
+    // or creates the row A creates, and the model has no move of A from there, A's write must
+    // be refused and change nothing: `check` and `verify` ran A as one atomic action and never
+    // explored that write. One trace per pair of A's function and B's use case.
+    let mut tried: BTreeSet<(String, String)> = BTreeSet::new();
+    for &s in &reached {
+        for &a in &out_of[s as usize] {
+            for &b in &out_of[s as usize] {
+                let (ca, cb) = (&calls[a], &calls[b]);
+                if tried.contains(&(ca.function.clone(), cb.action.clone()))
+                    || moved.contains(&(cb.to, ca.act, ca.params.clone()))
+                    || !cx.breaks(
+                        &ca.action,
+                        &ca.function,
+                        &ca.params,
+                        &run.states[cb.to as usize],
+                    )
+                {
+                    continue;
+                }
+                tried.insert((ca.function.clone(), cb.action.clone()));
+                let init = root[s as usize].expect("a reached state has an initial state");
+                out.traces += 1;
+                out.interleavings += 1;
+                used_states.insert(init);
+                used_states.insert(cb.to);
+                body.push_str(&format!("T {init}\n"));
+                for line in cx.seed(port, &run.states[init as usize]) {
+                    body.push_str(&format!("R {line}\n"));
+                }
+                body.push_str("G\n");
+                let mut path = Vec::new();
+                let mut at = s;
+                while let Some(c) = parent[at as usize] {
+                    path.push(c);
+                    at = calls[c].from;
+                }
+                path.reverse();
+                for c in path {
+                    let call = &calls[c];
+                    out.calls += 1;
+                    used_states.insert(call.to);
+                    body.push_str(&format!(
+                        "C {} {}{}\n",
+                        call.to,
+                        call.action,
+                        joined(&call.args)
+                    ));
+                }
+                body.push_str(&format!(
+                    "I {} {}{} | {}{}\n",
+                    cb.to,
+                    ca.action,
+                    joined(&ca.args),
+                    cb.action,
+                    joined(&cb.args)
+                ));
+            }
         }
     }
     // The states first, so the harness knows each before a trace names it.
@@ -677,6 +755,42 @@ impl Cx<'_> {
             }
         }
         None
+    }
+
+    /// Whether, in `state`, a row the function `function` of `action` writes (at `params`) is
+    /// no longer what the function read: gone, in another state, or created by someone else.
+    fn breaks(&self, action: &str, function: &str, params: &[u8], state: &StateSlice) -> bool {
+        let ts = self.ts;
+        let (Some(act), Some(f)) = (
+            ts.actions().iter().find(|a| a.name == action),
+            self.domain.fns.iter().find(|f| f.name == function),
+        ) else {
+            return false;
+        };
+        act.params.iter().enumerate().any(|(p, param)| {
+            let slot = usize::from(params[p]);
+            let present = state.is_present(ts, param.entity, slot);
+            match param.role {
+                ParamRole::New => present,
+                ParamRole::Existing => {
+                    if !present {
+                        return true;
+                    }
+                    let Some((tag, value)) = f
+                        .rows
+                        .iter()
+                        .find(|r| r.param == Some(p))
+                        .and_then(|r| r.state.as_ref())
+                    else {
+                        return false;
+                    };
+                    column_var(ts, &ts.entity(param.entity).id, tag)
+                        .and_then(|v| enum_name(ts, v, state.get(ts, v, slot)))
+                        .is_some_and(|now| now != *value)
+                }
+                _ => false,
+            }
+        })
     }
 
     fn port_entity(&self, entity: &str) -> Option<&PortEntity> {

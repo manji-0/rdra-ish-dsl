@@ -143,6 +143,19 @@
   Code that read a state's fields reads the methods instead; records and `<Entity>Row` keep
   public fields. See [Who makes a state](./docs/design/algebraic-codegen.md#who-makes-a-state).
 
+- `codegen` asks for one transaction per function (#332). The header gains the obligation
+  that each function runs in one transaction with its reads, and each result (Rust, Go, and
+  TypeScript) gains, per row it writes, `<row>_expected` / `<Row>Expected`: an
+  `ExpectedSource` naming what the row must still be when the write commits (`Absent` for a
+  created row, the tag column and the state read, or `Present`), so a store can write
+  conditionally and return `NotEnabled` when the write matches no row. The `--conformance`
+  port splits each `run_*` / `Run*` method into `prepare_*` (read and call the core) and
+  `commit_*` (write), the traces file is format 2, and its new `I` records prepare a call,
+  run another that changes a row it writes, and require the commit to fail and change
+  nothing. `tests/codegen_conformance.rs` shows that a service whose commits write
+  unconditionally fails. See
+  [One transaction per function](./docs/design/algebraic-codegen.md#atomicity).
+
 - `codegen --lang rust|go --conformance <FILE>` (experimental) prints a conformance port
   and harness after the core, and writes to `FILE` the traces the harness drives a finished
   service along (#330). The service implements `ConformancePort`: it seeds an empty store,

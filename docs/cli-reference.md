@@ -2027,6 +2027,14 @@ Go, `json` tags). `orderFromRow(row)` / `Order::from_row(row)` / `OrderFromRow(r
 the state of a row, or `InvalidRow` naming the column whose value its state rules out;
 `orderToRow` / `into_row` / `OrderToRow` returns the flat row of a state.
 
+Each function's result also carries, per row it writes, the source that row must still have
+when the write commits: `order_expected` / `OrderExpected`, an `ExpectedSource` that is
+`Absent` for a created row, `In { column, value }` (the tag column and the state the function
+read) for a state type, and `Present` for a record. The header's obligations ask the code to
+run each function in one transaction with its reads and to write each row only where it
+still is what the result expects (`UPDATE .. WHERE id = ? AND status = ?`); a write that
+matches no row rolls the transaction back and is `NotEnabled`.
+
 Each use case whose functions take a state type gets a **dispatcher**, `runCancel` /
 `run_cancel` / `RunCancel`, over the entity types: it calls the transition function of the
 rows' states and returns its result as a `CancelOutcome` case, or `NotEnabled` when the use
@@ -2039,15 +2047,18 @@ for the service that finishes it, and `FILE` gets the traces it runs. The servic
 implements `ConformancePort`: `seed` empties its store and stores the rows of an initial
 state, `snapshot` returns a `StoreSnapshot` of every row (the `<Entity>Row` of a state type,
 the record otherwise), every pending run mark (`<UseCase><Entity>Run { id, step }`), and
-every event a triggered use case reads, and one method per action (`run_pay` / `RunPay`)
-runs the use case by the ids of its rows and its inputs, returning an error when it does not
-run. The agent's test calls `conform(|| MyService::new(), &traces)` in Rust or
+every event a triggered use case reads, and two methods per action run the use case by the
+ids of its rows and its inputs: `prepare_pay` / `PreparePay` loads the rows and returns the
+dispatcher's result, writing nothing, and `commit_pay` / `CommitPay` stores that result in one
+transaction. Either returns an error when the use case does not run. The agent's test calls `conform(|| MyService::new(), &traces)` in Rust or
 `Conform(func() ConformancePort { return newService() }, traces)` in Go. The harness starts
 a fresh port per trace, seeds the trace's initial state, makes each call, and after each
 compares the store, cut down to the columns the model tracks (an enum's value, null or not,
 an integer, a key's parent id), with the state BFS reached. A call the model refuses must
-fail and leave the store as it was. It returns the first difference, naming the traces line
-and the rows only the model or only the store holds.
+fail and leave the store as it was, and so must a commit after another call changed the
+state of a row it writes (the harness prepares one call, runs another, then commits the
+first). It returns the first difference, naming the traces line and the rows only the model
+or only the store holds.
 
 The traces are a text file, not code. They come from a BFS of the whole transition system
 at `check`'s bounds (one row per entity), from its initial states, and take every move of a

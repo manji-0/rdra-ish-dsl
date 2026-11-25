@@ -513,11 +513,14 @@ and writes the traces the harness runs to `FILE`.
 **The port.** The service implements `ConformancePort`: `seed` empties the store and stores
 the rows of an initial state, `snapshot` returns everything the store holds (each entity's
 rows in its `<Entity>Row` or record type, each pending run mark as `<UseCase><Entity>Run {
-id, step }`, each event a triggered use case reads), and one method per action runs the use
-case by the ids of its rows, the ids of its run marks, its event, its inputs, and its
-choices. A list of related rows is not an argument: the service loads it. The method returns
-an error when the use case does not run. The port is how the harness drives and reads the
-service, not a persistence layer: the service still decides how it stores rows.
+id, step }`, each event a triggered use case reads), and two methods per action run the
+use case by the ids of its rows, the ids of its run marks, its event, its inputs, and its
+choices: `prepare_<action>` / `Prepare<Action>` loads the rows and returns what the
+dispatcher (or the one function) returns, writing nothing, and `commit_<action>` /
+`Commit<Action>` stores that result in one transaction (since #332; #330 had one `run_*`
+method). A list of related rows is not an argument: the service loads it. Either method
+returns an error when the use case does not run. The port is how the harness drives and
+reads the service, not a persistence layer: the service still decides how it stores rows.
 
 **The oracle.** The expected values come from BFS, never from the generated core. `traces`
 in `codegen/conformance` explores the whole transition system at `check`'s bounds
@@ -536,6 +539,13 @@ functions allow none (a source state no function takes, a condition that fails);
 must fail and change nothing. A use case that creates a row is never tried as refused: at
 one row per entity, BFS has no free slot after the first, but a real store does.
 
+The traces also try what [one transaction per function](#atomicity) rules out. In a reached
+state with two moves A and B (B may be A again), when B leaves a row A writes in another
+state than A read it in, deletes it, or creates the row A creates, and the model has no move
+of A after B, an `I` record prepares A, runs B, and commits A: the commit must fail and leave
+the store in B's successor. One such trace is written per pair of A's function and B's use
+case.
+
 **Where the traces live: a data file, not code.** The traces are a line-oriented text file
 that the generated harness parses, and the code stream holds no trace. Three reasons:
 
@@ -548,7 +558,8 @@ that the generated harness parses, and the code stream holds no trace. Three rea
   other bounds without a code diff, and a diff of the code still shows a change of the model.
 - *No library.* Each line is a record of whitespace-separated tokens (`S`/`A` a state and
   its rows, `T` a trace, `R` a seed row, `G` seeding done, `C` a call and the state it
-  reaches, `X` a call that must be refused), so the harness parses it with the standard
+  reaches, `X` a call that must be refused, `I` a prepared call, the call run before its
+  commit, and the state it reaches), so the harness parses it with the standard
   library of Rust and Go, as the rest of the output builds without one.
 
 The cost is a second file the agent keeps beside the code and reads in its test; the first
@@ -556,10 +567,11 @@ line names the format, and the harness refuses another.
 
 **What it proves.** On `tests/fixtures/codegen/conformance.rdra`,
 `tests/codegen_conformance.rs` runs an in-memory service built on the generated core in Rust
-and in Go (the Go one from outside the package). It passes. Each of three planted faults
+and in Go (the Go one from outside the package). It passes. Each of four planted faults
 fails at the call that shows it: Pay writing the tag itself (`paid_at` and `qty` differ),
-Ship dropping the shipment the core returns (the shipment row is missing), and Cancel
-running from `shipped` (a refused call ran).
+Ship dropping the shipment the core returns (the shipment row is missing), Cancel
+running from `shipped` (a refused call ran), and every commit writing without its condition
+(a second Place, prepared before the first committed, commits over it).
 
 **What it does not prove.** The harness checks what is stored, not how: a service that
 computes the same rows without calling the core passes. A column the system does not track
@@ -567,8 +579,38 @@ computes the same rows without calling the core passes. A column the system does
 `check`, one row per entity, so a service that is wrong only with two rows passes. A BFS
 stopped at the cap covers the states it reached and tries no refused call, and the header
 says so. A counted trigger, a comparison proposition, and the clock are not compared, and no
-trace takes a tick, so a move after one is left out; the header lists these. A run between a
-use case's read and its write is not tried: the port runs each use case as a whole.
+trace takes a tick, so a move after one is left out; the header lists these. An
+interleaving is tried only where B changes the state of a row A writes, so a service that
+does not hold a non-tag column a condition read, a row it reads and does not write, or a run
+mark or event it consumes still passes; and the harness is one thread, so it shows the
+condition on the write, not the locks of a real store.
+
+<a id="atomicity"></a>
+### One transaction per function
+
+<!-- derived-from #use-cases-split-into-transactions -->
+
+`check` and `verify` explore each use case, and each step of a split one, as one atomic
+action: they never see a state where another use case ran between a function's read and its
+write. A service that reads a row, calls the core, and writes the result in a later
+transaction can write over another call's change, such as `paid` over `cancelled`, a move no
+`transitions` has. Since #332 the header states the obligation, and the results carry what a
+store needs to keep it:
+
+- Each function runs in one transaction with its reads. The store holds what the function
+  read until the write commits (`SELECT .. FOR UPDATE`, or serializable isolation).
+- Each result carries, per row it writes, `<row>_expected` (`<Row>Expected` in Go): the
+  source the row must still have, `Absent` for a row the function creates, `In { column,
+  value }` (the tag column and the state it read) for a state type, and `Present` for a
+  record. The store writes the row only where it still is that (`UPDATE .. WHERE id = ? AND
+  status = ?`, an `INSERT` that fails on a present id), and when a write matches no row, it
+  rolls back and returns `NotEnabled`, the answer the model gives in the state the other call
+  left.
+
+The condition covers a row another call created, deleted, or moved to another state, which
+is the race the model's tag guards. It does not cover another column a condition read (Big
+reads `qty`), a row read and not written (a parent, a `.has` list), or a consumed run mark or
+event; the held reads keep those, and the obligation says so.
 
 ## Architecture
 

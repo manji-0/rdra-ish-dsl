@@ -340,6 +340,9 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
     out.push_str("/// A condition of the use case did not hold: the use case does not run.\n");
     out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
     out.push_str("pub struct Rejected {\n    pub condition: &'static str,\n    pub label: &'static str,\n    pub site: ::core::option::Option<&'static str>,\n}\n\n");
+    out.push_str("/// What a row a result writes must still be when the write commits, so the store can write\n/// it conditionally and take a write that matches no row as `NotEnabled` (see the obligations).\n");
+    out.push_str("#[derive(Debug, Clone, Copy, PartialEq, Eq)]\n");
+    out.push_str("pub enum ExpectedSource {\n    /// The row is created: no row has its id.\n    Absent,\n    /// The row exists.\n    Present,\n    /// The row exists, and its `column` holds `value`.\n    In { column: &'static str, value: &'static str },\n}\n\n");
     for f in &domain.fns {
         out.push_str(&format!("/// What `{}` returns.\n", fn_ident(&f.name)));
         out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
@@ -354,6 +357,13 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                 } => out.push_str(&format!("    pub {}: {ty},\n", ident(&o.name))),
                 OutKind::Deleted { id: None, .. } => {}
             }
+        }
+        for o in &f.outputs {
+            out.push_str(&format!(
+                "    /// What `{}` must still be when it is written.\n    pub {}: ExpectedSource,\n",
+                o.name,
+                ident(&format!("{}_expected", o.name))
+            ));
         }
         for m in &f.marks_out {
             out.push_str(&format!("    pub {}: {},\n", ident(&m.name), m.ty));
@@ -610,6 +620,21 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                 }
                 OutKind::Deleted { id: None, .. } => {}
             }
+        }
+        for o in &f.outputs {
+            let expected = match f.expected(o) {
+                super::ir::Expected::Absent => "ExpectedSource::Absent".to_string(),
+                super::ir::Expected::Present => "ExpectedSource::Present".to_string(),
+                super::ir::Expected::In { column, value } => format!(
+                    "ExpectedSource::In {{ column: {}, value: {} }}",
+                    string_literal(&column),
+                    string_literal(&value)
+                ),
+            };
+            body.push_str(&format!(
+                "        {}: {expected},\n",
+                ident(&format!("{}_expected", o.name))
+            ));
         }
         for m in &f.marks_out {
             body.push_str(&format!("        {}: out_{},\n", ident(&m.name), m.name));

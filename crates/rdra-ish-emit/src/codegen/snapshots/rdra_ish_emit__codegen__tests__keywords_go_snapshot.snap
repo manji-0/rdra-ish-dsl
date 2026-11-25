@@ -20,7 +20,8 @@ expression: "generated_from(KEYWORDS_SRC, \"keywords.rdra\", Lang::Go)"
 // O1 Match.function_id names a present Function.
 // O2 Match.func_id names a present Func.
 // O3 Match.mod_id names a present Mod.
-// O4 every row the code writes keeps its rules: its RuleViolations is empty.
+// O4 each function runs in one transaction with the reads of its rows, marks, and events: `check` and `verify` explore every use case, and every step of a split one, as one atomic action, and a run of another use case between the read and the write is a state they never explored. Hold what the function read until the write commits (SELECT .. FOR UPDATE, or serializable isolation), and write each row only where it still is what the result's `<row>_expected` (`<Row>Expected` in Go) names (UPDATE .. WHERE id = ? AND <tag> = ?; INSERT a created row only where none has its id; DELETE likewise); when a write matches no row, roll the transaction back and treat the call as NotEnabled. The condition catches a row another call created, deleted, or moved to another state; it does not catch a change to another column a condition read, to a row the function reads and does not write, or to a run mark or event it consumes, which only the held reads keep.
+// O5 every row the code writes keeps its rules: its RuleViolations is empty.
 package domain
 
 // ── Scalars: replace with the project's own types if it has them ──
@@ -628,6 +629,16 @@ type Rejected struct {
 	Site      string
 }
 
+// ExpectedSource is what a row a result writes must still be when the write commits, so the
+// store can write it conditionally and take a write that matches no row as NotEnabled (see the
+// obligations). Absent: the row is created, and no row has its id. Otherwise the row exists,
+// and when Column is set, it holds Value.
+type ExpectedSource struct {
+	Absent bool
+	Column string
+	Value  string
+}
+
 // Error names the condition.
 func (r *Rejected) Error() string {
 	return "rejected by the condition " + r.Condition + ": " + r.Label
@@ -636,6 +647,7 @@ func (r *Rejected) Error() string {
 // ReturnResult is what Return returns.
 type ReturnResult struct {
 	Match MatchReturn
+	MatchExpected ExpectedSource
 	Switch Switch
 }
 
@@ -660,6 +672,7 @@ func Return(match MatchNew) ReturnResult {
 			modId: match.modId,
 			valid_: true,
 		},
+		MatchExpected: ExpectedSource{Column: "status", Value: "new"},
 		Switch: Switch{MatchId: match.id},
 	}
 }
@@ -667,6 +680,7 @@ func Return(match MatchNew) ReturnResult {
 // DeleteResult is what Delete returns.
 type DeleteResult struct {
 	Match MatchSelf
+	MatchExpected ExpectedSource
 }
 
 // Delete runs Delete (Delete). One run of the use case, from the states of the arguments' types. It requires what `Delete` requires and writes what it writes; the values the model leaves open are the inputs.
@@ -693,12 +707,14 @@ func Delete(match MatchReturn, switch_ Switch) DeleteResult {
 			modId: match.modId,
 			valid_: true,
 		},
+		MatchExpected: ExpectedSource{Column: "status", Value: "return"},
 	}
 }
 
 // SuperResult is what Super returns.
 type SuperResult struct {
 	Match MatchSuper
+	MatchExpected ExpectedSource
 }
 
 // Super runs Super (Super). One run of the use case, from the states of the arguments' types. It requires what `Super` requires and writes what it writes; the values the model leaves open are the inputs.
@@ -726,12 +742,14 @@ func Super(match MatchSelf) (SuperResult, error) {
 			modId: match.modId,
 			valid_: true,
 		},
+		MatchExpected: ExpectedSource{Column: "status", Value: "self"},
 	}, nil
 }
 
 // CrateResult is what Crate returns.
 type CrateResult struct {
 	Match MatchCrate
+	MatchExpected ExpectedSource
 }
 
 // Crate runs Crate (Crate). One run of the use case, from the states of the arguments' types. It requires what `Crate` requires and writes what it writes; the values the model leaves open are the inputs.
@@ -755,12 +773,14 @@ func Crate(match MatchSuper) CrateResult {
 			modId: match.modId,
 			valid_: true,
 		},
+		MatchExpected: ExpectedSource{Column: "status", Value: "super"},
 	}
 }
 
 // DefaultResult is what Default returns.
 type DefaultResult struct {
 	Match MatchDefault
+	MatchExpected ExpectedSource
 }
 
 // Default runs Default (Default). One run of the use case, from the states of the arguments' types. It requires what `Default` requires and writes what it writes; the values the model leaves open are the inputs.
@@ -784,12 +804,14 @@ func Default(match MatchCrate) DefaultResult {
 			modId: match.modId,
 			valid_: true,
 		},
+		MatchExpected: ExpectedSource{Column: "status", Value: "crate"},
 	}
 }
 
 // TypeResult is what Type returns.
 type TypeResult struct {
 	Func FuncReturn
+	FuncExpected ExpectedSource
 }
 
 // Type runs Type (Type). One run of the use case, from the states of the arguments' types. It requires what `Type` requires and writes what it writes; the values the model leaves open are the inputs.
@@ -802,12 +824,14 @@ func Type(func_ FuncNew) TypeResult {
 			id: func_.id,
 			valid_: true,
 		},
+		FuncExpected: ExpectedSource{Column: "type", Value: "new"},
 	}
 }
 
 // ClassResult is what Class returns.
 type ClassResult struct {
 	Func FuncFunc
+	FuncExpected ExpectedSource
 }
 
 // Class runs Class (Class). One run of the use case, from the states of the arguments' types. It requires what `Class` requires and writes what it writes; the values the model leaves open are the inputs.
@@ -820,12 +844,14 @@ func Class(func_ FuncReturn) ClassResult {
 			id: func_.id,
 			valid_: true,
 		},
+		FuncExpected: ExpectedSource{Column: "type", Value: "return"},
 	}
 }
 
 // NewFromNewResult is what NewFromNew returns.
 type NewFromNewResult struct {
 	Match MatchNew
+	MatchExpected ExpectedSource
 }
 
 // NewFromNew runs New (New). One run of the use case, from the states of the arguments' types. It requires what `New` requires and writes what it writes; the values the model leaves open are the inputs.
@@ -852,12 +878,14 @@ func NewFromNew(parentFunction Function, parentFunc FuncNew, parentMod Mod, matc
 			modId: parentMod.Id,
 			valid_: true,
 		},
+		MatchExpected: ExpectedSource{Absent: true},
 	}
 }
 
 // NewFromReturnResult is what NewFromReturn returns.
 type NewFromReturnResult struct {
 	Match MatchNew
+	MatchExpected ExpectedSource
 }
 
 // NewFromReturn runs New (New). One run of the use case, from the states of the arguments' types. It requires what `New` requires and writes what it writes; the values the model leaves open are the inputs.
@@ -884,12 +912,14 @@ func NewFromReturn(parentFunction Function, parentFunc FuncReturn, parentMod Mod
 			modId: parentMod.Id,
 			valid_: true,
 		},
+		MatchExpected: ExpectedSource{Absent: true},
 	}
 }
 
 // NewFromFuncResult is what NewFromFunc returns.
 type NewFromFuncResult struct {
 	Match MatchNew
+	MatchExpected ExpectedSource
 }
 
 // NewFromFunc runs New (New). One run of the use case, from the states of the arguments' types. It requires what `New` requires and writes what it writes; the values the model leaves open are the inputs.
@@ -916,12 +946,14 @@ func NewFromFunc(parentFunction Function, parentFunc FuncFunc, parentMod Mod, ma
 			modId: parentMod.Id,
 			valid_: true,
 		},
+		MatchExpected: ExpectedSource{Absent: true},
 	}
 }
 
 // StaticResult is what Static returns.
 type StaticResult struct {
 	Function Function
+	FunctionExpected ExpectedSource
 }
 
 // Static runs Static (Static). One run of the use case, from the states of the arguments' types. It requires what `Static` requires and writes what it writes; the values the model leaves open are the inputs.
@@ -931,6 +963,7 @@ func Static(function Function, functionDefault string) StaticResult {
 			Id: function.Id,
 			Default: ptrTo(functionDefault),
 		},
+		FunctionExpected: ExpectedSource{},
 	}
 }
 
