@@ -126,10 +126,72 @@ fn keys_and_obligations() {
     let names: Vec<_> = domain
         .obligations
         .iter()
-        .filter_map(|o| o.invariant.as_deref())
+        .filter(|o| o.checked)
+        .map(|o| o.name.as_str())
         .collect();
     assert!(names.contains(&"Check_Order_total_0"), "{names:?}");
     assert!(names.contains(&"MinCard_OrderLine_Order"), "{names:?}");
+}
+
+/// The JSON contract of `--format json`: types, states, use cases, functions, obligations.
+#[test]
+fn json_snapshot() {
+    let model = model_from(SRC);
+    let options = Options {
+        lang: Lang::Rust,
+        package: "domain".to_string(),
+        model_path: "order.rdra".to_string(),
+        version: "x.y.z".to_string(),
+        check: CheckStatus::Passed {
+            bounds: "1 instance per entity, Int 0..5".to_string(),
+            caps: CAPS,
+        },
+        conformance: None,
+    };
+    insta::assert_snapshot!(generate_json(&model, &options, &|_| None).expect("generates"));
+}
+
+/// Every obligation has a name of its own, built from model identifiers: a declaration added
+/// to the model, ahead of the others and with keys and rules of its own, moves none of the
+/// names the model had, nor what each names.
+#[test]
+fn obligation_names_do_not_move() {
+    let names = |src: &str| -> Vec<(String, String)> {
+        build(&model_from(src), Some(CAPS), &|_| None)
+            .unwrap()
+            .obligations
+            .into_iter()
+            .map(|o| (o.name, o.text))
+            .collect()
+    };
+    let before = names(SRC);
+    let mut seen = std::collections::BTreeSet::new();
+    for (name, _) in &before {
+        assert!(seen.insert(name.clone()), "{name} twice: {before:?}");
+    }
+    assert!(
+        before.iter().any(|(n, _)| n == "Ref_OrderLine_order_id"),
+        "{before:?}"
+    );
+    let added = format!(
+        r#"
+entity Archive "Archive" {{
+  id: Int @pk
+  code: String @unique
+  total: Int @check(total >= 0)
+}}
+relate(Archive, Customer, N:1)
+relate(OrderLine, Archive, N:1)
+{SRC}"#
+    );
+    let after = names(&added);
+    for (name, text) in &before {
+        assert!(
+            after.iter().any(|(n, t)| n == name && t == text),
+            "{name} moved or changed: {after:?}"
+        );
+    }
+    assert!(after.len() > before.len(), "{after:?}");
 }
 
 /// Two declarations that generate one type name are an error naming both.

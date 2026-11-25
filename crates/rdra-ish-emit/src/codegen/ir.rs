@@ -116,8 +116,12 @@ pub struct RecordDecl {
 /// output must keep it.
 #[derive(Clone, Debug)]
 pub struct Obligation {
-    /// The invariant `check` and `verify` name it by, when they check it.
-    pub invariant: Option<String>,
+    /// A name built from model identifiers only, so it does not move when the model gains an
+    /// unrelated declaration: the invariant's name where `check` and `verify` check it
+    /// (`Unique_Payment_Order`), else one of its own (`Ref_Product_category_id`).
+    pub name: String,
+    /// Whether `check` and `verify` check it, under `name`.
+    pub checked: bool,
     pub text: String,
     pub site: Option<String>,
 }
@@ -168,6 +172,9 @@ pub struct DomainModel {
     /// Rules the reachable states agree with and the model does not state.
     pub candidates: Vec<String>,
     pub obligations: Vec<Obligation>,
+    /// Every use case of the model, in model order, with the actions the transition system
+    /// runs it as: empty for a model `check` rejects.
+    pub usecases: Vec<UseCaseDecl>,
     /// The conformance port and harness, when asked for.
     pub port: Option<PortDecl>,
 }
@@ -567,7 +574,46 @@ pub struct EventIn {
 #[derive(Clone, Debug)]
 pub struct Skipped {
     pub action: String,
+    /// The use case the action runs.
+    pub usecase: String,
     pub reason: String,
+}
+
+/// A use case of the model.
+#[derive(Clone, Debug)]
+pub struct UseCaseDecl {
+    pub id: String,
+    pub label: String,
+    /// Its declaration's site.
+    pub site: Option<String>,
+    /// The transition system's actions it runs as, in order: one, one per step of a split use
+    /// case, or one per event of a triggered one. None for a use case that writes nothing.
+    pub actions: Vec<String>,
+}
+
+/// What the generated code offers for a use case.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UseCaseKind {
+    /// Every action has functions.
+    Functions,
+    /// Some action has no function yet (the vocabulary is not printed, #335).
+    Unprinted,
+    /// It writes nothing: no action, no function, no entry point (decision 13 of
+    /// docs/design/code-check.md).
+    ReadOnly,
+}
+
+impl DomainModel {
+    /// What the code offers for the use case `uc`.
+    pub fn usecase_kind(&self, uc: &UseCaseDecl) -> UseCaseKind {
+        if uc.actions.is_empty() {
+            UseCaseKind::ReadOnly
+        } else if self.skipped.iter().any(|s| s.usecase == uc.id) {
+            UseCaseKind::Unprinted
+        } else {
+            UseCaseKind::Functions
+        }
+    }
 }
 
 // ── Rule validators ──────────────────────────────────────────────────────────

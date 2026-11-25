@@ -14,14 +14,14 @@ expression: "generated(Lang::TypeScript)"
 // `check` verified those rules within these bounds: 1 instance per entity, Int 0..5.
 // Run `rdra-ish verify` to check them at larger bounds.
 //
-// Obligations:
-// O1 no two Customer rows share email.
-// O2 Order.customer_id names a present Customer.
-// O3 [Check_Order_total_0] every Order row satisfies total >= 0 (@check on total).
-// O4 OrderLine.order_id names a present Order.
-// O5 [MinCard_OrderLine_Order] every present Order has at least one OrderLine through OrderLine.order_id.
-// O6 each function runs in one transaction with the reads of its rows, marks, and events: `check` and `verify` explore every use case, and every step of a split one, as one atomic action, and a run of another use case between the read and the write is a state they never explored. Hold what the function read until the write commits (SELECT .. FOR UPDATE, or serializable isolation), and write each row only where it still is what the result's `<row>_expected` (`<Row>Expected` in Go) names (UPDATE .. WHERE id = ? AND <tag> = ?; INSERT a created row only where none has its id; DELETE likewise); when a write matches no row, roll the transaction back and treat the call as NotEnabled. The condition catches a row another call created, deleted, or moved to another state; it does not catch a change to another column a condition read, to a row the function reads and does not write, or to a run mark or event it consumes, which only the held reads keep.
-// O7 [Check_Order_total_0] holds in every state (total >= 0); no one-row check prints it.
+// Obligations, each by a name that stays when the model changes elsewhere (`check` and
+// `verify` report the ones marked [checked] by the same name):
+// Unique_Customer_email: no two Customer rows share email.
+// Ref_Order_customer_id: Order.customer_id names a present Customer.
+// Check_Order_total_0 [checked]: every Order row satisfies total >= 0 (@check on total).
+// Ref_OrderLine_order_id: OrderLine.order_id names a present Order.
+// MinCard_OrderLine_Order [checked]: every present Order has at least one OrderLine through OrderLine.order_id.
+// OneTransaction: each function runs in one transaction with the reads of its rows, marks, and events: `check` and `verify` explore every use case, and every step of a split one, as one atomic action, and a run of another use case between the read and the write is a state they never explored. Hold what the function read until the write commits (SELECT .. FOR UPDATE, or serializable isolation), and write each row only where it still is what the result's `<row>_expected` (`<Row>Expected` in Go) names (UPDATE .. WHERE id = ? AND <tag> = ?; INSERT a created row only where none has its id; DELETE likewise); when a write matches no row, roll the transaction back and treat the call as NotEnabled. The condition catches a row another call created, deleted, or moved to another state; it does not catch a change to another column a condition read, to a row the function reads and does not write, or to a run mark or event it consumes, which only the held reads keep.
 //
 // Candidate rules: every reachable row of the state agrees, and no rule says so. A rule
 // the business holds narrows the state type; one that is an accident of the model is a gap:

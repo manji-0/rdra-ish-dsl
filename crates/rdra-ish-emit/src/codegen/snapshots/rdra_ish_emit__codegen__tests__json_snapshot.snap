@@ -1,0 +1,574 @@
+---
+source: crates/rdra-ish-emit/src/codegen/tests.rs
+expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
+---
+{
+  "check": {
+    "bounds": "1 instance per entity, Int 0..5",
+    "passed": true
+  },
+  "format": "rdra-ish codegen json 1",
+  "functions": [
+    {
+      "action": "Pay",
+      "conditions": [],
+      "event": null,
+      "inputs": [
+        {
+          "name": "order_paid_at",
+          "nullable": false,
+          "type": {
+            "kind": "scalar",
+            "name": "DateTime"
+          }
+        }
+      ],
+      "marks": [],
+      "name": "Pay",
+      "raises": [],
+      "result": "PayResult",
+      "rows": [
+        {
+          "entity": "Order",
+          "name": "order",
+          "state": {
+            "column": "status",
+            "value": "pending"
+          },
+          "type": "OrderPending"
+        }
+      ],
+      "step": null,
+      "usecase": "Pay",
+      "writes": [
+        "order"
+      ]
+    },
+    {
+      "action": "CancelOrder",
+      "conditions": [],
+      "event": null,
+      "inputs": [],
+      "marks": [],
+      "name": "CancelOrder",
+      "raises": [],
+      "result": "CancelOrderResult",
+      "rows": [
+        {
+          "entity": "Order",
+          "name": "order",
+          "state": {
+            "column": "status",
+            "value": "pending"
+          },
+          "type": "OrderPending"
+        }
+      ],
+      "step": null,
+      "usecase": "CancelOrder",
+      "writes": [
+        "order"
+      ]
+    },
+    {
+      "action": "Place",
+      "conditions": [],
+      "event": null,
+      "inputs": [
+        {
+          "name": "order_id",
+          "nullable": false,
+          "type": {
+            "kind": "id",
+            "name": "OrderId"
+          }
+        },
+        {
+          "name": "order_method",
+          "nullable": false,
+          "type": {
+            "kind": "enum",
+            "name": "PaymentMethod"
+          }
+        }
+      ],
+      "marks": [],
+      "name": "Place",
+      "raises": [],
+      "result": "PlaceResult",
+      "rows": [
+        {
+          "entity": "Customer",
+          "name": "parent_customer",
+          "state": null,
+          "type": "Customer"
+        }
+      ],
+      "step": null,
+      "usecase": "Place",
+      "writes": [
+        "order"
+      ]
+    }
+  ],
+  "generator": "rdra-ish x.y.z",
+  "model": "order.rdra",
+  "obligations": [
+    {
+      "checked": false,
+      "name": "Unique_Customer_email",
+      "site": null,
+      "text": "no two Customer rows share email."
+    },
+    {
+      "checked": false,
+      "name": "Ref_Order_customer_id",
+      "site": null,
+      "text": "Order.customer_id names a present Customer."
+    },
+    {
+      "checked": true,
+      "name": "Check_Order_total_0",
+      "site": null,
+      "text": "every Order row satisfies total >= 0 (@check on total)."
+    },
+    {
+      "checked": false,
+      "name": "Ref_OrderLine_order_id",
+      "site": null,
+      "text": "OrderLine.order_id names a present Order."
+    },
+    {
+      "checked": true,
+      "name": "MinCard_OrderLine_Order",
+      "site": null,
+      "text": "every present Order has at least one OrderLine through OrderLine.order_id."
+    },
+    {
+      "checked": false,
+      "name": "OneTransaction",
+      "site": null,
+      "text": "each function runs in one transaction with the reads of its rows, marks, and events: `check` and `verify` explore every use case, and every step of a split one, as one atomic action, and a run of another use case between the read and the write is a state they never explored. Hold what the function read until the write commits (SELECT .. FOR UPDATE, or serializable isolation), and write each row only where it still is what the result's `<row>_expected` (`<Row>Expected` in Go) names (UPDATE .. WHERE id = ? AND <tag> = ?; INSERT a created row only where none has its id; DELETE likewise); when a write matches no row, roll the transaction back and treat the call as NotEnabled. The condition catches a row another call created, deleted, or moved to another state; it does not catch a change to another column a condition read, to a row the function reads and does not write, or to a run mark or event it consumes, which only the held reads keep."
+    }
+  ],
+  "states": [
+    {
+      "entity": "Order",
+      "name": "Order",
+      "row": "OrderRow",
+      "site": null,
+      "tag": {
+        "ident": "Status",
+        "name": "status",
+        "nullable": false,
+        "type": {
+          "kind": "enum",
+          "name": "OrderStatus"
+        }
+      },
+      "variants": [
+        {
+          "always_null": [
+            "paid_at"
+          ],
+          "fields": [
+            {
+              "ident": "Id",
+              "name": "id",
+              "nullable": false,
+              "type": {
+                "kind": "id",
+                "name": "OrderId"
+              }
+            },
+            {
+              "ident": "Total",
+              "name": "total",
+              "nullable": false,
+              "type": {
+                "kind": "scalar",
+                "name": "Money"
+              }
+            },
+            {
+              "ident": "Method",
+              "name": "method",
+              "nullable": false,
+              "type": {
+                "kind": "enum",
+                "name": "PaymentMethod"
+              }
+            },
+            {
+              "ident": "DeliveredAt",
+              "name": "delivered_at",
+              "nullable": true,
+              "type": {
+                "kind": "scalar",
+                "name": "DateTime"
+              }
+            },
+            {
+              "ident": "Type",
+              "name": "type",
+              "nullable": true,
+              "type": {
+                "kind": "scalar",
+                "name": "String"
+              }
+            },
+            {
+              "ident": "CustomerId",
+              "name": "customer_id",
+              "nullable": false,
+              "type": {
+                "kind": "id",
+                "name": "CustomerId"
+              }
+            }
+          ],
+          "name": "OrderPending",
+          "value": "pending"
+        },
+        {
+          "always_null": [],
+          "fields": [
+            {
+              "ident": "Id",
+              "name": "id",
+              "nullable": false,
+              "type": {
+                "kind": "id",
+                "name": "OrderId"
+              }
+            },
+            {
+              "ident": "Total",
+              "name": "total",
+              "nullable": false,
+              "type": {
+                "kind": "scalar",
+                "name": "Money"
+              }
+            },
+            {
+              "ident": "PaidAt",
+              "name": "paid_at",
+              "nullable": false,
+              "type": {
+                "kind": "scalar",
+                "name": "DateTime"
+              }
+            },
+            {
+              "ident": "Method",
+              "name": "method",
+              "nullable": false,
+              "type": {
+                "kind": "enum",
+                "name": "PaymentMethod"
+              }
+            },
+            {
+              "ident": "DeliveredAt",
+              "name": "delivered_at",
+              "nullable": true,
+              "type": {
+                "kind": "scalar",
+                "name": "DateTime"
+              }
+            },
+            {
+              "ident": "Type",
+              "name": "type",
+              "nullable": true,
+              "type": {
+                "kind": "scalar",
+                "name": "String"
+              }
+            },
+            {
+              "ident": "CustomerId",
+              "name": "customer_id",
+              "nullable": false,
+              "type": {
+                "kind": "id",
+                "name": "CustomerId"
+              }
+            }
+          ],
+          "name": "OrderPaid",
+          "value": "paid"
+        },
+        {
+          "always_null": [],
+          "fields": [
+            {
+              "ident": "Id",
+              "name": "id",
+              "nullable": false,
+              "type": {
+                "kind": "id",
+                "name": "OrderId"
+              }
+            },
+            {
+              "ident": "Total",
+              "name": "total",
+              "nullable": false,
+              "type": {
+                "kind": "scalar",
+                "name": "Money"
+              }
+            },
+            {
+              "ident": "PaidAt",
+              "name": "paid_at",
+              "nullable": true,
+              "type": {
+                "kind": "scalar",
+                "name": "DateTime"
+              }
+            },
+            {
+              "ident": "Method",
+              "name": "method",
+              "nullable": false,
+              "type": {
+                "kind": "enum",
+                "name": "PaymentMethod"
+              }
+            },
+            {
+              "ident": "DeliveredAt",
+              "name": "delivered_at",
+              "nullable": true,
+              "type": {
+                "kind": "scalar",
+                "name": "DateTime"
+              }
+            },
+            {
+              "ident": "Type",
+              "name": "type",
+              "nullable": true,
+              "type": {
+                "kind": "scalar",
+                "name": "String"
+              }
+            },
+            {
+              "ident": "CustomerId",
+              "name": "customer_id",
+              "nullable": false,
+              "type": {
+                "kind": "id",
+                "name": "CustomerId"
+              }
+            }
+          ],
+          "name": "OrderCancelled",
+          "value": "cancelled"
+        }
+      ]
+    }
+  ],
+  "types": [
+    {
+      "kind": "enum",
+      "name": "PaymentMethod",
+      "site": null,
+      "values": [
+        {
+          "ident": "CreditCard",
+          "label": "Credit card",
+          "wire": "credit_card"
+        },
+        {
+          "ident": "BankTransfer",
+          "label": null,
+          "wire": "bank_transfer"
+        }
+      ],
+      "variation": "PaymentMethod"
+    },
+    {
+      "kind": "enum",
+      "name": "OrderStatus",
+      "site": null,
+      "values": [
+        {
+          "ident": "Pending",
+          "label": "Pending",
+          "wire": "pending"
+        },
+        {
+          "ident": "Paid",
+          "label": null,
+          "wire": "paid"
+        },
+        {
+          "ident": "Cancelled",
+          "label": null,
+          "wire": "cancelled"
+        }
+      ],
+      "variation": null
+    },
+    {
+      "entity": "Customer",
+      "kind": "id",
+      "name": "CustomerId",
+      "repr": "Int"
+    },
+    {
+      "entity": "Order",
+      "kind": "id",
+      "name": "OrderId",
+      "repr": "Int"
+    },
+    {
+      "entity": "OrderLine",
+      "kind": "id",
+      "name": "OrderLineId",
+      "repr": "Int"
+    },
+    {
+      "fields": [
+        {
+          "ident": "Id",
+          "name": "id",
+          "nullable": false,
+          "type": {
+            "kind": "id",
+            "name": "CustomerId"
+          }
+        },
+        {
+          "ident": "Email",
+          "name": "email",
+          "nullable": false,
+          "type": {
+            "kind": "scalar",
+            "name": "String"
+          }
+        }
+      ],
+      "id": "Customer",
+      "kind": "entity",
+      "name": "Customer",
+      "site": null
+    },
+    {
+      "fields": [
+        {
+          "ident": "Id",
+          "name": "id",
+          "nullable": false,
+          "type": {
+            "kind": "id",
+            "name": "OrderLineId"
+          }
+        },
+        {
+          "ident": "Qty",
+          "name": "qty",
+          "nullable": false,
+          "type": {
+            "kind": "scalar",
+            "name": "Int"
+          }
+        },
+        {
+          "ident": "OrderId",
+          "name": "order_id",
+          "nullable": false,
+          "type": {
+            "kind": "id",
+            "name": "OrderId"
+          }
+        }
+      ],
+      "id": "OrderLine",
+      "kind": "entity",
+      "name": "OrderLine",
+      "site": null
+    },
+    {
+      "fields": [
+        {
+          "ident": "CustomerId",
+          "name": "customer_id",
+          "nullable": false,
+          "type": {
+            "kind": "scalar",
+            "name": "Int"
+          }
+        },
+        {
+          "ident": "Note",
+          "name": "note",
+          "nullable": true,
+          "type": {
+            "kind": "scalar",
+            "name": "String"
+          }
+        }
+      ],
+      "id": "CreateOrderRequest",
+      "kind": "dto",
+      "name": "CreateOrderRequest",
+      "site": null
+    }
+  ],
+  "usecases": [
+    {
+      "actions": [
+        {
+          "dispatcher": null,
+          "functions": [
+            "Place"
+          ],
+          "name": "Place",
+          "unprinted": null
+        }
+      ],
+      "id": "Place",
+      "kind": "functions",
+      "label": "Place",
+      "site": null
+    },
+    {
+      "actions": [
+        {
+          "dispatcher": "RunPay",
+          "functions": [
+            "Pay"
+          ],
+          "name": "Pay",
+          "unprinted": null
+        }
+      ],
+      "id": "Pay",
+      "kind": "functions",
+      "label": "Pay",
+      "site": null
+    },
+    {
+      "actions": [
+        {
+          "dispatcher": "RunCancelOrder",
+          "functions": [
+            "CancelOrder"
+          ],
+          "name": "CancelOrder",
+          "unprinted": null
+        }
+      ],
+      "id": "CancelOrder",
+      "kind": "functions",
+      "label": "Cancel",
+      "site": null
+    }
+  ]
+}

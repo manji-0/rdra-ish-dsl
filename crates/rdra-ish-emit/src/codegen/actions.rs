@@ -106,6 +106,7 @@ pub(super) fn add_functions(
             ) {
                 Ok(list) if list.is_empty() => skipped.push(Skipped {
                     action: action.name.clone(),
+                    usecase: model.use_cases[*uc].id.clone(),
                     reason: "no source state the verified model runs it from".to_string(),
                 }),
                 Ok(list) => {
@@ -142,6 +143,7 @@ pub(super) fn add_functions(
                 }
                 Err(reason) => skipped.push(Skipped {
                     action: action.name.clone(),
+                    usecase: model.use_cases[*uc].id.clone(),
                     reason,
                 }),
             }
@@ -167,7 +169,8 @@ pub(super) fn add_functions(
             "the expected source of a written row".to_string(),
         )?;
         domain.obligations.push(super::ir::Obligation {
-            invariant: None,
+            name: "OneTransaction".to_string(),
+            checked: false,
             text: "each function runs in one transaction with the reads of its rows, marks, and events: `check` and `verify` explore every use case, and every step of a split one, as one atomic action, and a run of another use case between the read and the write is a state they never explored. Hold what the function read until the write commits (SELECT .. FOR UPDATE, or serializable isolation), and write each row only where it still is what the result's `<row>_expected` (`<Row>Expected` in Go) names (UPDATE .. WHERE id = ? AND <tag> = ?; INSERT a created row only where none has its id; DELETE likewise); when a write matches no row, roll the transaction back and treat the call as NotEnabled. The condition catches a row another call created, deleted, or moved to another state; it does not catch a change to another column a condition read, to a row the function reads and does not write, or to a run mark or event it consumes, which only the held reads keep.".to_string(),
             site: None,
         });
@@ -185,7 +188,8 @@ pub(super) fn add_functions(
             .map(|m| m.name.as_str())
             .collect();
         domain.obligations.push(super::ir::Obligation {
-            invariant: None,
+            name: format!("RunMarks_{uc}"),
+            checked: false,
             text: format!(
                 "{uc} runs as separate transactions linked by run marks ({}): store each mark with its row in the transaction of the step that returns it; keep at most one mark of {uc} per row and start step 1 only on a row with none; never abandon a run, but retry a step that returns NotEnabled or Rejected until it runs.",
                 names.join(", ")
@@ -206,7 +210,8 @@ pub(super) fn add_functions(
     lists.dedup();
     for ty in lists {
         domain.obligations.push(super::ir::Obligation {
-            invariant: None,
+            name: format!("CompleteRows_{ty}"),
+            checked: false,
             text: format!(
                 "a function input of {ty} rows holds every present row of the entity, read in the function's transaction: a `.has` / `.none` condition reads them all."
             ),

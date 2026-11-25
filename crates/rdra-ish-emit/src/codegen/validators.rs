@@ -135,7 +135,8 @@ pub(super) fn add_validators(
     if has_rules {
         push(
             domain,
-            None,
+            "RuleChecks".to_string(),
+            false,
             "every row the code writes keeps its rules: its RuleViolations is empty.".to_string(),
             None,
         );
@@ -143,7 +144,8 @@ pub(super) fn add_validators(
     for (name, text, at) in obligations {
         push(
             domain,
-            Some(name),
+            name,
+            true,
             format!("holds in every state ({text}); no one-row check prints it."),
             at,
         );
@@ -151,9 +153,10 @@ pub(super) fn add_validators(
     Ok(())
 }
 
-fn push(domain: &mut DomainModel, invariant: Option<String>, text: String, site: Option<String>) {
+fn push(domain: &mut DomainModel, name: String, checked: bool, text: String, site: Option<String>) {
     domain.obligations.push(Obligation {
-        invariant,
+        name,
+        checked,
         text,
         site,
     });

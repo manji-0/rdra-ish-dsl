@@ -13,6 +13,7 @@ pub mod conformance;
 mod go;
 mod go_port;
 pub mod ir;
+pub mod json;
 mod rust;
 mod rust_port;
 mod states;
@@ -21,14 +22,14 @@ mod validators;
 
 use std::collections::BTreeMap;
 
-use rdra_ish_core::lifecycle::Caps;
+use rdra_ish_core::lifecycle::{ActionOrigin, Caps};
 use rdra_ish_core::location::LocatedSpan;
 use rdra_ish_core::model::{ColumnType, Entity, EntityKey, Max, Min, ModelColumn, RefAction};
 use rdra_ish_core::SemanticModel;
 
 use ir::{
     DomainModel, EnumDecl, EnumValue, Field, FieldType, IdDecl, Obligation, RecordDecl, RecordKind,
-    Scalar, SumDecl, VariantDecl,
+    Scalar, SumDecl, UseCaseDecl, VariantDecl,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -115,16 +116,7 @@ pub fn generate_all(
             ));
         }
     }
-    let mut domain = build_with(model, refine, options.conformance.is_some(), site)?;
-    if let CheckStatus::Failed { errors } = &options.check {
-        for error in errors {
-            domain.obligations.push(Obligation {
-                invariant: None,
-                text: format!("NOT MET by the model, which `check` rejects: {error}"),
-                site: None,
-            });
-        }
-    }
+    let domain = domain_of(model, options, options.conformance.is_some(), site)?;
     let traces = options.conformance.map(|cap| {
         let mut header = vec![format!("model: {}", options.model_path)];
         if let CheckStatus::Passed { bounds, .. } = &options.check {
@@ -138,6 +130,45 @@ pub fn generate_all(
         Lang::Go => go::print(&domain, options, traces.as_ref()),
     };
     Ok(Generated { code, traces })
+}
+
+/// The contract as JSON (`codegen --format json`): the same choices the printers print, with
+/// model locations. `options.lang` does not change it.
+pub fn generate_json(
+    model: &SemanticModel,
+    options: &Options,
+    site: &dyn Fn(&LocatedSpan) -> Option<String>,
+) -> Result<String, CodegenError> {
+    let domain = domain_of(model, options, false, site)?;
+    Ok(json::print(model, &domain, options, site))
+}
+
+/// The domain model the options ask for: refined when `check` passed, with an unmet
+/// obligation per error when it did not.
+fn domain_of(
+    model: &SemanticModel,
+    options: &Options,
+    port: bool,
+    site: &dyn Fn(&LocatedSpan) -> Option<String>,
+) -> Result<DomainModel, CodegenError> {
+    let refine = match options.check {
+        CheckStatus::Passed { caps, .. } => Some(caps),
+        CheckStatus::Failed { .. } => None,
+    };
+    let mut domain = build_with(model, refine, port, site)?;
+    if let CheckStatus::Failed { errors } = &options.check {
+        for error in errors {
+            let name = error.split_once(':').map_or(error.as_str(), |(n, _)| n);
+            domain.obligations.push(Obligation {
+                name: format!("NotMet_{}", name.trim()),
+                checked: false,
+                text: format!("NOT MET by the model, which `check` rejects: {error}"),
+                site: None,
+            });
+        }
+        unique_names(&mut domain.obligations);
+    }
+    Ok(domain)
 }
 
 /// The header every language prints as comment lines. Compatibility covers the TypeScript
@@ -287,14 +318,14 @@ fn obligations_only(domain: &DomainModel) -> Vec<String> {
     if domain.obligations.is_empty() {
         return vec!["Obligations: none.".to_string()];
     }
-    let mut lines = vec!["Obligations:".to_string()];
-    for (i, o) in domain.obligations.iter().enumerate() {
-        let name = o
-            .invariant
-            .as_ref()
-            .map(|n| format!(" [{n}]"))
-            .unwrap_or_default();
-        lines.push(format!("O{}{name} {}", i + 1, o.text));
+    let mut lines = vec![
+        "Obligations, each by a name that stays when the model changes elsewhere (`check` and"
+            .to_string(),
+        "`verify` report the ones marked [checked] by the same name):".to_string(),
+    ];
+    for o in &domain.obligations {
+        let checked = if o.checked { " [checked]" } else { "" };
+        lines.push(format!("{}{checked}: {}", o.name, o.text));
         if let Some(site) = &o.site {
             lines.push(format!("    at {site}"));
         }
@@ -445,6 +476,7 @@ pub fn build_with(
     }
 
     domain.obligations = obligations(model, site);
+    domain.usecases = usecases(model, site);
 
     // Transition functions and rule checks rest on the verified system: only a model `check`
     // passed gets them.
@@ -460,7 +492,20 @@ pub fn build_with(
         if port {
             domain.port = Some(conformance::port(model, &built.ts, &domain, &mut names)?);
         }
+        for uc in &mut domain.usecases {
+            uc.actions = built
+                .ts
+                .actions()
+                .iter()
+                .filter(|a| {
+                    matches!(&a.origin, ActionOrigin::UseCase { uc: k, .. }
+                        if model.use_cases[*k].id == uc.id)
+                })
+                .map(|a| a.name.clone())
+                .collect();
+        }
     }
+    unique_names(&mut domain.obligations);
 
     // Go declares `<Enum>Values` and one `<Enum><Value>` constant per value in the package
     // scope the types share, so those names are claimed too.
@@ -713,15 +758,18 @@ fn doc_of(label: &str, description: Option<&str>) -> Vec<String> {
     doc
 }
 
-/// What the data layer's invariants and constraints ask of the code, in entity order.
+/// What the data layer's invariants and constraints ask of the code, in entity order. Each
+/// name is built from the model's identifiers, never from a position, so adding an unrelated
+/// declaration moves none.
 fn obligations(
     model: &SemanticModel,
     site: &dyn Fn(&LocatedSpan) -> Option<String>,
 ) -> Vec<Obligation> {
     let mut out: Vec<Obligation> = Vec::new();
-    let mut push = |invariant: Option<String>, text: String, at: Option<&LocatedSpan>| {
+    let mut push = |name: String, checked: bool, text: String, at: Option<&LocatedSpan>| {
         out.push(Obligation {
-            invariant,
+            name,
+            checked,
             text,
             site: at.and_then(site),
         });
@@ -739,15 +787,23 @@ fn obligations(
                 .map(|(c, _)| format!("{}.{c}", entity.id))
                 .collect::<Vec<_>>()
                 .join(", ");
+            let col_names = fk
+                .columns
+                .iter()
+                .map(|(c, _)| c.as_str())
+                .collect::<Vec<_>>()
+                .join("_");
             let nullable = if fk.optional() { " when set" } else { "" };
             push(
-                None,
+                format!("Ref_{}_{col_names}", entity.id),
+                false,
                 format!("{cols} names a present {}{nullable}.", parent.id),
                 fk.site.as_ref(),
             );
             if fk.children.max == Max::One {
                 push(
-                    Some(format!("Unique_{}_{role}", entity.id)),
+                    format!("Unique_{}_{role}", entity.id),
+                    true,
                     format!(
                         "no two {} rows share one {} through {cols}.",
                         entity.id, parent.id
@@ -757,7 +813,8 @@ fn obligations(
             }
             if fk.children.min == Min::One {
                 push(
-                    Some(format!("MinCard_{}_{role}", entity.id)),
+                    format!("MinCard_{}_{role}", entity.id),
+                    true,
                     format!(
                         "every present {} has at least one {} through {cols}.",
                         parent.id, entity.id
@@ -767,7 +824,8 @@ fn obligations(
             }
             if let Some(most) = fk.children.most {
                 push(
-                    Some(format!("MaxCard_{}_{role}", entity.id)),
+                    format!("MaxCard_{}_{role}", entity.id),
+                    true,
                     format!(
                         "every present {} has at most {most} {} through {cols}.",
                         parent.id, entity.id
@@ -775,10 +833,14 @@ fn obligations(
                     fk.site.as_ref(),
                 );
             }
-            for (what, action) in [("delete", fk.on_delete), ("update", fk.on_update)] {
+            for (what, prefix, action) in [
+                ("delete", "OnDelete", fk.on_delete),
+                ("update", "OnUpdate", fk.on_update),
+            ] {
                 if let Some(action) = action {
                     push(
-                        None,
+                        format!("{prefix}_{}_{col_names}", entity.id),
+                        false,
                         format!(
                             "on {what} of a {}, apply {} to its {} rows through {cols}.",
                             parent.id,
@@ -799,14 +861,16 @@ fn obligations(
         for column in &entity.columns {
             if column.is_unique && !column.is_pk && !one_to_one(&column.name) {
                 push(
-                    None,
+                    format!("Unique_{}_{}", entity.id, column.name),
+                    false,
                     format!("no two {} rows share {}.", entity.id, column.name),
                     None,
                 );
             }
             for (i, check) in column.check_constraints.iter().enumerate() {
                 push(
-                    Some(format!("Check_{}_{}_{i}", entity.id, column.name)),
+                    format!("Check_{}_{}_{i}", entity.id, column.name),
+                    true,
                     format!(
                         "every {} row satisfies {} (@check on {}).",
                         entity.id,
@@ -818,7 +882,8 @@ fn obligations(
             }
             if let Some(expr) = &column.derived_expr {
                 push(
-                    None,
+                    format!("Derived_{}_{}", entity.id, column.name),
+                    false,
                     format!(
                         "{}.{} always equals {}.",
                         entity.id,
@@ -836,7 +901,8 @@ fn obligations(
             .filter(|u| u.columns.len() > 1)
         {
             push(
-                None,
+                format!("Unique_{}_{}", entity.id, unique.columns.join("_")),
+                false,
                 format!(
                     "no two {} rows share ({}).",
                     entity.id,
@@ -847,6 +913,47 @@ fn obligations(
         }
     }
     out
+}
+
+/// Every use case of the model, without its actions: [`build_with`] adds them from the
+/// transition system of a model `check` passed.
+fn usecases(
+    model: &SemanticModel,
+    site: &dyn Fn(&LocatedSpan) -> Option<String>,
+) -> Vec<UseCaseDecl> {
+    model
+        .use_cases
+        .values()
+        .map(|uc| UseCaseDecl {
+            id: uc.id.clone(),
+            label: uc.label.clone(),
+            site: model
+                .decl_sites
+                .located("usecase", &uc.id)
+                .as_ref()
+                .and_then(site),
+            actions: Vec::new(),
+        })
+        .collect()
+}
+
+/// Obligations that share a name. A second one of an invariant `check` names is the same
+/// invariant seen from elsewhere (an `@check` the data layer lists and no one-row check
+/// prints): it goes. Two others (two keys from one child to one parent through one role)
+/// keep the first as it is and number the rest from 2, in model order.
+fn unique_names(obligations: &mut Vec<Obligation>) {
+    let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    obligations.retain(|o| !o.checked || seen.insert(o.name.clone()));
+    for o in obligations.iter_mut().filter(|o| !o.checked) {
+        let mut candidate = o.name.clone();
+        let mut n = 2;
+        while seen.contains(&candidate) {
+            candidate = format!("{}_{n}", o.name);
+            n += 1;
+        }
+        seen.insert(candidate.clone());
+        o.name = candidate;
+    }
 }
 
 fn ref_action(action: RefAction) -> &'static str {
