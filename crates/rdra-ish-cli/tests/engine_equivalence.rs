@@ -3342,26 +3342,11 @@ const TEMPORAL_CASES: &[TemporalCase] = &[
         MANY_CLASSES_COUNTEREXAMPLE,
         &[],
     ),
-    (
-        "copy_parent",
-        COPY_PARENT,
-        &[("IssueEventuallyPlain", Why::WfNext)],
-    ),
+    ("copy_parent", COPY_PARENT, &[]),
     ("copy_outside", COPY_OUTSIDE, &[]),
     ("quantifier_chain", QUANTIFIER_CHAIN, &[]),
-    (
-        "shared_writer",
-        SHARED_WRITER,
-        &[
-            ("PaidLeadsToShipped", Why::WfNext),
-            ("EventuallyTerminal", Why::WfNext),
-        ],
-    ),
-    (
-        "loop_needs_a_mark",
-        LOOP_NEEDS_A_MARK,
-        &[("PaidShipsUnfair", Why::WfNext)],
-    ),
+    ("shared_writer", SHARED_WRITER, &[]),
+    ("loop_needs_a_mark", LOOP_NEEDS_A_MARK, &[]),
 ];
 
 /// The flag toggles outside the cone, but Pay and Ship write it with the status, so the

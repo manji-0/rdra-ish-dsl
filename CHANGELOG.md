@@ -152,6 +152,14 @@ No sample changes verdict.
   counterexample is the cone's stop. Expected, not yet run: a domain sample property that
   ended `not decided` because its whole model did not finish may now be a counterexample;
   `RDRA_ISH_LADDER_STATS=1` names the step that decided each property.
+- A property no earlier step decides runs with `WF_vars(Next)` on its exact cone widened
+  over every var outside it that can change forever, until nothing outside does (#168 phase
+  4, step 6). This run replaces the whole-model run, under the same `--temporal-budget` and
+  state cap: no `RdraSpec_` line is printed, the line reads `on the cone widened by what
+  changes outside it (N more vars, M states)`, and a run that stops is listed under `not
+  checked:` as `the run on the widened cone stopped ...` with the same hint. `-o` writes the
+  whole-model spec only for a property left undecided. Expected, not yet run: a sample
+  property whose whole model did not finish may be decided on a smaller widened cone.
 - Invalid `Enum` and `Bool` defaults (#187) and out-of-range Int defaults (#180) fail to
   load. `UnresolvedPropertyAtom` is renamed `UnresolvedPropertyColumn` (#160).
 - `export --kind typescript-states` and `states --format typescript` are removed. Unknown

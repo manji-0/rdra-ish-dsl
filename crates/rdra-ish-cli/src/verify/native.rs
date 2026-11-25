@@ -4,7 +4,7 @@ use super::report::run_line;
 use super::shared::Shared;
 use super::tlc::{undecided_hint, Decision, Stop};
 use super::WholeRun;
-use crate::property_cone::{AfterPlain, ConeRun, Settled, Step, Verdict, Why};
+use crate::property_cone::{AfterPlain, ConeRun, Settled, Step, Stopped, Verdict, Why};
 use crate::tlc_output::Outcome;
 use rdra_ish_core::in_parallel;
 use rdra_ish_core::lifecycle::{
@@ -62,9 +62,10 @@ impl Native {
         )
     }
 
-    /// The cone leaves the property to the whole model.
+    /// The cone leaves the property to the whole model: no wider cone decided it, and none
+    /// stopped trying (`settle`).
     pub(super) fn goes_whole(&self) -> bool {
-        matches!(self.decision, Decision::Undecided { .. }) && !self.cone_capped
+        matches!(self.decision, Decision::Undecided { stop: None, .. }) && !self.cone_capped
     }
 }
 
@@ -464,13 +465,21 @@ impl Native {
     }
 
     /// A property the cone left to the whole model, decided on wider cones of `ts` under
-    /// `caps` (`PropertyCone::settle`). The runs `--with-tlc` compares stay those of the cone;
-    /// the decision and its notes are the step's.
-    fn settle(mut self, ts: &TransitionSystem, p: &PropertyJob, caps: Caps) -> Native {
+    /// `caps` and the budget of a whole-model run (`PropertyCone::settle`). The runs
+    /// `--with-tlc` compares stay those of the cone; the decision and its notes are the
+    /// step's. A widened run that stops leaves the property undecided with why, as a
+    /// whole-model run that stops does.
+    fn settle(
+        mut self,
+        ts: &TransitionSystem,
+        p: &PropertyJob,
+        caps: Caps,
+        budget: WholeRun,
+    ) -> Native {
         if !self.goes_whole() {
             return self;
         }
-        let settled = p.cone.settle(ts, caps);
+        let settled = p.cone.settle(ts, budget.caps(caps));
         ladder_stats(ts, p, &settled);
         let Settled {
             verdict,
@@ -479,6 +488,7 @@ impl Native {
             fault,
             notes,
             crowded,
+            stop,
         } = settled;
         self.crowded |= crowded;
         if verdict == Verdict::Undecided(Why::WfNext) {
@@ -494,12 +504,26 @@ impl Native {
         match (verdict, fault) {
             (Verdict::ToolError, Some(fault)) => self.faulty(&fault),
             (Verdict::Undecided(_), _) => {
-                self.notes.push(Why::Stopped.as_str().to_string());
-                self.decision = Decision::Undecided {
-                    why: Why::Stopped.as_str().to_string(),
-                    stop: None,
+                let (at, states) = stop.unwrap_or((Stopped::Memory, 0));
+                let (stop, why) = match at {
+                    Stopped::StateCap(cap) => (
+                        Stop::StateCap,
+                        format!("stopped at the state cap of {cap} states"),
+                    ),
+                    Stopped::Memory => (Stop::Memory, "stopped at the memory limit".to_string()),
+                    Stopped::Budget => (
+                        Stop::Budget,
+                        format!(
+                            "stopped at the time budget of {} s",
+                            budget.budget.as_secs()
+                        ),
+                    ),
                 };
-                self.cone_capped = true;
+                self.notes.push(why.clone());
+                self.decision = Decision::Undecided {
+                    why: format!("{why} after {states} states"),
+                    stop: Some(stop),
+                };
                 self.found = None;
                 self
             }
@@ -562,7 +586,7 @@ pub(super) fn native_properties(
             Some(plain) => native_property_after(job(k), caps, plain),
             None => native_property(ts, job(k), caps, orbits[k]),
         };
-        (native.settle(ts, job(k), budget.caps(caps)), vacuity)
+        (native.settle(ts, job(k), caps, budget), vacuity)
     };
     let ks: Vec<usize> = at.iter().map(|(k, _)| *k).collect();
     let ran = in_parallel(at, rdra_ish_core::jobs(), decide);
@@ -653,27 +677,64 @@ impl Natives {
         self.wholes.iter().find(|(at, _)| *at == i).map(|(_, n)| n)
     }
 
-    /// The properties the whole-model run leaves undecided, one line each.
-    pub(super) fn undecided_lines(&self, names: &TlaNames) -> Vec<String> {
-        self.wholes
-            .iter()
-            .filter_map(|(i, native)| {
-                let Decision::Undecided {
-                    why,
-                    stop: Some(stop),
-                } = &native.decision
-                else {
-                    return None;
-                };
-                let states = native
-                    .states
-                    .map_or(String::new(), |n| format!(" after {n} states"));
-                Some(format!(
-                    "  {}: the whole-model run {why}{states}; {}",
-                    names.property(*i),
-                    undecided_hint(*stop)
-                ))
+    /// The properties a run on a widened cone or on the whole model left undecided where it
+    /// stopped, by index.
+    pub(super) fn stopped(&self, jobs: &[Job]) -> Vec<usize> {
+        let mut out: Vec<usize> = (jobs.iter().zip(&self.properties))
+            .filter_map(|(job, native)| match (&job.kind, native) {
+                (JobKind::PropertyCone(p), Some(n)) if n.stopped_widened() => Some(p.index),
+                _ => None,
             })
-            .collect()
+            .chain(self.wholes.iter().map(|(i, _)| *i))
+            .collect();
+        out.sort_unstable();
+        out
+    }
+
+    /// The properties the whole-model run, or a run on a widened cone, leaves undecided, one
+    /// line each.
+    pub(super) fn undecided_lines(&self, jobs: &[Job], names: &TlaNames) -> Vec<String> {
+        let widened = (jobs.iter().zip(&self.properties)).filter_map(|(job, native)| {
+            let (JobKind::PropertyCone(p), Some(n)) = (&job.kind, native) else {
+                return None;
+            };
+            let Decision::Undecided {
+                why,
+                stop: Some(stop),
+            } = &n.decision
+            else {
+                return None;
+            };
+            Some(format!(
+                "  {}: the run on the widened cone {why}; {}",
+                names.property(p.index),
+                undecided_hint(*stop)
+            ))
+        });
+        let wholes = self.wholes.iter().filter_map(|(i, native)| {
+            let Decision::Undecided {
+                why,
+                stop: Some(stop),
+            } = &native.decision
+            else {
+                return None;
+            };
+            let states = native
+                .states
+                .map_or(String::new(), |n| format!(" after {n} states"));
+            Some(format!(
+                "  {}: the whole-model run {why}{states}; {}",
+                names.property(*i),
+                undecided_hint(*stop)
+            ))
+        });
+        widened.chain(wholes).collect()
+    }
+}
+
+impl Native {
+    /// A run on a widened cone stopped before it decided (`settle`).
+    fn stopped_widened(&self) -> bool {
+        matches!(self.decision, Decision::Undecided { stop: Some(_), .. })
     }
 }

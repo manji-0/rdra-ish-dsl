@@ -352,11 +352,11 @@ pub fn run(
     }
     end.safety = report_bfs_cones(program, model, &jobs, &natives.safety);
     end.temporal = report_properties(program, model, &ts, &jobs, &natives, &whole_modules);
-    let undecided = natives.undecided_lines(&names);
-    // Under `-o` the whole-model module of each property its cone leaves undecided is
-    // written, for a run by hand, as TLC's whole-model run writes it.
+    let undecided = natives.undecided_lines(&jobs, &names);
+    // Under `-o` the whole-model module of each property a widened cone or the whole model
+    // left undecided is written, for a run by hand, as TLC's whole-model run writes it.
     if let (true, Some(dir), Some((index, index_path))) = (keep, &dir, &mut index) {
-        let open: Vec<usize> = natives.wholes.iter().map(|(i, _)| *i).collect();
+        let open = natives.stopped(&jobs);
         write_whole_specs(
             dir,
             (index, index_path),

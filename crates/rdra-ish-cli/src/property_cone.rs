@@ -127,10 +127,24 @@ pub enum Step {
     /// Step 5: a var set outside the exact cone loops on its own (`independent_loop`), so the
     /// `Plain` counterexample's stop lasts forever in the whole model.
     Independent,
+    /// Step 6: the exact cone widened over every var outside it that can change forever
+    /// (`loop_cone`) decided it with `WF_vars(Next)`; nothing outside that cone runs forever.
+    Loops,
 }
 
 impl Step {
-    const ALL: [Step; 3] = [Step::Exact, Step::Monotone, Step::Independent];
+    const ALL: [Step; 4] = [Step::Exact, Step::Monotone, Step::Independent, Step::Loops];
+}
+
+/// Where a run of a widened cone stopped before it decided.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Stopped {
+    /// At the state cap of this many states.
+    StateCap(usize),
+    /// At the memory limit.
+    Memory,
+    /// At the time budget (`--temporal-budget`).
+    Budget,
 }
 
 /// How often each step decided a property in this process, for measuring how often each one
@@ -159,6 +173,8 @@ pub struct Settled {
     /// A widened run met the memory limit, maybe only because the runs beside it held the
     /// rest.
     pub crowded: bool,
+    /// With `Undecided(Stopped)`: where the run stopped, and how many states it had.
+    pub stop: Option<(Stopped, usize)>,
 }
 
 impl Settled {
@@ -170,6 +186,7 @@ impl Settled {
             fault: None,
             notes,
             crowded: false,
+            stop: None,
         }
     }
 
@@ -184,8 +201,16 @@ impl Settled {
         self
     }
 
-    fn stopped(mut self) -> Settled {
+    /// `run` stopped before it decided.
+    fn stopped(mut self, run: &ComponentRun) -> Settled {
         self.verdict = Verdict::Undecided(Why::Stopped);
+        let at = run.diags.iter().find_map(|d| match &d.diag {
+            StateDiag::StateCapReached { cap, .. } => Some(Stopped::StateCap(*cap)),
+            StateDiag::MemoryCapReached { .. } => Some(Stopped::Memory),
+            StateDiag::TimeBudgetReached { .. } => Some(Stopped::Budget),
+            _ => None,
+        });
+        self.stop = Some((at.unwrap_or(Stopped::Memory), run.states.len()));
         self
     }
 
@@ -323,7 +348,7 @@ impl PropertyCone {
         let liveness = self.kind.is_liveness();
         match decide(&run, i, Fairness::Plain) {
             Err(fault) => return out.faulty(fault),
-            Ok(PropertyVerdict::Undecided) => return out.stopped(),
+            Ok(PropertyVerdict::Undecided) => return out.stopped(&run),
             Ok(PropertyVerdict::Holds) => return out.decided(Step::Exact, None),
             Ok(PropertyVerdict::Violated(d)) if !liveness => {
                 return out.decided(Step::Exact, Some(d))
@@ -332,7 +357,7 @@ impl PropertyCone {
         }
         match decide(&run, i, Fairness::WfNext) {
             Err(fault) => out.faulty(fault),
-            Ok(PropertyVerdict::Undecided) => out.stopped(),
+            Ok(PropertyVerdict::Undecided) => out.stopped(&run),
             Ok(PropertyVerdict::Violated(d)) => out.decided(Step::Exact, Some(d)),
             Ok(PropertyVerdict::Holds) if ts.cone_keeps_every_write(&exact.vars) => {
                 out.decided(Step::Exact, None)
@@ -357,6 +382,10 @@ impl PropertyCone {
     /// `WF_vars(Next)`: the `Plain` counterexample stands. `run` is the exact cone's run when
     /// `settle` made one; otherwise the exact cone is the property's cone, explored here for
     /// the lasso.
+    ///
+    /// Step 6: otherwise the exact cone is widened over every var outside it that can change
+    /// forever (`loop_cone`), and the run with `WF_vars(Next)` there decides. The widened cone
+    /// may be the whole model; it runs under the same caps and budget.
     fn beyond(
         &self,
         ts: &TransitionSystem,
@@ -396,11 +425,28 @@ impl PropertyCone {
                     return out.decided(Step::Independent, Some(d));
                 }
                 Err(fault) => return out.faulty(fault),
-                Ok(PropertyVerdict::Undecided) => return out.stopped(),
+                Ok(PropertyVerdict::Undecided) => return out.stopped(&run),
                 Ok(_) => {}
             }
         }
-        out
+        // Step 6: on the cone widened over what can change forever outside it, everything
+        // outside is monotone, so step 4's argument makes its run with `WF_vars(Next)` exact:
+        // its `ok` and its counterexample are the whole model's.
+        let wide = ts.loop_cone(exact);
+        let (system, i) = cone_system(ts, &wide, self.at);
+        let run = system.run(caps);
+        out.crowded |= met_memory_limit(&run);
+        out.notes.push(format!(
+            "on the cone widened by what changes outside it ({} more vars, {} states)",
+            wide.vars.len() - exact.vars.len(),
+            run.states.len()
+        ));
+        match decide(&run, i, Fairness::WfNext) {
+            Err(fault) => out.faulty(fault),
+            Ok(PropertyVerdict::Undecided) => out.stopped(&run),
+            Ok(PropertyVerdict::Holds) => out.decided(Step::Loops, None),
+            Ok(PropertyVerdict::Violated(d)) => out.decided(Step::Loops, Some(d)),
+        }
     }
 }
 

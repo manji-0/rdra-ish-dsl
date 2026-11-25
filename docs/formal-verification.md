@@ -224,16 +224,16 @@ cones: 1 for 2 invariant(s) and 1 after-assert(s)
 temporal properties: 2, each checked on its cone, and on the whole model only when the cone does not decide it (budget 300 s)
 state models (BFS on 1 entity cone): 1 state model, 5 states witnessed, 0 deadlocks, 0 use cases that never run
 Cone_Forbidden_Order_0 [Forbidden_Order_0, Inv_Order_0, AfterAssert_DeliverOrder_0]: ok (31 states)
-Cone_PaidLeadsToShipped [PaidLeadsToShipped]: not decided (31 states, Cone_PaidLeadsToShipped_WF: ok, needs the whole model's WF_vars(Next))
-Cone_EventuallyTerminal [EventuallyTerminal]: not decided (31 states, Cone_EventuallyTerminal_WF: ok, needs the whole model's WF_vars(Next))
-RdraSpec_PaidLeadsToShipped [PaidLeadsToShipped]: ok (31 states)
-RdraSpec_EventuallyTerminal [EventuallyTerminal]: ok (31 states)
+Cone_PaidLeadsToShipped [PaidLeadsToShipped]: ok (31 states, Cone_PaidLeadsToShipped_WF: ok, nothing outside the cone runs forever)
+Cone_EventuallyTerminal [EventuallyTerminal]: ok (31 states, Cone_EventuallyTerminal_WF: ok, nothing outside the cone runs forever)
 result: ok
 OK: no errors within 2 instances per entity, Int 0..5
 ```
 
 Neither property of `order.rdra` has `.fair`, and `DeliverOrder` writes `delivered_at`, which
-neither reads, so their cones cannot decide them and the whole model does. With
+neither reads, so their cones' own runs cannot decide them. `delivered_at` is set once and
+never changes back, so nothing outside the cones runs forever, and the cones' `WF_vars(Next)`
+runs decide them. With
 `.fair(ShipOrder)` on `PaidLeadsToShipped`, its first cone run would decide it.
 
 **Reading a counterexample.** A violation prints in model terms, as `check` prints it: the
@@ -288,7 +288,12 @@ native checker decides each on the graph BFS explores:
 2. `Cone_<P>_WF`: the same cone with `WF_vars(Next)`, after a counterexample in run 1. A
    counterexample decides. An `ok` decides only when the cone holds every variable an action
    writes.
-3. `RdraSpec_<P>`: the whole model, for a property its cone leaves undecided. It stops at
+3. Wider cones, for a property its cone leaves undecided (#168 phase 4): the cone made
+   exact, then, when every variable written outside it is monotone, its `WF_vars(Next)`
+   run (`nothing outside the cone runs forever`); a part outside that loops on its own
+   (`<Entity> runs forever outside the cone`); and last the cone widened over everything
+   outside that can change forever, up to the whole model (`on the cone widened by what
+   changes outside it`). That last run takes the place of the whole-model run. It stops at
    `--temporal-budget` seconds (default 300), at the memory limit, or at `--max-states`.
    Stopped before a counterexample, the property is `not decided`: it is listed under `not
    checked:`, the run prints `result: not decided` and a `warning:`, and exits 0 unless
@@ -297,8 +302,9 @@ native checker decides each on the graph BFS explores:
 A cone that frees slots can show a lasso that creates more instances than the bound, so only
 its `ok` counts and a counterexample goes to the whole model. Each line names what happened:
 `Cone_P [P]: ok (111 states)`, `Cone_P [P]: counterexample (43 states, Cone_P_WF:
-counterexample)`, or `Cone_P [P]: not decided (31 states, Cone_P_WF: ok, needs the whole
-model's WF_vars(Next))` followed by the `RdraSpec_P [P]:` line. A reduced cone may add
+counterexample)`, or `Cone_P [P]: ok (31 states, Cone_P_WF: ok, nothing outside the cone
+runs forever)`, where the wider cone's note replaces `needs the whole model's
+WF_vars(Next)`. A reduced cone may add
 `Cone_P_Full` ([WF_vars(Next) on a reduced cone](#wf_varsnext-on-a-reduced-cone)).
 
 A property without `.fair` rests on `WF_vars(Next)` alone, so it reaches the whole model

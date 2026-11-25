@@ -15,8 +15,10 @@ Status (2026-11-26): in progress. The plan started after
 - **Landed.** Phases 0 to 3 (#176, #177, #178, #179): `verify` decides every check natively
   by default, and TLC runs only under `--with-tlc`. The conservative divergence trial C,
   adopted (#227, [Decisions](#decisions)).
-- **Open.** Phase 4, with #206 on the safety side (`order.rdra` still prints `RdraSpec_`
-  lines). Phase 5, the lift of a reduced lasso. Phase 6, the release gate.
+- **In review.** Phase 4 with #206, on the branch `native-temporal/phase-4`: the exact
+  cone, steps 4 to 6, and the safety recheck. No native `RdraSpec_` line is left. The exit
+  check (TLC, `reduction-diff.py`, the samples) is not run yet.
+- **Open.** Phase 5, the lift of a reduced lasso. Phase 6, the release gate.
 - **Superseded.** Nothing.
 
 The owner decided three questions on 2026-11-23: `verify` defaults to the native checker
@@ -852,6 +854,9 @@ rewrite here. The first one is not a choice any more.
 - **A widened cone as large as the whole model.** Step 6 then decides nothing new and costs
   an exploration up to the cap. Mitigation: the run estimates the widened cone's var count
   first and skips to `not decided` with the `.fair` hint when the cone is the whole model.
+  [Phase 4 runs step 6 in place of the whole-model run instead, under its budget and cap,
+  so the whole model is explored at most once, as before; a run that stops gives the
+  hint.]
 - **Two engines to keep.** TLC stays in the tests, so the TLA+ printer, the decoder, and
   the replay stay maintained. That is the price of the oracle, and it is the price paid
   today.

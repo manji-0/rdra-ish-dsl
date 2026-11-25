@@ -74,7 +74,7 @@ const CASES: &[Case] = &[
     ),
     (
         Model::File("crates/rdra-ish-cli/tests/engine_corpus/cone_copy_from_parent.rdra"),
-        &[("IssueEventuallyPlain", "none")],
+        &[("IssueEventuallyPlain", "Loops")],
     ),
     (
         Model::Source("guard_reads_other", GUARD_READS_OTHER),
@@ -94,13 +94,13 @@ const CASES: &[Case] = &[
     (
         Model::Source("shared_writer", SHARED_WRITER),
         &[
-            ("PaidLeadsToShipped", "none"),
-            ("EventuallyTerminal", "none"),
+            ("PaidLeadsToShipped", "Loops"),
+            ("EventuallyTerminal", "Loops"),
         ],
     ),
     (
         Model::Source("loop_needs_a_mark", LOOP_NEEDS_A_MARK),
-        &[("PaidShipsUnfair", "none")],
+        &[("PaidShipsUnfair", "Loops")],
     ),
 ];
 
@@ -239,6 +239,8 @@ property PaidShips leads_to(Order.status == paid, Order.status == shipped).fair(
 struct Printed {
     verdicts: BTreeMap<String, String>,
     steps: BTreeMap<String, String>,
+    /// The `RdraSpec_` lines: whole-model runs, which the ladder replaces.
+    wholes: Vec<String>,
 }
 
 fn verify(path: &Path) -> Printed {
@@ -251,6 +253,7 @@ fn verify(path: &Path) -> Printed {
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
     let mut verdicts = BTreeMap::new();
+    let mut wholes = Vec::new();
     for line in stdout.lines() {
         let (module, rest) = match line.split_once(" [") {
             Some(pair) => pair,
@@ -269,6 +272,9 @@ fn verify(path: &Path) -> Printed {
             .unwrap_or_else(|| panic!("a verdict on {line}"));
         // The whole-model line comes after the cone's and overrides it.
         verdicts.insert(checks.to_string(), verdict.to_string());
+        if module.starts_with("RdraSpec_") {
+            wholes.push(line.to_string());
+        }
     }
     let mut steps = BTreeMap::new();
     for line in stderr.lines() {
@@ -283,7 +289,11 @@ fn verify(path: &Path) -> Printed {
             .expect("a step");
         steps.insert(name, step.to_string());
     }
-    Printed { verdicts, steps }
+    Printed {
+        verdicts,
+        steps,
+        wholes,
+    }
 }
 
 /// What the native checker decides of each `always`, `eventually`, and `leads_to` on the
@@ -333,6 +343,9 @@ fn the_cone_ladder_decides_what_the_whole_model_decides() {
         };
         let label = path.file_name().unwrap().to_string_lossy().to_string();
         let printed = verify(&path);
+        for line in &printed.wholes {
+            failures.push(format!("{label}: a whole-model run: {line}"));
+        }
         let whole = whole(&path);
         for (name, want) in &whole {
             match printed.verdicts.get(name) {
@@ -355,4 +368,23 @@ fn the_cone_ladder_decides_what_the_whole_model_decides() {
     }
     let _ = std::fs::remove_dir_all(&scratch);
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// `fired` counts each step as `settle` decides with it, in this process: the measure the
+/// owner reads to decide whether step 5 stays (docs/design/native-temporal-verification.md,
+/// "Decisions").
+#[test]
+fn settle_counts_the_step_that_decides() {
+    use rdra_ish_cli::property_cone::{fired, PropertyCone, Step, Verdict};
+    let path = repo().join("crates/rdra-ish-cli/tests/engine_corpus/cone_independent_loop.rdra");
+    let model = load_project(&[path], None).expect("loads").model;
+    let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+    let i = (ts.properties().iter())
+        .position(|p| p.name == "PaidShipsUnfair")
+        .expect("the property");
+    let before = fired(Step::Independent);
+    let settled = PropertyCone::new(&ts, i).settle(&ts, Caps::VERIFY);
+    assert_eq!(settled.step, Some(Step::Independent));
+    assert_eq!(settled.verdict, Verdict::Counterexample);
+    assert!(fired(Step::Independent) > before);
 }

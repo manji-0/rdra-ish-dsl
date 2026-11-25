@@ -487,9 +487,9 @@ fn a_property_along_reads_only_linked_rows() {
 }
 
 /// An order that pays and ships, and a flag that each of them flips: the flag changes outside
-/// the properties' cones, and nothing but a run of the whole model shows that it cannot keep
-/// the model moving while an order waits (docs/design/native-temporal-verification.md,
-/// "Modes and the cone").
+/// the properties' cones, and only a cone widened over it shows that it cannot keep the model
+/// moving while an order waits (docs/design/native-temporal-verification.md, "Modes and the
+/// cone", step 6).
 const WHOLE_MODEL_ORDER: &str = r#"entity Order "注文" {
   id: Int @pk
   status: Enum(pending, paid, shipped) @default(pending)
@@ -508,11 +508,12 @@ property EventuallyTerminal eventually(Order.status == shipped)
 "#;
 
 /// A property without `.fair` rests on the whole model's `WF_vars(Next)`, which the cone
-/// does not keep: the cone's two runs leave it undecided, and the whole-model run decides it
-/// under the budget. With a budget of 0 s the whole-model run is stopped, the property is
-/// listed as not decided, and the run still ends in `OK:` as a BFS cone at its cap does.
+/// does not keep: the cone's two runs leave it undecided, and the run on the cone widened over
+/// what changes outside it decides it under the budget of a whole-model run. With a budget of
+/// 0 s that run is stopped, the property is listed as not decided, and the run still ends in
+/// `OK:` as a BFS cone at its cap does.
 #[test]
-fn a_property_the_cone_cannot_decide_runs_on_the_whole_model_under_the_budget() {
+fn a_property_the_cone_cannot_decide_runs_on_a_widened_cone_under_the_budget() {
     let tmp = scratch("verify_cli_whole_model");
     let sample = tmp.join("m.rdra");
     std::fs::write(&sample, WHOLE_MODEL_ORDER).unwrap();
@@ -525,13 +526,10 @@ fn a_property_the_cone_cannot_decide_runs_on_the_whole_model_under_the_budget() 
         "{stdout}"
     );
     assert!(
-        stdout.contains("\nCone_PaidLeadsToShipped [PaidLeadsToShipped]: not decided (13 states, Cone_PaidLeadsToShipped_WF: ok, needs the whole model's WF_vars(Next))\n"),
+        stdout.contains("\nCone_PaidLeadsToShipped [PaidLeadsToShipped]: ok (13 states, Cone_PaidLeadsToShipped_WF: ok, on the cone widened by what changes outside it (1 more vars, 13 states))\n"),
         "{stdout}"
     );
-    assert!(
-        stdout.contains("\nRdraSpec_PaidLeadsToShipped [PaidLeadsToShipped]: ok (13 states)\n"),
-        "{stdout}"
-    );
+    assert!(!stdout.contains("RdraSpec_"), "{stdout}");
     assert!(!stdout.contains("not checked:"), "{stdout}");
 
     let output = verify(
@@ -543,12 +541,11 @@ fn a_property_the_cone_cannot_decide_runs_on_the_whole_model_under_the_budget() 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(output.status.code(), Some(0), "{stdout}{stderr}");
     assert!(
-        stdout.contains("\nRdraSpec_PaidLeadsToShipped [PaidLeadsToShipped]: not decided (stopped at the time budget of 0 s)\n")
-            || stdout.contains("\nRdraSpec_PaidLeadsToShipped [PaidLeadsToShipped]: not decided (13 states, stopped at the time budget of 0 s)\n"),
+        stdout.contains("\nCone_PaidLeadsToShipped [PaidLeadsToShipped]: not decided (13 states, Cone_PaidLeadsToShipped_WF: ok, on the cone widened by what changes outside it (1 more vars, 0 states), stopped at the time budget of 0 s)\n"),
         "{stdout}"
     );
     assert!(
-        stdout.contains("\nnot checked: 2 temporal properties not decided\n  PaidLeadsToShipped: the whole-model run stopped at the time budget of 0 s"),
+        stdout.contains("\nnot checked: 2 temporal properties not decided\n  PaidLeadsToShipped: the run on the widened cone stopped at the time budget of 0 s"),
         "{stdout}"
     );
     assert!(
@@ -652,47 +649,51 @@ fn max_states_raises_the_cap_of_each_cone() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// The whole-model run takes the same `--max-states`: with a second entity the whole model
-/// has 169 states, though each cone has 13. At 100 the run is stopped and the hint names the
-/// flag; at 169 it decides. Without the flag it stays under 2^21 and decides.
+/// The run on a widened cone takes the same `--max-states`: a parcel that goes back and forth
+/// once an order has shipped widens each property's cone of 13 states to the whole model of
+/// 63. At 30 the run is stopped and the hint names the flag; at 63 it decides. Without the
+/// flag it stays under 2^21 and decides. The parcel's loop keeps the model moving while a paid
+/// order waits, so both properties fail, as on the whole model.
 #[test]
-fn max_states_raises_the_cap_of_the_whole_model_run() {
+fn max_states_raises_the_cap_of_a_widened_cone_run() {
     let tmp = scratch("verify_cli_max_states_whole");
     let mut src = WHOLE_MODEL_ORDER.to_string();
     src.push_str(
         r#"
 entity Parcel "Parcel" {
   id: Int @pk
-  status: Enum(packed, sent, received) @default(packed)
+  status: Enum(packed, sent) @default(packed)
 }
 usecase PackParcel "Pack"
 usecase SendParcel "Send"
-usecase ReceiveParcel "Receive"
+usecase ReturnParcel "Return"
 creates(PackParcel, Parcel)
-updates(SendParcel, Parcel)
-updates(ReceiveParcel, Parcel)
 transitions(SendParcel, Parcel.status, packed -> sent)
-transitions(ReceiveParcel, Parcel.status, sent -> received)
+transitions(ReturnParcel, Parcel.status, sent -> packed)
+condition Shipped "出荷済"
+holds(Shipped, Order.status == shipped)
+applies_to(Shipped, SendParcel)
+applies_to(Shipped, ReturnParcel)
 "#,
     );
     let model = tmp.join("m.rdra");
     std::fs::write(&model, src).unwrap();
     let model = model.to_str().unwrap();
 
-    let small = verify(&repo(), &tmp, &[model, "--max-states", "100"]);
+    let small = verify(&repo(), &tmp, &[model, "--max-states", "30"]);
     let stdout = String::from_utf8_lossy(&small.stdout);
     assert!(
-        stdout.contains("\nRdraSpec_PaidLeadsToShipped [PaidLeadsToShipped]: not decided (100 states, stopped at the state cap of 100 states)\n"),
+        stdout.contains("\nCone_PaidLeadsToShipped [PaidLeadsToShipped]: not decided (13 states, Cone_PaidLeadsToShipped_WF: ok, on the cone widened by what changes outside it (3 more vars, 30 states), stopped at the state cap of 30 states)\n"),
         "{stdout}"
     );
     assert!(stdout.contains("so raise --max-states ("), "{stdout}");
 
-    for args in [&["--max-states", "169"][..], &[]] {
+    for args in [&["--max-states", "63"][..], &[]] {
         let large = verify(&repo(), &tmp, &[&[model][..], args].concat());
         let stdout = String::from_utf8_lossy(&large.stdout);
+        assert_eq!(large.status.code(), Some(1), "{args:?}: {stdout}");
         assert!(
-            stdout
-                .contains("\nRdraSpec_PaidLeadsToShipped [PaidLeadsToShipped]: ok (169 states)\n"),
+            stdout.contains("\nCone_PaidLeadsToShipped [PaidLeadsToShipped]: counterexample (13 states, Cone_PaidLeadsToShipped_WF: ok, on the cone widened by what changes outside it (3 more vars, 63 states))\n"),
             "{args:?}: {stdout}"
         );
     }
@@ -1182,12 +1183,13 @@ fn a_rerun_cfg_named_like_a_property_module_leaves_that_cfg() {
     assert!(!rest.contains("Forbidden_Parcel_0"), "{rest}");
 }
 
-/// `-o Cone.tla` names the whole-model module `Cone`, so the whole-model run of `P` is
+/// `-o Cone.tla` names the whole-model module `Cone`, so the whole-model spec of `P` is
 /// `Cone_P`, the name of `P`'s cone: the whole-model spec takes `Cone_P_2`, and the cone's
-/// spec is left as it ran.
+/// spec is left as it ran. The spec is written for a property a widened run left undecided,
+/// here at a budget of 0 s.
 #[test]
-fn a_whole_model_run_named_like_a_cone_leaves_the_cone_spec() {
-    // `Flip` sets `seen` and `Unsee` clears it, outside the cone: only the whole model decides.
+fn a_whole_model_spec_named_like_a_cone_leaves_the_cone_spec() {
+    // `Flip` sets `seen` and `Unsee` clears it, outside the cone: only a widened cone decides.
     let src = r#"entity E "E" { id: Int @pk  status: Enum(a, b) @default(a)  seen: Bool @default(false) }
 usecase Make "作成"
 usecase Flip "切替"
@@ -1201,17 +1203,33 @@ holds(Fresh, E.status == a)
 applies_to(Fresh, Make)
 property P eventually(E.status == b)
 "#;
-    let (stdout, stderr, code, dir) = verify_model("verify_cli_whole_named", src, "Cone.tla");
-    assert_eq!(code, Some(0), "{stdout}{stderr}");
+    let tmp = scratch("verify_cli_whole_named");
+    let model = tmp.join("m.rdra");
+    std::fs::write(&model, src).unwrap();
+    let dir = tmp.join("out");
+    let target = dir.join("Cone.tla");
+    let output = verify(
+        &repo(),
+        &tmp,
+        &[
+            model.to_str().unwrap(),
+            "-o",
+            target.to_str().unwrap(),
+            "--temporal-budget",
+            "0",
+        ],
+    );
+    let (stdout, stderr) = (
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    assert_eq!(output.status.code(), Some(0), "{stdout}{stderr}");
     let lines: Vec<&str> = stdout.lines().collect();
     assert!(
         lines
             .iter()
-            .any(|l| l.starts_with("Cone_P [P]: not decided (")),
-        "{stdout}"
-    );
-    assert!(
-        lines.iter().any(|l| l.starts_with("Cone_P_2 [P]: ok (")),
+            .any(|l| l.starts_with("Cone_P [P]: not decided (")
+                && l.ends_with("stopped at the time budget of 0 s)")),
         "{stdout}"
     );
     let cone = std::fs::read_to_string(dir.join("Cone_P.tla")).unwrap();

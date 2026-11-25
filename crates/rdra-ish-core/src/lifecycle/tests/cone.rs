@@ -561,4 +561,11 @@ property PaidShips leads_to(Order.status == paid, Order.status == shipped)
     let cone = ts.property_cone(0);
     assert_eq!(ts.cyclic_outside(&cone.vars).len(), 1, "the flag");
     assert_eq!(ts.independent_loop(&cone.vars, Caps::VERIFY), None);
+    // Step 6 widens over the flag: then nothing outside changes forever, and here the
+    // widened cone holds every var.
+    let wide = ts.loop_cone(&cone);
+    assert!(wide.vars.is_superset(&cone.vars));
+    assert!(ts.is_exact(&wide));
+    assert!(ts.cyclic_outside(&wide.vars).is_empty());
+    assert_eq!(wide.vars.len(), ts.var_ids().count());
 }

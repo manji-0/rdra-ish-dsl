@@ -42,8 +42,10 @@ Cone lines:
 
 - `Cone_<name> [<checks>]: ok (<n> states)` decides every check in the brackets.
 - `ok (checked in Cone_<larger>)`: a larger cone that takes every step of this one passed.
-- A temporal property's line names its other runs: `Cone_P_WF: ok, needs the whole model's
-  WF_vars(Next)` leaves it `not decided` until the `RdraSpec_P [P]:` line that follows.
+- A temporal property's line names its other runs, and the wider cone that decided it when
+  its own cone could not: `nothing outside the cone runs forever`, `<Entity> runs forever
+  outside the cone`, or `on the cone widened by what changes outside it (N more vars, M
+  states)`.
 - `property P (BFS on its cone): ok` or `violated` for `stable`, `unchanged`, `precedes`,
   and `can_reach`.
 - `warning[Vacuous_<name>]`: the check passed because what it ranges over never happens.

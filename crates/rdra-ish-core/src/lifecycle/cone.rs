@@ -523,6 +523,22 @@ impl TransitionSystem {
             .collect()
     }
 
+    /// Step 6 of docs/design/native-temporal-verification.md, "Modes and the cone": `cone`
+    /// widened over every var outside it that some action writes and that is not monotone
+    /// (`cyclic_outside`), made exact again (`exact_cone`, keeping `cone.keep`), until nothing
+    /// outside it can change forever. At most the whole system's written vars.
+    pub fn loop_cone(&self, cone: &Cone) -> Cone {
+        let mut seed = cone.vars.clone();
+        loop {
+            let wide = self.exact_cone(&seed, &cone.keep);
+            let more = self.cyclic_outside(&wide.vars);
+            if more.is_empty() {
+                return wide;
+            }
+            seed.extend(more);
+        }
+    }
+
     /// Step 5 of docs/design/native-temporal-verification.md, "Modes and the cone": a var set
     /// `W` outside `cone` that can change forever on its own, whatever the cone does. For each
     /// var `cyclic_outside` names, `W` is the exact cone of it (`exact_cone`), taken only when
