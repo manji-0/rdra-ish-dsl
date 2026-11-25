@@ -144,7 +144,10 @@
   31,926,220 orbits for about 260M states and is decided (`ok`, 98 s at `RDRA_JOBS=4`), and
   with it `Inv_Patent_0`. `Forbidden_OfficeAction_3` is not: `G_T` moves its one T entity,
   so it stores at most 6 times fewer states, and it stopped at 67.1M orbits. With S fixed
-  the factor on patent-ops' complete n=3 cones is 3.0 to 5.5. The `shadow` build counts the
+  the factor on patent-ops' complete n=3 cones is 3.0 to 5.5. That result is `always`'s:
+  `retry` has not been seen to reach and decide `Forbidden_Patent_4` at n=3, since a run of
+  `verify --entity Patent --symmetry retry` at `RDRA_JOBS=4` was stopped after 2,400 s,
+  still in the plain attempts that come before the retry. The `shadow` build counts the
   run's twin on a reduced cone as `reduced_orbit_run`.
 
 - `verify --symmetry` also covers the sub-lifecycle of a reduced cone (#212, phase 2):
