@@ -1,17 +1,14 @@
 # Step 6: Lifecycle
 
-Use this context when entity structure exists and the next task is to describe which
-use cases move entity state, which events and timers start other work, which
-conditions guard a use case, and which columns each use case changes.
+<!-- derived-from ../../../docs/incremental-modeling.md#stage-6-lifecycle -->
 
-## Goal
+Say which use case moves each state, which events and timers start other work, which
+conditions guard a use case, and which columns each use case changes. A use case drives
+every state change, as in the 遷移UC column of an RDRA state sheet; an event only connects
+use cases, or a use case and an external system. `check` then explores the reachable
+states.
 
-Make lifecycle causality reviewable. A use case drives every state change, as in the
-遷移UC column of an RDRA state sheet. An event is only the interface between use cases,
-or between a use case and an external system; a timer starts a use case on a schedule.
-`check` then explores the reachable states and reports what the model cannot do.
-
-## Ask For
+## Ask
 
 <!-- stage-spec: asks lifecycle -->
 - Which Enum column and variants represent lifecycle state?
@@ -21,113 +18,81 @@ or between a use case and an external system; a timer starts a use case on a sch
 - Are the Enum variants the states you want to see? Diagrams derive one state per variant.
 <!-- /stage-spec -->
 
-Also ask:
+Also ask which values an actor merely chooses, which schedules start a use case, which
+business rule (条件) decides when a use case may run, and which states are end states.
 
-- Which entity values represent lifecycle state, and which ones does an actor merely
-  choose?
-- Which use case raises each domain event, and what consumes it?
-- Does a schedule start any use case?
-- Does a business rule (an RDRA 条件) decide when a use case may run?
-- Which nullable, enum, boolean, Int, or comparison values change with each use case?
-- Which states are end states, and which must always have a way out?
+## States
 
-## Procedure
+- Write `transitions(UseCase, Entity.col, from -> to)` for each edge. Each variant a
+  `transitions` names, and each value a creating use case sets, is a state.
+- `transitions(Cancel, Order.status, (pending, held) -> cancelled)` is one arm per source.
+- Several arms of one use case from one state are the actor's choice: a run takes one arm.
+- An entity may have several lifecycle columns, each its own state model. A use case that
+  moves two takes one arm of each in one step, so it runs only where both have an arm.
+- Mark a state an instance may rest in, though an arm leaves it, with `@end(free)` on the
+  column; otherwise `check` reports a deadlock there. A state no arm leaves is an end state
+  already, and `@end` on it draws `lint` `end-redundant`.
 
-1. Add lifecycle columns such as `Enum(...)`, `Bool`, and nullable timestamp/value
-   columns. Values an actor merely chooses are not lifecycle: type those columns by a
-   `variation` and leave them out of `transitions`. A created row takes any value; an
-   update keeps it unless the use case lets the actor pick again with
-   `chooses(UseCase, Entity.column)`. To offer only some values, write one
-   `chooses(UseCase, Entity.column, value)` line per value.
-2. Add `transitions(UseCase, Entity.col, from -> to)` for lifecycle movement, naming
-   the use case that drives each edge. States are not declared: each variant a
-   `transitions` names, and each value a creating use case sets, is a state of the
-   state model. A use case that moves several states to one target lists them once,
-   `transitions(Cancel, Order.status, (pending, held) -> cancelled)`: one arm per
-   listed source, the same as one line per source, and a `.when(Cond)` after the list
-   guards each arm. An entity may have several lifecycle columns (a procedure `status` and
-   a `publication` that moves on its own): give each its own `transitions`, and do not
-   split the entity or fake one with guarded `sets`. Each column is its own state model,
-   and guards and rules may read any of them. A use case that moves two of them takes one
-   arm of each in one step, so it runs only where both columns have an arm: list an arm for
-   every state of the other column it should run from.
-3. Declare an `event` and `raises(UseCase, Event)` only for an interface between use
-   cases: something must consume the event (`triggers`, or `outbox(Event)` for a
-   publication outside the model), else `check` warns that it is never consumed.
-4. For downstream automation, model BUC-level causality first:
-   `triggers(Event, TargetBuc)`. When the concrete entry action is known, refine with
-   `contains(TargetBuc, EntryUseCase)` and `triggers(Event, EntryUseCase)` without
-   removing the BUC-level trigger. The entry use case runs after a raise, as often as its
-   states allow. When it must run once per raise (each payment posted once, a queue of
-   capacity 2), write `triggers(Event, EntryUseCase).counted(2)`: `verify` then also
-   checks `EventOverflow_<E>_<Event>_<EntryUseCase>`, a raise with 2 already pending.
-5. Connect an external system through events: `raises(ExtSystem, Event)` inbound,
-   `triggers(Event, ExtSystem)` outbound.
-6. Declare a `timer` and `triggers(Timer, UseCase)` for a schedule that starts a use
-   case. Keep that use case in a BUC. A timer has no parameter: it is about the rows its use
-   case writes, which the use case's guards read. When the deadline depends on a reason, put
-   the deadline in a `Date` column, set it with one `sets(UseCase, Entity.due == N).when(Cond)`
-   per reason, and guard the timer's use case with `holds(Due, Entity.due <= now)` (see the
-   third pattern below).
-7. Declare a `condition` for a business rule that selects when a use case applies.
-   Without a body it is a trace link (`combines` its variation and lifecycle column);
-   with `holds(Cond, Entity.col == value, ...)` it guards each use case it
-   `applies_to`, and `check` and `verify` read the guard. When the rule holds back only one
-   outcome of a use case's choice, guard that arm instead:
-   `transitions(UseCase, Entity.col, from -> to).when(Cond)`. The other arms stay free.
-   When it holds back one value the actor picks, guard that value:
-   `chooses(UseCase, Entity.col, value).when(Cond)` beside the unguarded values. Keep
-   one use case; do not split it per value. A body that reads a related entity
-   (`holds(Renewable, Permit.status == valid)`) follows the `relate` between it and the
-   entity the use case writes; when two relates join them, name the one with
-   `.role(role)` after the body (`holds(Renewable, Permit.status == valid).role(renews)`). On a
-   use case that creates the child of an `.optional()` key, such a guard also links the
-   new row to the parent it reads. "No related row" is `.none(Related)`. An entity two
-   hops away, such as the settlement of the case a claim belongs to, needs the path:
-   `holds(SettlementSigned, Settlement.status == agreed).along(Claim, ClaimCase,
-   Settlement)`. Without it the guard reads any settlement, and `check` warns
-   `UnjoinedGuardRead` with the `.along(...)` to add. A use case that writes two entities
-   joined only through a third it does not write, such as `Account` and `Store` through
-   `Device`, draws `UnjoinedWrite`: also write the entity between
-   (`updates(Register, Device)`), or mark a write meant as a row of its own with `.apart()`.
-8. Add `sets(UseCase, Entity.col == val)` for enum, nullable, boolean, Int, and Date
-   effects not explained by transitions (`chooses` and `sets` on one column in one use
-   case are an error). To let the row pick the value, write one line per value with
-   `.when(Cond)`: `sets(Extend, Extension.due_on == 3).when(ExpertInquiry)`. The guard reads a
-   created row after the step and an updated row before it, so put a reason the same use
-   case picks on the row it creates. Keep the guards disjoint; an unguarded `sets` of the
-   same column beside them is `ConflictingEffects`. A `sets` on a column that `transitions`
-   drives is an error unless the use case creates the entity. A `Date` or `DateTime`
-   column takes a number, a point on the clock `now` ticks through
-   (`sets(Issue, Coupon.expires_at == 3)`), so a rule that reads `expires_at < now` has a
-   deadline to reach; a column the use case stamps with the current time is `@null` and
-   set to `present`.
-   When the value comes from another row, copy it: `sets(Register, Permit.kind ==
-   Application.kind)`. The source must be a row the step binds: an entity the use case
-   writes in the same or an earlier transaction group, or the parent of the target through a `relate`
-   (a created child reads the parent it is created under; with two relates to the source,
-   name one: `sets(Fix, Permit.kind == Site.kind).role(home)`). Any other source is
-   `UnboundCopySource`; give the target a `relate` to the source instead of leaving the
-   value a free choice. The two columns hold one set of values (`SetsCopyMismatch`).
-   When a use case gives an existing row its parent (a handler assigned to an open case),
-   write `links(Assign, Case, Handler)`: the key from the child to the parent must be
-   `.optional()`, the use case binds a present parent (the one it writes, when it does)
-   and links the unlinked child to it, and a child that already has a parent waits. A
-   `holds` guard that compares the parent, or `updates` on it, picks which parent. A
-   reassignment is `relinks(Reassign, Case, Handler)`: a linked child moves to the parent
-   the use case binds, the same one included (a `holds` guard on the parent keeps the move
-   real). A release is `unlinks(Release, Case, Handler)`: a linked child, the one under the
-   parent the use case writes when it writes one, becomes unlinked. One use case states one
-   of the three per key (`ConflictingLinks`); `relinks` alone also takes a mandatory key.
-9. Add `drives(UC, E.col op rhs, true|false)` when rules depend on a derived comparison and
-   the model does not track the values. Prefer Int / Money / Decimal columns plus
-   `sets(UC, E.col == N)` when the quantity itself must be checked: a comparison
-   reads those values in `states` and `verify`.
-10. Add `after(UseCase).assert(...)` for a postcondition of that use case, and
-    `property Name ["label"] always|eventually|leads_to|stable|unchanged|precedes|can_reach(...)`
-    for a temporal property (checked by `verify` only; `check` notes that it skipped it).
+## Events and timers
 
-## Minimal Pattern
+- Declare an `event` with `raises(UseCase, Event)` only when something consumes it:
+  `triggers`, or `outbox(Event)` for a publication outside the model.
+- For a downstream BUC, write `triggers(Event, TargetBuc)` first. Once the entry use case is
+  known, add `contains(TargetBuc, EntryUseCase)` and `triggers(Event, EntryUseCase)`, and
+  keep the BUC-level trigger. The entry use case runs after a raise as often as its states
+  allow; `triggers(Event, EntryUseCase).counted(2)` makes it once per raise, with a queue
+  of 2 (`verify` checks `EventOverflow_<E>_<Event>_<EntryUseCase>`).
+- An external system receives with `triggers(Event, ExtSystem)` and sends with
+  `raises(ExtSystem, Event)`.
+- A schedule is a `timer` with `triggers(Timer, UseCase)`, the use case in a BUC. A timer
+  has no parameter: its use case's guards pick the rows.
+
+## Conditions
+
+A `condition` is an RDRA 条件. With only `combines` it is a trace link. With
+`holds(Cond, Entity.col == value, ...)` and `applies_to(Cond, UseCase)` it guards the use
+case in `check`, `verify`, and the TLA+ export; a body applied to a use case that writes
+nothing is `UnbindableCondition`.
+
+- Guard one arm, not the use case, with `transitions(..).when(Cond)`, or one pickable value
+  with `chooses(UC, E.col, value).when(Cond)`. Keep one use case; do not split it per value.
+  An arm the guard never lets run warns `ArmNeverTaken` (`Arm_<UseCase>_<from>_<to>`); a
+  value never chosen warns `ValueNeverChosen`.
+- A body that reads a related entity follows the `relate`; name one of two keys with
+  `.role(r)` after the body. "No related row" is `.none(Related)`.
+- An entity two hops away needs the path:
+  `holds(SettlementSigned, Settlement.status == agreed).along(Claim, ClaimCase, Settlement)`.
+  Without it the guard reads any row, and `check` warns `UnjoinedGuardRead`.
+
+## Effects
+
+- `sets(UseCase, Entity.col == value)` for an Enum without `transitions`, a `Bool`, a
+  `@null` column (`present` or `null`), an Int, or a Date. A `sets` on a column `transitions`
+  drives is an error unless the use case creates the entity. A Date takes a clock mark
+  (`sets(Issue, Coupon.expires_at == 3)`); a column stamped with the current time is `@null`
+  and set to `present`.
+- One `sets` per value with `.when(Cond)` lets the row pick:
+  `sets(Extend, Extension.due_on == 3).when(ExpertInquiry)`. Keep the guards disjoint; an
+  unguarded `sets` beside them is `ConflictingEffects`.
+- A variation column takes any value on a created row, whatever its `@default`, unless the
+  creating use case `sets` it. An update keeps the value unless the use case lets the actor
+  pick again: `chooses(UseCase, Entity.col)`, or one `chooses(UseCase, Entity.col, value)`
+  line per offered value, never both forms (`ChoosesMixedForms`). `chooses` and `sets` on
+  one column in one use case are an error, and so is `chooses` on a column no variation
+  types.
+- Copy a value from a row the step binds: `sets(Register, Permit.kind == Application.kind)`.
+  The source is an entity the use case writes, or the target's parent through a `relate`;
+  any other is `UnboundCopySource`. Both columns hold one set of values
+  (`SetsCopyMismatch`).
+- Give an existing row a parent with `links(Assign, Case, Handler)` (the key must be
+  `.optional()`), move it with `relinks`, drop it with `unlinks`. A use case states one of
+  the three per key (`ConflictingLinks`).
+- A use case that writes two entities joined only through a third it does not write draws
+  `UnjoinedWrite`: also write the entity between, or mark a write `.apart()`.
+- `drives(UC, E.col op rhs, true|false)` makes a comparison a Bool when the model does not
+  track the values. Prefer Int columns and `sets(UC, E.col == N)` when the quantity matters.
+
+## Example
 
 ```rdra
 entity Order "Order" {
@@ -146,7 +111,7 @@ transitions(FulfillOrder, Order.status, submitted -> fulfilled)
 sets(SubmitOrder, Order.submitted_at == present)
 ```
 
-Event-started BUC, a timer, and a condition with a body:
+An event-started BUC, a timer, and a guard:
 
 ```rdra
 event OrderSubmitted "Order Submitted"
@@ -165,7 +130,8 @@ applies_to(CardPayment, CapturePayment)
 ```
 
 A deadline that depends on a reason: the reason sets the deadline on the row it creates,
-and the timer's use case waits for the clock to reach it.
+and the timer's use case waits for the clock. The clock counts marks, not days: pick marks
+that keep the periods' order (60 days at 2, 90 at 3).
 
 ```rdra
 variation ExtensionReason "Extension reason" {
@@ -213,43 +179,10 @@ condition DeadlinePassed "The extended deadline has come"
 holds(DeadlinePassed, Extension.due_on <= now)
 transitions(FlagOverdue, Claim.period, extended -> overdue).when(DeadlinePassed)
 
-invariant(Extension).when(reason == expert_inquiry).then(due_on == 3).label("An expert inquiry ends at mark 3")
 forbidden(Claim, Extension, Claim.period == overdue, Extension.due_on > now).along(Extension, Claim).label("No claim is overdue before its deadline")
 ```
 
-The clock counts marks, not days: pick marks that keep the order of the periods (60 days at
-2, 90 days at 3), and read a passing check as "this deadline comes after that one and nothing
-passes it early".
-
-A created row that copies a value from the row it is created under:
-
-```rdra
-variation Kind "Kind" {
-  food "Food"
-  drink "Drink"
-}
-
-entity Application "Application" {
-  id: Int @pk
-  kind: Kind
-}
-
-entity Permit "Permit" {
-  id: Int @pk
-  kind: Kind
-}
-
-relate(Permit, Application, N:1)
-
-usecase Apply "Apply"
-usecase Register "Register"
-
-creates(Apply, Application)
-creates(Register, Permit)
-sets(Register, Permit.kind == Application.kind)
-```
-
-## Validation
+## Validate
 
 <!-- stage-spec: review lifecycle -->
 ```sh
@@ -260,50 +193,16 @@ rdra-ish diagram src/ --kind event --format mermaid
 ```
 <!-- /stage-spec -->
 
-Also run:
+`check` names what the lifecycle cannot do: `Witness_*` (a state nothing reaches),
+`Deadlock_*` (an instance stuck at a state with a way out), `Runs_*` (a use case that never
+runs), `Vacuous_*` (a rule that says nothing). Each points at the arm or use case at fault;
+the fix is usually a missing `creates`, arm, or `sets`. Read them with
+`../../rdra-ish-buc-analyze/references/state-patterns.md`.
 
-```sh
-rdra-ish export src/ --kind asyncapi --out out/asyncapi.json
-```
+## Done when
 
-`check` reports, by name, what the lifecycle cannot do:
+- Every state change names its use case; every raised event is consumed.
+- An event-started BUC has `triggers(Event, Buc)`, and its entry use case is in that BUC.
+- `check` reports no `Witness_*` or `Deadlock_*`, and each `Runs_*` is understood.
 
-- `error[Witness_<E>_<col>_<value>]`: no sequence of use cases reaches that state.
-- `error[Deadlock_<E>_<col>_<value>]`: an instance can reach that state, which is not
-  an end state, and nothing ever moves it off (a guard that never opens, or a missing
-  use case). A deadlock that only a free instance slot would clear is a warning. When
-  staying there is correct, such as a stock row waiting at `free` to be used, declare it
-  on the column: `status: Enum(free, used) @default(free) @end(free)`. `lint`
-  `end-redundant` flags an `@end` value that no `transitions` arm leaves, which is an end
-  state already.
-- `warning[Runs_<UseCase>]`: the use case never runs, with the guard or instance that
-  blocks it.
-- `warning[Vacuous_<rule>]`: the rule holds and says nothing, because no reachable state
-  has the rows it ranges over, the guards of its `.when`, or one of the conditions of a
-  `forbidden` of several. An `after` assertion whose use case never runs to its last step,
-  and a `property` whose rows never exist together, warn the same way (`verify` too).
-  Check the value for a typo or a state no use case enters.
-
-Each prints the `transitions` arm or use case at fault with its `path:line:col`. The
-fix is usually in the model (a missing `creates`, `transitions` arm, or `sets`), not in
-the rule. Use skill `rdra-ish-verify` to check the same model at two instances and its
-temporal properties.
-
-## Achievement Conditions
-
-- Every state change names the use case that drives it.
-- Events have clear origins through `raises` unless intentionally external, and raised
-  events are consumed by `triggers`, `outbox`, or an external system.
-- Event-started BUCs are represented directly with `triggers(Event, Buc)`, and
-  concrete triggered use cases are contained by the downstream BUC.
-- `check` reports no `Witness_*` or `Deadlock_*` error, and each `Runs_*` warning is
-  understood.
-- `sets` captures relevant enum, nullable, boolean, Int, and Date effects, and `drives`
-  the comparison effects.
-- AsyncAPI export is meaningful when events, raises/triggers/transitions, and
-  outbox-like handoffs are part of the review.
-
-## Next Step
-
-Load `references/07-rules.md` when reachable state combinations need
-entity constraints.
+Next: `references/07-rules.md`, when reachable combinations need rules.

@@ -1,16 +1,11 @@
 # Step 2: Screens
 
-Use this context when actors and use cases are stable enough to ask what the actor sees
-and does in each use case.
+<!-- derived-from ../../../docs/incremental-modeling.md#stage-2-screens -->
 
-## Goal
+Add the screens each use case works through, and the moves between them, before the data.
+In RDRA the screen sits with the use case on the system boundary, nearest the actor.
 
-Add the screens each use case works through, and the transitions between them, before
-deciding which data each use case touches. In RDRA the screen sits with the use case on
-the system boundary, nearest the actor, so it is settled before the information inside
-the system.
-
-## Ask For
+## Ask
 
 <!-- stage-spec: asks screens -->
 - Which screen does the actor work on in each use case?
@@ -19,21 +14,15 @@ the system.
 - Is any use case started by an event or timer, with no actor at a screen?
 <!-- /stage-spec -->
 
-## Procedure
+## Do
 
-1. Add a `screen` for each surface an actor works on. Name it for what the actor does
-   there, not for a UI component.
-2. Connect each use case to its screen with `displays(UseCase, Screen)`. A use case
-   that an event or timer starts needs no screen: model it with `triggers(Event, UseCase)`
-   or `triggers(Timer, UseCase)` instead.
-3. Add `navigates(FromScreen, ToScreen).via(UseCase)` for each move between screens the
-   UI offers, naming the use case whose operation causes it. `diagram --kind screen`
-   draws them, and fills the gaps with dashed `業務上の順番` edges from the flows.
-4. Add `field` and `contains(Screen, Field)` only when a screen item needs review as a
-   model element. Leave `maps_field` for Step 3, once the entity exists.
-5. Keep entities, CRUD, `shows`, APIs, and permissions out of this step.
-
-## Minimal Pattern
+1. Add a `screen` per surface the actor works on, named for what the actor does there.
+2. Add `displays(UseCase, Screen)`. A use case an event or timer starts needs no screen.
+3. Add `navigates(From, To).via(UseCase)` for each move the UI offers.
+4. Add `field` and `contains(Screen, Field)` only for items that need review, with `access`
+   (`editable`, `readonly`), `required`, and `source` (`actor` or `system`). Leave
+   `maps_field` for step 3, once the entity exists; `lint` `field-unmapped` is expected now.
+5. Keep entities, CRUD, APIs, and permissions out.
 
 ```rdra
 screen CartScreen "Cart"
@@ -42,9 +31,16 @@ screen CheckoutScreen "Checkout"
 displays(PlaceOrder, CheckoutScreen)
 displays(CancelOrder, CartScreen)
 navigates(CartScreen, CheckoutScreen).via(PlaceOrder)
+
+field AddressField "Delivery address"
+  access editable
+  required true
+  source actor
+
+contains(CheckoutScreen, AddressField)
 ```
 
-## Validation
+## Validate
 
 <!-- stage-spec: review screens -->
 ```sh
@@ -55,23 +51,12 @@ rdra-ish list src/ --kind screen --format table
 ```
 <!-- /stage-spec -->
 
-Also run:
+## Done when
 
-```sh
-rdra-ish lint src/ --format table
-```
-
-`lint` reports `field-unmapped` for a field with no `maps_field` yet; at this step that
-is expected.
-
-## Achievement Conditions
-
-- Every use case an actor starts names the screen it works on.
-- Every use case with no screen is started by an event or timer.
+- Each use case an actor starts names its screen; each one without a screen is started by
+  an event or timer.
 - The screen diagram reads as the actor's path through the BUC.
-- No entity, CRUD, or API was guessed to make the screens look complete.
+- No entity, CRUD, or API was guessed.
 
-## Next Step
-
-Load `references/03-data-touchpoints.md` when reviewers can name the business objects
-each use case touches and each screen shows.
+Next: `references/03-data-touchpoints.md`, once reviewers can name the objects each use
+case touches.

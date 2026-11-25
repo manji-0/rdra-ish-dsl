@@ -1,80 +1,47 @@
-# Information, Conditions, and Data
+# Information, conditions, and data
 
-Use this reference for what the use cases act on: the information model, the variations
-and conditions that select business rules, and the logical data model (columns, keys,
-cardinality).
-
-## Commands
+Use these views for what the use cases act on. Read `information` before `er`: the
+relations and state models first, then the columns.
 
 ```sh
-# 情報モデル — entities, relates, state models, and variations, without columns
 rdra-ish diagram src/ --kind information --format mermaid
-rdra-ish diagram src/ --kind information --buc <BucId> --format mermaid
-
-# バリエーション・条件 — conditions and variations with their values
-rdra-ish diagram src/ --kind condition --format mermaid
-rdra-ish diagram src/ --kind condition --buc <BucId> --format mermaid
-
-# Logical data model — entities with columns
-rdra-ish diagram src/ --kind er --format mermaid
-rdra-ish diagram src/ --kind er --buc <BucId> --format mermaid --out docs/er
-
-# Data contract exports
-rdra-ish export src/ --kind dbml --out out/schema.dbml
-rdra-ish export src/ --kind sql --dialect postgres --out out/schema.sql
-rdra-ish export src/ --kind json-schema --out out/json-schema.json
+rdra-ish diagram src/ --kind condition --buc BucOrder --format mermaid
+rdra-ish diagram src/ --kind er --entity Order --format mermaid
 ```
 
-## Reading the Information Model
+`--entity` on `information` and `er` draws the named entities and the ones a `relate`
+joins them to.
 
-- There are no layers; every node is `entity__<Id>`, `statemodel__<Entity>_<column>`, or
-  `variation__<Id>`. `omitted:` starts with `columns`, which `er` draws.
-- `entity__<Child> ---|N:1| entity__<Parent>` is a `relate` with its DSL cardinality, the
-  same relates `er` draws.
-- An unlabelled `-.->` (`statemodel`) links an entity to each column that `transitions` drive (the
-  composite state of `--kind state`); an `Enum` column without `transitions` is none.
+## Information model (`information`)
+
+- Nodes are `entity__<Id>`, `statemodel__<Entity>_<column>`, and `variation__<Id>`.
+  `omitted:` starts with `columns`, which `er` draws.
+- `entity__<Child> ---|N:1| entity__<Parent>` is a `relate` with its cardinality.
+- An unlabelled `-.->` links an entity to each column `transitions` drive. An `Enum`
+  without `transitions` is no state model.
 - `-.->|variation <column>|` links an entity to the variation that column takes.
 
-## Reading the Condition Diagram
+## Conditions and variations (`condition`)
 
-- There are no layers. Each condition links an unlabelled `-.->` (`combines`) to each variation
-  and state model (`statemodel__<Entity>_<column>`) it combines, and one (`applies_to`) to the
-  APIs and systems it applies to. To a use case the edge is labelled, `-.->|applies_to|`,
-  because a condition can also guard one: a `.when(Cond)` on a `transitions` arm or a
-  `chooses` value of the use case draws `-.->|when|`, followed by `%% derived <condition> ->
-  <usecase> via transitions <Entity>.<column> <from>-><to>` (or `via chooses
-  <Entity>.<column> <value>`).
+- A condition links by an unlabelled `-.->` (`combines`) to each variation and state
+  model it combines, and to the APIs and systems it applies to.
+- To a use case the edge is labelled: `-.->|applies_to|`, or `-.->|when|` when the
+  condition guards a `transitions` arm or a `chooses` value of the use case, followed by
+  `%% derived ... via transitions <Entity>.<column> <from>-><to>` (or `via chooses ...`).
 - A condition with a `holds` body has a `%% holds <id>: <body>` line, and each link read
-  from that body is followed by `%% derived <from> -> <to> from holds`. A link without it
-  is a `combines` declaration.
-- Each variation is `subgraph variation__<id>` holding one
-  `variation__<Variation>__<value>["<value label>"]:::value` node per value.
-- The whole model draws every variation, used by a condition or not (the RDRA variation
-  sheet). `--buc` draws the conditions on the BUC's use cases and their APIs and what
-  those combine.
+  from the body is followed by `%% derived <from> -> <to> from holds`. A link without it is
+  a declared `combines`.
+- Each variation is `subgraph variation__<id>` with one `:::value` node per value. The
+  whole model draws every variation, used or not.
 
-## Reading the ER Output
+## Logical data model (`er`)
 
-- The `%%` header comes first (`%% rdra-ish diagram=er ...`, `%% kinds: entity`); entity
-  names in the `erDiagram` body are the DSL ids, not `entity__` ids.
-- Each entity box lists columns with PK/FK markers. A variation or a state model shows
-  only as a column type; `information` and `condition` draw them.
-- Column annotations such as indexes, composite uniques, checks, tenant/history,
-  soft delete, derived columns, FK optionality, and on-delete/on-update actions are
-  review signals; use list/export output for exact metadata.
-- Crow's foot notation comes from `relate` predicates. A key whose card has a minimum
-  of 1 (`1..*:1`) draws its child end as one-or-more.
-- FK columns are auto-generated by `relate`, including the unique key of a `1:1` and
-  one column per key column of a composite parent `@pk`; do not add manual FK columns
-  for the same relationship, or adopt yours with `.key(...)`.
-- These diagrams and the `dbml`, `sql`, and `json-schema` exports read only declared
-  facts and the data layer. They write when the lifecycle has errors, without exploring
-  it; run `check` for those errors.
-
-## Tips
-
-- Read `information` before `er`: the relations and state models first, then columns.
-- Pair ER output with `rdra-ish list src/ --kind entity --format json` when checking
-  exact column metadata.
-- Pair ER output with `rdra-ish csv src/ --kind api-matrix` when entity ownership is
-  being reviewed through API boundaries.
+- The body is an `erDiagram`; its entity names are DSL ids, not `entity__` ids.
+- Each entity lists its columns with `PK` / `FK`. A variation or state model shows only as
+  a column type.
+- Crow's foot ends come from `relate`. A key with a minimum of 1 (`1..*:1`) draws its child
+  end as one-or-more.
+- `relate` generates the FK columns, one per key column of a composite parent `@pk`. Do
+  not add one by hand; adopt your own with `.key(...)`.
+- Read exact column metadata from `rdra-ish list src/ --kind entity --format json`, and
+  API ownership from `rdra-ish csv src/ --kind api-matrix`.
