@@ -614,7 +614,8 @@ The owner decided these on 2026-11-24.
   count of such states goes to a note under the cone line and to the shadow stats
   ([The canonical form](#the-canonical-form)).
 - **The cone line shows orbits and an estimate of the plain count**, as `(240,016 orbits,
-  about 62M states)`.
+  about 62M states)`. Superseded on 2026-11-25: the line prints `(about 62M states)`, and
+  the orbit count moves to `RDRA_ISH_SYMMETRY_STATS`. The estimate below stands.
   - How: the size of a stored state's orbit is `|G_r| / |Aut(r)|`. `|G_r|` is the product,
     over classes, of the factorial of the movable slot count. `|Aut(r)|`, the elements of
     `G_r` that leave `r` as it is, is counted once per stored state at `admit`: the factorials
@@ -629,6 +630,23 @@ The owner decided these on 2026-11-24.
     and a state the branch cap cut counts with `|G_r|` alone. Phase 1 reports its error.
 - **`TLA_CELL_BUDGET` is decided in #284**: it is raised for the native checker and TLC
   alike, in a change of its own. It is not part of this plan.
+
+The owner decided these on 2026-11-25, on the coordinator's recommendations, for
+[Always by default](#always-by-default):
+
+- **`never` stays and `retry` goes.** `never` is the escape hatch, still exercised in CI after
+  the flip. `retry` is removed in step 1, since `--symmetry` is in no release.
+- **The default output describes the user's model.**
+  - Cone lines keep `never`'s shape and print a state count, exact where a plain run
+    decided the cone and `about <m>` where the orbit run did.
+  - Orbit counts and the left-out notes move to `RDRA_ISH_SYMMETRY_STATS`.
+  - A counterexample may name other rows than `never`'s only if it replays on the
+    unreduced model and is the same in every run and at every `RDRA_JOBS`.
+  - A plain result that an earlier pass decided on a complete run is kept. That choice
+    follows from the pass order and the model, never from which run finishes first.
+- **The order and its gates.** Step 1, then phase 4, then the flip. The gates: the per-pair
+  exit of step 1, per-rule witnesses before the flip, the flip as a `### Breaking` entry,
+  and any residual-cost choice back to the owner.
 
 ## Always by default
 
@@ -680,65 +698,90 @@ On `main` at `7e464c43` (phases 1 to 3), each run alone.
 
 ### Where `always` costs more or prints otherwise
 
-1. **Canonicalization on every successor.** It costs 75.4K instructions per successor on
+1. **Runs it repeats.** Under `always`, a job that runs up to symmetry shares no run with
+   the entity, safety and property passes (#306). So the safety pass runs up to symmetry a
+   cone the entity pass has already explored plainly and to the end. This is most of the
+   +10.8%. On patent-ops (`RDRA_PERF=1 RDRA_JOBS=1`, n=2):
+   - the entity pass explores the same reduced cones plainly either way, 1,861,636 states;
+   - the safety pass grows from 3 runs of 63,371 states (41 ms) to 6 runs of 808,320
+     stored states (938 ms);
+   - per stored state the orbit run costs 1,159 ns, against 742 ns for a plain run of the
+     same cone: 1.6×, not the 30× that the per-successor cost of canonicalization suggests.
+
+   It also moves output: a counterexample cone counts what it stored before it stopped.
+   `formal-verification-fail/order.rdra` `Inv_Order_0` reads `(3 orbits, about 3 states)`
+   where `never` reads `(7 states)`, off the entity pass's run.
+
+   *Removed by:* a cone that an earlier pass decided on a complete plain run keeps that
+   result, its line and its count, as under `never`. A cone runs up to symmetry only where
+   no plain run decided it. The choice follows from the pass order and the model alone.
+   - Which cones an entity cone's run can decide is fixed before any run: a safety or
+     property cone whose system is that of an entity cone (`Shared::wanted`).
+   - The entity pass ends before the safety pass starts.
+   - A run that met the memory limit in a crowded pool runs again alone before its answer
+     counts, as under `never`.
+
+   So `RDRA_JOBS` cannot move the choice. The 43 pairs must print the same at
+   `RDRA_JOBS=1`, 4 and 8. A test-only switch, as for S up to `H`,
+   runs every symmetric cone up to symmetry, so that the twins and rule 8 still reach the
+   orbit run on the samples.
+2. **Canonicalization on every successor.** It costs 75.4K instructions per successor on
    `Inv_Encounter_2`, against 2.5K for a plain successor (#311). Nothing short-circuits a
    group that moves nothing: `Canon::canonical` sorts every block of every successor, and
-   `Group::is_trivial` exists only in tests. That is where the +10.8% goes. Some cones pay
-   for nothing: insurance-claim-ops `MultiForbidden_Payment_3` stores 779,267 orbits for
-   783,427 states. patent-ops' reduced cones gain about 2× at n=2, too little to pay back a
-   canonicalization that costs some 30 plain successors.
-   *Removed by:* (a) a cone whose group is trivial runs the plain path, `run` and not
-   `run_orbits`, so its cost and output are `never`'s. (b) A state in which no class has
-   two movable rows skips the sort and is stored as it is, at the cost of one pass over the
-   classes. (c) A cheaper canonical form for the common case: one block, no joint classes.
-   Exit: the 43 pairs within 2% of `never`'s instructions, with no pair whose group is
-   trivial above 0.5%. A cone whose group moves rows but gains little keeps a residual
-   cost. If (a) to (c) leave patent-ops noticeably slower at n=2, the choice between
-   accepting that and a per-cone switch goes back to the owner. A switch on the plain run's
-   size would bring back a retry and the output it moves.
-2. **The cone line counts orbits.** 78 lines in 36 of the 43 pairs read
+   `Group::is_trivial` exists only in tests. Some cones pay for nothing: insurance-claim-ops
+   `MultiForbidden_Payment_3` stores 779,267 orbits for 783,427 states.
+   *Removed by:*
+   - (a) a cone whose group moves nothing runs the plain path, `run` and not
+     `run_orbits`, so its cost and output are `never`'s;
+   - (b) a state in which no class has two rows that may move skips the sort and is stored
+     as it is;
+   - (c) a cheaper canonical form for the common case of one block and no joint classes,
+     built only if the exit below needs it.
+3. **The cone line counts orbits.** 78 lines in 36 of the 43 pairs read
    `(<n> orbits, about <m> states)` where `never` reads `(<n> states)`. In 19 of them the two
    counts are equal, because nothing moved.
-   *Removed by:* 1(a) for a trivial group, which prints `never`'s line. A group that moves
-   rows prints `(about <m> states)`, and the orbit count goes to the perf and stats output.
-   The estimate is high, not exact (253 for 243 states on food-permit-ops
-   `Forbidden_BusinessPermit_4`, 7.3K for 6,125 on `Inv_PermitApplication_2`). So a user
-   still sees `about` and a rounded count on such a cone; that is the one difference left
-   on a cone `never` decides.
-3. **Notes on what the group leaves out.** 80 `note: instance symmetry leaves <entity> out`
+   *Removed by:* 1 and 2(a), which print `never`'s line wherever a plain run decided the cone
+   or the group moves nothing. Where the orbit run decides, the line keeps `never`'s shape
+   and prints `(about <m> states)`. The orbit count moves to the diagnostic level (4).
+
+   The exact count cannot be recovered from the orbit sizes at insert. The size of an orbit
+   is `|G_r| / |Aut(r)|`, and an orbit can hold states no run reaches: the `FirstAbsent`
+   asymmetry of [The group](#the-group), 4 of 41 states in
+   `presence_first_absent_asymmetry`. A state the branch cap cut also counts as `|G_r|`.
+   The measured estimate runs high: 253 for 243 states on food-permit-ops
+   `Forbidden_BusinessPermit_4`, and 7.3K for 6,125 on `Inv_PermitApplication_2`. So `about`
+   stays on exactly those lines.
+4. **Notes on what the group leaves out.** 80 `note: instance symmetry leaves <entity> out`
    lines in 7 pairs: every S entity of a reduced cone, and each class the scan leaves out.
    They explain lost reduction, not a verdict.
-   *Removed by:* not printing them by default. They move to the stats line of
-   `RDRA_ISH_G_T_STATS` and to a perf build. The branch-cap note stays, since it says the
-   orbit count is an upper bound; no sample hits it.
-4. **Shared runs and the early stop.** Under `always`, a job that runs up to symmetry shares
-   no run with the entity, safety and property passes, and it stops once every check has
-   failed. A counterexample cone then counts what it stored before it stopped:
-   `formal-verification-fail/order.rdra` `Inv_Order_0` reads `(3 orbits, about 3 states)`
-   where `never` reads `(7 states)` off the entity pass's run.
-   *Removed by:* 1(a) for a trivial group, which shares as `never` does. A cone that moves
-   rows keeps its own count; with 2 that reads `(about 3 states)`, which is what a run that
-   stopped at the counterexample stored.
+   *Removed by:* the diagnostic level, which is the environment variable
+   `RDRA_ISH_SYMMETRY_STATS`. It prints, per run up to symmetry, the orbits, the estimate,
+   the states the branch cap cut, and the classes left out with their rules.
+   `RDRA_ISH_G_T_STATS` keeps the per-entity reasons of `G_T`. The branch-cap note stays
+   under the line, because it says the count is an upper bound. No sample hits it.
 5. **Where `--memory` and `--max-states` stop a run.** An orbit run stops at the memory limit
-   at another count than a plain run, and the line reports orbits: `Forbidden_OfficeAction_3`
-   stopped at 67,108,864 orbits, and `never`'s `Forbidden_Patent_4` at 111,509,504 states.
-   Under `--max-states` the cap counts stored states.
+   at another count than a plain run: `Forbidden_OfficeAction_3` at 67,108,864 orbits, and
+   `never`'s `Forbidden_Patent_4` at 111,509,504 states. Under `--max-states` the cap counts
+   stored states, which are orbits.
    *Acceptable:* a run up to symmetry stores one state per orbit of the states a plain run
-   would store, so it reaches the memory limit no earlier in the exploration. `--max-states`
-   keeps counting stored states, which is what memory follows; the CLI reference says so.
-6. **S up to `H` only at the memory limit.** Kept. Under the default the sub-lifecycle of a
-   reduced cone runs plainly first and up to `H` only when that run stops at the memory limit
-   with the pool to itself. A cone whose S fits keeps its classes, its `Rep_` tables and its
-   lifted traces (#284). The price is the plain attempt before `H`, 35 to 61 s on the S runs
-   #284 saw stop at n=3, paid only where S does not fit.
+   would store, so it reaches either limit no earlier in the exploration. The compatibility
+   gate in [Order](#order) settles what this means for a release.
+6. **S up to `H` only at the memory limit.** Kept. Under the default, the sub-lifecycle of a
+   reduced cone runs plainly first, and runs up to `H` only when that run stops at the
+   memory limit with the pool to itself. A cone whose S fits keeps its classes, its `Rep_`
+   tables and its lifted traces (#284). The price is the plain attempt before `H`: 35 to 61 s
+   on the S runs #284 saw stop at n=3, paid only where S does not fit.
 7. **RSS above `--memory` (#237).** At n=3 under `--memory 8GiB` the process peaks at
    12.5–13.4 GB with `always` and 15.0–19.1 GB with `never`. `always` is not worse; the gap
    between the limit and the process is #237's, and the default change does not wait for it.
 8. **Counterexamples.** They are lifted through every permutation, and through #74 on a
    reduced cone, and replayed with the rows each step names, so they are concrete paths of
-   the user's model. They may name other rows, or another violating binding, than `never`'s
-   (agreement rule 1 compares verdicts and violated checks). No counterexample text differed
-   on the 43 pairs. *Acceptable.*
+   the user's model. They may name other rows, or another violating binding, than `never`'s;
+   agreement rule 1 compares verdicts and violated checks. No counterexample text differed
+   on the 43 pairs.
+   *Acceptable, under a condition:* such a counterexample replays on the unreduced model and
+   is the same in every run and at every `RDRA_JOBS`. Step 1 adds a test that holds it to
+   both.
 9. **`--with-tlc`.** TLC still explores the plain module and prints its state counts beside
    the native line, and the two are compared on verdicts only. *Acceptable.*
 10. **Checks that stay plain until phase 4.** Entity cones, `stable`, `unchanged`,
@@ -747,31 +790,65 @@ On `main` at `7e464c43` (phases 1 to 3), each run alone.
 
 ### What a user still sees differ
 
-Once 1 to 4 land, a cone whose group moves nothing prints exactly what `never` prints. A cone
-whose group moves rows differs in three ways:
+Once step 1 lands, a cone that a plain run decided, or whose group moves nothing, prints
+exactly what `never` prints. A cone that the orbit run decides differs in three ways:
 
 - its count reads `about <m> states`, rounded to two figures;
-- its counterexample can name other rows;
-- it decides more under the same `--memory`.
+- its counterexample can name other rows, the same ones in every run;
+- it decides more under the same `--memory` and `--max-states`.
 
-Nothing else in the output names symmetry.
+Nothing else in the default output names symmetry.
 
 ### `--symmetry`
 
-The default becomes `always`, and `retry` is removed, since `always` covers what it did. `never`
-stays as an escape hatch, kept out of the help's first screen, for three readers:
+The default becomes `always`. `never` stays as an escape hatch, kept out of the help's first
+screen and still run in CI after the flip by engine-agreement rule 8 and the twins. It
+serves three readers:
 
-- engine-agreement rule 8 and the twins compare a run up to symmetry with a plain one;
-- a user who suspects the symmetry can rerun plainly;
+- rule 8 and the twins, which compare a run up to symmetry with a plain one;
+- a user who suspects the symmetry and wants to rerun plainly;
 - docs and tests that quote exact plain state counts, such as the cone sizes in sample
-  READMEs, need the plain count.
+  READMEs.
 
-`symmetry` under `[verify]` in `rdra.toml` keeps the same two values.
+`retry` goes in step 1, not at the flip: `--symmetry` is in no release tag (`v2.3.0` does not
+hold `40e3783a`), so its removal needs no deprecation. `always` covers what `retry` did.
+`symmetry` under `[verify]` in `rdra.toml` keeps `never` and `always`.
 
 ### Order
 
-1. 1(a) to 1(c), 2 and 3 together, under `--symmetry always`, with the 43 pairs measured
-   again and `never` byte-identical to `main`.
-2. Phase 4, the annotated quotient, as [Phases](#phases) has it.
-3. The default flips to `always` and `retry` goes, with a CHANGELOG entry that lists the
-   differences above.
+1. **Step 1.** Under `--symmetry always`, with `never` byte-identical to `main`:
+   - the reuse of plain results (1);
+   - 2(a) and 2(b), and 2(c) if the exit needs it;
+   - the line and the diagnostic level (3, 4);
+   - the counterexample test (8);
+   - the removal of `retry`, with the CLI reference, the `rdra.toml` docs, and an
+     `Unreleased` CHANGELOG entry.
+
+   **Exit, per pair and not in aggregate,** since an aggregate hides patent-ops:
+   - instructions at `RDRA_JOBS=1` within 0.5% of `never` on every pair where no cone runs
+     up to symmetry;
+   - within 2% on every other pair;
+   - output identical at `RDRA_JOBS=1`, 4 and 8.
+
+   A cone that the orbit run decides may keep a residual cost only up to its stored states
+   times the per-state cost measured in 1, and only where `never` would store more. If 2(a)
+   to 2(c) leave a pair above 2%, the choice between accepting that residual and an
+   internal per-cone choice goes back to the owner. That choice would be derived from the
+   model and the flags before any run, not from a runtime retry.
+2. **Phase 4**, the annotated quotient, as [Phases](#phases) has it.
+3. **The flip** to `always`. Two gates come first:
+   - **Per-rule witnesses.** For each rule that leaves a class out or fixes an entity,
+     there is a corpus model in which dropping that rule alone changes a verdict or fires
+     a twin, as `sym_deleted_row_owner` does for the deleted row's key. Phase 3 found no
+     rule of `Reduction::fixed` that a sample witnesses alone. As a default, an unwitnessed
+     rule could regress silently.
+   - **Compatibility.** [Compatibility](../compatibility.md#bounds) calls a result that
+     changes within the same printed bounds a breaking change.
+     - Under `always`, a cone that stops at `--max-states` under `never` can decide, since
+       the cap counts stored states.
+     - With `--deny-undecided`, a cone that stops at `--memory` can then pass where it
+       failed, which changes the exit status.
+     - A verdict never moves between `ok` and `counterexample`.
+
+     The flip therefore goes under `### Breaking`, naming those two moves and `never` as
+     the way back. Which release carries it is the owner's call.
