@@ -15,13 +15,23 @@ impl TransitionSystem {
         states: impl IntoIterator<Item = impl std::borrow::Borrow<StateSlice>>,
         pin: Option<(usize, u8)>,
     ) -> Scan {
+        self.scan_guards_pinned(act, states.into_iter().map(|s| (s, pin)))
+    }
+
+    /// `scan_guards` with a pin per state: a run up to instance symmetry follows one
+    /// instance through stored states that keep it on other slots (#212 phase 4).
+    pub(crate) fn scan_guards_pinned(
+        &self,
+        act: ActId,
+        states: impl IntoIterator<Item = (impl std::borrow::Borrow<StateSlice>, Option<(usize, u8)>)>,
+    ) -> Scan {
         let action = &self.actions[act.index()];
         let mut bound = vec![false; action.params.len()];
         let mut held = vec![false; action.guards.len()];
         let mut any_binding = false;
         let mut crowded = vec![false; action.params.len()];
         let creates = action.params.iter().any(|p| p.role == ParamRole::New);
-        for s in states {
+        for (s, pin) in states {
             let s: &StateSlice = s.borrow();
             for (p, param) in action.params.iter().enumerate() {
                 let exists = self.entity(param.entity).exists;

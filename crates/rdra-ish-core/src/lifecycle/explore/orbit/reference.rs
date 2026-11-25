@@ -9,6 +9,7 @@
 
 use std::collections::BTreeSet;
 
+use super::findings::StuckAt;
 use super::OrbitRun;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::explore::symmetry::Canon;
@@ -223,5 +224,131 @@ pub(super) fn check_liveness(
         "{}",
         name("one run has a counterexample, the other none")
     );
+    compared(twin);
+}
+
+/// The twin of `OrbitRun::state_model_findings`: the plain run of the same system, when it
+/// stays under `SHADOW_CAP` states. A `shadow` build holds the findings on the pairs to it:
+///
+/// 1. the same witnesses, as found or not, the same runs, and the same `.when` arms taken;
+/// 2. a deadlock at the same values;
+/// 3. each deadlock the pairs found sits on a concrete state the plain run reaches, where the
+///    plain pass finds the instance the deadlock names stuck, and the plain pass gives that
+///    instance the same deadlock, its exits and what blocks each, but for the trace.
+pub(super) fn check_state_models(
+    orbits: &OrbitRun,
+    e: crate::lifecycle::types::EntId,
+    found: &crate::lifecycle::findings::StateModelFindings,
+    stuck: &[StuckAt],
+) {
+    use crate::lifecycle::findings::{Progress, Witness};
+    use crate::lifecycle::types::Value;
+    let twin = Twin::OrbitStateModels;
+    let ts = orbits.system();
+    let plain: ComponentRun = ts.clone().run_on(
+        Caps::new(usize::MAX, SHADOW_CAP).without_views(),
+        orbits.checks().clone(),
+        Threads::Shared,
+    );
+    if !plain.complete || !orbits.complete() {
+        skipped(twin);
+        return;
+    }
+    let want = ts.state_model_findings(e, &plain.graph());
+    let name = |what: &str| {
+        format!(
+            "shadow: state_model_findings of {} ({} classes): {what}",
+            ts.entity(e).id,
+            orbits.orbits()
+        )
+    };
+    // (1) The witnesses, the runs and the arms.
+    let kind = |w: &Witness| match w {
+        Witness::At(_) => None,
+        other => Some(other.clone()),
+    };
+    assert_eq!(
+        found.witnesses.len(),
+        want.witnesses.len(),
+        "{}",
+        name("witnesses")
+    );
+    for (a, b) in found.witnesses.iter().zip(&want.witnesses) {
+        assert!(
+            (a.var, a.value) == (b.var, b.value) && kind(&a.witness) == kind(&b.witness),
+            "{}",
+            name(&format!("the witness {a:?} is {b:?} on the plain run"))
+        );
+    }
+    assert_eq!(found.runs, want.runs, "{}", name("the runs differ"));
+    assert_eq!(found.arms, want.arms, "{}", name("the arms differ"));
+    // (2) and (3) The deadlocks.
+    assert_eq!(
+        found.deadlocks.len(),
+        want.deadlocks.len(),
+        "{}",
+        name("deadlocks")
+    );
+    let g = plain.graph();
+    let adjacency = g.adjacency();
+    let exists = ts.offset(ts.entity(e).exists);
+    let untraced = |d: &StateDiag| {
+        let mut d = d.clone();
+        if let Some(t) = d.trace_mut() {
+            *t = Default::default();
+        }
+        d
+    };
+    for ((a, b), at) in found.deadlocks.iter().zip(&want.deadlocks).zip(stuck) {
+        assert_eq!(
+            (a.var, a.value),
+            (b.var, b.value),
+            "{}",
+            name("deadlock values")
+        );
+        match (&a.progress, &b.progress, at) {
+            (Progress::Leaves, Progress::Leaves, _) => {}
+            (Progress::Stuck { diag, .. }, Progress::Stuck { .. }, Some((at, k))) => {
+                let (start, steps, tau) = orbits.lift_to(*at);
+                let last = steps.last().map_or(&start, |s| &s.2);
+                let named = usize::from(orbits.group.map_slot(&tau, e, *k as u8));
+                let p = (0..plain.states.len())
+                    .find(|&p| plain.states.at(p) == *last)
+                    .unwrap_or_else(|| panic!("{}", name("a deadlock's state is not reached")));
+                let leave = ts.can_leave(e, a.var, named, &g, &adjacency);
+                let s = plain.states.at(p);
+                assert!(
+                    s.0[exists + named] == Value::PRESENT.0
+                        && s.0[ts.offset(a.var) + named] == a.value.0
+                        && !leave[p],
+                    "{}",
+                    name(&format!(
+                        "the deadlock at {:?} = {:?} names slot {named} of plain state {p}, which can leave",
+                        a.var, a.value
+                    ))
+                );
+                let held: Vec<_> =
+                    (crate::lifecycle::TransitionSystem::forward(&adjacency, p as u32))
+                        .into_iter()
+                        .map(|i| (plain.states.at(i as usize), named as u8))
+                        .collect();
+                let exits = ts.exits(e, a.var, a.value);
+                let want = ts.deadlock(e, a.var, a.value, named, &exits, &held);
+                assert_eq!(
+                    untraced(diag),
+                    untraced(&want),
+                    "{}",
+                    name("the deadlock differs from the plain pass's for its instance")
+                );
+            }
+            (x, y, _) => panic!(
+                "{}",
+                name(&format!(
+                    "the deadlock at {:?} is {x:?}, on the plain run {y:?}",
+                    a.var
+                ))
+            ),
+        }
+    }
     compared(twin);
 }

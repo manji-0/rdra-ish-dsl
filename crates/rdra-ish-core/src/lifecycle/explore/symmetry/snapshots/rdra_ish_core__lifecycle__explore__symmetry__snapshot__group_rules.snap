@@ -1549,6 +1549,18 @@ Entity lines that name each rule or reason:
     Order[2] moves
   [property AlwaysDone] unreduced
     Order[2] moves
+== engine_corpus/sym_arm_reorders.rdra --instances Board=1
+  [entity Board] unreduced
+    Board[1] stays
+  [entity Job, Forbidden_Job_0] unreduced
+    Board[1] stays
+    Job[2] moves
+== engine_corpus/sym_arm_reorders.rdra --instance-count 3 --instances Board=1
+  [entity Board] unreduced
+    Board[1] stays
+  [entity Job, Forbidden_Job_0] unreduced
+    Board[1] stays
+    Job[3] moves
 == engine_corpus/sym_deleted_row_owner.rdra --instances Mall=1
   [entity Item, entity Shop, DanglingKey_Item_Shop] unreduced
     Item[2] moves
