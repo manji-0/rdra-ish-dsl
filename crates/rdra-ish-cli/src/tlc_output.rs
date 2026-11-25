@@ -95,8 +95,14 @@ impl TlcRun {
                 continue;
             };
             let name = violation_name(line);
-            let (trace, lasso, next) = parse_trace(&lines, i);
+            let (trace, mut lasso, next) = parse_trace(&lines, i);
             i = next;
+            // TLC 1.8.0's `[]S` checked as an invariant ends at the state that breaks `S`:
+            // every run through that state violates the property, the one that stutters
+            // there among them, which is the lasso TLC 1.7.x printed for it.
+            if lasso.is_none() && located_invariant(line.trim_start_matches("Error:").trim()) {
+                lasso = Some(Lasso::Stutter);
+            }
             run.violations.push(Violation {
                 kind,
                 name,
@@ -144,15 +150,25 @@ impl TlcRun {
 }
 
 /// `TypeOK` is the emitter's own typing, not a model rule: its violation is a tool error.
+///
+/// A temporal property's violation is `Error: Temporal properties were violated.` from TLC
+/// 1.7.x and `Error: Temporal property P was violated.` from 1.8.0. TLC 1.8.0 checks a
+/// property `[]S` of a state predicate `S` (an `always`) as an invariant on `S`, which it
+/// names by where `S` is: `Error: Invariant line 9, col 3 to line 9, col 40 of module M is
+/// violated.`, with a finite trace. That is the property's violation too.
 fn violation_kind(line: &str) -> Option<ViolationKind> {
     let rest = line.strip_prefix("Error:")?.trim();
     if rest.starts_with("Invariant TypeOK ") {
         None
+    } else if located_invariant(rest) {
+        Some(ViolationKind::Temporal)
     } else if rest.starts_with("Invariant ") && rest.ends_with("is violated.") {
         Some(ViolationKind::Invariant)
     } else if rest.starts_with("Action property ") && rest.ends_with("is violated.") {
         Some(ViolationKind::ActionProperty)
-    } else if rest.starts_with("Temporal properties were violated") {
+    } else if rest.starts_with("Temporal properties were violated")
+        || (rest.starts_with("Temporal property ") && rest.ends_with(" was violated."))
+    {
         Some(ViolationKind::Temporal)
     } else if rest.contains("violated") {
         Some(ViolationKind::Other)
@@ -161,8 +177,21 @@ fn violation_kind(line: &str) -> Option<ViolationKind> {
     }
 }
 
+/// `Invariant line L, col C to line L, col C of module M is violated.`: TLC 1.8.0's name for
+/// the state predicate of a `[]S` property it checks as an invariant.
+fn located_invariant(rest: &str) -> bool {
+    rest.strip_prefix("Invariant line ")
+        .and_then(|r| r.strip_suffix(" is violated."))
+        .is_some_and(|r| r.contains(" of module "))
+}
+
+/// The check an invariant or action property line names. A temporal violation names none,
+/// as TLC 1.7.x prints it: the run checks one property, and the caller knows which.
 fn violation_name(line: &str) -> Option<String> {
     let rest = line.strip_prefix("Error:")?.trim();
+    if located_invariant(rest) {
+        return None;
+    }
     let rest = rest
         .strip_prefix("Invariant ")
         .or_else(|| rest.strip_prefix("Action property "))?;
@@ -311,7 +340,13 @@ fn action_label(label: &str) -> String {
         Some((op, _)) => op,
         None => label,
     };
-    label.trim().to_string()
+    action_name(label.trim()).to_string()
+}
+
+/// The action operator of a label: TLC 1.8.0 adds the arguments it took, `Pay(1)` or
+/// `Enroll(1,1,1)`, where TLC 1.7.x prints `Pay`.
+fn action_name(label: &str) -> &str {
+    label.split_once('(').map_or(label, |(name, _)| name)
 }
 
 /// The `/\ var = value` lines from `start` to the next blank or header line. A line that
@@ -456,9 +491,14 @@ pub fn parse_dot<T>(
         let Some((head, attrs)) = line.split_once(" [") else {
             continue;
         };
+        // Attributes for every node or edge, as TLC 1.8.0 starts with `node [shape=box,...]`.
+        if matches!(head, "node" | "edge" | "graph") {
+            continue;
+        }
         let label = dot_label(attrs).ok_or_else(|| format!("no label: {line}"))?;
         match head.split_once(" -> ") {
             Some((from, to)) => {
+                let label = action_name(&label).to_string();
                 let from = node(from.trim(), &mut nodes);
                 let to = node(to.trim(), &mut nodes);
                 let l = match labels.iter().position(|l| *l == label) {
@@ -531,7 +571,7 @@ pub fn readback_failed(output: &str) -> bool {
 }
 
 /// What a run that `readback_failed` says to do.
-pub const READBACK_HINT: &str = "hint: TLC stopped with an ArrayIndexOutOfBoundsException while it read a trace back, which TLC 1.7.x does on JDK 21 and later (#314); run TLC on JDK 17 or earlier (the repository flake's `tlc` does), or use TLC 1.8.0";
+pub const READBACK_HINT: &str = "hint: TLC stopped with an ArrayIndexOutOfBoundsException while it read a trace back, which TLC 1.7.x does on JDK 21 and later (#314); use TLC 1.8.0 (the repository flake's `tlc` is 1.8.0), or run TLC 1.7.x on JDK 17 or earlier";
 
 /// The TLC and the JVM a run names in its first lines, as TLC prints them:
 ///
@@ -541,7 +581,8 @@ pub const READBACK_HINT: &str = "hint: TLC stopped with an ArrayIndexOutOfBounds
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Banner {
-    /// `2.19` above. TLC 1.7.x is `2.15` to `2.19`; 1.8.0 prints a date, `2026.11.19.180144`.
+    /// `2.19` above. TLC 1.7.x is `2.15` to `2.19`; the TLC 1.8.0 build the flake pins prints
+    /// a date, `2026.11.19.180144`.
     pub tlc: Option<String>,
     /// `21.0.11` above; JDK 8 prints `1.8.0_492`.
     pub java: Option<String>,
@@ -580,7 +621,7 @@ impl Banner {
         let feature = java_feature(java)?;
         (tlc.starts_with("2.") && feature >= 21).then(|| {
             format!(
-                "TLC {tlc} (TLC 1.7.x) runs on Java {java}; TLC 1.7.x fails reading a trace back on JDK 21 and later, and a run that prints many traces stops with an ArrayIndexOutOfBoundsException (#314); run TLC on JDK 17 or earlier (the repository flake's `tlc` does), or use TLC 1.8.0"
+                "TLC {tlc} (TLC 1.7.x) runs on Java {java}; TLC 1.7.x fails reading a trace back on JDK 21 and later, and a run that prints many traces stops with an ArrayIndexOutOfBoundsException (#314); use TLC 1.8.0 (the repository flake's `tlc` is 1.8.0), or run TLC 1.7.x on JDK 17 or earlier"
             )
         })
     }
@@ -780,6 +821,45 @@ Model checking completed. No error has been found.
         assert!(run.violations[0].name.is_none());
     }
 
+    /// TLC 1.8.0 names the temporal property it reports, prints an `always` as an invariant
+    /// on its state predicate, and adds each action's arguments to its label; each reads as
+    /// TLC 1.7.x's form does.
+    #[test]
+    fn tlc_1_8_forms_read_as_tlc_1_7_forms() {
+        let log = "Error: Temporal property ShippedReopens was violated.\n\n\
+                   Error: The following behavior constitutes a counter-example:\n\n\
+                   State 1: <Initial predicate>\n\
+                   /\\ s = <<\"pending\", \"pending\">>\n\n\
+                   State 2: <Place(1) line 46, col 3 to line 48, col 27 of module Train>\n\
+                   /\\ s = <<\"placed\", \"pending\">>\n\n\
+                   State 3: <Enroll(1,1,1) line 50, col 3 to line 52, col 27 of module Train>\n\
+                   /\\ s = <<\"placed\", \"placed\">>\n\n\
+                   State 4: Stuttering\n";
+        let run = TlcRun::parse(log);
+        let v = &run.violations[0];
+        assert_eq!((v.kind, v.name.as_deref()), (ViolationKind::Temporal, None));
+        let labels: Vec<&str> = v.trace.iter().map(|s| s.label.as_str()).collect();
+        assert_eq!(labels, ["Initial predicate", "Place", "Enroll"]);
+        assert_eq!(v.lasso, Some(Lasso::Stutter));
+
+        let always = "Error: Invariant line 109, col 33 to line 109, col 96 of module Cone_JobWaits_Full is violated.\n";
+        let v = &TlcRun::parse(always).violations[0];
+        assert_eq!((v.kind, v.name.as_deref()), (ViolationKind::Temporal, None));
+        assert_eq!(v.lasso, Some(Lasso::Stutter));
+        let named = "Error: Invariant Forbidden_line_0 is violated.\n";
+        let v = &TlcRun::parse(named).violations[0];
+        assert_eq!(v.kind, ViolationKind::Invariant);
+        assert_eq!(v.name.as_deref(), Some("Forbidden_line_0"));
+
+        let dot = "strict digraph DiskGraph {\nnode [shape=box,style=rounded]\n\
+                   1 [label=\"/\\\\ s = 0\",style = filled]\n\
+                   1 -> 2 [label=\"Place(1)\",color=\"black\",fontcolor=\"black\"];\n\
+                   2 [label=\"/\\\\ s = 1\",tooltip=\"/\\\\ s = 1\"];\n}\n";
+        let graph = parse_dot(dot.as_bytes(), |s| s.get("s").cloned()).unwrap();
+        assert_eq!(graph.labels, ["Place"]);
+        assert!(graph.nodes[0].initial && !graph.nodes[1].initial);
+    }
+
     /// TLC 1.7.4's two lasso tails, trimmed from runs of a model with a Reopen use case.
     const STUTTER: &str = r#"Error: Temporal properties were violated.
 
@@ -975,6 +1055,7 @@ The exception was a java.lang.RuntimeException
             .readback_warning()
             .is_none());
         assert!(banner(date, "21.0.11").readback_warning().is_none());
+        assert!(banner(date, "25.0.3").readback_warning().is_none());
         assert!(Banner::read("TLC2 Version 2.19\n")
             .readback_warning()
             .is_none());

@@ -1763,13 +1763,19 @@ Only `--with-tlc` needs TLC. `verify` looks for it in this order: `--tlc-jar`,
 - Nix: run `nix shell nixpkgs#tlaplus`, then run `verify` in that shell. If flakes are not
   enabled, add `--extra-experimental-features 'nix-command flakes'`. In this repository,
   `nix develop` provides `tlc`, and the flake's package puts the same `tlc` on the `PATH` of
-  `rdra-ish`: TLC 1.7.4, as `nixpkgs#tlaplus` packages it, on JDK 17 in place of JDK 8 and
-  with a class-data-sharing archive of TLC's classes, which starts each run sooner.
+  `rdra-ish`: TLC 1.8.0 on JDK 25, with a class-data-sharing archive of TLC's classes,
+  which starts each run sooner. `nixpkgs#tlaplus` is still TLC 1.7.4 on JDK 8.
 - The jar: download `tla2tools.jar` from the
   [TLA+ releases](https://github.com/tlaplus/tlaplus/releases), install a JDK, and pass
-  `--tlc-jar <path>` or set `RDRA_TLC_JAR=<path>`.
+  `--tlc-jar <path>` or set `RDRA_TLC_JAR=<path>`. TLC 1.8.0 needs JDK 11 or later.
 
-Run TLC 1.7.x on JDK 17 or earlier, or use TLC 1.8.0. On JDK 21 and later, TLC 1.7.x's
+`verify` reads the output of TLC 1.7.x and of TLC 1.8.0. TLC 1.8.0 is a pre-release that
+upstream rebuilds under the same tag. The flake pins the build of 2026-11-19 (`TLC2 Version
+2026.11.19.180144`) by its hash and downloads it from this repository's release
+[`tlc-1.8.0-bc1b506`](https://github.com/manji-0/rdra-ish-dsl/releases/tag/tlc-1.8.0-bc1b506)
+first, so a rebuild upstream does not break it.
+
+Use TLC 1.8.0, or run TLC 1.7.x on JDK 17 or earlier. On JDK 21 and later, TLC 1.7.x's
 own buffered file reads a trace record back wrongly once the JDK's
 `RandomAccessFile.readLong` goes through it, and a `-continue` run that prints many traces
 stops with `java.lang.ArrayIndexOutOfBoundsException` (`arraycopy: length -N is negative`
@@ -1780,7 +1786,7 @@ or `Index N out of bounds for length M`) (#314).
 - A run that stops on that exception is a `tool_error`, even when it had printed
   violations before it: it never reached the rest of the model. Its report starts with
   `hint: TLC stopped with an ArrayIndexOutOfBoundsException while it read a trace back, …`
-  and says to run TLC on JDK 17 or earlier or to use TLC 1.8.0.
+  and says to use TLC 1.8.0 or to run TLC 1.7.x on JDK 17 or earlier.
 
 #### Getting z3
 

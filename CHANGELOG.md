@@ -546,7 +546,29 @@
   JVM does not answer runs as a process, as every job does without `tlc-batch` on `PATH` or
   with `RDRA_TLC_BATCH=0`. See
   [Engine equivalence in batch JVMs](docs/formal-verification.md#engine-equivalence-in-batch-jvms).
-- `--max-patterns` caps only a run that builds an entity view (#251, #296): the cone of an
+- The flake's `tlc` and `tlc-batch` run TLC 1.8.0 on JDK 25, in place of TLC 1.7.4 on JDK 17,
+  with the class-data-sharing archive recorded for the new pair; the devShell's `java` is
+  JDK 25 (#309). nixpkgs packages TLC 1.7.4 only, so the flake takes the `tla2tools.jar` of
+  the v1.8.0 release, a pre-release that upstream rebuilds under the same tag, pinned by
+  hash to the build of 2026-11-19 (`TLC2 Version 2026.11.19.180144`, rev bc1b506) and
+  downloaded first from this repository's release `tlc-1.8.0-bc1b506`, which keeps that
+  jar with upstream's MIT license text. JDK 25
+  is the newest JDK nixpkgs packages. The run that #314 found TLC 1.7.4 failing on JDK 21
+  and 25 runs to its end on TLC 1.8.0 on both (#314).
+  - `verify` and the tests read TLC 1.8.0's output as they read 1.7.x's: a temporal
+    violation that names its property (`Error: Temporal property P was violated.`), an
+    `always` that TLC 1.8.0 checks as an invariant on its state predicate and names by
+    where the predicate is, action labels that carry their arguments (`Place(1)`) in traces
+    and in the state graph, and the `node [...]` line that starts its dot dump. Verdicts are
+    unchanged: the engine corpus and `engine_equivalence` agree on both pairs.
+  - A short TLC run takes 0.18 s of wall time and 0.48 user CPU-s, against 0.59 s and 0.31
+    on TLC 1.7.4; the archive and C1 for small state models still pay (0.28 s and 0.64 CPU-s
+    without the archive, 0.25 CPU-s with C1). The engine corpus went from 37 to 41 s of wall
+    time to 17 to 21 s, at 216 to 247 CPU-s against 164 to 182; `engine_equivalence` from 84
+    to 93 s and 849 to 884 CPU-s to 98 to 106 s and 727 to 744 CPU-s, on an 18-core Mac.
+  - A batch JVM of `engine_equivalence` gets 512 MiB of heap, not 256: a JVM keeps the data
+    of the job before past a GC, and on TLC 1.8.0 one job of the test ran out of the
+    256 MiB in two runs of four. a run that builds an entity view (#251, #296): the cone of an
   entity view in `check` and `states`. Only those runs gather view patterns now. A cone of
   invariants, `after` assertions or `can_reach` alone, a run that quotients a sub-lifecycle,
   and every run of `verify` gather none, so the pattern cap no longer stops them: a cone that
@@ -746,8 +768,8 @@
   and `verify` reported a `counterexample` for what it had printed before, or a
   `tool_error` with nothing that named the cause. `verify` now warns once when a run's
   banner shows TLC 1.7.x on JDK 21 or later. A run that stops on the exception is a
-  `tool_error` whose report starts with a hint to run TLC on JDK 17 or earlier, or to use
-  TLC 1.8.0.
+  `tool_error` whose report starts with a hint to use TLC 1.8.0, or to run TLC 1.7.x on
+  JDK 17 or earlier.
 - `codegen` escapes a name that is a keyword of the target language (#265). A use case
   named `Return` printed `pub fn return(...)` in Rust and `export function return(...)` in
   TypeScript, and neither compiled. Rust now prints a raw identifier (`r#return`), or a
