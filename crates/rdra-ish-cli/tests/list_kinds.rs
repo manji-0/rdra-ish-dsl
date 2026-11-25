@@ -7,15 +7,18 @@ fn repo() -> PathBuf {
     dunce::canonicalize(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).expect("repo root")
 }
 
-/// Written once: the tests run in parallel and would otherwise truncate the file under a
-/// reader.
+/// Written once per process beside the directory and moved into it: the tests run in
+/// parallel, under cargo-nextest each in a process of its own, and a plain write would
+/// truncate the file under a reader.
 fn model_dir() -> &'static Path {
     static DIR: OnceLock<PathBuf> = OnceLock::new();
     DIR.get_or_init(|| {
-        let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("list_kinds");
+        let tmp = Path::new(env!("CARGO_TARGET_TMPDIR"));
+        let dir = tmp.join("list_kinds");
         std::fs::create_dir_all(&dir).unwrap();
+        let written = tmp.join(format!("list_kinds-{}.rdra", std::process::id()));
         std::fs::write(
-            dir.join("m.rdra"),
+            &written,
             r#"
 screen OrderScreen "Order"
 screen CartScreen "Cart"
@@ -24,6 +27,7 @@ timer NightlyClose "Nightly close"
 "#,
         )
         .unwrap();
+        std::fs::rename(&written, dir.join("m.rdra")).unwrap();
         dir
     })
 }

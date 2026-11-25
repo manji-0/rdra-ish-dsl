@@ -10,7 +10,7 @@ default bounds, and memory or timing measurements. Before you start one, go thro
 list. Run it only when an item says it is needed, and say which item that was.
 
 1. **GitHub Actions already runs it?** `.github/workflows/ci.yml` runs on every pull request:
-   fmt, clippy, the tests (`scripts/diff-test.sh --all`), sample artifacts, skill snippets,
+   fmt, clippy, the tests, sample artifacts, skill snippets,
    `nix build`, `verify-samples.sh --with-tlc --tlc-roots scripts/tlc-roots.txt`, reduced
    cones, the `reduction-diff.py` seeds (without TLC on a PR, with it on main),
    `engine_equivalence`, `proof_equivalence`, `engine_corpus`,
@@ -18,7 +18,13 @@ list. Run it only when an item says it is needed, and say which item that was.
    only when a change can reach them; see `scripts/verify-relevant.sh` and
    `scripts/kani-relevant.sh`). A pull request whose files are all prose
    (`scripts/code-relevant.sh`) runs fmt, clippy, the tests that read Markdown, and the
-   skill snippets in place of the whole suite and the sample artifacts. The PR's checks,
+   skill snippets in place of the whole suite and the sample artifacts. The test step
+   (`scripts/diff-test.sh --all`) runs the tests under cargo-nextest's `pr` profile, which
+   skips the slow list in `.config/nextest.toml`; rdra-ish-cli's `diagram_contract` binary
+   runs whole with `cargo test` instead. A pull request that touches codegen (the `codegen`
+   output of the `changes` job) also runs the slow `codegen_*` tests. On main (scheduled or by
+   hand) the job also runs the slow list and fails on any test outside it that took over
+   10 s (`scripts/check-test-times.py`). The PR's checks,
    green on a head that contains the latest main, are the merge gate. Do not run these
    locally to gate a merge. Locally run only what Actions cannot: behaviour that differs on
    macOS (Actions runs on ubuntu).
