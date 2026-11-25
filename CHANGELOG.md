@@ -2,11 +2,27 @@
 
 ## Unreleased
 
+## v3.0.0 - 2026-11-26
+
 This is a major release. `verify` decides every check with its own checker and needs no JVM;
 TLC (`--with-tlc`) and z3 (`--prove`) check it from outside. `codegen` prints domain code in
 the Kamae style for TypeScript, Rust and Go, and `check --code` holds service code to the
 model. Some verdicts change where the lifecycle used to disagree with SQL. The upgrade guide
 lists what to change.
+
+**Release gate** ([plan](docs/design/native-temporal-verification.md#decisions)). Phases 4
+and 5 are moved out of this release, and items 3 and 7 are waived. The other items held:
+
+- 2 and 5: the `formal-verify` job of the `main` CI at this commit checks every sample
+  header natively and the TLC roots with `--with-tlc`, with no disagreement and no
+  tool-bug line.
+- 4: no open issue reports a wrong native verdict; #374 is fixed here.
+- 6: no sample check went from decided under TLC to `not decided`, and each sample's native
+  `verify` beats its TLC run (wall time / peak RSS, release build, default bounds):
+  patent-ops 1.0 s / 187 MB against 33.3 s / 795 MB, food-permit-ops 2.7 s / 681 MB against
+  24.0 s / 1.61 GB, insurance-claim-ops 5.9 s / 867 MB against 127.0 s / 2.10 GB, and the
+  five small samples under 0.01 s / 10 MB against 3.7-7.1 s / 122-152 MB.
+- 8: the docs, compatibility page and skills were rewritten for this release (#375-#379).
 
 ### Upgrading from v2.3.0
 
@@ -323,6 +339,11 @@ No sample changes verdict.
 
 ### Known issues
 
+- Phases 4 and 5 of the native temporal plan are not in this release (#168). A temporal
+  property whose cone leaves it open, such as patent-ops' `GrantEnds`, still ends as
+  `not decided` where the whole model is too large, and a counterexample on a reduced cone
+  is repeated on the unreduced one. A minor release may decide such a property, as
+  [compatibility](docs/compatibility.md) allows.
 - `--memory` bounds what the state stores hold, not the whole process (#237, #242, #243).
   A run that stops at the limit has been measured at up to 1.85 times it. Set `--memory` to about half
   the memory you can spare. See [Memory limit](docs/cli-reference.md#memory-limit).
