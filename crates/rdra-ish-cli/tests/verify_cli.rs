@@ -1131,6 +1131,60 @@ fn a_property_named_like_another_property_module_keeps_its_own_spec() {
     assert!(!stdout.contains("tool_error"), "{stdout}");
 }
 
+/// `FULL_NAMED`'s reduced cones show their counterexamples within `--max-states 40`, and the
+/// unreduced cones (206 states) stop at it before they do: the `Full` run lifts the reduced
+/// counterexample instead, which before phase 5 left both properties `not decided`. With no
+/// cap the `Full` run explores and prints its own lasso, unless `RDRA_ISH_LIFT_EVERYWHERE`
+/// asks for the lift on every cone.
+#[test]
+fn a_reduced_counterexample_lifts_where_the_unreduced_cone_passes_the_cap() {
+    let tmp = scratch("verify_cli_lift_past_the_cap");
+    let model = tmp.join("m.rdra");
+    std::fs::write(&model, FULL_NAMED).unwrap();
+    let model = model.to_str().unwrap();
+    let lifted = ": counterexample lifted from the reduced cone)";
+    let everywhere = [("RDRA_ISH_LIFT_EVERYWHERE", "1")];
+    let cases = [
+        (&[][..], &["--max-states", "40"][..], lifted),
+        (&[], &[], ": counterexample)"),
+        (&everywhere, &[], lifted),
+    ];
+    for (env, flags, ending) in cases {
+        let args: Vec<&str> = std::iter::once(model)
+            .chain(flags.iter().copied())
+            .collect();
+        let out = verify_env(&repo(), &tmp, env, &args);
+        let (stdout, stderr) = (
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr),
+        );
+        assert_eq!(
+            out.status.code(),
+            Some(1),
+            "{env:?} {flags:?}: {stdout}{stderr}"
+        );
+        for (module, property, full) in [
+            ("Cone_Q", "Q", "Cone_Q_Full_2"),
+            ("Cone_Q_Full", "Q_Full", "Cone_Q_Full_Full"),
+        ] {
+            assert!(
+                stdout.lines().any(|l| l
+                    .starts_with(&format!("{module} [{property}]: counterexample ("))
+                    && l.ends_with(&format!(", {full}{ending}"))),
+                "{env:?} {flags:?}: {stdout}"
+            );
+            assert!(
+                stderr.contains(&format!(
+                    "error[{property}]: property {property} is violated: "
+                )),
+                "{env:?} {flags:?}: {stderr}"
+            );
+        }
+        assert!(stderr.contains("result: counterexample"), "{stderr}");
+    }
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 /// A cone reruns without the check it has reported, from `Cone_MultiInv_Order_0_rest1.cfg`,
 /// the cfg of the property `MultiInv_Order_0_rest1`; the rerun takes `_rest1_2.cfg`, and the
 /// property's cfg still names the property.

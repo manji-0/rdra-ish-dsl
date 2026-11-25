@@ -8,8 +8,8 @@ use crate::property_cone::{AfterPlain, ConeRun, Verdict};
 use crate::tlc_output::Outcome;
 use rdra_ish_core::in_parallel;
 use rdra_ish_core::lifecycle::{
-    Caps, ComponentRun, Diag, Fairness, LassoFault, OrbitRun, PropertyVerdict, ReducedVerdict,
-    StateDiag, TransitionSystem,
+    Caps, ComponentRun, Diag, Fairness, LassoFault, LiftedLasso, OrbitRun, PropertyVerdict,
+    ReducedLasso, ReducedVerdict, Spurious, StateDiag, TransitionSystem,
 };
 use rdra_ish_emit::tla::TlaNames;
 
@@ -118,6 +118,8 @@ pub(super) struct Plain {
     answer: Answer,
     /// The run with `WF_vars(Next)` on the reduced graph, when the plain one asks for it.
     reduced_wf: Option<ReducedVerdict>,
+    /// The plain counterexample, to lift when the `Full` run would read it again.
+    lasso: Option<ReducedLasso>,
     crowded: bool,
 }
 
@@ -149,14 +151,108 @@ impl Plain {
         if let Some(verdict) = &reduced_wf {
             wf_reduced_stats(ts, p, &cone.reduced, verdict);
         }
+        // A counterexample the `Full` run would read again on the unreduced cone, kept as
+        // reduced steps to lift there instead (`full_or_lifted`).
+        let lasso = match (&answer, &reduced_wf) {
+            (
+                Answer::Verdict(Outcome::Counterexample, _),
+                None | Some(ReducedVerdict::Undecided | ReducedVerdict::Spurious(_)),
+            ) if cone.is_reduced() && p.full.is_some() => run.reduced_lasso(cone.reduced_index),
+            _ => None,
+        };
         Plain {
             vacuous: ts.property_vacuity(p.index, run),
             states: run.states.len() as u64,
             answer,
             reduced_wf,
+            lasso,
             crowded: crowded(run),
         }
     }
+}
+
+/// Phase 5's second half (docs/design/native-temporal-verification.md, "Phases"): lift a
+/// reduced counterexample in place of the `Full` run on every cone, not only where that run
+/// stops at the state cap or the memory limit. Off until the owner has compared the lifted
+/// lassos with the explored ones on the samples (`RDRA_ISH_LIFT_STATS`); a test hook, not a
+/// setting, as `RDRA_ISH_NO_WF_REDUCED` is.
+fn lift_everywhere() -> bool {
+    std::env::var_os("RDRA_ISH_LIFT_EVERYWHERE").is_some()
+}
+
+/// The `Full` run after a counterexample on the reduced cone: the reduced lasso lifted to the
+/// unreduced cone and certified there when the unreduced cone stops before it decides (or,
+/// under `lift_everywhere`, before exploring it at all), else the `Plain` run on the
+/// unreduced cone as before. Returns the answer, whether it was lifted, and the unreduced run
+/// when one was explored.
+fn full_or_lifted(
+    p: &PropertyJob,
+    caps: Caps,
+    lasso: Option<&ReducedLasso>,
+    crowded_run: &mut bool,
+) -> (Answer, bool, Option<ComponentRun>) {
+    let cone = &p.cone;
+    let lift = || {
+        let lasso = lasso?;
+        let lifted = lasso.lift(&cone.reduced, &cone.system, cone.index);
+        lift_stats(p, lasso, &lifted, None);
+        lifted.ok()
+    };
+    let lifted = |l: LiftedLasso| Answer::Verdict(Outcome::Counterexample, Some(l.diag));
+    if lift_everywhere() {
+        if let Some(l) = lift() {
+            return (lifted(l), true, None);
+        }
+    }
+    let run = explore(&cone.system, caps, crowded_run);
+    let again = Answer::of(&run, cone.index, Fairness::Plain);
+    let again = match again {
+        // The unreduced cone stopped at the cap before it showed the counterexample, which
+        // it holds: the reduced one, lifted and certified, is one of its lassos.
+        Answer::Stopped if !lift_everywhere() => match lift() {
+            Some(l) => return (lifted(l), true, Some(run)),
+            None => Answer::Stopped,
+        },
+        Answer::Verdict(Outcome::Counterexample, Some(found)) => {
+            if let Some(lasso) = lasso.filter(|_| lift_stats_on()) {
+                let lifted = lasso.lift(&cone.reduced, &cone.system, cone.index);
+                lift_stats(p, lasso, &lifted, Some(&found));
+            }
+            Answer::Verdict(Outcome::Counterexample, Some(found))
+        }
+        other => other,
+    };
+    (again, false, Some(run))
+}
+
+fn lift_stats_on() -> bool {
+    std::env::var_os("RDRA_ISH_LIFT_STATS").is_some()
+}
+
+/// Under `RDRA_ISH_LIFT_STATS`, one line on stderr per reduced counterexample lifted to the
+/// unreduced cone: the steps of the reduced lasso, of the lifted one or why it did not
+/// certify, and of the lasso the explored unreduced cone gives, when it ran. For deciding
+/// `lift_everywhere`.
+fn lift_stats(
+    p: &PropertyJob,
+    lasso: &ReducedLasso,
+    lifted: &Result<LiftedLasso, Spurious>,
+    explored: Option<&StateDiag>,
+) {
+    if !lift_stats_on() {
+        return;
+    }
+    let steps = |d: &StateDiag| d.trace().map_or(0, |t| t.steps.len()).to_string();
+    let lifted = match lifted {
+        Ok(l) => steps(&l.diag),
+        Err(why) => format!("spurious-{why:?}"),
+    };
+    let explored = explored.map_or("-".to_string(), steps);
+    eprintln!(
+        "lift: {} reduced={} lifted={lifted} explored={explored}",
+        p.cone.system.properties()[p.cone.index].name,
+        lasso.steps()
+    );
 }
 
 /// `p` on its cone by the runs `property_cone` defines, each on a graph BFS explores: `Plain`
@@ -225,12 +321,16 @@ fn native_property_after(p: &PropertyJob, caps: Caps, plain: Plain) -> (Native, 
     // A counterexample on the reduced cone is real, but its lasso is read on the unreduced
     // cone, whose run gives the verdict from here on.
     if let (Answer::Verdict(Outcome::Counterexample, _), Some(full)) = (&last, &p.full) {
-        let run = explore(&cone.system, caps, &mut crowded_run);
-        let again = Answer::of(&run, cone.index, Fairness::Plain);
-        unreduced = Some(run);
+        let (again, lifted, run) = full_or_lifted(p, caps, plain.lasso.as_ref(), &mut crowded_run);
+        unreduced = run;
         out.runs.push((ConeRun::Full, again.outcome()));
+        let how = if lifted {
+            " lifted from the reduced cone"
+        } else {
+            ""
+        };
         out.notes
-            .push(format!("{}: {}", full.module, again.as_str()));
+            .push(format!("{}: {}{how}", full.module, again.as_str()));
         last = match again {
             Answer::Verdict(Outcome::Ok, _) => {
                 out.fault =
