@@ -27,6 +27,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
 use super::cone::{Cone, Seed, VarSet};
+use super::explore::symmetry::dropped;
 use super::explore::Caps;
 use super::expr::{State, StateSlice};
 use super::types::{ActId, EntId, Pred, Value, VarId};
@@ -223,18 +224,14 @@ impl Reduction {
     }
 
     /// The entities of `ts`, this reduced cone, that a run up to instance symmetry leaves
-    /// where they are (#212 phase 3, `G_T`): the state holds a class representative for S,
-    /// which a permutation of S rows does not map to a representative, and the class tables
-    /// key on the inputs and the bits slot by slot. So every S entity stays; so does every
-    /// entity that holds an S var or an input, and every parent such a key names; every
-    /// entity a bit is kept per row of; and every entity a param of an S action binds, since
-    /// a class move's params are stored with its class and do not follow the T rows.
-    pub(crate) fn fixed(&self, ts: &TransitionSystem) -> Vec<EntId> {
-        self.fixed_why(ts).into_keys().collect()
-    }
-
-    /// `fixed`, each entity with every reason found for it, for the stats line of
-    /// `RDRA_ISH_G_T_STATS`.
+    /// where they are (#212 phase 3, `G_T`), each with every reason found for it: the state
+    /// holds a class representative for S, which a permutation of S rows does not map to a
+    /// representative, and the class tables key on the inputs and the bits slot by slot. So
+    /// every S entity stays; so does every entity that holds an S var or an input, and every
+    /// parent such a key names; every entity a bit is kept per row of; and every entity a
+    /// param of an S action binds, since a class move's params are stored with its class and
+    /// do not follow the T rows. The reasons go to the stats line of `RDRA_ISH_G_T_STATS`, and
+    /// the snapshot `explore/symmetry/snapshot.rs` pins them per cone.
     pub(crate) fn fixed_why(&self, ts: &TransitionSystem) -> BTreeMap<EntId, Vec<&'static str>> {
         let mut fixed: BTreeMap<EntId, Vec<&'static str>> = BTreeMap::new();
         let mut add = |e: EntId, why: &'static str| {
@@ -276,7 +273,48 @@ impl Reduction {
                 add(p.entity, "S action param");
             }
         }
+        // "S" is implied by "S var": an S entity's existence mark is an S var. So no S
+        // entity moves when one of the two reasons is dropped alone, and this keeps the
+        // implication true (docs/design/instance-symmetry.md, "Always by default", the
+        // per-rule gate, (c)).
+        for (e, why) in &fixed {
+            assert!(
+                !why.contains(&"S") || why.contains(&"S var"),
+                "symmetry: the S entity {} holds no S var",
+                ts.entity(*e).id
+            );
+        }
+        // A reason a test or a `shadow` build drops (`dropped`) is left out, and an entity
+        // with no reason left moves.
+        for why in fixed.values_mut() {
+            why.retain(|w| !dropped(&format!("Reduced:{w}")));
+        }
+        fixed.retain(|_, why| !why.is_empty());
         fixed
+    }
+
+    /// The sub-lifecycle that a run of S up to `H` runs for `ts`, this reduced cone (#212
+    /// phase 2), with no run of it: the extended sub-lifecycle of this reduction, or of the
+    /// innermost nested one, which `Classes::of` explores unreduced and so may run up to `H`.
+    /// Returns its depth (1 for this reduction's own), the system, and the entities `H`
+    /// leaves where they are with their reasons (`Extended::fixed_why`), for the snapshot
+    /// that pins them (`explore/symmetry/snapshot.rs`).
+    #[cfg(test)]
+    pub(crate) fn sub_lifecycle_up_to_h(
+        &self,
+        ts: &TransitionSystem,
+    ) -> (usize, TransitionSystem, BTreeMap<EntId, Vec<&'static str>>) {
+        let mut ext = Extended::rebuild(ts, self);
+        let mut r = self;
+        let mut depth = 1;
+        while let Some(inner) = r.inner.as_deref() {
+            let mut sub = ext.system.clone();
+            sub.reduction = r.inner.clone();
+            ext = Extended::rebuild(&sub, inner);
+            r = inner;
+            depth += 1;
+        }
+        (depth, ext.system, ext.fixed_why)
     }
 
     /// The S and input bytes of a state, as the extended sub-lifecycle's state: its vars in

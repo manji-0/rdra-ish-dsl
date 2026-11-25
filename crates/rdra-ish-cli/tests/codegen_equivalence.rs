@@ -17,7 +17,9 @@
 //!   entity, and a key between two rows holds when the child's owner var names the parent.
 //! - **Rule checks.** No row of a reached state breaks a rule of its type's validator.
 //!
-//! The printers print this IR, and `codegen_builds.rs` compiles what they print.
+//! The printers print this IR, and `codegen_builds.rs` compiles what they print. The
+//! evaluator it reads the functions' conditions with (`codegen::conformance::eval`) is the one
+//! the conformance traces pick each move's function with.
 
 mod codegen_cases;
 
@@ -53,8 +55,8 @@ fn functions_agree_with_the_transition_system() {
             if domain.skipped.iter().any(|s| s.action == action.name) {
                 continue;
             }
-            let pre = &run.states[edge.from as usize];
-            let post = &run.states[edge.to as usize];
+            let pre = &run.states.at(edge.from as usize);
+            let post = &run.states.at(edge.to as usize);
             let f = match pick(&domain, &model, ts, action, params, pre, post) {
                 Ok(f) => f,
                 Err(why) => {
@@ -262,7 +264,7 @@ fn functions_agree_with_the_transition_system() {
                     let rows = Rows::new(
                         ts,
                         &model,
-                        state,
+                        &state,
                         vec![(v.entity.clone(), slot)],
                         Vec::new(),
                     );
@@ -322,7 +324,7 @@ fn functions_agree_with_the_transition_system() {
                     let rows = Rows::new(
                         ts,
                         &model,
-                        state,
+                        &state,
                         vec![(entity.clone(), slot)],
                         f.elems.iter().map(|e| e.entity.clone()).collect(),
                     );

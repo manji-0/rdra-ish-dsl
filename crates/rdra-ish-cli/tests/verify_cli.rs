@@ -1865,7 +1865,8 @@ fn verify_on_banner(test: &str, java: &str, crash: bool) -> String {
 
 /// TLC 1.7.x fails reading a trace back on JDK 21 and later (#314): `verify` warns once when
 /// a run's banner shows that pair, and a run that stopped on the failure is a `tool_error`
-/// whose hint names the cause and says to use JDK 17 or earlier. On JDK 17 neither appears.
+/// whose hint names the cause and says to use TLC 1.8.0 or JDK 17 or earlier. On JDK 17
+/// neither appears.
 #[cfg(unix)]
 #[test]
 fn tlc_1_7_on_jdk_21_warns_once_and_its_read_back_failure_names_the_fix() {
@@ -1874,7 +1875,7 @@ fn tlc_1_7_on_jdk_21_warns_once_and_its_read_back_failure_names_the_fix() {
         "hint: TLC stopped with an ArrayIndexOutOfBoundsException while it read a trace back";
     let out = verify_on_banner("verify_cli_readback_21", "21.0.11", true);
     assert_eq!(out.matches(WARNING).count(), 1, "{out}");
-    assert!(out.contains("run TLC on JDK 17 or earlier"), "{out}");
+    assert!(out.contains("run TLC 1.7.x on JDK 17 or earlier"), "{out}");
     assert!(out.contains(HINT), "{out}");
     assert!(out.contains("tool_error"), "{out}");
 
@@ -2048,7 +2049,7 @@ fn symmetry_always_decides_a_cone_the_memory_limit_stopped_at_any_jobs() {
     let line = "Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: ";
     let never = run("never", "1");
     assert!(
-        never.contains(&format!("{line}not decided (2048 states, stopped")),
+        never.contains(&format!("{line}not decided (4096 states, stopped")),
         "{never}"
     );
     let always = run("always", "1");
@@ -2064,18 +2065,21 @@ fn symmetry_always_decides_a_cone_the_memory_limit_stopped_at_any_jobs() {
 /// A counterexample found up to instance symmetry may name other rows than a plain run's,
 /// but the same ones in every run and at every `RDRA_JOBS` (docs/design/instance-symmetry.md,
 /// "Always by default", 8): on an unreduced cone (`sym_lift_compose`) and on a reduced one
-/// whose `G_T` moves rows (`gate_reduced`), both forced up to symmetry. Each trace replays
-/// through the step relation before the #74 lift, or the run panics, which the exit code
-/// would show; that every lifted path of the gate's cone is a path of the unreduced cone is
+/// whose `G_T` moves rows (`gate_reduced`), both forced up to symmetry, and a liveness lasso
+/// whose loop is an orbit self-edge, repeated until it closes (`sym_relink_loop`, #212 phase
+/// 4). Each trace replays through the step relation before the #74 lift, or the run panics,
+/// which the exit code would show; that every lifted path of the gate's cone is a path of the unreduced cone is
 /// `a_reduced_cone_up_to_g_t_stores_fewer_states_and_lifts_its_trace`'s.
 #[test]
 fn symmetry_counterexamples_are_the_same_in_every_run() {
     let tmp = scratch("verify_cli_symmetry_same");
     let lift = repo().join("crates/rdra-ish-cli/tests/engine_corpus/sym_lift_compose.rdra");
     let gate = repo().join("crates/rdra-ish-cli/tests/fixtures/symmetry/gate_reduced.rdra");
+    let relink = repo().join("crates/rdra-ish-cli/tests/engine_corpus/sym_relink_loop.rdra");
     for args in [
         vec![lift.to_str().unwrap(), "--instances", "Queue=1"],
         vec![gate.to_str().unwrap()],
+        vec![relink.to_str().unwrap(), "--instances", "Ticket=1"],
     ] {
         let args: Vec<&str> = args.into_iter().chain(["--symmetry", "always"]).collect();
         let run = |jobs: &str| {

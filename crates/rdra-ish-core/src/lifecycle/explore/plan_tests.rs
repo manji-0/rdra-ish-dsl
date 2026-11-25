@@ -125,7 +125,7 @@ fn planned_enabled_bindings_agree_with_eval_on_every_shipped_model() {
         for cone in cones() {
             for state in &cone.run.states {
                 states += 1;
-                enabled += assert_planned_agrees(&name, &cone.run.system, state);
+                enabled += assert_planned_agrees(&name, &cone.run.system, &state);
             }
         }
     }

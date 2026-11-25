@@ -660,8 +660,9 @@ The slots of an entity are interchangeable unless the model tells them apart: tw
 differ only in which slot holds which row reach the same verdicts. `verify --symmetry always`
 stores one state per class of such states, an orbit, so a cone that outgrows the memory limit
 slot by slot can finish. [Instance symmetry](./design/instance-symmetry.md) covers the safety
-cones (`Cone_<check>`), reduced or not, and the cones of `always` properties that `verify`
-leaves unreduced, when no plain run decides them. Every other cone runs as before.
+cones (`Cone_<check>`), reduced or not, the cones of `always` properties that `verify`
+leaves unreduced, and the cones of `eventually` and `leads_to` properties, when no plain run
+decides them. Every other cone runs as before.
 
 ```sh
 rdra-ish verify samples/clinic-ops --instance-count 3 --memory 8GiB --symmetry always
@@ -702,6 +703,13 @@ Cone_Inv_Encounter_2 [Inv_Encounter_2]: ok (about 820M states)
   an S action binds. `RDRA_ISH_SYMMETRY_STATS` names them (`the reduced sub-lifecycle of
   its cone keys on its rows`). Its counterexample is lifted through the symmetry, then through
   the reduction, and replayed. An `always` property on a reduced cone runs plain.
+- **Liveness** (phase 4). An `eventually` or `leads_to` cone, `.fair` included, runs up to
+  symmetry with each edge's permutation kept, and its fair components are read per binding:
+  an edge moves the binding, and each fair instance, by its permutation. Its counterexample
+  repeats the stored loop until the concrete states close it, and replays and passes the
+  fairness check before it prints. On a reduced cone whose run up to symmetry finds a
+  counterexample, the property is decided as under `never`. A property whose reduced cone
+  is a safety cone's system stays plain, so that one plain run decides both.
 - **Shared runs.** A cone that runs up to symmetry stops once every check has failed, and its
   run decides nothing for the other passes, which have no plain graph to read off it.
 - **Branch cap.** The canonical form branches on rows it cannot tell apart that other rows
@@ -819,7 +827,7 @@ the sample cones that number rises to a peak and falls about as it rose, so:
   stops early usually gets no estimate: of the 73 cones, 1 got one when stopped at half its
   states, 10 at three quarters, and 49 at nine tenths. A cone that outgrows a machine is
   often still rising; the `Complaint` cone of `insurance-claim-ops` at two instances stops
-  at the default `4GiB` with 13.5 million states, still growing 1.6 times per depth.
+  at the default `4GiB` with 1.7 million states, still growing 1.7 times per depth.
 - **Just past the peak, or a long fall.** One depth past the peak, or a fall that already
   holds more states than the mirror gives, gets no estimate either, and the message says
   which.
@@ -832,25 +840,27 @@ reached. A size is computed with `(w + 12)·p2(n) + 5·buckets(n) + (4 + b)·p2(
 `n` states of `w` bytes and `e` edges, where `b` is the 1, 2 or 4 bytes of a binding id
 (`p2` rounds up to a power of two, `buckets` to a power of two of at least `n·8/7`): the run
 keeps each state once, in one buffer, indexes it by number, and keeps an edge as its target
-and binding id. A cone that stops once every check fails keeps no edges, and its size is
+and binding id. A state is kept packed: each variable takes the bits its domain needs
+(`ceil(log2(size))`, so a 3-value status takes 2), and `w` is their sum rounded up to whole
+bytes. A cone that stops once every check fails keeps no edges, and its size is
 `(w + 8 + b)·p2(n) + 5·buckets(n)`. The size is never under what the run counts at its
 end. `e` is the edges per
 expanded state seen so far times `n`; early depths have fewer, so that part is low. Every
 figure is for the one cone; the cones share the limit, so allow more than it says.
 
 ```text
-error[MemoryCapReached_Task]: state derivation for entity 'Task': memory limit 21KiB reached at 256 states; results are incomplete: the cone has 9 variables, 9 of them vary (...); new states first reached by: Flip7 127, Flip6 64, Flip5 32, Flip4 16, Flip3 8, Flip2 4, Flip1 2, Close 1; held at 85 B per state; the frontier peaked at depth 5 and has shrunk for 3 layers since, so the cone probably holds about 258 states (its falling side taken to mirror its rising side: an estimate, not a bound); with a quarter to spare, this cone alone probably needs about 1MiB: try 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
-error[MemoryCapReached_Order]: state derivation for entity 'Order': memory limit 1KiB reached at 4 states; results are incomplete: the cone has 3 variables, 2 of them vary (values reached/domain: Order.status 3/5, Order._exists 2/3); new states first reached by: CancelOrder 1, CapturePay 1, PlaceOrder 1; held at 91 B per state; the frontier still grows (2 new states at depth 2, 2.0x the depth before), so its layers give no estimate of the states left; the cone's variables allow at most 30 states, so if all are reachable this cone alone needs at least about 1MiB; raise it to 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
+error[MemoryCapReached_Task]: state derivation for entity 'Task': memory limit 17KiB reached at 256 states; results are incomplete: the cone has 9 variables, 9 of them vary (...); new states first reached by: Flip7 127, Flip6 64, Flip5 32, Flip4 16, Flip3 8, Flip2 4, Flip1 2, Close 1; held at 71 B per state; the frontier peaked at depth 5 and has shrunk for 3 layers since, so the cone probably holds about 258 states (its falling side taken to mirror its rising side: an estimate, not a bound); with a quarter to spare, this cone alone probably needs about 1MiB: try 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
+error[MemoryCapReached_Order]: state derivation for entity 'Order': memory limit 1KiB reached at 14 states; results are incomplete: the cone has 3 variables, 3 of them vary (values reached/domain: Order.status 5/5, Order._exists 2/3, Order.delivered_at 2/2); new states first reached by: PlaceOrder 5, CancelOrder 3, CapturePay 3, DeliverOrder 1, ShipOrder 1; held at 71 B per state; the frontier still grows (5 new states at depth 3, 1.7x the depth before), so its layers give no estimate of the states left; the cone's variables allow at most 900 states, so if all are reachable this cone alone needs at least about 1MiB; raise it to 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
 ```
 
 The `Task` cone (`crates/rdra-ish-cli/tests/fixtures/memory/flags.rdra`) holds 257 states.
 
-`verify` lists what the cones leave undecided. `verify samples/patent-ops --memory 128MiB`
+`verify` lists what the cones leave undecided. `verify samples/patent-ops --memory 64MiB`
 prints (trimmed):
 
 ```text
 not checked: 10 findings not decided
-  whether some OfficeAction can get stuck at status = open is not decided: the OfficeAction cone stopped at the memory limit (128MiB; raise it with --memory or `memory` under [verify] in rdra.toml)
+  whether some OfficeAction can get stuck at status = open is not decided: the OfficeAction cone stopped at the memory limit (64MiB; raise it with --memory or `memory` under [verify] in rdra.toml)
 ...
 result: not decided
 warning: 10 findings a cone stopped at the state cap or the memory limit left undecided; the OK line holds only for what was decided (--deny-undecided fails the run)
@@ -1578,7 +1588,7 @@ rdra-ish verify <INPUTS...> [--with-tlc] [-o <OUT>] [--instance-count <N>] [--in
 | `--temporal-budget` | unsigned integer | `300` | Seconds a temporal property's whole-model run gets when its cone does not decide it. Past them, or past `--max-states` states or `--memory`, the run stops and, unless it had already found a counterexample, the property is `not decided`, which warns and does not fail the run. Under `--with-tlc` TLC's whole-model run gets the same budget, and its state count is read from its progress lines (about one a minute). |
 | `--tlc-jar` | path | `RDRA_TLC_JAR`, else none | With `--with-tlc`: run TLC as `java -cp <PATH> tlc2.TLC` from `tla2tools.jar` instead of a `tlc` / `tlc2` launcher on `PATH`. Needs `java` on `PATH`. Without `--with-tlc` it prints a warning and starts no TLC. |
 | `--memory` | size | `memory` under `[verify]` in `rdra.toml`, else `16GiB` | What the run may hold in memory, such as `16GiB` or `512MiB` (`G` and `GB` also mean GiB). BFS takes all of it; under `--with-tlc` BFS takes half and the TLC cone runs going at once the other half, at least `64MiB`. A BFS cone past its share stops and leaves its findings undecided. See [Memory limit](#memory-limit). |
-| `--symmetry` | `never`, `always` | `symmetry` under `[verify]` in `rdra.toml`, else `never` | Experimental. Explore a safety cone (on a reduced one, its T rows), and the unreduced cone of an `always` property, up to instance symmetry: one stored state per class of states that differ only in which slots hold which rows. `always` does it on every such cone that no plain run decides; `never` changes nothing. A cone run up to symmetry prints `(about <m> states)`. See [Instance symmetry](#instance-symmetry). |
+| `--symmetry` | `never`, `always` | `symmetry` under `[verify]` in `rdra.toml`, else `never` | Experimental. Explore a safety cone (on a reduced one, its T rows), the unreduced cone of an `always` property, and the cone of an `eventually` or `leads_to`, up to instance symmetry: one stored state per class of states that differ only in which slots hold which rows. `always` does it on every such cone that no plain run decides; `never` changes nothing. A cone run up to symmetry prints `(about <m> states)`. See [Instance symmetry](#instance-symmetry). |
 | `--deny-undecided` | flag | off | Fail the run (exit 1) when it leaves a finding undecided: a temporal property past `--temporal-budget`, or a check, state, deadlock, or use case a BFS cone left at its state cap or the memory limit. Findings a `--buc` or `--entity` scope leaves open do not count. Without it, `verify` prints `warning: <what> undecided; the OK line holds only for what was decided (--deny-undecided fails the run)` on stderr and passes. |
 | `--prove` | flag | off | Experimental. Beside the cones, try to prove each selected state rule (`forbidden`, `invariant`, `required`, `@check`, quantifier rules, `Unique_*`, `MinCard_*`) for any number of rows and any non-negative Int value (`now` has no top) with z3, and print one `proved:`, `unproved:`, or `out of scope:` line per rule. The `OK:` line gains `; <n> of <m> rules proved for any number of rows and any Int value`. A rule the SQL export's schema does not enforce is marked `[not enforced by the SQL schema: <why>]`, and a `proof: the SQL schema leaves ...` line counts those rules. An invariant cone BFS stopped at the memory limit is `ok` when z3 proves every rule in it (see [Memory limit](#memory-limit)). Each z3 check has a fixed budget of z3 resource units, not of time, so the verdicts do not depend on the machine or its load. Needs z3 (see [Getting z3](#getting-z3)). See [Proofs for any number of rows](./formal-verification.md#proofs-for-any-number-of-rows). |
 | `--deny-unproved` | flag | off | With `--prove`: fail the run (exit 1) when a rule is unproved. A rule out of scope does not count. |
@@ -1761,13 +1771,19 @@ Only `--with-tlc` needs TLC. `verify` looks for it in this order: `--tlc-jar`,
 - Nix: run `nix shell nixpkgs#tlaplus`, then run `verify` in that shell. If flakes are not
   enabled, add `--extra-experimental-features 'nix-command flakes'`. In this repository,
   `nix develop` provides `tlc`, and the flake's package puts the same `tlc` on the `PATH` of
-  `rdra-ish`: TLC 1.7.4, as `nixpkgs#tlaplus` packages it, on JDK 17 in place of JDK 8 and
-  with a class-data-sharing archive of TLC's classes, which starts each run sooner.
+  `rdra-ish`: TLC 1.8.0 on JDK 25, with a class-data-sharing archive of TLC's classes,
+  which starts each run sooner. `nixpkgs#tlaplus` is still TLC 1.7.4 on JDK 8.
 - The jar: download `tla2tools.jar` from the
   [TLA+ releases](https://github.com/tlaplus/tlaplus/releases), install a JDK, and pass
-  `--tlc-jar <path>` or set `RDRA_TLC_JAR=<path>`.
+  `--tlc-jar <path>` or set `RDRA_TLC_JAR=<path>`. TLC 1.8.0 needs JDK 11 or later.
 
-Run TLC 1.7.x on JDK 17 or earlier, or use TLC 1.8.0. On JDK 21 and later, TLC 1.7.x's
+`verify` reads the output of TLC 1.7.x and of TLC 1.8.0. TLC 1.8.0 is a pre-release that
+upstream rebuilds under the same tag. The flake pins the build of 2026-11-19 (`TLC2 Version
+2026.11.19.180144`) by its hash and downloads it from this repository's release
+[`tlc-1.8.0-bc1b506`](https://github.com/manji-0/rdra-ish-dsl/releases/tag/tlc-1.8.0-bc1b506)
+first, so a rebuild upstream does not break it.
+
+Use TLC 1.8.0, or run TLC 1.7.x on JDK 17 or earlier. On JDK 21 and later, TLC 1.7.x's
 own buffered file reads a trace record back wrongly once the JDK's
 `RandomAccessFile.readLong` goes through it, and a `-continue` run that prints many traces
 stops with `java.lang.ArrayIndexOutOfBoundsException` (`arraycopy: length -N is negative`
@@ -1778,7 +1794,7 @@ or `Index N out of bounds for length M`) (#314).
 - A run that stops on that exception is a `tool_error`, even when it had printed
   violations before it: it never reached the rest of the model. Its report starts with
   `hint: TLC stopped with an ArrayIndexOutOfBoundsException while it read a trace back, …`
-  and says to run TLC on JDK 17 or earlier or to use TLC 1.8.0.
+  and says to use TLC 1.8.0 or to run TLC 1.7.x on JDK 17 or earlier.
 
 #### Getting z3
 
@@ -1928,11 +1944,12 @@ that `codegen <INPUTS...> --lang ts [-o <FILE>]` prints for a model that `check`
 These types are the scalars, the id types, the value sets, the state types, and the
 `<Entity>Row` row types. Everything else may change or be removed in any release: the
 transition functions, the rule checks, the dispatchers, the header and its obligations,
-`--allow-failing`, and the Rust and Go output. [The design](./design/algebraic-codegen.md)
+`--allow-failing`, `--check` and the fingerprint line, and the Rust and Go output. [The design](./design/algebraic-codegen.md)
 describes where `codegen` is going.
 
 ```
-rdra-ish codegen <INPUTS...> --lang <LANG> [-o <FILE>] [--package <NAME>] [--allow-failing]
+rdra-ish codegen <INPUTS...> --lang <LANG> [-o <FILE> | --check <FILE>] [--package <NAME>] [--allow-failing]
+                 [--conformance <FILE> [--conformance-states <N>]]
 ```
 
 | Option | Type | Default | Description |
@@ -1940,8 +1957,11 @@ rdra-ish codegen <INPUTS...> --lang <LANG> [-o <FILE>] [--package <NAME>] [--all
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--lang` | `ts` \| `rust` \| `go` | — (required) | Language. `typescript` is an alias of `ts`. |
 | `-o`, `--out` | path | — (stdout) | Write to this file instead of stdout. |
-| `--package` | string | `domain` | The Go package name (`--lang go` only). |
+| `--package` | string | `domain` | The Go package name (`--lang go` only). Put the file in a directory of its own, as this package, and write the code that finishes it in another package: the fields of a state type are unexported, so only code outside the package is kept from building a state. |
 | `--allow-failing` | flag | off | Generate even when `check` reports errors. The state types then narrow no column, and each error is listed as an obligation the model does not meet. |
+| `--conformance` | path | — (no harness) | `--lang rust` and `go` only, on a model `check` passes: also print the conformance port and harness, and write to this file the traces the harness drives a finished service along. |
+| `--conformance-states` | integer | `65536` | The states the BFS behind the traces explores at most. |
+| `--check` | path | — | Generate again and compare the result with this file instead of printing it. Exit 1 when they differ. Not with `-o` or `--conformance`. |
 
 The output is one compilation unit: a TypeScript module, a Rust module file, or a Go file.
 It opens with a header and the numbered **obligations**: what `check` and `verify` assume of
@@ -1962,7 +1982,16 @@ present in `v`, `forbidden(E, status == v, x == present)` makes it null there, a
 `required(E, x == present)` makes it present in every state. A rule with another atom or a
 `.when(Cond)` narrows nothing. A null column is `null` in TypeScript and left out of the
 Rust and Go structs, with a doc line naming the rule. The Rust and Go variants hold no tag
-field: the variant is the tag, and writing it to a row is the code's job. An entity whose
+field: the variant is the tag, and writing it to a row is the code's job. A variant's fields are
+private in Rust and unexported in Go, and methods of the same name read them (`paid_at()`,
+`PaidAt()`). Only a transition function and `from_row` (`<Entity>FromRow` in Go) make a
+state, from the rows and the inputs the model leaves open, so code outside the generated
+module or package can neither build a state by hand nor change a field a transition keeps.
+In Go, a transition function or `<Entity>ToRow` given the zero value of a state (`OrderPaid{}`)
+panics, `<Entity>FromRow` refuses a value outside a value set, a function refuses such a
+value as an input, and every value set has `Parse<Enum>(s)`, which returns an
+`InvalidValue` error for text that is no value. Records and `<Entity>Row` row types keep
+public fields. An entity whose
 `Enum` only `sets` writes, with no `transitions` (ec-site's `Payment`), is a plain record.
 
 Each use case of one transaction gets **transition functions**, read from the transition
@@ -2014,12 +2043,49 @@ Go, `json` tags). `orderFromRow(row)` / `Order::from_row(row)` / `OrderFromRow(r
 the state of a row, or `InvalidRow` naming the column whose value its state rules out;
 `orderToRow` / `into_row` / `OrderToRow` returns the flat row of a state.
 
+Each function's result also carries, per row it writes, the source that row must still have
+when the write commits: `order_expected` / `OrderExpected`, an `ExpectedSource` that is
+`Absent` for a created row, `In { column, value }` (the tag column and the state the function
+read) for a state type, and `Present` for a record. The header's obligations ask the code to
+run each function in one transaction with its reads and to write each row only where it
+still is what the result expects (`UPDATE .. WHERE id = ? AND status = ?`); a write that
+matches no row rolls the transaction back and is `NotEnabled`.
+
 Each use case whose functions take a state type gets a **dispatcher**, `runCancel` /
 `run_cancel` / `RunCancel`, over the entity types: it calls the transition function of the
 rows' states and returns its result as a `CancelOutcome` case, or `NotEnabled` when the use
 case does not run from those states (in Rust, `Refused::NotEnabled`, beside
 `Refused::Rejected`). The code that finishes the output loads rows, converts them, calls the
 dispatcher, and stores the rows it returns.
+
+With `--conformance <FILE>` (Rust and Go), the output ends with a **conformance harness**
+for the service that finishes it, and `FILE` gets the traces it runs. The service
+implements `ConformancePort`: `seed` empties its store and stores the rows of an initial
+state, `snapshot` returns a `StoreSnapshot` of every row (the `<Entity>Row` of a state type,
+the record otherwise), every pending run mark (`<UseCase><Entity>Run { id, step }`), and
+every event a triggered use case reads, and two methods per action run the use case by the
+ids of its rows and its inputs: `prepare_pay` / `PreparePay` loads the rows and returns the
+dispatcher's result, writing nothing, and `commit_pay` / `CommitPay` stores that result in one
+transaction. Either returns an error when the use case does not run. The agent's test calls `conform(|| MyService::new(), &traces)` in Rust or
+`Conform(func() ConformancePort { return newService() }, traces)` in Go. The harness starts
+a fresh port per trace, seeds the trace's initial state, makes each call, and after each
+compares the store, cut down to the columns the model tracks (an enum's value, null or not,
+an integer, a key's parent id), with the state BFS reached. A call the model refuses must
+fail and leave the store as it was, and so must a commit after another call changed the
+state of a row it writes (the harness prepares one call, runs another, then commits the
+first). It returns the first difference, naming the traces line and the rows only the model
+or only the store holds.
+
+The traces are a text file, not code. They come from a BFS of the whole transition system
+at `check`'s bounds (one row per entity), from its initial states, and take every move of a
+use case with a printed function between the states those moves reach, in as few traces as
+a greedy walk finds. In each state they also try every use case over one row that the model
+does not run on a present row, as a call that must be refused. A BFS that stops at
+`--conformance-states` covers only the states it reached and tries no refused call. The
+header of the code says how many moves the traces take, and what the harness does not
+compare (a counted trigger, a comparison proposition, the clock). A service whose store
+abstracts to the model's state after every call passes even when it does not call the core;
+the harness checks what is stored, not how.
 
 The header also lists **candidate rules**: a nullable column that every reachable row of a
 state holds present (or null) with no rule saying so, printed as the `invariant` or
@@ -2033,6 +2099,29 @@ prints them in the header. It refuses a model `check` rejects (exit 1, with the 
 stderr) unless `--allow-failing` is given; the output then has no transition functions and
 no rule checks. It refuses a model with model errors. Two declarations that generate one type name, such as an entity
 `OrderStatus` beside the inline `Enum` of `Order.status`, are an error naming both.
+
+The second line of the output is a **fingerprint**:
+`// rdra-ish codegen fingerprint: model=<hash> code=<hash>`. The model hash covers the
+source text of the loaded files. The code hash covers the output without this line.
+
+`codegen --check <FILE>` checks a committed file in CI. It generates again with the same
+inputs and options and compares the result with `<FILE>`, ignoring the fingerprint line.
+Run it from the same directory with the same input paths, because the header names them.
+`--check` writes nothing and prints nothing on stdout. When the two match, it prints
+`ok: <FILE> is what the model generates` on stderr and exits 0. A model edit that changes
+no generated code, such as a comment, still passes. When the two differ, it exits 1. On
+stderr it prints the cause, how many lines differ, and the first difference. The causes are:
+
+- `file edited`: the file no longer matches its own code hash. Someone changed it after it
+  was generated.
+- `model changed`: the model's source text differs from the text the fingerprint records.
+- `generator changed`: neither the file nor the model changed, so the output of `codegen`
+  did. Another rdra-ish version, other `--lang`, `--package` or `--allow-failing`, or other
+  input paths cause this.
+- No fingerprint line: the file was not generated by `codegen`, or the line was removed.
+
+`file edited` and `model changed` can both appear. Restore or regenerate the file. Do not
+edit it by hand: code that finishes the output belongs in other files.
 
 ---
 

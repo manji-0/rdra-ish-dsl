@@ -305,6 +305,18 @@ pub(crate) enum Commands {
         /// and each error is listed as an obligation the model does not meet
         #[arg(long)]
         allow_failing: bool,
+        /// Also print the conformance port and harness (--lang rust or go), and write to
+        /// this file the traces the harness drives a finished service along
+        #[arg(long, value_name = "FILE")]
+        conformance: Option<PathBuf>,
+        /// The states the BFS behind the traces explores at most (with --conformance)
+        #[arg(long, value_name = "N", default_value_t = rdra_ish_emit::codegen::conformance::DEFAULT_STATES, requires = "conformance")]
+        conformance_states: usize,
+        /// Generate again with the same options and compare with FILE instead of printing:
+        /// exit 1 with a short summary on stderr when it differs (file edited, model changed,
+        /// or generator changed)
+        #[arg(long, value_name = "FILE", conflicts_with_all = ["out", "conformance"])]
+        check: Option<PathBuf>,
     },
     /// Derive reachable state patterns per entity (aggregated across BUCs)
     States {
@@ -400,8 +412,9 @@ pub(crate) enum Commands {
         /// rest. Default: `memory` under [verify] in rdra.toml, else 16GiB
         #[arg(long, value_name = "SIZE")]
         memory: Option<MemorySize>,
-        /// Explore an invariant or after-assert cone, and an `always` property's cone that
-        /// the sub-lifecycle reduction leaves whole, up to instance symmetry, storing one
+        /// Explore an invariant or after-assert cone, an `always` property's cone that the
+        /// sub-lifecycle reduction leaves whole, and an `eventually` or `leads_to` property's
+        /// cone, up to instance symmetry, storing one
         /// state per permutation of rows (on a reduced cone, of the rows its reduced
         /// sub-lifecycle does not key on) when no plain run of the entity pass decides it:
         /// `never` or `always`. Default: `symmetry` under [verify] in rdra.toml, else never

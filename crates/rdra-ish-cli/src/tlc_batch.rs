@@ -1,12 +1,13 @@
 //! TLC jobs in a JVM that stays up between them (#310).
 //!
-//! A TLC run of a small spec is 0.6 to 0.8 s of JVM start and stop around a few
-//! milliseconds of model checking. `nix/tlc-batch/RdraTlcBatch.java` runs one job after
-//! another in one JVM, each through a class loader of its own, and answers each on stdout;
-//! this is its caller. A job that gets no answer was not run as far as the caller knows:
-//! [`Pool::run`] returns `None`, and the caller starts TLC as a process of its own for it,
-//! which is also what happens when there is no driver at all. The driver exists for TLC
-//! 1.7.4, whose start and stop are slow; it and this module go when TLC 1.8 is the baseline.
+//! A TLC run of a small spec is mostly JVM start and stop around a few milliseconds of model
+//! checking: 0.6 to 0.8 s on TLC 1.7.4, 0.18 s on the flake's TLC 1.8.0 on JDK 25.
+//! `nix/tlc-batch/RdraTlcBatch.java` runs one job after another in one JVM, each through a
+//! class loader of its own, and answers each on stdout; this is its caller. A job that gets
+//! no answer was not run as far as the caller knows: [`Pool::run`] returns `None`, and the
+//! caller starts TLC as a process of its own for it, which is also what happens when there
+//! is no driver at all. On TLC 1.8.0 the driver still saves `engine_equivalence` about 60%
+//! of its CPU (docs/formal-verification.md).
 
 use std::ffi::OsString;
 use std::io::{BufRead, BufReader, Write};

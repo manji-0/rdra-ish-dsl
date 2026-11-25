@@ -21,6 +21,7 @@
 //! | edges without their source, binding ids in 1 to 4 bytes, parents (`explore/edges.rs`, #296 2.1) | `explore/edges/reference.rs`: the 12-byte `Edge` list and the parent edges, as a run kept them before |
 //! | an after-assert step's ends recorded on a run without an edge list (`StepEnds`, #296 2.1) | `ComponentRun::step_ends`'s scan of that 12-byte list |
 //! | `Classes::of` on a run of S up to `H` (`reduce/partition.rs`, #212 phase 2) | `reduce/partition/up_to_h.rs`: the classes of the plain run of S, up to `SHADOW_CAP` states |
+//! | states packed into their cells' bits (`States`, `explore/arena.rs`, #296 2.3) | the states unpacked, beside the packed rows, compared on every read; `Seen`'s twin keys the unpacked bytes |
 //!
 //! A `shadow` build also runs the checks `shadow_assert!` makes, as a debug build does: each
 //! reader of a run's check results reads only checks the run evaluated (#251), and a steady
@@ -51,9 +52,11 @@ pub(crate) enum Twin {
     SUpToH,
     Edges,
     StepEnds,
+    OrbitLiveness,
+    Packed,
 }
 
-const TWINS: [(Twin, &str); 15] = [
+const TWINS: [(Twin, &str); 17] = [
     (Twin::EachEnabled, "each_enabled"),
     (Twin::Seen, "seen"),
     (Twin::Source, "source"),
@@ -69,6 +72,8 @@ const TWINS: [(Twin, &str); 15] = [
     (Twin::SUpToH, "s_up_to_h"),
     (Twin::Edges, "edges"),
     (Twin::StepEnds, "step_ends"),
+    (Twin::OrbitLiveness, "orbit_liveness"),
+    (Twin::Packed, "packed"),
 ];
 
 static COMPARED: [AtomicU64; TWINS.len()] = [const { AtomicU64::new(0) }; TWINS.len()];

@@ -93,7 +93,7 @@ pub(super) fn check(orbits: &OrbitRun, caps: Caps) {
     // (2) Each plain state steps into the classes its stored form steps into.
     for s in plain.states.iter() {
         let rep = form(&s.0);
-        let mine: BTreeSet<Vec<u8>> = ts.moves(s).map(|m| form(&m.next.0)).collect();
+        let mine: BTreeSet<Vec<u8>> = ts.moves(&s).map(|m| form(&m.next.0)).collect();
         let theirs: BTreeSet<Vec<u8>> = ts
             .moves(StateSlice::new(&rep))
             .map(|m| form(&m.next.0))
@@ -109,5 +109,119 @@ pub(super) fn check(orbits: &OrbitRun, caps: Caps) {
             ))
         );
     }
+    compared(twin);
+}
+
+/// The twin of `OrbitRun::decide_liveness`: the plain run of the same system, when it stays
+/// under `SHADOW_CAP` states, decided per binding by `liveness.rs`. A `shadow` build holds the
+/// pairs to it:
+///
+/// 1. each edge's permutation takes the move at the edge's place among its source's moves to
+///    the edge's target;
+/// 2. for every plain state `s` and binding `b`, the pair of `s`'s stored form and `σ_s(b)`
+///    fails the goal and can avoid it forever exactly when `(s, b)` does on the plain graph,
+///    which checks that the binding and the fair instances follow the permutations;
+/// 3. the two have a counterexample alike.
+pub(super) fn check_liveness(
+    product: &super::liveness::Product,
+    search: &super::liveness::Search,
+    i: usize,
+    fairness: crate::lifecycle::lasso::Fairness,
+) {
+    use crate::fasthash::FastMap;
+    use crate::lifecycle::explore::Checks;
+    let orbits = product.run;
+    let ts = orbits.system();
+    let twin = Twin::OrbitLiveness;
+    let plain: ComponentRun = ts.clone().run_on(
+        Caps::new(usize::MAX, SHADOW_CAP).without_views(),
+        Checks::All,
+        Threads::Shared,
+    );
+    if !plain.complete || !orbits.complete() {
+        skipped(twin);
+        return;
+    }
+    let g = &orbits.group;
+    let perms = orbits.perms.as_ref().expect("an annotated run");
+    let p = &ts.properties()[i];
+    let name = |what: &str| {
+        format!(
+            "shadow: OrbitRun::decide_liveness({}, {fairness:?}) ({} classes): {what}",
+            p.name,
+            orbits.orbits()
+        )
+    };
+    // (1) Each edge's permutation.
+    let edges = orbits.run.edges();
+    let mut out = vec![0u8; ts.width];
+    for r in 0..orbits.run.states.len() as u32 {
+        let moves: Vec<_> = ts.moves(&orbits.run.states.at(r as usize)).collect();
+        let first = edges.range_of(r).start;
+        for (k, e) in edges.range_of(r).zip(edges.from_state(r)) {
+            g.apply(perms.get(perms.id(k)), &moves[k - first].next.0, &mut out);
+            assert!(
+                out[..] == orbits.run.states.at(e.to as usize).0[..],
+                "{}",
+                name(&format!(
+                    "edge {k}'s permutation does not take its move to its target"
+                ))
+            );
+        }
+    }
+    // (2) The pairs against the plain bindings.
+    let reference = plain.liveness_reference(i, fairness);
+    let stored: FastMap<Vec<u8>, u32> = (orbits.run.states.iter().enumerate())
+        .map(|(r, s)| (s.0.to_vec(), r as u32))
+        .collect();
+    let index: FastMap<&[u8], u32> = (product.bindings.iter().enumerate())
+        .map(|(k, b)| (&b[..], k as u32))
+        .collect();
+    let cause = match &p.formula {
+        crate::lifecycle::types::Ltl::LeadsTo(x, _) => Some(x),
+        _ => None,
+    };
+    let mut canon = Canon::default();
+    let mut has = false;
+    for (at, s) in plain.states.iter().enumerate() {
+        canon.canonical(g, &s.0, &mut out);
+        let r = stored[&out[..]];
+        let sigma = canon.perm().to_vec();
+        for (kb, b) in product.bindings.iter().enumerate() {
+            let moved: Vec<u8> = (p.binders.iter().zip(b))
+                .map(|(&e, &slot)| g.map_slot(&sigma, e, slot))
+                .collect();
+            let u = product.pair(r, index[&moved[..]]) as usize;
+            let (in_n, avoid) = (&reference[kb].0, &reference[kb].1);
+            assert_eq!(
+                in_n[at],
+                search.in_n[u],
+                "{}",
+                name(&format!(
+                    "state {at} binding {b:?}: the goal differs on its pair"
+                ))
+            );
+            assert_eq!(
+                avoid[at],
+                search.toward[u] != u32::MAX,
+                "{}",
+                name(&format!(
+                    "state {at} binding {b:?}: the plain run can avoid the goal forever: {}, its pair: {}",
+                    avoid[at],
+                    !avoid[at]
+                ))
+            );
+            has |= avoid[at]
+                && ts.triggers(p, b, &s)
+                && cause.is_none_or(|x| ts.holds_bound(x, &s, b));
+        }
+    }
+    // (3) A counterexample alike.
+    assert_eq!(
+        has,
+        search.start.is_some(),
+        "{}",
+        name("one run has a counterexample, the other none")
+    );
     compared(twin);
 }

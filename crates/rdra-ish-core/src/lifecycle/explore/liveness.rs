@@ -32,6 +32,9 @@ pub enum LassoFault {
     Satisfies,
     /// The lasso's loop is not fair (`TransitionSystem::unfair_loop`).
     Unfair(Unfair),
+    /// A loop of a run up to instance symmetry, repeated, did not come back to its first
+    /// concrete state within the copies tried (`OrbitRun::decide_liveness`).
+    Unclosed,
 }
 
 const NONE: u32 = u32::MAX;
@@ -164,7 +167,7 @@ impl ComponentRun {
         let looping: Vec<bool> = self
             .states
             .iter()
-            .map(|s| r.class(ts, s).is_some_and(|c| r.can_loop(c)))
+            .map(|s| r.class(ts, &s).is_some_and(|c| r.can_loop(c)))
             .collect();
         let Some((fair, avoid, start)) = self.liveness_search(i, StopRule::Looping(&looping))
         else {
@@ -176,17 +179,25 @@ impl ComponentRun {
         let (first, walk, tail) = self.walk(&fair, &avoid, start);
         let step = |e: &Edge| {
             let (act, params) = self.step(e);
-            (act, params.into(), self.states[e.to as usize].to_owned())
+            (
+                act,
+                params.into(),
+                self.states.at(e.to as usize).into_state(),
+            )
         };
         let lifted = match tail {
             Loop::Stutter => {
                 let prefix: Vec<_> = walk.iter().map(step).collect();
-                ts.lift_stop(cone, &self.states[first as usize].to_owned(), &prefix)
+                ts.lift_stop(cone, &self.states.at(first as usize).into_state(), &prefix)
             }
             Loop::Back { to } => {
                 let prefix: Vec<_> = walk[..to - 1].iter().map(step).collect();
                 let cycle: Vec<_> = walk[to - 1..].iter().map(step).collect();
-                ts.lift_cycle(&self.states[first as usize].to_owned(), &prefix, &cycle)
+                ts.lift_cycle(
+                    &self.states.at(first as usize).into_state(),
+                    &prefix,
+                    &cycle,
+                )
             }
         };
         let (states, actions, tail) = match lifted {
@@ -223,7 +234,7 @@ impl ComponentRun {
         for b in ts.binder_slots(&p.binders) {
             let avoid = self.avoid(&fair, goal, &b, rule);
             let found = (0..self.states.len() as u32).find(|&s| {
-                let st = &self.states[s as usize];
+                let st = &self.states.at(s as usize);
                 avoid.toward[s as usize] != NONE
                     && ts.triggers(p, &b, st)
                     && cause.is_none_or(|x| ts.holds_bound(x, st, &b))
@@ -280,7 +291,7 @@ impl ComponentRun {
     /// The states the run expanded: all of them on a complete graph. A cap stops the run
     /// inside the expansion of the state its last edge leaves, so on a capped graph only the
     /// states before that one have every move recorded.
-    fn expanded(&self) -> usize {
+    pub(super) fn expanded(&self) -> usize {
         match self.complete {
             true => self.states.len(),
             false => self.edges().last().map_or(0, |e| e.from as usize),
@@ -295,7 +306,7 @@ impl ComponentRun {
         let in_n: Vec<bool> = self
             .states
             .iter()
-            .map(|s| !ts.holds_bound(goal, s, b))
+            .map(|s| !ts.holds_bound(goal, &s, b))
             .collect();
         let inside = |e: &Edge| in_n[e.from as usize] && in_n[e.to as usize];
         let adjacency = Adjacency::new(n, || {
@@ -379,7 +390,7 @@ impl ComponentRun {
     /// end, and for a component a loop that covers every fair instance and returns.
     fn lasso(&self, fair: &FairSteps, avoid: &Avoid, start: u32) -> Lasso {
         let (first, walk, tail) = self.walk(fair, avoid, start);
-        let mut states = vec![self.states[first as usize].to_owned()];
+        let mut states = vec![self.states.at(first as usize).into_state()];
         let mut actions = Vec::with_capacity(walk.len());
         let steps = match tail {
             Loop::Stutter => walk.len(),
@@ -388,7 +399,7 @@ impl ComponentRun {
         for (k, e) in walk.iter().enumerate() {
             actions.push(self.bindings[e.binding as usize].0);
             if k < steps {
-                states.push(self.states[e.to as usize].to_owned());
+                states.push(self.states.at(e.to as usize).into_state());
             }
         }
         Lasso {
@@ -529,6 +540,37 @@ impl ComponentRun {
         self.edges_from(from)
             .find(|e| e.to == to)
             .expect("the adjacency holds only recorded moves")
+    }
+}
+
+#[cfg(feature = "shadow")]
+impl ComponentRun {
+    /// Per binding of `properties()[i]`, in `binder_slots` order: per state, whether the goal
+    /// fails there, and whether it can avoid the goal forever under `fairness`. What the twin
+    /// of `OrbitRun::decide_liveness` holds the pairs to.
+    pub(crate) fn liveness_reference(
+        &self,
+        i: usize,
+        fairness: Fairness,
+    ) -> Vec<(Vec<bool>, Vec<bool>)> {
+        let ts = &self.system;
+        let p = &ts.properties()[i];
+        let goal = match &p.formula {
+            Ltl::Eventually(g) | Ltl::LeadsTo(_, g) => g,
+            other => panic!("liveness_reference on {:?}", other.kind()),
+        };
+        let fair = self.fair_steps(i);
+        ts.binder_slots(&p.binders)
+            .map(|b| {
+                let avoid = self.avoid(&fair, goal, &b, StopRule::Fair(fairness));
+                let in_n = self
+                    .states
+                    .iter()
+                    .map(|s| !ts.holds_bound(goal, &s, &b))
+                    .collect();
+                (in_n, avoid.toward.iter().map(|&t| t != NONE).collect())
+            })
+            .collect()
     }
 }
 

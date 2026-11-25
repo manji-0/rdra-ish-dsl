@@ -846,7 +846,7 @@ impl TransitionSystem {
         let met = |pred: &Pred| {
             run.stored()
                 .iter()
-                .any(|s| sys.meets(&local.binders, pred, s))
+                .any(|s| sys.meets(&local.binders, pred, &s))
         };
         let unmet = |premise: &Premise| UnmetPremise::Rows {
             rows: TransitionSystem::premise_rows(inv.binders.len(), &premise.pred)
@@ -946,7 +946,7 @@ impl TransitionSystem {
         let met = |pred: &Pred| {
             let absent = Pred::Not(Box::new(pred.clone()));
             run.stored().iter().any(|s| {
-                sys.find_violation(&local.binders, &absent, s, &[])
+                sys.find_violation(&local.binders, &absent, &s, &[])
                     .is_some()
             })
         };

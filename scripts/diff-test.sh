@@ -26,6 +26,7 @@ release_only=(
   tlc_alone_
   a_property_cone_decides_what_the_whole_model_decides
   reduced_domain_cones_decide_what_the_cones_decide
+  the_group_rules_of_every_cone_are_the_snapshot
   no_proved_rule_has_a_bounded_counterexample
   a_proof_is_the_same_on_any_number_of_solvers
 )

@@ -1,7 +1,8 @@
 //! `rdra-ish codegen` output builds as printed: on every `samples.txt` root, and on
 //! `tests/fixtures/codegen/keywords.rdra`, whose names are keywords of the targets, the
 //! TypeScript output passes `tsc --strict`, the Rust output compiles as a library, and the
-//! Go output passes `go vet`. A compiler missing from PATH skips its language, except under
+//! Go output passes `go vet`, the Rust and Go output with the conformance harness of
+//! `--conformance`. A compiler missing from PATH skips its language, except under
 //! `RDRA_REQUIRE_CODEGEN_TOOLS=1`, which CI sets in the dev shell that provides all three.
 
 use std::path::{Path, PathBuf};
@@ -52,12 +53,21 @@ fn codegen(sample: &str, lang: &str, path: &Path, extra: &[&str]) -> std::proces
         .expect("runs rdra-ish")
 }
 
-/// The codegen output of `sample` in `lang`, written to `dir/file`. A sample `check`
-/// rejects is refused, and generated again with `--allow-failing`.
+/// The codegen output of `sample` in `lang`, written to `dir/file`; Rust and Go with the
+/// conformance harness, its traces from at most 4096 states. A sample `check` rejects is
+/// refused, and generated again with `--allow-failing` and no harness.
 fn generate(sample: &str, lang: &str, dir: &Path, file: &str) -> PathBuf {
     std::fs::create_dir_all(dir).unwrap();
     let path = dir.join(file);
-    let mut output = codegen(sample, lang, &path, &[]);
+    let traces = dir.join("traces.txt");
+    let harness = [
+        "--conformance",
+        traces.to_str().expect("a UTF-8 path"),
+        "--conformance-states",
+        "4096",
+    ];
+    let first: &[&str] = if lang == "ts" { &[] } else { &harness };
+    let mut output = codegen(sample, lang, &path, first);
     if !output.status.success()
         && String::from_utf8_lossy(&output.stderr).contains("refusing to generate code")
     {

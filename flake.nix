@@ -33,15 +33,20 @@
             }
           )
         );
-      # TLC 1.7.4 as nixpkgs packages it, on JDK 17 instead of JDK 8, with a class-data-sharing
-      # archive of the classes TLC loads (#309). Each `verify --with-tlc` starts many short
-      # TLC runs, and both cut what a run costs before it reaches the model: 0.80 to 0.63 s
-      # wall and 0.68 to 0.38 user CPU-s for an 87-state cone.
+      # TLC 1.8.0 on JDK 25, the newest JDK nixpkgs packages, with a class-data-sharing archive
+      # of the classes TLC loads (#309). nixpkgs still packages TLC 1.7.4, so the package
+      # takes the jar of the v1.8.0 release instead, pinned by its hash.
       #
-      # Not JDK 21 or later: TLC 1.7.4's BufferedRandomAccessFile.read(byte[], int, int) breaks
-      # when it reads back a record still in its write buffer, and from JDK 21 on
-      # RandomAccessFile.readLong reads through it (JDK 20 read byte by byte), so a `-continue`
-      # run that prints many traces dies with an ArrayIndexOutOfBoundsException.
+      # TLC 1.8.0 is a pre-release that upstream rebuilds from master under the same tag.
+      # This hash is the build of 2026-11-19 (rev bc1b506, `TLC2 Version 2026.11.19.180144`),
+      # which this repository's release `tlc-1.8.0-bc1b506` keeps with upstream's MIT license
+      # text, so the download does not depend on upstream keeping it. Upstream's URL comes
+      # second; once it serves another build, Nix rejects that build on the hash. To move to
+      # a newer build, publish it the same way and change the URLs and the hash together.
+      #
+      # TLC 1.7.x cannot run on JDK 21 or later: its BufferedRandomAccessFile.read(byte[], int,
+      # int) breaks when it reads back a trace record still in its write buffer, which
+      # RandomAccessFile.readLong reaches from JDK 21 on (#314). TLC 1.8.0 rewrote that read.
       #
       # The archive is recorded from one run of nix/tlc-cds/Train.tla against the jar's store
       # path. The JVM checks that the jar and the JDK are the ones it was recorded with and
@@ -51,8 +56,17 @@
       tlcFor =
         pkgs:
         let
-          jdk = pkgs.jdk17_headless;
-          tlaplus = pkgs.tlaplus.override { jre8 = jdk; };
+          jdk = pkgs.jdk25_headless;
+          tlaplus = (pkgs.tlaplus.override { jre8 = jdk; }).overrideAttrs {
+            version = "1.8.0";
+            src = pkgs.fetchurl {
+              urls = [
+                "https://github.com/manji-0/rdra-ish-dsl/releases/download/tlc-1.8.0-bc1b506/tla2tools.jar"
+                "https://github.com/tlaplus/tlaplus/releases/download/v1.8.0/tla2tools.jar"
+              ];
+              hash = "sha256-/f/vJH9WPvbtv9RJWNKoLbeedWTgfLZzJi2JY1P6ZxM=";
+            };
+          };
           jar = "${tlaplus}/share/java/tla2tools.jar";
           archive = pkgs.runCommand "tla2tools-${tlaplus.version}-cds" { } ''
             mkdir -p $out work
@@ -68,7 +82,7 @@
               ${jdk}/bin/java -XX:+UseParallelGC -XX:-UsePerfData -Xmx1g "$@" -Djava.io.tmpdir=$PWD \
                 -cp ${jar} tlc2.TLC -workers 1 -metadir $PWD/states \
                 -config Train.cfg Train.tla > train.log 2>&1 || status=$?
-              if [ $status -ne 13 ] || ! grep -q '^Error: Temporal properties were violated.$' train.log; then
+              if [ $status -ne 13 ] || ! grep -q '^Error: Temporal property ShippedReopens was violated.$' train.log; then
                 cat train.log
                 exit 1
               fi
@@ -77,13 +91,14 @@
             # The archive must map: -Xshare:on stops the JVM where the default would skip it.
             train -Xshare:on -XX:SharedArchiveFile=$out/tla2tools.jsa
           '';
-          # The driver that runs many TLC jobs in one JVM (#310), for Java 8 as TLC 1.7.4 is.
+          # The driver that runs many TLC jobs in one JVM (#310). It is written for Java 8, the
+          # oldest JVM TLC 1.7.4 runs on, and calls nothing TLC 1.8.0 dropped.
           batch = pkgs.runCommand "rdra-tlc-batch" { } ''
             mkdir -p $out
             ${jdk}/bin/javac --release 8 -Xlint:-options -d $out ${./nix/tlc-batch}/RdraTlcBatch.java
           '';
         in
-        pkgs.runCommand "tlaplus-${tlaplus.version}-jdk17"
+        pkgs.runCommand "tlaplus-${tlaplus.version}-jdk25"
           {
             nativeBuildInputs = [ pkgs.makeWrapper ];
             inherit (tlaplus) meta;
@@ -161,7 +176,7 @@
             pkgs.python3
 
             # Formal verification (TLC)
-            pkgs.jdk17_headless
+            pkgs.jdk25_headless
             (tlcFor pkgs)
             # `verify --prove` (tests/prove_cli.rs, tests/proof_equivalence.rs)
             pkgs.z3
@@ -180,7 +195,7 @@
           # GNU time for scripts/verify-samples.sh (macOS has BSD /usr/bin/time).
           ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.time ];
 
-          JAVA_HOME = "${pkgs.jdk17_headless}";
+          JAVA_HOME = "${pkgs.jdk25_headless}";
 
           # A GOROOT from the user's shell (a version manager's Go, say) points the flake's
           # `go` at another toolchain's standard library, and the codegen build tests then

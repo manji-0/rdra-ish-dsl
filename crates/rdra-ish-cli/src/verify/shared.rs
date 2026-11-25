@@ -15,7 +15,9 @@
 //! Under `--symmetry always` the entity pass runs and shares as under `never`, and a job that
 //! may run up to instance symmetry (#212) does so only when no plain run decided it: no
 //! entity cone's complete run, and, for a safety cone, no property's plain run of the same
-//! system (`up_to_symmetry`). Which runs are complete is what they are alone, since the entity
+//! system (`up_to_symmetry`). An `eventually` or `leads_to` whose reduced cone is a safety
+//! cone's system does not run up to symmetry, so that one plain run decides both (`new`).
+//! Which runs are complete is what they are alone, since the entity
 //! pass runs a crowded cone again alone, so the choice does not depend on `RDRA_JOBS`. A run
 //! up to symmetry decides no other job.
 //!
@@ -43,13 +45,31 @@ pub(super) struct Shared {
 
 impl Shared {
     pub(super) fn new(jobs: &[Job], symmetry: Symmetry) -> Self {
+        let forced = std::env::var_os("RDRA_ISH_FORCE_ORBITS").is_some();
+        // An `eventually` or `leads_to` whose reduced cone is a safety cone's system stays
+        // plain, so that one plain run decides both, as before phase 4 (#212): the two would
+        // otherwise run up to symmetry apart. Which ones is read off the jobs before any run.
+        let shares_safety = |p: &super::jobs::PropertyJob| {
+            jobs.iter()
+                .any(|j| matches!(&j.kind, JobKind::Cone(c) if c.system == p.cone.reduced))
+        };
+        let symmetric: Vec<bool> = (jobs.iter())
+            .map(|job| {
+                symmetry == Symmetry::Always
+                    && job.symmetric()
+                    && match &job.kind {
+                        JobKind::PropertyCone(p) if p.cone.kind.is_liveness() && !forced => {
+                            !shares_safety(p)
+                        }
+                        _ => true,
+                    }
+            })
+            .collect();
         Shared {
             safety: jobs.iter().map(|_| None).collect(),
             plain: jobs.iter().map(|_| None).collect(),
-            symmetric: (jobs.iter())
-                .map(|job| symmetry == Symmetry::Always && job.symmetric())
-                .collect(),
-            forced: std::env::var_os("RDRA_ISH_FORCE_ORBITS").is_some(),
+            symmetric,
+            forced,
         }
     }
 

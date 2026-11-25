@@ -131,7 +131,7 @@ fn a_replayed_path_explains_its_violation_and_a_corrupted_one_fails() {
     let path = run.path_to(at);
     let states: Vec<_> = std::iter::once(path[0].from)
         .chain(path.iter().map(|e| e.to))
-        .map(|i| run.states[i as usize].to_owned())
+        .map(|i| run.states.at(i as usize).into_state())
         .collect();
     let acts: Vec<_> = path.iter().map(|e| run.step(e).0).collect();
     assert_eq!(acts.len(), 3, "Place, Pay, Ship");

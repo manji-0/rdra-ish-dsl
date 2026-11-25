@@ -95,15 +95,14 @@ fn costly(run: &ComponentRun) -> String {
     let (mut delta, mut with_parent) = (0u64, 0u64);
     for i in 0..run.states.len() {
         if let Some(e) = run.parent(i as u32) {
-            let (a, b) = (&run.states[e.from as usize], &run.states[i]);
+            let (a, b) = (&run.states.at(e.from as usize), &run.states.at(i));
             delta += a.0.iter().zip(b.0.iter()).filter(|(x, y)| x != y).count() as u64;
             with_parent += 1;
         }
     }
     let fx = |h: u64, w: u64| (h.rotate_left(5) ^ w).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
-    let shash = (run.states.iter())
-        .flat_map(|s| s.0.iter())
-        .fold(0u64, |h, b| fx(h, u64::from(*b)));
+    let shash =
+        (run.states.iter()).fold(0u64, |h, s| s.0.iter().fold(h, |h, b| fx(h, u64::from(*b))));
     // A run without an edge list has no graph to hash.
     let (pairs, ehash, bhash) = match run.has_edges() {
         false => ("-".to_string(), "-".to_string(), "-".to_string()),

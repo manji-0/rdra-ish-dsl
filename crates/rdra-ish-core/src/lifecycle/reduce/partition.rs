@@ -305,7 +305,7 @@ impl Classes {
     /// "Composition with #74"), after its plain run stopped at the memory limit after
     /// `stopped_at` states under `--symmetry always`, or at once when a test forces
     /// it. `H` leaves
-    /// `ext.fixed` where they are, so every element keeps `obs` and the inputs: the run's
+    /// `ext.fixed()` where they are, so every element keeps `obs` and the inputs: the run's
     /// orbits are a label-preserving bisimulation, finer than the stuttering partition, which
     /// therefore comes out of the stored graph class for class. The classes are the same sets
     /// of S states as a plain run's; their numbering and representatives are others. After a
@@ -321,7 +321,7 @@ impl Classes {
         let orbits = {
             let _label = crate::perf::label("S up to H");
             sub.clone()
-                .run_orbits_fixing(caps, Checks::none(), &ext.fixed)
+                .run_orbits_fixing(caps, Checks::none(), &ext.fixed())
         };
         // `H` keeps every var the quotient reads where it is: the entity that holds it, and
         // for a key the entity it names, stay put.
@@ -397,7 +397,7 @@ impl Classes {
             .states
             .iter()
             .map(|st| {
-                let key = sub.project(st, &key_vars);
+                let key = sub.project(&st, &key_vars);
                 let len = index.len() as u32;
                 *index.entry(key).or_insert(len)
             })
@@ -465,8 +465,8 @@ impl Classes {
             if ext.rise[act.index()] {
                 // Every state of a block rises into the same blocks; the representative's
                 // edges are enough.
-                if *reps[class[x] as usize] == run.states[x].0 {
-                    let inputs = sub.project(&run.states[y], &ext.inputs_local).0;
+                if *reps[class[x] as usize] == run.states.at(x).0 {
+                    let inputs = sub.project(&run.states.at(y), &ext.inputs_local).0;
                     let was = rises.insert((class[x], inputs), class[y]);
                     assert!(was.is_none_or(|c| c == class[y]), "a rise is a function");
                 }
@@ -569,7 +569,7 @@ fn divergence(
     let inner_loops = |i: usize| {
         inner.is_some_and(|inner| {
             inner
-                .class(sub, &run.states[i])
+                .class(sub, &run.states.at(i))
                 .is_some_and(|c| inner.can_loop(c))
         })
     };

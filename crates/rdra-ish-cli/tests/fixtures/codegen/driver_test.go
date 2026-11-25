@@ -1,10 +1,13 @@
-// Driver of tests/codegen_behaviour.rs: runs the Go that `codegen` prints for order.rdra.
-package domain
+// Driver of tests/codegen_behaviour.rs: runs the Go that `codegen` prints for order.rdra, from
+// outside its package, as the code that finishes it does.
+package domain_test
 
 import (
 	"errors"
 	"reflect"
 	"testing"
+
+	. "example.com/domain"
 )
 
 func row(status OrderStatus, paidAt *DateTime, qty int64) OrderRow {
@@ -31,13 +34,24 @@ func TestGenerated(t *testing.T) {
 	if _, err := OrderFromRow(row(OrderStatusPaid, nil, 1)); !errors.As(err, &invalid) || invalid.Column != "paid_at" {
 		t.Fatalf("paid without a payment time is invalid: %v", err)
 	}
+	bogus := row(OrderStatusPending, nil, 1)
+	bogus.Method = Method("bogus")
+	if _, err := OrderFromRow(bogus); !errors.As(err, &invalid) || invalid.Column != "method" {
+		t.Fatalf("a value outside the value set is invalid: %v", err)
+	}
+	if _, err := ParseOrderStatus("bogus"); err == nil {
+		t.Fatal("ParseOrderStatus refuses text that is no value")
+	}
+	if v, err := ParseOrderStatus("paid"); err != nil || v != OrderStatusPaid {
+		t.Fatalf("ParseOrderStatus reads a value: %v %v", v, err)
+	}
 
 	out, err := RunPay(order, stamp)
 	if err != nil || out.Ran == nil {
 		t.Fatalf("Pay runs from pending: %v", err)
 	}
 	paid := out.Ran.Order
-	if paid.PaidAt != stamp || paid.Qty != 2 {
+	if paid.PaidAt() != stamp || paid.Qty() != 2 {
 		t.Fatalf("Pay writes: %+v", paid)
 	}
 	var notEnabled *NotEnabled
@@ -55,8 +69,22 @@ func TestGenerated(t *testing.T) {
 	if v := paid.RuleViolations(); len(v) != 0 {
 		t.Fatalf("a paid order keeps its rules: %v", v)
 	}
-	paid.Qty = 5
-	if v := Order(paid).RuleViolations(); !reflect.DeepEqual(v, []string{"Forbidden_Order_0"}) {
+	// A state's fields are unexported: a row with qty 5 is the way to such a state.
+	bigRow := OrderToRow(paid)
+	bigRow.Qty = 5
+	big, err := OrderFromRow(bigRow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := big.RuleViolations(); !reflect.DeepEqual(v, []string{"Forbidden_Order_0"}) {
 		t.Fatalf("qty 5 breaks Forbidden_Order_0: %v", v)
 	}
+
+	// The zero value is no state: a function given one panics.
+	defer func() {
+		if recover() == nil {
+			t.Fatal("Pay panics on the zero OrderPending")
+		}
+	}()
+	Pay(OrderPending{}, stamp)
 }

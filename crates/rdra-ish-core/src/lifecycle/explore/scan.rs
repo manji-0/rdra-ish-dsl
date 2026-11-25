@@ -9,10 +9,10 @@ use super::Scan;
 impl TransitionSystem {
     /// Which of `act`'s checks in `moves` hold in no state of `states`. With `pin = (p, k)`,
     /// only the bindings that put param `p` on slot `k` count.
-    pub(crate) fn scan_guards<'a>(
+    pub(crate) fn scan_guards(
         &self,
         act: ActId,
-        states: impl IntoIterator<Item = &'a StateSlice>,
+        states: impl IntoIterator<Item = impl std::borrow::Borrow<StateSlice>>,
         pin: Option<(usize, u8)>,
     ) -> Scan {
         let action = &self.actions[act.index()];
@@ -22,6 +22,7 @@ impl TransitionSystem {
         let mut crowded = vec![false; action.params.len()];
         let creates = action.params.iter().any(|p| p.role == ParamRole::New);
         for s in states {
+            let s: &StateSlice = s.borrow();
             for (p, param) in action.params.iter().enumerate() {
                 let exists = self.entity(param.entity).exists;
                 let want = match param.role {

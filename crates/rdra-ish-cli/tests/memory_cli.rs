@@ -93,22 +93,25 @@ fn a_cone_past_the_memory_limit_stops_as_at_the_state_cap() {
 /// cap, so the bounds line says so and `--max-states` still caps.
 #[test]
 fn a_run_at_the_memory_limit_estimates_what_finishing_needs() {
-    let out = run(&repo(), &["check", "--memory", "1KiB", ORDER]);
+    let out = run(
+        &repo(),
+        &["check", "--memory", "1KiB", "--instance-count", "2", ORDER],
+    );
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
         stderr.starts_with(
-            "bounds: 1 instance per entity, Int 0..5; no state cap per cone, memory 1KiB;"
+            "bounds: 2 instances per entity, Int 0..5; no state cap per cone, memory 1KiB;"
         ),
         "{stderr}"
     );
     // A frontier still growing says nothing yet, so the cone's variables bound what it needs.
     assert!(
         stderr.contains(
-            "new states first reached by: CancelOrder 1, CapturePay 1, PlaceOrder 1; held at 91 B \
-             per state; the frontier still grows (2 new states at depth 2, 2.0x the depth before), \
-             so its layers give no estimate of the states left; the cone's variables allow at most \
-             30 states, so if all are reachable this cone alone needs at least about 1MiB; raise \
-             it to 1MiB or more with --memory"
+            "new states first reached by: PlaceOrder 5, CancelOrder 3, CapturePay 3, DeliverOrder \
+             1, ShipOrder 1; held at 71 B per state; the frontier still grows (5 new states at \
+             depth 3, 1.7x the depth before), so its layers give no estimate of the states left; \
+             the cone's variables allow at most 900 states, so if all are reachable this cone \
+             alone needs at least about 1MiB; raise it to 1MiB or more with --memory"
         ),
         "{stderr}"
     );
@@ -116,12 +119,12 @@ fn a_run_at_the_memory_limit_estimates_what_finishing_needs() {
     // figure.
     let out = run(
         &repo(),
-        &["check", "--memory", "2MiB", "samples/insurance-claim-ops"],
+        &["check", "--memory", "1MiB", "samples/insurance-claim-ops"],
     );
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
         stderr.contains(
-            "the frontier still grows (176 new states at depth 8, 1.3x the depth before), so its \
+            "the frontier still grows (172 new states at depth 8, 1.3x the depth before), so its \
              layers give no estimate of the states left; raise it with --memory or `memory` under \
              [check] in rdra.toml, or narrow with --entity or --buc"
         ),
@@ -129,7 +132,10 @@ fn a_run_at_the_memory_limit_estimates_what_finishing_needs() {
     );
     assert!(!stderr.contains("1TiB"), "{stderr}");
     // The estimate is a figure `--memory` takes: the run it names completes.
-    let again = run(&repo(), &["check", "--memory", "1MiB", ORDER]);
+    let again = run(
+        &repo(),
+        &["check", "--memory", "1MiB", "--instance-count", "2", ORDER],
+    );
     assert!(
         again.status.success(),
         "{}",
@@ -154,10 +160,10 @@ fn a_run_at_the_memory_limit_estimates_what_finishing_needs() {
 /// the `--memory` it names finishes the run.
 #[test]
 fn a_run_past_its_frontiers_peak_estimates_the_states_its_cone_reaches() {
-    let out = run(&repo(), &["check", "--memory", "21KiB", FLAGS]);
+    let out = run(&repo(), &["check", "--memory", "17KiB", FLAGS]);
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
-        stderr.contains("memory limit 21KiB reached at 256 states; results are incomplete"),
+        stderr.contains("memory limit 17KiB reached at 256 states; results are incomplete"),
         "{stderr}"
     );
     assert!(
@@ -194,7 +200,7 @@ fn cones_side_by_side_stop_where_they_stop_one_at_a_time() {
         let out = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
             .current_dir(repo())
             .env("RDRA_JOBS", jobs)
-            .args(["check", "--memory", "2MiB", "samples/insurance-claim-ops"])
+            .args(["check", "--memory", "1MiB", "samples/insurance-claim-ops"])
             .output()
             .expect("rdra-ish runs");
         String::from_utf8_lossy(&out.stderr).into_owned()

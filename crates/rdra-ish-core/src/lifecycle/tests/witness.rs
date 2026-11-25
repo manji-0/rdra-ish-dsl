@@ -107,7 +107,7 @@ fn a_witness_state_holds_its_value() {
                 for w in cone.system.state_model_findings(local, &g).witnesses {
                     match w.witness {
                         Witness::At(i) => {
-                            let s = &g.states[i as usize];
+                            let s = &g.states.at(i as usize);
                             assert!(
                                 (0..cone.system.slots(local)).any(|slot| s.is_present(
                                     &cone.system,

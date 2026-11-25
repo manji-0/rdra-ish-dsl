@@ -1,0 +1,31 @@
+// trap: a move into the class of its own source, a loop the stored graph keeps as a loop.
+// One ticket, two desks alike: Reassign moves the ticket to the other desk, and the state it
+// reaches is the one it left with the desks swapped, so a run up to instance symmetry stores
+// the move as a loop (an orbit self-edge). Close ends the ticket at the desk that holds it,
+// but nothing makes it run: under WF_vars(Next) the ticket may be reassigned forever, so
+// TicketCloses fails, by a lasso that reassigns the ticket there and back. A checker that
+// read the loop as a stutter would find no cycle, let Close end every behavior, and answer
+// ok. `.fair(Close)` is fair per (ticket, desk), since Close binds the desk it writes: each
+// reassignment disables the instance of the desk the ticket left, so the same loop is fair
+// and TicketClosesFair fails too. A checker that kept the instance's desk where it was
+// around the loop would find it enabled throughout and never taken, and answer ok.
+// flags: --instances Ticket=1
+// expect TicketCloses: native=counterexample tlc=counterexample
+// expect TicketClosesFair: native=counterexample tlc=counterexample
+entity Desk "窓口" { id: Int @pk  open: Bool @default(true) }
+entity Ticket "問合せ" { id: Int @pk  status: Enum(open, closed) @default(open) }
+relate(Ticket, Desk, N:1)
+usecase Staff "開設"
+usecase Raise "受付"
+usecase Reassign "担当替え"
+usecase Close "完了"
+creates(Staff, Desk)
+creates(Raise, Ticket)
+relinks(Reassign, Ticket, Desk)
+transitions(Close, Ticket.status, open -> closed)
+sets(Close, Desk.open == true)
+condition HoldsTicket "未完了の問合せを持つ窓口"
+holds(HoldsTicket, Desk.open == true).has(Ticket.status == open)
+applies_to(HoldsTicket, Close)
+property TicketCloses leads_to(Ticket.status == open, Ticket.status == closed)
+property TicketClosesFair leads_to(Ticket.status == open, Ticket.status == closed).fair(Close)
