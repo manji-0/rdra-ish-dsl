@@ -257,9 +257,16 @@ impl PropertyCone {
     }
 
     /// `new`, with the run that reduces the cone under `caps` and the quotient shared
-    /// through `quotients`.
+    /// through `quotients`. Under `RDRA_ISH_WHOLE_CONE` the cone is the whole model, so each
+    /// property is decided there: the oracle of `scripts/reduction-diff.py run --whole`.
     pub fn under(ts: &TransitionSystem, i: usize, caps: Caps, quotients: &QuotientCache) -> Self {
-        let cone = ts.property_cone(i);
+        let cone = match std::env::var_os("RDRA_ISH_WHOLE_CONE") {
+            Some(_) => {
+                let (_, keep) = ts.property_seed(i);
+                ts.exact_cone(&ts.var_ids().collect(), &keep)
+            }
+            None => ts.property_cone(i),
+        };
         let system = ts.restrict_to(&cone.vars, &cone.keep);
         let name = &ts.properties()[i].name;
         let index = system
@@ -391,7 +398,7 @@ impl PropertyCone {
         ts: &TransitionSystem,
         exact: &Cone,
         caps: Caps,
-        run: Option<(ComponentRun, usize)>,
+        mut run: Option<(ComponentRun, usize)>,
         mut out: Settled,
     ) -> Settled {
         if ts.cyclic_outside(&exact.vars).is_empty() {
@@ -399,8 +406,8 @@ impl PropertyCone {
                 .push("nothing outside the cone runs forever".to_string());
             return out.decided(Step::Monotone, None);
         }
-        if let Some(entity) = ts.independent_loop(&exact.vars, caps) {
-            let (run, i) = match run {
+        if let Some(entity) = ts.independent_loop(exact, caps) {
+            let (run, i) = match run.take() {
                 Some(run) => run,
                 None => {
                     let (system, i) = cone_system(ts, exact, self.at);
@@ -432,6 +439,8 @@ impl PropertyCone {
         // Step 6: on the cone widened over what can change forever outside it, everything
         // outside is monotone, so step 4's argument makes its run with `WF_vars(Next)` exact:
         // its `ok` and its counterexample are the whole model's.
+        // The exact cone's run is not read again: its memory goes back before the wider run.
+        drop(run);
         let wide = ts.loop_cone(exact);
         let (system, i) = cone_system(ts, &wide, self.at);
         let run = system.run(caps);

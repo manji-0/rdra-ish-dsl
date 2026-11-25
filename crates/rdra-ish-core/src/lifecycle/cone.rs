@@ -542,13 +542,15 @@ impl TransitionSystem {
     /// Step 5 of docs/design/native-temporal-verification.md, "Modes and the cone": a var set
     /// `W` outside `cone` that can change forever on its own, whatever the cone does. For each
     /// var `cyclic_outside` names, `W` is the exact cone of it (`exact_cone`), taken only when
-    /// it is disjoint from `cone` and no action writes both. Both are closed, so their actions
+    /// it is disjoint from `cone`, no action writes both, and no fair use case of the property
+    /// (`cone.keep`) writes it, so `W`'s loop starves no fair instance. Both are closed, so their actions
     /// read only their own vars, and both are exact, so their steps are the whole system's:
     /// the two interleave freely. When `W`'s graph under `caps` has a cycle, the whole system
     /// can run it forever at any state of the cone. Returns the entity of the var `W` grew
     /// from (its id), or `None` when no candidate loops.
-    pub fn independent_loop(&self, cone: &VarSet, caps: super::Caps) -> Option<String> {
+    pub fn independent_loop(&self, cone: &Cone, caps: super::Caps) -> Option<String> {
         let writes: Vec<VarSet> = self.actions.iter().map(|a| self.action_writes(a)).collect();
+        let (keep, cone) = (&cone.keep, &cone.vars);
         let mut tried: Vec<VarSet> = Vec::new();
         for v in self.cyclic_outside(cone) {
             let mut seed = VarSet::from([v]);
@@ -558,9 +560,9 @@ impl TransitionSystem {
                 continue;
             }
             tried.push(w.vars.clone());
-            let shared = writes
-                .iter()
-                .any(|ws| !ws.is_disjoint(&w.vars) && !ws.is_disjoint(cone));
+            let shared = writes.iter().enumerate().any(|(i, ws)| {
+                !ws.is_disjoint(&w.vars) && (!ws.is_disjoint(cone) || keep.contains(&ActId::at(i)))
+            });
             if shared {
                 continue;
             }

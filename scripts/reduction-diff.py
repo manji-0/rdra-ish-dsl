@@ -11,13 +11,17 @@ limit, a property past the budget) and the other decides it, the seed is listed 
 `plain_undecided` or `reduced_undecided` and compared on what both decided: a finding one run
 prints must be one the other prints or leaves open.
 
+With `--whole` the unreduced run also sets RDRA_ISH_WHOLE_CONE, which makes each temporal
+property's cone the whole model: the two runs then compare what the cones and the steps that
+widen them decide (#168 phase 4) with each property's whole-model verdict.
+
 With `--with-tlc` both runs pass `--with-tlc`, so TLC runs every cone beside the native
 checker, and every check on which the two engines differ (an `error[EngineDisagreement]`
 line, or an `error[LassoFault]` line for a native counterexample that fails its own check)
 is recorded. Such a seed is listed under `disagreed`, its model copied to
 `<work>/disagreed/seed<N>.rdra`, whatever the reduced and unreduced runs compare to.
 
-  python3 -I scripts/reduction-diff.py run BIN --seeds 0:40 [--jobs N] [--fail-on-timeout] [--with-tlc] [--counted]
+  python3 -I scripts/reduction-diff.py run BIN --seeds 0:40 [--jobs N] [--fail-on-timeout] [--with-tlc] [--counted] [--whole]
       [--min-compared N] [--min-reduced N]
   (--seeds @FILE reads the seeds and ranges from FILE, as scripts/reduction-diff-pr-seeds.txt)
   (--timeout S and --work DIR go before the subcommand)
@@ -25,7 +29,7 @@ is recorded. Such a seed is listed under `disagreed`, its model copied to
 
 `--counted` puts `.counted(k)`, k of 1 or 2, on every `triggers` line the seed draws (#220),
 so the reduced and unreduced runs also compare a model whose handler runs once per raise.
-  python3 -I scripts/reduction-diff.py compare BIN MODEL.rdra [--instance-count N] [--with-tlc]
+  python3 -I scripts/reduction-diff.py compare BIN MODEL.rdra [--instance-count N] [--with-tlc] [--whole]
   python3 -I scripts/reduction-diff.py minimize BIN MODEL.rdra OUT.rdra [--instance-count N] [--with-tlc]
   python3 -I scripts/reduction-diff.py selfcheck
 
@@ -422,14 +426,18 @@ def has_reduced_cone(d):
     return d.is_dir() and any("S_class" in f.read_text() for f in d.glob("*.tla"))
 
 
-def verify_both(bin_, model, instances, timeout, work, with_tlc=False):
-    """Each side's observation, or "timeout"; and whether the users' run reduced a cone."""
+def verify_both(bin_, model, instances, timeout, work, with_tlc=False, whole=False):
+    """Each side's observation, or "timeout"; and whether the users' run reduced a cone.
+    Under `whole` the unreduced side decides each temporal property on the whole model."""
     sides = {}
     for side in ("reduced", "plain"):
         shutil.rmtree(work / side, ignore_errors=True)
-    for side, extra in (("reduced", {}), ("plain", {"RDRA_ISH_NO_REDUCE": "1"})):
+    plain = {"RDRA_ISH_NO_REDUCE": "1"}
+    if whole:
+        plain["RDRA_ISH_WHOLE_CONE"] = "1"
+    for side, extra in (("reduced", {}), ("plain", plain)):
         d = work / side
-        env = {k: v for k, v in os.environ.items() if k != "RDRA_ISH_NO_REDUCE"}
+        env = {k: v for k, v in os.environ.items() if k not in ("RDRA_ISH_NO_REDUCE", "RDRA_ISH_WHOLE_CONE")}
         env.update(extra)
         cmd = [bin_, "verify", "--deny-undecided", "--instance-count", str(instances), "-o", str(d), str(model)]
         if with_tlc:
@@ -467,7 +475,7 @@ def compare_seed(args, seed):
     ok, out = loads(args.bin, model, args.timeout, work)
     if not ok:
         return dict(res, status="load_error", detail=out[:300])
-    sides, reduced = verify_both(args.bin, model, instances, args.timeout, work, args.with_tlc)
+    sides, reduced = verify_both(args.bin, model, instances, args.timeout, work, args.with_tlc, args.whole)
     res["reduced"] = reduced
     if disagreed(sides):
         bad = Path(args.work) / "disagreed"
@@ -531,6 +539,7 @@ def cmd_run(args):
         load_errors=[x["seed"] for x in by("load_error")],
         diverged=[x["seed"] for x in by("diverged")],
         with_tlc=args.with_tlc,
+        whole=args.whole,
         disagreed=[x["seed"] for x in by("disagreed")],
     )
     print(json.dumps(summary))
@@ -559,7 +568,7 @@ def diverges(args, lines, work):
     model.write_text("\n".join(lines) + "\n")
     if not loads(args.bin, model, args.timeout, work)[0]:
         return False
-    sides, _ = verify_both(args.bin, model, args.instance_count, args.timeout, work, args.with_tlc)
+    sides, _ = verify_both(args.bin, model, args.instance_count, args.timeout, work, args.with_tlc, args.whole)
     if disagreed(sides):
         return True
     return "timeout" not in sides.values() and agreement(sides["reduced"], sides["plain"]) == "diverged"
@@ -570,7 +579,7 @@ def cmd_compare(args):
     work = Path(args.work) / "compare"
     work.mkdir(parents=True, exist_ok=True)
     model = Path(args.model).resolve()
-    sides, reduced = verify_both(args.bin, model, args.instance_count, args.timeout, work, args.with_tlc)
+    sides, reduced = verify_both(args.bin, model, args.instance_count, args.timeout, work, args.with_tlc, args.whole)
     late = "timeout" in sides.values()
     status = "timeout" if late else agreement(sides["reduced"], sides["plain"])
     if disagreed(sides):
@@ -632,6 +641,7 @@ def main():
     p.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) // 2))
     p.add_argument("--with-tlc", action="store_true", help="run TLC beside the native checker and record where they differ")
     p.add_argument("--counted", action="store_true", help="count the raises of every triggers line (#220)")
+    p.add_argument("--whole", action="store_true", help="decide each property on the whole model in the unreduced run")
     p = sub.add_parser("gen")
     p.add_argument("seed", type=int)
     p.add_argument("--counted", action="store_true", help="count the raises of every triggers line (#220)")
@@ -644,6 +654,7 @@ def main():
             p.add_argument("out")
         p.add_argument("--instance-count", type=int, default=2)
         p.add_argument("--with-tlc", action="store_true", help="run TLC beside the native checker")
+        p.add_argument("--whole", action="store_true", help="decide each property on the whole model in the unreduced run")
     args = ap.parse_args()
     args.work = str(Path(args.work).resolve())
     cmds = dict(run=cmd_run, gen=cmd_gen, compare=cmd_compare, minimize=cmd_minimize, selfcheck=cmd_selfcheck)

@@ -77,7 +77,7 @@ define the runs:
 | `Cone_<P>` (`Plain`) | The property's cone, reduced by its sub-lifecycle | `Fair_P` only | An `ok` is the whole model's `ok`. A counterexample of an `always` is final. |
 | `Cone_<P>_Full` | The unreduced cone | `Fair_P` only | Repeats a counterexample of the reduced cone, because a reduced lasso does not lift step by step. |
 | `Cone_<P>_WF` (`WfNext`) | The unreduced cone | `Fair_P` and `WF_vars(Next)` | A counterexample is final. An `ok` is final only when the cone holds every var an action writes (`cone_keeps_every_write`, `lifecycle/cone.rs:418`). |
-| `RdraSpec_<P>` | The whole model | `Fair_P` and `WF_vars(Next)` | Decides what the cone left open, under `--temporal-budget` and a cap of 2,097,152 states (`verify.rs:40`). |
+| `RdraSpec_<P>` | The whole model | `Fair_P` and `WF_vars(Next)` | Decides what the cone left open, under `--temporal-budget` and a cap of 2,097,152 states (`verify.rs:40`). [Since phase 4 only TLC runs it; the native checker runs steps 4 to 6 instead.] |
 
 A cone that frees an entity's slots (`cone_frees_slots`, `cone.rs:426`) reaches a superset,
 so only its `ok` counts and a counterexample goes to the whole model.
@@ -769,7 +769,7 @@ left-out marks and their raisers. A replay that succeeds prints the counterexamp
 the `note:` row; one that fails reruns that check alone on the widened cone, under the same
 memory limit, and keeps the note if the rerun is undecided. Exit: the undecided list of
 `TEMPORAL_CASES` is empty with every verdict equal to the whole model's, the whole-model
-mode of `reduction-diff.py` finds no difference on seeds `0:500`, `order.rdra` prints no
+mode of `reduction-diff.py` (`run --whole`) finds no difference on seeds `0:500`, `order.rdra` prints no
 `RdraSpec_` line, and a corpus case whose only cone counterexample runs a handler before its
 raiser reports `ok`, beside a twin whose violation is real either way.
 

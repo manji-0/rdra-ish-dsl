@@ -530,7 +530,7 @@ property Ships leads_to(Order.status == pending, Order.status == shipped)
     // The ticket loops on its own; the note's state is done once and never back, so it has
     // no cycle, and the cone of the order shares no write with either.
     assert_eq!(
-        ts.independent_loop(&cone.vars, Caps::VERIFY),
+        ts.independent_loop(&cone, Caps::VERIFY),
         Some("Ticket".to_string())
     );
 }
@@ -560,7 +560,7 @@ property PaidShips leads_to(Order.status == paid, Order.status == shipped)
     let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
     let cone = ts.property_cone(0);
     assert_eq!(ts.cyclic_outside(&cone.vars).len(), 1, "the flag");
-    assert_eq!(ts.independent_loop(&cone.vars, Caps::VERIFY), None);
+    assert_eq!(ts.independent_loop(&cone, Caps::VERIFY), None);
     // Step 6 widens over the flag: then nothing outside changes forever, and here the
     // widened cone holds every var.
     let wide = ts.loop_cone(&cone);

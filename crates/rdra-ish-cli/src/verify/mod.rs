@@ -298,6 +298,10 @@ pub fn run(
                 _ => None,
             })
             .collect();
+        // `settle` decides each property on a widened cone, or leaves it undecided where that
+        // run stopped (phase 4, step 6), so none is left for the whole model; the run below
+        // stays as the fallback it was.
+        debug_assert!(open.is_empty(), "step 6 leaves nothing to the whole model");
         rdra_ish_core::perf::pass("wholes");
         let wholes = native_wholes(&ts, &open, caps, budget);
         rdra_ish_core::perf::pass("proof");

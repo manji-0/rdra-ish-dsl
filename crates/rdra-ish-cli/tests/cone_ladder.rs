@@ -102,7 +102,31 @@ const CASES: &[Case] = &[
         Model::Source("loop_needs_a_mark", LOOP_NEEDS_A_MARK),
         &[("PaidShipsUnfair", "Loops")],
     ),
+    (Model::Source("fair_outside", FAIR_OUTSIDE), &[]),
 ];
+
+/// The property assumes `Close` fair, and `Close` only moves the ticket that loops. A loop
+/// that starved a fair use case would be no fair behavior of the whole model, so step 5 never
+/// takes a loop a fair use case writes. Here the cone takes `Close` and what it reads, the
+/// ticket, so the cone decides alone, as the whole model does: a counterexample, the ticket
+/// closing and reopening while a paid order waits.
+const FAIR_OUTSIDE: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid, shipped) @default(pending) }
+entity Ticket "問い合わせ" { id: Int @pk  status: Enum(open, closed) @default(open) }
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Ship "出荷"
+usecase Open "起票"
+usecase Close "完了"
+usecase Reopen "再開"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+creates(Open, Ticket)
+transitions(Close, Ticket.status, open -> closed)
+transitions(Reopen, Ticket.status, closed -> open)
+property PaidShipsCloses leads_to(Order.status == paid, Order.status == shipped).fair(Close)
+"#;
 
 /// The flag toggles outside the cone, but Pay and Ship write it with the status: the flag's
 /// cone shares their writes, so it is no independent loop (step 5), and the whole model,
