@@ -325,6 +325,8 @@ pub fn run() -> Result<()> {
             deny_unproved,
             z3,
             tlc_jar,
+            tlc_jobs,
+            tlc_workers,
             memory,
             symmetry,
             scope,
@@ -340,6 +342,15 @@ pub fn run() -> Result<()> {
                     "warning: --tlc-jar applies only with --with-tlc; this run starts no TLC"
                 );
             }
+            for (flag, given) in [("--tlc-jobs", tlc_jobs), ("--tlc-workers", tlc_workers)] {
+                if given.is_some() && !with_tlc {
+                    eprintln!(
+                        "warning: {flag} applies only with --with-tlc; this run starts no TLC"
+                    );
+                }
+            }
+            let tlc_jobs = tlc_count(tlc_jobs, "RDRA_TLC_JOBS")?;
+            let tlc_workers = tlc_count(tlc_workers, "RDRA_TLC_WORKERS")?;
             let (program, model, manifest) = load_clean(&inputs)?;
             let memory = memory_limit(memory, manifest.as_ref(), Budgeted::Verify);
             if manifest
@@ -373,12 +384,31 @@ pub fn run() -> Result<()> {
                     memory,
                     symmetry,
                 },
-                with_tlc.then_some(verify::WithTlc { jar: tlc_jar }),
+                with_tlc.then_some(verify::WithTlc {
+                    jar: tlc_jar,
+                    jobs: tlc_jobs,
+                    workers: tlc_workers,
+                }),
             )?;
         }
     }
 
     Ok(())
+}
+
+/// `--tlc-jobs` or `--tlc-workers`, else the variable `env` names: a whole number above 0.
+fn tlc_count(flag: Option<u32>, env: &str) -> anyhow::Result<Option<usize>> {
+    if let Some(n) = flag {
+        return Ok(Some(n as usize));
+    }
+    match std::env::var(env) {
+        Ok(text) if text.trim().is_empty() => Ok(None),
+        Ok(text) => match text.trim().parse::<usize>() {
+            Ok(n) if n > 0 => Ok(Some(n)),
+            _ => anyhow::bail!("{env} must be a whole number above 0, not `{text}`"),
+        },
+        Err(_) => Ok(None),
+    }
 }
 
 #[cfg(test)]

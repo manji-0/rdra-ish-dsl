@@ -38,14 +38,15 @@ mod tlc;
 mod tlc_tool;
 
 use self::bfs::{
-    bfs_cones, decide_by_proof, explored_properties, report_bfs_cones, state_models, Explored,
-    Safety, STATE_MODEL_TLC_STATES,
+    bfs_cones, decide_by_proof, explored_properties, report_bfs_cones, state_models, BfsCone,
+    Explored, Safety, STATE_MODEL_TLC_STATES,
 };
 use self::compare::disagreements;
 use self::end::{End, TlcEnd};
 use self::jobs::{cone_jobs, explored_jobs, property_jobs, Job, JobKind};
-use self::native::{native_properties, native_wholes, Natives};
+use self::native::{native_properties, native_wholes, Native, Natives};
 use self::report::{print_plan, report_properties, Temporal};
+use self::schedule::{Machine, Pool};
 use self::shared::Shared;
 use self::specs::{out_names, spec_dir, write_specs_and_index, write_whole_specs};
 use self::state_models::{run_state_models, state_model_disagreements, state_model_jobs};
@@ -91,6 +92,10 @@ impl WholeRun {
 pub struct WithTlc {
     /// `--tlc-jar`: run TLC from `tla2tools.jar`; else `RDRA_TLC_JAR`, else `tlc` on PATH.
     pub jar: Option<PathBuf>,
+    /// `--tlc-jobs`, else `RDRA_TLC_JOBS`: the most TLC runs at once.
+    pub jobs: Option<usize>,
+    /// `--tlc-workers`, else `RDRA_TLC_WORKERS`: every TLC run's workers.
+    pub workers: Option<usize>,
 }
 
 /// What `verify` spends on a check it may not finish, and whether one it leaves undecided
@@ -243,6 +248,12 @@ pub fn run(
     let written = dir
         .as_ref()
         .map(|dir| write_specs_and_index(dir, &jobs, &whole));
+    let machine = (with_tlc.as_ref()).map_or(Machine::here(None, None), |w| {
+        Machine::here(w.workers, w.jobs)
+    });
+    // The cone runs pick their jobs as BFS counts them (#384), on half of `--memory` until
+    // BFS ends and all of it after.
+    let pool = Pool::new(machine, memory.cones, jobs.len(), false);
     let tlc = with_tlc.map(|w| Tlc::find(w.jar));
     let z3 = prove.as_ref().map(|p| find_z3(p.z3.clone()));
     let start = match (&dir, &written, &tlc, &z3) {
@@ -250,8 +261,8 @@ pub fn run(
         _ => None,
     };
     let (bfs, mut natives, explored, proof, cones_ran) = std::thread::scope(|threads| {
-        let cones = start
-            .map(|(tlc, dir)| threads.spawn(|| run_cones(tlc, dir, &modules, &jobs, memory.cones)));
+        let cones =
+            start.map(|(tlc, dir)| threads.spawn(|| run_cones(tlc, dir, &modules, &jobs, &pool)));
         // A cone the entity, safety and property passes share runs once (#209): the pass that
         // runs it first decides the later passes' jobs on its run.
         let covers = covering(&jobs);
@@ -270,10 +281,17 @@ pub fn run(
             &wanted,
             |run| shared.decide_on(&ts, &jobs, &covers, run),
         );
+        let shared_safety: Vec<Option<&BfsCone>> = (shared.safety.iter())
+            .map(|s| s.as_ref().map(|(c, _)| c))
+            .collect();
+        pool.learn(counted(&shared_safety, &shared, &[]));
         rdra_ish_core::perf::pass("safety_pass");
         let (safety, mut vacuous) = bfs_cones(&ts, &jobs, caps, &covers, &mut shared);
+        let safety_ran: Vec<Option<&BfsCone>> = safety.iter().map(Option::as_ref).collect();
+        pool.learn(counted(&safety_ran, &shared, &[]));
         rdra_ish_core::perf::pass("property_pass");
         let (properties, property_vacuous) = native_properties(&ts, &jobs, caps, &mut shared);
+        pool.learn(counted(&[], &shared, &properties));
         // A `--buc` drops use cases that may reach a premise.
         if scope.bucs.is_empty() {
             vacuous.extend(property_vacuous);
@@ -307,6 +325,8 @@ pub fn run(
             }),
             _ => Ok(None),
         };
+        // BFS has let go of its half: the cone runs that start from here take all of it.
+        pool.bfs_ended(memory.limit.bytes());
         let cones_ran = cones.map(|cones| match cones.join() {
             Ok(ran) => ran,
             Err(panic) => std::panic::resume_unwind(panic),
@@ -378,7 +398,7 @@ pub fn run(
             (&tlc, dir),
             (&ts, &names),
             &whole_modules,
-            (budget, memory.wholes),
+            (budget, memory.wholes, machine),
             (&jobs, &ran),
             (index, index_path.as_path()),
         )?;
@@ -471,6 +491,21 @@ pub fn run(
         }
     }
     end.finish(&line, &undecided)
+}
+
+/// The states BFS counted of each safety and property cone job (`BfsCone::counted`,
+/// `Plain::counted`, `Native::counted`), for the TLC scheduler (#384).
+fn counted(
+    safety: &[Option<&BfsCone>],
+    shared: &self::shared::Shared,
+    properties: &[Option<Native>],
+) -> Vec<(usize, u64)> {
+    let safety = (safety.iter().enumerate()).filter_map(|(k, c)| Some((k, c.as_ref()?.counted()?)));
+    let plain =
+        (shared.plain.iter().enumerate()).filter_map(|(k, p)| Some((k, p.as_ref()?.counted()?)));
+    let native =
+        (properties.iter().enumerate()).filter_map(|(k, n)| Some((k, n.as_ref()?.counted?)));
+    safety.chain(plain).chain(native).collect()
 }
 
 /// The worst of `outcomes`: a counterexample over a tool error over `ok`.

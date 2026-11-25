@@ -375,6 +375,22 @@ impl BfsCone {
         out
     }
 
+    /// The states of the cone's module, when a plain run explored all of them: not a run
+    /// stopped once every check failed, at a cap or the memory limit, nor one up to symmetry,
+    /// which counts orbits. The TLC scheduler sizes the cone's run by it (#384).
+    pub(super) fn counted(&self) -> Option<u64> {
+        match self {
+            BfsCone::Ran {
+                states,
+                end: RunEnd::Complete,
+                memory: false,
+                orbits: None,
+                ..
+            } => Some(*states as u64),
+            _ => None,
+        }
+    }
+
     /// The verdict of `run`, a run of `cone`'s system.
     pub(super) fn of(ts: &TransitionSystem, cone: &ConeSystem, run: &ComponentRun) -> BfsCone {
         let mut out = Self::of_parts(ts, cone, run.checks(), &run.diags, run.end());

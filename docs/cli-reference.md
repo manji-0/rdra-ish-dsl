@@ -752,7 +752,8 @@ number, `0`, and a fraction are refused.
   instances the process peaked at 1.2 to 1.4 times the limit at `RDRA_JOBS=1` and up to twice it
   with eight. A cone can take 1.35 to 1.6 times what it is counted while it grows.
 - **TLC** (`verify --with-tlc`). The TLC cone runs get half the limit (at least `64MiB`) and
-  BFS the rest; the whole-model property runs start after BFS and may take all of it. Each
+  BFS the rest until BFS ends; a cone run that starts after that, and the whole-model property
+  runs, may take all of it. Each
   run counts its `-Xmx` plus `256MiB`. A run's heap is 512 MiB per MiB of module text in whole
   GiB, at least `1g` (cone) or `2g` (whole model), at most the share. A run starts once its
   heap fits beside the running ones, or when none runs. A run that runs out of memory runs
@@ -761,6 +762,14 @@ number, `0`, and a fraction are refused.
   a `tool_error` naming the heap. `RDRA_TLC_HEAP` or an `-Xmx` in `JAVA_TOOL_OPTIONS` sets the
   heap as given, with no rerun. A `--memory` that leaves BFS nothing beside `64MiB` of TLC heap
   is refused.
+- **TLC's cores** (`verify --with-tlc`). Each TLC run holds its `-workers` of the cores while
+  it goes. A run gets one worker per 50,000 states BFS counted in its module, from 1 to 8, or
+  8 while BFS has not counted it. When memory, not the number of runs waiting, bounds the
+  runs at once, a run gets the cores divided among those that fit, up to 32. The largest runs
+  start first. A run starts once the cores for its workers are free and its heap fits, or
+  when none runs, and a smaller run does not pass it. Whole-model runs go 2 at once.
+  `--tlc-workers` and `--tlc-jobs` set the workers and the most runs at once; see
+  [docs/design/tlc-scheduling.md](./design/tlc-scheduling.md).
 - **z3** (`verify --prove`) is not counted and runs unbounded: z3 at its own
   `memory_max_size` exits, which would end the proof.
 
@@ -1348,7 +1357,7 @@ the native checker. No JVM starts unless `--with-tlc` is given. See
 [formal-verification.md](./formal-verification.md).
 
 ```
-rdra-ish verify <INPUTS...> [--with-tlc [--tlc-jar <PATH>]] [-o <DIR>]
+rdra-ish verify <INPUTS...> [--with-tlc [--tlc-jar <PATH>] [--tlc-jobs <N>] [--tlc-workers <N>]] [-o <DIR>]
                 [--instance-count <N>] [--instances <ENTITY=N>]... [--int-range-max <N>]
                 [--max-states <N>] [--max-patterns <N>] [--memory <SIZE>] [--symmetry never|always]
                 [--temporal-budget <SECS>] [--deny-undecided]
@@ -1374,6 +1383,8 @@ rdra-ish verify <INPUTS...> [--with-tlc [--tlc-jar <PATH>]] [-o <DIR>]
 | `--prove` | off | Experimental. Also try to prove each selected state rule (`forbidden`, `invariant`, `required`, `@check`, quantifiers, `Unique_*`, `MinCard_*`) for any number of rows and any non-negative Int (`now` has no top) with z3. See [Proofs](#proofs). Needs z3 ([Getting z3](#getting-z3)). |
 | `--deny-unproved` | off | With `--prove`: exit 1 when a rule is unproved. A rule out of scope does not count. |
 | `--z3 <PATH>` | `RDRA_Z3`, else `z3` on `PATH` | The z3 binary for `--prove`. |
+| `--tlc-jobs <N>` | `RDRA_TLC_JOBS`, else as many as the cores and memory allow | With `--with-tlc`: at most `N` TLC runs at once. The memory they share still bounds them. The verdicts do not change. Without `--with-tlc` it warns. |
+| `--tlc-workers <N>` | `RDRA_TLC_WORKERS`, else by the states BFS counted | With `--with-tlc`: every TLC run gets `-workers N`; a safety cone that does not pass still reruns on one worker. See [Memory limit](#memory-limit). Without `--with-tlc` it warns. |
 | `--tlc-jar <PATH>` | `RDRA_TLC_JAR` | With `--with-tlc`: run `java -cp <PATH> tlc2.TLC` from `tla2tools.jar` instead of a `tlc` / `tlc2` launcher. Needs `java`. Without `--with-tlc` it warns and starts nothing. |
 | `--buc`, `--entity`, `--without-usecase`, `--without-buc`, `--actor` `<ID>` | whole model | See [Partial runs](#partial-runs). A scoped run checks no property. |
 
@@ -1903,6 +1914,8 @@ Sites are `path:line:col` relative to the working directory, or to `rdra.toml`'s
 |---|---|---|
 | `RDRA_JOBS` | `check`, `states`, `verify`, the generators | A whole number above 0: the cones explored at once, the threads that compute one cone's moves, and the z3 processes of `--prove`. Default: cones and z3 processes are the cores, at most 8; one cone's threads are a third of the cores, at least 4 and at most 12, never more than the cores. `1` runs everything one after another on one thread. Lower uses less memory; the output does not change. TLC runs are not counted. |
 | `RDRA_TLC_JAR` | `verify --with-tlc` | Path to `tla2tools.jar`, used as `--tlc-jar` when the flag is absent. |
+| `RDRA_TLC_JOBS` | `verify --with-tlc` | A whole number above 0, used as `--tlc-jobs` when the flag is absent. |
+| `RDRA_TLC_WORKERS` | `verify --with-tlc` | A whole number above 0, used as `--tlc-workers` when the flag is absent. |
 | `RDRA_TLC_HEAP` | `verify --with-tlc` | The heap of every TLC JVM, such as `4g`, with no rerun. Runs queue so their heaps fit; see [Memory limit](#memory-limit). |
 | `JAVA_TOOL_OPTIONS` | `verify --with-tlc` | Appended after the options `verify` sets (`-Xmx`, `-Djava.io.tmpdir`, and `-XX:TieredStopAtLevel=1` on a state-model run of at most 10,000 BFS states, added only after TLC started once with it), so a value here wins. |
 | `RDRA_TLC_BATCH` | `verify --with-tlc` | `0` runs each TLC job as its own process instead of in the `tlc-batch` JVM the flake provides. |

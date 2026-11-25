@@ -1,11 +1,11 @@
 use super::jobs::{whole_job, ConeSystem, Job, JobKind};
 use super::report::run_line;
-use super::schedule::{run_budgeted, Budget, Hold};
+use super::schedule::{Machine, Pool, Rank, Slot};
 use super::specs::write_whole_specs;
 use super::tlc_tool::Tlc;
 use super::{WholeRun, WHOLE_MODEL_STATE_CAP};
 use crate::export::Modules;
-use crate::memory::{tlc_workers, TlcHeap};
+use crate::memory::TlcHeap;
 use crate::property_cone::{AfterPlain, ConeRun, Verdict, Why};
 use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_env::{current_user_heap, tlc_env_sized, xmx, Heap, Jit};
@@ -165,7 +165,7 @@ impl Ran {
 fn run_sized(
     job: &Job,
     heap: TlcHeap,
-    (share, hold): (u64, &mut Hold),
+    (share, slot): (u64, &mut Slot),
     run: impl Fn(u64) -> Result<Ran>,
 ) -> Result<Ran> {
     let bytes = match heap {
@@ -176,7 +176,7 @@ fn run_sized(
     let (true, Some(more)) = (out_of_memory(&ran.log), heap.doubled(share)) else {
         return Ok(ran);
     };
-    hold.regrow(more.charge());
+    slot.regrow(more.charge());
     let doubled = more.bytes().expect("a doubled heap is sized");
     let mut again = run(doubled)?;
     again.cost = ran.cost.then(again.cost);
@@ -522,8 +522,9 @@ fn run_whole(
     })
 }
 
-/// Runs the cone jobs, as many at once as the cores allow and their heaps fit `share`
-/// (`run_some`), each with the heap its module needs (`TlcHeap::of`).
+/// Runs the cone jobs one `pool` pick at a time (`run_some`), each with the heap its module
+/// needs (`TlcHeap::of`) of the share the cone runs have while BFS runs. Once BFS ends more of
+/// them may go at once, but each keeps that heap, so no verdict depends on when a run starts.
 ///
 /// A cone another cone covers (`covering`) waits for that one: when it passes, the covered
 /// cone is `ok` without a run, and when it does not, the covered cone runs as it would have.
@@ -532,22 +533,15 @@ pub(super) fn run_cones(
     dir: &Path,
     modules: &Modules,
     jobs: &[Job],
-    share: u64,
+    pool: &Pool,
 ) -> Result<Vec<Ran>> {
-    let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
     let set = current_user_heap();
-    let heaps: Vec<TlcHeap> = jobs
-        .iter()
-        .map(|job| TlcHeap::of(job.module_bytes(), Heap::Cone, share, set))
-        .collect();
-    let budget = Budget::new(share);
+    let heap =
+        |job: usize, share: u64| TlcHeap::of(jobs[job].module_bytes(), Heap::Cone, share, set);
     let run = |only: &[usize]| {
-        run_some(
-            (jobs, only),
-            (cores, cores),
-            (&heaps, &budget),
-            |job, jvm| run_job(tlc, dir, modules, job, jvm),
-        )
+        run_some((jobs, only), pool, &heap, |job, jvm| {
+            run_job(tlc, dir, modules, job, jvm)
+        })
     };
     let covers = covering(jobs);
     let first: Vec<usize> = (0..jobs.len()).filter(|i| covers[*i].is_none()).collect();
@@ -658,66 +652,54 @@ impl<'a> Covered<'a> {
     }
 }
 
-/// Runs the whole-model property jobs, up to 2 at once and as their heaps fit `share`
-/// (`run_some`), each with at least the temporal heap (`TlcHeap::of`).
+/// Runs the whole-model property jobs, up to 2 at once unless `--tlc-jobs` says otherwise,
+/// as their heaps fit `share` (`run_some`), each with at least the temporal heap
+/// (`TlcHeap::of`). BFS has ended, so no count is coming.
 fn run_wholes(
     tlc: &Tlc,
     dir: &Path,
     jobs: &[Job],
-    budget: WholeRun,
-    share: u64,
+    (budget, share): (WholeRun, u64),
+    machine: Machine,
 ) -> Result<Vec<Ran>> {
-    let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
     let set = current_user_heap();
-    let heaps: Vec<TlcHeap> = jobs
-        .iter()
-        .map(|job| TlcHeap::of(job.module_bytes(), Heap::Temporal, share, set))
-        .collect();
+    let heap =
+        |job: usize, share: u64| TlcHeap::of(jobs[job].module_bytes(), Heap::Temporal, share, set);
+    let machine = Machine {
+        jobs: Some(machine.jobs.unwrap_or(2)),
+        ..machine
+    };
+    let pool = Pool::new(machine, share, jobs.len(), true);
     let all: Vec<usize> = (0..jobs.len()).collect();
-    run_some(
-        (jobs, &all),
-        (2, cores),
-        (&heaps, &Budget::new(share)),
-        |job, jvm| run_whole(tlc, dir, job, jvm, budget),
-    )
+    run_some((jobs, &all), &pool, &heap, |job, jvm| {
+        run_whole(tlc, dir, job, jvm, budget)
+    })
 }
 
-/// Runs the jobs `only` names on up to `threads` threads, the largest heap first, then the
-/// heaviest (`Job::weight`). A run starts once its heap and those of the runs going fit the
-/// budget (`Budget`), or alone; it reruns once at twice the heap when it runs out of memory
-/// (`run_sized`). Its TLC workers divide the cores among the runs that can go at once, at
-/// most 8 (`tlc_workers`). The results come back in the order of `only`.
+/// Runs the jobs `only` names, one `pool` pick at a time (`schedule::pick`): the job at the
+/// head of the order once its workers' cores are free and its heap fits beside the runs
+/// going, or alone. Its heap is `heap` at the pool's sizing share; it reruns once at twice
+/// the heap when it runs out of memory (`run_sized`). The results come back in the order of
+/// `only`.
 fn run_some(
     (jobs, only): (&[Job], &[usize]),
-    (threads, cores): (usize, usize),
-    (heaps, budget): (&[TlcHeap], &Budget),
+    pool: &Pool,
+    heap: &(dyn Fn(usize, u64) -> TlcHeap + Sync),
     run: impl Fn(&Job, (&str, u64)) -> Result<Ran> + Sync,
 ) -> Result<Vec<Ran>> {
-    // Positions in `only`, the largest heap first, then the heaviest job.
-    let mut order: Vec<usize> = (0..only.len()).collect();
-    order.sort_by_key(|at| {
-        let job = only[*at];
-        std::cmp::Reverse((heaps[job].charge(), jobs[job].weight()))
+    let want = |job: usize, share: u64| -> (u64, Rank) {
+        let charge = heap(job, share).charge();
+        (charge, (charge, jobs[job].weight()))
+    };
+    let done = pool.run(only, want, |started, slot| {
+        let (job, share) = (&jobs[started.job], started.share);
+        let heap = heap(started.job, share);
+        let workers = started.workers.to_string();
+        run_sized(job, heap, (share, slot), |bytes| {
+            run(job, (&workers, bytes))
+        })
     });
-    let share = budget.bytes();
-    let done = run_budgeted(
-        &order,
-        threads,
-        budget,
-        |at| heaps[only[at]].charge(),
-        |at, hold, in_flight| {
-            let (job, heap) = (&jobs[only[at]], heaps[only[at]]);
-            // The runs that can go at once: those going and queued, but no more than the
-            // threads, nor than fit the share, so cores the budget leaves idle go to workers.
-            let fit = usize::try_from(share / heap.charge().max(1)).unwrap_or(usize::MAX);
-            let sharing = in_flight.min(threads).min(fit.max(1));
-            let workers = tlc_workers(cores, sharing).to_string();
-            run_sized(job, heap, (share, hold), |bytes| {
-                run(job, (&workers, bytes))
-            })
-        },
-    );
-    done.into_iter().map(|(_, r)| r).collect()
+    done.into_iter().collect()
 }
 
 /// Each violated check of a cone run once, in model terms, from its first TLC trace. A trace
@@ -780,7 +762,7 @@ pub(super) fn run_tlc_wholes(
     (tlc, dir): (&Tlc, &Path),
     (ts, names): (&TransitionSystem, &TlaNames),
     whole_modules: &[String],
-    (budget, share): (WholeRun, u64),
+    (budget, share, machine): (WholeRun, u64, Machine),
     (jobs, ran): (&[Job], &[Ran]),
     index: (&mut String, &Path),
 ) -> Result<(Vec<Job>, Vec<Ran>)> {
@@ -803,7 +785,7 @@ pub(super) fn run_tlc_wholes(
         .iter()
         .map(|&i| whole_job(ts, names, &whole_modules[i], i))
         .collect();
-    let more = run_wholes(tlc, dir, &wholes, budget, share)?;
+    let more = run_wholes(tlc, dir, &wholes, (budget, share), machine)?;
     for (job, r) in wholes.iter().zip(&more) {
         println!("tlc: {}", r.line(&job.module, &job.checks));
     }
