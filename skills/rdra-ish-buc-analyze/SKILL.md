@@ -4,83 +4,39 @@ description: Choose the right RDRA-ish BUC or whole-model analysis path for refi
 license: MIT
 ---
 
-## Choose BUC Analysis
+## When to use
 
-Choose the analysis path that matches the user's question and the model's current
-refinement stage. Keep this top-level skill as the routing layer, then load the
-reference file for the concrete analysis task.
+Answer one analysis question about a BUC or the whole model: where it is in refinement,
+what is missing, whether access or API boundaries hold, or what its lifecycle reaches. For
+a verdict over every area, use skill `rdra-ish-review`.
 
-### Routing Guide
+## Steps
 
-| User intent | Analyze first | Load |
-|---|---|---|
-| "Where are we in refinement?" | Stage signals and next missing information | `references/stage-readiness.md` |
-| "What is incomplete in this BUC/model?" | BUC, actor, use-case, flow, field, CRUD, inferred actor inputs, requirement/NFR scope, and layout gaps | `references/coverage-gaps.md` |
-| "Are permissions/media correct?" | screen/access paths, permission callables, actor grants | `references/access-permissions.md` |
-| "Are API/system boundaries sound?" | API ownership, API CRUD, cross-system relations, coordination | `references/api-system-boundaries.md` |
-| "Are lifecycle states/rules valid?" | reachable state patterns, states with no witness, deadlocks, use cases that never run, rule counterexamples, and `not checked:` | `references/state-patterns.md` |
-| "Do temporal `property` rules or two-instance rules hold?" | Prefer skill `rdra-ish-verify` (`verify`) | `references/state-patterns.md` |
-| "Summarize findings for review" | severity, evidence, next questions, and concrete recommendations | `references/reporting.md` |
+1. Run `rdra-ish check <src-dir>/` first, unless the user only asks what a command does.
+   Paste the `bounds:` line and the last line exactly as printed.
+2. Pick the question's reference below and run only its commands.
+3. Judge each gap at the model's stage: screens and data touchpoints are business-facing;
+   the API boundary, entity structure, lifecycle, and rules are technical commitments.
+4. Report with `../rdra-ish-review/references/output-format.md`: each finding with the
+   command and diagnostic behind it, the `bounds:` line, and everything under
+   `not checked:` as not checked.
+5. End with the next refinement question or the smallest model change.
 
-### Default Workflow
+| The question | Load |
+|---|---|
+| Where are we in refinement? What should we ask next? | `references/stage-readiness.md` |
+| What is missing in this BUC or model? | `references/coverage-gaps.md` |
+| Are permissions and media right? | `references/access-permissions.md` |
+| Are API and system boundaries sound? | `references/api-system-boundaries.md` |
+| Which states are reachable? What do `Witness_*`, `Deadlock_*`, `Runs_*` mean? | `references/state-patterns.md` |
+| Do temporal properties or two-row rules hold? | skill `rdra-ish-verify` |
 
-1. Run `rdra-ish check <src-dir>/` first unless the user only wants a narrow command
-   explanation.
-2. Identify whether the model is still business-facing or has entered technical
-   commitment: API and access boundary, entity structure, lifecycle, or rules. Screens
-   and data touchpoints are still business-facing.
-3. Load one reference file from the routing guide and run only the commands needed for
-   that analysis.
-4. Report evidence with command output signals, not just intuition: the diagnostic
-   name, the `bounds:` line a lifecycle result holds under, and anything listed under
-   `not checked:`. Paste the `bounds:` line and the last line of `check` exactly as
-   printed; do not paraphrase them. If `check` printed no `Witness_*`, `Deadlock_*` or
-   `Runs_*` finding, say so. Give a row or finding count only after counting it in the
-   output (for a CSV, its data rows without the header).
-5. End with the next useful refinement question or the smallest concrete model change.
+## References
 
-### Quick Command Palette
-
-```sh
-rdra-ish check src/
-rdra-ish check src/ --strict
-rdra-ish check src/ --entity <EntityId>
-rdra-ish lint src/ --format table
-rdra-ish list src/ --kind buc --format table
-rdra-ish list src/ --kind usecase --format table
-rdra-ish list src/ --kind actor --format table
-rdra-ish list src/ --kind requirement --format table
-rdra-ish list src/ --kind nfr --format table
-rdra-ish list src/ --kind field --format table
-rdra-ish list src/ --kind api --format table
-rdra-ish list src/ --kind adr --format table
-rdra-ish list src/ --kind rule --format markdown
-rdra-ish csv src/ --kind matrix
-rdra-ish csv src/ --kind business-inputs
-rdra-ish csv src/ --kind api-matrix
-rdra-ish csv src/ --kind screen-constraints
-rdra-ish csv src/ --kind permission-callables
-rdra-ish csv src/ --kind actor-permission-audit
-rdra-ish states src/
-rdra-ish states src/ --buc <BucId>
-rdra-ish states src/ --entity <EntityId>
-rdra-ish verify src/
-rdra-ish export src/ --kind openapi --out out/openapi.json
-rdra-ish export src/ --kind dbml --out out/schema.dbml
-```
-
-### Reference Files
-
-- `references/stage-readiness.md` — classify the current abstraction stage and decide
-  what information should be requested next.
-- `references/coverage-gaps.md` — find missing BUC ownership, actor/use-case links,
-  CRUD touchpoints, layout issues, and import hygiene.
-- `references/access-permissions.md` — analyze permission/media requirements and actor
-  grant coverage with the three access CSVs.
-- `references/api-system-boundaries.md` — review API invocation, system ownership,
-  API/entity matrices, and cross-system coordination.
-- `references/state-patterns.md` — interpret `states` and the lifecycle findings of
-  `check`: witnesses, deadlocks, use cases that never run, rule counterexamples, and
-  caps. For formal verification with `verify`, load skill `rdra-ish-verify` instead.
-- `references/reporting.md` — structure analysis output with severity, evidence, and
-  recommendations.
+- `references/stage-readiness.md`: stage signals and the next question.
+- `references/coverage-gaps.md`: missing links between actors, BUCs, use cases, data,
+  fields, and requirements.
+- `references/access-permissions.md`: the three access CSVs.
+- `references/api-system-boundaries.md`: API ownership and cross-system coordination.
+- `references/state-patterns.md`: `states`, and every lifecycle finding of `check`.
+- `../rdra-ish-review/references/output-format.md`: the template and evidence rules.
