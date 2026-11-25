@@ -631,8 +631,9 @@ The owner decided these on 2026-11-24.
 - **`TLA_CELL_BUDGET` is decided in #284**: it is raised for the native checker and TLC
   alike, in a change of its own. It is not part of this plan.
 
-The owner decided these on 2026-11-25, on the coordinator's recommendations, for
-[Always by default](#always-by-default):
+Decided on 2026-11-25 for [Always by default](#always-by-default). The owner delegated the
+three choices of the first draft to the coordinator's recommendations; the reuse of plain
+results was proposed with the measurements of item 1 and accepted by the coordinator.
 
 - **`never` stays and `retry` goes.** `never` is the escape hatch, still exercised in CI after
   the flip. `retry` is removed in step 1, since `--symmetry` is in no release.
@@ -643,7 +644,8 @@ The owner decided these on 2026-11-25, on the coordinator's recommendations, for
   - A counterexample may name other rows than `never`'s only if it replays on the
     unreduced model and is the same in every run and at every `RDRA_JOBS`.
   - A plain result that an earlier pass decided on a complete run is kept. That choice
-    follows from the pass order and the model, never from which run finishes first.
+    follows from the pass order and the model, never from which run finishes first, and
+    the output is the same at `RDRA_JOBS=1`, 4 and 8.
 - **The order and its gates.** Step 1, then phase 4, then the flip. The gates: the per-pair
   exit of step 1, per-rule witnesses before the flip, the flip as a `### Breaking` entry,
   and any residual-cost choice back to the owner.
@@ -700,8 +702,9 @@ On `main` at `7e464c43` (phases 1 to 3), each run alone.
 
 1. **Runs it repeats.** Under `always`, a job that runs up to symmetry shares no run with
    the entity, safety and property passes (#306). So the safety pass runs up to symmetry a
-   cone the entity pass has already explored plainly and to the end. This is most of the
-   +10.8%. On patent-ops (`RDRA_PERF=1 RDRA_JOBS=1`, n=2):
+   cone the entity pass has already explored plainly and to the end. This is most of
+   patent-ops' +53.7%; the other pairs are measured again in step 1. On patent-ops
+   (`RDRA_PERF=1 RDRA_JOBS=1`, n=2):
    - the entity pass explores the same reduced cones plainly either way, 1,861,636 states;
    - the safety pass grows from 3 runs of 63,371 states (41 ms) to 6 runs of 808,320
      stored states (938 ms);
