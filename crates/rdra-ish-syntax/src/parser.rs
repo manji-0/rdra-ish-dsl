@@ -1014,6 +1014,19 @@ fn root_parser() -> impl Parser<Token, Vec<Item>, Error = Simple<Token>> {
         .then_ignore(end())
 }
 
+/// The items of an input whose last item is unfinished, which `root_parser` does not get past:
+/// its recovery retries an item a token later, and at the end of the input no item follows.
+/// Here that last item is dropped and the items before it are kept.
+fn salvage_parser() -> impl Parser<Token, Vec<Item>, Error = Simple<Token>> {
+    item()
+        .map(Some)
+        .recover_with(skip_then_retry_until([]))
+        .recover_with(skip_until([], |_| None))
+        .repeated()
+        .then_ignore(end())
+        .map(|items| items.into_iter().flatten().collect())
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /// Lex and parse `src`. Returns the best-effort AST and any lex/parse errors. A deprecated
@@ -1050,9 +1063,17 @@ pub fn parse_with_deprecations(src: &str) -> Parsed {
     } = lex(src);
     let len = src.len();
 
-    let stream = Stream::from_iter(len..len + 1, tokens.into_iter());
+    let stream = Stream::from_iter(len..len + 1, tokens.clone().into_iter());
     let (items, mut errors) = root_parser().parse_recovery(stream);
-    let mut items = items.unwrap_or_default();
+    // An unfinished last item, as while it is typed, leaves no AST: keep the items before
+    // it, with the errors above, so the file's other declarations stay visible.
+    let mut items = items.unwrap_or_else(|| {
+        let stream = Stream::from_iter(len..len + 1, tokens.into_iter());
+        salvage_parser()
+            .parse_recovery(stream)
+            .0
+            .unwrap_or_default()
+    });
     items.retain(|item| match item {
         Item::Predicate(call) => match removed_when(call, src) {
             Some(msg) => {

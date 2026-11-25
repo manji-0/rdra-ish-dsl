@@ -853,6 +853,13 @@
 
 ### Fixed
 
+- An unfinished declaration at the end of a file, as while it is typed (`actor ` on the last
+  line), no longer empties that file's syntax tree. The parser recovered from a broken
+  declaration in the middle of a file but not at its end, so the whole file was dropped:
+  the language server's outline, code lenses and semantic colors went blank, the files
+  that import it reported `unknown module` and `undefined symbol` for what it declares,
+  and `check` reported only the syntax error. The declarations before the unfinished one
+  are now kept, with the same syntax error.
 - `codegen` computes a logical `@derived` column in the transition functions it prints, in
   Rust, Go and TypeScript. A function used to copy the column from the row it read, so a
   function that changed `qty` returned `bulk` as it was, against the header's obligation

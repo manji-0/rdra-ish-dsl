@@ -1,5 +1,43 @@
 use super::*;
 
+/// The ids of the instances an AST declares, in order.
+fn instance_ids(ast: &Ast) -> Vec<&str> {
+    ast.items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Instance(decl) => Some(decl.id.as_str()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// An unfinished declaration at the end of the file, as while one is being typed, keeps
+/// the items before it, as one in the middle of the file does.
+#[test]
+fn an_unfinished_last_declaration_keeps_the_items_before_it() {
+    for src in [
+        "actor A \"a\"\nactor ",
+        "actor A \"a\"\nactor B",
+        "actor A \"a\"\nusecase U \"u\"\nperforms(A, U)\nperforms(A,",
+        "actor A \"a\"\nentity E \"e\" {\n  id: Int @pk\n",
+    ] {
+        let (ast, errors) = parse(src);
+        assert!(!errors.is_empty(), "{src:?} parsed without an error");
+        assert_eq!(
+            instance_ids(&ast).first(),
+            Some(&"A"),
+            "{src:?}: {:?}",
+            ast.items
+        );
+    }
+    let (ast, _) = parse("actor A \"a\"\nusecase U \"u\"\nperforms(A, U)\nperforms(A,");
+    assert_eq!(instance_ids(&ast), ["A", "U"]);
+    assert!(ast
+        .items
+        .iter()
+        .any(|item| matches!(item, Item::Predicate(call) if call.args.len() == 2)));
+}
+
 fn parse_ok(src: &str) -> Ast {
     let (ast, errors) = parse(src);
     if !errors.is_empty() {
