@@ -265,6 +265,64 @@ type Mod struct {
 	Id ModId `json:"id"`
 }
 
+// ── Errors ──
+
+// ErrNotEnabled is what errors.Is matches a *NotEnabled with.
+var ErrNotEnabled = errors.New("the use case does not run from these states")
+
+// NotEnabled reports rows in states the use case does not run from, or a commit that found a row it writes changed since the read.
+type NotEnabled struct {
+	UseCase string
+}
+
+// Error says what happened.
+func (e *NotEnabled) Error() string {
+	return "the use case " + e.UseCase + " does not run from these states"
+}
+
+// Is reports whether target is ErrNotEnabled.
+func (e *NotEnabled) Is(target error) bool {
+	return target == ErrNotEnabled
+}
+
+// ErrRejected is what errors.Is matches a *Rejected with.
+var ErrRejected = errors.New("rejected by a condition")
+
+// Rejected reports a condition of a use case that did not hold: the use case does not run.
+type Rejected struct {
+	Condition string
+	Label     string
+	Site      string
+}
+
+// Error says what happened.
+func (e *Rejected) Error() string {
+	return "rejected by the condition " + e.Condition + ": " + e.Label
+}
+
+// Is reports whether target is ErrRejected.
+func (e *Rejected) Is(target error) bool {
+	return target == ErrRejected
+}
+
+// ErrInvalidArgument is what errors.Is matches a *InvalidArgument with.
+var ErrInvalidArgument = errors.New("an argument the verified model never holds")
+
+// InvalidArgument reports arguments that break what the verified model keeps: a nil state or one this package did not make, a text that is no value of its type, a row that does not name the row passed with it, a column the state keeps null that holds a value.
+type InvalidArgument struct {
+	Reason string
+}
+
+// Error says what happened.
+func (e *InvalidArgument) Error() string {
+	return "invalid argument: " + e.Reason
+}
+
+// Is reports whether target is ErrInvalidArgument.
+func (e *InvalidArgument) Is(target error) bool {
+	return target == ErrInvalidArgument
+}
+
 // ── Entities with states ──
 
 // FuncKind tells the states of Func apart: one value per state, the value of Kind().
@@ -368,6 +426,33 @@ func (funcFuncState) Kind() FuncKind {
 func (funcFuncState) isFunc() {}
 
 func (funcFuncState) isFuncFunc() {}
+
+// FuncVisitor has one method per state of Func, which MatchFunc calls. When the model gains a
+// state, FuncVisitor gains its method, and an implementation that lacks it no longer compiles
+// where MatchFunc takes it: Go's type switch says nothing of a state it misses.
+type FuncVisitor[R any] interface {
+	// New is called on a state of kind FuncKindNew.
+	New(FuncNew) R
+	// Return is called on a state of kind FuncKindReturn.
+	Return(FuncReturn) R
+	// Func is called on a state of kind FuncKindFunc.
+	Func(FuncFunc) R
+}
+
+// MatchFunc calls the method of v for the state of state and returns what it returns. A nil
+// state, or a value of another type that embeds a state, is an *InvalidArgument.
+func MatchFunc[R any](state Func, v FuncVisitor[R]) (R, error) {
+	switch s := state.(type) {
+	case funcNewState:
+		return v.New(s), nil
+	case funcReturnState:
+		return v.Return(s), nil
+	case funcFuncState:
+		return v.Func(s), nil
+	}
+	var zero R
+	return zero, &InvalidArgument{Reason: "no state of Func this package made"}
+}
 
 // MatchKind tells the states of Match apart: one value per state, the value of Kind().
 type MatchKind string
@@ -1017,6 +1102,45 @@ func (matchDefaultState) isMatch() {}
 
 func (matchDefaultState) isMatchDefault() {}
 
+// MatchVisitor has one method per state of Match, which MatchMatch calls. When the model gains a
+// state, MatchVisitor gains its method, and an implementation that lacks it no longer compiles
+// where MatchMatch takes it: Go's type switch says nothing of a state it misses.
+type MatchVisitor[R any] interface {
+	// New is called on a state of kind MatchKindNew.
+	New(MatchNew) R
+	// Return is called on a state of kind MatchKindReturn.
+	Return(MatchReturn) R
+	// Self is called on a state of kind MatchKindSelf.
+	Self(MatchSelf) R
+	// Super is called on a state of kind MatchKindSuper.
+	Super(MatchSuper) R
+	// Crate is called on a state of kind MatchKindCrate.
+	Crate(MatchCrate) R
+	// Default is called on a state of kind MatchKindDefault.
+	Default(MatchDefault) R
+}
+
+// MatchMatch calls the method of v for the state of state and returns what it returns. A nil
+// state, or a value of another type that embeds a state, is an *InvalidArgument.
+func MatchMatch[R any](state Match, v MatchVisitor[R]) (R, error) {
+	switch s := state.(type) {
+	case matchNewState:
+		return v.New(s), nil
+	case matchReturnState:
+		return v.Return(s), nil
+	case matchSelfState:
+		return v.Self(s), nil
+	case matchSuperState:
+		return v.Super(s), nil
+	case matchCrateState:
+		return v.Crate(s), nil
+	case matchDefaultState:
+		return v.Default(s), nil
+	}
+	var zero R
+	return zero, &InvalidArgument{Reason: "no state of Match this package made"}
+}
+
 // ── Events ──
 
 // Switch is the event Switch.
@@ -1026,62 +1150,6 @@ type Switch struct {
 }
 
 // ── Use cases ──
-
-// ErrNotEnabled is what errors.Is matches a *NotEnabled with.
-var ErrNotEnabled = errors.New("the use case does not run from these states")
-
-// NotEnabled reports rows in states the use case does not run from, or a commit that found a row it writes changed since the read.
-type NotEnabled struct {
-	UseCase string
-}
-
-// Error says what happened.
-func (e *NotEnabled) Error() string {
-	return "the use case " + e.UseCase + " does not run from these states"
-}
-
-// Is reports whether target is ErrNotEnabled.
-func (e *NotEnabled) Is(target error) bool {
-	return target == ErrNotEnabled
-}
-
-// ErrRejected is what errors.Is matches a *Rejected with.
-var ErrRejected = errors.New("rejected by a condition")
-
-// Rejected reports a condition of a use case that did not hold: the use case does not run.
-type Rejected struct {
-	Condition string
-	Label     string
-	Site      string
-}
-
-// Error says what happened.
-func (e *Rejected) Error() string {
-	return "rejected by the condition " + e.Condition + ": " + e.Label
-}
-
-// Is reports whether target is ErrRejected.
-func (e *Rejected) Is(target error) bool {
-	return target == ErrRejected
-}
-
-// ErrInvalidArgument is what errors.Is matches a *InvalidArgument with.
-var ErrInvalidArgument = errors.New("an argument the verified model never holds")
-
-// InvalidArgument reports arguments that break what the verified model keeps: a nil state or one this package did not make, a text that is no value of its type, a row that does not name the row passed with it, a column the state keeps null that holds a value.
-type InvalidArgument struct {
-	Reason string
-}
-
-// Error says what happened.
-func (e *InvalidArgument) Error() string {
-	return "invalid argument: " + e.Reason
-}
-
-// Is reports whether target is ErrInvalidArgument.
-func (e *InvalidArgument) Is(target error) bool {
-	return target == ErrInvalidArgument
-}
 
 // ExpectedSource is what a row a result writes must still be when the write commits, so the
 // store can write it conditionally and take a write that matches no row as NotEnabled (see the

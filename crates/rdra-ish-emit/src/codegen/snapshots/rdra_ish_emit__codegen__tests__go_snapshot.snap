@@ -237,6 +237,64 @@ type CreateOrderRequest struct {
 	Note       *string `json:"note"`
 }
 
+// ── Errors ──
+
+// ErrNotEnabled is what errors.Is matches a *NotEnabled with.
+var ErrNotEnabled = errors.New("the use case does not run from these states")
+
+// NotEnabled reports rows in states the use case does not run from, or a commit that found a row it writes changed since the read.
+type NotEnabled struct {
+	UseCase string
+}
+
+// Error says what happened.
+func (e *NotEnabled) Error() string {
+	return "the use case " + e.UseCase + " does not run from these states"
+}
+
+// Is reports whether target is ErrNotEnabled.
+func (e *NotEnabled) Is(target error) bool {
+	return target == ErrNotEnabled
+}
+
+// ErrRejected is what errors.Is matches a *Rejected with.
+var ErrRejected = errors.New("rejected by a condition")
+
+// Rejected reports a condition of a use case that did not hold: the use case does not run.
+type Rejected struct {
+	Condition string
+	Label     string
+	Site      string
+}
+
+// Error says what happened.
+func (e *Rejected) Error() string {
+	return "rejected by the condition " + e.Condition + ": " + e.Label
+}
+
+// Is reports whether target is ErrRejected.
+func (e *Rejected) Is(target error) bool {
+	return target == ErrRejected
+}
+
+// ErrInvalidArgument is what errors.Is matches a *InvalidArgument with.
+var ErrInvalidArgument = errors.New("an argument the verified model never holds")
+
+// InvalidArgument reports arguments that break what the verified model keeps: a nil state or one this package did not make, a text that is no value of its type, a row that does not name the row passed with it, a column the state keeps null that holds a value.
+type InvalidArgument struct {
+	Reason string
+}
+
+// Error says what happened.
+func (e *InvalidArgument) Error() string {
+	return "invalid argument: " + e.Reason
+}
+
+// Is reports whether target is ErrInvalidArgument.
+func (e *InvalidArgument) Is(target error) bool {
+	return target == ErrInvalidArgument
+}
+
 // ── Entities with states ──
 
 // OrderKind tells the states of Order apart: one value per state, the value of Kind().
@@ -462,63 +520,34 @@ func (orderCancelledState) isOrder() {}
 
 func (orderCancelledState) isOrderCancelled() {}
 
+// OrderVisitor has one method per state of Order, which MatchOrder calls. When the model gains a
+// state, OrderVisitor gains its method, and an implementation that lacks it no longer compiles
+// where MatchOrder takes it: Go's type switch says nothing of a state it misses.
+type OrderVisitor[R any] interface {
+	// Pending is called on a state of kind OrderKindPending.
+	Pending(OrderPending) R
+	// Paid is called on a state of kind OrderKindPaid.
+	Paid(OrderPaid) R
+	// Cancelled is called on a state of kind OrderKindCancelled.
+	Cancelled(OrderCancelled) R
+}
+
+// MatchOrder calls the method of v for the state of state and returns what it returns. A nil
+// state, or a value of another type that embeds a state, is an *InvalidArgument.
+func MatchOrder[R any](state Order, v OrderVisitor[R]) (R, error) {
+	switch s := state.(type) {
+	case orderPendingState:
+		return v.Pending(s), nil
+	case orderPaidState:
+		return v.Paid(s), nil
+	case orderCancelledState:
+		return v.Cancelled(s), nil
+	}
+	var zero R
+	return zero, &InvalidArgument{Reason: "no state of Order this package made"}
+}
+
 // ── Use cases ──
-
-// ErrNotEnabled is what errors.Is matches a *NotEnabled with.
-var ErrNotEnabled = errors.New("the use case does not run from these states")
-
-// NotEnabled reports rows in states the use case does not run from, or a commit that found a row it writes changed since the read.
-type NotEnabled struct {
-	UseCase string
-}
-
-// Error says what happened.
-func (e *NotEnabled) Error() string {
-	return "the use case " + e.UseCase + " does not run from these states"
-}
-
-// Is reports whether target is ErrNotEnabled.
-func (e *NotEnabled) Is(target error) bool {
-	return target == ErrNotEnabled
-}
-
-// ErrRejected is what errors.Is matches a *Rejected with.
-var ErrRejected = errors.New("rejected by a condition")
-
-// Rejected reports a condition of a use case that did not hold: the use case does not run.
-type Rejected struct {
-	Condition string
-	Label     string
-	Site      string
-}
-
-// Error says what happened.
-func (e *Rejected) Error() string {
-	return "rejected by the condition " + e.Condition + ": " + e.Label
-}
-
-// Is reports whether target is ErrRejected.
-func (e *Rejected) Is(target error) bool {
-	return target == ErrRejected
-}
-
-// ErrInvalidArgument is what errors.Is matches a *InvalidArgument with.
-var ErrInvalidArgument = errors.New("an argument the verified model never holds")
-
-// InvalidArgument reports arguments that break what the verified model keeps: a nil state or one this package did not make, a text that is no value of its type, a row that does not name the row passed with it, a column the state keeps null that holds a value.
-type InvalidArgument struct {
-	Reason string
-}
-
-// Error says what happened.
-func (e *InvalidArgument) Error() string {
-	return "invalid argument: " + e.Reason
-}
-
-// Is reports whether target is ErrInvalidArgument.
-func (e *InvalidArgument) Is(target error) bool {
-	return target == ErrInvalidArgument
-}
 
 // ExpectedSource is what a row a result writes must still be when the write commits, so the
 // store can write it conditionally and take a write that matches no row as NotEnabled (see the

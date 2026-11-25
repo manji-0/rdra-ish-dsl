@@ -3,8 +3,8 @@
 //! back, refuses a row that breaks its state's refinement, dispatches the use cases by state
 //! (`NotEnabled`, `Rejected`, the writes, the raised event), and runs the rule checks. Code
 //! outside the generated module or package cannot build a state or change one of its fields
-//! (#331): the compiler refuses it. A
-//! compiler or runtime missing from PATH skips its language, except under
+//! (#331): the compiler refuses it. In Go, a state the model gains breaks every state
+//! visitor that lacks its method (#363, P7). A compiler or runtime missing from PATH skips its language, except under
 //! `RDRA_REQUIRE_CODEGEN_TOOLS=1`, which CI sets in the dev shell.
 
 use std::path::{Path, PathBuf};
@@ -143,10 +143,8 @@ const GO_FORGERIES: [(&str, &str); 4] = [
         "var o domain.OrderPaid; o.qty = 7; _ = o",
         "o.qty undefined",
     ),
-    (
-        "o := domain.orderPaidState{}; _ = o",
-        "undefined: domain.orderPaidState",
-    ),
+    // `go vet` says `undefined: domain.orderPaidState` or `name orderPaidState not exported`.
+    ("o := domain.orderPaidState{}; _ = o", "orderPaidState"),
     (
         "var o domain.Order = struct{ domain.OrderKind }{}; _ = o",
         "does not implement domain.Order",
@@ -174,6 +172,89 @@ fn rust_states_are_not_built_outside() {
         assert!(!output.status.success(), "rustc builds {body}");
         assert!(err.contains(code), "{body}: {err}");
     }
+}
+
+/// A visitor outside the package, over the three states of `order.rdra`'s `Order`.
+const GO_VISITOR: &str = r#"package domain_test
+
+import (
+	"errors"
+	"testing"
+
+	"example.com/domain"
+)
+
+type label struct{}
+
+func (label) Pending(domain.OrderPending) string     { return "pending" }
+func (label) Paid(domain.OrderPaid) string           { return "paid" }
+func (label) Cancelled(domain.OrderCancelled) string { return "cancelled" }
+
+func TestVisitor(t *testing.T) {
+	row := domain.OrderRow{Id: 1, Status: domain.OrderStatusPending, Method: domain.MethodCard, Qty: 1, Note: "n", CustomerId: 7}
+	order, err := domain.OrderFromRow(row)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := domain.MatchOrder[string](order, label{}); err != nil || got != "pending" {
+		t.Fatalf("MatchOrder: %q %v", got, err)
+	}
+	if _, err := domain.MatchOrder[string](nil, label{}); !errors.Is(err, domain.ErrInvalidArgument) {
+		t.Fatalf("MatchOrder refuses a nil state: %v", err)
+	}
+}
+"#;
+
+/// P7 of docs/design/code-check.md: Go's type switch says nothing of a state it misses, so the
+/// Go output has a visitor per state type. A visitor over the states of `order.rdra` runs; once
+/// the model gains a state, the same visitor no longer compiles, and the compiler names the
+/// method it lacks.
+#[test]
+fn go_visitor_fails_to_compile_on_a_new_state() {
+    if !available("go", "version") {
+        return;
+    }
+    let dir = scratch("go-visitor");
+    generate("go", &dir.join("domain.go"));
+    std::fs::write(dir.join("go.mod"), "module example.com/domain\n\ngo 1.21\n").unwrap();
+    std::fs::write(dir.join("visitor_test.go"), GO_VISITOR).unwrap();
+    run(
+        Command::new("go").args(["test", "./..."]).current_dir(&dir),
+        "go test on the visitor",
+    );
+
+    let model = std::fs::read_to_string(fixture().join("order.rdra")).unwrap();
+    let grown = model.replace(
+        "Enum(pending, paid, cancelled)",
+        "Enum(pending, paid, cancelled, refunded)",
+    );
+    assert_ne!(grown, model, "the fixture's status column moved");
+    std::fs::write(dir.join("order.rdra"), grown).unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .args(["codegen", "--lang", "go", "-o"])
+        .arg(dir.join("domain.go"))
+        .arg(dir.join("order.rdra"))
+        .output()
+        .expect("runs rdra-ish");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let output = Command::new("go")
+        .args(["vet", "./..."])
+        .current_dir(&dir)
+        .output()
+        .expect("runs go");
+    let err = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !output.status.success(),
+        "the visitor compiles with a state missing"
+    );
+    assert!(
+        err.contains("does not implement domain.OrderVisitor[string] (missing method Refunded)"),
+        "{err}"
+    );
 }
 
 #[test]

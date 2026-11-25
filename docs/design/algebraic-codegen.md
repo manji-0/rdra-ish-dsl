@@ -454,7 +454,10 @@ The same principles, with the standard library only:
   visitor of P7 of [code-check.md](./code-check.md#phases) for exhaustiveness. Each state is
   an interface too (`OrderPaid`: `Order`, its accessors, and `isOrderPaid()`), implemented by
   one unexported struct ([Who makes a state](#who-makes-a-state)); a type switch on the state
-  interfaces tells them apart. `<Entity>Kind` is a `string` type with one constant per state
+  interfaces tells them apart. The visitor is `OrderVisitor[R any]`, one method per state named
+  by its kind (`Paid(OrderPaid) R`), and `MatchOrder(state, v) (R, error)`; a state the model
+  gains is a method every implementation lacks, so the compiler names each place that matches
+  states (`codegen_behaviour.rs` checks it). `<Entity>Kind` is a `string` type with one constant per state
   (`OrderKindPaid = "Paid"`).
 - Unexported fields read by accessors of the column's name (`PaidAt()`, `Kind_()` for a
   column `kind`); a nullable column's accessor returns a copy. Ids and scalars are defined

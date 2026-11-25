@@ -38,7 +38,7 @@ pub(super) fn print(
     ));
 
     let mut imports: BTreeSet<&str> = BTreeSet::new();
-    if !domain.fns.is_empty() {
+    if !domain.fns.is_empty() || !domain.sums.is_empty() {
         imports.insert("errors");
     }
     if domain.harness {
@@ -56,6 +56,9 @@ pub(super) fn print(
     print_ids(domain, &mut out);
     print_enums(domain, &mut out);
     print_records(domain, &mut out);
+    if !domain.fns.is_empty() || !domain.sums.is_empty() {
+        print_error_details(&mut out);
+    }
     for sum in &domain.sums {
         print_sum(domain, sum, &mut out);
     }
@@ -617,6 +620,43 @@ fn print_sum(domain: &DomainModel, sum: &SumDecl, out: &mut String) {
         out.push_str(&format!("func ({st}) {marker}() {{}}\n\n"));
         out.push_str(&format!("func ({st}) {own}() {{}}\n\n"));
     }
+    print_visitor(sum, out);
+}
+
+/// `<Entity>Visitor`, one method per state, and `Match<Entity>`, which calls the method of a
+/// state's own: a state the model gains is a method an implementation lacks, so the code that
+/// matches states stops compiling until it handles it (P7 of docs/design/code-check.md).
+fn print_visitor(sum: &SumDecl, out: &mut String) {
+    let visitor = format!("{}Visitor", sum.name);
+    out.push_str(&format!(
+        "// {visitor} has one method per state of {0}, which Match{0} calls. When the model gains a\n// state, {visitor} gains its method, and an implementation that lacks it no longer compiles\n// where Match{0} takes it: Go's type switch says nothing of a state it misses.\n",
+        sum.name
+    ));
+    let mut methods = String::new();
+    for v in &sum.variants {
+        methods.push_str(&format!(
+            "\t// {0} is called on a state of kind {1}{0}.\n\t{0}({2}) R\n",
+            v.value.ident, sum.kind, v.name
+        ));
+    }
+    out.push_str(&format!(
+        "type {visitor}[R any] interface {{\n{methods}}}\n\n"
+    ));
+    out.push_str(&format!(
+        "// Match{0} calls the method of v for the state of state and returns what it returns. A nil\n// state, or a value of another type that embeds a state, is an *InvalidArgument.\nfunc Match{0}[R any](state {0}, v {visitor}[R]) (R, error) {{\n\tswitch s := state.(type) {{\n",
+        sum.name
+    ));
+    for v in &sum.variants {
+        out.push_str(&format!(
+            "\tcase {}:\n\t\treturn v.{}(s), nil\n",
+            concrete(&v.name),
+            v.value.ident
+        ));
+    }
+    out.push_str(&format!(
+        "\t}}\n\tvar zero R\n\treturn zero, &InvalidArgument{{Reason: {}}}\n}}\n\n",
+        string_literal(&format!("no state of {} this package made", sum.name))
+    ));
 }
 
 // ── Use cases ────────────────────────────────────────────────────────────────
@@ -661,8 +701,9 @@ fn use_case_error(name: &str, case: &str, detail: &str) -> String {
     format!("&{name}{{Kind: {name}{case}, Err: {detail}}}")
 }
 
-fn print_errors(domain: &DomainModel, out: &mut String) {
-    out.push_str("// ── Use cases ──\n\n");
+/// The detail types every `<UseCase>Error` shares, and `Match<Entity>` returns.
+fn print_error_details(out: &mut String) {
+    out.push_str("// ── Errors ──\n\n");
     let detail = |out: &mut String,
                   name: &str,
                   sentinel: &str,
@@ -714,6 +755,10 @@ fn print_errors(domain: &DomainModel, out: &mut String) {
         &[("Reason", "string")],
         "\"invalid argument: \" + e.Reason",
     );
+}
+
+fn print_errors(domain: &DomainModel, out: &mut String) {
+    out.push_str("// ── Use cases ──\n\n");
     out.push_str("// ExpectedSource is what a row a result writes must still be when the write commits, so the\n// store can write it conditionally and take a write that matches no row as NotEnabled (see the\n// obligations). Absent: the row is created, and no row has its id. Otherwise the row exists,\n// and when Column is set, it holds Value.\n");
     out.push_str(&struct_decl(
         "ExpectedSource",

@@ -2133,7 +2133,10 @@ nothing is `nil`. A transition function refuses a `nil` state with an `InvalidAr
 by `Kind_()`. `<Entity>FromRow` refuses a value outside a value set or a `Money`, `Decimal`,
 `Date` or `DateTime` outside its shape, a function refuses such a value as an input, and every
 value set, id and scalar has `Parse<Type>(s)`, which returns an `InvalidValue` error for text
-that is no value. No Go function panics. Records and `<Entity>Row` row types keep public
+that is no value. No Go function panics. A Go type switch does not say when it misses a
+state, so each Go state type also has a visitor, `OrderVisitor[R]` with a method per state
+(`Pending(OrderPending) R`), and `MatchOrder(state, v) (R, error)`, which calls the state's
+method: once the model gains a state, a visitor without its method no longer compiles. Records and `<Entity>Row` row types keep public
 fields. An entity whose
 `Enum` only `sets` writes, with no `transitions` (ec-site's `Payment`), is a plain record.
 
