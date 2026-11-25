@@ -137,7 +137,7 @@ fn each_planted_omission_is_named() {
                 ("func (s *Service) CommitShip(", "func (s *Service) commitShip("),
             ],
             "CodeMissingUseCase_Ship",
-            "model: model.rdra:22:1  usecase Ship",
+            "model: model/model.rdra:22:1  usecase Ship",
         ),
         (
             "incomplete",
@@ -204,11 +204,34 @@ fn each_fault_fails_the_conformance_run() {
         return;
     }
     let dir = shop("faults", &[]);
-    for fault in ["skip-core", "drop-row", "accept-disabled", "unconditional"] {
+    for (fault, reason) in [
+        (
+            "skip-core",
+            "after `Pay 1 2026-01-01T00:00:00Z`, the store differs from the model",
+        ),
+        (
+            "drop-row",
+            "after `Ship 1 1`, the store differs from the model",
+        ),
+        (
+            "accept-disabled",
+            "the model refuses `Cancel 1` here, and the service ran it",
+        ),
+        (
+            "unconditional",
+            "the write must be conditional on what the row was",
+        ),
+    ] {
         let (code, stdout, stderr) =
             text(&rdra(&dir, &["check", "model", "--code=run"], Some(fault)));
         assert_eq!(code, Some(1), "{fault}: {stderr}");
         assert_eq!(errors(&stderr), ["CodeConformance"], "{fault}: {stderr}");
+        // The diagnostic quotes the harness's report of the first difference.
+        let quoted = stderr
+            .lines()
+            .find(|l| l.starts_with("  code:  traces line "))
+            .unwrap_or_default();
+        assert!(quoted.contains(reason), "{fault}: {reason:?} in\n{stderr}");
         assert!(
             stdout.contains("FAIL: code: 1 error(s) at --code=run"),
             "{fault}: {stdout}"

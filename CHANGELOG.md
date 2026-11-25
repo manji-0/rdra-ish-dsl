@@ -217,6 +217,16 @@
   location (`CodeMissingUseCase_*`, `CodeIncomplete_*`, `CodeSignature_*`); `run` runs the
   conformance test the probe holds (`CodeConformance`).
 
+- **`check --code=build` and `--code=run` for Go** (experimental, #363, P2 and P4). The Go
+  output has one contract interface per use case (`<UseCase>UseCase`, `Prepare*` / `Commit*`
+  and `Run*` for an entry point); `ConformancePort` embeds them with `Seed` and `Snapshot`.
+  `[code.go]` `probe`, `service` (`<import path>.<Type>`), `module` and `new` bind the service:
+  the probe is a `_test.go` in the service's package that assigns the service to each
+  contract and names each method on a line of its own, since Go names one missing method per
+  interface. `build` runs `go test -run ^$` on the package and maps `missing method`, `has no
+  field or method` and `wrong type for method` to the use case; `run` runs
+  `TestRdraConformance`, and its `CodeConformance` quotes the harness's first difference.
+
 - `check --code[=fresh|build|run]` (#363, experimental; [design](docs/design/code-check.md)):
   does the service code have what the model requires? `[code.rust]`, `[code.go]` and
   `[code.ts]` in `rdra.toml` name the generated files, `codegen <INPUTS> --code` writes them

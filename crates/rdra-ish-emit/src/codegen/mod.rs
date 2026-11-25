@@ -12,6 +12,8 @@ mod actions;
 pub mod conformance;
 mod go;
 mod go_port;
+/// The test the Go probe holds when bound to traces: `check --code=run` runs it.
+pub use go_port::CONFORMANCE_TEST as GO_CONFORMANCE_TEST;
 pub mod ir;
 pub mod json;
 pub mod probe;
@@ -161,7 +163,8 @@ pub struct ProbeBinding {
 pub fn probe_for(lang: Lang, domain: &DomainModel, binding: &ProbeBinding) -> Option<probe::Probe> {
     match lang {
         Lang::Rust => rust_port::probe(domain, binding),
-        Lang::Go | Lang::TypeScript => None,
+        Lang::Go => go_port::probe(domain, binding),
+        Lang::TypeScript => None,
     }
 }
 

@@ -210,7 +210,13 @@ The last line on stdout, after the model check's `OK:` line, is
 At `build`, each compiler error goes back to a use case: by the probe line it is on (the
 probe has one line per use case), or by the generated method or contract it names. In Rust
 the build is `cargo check --test <probe> --message-format=json` in the table's `root`, and
-`run` is `cargo test --test <probe> -- rdra_conformance`. One block per use case and kind:
+`run` is `cargo test --test <probe> -- rdra_conformance`. In Go the build is
+`go test -count=1 -run ^$ -gcflags=-e ./<probe dir>` in the table's `root`, which compiles the
+service package and its probe and runs no test, and `run` is
+`go test -count=1 -run ^TestRdraConformance$ ./<probe dir>`. Go names only one missing method
+of an interface per error, so the Go probe names each method of a contract on a line of its
+own as well: a use case whose every method the compiler finds missing is
+`CodeMissingUseCase`, one with some of them `CodeIncomplete`. One block per use case and kind:
 
 ```
 error[CodeMissingUseCase_Ship]: use case Ship has no implementation in svc::service::Service
@@ -221,9 +227,9 @@ error[CodeMissingUseCase_Ship]: use case Ship has no implementation in svc::serv
 
 | Name | When |
 |---|---|
-| `CodeMissingUseCase_<UseCase>` | The service does not implement the use case's contract (Rust E0277). |
-| `CodeIncomplete_<UseCase>` | It implements the contract without some of its methods (E0046). |
-| `CodeSignature_<UseCase>` | A method takes or returns other types than the contract's (E0053, E0050). |
+| `CodeMissingUseCase_<UseCase>` | The service does not implement the use case's contract (Rust E0277; Go: every method of it missing). |
+| `CodeIncomplete_<UseCase>` | It implements the contract without some of its methods (E0046; Go `missing method`, `has no field or method`). |
+| `CodeSignature_<UseCase>` | A method takes or returns other types than the contract's (E0053, E0050; Go `wrong type for method`). |
 | `CodeError_<UseCase>` | Another error on the use case's probe line or naming its methods. |
 | `CodeUnmapped` | The count of the errors that belong to no use case, the first one quoted. |
 | `CodeBuildFailed` | The build failed with no error rdra-ish reads. |
@@ -706,6 +712,13 @@ domain = "../service/src/domain.rs"        # the codegen output
 traces = "../service/tests/traces.txt"     # with it, domain holds the conformance harness
 conformance_states = 65536                 # --conformance-states of the traces
 
+[code.go]
+domain = "../shop/domain/domain.go"
+traces = "../shop/svc/traces.txt"
+probe = "../shop/svc/rdra_contract_test.go"    # a _test.go in the service's package
+service = "example.com/shop/svc.Service"       # <import path>.<Type>
+new = "svc.New()"
+
 [code.obligations]
 Unique_Payment_Order = "../service/migrations/003_payment.sql"
 ```
@@ -716,10 +729,10 @@ Unique_Payment_Order = "../service/migrations/003_payment.sql"
 | `traces` | Rust and Go: the conformance traces. With it, `domain` also holds the conformance port and harness (`--conformance`). |
 | `conformance_states` | The states the BFS behind the traces explores at most. Default `65536`. |
 | `package` | Go: the package name of `domain` (`--package`). Default `domain`. |
-| `probe` | The probe `codegen --code` (or `--probe`) writes: in Rust a file under the service crate's `tests/`, one line per use case stating that `service` implements that use case's contract (`<UseCase>UseCase`). `build` needs it. |
-| `service` | The service type, as the probe names it: `svc::service::Service`. |
-| `module` | The path of the generated module in the service's crate: `svc::domain`. |
-| `new` | An expression that makes a fresh service. With `traces`, the probe also holds the conformance test, `rdra_conformance`, which `run` runs. |
+| `probe` | The probe `codegen --code` (or `--probe`) writes, one line per use case stating that `service` implements that use case's contract (`<UseCase>UseCase`). In Rust a file under the service crate's `tests/`; in Go a `_test.go` file in the service's package directory (`package <svc>_test`), which also names each method of a contract on a line of its own. `build` needs it. |
+| `service` | The service type, as the probe names it: Rust `svc::service::Service`, Go `<import path>.<Type>` (`example.com/shop/svc.Service`). |
+| `module` | Rust: the path of the generated module in the service's crate, `svc::domain`. Go: the import path of `domain`'s package; by default the service's import path moved as `domain`'s directory is from the probe's. |
+| `new` | An expression that makes a fresh service. Rust: with `traces`, the probe also holds the conformance test, `rdra_conformance`, which `run` runs. Go: with `traces` the probe holds `TestRdraConformance`, and `new` defaults to `new(<pkg>.<Type>)`. |
 | `root` | The directory the build command runs in. Default: the nearest directory above `domain` that holds `Cargo.toml`, `go.mod`, `package.json` or `tsconfig.json`. |
 | `build`, `run` | The command `check --code=build` / `--code=run` runs in place of the language's default, as a list of arguments. It runs only when that level is given on the command line, never from the LSP. |
 
