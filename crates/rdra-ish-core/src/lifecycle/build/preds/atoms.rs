@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use super::{cmp_op, one_slot_set};
+use super::{cmp_op, columns_cmp, one_slot_set};
 use crate::lifecycle::build::naming::is_driven;
 use crate::lifecycle::build::Builder;
 use crate::lifecycle::diag::StateDiag;
@@ -168,7 +168,7 @@ impl<'m> Builder<'m> {
     }
 
     /// `lhs == rhs` / `lhs != rhs` over two columns of one entity: both Int-typed, or of one
-    /// domain, as two Enum columns with the same values are.
+    /// domain, as two Enum columns with the same values are. A null operand equals nothing.
     #[allow(clippy::too_many_arguments)]
     fn columns_eq(
         &mut self,
@@ -183,10 +183,8 @@ impl<'m> Builder<'m> {
         let l = self.read_slot(ek, lhs, at, site);
         let r = self.read_slot(ek, rhs, at, site);
         match (l, r) {
-            (Some((lt, ld)), Some((rt, rd)))
-                if ld == rd || (ld.is_numeric() && rd.is_numeric()) =>
-            {
-                Pred::Cmp(lt, op, rt)
+            (Some(l), Some(r)) if l.1 == r.1 || (l.1.is_numeric() && r.1.is_numeric()) => {
+                columns_cmp(l, op, r)
             }
             _ => {
                 self.diag(

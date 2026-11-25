@@ -1,7 +1,7 @@
 //! Atoms over several entities: a cross-entity comparison and the owner or key link that ties its rows.
 
 use super::display::cross_rhs_display;
-use super::{ambiguous_owner_link, at_of, cmp_op, Binding};
+use super::{ambiguous_owner_link, at_of, cmp_op, columns_cmp, Binding};
 use crate::lifecycle::build::Builder;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::types::{At, CmpOp, Pred, Site, Term, VarId, VarKind};
@@ -51,11 +51,11 @@ impl Builder<'_> {
                         let l = self.read_slot(prop.lhs.entity, &prop.lhs.column, lat, site);
                         let r = self.read_slot(rc.entity, &rc.column, rat, site);
                         match (l, r) {
-                            (Some((lt, ld)), Some((rt, rd)))
-                                if (ld.is_numeric() && rd.is_numeric())
-                                    || (!ordered && ld == rd) =>
+                            (Some(l), Some(r))
+                                if (l.1.is_numeric() && r.1.is_numeric())
+                                    || (!ordered && l.1 == r.1) =>
                             {
-                                Pred::Cmp(lt, op, rt)
+                                columns_cmp(l, op, r)
                             }
                             _ => {
                                 self.diag(

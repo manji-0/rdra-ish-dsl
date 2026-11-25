@@ -789,6 +789,67 @@ sets(Set, Line.qty == {value})
 }
 
 #[test]
+/// Two columns that both hold null are not equal (#355): `==` between columns needs both
+/// present and `!=` holds when either is null, in a rule and a `@check`, over Int and String
+/// columns alike. A logical `@derived` comparison of them is neither true nor false.
+fn two_null_columns_are_not_equal() {
+    let src = |rule: &str| {
+        format!(
+            r#"
+entity Item "品目" {{
+  id: Int @pk
+  qty: Int @null
+  lim: Int @null
+  a: String @null
+  b: String @null
+  same: Bool @null @derived(qty == lim)
+  alike: Bool @null @derived(a == b)
+}}
+usecase Make "作成"
+creates(Make, Item)
+{rule}
+"#
+        )
+    };
+    for (rule, kind, broken) in [
+        ("forbidden(Item, qty == lim)", InvKind::Forbidden, false),
+        ("forbidden(Item, qty != lim)", InvKind::Forbidden, true),
+        ("required(Item, qty == lim)", InvKind::Required, true),
+        ("required(Item, qty != lim)", InvKind::Required, false),
+        ("forbidden(Item, a == b)", InvKind::Forbidden, false),
+        ("forbidden(Item, a != b)", InvKind::Forbidden, true),
+        ("forbidden(Item, same == true)", InvKind::Forbidden, false),
+        ("forbidden(Item, same == false)", InvKind::Forbidden, false),
+        ("forbidden(Item, same == null)", InvKind::Forbidden, true),
+        ("forbidden(Item, alike == true)", InvKind::Forbidden, false),
+        ("forbidden(Item, alike == false)", InvKind::Forbidden, false),
+        ("forbidden(Item, alike == null)", InvKind::Forbidden, true),
+    ] {
+        let d = derive_src(&src(rule));
+        assert_eq!(violated(&d, "Item", kind), broken, "{rule}");
+    }
+    let check = |expr: &str| {
+        format!(
+            r#"
+entity Item "品目" {{ id: Int @pk  qty: Int @null  lim: Int @null @check({expr}) }}
+usecase Make "作成"
+creates(Make, Item)
+"#
+        )
+    };
+    assert!(violated(
+        &derive_src(&check("qty == lim")),
+        "Item",
+        InvKind::Check
+    ));
+    assert!(!violated(
+        &derive_src(&check("qty != lim")),
+        "Item",
+        InvKind::Check
+    ));
+}
+
+#[test]
 fn a_logical_derived_column_is_its_expression_and_no_axis() {
     let src = |qty: u8| {
         format!(

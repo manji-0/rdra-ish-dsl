@@ -255,6 +255,9 @@ under a load average of 30 to 60, measured.
 | `safety_delete_set_null` | `.on_delete(set_null)` keeps its unguarded one-row delete and gets no `DanglingKey_*`; the linked line the delete marks stays | counterexample, z3 unproved |
 | `safety_counted_once_per_raise` | A counted handler runs once per raise; the latch runs twice after one | counted ok, z3 proved; latch counterexample |
 | `safety_event_overflow` | A raise past `k` is `EventOverflow`, and the raiser never waits | `k = 2` counterexample; `k = 3` ok, z3 proved |
+| `safety_null_columns_ne` | The model of #355: two `@null` columns that both hold null; `!=` holds and `==` fails | counterexample, z3 unproved |
+| `safety_null_columns_eq` | The reverse: `==` on two null columns never holds and `!=` always does, in rules and an `always`, over Int and String columns and a logical `@derived`; two columns that reach 2 still meet `==` | null pairs ok, z3 proved; present pair counterexample |
+| `safety_null_columns_cross` | The same reading across two entities | null `==` ok, z3 proved; null `!=` and present `==` counterexample |
 | `safety_unique_sets` | A unique column set over column vars, owner vars, and a nullable Int that two rows leave null | single column and junction counterexample; guarded set and null set ok, z3 proved |
 | `sym_owner_coupled` | A child's key moves with its parent's row, a deleted child's too | ok, z3 proved; BFS ok, ok, ok |
 | `sym_identity_pair` | A pre-existing 1:1 child starts at its parent's slot, so the two permute as one class | counterexample |
@@ -373,7 +376,7 @@ compile it.
 
 | Harness | File under `lifecycle/` | Statement | Bound |
 |---|---|---|---|
-| `numbers_compare_as_i64_and_null_is_never_ordered` | `expr.rs` | `compare_numbers` orders two numbers as `i64` does; `null` equals only `null` and is never ordered | every pair of `Option<i64>`, every operator |
+| `numbers_compare_as_i64_and_null_is_never_ordered` | `expr.rs` | `compare_numbers` orders two numbers as `i64` does; as term equality, `null` equals only `null`, and it is never ordered. A rule's `==` between two columns adds a present guard on each nullable one when it is built, so two null columns are not equal there | every pair of `Option<i64>`, every operator |
 | `compare_negates_and_mirrors` | `expr.rs` | `compare` does not panic, `!=` is the negation of `==`, and swapping the operands mirrors the operator | every operand kind, every domain, every value |
 | `a_block_rounds_up_to_16` | `explore/store.rs` | `block(n)` is a multiple of 16 that holds `n` and wastes under 16 bytes | every `n` up to `usize::MAX - 16` |
 | `locate_numbers_rows_in_order` | `explore/segments.rs` | `locate` puts each row in one segment, right after the row before it, at a place under that segment's rows | every row up to 40, segments of 4, 4 and then 4 |
