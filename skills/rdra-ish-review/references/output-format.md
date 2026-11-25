@@ -15,7 +15,7 @@ needs. Skills `rdra-ish-review` and `rdra-ish-buc-analyze` both use it.
 - Next questions: <what moves the model one stage deeper>
 
 ## Findings
-- [high] <file>:<line> — <finding> (<source>)
+- [high] <file>:<line>: <finding>, from <source>
 - [medium] ...
 - [low] ...
 

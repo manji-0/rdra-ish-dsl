@@ -4,16 +4,14 @@ description: Write RDRA DSL files from requirements using correct syntax and fil
 license: MIT
 ---
 
-## Write RDRA DSL
-
-### When to use
+## When to use
 
 Write or extend `.rdra` files from requirements. Model one refinement stage at a time: a
 guessed column, endpoint, or state machine reads as a decision to reviewers. To start or
 change one BUC, skills `rdra-ish-buc-create` and `rdra-ish-buc-update` add their steps to
 these.
 
-### Steps
+## Steps
 
 1. Find the model root and its stage. `rdra-ish next src/` prints each BUC's stage and the
    gaps that block the next one; `rdra-ish next src/ --buc <BucId> --format json` gives
@@ -45,7 +43,7 @@ these.
 | 7C Advanced rules | Tech-enforced rules | Which comparison or cross-entity facts are reviewable from the abstract state space? | comparison propositions, multi-entity `forbidden` / `invariant` |
 <!-- /stage-spec -->
 
-### References
+## References
 
 - `references/00-scope.md`, `references/01-buc-skeleton.md`, `references/02-screens.md`,
   `references/03-data-touchpoints.md`, `references/04-api-access-boundary.md`,

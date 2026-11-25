@@ -4,16 +4,14 @@ description: Create a new BUC file from a requirements description, using staged
 license: MIT
 ---
 
-## Create a new BUC
-
-### When to use
+## When to use
 
 A requirement or feature description needs a new BUC file, and the shared declarations it
 uses. Build only the stage the requirement supports: invented columns, endpoints, or state
 machines read as decisions. Skill `rdra-ish-write` holds the stage table, the step file of
 each stage, and the syntax.
 
-### Steps
+## Steps
 
 1. Classify the requirement by the stage it answers, with the stage table of
    `../rdra-ish-write/SKILL.md`. Ask only for what that stage adds.
@@ -30,7 +28,7 @@ each stage, and the syntax.
    last line of `check` exactly as printed, in a code block.
 6. Hand off with the next stage's questions.
 
-### Example
+## Example
 
 A BUC at the data-touchpoint stage, with the shared files it imports. Clerk cancels but
 does not place orders, so Clerk performs CancelOrder, not the BUC.
@@ -85,7 +83,7 @@ updates(CancelOrder, Order)
 displays(CancelOrder, OrderScreen)
 ```
 
-### References
+## References
 
 - `../rdra-ish-write/SKILL.md`: the stage table and the step files.
 - `../rdra-ish-write/references/layout.md`: shared versus BUC-local, imports, performers.
