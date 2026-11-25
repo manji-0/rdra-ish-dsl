@@ -665,6 +665,7 @@ headers of the samples list these names
 | `MinCardOfPreExistingParent { child }` | `MinCardOfPreExistingParent_<E>_<child>` | warning | The parent of a `1..*` key starts present and every child absent, so `MinCard_*` fails at the start. |
 | `CountAboveBound { rule, entity, n, slots }` | `CountAboveBound_<E>_<rule>` | warning | An `.at_least(n, ..)` or `.exactly(n, ..)` counts more rows than the entity has slots. The message names the `--instances` that gives it `n`. |
 | `PreExistingChildOfCreatedParent { parent }` | `PreExistingChildOfCreatedParent_<E>_<parent>` | warning | No use case creates the entity, but one creates the parent of its mandatory `relate`. |
+| `IdentityStartSlots { parent }` | `IdentityStartSlots_<E>_<parent>` | error | The entity starts linked one-to-one to its parent's slots, but the bounds (`--instances`) give the two a different slot count. |
 | `ConflictingEffects { usecase, column }` | `ConflictingEffects_<E>_<usecase>_<column>` | error | One use case assigns two values to one column. |
 | `DoubleModeledEnum { column, usecase }` | `DoubleModeledEnum_<E>_<usecase>_<column>` | error | A use case that does not create the entity `sets` a lifecycle column that `transitions` drive. |
 | `ContradictoryDrivenComparison { usecase, proposition, driven }` | `ContradictoryDrivenComparison_<E>_<usecase>_<proposition>` | error | A use case drives a comparison to one truth while its own Int `sets` make it the other. |
