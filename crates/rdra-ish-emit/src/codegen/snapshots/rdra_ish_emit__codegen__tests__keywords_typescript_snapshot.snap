@@ -18,7 +18,8 @@ expression: "generated_from(KEYWORDS_SRC, \"keywords.rdra\", Lang::TypeScript)"
 // O1 Match.function_id names a present Function.
 // O2 Match.func_id names a present Func.
 // O3 Match.mod_id names a present Mod.
-// O4 every row the code writes keeps its rules: its RuleViolations is empty.
+// O4 each function runs in one transaction with the reads of its rows, marks, and events: `check` and `verify` explore every use case, and every step of a split one, as one atomic action, and a run of another use case between the read and the write is a state they never explored. Hold what the function read until the write commits (SELECT .. FOR UPDATE, or serializable isolation), and write each row only where it still is what the result's `<row>_expected` (`<Row>Expected` in Go) names (UPDATE .. WHERE id = ? AND <tag> = ?; INSERT a created row only where none has its id; DELETE likewise); when a write matches no row, roll the transaction back and treat the call as NotEnabled. The condition catches a row another call created, deleted, or moved to another state; it does not catch a change to another column a condition read, to a row the function reads and does not write, or to a run mark or event it consumes, which only the held reads keep.
+// O5 every row the code writes keeps its rules: its RuleViolations is empty.
 
 // ── Scalars: replace with the project's own types if it has them ──
 
@@ -267,6 +268,15 @@ export interface Rejected {
   readonly site: string | null;
 }
 
+/**
+ * What a row a result writes must still be when the write commits, so the store can write it
+ * conditionally and take a write that matches no row as NotEnabled (see the obligations).
+ */
+export type ExpectedSource =
+  | { readonly kind: "absent" }
+  | { readonly kind: "present" }
+  | { readonly kind: "in"; readonly column: string; readonly value: string };
+
 /** A state the verified model does not reach: the arguments break a rule. */
 function unreachable(message: string): never {
   throw new Error(message);
@@ -275,6 +285,7 @@ function unreachable(message: string): never {
 /** What return_ returns. */
 export interface ReturnResult {
   match: MatchReturn;
+  match_expected: ExpectedSource;
   switch: Switch;
 }
 
@@ -299,6 +310,7 @@ export function return_(match: MatchNew): ReturnResult {
       func_id: match.func_id,
       mod_id: match.mod_id,
     },
+    match_expected: { kind: "in", column: "status", value: "new" },
     switch: { event: "Switch", match_id: match.id },
   };
 }
@@ -306,6 +318,7 @@ export function return_(match: MatchNew): ReturnResult {
 /** What delete_ returns. */
 export interface DeleteResult {
   match: MatchSelf;
+  match_expected: ExpectedSource;
 }
 
 /**
@@ -332,12 +345,14 @@ export function delete_(match: MatchReturn, switch_: Switch): DeleteResult {
       func_id: match.func_id,
       mod_id: match.mod_id,
     },
+    match_expected: { kind: "in", column: "status", value: "return" },
   };
 }
 
 /** What super_ returns. */
 export interface SuperResult {
   match: MatchSuper;
+  match_expected: ExpectedSource;
 }
 
 /**
@@ -365,12 +380,14 @@ export function super_(match: MatchSelf): SuperResult | Rejected {
       func_id: match.func_id,
       mod_id: match.mod_id,
     },
+    match_expected: { kind: "in", column: "status", value: "self" },
   };
 }
 
 /** What crate returns. */
 export interface CrateResult {
   match: MatchCrate;
+  match_expected: ExpectedSource;
 }
 
 /**
@@ -394,12 +411,14 @@ export function crate(match: MatchSuper): CrateResult {
       func_id: match.func_id,
       mod_id: match.mod_id,
     },
+    match_expected: { kind: "in", column: "status", value: "super" },
   };
 }
 
 /** What default_ returns. */
 export interface DefaultResult {
   match: MatchDefault;
+  match_expected: ExpectedSource;
 }
 
 /**
@@ -423,12 +442,14 @@ export function default_(match: MatchCrate): DefaultResult {
       func_id: match.func_id,
       mod_id: match.mod_id,
     },
+    match_expected: { kind: "in", column: "status", value: "crate" },
   };
 }
 
 /** What type returns. */
 export interface TypeResult {
   func: FuncReturn;
+  func_expected: ExpectedSource;
 }
 
 /**
@@ -441,12 +462,14 @@ export function type(func: FuncNew): TypeResult {
       type: "return",
       id: func.id,
     },
+    func_expected: { kind: "in", column: "type", value: "new" },
   };
 }
 
 /** What class_ returns. */
 export interface ClassResult {
   func: FuncFunc;
+  func_expected: ExpectedSource;
 }
 
 /**
@@ -459,12 +482,14 @@ export function class_(func: FuncReturn): ClassResult {
       type: "func",
       id: func.id,
     },
+    func_expected: { kind: "in", column: "type", value: "return" },
   };
 }
 
 /** What newFromNew returns. */
 export interface NewFromNewResult {
   match: MatchNew;
+  match_expected: ExpectedSource;
 }
 
 /**
@@ -488,12 +513,14 @@ export function newFromNew(parentFunction: Function, parentFunc: FuncNew, parent
       func_id: parentFunc.id,
       mod_id: parentMod.id,
     },
+    match_expected: { kind: "absent" },
   };
 }
 
 /** What newFromReturn returns. */
 export interface NewFromReturnResult {
   match: MatchNew;
+  match_expected: ExpectedSource;
 }
 
 /**
@@ -517,12 +544,14 @@ export function newFromReturn(parentFunction: Function, parentFunc: FuncReturn, 
       func_id: parentFunc.id,
       mod_id: parentMod.id,
     },
+    match_expected: { kind: "absent" },
   };
 }
 
 /** What newFromFunc returns. */
 export interface NewFromFuncResult {
   match: MatchNew;
+  match_expected: ExpectedSource;
 }
 
 /**
@@ -546,12 +575,14 @@ export function newFromFunc(parentFunction: Function, parentFunc: FuncFunc, pare
       func_id: parentFunc.id,
       mod_id: parentMod.id,
     },
+    match_expected: { kind: "absent" },
   };
 }
 
 /** What static_ returns. */
 export interface StaticResult {
   function: Function;
+  function_expected: ExpectedSource;
 }
 
 /**
@@ -564,6 +595,7 @@ export function static_(function_: Function, functionDefault: string): StaticRes
       id: function_.id,
       default: functionDefault,
     },
+    function_expected: { kind: "present" },
   };
 }
 

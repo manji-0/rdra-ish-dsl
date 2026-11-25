@@ -160,6 +160,18 @@ pub(super) fn add_functions(
         names.claim(d.outcome.clone(), format!("the outcome of {}", d.name))?;
     }
     domain.dispatchers = dispatchers;
+    // `check` and `verify` run each action as one atomic step.
+    if !fns.is_empty() {
+        names.claim(
+            "ExpectedSource".to_string(),
+            "the expected source of a written row".to_string(),
+        )?;
+        domain.obligations.push(super::ir::Obligation {
+            invariant: None,
+            text: "each function runs in one transaction with the reads of its rows, marks, and events: `check` and `verify` explore every use case, and every step of a split one, as one atomic action, and a run of another use case between the read and the write is a state they never explored. Hold what the function read until the write commits (SELECT .. FOR UPDATE, or serializable isolation), and write each row only where it still is what the result's `<row>_expected` (`<Row>Expected` in Go) names (UPDATE .. WHERE id = ? AND <tag> = ?; INSERT a created row only where none has its id; DELETE likewise); when a write matches no row, roll the transaction back and treat the call as NotEnabled. The condition catches a row another call created, deleted, or moved to another state; it does not catch a change to another column a condition read, to a row the function reads and does not write, or to a run mark or event it consumes, which only the held reads keep.".to_string(),
+            site: None,
+        });
+    }
     // The run marks, and what a split use case asks of the code that stores them.
     marks.sort_by(|a, b| a.name.cmp(&b.name));
     marks.dedup();

@@ -305,10 +305,17 @@ pub(crate) enum Commands {
         /// and each error is listed as an obligation the model does not meet
         #[arg(long)]
         allow_failing: bool,
+        /// Also print the conformance port and harness (--lang rust or go), and write to
+        /// this file the traces the harness drives a finished service along
+        #[arg(long, value_name = "FILE")]
+        conformance: Option<PathBuf>,
+        /// The states the BFS behind the traces explores at most (with --conformance)
+        #[arg(long, value_name = "N", default_value_t = rdra_ish_emit::codegen::conformance::DEFAULT_STATES, requires = "conformance")]
+        conformance_states: usize,
         /// Generate again with the same options and compare with FILE instead of printing:
         /// exit 1 with a short summary on stderr when it differs (file edited, model changed,
         /// or generator changed)
-        #[arg(long, value_name = "FILE", conflicts_with = "out")]
+        #[arg(long, value_name = "FILE", conflicts_with_all = ["out", "conformance"])]
         check: Option<PathBuf>,
     },
     /// Derive reachable state patterns per entity (aggregated across BUCs)
