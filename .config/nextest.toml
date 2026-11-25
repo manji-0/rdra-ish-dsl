@@ -4,12 +4,44 @@
 # A SLOW line in the log for each test past 10 s; none is stopped.
 slow-timeout = "10s"
 
-[profile.ci]
-# CI's check job on main (scheduled or by hand): every test diff-test.sh does not leave to the
-# release jobs. Every failure, not only the first, and the slow tests again at the end.
+[profile.pr]
+# CI's check job. On a pull request it runs this profile alone: every test but the ones
+# below, which take over 10 s on the runner. On main (scheduled or by hand) it runs this
+# profile, fails when a test of it took over 10 s (scripts/check-test-times.py), and then runs
+# the tests below. A test is listed by its binary and its exact name.
+default-filter = """
+not (
+    (binary_id(rdra-ish-cli::codegen_equivalence) & test(=functions_agree_with_the_transition_system))
+  | (binary_id(rdra-ish-cli::codegen_differential) & test(=printed_code_agrees_on_the_domain_samples))
+  | (binary_id(rdra-ish-cli::codegen_builds) & (test(=go_builds) | test(=rust_builds) | test(=typescript_builds)))
+  | (binary_id(rdra-ish-cli::memory_cli) & (
+        test(=shared_quotients_stop_no_cone_elsewhere_on_any_number_of_threads)
+      | test(=the_generators_finish_a_cone_check_finishes)))
+  | (binary_id(rdra-ish-cli::guards_cli) & test(=oidc_auth_readme_rules_table_is_what_the_report_finds))
+  | (binary_id(rdra-ish-cli::check_cli) & test(=check_defaults_to_a_pattern_cap_that_follows_the_instance_count_and_no_state_cap))
+  | (binary_id(rdra-ish-cli::verify_cli) & test(=a_safety_cone_stops_once_every_check_on_it_has_failed))
+  | (binary_id(rdra-ish-core) & (
+        test(=lifecycle::explore::tests::a_run_is_the_same_on_any_number_of_threads)
+      | test(=lifecycle::explore::tests::a_run_stops_at_the_memory_limit_at_the_same_state_on_any_number_of_threads)
+      | test(=lifecycle::explore::tests::a_run_stops_once_every_check_has_failed)
+      | test(=lifecycle::explore::tests::store_bytes_models_the_store_a_run_counts)
+      | test(=lifecycle::explore::plan_tests::planned_enabled_bindings_agree_with_eval_on_every_shipped_model)
+      | test(=lifecycle::tests::reduce::a_count_over_t_in_a_guard_reduces_exactly)))
+)
+"""
+# Every failure, not only the first, and the slow tests again at the end of the log.
 fail-fast = false
 final-status-level = "slow"
 
-[profile.ci.junit]
-# target/nextest/ci/junit.xml, each test's time.
+[profile.pr.junit]
+# target/nextest/pr/junit.xml: each test's time, which scripts/check-test-times.py reads.
+path = "junit.xml"
+
+[profile.slow]
+# The tests the list above names, on main: `diff-test.sh --profile slow --filter 'not
+# default()'`, `default()` being the `pr` filter this profile inherits. A profile of its own
+# so that its times go to target/nextest/slow/junit.xml beside the `pr` run's.
+inherits = "pr"
+
+[profile.slow.junit]
 path = "junit.xml"

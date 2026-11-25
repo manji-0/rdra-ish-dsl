@@ -6,9 +6,10 @@
 #   scripts/diff-test.sh FILE...   the crates that own FILE...; nothing when none does
 #   scripts/diff-test.sh --all     every crate (CI's `test` step)
 #
-#   --profile NAME   a profile of .config/nextest.toml: CI's check job runs `ci` on main and
-#                    `pr` on a pull request, which skips the slow tests that profile lists
-#   --also FILTER    also the tests the nextest filterset FILTER matches, slow or not
+#   --profile NAME   a profile of .config/nextest.toml; CI's check job runs `pr`, which skips
+#                    the slow tests it lists
+#   --filter EXPR    the tests the nextest filterset EXPR matches in place of the profile's
+#                    default filter, which EXPR can name as `default()`
 #
 # A change to the root Cargo.toml or Cargo.lock runs every crate. A crate's dependents are
 # not run: CI's test step runs the whole workspace. The doctests run after, through
@@ -40,11 +41,10 @@ while (($#)); do
       nextest+=(--profile "$2")
       shift
       ;;
-    --also)
-      # The profile's default filter, `default()`, joined by FILTER: nextest otherwise
-      # intersects every filterset with it.
+    --filter)
+      # nextest otherwise intersects every filterset with the default filter.
       nextest+=(--ignore-default-filter)
-      filter="$filter and (default() | ($2))"
+      filter="$filter and ($2)"
       shift
       ;;
     --all | Cargo.toml | Cargo.lock) all=true ;;
@@ -63,5 +63,6 @@ elif ! ((${#packages[@]})); then
   echo "diff-test: no crate changed"
   exit 0
 fi
-cargo nextest run "${packages[@]}" "${nextest[@]}" -E "$filter"
+# --no-tests=pass: a crate whose tests the filters all skip.
+cargo nextest run "${packages[@]}" "${nextest[@]}" --no-tests=pass -E "$filter"
 cargo test --doc "${packages[@]}"
