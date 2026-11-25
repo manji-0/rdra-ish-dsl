@@ -244,6 +244,9 @@ pub struct ComponentRun {
     pub layers: Layers,
     /// `kept`, charged to `Caps::memory` while the result is alive.
     _charge: Option<Charge>,
+    /// The run kept only its system, diagnostics and end once its reader was done
+    /// (`release`): a reader of its graph panics.
+    released: bool,
 }
 
 /// What a reader of state predicates and action labels reads of a run, plain or up to
@@ -330,6 +333,34 @@ impl ComponentRun {
             }
             None => false,
         }
+    }
+
+    /// Drops the states, the edges and the views of a stopped run once what it decides was
+    /// read, and gives what they held back to `Caps::memory`; the system, the diagnostics and
+    /// the end stay. The entity pass of `verify` releases a stopped entity cone after
+    /// `entity_findings` (`TransitionSystem::explore_targets_reduced_in`), so that the cones
+    /// after it run in the room it held. A reader of the graph of a released run panics.
+    pub(crate) fn release(&mut self) {
+        assert!(!self.complete, "only a stopped run is released");
+        self.states = States::new(self.states.width());
+        self.steps = edges::Steps::new(false);
+        self.ends = None;
+        self.bindings = Vec::new();
+        self.views = Vec::new();
+        self.gathered_views = false;
+        self.layers = Layers::default();
+        self.kept = 0;
+        self._charge = None;
+        self.released = true;
+    }
+
+    /// Panics on a released run (`release`): only `entity_findings` reads a stopped entity
+    /// cone of the entity pass, before the release.
+    pub(crate) fn assert_held(&self) {
+        assert!(
+            !self.released,
+            "a stopped entity cone's run is released once entity_findings read it: nothing else may read its graph"
+        );
     }
 
     /// Whether `other` is the same run of the same graph: the states, parents, edges,
@@ -730,6 +761,7 @@ impl TransitionSystem {
             peak,
             layers,
             _charge: charge,
+            released: false,
         };
         #[cfg(feature = "perf")]
         perf::line(&run, clock, caps.stop_when_all_violated);

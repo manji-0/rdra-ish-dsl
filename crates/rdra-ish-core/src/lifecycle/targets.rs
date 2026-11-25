@@ -7,7 +7,7 @@ use std::fmt;
 use super::cone::{Cone, Target};
 use super::diag::{Diag, StateDiag, UnmetPremise};
 use super::explore::{Caps, Checks, ComponentRun, StoredRun};
-use super::findings::{Progress, Runs, Taken, Witness};
+use super::findings::{Progress, Runs, StateModelFindings, Taken, Witness};
 use super::types::{
     ActionOrigin, AfterAssert, AfterStep, EntId, GuardWhy, Invariant, Ltl, Pred, Premise, Site,
     Term, VarKind,
@@ -174,6 +174,13 @@ fn stopped_at(run: &ComponentRun) -> Option<UndecidedWhy> {
     })
 }
 
+/// What `entity_findings` reads of an entity cone's graph (`read_entity`).
+#[derive(Clone)]
+struct EntityRead {
+    findings: StateModelFindings,
+    why: Option<UndecidedWhy>,
+}
+
 /// What the entity cones that keep one action say about it.
 #[derive(Default)]
 struct RunsSoFar {
@@ -203,7 +210,7 @@ struct ArmSoFar {
 impl TransitionSystem {
     /// Explores each target on its cone; targets with the same cone share one run.
     pub fn explore_targets(&self, targets: &[Target], caps: Caps) -> TargetExploration {
-        self.explore_targets_with(targets, caps, None, &[])
+        self.explore_targets_with(targets, caps, None, &[], false)
     }
 
     /// `explore_targets` with each cone reduced by its independent sub-lifecycle
@@ -216,7 +223,9 @@ impl TransitionSystem {
     /// reduced in it. A cone whose system is one of `every_check` evaluates every check its
     /// system holds, whatever its targets read, so that a caller can decide on its run the
     /// targets of a later pass that runs that system (#209): `verify`'s safety and property
-    /// cones.
+    /// cones. Under a memory limit, a cone of entity targets alone that stops is released
+    /// once its findings are read (`ComponentRun::release`): the caller reads no stopped
+    /// entity cone's graph, and the cones after it run in the room it held.
     pub fn explore_targets_reduced_in(
         &self,
         targets: &[Target],
@@ -224,16 +233,19 @@ impl TransitionSystem {
         cache: &QuotientCache,
         every_check: &[&TransitionSystem],
     ) -> TargetExploration {
-        self.explore_targets_with(targets, caps, Some(cache), every_check)
+        self.explore_targets_with(targets, caps, Some(cache), every_check, true)
     }
 
     /// `reduce` holds the quotients the cones are reduced with; `None` leaves them whole.
-    fn explore_targets_with(
+    /// `release` releases a stopped cone of entity targets alone under a memory limit once
+    /// its findings are read (`explore_targets_reduced_in`).
+    pub(super) fn explore_targets_with(
         &self,
         targets: &[Target],
         caps: Caps,
         reduce: Option<&QuotientCache>,
         every_check: &[&TransitionSystem],
+        release: bool,
     ) -> TargetExploration {
         let mut groups: Vec<(Cone, Vec<Target>)> = Vec::new();
         let mut index: HashMap<Cone, usize> = HashMap::new();
@@ -286,7 +298,9 @@ impl TransitionSystem {
         // order, each with the room the results before it leave. A cone whose run side by
         // side met a fuller pool, or reached past that room, runs again alone with it.
         // A crowded run is dropped before the first run again, so that what the runs hold
-        // stays near the limit.
+        // stays near the limit. A stopped cone of entity targets alone leaves no result
+        // under `release`: its findings are read at once, and its run is released
+        // (`ComponentRun::release`), so the cones after it have the room it held.
         let ran: Vec<_> = ran
             .into_iter()
             .map(|(cone, shared, run, seen)| {
@@ -296,21 +310,38 @@ impl TransitionSystem {
             .collect();
         let mut held = 0u64;
         let mut cones = Vec::with_capacity(ran.len());
+        // By cone: the findings of a released cone, read before its release.
+        let mut reads: HashMap<usize, Vec<(EntId, EntityRead)>> = HashMap::new();
         for (cone, shared, run, peak) in ran {
             let run = match (caps.memory, run) {
                 (None, Some(run)) => run,
                 (Some(pool), run) => {
                     let room = pool.room().saturating_sub(held);
-                    let run = match run.filter(|_| peak <= room) {
+                    match run.filter(|_| peak <= room) {
                         Some(run) => run,
                         None => explore(&cone, &shared, caps.charged_to(pool.with_room(room))),
-                    };
-                    held += run.kept;
-                    run
+                    }
                 }
                 (None, None) => unreachable!("only a run charged to a pool is crowded"),
             };
-            cones.push(ConeRun { cone, run });
+            let mut cone = ConeRun { cone, run };
+            let entities: Option<Vec<EntId>> = (shared.iter())
+                .map(|t| match t {
+                    Target::Entity(e) => Some(*e),
+                    _ => None,
+                })
+                .collect();
+            match entities {
+                Some(entities) if release && caps.memory.is_some() && !cone.run.complete => {
+                    let read = (entities.into_iter())
+                        .map(|e| (e, self.read_entity(e, &cone)))
+                        .collect();
+                    reads.insert(cones.len(), read);
+                    cone.run.release();
+                }
+                _ => held += cone.run.kept,
+            }
+            cones.push(cone);
         }
         let mut out = TargetExploration {
             cones: Vec::new(),
@@ -327,7 +358,15 @@ impl TransitionSystem {
                     if !entity_cones.contains(&at) {
                         entity_cones.push(at);
                     }
-                    self.entity_findings(e, &cones[at], &mut out, &mut runs);
+                    let read = match reads.get(&at) {
+                        Some(read) => (read.iter().find(|(x, _)| *x == e))
+                            .expect("a released cone's findings were read for each of its targets")
+                            .1
+                            .clone(),
+                        None => self.read_entity(e, &cones[at]),
+                    };
+                    let system = &cones[at].run.system;
+                    self.entity_findings(e, read, system, &mut out, &mut runs);
                 }
                 // A state the cap left unexpanded has no edges, so it would look stuck: only a
                 // complete graph decides a `can_reach`.
@@ -581,23 +620,43 @@ impl TransitionSystem {
         EntId::at(at)
     }
 
-    /// The `NoWitness` errors and `Deadlock`s of `e`'s state models on its cone, each deadlock
-    /// with its trace, and what a capped cone leaves undecided; and into `runs`, by this
-    /// system's action, what the cone says about each action it keeps.
+    /// What `entity_findings` reads of the graph of `e`'s cone: the state-model findings,
+    /// each deadlock with its trace, and the cap a stopped run met. Nothing else reads the
+    /// graph, so a stopped cone of the entity pass is released once this is read
+    /// (`ComponentRun::release`).
+    fn read_entity(&self, e: EntId, cone: &ConeRun) -> EntityRead {
+        let run = &cone.run;
+        debug_assert!(!run.checks_failed, "an entity cone runs to the end");
+        let local = run.system.local_entity(self.entity(e).key);
+        let mut findings = run.system.state_model_findings(local, &run.graph());
+        for d in &mut findings.deadlocks {
+            if let Progress::Stuck { at, diag } = &mut d.progress {
+                if let Some(trace) = diag.trace_mut() {
+                    *trace = run.trace_to(*at);
+                    self.annotate(&cone.cone, trace);
+                }
+            }
+        }
+        EntityRead {
+            findings,
+            why: stopped_at(run),
+        }
+    }
+
+    /// The `NoWitness` errors and `Deadlock`s of `e`'s state models that `read` found on its
+    /// cone, a run of `system`, and what a capped cone leaves undecided; and into `runs`, by
+    /// this system's action, what the cone says about each action it keeps.
     fn entity_findings(
         &self,
         e: EntId,
-        cone: &ConeRun,
+        read: EntityRead,
+        system: &TransitionSystem,
         out: &mut TargetExploration,
         runs: &mut [RunsSoFar],
     ) {
-        let run = &cone.run;
-        debug_assert!(!run.checks_failed, "an entity cone runs to the end");
         let decl = self.entity(e);
-        let local = run.system.local_entity(decl.key);
-        let why = stopped_at(run);
+        let EntityRead { findings, why } = read;
         let capped = || why.expect("an incomplete run stopped at a cap");
-        let findings = run.system.state_model_findings(local, &run.graph());
         let mut models = Vec::new();
         for w in findings.witnesses {
             if !models.contains(&w.var) {
@@ -612,8 +671,8 @@ impl TransitionSystem {
                 Witness::NotDecided => out.undecided.push(Undecided {
                     subject: Subject::State {
                         entity: decl.id.clone(),
-                        column: run.system.var_name(w.var),
-                        value: AbstractValue::of(&run.system.var(w.var).domain, w.value).display(),
+                        column: system.var_name(w.var),
+                        value: AbstractValue::of(&system.var(w.var).domain, w.value).display(),
                     },
                     cone: Some(decl.id.clone()),
                     why: capped(),
@@ -624,11 +683,7 @@ impl TransitionSystem {
         for d in findings.deadlocks {
             match d.progress {
                 Progress::Leaves => {}
-                Progress::Stuck { at, mut diag } => {
-                    if let Some(trace) = diag.trace_mut() {
-                        *trace = run.trace_to(at);
-                        self.annotate(&cone.cone, trace);
-                    }
+                Progress::Stuck { diag, .. } => {
                     out.tally.deadlocks += 1;
                     out.verdicts.push(Diag {
                         diag: *diag,
@@ -638,8 +693,8 @@ impl TransitionSystem {
                 Progress::NotDecided => out.undecided.push(Undecided {
                     subject: Subject::Deadlock {
                         entity: decl.id.clone(),
-                        column: run.system.var_name(d.var),
-                        value: run.system.value_text(d.var, d.value),
+                        column: system.var_name(d.var),
+                        value: system.value_text(d.var, d.value),
                     },
                     cone: Some(decl.id.clone()),
                     why: capped(),
@@ -647,7 +702,7 @@ impl TransitionSystem {
             }
         }
         for a in findings.runs {
-            let source = run.system.actions()[a.act.index()].source;
+            let source = system.actions()[a.act.index()].source;
             let at = self
                 .actions
                 .iter()
@@ -666,7 +721,7 @@ impl TransitionSystem {
             }
         }
         for arm in findings.arms {
-            let action = &run.system.actions()[arm.act.index()];
+            let action = &system.actions()[arm.act.index()];
             let (source, name) = (action.source, &action.name);
             let at = self
                 .actions

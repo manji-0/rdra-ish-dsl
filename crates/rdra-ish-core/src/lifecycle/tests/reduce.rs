@@ -1379,3 +1379,46 @@ fn a_counted_mark_is_not_monotone_without_its_handler() {
         );
     }
 }
+
+/// Under a memory limit the entity pass releases a stopped entity cone once its findings are
+/// read, and the cones after it run in the room it held (#284). Releasing moves findings from
+/// undecided to decided and changes no decided one, and a reader of a released cone's graph
+/// panics: nothing but `entity_findings` reads a stopped entity cone.
+#[test]
+fn a_stopped_entity_cone_leaves_its_room_to_the_cones_after_it() {
+    let ts = TransitionSystem::build(&load("samples/patent-ops"), Bounds::VERIFY, &Scope::ALL).ts;
+    let entities: Vec<Target> = (ts.targets().into_iter())
+        .filter(|t| matches!(t, Target::Entity(_)))
+        .collect();
+    let explore = |release: bool| {
+        let limit = MemorySize::from_bytes(1 << 20).expect("a size");
+        let caps = Caps::VERIFY.charged_to(MemoryPool::for_command(limit, "--memory"));
+        ts.explore_targets_with(&entities, caps, Some(&QuotientCache::new()), &[], release)
+    };
+    let (kept, released) = (explore(false), explore(true));
+    for v in kept.verdicts() {
+        assert!(released.verdicts().contains(v), "decided alike: {v:?}");
+    }
+    for u in released.undecided() {
+        assert!(
+            kept.undecided().iter().any(|k| k.subject == u.subject),
+            "left undecided only where the held runs left it: {u:?}"
+        );
+    }
+    assert!(
+        released.undecided().len() < kept.undecided().len(),
+        "the room a stopped cone held decides more: {} undecided, {} with the runs held",
+        released.undecided().len(),
+        kept.undecided().len()
+    );
+    let stopped: Vec<&ComponentRun> = (released.cones.iter())
+        .map(|c| &c.run)
+        .filter(|run| !run.complete)
+        .collect();
+    assert!(!stopped.is_empty(), "some entity cone stops at 1MiB");
+    for run in stopped {
+        assert!(run.states.is_empty(), "a released run holds no state");
+        let read = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run.graph().complete));
+        assert!(read.is_err(), "a reader of a released run's graph panics");
+    }
+}

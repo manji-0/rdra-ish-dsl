@@ -212,6 +212,36 @@ fn cones_side_by_side_stop_where_they_stop_one_at_a_time() {
     assert_eq!(run_on("3"), one);
 }
 
+/// `verify` releases an entity cone that stops at the memory limit once its findings are
+/// read, and the cones after it run in the room it held (#284). The run is the same on one
+/// thread as on eight, and every pass after the entity pass reads past the released cones: a
+/// reader of a released cone's graph panics.
+#[test]
+fn a_stopped_entity_cone_leaves_its_room_on_any_number_of_threads() {
+    let dir = scratch("memory_cli_released_entity_cones");
+    let run_on = |jobs: &str| {
+        let spec = dir.join("spec");
+        let _ = std::fs::remove_dir_all(&spec);
+        let out = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+            .current_dir(repo())
+            .env("RDRA_JOBS", jobs)
+            .args(["verify", "--memory", "1MiB", "samples/patent-ops", "-o"])
+            .arg(&spec)
+            .output()
+            .expect("rdra-ish runs");
+        let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+        assert!(!stderr.contains("panicked"), "{jobs} threads\n{stderr}");
+        String::from_utf8_lossy(&out.stdout).into_owned() + &stderr
+    };
+    let one = run_on("1");
+    assert!(
+        one.contains("the OfficeAction cone stopped at the memory limit"),
+        "an entity cone stops\n{one}"
+    );
+    assert_eq!(run_on("4"), one, "four threads");
+    assert_eq!(run_on("8"), one, "eight threads");
+}
+
 /// Cones with equal sub-lifecycles share one quotient, which stays counted while `verify`
 /// holds it (#252). Under limits where cones stop, the run is the same on one thread as on
 /// eight: a cone takes a shared quotient only where computing its own would have fit, and the
