@@ -303,7 +303,7 @@ impl Classes {
 
     /// The classes of S up to `H` (#212 phase 2, docs/design/instance-symmetry.md,
     /// "Composition with #74"), after its plain run stopped at the memory limit after
-    /// `stopped_at` states under `--symmetry retry` or `always`, or at once when a test forces
+    /// `stopped_at` states under `--symmetry always`, or at once when a test forces
     /// it. `H` leaves
     /// `ext.fixed` where they are, so every element keeps `obs` and the inputs: the run's
     /// orbits are a label-preserving bisimulation, finer than the stuttering partition, which

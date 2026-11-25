@@ -104,7 +104,7 @@ pub struct Caps {
     pub views: bool,
     /// The sub-lifecycle of a reduced cone whose plain run stops at the memory limit runs
     /// again up to `H`, the instance symmetry that keeps what the quotient reads (#212 phase
-    /// 2; `verify --symmetry retry` and `always`), where `Classes::of` reduces nothing
+    /// 2; `verify --symmetry always`), where `Classes::of` reduces nothing
     /// otherwise.
     pub s_up_to_h: bool,
     /// Test-only: such a sub-lifecycle runs up to `H` at once, with no plain run first, so

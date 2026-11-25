@@ -173,12 +173,14 @@
 
 - `verify --symmetry` also covers a reduced safety cone (#212, phase 3): under `always`, and
   under `retry` once its plain run stopped at the memory limit, it runs up to `G_T`, the
+- `verify --symmetry` also covers a reduced safety cone (#212, phase 3): under `always` it
+  runs up to `G_T`, the
   instance symmetry of its T rows, which leaves every S entity, and with it the class
   representative, where it is, along with each entity the reduction keys on (an S var or an
-  input, the rows such a key names, a bit's rows, an S action's params). The notes under the
-  line name those entities. A counterexample is lifted through the symmetry, then through
-  the reduction, and replayed. Without the option nothing changes, and `retry` changes
-  only a cone that stops at the memory limit. At `--instance-count 3 --memory 8GiB`
+  input, the rows such a key names, a bit's rows, an S action's params).
+  `RDRA_ISH_SYMMETRY_STATS` names those entities. A counterexample is lifted through the
+  symmetry, then through the reduction, and replayed. Without the option nothing changes.
+  At `--instance-count 3 --memory 8GiB`
   patent-ops' `Forbidden_Patent_4`, whose plain run stopped at 40.8M states, takes
   31,926,220 orbits for about 260M states and is decided (`ok`, 98 s at `RDRA_JOBS=4`), and
   with it `Inv_Patent_0`. `Forbidden_OfficeAction_3` is not: `G_T` moves its one T entity,
@@ -187,7 +189,7 @@
   run's twin on a reduced cone as `reduced_orbit_run`.
 
 - `verify --symmetry` also covers the sub-lifecycle of a reduced cone (#212, phase 2):
-  under `retry` and `always`, a sub-lifecycle whose run stops at the memory limit, alone,
+  under `always`, a sub-lifecycle whose run stops at the memory limit, alone,
   runs again up to `H`, the instance symmetry that keeps what the quotient reads, and the
   cone is reduced where it was left whole. The classes are the same sets of states, so the
   verdicts are the same; their numbering and representatives can differ, and so can such a
@@ -197,25 +199,28 @@
   `--instance-count 3` the sub-lifecycle of clinic-ops' `Forbidden_ClinicalOrder_1`,
   whose plain run stopped at the memory limit after 25.3M states, takes 240,016 orbits for
   about 61.8M states and yields #284's 20 classes, and the cone is decided (`ok`, 5,050
-  states; `verify --entity ClinicalOrder --memory 8GiB --symmetry retry` takes 72 s at
+  states; `verify --entity ClinicalOrder --memory 8GiB --symmetry always` took 72 s at
   `RDRA_JOBS=4`, 6.2 GiB at the peak). The `shadow` build adds the `s_up_to_h` twin, which holds the
   classes up to `H` to those of the plain run of the same sub-lifecycle, up to 200,000
   states, and reads `RDRA_ISH_FORCE_S_UP_TO_H`, a test-only switch that runs every
   sub-lifecycle up to `H` at once, so that the samples at small bounds reach the path and
   its twin; a release build ignores it.
 
-- `verify --symmetry never|retry|always` (#212, phase 1; experimental, default `never`):
+- `verify --symmetry never|always` (#212, phase 1; experimental, default `never`):
   explore an unreduced safety cone, and the cone of an `always` property, up to instance
   symmetry, one stored state per orbit of states that differ only in which slot holds which
-  row. The cone line reads `(<n> orbits, about <m> states)`. `retry` reruns up to symmetry
-  only a cone that stopped at the memory limit. `symmetry` under `[verify]` in `rdra.toml`
-  sets the default; under `[check]` it warns and is not read. A counterexample is lifted to
+  row. Such a cone line reads `(about <m> states)`, the sum of the orbit sizes, which can
+  exceed what a plain run stores. A cone that a complete plain run of the entity pass
+  decides, a safety cone whose plain run a property not yet decided needs, and a cone whose
+  group moves no row run and print as under `never`, at every `RDRA_JOBS`.
+  `RDRA_ISH_SYMMETRY_STATS=1` prints the orbits, the estimate and what the group leaves out
+  per run up to symmetry, on stderr. `symmetry` under `[verify]` in `rdra.toml` sets the
+  default; under `[check]` it warns and is not read. A counterexample is lifted to
   concrete slots and replayed, with the rows each step names, before it prints. A static
   scan leaves out an entity whose slots the model tells apart (an ordered id comparison, an
-  id against a literal, a key set to a literal row, and five more) and names it and the
-  reason under the line. A cone run up to symmetry gathers no entity view (#251) and shares
-  no run with the entity, safety and property passes (#209). Without the option nothing
-  changes. At `--instance-count 3` the
+  id against a literal, a key set to a literal row, and five more). A cone run up to
+  symmetry gathers no entity view (#251), and its run decides no other job (#209). Without
+  the option nothing changes. At `--instance-count 3` the
   five clinic-ops and insurance-claim-ops lines that stopped at the memory limit are decided
   under `--memory 8GiB`. In `rdra-ish-core`, `TransitionSystem::run_orbits` returns an
   `OrbitRun`, which has no graph or adjacency to read, and the vacuity readers take any

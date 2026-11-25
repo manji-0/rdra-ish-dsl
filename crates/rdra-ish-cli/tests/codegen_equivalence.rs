@@ -21,41 +21,16 @@
 //! evaluator it reads the functions' conditions with (`codegen::conformance::eval`) is the one
 //! the conformance traces pick each move's function with.
 
-use std::path::{Path, PathBuf};
-use std::process::Command;
+mod codegen_cases;
 
-use rdra_ish_core::lifecycle::{
-    ActionOrigin, Bounds, Caps, Domain, GuardWhy, ParamRole, Scope, StateSlice, TransitionSystem,
-    Value, VarKind,
+use codegen_cases::{
+    check_passes, column_var, enum_name, explore, matching, pick, row_slots, samples, type_name,
+    Explored, Rows,
 };
-use rdra_ish_core::load_project;
-use rdra_ish_emit::codegen::build;
-use rdra_ish_emit::codegen::conformance::eval::{column_var, enum_name, matching, Rows};
-use rdra_ish_emit::codegen::ir::{Adapt, Assigned, FnDecl, Lit, OutKind};
-
-fn repo() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-fn samples() -> Vec<String> {
-    std::fs::read_to_string(repo().join("samples.txt"))
-        .expect("samples.txt")
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
-        .map(str::to_string)
-        .collect()
-}
-
-fn check_passes(sample: &str) -> bool {
-    Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
-        .current_dir(repo())
-        .args(["check", sample])
-        .output()
-        .expect("runs rdra-ish")
-        .status
-        .success()
-}
+use rdra_ish_core::lifecycle::{
+    ActionOrigin, Domain, GuardWhy, ParamRole, StateSlice, Value, VarKind,
+};
+use rdra_ish_emit::codegen::ir::{Adapt, Assigned, Lit, OutKind};
 
 #[test]
 fn functions_agree_with_the_transition_system() {
@@ -69,16 +44,7 @@ fn functions_agree_with_the_transition_system() {
         if !check_passes(&sample) {
             continue;
         }
-        let project = load_project(&[repo().join(&sample)], None).expect("loads");
-        let model = project.model;
-        let domain = build(&model, Some(Caps::for_instances(1)), &|_| None).expect("builds");
-        let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
-        // The whole system, not a cone, and charged to no pool: its first 65,536 states
-        // sample the moves.
-        let run = built
-            .ts
-            .clone()
-            .run(Caps::new(Caps::for_instances(1).patterns, 1 << 16));
+        let Explored { model, domain, run } = explore(&sample);
         let ts = &run.system;
         for edge in run.edges() {
             let (act, params) = run.step(edge);
@@ -91,53 +57,12 @@ fn functions_agree_with_the_transition_system() {
             }
             let pre = &run.states[edge.from as usize];
             let post = &run.states[edge.to as usize];
-            let row_slots = |f: &FnDecl| -> Vec<(String, usize)> {
-                f.rows
-                    .iter()
-                    .map(|r| {
-                        let param = r.param.expect("a function row binds a param");
-                        let e = action.params[param].entity;
-                        (ts.entity(e).id.clone(), usize::from(params[param]))
-                    })
-                    .collect()
-            };
-            // The rows as the first function of the action names them; every function
-            // of one action binds the same params.
-            let Some(first) = domain.fns.iter().find(|f| f.action == action.name) else {
-                failures.push(format!(
-                    "{sample}: BFS runs {} but the generator printed no function and listed no skip",
-                    action.name
-                ));
-                continue;
-            };
-            let before = Rows::new(ts, &model, pre, row_slots(first), Vec::new());
-            let mut fns = matching(&domain.fns, &action.name, &before);
-            // Several arms from one state: the function whose target BFS took.
-            if fns.len() > 1 {
-                fns.retain(|f| {
-                    f.outputs.iter().all(|o| match &o.kind {
-                        OutKind::Row {
-                            tag: Some((column, value)),
-                            ..
-                        } => {
-                            let e = action.params[o.param].entity;
-                            let slot = usize::from(params[o.param]);
-                            column_var(ts, &ts.entity(e).id, column)
-                                .and_then(|v| enum_name(ts, v, post.get(ts, v, slot)))
-                                .is_some_and(|n| n == value.wire)
-                        }
-                        _ => true,
-                    })
-                });
-            }
-            let [f] = fns.as_slice() else {
-                failures.push(format!(
-                    "{sample}: {} from {:?} matches {} functions",
-                    action.name,
-                    first.rows.iter().map(|r| &r.state).collect::<Vec<_>>(),
-                    fns.len()
-                ));
-                continue;
+            let f = match pick(&domain, &model, ts, action, params, pre, post) {
+                Ok(f) => f,
+                Err(why) => {
+                    failures.push(format!("{sample}: {why}"));
+                    continue;
+                }
             };
             checked_moves += 1;
             // The function's own rows, with the rows its quantifiers bind.
@@ -145,7 +70,7 @@ fn functions_agree_with_the_transition_system() {
                 ts,
                 &model,
                 pre,
-                row_slots(f),
+                row_slots(ts, action, params, f),
                 f.elems.iter().map(|e| e.entity.clone()).collect(),
             );
             for c in &f.conditions {
@@ -452,23 +377,4 @@ fn functions_agree_with_the_transition_system() {
     eprintln!(
         "checked {checked_moves} moves, {checked_rows} rows, {checked_rules} rule checks, {checked_keys} keys, and {checked_events} raised events"
     );
-}
-
-/// The type name codegen gives an id: PascalCase, `_` and `-` splitting words.
-fn type_name(id: &str) -> String {
-    let mut out = String::new();
-    let mut upper = true;
-    for ch in id.chars() {
-        if ch == '_' || ch == '-' || ch == ' ' {
-            upper = true;
-            continue;
-        }
-        if upper {
-            out.extend(ch.to_uppercase());
-            upper = false;
-        } else {
-            out.push(ch);
-        }
-    }
-    out
 }
