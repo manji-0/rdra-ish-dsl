@@ -1098,6 +1098,96 @@ fn a_reduced_wf_next_run_decides_what_the_unreduced_one_decides() {
     );
 }
 
+/// A counterexample of the `Plain` run on a reduced cone, lifted to the unreduced cone
+/// without exploring it (docs/design/native-temporal-verification.md, "Lifting a reduced
+/// lasso"), is one of the unreduced cone's: where the lift certifies, the unreduced `Plain`
+/// run finds a counterexample too, and the lifted lasso replays through the unreduced
+/// cone's `moves`, fails the property, and passes the fairness check of `Fair_P`, each read
+/// again here. A lift that does not certify falls back, which is never wrong; the test
+/// counts the lassos that lift, by how they end, so that a lift that stops working shows.
+/// No corpus case has a `Plain` counterexample that loops; `REDUCED_GATE_LOOP` in
+/// `engine_equivalence.rs` lifts one.
+#[test]
+fn a_lifted_plain_counterexample_is_one_of_the_unreduced_cone() {
+    use rdra_ish_core::lifecycle::{LtlKind, StateDiag};
+    let steps = |d: &StateDiag| d.trace().map_or(0, |t| t.steps.len());
+    let mut lifted: BTreeMap<&'static str, usize> = BTreeMap::new();
+    for case in cases() {
+        let project = load_project(std::slice::from_ref(&case.path), None)
+            .unwrap_or_else(|e| panic!("{}: {e}", case.name));
+        let ts = TransitionSystem::build(&project.model, case.bounds(), &Scope::default()).ts;
+        for i in 0..ts.properties().len() {
+            let p = &ts.properties()[i];
+            let kind = p.formula.kind();
+            if kind != LtlKind::Always && !kind.is_liveness() {
+                continue;
+            }
+            let cone = ts.property_cone(i);
+            let reduced = ts.reduced_cone(&cone, [ts.property_seed(i)], Caps::VERIFY);
+            if reduced.reduction().is_none() {
+                continue;
+            }
+            let unreduced = ts.restrict_to(&cone.vars, &cone.keep);
+            let at = |sys: &TransitionSystem| {
+                sys.properties()
+                    .iter()
+                    .position(|q| q.name == p.name)
+                    .expect("the cone keeps its property")
+            };
+            let (ri, ui) = (at(&reduced), at(&unreduced));
+            let Some(lasso) = reduced.clone().run(Caps::VERIFY).reduced_lasso(ri) else {
+                continue;
+            };
+            let label = format!("{}: {}", case.name, p.name);
+            let Ok(l) = lasso.lift(&reduced, &unreduced, ui) else {
+                *lifted.entry("fell back").or_default() += 1;
+                continue;
+            };
+            let replay = unreduced
+                .replay_lasso(l.states.clone(), &l.actions, l.tail)
+                .unwrap_or_else(|e| panic!("{label}: the lifted lasso does not replay: {e:?}"));
+            assert!(
+                unreduced.explain_property(ui, &replay).is_some(),
+                "{label}: the lifted lasso satisfies the property"
+            );
+            assert_eq!(
+                unreduced.unfair_loop(ui, &replay, Fairness::Plain),
+                None,
+                "{label}: the lifted lasso is not fair"
+            );
+            let full = unreduced.clone().run(Caps::VERIFY);
+            let truth = match kind.is_liveness() {
+                true => full
+                    .decide_liveness(ui, Fairness::Plain)
+                    .expect("a lasso that certifies"),
+                false => full.decide_property(ui).expect("an always"),
+            };
+            let PropertyVerdict::Violated(explored) = truth else {
+                panic!("{label}: the lift certifies, the unreduced cone says {truth:?}");
+            };
+            println!(
+                "{label}: reduced {} steps, lifted {}, explored {}",
+                lasso.steps(),
+                steps(&l.diag),
+                steps(&explored)
+            );
+            let how = match (kind.is_liveness(), l.tail) {
+                (false, _) => "always",
+                (true, rdra_ish_core::lifecycle::Loop::Stutter) => "stops",
+                (true, rdra_ish_core::lifecycle::Loop::Back { .. }) => "loops",
+            };
+            *lifted.entry(how).or_default() += 1;
+        }
+    }
+    println!("lifted: {lifted:?}");
+    for how in ["always", "stops"] {
+        assert!(
+            lifted.get(how).is_some_and(|n| *n > 0),
+            "no corpus case lifts a counterexample that {how}: {lifted:?}"
+        );
+    }
+}
+
 /// The witnesses of the reasons `H` keeps an entity in place for that a corpus case shows
 /// (docs/design/instance-symmetry.md, "Always by default", the per-rule gate): with the
 /// sub-lifecycle run up to `H` at once and one reason dropped (`RDRA_ISH_DROP_RULE`), the

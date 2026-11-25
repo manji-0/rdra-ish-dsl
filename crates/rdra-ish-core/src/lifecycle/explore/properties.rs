@@ -112,7 +112,7 @@ impl ComponentRun {
     /// The first state, in the order BFS found them, where the trigger holds and `x` fails for
     /// some binding, and the BFS path to it: the shortest walk to a state that breaks
     /// `always(x)`.
-    fn unsafe_state(&self, p: &Property, x: &Pred) -> Option<(u32, Vec<Edge>)> {
+    pub(super) fn unsafe_state(&self, p: &Property, x: &Pred) -> Option<(u32, Vec<Edge>)> {
         let ts = &self.system;
         let bindings: Vec<Vec<u8>> = ts.binder_slots(&p.binders).collect();
         let at = self.states.iter().position(|s| {

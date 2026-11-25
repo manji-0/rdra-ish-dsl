@@ -3937,6 +3937,133 @@ fn a_property_cone_decides_what_the_whole_model_decides() {
 }
 
 /// A `Date` column set to a number is a point on the `now` clock in both engines (#89): the
+/// `REDUCED_GATE`'s gate with a job that a fair `Finish` ends while the gate is not open and
+/// a fair `Start` ends once it is: no stop is fair, and a loop inside one class starves
+/// `Finish`, so the `Plain` counterexample on the reduced cone cycles the gate through its
+/// classes, shut, half, open, and shut again (phase 5, a loop that lifts copy by copy).
+const REDUCED_GATE_LOOP: &str = r#"
+entity Key "鍵" { id: Int @pk  status: Enum(locked, unlocked) @default(locked) }
+entity Gate "門" { id: Int @pk  status: Enum(shut, half, open) @default(shut)  latch: Bool @default(false) }
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+relate(Gate, Key, N:1)
+relate(Job, Gate, N:1)
+usecase Unlock "解錠"
+usecase Crack "少し開ける"
+usecase Unlatch "掛け金を外す"
+usecase Swing "開く"
+usecase Close "閉める"
+usecase Submit "投入"
+usecase Start "開始"
+usecase Finish "閉じたまま終える"
+transitions(Unlock, Key.status, locked -> unlocked)
+transitions(Crack, Gate.status, shut -> half)
+sets(Unlatch, Gate.latch == true)
+transitions(Swing, Gate.status, half -> open)
+transitions(Close, Gate.status, open -> shut)
+condition Unlatched "掛け金が外れている"
+holds(Unlatched, Gate.latch == true)
+applies_to(Unlatched, Swing)
+condition KeyOpen "鍵が開いている"
+holds(KeyOpen, Key.status == unlocked)
+applies_to(KeyOpen, Swing)
+creates(Submit, Job)
+transitions(Start, Job.status, waiting -> running)
+transitions(Finish, Job.status, waiting -> running)
+condition GateOpen "門が開いている"
+holds(GateOpen, Gate.status == open)
+applies_to(GateOpen, Start)
+condition GateNotOpen "門が開いていない"
+holds(GateNotOpen, Gate.status != open)
+applies_to(GateNotOpen, Finish)
+property JobEnds "作業はいずれ終わる" eventually(Job.status == running).fair(Start, Finish)
+"#;
+
+/// Each counterexample the `Plain` run finds on a reduced cone of `src`, lifted to the
+/// unreduced cone with no exploration of that cone, then checked again by hand: the lifted
+/// lasso replays through the unreduced cone's `moves`, fails the property, and is fair under
+/// `Fair_P` (docs/design/native-temporal-verification.md, "Phases", phase 5). Only after
+/// those checks is the unreduced cone explored, for the length of its own lasso. Returns,
+/// per property, how the lifted lasso ends and the steps of the reduced, the lifted, and the
+/// explored lasso.
+fn lift_each_plain_counterexample(name: &str, src: &str) -> Vec<(String, Loop, [usize; 3])> {
+    let scratch = std::env::temp_dir().join(format!("rdra-lift-{name}-{}", std::process::id()));
+    std::fs::create_dir_all(&scratch).expect("scratch dir");
+    let file = scratch.join(format!("{name}.rdra"));
+    std::fs::write(&file, src).expect("write model");
+    let model = load(file.to_str().expect("utf-8 path"));
+    let _ = std::fs::remove_dir_all(&scratch);
+    let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+    let steps = |d: &StateDiag| d.trace().map_or(0, |t| t.steps.len());
+    let mut out = Vec::new();
+    for i in 0..ts.properties().len() {
+        let label = format!("{name}: {}", ts.properties()[i].name);
+        let cone = PropertyCone::new(&ts, i);
+        assert!(cone.is_reduced(), "{label}: the gate's cone is not reduced");
+        let lasso = cone
+            .reduced
+            .clone()
+            .run(Caps::VERIFY)
+            .reduced_lasso(cone.reduced_index)
+            .unwrap_or_else(|| panic!("{label}: no counterexample on the reduced cone"));
+        let lifted = lasso
+            .lift(&cone.reduced, &cone.system, cone.index)
+            .unwrap_or_else(|why| panic!("{label}: the lift falls back ({why:?})"));
+        let replay = cone
+            .system
+            .replay_lasso(lifted.states.clone(), &lifted.actions, lifted.tail)
+            .unwrap_or_else(|e| panic!("{label}: the lifted lasso does not replay: {e:?}"));
+        assert!(
+            cone.system.explain_property(cone.index, &replay).is_some(),
+            "{label}: the lifted lasso satisfies the property"
+        );
+        assert_eq!(
+            cone.system
+                .unfair_loop(cone.index, &replay, Fairness::Plain),
+            None,
+            "{label}: the lifted lasso is not fair"
+        );
+        // Only now, for the length of the lasso the `Full` run prints today.
+        let full = cone.system.clone().run(Caps::VERIFY);
+        let explored = match cone.kind.is_liveness() {
+            true => full.decide_liveness(cone.index, Fairness::Plain),
+            false => Ok(full.decide_property(cone.index).expect("an always")),
+        };
+        let Ok(PropertyVerdict::Violated(explored)) = explored else {
+            panic!("{label}: the lift certifies, the unreduced cone says {explored:?}");
+        };
+        let lengths = [lasso.steps(), steps(&lifted.diag), steps(&explored)];
+        println!(
+            "{label}: {:?}, reduced {} steps, lifted {}, explored {}",
+            lifted.tail, lengths[0], lengths[1], lengths[2]
+        );
+        out.push((label, lifted.tail, lengths));
+    }
+    out
+}
+
+/// Phase 5's exit check: both of `reduced_gate`'s counterexamples, which
+/// `a_property_cone_decides_what_the_whole_model_decides` reads on the `Full` run, lift from
+/// the reduced cone and certify on the unreduced one without exploring it. `JobStarts` stops
+/// at a waiting job, `JobWaits` is an `always`.
+#[test]
+fn reduced_gate_lifts_both_counterexamples_without_the_full_run() {
+    let lifted = lift_each_plain_counterexample("reduced_gate", REDUCED_GATE);
+    assert_eq!(lifted.len(), 2, "{lifted:?}");
+    assert!(lifted.iter().all(|(_, tail, _)| *tail == Loop::Stutter));
+}
+
+/// A `Plain` counterexample whose loop runs through the classes of the reduced cone lifts to
+/// a loop of the unreduced cone that closes.
+#[test]
+fn reduced_gate_loop_lifts_a_loop_through_the_classes() {
+    let lifted = lift_each_plain_counterexample("reduced_gate_loop", REDUCED_GATE_LOOP);
+    assert!(
+        matches!(lifted.as_slice(), [(_, Loop::Back { .. }, _)]),
+        "{lifted:?}"
+    );
+}
+
+/// A `Date` column set to a number is a point on the `now` clock in both engines (#89): the
 /// deadline `Issue` sets is passed by `Tick` alone, so the rule that an active coupon is in
 /// date is violated, and `Expire`, guarded by the deadline, runs only after it.
 const DATE_SETS: &str = r#"

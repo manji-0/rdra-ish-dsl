@@ -19,6 +19,7 @@ mod plan;
 mod probe;
 mod properties;
 mod reach;
+mod reduced_lasso;
 mod scan;
 mod segments;
 mod store;
@@ -34,6 +35,7 @@ pub use orbit::{LabelledEdge, OrbitRun};
 pub(crate) use plan::Plans;
 pub use properties::PropertyVerdict;
 pub use reach::{Estimate, Layers};
+pub use reduced_lasso::{LiftedLasso, ReducedLasso};
 pub use store::{store_bytes, Held, Shape};
 pub use symmetry::{LeftOut, Rule as SymmetryRule, Symmetry};
 

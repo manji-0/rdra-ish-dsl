@@ -40,7 +40,7 @@ pub enum LassoFault {
 const NONE: u32 = u32::MAX;
 
 /// The fair instances of one property on one graph.
-struct FairSteps {
+pub(super) struct FairSteps {
     /// Per binding of the graph: the fair instance its moves are steps of, or `NONE`.
     instance: Vec<u32>,
     /// The fair instances some move steps.
@@ -62,7 +62,7 @@ impl FairSteps {
 
 /// What one binding's search found: per state of `N`, the next state on a shortest walk
 /// inside `N` to the nearest fair end, and how each end ends.
-struct Avoid {
+pub(super) struct Avoid {
     comp: Vec<u32>,
     /// Per component: it admits a fair cycle.
     fair_cycle: Vec<bool>,
@@ -83,7 +83,7 @@ struct Lasso {
 
 /// Which states of `N` may stop.
 #[derive(Clone, Copy)]
-enum StopRule<'a> {
+pub(super) enum StopRule<'a> {
     Fair(Fairness),
     /// `WF_vars(Next)` on a reduced graph: per state, whether its class can loop inside
     /// itself, where a behavior of the cone may step forever while the reduced graph stands
@@ -221,7 +221,11 @@ impl ComponentRun {
 
     /// The search of the binding whose failing triggered state BFS found first, the first
     /// binding on a tie, with that state; `None` when every binding holds.
-    fn liveness_search(&self, i: usize, rule: StopRule) -> Option<(FairSteps, Avoid, u32)> {
+    pub(super) fn liveness_search(
+        &self,
+        i: usize,
+        rule: StopRule,
+    ) -> Option<(FairSteps, Avoid, u32)> {
         let ts = &self.system;
         let p = &ts.properties()[i];
         let (cause, goal) = match &p.formula {
@@ -411,7 +415,12 @@ impl ComponentRun {
 
     /// The lasso from `start` as a walk of edges from its first state: with `Loop::Back`,
     /// the last edge returns to the state the loop starts at.
-    fn walk(&self, fair: &FairSteps, avoid: &Avoid, start: u32) -> (u32, Vec<Edge>, Loop) {
+    pub(super) fn walk(
+        &self,
+        fair: &FairSteps,
+        avoid: &Avoid,
+        start: u32,
+    ) -> (u32, Vec<Edge>, Loop) {
         let mut walk: Vec<Edge> = self.path_to(start);
         let mut at = start;
         while avoid.toward[at as usize] != at {
