@@ -134,14 +134,15 @@ before TLC starts.
 
 ### What the rule gives
 
-Each row is a test of the pure function (`schedule::pick` with a simulated completion
-sequence). Cores, memory and counts are the inputs, so no test needs the machine.
+The first three rows are tests of the pure function (`schedule::pick`, some with a
+simulated completion sequence). Cores, memory and counts are the inputs, so no test needs the
+machine. The fourth follows from `target`.
 
 | Case | Today | Under the rule |
 |---|---|---|
 | 64 cores, 48 GiB share, heap 16g | 2 runs × 8 workers | 2 × 32. After BFS ends (below), 5 fit in 96 GiB, and a run that starts then gets 12 |
 | 64 cores, 48 GiB, heap unset, 27 unknown jobs | 24 × 2 | 8 × 8 at first. A job BFS has counted takes its target as cores free, and small jobs run on 1 worker |
-| 4 cores, 15 jobs of a few hundred states each (a sample in CI) | 4 × 1 | 1 × 4 until BFS has counted the jobs, a second at most, then 4 × 1 |
+| 4 cores, 15 jobs of a few hundred states each (a sample in CI) | 4 × 1 | 1 × 4 until BFS has counted the jobs, then 4 × 1. Counts arrive at the end of each BFS pass, so this lasts as long as the entity pass |
 | 18 cores, heap set so 1 fits | 1 × 8 | 1 × 18 (`cores / fit`, at most `4W`) |
 
 ### Memory after BFS
@@ -209,10 +210,12 @@ compatibility contract until the owner says so.
 - **`verify --with-tlc --plan <FILE> -o <DIR>`** runs the native checker and prints what it
   prints. It writes the specs to `<DIR>` and the TLC launches it would make to `<FILE>`, and
   starts no TLC. Each entry of `launches` gives: `module`, `cfg`, `kind` (`cone`, `property`,
-  `explored`, `whole`), the checks it answers, `covered_by` when it is not run, the BFS
-  verdict and state count, and the `heap`, `workers` and `args` the schedule would give it.
-  The file starts with `"version": 1`.
-- **`verify --with-tlc --tlc-results <DIR>`** runs the native checker, then the same
+  `explored`), the checks it answers, `checked_in` when it is not run, the BFS verdict and
+  state count, and the `heap`, `workers` and `args` the schedule would give it, with its
+  `follow_ups`. The file starts with `"version": 1`. The `StateModel_` runs are not listed
+  yet.
+- **`verify --with-tlc --tlc-results <DIR>`** (designed, not built: see the owner's decision
+  5 and #323 below) runs the native checker, then the same
   `run_job` ladder as `--with-tlc`, but reads each launch from
   `<DIR>/<cfg stem>.out` (stdout and stderr) and `<DIR>/<cfg stem>.status` (the exit code,
   which `TlcRun::outcome` needs) instead of starting TLC. It compares and prints the verdict
@@ -238,8 +241,12 @@ and the comparison, and only the launching moves out.
 - **#323** runs small state models in batch JVMs, which it does not overlap with process runs
   because `tlc_workers` does not count the batch JVMs. With a core budget, a batch JVM holds
   one core like a one-worker run, and the two can overlap. That is a change for after #323,
-  not part of this work. Nothing here conflicts with #323's code: this work does not touch
-  `state_models.rs`, `tlc_batch.rs` or `tlc_tool.rs`.
+  not part of this work. This work does not touch `state_models.rs`, `tlc_batch.rs` or
+  `tlc_tool.rs`. Two things do meet #323. Both add a test helper after `verify_with_tlc` in
+  `tests/verify_cli.rs`, a textual conflict. #323's test compares the whole stdout of its
+  three batch modes, and the cost on `tlc:` lines (seconds, and workers that can depend on
+  timing) makes those differ, so that test should compare the `tlc:` lines without the cost.
+  `--tlc-results` would read state-model logs in `state_models.rs`, so it waits for #323.
 - **#309 decision 5** (start a cone with the small-run JVM settings and restart it): a known
   job under `SMALL_RUN_STATES` (10,000) could start with C1 as a state model does, with no
   restart. That is left for after this work, since it is a change to how the JVM runs, not to
@@ -270,10 +277,19 @@ and the comparison, and only the launching moves out.
 4. **Per-run cost on `tlc:` lines.** Recommended: add it and leave the lines uncovered, as
    [compatibility.md](../compatibility.md#what-is-not-covered) leaves run time.
 5. **`--plan` and `--tlc-results`.** Recommended: experimental, the JSON at `"version": 1`
-   with no promise, and exit 3 for "waiting for logs".
-6. **Unknown jobs ranked as large.** On a small machine in CI this runs one unknown job alone
-   for up to about a second before BFS has counted the rest. Recommended: accept it, and
-   check the engine corpus's wall time on the PR.
+   with no promise. `--tlc-results` needs an exit status for "waiting for logs", and exit
+   statuses are covered by compatibility.md. Recommended: exit 3, after #323.
+6. **Unknown jobs ranked as large.** While BFS has counted nothing (the whole entity pass),
+   uncounted jobs go `cores / 8` at once: 1 × 4 on a 4-core runner where today runs 4 × 1.
+   On patent-ops on 18 cores, measured, the wall time was the same (7.6 s before, 7.3 s
+   after) and the 1.34M-state cone got 8 workers where it got 3. Recommended: watch the
+   formal-verify and engine-corpus step times on the scheduler PR against the PR before it,
+   and give uncounted jobs today's share on machines under 16 cores if they regress.
+7. **`--tlc-jobs` and `--tlc-workers`** are in the CLI reference unmarked, so compatibility.md
+   would cover them. Recommended: cover them, since they only fix what the scheduler would
+   pick.
+8. **`Pool` beside `Budget`, not inside it.** Putting it inside would change `Budget`'s API,
+   which #323 uses. Recommended: keep them apart until #323 lands, then merge them.
 
 ## What to measure on a many-core machine
 
