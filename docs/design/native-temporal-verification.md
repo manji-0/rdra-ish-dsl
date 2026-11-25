@@ -16,7 +16,9 @@ Status (2026-11-26): in progress. The plan started after
   by default, and TLC runs only under `--with-tlc`. The conservative divergence trial C,
   adopted (#227, [Decisions](#decisions)).
 - **Open.** Phase 4, with #206 on the safety side (`order.rdra` still prints `RdraSpec_`
-  lines). Phase 5, the lift of a reduced lasso. Phase 6, the release gate.
+  lines). Phase 5, the lift of a reduced lasso. The owner moved both out of v3.0.0 on
+  2026-11-26 ([Decisions](#decisions)); they land in a minor release. Phase 6, the release
+  gate, ran for v3.0.0 with items 3 and 7 waived.
 - **Superseded.** Nothing.
 
 The owner decided three questions on 2026-11-23: `verify` defaults to the native checker
@@ -955,3 +957,13 @@ The owner decided four more on 2026-11-23, closing the questions this plan left 
   gate passes, the step moves from the `main` CI to `release.yml`, where it gates every
   release. The step that checks the headers without a JVM stays on `main`, and so do the
   random-model sweep with `--with-tlc`, `engine_equivalence`, and the adversarial corpus.
+
+The owner decided on 2026-11-26, for v3.0.0:
+
+- **Phases 4 and 5 are moved out of v3.0.0**, as item 1 of the gate allows. They land in a
+  minor release. [Compatibility](../compatibility.md) now says a check that ends
+  `not decided` has no verdict yet, so deciding it later is not a breaking change.
+- **Items 3 and 7 of the gate are waived for v3.0.0.** The tag waits for items 2, 4, 5, 6
+  and 8 at the release commit. The changelog entry records the result.
+- **The samples keep running with `--with-tlc` on `main`.** Phases 4 and 5 still change
+  native verdicts, so the step moves to `release.yml` only after a full gate passes.
