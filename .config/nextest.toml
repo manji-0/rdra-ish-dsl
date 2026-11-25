@@ -60,7 +60,9 @@ not (
       | test(=lifecycle::explore::symmetry::witnesses::past_the_branch_cap_the_verdict_stands)
       | test(=lifecycle::tests::reduce::a_count_over_t_in_a_guard_reduces_exactly)
       | test(=lifecycle::tests::reduce::a_sub_lifecycle_that_reads_inputs_of_t_is_reduced_and_decides_the_same)
-      | test(=lifecycle::tests::reduce::a_cone_between_the_old_and_the_new_cell_budget_is_reduced)))
+      | test(=lifecycle::tests::reduce::a_cone_between_the_old_and_the_new_cell_budget_is_reduced)
+      | test(=lifecycle::tests::reduce::a_stopped_entity_cone_leaves_its_room_to_the_cones_after_it)))
+  | (binary_id(rdra-ish-cli) & test(=verify::bfs::tests::tlc_reads_no_stopped_entity_cone))
 )
 """
 # Every failure, not only the first, and the slow tests again at the end of the log.
