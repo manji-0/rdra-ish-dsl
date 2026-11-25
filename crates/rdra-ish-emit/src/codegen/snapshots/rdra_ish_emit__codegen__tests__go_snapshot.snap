@@ -972,3 +972,32 @@ func countOf[T any](rows []T, p func(T) bool) int {
 	}
 	return n
 }
+
+// ── Contracts: one per use case, which the service implements ──
+
+// PayUseCase is the use case Pay: Pay.
+// Each action is two calls: Prepare* loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching Commit* stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's <Row>Expected names. Either returns an error, a *PayError where the use case does not run, and changes nothing then.
+type PayUseCase interface {
+	// PreparePay loads the rows of Pay (the action Pay) and runs it, writing nothing.
+	PreparePay(order OrderId, orderPaidAt DateTime) (PayOutcome, error)
+	// CommitPay stores what PreparePay returned in one transaction.
+	CommitPay(write PayOutcome) error
+}
+
+// CancelOrderUseCase is the use case CancelOrder: Cancel.
+// Each action is two calls: Prepare* loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching Commit* stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's <Row>Expected names. Either returns an error, a *CancelOrderError where the use case does not run, and changes nothing then.
+type CancelOrderUseCase interface {
+	// PrepareCancelOrder loads the rows of CancelOrder (the action CancelOrder) and runs it, writing nothing.
+	PrepareCancelOrder(order OrderId) (CancelOrderOutcome, error)
+	// CommitCancelOrder stores what PrepareCancelOrder returned in one transaction.
+	CommitCancelOrder(write CancelOrderOutcome) error
+}
+
+// PlaceUseCase is the use case Place: Place.
+// Each action is two calls: Prepare* loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching Commit* stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's <Row>Expected names. Either returns an error, a *PlaceError where the use case does not run, and changes nothing then.
+type PlaceUseCase interface {
+	// PreparePlace loads the rows of Place (the action Place) and runs it, writing nothing.
+	PreparePlace(parentCustomer CustomerId, orderId OrderId, orderMethod PaymentMethod) (PlaceResult, error)
+	// CommitPlace stores what PreparePlace returned in one transaction.
+	CommitPlace(write PlaceResult) error
+}

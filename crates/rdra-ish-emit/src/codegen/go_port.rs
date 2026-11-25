@@ -9,10 +9,55 @@ use super::{string_literal, type_ident};
 /// The packages the harness imports.
 pub(super) const IMPORTS: [&str; 5] = ["errors", "fmt", "sort", "strconv", "strings"];
 
+/// One interface per use case (docs/design/code-check.md, decision 6): the prepare and commit
+/// methods of its actions. A service implements each; the probe names each.
+fn print_contracts(port: &super::ir::PortDecl, out: &mut String) {
+    if port.contracts.is_empty() {
+        return;
+    }
+    out.push_str("// ── Contracts: one per use case, which the service implements ──\n\n");
+    for c in &port.contracts {
+        let at = c
+            .site
+            .as_ref()
+            .map(|s| format!(" ({s})"))
+            .unwrap_or_default();
+        out.push_str(&doc(
+            &c.name,
+            &[
+                format!("is the use case {}{at}: {}.", c.usecase, super::one_line(&c.label)),
+                format!("Each action is two calls: Prepare* loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching Commit* stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's <Row>Expected names. Either returns an error, a *{} where the use case does not run, and changes nothing then.", c.error),
+            ],
+            "",
+        ));
+        out.push_str(&format!("type {} interface {{\n", c.name));
+        for &i in &c.methods {
+            let m = &port.methods[i];
+            out.push_str(&format!(
+                "\t// Prepare{0} loads the rows of {1} (the action {2}) and runs it, writing nothing.\n\tPrepare{0}({3}) ({4}, error)\n",
+                m.name,
+                m.usecase,
+                m.action,
+                params(m).join(", "),
+                m.write
+            ));
+            out.push_str(&format!(
+                "\t// Commit{0} stores what Prepare{0} returned in one transaction.\n\tCommit{0}(write {1}) error\n",
+                m.name, m.write
+            ));
+        }
+        out.push_str("}\n\n");
+    }
+}
+
 pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
-    let Some(port) = domain.port.as_ref().filter(|_| domain.harness) else {
+    let Some(port) = &domain.port else {
         return;
     };
+    print_contracts(port, out);
+    if !domain.harness {
+        return;
+    }
     out.push_str(
         "// ── Conformance: the port a finished service implements, and the harness that drives it ──\n\n",
     );
@@ -49,27 +94,17 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
     }
     out.push_str(&struct_decl("StoreSnapshot", &lines));
 
-    out.push_str("// ConformancePort is what a finished service offers the conformance harness. A use case is two\n// calls: each Prepare* method loads its rows by id and calls the dispatcher or transition\n// function, writing nothing; the matching Commit* stores the rows, marks, and events the result\n// holds in one transaction, each row only where it still is what the result's <Row>Expected\n// names. Either returns an error and changes nothing when the use case does not run.\n");
+    out.push_str("// ConformancePort is what a finished service offers the conformance harness: every use case's\n// contract, and a store the harness can seed and read back.\n");
     out.push_str("type ConformancePort interface {\n");
+    for c in &port.contracts {
+        out.push_str(&format!("\t{}\n", c.name));
+    }
     out.push_str(
         "\t// Seed empties the store and stores these rows: the initial state of a trace.\n",
     );
     out.push_str("\tSeed(rows StoreSnapshot)\n");
     out.push_str("\t// Snapshot returns everything the store holds now.\n");
     out.push_str("\tSnapshot() StoreSnapshot\n");
-    for m in &port.methods {
-        out.push_str(&format!(
-            "\t// Prepare{0} reads what {1} (the action {2}) writes; Commit{0} writes it.\n",
-            m.name, m.usecase, m.action
-        ));
-        out.push_str(&format!(
-            "\tPrepare{}({}) ({}, error)\n",
-            m.name,
-            params(m).join(", "),
-            m.write
-        ));
-        out.push_str(&format!("\tCommit{}(write {}) error\n", m.name, m.write));
-    }
     out.push_str("}\n\n");
 
     out.push_str("// ConformanceReport is what Conform checked.\ntype ConformanceReport struct {\n\tTraces        int\n\tCalls         int\n\tRefusals      int\n\tInterleavings int\n}\n\n");

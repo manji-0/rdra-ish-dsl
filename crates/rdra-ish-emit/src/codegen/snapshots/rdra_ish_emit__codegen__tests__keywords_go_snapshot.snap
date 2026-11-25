@@ -2134,3 +2134,86 @@ func countOf[T any](rows []T, p func(T) bool) int {
 	}
 	return n
 }
+
+// ── Contracts: one per use case, which the service implements ──
+
+// ReturnUseCase is the use case Return: Return.
+// Each action is two calls: Prepare* loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching Commit* stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's <Row>Expected names. Either returns an error, a *ReturnError where the use case does not run, and changes nothing then.
+type ReturnUseCase interface {
+	// PrepareReturn loads the rows of Return (the action Return) and runs it, writing nothing.
+	PrepareReturn(match MatchId) (ReturnOutcome, error)
+	// CommitReturn stores what PrepareReturn returned in one transaction.
+	CommitReturn(write ReturnOutcome) error
+}
+
+// DeleteUseCase is the use case Delete: Delete.
+// Each action is two calls: Prepare* loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching Commit* stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's <Row>Expected names. Either returns an error, a *DeleteError where the use case does not run, and changes nothing then.
+type DeleteUseCase interface {
+	// PrepareDelete loads the rows of Delete (the action Delete) and runs it, writing nothing.
+	PrepareDelete(match MatchId, switch_ Switch) (DeleteOutcome, error)
+	// CommitDelete stores what PrepareDelete returned in one transaction.
+	CommitDelete(write DeleteOutcome) error
+}
+
+// SuperUseCase is the use case Super: Super.
+// Each action is two calls: Prepare* loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching Commit* stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's <Row>Expected names. Either returns an error, a *SuperError where the use case does not run, and changes nothing then.
+type SuperUseCase interface {
+	// PrepareSuper loads the rows of Super (the action Super) and runs it, writing nothing.
+	PrepareSuper(match MatchId) (SuperOutcome, error)
+	// CommitSuper stores what PrepareSuper returned in one transaction.
+	CommitSuper(write SuperOutcome) error
+}
+
+// CrateUseCase is the use case Crate: Crate.
+// Each action is two calls: Prepare* loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching Commit* stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's <Row>Expected names. Either returns an error, a *CrateError where the use case does not run, and changes nothing then.
+type CrateUseCase interface {
+	// PrepareCrate loads the rows of Crate (the action Crate) and runs it, writing nothing.
+	PrepareCrate(match MatchId) (CrateOutcome, error)
+	// CommitCrate stores what PrepareCrate returned in one transaction.
+	CommitCrate(write CrateOutcome) error
+}
+
+// DefaultUseCase is the use case Default: Default.
+// Each action is two calls: Prepare* loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching Commit* stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's <Row>Expected names. Either returns an error, a *DefaultError where the use case does not run, and changes nothing then.
+type DefaultUseCase interface {
+	// PrepareDefault loads the rows of Default (the action Default) and runs it, writing nothing.
+	PrepareDefault(match MatchId) (DefaultOutcome, error)
+	// CommitDefault stores what PrepareDefault returned in one transaction.
+	CommitDefault(write DefaultOutcome) error
+}
+
+// TypeUseCase is the use case Type: Type.
+// Each action is two calls: Prepare* loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching Commit* stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's <Row>Expected names. Either returns an error, a *TypeError where the use case does not run, and changes nothing then.
+type TypeUseCase interface {
+	// PrepareType loads the rows of Type (the action Type) and runs it, writing nothing.
+	PrepareType(func_ FuncId) (TypeOutcome, error)
+	// CommitType stores what PrepareType returned in one transaction.
+	CommitType(write TypeOutcome) error
+}
+
+// ClassUseCase is the use case Class: Class.
+// Each action is two calls: Prepare* loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching Commit* stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's <Row>Expected names. Either returns an error, a *ClassError where the use case does not run, and changes nothing then.
+type ClassUseCase interface {
+	// PrepareClass loads the rows of Class (the action Class) and runs it, writing nothing.
+	PrepareClass(func_ FuncId) (ClassOutcome, error)
+	// CommitClass stores what PrepareClass returned in one transaction.
+	CommitClass(write ClassOutcome) error
+}
+
+// NewUseCase is the use case New: New.
+// Each action is two calls: Prepare* loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching Commit* stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's <Row>Expected names. Either returns an error, a *NewError where the use case does not run, and changes nothing then.
+type NewUseCase interface {
+	// PrepareNew loads the rows of New (the action New) and runs it, writing nothing.
+	PrepareNew(parentFunction FunctionId, parentFunc FuncId, parentMod ModId, matchId MatchId, matchType string, matchNew string, matchFunc string, matchSelf string, matchCrate string, matchSuper string, matchKind Kind) (NewOutcome, error)
+	// CommitNew stores what PrepareNew returned in one transaction.
+	CommitNew(write NewOutcome) error
+}
+
+// StaticUseCase is the use case Static: Static.
+// Each action is two calls: Prepare* loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching Commit* stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's <Row>Expected names. Either returns an error, a *StaticError where the use case does not run, and changes nothing then.
+type StaticUseCase interface {
+	// PrepareStatic loads the rows of Static (the action Static) and runs it, writing nothing.
+	PrepareStatic(function FunctionId, functionDefault string) (StaticResult, error)
+	// CommitStatic stores what PrepareStatic returned in one transaction.
+	CommitStatic(write StaticResult) error
+}
