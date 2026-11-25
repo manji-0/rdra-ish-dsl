@@ -67,6 +67,7 @@ fn generated_from(src: &str, path: &str, lang: Lang) -> String {
             bounds: "1 instance per entity, Int 0..5".to_string(),
             caps: CAPS,
         },
+        conformance: None,
     };
     generate(&model, &options, &|_| None).expect("generates")
 }

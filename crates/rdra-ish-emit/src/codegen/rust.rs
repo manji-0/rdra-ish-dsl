@@ -4,16 +4,23 @@
 use super::ir::{DomainModel, FieldType, RecordKind, Scalar};
 use super::{header_lines, obligation_lines, one_line, string_literal, Options};
 
-const OPTION: &str = "::core::option::Option";
-const STRING: &str = "::std::string::String";
+pub(super) const OPTION: &str = "::core::option::Option";
+pub(super) const STRING: &str = "::std::string::String";
 
-pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
+pub(super) fn print(
+    domain: &DomainModel,
+    options: &Options,
+    traces: Option<&super::conformance::Traces>,
+) -> String {
     let mut out = String::new();
     for line in header_lines(options) {
         out.push_str(&comment(&line));
     }
     out.push_str("//\n");
     for line in obligation_lines(domain) {
+        out.push_str(&comment(&line));
+    }
+    for line in super::conformance_lines(domain, traces, "conform", "ConformancePort") {
         out.push_str(&comment(&line));
     }
     out.push_str("\n#![allow(dead_code, unused_variables, non_camel_case_types, non_snake_case, clippy::all)]\n\n");
@@ -187,13 +194,14 @@ pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
     print_validators(domain, &mut out);
     print_rows(domain, &mut out);
     print_dispatchers(domain, &mut out);
+    super::rust_port::print_port(domain, &mut out);
     while out.ends_with("\n\n") {
         out.pop();
     }
     out
 }
 
-fn field_type(ty: &FieldType) -> String {
+pub(super) fn field_type(ty: &FieldType) -> String {
     match ty {
         FieldType::Scalar(s) => scalar(*s).to_string(),
         FieldType::Enum(name) | FieldType::Id(name) => name.clone(),
@@ -201,7 +209,7 @@ fn field_type(ty: &FieldType) -> String {
     }
 }
 
-fn scalar(s: Scalar) -> &'static str {
+pub(super) fn scalar(s: Scalar) -> &'static str {
     match s {
         Scalar::Int => "i64",
         Scalar::String => STRING,
@@ -212,7 +220,7 @@ fn scalar(s: Scalar) -> &'static str {
 
 /// A field name: a keyword is raw (`r#type`), and the keywords a raw identifier cannot be
 /// get a trailing `_`.
-fn ident(name: &str) -> String {
+pub(super) fn ident(name: &str) -> String {
     const NOT_RAW: [&str; 5] = ["self", "Self", "super", "crate", "_"];
     const KEYWORDS: [&str; 46] = [
         "as", "async", "await", "break", "const", "continue", "dyn", "else", "enum", "extern",
@@ -243,7 +251,7 @@ fn comment(line: &str) -> String {
     }
 }
 
-fn doc(lines: &[String], indent: &str) -> String {
+pub(super) fn doc(lines: &[String], indent: &str) -> String {
     lines
         .iter()
         .map(|l| one_line(l))
@@ -253,7 +261,7 @@ fn doc(lines: &[String], indent: &str) -> String {
 }
 
 /// An enum variant: `Self` is the one PascalCase word Rust does not take.
-fn variant_ident(name: &str) -> String {
+pub(super) fn variant_ident(name: &str) -> String {
     if name == "Self" {
         "Self_".to_string()
     } else {

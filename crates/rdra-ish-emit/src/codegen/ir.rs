@@ -168,6 +168,8 @@ pub struct DomainModel {
     /// Rules the reachable states agree with and the model does not state.
     pub candidates: Vec<String>,
     pub obligations: Vec<Obligation>,
+    /// The conformance port and harness, when asked for.
+    pub port: Option<PortDecl>,
 }
 
 // ── Transition functions ─────────────────────────────────────────────────────
@@ -583,6 +585,94 @@ pub struct DispatchDecl {
     pub cases: Vec<DispatchCase>,
     /// Whether some case can be rejected by a condition.
     pub rejects: bool,
+}
+
+// ── Conformance ──────────────────────────────────────────────────────────────
+
+/// The port a finished service implements so the conformance harness can drive it, and what
+/// the harness reads of the store (docs/design/algebraic-codegen.md, "The conformance
+/// harness"). Printed only on request.
+#[derive(Clone, Debug, Default)]
+pub struct PortDecl {
+    /// Every entity of the transition system: the rows a snapshot holds.
+    pub entities: Vec<PortEntity>,
+    /// Every run mark the system keeps: one per split use case and entity a step before the
+    /// last writes.
+    pub runs: Vec<PortRun>,
+    /// Every event the system remembers being raised on a row.
+    pub events: Vec<PortEvent>,
+    /// One per action the generator printed functions for.
+    pub methods: Vec<PortMethod>,
+    /// What the store holds that the harness does not compare, for the header.
+    pub unchecked: Vec<String>,
+}
+
+/// The rows of one entity in a snapshot.
+#[derive(Clone, Debug)]
+pub struct PortEntity {
+    pub entity: String,
+    /// The snapshot field, snake_case.
+    pub field: String,
+    /// The row type: `<Entity>Row` of a state type, or the entity's record.
+    pub ty: String,
+    /// The primary key column.
+    pub id: Field,
+    /// Every column of the row type, in order.
+    pub columns: Vec<Field>,
+    /// The columns the transition system tracks, in column order, and how.
+    pub tracked: Vec<(Field, Track)>,
+}
+
+/// How the harness abstracts a tracked column to the value the transition system holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Track {
+    /// The value itself: an enum's name, a bool, an integer, a key's id; `~` for null.
+    Exact,
+    /// Only whether it is set: `+`, or `~` for null.
+    Presence,
+}
+
+/// The run marks of one split use case on one entity, as a store keeps them.
+#[derive(Clone, Debug)]
+pub struct PortRun {
+    /// `<UseCase><Entity>Run`.
+    pub name: String,
+    /// The snapshot field, snake_case.
+    pub field: String,
+    pub usecase: String,
+    pub entity: String,
+    pub id_ty: String,
+}
+
+/// The events of one type a store remembers being raised.
+#[derive(Clone, Debug)]
+pub struct PortEvent {
+    pub ty: String,
+    /// The snapshot field, snake_case.
+    pub field: String,
+    /// The event's id fields; `true` where the system remembers the raise on that row.
+    pub ids: Vec<(EventField, bool)>,
+}
+
+/// One action as the service runs it: it loads the rows by id and stores what the core returns.
+#[derive(Clone, Debug)]
+pub struct PortMethod {
+    /// The transition system's action, which the traces name.
+    pub action: String,
+    /// PascalCase: `run_<snake>` in Rust, `Run<Pascal>` in Go.
+    pub name: String,
+    pub usecase: String,
+    /// `(name, id type)` per row the functions take.
+    pub rows: Vec<(String, String)>,
+    /// `(name, id type)` per run mark the functions take: the id of the row it marks.
+    pub marks: Vec<(String, String)>,
+    /// `(name, event type)` of the event a triggered use case takes.
+    pub event: Option<(String, String)>,
+    /// Every input any of the functions takes but the lists of related rows, which the
+    /// service loads.
+    pub inputs: Vec<FnInput>,
+    /// `(name, tag enum)` per choice among arms.
+    pub choices: Vec<(String, String)>,
 }
 
 #[derive(Clone, Debug)]

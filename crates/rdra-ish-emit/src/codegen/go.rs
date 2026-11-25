@@ -4,7 +4,11 @@
 use super::ir::{DomainModel, FieldType, RecordKind, Scalar};
 use super::{header_lines, obligation_lines, one_line, string_literal, Options};
 
-pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
+pub(super) fn print(
+    domain: &DomainModel,
+    options: &Options,
+    traces: Option<&super::conformance::Traces>,
+) -> String {
     let mut out = String::new();
     let mut head = vec![format!(
         "Package {} holds the domain types of the model.",
@@ -14,10 +18,19 @@ pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
     head.extend(header_lines(options));
     head.push(String::new());
     head.extend(obligation_lines(domain));
+    head.extend(super::conformance_lines(
+        domain,
+        traces,
+        "Conform",
+        "ConformancePort",
+    ));
     for line in head {
         out.push_str(&comment(&line, ""));
     }
     out.push_str(&format!("package {}\n\n", options.package));
+    if domain.port.is_some() {
+        out.push_str(super::go_port::IMPORTS);
+    }
 
     out.push_str("// ── Scalars: replace with the project's own types if it has them ──\n\n");
     for scalar in Scalar::PRELUDE {
@@ -185,13 +198,14 @@ pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
     print_rows(domain, &mut out);
     print_dispatchers(domain, &mut out);
     print_helpers(domain, &mut out);
+    super::go_port::print_port(domain, &mut out);
     while out.ends_with("\n\n") {
         out.pop();
     }
     out
 }
 
-fn field_type(ty: &FieldType) -> String {
+pub(super) fn field_type(ty: &FieldType) -> String {
     match ty {
         FieldType::Scalar(s) => scalar(*s).to_string(),
         FieldType::Enum(name) | FieldType::Id(name) => name.clone(),
@@ -199,7 +213,7 @@ fn field_type(ty: &FieldType) -> String {
     }
 }
 
-fn scalar(s: Scalar) -> &'static str {
+pub(super) fn scalar(s: Scalar) -> &'static str {
     match s {
         Scalar::Int => "int64",
         Scalar::String => "string",
@@ -216,7 +230,7 @@ fn lower_first(text: &str) -> String {
     }
 }
 
-fn comment(line: &str, indent: &str) -> String {
+pub(super) fn comment(line: &str, indent: &str) -> String {
     if line.is_empty() {
         format!("{indent}//\n")
     } else {
@@ -226,7 +240,7 @@ fn comment(line: &str, indent: &str) -> String {
 
 /// A Go doc comment: the first line starts with the declared name, as `go vet` and godoc
 /// expect.
-fn doc(name: &str, lines: &[String], indent: &str) -> String {
+pub(super) fn doc(name: &str, lines: &[String], indent: &str) -> String {
     let mut out = String::new();
     for (i, line) in lines.iter().enumerate() {
         let line = one_line(line);
@@ -242,7 +256,7 @@ fn doc(name: &str, lines: &[String], indent: &str) -> String {
 // ── Use cases ────────────────────────────────────────────────────────────────
 
 /// A Go identifier for a local name: camelCase, with a keyword given a trailing `_`.
-fn local(snake_name: &str) -> String {
+pub(super) fn local(snake_name: &str) -> String {
     const KEYWORDS: [&str; 25] = [
         "break",
         "case",

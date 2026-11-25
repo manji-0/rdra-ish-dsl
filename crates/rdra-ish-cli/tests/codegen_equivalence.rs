@@ -17,18 +17,21 @@
 //!   entity, and a key between two rows holds when the child's owner var names the parent.
 //! - **Rule checks.** No row of a reached state breaks a rule of its type's validator.
 //!
-//! The printers print this IR, and `codegen_builds.rs` compiles what they print.
+//! The printers print this IR, and `codegen_builds.rs` compiles what they print. The
+//! evaluator it reads the functions' conditions with (`codegen::conformance::eval`) is the one
+//! the conformance traces pick each move's function with.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use rdra_ish_core::lifecycle::{
     ActionOrigin, Bounds, Caps, Domain, GuardWhy, ParamRole, Scope, StateSlice, TransitionSystem,
-    Value, VarId, VarKind,
+    Value, VarKind,
 };
 use rdra_ish_core::load_project;
 use rdra_ish_emit::codegen::build;
-use rdra_ish_emit::codegen::ir::{Adapt, ArgCheck, Assigned, CmpOp, Expr, FnDecl, Lit, OutKind};
+use rdra_ish_emit::codegen::conformance::eval::{column_var, enum_name, matching, Rows};
+use rdra_ish_emit::codegen::ir::{Adapt, Assigned, FnDecl, Lit, OutKind};
 
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -52,202 +55,6 @@ fn check_passes(sample: &str) -> bool {
         .expect("runs rdra-ish")
         .status
         .success()
-}
-
-/// The var of `entity.column` in `ts`.
-fn column_var(ts: &TransitionSystem, entity: &str, column: &str) -> Option<VarId> {
-    ts.var_ids().find(|v| match &ts.var(*v).kind {
-        VarKind::Column {
-            entity: e,
-            column: c,
-            ..
-        } => ts.entity(*e).id == entity && c == column,
-        _ => false,
-    })
-}
-
-fn enum_name(ts: &TransitionSystem, var: VarId, value: Value) -> Option<String> {
-    match &ts.var(var).domain {
-        Domain::Enum(values) => values.get(usize::from(value.0)).cloned(),
-        _ => None,
-    }
-}
-
-/// The value of a row's column, by the row's slot; `None` when the system does not track it.
-struct Rows<'a> {
-    ts: &'a TransitionSystem,
-    model: &'a rdra_ish_core::SemanticModel,
-    state: &'a StateSlice,
-    /// `(entity id, slot)` per row of the function.
-    rows: Vec<(String, usize)>,
-    /// The entity of each row a quantifier binds, numbered after `rows`.
-    elems: Vec<String>,
-    /// The slot each quantifier's row is at while its body is evaluated.
-    env: std::cell::RefCell<Vec<usize>>,
-}
-
-impl Rows<'_> {
-    fn new<'a>(
-        ts: &'a TransitionSystem,
-        model: &'a rdra_ish_core::SemanticModel,
-        state: &'a StateSlice,
-        rows: Vec<(String, usize)>,
-        elems: Vec<String>,
-    ) -> Rows<'a> {
-        let n = elems.len();
-        Rows {
-            ts,
-            model,
-            state,
-            rows,
-            elems,
-            env: std::cell::RefCell::new(vec![0; n]),
-        }
-    }
-
-    fn at(&self, row: usize) -> (String, usize) {
-        match self.rows.get(row) {
-            Some(r) => r.clone(),
-            None => {
-                let k = row - self.rows.len();
-                (self.elems[k].clone(), self.env.borrow()[k])
-            }
-        }
-    }
-
-    fn get(&self, row: usize, column: &str) -> Option<(VarId, Value)> {
-        let (entity, slot) = self.at(row);
-        let var = column_var(self.ts, &entity, column)?;
-        Some((var, self.state.get(self.ts, var, slot)))
-    }
-
-    /// `body` on every present row of the entity a quantifier's row `elem` ranges over, as
-    /// the condition reads it; `None` when the body reads a column the system does not track.
-    fn over(&self, elem: usize, body: &Expr) -> Option<Vec<bool>> {
-        let k = elem - self.rows.len();
-        let entity = self.elems[k].clone();
-        let e = self
-            .ts
-            .entity_ids()
-            .find(|e| self.ts.entity(*e).id == entity)?;
-        let mut out = Vec::new();
-        for slot in 0..self.ts.slots(e) {
-            if !self.state.is_present(self.ts, e, slot) {
-                continue;
-            }
-            self.env.borrow_mut()[k] = slot;
-            out.push(self.eval(body)?);
-        }
-        Some(out)
-    }
-
-    /// `None` when the expression reads a column the system does not track.
-    fn eval(&self, e: &Expr) -> Option<bool> {
-        Some(match e {
-            Expr::True => true,
-            Expr::False => false,
-            Expr::Not(inner) => !self.eval(inner)?,
-            Expr::And(items) => {
-                let mut all = true;
-                for i in items {
-                    all &= self.eval(i)?;
-                }
-                all
-            }
-            Expr::Or(items) => {
-                let mut any = false;
-                for i in items {
-                    any |= self.eval(i)?;
-                }
-                any
-            }
-            Expr::IsNull { row, field } => self.get(*row, &field.wire)?.1 == Value::NULL,
-            Expr::EnumEq {
-                row, field, value, ..
-            } => {
-                let (var, v) = self.get(*row, &field.wire)?;
-                enum_name(self.ts, var, v)? == value.wire
-            }
-            Expr::BoolEq { row, field, value } => {
-                (self.get(*row, &field.wire)?.1 == Value::TRUE) == *value
-            }
-            Expr::KeyEq {
-                child,
-                child_field,
-                parent,
-                ..
-            } => {
-                let (centity, cslot) = self.at(*child);
-                let (_, pslot) = self.at(*parent);
-                let e = self
-                    .ts
-                    .entity_ids()
-                    .find(|e| self.ts.entity(*e).id == centity)?;
-                let owner = self.ts.var_ids().find(|v| match &self.ts.var(*v).kind {
-                    VarKind::Owner { child, fk, .. } => {
-                        *child == e
-                            && self
-                                .model
-                                .foreign_key(*fk)
-                                .columns
-                                .iter()
-                                .any(|(c, _)| *c == child_field.wire)
-                    }
-                    _ => false,
-                })?;
-                self.ts
-                    .var(owner)
-                    .domain
-                    .slot(self.state.get(self.ts, owner, cslot))
-                    == Some(u8::try_from(pslot).ok()?)
-            }
-            Expr::Exists { elem, body, .. } => self.over(*elem, body)?.iter().any(|v| *v),
-            Expr::Forall { elem, body, .. } => self.over(*elem, body)?.iter().all(|v| *v),
-            Expr::Count {
-                elem, body, op, n, ..
-            } => {
-                let count = self.over(*elem, body)?.iter().filter(|v| **v).count();
-                compare(i64::try_from(count).ok()?, *op, i64::from(*n))
-            }
-            Expr::IntCmp {
-                row,
-                field,
-                op,
-                value,
-            } => {
-                let (var, v) = self.get(*row, &field.wire)?;
-                let n = self.ts.var(var).domain.number(v)?;
-                compare(n, *op, *value)
-            }
-        })
-    }
-
-    /// Whether the function's argument checks pass on these rows.
-    fn checks_pass(&self, f: &FnDecl) -> bool {
-        f.checks.iter().all(|c| match c {
-            ArgCheck::MustBeNull { row, field, .. } => self
-                .get(*row, &field.wire)
-                .is_none_or(|(_, v)| v == Value::NULL),
-            // A link is the binding BFS chose; the owner var is not a column.
-            ArgCheck::Link { .. } | ArgCheck::EventRow { .. } => true,
-        })
-    }
-}
-
-/// The functions of `action` whose source states are the rows' states.
-fn matching<'f>(fns: &'f [FnDecl], action: &str, rows: &Rows<'_>) -> Vec<&'f FnDecl> {
-    fns.iter()
-        .filter(|f| f.action == action)
-        .filter(|f| {
-            f.rows.iter().enumerate().all(|(r, row)| match &row.state {
-                None => true,
-                Some((tag, value)) => rows
-                    .get(r, tag)
-                    .and_then(|(var, v)| enum_name(rows.ts, var, v))
-                    .is_some_and(|name| name == *value),
-            })
-        })
-        .collect()
 }
 
 #[test]
@@ -664,15 +471,4 @@ fn type_name(id: &str) -> String {
         }
     }
     out
-}
-
-fn compare(a: i64, op: CmpOp, b: i64) -> bool {
-    match op {
-        CmpOp::Eq => a == b,
-        CmpOp::Ne => a != b,
-        CmpOp::Lt => a < b,
-        CmpOp::Le => a <= b,
-        CmpOp::Gt => a > b,
-        CmpOp::Ge => a >= b,
-    }
 }

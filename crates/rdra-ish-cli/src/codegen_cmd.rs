@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use rdra_ish_core::format_location;
 use rdra_ish_core::lifecycle::{Bounds, Scope, Severity};
-use rdra_ish_emit::codegen::{generate, CheckStatus, Lang, Options};
+use rdra_ish_emit::codegen::{generate_all, CheckStatus, Lang, Options};
 
 use crate::cli::CodegenLang;
 use crate::load::load_clean;
@@ -20,6 +20,7 @@ pub fn run_codegen(
     out: Option<&Path>,
     package: &str,
     allow_failing: bool,
+    conformance: Option<(&Path, usize)>,
 ) -> Result<()> {
     let (program, model, manifest) = load_clean(inputs)?;
     // The state types rest on the rules `check` verifies, so the generator runs it first, at
@@ -71,6 +72,7 @@ pub fn run_codegen(
             .join(" "),
         version: env!("CARGO_PKG_VERSION").to_string(),
         check,
+        conformance: conformance.map(|(_, states)| states),
     };
     // Sites relative to the working directory, as the user named the inputs.
     let cwd = std::env::current_dir().ok();
@@ -86,7 +88,25 @@ pub fn run_codegen(
             },
         )
     };
-    let code = generate(&model, &options, &site)?;
+    let generated = generate_all(&model, &options, &site)?;
+    let code = generated.code;
+    if let (Some((path, _)), Some(traces)) = (conformance, &generated.traces) {
+        fs::write(path, &traces.text)
+            .with_context(|| format!("failed to write {}", path.display()))?;
+        eprintln!(
+            "wrote {}: {} of {} moves in {} traces, {} refused calls{}",
+            path.display(),
+            traces.covered,
+            traces.moves,
+            traces.traces,
+            traces.refusals,
+            if traces.complete {
+                ""
+            } else {
+                "; BFS stopped at --conformance-states"
+            }
+        );
+    }
     match out {
         Some(path) => {
             fs::write(path, format!("{code}\n"))

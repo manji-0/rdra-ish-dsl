@@ -9,9 +9,12 @@
 //! layer's invariants put on the code.
 
 mod actions;
+pub mod conformance;
 mod go;
+mod go_port;
 pub mod ir;
 mod rust;
+mod rust_port;
 mod states;
 mod ts;
 mod validators;
@@ -46,6 +49,9 @@ pub struct Options {
     pub version: String,
     /// What `check` said of the model: the state sums refine only a model it passed.
     pub check: CheckStatus,
+    /// Print the conformance port and harness (Rust and Go), and write the traces of a BFS
+    /// that stops at this many states.
+    pub conformance: Option<usize>,
 }
 
 /// The result of the `check` the generator ran before printing.
@@ -67,6 +73,14 @@ pub enum CodegenError {
         first: String,
         second: String,
     },
+    #[error("codegen: no conformance harness for this model: {0}")]
+    Conformance(String),
+}
+
+/// The code, and the traces when the options ask for the conformance harness.
+pub struct Generated {
+    pub code: String,
+    pub traces: Option<conformance::Traces>,
 }
 
 /// The generated code for `options.lang`. `site` formats a source location as `path:line:col`.
@@ -75,11 +89,33 @@ pub fn generate(
     options: &Options,
     site: &dyn Fn(&LocatedSpan) -> Option<String>,
 ) -> Result<String, CodegenError> {
+    generate_all(model, options, site).map(|g| g.code)
+}
+
+/// The generated code, with the conformance traces when `options.conformance` asks for them.
+pub fn generate_all(
+    model: &SemanticModel,
+    options: &Options,
+    site: &dyn Fn(&LocatedSpan) -> Option<String>,
+) -> Result<Generated, CodegenError> {
     let refine = match options.check {
         CheckStatus::Passed { caps, .. } => Some(caps),
         CheckStatus::Failed { .. } => None,
     };
-    let mut domain = build(model, refine, site)?;
+    if options.conformance.is_some() {
+        if options.lang == Lang::TypeScript {
+            return Err(CodegenError::Conformance(
+                "the harness is printed for --lang rust and go only".to_string(),
+            ));
+        }
+        if refine.is_none() {
+            return Err(CodegenError::Conformance(
+                "`check` rejects the model, so there are no transition functions to drive"
+                    .to_string(),
+            ));
+        }
+    }
+    let mut domain = build_with(model, refine, options.conformance.is_some(), site)?;
     if let CheckStatus::Failed { errors } = &options.check {
         for error in errors {
             domain.obligations.push(Obligation {
@@ -89,11 +125,19 @@ pub fn generate(
             });
         }
     }
-    Ok(match options.lang {
+    let traces = options.conformance.map(|cap| {
+        let mut header = vec![format!("model: {}", options.model_path)];
+        if let CheckStatus::Passed { bounds, .. } = &options.check {
+            header.push(format!("bounds: {bounds}"));
+        }
+        conformance::traces(model, &domain, cap, &header)
+    });
+    let code = match options.lang {
         Lang::TypeScript => ts::print(&domain, options),
-        Lang::Rust => rust::print(&domain, options),
-        Lang::Go => go::print(&domain, options),
-    })
+        Lang::Rust => rust::print(&domain, options, traces.as_ref()),
+        Lang::Go => go::print(&domain, options, traces.as_ref()),
+    };
+    Ok(Generated { code, traces })
 }
 
 /// The header every language prints as comment lines. Compatibility covers the TypeScript
@@ -186,6 +230,53 @@ fn obligation_lines(domain: &DomainModel) -> Vec<String> {
     lines
 }
 
+/// What the conformance harness checks, as comment lines; none without the harness.
+fn conformance_lines(
+    domain: &DomainModel,
+    traces: Option<&conformance::Traces>,
+    conform: &str,
+    port: &str,
+) -> Vec<String> {
+    let (Some(decl), Some(t)) = (&domain.port, traces) else {
+        return Vec::new();
+    };
+    let mut lines = vec![
+        String::new(),
+        format!("Conformance: the service that finishes this output implements {port}: it seeds"),
+        "an empty store, reads the store back, and runs each use case by the ids of its rows,"
+        .to_string(),
+        format!("in one transaction. It must pass {conform} with the traces written with this file."),
+        format!(
+            "The traces take {} of the {} moves of the printed use cases between the {} states",
+            t.covered, t.moves, t.states
+        ),
+        format!(
+            "they reach at `check`'s bounds, in {} traces of {} calls, and try {} calls the model refuses.",
+            t.traces, t.calls, t.refusals
+        ),
+    ];
+    if !t.complete {
+        lines.push(
+            "BFS stopped at its state cap: moves past it are not in the traces, and no call is"
+                .to_string(),
+        );
+        lines.push("tried as refused.".to_string());
+    }
+    if t.left_out > 0 {
+        lines.push(format!(
+            "{} moves of use cases with no function, or of no use case, are left out.",
+            t.left_out
+        ));
+    }
+    if !decl.unchecked.is_empty() {
+        lines.push("The harness does not compare:".to_string());
+        for u in &decl.unchecked {
+            lines.push(format!("- {u}"));
+        }
+    }
+    lines
+}
+
 fn obligations_only(domain: &DomainModel) -> Vec<String> {
     if domain.obligations.is_empty() {
         return vec!["Obligations: none.".to_string()];
@@ -211,6 +302,16 @@ fn obligations_only(domain: &DomainModel) -> Vec<String> {
 pub fn build(
     model: &SemanticModel,
     refine: Option<Caps>,
+    site: &dyn Fn(&LocatedSpan) -> Option<String>,
+) -> Result<DomainModel, CodegenError> {
+    build_with(model, refine, false, site)
+}
+
+/// [`build`], with the conformance port when `port` asks for it.
+pub fn build_with(
+    model: &SemanticModel,
+    refine: Option<Caps>,
+    port: bool,
     site: &dyn Fn(&LocatedSpan) -> Option<String>,
 ) -> Result<DomainModel, CodegenError> {
     let mut names = Names::default();
@@ -349,6 +450,9 @@ pub fn build(
         actions::add_functions(model, &built.ts, &mut domain, &mut names, site)?;
         validators::add_validators(&built.ts, &mut domain, &mut names, site)?;
         domain.candidates = states::candidates(model, &domain.sums, caps);
+        if port {
+            domain.port = Some(conformance::port(model, &built.ts, &domain, &mut names)?);
+        }
     }
 
     // Go declares `<Enum>Values` and one `<Enum><Value>` constant per value in the package

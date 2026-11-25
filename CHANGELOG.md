@@ -132,6 +132,21 @@
 
 ### Added
 
+- `codegen --lang rust|go --conformance <FILE>` (experimental) prints a conformance port
+  and harness after the core, and writes to `FILE` the traces the harness drives a finished
+  service along (#330). The service implements `ConformancePort`: it seeds an empty store,
+  returns a `StoreSnapshot` of every row, pending run mark, and raised event, and runs each
+  use case by the ids of its rows. `conform` (Rust) or `Conform` (Go) seeds each trace's
+  initial state, makes each call, and after each compares the store, abstracted to the
+  columns the model tracks, with the state BFS reaches. A call the model refuses must fail
+  and change nothing. The traces come from a BFS of the whole system at `check`'s bounds
+  and take every move of a printed use case between the states it reaches, up to
+  `--conformance-states` (default 65,536); the header says how many. On
+  `tests/fixtures/codegen/conformance.rdra`, `tests/codegen_conformance.rs` shows that a
+  service built on the generated core passes in both languages, and that one which writes
+  the tag itself, drops a returned row, or runs a refused call fails. See
+  [The conformance harness](./docs/design/algebraic-codegen.md#conformance).
+
 - `verify --symmetry` also covers a reduced safety cone (#212, phase 3): under `always`, and
   under `retry` once its plain run stopped at the memory limit, it runs up to `G_T`, the
   instance symmetry of its T rows, which leaves every S entity, and with it the class

@@ -462,10 +462,84 @@ agent can split it into files wherever the project wants:
 5. **Conformance tests.** Each `forbidden`, `invariant`, `@check`, and `after(UC).assert`
    as a property for `fast-check`, `proptest`, or `rapid`, run against the core and,
    through the scaffold's ports, against the finished services. When an agent edit breaks
-   one, the code has left what was verified.
+   one, the code has left what was verified. As built, the core's part is the rule checks,
+   and the finished service's part is [the conformance harness](#conformance), for Rust
+   and Go.
 
 `--format json` prints the same intermediate form and obligations as data, for an agent
 that wants to generate in another language or check its work against the list.
+
+<a id="conformance"></a>
+### The conformance harness
+
+<!-- derived-from #the-agent-contract -->
+
+Item 5 as built (#330). The rule checks and `codegen_equivalence.rs` show that the core does
+what the model does. Nothing showed that the service an agent writes around the core does:
+a service that writes the store directly, stores only some of the rows a function returns,
+or runs a use case from a state the model refuses passes every other check.
+`codegen --lang rust|go --conformance <FILE>` prints a port and a harness after the core,
+and writes the traces the harness runs to `FILE`.
+
+**The port.** The service implements `ConformancePort`: `seed` empties the store and stores
+the rows of an initial state, `snapshot` returns everything the store holds (each entity's
+rows in its `<Entity>Row` or record type, each pending run mark as `<UseCase><Entity>Run {
+id, step }`, each event a triggered use case reads), and one method per action runs the use
+case by the ids of its rows, the ids of its run marks, its event, its inputs, and its
+choices. A list of related rows is not an argument: the service loads it. The method returns
+an error when the use case does not run. The port is how the harness drives and reads the
+service, not a persistence layer: the service still decides how it stores rows.
+
+**The oracle.** The expected values come from BFS, never from the generated core. `traces`
+in `codegen/conformance` explores the whole transition system at `check`'s bounds
+(`Bounds::STATES`), from its initial states, and keeps each move of a use case with a printed
+function. It picks the move's function with the same evaluator `codegen_equivalence.rs`
+checks the functions with (`codegen::conformance::eval`), and reads every argument the move
+leaves open from the successor: the id of a created row is its slot plus one, a chosen value
+is the value the successor holds, a column `present` gets a default value. A greedy walk then
+takes every move between the states the moves reach, starting a new trace (a fresh port,
+seeded) when it runs out of moves where it stands. After each call the harness cuts the
+store down to what the system tracks (an enum's value, null or set, an integer, a key's
+parent id, a pending mark, a raise a triggered use case reads), sorts the lines, and compares
+them with the successor's. In each state reached first, the traces also try every use case
+over one row that the model does not run on a present row, where BFS has no move and the
+functions allow none (a source state no function takes, a condition that fails); the call
+must fail and change nothing. A use case that creates a row is never tried as refused: at
+one row per entity, BFS has no free slot after the first, but a real store does.
+
+**Where the traces live: a data file, not code.** The traces are a line-oriented text file
+that the generated harness parses, and the code stream holds no trace. Three reasons:
+
+- *Size.* At `check`'s bounds, ec-site has 189 moves, but clinic-ops, patent-ops,
+  food-permit-ops and oidc-auth reach the 65,536-state cap with 177,000 to 309,000 moves
+  (clinic-ops' traces are 178 MB). Code of that size would not be read, reviewed, or
+  compiled in reasonable time, and `codegen_builds.rs` compiles every sample's output.
+- *The code stays the code.* The core, the port and the harness are the same at any trace
+  bound; `--conformance-states` changes only the file. The agent regenerates the traces at
+  other bounds without a code diff, and a diff of the code still shows a change of the model.
+- *No library.* Each line is a record of whitespace-separated tokens (`S`/`A` a state and
+  its rows, `T` a trace, `R` a seed row, `G` seeding done, `C` a call and the state it
+  reaches, `X` a call that must be refused), so the harness parses it with the standard
+  library of Rust and Go, as the rest of the output builds without one.
+
+The cost is a second file the agent keeps beside the code and reads in its test; the first
+line names the format, and the harness refuses another.
+
+**What it proves.** On `tests/fixtures/codegen/conformance.rdra`,
+`tests/codegen_conformance.rs` runs an in-memory service built on the generated core in Rust
+and in Go (the Go one from outside the package). It passes. Each of three planted faults
+fails at the call that shows it: Pay writing the tag itself (`paid_at` and `qty` differ),
+Ship dropping the shipment the core returns (the shipment row is missing), and Cancel
+running from `shipped` (a refused call ran).
+
+**What it does not prove.** The harness checks what is stored, not how: a service that
+computes the same rows without calling the core passes. A column the system does not track
+(a string, a `present` timestamp's value) is not compared. The traces cover the bounds of
+`check`, one row per entity, so a service that is wrong only with two rows passes. A BFS
+stopped at the cap covers the states it reached and tries no refused call, and the header
+says so. A counted trigger, a comparison proposition, and the clock are not compared, and no
+trace takes a tick, so a move after one is left out; the header lists these. A run between a
+use case's read and its write is not tried: the port runs each use case as a whole.
 
 ## Architecture
 
@@ -525,6 +599,10 @@ sample. For this generator:
 - **The split runs agree.** On the three split samples, the test also runs interleavings
   of steps and other actions, and checks that `Blocked` is returned exactly where BFS has
   no successor for the step.
+- **The harness tells a faulty service apart.** `crates/rdra-ish-cli/tests/codegen_conformance.rs`
+  runs a reference service and three planted faults through the Rust and Go harness
+  ([The conformance harness](#conformance)), and `codegen_builds.rs` compiles the harness of
+  every sample.
 - **The keys agree.** `key_facts` (`crates/rdra-ish-cli/tests/key_facts.rs`) gains the
   generated key fields as one more consumer of the `ForeignKey` fact set.
 

@@ -1934,6 +1934,7 @@ describes where `codegen` is going.
 
 ```
 rdra-ish codegen <INPUTS...> --lang <LANG> [-o <FILE>] [--package <NAME>] [--allow-failing]
+                 [--conformance <FILE> [--conformance-states <N>]]
 ```
 
 | Option | Type | Default | Description |
@@ -1943,6 +1944,8 @@ rdra-ish codegen <INPUTS...> --lang <LANG> [-o <FILE>] [--package <NAME>] [--all
 | `-o`, `--out` | path | — (stdout) | Write to this file instead of stdout. |
 | `--package` | string | `domain` | The Go package name (`--lang go` only). |
 | `--allow-failing` | flag | off | Generate even when `check` reports errors. The state types then narrow no column, and each error is listed as an obligation the model does not meet. |
+| `--conformance` | path | — (no harness) | `--lang rust` and `go` only, on a model `check` passes: also print the conformance port and harness, and write to this file the traces the harness drives a finished service along. |
+| `--conformance-states` | integer | `65536` | The states the BFS behind the traces explores at most. |
 
 The output is one compilation unit: a TypeScript module, a Rust module file, or a Go file.
 It opens with a header and the numbered **obligations**: what `check` and `verify` assume of
@@ -2021,6 +2024,32 @@ rows' states and returns its result as a `CancelOutcome` case, or `NotEnabled` w
 case does not run from those states (in Rust, `Refused::NotEnabled`, beside
 `Refused::Rejected`). The code that finishes the output loads rows, converts them, calls the
 dispatcher, and stores the rows it returns.
+
+With `--conformance <FILE>` (Rust and Go), the output ends with a **conformance harness**
+for the service that finishes it, and `FILE` gets the traces it runs. The service
+implements `ConformancePort`: `seed` empties its store and stores the rows of an initial
+state, `snapshot` returns a `StoreSnapshot` of every row (the `<Entity>Row` of a state type,
+the record otherwise), every pending run mark (`<UseCase><Entity>Run { id, step }`), and
+every event a triggered use case reads, and one method per action (`run_pay` / `RunPay`)
+runs the use case by the ids of its rows and its inputs, returning an error when it does not
+run. The agent's test calls `conform(|| MyService::new(), &traces)` in Rust or
+`Conform(func() ConformancePort { return newService() }, traces)` in Go. The harness starts
+a fresh port per trace, seeds the trace's initial state, makes each call, and after each
+compares the store, cut down to the columns the model tracks (an enum's value, null or not,
+an integer, a key's parent id), with the state BFS reached. A call the model refuses must
+fail and leave the store as it was. It returns the first difference, naming the traces line
+and the rows only the model or only the store holds.
+
+The traces are a text file, not code. They come from a BFS of the whole transition system
+at `check`'s bounds (one row per entity), from its initial states, and take every move of a
+use case with a printed function between the states those moves reach, in as few traces as
+a greedy walk finds. In each state they also try every use case over one row that the model
+does not run on a present row, as a call that must be refused. A BFS that stops at
+`--conformance-states` covers only the states it reached and tries no refused call. The
+header of the code says how many moves the traces take, and what the harness does not
+compare (a counted trigger, a comparison proposition, the clock). A service whose store
+abstracts to the model's state after every call passes even when it does not call the core;
+the harness checks what is stored, not how.
 
 The header also lists **candidate rules**: a nullable column that every reachable row of a
 state holds present (or null) with no rule saying so, printed as the `invariant` or
