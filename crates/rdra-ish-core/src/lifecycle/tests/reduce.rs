@@ -764,7 +764,8 @@ fn a_sub_lifecycle_up_to_h_stores_fewer_states_and_lifts_its_traces() {
 /// gate, the key and the card where they are. It stores fewer states than the plain reduced
 /// run, finds the same violation, and lifts its trace through the swap and then through the
 /// class moves, so the printed trace spells the gate's and the key's steps and ends in the
-/// job's start, as the plain reduced run's does.
+/// job's start, as the plain reduced run's does. The path to every stored state lifts, through
+/// the permutations and then through both reductions, to a real path of the unreduced cone.
 #[test]
 fn a_reduced_cone_up_to_g_t_stores_fewer_states_and_lifts_its_trace() {
     let model = model_from(GATE);
@@ -812,6 +813,18 @@ fn a_reduced_cone_up_to_g_t_stores_fewer_states_and_lifts_its_trace() {
         "the lifted trace spells the gate's and the key's steps: {lifted:?}"
     );
     assert_eq!(lifted.last().map(String::as_str), Some("Start"));
+    let unreduced = ts.restrict_to(
+        &plain.cone_of(rule).cone.vars,
+        &plain.cone_of(rule).cone.keep,
+    );
+    let graph = orbits.quotient_graph();
+    for at in 0..graph.states.len() as u32 {
+        let path = graph.path_to(at);
+        let first = path.first().map_or(at, |e| e.from);
+        let (start, steps) = orbits.lift_path(first, &path);
+        let (start, steps) = p.system.lifted(&start, &steps);
+        assert_real_path(&unreduced, &start, &steps);
+    }
 }
 
 /// Two actions of one name are two actions: the reduced cone relates the gate's action to
