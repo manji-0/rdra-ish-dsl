@@ -118,7 +118,18 @@ impl Backend {
         }
         let analysis = match analyzed {
             Ok(analysis) => analysis,
-            Err(ProjectError::NoRdraFiles) => return,
+            Err(ProjectError::NoRdraFiles) => {
+                // The last .rdra file left the workspace: nothing to analyze, and nothing
+                // published before may stay.
+                let mut state = self.state.write().await;
+                state.analysis = None;
+                let stale = std::mem::take(&mut state.published);
+                drop(state);
+                for uri in stale {
+                    self.client.publish_diagnostics(uri, vec![], None).await;
+                }
+                return;
+            }
             Err(err) => {
                 self.report_load_error(&err, &overlays).await;
                 return;
@@ -195,7 +206,14 @@ impl Backend {
                 .await;
             published.insert(uri);
         }
-        self.state.write().await.published = published;
+        // A file published before that is no source now (deleted, renamed, or no longer
+        // under a root) keeps its diagnostics in the editor until they are withdrawn.
+        let stale = std::mem::replace(&mut self.state.write().await.published, published.clone());
+        for uri in stale.difference(&published) {
+            self.client
+                .publish_diagnostics(uri.clone(), vec![], None)
+                .await;
+        }
     }
 }
 

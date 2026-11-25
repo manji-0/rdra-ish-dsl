@@ -853,6 +853,10 @@
 
 ### Fixed
 
+- The language server withdraws the diagnostics of a file that leaves the analysis: one
+  deleted, renamed, or moved out of the workspace, as on a branch switch. Their errors and
+  warnings used to stay in the editor's problem list until it restarted, and so did those of
+  the last `.rdra` file of a workspace when it was deleted.
 - A use case that a BUC holds only through a step of one of its flows (`covers(Step, UC)`)
   no longer draws the `TimerTriggeredUseCaseUnreachable` warning ("belongs to no BUC") when a
   timer triggers it, as an event-triggered one already did not (#161). The warning failed
