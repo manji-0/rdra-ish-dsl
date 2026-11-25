@@ -197,7 +197,7 @@ fn lift_path(
 
 /// The step of `act` under `params` into `t`, read through `tau`. A class move of a reduced
 /// cone keeps its params: they may bind the extended sub-lifecycle's action rather than the
-/// cone's, and every row they name is one `G_T` leaves where it is (`Reduction::fixed`).
+/// cone's, and every row they name is one `G_T` leaves where it is (`Reduction::fixed_why`).
 fn concrete(
     ts: &TransitionSystem,
     g: &Group,
