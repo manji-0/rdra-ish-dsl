@@ -2238,6 +2238,17 @@ actors (`EndUserCapability`, made only by `EndUserCapability::issue()`). Code wi
 capability of an actor that performs the use case does not compile; whether the code that
 calls `issue` authenticated the actor is not checked.
 
+In Go, the contract is the interface `<UseCase>UseCase` (`Prepare*` / `Commit*`, and
+`Run<Action>` for an entry point). Its caller, `by <UseCase>Caller`, is an interface with an
+unexported method that only the capabilities of the actors that perform the use case
+implement, so a call with another actor's capability does not compile
+(`RelyingPartyCapability does not implement DenyDeviceCaller (missing method
+isDenyDeviceCaller)`). A capability is a struct with an unexported field, made valid only by
+`Issue<Actor>Capability()`. Go cannot forbid two values: the zero value
+`EndUserCapability{}`, which code outside the package can write, and a nil caller. Both
+compile, `Valid()` reports false for the zero value, and `CallerValid(by)` is false for
+either, so a service refuses a call whose caller is not valid.
+
 With `--conformance <FILE>` (Rust and Go), the output ends with a **conformance harness**
 for the service that finishes it, and `FILE` gets the traces it runs. The service
 implements `ConformancePort`: `seed` empties its store and stores the rows of an initial

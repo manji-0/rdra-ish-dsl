@@ -199,6 +199,13 @@
   `run_*` take first. A call without the capability of an actor that performs the use case
   does not compile. The conformance harness calls as the first such actor.
 
+- **Actor capabilities in the Go contracts** (experimental, #363 P6, #337): the same in Go.
+  `<Actor>Capability` is a struct with an unexported field, made by
+  `Issue<Actor>Capability()`, and `<UseCase>Caller` is an interface only the capabilities of
+  the actors that perform the use case implement. `Prepare*` and `Run*` take it first, so
+  another actor's capability does not compile. Go cannot refuse the zero value of a
+  capability or a nil caller at compile time; `CallerValid(by)` is false for both.
+
 - **The obligation ledger** (`check --code`, #363, P5): each obligation the generated code
   lists needs an owner, declared by a `rdra: obligation <name> [file]` marker line in the
   service code or under `[code.obligations]`. An obligation with no owner is

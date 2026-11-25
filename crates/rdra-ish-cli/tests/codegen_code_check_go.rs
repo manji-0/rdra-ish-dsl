@@ -40,9 +40,14 @@ service = "example.com/shop/svc.Service"
 new = "svc.New()"
 "#;
 
+/// The model the reference service implements.
+fn conformance() -> String {
+    std::fs::read_to_string(fixtures().join("conformance.rdra")).unwrap()
+}
+
 /// A Go module of its own: `model/` with `model` and `manifest`, `svc/` with `service`, and
 /// the files `codegen --code` writes.
-fn project(name: &str, model: &Path, manifest: &str, service: &str) -> PathBuf {
+fn project(name: &str, model: &str, manifest: &str, service: &str) -> PathBuf {
     let dir = std::env::temp_dir()
         .join(format!("rdra-ish-code-check-go-{}", std::process::id()))
         .join(name);
@@ -50,7 +55,7 @@ fn project(name: &str, model: &Path, manifest: &str, service: &str) -> PathBuf {
     std::fs::create_dir_all(dir.join("model")).unwrap();
     std::fs::create_dir_all(dir.join("svc")).unwrap();
     std::fs::create_dir_all(dir.join(".git")).unwrap();
-    std::fs::copy(model, dir.join("model/model.rdra")).unwrap();
+    std::fs::write(dir.join("model/model.rdra"), model).unwrap();
     std::fs::write(dir.join("model/rdra.toml"), manifest).unwrap();
     std::fs::write(dir.join("go.mod"), "module example.com/shop\n\ngo 1.21\n").unwrap();
     std::fs::write(dir.join("svc/service.go"), service).unwrap();
@@ -66,12 +71,7 @@ fn shop(name: &str, edits: &[(&str, &str)]) -> PathBuf {
         assert!(service.contains(from), "the service holds {from:?}");
         service = service.replacen(from, to, 1);
     }
-    project(
-        name,
-        &fixtures().join("conformance.rdra"),
-        MANIFEST,
-        &service,
-    )
+    project(name, &conformance(), MANIFEST, &service)
 }
 
 fn rdra(dir: &Path, args: &[&str], fault: Option<&str>) -> Output {
@@ -184,7 +184,7 @@ fn a_build_command_in_rdra_toml_replaces_the_default() {
     let manifest = format!("{MANIFEST}build = [\"go\", \"vet\", \"./svc\"]\n");
     let dir = project(
         "override",
-        &fixtures().join("conformance.rdra"),
+        &conformance(),
         &manifest,
         &service.replacen(
             "func (s *Service) CommitShip(",
@@ -195,6 +195,48 @@ fn a_build_command_in_rdra_toml_replaces_the_default() {
     let (code, _, stderr) = text(&rdra(&dir, &["check", "model", "--code=build"], None));
     assert_eq!(code, Some(1), "{stderr}");
     assert_eq!(errors(&stderr), ["CodeIncomplete_Ship"], "{stderr}");
+}
+
+/// With an actor that performs Pay (#337), `PreparePay` takes a `PayCaller` first: the service
+/// that takes it builds, and one that takes no caller, or another actor's capability, is a
+/// `CodeSignature_Pay`.
+#[test]
+fn a_prepare_takes_the_caller_of_its_use_case() {
+    if !go_available() {
+        return;
+    }
+    let model = format!(
+        "{}actor Clerk \"Clerk\"\nactor Courier \"Courier\"\nperforms(Clerk, Pay)\nperforms(Courier, Ship)\n",
+        conformance()
+    );
+    let service = std::fs::read_to_string(fixtures().join("go_service/service.go")).unwrap();
+    let pay = "PreparePay(id domain.OrderId, paidAt domain.DateTime)";
+    let ship = "PrepareShip(id domain.OrderId, shipmentID domain.ShipmentId)";
+    let ship_by =
+        "PrepareShip(_ domain.ShipCaller, id domain.OrderId, shipmentID domain.ShipmentId)";
+    for (name, by, says) in [
+        ("caller", "_ domain.PayCaller, ", None),
+        ("no-caller", "", Some("wrong type for method PreparePay")),
+        (
+            "other-actor",
+            "_ domain.CourierCapability, ",
+            Some("wrong type for method PreparePay"),
+        ),
+    ] {
+        let service = service
+            .replacen(pay, &pay.replacen('(', &format!("({by}"), 1), 1)
+            .replacen(ship, ship_by, 1);
+        let dir = project(name, &model, MANIFEST, &service);
+        let (code, _, stderr) = text(&rdra(&dir, &["check", "model", "--code=build"], None));
+        match says {
+            None => assert_eq!(code, Some(0), "{name}: {stderr}"),
+            Some(says) => {
+                assert_eq!(code, Some(1), "{name}: {stderr}");
+                assert_eq!(errors(&stderr), ["CodeSignature_Pay"], "{name}: {stderr}");
+                assert!(stderr.contains(says), "{name}: {stderr}");
+            }
+        }
+    }
 }
 
 /// Each fault of the reference service fails the conformance test the probe holds.

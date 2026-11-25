@@ -9,12 +9,92 @@ use super::{string_literal, type_ident};
 /// The packages the harness imports.
 pub(super) const IMPORTS: [&str; 5] = ["errors", "fmt", "sort", "strconv", "strings"];
 
+/// `Issue<Actor>Capability`.
+fn issue(domain: &DomainModel, cap: &super::ir::CapabilityDecl) -> String {
+    super::go::derived(domain, &format!("go:issue:{}", cap.actor), || {
+        format!("Issue{}", cap.name)
+    })
+}
+
+/// The unexported method that makes a capability a caller of `caller`.
+fn caller_marker(caller: &super::ir::CallerDecl) -> String {
+    format!("is{}", caller.name)
+}
+
+/// The capability of each actor and the caller interface of each use case (#337): a prepare
+/// or an entry point takes the caller first, so code that holds no capability of an actor that
+/// performs the use case does not compile. A capability is a struct with an unexported field:
+/// only `Issue<Actor>Capability` makes a valid one. Go lets code outside the package write
+/// the zero value, which `Valid` reports false for, and a nil caller; `CallerValid` refuses
+/// both, and a service calls it.
+fn print_capabilities(domain: &DomainModel, port: &super::ir::PortDecl, out: &mut String) {
+    if domain.capabilities.is_empty() {
+        return;
+    }
+    let valid = super::go::derived(domain, "go:callervalid", || "CallerValid".to_string());
+    out.push_str("// ── Capabilities: who may run each use case ──\n\n");
+    for cap in &domain.capabilities {
+        let issue = issue(domain, cap);
+        out.push_str(&doc(
+            &cap.name,
+            &[
+                format!(
+                    "is the capability of the actor {} ({}): the use cases it performs take it.",
+                    cap.actor,
+                    super::one_line(&cap.label)
+                ),
+                format!("Only {issue} makes a valid one, which the code calls once it has authenticated a {}; rdra-ish does not check who calls it. Go lets code outside this package write the zero value, {}{{}}: it is not valid (Valid reports false), and {valid} refuses it.", cap.actor, cap.name),
+            ],
+            "",
+        ));
+        out.push_str(&struct_decl(
+            &cap.name,
+            &[Line::Cells(vec!["issued".into(), "bool".into()])],
+        ));
+        out.push_str(&format!(
+            "// {issue} returns the capability, for code that has authenticated a {1}.\nfunc {issue}() {0} {{\n\treturn {0}{{issued: true}}\n}}\n\n",
+            cap.name, cap.actor
+        ));
+        out.push_str(&format!(
+            "// Valid reports whether {issue} made the capability: the zero value is not valid.\nfunc (c {}) Valid() bool {{\n\treturn c.issued\n}}\n\n",
+            cap.name
+        ));
+    }
+    out.push_str(&format!(
+        "// {valid} reports whether by is a capability an Issue function made: false for a nil caller\n// and for the zero value of a capability. A service refuses a call whose caller is not valid.\nfunc {valid}(by interface{{ Valid() bool }}) bool {{\n\treturn by != nil && by.Valid()\n}}\n\n"
+    ));
+    for c in &port.contracts {
+        let Some(caller) = &c.caller else {
+            continue;
+        };
+        let caps: Vec<&str> = caller
+            .actors
+            .iter()
+            .map(|&i| domain.capabilities[i].name.as_str())
+            .collect();
+        out.push_str(&format!(
+            "// {} is who may run {}: the capability of an actor that performs it ({}).\n// A capability of another actor does not implement it, so a call with one does not compile.\ntype {0} interface {{\n\t// Valid reports whether the capability was issued.\n\tValid() bool\n\t{}()\n}}\n\n",
+            caller.name,
+            c.usecase,
+            caps.join(", "),
+            caller_marker(caller)
+        ));
+        for cap in &caps {
+            out.push_str(&format!(
+                "func ({cap}) {}() {{}}\n\n",
+                caller_marker(caller)
+            ));
+        }
+    }
+}
+
 /// One interface per use case (docs/design/code-check.md, decision 6): the prepare and commit
 /// methods of its actions. A service implements each; the probe names each.
-fn print_contracts(port: &super::ir::PortDecl, out: &mut String) {
+fn print_contracts(domain: &DomainModel, port: &super::ir::PortDecl, out: &mut String) {
     if port.contracts.is_empty() {
         return;
     }
+    print_capabilities(domain, port, out);
     out.push_str("// ── Contracts: one per use case, which the service implements ──\n\n");
     for c in &port.contracts {
         let at = c
@@ -31,6 +111,11 @@ fn print_contracts(port: &super::ir::PortDecl, out: &mut String) {
             "",
         ));
         out.push_str(&format!("type {} interface {{\n", c.name));
+        let by: Vec<String> = c
+            .caller
+            .iter()
+            .map(|caller| format!("by {}", caller.name))
+            .collect();
         for &i in &c.methods {
             let m = &port.methods[i];
             out.push_str(&format!(
@@ -38,7 +123,7 @@ fn print_contracts(port: &super::ir::PortDecl, out: &mut String) {
                 m.name,
                 m.usecase,
                 m.action,
-                params(m).join(", "),
+                by.iter().cloned().chain(params(m)).collect::<Vec<_>>().join(", "),
                 m.write
             ));
             out.push_str(&format!(
@@ -52,7 +137,7 @@ fn print_contracts(port: &super::ir::PortDecl, out: &mut String) {
                 entry_method(e),
                 e.action,
                 c.usecase,
-                entry_params(e).join(", ")
+                by.iter().cloned().chain(entry_params(e)).collect::<Vec<_>>().join(", ")
             ));
         }
         out.push_str("}\n\n");
@@ -171,7 +256,7 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
     let Some(port) = &domain.port else {
         return;
     };
-    print_contracts(port, out);
+    print_contracts(domain, port, out);
     if !domain.harness {
         return;
     }
@@ -486,9 +571,21 @@ func confSet[T any](p *T) string {{
     );
     out.push_str("\tconfA := &confArgs{toks: call[1:]}\n\t_ = confA\n");
     out.push_str("\tswitch call[0] {\n");
-    for m in &port.methods {
+    for (k, m) in port.methods.iter().enumerate() {
         out.push_str(&format!("\tcase {}:\n", string_literal(&m.action)));
         let mut args = Vec::new();
+        // The harness runs each call as the first actor that performs the use case.
+        let caller = port
+            .contracts
+            .iter()
+            .find(|c| c.methods.contains(&k))
+            .and_then(|c| c.caller.as_ref());
+        if let Some(caller) = caller {
+            args.push(format!(
+                "{}()",
+                issue(domain, &domain.capabilities[caller.actors[0]])
+            ));
+        }
         for (name, ty) in m.rows.iter().chain(&m.marks) {
             let v = local(&format!("conf_{name}"));
             out.push_str(&format!(

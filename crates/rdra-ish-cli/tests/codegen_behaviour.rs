@@ -337,3 +337,83 @@ fn rust_a_use_case_takes_the_capability_of_an_actor_that_performs_it() {
         }
     }
 }
+
+/// Code outside the package that calls a use case of oidc-auth, and what `go vet` says
+/// (#337): `DenyDevice` is performed by EndUser only, so its prepare takes a
+/// `DenyDeviceCaller`, which only `EndUserCapability` implements.
+const GO_CAPABILITY_CALLS: [(&str, Option<&str>); 3] = [
+    (
+        "_, _ = s.PrepareDenyDevice(domain.IssueEndUserCapability(), d)",
+        None,
+    ),
+    (
+        "_, _ = s.PrepareDenyDevice(d)",
+        Some("not enough arguments in call to s.PrepareDenyDevice"),
+    ),
+    (
+        "_, _ = s.PrepareDenyDevice(domain.IssueRelyingPartyCapability(), d)",
+        Some("domain.RelyingPartyCapability does not implement domain.DenyDeviceCaller (missing method isDenyDeviceCaller)"),
+    ),
+];
+
+/// What Go cannot refuse at compile time, refused by `CallerValid`: the zero value of a
+/// capability, and a nil caller.
+const GO_CAPABILITY_VALID: &str = "\tif !domain.CallerValid(domain.IssueEndUserCapability()) {\n\t\tt.Fatal(\"an issued capability is valid\")\n\t}\n\tif domain.CallerValid(domain.EndUserCapability{}) {\n\t\tt.Fatal(\"the zero value is no capability\")\n\t}\n\tvar none domain.DenyDeviceCaller\n\tif domain.CallerValid(none) {\n\t\tt.Fatal(\"a nil caller is no capability\")\n\t}";
+
+#[test]
+fn go_a_use_case_takes_the_capability_of_an_actor_that_performs_it() {
+    if !available("go", "version") {
+        return;
+    }
+    let dir = scratch("go-capability");
+    let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .current_dir(fixture().join("../../../../.."))
+        .args(["codegen", "samples/oidc-auth", "--lang", "go", "-o"])
+        .arg(dir.join("domain.go"))
+        .output()
+        .expect("runs rdra-ish");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    std::fs::write(dir.join("go.mod"), "module example.com/domain\n\ngo 1.21\n").unwrap();
+    let call = |decl: &str, body: &str| {
+        std::fs::write(
+            dir.join("call_test.go"),
+            format!("package domain_test\n\nimport (\n\t\"testing\"\n\n\t\"example.com/domain\"\n)\n\n{decl}\n\nfunc TestCall(t *testing.T) {{\n{body}\n}}\n"),
+        )
+        .unwrap();
+    };
+    for (body, says) in GO_CAPABILITY_CALLS {
+        call(
+            &format!("func call(s domain.DenyDeviceUseCase, d domain.DeviceAuthorizationId) {{\n\t{body}\n}}\n\nvar _ = call"),
+            "",
+        );
+        let output = Command::new("go")
+            .args(["vet", "./..."])
+            .current_dir(&dir)
+            .output()
+            .expect("runs go");
+        let err = String::from_utf8_lossy(&output.stderr);
+        match says {
+            None => assert!(output.status.success(), "{body}: {err}"),
+            Some(says) => {
+                assert!(!output.status.success(), "go builds {body}");
+                assert!(err.contains(says), "{body}: {err}");
+            }
+        }
+    }
+    call("", GO_CAPABILITY_VALID);
+    let output = Command::new("go")
+        .args(["test", "-count=1", "-run", "^TestCall$", "./..."])
+        .current_dir(&dir)
+        .output()
+        .expect("runs go");
+    assert!(
+        output.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}

@@ -324,11 +324,29 @@ pub(super) fn derived_names(domain: &DomainModel) -> Vec<super::DerivedName> {
             );
         }
     }
+    for cap in &domain.capabilities {
+        push(
+            format!("go:issue:{}", cap.actor),
+            format!("Issue{}", cap.name),
+            format!("the Go constructor of {}", cap.name),
+        );
+    }
+    if !domain.capabilities.is_empty() {
+        push(
+            "go:callervalid".to_string(),
+            "CallerValid".to_string(),
+            "the Go check of a caller".to_string(),
+        );
+    }
     out
 }
 
 /// The name claimed under `key`, else `fallback` (a domain built for no language).
-fn derived(domain: &DomainModel, key: &str, fallback: impl FnOnce() -> String) -> String {
+pub(super) fn derived(
+    domain: &DomainModel,
+    key: &str,
+    fallback: impl FnOnce() -> String,
+) -> String {
     domain.derived(key).map_or_else(fallback, str::to_string)
 }
 
