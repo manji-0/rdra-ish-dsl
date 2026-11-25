@@ -720,7 +720,10 @@ fn rs_scalar_dec(s: Scalar, j: &str) -> String {
         Scalar::Int => format!("{j}.int()"),
         Scalar::String => format!("{j}.str()"),
         Scalar::Bool => format!("{j}.bool()"),
-        other => format!("{}({j}.str())", other.name()),
+        other => format!(
+            "{j}.str().parse::<{0}>().expect(\"driver: a {0}\")",
+            other.name()
+        ),
     }
 }
 
@@ -729,7 +732,7 @@ fn rs_scalar_enc(s: Scalar, r: &str) -> String {
         Scalar::Int => format!("DrvJ::Num(*{r})"),
         Scalar::String => format!("DrvJ::Str({r}.clone())"),
         Scalar::Bool => format!("DrvJ::Bool(*{r})"),
-        _ => format!("DrvJ::Str({r}.0.clone())"),
+        _ => format!("DrvJ::Str({r}.to_string())"),
     }
 }
 
@@ -741,9 +744,14 @@ fn rs_dec(d: &DomainModel, ty: &FieldType, nullable: bool, j: &str) -> String {
     match ty {
         FieldType::Scalar(s) => rs_scalar_dec(*s, j),
         FieldType::Enum(name) => {
-            format!("{name}::parse(&{j}.str()).expect(\"driver: a value of {name}\")")
+            format!("{j}.str().parse::<{name}>().expect(\"driver: a value of {name}\")")
         }
-        FieldType::Id(name) => format!("{name}({})", rs_scalar_dec(id_repr(d, name), j)),
+        FieldType::Id(name) => match id_repr(d, name) {
+            s @ (Scalar::Int | Scalar::Bool | Scalar::String) => {
+                format!("{name}::from({})", rs_scalar_dec(s, j))
+            }
+            _ => format!("{j}.str().parse::<{name}>().expect(\"driver: a {name}\")"),
+        },
         FieldType::Rows(name) => format!("{j}.arr().iter().map(dec_{name}).collect::<Vec<_>>()"),
     }
 }
@@ -756,7 +764,11 @@ fn rs_enc(d: &DomainModel, ty: &FieldType, nullable: bool, r: &str) -> String {
     match ty {
         FieldType::Scalar(s) => rs_scalar_enc(*s, r),
         FieldType::Enum(_) => format!("DrvJ::Str({r}.as_str().to_string())"),
-        FieldType::Id(name) => rs_scalar_enc(id_repr(d, name), &format!("(&{r}.0)")),
+        FieldType::Id(name) => match id_repr(d, name) {
+            Scalar::Int => format!("DrvJ::Num({r}.get())"),
+            Scalar::Bool => format!("DrvJ::Bool({r}.get())"),
+            _ => format!("DrvJ::Str({r}.to_string())"),
+        },
         FieldType::Rows(_) => panic!("a list is not returned"),
     }
 }
@@ -897,9 +909,16 @@ fn rust_driver(d: &DomainModel) -> String {
             rs_ident(&snake(&f.name)),
             call.join(", ")
         );
-        if !f.conditions.is_empty() {
-            body.push_str("    let r = match r { ::core::result::Result::Ok(r) => r, ::core::result::Result::Err(e) => return drv_obj(vec![(\"rejected\", DrvJ::Str(e.condition.to_string()))]) };\n");
-        }
+        let error = &d.error_of(&f.usecase).expect("an error type").name;
+        let rejected = if f.conditions.is_empty() {
+            String::new()
+        } else {
+            format!("::core::result::Result::Err({error}::Rejected(e)) => return drv_obj(vec![(\"rejected\", DrvJ::Str(e.condition.to_string()))]), ")
+        };
+        let _ = writeln!(
+            body,
+            "    let r = match r {{ ::core::result::Result::Ok(r) => r, {rejected}::core::result::Result::Err(e) => panic!(\"driver: {{e}}\") }};"
+        );
         let mut pairs = Vec::new();
         for o in &f.outputs {
             match &o.kind {

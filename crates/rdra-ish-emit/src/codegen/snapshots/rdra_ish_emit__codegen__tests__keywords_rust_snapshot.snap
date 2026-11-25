@@ -22,47 +22,367 @@ expression: "generated_from(KEYWORDS_SRC, \"keywords.rdra\", Lang::Rust)"
 // OneTransaction: each function runs in one transaction with the reads of its rows, marks, and events: `check` and `verify` explore every use case, and every step of a split one, as one atomic action, and a run of another use case between the read and the write is a state they never explored. Hold what the function read until the write commits (SELECT .. FOR UPDATE, or serializable isolation), and write each row only where it still is what the result's `<row>_expected` (`<Row>Expected` in Go) names (UPDATE .. WHERE id = ? AND <tag> = ?; INSERT a created row only where none has its id; DELETE likewise); when a write matches no row, roll the transaction back and treat the call as NotEnabled. The condition catches a row another call created, deleted, or moved to another state; it does not catch a change to another column a condition read, to a row the function reads and does not write, or to a run mark or event it consumes, which only the held reads keep.
 // RuleChecks: every row the code writes keeps its rules: its RuleViolations is empty.
 
-#![allow(dead_code, unused_variables, non_camel_case_types, non_snake_case, clippy::all)]
+//! The data layer and the use cases of the model, as `rdra-ish codegen` generates them.
+
+// ── Boundary: what a parser of this module refuses ──
+
+/// Text that is no value of the type a parser makes: an id, a scalar, or a value set.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvalidValue {
+    /// The type the text was parsed as.
+    pub type_name: &'static str,
+    /// The text.
+    pub value: ::std::string::String,
+}
+
+impl ::core::fmt::Display for InvalidValue {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        write!(f, "{:?} is no value of {}", self.value, self.type_name)
+    }
+}
+
+impl ::std::error::Error for InvalidValue {}
+
+/// Whether `text` is all ASCII digits, and not empty.
+fn rdra_is_digits(text: &str) -> bool {
+    !text.is_empty() && text.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// Whether `text` is groups of ASCII digits of the lengths `widths`, split by `sep`.
+fn rdra_is_groups(text: &str, sep: char, widths: &[usize]) -> bool {
+    let parts: ::std::vec::Vec<&str> = text.split(sep).collect();
+    parts.len() == widths.len()
+        && parts.iter().zip(widths).all(|(p, n)| p.len() == *n && rdra_is_digits(p))
+}
+
+/// Whether `text` is decimal text: an optional `-`, digits, and optionally `.` and digits.
+fn rdra_is_decimal(text: &str) -> bool {
+    let digits = text.strip_prefix('-').unwrap_or(text);
+    match digits.split_once('.') {
+        ::core::option::Option::Some((whole, fraction)) => rdra_is_digits(whole) && rdra_is_digits(fraction),
+        ::core::option::Option::None => rdra_is_digits(digits),
+    }
+}
+
+/// Whether `text` has the shape of an ISO 8601 date, `YYYY-MM-DD`; the calendar is not checked.
+fn rdra_is_date(text: &str) -> bool {
+    rdra_is_groups(text, '-', &[4, 2, 2])
+}
+
+/// Whether `text` has the shape of an ISO 8601 date and time with an offset:
+/// `YYYY-MM-DDTHH:MM:SS`, optionally `.` and digits, then `Z` or `+HH:MM` / `-HH:MM`.
+fn rdra_is_date_time(text: &str) -> bool {
+    let ::core::option::Option::Some((date, time)) = text.split_once('T') else {
+        return false;
+    };
+    let (clock, zone_ok) = match time.strip_suffix('Z') {
+        ::core::option::Option::Some(clock) => (clock, true),
+        ::core::option::Option::None => match time.rfind(['+', '-']) {
+            ::core::option::Option::Some(at) => (&time[..at], rdra_is_groups(&time[at + 1..], ':', &[2, 2])),
+            ::core::option::Option::None => return false,
+        },
+    };
+    let clock_ok = match clock.split_once('.') {
+        ::core::option::Option::Some((whole, fraction)) => {
+            rdra_is_groups(whole, ':', &[2, 2, 2]) && rdra_is_digits(fraction)
+        }
+        ::core::option::Option::None => rdra_is_groups(clock, ':', &[2, 2, 2]),
+    };
+    rdra_is_date(date) && clock_ok && zone_ok
+}
 
 // ── Scalars: replace with the project's own types if it has them ──
 
 /// A monetary amount as decimal text, such as "1200.50".
+/// Made only by `TryFrom<String>` and `FromStr`, which take decimal text (an optional `-`, digits, and optionally `.` and digits) and refuse other text with [`InvalidValue`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Money(pub ::std::string::String);
+pub struct Money(::std::string::String);
+
+impl Money {
+    /// The text it holds.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl ::core::convert::TryFrom<::std::string::String> for Money {
+    type Error = InvalidValue;
+
+    /// The value of `text`, or [`InvalidValue`] when it is not decimal text (an optional `-`, digits, and optionally `.` and digits).
+    fn try_from(text: ::std::string::String) -> ::core::result::Result<Self, InvalidValue> {
+        if rdra_is_decimal(&text) {
+            ::core::result::Result::Ok(Self(text))
+        } else {
+            ::core::result::Result::Err(InvalidValue { type_name: "Money", value: text })
+        }
+    }
+}
+
+impl ::core::str::FromStr for Money {
+    type Err = InvalidValue;
+
+    fn from_str(text: &str) -> ::core::result::Result<Self, InvalidValue> {
+        <Self as ::core::convert::TryFrom<::std::string::String>>::try_from(text.to_string())
+    }
+}
+
+impl ::core::fmt::Display for Money {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
 
 /// A decimal number as text, such as "0.3".
+/// Made only by `TryFrom<String>` and `FromStr`, which take decimal text (an optional `-`, digits, and optionally `.` and digits) and refuse other text with [`InvalidValue`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Decimal(pub ::std::string::String);
+pub struct Decimal(::std::string::String);
+
+impl Decimal {
+    /// The text it holds.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl ::core::convert::TryFrom<::std::string::String> for Decimal {
+    type Error = InvalidValue;
+
+    /// The value of `text`, or [`InvalidValue`] when it is not decimal text (an optional `-`, digits, and optionally `.` and digits).
+    fn try_from(text: ::std::string::String) -> ::core::result::Result<Self, InvalidValue> {
+        if rdra_is_decimal(&text) {
+            ::core::result::Result::Ok(Self(text))
+        } else {
+            ::core::result::Result::Err(InvalidValue { type_name: "Decimal", value: text })
+        }
+    }
+}
+
+impl ::core::str::FromStr for Decimal {
+    type Err = InvalidValue;
+
+    fn from_str(text: &str) -> ::core::result::Result<Self, InvalidValue> {
+        <Self as ::core::convert::TryFrom<::std::string::String>>::try_from(text.to_string())
+    }
+}
+
+impl ::core::fmt::Display for Decimal {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
 
 /// A date in ISO 8601, such as "2026-11-07".
+/// Made only by `TryFrom<String>` and `FromStr`, which take an ISO 8601 date, `YYYY-MM-DD` and refuse other text with [`InvalidValue`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Date(pub ::std::string::String);
+pub struct Date(::std::string::String);
+
+impl Date {
+    /// The text it holds.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl ::core::convert::TryFrom<::std::string::String> for Date {
+    type Error = InvalidValue;
+
+    /// The value of `text`, or [`InvalidValue`] when it is not an ISO 8601 date, `YYYY-MM-DD`.
+    fn try_from(text: ::std::string::String) -> ::core::result::Result<Self, InvalidValue> {
+        if rdra_is_date(&text) {
+            ::core::result::Result::Ok(Self(text))
+        } else {
+            ::core::result::Result::Err(InvalidValue { type_name: "Date", value: text })
+        }
+    }
+}
+
+impl ::core::str::FromStr for Date {
+    type Err = InvalidValue;
+
+    fn from_str(text: &str) -> ::core::result::Result<Self, InvalidValue> {
+        <Self as ::core::convert::TryFrom<::std::string::String>>::try_from(text.to_string())
+    }
+}
+
+impl ::core::fmt::Display for Date {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
 
 /// A date and time in ISO 8601 with offset, such as "2026-11-07T09:00:00+09:00".
+/// Made only by `TryFrom<String>` and `FromStr`, which take an ISO 8601 date and time with `Z` or an offset and refuse other text with [`InvalidValue`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct DateTime(pub ::std::string::String);
+pub struct DateTime(::std::string::String);
+
+impl DateTime {
+    /// The text it holds.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl ::core::convert::TryFrom<::std::string::String> for DateTime {
+    type Error = InvalidValue;
+
+    /// The value of `text`, or [`InvalidValue`] when it is not an ISO 8601 date and time with `Z` or an offset.
+    fn try_from(text: ::std::string::String) -> ::core::result::Result<Self, InvalidValue> {
+        if rdra_is_date_time(&text) {
+            ::core::result::Result::Ok(Self(text))
+        } else {
+            ::core::result::Result::Err(InvalidValue { type_name: "DateTime", value: text })
+        }
+    }
+}
+
+impl ::core::str::FromStr for DateTime {
+    type Err = InvalidValue;
+
+    fn from_str(text: &str) -> ::core::result::Result<Self, InvalidValue> {
+        <Self as ::core::convert::TryFrom<::std::string::String>>::try_from(text.to_string())
+    }
+}
+
+impl ::core::fmt::Display for DateTime {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
 
 // ── Ids ──
 
 /// The id of entity Function.
+/// Any `i64` is one: made by `From` (so `TryFrom`) and `FromStr`, read by `get`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct FunctionId(pub i64);
+pub struct FunctionId(i64);
+
+impl FunctionId {
+    /// The value it holds.
+    pub fn get(self) -> i64 {
+        self.0
+    }
+}
+
+impl ::core::convert::From<i64> for FunctionId {
+    fn from(value: i64) -> Self {
+        Self(value)
+    }
+}
+
+impl ::core::str::FromStr for FunctionId {
+    type Err = InvalidValue;
+
+    fn from_str(text: &str) -> ::core::result::Result<Self, InvalidValue> {
+        text.parse::<i64>().map(Self).map_err(|_| InvalidValue { type_name: "FunctionId", value: text.to_string() })
+    }
+}
+
+impl ::core::fmt::Display for FunctionId {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        ::core::fmt::Display::fmt(&self.0, f)
+    }
+}
 
 /// The id of entity Func.
+/// Any `i64` is one: made by `From` (so `TryFrom`) and `FromStr`, read by `get`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct FuncId(pub i64);
+pub struct FuncId(i64);
+
+impl FuncId {
+    /// The value it holds.
+    pub fn get(self) -> i64 {
+        self.0
+    }
+}
+
+impl ::core::convert::From<i64> for FuncId {
+    fn from(value: i64) -> Self {
+        Self(value)
+    }
+}
+
+impl ::core::str::FromStr for FuncId {
+    type Err = InvalidValue;
+
+    fn from_str(text: &str) -> ::core::result::Result<Self, InvalidValue> {
+        text.parse::<i64>().map(Self).map_err(|_| InvalidValue { type_name: "FuncId", value: text.to_string() })
+    }
+}
+
+impl ::core::fmt::Display for FuncId {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        ::core::fmt::Display::fmt(&self.0, f)
+    }
+}
 
 /// The id of entity Mod.
+/// Any `i64` is one: made by `From` (so `TryFrom`) and `FromStr`, read by `get`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct ModId(pub i64);
+pub struct ModId(i64);
+
+impl ModId {
+    /// The value it holds.
+    pub fn get(self) -> i64 {
+        self.0
+    }
+}
+
+impl ::core::convert::From<i64> for ModId {
+    fn from(value: i64) -> Self {
+        Self(value)
+    }
+}
+
+impl ::core::str::FromStr for ModId {
+    type Err = InvalidValue;
+
+    fn from_str(text: &str) -> ::core::result::Result<Self, InvalidValue> {
+        text.parse::<i64>().map(Self).map_err(|_| InvalidValue { type_name: "ModId", value: text.to_string() })
+    }
+}
+
+impl ::core::fmt::Display for ModId {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        ::core::fmt::Display::fmt(&self.0, f)
+    }
+}
 
 /// The id of entity Match.
+/// Any `i64` is one: made by `From` (so `TryFrom`) and `FromStr`, read by `get`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct MatchId(pub i64);
+pub struct MatchId(i64);
+
+impl MatchId {
+    /// The value it holds.
+    pub fn get(self) -> i64 {
+        self.0
+    }
+}
+
+impl ::core::convert::From<i64> for MatchId {
+    fn from(value: i64) -> Self {
+        Self(value)
+    }
+}
+
+impl ::core::str::FromStr for MatchId {
+    type Err = InvalidValue;
+
+    fn from_str(text: &str) -> ::core::result::Result<Self, InvalidValue> {
+        text.parse::<i64>().map(Self).map_err(|_| InvalidValue { type_name: "MatchId", value: text.to_string() })
+    }
+}
+
+impl ::core::fmt::Display for MatchId {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        ::core::fmt::Display::fmt(&self.0, f)
+    }
+}
 
 // ── Value sets ──
 
 /// K
+/// Parsed from its wire spelling by `FromStr`, printed by `as_str` and `Display`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Kind {
     /// `self`
@@ -94,14 +414,28 @@ impl Kind {
             Self::Func => "func",
         }
     }
+}
 
-    /// The value the model spells `text`, if any.
-    pub fn parse(text: &str) -> ::core::option::Option<Self> {
-        Self::ALL.into_iter().find(|v| v.as_str() == text)
+impl ::core::str::FromStr for Kind {
+    type Err = InvalidValue;
+
+    /// The value the model spells `text`, or [`InvalidValue`].
+    fn from_str(text: &str) -> ::core::result::Result<Self, InvalidValue> {
+        Self::ALL
+            .into_iter()
+            .find(|v| v.as_str() == text)
+            .ok_or_else(|| InvalidValue { type_name: "Kind", value: text.to_string() })
+    }
+}
+
+impl ::core::fmt::Display for Kind {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
 /// The values of Func.type.
+/// Parsed from its wire spelling by `FromStr`, printed by `as_str` and `Display`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum FuncType {
     /// `new`
@@ -124,14 +458,28 @@ impl FuncType {
             Self::Func => "func",
         }
     }
+}
 
-    /// The value the model spells `text`, if any.
-    pub fn parse(text: &str) -> ::core::option::Option<Self> {
-        Self::ALL.into_iter().find(|v| v.as_str() == text)
+impl ::core::str::FromStr for FuncType {
+    type Err = InvalidValue;
+
+    /// The value the model spells `text`, or [`InvalidValue`].
+    fn from_str(text: &str) -> ::core::result::Result<Self, InvalidValue> {
+        Self::ALL
+            .into_iter()
+            .find(|v| v.as_str() == text)
+            .ok_or_else(|| InvalidValue { type_name: "FuncType", value: text.to_string() })
+    }
+}
+
+impl ::core::fmt::Display for FuncType {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
 /// The values of Match.status.
+/// Parsed from its wire spelling by `FromStr`, printed by `as_str` and `Display`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum MatchStatus {
     /// `new`
@@ -163,24 +511,40 @@ impl MatchStatus {
             Self::Default => "default",
         }
     }
+}
 
-    /// The value the model spells `text`, if any.
-    pub fn parse(text: &str) -> ::core::option::Option<Self> {
-        Self::ALL.into_iter().find(|v| v.as_str() == text)
+impl ::core::str::FromStr for MatchStatus {
+    type Err = InvalidValue;
+
+    /// The value the model spells `text`, or [`InvalidValue`].
+    fn from_str(text: &str) -> ::core::result::Result<Self, InvalidValue> {
+        Self::ALL
+            .into_iter()
+            .find(|v| v.as_str() == text)
+            .ok_or_else(|| InvalidValue { type_name: "MatchStatus", value: text.to_string() })
+    }
+}
+
+impl ::core::fmt::Display for MatchStatus {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
 // ── Entities ──
 
 /// F
+/// A record of entity Function: it has no states, so it is its own row, and the types of its fields are what it keeps.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Function {
     /// Primary key.
     pub id: FunctionId,
+    /// The column `default`.
     pub default: ::core::option::Option<::std::string::String>,
 }
 
 /// D
+/// A record of entity Mod: it has no states, so it is its own row, and the types of its fields are what it keeps.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Mod {
     /// Primary key.
@@ -190,7 +554,7 @@ pub struct Mod {
 // ── Entities with states ──
 
 /// Func in the state `new` of type.
-/// Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.
+/// Sealed: only a transition function and `from_row` make one. Its fields are private, and read by the methods of the same name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FuncNew {
     /// Primary key.
@@ -198,14 +562,14 @@ pub struct FuncNew {
 }
 
 impl FuncNew {
-    /// `id`.
+    /// The column `id`.
     pub fn id(&self) -> &FuncId {
         &self.id
     }
 }
 
 /// Func in the state `return` of type.
-/// Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.
+/// Sealed: only a transition function and `from_row` make one. Its fields are private, and read by the methods of the same name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FuncReturn {
     /// Primary key.
@@ -213,14 +577,14 @@ pub struct FuncReturn {
 }
 
 impl FuncReturn {
-    /// `id`.
+    /// The column `id`.
     pub fn id(&self) -> &FuncId {
         &self.id
     }
 }
 
 /// Func in the state `func` of type.
-/// Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.
+/// Sealed: only a transition function and `from_row` make one. Its fields are private, and read by the methods of the same name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FuncFunc {
     /// Primary key.
@@ -228,28 +592,43 @@ pub struct FuncFunc {
 }
 
 impl FuncFunc {
-    /// `id`.
+    /// The column `id`.
     pub fn id(&self) -> &FuncId {
         &self.id
     }
 }
 
+/// Which state a Func is in: its discriminant.
+/// The domain's own: the tag column `type` lives only in [`FuncRow`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum FuncKind {
+    /// The state `new`.
+    New,
+    /// The state `return`.
+    Return,
+    /// The state `func`.
+    Func,
+}
+
 /// G
-/// One of its states, told apart by `type`.
+/// One of its states, told apart by `kind()`. A store holds it as [`FuncRow`]: `from_row` (or `TryFrom`) reads one, `into_row` (or `From`) writes one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Func {
+    /// The state `new`.
     New(FuncNew),
+    /// The state `return`.
     Return(FuncReturn),
+    /// The state `func`.
     Func(FuncFunc),
 }
 
 impl Func {
-    /// The state's `type`.
-    pub fn r#type(&self) -> FuncType {
+    /// The state it is in.
+    pub fn kind(&self) -> FuncKind {
         match self {
-            Self::New(_) => FuncType::New,
-            Self::Return(_) => FuncType::Return,
-            Self::Func(_) => FuncType::Func,
+            Self::New(_) => FuncKind::New,
+            Self::Return(_) => FuncKind::Return,
+            Self::Func(_) => FuncKind::Func,
         }
     }
 }
@@ -273,7 +652,7 @@ impl ::core::convert::From<FuncFunc> for Func {
 }
 
 /// Match in the state `new` of status.
-/// Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.
+/// Sealed: only a transition function and `from_row` make one. Its fields are private, and read by the methods of the same name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchNew {
     /// Primary key.
@@ -285,65 +664,66 @@ pub struct MatchNew {
     self_: ::std::string::String,
     crate_: ::std::string::String,
     super_: ::std::string::String,
-    kind: Kind,
+    kind_: Kind,
     function_id: FunctionId,
     func_id: FuncId,
     mod_id: ModId,
 }
 
+#[allow(clippy::new_ret_no_self, clippy::should_implement_trait)] // accessors are named after the model's columns
 impl MatchNew {
-    /// `id`.
+    /// The column `id`.
     pub fn id(&self) -> &MatchId {
         &self.id
     }
-    /// `type`.
+    /// The column `type`.
     pub fn r#type(&self) -> &::std::string::String {
         &self.r#type
     }
-    /// `default`.
+    /// The column `default`.
     pub fn default(&self) -> &i64 {
         &self.default
     }
-    /// `new`.
+    /// The column `new`.
     pub fn new(&self) -> &::std::string::String {
         &self.new
     }
-    /// `func`.
+    /// The column `func`.
     pub fn func(&self) -> &::std::string::String {
         &self.func
     }
-    /// `self`.
+    /// The column `self`.
     pub fn self_(&self) -> &::std::string::String {
         &self.self_
     }
-    /// `crate`.
+    /// The column `crate`.
     pub fn crate_(&self) -> &::std::string::String {
         &self.crate_
     }
-    /// `super`.
+    /// The column `super`.
     pub fn super_(&self) -> &::std::string::String {
         &self.super_
     }
-    /// `kind`.
-    pub fn kind(&self) -> &Kind {
-        &self.kind
+    /// The column `kind`.
+    pub fn kind_(&self) -> &Kind {
+        &self.kind_
     }
-    /// `function_id`.
+    /// The column `function_id`.
     pub fn function_id(&self) -> &FunctionId {
         &self.function_id
     }
-    /// `func_id`.
+    /// The column `func_id`.
     pub fn func_id(&self) -> &FuncId {
         &self.func_id
     }
-    /// `mod_id`.
+    /// The column `mod_id`.
     pub fn mod_id(&self) -> &ModId {
         &self.mod_id
     }
 }
 
 /// Match in the state `return` of status.
-/// Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.
+/// Sealed: only a transition function and `from_row` make one. Its fields are private, and read by the methods of the same name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchReturn {
     /// Primary key.
@@ -355,65 +735,66 @@ pub struct MatchReturn {
     self_: ::std::string::String,
     crate_: ::std::string::String,
     super_: ::std::string::String,
-    kind: Kind,
+    kind_: Kind,
     function_id: FunctionId,
     func_id: FuncId,
     mod_id: ModId,
 }
 
+#[allow(clippy::new_ret_no_self, clippy::should_implement_trait)] // accessors are named after the model's columns
 impl MatchReturn {
-    /// `id`.
+    /// The column `id`.
     pub fn id(&self) -> &MatchId {
         &self.id
     }
-    /// `type`.
+    /// The column `type`.
     pub fn r#type(&self) -> &::std::string::String {
         &self.r#type
     }
-    /// `default`.
+    /// The column `default`.
     pub fn default(&self) -> &i64 {
         &self.default
     }
-    /// `new`.
+    /// The column `new`.
     pub fn new(&self) -> &::std::string::String {
         &self.new
     }
-    /// `func`.
+    /// The column `func`.
     pub fn func(&self) -> &::std::string::String {
         &self.func
     }
-    /// `self`.
+    /// The column `self`.
     pub fn self_(&self) -> &::std::string::String {
         &self.self_
     }
-    /// `crate`.
+    /// The column `crate`.
     pub fn crate_(&self) -> &::std::string::String {
         &self.crate_
     }
-    /// `super`.
+    /// The column `super`.
     pub fn super_(&self) -> &::std::string::String {
         &self.super_
     }
-    /// `kind`.
-    pub fn kind(&self) -> &Kind {
-        &self.kind
+    /// The column `kind`.
+    pub fn kind_(&self) -> &Kind {
+        &self.kind_
     }
-    /// `function_id`.
+    /// The column `function_id`.
     pub fn function_id(&self) -> &FunctionId {
         &self.function_id
     }
-    /// `func_id`.
+    /// The column `func_id`.
     pub fn func_id(&self) -> &FuncId {
         &self.func_id
     }
-    /// `mod_id`.
+    /// The column `mod_id`.
     pub fn mod_id(&self) -> &ModId {
         &self.mod_id
     }
 }
 
 /// Match in the state `self` of status.
-/// Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.
+/// Sealed: only a transition function and `from_row` make one. Its fields are private, and read by the methods of the same name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchSelf {
     /// Primary key.
@@ -425,65 +806,66 @@ pub struct MatchSelf {
     self_: ::std::string::String,
     crate_: ::std::string::String,
     super_: ::std::string::String,
-    kind: Kind,
+    kind_: Kind,
     function_id: FunctionId,
     func_id: FuncId,
     mod_id: ModId,
 }
 
+#[allow(clippy::new_ret_no_self, clippy::should_implement_trait)] // accessors are named after the model's columns
 impl MatchSelf {
-    /// `id`.
+    /// The column `id`.
     pub fn id(&self) -> &MatchId {
         &self.id
     }
-    /// `type`.
+    /// The column `type`.
     pub fn r#type(&self) -> &::std::string::String {
         &self.r#type
     }
-    /// `default`.
+    /// The column `default`.
     pub fn default(&self) -> &i64 {
         &self.default
     }
-    /// `new`.
+    /// The column `new`.
     pub fn new(&self) -> &::std::string::String {
         &self.new
     }
-    /// `func`.
+    /// The column `func`.
     pub fn func(&self) -> &::std::string::String {
         &self.func
     }
-    /// `self`.
+    /// The column `self`.
     pub fn self_(&self) -> &::std::string::String {
         &self.self_
     }
-    /// `crate`.
+    /// The column `crate`.
     pub fn crate_(&self) -> &::std::string::String {
         &self.crate_
     }
-    /// `super`.
+    /// The column `super`.
     pub fn super_(&self) -> &::std::string::String {
         &self.super_
     }
-    /// `kind`.
-    pub fn kind(&self) -> &Kind {
-        &self.kind
+    /// The column `kind`.
+    pub fn kind_(&self) -> &Kind {
+        &self.kind_
     }
-    /// `function_id`.
+    /// The column `function_id`.
     pub fn function_id(&self) -> &FunctionId {
         &self.function_id
     }
-    /// `func_id`.
+    /// The column `func_id`.
     pub fn func_id(&self) -> &FuncId {
         &self.func_id
     }
-    /// `mod_id`.
+    /// The column `mod_id`.
     pub fn mod_id(&self) -> &ModId {
         &self.mod_id
     }
 }
 
 /// Match in the state `super` of status.
-/// Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.
+/// Sealed: only a transition function and `from_row` make one. Its fields are private, and read by the methods of the same name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchSuper {
     /// Primary key.
@@ -495,65 +877,66 @@ pub struct MatchSuper {
     self_: ::std::string::String,
     crate_: ::std::string::String,
     super_: ::std::string::String,
-    kind: Kind,
+    kind_: Kind,
     function_id: FunctionId,
     func_id: FuncId,
     mod_id: ModId,
 }
 
+#[allow(clippy::new_ret_no_self, clippy::should_implement_trait)] // accessors are named after the model's columns
 impl MatchSuper {
-    /// `id`.
+    /// The column `id`.
     pub fn id(&self) -> &MatchId {
         &self.id
     }
-    /// `type`.
+    /// The column `type`.
     pub fn r#type(&self) -> &::std::string::String {
         &self.r#type
     }
-    /// `default`.
+    /// The column `default`.
     pub fn default(&self) -> &i64 {
         &self.default
     }
-    /// `new`.
+    /// The column `new`.
     pub fn new(&self) -> &::std::string::String {
         &self.new
     }
-    /// `func`.
+    /// The column `func`.
     pub fn func(&self) -> &::std::string::String {
         &self.func
     }
-    /// `self`.
+    /// The column `self`.
     pub fn self_(&self) -> &::std::string::String {
         &self.self_
     }
-    /// `crate`.
+    /// The column `crate`.
     pub fn crate_(&self) -> &::std::string::String {
         &self.crate_
     }
-    /// `super`.
+    /// The column `super`.
     pub fn super_(&self) -> &::std::string::String {
         &self.super_
     }
-    /// `kind`.
-    pub fn kind(&self) -> &Kind {
-        &self.kind
+    /// The column `kind`.
+    pub fn kind_(&self) -> &Kind {
+        &self.kind_
     }
-    /// `function_id`.
+    /// The column `function_id`.
     pub fn function_id(&self) -> &FunctionId {
         &self.function_id
     }
-    /// `func_id`.
+    /// The column `func_id`.
     pub fn func_id(&self) -> &FuncId {
         &self.func_id
     }
-    /// `mod_id`.
+    /// The column `mod_id`.
     pub fn mod_id(&self) -> &ModId {
         &self.mod_id
     }
 }
 
 /// Match in the state `crate` of status.
-/// Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.
+/// Sealed: only a transition function and `from_row` make one. Its fields are private, and read by the methods of the same name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchCrate {
     /// Primary key.
@@ -565,65 +948,66 @@ pub struct MatchCrate {
     self_: ::std::string::String,
     crate_: ::std::string::String,
     super_: ::std::string::String,
-    kind: Kind,
+    kind_: Kind,
     function_id: FunctionId,
     func_id: FuncId,
     mod_id: ModId,
 }
 
+#[allow(clippy::new_ret_no_self, clippy::should_implement_trait)] // accessors are named after the model's columns
 impl MatchCrate {
-    /// `id`.
+    /// The column `id`.
     pub fn id(&self) -> &MatchId {
         &self.id
     }
-    /// `type`.
+    /// The column `type`.
     pub fn r#type(&self) -> &::std::string::String {
         &self.r#type
     }
-    /// `default`.
+    /// The column `default`.
     pub fn default(&self) -> &i64 {
         &self.default
     }
-    /// `new`.
+    /// The column `new`.
     pub fn new(&self) -> &::std::string::String {
         &self.new
     }
-    /// `func`.
+    /// The column `func`.
     pub fn func(&self) -> &::std::string::String {
         &self.func
     }
-    /// `self`.
+    /// The column `self`.
     pub fn self_(&self) -> &::std::string::String {
         &self.self_
     }
-    /// `crate`.
+    /// The column `crate`.
     pub fn crate_(&self) -> &::std::string::String {
         &self.crate_
     }
-    /// `super`.
+    /// The column `super`.
     pub fn super_(&self) -> &::std::string::String {
         &self.super_
     }
-    /// `kind`.
-    pub fn kind(&self) -> &Kind {
-        &self.kind
+    /// The column `kind`.
+    pub fn kind_(&self) -> &Kind {
+        &self.kind_
     }
-    /// `function_id`.
+    /// The column `function_id`.
     pub fn function_id(&self) -> &FunctionId {
         &self.function_id
     }
-    /// `func_id`.
+    /// The column `func_id`.
     pub fn func_id(&self) -> &FuncId {
         &self.func_id
     }
-    /// `mod_id`.
+    /// The column `mod_id`.
     pub fn mod_id(&self) -> &ModId {
         &self.mod_id
     }
 }
 
 /// Match in the state `default` of status.
-/// Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.
+/// Sealed: only a transition function and `from_row` make one. Its fields are private, and read by the methods of the same name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchDefault {
     /// Primary key.
@@ -635,85 +1019,110 @@ pub struct MatchDefault {
     self_: ::std::string::String,
     crate_: ::std::string::String,
     super_: ::std::string::String,
-    kind: Kind,
+    kind_: Kind,
     function_id: FunctionId,
     func_id: FuncId,
     mod_id: ModId,
 }
 
+#[allow(clippy::new_ret_no_self, clippy::should_implement_trait)] // accessors are named after the model's columns
 impl MatchDefault {
-    /// `id`.
+    /// The column `id`.
     pub fn id(&self) -> &MatchId {
         &self.id
     }
-    /// `type`.
+    /// The column `type`.
     pub fn r#type(&self) -> &::std::string::String {
         &self.r#type
     }
-    /// `default`.
+    /// The column `default`.
     pub fn default(&self) -> &i64 {
         &self.default
     }
-    /// `new`.
+    /// The column `new`.
     pub fn new(&self) -> &::std::string::String {
         &self.new
     }
-    /// `func`.
+    /// The column `func`.
     pub fn func(&self) -> &::std::string::String {
         &self.func
     }
-    /// `self`.
+    /// The column `self`.
     pub fn self_(&self) -> &::std::string::String {
         &self.self_
     }
-    /// `crate`.
+    /// The column `crate`.
     pub fn crate_(&self) -> &::std::string::String {
         &self.crate_
     }
-    /// `super`.
+    /// The column `super`.
     pub fn super_(&self) -> &::std::string::String {
         &self.super_
     }
-    /// `kind`.
-    pub fn kind(&self) -> &Kind {
-        &self.kind
+    /// The column `kind`.
+    pub fn kind_(&self) -> &Kind {
+        &self.kind_
     }
-    /// `function_id`.
+    /// The column `function_id`.
     pub fn function_id(&self) -> &FunctionId {
         &self.function_id
     }
-    /// `func_id`.
+    /// The column `func_id`.
     pub fn func_id(&self) -> &FuncId {
         &self.func_id
     }
-    /// `mod_id`.
+    /// The column `mod_id`.
     pub fn mod_id(&self) -> &ModId {
         &self.mod_id
     }
 }
 
+/// Which state a Match is in: its discriminant.
+/// The domain's own: the tag column `status` lives only in [`MatchRow`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum MatchKind {
+    /// The state `new`.
+    New,
+    /// The state `return`.
+    Return,
+    /// The state `self`.
+    Self_,
+    /// The state `super`.
+    Super,
+    /// The state `crate`.
+    Crate,
+    /// The state `default`.
+    Default,
+}
+
 /// M
-/// One of its states, told apart by `status`.
+/// One of its states, told apart by `kind()`. A store holds it as [`MatchRow`]: `from_row` (or `TryFrom`) reads one, `into_row` (or `From`) writes one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Match {
+    /// The state `new`.
     New(MatchNew),
+    /// The state `return`.
     Return(MatchReturn),
+    /// The state `self`.
     Self_(MatchSelf),
+    /// The state `super`.
     Super(MatchSuper),
+    /// The state `crate`.
     Crate(MatchCrate),
+    /// The state `default`.
     Default(MatchDefault),
 }
 
 impl Match {
-    /// The state's `status`.
-    pub fn status(&self) -> MatchStatus {
+    /// The state it is in.
+    pub fn kind(&self) -> MatchKind {
         match self {
-            Self::New(_) => MatchStatus::New,
-            Self::Return(_) => MatchStatus::Return,
-            Self::Self_(_) => MatchStatus::Self_,
-            Self::Super(_) => MatchStatus::Super,
-            Self::Crate(_) => MatchStatus::Crate,
-            Self::Default(_) => MatchStatus::Default,
+            Self::New(_) => MatchKind::New,
+            Self::Return(_) => MatchKind::Return,
+            Self::Self_(_) => MatchKind::Self_,
+            Self::Super(_) => MatchKind::Super,
+            Self::Crate(_) => MatchKind::Crate,
+            Self::Default(_) => MatchKind::Default,
         }
     }
 }
@@ -765,12 +1174,339 @@ pub struct Switch {
 
 // ── Use cases ──
 
-/// A condition of the use case did not hold: the use case does not run.
+/// The rows are in states the use case does not run from, or a store found a row it writes
+/// no longer what the result expects when it committed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotEnabled {
+    /// The use case.
+    pub usecase: &'static str,
+}
+
+impl ::core::fmt::Display for NotEnabled {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        write!(f, "{} does not run from the states of its rows", self.usecase)
+    }
+}
+
+impl ::std::error::Error for NotEnabled {}
+
+/// A condition applied to the use case does not hold: the use case does not run.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Rejected {
+    /// The condition's id.
     pub condition: &'static str,
+    /// The condition's label.
     pub label: &'static str,
+    /// Where the condition is declared.
     pub site: ::core::option::Option<&'static str>,
+}
+
+impl ::core::fmt::Display for Rejected {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        write!(f, "the condition {} ({}) does not hold", self.condition, self.label)
+    }
+}
+
+impl ::std::error::Error for Rejected {}
+
+/// The arguments break what the verified model keeps: a child row that does not name the
+/// parent passed with it, a row that is not the event's, or a column its state keeps null or
+/// present that is not. The caller's rows are wrong; the use case does not run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvalidArgument {
+    /// The use case.
+    pub usecase: &'static str,
+    /// What the arguments break.
+    pub reason: &'static str,
+}
+
+impl ::core::fmt::Display for InvalidArgument {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        write!(f, "{}: {}", self.usecase, self.reason)
+    }
+}
+
+impl ::std::error::Error for InvalidArgument {}
+
+/// Why Return did not run: what its functions, its dispatcher, and the commit of its result return.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ReturnError {
+    /// The rows are in states Return does not run from, or a commit found a row it writes changed.
+    NotEnabled(NotEnabled),
+}
+
+impl ::core::fmt::Display for ReturnError {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        match self {
+            Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
+        }
+    }
+}
+
+impl ::std::error::Error for ReturnError {
+    fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
+        match self {
+            Self::NotEnabled(e) => ::core::option::Option::Some(e),
+        }
+    }
+}
+
+impl ::core::convert::From<NotEnabled> for ReturnError {
+    fn from(e: NotEnabled) -> Self {
+        Self::NotEnabled(e)
+    }
+}
+
+/// Why Delete did not run: what its functions, its dispatcher, and the commit of its result return.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeleteError {
+    /// The rows are in states Delete does not run from, or a commit found a row it writes changed.
+    NotEnabled(NotEnabled),
+    /// The arguments break what the verified model keeps.
+    InvalidArgument(InvalidArgument),
+}
+
+impl ::core::fmt::Display for DeleteError {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        match self {
+            Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
+            Self::InvalidArgument(e) => ::core::fmt::Display::fmt(e, f),
+        }
+    }
+}
+
+impl ::std::error::Error for DeleteError {
+    fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
+        match self {
+            Self::NotEnabled(e) => ::core::option::Option::Some(e),
+            Self::InvalidArgument(e) => ::core::option::Option::Some(e),
+        }
+    }
+}
+
+impl ::core::convert::From<NotEnabled> for DeleteError {
+    fn from(e: NotEnabled) -> Self {
+        Self::NotEnabled(e)
+    }
+}
+
+impl ::core::convert::From<InvalidArgument> for DeleteError {
+    fn from(e: InvalidArgument) -> Self {
+        Self::InvalidArgument(e)
+    }
+}
+
+/// Why Super did not run: what its functions, its dispatcher, and the commit of its result return.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SuperError {
+    /// The rows are in states Super does not run from, or a commit found a row it writes changed.
+    NotEnabled(NotEnabled),
+    /// A condition applied to Super does not hold.
+    Rejected(Rejected),
+}
+
+impl ::core::fmt::Display for SuperError {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        match self {
+            Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
+            Self::Rejected(e) => ::core::fmt::Display::fmt(e, f),
+        }
+    }
+}
+
+impl ::std::error::Error for SuperError {
+    fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
+        match self {
+            Self::NotEnabled(e) => ::core::option::Option::Some(e),
+            Self::Rejected(e) => ::core::option::Option::Some(e),
+        }
+    }
+}
+
+impl ::core::convert::From<NotEnabled> for SuperError {
+    fn from(e: NotEnabled) -> Self {
+        Self::NotEnabled(e)
+    }
+}
+
+impl ::core::convert::From<Rejected> for SuperError {
+    fn from(e: Rejected) -> Self {
+        Self::Rejected(e)
+    }
+}
+
+/// Why Crate did not run: what its functions, its dispatcher, and the commit of its result return.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CrateError {
+    /// The rows are in states Crate does not run from, or a commit found a row it writes changed.
+    NotEnabled(NotEnabled),
+}
+
+impl ::core::fmt::Display for CrateError {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        match self {
+            Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
+        }
+    }
+}
+
+impl ::std::error::Error for CrateError {
+    fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
+        match self {
+            Self::NotEnabled(e) => ::core::option::Option::Some(e),
+        }
+    }
+}
+
+impl ::core::convert::From<NotEnabled> for CrateError {
+    fn from(e: NotEnabled) -> Self {
+        Self::NotEnabled(e)
+    }
+}
+
+/// Why Default did not run: what its functions, its dispatcher, and the commit of its result return.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DefaultError {
+    /// The rows are in states Default does not run from, or a commit found a row it writes changed.
+    NotEnabled(NotEnabled),
+}
+
+impl ::core::fmt::Display for DefaultError {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        match self {
+            Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
+        }
+    }
+}
+
+impl ::std::error::Error for DefaultError {
+    fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
+        match self {
+            Self::NotEnabled(e) => ::core::option::Option::Some(e),
+        }
+    }
+}
+
+impl ::core::convert::From<NotEnabled> for DefaultError {
+    fn from(e: NotEnabled) -> Self {
+        Self::NotEnabled(e)
+    }
+}
+
+/// Why Type did not run: what its functions, its dispatcher, and the commit of its result return.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TypeError {
+    /// The rows are in states Type does not run from, or a commit found a row it writes changed.
+    NotEnabled(NotEnabled),
+}
+
+impl ::core::fmt::Display for TypeError {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        match self {
+            Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
+        }
+    }
+}
+
+impl ::std::error::Error for TypeError {
+    fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
+        match self {
+            Self::NotEnabled(e) => ::core::option::Option::Some(e),
+        }
+    }
+}
+
+impl ::core::convert::From<NotEnabled> for TypeError {
+    fn from(e: NotEnabled) -> Self {
+        Self::NotEnabled(e)
+    }
+}
+
+/// Why Class did not run: what its functions, its dispatcher, and the commit of its result return.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClassError {
+    /// The rows are in states Class does not run from, or a commit found a row it writes changed.
+    NotEnabled(NotEnabled),
+}
+
+impl ::core::fmt::Display for ClassError {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        match self {
+            Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
+        }
+    }
+}
+
+impl ::std::error::Error for ClassError {
+    fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
+        match self {
+            Self::NotEnabled(e) => ::core::option::Option::Some(e),
+        }
+    }
+}
+
+impl ::core::convert::From<NotEnabled> for ClassError {
+    fn from(e: NotEnabled) -> Self {
+        Self::NotEnabled(e)
+    }
+}
+
+/// Why New did not run: what its functions, its dispatcher, and the commit of its result return.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NewError {
+    /// The rows are in states New does not run from, or a commit found a row it writes changed.
+    NotEnabled(NotEnabled),
+}
+
+impl ::core::fmt::Display for NewError {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        match self {
+            Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
+        }
+    }
+}
+
+impl ::std::error::Error for NewError {
+    fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
+        match self {
+            Self::NotEnabled(e) => ::core::option::Option::Some(e),
+        }
+    }
+}
+
+impl ::core::convert::From<NotEnabled> for NewError {
+    fn from(e: NotEnabled) -> Self {
+        Self::NotEnabled(e)
+    }
+}
+
+/// Why Static did not run: what its functions, its dispatcher, and the commit of its result return.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StaticError {
+    /// The rows are in states Static does not run from, or a commit found a row it writes changed.
+    NotEnabled(NotEnabled),
+}
+
+impl ::core::fmt::Display for StaticError {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        match self {
+            Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
+        }
+    }
+}
+
+impl ::std::error::Error for StaticError {
+    fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
+        match self {
+            Self::NotEnabled(e) => ::core::option::Option::Some(e),
+        }
+    }
+}
+
+impl ::core::convert::From<NotEnabled> for StaticError {
+    fn from(e: NotEnabled) -> Self {
+        Self::NotEnabled(e)
+    }
 }
 
 /// What a row a result writes must still be when the write commits, so the store can write
@@ -782,23 +1518,30 @@ pub enum ExpectedSource {
     /// The row exists.
     Present,
     /// The row exists, and its `column` holds `value`.
-    In { column: &'static str, value: &'static str },
+    In {
+        /// The column, as the row spells it.
+        column: &'static str,
+        /// The value, as the model spells it.
+        value: &'static str,
+    },
 }
 
 /// What `r#return` returns.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReturnResult {
+    /// The row `match` to write.
     pub r#match: MatchReturn,
     /// What `match` must still be when it is written.
     pub match_expected: ExpectedSource,
+    /// The event raised.
     pub switch: Switch,
 }
 
 /// Return (Return).
 /// One run of the use case, from the states of the arguments' types. It requires what `Return` requires and writes what it writes; the values the model leaves open are the inputs.
-pub fn r#return(r#match: MatchNew) -> ReturnResult {
-    let out_switch = Switch { match_id: r#match.id.clone() };
-    ReturnResult {
+pub fn r#return(r#match: MatchNew) -> ::core::result::Result<ReturnResult, ReturnError> {
+    let out_switch = Switch { match_id: r#match.id };
+    ::core::result::Result::Ok(ReturnResult {
         r#match: MatchReturn {
             id: r#match.id,
             r#type: r#match.r#type,
@@ -808,19 +1551,20 @@ pub fn r#return(r#match: MatchNew) -> ReturnResult {
             self_: r#match.self_,
             crate_: r#match.crate_,
             super_: r#match.super_,
-            kind: r#match.kind,
+            kind_: r#match.kind_,
             function_id: r#match.function_id,
             func_id: r#match.func_id,
             mod_id: r#match.mod_id,
         },
         match_expected: ExpectedSource::In { column: "status", value: "new" },
         switch: out_switch,
-    }
+    })
 }
 
 /// What `delete` returns.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeleteResult {
+    /// The row `match` to write.
     pub r#match: MatchSelf,
     /// What `match` must still be when it is written.
     pub match_expected: ExpectedSource,
@@ -828,11 +1572,15 @@ pub struct DeleteResult {
 
 /// Delete (Delete).
 /// One run of the use case, from the states of the arguments' types. It requires what `Delete` requires and writes what it writes; the values the model leaves open are the inputs.
-pub fn delete(r#match: MatchReturn, switch: Switch) -> DeleteResult {
+///
+/// # Errors
+///
+/// `InvalidArgument` when the arguments break what the model keeps.
+pub fn delete(r#match: MatchReturn, switch: Switch) -> ::core::result::Result<DeleteResult, DeleteError> {
     if r#match.id != switch.match_id {
-        panic!("rdra-ish: the Match row is not the row the event was raised on");
+        return ::core::result::Result::Err(DeleteError::InvalidArgument(InvalidArgument { usecase: "Delete", reason: "rdra-ish: the Match row is not the row the event was raised on" }));
     }
-    DeleteResult {
+    ::core::result::Result::Ok(DeleteResult {
         r#match: MatchSelf {
             id: r#match.id,
             r#type: r#match.r#type,
@@ -842,18 +1590,19 @@ pub fn delete(r#match: MatchReturn, switch: Switch) -> DeleteResult {
             self_: r#match.self_,
             crate_: r#match.crate_,
             super_: r#match.super_,
-            kind: r#match.kind,
+            kind_: r#match.kind_,
             function_id: r#match.function_id,
             func_id: r#match.func_id,
             mod_id: r#match.mod_id,
         },
         match_expected: ExpectedSource::In { column: "status", value: "return" },
-    }
+    })
 }
 
 /// What `super_` returns.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SuperResult {
+    /// The row `match` to write.
     pub r#match: MatchSuper,
     /// What `match` must still be when it is written.
     pub match_expected: ExpectedSource,
@@ -862,9 +1611,17 @@ pub struct SuperResult {
 /// Super (Super).
 /// One run of the use case, from the states of the arguments' types. It requires what `Super` requires and writes what it writes; the values the model leaves open are the inputs.
 /// Requires the condition Small (Small default).
-pub fn super_(r#match: MatchSelf) -> ::core::result::Result<SuperResult, Rejected> {
+///
+/// # Errors
+///
+/// `Rejected` when a condition does not hold.
+pub fn super_(r#match: MatchSelf) -> ::core::result::Result<SuperResult, SuperError> {
     if !(r#match.default <= 4) {
-        return ::core::result::Result::Err(Rejected { condition: "Small", label: "Small default", site: None });
+        return ::core::result::Result::Err(SuperError::Rejected(Rejected {
+            condition: "Small",
+            label: "Small default",
+            site: ::core::option::Option::None,
+        }));
     }
     ::core::result::Result::Ok(SuperResult {
         r#match: MatchSuper {
@@ -876,7 +1633,7 @@ pub fn super_(r#match: MatchSelf) -> ::core::result::Result<SuperResult, Rejecte
             self_: r#match.self_,
             crate_: r#match.crate_,
             super_: r#match.super_,
-            kind: r#match.kind,
+            kind_: r#match.kind_,
             function_id: r#match.function_id,
             func_id: r#match.func_id,
             mod_id: r#match.mod_id,
@@ -888,6 +1645,7 @@ pub fn super_(r#match: MatchSelf) -> ::core::result::Result<SuperResult, Rejecte
 /// What `crate_` returns.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CrateResult {
+    /// The row `match` to write.
     pub r#match: MatchCrate,
     /// What `match` must still be when it is written.
     pub match_expected: ExpectedSource,
@@ -895,8 +1653,8 @@ pub struct CrateResult {
 
 /// Crate (Crate).
 /// One run of the use case, from the states of the arguments' types. It requires what `Crate` requires and writes what it writes; the values the model leaves open are the inputs.
-pub fn crate_(r#match: MatchSuper) -> CrateResult {
-    CrateResult {
+pub fn crate_(r#match: MatchSuper) -> ::core::result::Result<CrateResult, CrateError> {
+    ::core::result::Result::Ok(CrateResult {
         r#match: MatchCrate {
             id: r#match.id,
             r#type: r#match.r#type,
@@ -906,18 +1664,19 @@ pub fn crate_(r#match: MatchSuper) -> CrateResult {
             self_: r#match.self_,
             crate_: r#match.crate_,
             super_: r#match.super_,
-            kind: r#match.kind,
+            kind_: r#match.kind_,
             function_id: r#match.function_id,
             func_id: r#match.func_id,
             mod_id: r#match.mod_id,
         },
         match_expected: ExpectedSource::In { column: "status", value: "super" },
-    }
+    })
 }
 
 /// What `default` returns.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DefaultResult {
+    /// The row `match` to write.
     pub r#match: MatchDefault,
     /// What `match` must still be when it is written.
     pub match_expected: ExpectedSource,
@@ -925,8 +1684,8 @@ pub struct DefaultResult {
 
 /// Default (Default).
 /// One run of the use case, from the states of the arguments' types. It requires what `Default` requires and writes what it writes; the values the model leaves open are the inputs.
-pub fn default(r#match: MatchCrate) -> DefaultResult {
-    DefaultResult {
+pub fn default(r#match: MatchCrate) -> ::core::result::Result<DefaultResult, DefaultError> {
+    ::core::result::Result::Ok(DefaultResult {
         r#match: MatchDefault {
             id: r#match.id,
             r#type: r#match.r#type,
@@ -936,18 +1695,19 @@ pub fn default(r#match: MatchCrate) -> DefaultResult {
             self_: r#match.self_,
             crate_: r#match.crate_,
             super_: r#match.super_,
-            kind: r#match.kind,
+            kind_: r#match.kind_,
             function_id: r#match.function_id,
             func_id: r#match.func_id,
             mod_id: r#match.mod_id,
         },
         match_expected: ExpectedSource::In { column: "status", value: "crate" },
-    }
+    })
 }
 
 /// What `r#type` returns.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypeResult {
+    /// The row `func` to write.
     pub func: FuncReturn,
     /// What `func` must still be when it is written.
     pub func_expected: ExpectedSource,
@@ -955,18 +1715,19 @@ pub struct TypeResult {
 
 /// Type (Type).
 /// One run of the use case, from the states of the arguments' types. It requires what `Type` requires and writes what it writes; the values the model leaves open are the inputs.
-pub fn r#type(func: FuncNew) -> TypeResult {
-    TypeResult {
+pub fn r#type(func: FuncNew) -> ::core::result::Result<TypeResult, TypeError> {
+    ::core::result::Result::Ok(TypeResult {
         func: FuncReturn {
             id: func.id,
         },
         func_expected: ExpectedSource::In { column: "type", value: "new" },
-    }
+    })
 }
 
 /// What `class` returns.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClassResult {
+    /// The row `func` to write.
     pub func: FuncFunc,
     /// What `func` must still be when it is written.
     pub func_expected: ExpectedSource,
@@ -974,18 +1735,19 @@ pub struct ClassResult {
 
 /// Class (Class).
 /// One run of the use case, from the states of the arguments' types. It requires what `Class` requires and writes what it writes; the values the model leaves open are the inputs.
-pub fn class(func: FuncReturn) -> ClassResult {
-    ClassResult {
+pub fn class(func: FuncReturn) -> ::core::result::Result<ClassResult, ClassError> {
+    ::core::result::Result::Ok(ClassResult {
         func: FuncFunc {
             id: func.id,
         },
         func_expected: ExpectedSource::In { column: "type", value: "return" },
-    }
+    })
 }
 
 /// What `new_from_new` returns.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewFromNewResult {
+    /// The row `match` to write.
     pub r#match: MatchNew,
     /// What `match` must still be when it is written.
     pub match_expected: ExpectedSource,
@@ -993,8 +1755,9 @@ pub struct NewFromNewResult {
 
 /// New (New).
 /// One run of the use case, from the states of the arguments' types. It requires what `New` requires and writes what it writes; the values the model leaves open are the inputs.
-pub fn new_from_new(parent_function: Function, parent_func: FuncNew, parent_mod: Mod, match_id: MatchId, match_type: ::std::string::String, match_new: ::std::string::String, match_func: ::std::string::String, match_self: ::std::string::String, match_crate: ::std::string::String, match_super: ::std::string::String, match_kind: Kind) -> NewFromNewResult {
-    NewFromNewResult {
+#[allow(clippy::too_many_arguments)] // one argument per row and input of the use case
+pub fn new_from_new(parent_function: Function, parent_func: FuncNew, parent_mod: Mod, match_id: MatchId, match_type: ::std::string::String, match_new: ::std::string::String, match_func: ::std::string::String, match_self: ::std::string::String, match_crate: ::std::string::String, match_super: ::std::string::String, match_kind: Kind) -> ::core::result::Result<NewFromNewResult, NewError> {
+    ::core::result::Result::Ok(NewFromNewResult {
         r#match: MatchNew {
             id: match_id,
             r#type: match_type,
@@ -1004,18 +1767,19 @@ pub fn new_from_new(parent_function: Function, parent_func: FuncNew, parent_mod:
             self_: match_self,
             crate_: match_crate,
             super_: match_super,
-            kind: match_kind,
-            function_id: parent_function.id.clone(),
-            func_id: parent_func.id.clone(),
-            mod_id: parent_mod.id.clone(),
+            kind_: match_kind,
+            function_id: parent_function.id,
+            func_id: parent_func.id,
+            mod_id: parent_mod.id,
         },
         match_expected: ExpectedSource::Absent,
-    }
+    })
 }
 
 /// What `new_from_return` returns.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewFromReturnResult {
+    /// The row `match` to write.
     pub r#match: MatchNew,
     /// What `match` must still be when it is written.
     pub match_expected: ExpectedSource,
@@ -1023,8 +1787,9 @@ pub struct NewFromReturnResult {
 
 /// New (New).
 /// One run of the use case, from the states of the arguments' types. It requires what `New` requires and writes what it writes; the values the model leaves open are the inputs.
-pub fn new_from_return(parent_function: Function, parent_func: FuncReturn, parent_mod: Mod, match_id: MatchId, match_type: ::std::string::String, match_new: ::std::string::String, match_func: ::std::string::String, match_self: ::std::string::String, match_crate: ::std::string::String, match_super: ::std::string::String, match_kind: Kind) -> NewFromReturnResult {
-    NewFromReturnResult {
+#[allow(clippy::too_many_arguments)] // one argument per row and input of the use case
+pub fn new_from_return(parent_function: Function, parent_func: FuncReturn, parent_mod: Mod, match_id: MatchId, match_type: ::std::string::String, match_new: ::std::string::String, match_func: ::std::string::String, match_self: ::std::string::String, match_crate: ::std::string::String, match_super: ::std::string::String, match_kind: Kind) -> ::core::result::Result<NewFromReturnResult, NewError> {
+    ::core::result::Result::Ok(NewFromReturnResult {
         r#match: MatchNew {
             id: match_id,
             r#type: match_type,
@@ -1034,18 +1799,19 @@ pub fn new_from_return(parent_function: Function, parent_func: FuncReturn, paren
             self_: match_self,
             crate_: match_crate,
             super_: match_super,
-            kind: match_kind,
-            function_id: parent_function.id.clone(),
-            func_id: parent_func.id.clone(),
-            mod_id: parent_mod.id.clone(),
+            kind_: match_kind,
+            function_id: parent_function.id,
+            func_id: parent_func.id,
+            mod_id: parent_mod.id,
         },
         match_expected: ExpectedSource::Absent,
-    }
+    })
 }
 
 /// What `new_from_func` returns.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewFromFuncResult {
+    /// The row `match` to write.
     pub r#match: MatchNew,
     /// What `match` must still be when it is written.
     pub match_expected: ExpectedSource,
@@ -1053,8 +1819,9 @@ pub struct NewFromFuncResult {
 
 /// New (New).
 /// One run of the use case, from the states of the arguments' types. It requires what `New` requires and writes what it writes; the values the model leaves open are the inputs.
-pub fn new_from_func(parent_function: Function, parent_func: FuncFunc, parent_mod: Mod, match_id: MatchId, match_type: ::std::string::String, match_new: ::std::string::String, match_func: ::std::string::String, match_self: ::std::string::String, match_crate: ::std::string::String, match_super: ::std::string::String, match_kind: Kind) -> NewFromFuncResult {
-    NewFromFuncResult {
+#[allow(clippy::too_many_arguments)] // one argument per row and input of the use case
+pub fn new_from_func(parent_function: Function, parent_func: FuncFunc, parent_mod: Mod, match_id: MatchId, match_type: ::std::string::String, match_new: ::std::string::String, match_func: ::std::string::String, match_self: ::std::string::String, match_crate: ::std::string::String, match_super: ::std::string::String, match_kind: Kind) -> ::core::result::Result<NewFromFuncResult, NewError> {
+    ::core::result::Result::Ok(NewFromFuncResult {
         r#match: MatchNew {
             id: match_id,
             r#type: match_type,
@@ -1064,18 +1831,19 @@ pub fn new_from_func(parent_function: Function, parent_func: FuncFunc, parent_mo
             self_: match_self,
             crate_: match_crate,
             super_: match_super,
-            kind: match_kind,
-            function_id: parent_function.id.clone(),
-            func_id: parent_func.id.clone(),
-            mod_id: parent_mod.id.clone(),
+            kind_: match_kind,
+            function_id: parent_function.id,
+            func_id: parent_func.id,
+            mod_id: parent_mod.id,
         },
         match_expected: ExpectedSource::Absent,
-    }
+    })
 }
 
 /// What `r#static` returns.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StaticResult {
+    /// The row `function` to write.
     pub function: Function,
     /// What `function` must still be when it is written.
     pub function_expected: ExpectedSource,
@@ -1083,14 +1851,14 @@ pub struct StaticResult {
 
 /// Static (Static).
 /// One run of the use case, from the states of the arguments' types. It requires what `Static` requires and writes what it writes; the values the model leaves open are the inputs.
-pub fn r#static(function: Function, function_default: ::std::string::String) -> StaticResult {
-    StaticResult {
+pub fn r#static(function: Function, function_default: ::std::string::String) -> ::core::result::Result<StaticResult, StaticError> {
+    ::core::result::Result::Ok(StaticResult {
         function: Function {
             id: function.id,
-            default: Some(function_default),
+            default: ::core::option::Option::Some(function_default),
         },
         function_expected: ExpectedSource::Present,
-    }
+    })
 }
 
 // ── Rule checks ──
@@ -1233,24 +2001,40 @@ impl Match {
 
 // ── Rows: the flat shape a store or the wire holds ──
 
-/// A row that breaks what the type of its state requires.
+/// A row that fits no state of its entity: `from_row` refuses it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvalidRow {
+    /// The entity.
     pub entity: &'static str,
+    /// The column that breaks what the state requires.
     pub column: &'static str,
+    /// What the state requires of it.
     pub reason: &'static str,
 }
 
-/// Every column of Func as the data layer declares it.
+impl ::core::fmt::Display for InvalidRow {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        write!(f, "{}.{}: {}", self.entity, self.column, self.reason)
+    }
+}
+
+impl ::std::error::Error for InvalidRow {}
+
+/// Every column of Func as the data layer declares it: the shape a store or the wire holds. The
+/// scalars it holds were parsed when it was built.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FuncRow {
+    /// The column `id`.
     pub id: FuncId,
+    /// The column `type`.
     pub r#type: FuncType,
 }
 
-impl Func {
+impl ::core::convert::TryFrom<FuncRow> for Func {
+    type Error = InvalidRow;
+
     /// The state of a row, or why the row fits none.
-    pub fn from_row(row: FuncRow) -> ::core::result::Result<Self, InvalidRow> {
+    fn try_from(row: FuncRow) -> ::core::result::Result<Self, InvalidRow> {
         match row.r#type {
             FuncType::New => {
                 ::core::result::Result::Ok(Self::New(FuncNew { id: row.id }))
@@ -1263,199 +2047,289 @@ impl Func {
             }
         }
     }
+}
 
-    /// The flat row of this state.
-    pub fn into_row(self) -> FuncRow {
-        match self {
-            Self::New(state) => FuncRow { id: state.id, r#type: FuncType::New },
-            Self::Return(state) => FuncRow { id: state.id, r#type: FuncType::Return },
-            Self::Func(state) => FuncRow { id: state.id, r#type: FuncType::Func },
+impl ::core::convert::From<Func> for FuncRow {
+    /// The flat row of a state.
+    fn from(state: Func) -> Self {
+        match state {
+            Func::New(s) => Self { id: s.id, r#type: FuncType::New },
+            Func::Return(s) => Self { id: s.id, r#type: FuncType::Return },
+            Func::Func(s) => Self { id: s.id, r#type: FuncType::Func },
         }
     }
 }
 
-/// Every column of Match as the data layer declares it.
+impl Func {
+    /// The state of a row, or why the row fits none: [`TryFrom`] by name.
+    ///
+    /// # Errors
+    ///
+    /// [`InvalidRow`] when the row fits no state.
+    pub fn from_row(row: FuncRow) -> ::core::result::Result<Self, InvalidRow> {
+        <Self as ::core::convert::TryFrom<FuncRow>>::try_from(row)
+    }
+
+    /// The flat row of this state: [`From`] by name.
+    pub fn into_row(self) -> FuncRow {
+        FuncRow::from(self)
+    }
+}
+
+/// Every column of Match as the data layer declares it: the shape a store or the wire holds. The
+/// scalars it holds were parsed when it was built.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchRow {
+    /// The column `id`.
     pub id: MatchId,
+    /// The column `status`.
     pub status: MatchStatus,
+    /// The column `type`.
     pub r#type: ::std::string::String,
+    /// The column `default`.
     pub default: i64,
+    /// The column `new`.
     pub new: ::std::string::String,
+    /// The column `func`.
     pub func: ::std::string::String,
+    /// The column `self`.
     pub self_: ::std::string::String,
+    /// The column `crate`.
     pub crate_: ::std::string::String,
+    /// The column `super`.
     pub super_: ::std::string::String,
+    /// The column `kind`.
     pub kind: Kind,
+    /// The column `function_id`.
     pub function_id: FunctionId,
+    /// The column `func_id`.
     pub func_id: FuncId,
+    /// The column `mod_id`.
     pub mod_id: ModId,
 }
 
-impl Match {
+impl ::core::convert::TryFrom<MatchRow> for Match {
+    type Error = InvalidRow;
+
     /// The state of a row, or why the row fits none.
-    pub fn from_row(row: MatchRow) -> ::core::result::Result<Self, InvalidRow> {
+    fn try_from(row: MatchRow) -> ::core::result::Result<Self, InvalidRow> {
         match row.status {
             MatchStatus::New => {
-                ::core::result::Result::Ok(Self::New(MatchNew { id: row.id, r#type: row.r#type, default: row.default, new: row.new, func: row.func, self_: row.self_, crate_: row.crate_, super_: row.super_, kind: row.kind, function_id: row.function_id, func_id: row.func_id, mod_id: row.mod_id }))
+                ::core::result::Result::Ok(Self::New(MatchNew { id: row.id, r#type: row.r#type, default: row.default, new: row.new, func: row.func, self_: row.self_, crate_: row.crate_, super_: row.super_, kind_: row.kind, function_id: row.function_id, func_id: row.func_id, mod_id: row.mod_id }))
             }
             MatchStatus::Return => {
-                ::core::result::Result::Ok(Self::Return(MatchReturn { id: row.id, r#type: row.r#type, default: row.default, new: row.new, func: row.func, self_: row.self_, crate_: row.crate_, super_: row.super_, kind: row.kind, function_id: row.function_id, func_id: row.func_id, mod_id: row.mod_id }))
+                ::core::result::Result::Ok(Self::Return(MatchReturn { id: row.id, r#type: row.r#type, default: row.default, new: row.new, func: row.func, self_: row.self_, crate_: row.crate_, super_: row.super_, kind_: row.kind, function_id: row.function_id, func_id: row.func_id, mod_id: row.mod_id }))
             }
             MatchStatus::Self_ => {
-                ::core::result::Result::Ok(Self::Self_(MatchSelf { id: row.id, r#type: row.r#type, default: row.default, new: row.new, func: row.func, self_: row.self_, crate_: row.crate_, super_: row.super_, kind: row.kind, function_id: row.function_id, func_id: row.func_id, mod_id: row.mod_id }))
+                ::core::result::Result::Ok(Self::Self_(MatchSelf { id: row.id, r#type: row.r#type, default: row.default, new: row.new, func: row.func, self_: row.self_, crate_: row.crate_, super_: row.super_, kind_: row.kind, function_id: row.function_id, func_id: row.func_id, mod_id: row.mod_id }))
             }
             MatchStatus::Super => {
-                ::core::result::Result::Ok(Self::Super(MatchSuper { id: row.id, r#type: row.r#type, default: row.default, new: row.new, func: row.func, self_: row.self_, crate_: row.crate_, super_: row.super_, kind: row.kind, function_id: row.function_id, func_id: row.func_id, mod_id: row.mod_id }))
+                ::core::result::Result::Ok(Self::Super(MatchSuper { id: row.id, r#type: row.r#type, default: row.default, new: row.new, func: row.func, self_: row.self_, crate_: row.crate_, super_: row.super_, kind_: row.kind, function_id: row.function_id, func_id: row.func_id, mod_id: row.mod_id }))
             }
             MatchStatus::Crate => {
-                ::core::result::Result::Ok(Self::Crate(MatchCrate { id: row.id, r#type: row.r#type, default: row.default, new: row.new, func: row.func, self_: row.self_, crate_: row.crate_, super_: row.super_, kind: row.kind, function_id: row.function_id, func_id: row.func_id, mod_id: row.mod_id }))
+                ::core::result::Result::Ok(Self::Crate(MatchCrate { id: row.id, r#type: row.r#type, default: row.default, new: row.new, func: row.func, self_: row.self_, crate_: row.crate_, super_: row.super_, kind_: row.kind, function_id: row.function_id, func_id: row.func_id, mod_id: row.mod_id }))
             }
             MatchStatus::Default => {
-                ::core::result::Result::Ok(Self::Default(MatchDefault { id: row.id, r#type: row.r#type, default: row.default, new: row.new, func: row.func, self_: row.self_, crate_: row.crate_, super_: row.super_, kind: row.kind, function_id: row.function_id, func_id: row.func_id, mod_id: row.mod_id }))
+                ::core::result::Result::Ok(Self::Default(MatchDefault { id: row.id, r#type: row.r#type, default: row.default, new: row.new, func: row.func, self_: row.self_, crate_: row.crate_, super_: row.super_, kind_: row.kind, function_id: row.function_id, func_id: row.func_id, mod_id: row.mod_id }))
             }
         }
     }
+}
 
-    /// The flat row of this state.
-    pub fn into_row(self) -> MatchRow {
-        match self {
-            Self::New(state) => MatchRow { id: state.id, status: MatchStatus::New, r#type: state.r#type, default: state.default, new: state.new, func: state.func, self_: state.self_, crate_: state.crate_, super_: state.super_, kind: state.kind, function_id: state.function_id, func_id: state.func_id, mod_id: state.mod_id },
-            Self::Return(state) => MatchRow { id: state.id, status: MatchStatus::Return, r#type: state.r#type, default: state.default, new: state.new, func: state.func, self_: state.self_, crate_: state.crate_, super_: state.super_, kind: state.kind, function_id: state.function_id, func_id: state.func_id, mod_id: state.mod_id },
-            Self::Self_(state) => MatchRow { id: state.id, status: MatchStatus::Self_, r#type: state.r#type, default: state.default, new: state.new, func: state.func, self_: state.self_, crate_: state.crate_, super_: state.super_, kind: state.kind, function_id: state.function_id, func_id: state.func_id, mod_id: state.mod_id },
-            Self::Super(state) => MatchRow { id: state.id, status: MatchStatus::Super, r#type: state.r#type, default: state.default, new: state.new, func: state.func, self_: state.self_, crate_: state.crate_, super_: state.super_, kind: state.kind, function_id: state.function_id, func_id: state.func_id, mod_id: state.mod_id },
-            Self::Crate(state) => MatchRow { id: state.id, status: MatchStatus::Crate, r#type: state.r#type, default: state.default, new: state.new, func: state.func, self_: state.self_, crate_: state.crate_, super_: state.super_, kind: state.kind, function_id: state.function_id, func_id: state.func_id, mod_id: state.mod_id },
-            Self::Default(state) => MatchRow { id: state.id, status: MatchStatus::Default, r#type: state.r#type, default: state.default, new: state.new, func: state.func, self_: state.self_, crate_: state.crate_, super_: state.super_, kind: state.kind, function_id: state.function_id, func_id: state.func_id, mod_id: state.mod_id },
+impl ::core::convert::From<Match> for MatchRow {
+    /// The flat row of a state.
+    fn from(state: Match) -> Self {
+        match state {
+            Match::New(s) => Self { id: s.id, status: MatchStatus::New, r#type: s.r#type, default: s.default, new: s.new, func: s.func, self_: s.self_, crate_: s.crate_, super_: s.super_, kind: s.kind_, function_id: s.function_id, func_id: s.func_id, mod_id: s.mod_id },
+            Match::Return(s) => Self { id: s.id, status: MatchStatus::Return, r#type: s.r#type, default: s.default, new: s.new, func: s.func, self_: s.self_, crate_: s.crate_, super_: s.super_, kind: s.kind_, function_id: s.function_id, func_id: s.func_id, mod_id: s.mod_id },
+            Match::Self_(s) => Self { id: s.id, status: MatchStatus::Self_, r#type: s.r#type, default: s.default, new: s.new, func: s.func, self_: s.self_, crate_: s.crate_, super_: s.super_, kind: s.kind_, function_id: s.function_id, func_id: s.func_id, mod_id: s.mod_id },
+            Match::Super(s) => Self { id: s.id, status: MatchStatus::Super, r#type: s.r#type, default: s.default, new: s.new, func: s.func, self_: s.self_, crate_: s.crate_, super_: s.super_, kind: s.kind_, function_id: s.function_id, func_id: s.func_id, mod_id: s.mod_id },
+            Match::Crate(s) => Self { id: s.id, status: MatchStatus::Crate, r#type: s.r#type, default: s.default, new: s.new, func: s.func, self_: s.self_, crate_: s.crate_, super_: s.super_, kind: s.kind_, function_id: s.function_id, func_id: s.func_id, mod_id: s.mod_id },
+            Match::Default(s) => Self { id: s.id, status: MatchStatus::Default, r#type: s.r#type, default: s.default, new: s.new, func: s.func, self_: s.self_, crate_: s.crate_, super_: s.super_, kind: s.kind_, function_id: s.function_id, func_id: s.func_id, mod_id: s.mod_id },
         }
+    }
+}
+
+impl Match {
+    /// The state of a row, or why the row fits none: [`TryFrom`] by name.
+    ///
+    /// # Errors
+    ///
+    /// [`InvalidRow`] when the row fits no state.
+    pub fn from_row(row: MatchRow) -> ::core::result::Result<Self, InvalidRow> {
+        <Self as ::core::convert::TryFrom<MatchRow>>::try_from(row)
+    }
+
+    /// The flat row of this state: [`From`] by name.
+    pub fn into_row(self) -> MatchRow {
+        MatchRow::from(self)
     }
 }
 
 // ── Dispatch: run a use case from whatever states its rows are in ──
 
-/// The rows are in states the use case does not run from.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NotEnabled {
-    pub usecase: &'static str,
-}
-
-/// Why a use case did not run.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Refused {
-    Rejected(Rejected),
-    NotEnabled(NotEnabled),
-}
-
 /// What `run_return` returns when the use case runs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReturnOutcome {
+    /// `r#return` ran.
     Ran(ReturnResult),
 }
 
-/// Runs Return from whatever states its rows are in: the transition function of those states, or `NotEnabled`.
-pub fn run_return(r#match: Match) -> ::core::result::Result<ReturnOutcome, Refused> {
+/// Runs Return from whatever states its rows are in: the transition function of those states.
+///
+/// # Errors
+///
+/// `NotEnabled` when the rows are in states it does not run from, and what the transition
+/// function returns.
+pub fn run_return(r#match: Match) -> ::core::result::Result<ReturnOutcome, ReturnError> {
     match (r#match,) {
-        (Match::New(r#match),) => ::core::result::Result::Ok(ReturnOutcome::Ran(r#return(r#match))),
-        _ => ::core::result::Result::Err(Refused::NotEnabled(NotEnabled { usecase: "Return" })),
+        (Match::New(r#match),) => r#return(r#match).map(ReturnOutcome::Ran),
+        _ => ::core::result::Result::Err(ReturnError::NotEnabled(NotEnabled { usecase: "Return" })),
     }
 }
 
 /// What `run_delete` returns when the use case runs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DeleteOutcome {
+    /// `delete` ran.
     Ran(DeleteResult),
 }
 
-/// Runs Delete from whatever states its rows are in: the transition function of those states, or `NotEnabled`.
-pub fn run_delete(r#match: Match, switch: Switch) -> ::core::result::Result<DeleteOutcome, Refused> {
+/// Runs Delete from whatever states its rows are in: the transition function of those states.
+///
+/// # Errors
+///
+/// `NotEnabled` when the rows are in states it does not run from, and what the transition
+/// function returns.
+pub fn run_delete(r#match: Match, switch: Switch) -> ::core::result::Result<DeleteOutcome, DeleteError> {
     match (r#match,) {
-        (Match::Return(r#match),) => ::core::result::Result::Ok(DeleteOutcome::Ran(delete(r#match, switch))),
-        _ => ::core::result::Result::Err(Refused::NotEnabled(NotEnabled { usecase: "Delete" })),
+        (Match::Return(r#match),) => delete(r#match, switch).map(DeleteOutcome::Ran),
+        _ => ::core::result::Result::Err(DeleteError::NotEnabled(NotEnabled { usecase: "Delete" })),
     }
 }
 
 /// What `run_super` returns when the use case runs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SuperOutcome {
+    /// `super_` ran.
     Ran(SuperResult),
 }
 
-/// Runs Super from whatever states its rows are in: the transition function of those states, or `NotEnabled`.
-pub fn run_super(r#match: Match) -> ::core::result::Result<SuperOutcome, Refused> {
+/// Runs Super from whatever states its rows are in: the transition function of those states.
+///
+/// # Errors
+///
+/// `NotEnabled` when the rows are in states it does not run from, and what the transition
+/// function returns.
+pub fn run_super(r#match: Match) -> ::core::result::Result<SuperOutcome, SuperError> {
     match (r#match,) {
-        (Match::Self_(r#match),) => super_(r#match).map(SuperOutcome::Ran).map_err(Refused::Rejected),
-        _ => ::core::result::Result::Err(Refused::NotEnabled(NotEnabled { usecase: "Super" })),
+        (Match::Self_(r#match),) => super_(r#match).map(SuperOutcome::Ran),
+        _ => ::core::result::Result::Err(SuperError::NotEnabled(NotEnabled { usecase: "Super" })),
     }
 }
 
 /// What `run_crate` returns when the use case runs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CrateOutcome {
+    /// `crate_` ran.
     Ran(CrateResult),
 }
 
-/// Runs Crate from whatever states its rows are in: the transition function of those states, or `NotEnabled`.
-pub fn run_crate(r#match: Match) -> ::core::result::Result<CrateOutcome, Refused> {
+/// Runs Crate from whatever states its rows are in: the transition function of those states.
+///
+/// # Errors
+///
+/// `NotEnabled` when the rows are in states it does not run from, and what the transition
+/// function returns.
+pub fn run_crate(r#match: Match) -> ::core::result::Result<CrateOutcome, CrateError> {
     match (r#match,) {
-        (Match::Super(r#match),) => ::core::result::Result::Ok(CrateOutcome::Ran(crate_(r#match))),
-        _ => ::core::result::Result::Err(Refused::NotEnabled(NotEnabled { usecase: "Crate" })),
+        (Match::Super(r#match),) => crate_(r#match).map(CrateOutcome::Ran),
+        _ => ::core::result::Result::Err(CrateError::NotEnabled(NotEnabled { usecase: "Crate" })),
     }
 }
 
 /// What `run_default` returns when the use case runs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DefaultOutcome {
+    /// `default` ran.
     Ran(DefaultResult),
 }
 
-/// Runs Default from whatever states its rows are in: the transition function of those states, or `NotEnabled`.
-pub fn run_default(r#match: Match) -> ::core::result::Result<DefaultOutcome, Refused> {
+/// Runs Default from whatever states its rows are in: the transition function of those states.
+///
+/// # Errors
+///
+/// `NotEnabled` when the rows are in states it does not run from, and what the transition
+/// function returns.
+pub fn run_default(r#match: Match) -> ::core::result::Result<DefaultOutcome, DefaultError> {
     match (r#match,) {
-        (Match::Crate(r#match),) => ::core::result::Result::Ok(DefaultOutcome::Ran(default(r#match))),
-        _ => ::core::result::Result::Err(Refused::NotEnabled(NotEnabled { usecase: "Default" })),
+        (Match::Crate(r#match),) => default(r#match).map(DefaultOutcome::Ran),
+        _ => ::core::result::Result::Err(DefaultError::NotEnabled(NotEnabled { usecase: "Default" })),
     }
 }
 
 /// What `run_type` returns when the use case runs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeOutcome {
+    /// `r#type` ran.
     Ran(TypeResult),
 }
 
-/// Runs Type from whatever states its rows are in: the transition function of those states, or `NotEnabled`.
-pub fn run_type(func: Func) -> ::core::result::Result<TypeOutcome, Refused> {
+/// Runs Type from whatever states its rows are in: the transition function of those states.
+///
+/// # Errors
+///
+/// `NotEnabled` when the rows are in states it does not run from, and what the transition
+/// function returns.
+pub fn run_type(func: Func) -> ::core::result::Result<TypeOutcome, TypeError> {
     match (func,) {
-        (Func::New(func),) => ::core::result::Result::Ok(TypeOutcome::Ran(r#type(func))),
-        _ => ::core::result::Result::Err(Refused::NotEnabled(NotEnabled { usecase: "Type" })),
+        (Func::New(func),) => r#type(func).map(TypeOutcome::Ran),
+        _ => ::core::result::Result::Err(TypeError::NotEnabled(NotEnabled { usecase: "Type" })),
     }
 }
 
 /// What `run_class` returns when the use case runs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClassOutcome {
+    /// `class` ran.
     Ran(ClassResult),
 }
 
-/// Runs Class from whatever states its rows are in: the transition function of those states, or `NotEnabled`.
-pub fn run_class(func: Func) -> ::core::result::Result<ClassOutcome, Refused> {
+/// Runs Class from whatever states its rows are in: the transition function of those states.
+///
+/// # Errors
+///
+/// `NotEnabled` when the rows are in states it does not run from, and what the transition
+/// function returns.
+pub fn run_class(func: Func) -> ::core::result::Result<ClassOutcome, ClassError> {
     match (func,) {
-        (Func::Return(func),) => ::core::result::Result::Ok(ClassOutcome::Ran(class(func))),
-        _ => ::core::result::Result::Err(Refused::NotEnabled(NotEnabled { usecase: "Class" })),
+        (Func::Return(func),) => class(func).map(ClassOutcome::Ran),
+        _ => ::core::result::Result::Err(ClassError::NotEnabled(NotEnabled { usecase: "Class" })),
     }
 }
 
 /// What `run_new` returns when the use case runs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NewOutcome {
+    /// `new_from_new` ran.
     FromNew(NewFromNewResult),
+    /// `new_from_return` ran.
     FromReturn(NewFromReturnResult),
+    /// `new_from_func` ran.
     FromFunc(NewFromFuncResult),
 }
 
-/// Runs New from whatever states its rows are in: the transition function of those states, or `NotEnabled`.
-pub fn run_new(parent_function: Function, parent_func: Func, parent_mod: Mod, match_id: MatchId, match_type: ::std::string::String, match_new: ::std::string::String, match_func: ::std::string::String, match_self: ::std::string::String, match_crate: ::std::string::String, match_super: ::std::string::String, match_kind: Kind) -> ::core::result::Result<NewOutcome, Refused> {
+/// Runs New from whatever states its rows are in: the transition function of those states.
+///
+/// # Errors
+///
+/// `NotEnabled` when the rows are in states it does not run from, and what the transition
+/// function returns.
+#[allow(clippy::too_many_arguments)] // one argument per row and input of the use case
+pub fn run_new(parent_function: Function, parent_func: Func, parent_mod: Mod, match_id: MatchId, match_type: ::std::string::String, match_new: ::std::string::String, match_func: ::std::string::String, match_self: ::std::string::String, match_crate: ::std::string::String, match_super: ::std::string::String, match_kind: Kind) -> ::core::result::Result<NewOutcome, NewError> {
     match (parent_function, parent_func, parent_mod,) {
-        (parent_function, Func::New(parent_func), parent_mod,) => ::core::result::Result::Ok(NewOutcome::FromNew(new_from_new(parent_function, parent_func, parent_mod, match_id, match_type, match_new, match_func, match_self, match_crate, match_super, match_kind))),
-        (parent_function, Func::Return(parent_func), parent_mod,) => ::core::result::Result::Ok(NewOutcome::FromReturn(new_from_return(parent_function, parent_func, parent_mod, match_id, match_type, match_new, match_func, match_self, match_crate, match_super, match_kind))),
-        (parent_function, Func::Func(parent_func), parent_mod,) => ::core::result::Result::Ok(NewOutcome::FromFunc(new_from_func(parent_function, parent_func, parent_mod, match_id, match_type, match_new, match_func, match_self, match_crate, match_super, match_kind))),
+        (parent_function, Func::New(parent_func), parent_mod,) => new_from_new(parent_function, parent_func, parent_mod, match_id, match_type, match_new, match_func, match_self, match_crate, match_super, match_kind).map(NewOutcome::FromNew),
+        (parent_function, Func::Return(parent_func), parent_mod,) => new_from_return(parent_function, parent_func, parent_mod, match_id, match_type, match_new, match_func, match_self, match_crate, match_super, match_kind).map(NewOutcome::FromReturn),
+        (parent_function, Func::Func(parent_func), parent_mod,) => new_from_func(parent_function, parent_func, parent_mod, match_id, match_type, match_new, match_func, match_self, match_crate, match_super, match_kind).map(NewOutcome::FromFunc),
     }
 }

@@ -1,9 +1,10 @@
 //! `rdra-ish codegen` output builds as printed: on every `samples.txt` root, and on
 //! `tests/fixtures/codegen/keywords.rdra`, whose names are keywords of the targets, the
-//! TypeScript output passes `tsc --strict`, the Rust output compiles as a library, and the
-//! Go output passes `go vet`, the Rust and Go output with the conformance harness of
+//! TypeScript output passes `tsc --strict`, the Rust output compiles as a library with no
+//! clippy warning and no undocumented public item (`clippy-driver -D warnings -D missing_docs`),
+//! and the Go output passes `go vet`, the Rust and Go output with the conformance harness of
 //! `--conformance`. A compiler missing from PATH skips its language, except under
-//! `RDRA_REQUIRE_CODEGEN_TOOLS=1`, which CI sets in the dev shell that provides all three.
+//! `RDRA_REQUIRE_CODEGEN_TOOLS=1`, which CI sets in the dev shell that provides them all.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -118,14 +119,18 @@ fn typescript_builds() {
     }
 }
 
+/// The Rust output passes clippy as it is printed: no crate-level allow hides a lint, and every
+/// public item has rustdoc (docs/design/algebraic-codegen.md, "Generated code style").
 #[test]
 fn rust_builds() {
-    let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
+    if !available("clippy-driver") {
+        return;
+    }
     for sample in models() {
         let dir = scratch("rust", &sample);
         let path = generate(&sample, "rust", &dir, "domain.rs");
         run(
-            Command::new(&rustc)
+            Command::new("clippy-driver")
                 .args([
                     "--edition",
                     "2021",
@@ -133,11 +138,13 @@ fn rust_builds() {
                     "lib",
                     "-D",
                     "warnings",
+                    "-D",
+                    "missing_docs",
                     "-o",
                 ])
                 .arg(dir.join("libdomain.rlib"))
                 .arg(&path),
-            &format!("rustc on the codegen of {sample}"),
+            &format!("clippy on the codegen of {sample}"),
         );
     }
 }

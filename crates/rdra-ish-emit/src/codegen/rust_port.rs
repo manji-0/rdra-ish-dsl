@@ -17,16 +17,6 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
     out.push_str(
         "// ── Conformance: the port a finished service implements, and the harness that drives it ──\n\n",
     );
-    if domain.dispatchers.is_empty() && !domain.fns.is_empty() {
-        out.push_str("/// The rows are in states the use case does not run from.\n");
-        out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
-        out.push_str("pub struct NotEnabled {\n    pub usecase: &'static str,\n}\n\n");
-        out.push_str("/// Why a use case did not run.\n");
-        out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
-        out.push_str(
-            "pub enum Refused {\n    Rejected(Rejected),\n    NotEnabled(NotEnabled),\n}\n\n",
-        );
-    }
     for r in &port.runs {
         out.push_str(&format!(
             "/// A run mark of {} on a {} row, as a store keeps it: the last step of the run that wrote the row.\n",
@@ -34,7 +24,7 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
         ));
         out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
         out.push_str(&format!(
-            "pub struct {} {{\n    pub id: {},\n    pub step: u8,\n}}\n\n",
+            "pub struct {} {{\n    /// The id of the marked row.\n    pub id: {},\n    /// The last step of the run that wrote the row.\n    pub step: u8,\n}}\n\n",
             r.name, r.id_ty
         ));
     }
@@ -42,25 +32,33 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
     out.push_str("#[derive(Debug, Clone, Default, PartialEq, Eq)]\n");
     out.push_str("pub struct StoreSnapshot {\n");
     for e in &port.entities {
-        out.push_str(&format!("    pub {}: {VEC}<{}>,\n", ident(&e.field), e.ty));
+        out.push_str(&format!(
+            "    /// The {} rows.\n    pub {}: {VEC}<{}>,\n",
+            e.entity,
+            ident(&e.field),
+            e.ty
+        ));
     }
     for r in &port.runs {
         out.push_str(&format!(
-            "    pub {}: {VEC}<{}>,\n",
+            "    /// The pending run marks of {} on {} rows.\n    pub {}: {VEC}<{}>,\n",
+            r.usecase,
+            r.entity,
             ident(&r.field),
             r.name
         ));
     }
     for ev in &port.events {
         out.push_str(&format!(
-            "    pub {}: {VEC}<{}>,\n",
+            "    /// The {} events raised.\n    pub {}: {VEC}<{}>,\n",
+            ev.ty,
             ident(&ev.field),
             ev.ty
         ));
     }
     out.push_str("}\n\n");
 
-    out.push_str("/// What a finished service offers the conformance harness. A use case is two calls: each\n/// `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing\n/// nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one\n/// transaction, each row only where it still is what the result's `<row>_expected` names. Either\n/// returns `Err` and changes nothing when the use case does not run.\n");
+    out.push_str("/// What a finished service offers the conformance harness. A use case is two calls: each\n/// `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing\n/// nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one\n/// transaction, each row only where it still is what the result's `<row>_expected` names. Either\n/// returns the use case's error and changes nothing when the use case does not run.\n");
     out.push_str("pub trait ConformancePort {\n");
     out.push_str(
         "    /// Empties the store and stores these rows: the initial state of a trace.\n",
@@ -69,21 +67,31 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
     out.push_str("    /// Everything the store holds now.\n");
     out.push_str("    fn snapshot(&mut self) -> StoreSnapshot;\n");
     for m in &port.methods {
+        let error = error_of(domain, &m.usecase);
         out.push_str(&doc(
-            &[format!("Runs {} (the action {}).", m.usecase, m.action)],
+            &[format!(
+                "Loads the rows of {} (the action {}) and runs it, writing nothing.",
+                m.usecase, m.action
+            )],
+            "    ",
+        ));
+        let params = params(m);
+        out.push_str(&super::rust::allow_arguments(params.len() + 1, "    "));
+        out.push_str(&format!(
+            "    fn prepare_{}(&mut self{}) -> {RESULT}<{}, {error}>;\n",
+            snake(&m.name),
+            params.iter().map(|p| format!(", {p}")).collect::<String>(),
+            m.write
+        ));
+        out.push_str(&doc(
+            &[format!(
+                "Stores what `prepare_{}` returned in one transaction.",
+                snake(&m.name)
+            )],
             "    ",
         ));
         out.push_str(&format!(
-            "    fn prepare_{}(&mut self{}) -> {RESULT}<{}, Refused>;\n",
-            snake(&m.name),
-            params(m)
-                .iter()
-                .map(|p| format!(", {p}"))
-                .collect::<String>(),
-            m.write
-        ));
-        out.push_str(&format!(
-            "    fn commit_{}(&mut self, write: {}) -> {RESULT}<(), Refused>;\n",
+            "    fn commit_{}(&mut self, write: {}) -> {RESULT}<(), {error}>;\n",
             snake(&m.name),
             m.write
         ));
@@ -92,7 +100,7 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
 
     out.push_str("/// What `conform` checked.\n");
     out.push_str("#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]\n");
-    out.push_str("pub struct ConformanceReport {\n    pub traces: usize,\n    pub calls: usize,\n    pub refusals: usize,\n    pub interleavings: usize,\n}\n\n");
+    out.push_str("pub struct ConformanceReport {\n    /// The traces run.\n    pub traces: usize,\n    /// The calls the model runs, made.\n    pub calls: usize,\n    /// The calls the model refuses, made and refused.\n    pub refusals: usize,\n    /// The commits after another call changed a row they write, refused.\n    pub interleavings: usize,\n}\n\n");
     out.push_str("/// A prepared write of any use case.\nenum ConfWrite {\n");
     for m in &port.methods {
         out.push_str(&format!("    {}({}),\n", m.name, m.write));
@@ -105,6 +113,10 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
 /// with the state the model reaches. A call the model refuses must return `Err` and change
 /// nothing, and so must a commit whose rows another call changed after its prepare. Returns the
 /// first difference.
+///
+/// # Errors
+///
+/// The first difference, or what is wrong with `traces`, as text naming its line.
 pub fn conform<P: ConformancePort>(mut new_port: impl FnMut() -> P, traces: &str) -> {RESULT}<ConformanceReport, {STRING}> {{
     let mut lines = traces.lines().enumerate();
     match lines.next() {{
@@ -135,7 +147,9 @@ pub fn conform<P: ConformancePort>(mut new_port: impl FnMut() -> P, traces: &str
             }}
             "A" => {{
                 let id = defining.as_ref().ok_or_else(|| at("a row outside a state".to_string()))?;
-                states.get_mut(id).expect("defined").push(rest.join(" "));
+                if let ::core::option::Option::Some(rows) = states.get_mut(id) {{
+                    rows.push(rest.join(" "));
+                }}
             }}
             "T" => {{
                 want = state(rest.first())?;
@@ -154,7 +168,7 @@ pub fn conform<P: ConformancePort>(mut new_port: impl FnMut() -> P, traces: &str
                 let call = rest.get(1..).unwrap_or_default();
                 let p = conf_port.as_mut().ok_or_else(|| at("a call outside a trace".to_string()))?;
                 if let {RESULT}::Err(why) = conf_run(p, call).map_err(at)? {{
-                    return {RESULT}::Err(at(format!("the model runs `{{}}` here, and the service refused it: {{why:?}}", call.join(" "))));
+                    return {RESULT}::Err(at(format!("the model runs `{{}}` here, and the service refused it: {{why}}", call.join(" "))));
                 }}
                 conf_compare(&conf_abstract(&p.snapshot()), &next, &format!("after `{{}}`", call.join(" "))).map_err(at)?;
                 want = next;
@@ -175,10 +189,10 @@ pub fn conform<P: ConformancePort>(mut new_port: impl FnMut() -> P, traces: &str
                 let p = conf_port.as_mut().ok_or_else(|| at("a call outside a trace".to_string()))?;
                 let early = match conf_prepare(p, first).map_err(at)? {{
                     {RESULT}::Ok(w) => w,
-                    {RESULT}::Err(why) => return {RESULT}::Err(at(format!("the model runs `{{}}` here, and the service refused it: {{why:?}}", first.join(" ")))),
+                    {RESULT}::Err(why) => return {RESULT}::Err(at(format!("the model runs `{{}}` here, and the service refused it: {{why}}", first.join(" ")))),
                 }};
                 if let {RESULT}::Err(why) = conf_run(p, second).map_err(at)? {{
-                    return {RESULT}::Err(at(format!("the model runs `{{}}` here, and the service refused it: {{why:?}}", second.join(" "))));
+                    return {RESULT}::Err(at(format!("the model runs `{{}}` here, and the service refused it: {{why}}", second.join(" "))));
                 }}
                 conf_compare(&conf_abstract(&p.snapshot()), &next, &format!("after `{{}}`", second.join(" "))).map_err(at)?;
                 if conf_commit(p, early).is_ok() {{
@@ -209,8 +223,9 @@ fn conf_compare(got: &[{STRING}], want: &[{STRING}], when: &str) -> {RESULT}<(),
     {RESULT}::Err(out)
 }}
 
-/// Prepares and commits a call.
-fn conf_run<P: ConformancePort>(conf_port: &mut P, call: &[&str]) -> {RESULT}<{RESULT}<(), Refused>, {STRING}> {{
+/// Prepares and commits a call: the outer `Err` is a call the port cannot make, the inner one
+/// the use case's error, as text.
+fn conf_run<P: ConformancePort>(conf_port: &mut P, call: &[&str]) -> {RESULT}<{RESULT}<(), {STRING}>, {STRING}> {{
     {RESULT}::Ok(match conf_prepare(conf_port, call)? {{
         {RESULT}::Ok(w) => conf_commit(conf_port, w),
         {RESULT}::Err(why) => {RESULT}::Err(why),
@@ -221,25 +236,22 @@ fn conf_next<'a>(args: &mut impl ::core::iter::Iterator<Item = &'a str>) -> {RES
     args.next().ok_or_else(|| "too few values".to_string())
 }}
 
-fn conf_int(t: &str) -> {RESULT}<i64, {STRING}> {{
-    t.parse::<i64>().map_err(|e| format!("{{t}}: {{e}}"))
-}}
-
-fn conf_bool(t: &str) -> {RESULT}<bool, {STRING}> {{
-    match t {{
-        "true" => {RESULT}::Ok(true),
-        "false" => {RESULT}::Ok(false),
-        _ => {RESULT}::Err(format!("not a bool: {{t}}")),
-    }}
+/// The value `t` spells, of the type `T`.
+fn conf_parse<T: ::core::str::FromStr>(t: &str) -> {RESULT}<T, {STRING}>
+where
+    T::Err: {FMT}::Display,
+{{
+    t.parse::<T>().map_err(|e| format!("{{t}}: {{e}}"))
 }}
 
 "##,
         format = string_literal(TRACES_FORMAT),
+        FMT = "::core::fmt",
     ));
 
     // The calls.
     out.push_str(&format!(
-        "#[allow(unused_mut)]\nfn conf_prepare<P: ConformancePort>(conf_port: &mut P, call: &[&str]) -> {RESULT}<{RESULT}<ConfWrite, Refused>, {STRING}> {{\n"
+        "#[allow(unused_mut, unused_variables)] // a model whose calls take no values reads none\nfn conf_prepare<P: ConformancePort>(conf_port: &mut P, call: &[&str]) -> {RESULT}<{RESULT}<ConfWrite, {STRING}>, {STRING}> {{\n"
     ));
     out.push_str("    let ::core::option::Option::Some((&action, values)) = call.split_first() else {\n        return ::core::result::Result::Err(\"a call names no use case\".to_string());\n    };\n");
     out.push_str("    let mut conf_args = values.iter().copied();\n");
@@ -251,7 +263,7 @@ fn conf_bool(t: &str) -> {RESULT}<bool, {STRING}> {{
             out.push_str(&format!(
                 "            let {} = {};\n",
                 ident(&format!("conf_{name}")),
-                parse(domain, &FieldType::Id(ty.clone()), false)
+                parse(&FieldType::Id(ty.clone()), false)
             ));
             args.push(ident(&format!("conf_{name}")));
         }
@@ -265,7 +277,7 @@ fn conf_bool(t: &str) -> {RESULT}<bool, {STRING}> {{
                     format!(
                         "{}: {}",
                         ident(&f.name),
-                        parse(domain, &FieldType::Id(f.id_ty.clone()), false)
+                        parse(&FieldType::Id(f.id_ty.clone()), false)
                     )
                 })
                 .collect();
@@ -284,7 +296,7 @@ fn conf_bool(t: &str) -> {RESULT}<bool, {STRING}> {{
             out.push_str(&format!(
                 "            let {} = {};\n",
                 ident(&format!("conf_{}", i.name)),
-                parse(domain, &i.ty, i.nullable)
+                parse(&i.ty, i.nullable)
             ));
             args.push(ident(&format!("conf_{}", i.name)));
         }
@@ -292,12 +304,12 @@ fn conf_bool(t: &str) -> {RESULT}<bool, {STRING}> {{
             out.push_str(&format!(
                 "            let {} = {};\n",
                 ident(&format!("conf_{name}")),
-                parse(domain, &FieldType::Enum(ty.clone()), false)
+                parse(&FieldType::Enum(ty.clone()), false)
             ));
             args.push(ident(&format!("conf_{name}")));
         }
         out.push_str(&format!(
-            "            {RESULT}::Ok(conf_port.prepare_{}({}).map(ConfWrite::{}))\n        }}\n",
+            "            {RESULT}::Ok(conf_port.prepare_{}({}).map(ConfWrite::{}).map_err(|e| e.to_string()))\n        }}\n",
             snake(&m.name),
             args.join(", "),
             m.name
@@ -307,11 +319,11 @@ fn conf_bool(t: &str) -> {RESULT}<bool, {STRING}> {{
         "        other => {RESULT}::Err(format!(\"no use case {{other}} in this port\")),\n    }}\n}}\n\n"
     ));
     out.push_str(&format!(
-        "fn conf_commit<P: ConformancePort>(conf_port: &mut P, write: ConfWrite) -> {RESULT}<(), Refused> {{\n    match write {{\n"
+        "fn conf_commit<P: ConformancePort>(conf_port: &mut P, write: ConfWrite) -> {RESULT}<(), {STRING}> {{\n    match write {{\n"
     ));
     for m in &port.methods {
         out.push_str(&format!(
-            "        ConfWrite::{}(w) => conf_port.commit_{}(w),\n",
+            "        ConfWrite::{}(w) => conf_port.commit_{}(w).map_err(|e| e.to_string()),\n",
             m.name,
             snake(&m.name)
         ));
@@ -320,7 +332,7 @@ fn conf_bool(t: &str) -> {RESULT}<bool, {STRING}> {{
 
     // The rows of an initial state.
     out.push_str(&format!(
-        "#[allow(unused_mut)]\nfn conf_seed_row(seed: &mut StoreSnapshot, toks: &[&str]) -> {RESULT}<(), {STRING}> {{\n"
+        "#[allow(unused_mut)] // an entity of one column takes it without advancing\nfn conf_seed_row(seed: &mut StoreSnapshot, toks: &[&str]) -> {RESULT}<(), {STRING}> {{\n"
     ));
     out.push_str("    let ::core::option::Option::Some((&entity, values)) = toks.split_first() else {\n        return ::core::result::Result::Err(\"a row names no entity\".to_string());\n    };\n");
     out.push_str("    let mut conf_args = values.iter().copied();\n");
@@ -329,7 +341,7 @@ fn conf_bool(t: &str) -> {RESULT}<bool, {STRING}> {{
         let fields: Vec<String> = e
             .columns
             .iter()
-            .map(|f| format!("{}: {}", ident(&f.wire), parse(domain, &f.ty, f.nullable)))
+            .map(|f| format!("{}: {}", ident(&f.wire), parse(&f.ty, f.nullable)))
             .collect();
         out.push_str(&format!(
             "        {} => seed.{}.push({} {{ {} }}),\n",
@@ -350,26 +362,25 @@ fn conf_bool(t: &str) -> {RESULT}<bool, {STRING}> {{
     for e in &port.entities {
         out.push_str(&format!("    for row in &s.{} {{\n", ident(&e.field)));
         out.push_str(&format!(
-            "        let mut line = format!(\"{} {{}}\", {});\n",
+            "        let mut line = format!(\"{} {{}}\", row.{});\n",
             e.entity,
-            text(domain, &format!("row.{}", ident(&e.id.wire)), &e.id.ty)
+            ident(&e.id.wire)
         ));
         for (field, how) in &e.tracked {
             out.push_str(&format!(
                 "        line.push_str(&format!(\" {}={{}}\", {}));\n",
                 field.wire,
-                abstracted(domain, field, *how)
+                abstracted(field, *how)
             ));
         }
         out.push_str("        out.push(line);\n    }\n");
     }
     for r in &port.runs {
         out.push_str(&format!(
-            "    for m in &s.{} {{\n        out.push(format!(\"mark {} {} {{}} {{}}\", {}, m.step));\n    }}\n",
+            "    for m in &s.{} {{\n        out.push(format!(\"mark {} {} {{}} {{}}\", m.id, m.step));\n    }}\n",
             ident(&r.field),
             r.usecase,
-            r.entity,
-            text(domain, "m.id", &FieldType::Id(r.id_ty.clone()))
+            r.entity
         ));
     }
     for ev in &port.events {
@@ -377,14 +388,10 @@ fn conf_bool(t: &str) -> {RESULT}<bool, {STRING}> {{
         for (field, tracked) in &ev.ids {
             if *tracked {
                 out.push_str(&format!(
-                    "        out.push(format!(\"raised {} {} {{}}\", {}));\n",
+                    "        out.push(format!(\"raised {} {} {{}}\", ev.{}));\n",
                     ev.ty,
                     field.entity,
-                    text(
-                        domain,
-                        &format!("ev.{}", ident(&field.name)),
-                        &FieldType::Id(field.id_ty.clone())
-                    )
+                    ident(&field.name)
                 ));
             }
         }
@@ -418,30 +425,26 @@ fn params(m: &super::ir::PortMethod) -> Vec<String> {
     out
 }
 
-/// The scalar an id type wraps.
-fn id_repr(domain: &DomainModel, id: &str) -> Scalar {
+/// The error type of the use case `usecase`.
+fn error_of(domain: &DomainModel, usecase: &str) -> String {
     domain
-        .ids
-        .iter()
-        .find(|i| i.name == id)
-        .map_or(Scalar::Int, |i| i.repr)
+        .error_of(usecase)
+        .map_or_else(|| "InvalidArgument".to_string(), |e| e.name.clone())
 }
 
-/// An expression that reads the next value of `conf_args` as `ty`.
-fn parse(domain: &DomainModel, ty: &FieldType, nullable: bool) -> String {
+/// An expression that reads the next value of `conf_args` as `ty`, through the parser of the
+/// type: the harness meets the module at its boundary as a store would.
+fn parse(ty: &FieldType, nullable: bool) -> String {
     let value = |t: &str| -> String {
         match ty {
-            FieldType::Scalar(s) => scalar_parse(*s, t),
-            FieldType::Enum(name) => format!(
-                "{name}::parse({t}).ok_or_else(|| format!(\"not a value of {name}: {{}}\", {t}))?"
-            ),
-            FieldType::Id(name) => format!("{name}({})", scalar_parse(id_repr(domain, name), t)),
+            FieldType::Scalar(Scalar::String) => format!("{t}.to_string()"),
             FieldType::Rows(_) => unreachable!("a list of rows is no port argument"),
+            other => format!("conf_parse::<{}>({t})?", field_type(other)),
         }
     };
     if nullable {
         format!(
-            "{{ let t = conf_next(&mut conf_args)?; if t == \"~\" {{ None }} else {{ Some({}) }} }}",
+            "{{ let t = conf_next(&mut conf_args)?; if t == \"~\" {{ {OPTION}::None }} else {{ {OPTION}::Some({}) }} }}",
             value("t")
         )
     } else {
@@ -449,35 +452,8 @@ fn parse(domain: &DomainModel, ty: &FieldType, nullable: bool) -> String {
     }
 }
 
-fn scalar_parse(s: Scalar, t: &str) -> String {
-    match s {
-        Scalar::Int => format!("conf_int({t})?"),
-        Scalar::Bool => format!("conf_bool({t})?"),
-        Scalar::String => format!("{t}.to_string()"),
-        other => format!("{}({t}.to_string())", other.name()),
-    }
-}
-
-/// The text of the value at place `e` of type `ty` (not null), as the traces spell it.
-fn text(domain: &DomainModel, e: &str, ty: &FieldType) -> String {
-    match ty {
-        FieldType::Scalar(s) => scalar_text(*s, e),
-        FieldType::Enum(_) => format!("{e}.as_str().to_string()"),
-        FieldType::Id(name) => scalar_text(id_repr(domain, name), &format!("{e}.0")),
-        FieldType::Rows(_) => unreachable!("a list of rows is no column"),
-    }
-}
-
-fn scalar_text(s: Scalar, e: &str) -> String {
-    match s {
-        Scalar::Int | Scalar::Bool => format!("{e}.to_string()"),
-        Scalar::String => format!("{e}.clone()"),
-        _ => format!("{e}.0.clone()"),
-    }
-}
-
-/// The tracked column `field` of `row`, abstracted as the model holds it.
-fn abstracted(domain: &DomainModel, field: &Field, how: Track) -> String {
+/// The tracked column `field` of `row`, abstracted as the model holds it: a format argument.
+fn abstracted(field: &Field, how: Track) -> String {
     let place = format!("row.{}", ident(&field.wire));
     match (how, field.nullable) {
         (Track::Presence, true) => {
@@ -485,9 +461,8 @@ fn abstracted(domain: &DomainModel, field: &Field, how: Track) -> String {
         }
         (Track::Presence, false) => "\"+\"".to_string(),
         (Track::Exact, true) => format!(
-            "match &{place} {{ Some(x) => {}, None => \"~\".to_string() }}",
-            text(domain, "x", &field.ty)
+            "match &{place} {{ {OPTION}::Some(x) => x.to_string(), {OPTION}::None => \"~\".to_string() }}"
         ),
-        (Track::Exact, false) => text(domain, &place, &field.ty),
+        (Track::Exact, false) => place,
     }
 }

@@ -116,17 +116,19 @@ fn go_behaves() {
     );
 }
 
-/// Code outside the generated module that builds a state, or writes a field of one, and what
-/// rustc says.
-const RUST_FORGERIES: [(&str, &str); 2] = [
+/// Code outside the generated module that builds a state, writes a field of one, or makes a
+/// scalar or an id without its parser, and what rustc says.
+const RUST_FORGERIES: [(&str, &str); 4] = [
     (
-        "let o = OrderPaid { id: OrderId(1), paid_at: DateTime(String::new()), method: Method::Card, qty: 9, note: String::new(), customer_id: CustomerId(1) }; let _ = o;",
+        "let o = OrderPaid { id: OrderId::from(1), paid_at: \"2026-01-01T00:00:00Z\".parse().unwrap(), method: Method::Card, qty: 9, note: String::new(), customer_id: CustomerId::from(1) }; let _ = o;",
         "E0451",
     ),
     (
-        "let mut o = Order::from_row(OrderRow { id: OrderId(1), status: OrderStatus::Pending, paid_at: None, method: Method::Card, qty: 1, note: String::new(), customer_id: CustomerId(1) }).unwrap(); if let Order::Pending(p) = &mut o { p.qty = 7; }",
+        "let mut o = Order::from_row(OrderRow { id: OrderId::from(1), status: OrderStatus::Pending, paid_at: None, method: Method::Card, qty: 1, note: String::new(), customer_id: CustomerId::from(1) }).unwrap(); if let Order::Pending(p) = &mut o { p.qty = 7; }",
         "E0616",
     ),
+    ("let t = DateTime(String::from(\"t\")); let _ = t;", "E0423"),
+    ("let id = OrderId(1); let _ = id;", "E0423"),
 ];
 
 /// The same in Go, outside the generated package, and what the compiler says.

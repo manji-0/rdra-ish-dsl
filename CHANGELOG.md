@@ -13,6 +13,18 @@
 
 ### Breaking
 
+- **Rust codegen output takes the Kamae shapes** (experimental output, #363): ids and the
+  prelude scalars are opaque (`OrderId::from(7)`, `get()`, `"12.50".parse::<Money>()`, with
+  `Money` / `Decimal` / `Date` / `DateTime` checked for their shape); value sets parse with
+  `FromStr` instead of `parse() -> Option`; a state type has `kind() -> <Entity>Kind` instead of
+  the tag column's accessor, `TryFrom<<Entity>Row>` and `From<state> for <Entity>Row` beside
+  `from_row` / `into_row`, and a column named `kind` is `kind_` in the states. Every transition
+  function and dispatcher returns `Result<_, <UseCase>Error>` (`NotEnabled`, `Rejected`,
+  `InvalidArgument`) instead of the result, `Result<_, Rejected>` or `Result<_, Refused>`;
+  `Refused` is gone, and so are the `panic!`, `expect` and `unreachable!` of the output.
+  `ConformancePort` methods return the use case's error. The crate-level
+  `#![allow(..., clippy::all)]` is gone: the output passes `clippy -D warnings -D missing_docs`.
+
 - A `[code]` table in `rdra.toml` is read now (#363), and an unknown key under it makes every
   loading command exit 1 with the line, as under `[check]`. It used to be ignored.
 - `codegen` (experimental): the obligations are no longer numbered `O1`, `O2`, ... (#363). Each

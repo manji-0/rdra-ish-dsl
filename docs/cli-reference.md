@@ -2140,9 +2140,14 @@ matches no row rolls the transaction back and is `NotEnabled`.
 Each use case whose functions take a state type gets a **dispatcher**, `runCancel` /
 `run_cancel` / `RunCancel`, over the entity types: it calls the transition function of the
 rows' states and returns its result as a `CancelOutcome` case, or `NotEnabled` when the use
-case does not run from those states (in Rust, `Refused::NotEnabled`, beside
-`Refused::Rejected`). The code that finishes the output loads rows, converts them, calls the
-dispatcher, and stores the rows it returns.
+case does not run from those states. In Rust every transition function and dispatcher returns
+`Result<_, <UseCase>Error>` (`PayError`), an enum of `NotEnabled`, `Rejected` (when a condition
+applies), and `InvalidArgument` (when the arguments can break what the model keeps), each a type
+that implements `std::error::Error`; the generated Rust never panics. The code that finishes
+the output loads rows, converts them, calls the dispatcher, and stores the rows it returns.
+The Rust ids and scalars are opaque: `OrderId::from(7)`, `"12.50".parse::<Money>()`,
+`"2026-01-01".parse::<Date>()`, which refuse text of another shape with `InvalidValue`
+([Generated code style](design/algebraic-codegen.md#generated-code-style)).
 
 With `--conformance <FILE>` (Rust and Go), the output ends with a **conformance harness**
 for the service that finishes it, and `FILE` gets the traces it runs. The service
@@ -2152,7 +2157,8 @@ the record otherwise), every pending run mark (`<UseCase><Entity>Run { id, step 
 every event a triggered use case reads, and two methods per action run the use case by the
 ids of its rows and its inputs: `prepare_pay` / `PreparePay` loads the rows and returns the
 dispatcher's result, writing nothing, and `commit_pay` / `CommitPay` stores that result in one
-transaction. Either returns an error when the use case does not run. The agent's test calls `conform(|| MyService::new(), &traces)` in Rust or
+transaction. Either returns an error when the use case does not run (in Rust, the use
+case's `<UseCase>Error`). The agent's test calls `conform(|| MyService::new(), &traces)` in Rust or
 `Conform(func() ConformancePort { return newService() }, traces)` in Go. The harness starts
 a fresh port per trace, seeds the trace's initial state, makes each call, and after each
 compares the store, cut down to the columns the model tracks (an enum's value, null or not,

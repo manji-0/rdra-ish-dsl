@@ -197,8 +197,8 @@ contract traits, one per use case whose functions are printed, 11 on ec-site):
 ```rust
 /// usecase ShipOrder  samples/ec-site/buc/buc_order.rdra:14:1
 pub trait ShipOrderUseCase {
-    fn prepare_ship_order(&mut self, order: OrderId) -> Result<ShipOrderOutcome, Refused>;
-    fn commit_ship_order(&mut self, write: ShipOrderOutcome) -> Result<(), Refused>;
+    fn prepare_ship_order(&mut self, order: OrderId) -> Result<ShipOrderOutcome, ShipOrderError>;
+    fn commit_ship_order(&mut self, write: ShipOrderOutcome) -> Result<(), ShipOrderError>;
 }
 ```
 

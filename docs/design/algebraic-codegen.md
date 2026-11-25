@@ -461,7 +461,10 @@ marks a column as personal, so the generator cannot know which to wrap; tracked 
 
 ### Status of each language
 
-- Rust: brought to this section by the Rust pull request of #363.
+- Rust: in these shapes since the Rust pull request of #363. `codegen_builds.rs` runs
+  `clippy-driver -D warnings -D missing_docs` on the output of every sample, so no lint is
+  allowed crate-wide; the few per-item allows name their reason (a function of more than seven
+  arguments, an accessor named after a column such as `new`, the model's spelling of a name).
 - TypeScript, Go: the output keeps its earlier shape until their pull requests of #363 land.
 
 ## Use cases split into transactions

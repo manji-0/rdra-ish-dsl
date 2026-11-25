@@ -7,6 +7,7 @@
 //   accept-disabled  Cancel cancels an order the core refuses, as if it were paid, unconditionally
 //   unconditional    every commit writes without checking what the row still is
 #[path = "domain.rs"]
+#[allow(dead_code)] // the service uses part of the module
 mod domain;
 use domain::*;
 use std::collections::BTreeMap;
@@ -20,8 +21,9 @@ struct Service {
     ev_shipped: Vec<EvShipped>,
 }
 
-fn not_enabled(usecase: &'static str) -> Refused {
-    Refused::NotEnabled(NotEnabled { usecase })
+/// `NotEnabled` as the error of any use case.
+fn not_enabled<E: From<NotEnabled>>(usecase: &'static str) -> E {
+    NotEnabled { usecase }.into()
 }
 
 /// Whether a row, by its tag (`None` when absent), is still what a result expects.
@@ -34,8 +36,12 @@ fn holds(tag: Option<&str>, expected: ExpectedSource) -> bool {
 }
 
 impl Service {
-    fn order(&self, id: OrderId, usecase: &'static str) -> Result<Order, Refused> {
-        let row = self.orders.get(&id.0).cloned().ok_or(not_enabled(usecase))?;
+    fn order(&self, id: OrderId, usecase: &'static str) -> Result<Order, NotEnabled> {
+        let row = self
+            .orders
+            .get(&id.get())
+            .cloned()
+            .ok_or(NotEnabled { usecase })?;
         Ok(Order::from_row(row).expect("the store holds valid rows"))
     }
 
@@ -46,20 +52,20 @@ impl Service {
         usecase: &'static str,
         orders: &[(OrderId, ExpectedSource)],
         shipments: &[(ShipmentId, ExpectedSource)],
-    ) -> Result<(), Refused> {
+    ) -> Result<(), NotEnabled> {
         if self.fault == "unconditional" {
             return Ok(());
         }
         let order_ok = orders.iter().all(|(id, e)| {
-            holds(self.orders.get(&id.0).map(|r| r.status.as_str()), *e)
+            holds(self.orders.get(&id.get()).map(|r| r.status.as_str()), *e)
         });
         let shipment_ok = shipments.iter().all(|(id, e)| {
-            holds(self.shipments.get(&id.0).map(|r| r.status.as_str()), *e)
+            holds(self.shipments.get(&id.get()).map(|r| r.status.as_str()), *e)
         });
         if order_ok && shipment_ok {
             Ok(())
         } else {
-            Err(not_enabled(usecase))
+            Err(NotEnabled { usecase })
         }
     }
 }
@@ -71,13 +77,13 @@ impl ConformancePort for Service {
             ..Service::default()
         };
         for c in rows.customer {
-            self.customers.insert(c.id.0, c);
+            self.customers.insert(c.id.get(), c);
         }
         for o in rows.order {
-            self.orders.insert(o.id.0, o);
+            self.orders.insert(o.id.get(), o);
         }
         for s in rows.shipment {
-            self.shipments.insert(s.id.0, s);
+            self.shipments.insert(s.id.get(), s);
         }
         self.ev_shipped = rows.ev_shipped;
     }
@@ -97,45 +103,45 @@ impl ConformancePort for Service {
         order_id: OrderId,
         order_method: Method,
         order_note: String,
-    ) -> Result<PlaceResult, Refused> {
+    ) -> Result<PlaceResult, PlaceError> {
         let customer = self
             .customers
-            .get(&parent_customer.0)
+            .get(&parent_customer.get())
             .cloned()
-            .ok_or(not_enabled("Place"))?;
-        Ok(place(customer, order_id, order_method, order_note))
+            .ok_or(NotEnabled { usecase: "Place" })?;
+        place(customer, order_id, order_method, order_note)
     }
 
-    fn commit_place(&mut self, r: PlaceResult) -> Result<(), Refused> {
+    fn commit_place(&mut self, r: PlaceResult) -> Result<(), PlaceError> {
         let id = *r.order.id();
         self.check("Place", &[(id, r.order_expected)], &[])?;
-        self.orders.insert(id.0, Order::Pending(r.order).into_row());
+        self.orders.insert(id.get(), Order::Pending(r.order).into_row());
         Ok(())
     }
 
-    fn prepare_pay(&mut self, order: OrderId, order_paid_at: DateTime) -> Result<PayOutcome, Refused> {
+    fn prepare_pay(&mut self, order: OrderId, order_paid_at: DateTime) -> Result<PayOutcome, PayError> {
         run_pay(self.order(order, "Pay")?, order_paid_at)
     }
 
-    fn commit_pay(&mut self, write: PayOutcome) -> Result<(), Refused> {
+    fn commit_pay(&mut self, write: PayOutcome) -> Result<(), PayError> {
         let PayOutcome::Ran(r) = write;
         let id = *r.order.id();
         self.check("Pay", &[(id, r.order_expected)], &[])?;
         if self.fault == "skip-core" {
-            let mut row = self.orders[&id.0].clone();
+            let mut row = self.orders[&id.get()].clone();
             row.status = OrderStatus::Paid;
-            self.orders.insert(id.0, row);
+            self.orders.insert(id.get(), row);
             return Ok(());
         }
-        self.orders.insert(id.0, Order::Paid(r.order).into_row());
+        self.orders.insert(id.get(), Order::Paid(r.order).into_row());
         Ok(())
     }
 
-    fn prepare_ship(&mut self, order: OrderId, shipment_id: ShipmentId) -> Result<ShipOutcome, Refused> {
+    fn prepare_ship(&mut self, order: OrderId, shipment_id: ShipmentId) -> Result<ShipOutcome, ShipError> {
         run_ship(self.order(order, "Ship")?, shipment_id)
     }
 
-    fn commit_ship(&mut self, write: ShipOutcome) -> Result<(), Refused> {
+    fn commit_ship(&mut self, write: ShipOutcome) -> Result<(), ShipError> {
         let ShipOutcome::Ran(r) = write;
         let (order, shipment) = (*r.order.id(), *r.shipment.id());
         self.check(
@@ -143,43 +149,43 @@ impl ConformancePort for Service {
             &[(order, r.order_expected)],
             &[(shipment, r.shipment_expected)],
         )?;
-        self.orders.insert(order.0, Order::Shipped(r.order).into_row());
+        self.orders.insert(order.get(), Order::Shipped(r.order).into_row());
         if self.fault != "drop-row" {
             self.shipments
-                .insert(shipment.0, Shipment::Packed(r.shipment).into_row());
+                .insert(shipment.get(), Shipment::Packed(r.shipment).into_row());
         }
         self.ev_shipped.push(r.ev_shipped);
         Ok(())
     }
 
-    fn prepare_send(&mut self, shipment: ShipmentId, ev_shipped: EvShipped) -> Result<SendOutcome, Refused> {
+    fn prepare_send(&mut self, shipment: ShipmentId, ev_shipped: EvShipped) -> Result<SendOutcome, SendError> {
         if !self.ev_shipped.contains(&ev_shipped) {
             return Err(not_enabled("Send"));
         }
         let row = self
             .shipments
-            .get(&shipment.0)
+            .get(&shipment.get())
             .cloned()
-            .ok_or(not_enabled("Send"))?;
+            .ok_or(NotEnabled { usecase: "Send" })?;
         run_send(
             Shipment::from_row(row).expect("the store holds valid rows"),
             ev_shipped,
         )
     }
 
-    fn commit_send(&mut self, write: SendOutcome) -> Result<(), Refused> {
+    fn commit_send(&mut self, write: SendOutcome) -> Result<(), SendError> {
         let SendOutcome::Ran(r) = write;
         let id = *r.shipment.id();
         self.check("Send", &[], &[(id, r.shipment_expected)])?;
         self.shipments
-            .insert(id.0, Shipment::Sent(r.shipment).into_row());
+            .insert(id.get(), Shipment::Sent(r.shipment).into_row());
         Ok(())
     }
 
-    fn prepare_cancel(&mut self, order: OrderId) -> Result<CancelOutcome, Refused> {
+    fn prepare_cancel(&mut self, order: OrderId) -> Result<CancelOutcome, CancelError> {
         let state = self.order(order, "Cancel")?;
         match run_cancel(state.clone()) {
-            Err(Refused::NotEnabled(_)) if self.fault == "accept-disabled" => {
+            Err(CancelError::NotEnabled(_)) if self.fault == "accept-disabled" => {
                 let row = OrderRow {
                     status: OrderStatus::Paid,
                     ..state.into_row()
@@ -190,7 +196,7 @@ impl ConformancePort for Service {
         }
     }
 
-    fn commit_cancel(&mut self, write: CancelOutcome) -> Result<(), Refused> {
+    fn commit_cancel(&mut self, write: CancelOutcome) -> Result<(), CancelError> {
         let (r, expected) = match write {
             CancelOutcome::FromPending(r) => (r.order, r.order_expected),
             CancelOutcome::FromPaid(r) => (r.order, r.order_expected),
@@ -199,7 +205,7 @@ impl ConformancePort for Service {
         if self.fault != "accept-disabled" {
             self.check("Cancel", &[(id, expected)], &[])?;
         }
-        self.orders.insert(id.0, Order::Cancelled(r).into_row());
+        self.orders.insert(id.get(), Order::Cancelled(r).into_row());
         Ok(())
     }
 }
