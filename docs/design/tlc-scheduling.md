@@ -100,9 +100,9 @@ The **target** of a job:
 - `--tlc-workers N` (or `RDRA_TLC_WORKERS`): `N`.
 - Known, with `s` states: `clamp(ceil(s / 50_000), 1, W)`. Then a 48k-state cone gets 1
   worker, a 203k-state cone 5, and a cone of 400k states or more gets `W`.
-- Unknown while BFS runs: `W`, as if it were large.
-- Unknown once BFS has ended: the cores divided among the runs left, at most `W`, as before
-  #384.
+- Unknown while BFS runs, on 16 cores or more: `W`, as if it were large.
+- Unknown otherwise (below 16 cores, or once BFS has ended): the cores divided among the
+  runs left, at most `W`, as before #384.
 
 `W` is 8, the cap of #309. When memory, not the queue, bounds the runs at once, the cores
 those runs leave idle go to them: a job whose target is `W` gets
@@ -142,7 +142,7 @@ machine. The fourth follows from `target`.
 |---|---|---|
 | 64 cores, 48 GiB share, heap 16g | 2 runs × 8 workers | 2 × 32. After BFS ends (below), 5 fit in 96 GiB, and a run that starts then gets 12 |
 | 64 cores, 48 GiB, heap unset, 27 unknown jobs | 24 × 2 | 8 × 8 at first. A job BFS has counted takes its target as cores free, and small jobs run on 1 worker |
-| 4 cores, 15 jobs of a few hundred states each (a sample in CI) | 4 × 1 | 1 × 4 until BFS has counted the jobs, then 4 × 1. Counts arrive at the end of each BFS pass, so this lasts as long as the entity pass |
+| 4 cores, 15 jobs of a few hundred states each (a sample in CI) | 4 × 1 | 4 × 1: below 16 cores an uncounted job shares the cores as before |
 | 18 cores, heap set so 1 fits | 1 × 8 | 1 × 18 (`cores / fit`, at most `4W`) |
 
 ### Memory after BFS
@@ -279,12 +279,13 @@ and the comparison, and only the launching moves out.
 5. **`--plan` and `--tlc-results`.** Recommended: experimental, the JSON at `"version": 1`
    with no promise. `--tlc-results` needs an exit status for "waiting for logs", and exit
    statuses are covered by compatibility.md. Recommended: exit 3, after #323.
-6. **Unknown jobs ranked as large.** While BFS has counted nothing (the whole entity pass),
-   uncounted jobs go `cores / 8` at once: 1 × 4 on a 4-core runner where today runs 4 × 1.
-   On patent-ops on 18 cores, measured, the wall time was the same (7.6 s before, 7.3 s
-   after) and the 1.34M-state cone got 8 workers where it got 3. Recommended: watch the
-   formal-verify and engine-corpus step times on the scheduler PR against the PR before it,
-   and give uncounted jobs today's share on machines under 16 cores if they regress.
+6. **Unknown jobs ranked as large, from 16 cores.** While BFS has counted nothing (the
+   whole entity pass), uncounted jobs go `cores / 8` at once. On a 4-core CI runner that
+   made the `--with-tlc` samples step 17% slower (6 min 7 s against 5 min 13 s, one run
+   each), so below 16 cores an uncounted job now shares the cores as before. On patent-ops on
+   18 cores the wall time was the same (7.6 s before, 7.3 s after) and the 1.34M-state cone
+   got 8 workers where it got 3. The threshold of 16 is a guess. Recommended: keep it until
+   the many-core runs below.
 7. **`--tlc-jobs` and `--tlc-workers`** are in the CLI reference unmarked, so compatibility.md
    would cover them. Recommended: cover them, since they only fix what the scheduler would
    pick.
