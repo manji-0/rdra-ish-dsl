@@ -287,6 +287,8 @@ minor release.
   `.lemma()` marker: `check` checks a lemma like any rule, but `verify` runs no cone of its
   own for one, so a lemma that only fails at two instances can pass `verify`. Do not mark a
   rule the model must keep as a lemma.
+- **`verify --plan`.** Experimental: the flag, the JSON it writes, and which launches it
+  lists may change or go away in any release.
 - **`verify --symmetry`.** Experimental. Which cones run up to symmetry, and the
   `(about <m> states)` they print, may change. The verdicts follow [Bounds](#bounds) as any
   other run's do.

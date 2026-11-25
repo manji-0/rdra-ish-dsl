@@ -2231,3 +2231,70 @@ fn symmetry_lifts_a_counterexample_to_the_rows_it_names() {
         "{text}"
     );
 }
+
+/// `--with-tlc --plan` writes the TLC launches as JSON and starts no TLC, so it needs none on
+/// PATH; without `-o` it is refused (#384).
+#[test]
+fn a_plan_lists_the_tlc_launches_and_starts_no_tlc() {
+    let tmp = scratch("verify_cli_plan");
+    let sample = repo().join("samples/formal-verification/cross_order_payment_split.rdra");
+    let plan = tmp.join("plan.json");
+    let specs = tmp.join("specs");
+    let output = verify(
+        &repo(),
+        &tmp,
+        &[
+            sample.to_str().unwrap(),
+            "--with-tlc",
+            "--tlc-workers",
+            "2",
+            "--plan",
+            plan.to_str().unwrap(),
+            "-o",
+            specs.to_str().unwrap(),
+        ],
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
+    assert!(stdout.contains("TLC launches; no TLC ran)"), "{stdout}");
+    assert!(!stdout.contains("\ntlc: Cone_"), "{stdout}");
+    assert!(!stderr.contains("tlc_result:"), "{stderr}");
+    assert!(stderr.contains("\nresult: counterexample\n"), "{stderr}");
+    let plan: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&plan).expect("a plan")).unwrap();
+    assert_eq!(plan["version"], 1);
+    let launches = plan["launches"].as_array().unwrap();
+    let cone = launches
+        .iter()
+        .find(|l| l["module"] == "Cone_MultiForbidden_Order_0")
+        .unwrap_or_else(|| panic!("{plan:#}"));
+    assert_eq!(cone["kind"], "cone");
+    assert_eq!(cone["bfs"]["verdict"], "counterexample");
+    assert_eq!(cone["workers"], 2);
+    assert_eq!(
+        cone["args"],
+        serde_json::json!([
+            "-workers",
+            "2",
+            "-continue",
+            "-config",
+            "Cone_MultiForbidden_Order_0.cfg",
+            "Cone_MultiForbidden_Order_0.tla"
+        ])
+    );
+    assert!(specs.join("Cone_MultiForbidden_Order_0.tla").is_file());
+
+    let refused = verify(
+        &repo(),
+        &tmp,
+        &[sample.to_str().unwrap(), "--with-tlc", "--plan", "p.json"],
+    );
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert_eq!(refused.status.code(), Some(1), "{stderr}");
+    assert!(
+        stderr.contains("--plan needs --with-tlc and -o <DIR>"),
+        "{stderr}"
+    );
+    let _ = std::fs::remove_dir_all(&tmp);
+}

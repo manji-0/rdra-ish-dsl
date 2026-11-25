@@ -439,6 +439,10 @@ pub(crate) enum Commands {
         /// the runs
         #[arg(long, value_name = "N", value_parser = clap::value_parser!(u32).range(1..))]
         tlc_workers: Option<u32>,
+        /// [experimental] With --with-tlc and -o, write the TLC launches verify would start to
+        /// FILE as JSON and start no TLC: the native checker runs and prints as usual
+        #[arg(long, value_name = "FILE")]
+        plan: Option<PathBuf>,
         /// What the run may hold in memory, such as 16GiB (G and GB also mean GiB); under
         /// --with-tlc BFS takes half, and the TLC runs at once take no more `-Xmx` than the
         /// rest. Default: `memory` under [verify] in rdra.toml, else 16GiB

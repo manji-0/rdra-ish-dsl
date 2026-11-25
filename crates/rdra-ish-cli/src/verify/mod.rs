@@ -29,6 +29,7 @@ mod compare;
 mod end;
 mod jobs;
 mod native;
+mod plan;
 mod report;
 mod schedule;
 mod shared;
@@ -96,6 +97,8 @@ pub struct WithTlc {
     pub jobs: Option<usize>,
     /// `--tlc-workers`, else `RDRA_TLC_WORKERS`: every TLC run's workers.
     pub workers: Option<usize>,
+    /// `--plan`: write the TLC launches to this file and start no TLC.
+    pub plan: Option<PathBuf>,
 }
 
 /// What `verify` spends on a check it may not finish, and whether one it leaves undecided
@@ -254,7 +257,11 @@ pub fn run(
     // The cone runs pick their jobs as BFS counts them (#384), on half of `--memory` until
     // BFS ends and all of it after.
     let pool = Pool::new(machine, memory.cones, jobs.len(), false);
-    let tlc = with_tlc.map(|w| Tlc::find(w.jar));
+    // `--plan` writes the launches for a caller that runs TLC itself, and starts none.
+    let plan = with_tlc.as_ref().and_then(|w| w.plan.clone());
+    let tlc = with_tlc
+        .filter(|_| plan.is_none())
+        .map(|w| Tlc::find(w.jar));
     let z3 = prove.as_ref().map(|p| find_z3(p.z3.clone()));
     let start = match (&dir, &written, &tlc, &z3) {
         (Some(dir), Some(Ok(_)), Some(Ok(tlc)), None | Some(Ok(_))) => Some((tlc, dir)),
@@ -384,6 +391,16 @@ pub fn run(
         )?;
     }
 
+    if let (Some(path), Some(dir)) = (&plan, &dir) {
+        let n = plan::write_plan(
+            path,
+            dir,
+            (&jobs, &whole_modules),
+            (&natives, &end.explored),
+            (machine, memory.cones),
+        )?;
+        println!("plan: {} ({n} TLC launches; no TLC ran)", path.display());
+    }
     let mut disagreed = Vec::new();
     let mut tlc_outcome = None;
     if let Some(tlc) = tlc {

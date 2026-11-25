@@ -327,6 +327,7 @@ pub fn run() -> Result<()> {
             tlc_jar,
             tlc_jobs,
             tlc_workers,
+            plan,
             memory,
             symmetry,
             scope,
@@ -348,6 +349,11 @@ pub fn run() -> Result<()> {
                         "warning: {flag} applies only with --with-tlc; this run starts no TLC"
                     );
                 }
+            }
+            if plan.is_some() && (!with_tlc || out.is_none()) {
+                anyhow::bail!(
+                    "--plan needs --with-tlc and -o <DIR>: the plan names the specs -o writes"
+                );
             }
             let tlc_jobs = tlc_count(tlc_jobs, "RDRA_TLC_JOBS")?;
             let tlc_workers = tlc_count(tlc_workers, "RDRA_TLC_WORKERS")?;
@@ -388,6 +394,7 @@ pub fn run() -> Result<()> {
                     jar: tlc_jar,
                     jobs: tlc_jobs,
                     workers: tlc_workers,
+                    plan,
                 }),
             )?;
         }

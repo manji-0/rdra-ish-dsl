@@ -1357,7 +1357,8 @@ the native checker. No JVM starts unless `--with-tlc` is given. See
 [formal-verification.md](./formal-verification.md).
 
 ```
-rdra-ish verify <INPUTS...> [--with-tlc [--tlc-jar <PATH>] [--tlc-jobs <N>] [--tlc-workers <N>]] [-o <DIR>]
+rdra-ish verify <INPUTS...> [--with-tlc [--tlc-jar <PATH>] [--tlc-jobs <N>] [--tlc-workers <N>]
+                [--plan <FILE>]] [-o <DIR>]
                 [--instance-count <N>] [--instances <ENTITY=N>]... [--int-range-max <N>]
                 [--max-states <N>] [--max-patterns <N>] [--memory <SIZE>] [--symmetry never|always]
                 [--temporal-budget <SECS>] [--deny-undecided]
@@ -1385,6 +1386,7 @@ rdra-ish verify <INPUTS...> [--with-tlc [--tlc-jar <PATH>] [--tlc-jobs <N>] [--t
 | `--z3 <PATH>` | `RDRA_Z3`, else `z3` on `PATH` | The z3 binary for `--prove`. |
 | `--tlc-jobs <N>` | `RDRA_TLC_JOBS`, else as many as the cores and memory allow | With `--with-tlc`: at most `N` TLC runs at once. The memory they share still bounds them. The verdicts do not change. Without `--with-tlc` it warns. |
 | `--tlc-workers <N>` | `RDRA_TLC_WORKERS`, else by the states BFS counted | With `--with-tlc`: every TLC run gets `-workers N`; a safety cone that does not pass still reruns on one worker. See [Memory limit](#memory-limit). Without `--with-tlc` it warns. |
+| `--plan <FILE>` | none | Experimental. With `--with-tlc` and `-o`: run the native checker as usual, write the specs, and write to `FILE` as JSON the TLC launches `--with-tlc` would start first, and start no TLC. Each launch gives its module, cfg, kind, checks, the cone it is checked in, BFS's verdict and states, and the heap, workers and arguments the scheduler would give it, with the runs that follow from what it prints. No `tlc:` or `tlc_result:` line prints. The format (`"version": 1`) may change in any release. |
 | `--tlc-jar <PATH>` | `RDRA_TLC_JAR` | With `--with-tlc`: run `java -cp <PATH> tlc2.TLC` from `tla2tools.jar` instead of a `tlc` / `tlc2` launcher. Needs `java`. Without `--with-tlc` it warns and starts nothing. |
 | `--buc`, `--entity`, `--without-usecase`, `--without-buc`, `--actor` `<ID>` | whole model | See [Partial runs](#partial-runs). A scoped run checks no property. |
 
