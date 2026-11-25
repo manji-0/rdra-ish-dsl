@@ -6,8 +6,8 @@
 #   scripts/diff-test.sh FILE...   the crates that own FILE...; nothing when none does
 #   scripts/diff-test.sh --all     every crate (CI's `test` step)
 #
-#   --profile NAME   a profile of .config/nextest.toml; CI's check job runs `pr`, which skips
-#                    the slow tests it lists
+#   --profile NAME   a profile of .config/nextest.toml; `pr` by default, which skips the slow
+#                    tests it lists, as CI's test step does on a pull request
 #   --filter EXPR    the tests the nextest filterset EXPR matches in place of the profile's
 #                    default filter, which EXPR can name as `default()`
 #
@@ -35,11 +35,12 @@ filter="not (${filter# | })"
 
 packages=()
 nextest=()
+profile=pr
 all=false
 while (($#)); do
   case "$1" in
     --profile)
-      nextest+=(--profile "$2")
+      profile=$2
       shift
       ;;
     --filter)
@@ -65,5 +66,5 @@ elif ! ((${#packages[@]})); then
   exit 0
 fi
 # --no-tests=pass: a crate whose tests the filters all skip.
-cargo nextest run "${packages[@]}" "${nextest[@]}" --no-tests=pass -E "$filter"
+cargo nextest run "${packages[@]}" --profile "$profile" ${nextest[@]+"${nextest[@]}"} --no-tests=pass -E "$filter"
 cargo test --doc "${packages[@]}"

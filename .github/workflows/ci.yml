@@ -143,7 +143,7 @@ jobs:
           CODEGEN: ${{ needs.changes.outputs.codegen }}
         run: |
           also=()
-          if [ "$EVENT" = pull_request ] && [ "$CODEGEN" = true ]; then
+          if [ "$EVENT" = pull_request ] && [ "$CODEGEN" != false ]; then
             also=(--filter 'default() | binary_id(rdra-ish-cli::codegen_*)')
           fi
           RDRA_REQUIRE_CODEGEN_TOOLS=1 scripts/diff-test.sh --profile pr "${also[@]}" --all
