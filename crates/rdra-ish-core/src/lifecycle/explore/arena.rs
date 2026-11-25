@@ -1,5 +1,5 @@
-//! A run's states, end to end in one buffer: each state is kept once, with no heap block or
-//! pointer of its own.
+//! A run's states, end to end in segments (`segments::Rows`): each state is kept once, with
+//! no heap block or pointer of its own, and stays where it was pushed.
 
 use std::hash::Hasher;
 use std::ops::{Index, Range};
@@ -9,41 +9,53 @@ use hashbrown::HashTable;
 use crate::fasthash::FastHasher;
 use crate::lifecycle::expr::{State, StateSlice};
 
+use super::segments::Rows;
+
 #[cfg(feature = "shadow")]
 mod reference;
 
 /// States of `width` bytes each, numbered in the order pushed.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct States {
-    bytes: Vec<u8>,
-    width: usize,
-    len: usize,
+    rows: Rows<u8>,
 }
+
+impl Default for States {
+    fn default() -> Self {
+        States::new(0)
+    }
+}
+
+impl PartialEq for States {
+    fn eq(&self, other: &Self) -> bool {
+        self.width() == other.width() && self.iter().eq(other.iter())
+    }
+}
+
+impl Eq for States {}
 
 impl States {
     pub fn new(width: usize) -> Self {
         States {
-            bytes: Vec::new(),
-            width,
-            len: 0,
+            rows: Rows::new(width),
         }
     }
 
     pub fn len(&self) -> usize {
-        self.len
+        self.rows.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.len == 0
+        self.rows.len() == 0
     }
 
     /// Bytes in one state.
     pub fn width(&self) -> usize {
-        self.width
+        self.rows.width()
     }
 
     pub fn get(&self, i: usize) -> Option<&StateSlice> {
-        (i < self.len).then(|| &self[i])
+        (i < self.len()).then(|| &self[i])
     }
 
     pub fn first(&self) -> Option<&StateSlice> {
@@ -51,54 +63,46 @@ impl States {
     }
 
     pub fn last(&self) -> Option<&StateSlice> {
-        self.len.checked_sub(1).map(|i| &self[i])
+        self.len().checked_sub(1).map(|i| &self[i])
     }
 
     pub fn iter(&self) -> Iter<'_> {
         Iter {
             states: self,
-            at: 0..self.len,
+            at: 0..self.len(),
         }
     }
 
     /// A copy of the states in `range`.
     pub(crate) fn slice(&self, range: Range<usize>) -> States {
-        States {
-            bytes: self.bytes[range.start * self.width..range.end * self.width].to_vec(),
-            width: self.width,
-            len: range.len(),
+        let mut rows = Rows::new(self.width());
+        for i in range {
+            rows.push(self.rows.row(i));
         }
+        States { rows }
     }
 
-    /// Adds `s` at index `len()`. The buffer grows to twice its states when full, four at the
-    /// least, and to no more: what it holds is `width * capacity()` bytes.
+    /// Adds `s` at index `len()`, in the last segment, or in a new one when that is full. No
+    /// state already pushed moves.
     pub(crate) fn push(&mut self, s: &StateSlice) {
-        debug_assert_eq!(s.0.len(), self.width);
-        if self.len == self.capacity() {
-            let states = (self.len * 2).max(4);
-            self.bytes
-                .reserve_exact(states * self.width - self.bytes.len());
-        }
-        self.bytes.extend_from_slice(&s.0);
-        self.len += 1;
+        self.rows.push(&s.0);
     }
 
     /// The states the buffer holds room for.
+    #[cfg(kani)]
     pub(crate) fn capacity(&self) -> usize {
-        match self.width {
-            0 => self.len.max(4).next_power_of_two(),
-            w => self.bytes.capacity() / w,
-        }
+        self.rows.capacity()
     }
 
     /// The bytes the buffer takes once `more` states are pushed.
     pub(crate) fn bytes_with(&self, more: usize) -> u64 {
-        let cap = if self.len + more <= self.capacity() {
-            self.capacity()
-        } else {
-            (self.capacity() * 2).max(self.len + more).max(4)
-        };
-        (cap * self.width) as u64
+        self.rows.bytes_with(more)
+    }
+
+    /// The bytes of `bytes_with` that the list of segments takes.
+    #[cfg(feature = "shadow")]
+    pub(crate) fn list_bytes_with(&self, more: usize) -> u64 {
+        self.rows.parts_with(more).1
     }
 }
 
@@ -106,8 +110,7 @@ impl Index<usize> for States {
     type Output = StateSlice;
 
     fn index(&self, i: usize) -> &StateSlice {
-        assert!(i < self.len, "state {i} of {}", self.len);
-        StateSlice::new(&self.bytes[i * self.width..(i + 1) * self.width])
+        StateSlice::new(self.rows.row(i))
     }
 }
 
@@ -230,45 +233,37 @@ impl Seen {
 mod proofs {
     use super::*;
 
-    const WIDTH: usize = 2;
-    const PUSHES: usize = 5;
+    const PUSHES: usize = 9;
 
-    /// For every width up to 2 and every run of up to 5 pushes, from an empty store or from a
-    /// `slice` of one: each state reads back as pushed, no index leaves the buffer (the
-    /// `unsafe` cast included), the buffer never holds room for more than `capacity()` states,
-    /// and `bytes_with(1)` before a push is `bytes_with(0)` after it, which is what the memory
-    /// limit charges.
+    /// For states of one byte and every run of up to 9 pushes, past the doubling segments (4
+    /// and 4 states under Kani) into a fixed one: each state reads back as pushed and stays at
+    /// the address it was pushed to, no index leaves the buffer, and `bytes_with(1)` before a
+    /// push is `bytes_with(0)` after it, which is what the store's buffers hold and what the
+    /// memory limit charges. (At widths up to 2 CBMC ran 20 minutes and 4.5 GB; the unit
+    /// tests of `segments` push wider rows at the build's own segment size.)
     #[kani::proof]
-    #[kani::unwind(7)]
+    #[kani::unwind(11)]
     fn a_push_takes_the_bytes_bytes_with_said_and_reads_back() {
-        let width: usize = kani::any();
-        kani::assume(width <= WIDTH);
         let pushes: usize = kani::any();
         kani::assume(pushes <= PUSHES);
         let probe: usize = kani::any();
         kani::assume(probe < pushes);
-        let mut states = States::new(width);
-        let mut probed = [0u8; WIDTH];
-        // A slice in the middle: its buffer is as long as its states, not a power of two.
-        let cut: usize = kani::any();
-        kani::assume(cut <= pushes);
-        let sliced: bool = kani::any();
+        let mut states = States::new(1);
+        let mut probed = (0u8, std::ptr::null());
         for i in 0..pushes {
-            if sliced && i == cut {
-                states = states.slice(0..i);
-            }
-            let s: [u8; WIDTH] = kani::any();
+            let s: u8 = kani::any();
             let said = states.bytes_with(1);
-            states.push(StateSlice::new(&s[..width]));
+            states.push(StateSlice::new(&[s]));
             assert_eq!(states.bytes_with(0), said);
             assert_eq!(states.len(), i + 1);
             assert!(states.len() <= states.capacity());
-            assert_eq!(states.bytes.capacity(), states.capacity() * width);
+            assert_eq!(states.rows.allocated(), said);
             if i == probe {
-                probed = s;
+                probed = (s, states[i].0.as_ptr());
             }
         }
-        assert_eq!(states[probe].0, probed[..width]);
+        assert_eq!(states[probe].0, [probed.0]);
+        assert_eq!(states[probe].0.as_ptr(), probed.1);
         assert!(states.get(pushes).is_none());
     }
 }

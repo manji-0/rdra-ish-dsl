@@ -18,6 +18,7 @@ while IFS= read -r path; do
     crates/rdra-ish-core/src/lifecycle/expr.rs) relevant=true ;;
     crates/rdra-ish-core/src/lifecycle/explore/arena.rs) relevant=true ;;
     crates/rdra-ish-core/src/lifecycle/explore/edges.rs) relevant=true ;;
+    crates/rdra-ish-core/src/lifecycle/explore/segments.rs) relevant=true ;;
     crates/rdra-ish-core/src/lifecycle/explore/store.rs) relevant=true ;;
     crates/rdra-ish-core/src/lifecycle/explore/symmetry/mod.rs) relevant=true ;;
     # The canonical form the symmetry harness runs.
