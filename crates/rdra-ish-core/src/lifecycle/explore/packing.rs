@@ -84,11 +84,19 @@ impl Packing {
         self.bytes
     }
 
+    /// Whether a state packs through words. Under Kani it never does: the `packing`
+    /// harnesses prove the word path equal to the one-cell-at-a-time path, and the `States`
+    /// harness over the word path took 83 GB and 9 minutes where it takes 30 s over the other.
+    #[inline]
+    fn by_words(&self) -> bool {
+        self.width() <= FAST_CELLS && !cfg!(kani)
+    }
+
     /// `state` packed into `out`, which is `bytes()` long. Panics, in a release build too, when
     /// a cell holds a value its bits cannot: two states would pack alike.
     #[inline]
     pub(crate) fn pack(&self, state: &[u8], out: &mut [u8]) {
-        let over = match self.width() <= FAST_CELLS {
+        let over = match self.by_words() {
             true => pack_words(&self.bits, state, out),
             false => pack_into(&self.bits, state, out),
         };
@@ -109,7 +117,7 @@ impl Packing {
     /// The state `packed` holds, into `out`, which is `width()` long.
     #[inline]
     pub(crate) fn unpack(&self, packed: &[u8], out: &mut [u8]) {
-        match self.width() <= FAST_CELLS {
+        match self.by_words() {
             true => unpack_words(&self.bits, packed, out),
             false => unpack_into(&self.bits, packed, out),
         }

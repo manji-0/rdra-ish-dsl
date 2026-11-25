@@ -403,7 +403,9 @@ minute each. The others take under 20 seconds each.
 The `States` harness in `explore/arena.rs` and the `Rows` harness in `explore/segments.rs`
 push rows of one byte: at widths up to 2, the `States` harness held 8 GB before #296 2.2 and
 ran past 20 minutes on segments, and the `Rows` harness passed 8 GB. The unit tests of
-`segments` push wider rows at the build's own segment size.
+`segments` push wider rows at the build's own segment size. Under Kani a state packs one
+cell at a time (`Packing::by_words`): the `States` harness over the 64-bit word path took
+83 GB and 9 minutes, and the `packing` harnesses prove the two paths alike.
 
 ### In CI
 
