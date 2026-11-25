@@ -31,7 +31,9 @@ jobs:
     # checks that read prose instead of its whole test suite and the sample artifacts. `nix`
     # says whether the change can break the nix package while cargo still builds: the flake
     # takes the whole repository as its source, so only its own files, the manifests, the
-    # lock file and this workflow can.
+    # lock file and this workflow can. `codegen` says whether the change touches the codegen
+    # printers, the subcommand or their tests: `check` then runs codegen_differential's
+    # domain samples too.
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -41,6 +43,7 @@ jobs:
       verify: ${{ steps.decide.outputs.verify }}
       kani: ${{ steps.decide.outputs.kani }}
       code: ${{ steps.decide.outputs.code }}
+      codegen: ${{ steps.decide.outputs.codegen }}
       nix: ${{ steps.decide.outputs.nix }}
     defaults:
       run:
@@ -74,11 +77,13 @@ jobs:
             verify=false
             kani=false
             code=false
+            codegen=false
             nix=false
           elif [ "$EVENT" != pull_request ]; then
             verify=true
             kani=true
             code=true
+            codegen=true
             nix=true
           else
             git diff --name-only --no-renames HEAD^1 HEAD | tee changed.txt
@@ -88,6 +93,11 @@ jobs:
               nix=true
             else
               nix=false
+            fi
+            if grep -qE '^crates/rdra-ish-emit/src/codegen/|^crates/rdra-ish-cli/src/codegen_cmd\.rs$|^crates/rdra-ish-cli/tests/(codegen_|fixtures/codegen/)' changed.txt; then
+              codegen=true
+            else
+              codegen=false
             fi
             if [ "$NO_VERIFY" = true ]; then
               verify=false
@@ -99,6 +109,7 @@ jobs:
           echo "verify=$verify" | tee -a "$GITHUB_OUTPUT"
           echo "kani=$kani" | tee -a "$GITHUB_OUTPUT"
           echo "code=$code" | tee -a "$GITHUB_OUTPUT"
+          echo "codegen=$codegen" | tee -a "$GITHUB_OUTPUT"
           echo "nix=$nix" | tee -a "$GITHUB_OUTPUT"
 
   check:
@@ -123,6 +134,13 @@ jobs:
         # RDRA_REQUIRE_CODEGEN_TOOLS: the devShell has tsc and go, so the codegen build tests
         # may not skip a language here; portability.yml runs without them and skips.
         run: RDRA_REQUIRE_CODEGEN_TOOLS=1 scripts/diff-test.sh --all
+      - name: The printed Rust and Go agree with BFS on the domain samples
+        # The test step runs the small samples; scripts/diff-test.sh skips this test (about
+        # 100 s in debug locally). It runs where a printer bug shows: a pull request that
+        # touches the codegen printers, the codegen subcommand or the codegen tests (`codegen`
+        # above), and every run on main.
+        if: needs.changes.outputs.codegen != 'false'
+        run: RDRA_REQUIRE_CODEGEN_TOOLS=1 cargo test -p rdra-ish-cli --test codegen_differential printed_code_agrees_on_the_domain_samples
       - name: debug CLI
         # The binary the test step built (`cargo test --all` builds it for the CLI tests), for
         # the two steps below: a no-op after the test step, a build in prose mode. A separate
