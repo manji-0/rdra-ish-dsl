@@ -170,6 +170,12 @@
 
 ### Added
 
+- **Actor capabilities in the Rust contracts** (experimental, #363 P6, #337): each actor that
+  performs a use case with a contract gets a capability type (`<Actor>Capability`, made by
+  `issue()`), and the use case a caller type (`<UseCase>Caller`) that its `prepare_*` and
+  `run_*` take first. A call without the capability of an actor that performs the use case
+  does not compile. The conformance harness calls as the first such actor.
+
 - **The obligation ledger** (`check --code`, #363, P5): each obligation the generated code
   lists needs an owner, declared by a `rdra: obligation <name> [file]` marker line in the
   service code or under `[code.obligations]`. An obligation with no owner is

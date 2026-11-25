@@ -187,3 +187,59 @@ fn go_states_are_not_built_outside() {
         assert!(err.contains(says), "{body}: {err}");
     }
 }
+
+/// Code that calls a use case of oidc-auth, and what rustc says (#337): `DenyDevice` is
+/// performed by EndUser only, so its prepare takes a `DenyDeviceCaller`, which only an
+/// `EndUserCapability` makes.
+const RUST_CAPABILITY_CALLS: [(&str, Option<&str>); 3] = [
+    (
+        "fn f<S: DenyDeviceUseCase>(s: &mut S, d: DeviceAuthorizationId) { let _ = s.prepare_deny_device(DenyDeviceCaller::from(EndUserCapability::issue()), d); }",
+        None,
+    ),
+    (
+        "fn f<S: DenyDeviceUseCase>(s: &mut S, d: DeviceAuthorizationId) { let _ = s.prepare_deny_device(d); }",
+        Some("E0061"),
+    ),
+    (
+        "fn f<S: DenyDeviceUseCase>(s: &mut S, d: DeviceAuthorizationId) { let _ = s.prepare_deny_device(DenyDeviceCaller::RelyingParty(RelyingPartyCapability::issue()), d); }",
+        Some("E0599"),
+    ),
+];
+
+#[test]
+fn rust_a_use_case_takes_the_capability_of_an_actor_that_performs_it() {
+    let dir = scratch("rust-capability");
+    let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .current_dir(fixture().join("../../../../.."))
+        .args(["codegen", "samples/oidc-auth", "--lang", "rust", "-o"])
+        .arg(dir.join("domain.rs"))
+        .output()
+        .expect("runs rdra-ish");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
+    for (body, code) in RUST_CAPABILITY_CALLS {
+        std::fs::write(
+            dir.join("call.rs"),
+            format!("#[path = \"domain.rs\"]\n#[allow(dead_code)]\nmod domain;\nuse domain::*;\n#[allow(dead_code)]\n{body}\nfn main() {{}}\n"),
+        )
+        .unwrap();
+        let output = Command::new(&rustc)
+            .args(["--edition", "2021", "-o"])
+            .arg(dir.join("call"))
+            .arg(dir.join("call.rs"))
+            .output()
+            .expect("runs rustc");
+        let err = String::from_utf8_lossy(&output.stderr);
+        match code {
+            None => assert!(output.status.success(), "{body}: {err}"),
+            Some(code) => {
+                assert!(!output.status.success(), "rustc builds {body}");
+                assert!(err.contains(code), "{body}: {err}");
+            }
+        }
+    }
+}

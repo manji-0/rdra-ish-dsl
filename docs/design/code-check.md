@@ -564,3 +564,23 @@ mirrors them instead of inventing its own:
   diagnostic, the new obligation with no owner (`codegen_code_check.rs`).
 - An owner of a name the model lacks is a warning, since a rename in the model would otherwise
   fail every build until the marker follows.
+
+**P6, Rust (the S plan).**
+
+- The IR has `DomainModel.capabilities: Vec<CapabilityDecl { actor, label, name }>`, one per
+  actor that performs a use case with a contract (`rdra_ish_core::actors_for_usecase`: direct
+  `performs`, plus the BUC's actors unless an event or a timer starts it). It also has
+  `ContractDecl.caller: Option<CallerDecl { name, actors }>`. The names are
+  `<Actor>Capability` (or `<Actor>Cap`) and `<UseCase>Caller` (or `<UseCase>UseCaseCaller`).
+- Rust prints each capability as a struct with a private unit field, made only by `issue()`.
+  Each caller is an enum of its actors' capabilities with `From` for each. Every `prepare_*`
+  and `run_*` of the contract takes `by: <UseCase>Caller` first, and the harness calls as the
+  first actor.
+- `codegen_behaviour.rs` tests it on oidc-auth: `DenyDevice` (EndUser only) builds with
+  `EndUserCapability::issue()`. Without a caller it fails with E0061, and with
+  `DenyDeviceCaller::RelyingParty` it fails with E0599.
+- **Not done: the R plan, a refused trace for a call by another actor.** In Rust such a call
+  does not compile, so the harness has no way to make one, and the model names no dynamic
+  principal that a service would check at run time. A refusal trace fits a language where a
+  capability can be forged (a Go zero value, a TypeScript cast). Doing it in Rust would need a
+  decision on a dynamic `Caller` that the service converts from its authenticated principal.

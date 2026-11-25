@@ -244,6 +244,7 @@ mod tests {
             error: format!("{usecase}Error"),
             methods: vec![m],
             entries: Vec::new(),
+            caller: None,
         }
     }
 

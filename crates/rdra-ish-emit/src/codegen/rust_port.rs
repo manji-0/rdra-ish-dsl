@@ -14,7 +14,7 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
     let Some(port) = &domain.port else {
         return;
     };
-    print_contracts(port, out);
+    print_contracts(domain, port, out);
     if !domain.harness {
         return;
     }
@@ -236,9 +236,19 @@ where
     out.push_str("    let ::core::option::Option::Some((&action, values)) = call.split_first() else {\n        return ::core::result::Result::Err(\"a call names no use case\".to_string());\n    };\n");
     out.push_str("    let mut conf_args = values.iter().copied();\n");
     out.push_str("    match action {\n");
-    for m in &port.methods {
+    for (k, m) in port.methods.iter().enumerate() {
         out.push_str(&format!("        {} => {{\n", string_literal(&m.action)));
         let mut args = Vec::new();
+        // The harness runs each call as the first actor that performs the use case.
+        let caller = port
+            .contracts
+            .iter()
+            .find(|c| c.methods.contains(&k))
+            .and_then(|c| c.caller.as_ref());
+        if let Some(caller) = caller {
+            let cap = &domain.capabilities[caller.actors[0]];
+            args.push(format!("{}::from({}::issue())", caller.name, cap.name));
+        }
         for (name, ty) in m.rows.iter().chain(&m.marks) {
             out.push_str(&format!(
                 "            let {} = {};\n",
@@ -433,12 +443,68 @@ pub(super) fn probe(
     Some(w.finish())
 }
 
+/// The capability of each actor and the caller type of each use case (#337): a prepare or an
+/// entry point takes the caller, so code that has no capability of an actor that performs the
+/// use case cannot run it.
+fn print_capabilities(domain: &DomainModel, port: &super::ir::PortDecl, out: &mut String) {
+    if domain.capabilities.is_empty() {
+        return;
+    }
+    out.push_str("// ── Capabilities: who may run each use case ──\n\n");
+    for cap in &domain.capabilities {
+        out.push_str(&doc(
+            &[
+                format!("The capability of the actor {} ({}): the use cases it performs take it.", cap.actor, cap.label),
+                format!("Made only by `issue`, which the code calls once it has authenticated a {}; rdra-ish does not check who calls it.", cap.actor),
+            ],
+            "",
+        ));
+        out.push_str("#[derive(Debug, Clone, Copy, PartialEq, Eq)]\n");
+        out.push_str(&format!("pub struct {}(());\n\n", cap.name));
+        out.push_str(&format!(
+            "impl {} {{\n    /// The capability, for code that has authenticated a {}.\n    pub fn issue() -> Self {{\n        Self(())\n    }}\n}}\n\n",
+            cap.name, cap.actor
+        ));
+    }
+    for c in &port.contracts {
+        let Some(caller) = &c.caller else {
+            continue;
+        };
+        out.push_str(&format!(
+            "/// Who may run {}: an actor that performs it, by its capability.\n",
+            c.usecase
+        ));
+        out.push_str("#[derive(Debug, Clone, Copy, PartialEq, Eq)]\n");
+        out.push_str(&format!("pub enum {} {{\n", caller.name));
+        for &i in &caller.actors {
+            let cap = &domain.capabilities[i];
+            out.push_str(&format!(
+                "    /// The actor {}.\n    {}({}),\n",
+                cap.actor,
+                super::type_ident(&cap.actor),
+                cap.name
+            ));
+        }
+        out.push_str("}\n\n");
+        for &i in &caller.actors {
+            let cap = &domain.capabilities[i];
+            out.push_str(&format!(
+                "impl ::core::convert::From<{0}> for {1} {{\n    fn from(cap: {0}) -> Self {{\n        Self::{2}(cap)\n    }}\n}}\n\n",
+                cap.name,
+                caller.name,
+                super::type_ident(&cap.actor)
+            ));
+        }
+    }
+}
+
 /// One trait per use case (docs/design/code-check.md, decision 6): the prepare and commit
 /// methods of its actions. A service implements each; the probe names each.
-fn print_contracts(port: &super::ir::PortDecl, out: &mut String) {
+fn print_contracts(domain: &DomainModel, port: &super::ir::PortDecl, out: &mut String) {
     if port.contracts.is_empty() {
         return;
     }
+    print_capabilities(domain, port, out);
     out.push_str("// ── Contracts: one per use case, which the service implements ──\n\n");
     for c in &port.contracts {
         let at = c
@@ -464,7 +530,10 @@ fn print_contracts(port: &super::ir::PortDecl, out: &mut String) {
                 )],
                 "    ",
             ));
-            let params = params(m);
+            let mut params = params(m);
+            if let Some(caller) = &c.caller {
+                params.insert(0, format!("by: {}", caller.name));
+            }
             out.push_str(&super::rust::allow_arguments(params.len() + 1, "    "));
             out.push_str(&format!(
                 "    fn prepare_{}(&mut self{}) -> {RESULT}<{}, {error}>;\n",
@@ -493,12 +562,15 @@ fn print_contracts(port: &super::ir::PortDecl, out: &mut String) {
                 )],
                 "    ",
             ));
-            let params: Vec<String> = e
+            let mut params: Vec<String> = e
                 .rows
                 .iter()
                 .map(|(n, ty)| format!(", {}: {ty}", ident(n)))
                 .collect();
-            out.push_str(&super::rust::allow_arguments(e.rows.len() + 1, "    "));
+            if let Some(caller) = &c.caller {
+                params.insert(0, format!(", by: {}", caller.name));
+            }
+            out.push_str(&super::rust::allow_arguments(params.len() + 1, "    "));
             out.push_str(&format!(
                 "    fn run_{}(&mut self{}) -> {RESULT}<(), {}>;\n",
                 snake(&e.name),

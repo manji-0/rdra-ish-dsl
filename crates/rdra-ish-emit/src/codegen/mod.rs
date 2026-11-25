@@ -600,6 +600,7 @@ pub fn build_for(
                 domain.port = Some(decl);
                 domain.harness = port;
                 conformance::add_entries(&built.ts, &mut domain, &mut names)?;
+                conformance::add_callers(model, &mut domain, &mut names)?;
             }
             Err(e) if port => return Err(e),
             Err(_) => {}

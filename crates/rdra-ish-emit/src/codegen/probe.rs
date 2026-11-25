@@ -182,6 +182,7 @@ mod tests {
             error: format!("{usecase}Error"),
             methods,
             entries: Vec::new(),
+            caller: None,
         }
     }
 

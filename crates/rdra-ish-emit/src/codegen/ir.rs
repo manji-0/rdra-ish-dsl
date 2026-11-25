@@ -203,6 +203,8 @@ pub struct DomainModel {
     /// The names a language's printer derives, by key (`crate::codegen::derived_names`):
     /// the name as derived, or with `_` appended when a model type had it.
     pub derived: std::collections::BTreeMap<String, String>,
+    /// One per actor that performs a use case with a contract, in id order (#337).
+    pub capabilities: Vec<CapabilityDecl>,
     /// Whether the conformance harness is printed (`--conformance`): the snapshot,
     /// `ConformancePort`, and `conform`. The contracts of [`PortDecl`] are printed whenever
     /// `port` is set.
@@ -791,6 +793,29 @@ pub struct ContractDecl {
     /// One entry point per action the generator printed no function for (#335): the service
     /// runs it whole, so the probe still requires it.
     pub entries: Vec<EntryDecl>,
+    /// Who may run it (#337): `None` for a use case no actor performs (an event or a timer
+    /// starts it, or the model names no actor).
+    pub caller: Option<CallerDecl>,
+}
+
+/// The capability of one actor (#337): a value the code that authenticated the actor makes,
+/// and that every prepare and entry point of a use case the actor performs takes.
+#[derive(Clone, Debug)]
+pub struct CapabilityDecl {
+    /// The actor's id.
+    pub actor: String,
+    pub label: String,
+    /// `<Actor>Capability`, or `<Actor>Cap` when a model type has that name.
+    pub name: String,
+}
+
+/// Who may run one use case: one of the capabilities of the actors that perform it.
+#[derive(Clone, Debug)]
+pub struct CallerDecl {
+    /// `<UseCase>Caller`, or `<UseCase>UseCaseCaller`.
+    pub name: String,
+    /// Indices into [`DomainModel::capabilities`], in actor id order.
+    pub actors: Vec<usize>,
 }
 
 /// The entry point of an action with no printed function: `run_<action>` / `Run<Action>`

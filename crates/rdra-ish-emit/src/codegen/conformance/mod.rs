@@ -20,8 +20,8 @@ use rdra_ish_core::SemanticModel;
 
 use super::actions::snake;
 use super::ir::{
-    ContractDecl, DomainModel, EntryDecl, Field, FieldType, FnDecl, FnInput, OutKind, PortDecl,
-    PortEntity, PortEvent, PortMethod, PortRun, Scalar, Track,
+    CallerDecl, CapabilityDecl, ContractDecl, DomainModel, EntryDecl, Field, FieldType, FnDecl,
+    FnInput, OutKind, PortDecl, PortEntity, PortEvent, PortMethod, PortRun, Scalar, Track,
 };
 use super::{type_ident, CodegenError, Names};
 use eval::{column_var, enum_name, matching, Rows};
@@ -277,9 +277,62 @@ fn contracts(
                 .map_or_else(String::new, |e| e.name.clone()),
             methods: vec![i],
             entries: Vec::new(),
+            caller: None,
         });
     }
     Ok(out)
+}
+
+/// The callers of every contract (#337): the actors that perform its use case, each by a
+/// capability type of its own, claimed once.
+pub(super) fn add_callers(
+    model: &SemanticModel,
+    domain: &mut DomainModel,
+    names: &mut Names,
+) -> Result<(), CodegenError> {
+    let Some(mut port) = domain.port.take() else {
+        return Ok(());
+    };
+    for c in &mut port.contracts {
+        let Some((uc, _)) = model.use_cases.iter().find(|(_, u)| u.id == c.usecase) else {
+            continue;
+        };
+        let mut actors = Vec::new();
+        for a in rdra_ish_core::actors_for_usecase(model, uc) {
+            let actor = &model.actors[a];
+            let i = match domain.capabilities.iter().position(|x| x.actor == actor.id) {
+                Some(i) => i,
+                None => {
+                    let pascal = type_ident(&actor.id);
+                    domain.capabilities.push(CapabilityDecl {
+                        actor: actor.id.clone(),
+                        label: actor.label.clone(),
+                        name: super::claim_first(
+                            names,
+                            [format!("{pascal}Capability"), format!("{pascal}Cap")],
+                            format!("the capability of {}", actor.id),
+                        )?,
+                    });
+                    domain.capabilities.len() - 1
+                }
+            };
+            actors.push(i);
+        }
+        if actors.is_empty() {
+            continue;
+        }
+        let pascal = type_ident(&c.usecase);
+        c.caller = Some(CallerDecl {
+            name: super::claim_first(
+                names,
+                [format!("{pascal}Caller"), format!("{pascal}UseCaseCaller")],
+                format!("the callers of {}", c.usecase),
+            )?,
+            actors,
+        });
+    }
+    domain.port = Some(port);
+    Ok(())
 }
 
 /// The entry points of the actions with no printed function (#335), added to their use
@@ -345,6 +398,7 @@ pub(super) fn add_entries(
                 .map_or_else(String::new, |e| e.name.clone()),
             methods: Vec::new(),
             entries: vec![entry],
+            caller: None,
         });
     }
     domain.port = Some(port);

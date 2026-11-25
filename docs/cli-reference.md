@@ -2201,6 +2201,14 @@ The Rust ids and scalars are opaque: `OrderId::from(7)`, `"12.50".parse::<Money>
 `"2026-01-01".parse::<Date>()`, which refuse text of another shape with `InvalidValue`
 ([Generated code style](design/algebraic-codegen.md#generated-code-style)).
 
+In Rust, each use case with a function or an entry point also gets a **contract**, the trait
+`<UseCase>UseCase` with its `prepare_*` / `commit_*` methods (and `run_<action>` for an action
+with no printed function), printed with or without `--conformance`. A use case that actors
+perform takes a **caller** first: `by: <UseCase>Caller`, an enum over the capabilities of those
+actors (`EndUserCapability`, made only by `EndUserCapability::issue()`). Code without a
+capability of an actor that performs the use case does not compile; whether the code that
+calls `issue` authenticated the actor is not checked.
+
 With `--conformance <FILE>` (Rust and Go), the output ends with a **conformance harness**
 for the service that finishes it, and `FILE` gets the traces it runs. The service
 implements `ConformancePort`: `seed` empties its store and stores the rows of an initial
