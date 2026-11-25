@@ -28,12 +28,21 @@
 //! does not decide, it runs on the unreduced cone, where `WF_vars(Next)` keeps its meaning
 //! (docs/formal-verification.md, "WF_vars(Next) on a reduced cone").
 
-use rdra_ish_core::lifecycle::{Caps, LtlKind, QuotientCache, TransitionSystem};
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+use rdra_ish_core::lifecycle::{
+    Caps, ComponentRun, Cone, Fairness, LassoFault, LtlKind, PropertyVerdict, QuotientCache,
+    StateDiag, TransitionSystem, VarSet,
+};
 use rdra_ish_emit::tla::{self, PrintMode, TlaBundle};
 
 use crate::tlc_output::Outcome;
 
 pub struct PropertyCone {
+    /// The property's index in the whole system.
+    pub at: usize,
+    /// The cone's vars in the whole system.
+    pub vars: VarSet,
     /// The cone as a system; `index` is the property's index in it.
     pub system: TransitionSystem,
     pub index: usize,
@@ -85,6 +94,8 @@ pub enum Why {
     WfNext,
     /// The counterexample may create instances past the bound.
     FreesSlots,
+    /// A run of a widened cone (`PropertyCone::settle`) stopped at a cap or the budget.
+    Stopped,
 }
 
 impl Why {
@@ -92,8 +103,116 @@ impl Why {
         match self {
             Why::WfNext => "needs the whole model's WF_vars(Next)",
             Why::FreesSlots => "its counterexample may create instances past the bound",
+            Why::Stopped => {
+                "the widened cone stopped at the state cap, the memory limit, or the time budget"
+            }
         }
     }
+}
+
+/// The step that decided a property its cone left undecided (`PropertyCone::settle`;
+/// docs/design/native-temporal-verification.md, "Modes and the cone").
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Step {
+    /// The cone made exact (`TransitionSystem::exact_cone`) decided it by its own runs.
+    Exact,
+}
+
+impl Step {
+    const ALL: [Step; 1] = [Step::Exact];
+}
+
+/// How often each step decided a property in this process, for measuring how often each one
+/// fires (`fired`).
+static FIRED: [AtomicUsize; Step::ALL.len()] = [const { AtomicUsize::new(0) }; Step::ALL.len()];
+
+/// How often `step` decided a property in this process (`PropertyCone::settle`).
+pub fn fired(step: Step) -> usize {
+    FIRED[step as usize].load(Ordering::Relaxed)
+}
+
+/// What `PropertyCone::settle` decided of a property its cone left undecided.
+#[derive(Debug)]
+pub struct Settled {
+    /// `Ok` or `Counterexample` when a step decided; `Undecided(WfNext)` when the property is
+    /// still the whole model's; `Undecided(Stopped)` when a widened run stopped; `ToolError`
+    /// with `fault`.
+    pub verdict: Verdict,
+    /// The step that decided, with `Ok` or `Counterexample`.
+    pub step: Option<Step>,
+    /// The counterexample, on the cone the step read.
+    pub found: Option<Box<StateDiag>>,
+    pub fault: Option<LassoFault>,
+    /// What the run line adds: which cone decided, and why.
+    pub notes: Vec<String>,
+    /// A widened run met the memory limit, maybe only because the runs beside it held the
+    /// rest.
+    pub crowded: bool,
+}
+
+impl Settled {
+    fn open(notes: Vec<String>) -> Settled {
+        Settled {
+            verdict: Verdict::Undecided(Why::WfNext),
+            step: None,
+            found: None,
+            fault: None,
+            notes,
+            crowded: false,
+        }
+    }
+
+    fn decided(mut self, step: Step, found: Option<Box<StateDiag>>) -> Settled {
+        self.verdict = match found {
+            Some(_) => Verdict::Counterexample,
+            None => Verdict::Ok,
+        };
+        self.step = Some(step);
+        self.found = found;
+        FIRED[step as usize].fetch_add(1, Ordering::Relaxed);
+        self
+    }
+
+    fn stopped(mut self) -> Settled {
+        self.verdict = Verdict::Undecided(Why::Stopped);
+        self
+    }
+
+    fn faulty(mut self, fault: LassoFault) -> Settled {
+        self.verdict = Verdict::ToolError;
+        self.fault = Some(fault);
+        self
+    }
+}
+
+/// `properties()[i]` of `run`'s system on its graph: an `eventually` or `leads_to` by its fair
+/// components under `fairness`, any other form by its states or steps.
+fn decide(run: &ComponentRun, i: usize, fairness: Fairness) -> Result<PropertyVerdict, LassoFault> {
+    match run.system.properties()[i].formula.kind().is_liveness() {
+        true => run.decide_liveness(i, fairness),
+        false => Ok(run
+            .decide_property(i)
+            .expect("a form BFS decides on its states or steps")),
+    }
+}
+
+/// The run met the memory limit.
+fn met_memory_limit(run: &ComponentRun) -> bool {
+    run.diags
+        .iter()
+        .any(|d| matches!(d.diag, StateDiag::MemoryCapReached { .. }))
+}
+
+/// `cone` of `ts` as a system, and the index of `ts.properties()[at]` in it.
+fn cone_system(ts: &TransitionSystem, cone: &Cone, at: usize) -> (TransitionSystem, usize) {
+    let system = ts.restrict_to(&cone.vars, &cone.keep);
+    let name = &ts.properties()[at].name;
+    let index = system
+        .properties()
+        .iter()
+        .position(|p| p.name == *name)
+        .expect("a widened cone holds what the property reads");
+    (system, index)
 }
 
 impl PropertyCone {
@@ -124,6 +243,8 @@ impl PropertyCone {
             .position(|p| p.name == *name)
             .expect("the reduced cone keeps the property it is for");
         PropertyCone {
+            at: i,
+            vars: cone.vars,
             frees_slots,
             whole,
             kind: ts.properties()[i].formula.kind(),
@@ -159,6 +280,51 @@ impl PropertyCone {
     /// The verdict after the `Plain` run asked for the `WfNext` run and it ran.
     pub fn after_wf(&self, plain: Outcome, wf_next: Outcome) -> Verdict {
         after_wf(self.frees_slots, self.whole, plain, wf_next)
+    }
+
+    /// The property, which the runs on this cone left undecided, decided on wider cones of
+    /// `ts` under `caps` (docs/design/native-temporal-verification.md, "Modes and the cone").
+    ///
+    /// The cone is first made exact (`exact_cone`): no step of it creates a row the whole
+    /// model has no slot for. Its reachable states are then the projection of the whole
+    /// model's, so its `Plain` run's `ok` and any counterexample of an `always`, or of the run
+    /// with `WF_vars(Next)`, are the whole model's. A `WF_vars(Next)` `ok` there is final when
+    /// the exact cone holds every var an action writes; otherwise the property stays the whole
+    /// model's.
+    pub fn settle(&self, ts: &TransitionSystem, caps: Caps) -> Settled {
+        let (seed, keep) = ts.property_seed(self.at);
+        let exact = ts.exact_cone(&seed, &keep);
+        debug_assert!(exact.vars.is_superset(&self.vars), "widening only adds");
+        if exact.vars == self.vars {
+            return Settled::open(Vec::new());
+        }
+        let (system, i) = cone_system(ts, &exact, self.at);
+        let run = system.run(caps);
+        let mut out = Settled::open(vec![format!(
+            "decided on the cone made exact ({} more vars, {} states)",
+            exact.vars.len() - self.vars.len(),
+            run.states.len()
+        )]);
+        out.crowded = met_memory_limit(&run);
+        let liveness = self.kind.is_liveness();
+        match decide(&run, i, Fairness::Plain) {
+            Err(fault) => return out.faulty(fault),
+            Ok(PropertyVerdict::Undecided) => return out.stopped(),
+            Ok(PropertyVerdict::Holds) => return out.decided(Step::Exact, None),
+            Ok(PropertyVerdict::Violated(d)) if !liveness => {
+                return out.decided(Step::Exact, Some(d))
+            }
+            Ok(PropertyVerdict::Violated(_)) => {}
+        }
+        match decide(&run, i, Fairness::WfNext) {
+            Err(fault) => out.faulty(fault),
+            Ok(PropertyVerdict::Undecided) => out.stopped(),
+            Ok(PropertyVerdict::Violated(d)) => out.decided(Step::Exact, Some(d)),
+            Ok(PropertyVerdict::Holds) if ts.cone_keeps_every_write(&exact.vars) => {
+                out.decided(Step::Exact, None)
+            }
+            Ok(PropertyVerdict::Holds) => Settled::open(Vec::new()),
+        }
     }
 }
 

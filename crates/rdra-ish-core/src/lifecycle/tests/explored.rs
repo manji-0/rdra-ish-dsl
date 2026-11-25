@@ -195,9 +195,10 @@ property NeverD stable(Order.status != d)
 
 /// Each Bump creates a receipt the property does not read, so the cone counts no receipt
 /// slots and bumps an order to `d`; the whole model runs out of receipts after two bumps. The
-/// cone's violation is decided again on the whole model, which holds.
+/// cone's violation is decided again on the cone made exact, which counts the receipts and
+/// holds, as the whole model does.
 #[test]
-fn a_cone_that_frees_slots_decides_a_violation_on_the_whole_model() {
+fn a_cone_that_frees_slots_decides_a_violation_on_the_exact_cone() {
     let ts = TransitionSystem::build(&model_from(RECEIPTS), Bounds::VERIFY, &Scope::ALL).ts;
     let cone = ts.property_cone(0);
     assert!(ts.cone_frees_slots(&cone), "the cone counts no receipt");
@@ -210,6 +211,15 @@ fn a_cone_that_frees_slots_decides_a_violation_on_the_whole_model() {
         "{on_cone:?}"
     );
     assert_eq!(decide(&ts, "NeverD"), None);
+    let (seed, keep) = ts.property_seed(0);
+    let exact = ts.exact_cone(&seed, &keep);
+    assert!(ts.is_exact(&exact), "the widened cone counts the receipts");
+    assert!(!ts.cone_frees_slots(&exact));
+    let receipt = ts
+        .entity_ids()
+        .find(|e| ts.entity(*e).id == "Receipt")
+        .expect("Receipt");
+    assert!(exact.vars.contains(&ts.entity(receipt).exists));
 }
 
 const RELINK: &str = r#"

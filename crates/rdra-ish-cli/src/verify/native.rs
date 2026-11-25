@@ -4,7 +4,7 @@ use super::report::run_line;
 use super::shared::Shared;
 use super::tlc::{undecided_hint, Decision, Stop};
 use super::WholeRun;
-use crate::property_cone::{AfterPlain, ConeRun, Verdict};
+use crate::property_cone::{AfterPlain, ConeRun, Settled, Step, Verdict, Why};
 use crate::tlc_output::Outcome;
 use rdra_ish_core::in_parallel;
 use rdra_ish_core::lifecycle::{
@@ -32,9 +32,26 @@ pub(super) struct Native {
     pub(super) cone_capped: bool,
     /// A run met the memory limit, maybe only because the runs beside it held the rest.
     pub(super) crowded: bool,
+    /// The step of `PropertyCone::settle` that decided what the cone left open.
+    pub(super) step: Option<Step>,
 }
 
 impl Native {
+    /// `ok` so far, on a run of `states` states.
+    fn new(states: Option<u64>) -> Native {
+        Native {
+            decision: Decision::Decided(Outcome::Ok),
+            states,
+            notes: Vec::new(),
+            runs: Vec::new(),
+            found: None,
+            fault: None,
+            cone_capped: false,
+            crowded: false,
+            step: None,
+        }
+    }
+
     pub(super) fn line(&self, module: &str, checks: &[String]) -> String {
         run_line(
             module,
@@ -186,16 +203,7 @@ fn native_property(
 /// `native_property` from what its `Plain` run said, once that run is dropped.
 fn native_property_after(p: &PropertyJob, caps: Caps, plain: Plain) -> (Native, Option<Diag>) {
     let cone = &p.cone;
-    let mut out = Native {
-        decision: Decision::Decided(Outcome::Ok),
-        states: Some(plain.states),
-        notes: Vec::new(),
-        runs: Vec::new(),
-        found: None,
-        fault: None,
-        cone_capped: false,
-        crowded: false,
-    };
+    let mut out = Native::new(Some(plain.states));
     let mut crowded_run = plain.crowded;
     let vacuous = plain.vacuous;
     let mut last = plain.answer;
@@ -283,16 +291,7 @@ fn always_up_to_symmetry(
     caps: Caps,
 ) -> (Native, Option<Diag>) {
     let cone = &p.cone;
-    let mut out = Native {
-        decision: Decision::Decided(Outcome::Ok),
-        states: None,
-        notes: Vec::new(),
-        runs: Vec::new(),
-        found: None,
-        fault: None,
-        cone_capped: false,
-        crowded: false,
-    };
+    let mut out = Native::new(None);
     let run = cone.reduced.clone().run_orbits(caps);
     out.crowded = run
         .diags()
@@ -336,16 +335,7 @@ fn liveness_up_to_symmetry(
     caps: Caps,
 ) -> (Native, Option<Diag>) {
     let cone = &p.cone;
-    let mut out = Native {
-        decision: Decision::Decided(Outcome::Ok),
-        states: None,
-        notes: Vec::new(),
-        runs: Vec::new(),
-        found: None,
-        fault: None,
-        cone_capped: false,
-        crowded: false,
-    };
+    let mut out = Native::new(None);
     let run = cone.reduced.clone().run_annotated_orbits(caps);
     out.crowded = run
         .diags()
@@ -472,6 +462,70 @@ impl Native {
         self.found = None;
         self
     }
+
+    /// A property the cone left to the whole model, decided on wider cones of `ts` under
+    /// `caps` (`PropertyCone::settle`). The runs `--with-tlc` compares stay those of the cone;
+    /// the decision and its notes are the step's.
+    fn settle(mut self, ts: &TransitionSystem, p: &PropertyJob, caps: Caps) -> Native {
+        if !self.goes_whole() {
+            return self;
+        }
+        let settled = p.cone.settle(ts, caps);
+        ladder_stats(ts, p, &settled);
+        let Settled {
+            verdict,
+            step,
+            found,
+            fault,
+            notes,
+            crowded,
+        } = settled;
+        self.crowded |= crowded;
+        if verdict == Verdict::Undecided(Why::WfNext) {
+            return self;
+        }
+        // The cone's own reason gives way to what the wider cone decided.
+        if let Decision::Undecided { why, .. } = &self.decision {
+            let why = why.clone();
+            self.notes.retain(|n| *n != why);
+        }
+        self.notes.extend(notes);
+        self.step = step;
+        match (verdict, fault) {
+            (Verdict::ToolError, Some(fault)) => self.faulty(&fault),
+            (Verdict::Undecided(_), _) => {
+                self.notes.push(Why::Stopped.as_str().to_string());
+                self.decision = Decision::Undecided {
+                    why: Why::Stopped.as_str().to_string(),
+                    stop: None,
+                };
+                self.cone_capped = true;
+                self.found = None;
+                self
+            }
+            (verdict, _) => {
+                self.found = found;
+                self.decided(verdict)
+            }
+        }
+    }
+}
+
+/// Under `RDRA_ISH_LADDER_STATS`, one line on stderr per property its cone left open: the step
+/// of `PropertyCone::settle` that decided it, or that none did, for measuring how often each
+/// step fires (docs/design/native-temporal-verification.md, "Decisions").
+fn ladder_stats(ts: &TransitionSystem, p: &PropertyJob, settled: &Settled) {
+    if std::env::var_os("RDRA_ISH_LADDER_STATS").is_none() {
+        return;
+    }
+    let step = settled
+        .step
+        .map_or("none".to_string(), |s| format!("{s:?}"));
+    eprintln!(
+        "ladder: {} step={step} verdict={:?}",
+        ts.properties()[p.index].name,
+        settled.verdict
+    );
 }
 
 /// `native_property` for every property job, side by side, `None` for a safety cone. A
@@ -480,10 +534,14 @@ impl Native {
 /// is decided again alone. Also returns the vacuous properties. Under `--symmetry always` an
 /// `always` on a cone the reduction leaves whole runs up to instance symmetry when `shared`
 /// holds no plain answer for it (`Shared::up_to_symmetry`).
+///
+/// A property its cone leaves to the whole model is decided on wider cones first
+/// (`Native::settle`), each run under `caps` and the budget of a whole-model run.
 pub(super) fn native_properties(
     ts: &TransitionSystem,
     jobs: &[Job],
     caps: Caps,
+    budget: WholeRun,
     shared: &mut Shared,
 ) -> (Vec<Option<Native>>, Vec<Diag>) {
     let orbits: Vec<bool> = (0..jobs.len())
@@ -499,9 +557,12 @@ pub(super) fn native_properties(
             unreachable!("a property's job")
         }
     };
-    let decide = |(k, plain): (usize, Option<Plain>)| match plain {
-        Some(plain) => native_property_after(job(k), caps, plain),
-        None => native_property(ts, job(k), caps, orbits[k]),
+    let decide = |(k, plain): (usize, Option<Plain>)| {
+        let (native, vacuity) = match plain {
+            Some(plain) => native_property_after(job(k), caps, plain),
+            None => native_property(ts, job(k), caps, orbits[k]),
+        };
+        (native.settle(ts, job(k), budget.caps(caps)), vacuity)
     };
     let ks: Vec<usize> = at.iter().map(|(k, _)| *k).collect();
     let ran = in_parallel(at, rdra_ish_core::jobs(), decide);
@@ -557,16 +618,7 @@ pub(super) fn native_wholes(
     });
     open.iter()
         .map(|&i| {
-            let mut native = Native {
-                decision: Decision::Decided(Outcome::Ok),
-                states: (states > 0).then_some(states),
-                notes: Vec::new(),
-                runs: Vec::new(),
-                found: None,
-                fault: None,
-                cone_capped: false,
-                crowded: false,
-            };
+            let mut native = Native::new((states > 0).then_some(states));
             match Answer::of(&run, i, Fairness::WfNext) {
                 Answer::Verdict(outcome, found) => {
                     native.decision = Decision::Decided(outcome);

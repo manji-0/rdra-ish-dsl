@@ -3333,11 +3333,7 @@ const TEMPORAL_CASES: &[TemporalCase] = &[
     ("explored_along", EXPLORED_ALONG, &[]),
     ("explored_relink", EXPLORED_RELINK, &[]),
     ("explored_delete", EXPLORED_DELETE, &[]),
-    (
-        "explored_frees_slots",
-        EXPLORED_FREES_SLOTS,
-        &[("NeverD", Why::FreesSlots)],
-    ),
+    ("explored_frees_slots", EXPLORED_FREES_SLOTS, &[]),
     ("samples/formal-verification/temporal_unmet.rdra", "", &[]),
     ("samples/formal-verification/split_run_order.rdra", "", &[]),
     (
@@ -3351,11 +3347,7 @@ const TEMPORAL_CASES: &[TemporalCase] = &[
         &[("PaidShipsHalfFair", Why::WfNext)],
     ),
     ("guard_toggles", GUARD_TOGGLES, &[]),
-    (
-        "frees_slots",
-        FREES_SLOTS,
-        &[("PaidShips", Why::FreesSlots)],
-    ),
+    ("frees_slots", FREES_SLOTS, &[]),
     ("whole_cone", WHOLE_CONE, &[]),
     ("guard_on_unassigned", GUARD_ON_UNASSIGNED, &[]),
     ("reduced_gate", REDUCED_GATE, &[]),
@@ -3913,7 +3905,34 @@ fn a_property_cone_decides_what_the_whole_model_decides() {
                         );
                     }
                 }
-                Verdict::Undecided(why) => undecided.push((property.as_str(), why)),
+                // What the cone leaves open, the ladder of phase 4 decides on wider cones
+                // (`PropertyCone::settle`), and its verdict must be the whole model's.
+                Verdict::Undecided(why) => {
+                    let settled = cone.settle(&ts, Caps::VERIFY);
+                    let decided = match settled.verdict {
+                        Verdict::Ok => Some(Outcome::Ok),
+                        Verdict::Counterexample => Some(Outcome::Counterexample),
+                        Verdict::Undecided(_) => None,
+                        Verdict::ToolError => {
+                            panic!("{label}: the ladder's lasso fails: {:?}", settled.fault)
+                        }
+                    };
+                    match decided {
+                        Some(outcome) => {
+                            assert_eq!(
+                                outcome, whole_outcome,
+                                "{label}: the ladder ({:?}) says {}, the whole model does not\n{whole_log}",
+                                settled.step, outcome.as_str()
+                            );
+                            runs.push(format!(
+                                "{label}: decided by the ladder at {:?}: {}",
+                                settled.step,
+                                outcome.as_str()
+                            ));
+                        }
+                        None => undecided.push((property.as_str(), why)),
+                    }
+                }
                 Verdict::ToolError => panic!("{label}: {verdict:?}\n{log}"),
             }
             println!(

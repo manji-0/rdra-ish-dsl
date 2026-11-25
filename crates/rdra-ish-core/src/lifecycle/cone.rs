@@ -522,6 +522,52 @@ impl TransitionSystem {
         })
     }
 
+    /// What keeps `cone` from being exact: the existence of each entity outside it that an
+    /// action of it creates (`cone_frees_slots`). Empty when the cone is exact, so that a step
+    /// it allows the whole system allows (docs/design/native-temporal-verification.md, "Modes
+    /// and the cone").
+    pub fn inexact_vars(&self, cone: &Cone) -> VarSet {
+        let mut out = VarSet::new();
+        for (i, a) in self.actions.iter().enumerate() {
+            let inside = cone.keep.contains(&ActId::at(i))
+                || self.action_writes(a).iter().any(|v| cone.vars.contains(v));
+            if !inside {
+                continue;
+            }
+            for p in a.params.iter().filter(|p| p.role == ParamRole::New) {
+                let exists = self.entity(p.entity).exists;
+                if !cone.vars.contains(&exists) {
+                    out.insert(exists);
+                }
+            }
+        }
+        out
+    }
+
+    /// No action of `cone` takes a step the whole system does not allow (`inexact_vars`).
+    pub fn is_exact(&self, cone: &Cone) -> bool {
+        self.inexact_vars(cone).is_empty()
+    }
+
+    /// The cone of `seed` and `keep`, widened until it is exact: grown by what `inexact_vars`
+    /// names and closed again, until nothing is left. Its reachable states are the projection
+    /// of the whole system's, and no step of it creates a row the whole system has no slot
+    /// for, so a counterexample on it is one of the whole system. `keep` stays as it is.
+    pub fn exact_cone(&self, seed: &VarSet, keep: &BTreeSet<ActId>) -> Cone {
+        let mut seed = seed.clone();
+        loop {
+            let cone = Cone {
+                vars: self.cone(&seed, keep),
+                keep: keep.clone(),
+            };
+            let missing = self.inexact_vars(&cone);
+            if missing.is_empty() {
+                return cone;
+            }
+            seed.extend(missing);
+        }
+    }
+
     /// The targets `check` and `states` explore: views and safety checks. A `can_reach` is a
     /// temporal property, which only `verify` decides (`reach_targets`).
     pub fn targets(&self) -> Vec<Target> {

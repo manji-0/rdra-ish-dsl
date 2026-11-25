@@ -123,6 +123,12 @@ No sample changes verdict.
   deleted row (#212), and a `can_reach` whose cone stops at a cap (#246).
 - `verify --prove` (experimental) budgets z3 by resource units, and decides a cone stopped
   at the memory limit when z3 proves every rule it checks (#232).
+- A property its cone left to the whole model is decided on a wider cone first (#168
+  phase 4). A cone that creates rows of an entity it does not count is made exact, with that
+  entity's slots, and its verdict is final there; a `stable`, `unchanged`, or `precedes`
+  goes to that cone instead of the whole model. The line reads `decided on the cone made
+  exact (N more vars, M states)`. Expected, not yet run: patent-ops `GrantEnds`, whose cone
+  frees slots and whose whole model did not finish, may move off `not decided`.
 - Invalid `Enum` and `Bool` defaults (#187) and out-of-range Int defaults (#180) fail to
   load. `UnresolvedPropertyAtom` is renamed `UnresolvedPropertyColumn` (#160).
 - `export --kind typescript-states` and `states --format typescript` are removed. Unknown

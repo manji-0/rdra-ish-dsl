@@ -273,7 +273,8 @@ pub fn run(
         rdra_ish_core::perf::pass("safety_pass");
         let (safety, mut vacuous) = bfs_cones(&ts, &jobs, caps, &covers, &mut shared);
         rdra_ish_core::perf::pass("property_pass");
-        let (properties, property_vacuous) = native_properties(&ts, &jobs, caps, &mut shared);
+        let (properties, property_vacuous) =
+            native_properties(&ts, &jobs, caps, budget, &mut shared);
         // A `--buc` drops use cases that may reach a premise.
         if scope.bucs.is_empty() {
             vacuous.extend(property_vacuous);

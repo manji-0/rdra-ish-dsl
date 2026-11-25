@@ -31,10 +31,11 @@ impl TransitionSystem {
     /// `properties()[i]`, `always` or a form `LtlKind::is_explored` names, decided by BFS on
     /// its cone under `caps`. An `always` reads the cone reduced by its independent
     /// sub-lifecycle, as TLC's run of it does: the reduction keeps what a state predicate over
-    /// the property's vars sees. The other forms read the unreduced cone. A cone that frees an
-    /// entity's slots (`cone_frees_slots`) reaches a superset, so a violation there is decided
-    /// again on the whole system, under `whole`: a whole-model run is bounded as `verify`
-    /// bounds one, by its own state cap and `--temporal-budget`.
+    /// the property's vars sees. The other forms read the unreduced cone. A cone that is not
+    /// exact (`is_exact`: it frees an entity's slots) reaches a superset, so a violation there
+    /// is decided again on the cone made exact (`exact_cone`), unreduced, under `whole`: that
+    /// run is bounded as `verify` bounds a whole-model run, by its own state cap and
+    /// `--temporal-budget`.
     pub fn decide_property(&self, i: usize, caps: Caps, whole: Caps) -> PropertyVerdict {
         let cone = self.property_cone(i);
         let system = match self.properties()[i].formula {
@@ -52,11 +53,20 @@ impl TransitionSystem {
             .decide_property(index)
             .expect("an explored form");
         match verdict {
-            PropertyVerdict::Violated(_) if self.cone_frees_slots(&cone) => self
-                .clone()
-                .run(whole)
-                .decide_property(i)
-                .expect("an explored form"),
+            PropertyVerdict::Violated(_) if !self.is_exact(&cone) => {
+                let (seed, keep) = self.property_seed(i);
+                let exact = self.exact_cone(&seed, &keep);
+                let system = self.restrict_to(&exact.vars, &exact.keep);
+                let index = system
+                    .properties()
+                    .iter()
+                    .position(|p| p.name == *name)
+                    .expect("the exact cone holds what the property reads");
+                system
+                    .run(whole)
+                    .decide_property(index)
+                    .expect("an explored form")
+            }
             verdict => verdict,
         }
     }
