@@ -28,6 +28,7 @@ while IFS= read -r path; do
     crates/rdra-ish-cli/tests/snapshots/codegen_*) ;;
     .github/workflows/release.yml | .github/workflows/publish-pypi.yml) ;;
     .github/workflows/portability.yml | scripts/check-skill-snippets.py | pyproject.toml) ;;
+    scripts/check-release-version.sh) ;;
     *) relevant=true ;;
   esac
 done

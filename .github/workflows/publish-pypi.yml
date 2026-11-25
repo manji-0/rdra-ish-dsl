@@ -1,23 +1,39 @@
 name: Publish PyPI package
 
+# release.yml dispatches this with the tag once the GitHub release is out; dispatch it by
+# hand (`gh workflow run publish-pypi.yml -f ref=vX.Y.Z`) only when that job failed. It has no
+# `release: published` trigger: release.yml creates the release with GITHUB_TOKEN, which
+# starts no workflow, and a release made by hand would publish a second time.
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       ref:
-        description: "Git ref to publish, for example v0.1.6"
+        description: "Release tag to publish, for example v2.3.0"
         required: true
 
 permissions:
   contents: read
 
 jobs:
+  version:
+    # Only a release of rdra-ish itself (a tag v*) publishes (#349). Other releases of this
+    # repository, such as the pinned copy of a tool the flake downloads, do not. The tag,
+    # Cargo.toml and pyproject.toml must name one version, or nothing is built.
+    name: Check the version
+    if: ${{ startsWith(inputs.ref, 'v') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+      - name: The tag, Cargo.toml and pyproject.toml agree
+        env:
+          TAG: ${{ inputs.ref }}
+        run: scripts/check-release-version.sh "$TAG"
+
   build:
     name: Build ${{ matrix.target }}
-    # Only a release of rdra-ish itself (a tag v*) publishes. Other releases of this
-    # repository, such as the pinned copy of a tool the flake downloads, do not.
-    if: ${{ github.event_name != 'release' || startsWith(github.event.release.tag_name, 'v') }}
+    needs: version
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -36,7 +52,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+          ref: ${{ inputs.ref }}
 
       - uses: PyO3/maturin-action@v1
         with:

@@ -18,8 +18,22 @@ permissions:
   contents: write
 
 jobs:
+  version:
+    # The tag, Cargo.toml and pyproject.toml name one version, before anything is built.
+    name: Check the version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+      - name: The tag, Cargo.toml and pyproject.toml agree
+        env:
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: scripts/check-release-version.sh "$TAG"
+
   build:
     name: Build ${{ matrix.target }}
+    needs: version
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -108,3 +122,25 @@ jobs:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           files: dist/*
           generate_release_notes: true
+
+  pypi:
+    # PyPI. A release this workflow creates with GITHUB_TOKEN starts no other workflow, so
+    # publish-pypi.yml's `release: published` trigger never fired and each version was
+    # dispatched by hand. A workflow_dispatch event is the exception to that rule: this job
+    # dispatches it with the tag, as the manual command did (`gh workflow run
+    # publish-pypi.yml -f ref=vX.Y.Z`), so publish-pypi.yml stays the top-level workflow its
+    # PyPI trusted publisher names (PyPI does not accept a reusable workflow there). Only a
+    # tag of rdra-ish itself (v*) publishes; the manual dispatch stays the fallback.
+    name: Start the PyPI publish
+    needs: publish
+    if: ${{ startsWith(github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name, 'v') }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch publish-pypi.yml
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: gh workflow run publish-pypi.yml --repo "$REPO" -f ref="$TAG"
