@@ -96,10 +96,9 @@ fn rdra(dir: &Path, args: &[&str], fault: &str) -> Output {
         .current_dir(dir)
         .args(args)
         .env("FAULT", fault)
-        .env(
-            "CARGO_TARGET_DIR",
-            std::env::temp_dir().join(format!("rdra-ish-code-build-{}/target", std::process::id())),
-        )
+        // A target directory per project: cargo names a path package's outputs without its
+        // path, so two projects of one package name would overwrite each other's.
+        .env("CARGO_TARGET_DIR", dir.join("target"))
         .output()
         .expect("runs rdra-ish")
 }

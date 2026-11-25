@@ -6,6 +6,7 @@
 //! and maps its errors back to model locations; `run` runs the conformance test the probe
 //! holds. A language plugs in through [`Backend`]; the rest is shared.
 
+mod ledger;
 pub(crate) mod map;
 mod rust;
 
@@ -294,6 +295,11 @@ fn compile(
     Ok(map_messages(&messages, &mapping, backend))
 }
 
+/// Whether two paths name one file, compared as written and as resolved.
+fn same_path(a: &Path, b: &Path) -> bool {
+    a == b || matches!((dunce::canonicalize(a), dunce::canonicalize(b)), (Ok(x), Ok(y)) if x == y)
+}
+
 /// A site `path:line:col` relative to rdra.toml, as the check shows paths.
 fn rebase_site(t: &Target<'_>, site: &str) -> String {
     let mut parts = site.rsplitn(3, ':');
@@ -343,6 +349,11 @@ pub(crate) fn run(inputs: &[PathBuf], manifest: &Manifest, level: CodeLevel) -> 
     let code = manifest.code.as_ref().expect("the caller checked [code]");
     let mut failed = 0usize;
     let mut findings: Vec<CodeDiagnostic> = Vec::new();
+    // The ledger's inputs: the model's obligations (sites as the check shows them), the
+    // roots to scan for markers, and the generated files, which are not scanned.
+    let mut obligations: Option<Vec<rdra_ish_emit::codegen::ir::Obligation>> = None;
+    let mut roots: Vec<PathBuf> = Vec::new();
+    let mut generated_files: Vec<PathBuf> = Vec::new();
     for (name, target) in code.targets() {
         let request = configured_request(manifest, name, target, inputs);
         let generated = generate(&loaded, &request)?;
@@ -354,6 +365,24 @@ pub(crate) fn run(inputs: &[PathBuf], manifest: &Manifest, level: CodeLevel) -> 
             generated,
         };
         let backend = backend(name);
+        if obligations.is_none() {
+            obligations = t.generated.domain.as_ref().map(|d| {
+                d.obligations
+                    .iter()
+                    .map(|o| rdra_ish_emit::codegen::ir::Obligation {
+                        site: o.site.as_ref().map(|s| rebase_site(&t, s)),
+                        ..o.clone()
+                    })
+                    .collect()
+            });
+        }
+        let root = t.root();
+        if !roots.contains(&root) {
+            roots.push(root);
+        }
+        generated_files.push(t.path(&target.domain));
+        generated_files.extend(target.traces.as_ref().map(|p| t.path(p)));
+        generated_files.extend(backend.extra_files(&t).into_iter().map(|(p, _)| t.path(&p)));
         let mut fresh = true;
         fresh &= compare(&t.path(&target.domain), |p| {
             check_code(p, &t.generated.code, &t.generated.model_hash)
@@ -404,6 +433,43 @@ pub(crate) fn run(inputs: &[PathBuf], manifest: &Manifest, level: CodeLevel) -> 
                 }
             }
         }
+    }
+    let mut markers = Vec::new();
+    for root in &roots {
+        for file in ledger::files_under(root) {
+            if generated_files.iter().any(|g| same_path(g, &file)) {
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(&file) else {
+                continue;
+            };
+            if !text.contains(ledger::MARKER) {
+                continue;
+            }
+            for m in ledger::scan(&file.display().to_string(), &text) {
+                markers.push((root.clone(), m));
+            }
+        }
+    }
+    let shown_path = |p: &Path| shown(p);
+    let site = |s: &str| s.to_string();
+    let obligations = obligations.unwrap_or_default();
+    let book = ledger::Ledger {
+        obligations: &obligations,
+        markers: &markers,
+        table: &code.obligations,
+        manifest_dir: manifest.dir(),
+        shown: &shown_path,
+        site: &site,
+    };
+    if book.active() {
+        let found = ledger::check(&book);
+        failed += found.iter().filter(|d| !d.warning).count();
+        findings.extend(found);
+    } else if !obligations.is_empty() {
+        eprintln!(
+            "note: no obligation has an owner yet: mark one with `// rdra: obligation <name> [file]` or list it under [code.obligations] to keep the ledger"
+        );
     }
     for d in &findings {
         eprintln!("{d}");

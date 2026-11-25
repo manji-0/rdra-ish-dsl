@@ -241,3 +241,66 @@ fn the_json_contract_names_obligations_and_sites() {
     ));
     assert_eq!(code, Some(1), "{stderr}");
 }
+
+/// The obligation ledger (P5): with every obligation owned, by a marker or by
+/// `[code.obligations]`, the check passes; adding `@unique` to the model adds exactly one
+/// diagnostic, the new obligation with no owner. A marker naming a missing file fails it.
+#[test]
+fn the_ledger_wants_an_owner_per_obligation() {
+    let dir = generated("ledger");
+    let json = text(&rdra(&dir, &["codegen", "model", "--format", "json"])).1;
+    let contract: serde_json::Value = serde_json::from_str(&json).expect("the JSON contract");
+    let names: Vec<String> = contract["obligations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|o| o["name"].as_str().unwrap().to_string())
+        .collect();
+    assert!(names.len() > 3, "{names:?}");
+    // The first through the table, the rest by markers in one file.
+    let (first, rest) = names.split_first().unwrap();
+    std::fs::write(
+        dir.join("model/rdra.toml"),
+        format!("{MANIFEST}\n[code.obligations]\n{first} = \"../svc/src/owners.rs\"\n"),
+    )
+    .unwrap();
+    let markers: String = rest
+        .iter()
+        .map(|n| format!("// rdra: obligation {n}\n"))
+        .collect();
+    std::fs::write(dir.join("svc/src/owners.rs"), &markers).unwrap();
+    let (code, stdout, stderr) = text(&rdra(&dir, &["check", "model", "--code"]));
+    assert_eq!(code, Some(0), "{stdout}{stderr}");
+    assert!(!stderr.contains("CodeObligation"), "{stderr}");
+
+    let model = dir.join("model/order.rdra");
+    edit(&model, "  note: String\n", "  note: String @unique\n");
+    let (code, _, stderr) = text(&rdra(&dir, &["codegen", "model", "--code"]));
+    assert_eq!(code, Some(0), "{stderr}");
+    let (code, stdout, stderr) = text(&rdra(&dir, &["check", "model", "--code"]));
+    assert_eq!(code, Some(1), "{stdout}{stderr}");
+    let unowned: Vec<&str> = stderr
+        .lines()
+        .filter(|l| l.starts_with("error[CodeObligation"))
+        .collect();
+    assert_eq!(
+        unowned,
+        ["error[CodeObligationUnowned_Unique_Order_note]: no code owns the obligation Unique_Order_note"],
+        "{stderr}"
+    );
+    assert!(stderr.contains("  model: model/order.rdra:"), "{stderr}");
+
+    std::fs::write(
+        dir.join("svc/src/owners.rs"),
+        format!("{markers}// rdra: obligation Unique_Order_note migrations/none.sql\n"),
+    )
+    .unwrap();
+    let (code, _, stderr) = text(&rdra(&dir, &["check", "model", "--code"]));
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(
+        stderr.contains(
+            "error[CodeObligationOwnerMissing_Unique_Order_note]: the owner of Unique_Order_note does not exist"
+        ),
+        "{stderr}"
+    );
+}

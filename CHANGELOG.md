@@ -170,6 +170,14 @@
 
 ### Added
 
+- **The obligation ledger** (`check --code`, #363, P5): each obligation the generated code
+  lists needs an owner, declared by a `rdra: obligation <name> [file]` marker line in the
+  service code or under `[code.obligations]`. An obligation with no owner is
+  `CodeObligationUnowned_<name>`, and an owner whose file is missing is
+  `CodeObligationOwnerMissing_<name>`; the check says an obligation has an owner, never that it
+  holds. The ledger is kept once one owner is declared. Obligations with no declaration of
+  their own (`@unique`, derived columns, unique sets) now carry their entity's site.
+
 - **`check --code=build` and `--code=run` for Rust** (experimental, #363, P2 and P4). The
   generated code has one contract trait per use case (`<UseCase>UseCase`), printed with or
   without `--conformance`; `ConformancePort` is their composition with `seed` and `snapshot`.

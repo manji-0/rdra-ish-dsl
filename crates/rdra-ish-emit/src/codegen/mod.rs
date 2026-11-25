@@ -916,6 +916,8 @@ fn obligations(
         });
     };
     for (key, entity) in &model.entities {
+        // An obligation with no declaration of its own is at its entity's.
+        let entity_at = model.decl_sites.located("entity", &entity.id);
         for (_, fk) in model.foreign_keys().filter(|(_, fk)| fk.child == key) {
             if fk.columns.is_empty() {
                 continue;
@@ -1005,7 +1007,7 @@ fn obligations(
                     format!("Unique_{}_{}", entity.id, column.name),
                     false,
                     format!("no two {} rows share {}.", entity.id, column.name),
-                    None,
+                    entity_at.as_ref(),
                 );
             }
             for (i, check) in column.check_constraints.iter().enumerate() {
@@ -1031,7 +1033,7 @@ fn obligations(
                         column.name,
                         expr.display()
                     ),
-                    None,
+                    entity_at.as_ref(),
                 );
             }
         }
@@ -1049,7 +1051,7 @@ fn obligations(
                     entity.id,
                     unique.columns.join(", ")
                 ),
-                None,
+                entity_at.as_ref(),
             );
         }
     }

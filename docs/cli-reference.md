@@ -229,6 +229,32 @@ error[CodeMissingUseCase_Ship]: use case Ship has no implementation in svc::serv
 | `CodeBuildFailed` | The build failed with no error rdra-ish reads. |
 | `CodeConformance` | `run`: the conformance test failed; the message is the harness's first difference. |
 
+At every level, `check --code` also checks the **obligation ledger**: each obligation the
+generated code lists (`Unique_Payment_Order`, `Ref_Order_customer_id`, ...) needs an owner.
+An owner is either a marker line in the service code,
+`rdra: obligation <name> [file]` after any comment token (`//`, `#`, `--`), or an entry
+`<name> = "<file>"` under `[code.obligations]`. A marker's file is relative to the root
+the marker was found under; without one, the owner is the marker's own file. The check sees
+only the declaration, so it says an obligation **has an owner**, never that it holds. It
+confirms that the owning file exists.
+
+| Name | When |
+|---|---|
+| `CodeObligationUnowned_<name>` | The obligation has no owner. Error. |
+| `CodeObligationOwnerMissing_<name>` | Its owner names a file that does not exist. Error. |
+| `CodeObligationUnknown_<name>` | An owner names an obligation the model does not have (renamed or gone). Warning. |
+
+```
+error[CodeObligationUnowned_Unique_Order_note]: no code owns the obligation Unique_Order_note
+  model: model/order.rdra:6:1  no two Order rows share note.
+  fix:   add `// rdra: obligation Unique_Order_note <file that keeps it>` or list it under [code.obligations]
+```
+
+The ledger is kept once there is a marker or a `[code.obligations]` entry. Until then,
+`check --code` prints a note and diagnoses no obligation. Markers are searched under each
+table's `root`, skipping hidden directories, `target`, `node_modules`, `vendor`, `dist`,
+the generated files, and files over 1 MiB.
+
 `--code` on a model without a `[code.rust]`, `[code.go]` or `[code.ts]` table exits `1`, so a
 check that would check nothing never passes. `check` without `--code` on a model that has one
 prints one line, `note: rdra.toml has [code]; `check --code` also checks the service code

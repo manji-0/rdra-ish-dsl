@@ -551,3 +551,16 @@ mirrors them instead of inventing its own:
   - `codegen_builds.rs` `rust_probes_name_every_contract` compiles the probe of every sample
     against a service that implements nothing. It expects E0277 on exactly the line map's
     lines.
+
+**P5.** The ledger is language-neutral (`crates/rdra-ish-cli/src/code_check/ledger.rs`).
+
+- A marker is any line that holds `rdra: obligation <name> [file]`, so `//`, `#` and `--`
+  comments all work and no parser is needed. It is found in the files under each table's
+  `root`, outside the generated files and the usual build directories.
+- A marker's `file` is relative to that root. Without one, the owner is the marker's own file.
+  `[code.obligations]` paths are relative to rdra.toml.
+- The ledger is kept once one owner exists: a project that has not started one gets a note,
+  not one error per obligation. Once kept, adding `@unique` to the model adds exactly one
+  diagnostic, the new obligation with no owner (`codegen_code_check.rs`).
+- An owner of a name the model lacks is a warning, since a rename in the model would otherwise
+  fail every build until the marker follows.
