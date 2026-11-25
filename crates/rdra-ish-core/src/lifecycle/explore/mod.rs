@@ -425,7 +425,7 @@ enum Threads {
     /// This many, whatever other runs hold; none runs on the caller's thread alone.
     #[cfg_attr(not(test), allow(dead_code))]
     Fixed(usize),
-    /// What the process-wide budget has left (`parallel::Helpers`), `jobs()` less one in all.
+    /// What the process-wide budget has left (`parallel::Helpers`), `bfs_threads()` less one in all.
     Shared,
 }
 

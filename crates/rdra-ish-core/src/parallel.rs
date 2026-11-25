@@ -3,15 +3,36 @@
 /// How many threads parallel work uses: `RDRA_JOBS`, else the machine's cores, at most 8.
 /// Each lifecycle cone holds its own reached states, so memory grows with the number.
 pub fn jobs() -> usize {
+    env_jobs().unwrap_or_else(|| cores().min(8))
+}
+
+/// How many threads one BFS run expands its moves on, its own included: `RDRA_JOBS`, else
+/// [`bfs_threads_for`] of the machine's cores.
+pub fn bfs_threads() -> usize {
+    env_jobs().unwrap_or_else(|| bfs_threads_for(cores()))
+}
+
+/// The default BFS thread count for `cores` cores: a third of them, at least 4 and at most 12,
+/// and never more than there are. One run gains nothing past 4 to 6 threads today, and #296's
+/// model of 3.1 has food-permit-ops bound by its reader from about 6 on
+/// (docs/design/native-bfs-parallel.md, "Helpers by need and the jobs cap").
+pub fn bfs_threads_for(cores: usize) -> usize {
+    (cores / 3).clamp(4, 12).min(cores.max(1))
+}
+
+fn env_jobs() -> Option<usize> {
     std::env::var("RDRA_JOBS")
         .ok()
         .and_then(|v| v.trim().parse::<usize>().ok())
         .filter(|n| *n > 0)
-        .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get().min(8)))
+}
+
+fn cores() -> usize {
+    std::thread::available_parallelism().map_or(1, |n| n.get())
 }
 
 /// Threads that help a run beyond the one it runs on, taken from one budget for the whole
-/// process: `jobs()` less one. Runs that are themselves side by side (`in_parallel`) would
+/// process: `bfs_threads()` less one. Runs that are themselves side by side (`in_parallel`) would
 /// otherwise start `jobs()` helpers each. Dropping the value gives them back.
 pub(crate) struct Helpers(usize);
 
@@ -21,7 +42,7 @@ impl Helpers {
     /// Every helper the budget has left, which may be none.
     pub(crate) fn take() -> Helpers {
         use std::sync::atomic::Ordering;
-        let budget = jobs().saturating_sub(1);
+        let budget = bfs_threads().saturating_sub(1);
         let mut held = HELPING.load(Ordering::Relaxed);
         loop {
             let free = budget.saturating_sub(held);
@@ -89,7 +110,16 @@ pub fn in_parallel<T: Send, R: Send>(
 
 #[cfg(test)]
 mod tests {
-    use super::in_parallel;
+    #[test]
+    fn a_run_takes_a_third_of_the_cores_from_4_to_12() {
+        let got: Vec<usize> = [1, 2, 4, 8, 12, 18, 24, 36, 48, 64, 128]
+            .into_iter()
+            .map(bfs_threads_for)
+            .collect();
+        assert_eq!(got, [1, 2, 4, 4, 4, 6, 8, 12, 12, 12, 12]);
+    }
+
+    use super::{bfs_threads_for, in_parallel};
 
     /// The results come back in item order whatever the thread count, and each item runs
     /// once.
