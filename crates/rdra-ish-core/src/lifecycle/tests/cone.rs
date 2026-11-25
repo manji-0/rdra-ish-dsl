@@ -110,7 +110,7 @@ pub(super) fn assert_cones_exact(
         let projected: BTreeSet<State> = full_run
             .states
             .iter()
-            .map(|s| sub.project(s, &cr.cone.vars))
+            .map(|s| sub.project(&s, &cr.cone.vars))
             .collect();
         // A cone of checks alone stops once they have all failed (#213): its run is a
         // prefix of the cone's run to the end, and that run reaches what the cone reaches.
@@ -129,7 +129,7 @@ pub(super) fn assert_cones_exact(
             }
             false => &cr.run,
         };
-        let reached: BTreeSet<State> = run.states.iter().map(ToOwned::to_owned).collect();
+        let reached: BTreeSet<State> = run.states.iter().map(|s| s.into_state()).collect();
         if sub.cone_frees_slots(&cr.cone) {
             // An entity the target does not read never runs out of slots.
             assert!(
@@ -242,11 +242,11 @@ fn every_state_replays_from_its_parent_path_through_moves() {
                 if run.has_edges() {
                     let mut edges = run.edges().iter();
                     for (from, s) in run.states.iter().enumerate() {
-                        for m in ts.moves(s) {
+                        for m in ts.moves(&s) {
                             let e = edges.next().expect("an edge per move");
                             assert_eq!(e.from as usize, from, "{sample}: edge source");
                             assert_eq!(run.step(&e), (m.act, &m.params[..]), "{sample}: binding");
-                            assert_eq!(run.states[e.to as usize], m.next, "{sample}: successor");
+                            assert_eq!(run.states.at(e.to as usize), m.next, "{sample}: successor");
                         }
                     }
                     assert!(edges.next().is_none(), "{sample}: an edge with no move");
@@ -255,11 +255,15 @@ fn every_state_replays_from_its_parent_path_through_moves() {
                     let path = run.path_to(at);
                     let start = path.first().map_or(at, |e| e.from);
                     assert!(run.parent(start).is_none(), "{sample}: path starts initial");
-                    let mut cur = run.states[start as usize].to_owned();
+                    let mut cur = run.states.at(start as usize).into_state();
                     for e in &path {
-                        assert_eq!(run.states[e.from as usize], cur, "{sample}: path is joined");
+                        assert_eq!(
+                            run.states.at(e.from as usize),
+                            cur,
+                            "{sample}: path is joined"
+                        );
                         let (act, params) = run.step(e);
-                        let next = &run.states[e.to as usize];
+                        let next = &run.states.at(e.to as usize);
                         assert!(
                             ts.moves(&cur).any(|m| m.act == act
                                 && &m.params[..] == params
@@ -267,15 +271,16 @@ fn every_state_replays_from_its_parent_path_through_moves() {
                             "{sample}: the parent edge of {} is a move",
                             e.to
                         );
-                        cur = next.to_owned();
+                        cur = next.clone().into_state();
                     }
                     assert_eq!(
-                        cur, run.states[at as usize],
+                        cur,
+                        run.states.at(at as usize),
                         "{sample}: replay ends at {at}"
                     );
                     let states = std::iter::once(start)
                         .chain(path.iter().map(|e| e.to))
-                        .map(|i| run.states[i as usize].to_owned())
+                        .map(|i| run.states.at(i as usize).into_state())
                         .collect();
                     let acts: Vec<_> = path.iter().map(|e| run.step(e).0).collect();
                     let replay = ts.replay(states, &acts).expect("a BFS path replays");

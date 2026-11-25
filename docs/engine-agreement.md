@@ -382,7 +382,10 @@ compile it.
 | `store_bytes_never_overflows` | `explore/store.rs` | `store_bytes` neither overflows nor panics | every input, every shape |
 | `store_bytes_only_grows` | `explore/store.rs` | each term of the model only grows: room, list of segments and buckets with the rows, and the bytes per state, per edge and buffers of edges with the shape; summed and multiplied with saturation, more states, wider states, more edges, wider binding ids or an edge list never count as fewer bytes, and past `u64` the count stays at `u64::MAX` | every count up to `u64::MAX`, segments of 4 and of 2^14, every pair of shapes |
 | `store_bytes_is_at_most_the_model_before` | `explore/store.rs` | at segments of 2^14 rows, the model without its lists of segments never counts more than the one before #296 (8-byte parents, 12-byte edges, doubling buffers) | every input, every shape |
-| `a_push_takes_the_bytes_bytes_with_said_and_reads_back` | `explore/arena.rs` | a pushed state reads back and stays at the address it was pushed to, no index leaves the buffer, and `bytes_with(1)` before a push is `bytes_with(0)` after it and what the store's buffers hold | states of one byte, up to 9 pushes, past the doubling segments |
+| `a_push_takes_the_bytes_bytes_with_said_and_reads_back` | `explore/arena.rs` | a pushed state reads back and its packed row stays at the address it was pushed to, no index leaves the buffer, and `bytes_with(1)` before a push is `bytes_with(0)` after it and what the store's buffers hold | states of one byte, up to 9 pushes, past the doubling segments |
+| `pack_then_unpack_is_the_state` | `explore/packing.rs` | packing by 64-bit words and one cell at a time give the same bytes, write only the bytes the widths add up to, and report a value past its cell's bits exactly when there is one; a state whose values fit reads back whole either way and one cell at a time, so two states pack alike only when they are equal (#296 2.3) | 4 cells, every width from 0 to 8 bits, every value |
+| `a_cell_across_a_word_reads_back` | `explore/packing.rs` | the same, with a cell starting, ending or straddling bit 64 | seven 8-bit cells and four of every width from 0 to 8 bits, every value |
+| `a_patch_is_the_pack` | `explore/packing.rs` | patching a state's packed bytes with the cells where another state differs gives the other state's packed bytes | the same 11 cells, every pair of states that fit |
 | `apply_of_a_composition_is_the_composition_of_applies` | `explore/symmetry/mod.rs` | `apply(g ∘ h) = apply(g) ∘ apply(h)`, keys relabelled on present rows only | a 2-slot parent and a 2-slot child with a key to it, every state, every pair of permutations |
 
 A result holds up to its bound and no further, and for one thread.
@@ -407,11 +410,14 @@ minutes. `store_bytes_only_grows` proves the model's terms one by one: a harness
 itself took past 30 minutes once its buffers were segments.
 The symmetry harness stays at 2 slots per class: at 3 it did not finish in 20 minutes, and a
 harness of the canonical form itself did not finish in 30 at 2, so the exhaustive unit test
-and the `canonical` twin check the canonical form. The others take under 20 seconds each.
+and the `canonical` twin check the canonical form. The `packing` harnesses take under a
+minute each. The others take under 20 seconds each.
 The `States` harness in `explore/arena.rs` and the `Rows` harness in `explore/segments.rs`
 push rows of one byte: at widths up to 2, the `States` harness held 8 GB before #296 2.2 and
 ran past 20 minutes on segments, and the `Rows` harness passed 8 GB. The unit tests of
-`segments` push wider rows at the build's own segment size.
+`segments` push wider rows at the build's own segment size. Under Kani a state packs one
+cell at a time (`Packing::by_words`): the `States` harness over the 64-bit word path took
+83 GB and 9 minutes, and the `packing` harnesses prove the two paths alike.
 
 ### In CI
 

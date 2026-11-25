@@ -93,7 +93,7 @@ pub(super) fn check(orbits: &OrbitRun, caps: Caps) {
     // (2) Each plain state steps into the classes its stored form steps into.
     for s in plain.states.iter() {
         let rep = form(&s.0);
-        let mine: BTreeSet<Vec<u8>> = ts.moves(s).map(|m| form(&m.next.0)).collect();
+        let mine: BTreeSet<Vec<u8>> = ts.moves(&s).map(|m| form(&m.next.0)).collect();
         let theirs: BTreeSet<Vec<u8>> = ts
             .moves(StateSlice::new(&rep))
             .map(|m| form(&m.next.0))

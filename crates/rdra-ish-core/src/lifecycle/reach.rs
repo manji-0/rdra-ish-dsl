@@ -29,19 +29,19 @@ impl TransitionSystem {
             let present: Vec<bool> = graph
                 .states
                 .iter()
-                .map(|s| self.all_present(&r.binders, &binding, s))
+                .map(|s| self.all_present(&r.binders, &binding, &s))
                 .collect();
             // `.along`: only linked rows trigger; the path need only keep them present.
             let trigger: Vec<bool> = graph
                 .states
                 .iter()
                 .zip(&present)
-                .map(|(s, p)| *p && self.holds_for(&r.link, &binding, s))
+                .map(|(s, p)| *p && self.holds_for(&r.link, &binding, &s))
                 .collect();
             let mut can = vec![false; n];
             let mut queue: VecDeque<u32> = VecDeque::new();
             for (at, s) in graph.states.iter().enumerate() {
-                if present[at] && self.holds_for(&r.goal, &binding, s) {
+                if present[at] && self.holds_for(&r.goal, &binding, &s) {
                     can[at] = true;
                     queue.push_back(at as u32);
                 }
@@ -71,7 +71,7 @@ impl TransitionSystem {
                 .zip(&binding)
                 .map(|(e, slot)| self.inst(*e, usize::from(*slot)))
                 .collect(),
-            confined: self.goal_readings(r, &binding, confined.iter().map(|&s| &graph.states[s])),
+            confined: self.goal_readings(r, &binding, confined.iter().map(|&s| graph.states.at(s))),
             states: confined.len(),
             site: r.site.clone(),
             trace: Trace::default(),
@@ -95,11 +95,11 @@ impl TransitionSystem {
     /// What the goal reads of the bound instances in each of `states`, one line per distinct
     /// reading in the order first seen: `status = on_hold`, or `Order#1.status = on_hold`
     /// with more than one binder.
-    fn goal_readings<'s>(
+    fn goal_readings(
         &self,
         r: &super::types::Reach,
         binding: &[u8],
-        states: impl Iterator<Item = &'s StateSlice>,
+        states: impl Iterator<Item = impl std::borrow::Borrow<StateSlice>>,
     ) -> Vec<String> {
         let mut reads = VarSet::new();
         self.pred_reads(&r.goal, &mut reads);
@@ -125,6 +125,7 @@ impl TransitionSystem {
             .collect();
         let mut lines: Vec<String> = Vec::new();
         for s in states {
+            let s: &StateSlice = s.borrow();
             let line = fields
                 .iter()
                 .map(|(prefix, slot, v)| {

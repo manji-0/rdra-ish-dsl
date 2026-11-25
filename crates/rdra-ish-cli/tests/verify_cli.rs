@@ -2048,7 +2048,7 @@ fn symmetry_always_decides_a_cone_the_memory_limit_stopped_at_any_jobs() {
     let line = "Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: ";
     let never = run("never", "1");
     assert!(
-        never.contains(&format!("{line}not decided (2048 states, stopped")),
+        never.contains(&format!("{line}not decided (4096 states, stopped")),
         "{never}"
     );
     let always = run("always", "1");

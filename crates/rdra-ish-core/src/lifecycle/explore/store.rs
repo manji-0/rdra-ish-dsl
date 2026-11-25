@@ -49,7 +49,9 @@ pub struct Shape {
 /// (`segments::Rows`): the least power of two of at least `x` (4 at the least) up to
 /// `2 * SEG`, and whole segments of `SEG` beyond; `list(x)` is the list of those whole
 /// segments, 24 bytes a slot, doubling from four, and nothing up to `2 * SEG`; `buckets(n)`
-/// is the least power of two of at least `n * 8 / 7`. Each state is `w` bytes in `states`;
+/// is the least power of two of at least `n * 8 / 7`. Each state is `w` bytes in `states`,
+/// packed: each cell in the bits its domain needs, `ceil(log2(size))`, the sum rounded up to
+/// whole bytes (#296 item 2.3);
 /// with an edge list it has a 4-byte parent edge and the 4-byte index of its first edge, and
 /// an edge is a 4-byte target and a binding id; without one its parent is a 4-byte source and
 /// a binding id. `seen` holds a 4-byte index and a control byte per bucket, and the 4 bytes
@@ -130,7 +132,7 @@ fn buckets(n: u128) -> u128 {
 pub struct Held {
     /// The store with the state that did not fit (`Bfs::bytes_with_one_more`).
     pub bytes: u64,
-    /// Bytes in one state.
+    /// Bytes in one state as the store keeps it, packed into its cells' bits.
     pub width: usize,
     /// How the run keeps its moves.
     pub shape: Shape,
@@ -174,7 +176,7 @@ impl Bfs<'_> {
             .try_fold(1u64, |bound, size| bound.checked_mul(size?));
         Held {
             bytes,
-            width: self.ts.width,
+            width: self.states.packed_width(),
             shape: Shape {
                 binding: self.steps.binding_width(),
                 graph: self.steps.has_edges(),
@@ -232,9 +234,9 @@ impl ComponentRun {
         self.kept
     }
 
-    /// Bytes in one state.
+    /// Bytes in one state as the store keeps it, packed into its cells' bits.
     pub fn state_width(&self) -> usize {
-        self.states.width()
+        self.states.packed_width()
     }
 
     /// How the run keeps its moves.
