@@ -188,24 +188,48 @@ pub struct Mod {
 // ── Entities with states ──
 
 /// Func in the state `new` of type.
+/// Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FuncNew {
     /// Primary key.
-    pub id: FuncId,
+    id: FuncId,
+}
+
+impl FuncNew {
+    /// `id`.
+    pub fn id(&self) -> &FuncId {
+        &self.id
+    }
 }
 
 /// Func in the state `return` of type.
+/// Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FuncReturn {
     /// Primary key.
-    pub id: FuncId,
+    id: FuncId,
+}
+
+impl FuncReturn {
+    /// `id`.
+    pub fn id(&self) -> &FuncId {
+        &self.id
+    }
 }
 
 /// Func in the state `func` of type.
+/// Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FuncFunc {
     /// Primary key.
-    pub id: FuncId,
+    id: FuncId,
+}
+
+impl FuncFunc {
+    /// `id`.
+    pub fn id(&self) -> &FuncId {
+        &self.id
+    }
 }
 
 /// G
@@ -247,111 +271,423 @@ impl ::core::convert::From<FuncFunc> for Func {
 }
 
 /// Match in the state `new` of status.
+/// Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchNew {
     /// Primary key.
-    pub id: MatchId,
-    pub r#type: ::std::string::String,
-    pub default: i64,
-    pub new: ::std::string::String,
-    pub func: ::std::string::String,
-    pub self_: ::std::string::String,
-    pub crate_: ::std::string::String,
-    pub super_: ::std::string::String,
-    pub kind: Kind,
-    pub function_id: FunctionId,
-    pub func_id: FuncId,
-    pub mod_id: ModId,
+    id: MatchId,
+    r#type: ::std::string::String,
+    default: i64,
+    new: ::std::string::String,
+    func: ::std::string::String,
+    self_: ::std::string::String,
+    crate_: ::std::string::String,
+    super_: ::std::string::String,
+    kind: Kind,
+    function_id: FunctionId,
+    func_id: FuncId,
+    mod_id: ModId,
+}
+
+impl MatchNew {
+    /// `id`.
+    pub fn id(&self) -> &MatchId {
+        &self.id
+    }
+    /// `type`.
+    pub fn r#type(&self) -> &::std::string::String {
+        &self.r#type
+    }
+    /// `default`.
+    pub fn default(&self) -> &i64 {
+        &self.default
+    }
+    /// `new`.
+    pub fn new(&self) -> &::std::string::String {
+        &self.new
+    }
+    /// `func`.
+    pub fn func(&self) -> &::std::string::String {
+        &self.func
+    }
+    /// `self`.
+    pub fn self_(&self) -> &::std::string::String {
+        &self.self_
+    }
+    /// `crate`.
+    pub fn crate_(&self) -> &::std::string::String {
+        &self.crate_
+    }
+    /// `super`.
+    pub fn super_(&self) -> &::std::string::String {
+        &self.super_
+    }
+    /// `kind`.
+    pub fn kind(&self) -> &Kind {
+        &self.kind
+    }
+    /// `function_id`.
+    pub fn function_id(&self) -> &FunctionId {
+        &self.function_id
+    }
+    /// `func_id`.
+    pub fn func_id(&self) -> &FuncId {
+        &self.func_id
+    }
+    /// `mod_id`.
+    pub fn mod_id(&self) -> &ModId {
+        &self.mod_id
+    }
 }
 
 /// Match in the state `return` of status.
+/// Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchReturn {
     /// Primary key.
-    pub id: MatchId,
-    pub r#type: ::std::string::String,
-    pub default: i64,
-    pub new: ::std::string::String,
-    pub func: ::std::string::String,
-    pub self_: ::std::string::String,
-    pub crate_: ::std::string::String,
-    pub super_: ::std::string::String,
-    pub kind: Kind,
-    pub function_id: FunctionId,
-    pub func_id: FuncId,
-    pub mod_id: ModId,
+    id: MatchId,
+    r#type: ::std::string::String,
+    default: i64,
+    new: ::std::string::String,
+    func: ::std::string::String,
+    self_: ::std::string::String,
+    crate_: ::std::string::String,
+    super_: ::std::string::String,
+    kind: Kind,
+    function_id: FunctionId,
+    func_id: FuncId,
+    mod_id: ModId,
+}
+
+impl MatchReturn {
+    /// `id`.
+    pub fn id(&self) -> &MatchId {
+        &self.id
+    }
+    /// `type`.
+    pub fn r#type(&self) -> &::std::string::String {
+        &self.r#type
+    }
+    /// `default`.
+    pub fn default(&self) -> &i64 {
+        &self.default
+    }
+    /// `new`.
+    pub fn new(&self) -> &::std::string::String {
+        &self.new
+    }
+    /// `func`.
+    pub fn func(&self) -> &::std::string::String {
+        &self.func
+    }
+    /// `self`.
+    pub fn self_(&self) -> &::std::string::String {
+        &self.self_
+    }
+    /// `crate`.
+    pub fn crate_(&self) -> &::std::string::String {
+        &self.crate_
+    }
+    /// `super`.
+    pub fn super_(&self) -> &::std::string::String {
+        &self.super_
+    }
+    /// `kind`.
+    pub fn kind(&self) -> &Kind {
+        &self.kind
+    }
+    /// `function_id`.
+    pub fn function_id(&self) -> &FunctionId {
+        &self.function_id
+    }
+    /// `func_id`.
+    pub fn func_id(&self) -> &FuncId {
+        &self.func_id
+    }
+    /// `mod_id`.
+    pub fn mod_id(&self) -> &ModId {
+        &self.mod_id
+    }
 }
 
 /// Match in the state `self` of status.
+/// Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchSelf {
     /// Primary key.
-    pub id: MatchId,
-    pub r#type: ::std::string::String,
-    pub default: i64,
-    pub new: ::std::string::String,
-    pub func: ::std::string::String,
-    pub self_: ::std::string::String,
-    pub crate_: ::std::string::String,
-    pub super_: ::std::string::String,
-    pub kind: Kind,
-    pub function_id: FunctionId,
-    pub func_id: FuncId,
-    pub mod_id: ModId,
+    id: MatchId,
+    r#type: ::std::string::String,
+    default: i64,
+    new: ::std::string::String,
+    func: ::std::string::String,
+    self_: ::std::string::String,
+    crate_: ::std::string::String,
+    super_: ::std::string::String,
+    kind: Kind,
+    function_id: FunctionId,
+    func_id: FuncId,
+    mod_id: ModId,
+}
+
+impl MatchSelf {
+    /// `id`.
+    pub fn id(&self) -> &MatchId {
+        &self.id
+    }
+    /// `type`.
+    pub fn r#type(&self) -> &::std::string::String {
+        &self.r#type
+    }
+    /// `default`.
+    pub fn default(&self) -> &i64 {
+        &self.default
+    }
+    /// `new`.
+    pub fn new(&self) -> &::std::string::String {
+        &self.new
+    }
+    /// `func`.
+    pub fn func(&self) -> &::std::string::String {
+        &self.func
+    }
+    /// `self`.
+    pub fn self_(&self) -> &::std::string::String {
+        &self.self_
+    }
+    /// `crate`.
+    pub fn crate_(&self) -> &::std::string::String {
+        &self.crate_
+    }
+    /// `super`.
+    pub fn super_(&self) -> &::std::string::String {
+        &self.super_
+    }
+    /// `kind`.
+    pub fn kind(&self) -> &Kind {
+        &self.kind
+    }
+    /// `function_id`.
+    pub fn function_id(&self) -> &FunctionId {
+        &self.function_id
+    }
+    /// `func_id`.
+    pub fn func_id(&self) -> &FuncId {
+        &self.func_id
+    }
+    /// `mod_id`.
+    pub fn mod_id(&self) -> &ModId {
+        &self.mod_id
+    }
 }
 
 /// Match in the state `super` of status.
+/// Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchSuper {
     /// Primary key.
-    pub id: MatchId,
-    pub r#type: ::std::string::String,
-    pub default: i64,
-    pub new: ::std::string::String,
-    pub func: ::std::string::String,
-    pub self_: ::std::string::String,
-    pub crate_: ::std::string::String,
-    pub super_: ::std::string::String,
-    pub kind: Kind,
-    pub function_id: FunctionId,
-    pub func_id: FuncId,
-    pub mod_id: ModId,
+    id: MatchId,
+    r#type: ::std::string::String,
+    default: i64,
+    new: ::std::string::String,
+    func: ::std::string::String,
+    self_: ::std::string::String,
+    crate_: ::std::string::String,
+    super_: ::std::string::String,
+    kind: Kind,
+    function_id: FunctionId,
+    func_id: FuncId,
+    mod_id: ModId,
+}
+
+impl MatchSuper {
+    /// `id`.
+    pub fn id(&self) -> &MatchId {
+        &self.id
+    }
+    /// `type`.
+    pub fn r#type(&self) -> &::std::string::String {
+        &self.r#type
+    }
+    /// `default`.
+    pub fn default(&self) -> &i64 {
+        &self.default
+    }
+    /// `new`.
+    pub fn new(&self) -> &::std::string::String {
+        &self.new
+    }
+    /// `func`.
+    pub fn func(&self) -> &::std::string::String {
+        &self.func
+    }
+    /// `self`.
+    pub fn self_(&self) -> &::std::string::String {
+        &self.self_
+    }
+    /// `crate`.
+    pub fn crate_(&self) -> &::std::string::String {
+        &self.crate_
+    }
+    /// `super`.
+    pub fn super_(&self) -> &::std::string::String {
+        &self.super_
+    }
+    /// `kind`.
+    pub fn kind(&self) -> &Kind {
+        &self.kind
+    }
+    /// `function_id`.
+    pub fn function_id(&self) -> &FunctionId {
+        &self.function_id
+    }
+    /// `func_id`.
+    pub fn func_id(&self) -> &FuncId {
+        &self.func_id
+    }
+    /// `mod_id`.
+    pub fn mod_id(&self) -> &ModId {
+        &self.mod_id
+    }
 }
 
 /// Match in the state `crate` of status.
+/// Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchCrate {
     /// Primary key.
-    pub id: MatchId,
-    pub r#type: ::std::string::String,
-    pub default: i64,
-    pub new: ::std::string::String,
-    pub func: ::std::string::String,
-    pub self_: ::std::string::String,
-    pub crate_: ::std::string::String,
-    pub super_: ::std::string::String,
-    pub kind: Kind,
-    pub function_id: FunctionId,
-    pub func_id: FuncId,
-    pub mod_id: ModId,
+    id: MatchId,
+    r#type: ::std::string::String,
+    default: i64,
+    new: ::std::string::String,
+    func: ::std::string::String,
+    self_: ::std::string::String,
+    crate_: ::std::string::String,
+    super_: ::std::string::String,
+    kind: Kind,
+    function_id: FunctionId,
+    func_id: FuncId,
+    mod_id: ModId,
+}
+
+impl MatchCrate {
+    /// `id`.
+    pub fn id(&self) -> &MatchId {
+        &self.id
+    }
+    /// `type`.
+    pub fn r#type(&self) -> &::std::string::String {
+        &self.r#type
+    }
+    /// `default`.
+    pub fn default(&self) -> &i64 {
+        &self.default
+    }
+    /// `new`.
+    pub fn new(&self) -> &::std::string::String {
+        &self.new
+    }
+    /// `func`.
+    pub fn func(&self) -> &::std::string::String {
+        &self.func
+    }
+    /// `self`.
+    pub fn self_(&self) -> &::std::string::String {
+        &self.self_
+    }
+    /// `crate`.
+    pub fn crate_(&self) -> &::std::string::String {
+        &self.crate_
+    }
+    /// `super`.
+    pub fn super_(&self) -> &::std::string::String {
+        &self.super_
+    }
+    /// `kind`.
+    pub fn kind(&self) -> &Kind {
+        &self.kind
+    }
+    /// `function_id`.
+    pub fn function_id(&self) -> &FunctionId {
+        &self.function_id
+    }
+    /// `func_id`.
+    pub fn func_id(&self) -> &FuncId {
+        &self.func_id
+    }
+    /// `mod_id`.
+    pub fn mod_id(&self) -> &ModId {
+        &self.mod_id
+    }
 }
 
 /// Match in the state `default` of status.
+/// Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MatchDefault {
     /// Primary key.
-    pub id: MatchId,
-    pub r#type: ::std::string::String,
-    pub default: i64,
-    pub new: ::std::string::String,
-    pub func: ::std::string::String,
-    pub self_: ::std::string::String,
-    pub crate_: ::std::string::String,
-    pub super_: ::std::string::String,
-    pub kind: Kind,
-    pub function_id: FunctionId,
-    pub func_id: FuncId,
-    pub mod_id: ModId,
+    id: MatchId,
+    r#type: ::std::string::String,
+    default: i64,
+    new: ::std::string::String,
+    func: ::std::string::String,
+    self_: ::std::string::String,
+    crate_: ::std::string::String,
+    super_: ::std::string::String,
+    kind: Kind,
+    function_id: FunctionId,
+    func_id: FuncId,
+    mod_id: ModId,
+}
+
+impl MatchDefault {
+    /// `id`.
+    pub fn id(&self) -> &MatchId {
+        &self.id
+    }
+    /// `type`.
+    pub fn r#type(&self) -> &::std::string::String {
+        &self.r#type
+    }
+    /// `default`.
+    pub fn default(&self) -> &i64 {
+        &self.default
+    }
+    /// `new`.
+    pub fn new(&self) -> &::std::string::String {
+        &self.new
+    }
+    /// `func`.
+    pub fn func(&self) -> &::std::string::String {
+        &self.func
+    }
+    /// `self`.
+    pub fn self_(&self) -> &::std::string::String {
+        &self.self_
+    }
+    /// `crate`.
+    pub fn crate_(&self) -> &::std::string::String {
+        &self.crate_
+    }
+    /// `super`.
+    pub fn super_(&self) -> &::std::string::String {
+        &self.super_
+    }
+    /// `kind`.
+    pub fn kind(&self) -> &Kind {
+        &self.kind
+    }
+    /// `function_id`.
+    pub fn function_id(&self) -> &FunctionId {
+        &self.function_id
+    }
+    /// `func_id`.
+    pub fn func_id(&self) -> &FuncId {
+        &self.func_id
+    }
+    /// `mod_id`.
+    pub fn mod_id(&self) -> &ModId {
+        &self.mod_id
+    }
 }
 
 /// M

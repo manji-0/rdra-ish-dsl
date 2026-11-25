@@ -29,8 +29,8 @@ fn main() {
 
     // Dispatch: Pay runs from pending, writes the payment time and qty 2, raises EvPaid.
     let PayOutcome::Ran(paid) = run_pay(order, DateTime("t".to_string())).expect("runs");
-    assert_eq!(paid.order.paid_at, DateTime("t".to_string()));
-    assert_eq!(paid.order.qty, 2);
+    assert_eq!(paid.order.paid_at(), &DateTime("t".to_string()));
+    assert_eq!(*paid.order.qty(), 2);
     assert_eq!(paid.ev_paid, EvPaid);
     // Pay does not run from paid.
     let again = run_pay(Order::Paid(paid.order.clone()), DateTime("u".to_string()));
@@ -43,9 +43,13 @@ fn main() {
     assert!(matches!(rejected, Err(Refused::Rejected(Rejected { condition: "Big", .. }))));
 
     // Rule checks: qty 5 breaks `forbidden(Order, qty > 4)`.
-    let mut big = paid.order.clone();
-    assert!(big.rule_violations().is_empty());
-    big.qty = 5;
-    assert_eq!(Order::Paid(big).rule_violations(), vec!["Forbidden_Order_0"]);
+    // A state's fields are private: a row with qty 5 is the way to such a state.
+    assert!(paid.order.rule_violations().is_empty());
+    let big = Order::from_row(OrderRow {
+        qty: 5,
+        ..Order::Paid(paid.order.clone()).into_row()
+    })
+    .expect("a paid row");
+    assert_eq!(big.rule_violations(), vec!["Forbidden_Order_0"]);
     println!("ok");
 }

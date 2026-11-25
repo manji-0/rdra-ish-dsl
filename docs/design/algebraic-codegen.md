@@ -299,6 +299,35 @@ func UnmarshalOrder(data []byte) (Order, error) { /* reads "status", then the va
 The JSON form is the same in all three: the record's columns with the tag column inline,
 the row shape DBML and JSON Schema describe.
 
+### Who makes a state
+
+<!-- constrained-by #decisions -->
+
+The examples above show public fields, as the first output had. Code could then build
+`OrderPaid { .. }` without running the transition that leads there, or change a field a
+transition keeps, and Go also took `OrderStatus("bogus")` and the zero value `OrderPaid{}`.
+Since #331, Rust and Go make a state only in the generated code:
+
+- A variant's fields are private in Rust and unexported in Go, and methods of the same name
+  read them (`paid_at()` returns `&DateTime`, or `Option<&T>` for a nullable column;
+  `PaidAt()` returns a copy, so a pointer does not reach into the state). The only
+  constructors are the transition functions (whose created rows take the inputs the model
+  leaves open) and `from_row` / `<Entity>FromRow`, which checks the row against the state's
+  rules. A test outside the module or package (`codegen_behaviour.rs`) shows that the
+  compiler refuses a struct literal of a state and a write to its field.
+- Go cannot forbid the zero value of a struct, nor a conversion to a `string` type, from
+  another package. A state therefore carries an unexported mark that only the package sets:
+  a transition function or `<Entity>ToRow` given the zero value panics. `<Entity>FromRow`
+  refuses a value outside a value set in any column, a function panics on one as an input,
+  and each value set has `Parse<Enum>(s)`.
+- Go keeps this only when the code that finishes the output is in another package, so the
+  generated file goes in a directory of its own, named by `--package`.
+
+Records, row types, ids, and DTOs keep public fields: they are the shapes a store and the
+wire hold, and a state is made from them only through `from_row`. Decision 4 stands:
+the Rust encoding is still an enum of per-state structs whose transitions consume their
+source.
+
 <a id="split"></a>
 ## Use cases split into transactions
 

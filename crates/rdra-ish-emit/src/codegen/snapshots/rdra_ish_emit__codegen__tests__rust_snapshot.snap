@@ -155,42 +155,134 @@ pub struct CreateOrderRequest {
 
 /// Order in the state `pending` of status.
 /// `paid_at`: Null in this state by a rule.
+/// Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OrderPending {
     /// Primary key.
-    pub id: OrderId,
-    pub total: Money,
-    pub method: PaymentMethod,
-    pub delivered_at: ::core::option::Option<DateTime>,
-    pub r#type: ::core::option::Option<::std::string::String>,
-    pub customer_id: CustomerId,
+    id: OrderId,
+    total: Money,
+    method: PaymentMethod,
+    delivered_at: ::core::option::Option<DateTime>,
+    r#type: ::core::option::Option<::std::string::String>,
+    customer_id: CustomerId,
+}
+
+impl OrderPending {
+    /// `id`.
+    pub fn id(&self) -> &OrderId {
+        &self.id
+    }
+    /// `total`.
+    pub fn total(&self) -> &Money {
+        &self.total
+    }
+    /// `method`.
+    pub fn method(&self) -> &PaymentMethod {
+        &self.method
+    }
+    /// `delivered_at`.
+    pub fn delivered_at(&self) -> ::core::option::Option<&DateTime> {
+        self.delivered_at.as_ref()
+    }
+    /// `type`.
+    pub fn r#type(&self) -> ::core::option::Option<&::std::string::String> {
+        self.r#type.as_ref()
+    }
+    /// `customer_id`.
+    pub fn customer_id(&self) -> &CustomerId {
+        &self.customer_id
+    }
 }
 
 /// Order in the state `paid` of status.
+/// Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OrderPaid {
     /// Primary key.
-    pub id: OrderId,
-    pub total: Money,
+    id: OrderId,
+    total: Money,
     /// Present in this state by a rule.
-    pub paid_at: DateTime,
-    pub method: PaymentMethod,
-    pub delivered_at: ::core::option::Option<DateTime>,
-    pub r#type: ::core::option::Option<::std::string::String>,
-    pub customer_id: CustomerId,
+    paid_at: DateTime,
+    method: PaymentMethod,
+    delivered_at: ::core::option::Option<DateTime>,
+    r#type: ::core::option::Option<::std::string::String>,
+    customer_id: CustomerId,
+}
+
+impl OrderPaid {
+    /// `id`.
+    pub fn id(&self) -> &OrderId {
+        &self.id
+    }
+    /// `total`.
+    pub fn total(&self) -> &Money {
+        &self.total
+    }
+    /// `paid_at`.
+    pub fn paid_at(&self) -> &DateTime {
+        &self.paid_at
+    }
+    /// `method`.
+    pub fn method(&self) -> &PaymentMethod {
+        &self.method
+    }
+    /// `delivered_at`.
+    pub fn delivered_at(&self) -> ::core::option::Option<&DateTime> {
+        self.delivered_at.as_ref()
+    }
+    /// `type`.
+    pub fn r#type(&self) -> ::core::option::Option<&::std::string::String> {
+        self.r#type.as_ref()
+    }
+    /// `customer_id`.
+    pub fn customer_id(&self) -> &CustomerId {
+        &self.customer_id
+    }
 }
 
 /// Order in the state `cancelled` of status.
+/// Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OrderCancelled {
     /// Primary key.
-    pub id: OrderId,
-    pub total: Money,
-    pub paid_at: ::core::option::Option<DateTime>,
-    pub method: PaymentMethod,
-    pub delivered_at: ::core::option::Option<DateTime>,
-    pub r#type: ::core::option::Option<::std::string::String>,
-    pub customer_id: CustomerId,
+    id: OrderId,
+    total: Money,
+    paid_at: ::core::option::Option<DateTime>,
+    method: PaymentMethod,
+    delivered_at: ::core::option::Option<DateTime>,
+    r#type: ::core::option::Option<::std::string::String>,
+    customer_id: CustomerId,
+}
+
+impl OrderCancelled {
+    /// `id`.
+    pub fn id(&self) -> &OrderId {
+        &self.id
+    }
+    /// `total`.
+    pub fn total(&self) -> &Money {
+        &self.total
+    }
+    /// `paid_at`.
+    pub fn paid_at(&self) -> ::core::option::Option<&DateTime> {
+        self.paid_at.as_ref()
+    }
+    /// `method`.
+    pub fn method(&self) -> &PaymentMethod {
+        &self.method
+    }
+    /// `delivered_at`.
+    pub fn delivered_at(&self) -> ::core::option::Option<&DateTime> {
+        self.delivered_at.as_ref()
+    }
+    /// `type`.
+    pub fn r#type(&self) -> ::core::option::Option<&::std::string::String> {
+        self.r#type.as_ref()
+    }
+    /// `customer_id`.
+    pub fn customer_id(&self) -> &CustomerId {
+        &self.customer_id
+    }
 }
 
 /// Order

@@ -139,6 +139,9 @@ pub(super) fn print(
                     field.doc.last().cloned().unwrap_or_default()
                 ));
             }
+            lines.push(
+                "Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.".to_string(),
+            );
             out.push_str(&doc(&lines, ""));
             out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
             out.push_str(&format!("pub struct {} {{\n", variant.name));
@@ -150,9 +153,29 @@ pub(super) fn print(
                 } else {
                     ty
                 };
-                out.push_str(&format!("    pub {}: {ty},\n", ident(&field.wire)));
+                out.push_str(&format!("    {}: {ty},\n", ident(&field.wire)));
             }
             out.push_str("}\n\n");
+            if !variant.fields.is_empty() {
+                out.push_str(&format!("impl {} {{\n", variant.name));
+                for field in &variant.fields {
+                    let ty = field_type(&field.ty);
+                    let (ret, body) = if field.nullable {
+                        (
+                            format!("{OPTION}<&{ty}>"),
+                            format!("self.{}.as_ref()", ident(&field.wire)),
+                        )
+                    } else {
+                        (format!("&{ty}"), format!("&self.{}", ident(&field.wire)))
+                    };
+                    out.push_str(&format!(
+                        "    /// `{}`.\n    pub fn {}(&self) -> {ret} {{\n        {body}\n    }}\n",
+                        field.wire,
+                        ident(&field.wire)
+                    ));
+                }
+                out.push_str("}\n\n");
+            }
         }
         let mut lines = sum.doc.clone();
         lines.push(format!(

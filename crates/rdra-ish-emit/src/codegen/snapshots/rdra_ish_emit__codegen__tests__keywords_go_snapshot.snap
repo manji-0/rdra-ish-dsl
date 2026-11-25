@@ -80,6 +80,14 @@ func (v Kind) Valid() bool {
 	return false
 }
 
+// ParseKind returns the value of Kind the model spells s, or an error when there is none.
+func ParseKind(s string) (Kind, error) {
+	if v := Kind(s); v.Valid() {
+		return v, nil
+	}
+	return "", &InvalidValue{Type: "Kind", Value: s}
+}
+
 // FuncType is The values of Func.type.
 // Call Valid on a value read from outside: only the FuncType* constants are values.
 type FuncType string
@@ -102,6 +110,14 @@ func (v FuncType) Valid() bool {
 		}
 	}
 	return false
+}
+
+// ParseFuncType returns the value of FuncType the model spells s, or an error when there is none.
+func ParseFuncType(s string) (FuncType, error) {
+	if v := FuncType(s); v.Valid() {
+		return v, nil
+	}
+	return "", &InvalidValue{Type: "FuncType", Value: s}
 }
 
 // MatchStatus is The values of Match.status.
@@ -129,6 +145,25 @@ func (v MatchStatus) Valid() bool {
 		}
 	}
 	return false
+}
+
+// ParseMatchStatus returns the value of MatchStatus the model spells s, or an error when there is none.
+func ParseMatchStatus(s string) (MatchStatus, error) {
+	if v := MatchStatus(s); v.Valid() {
+		return v, nil
+	}
+	return "", &InvalidValue{Type: "MatchStatus", Value: s}
+}
+
+// InvalidValue reports text that is no value of a value set.
+type InvalidValue struct {
+	Type  string
+	Value string
+}
+
+// Error names the value set and the text.
+func (e *InvalidValue) Error() string {
+	return "not a value of " + e.Type + ": " + e.Value
 }
 
 // ── Entities ──
@@ -159,10 +194,15 @@ type Func interface {
 }
 
 // FuncNew is Func in the state `new` of type.
+// Only this package makes one, in a transition function or FuncFromRow: its fields are unexported, and read by the methods of the same name. A function given the zero value panics.
 type FuncNew struct {
 	// Primary key.
-	Id FuncId `json:"id"`
+	id FuncId
+	valid_ bool
 }
+
+// Id returns id.
+func (s FuncNew) Id() FuncId { return s.id }
 
 func (FuncNew) isFunc() {}
 
@@ -170,10 +210,15 @@ func (FuncNew) isFunc() {}
 func (FuncNew) Type() FuncType { return FuncTypeNew }
 
 // FuncReturn is Func in the state `return` of type.
+// Only this package makes one, in a transition function or FuncFromRow: its fields are unexported, and read by the methods of the same name. A function given the zero value panics.
 type FuncReturn struct {
 	// Primary key.
-	Id FuncId `json:"id"`
+	id FuncId
+	valid_ bool
 }
+
+// Id returns id.
+func (s FuncReturn) Id() FuncId { return s.id }
 
 func (FuncReturn) isFunc() {}
 
@@ -181,10 +226,15 @@ func (FuncReturn) isFunc() {}
 func (FuncReturn) Type() FuncType { return FuncTypeReturn }
 
 // FuncFunc is Func in the state `func` of type.
+// Only this package makes one, in a transition function or FuncFromRow: its fields are unexported, and read by the methods of the same name. A function given the zero value panics.
 type FuncFunc struct {
 	// Primary key.
-	Id FuncId `json:"id"`
+	id FuncId
+	valid_ bool
 }
+
+// Id returns id.
+func (s FuncFunc) Id() FuncId { return s.id }
 
 func (FuncFunc) isFunc() {}
 
@@ -202,21 +252,59 @@ type Match interface {
 }
 
 // MatchNew is Match in the state `new` of status.
+// Only this package makes one, in a transition function or MatchFromRow: its fields are unexported, and read by the methods of the same name. A function given the zero value panics.
 type MatchNew struct {
 	// Primary key.
-	Id MatchId `json:"id"`
-	Type string `json:"type"`
-	Default int64 `json:"default"`
-	New string `json:"new"`
-	Func string `json:"func"`
-	Self string `json:"self"`
-	Crate string `json:"crate"`
-	Super string `json:"super"`
-	Kind Kind `json:"kind"`
-	FunctionId FunctionId `json:"function_id"`
-	FuncId FuncId `json:"func_id"`
-	ModId ModId `json:"mod_id"`
+	id MatchId
+	type_ string
+	default_ int64
+	new string
+	func_ string
+	self string
+	crate string
+	super string
+	kind Kind
+	functionId FunctionId
+	funcId FuncId
+	modId ModId
+	valid_ bool
 }
+
+// Id returns id.
+func (s MatchNew) Id() MatchId { return s.id }
+
+// Type returns type.
+func (s MatchNew) Type() string { return s.type_ }
+
+// Default returns default.
+func (s MatchNew) Default() int64 { return s.default_ }
+
+// New returns new.
+func (s MatchNew) New() string { return s.new }
+
+// Func returns func.
+func (s MatchNew) Func() string { return s.func_ }
+
+// Self returns self.
+func (s MatchNew) Self() string { return s.self }
+
+// Crate returns crate.
+func (s MatchNew) Crate() string { return s.crate }
+
+// Super returns super.
+func (s MatchNew) Super() string { return s.super }
+
+// Kind returns kind.
+func (s MatchNew) Kind() Kind { return s.kind }
+
+// FunctionId returns function_id.
+func (s MatchNew) FunctionId() FunctionId { return s.functionId }
+
+// FuncId returns func_id.
+func (s MatchNew) FuncId() FuncId { return s.funcId }
+
+// ModId returns mod_id.
+func (s MatchNew) ModId() ModId { return s.modId }
 
 func (MatchNew) isMatch() {}
 
@@ -224,21 +312,59 @@ func (MatchNew) isMatch() {}
 func (MatchNew) Status() MatchStatus { return MatchStatusNew }
 
 // MatchReturn is Match in the state `return` of status.
+// Only this package makes one, in a transition function or MatchFromRow: its fields are unexported, and read by the methods of the same name. A function given the zero value panics.
 type MatchReturn struct {
 	// Primary key.
-	Id MatchId `json:"id"`
-	Type string `json:"type"`
-	Default int64 `json:"default"`
-	New string `json:"new"`
-	Func string `json:"func"`
-	Self string `json:"self"`
-	Crate string `json:"crate"`
-	Super string `json:"super"`
-	Kind Kind `json:"kind"`
-	FunctionId FunctionId `json:"function_id"`
-	FuncId FuncId `json:"func_id"`
-	ModId ModId `json:"mod_id"`
+	id MatchId
+	type_ string
+	default_ int64
+	new string
+	func_ string
+	self string
+	crate string
+	super string
+	kind Kind
+	functionId FunctionId
+	funcId FuncId
+	modId ModId
+	valid_ bool
 }
+
+// Id returns id.
+func (s MatchReturn) Id() MatchId { return s.id }
+
+// Type returns type.
+func (s MatchReturn) Type() string { return s.type_ }
+
+// Default returns default.
+func (s MatchReturn) Default() int64 { return s.default_ }
+
+// New returns new.
+func (s MatchReturn) New() string { return s.new }
+
+// Func returns func.
+func (s MatchReturn) Func() string { return s.func_ }
+
+// Self returns self.
+func (s MatchReturn) Self() string { return s.self }
+
+// Crate returns crate.
+func (s MatchReturn) Crate() string { return s.crate }
+
+// Super returns super.
+func (s MatchReturn) Super() string { return s.super }
+
+// Kind returns kind.
+func (s MatchReturn) Kind() Kind { return s.kind }
+
+// FunctionId returns function_id.
+func (s MatchReturn) FunctionId() FunctionId { return s.functionId }
+
+// FuncId returns func_id.
+func (s MatchReturn) FuncId() FuncId { return s.funcId }
+
+// ModId returns mod_id.
+func (s MatchReturn) ModId() ModId { return s.modId }
 
 func (MatchReturn) isMatch() {}
 
@@ -246,21 +372,59 @@ func (MatchReturn) isMatch() {}
 func (MatchReturn) Status() MatchStatus { return MatchStatusReturn }
 
 // MatchSelf is Match in the state `self` of status.
+// Only this package makes one, in a transition function or MatchFromRow: its fields are unexported, and read by the methods of the same name. A function given the zero value panics.
 type MatchSelf struct {
 	// Primary key.
-	Id MatchId `json:"id"`
-	Type string `json:"type"`
-	Default int64 `json:"default"`
-	New string `json:"new"`
-	Func string `json:"func"`
-	Self string `json:"self"`
-	Crate string `json:"crate"`
-	Super string `json:"super"`
-	Kind Kind `json:"kind"`
-	FunctionId FunctionId `json:"function_id"`
-	FuncId FuncId `json:"func_id"`
-	ModId ModId `json:"mod_id"`
+	id MatchId
+	type_ string
+	default_ int64
+	new string
+	func_ string
+	self string
+	crate string
+	super string
+	kind Kind
+	functionId FunctionId
+	funcId FuncId
+	modId ModId
+	valid_ bool
 }
+
+// Id returns id.
+func (s MatchSelf) Id() MatchId { return s.id }
+
+// Type returns type.
+func (s MatchSelf) Type() string { return s.type_ }
+
+// Default returns default.
+func (s MatchSelf) Default() int64 { return s.default_ }
+
+// New returns new.
+func (s MatchSelf) New() string { return s.new }
+
+// Func returns func.
+func (s MatchSelf) Func() string { return s.func_ }
+
+// Self returns self.
+func (s MatchSelf) Self() string { return s.self }
+
+// Crate returns crate.
+func (s MatchSelf) Crate() string { return s.crate }
+
+// Super returns super.
+func (s MatchSelf) Super() string { return s.super }
+
+// Kind returns kind.
+func (s MatchSelf) Kind() Kind { return s.kind }
+
+// FunctionId returns function_id.
+func (s MatchSelf) FunctionId() FunctionId { return s.functionId }
+
+// FuncId returns func_id.
+func (s MatchSelf) FuncId() FuncId { return s.funcId }
+
+// ModId returns mod_id.
+func (s MatchSelf) ModId() ModId { return s.modId }
 
 func (MatchSelf) isMatch() {}
 
@@ -268,21 +432,59 @@ func (MatchSelf) isMatch() {}
 func (MatchSelf) Status() MatchStatus { return MatchStatusSelf }
 
 // MatchSuper is Match in the state `super` of status.
+// Only this package makes one, in a transition function or MatchFromRow: its fields are unexported, and read by the methods of the same name. A function given the zero value panics.
 type MatchSuper struct {
 	// Primary key.
-	Id MatchId `json:"id"`
-	Type string `json:"type"`
-	Default int64 `json:"default"`
-	New string `json:"new"`
-	Func string `json:"func"`
-	Self string `json:"self"`
-	Crate string `json:"crate"`
-	Super string `json:"super"`
-	Kind Kind `json:"kind"`
-	FunctionId FunctionId `json:"function_id"`
-	FuncId FuncId `json:"func_id"`
-	ModId ModId `json:"mod_id"`
+	id MatchId
+	type_ string
+	default_ int64
+	new string
+	func_ string
+	self string
+	crate string
+	super string
+	kind Kind
+	functionId FunctionId
+	funcId FuncId
+	modId ModId
+	valid_ bool
 }
+
+// Id returns id.
+func (s MatchSuper) Id() MatchId { return s.id }
+
+// Type returns type.
+func (s MatchSuper) Type() string { return s.type_ }
+
+// Default returns default.
+func (s MatchSuper) Default() int64 { return s.default_ }
+
+// New returns new.
+func (s MatchSuper) New() string { return s.new }
+
+// Func returns func.
+func (s MatchSuper) Func() string { return s.func_ }
+
+// Self returns self.
+func (s MatchSuper) Self() string { return s.self }
+
+// Crate returns crate.
+func (s MatchSuper) Crate() string { return s.crate }
+
+// Super returns super.
+func (s MatchSuper) Super() string { return s.super }
+
+// Kind returns kind.
+func (s MatchSuper) Kind() Kind { return s.kind }
+
+// FunctionId returns function_id.
+func (s MatchSuper) FunctionId() FunctionId { return s.functionId }
+
+// FuncId returns func_id.
+func (s MatchSuper) FuncId() FuncId { return s.funcId }
+
+// ModId returns mod_id.
+func (s MatchSuper) ModId() ModId { return s.modId }
 
 func (MatchSuper) isMatch() {}
 
@@ -290,21 +492,59 @@ func (MatchSuper) isMatch() {}
 func (MatchSuper) Status() MatchStatus { return MatchStatusSuper }
 
 // MatchCrate is Match in the state `crate` of status.
+// Only this package makes one, in a transition function or MatchFromRow: its fields are unexported, and read by the methods of the same name. A function given the zero value panics.
 type MatchCrate struct {
 	// Primary key.
-	Id MatchId `json:"id"`
-	Type string `json:"type"`
-	Default int64 `json:"default"`
-	New string `json:"new"`
-	Func string `json:"func"`
-	Self string `json:"self"`
-	Crate string `json:"crate"`
-	Super string `json:"super"`
-	Kind Kind `json:"kind"`
-	FunctionId FunctionId `json:"function_id"`
-	FuncId FuncId `json:"func_id"`
-	ModId ModId `json:"mod_id"`
+	id MatchId
+	type_ string
+	default_ int64
+	new string
+	func_ string
+	self string
+	crate string
+	super string
+	kind Kind
+	functionId FunctionId
+	funcId FuncId
+	modId ModId
+	valid_ bool
 }
+
+// Id returns id.
+func (s MatchCrate) Id() MatchId { return s.id }
+
+// Type returns type.
+func (s MatchCrate) Type() string { return s.type_ }
+
+// Default returns default.
+func (s MatchCrate) Default() int64 { return s.default_ }
+
+// New returns new.
+func (s MatchCrate) New() string { return s.new }
+
+// Func returns func.
+func (s MatchCrate) Func() string { return s.func_ }
+
+// Self returns self.
+func (s MatchCrate) Self() string { return s.self }
+
+// Crate returns crate.
+func (s MatchCrate) Crate() string { return s.crate }
+
+// Super returns super.
+func (s MatchCrate) Super() string { return s.super }
+
+// Kind returns kind.
+func (s MatchCrate) Kind() Kind { return s.kind }
+
+// FunctionId returns function_id.
+func (s MatchCrate) FunctionId() FunctionId { return s.functionId }
+
+// FuncId returns func_id.
+func (s MatchCrate) FuncId() FuncId { return s.funcId }
+
+// ModId returns mod_id.
+func (s MatchCrate) ModId() ModId { return s.modId }
 
 func (MatchCrate) isMatch() {}
 
@@ -312,21 +552,59 @@ func (MatchCrate) isMatch() {}
 func (MatchCrate) Status() MatchStatus { return MatchStatusCrate }
 
 // MatchDefault is Match in the state `default` of status.
+// Only this package makes one, in a transition function or MatchFromRow: its fields are unexported, and read by the methods of the same name. A function given the zero value panics.
 type MatchDefault struct {
 	// Primary key.
-	Id MatchId `json:"id"`
-	Type string `json:"type"`
-	Default int64 `json:"default"`
-	New string `json:"new"`
-	Func string `json:"func"`
-	Self string `json:"self"`
-	Crate string `json:"crate"`
-	Super string `json:"super"`
-	Kind Kind `json:"kind"`
-	FunctionId FunctionId `json:"function_id"`
-	FuncId FuncId `json:"func_id"`
-	ModId ModId `json:"mod_id"`
+	id MatchId
+	type_ string
+	default_ int64
+	new string
+	func_ string
+	self string
+	crate string
+	super string
+	kind Kind
+	functionId FunctionId
+	funcId FuncId
+	modId ModId
+	valid_ bool
 }
+
+// Id returns id.
+func (s MatchDefault) Id() MatchId { return s.id }
+
+// Type returns type.
+func (s MatchDefault) Type() string { return s.type_ }
+
+// Default returns default.
+func (s MatchDefault) Default() int64 { return s.default_ }
+
+// New returns new.
+func (s MatchDefault) New() string { return s.new }
+
+// Func returns func.
+func (s MatchDefault) Func() string { return s.func_ }
+
+// Self returns self.
+func (s MatchDefault) Self() string { return s.self }
+
+// Crate returns crate.
+func (s MatchDefault) Crate() string { return s.crate }
+
+// Super returns super.
+func (s MatchDefault) Super() string { return s.super }
+
+// Kind returns kind.
+func (s MatchDefault) Kind() Kind { return s.kind }
+
+// FunctionId returns function_id.
+func (s MatchDefault) FunctionId() FunctionId { return s.functionId }
+
+// FuncId returns func_id.
+func (s MatchDefault) FuncId() FuncId { return s.funcId }
+
+// ModId returns mod_id.
+func (s MatchDefault) ModId() ModId { return s.modId }
 
 func (MatchDefault) isMatch() {}
 
@@ -363,22 +641,26 @@ type ReturnResult struct {
 
 // Return runs Return (Return). One run of the use case, from the states of the arguments' types. It requires what `Return` requires and writes what it writes; the values the model leaves open are the inputs.
 func Return(match MatchNew) ReturnResult {
+	if !match.valid_ {
+		panic("rdra-ish: MatchNew not made by this package (the zero value)")
+	}
 	return ReturnResult{
 		Match: MatchReturn{
-			Id: match.Id,
-			Type: match.Type,
-			Default: match.Default,
-			New: match.New,
-			Func: match.Func,
-			Self: match.Self,
-			Crate: match.Crate,
-			Super: match.Super,
-			Kind: match.Kind,
-			FunctionId: match.FunctionId,
-			FuncId: match.FuncId,
-			ModId: match.ModId,
+			id: match.id,
+			type_: match.type_,
+			default_: match.default_,
+			new: match.new,
+			func_: match.func_,
+			self: match.self,
+			crate: match.crate,
+			super: match.super,
+			kind: match.kind,
+			functionId: match.functionId,
+			funcId: match.funcId,
+			modId: match.modId,
+			valid_: true,
 		},
-		Switch: Switch{MatchId: match.Id},
+		Switch: Switch{MatchId: match.id},
 	}
 }
 
@@ -389,23 +671,27 @@ type DeleteResult struct {
 
 // Delete runs Delete (Delete). One run of the use case, from the states of the arguments' types. It requires what `Delete` requires and writes what it writes; the values the model leaves open are the inputs.
 func Delete(match MatchReturn, switch_ Switch) DeleteResult {
-	if match.Id != switch_.MatchId {
+	if !match.valid_ {
+		panic("rdra-ish: MatchReturn not made by this package (the zero value)")
+	}
+	if match.id != switch_.MatchId {
 		panic("rdra-ish: the Match row is not the row the event was raised on")
 	}
 	return DeleteResult{
 		Match: MatchSelf{
-			Id: match.Id,
-			Type: match.Type,
-			Default: match.Default,
-			New: match.New,
-			Func: match.Func,
-			Self: match.Self,
-			Crate: match.Crate,
-			Super: match.Super,
-			Kind: match.Kind,
-			FunctionId: match.FunctionId,
-			FuncId: match.FuncId,
-			ModId: match.ModId,
+			id: match.id,
+			type_: match.type_,
+			default_: match.default_,
+			new: match.new,
+			func_: match.func_,
+			self: match.self,
+			crate: match.crate,
+			super: match.super,
+			kind: match.kind,
+			functionId: match.functionId,
+			funcId: match.funcId,
+			modId: match.modId,
+			valid_: true,
 		},
 	}
 }
@@ -418,23 +704,27 @@ type SuperResult struct {
 // Super runs Super (Super). One run of the use case, from the states of the arguments' types. It requires what `Super` requires and writes what it writes; the values the model leaves open are the inputs.
 // Requires the condition Small (Small default).
 func Super(match MatchSelf) (SuperResult, error) {
-	if !(match.Default <= 4) {
+	if !match.valid_ {
+		panic("rdra-ish: MatchSelf not made by this package (the zero value)")
+	}
+	if !(match.default_ <= 4) {
 		return SuperResult{}, &Rejected{Condition: "Small", Label: "Small default", Site: ""}
 	}
 	return SuperResult{
 		Match: MatchSuper{
-			Id: match.Id,
-			Type: match.Type,
-			Default: match.Default,
-			New: match.New,
-			Func: match.Func,
-			Self: match.Self,
-			Crate: match.Crate,
-			Super: match.Super,
-			Kind: match.Kind,
-			FunctionId: match.FunctionId,
-			FuncId: match.FuncId,
-			ModId: match.ModId,
+			id: match.id,
+			type_: match.type_,
+			default_: match.default_,
+			new: match.new,
+			func_: match.func_,
+			self: match.self,
+			crate: match.crate,
+			super: match.super,
+			kind: match.kind,
+			functionId: match.functionId,
+			funcId: match.funcId,
+			modId: match.modId,
+			valid_: true,
 		},
 	}, nil
 }
@@ -446,20 +736,24 @@ type CrateResult struct {
 
 // Crate runs Crate (Crate). One run of the use case, from the states of the arguments' types. It requires what `Crate` requires and writes what it writes; the values the model leaves open are the inputs.
 func Crate(match MatchSuper) CrateResult {
+	if !match.valid_ {
+		panic("rdra-ish: MatchSuper not made by this package (the zero value)")
+	}
 	return CrateResult{
 		Match: MatchCrate{
-			Id: match.Id,
-			Type: match.Type,
-			Default: int64(2),
-			New: match.New,
-			Func: match.Func,
-			Self: match.Self,
-			Crate: match.Crate,
-			Super: match.Super,
-			Kind: match.Kind,
-			FunctionId: match.FunctionId,
-			FuncId: match.FuncId,
-			ModId: match.ModId,
+			id: match.id,
+			type_: match.type_,
+			default_: int64(2),
+			new: match.new,
+			func_: match.func_,
+			self: match.self,
+			crate: match.crate,
+			super: match.super,
+			kind: match.kind,
+			functionId: match.functionId,
+			funcId: match.funcId,
+			modId: match.modId,
+			valid_: true,
 		},
 	}
 }
@@ -471,20 +765,24 @@ type DefaultResult struct {
 
 // Default runs Default (Default). One run of the use case, from the states of the arguments' types. It requires what `Default` requires and writes what it writes; the values the model leaves open are the inputs.
 func Default(match MatchCrate) DefaultResult {
+	if !match.valid_ {
+		panic("rdra-ish: MatchCrate not made by this package (the zero value)")
+	}
 	return DefaultResult{
 		Match: MatchDefault{
-			Id: match.Id,
-			Type: match.Type,
-			Default: match.Default,
-			New: match.New,
-			Func: match.Func,
-			Self: match.Self,
-			Crate: match.Crate,
-			Super: match.Super,
-			Kind: match.Kind,
-			FunctionId: match.FunctionId,
-			FuncId: match.FuncId,
-			ModId: match.ModId,
+			id: match.id,
+			type_: match.type_,
+			default_: match.default_,
+			new: match.new,
+			func_: match.func_,
+			self: match.self,
+			crate: match.crate,
+			super: match.super,
+			kind: match.kind,
+			functionId: match.functionId,
+			funcId: match.funcId,
+			modId: match.modId,
+			valid_: true,
 		},
 	}
 }
@@ -496,9 +794,13 @@ type TypeResult struct {
 
 // Type runs Type (Type). One run of the use case, from the states of the arguments' types. It requires what `Type` requires and writes what it writes; the values the model leaves open are the inputs.
 func Type(func_ FuncNew) TypeResult {
+	if !func_.valid_ {
+		panic("rdra-ish: FuncNew not made by this package (the zero value)")
+	}
 	return TypeResult{
 		Func: FuncReturn{
-			Id: func_.Id,
+			id: func_.id,
+			valid_: true,
 		},
 	}
 }
@@ -510,9 +812,13 @@ type ClassResult struct {
 
 // Class runs Class (Class). One run of the use case, from the states of the arguments' types. It requires what `Class` requires and writes what it writes; the values the model leaves open are the inputs.
 func Class(func_ FuncReturn) ClassResult {
+	if !func_.valid_ {
+		panic("rdra-ish: FuncReturn not made by this package (the zero value)")
+	}
 	return ClassResult{
 		Func: FuncFunc{
-			Id: func_.Id,
+			id: func_.id,
+			valid_: true,
 		},
 	}
 }
@@ -524,20 +830,27 @@ type NewFromNewResult struct {
 
 // NewFromNew runs New (New). One run of the use case, from the states of the arguments' types. It requires what `New` requires and writes what it writes; the values the model leaves open are the inputs.
 func NewFromNew(parentFunction Function, parentFunc FuncNew, parentMod Mod, matchId MatchId, matchType string, matchNew string, matchFunc string, matchSelf string, matchCrate string, matchSuper string, matchKind Kind) NewFromNewResult {
+	if !parentFunc.valid_ {
+		panic("rdra-ish: FuncNew not made by this package (the zero value)")
+	}
+	if !matchKind.Valid() {
+		panic("rdra-ish: match_kind is not a value of Kind")
+	}
 	return NewFromNewResult{
 		Match: MatchNew{
-			Id: matchId,
-			Type: matchType,
-			Default: int64(0),
-			New: matchNew,
-			Func: matchFunc,
-			Self: matchSelf,
-			Crate: matchCrate,
-			Super: matchSuper,
-			Kind: matchKind,
-			FunctionId: parentFunction.Id,
-			FuncId: parentFunc.Id,
-			ModId: parentMod.Id,
+			id: matchId,
+			type_: matchType,
+			default_: int64(0),
+			new: matchNew,
+			func_: matchFunc,
+			self: matchSelf,
+			crate: matchCrate,
+			super: matchSuper,
+			kind: matchKind,
+			functionId: parentFunction.Id,
+			funcId: parentFunc.id,
+			modId: parentMod.Id,
+			valid_: true,
 		},
 	}
 }
@@ -549,20 +862,27 @@ type NewFromReturnResult struct {
 
 // NewFromReturn runs New (New). One run of the use case, from the states of the arguments' types. It requires what `New` requires and writes what it writes; the values the model leaves open are the inputs.
 func NewFromReturn(parentFunction Function, parentFunc FuncReturn, parentMod Mod, matchId MatchId, matchType string, matchNew string, matchFunc string, matchSelf string, matchCrate string, matchSuper string, matchKind Kind) NewFromReturnResult {
+	if !parentFunc.valid_ {
+		panic("rdra-ish: FuncReturn not made by this package (the zero value)")
+	}
+	if !matchKind.Valid() {
+		panic("rdra-ish: match_kind is not a value of Kind")
+	}
 	return NewFromReturnResult{
 		Match: MatchNew{
-			Id: matchId,
-			Type: matchType,
-			Default: int64(0),
-			New: matchNew,
-			Func: matchFunc,
-			Self: matchSelf,
-			Crate: matchCrate,
-			Super: matchSuper,
-			Kind: matchKind,
-			FunctionId: parentFunction.Id,
-			FuncId: parentFunc.Id,
-			ModId: parentMod.Id,
+			id: matchId,
+			type_: matchType,
+			default_: int64(0),
+			new: matchNew,
+			func_: matchFunc,
+			self: matchSelf,
+			crate: matchCrate,
+			super: matchSuper,
+			kind: matchKind,
+			functionId: parentFunction.Id,
+			funcId: parentFunc.id,
+			modId: parentMod.Id,
+			valid_: true,
 		},
 	}
 }
@@ -574,20 +894,27 @@ type NewFromFuncResult struct {
 
 // NewFromFunc runs New (New). One run of the use case, from the states of the arguments' types. It requires what `New` requires and writes what it writes; the values the model leaves open are the inputs.
 func NewFromFunc(parentFunction Function, parentFunc FuncFunc, parentMod Mod, matchId MatchId, matchType string, matchNew string, matchFunc string, matchSelf string, matchCrate string, matchSuper string, matchKind Kind) NewFromFuncResult {
+	if !parentFunc.valid_ {
+		panic("rdra-ish: FuncFunc not made by this package (the zero value)")
+	}
+	if !matchKind.Valid() {
+		panic("rdra-ish: match_kind is not a value of Kind")
+	}
 	return NewFromFuncResult{
 		Match: MatchNew{
-			Id: matchId,
-			Type: matchType,
-			Default: int64(0),
-			New: matchNew,
-			Func: matchFunc,
-			Self: matchSelf,
-			Crate: matchCrate,
-			Super: matchSuper,
-			Kind: matchKind,
-			FunctionId: parentFunction.Id,
-			FuncId: parentFunc.Id,
-			ModId: parentMod.Id,
+			id: matchId,
+			type_: matchType,
+			default_: int64(0),
+			new: matchNew,
+			func_: matchFunc,
+			self: matchSelf,
+			crate: matchCrate,
+			super: matchSuper,
+			kind: matchKind,
+			functionId: parentFunction.Id,
+			funcId: parentFunc.id,
+			modId: parentMod.Id,
+			valid_: true,
 		},
 	}
 }
@@ -643,7 +970,7 @@ func (row FuncFunc) RuleViolations() []string {
 func (row MatchNew) RuleViolations() []string {
 	var out []string
 	// default > 4
-	if row.Default > 4 {
+	if row.default_ > 4 {
 		out = append(out, "Forbidden_Match_0")
 	}
 	return out
@@ -653,7 +980,7 @@ func (row MatchNew) RuleViolations() []string {
 func (row MatchReturn) RuleViolations() []string {
 	var out []string
 	// default > 4
-	if row.Default > 4 {
+	if row.default_ > 4 {
 		out = append(out, "Forbidden_Match_0")
 	}
 	return out
@@ -663,11 +990,11 @@ func (row MatchReturn) RuleViolations() []string {
 func (row MatchSelf) RuleViolations() []string {
 	var out []string
 	// default > 4
-	if row.Default > 4 {
+	if row.default_ > 4 {
 		out = append(out, "Forbidden_Match_0")
 	}
 	// when status=self then default <= 4
-	if !(row.Default <= 4) {
+	if !(row.default_ <= 4) {
 		out = append(out, "Inv_Match_0")
 	}
 	return out
@@ -677,7 +1004,7 @@ func (row MatchSelf) RuleViolations() []string {
 func (row MatchSuper) RuleViolations() []string {
 	var out []string
 	// default > 4
-	if row.Default > 4 {
+	if row.default_ > 4 {
 		out = append(out, "Forbidden_Match_0")
 	}
 	return out
@@ -687,7 +1014,7 @@ func (row MatchSuper) RuleViolations() []string {
 func (row MatchCrate) RuleViolations() []string {
 	var out []string
 	// default > 4
-	if row.Default > 4 {
+	if row.default_ > 4 {
 		out = append(out, "Forbidden_Match_0")
 	}
 	return out
@@ -697,7 +1024,7 @@ func (row MatchCrate) RuleViolations() []string {
 func (row MatchDefault) RuleViolations() []string {
 	var out []string
 	// default > 4
-	if row.Default > 4 {
+	if row.default_ > 4 {
 		out = append(out, "Forbidden_Match_0")
 	}
 	return out
@@ -727,11 +1054,11 @@ type FuncRow struct {
 func FuncFromRow(row FuncRow) (Func, error) {
 	switch row.Type {
 	case FuncTypeNew:
-		return FuncNew{Id: row.Id}, nil
+		return FuncNew{id: row.Id, valid_: true}, nil
 	case FuncTypeReturn:
-		return FuncReturn{Id: row.Id}, nil
+		return FuncReturn{id: row.Id, valid_: true}, nil
 	case FuncTypeFunc:
-		return FuncFunc{Id: row.Id}, nil
+		return FuncFunc{id: row.Id, valid_: true}, nil
 	}
 	return nil, &InvalidRow{Entity: "Func", Column: "type", Reason: "not a value of FuncType"}
 }
@@ -740,11 +1067,20 @@ func FuncFromRow(row FuncRow) (Func, error) {
 func FuncToRow(state Func) FuncRow {
 	switch v := state.(type) {
 	case FuncNew:
-		return FuncRow{Id: v.Id, Type: FuncTypeNew}
+		if !v.valid_ {
+			panic("rdra-ish: FuncNew not made by this package (the zero value)")
+		}
+		return FuncRow{Id: v.id, Type: FuncTypeNew}
 	case FuncReturn:
-		return FuncRow{Id: v.Id, Type: FuncTypeReturn}
+		if !v.valid_ {
+			panic("rdra-ish: FuncReturn not made by this package (the zero value)")
+		}
+		return FuncRow{Id: v.id, Type: FuncTypeReturn}
 	case FuncFunc:
-		return FuncRow{Id: v.Id, Type: FuncTypeFunc}
+		if !v.valid_ {
+			panic("rdra-ish: FuncFunc not made by this package (the zero value)")
+		}
+		return FuncRow{Id: v.id, Type: FuncTypeFunc}
 	}
 	panic("rdra-ish: a state of Func this package does not declare")
 }
@@ -770,17 +1106,35 @@ type MatchRow struct {
 func MatchFromRow(row MatchRow) (Match, error) {
 	switch row.Status {
 	case MatchStatusNew:
-		return MatchNew{Id: row.Id, Type: row.Type, Default: row.Default, New: row.New, Func: row.Func, Self: row.Self, Crate: row.Crate, Super: row.Super, Kind: row.Kind, FunctionId: row.FunctionId, FuncId: row.FuncId, ModId: row.ModId}, nil
+		if !row.Kind.Valid() {
+			return nil, &InvalidRow{Entity: "Match", Column: "kind", Reason: "not a value of Kind"}
+		}
+		return MatchNew{id: row.Id, type_: row.Type, default_: row.Default, new: row.New, func_: row.Func, self: row.Self, crate: row.Crate, super: row.Super, kind: row.Kind, functionId: row.FunctionId, funcId: row.FuncId, modId: row.ModId, valid_: true}, nil
 	case MatchStatusReturn:
-		return MatchReturn{Id: row.Id, Type: row.Type, Default: row.Default, New: row.New, Func: row.Func, Self: row.Self, Crate: row.Crate, Super: row.Super, Kind: row.Kind, FunctionId: row.FunctionId, FuncId: row.FuncId, ModId: row.ModId}, nil
+		if !row.Kind.Valid() {
+			return nil, &InvalidRow{Entity: "Match", Column: "kind", Reason: "not a value of Kind"}
+		}
+		return MatchReturn{id: row.Id, type_: row.Type, default_: row.Default, new: row.New, func_: row.Func, self: row.Self, crate: row.Crate, super: row.Super, kind: row.Kind, functionId: row.FunctionId, funcId: row.FuncId, modId: row.ModId, valid_: true}, nil
 	case MatchStatusSelf:
-		return MatchSelf{Id: row.Id, Type: row.Type, Default: row.Default, New: row.New, Func: row.Func, Self: row.Self, Crate: row.Crate, Super: row.Super, Kind: row.Kind, FunctionId: row.FunctionId, FuncId: row.FuncId, ModId: row.ModId}, nil
+		if !row.Kind.Valid() {
+			return nil, &InvalidRow{Entity: "Match", Column: "kind", Reason: "not a value of Kind"}
+		}
+		return MatchSelf{id: row.Id, type_: row.Type, default_: row.Default, new: row.New, func_: row.Func, self: row.Self, crate: row.Crate, super: row.Super, kind: row.Kind, functionId: row.FunctionId, funcId: row.FuncId, modId: row.ModId, valid_: true}, nil
 	case MatchStatusSuper:
-		return MatchSuper{Id: row.Id, Type: row.Type, Default: row.Default, New: row.New, Func: row.Func, Self: row.Self, Crate: row.Crate, Super: row.Super, Kind: row.Kind, FunctionId: row.FunctionId, FuncId: row.FuncId, ModId: row.ModId}, nil
+		if !row.Kind.Valid() {
+			return nil, &InvalidRow{Entity: "Match", Column: "kind", Reason: "not a value of Kind"}
+		}
+		return MatchSuper{id: row.Id, type_: row.Type, default_: row.Default, new: row.New, func_: row.Func, self: row.Self, crate: row.Crate, super: row.Super, kind: row.Kind, functionId: row.FunctionId, funcId: row.FuncId, modId: row.ModId, valid_: true}, nil
 	case MatchStatusCrate:
-		return MatchCrate{Id: row.Id, Type: row.Type, Default: row.Default, New: row.New, Func: row.Func, Self: row.Self, Crate: row.Crate, Super: row.Super, Kind: row.Kind, FunctionId: row.FunctionId, FuncId: row.FuncId, ModId: row.ModId}, nil
+		if !row.Kind.Valid() {
+			return nil, &InvalidRow{Entity: "Match", Column: "kind", Reason: "not a value of Kind"}
+		}
+		return MatchCrate{id: row.Id, type_: row.Type, default_: row.Default, new: row.New, func_: row.Func, self: row.Self, crate: row.Crate, super: row.Super, kind: row.Kind, functionId: row.FunctionId, funcId: row.FuncId, modId: row.ModId, valid_: true}, nil
 	case MatchStatusDefault:
-		return MatchDefault{Id: row.Id, Type: row.Type, Default: row.Default, New: row.New, Func: row.Func, Self: row.Self, Crate: row.Crate, Super: row.Super, Kind: row.Kind, FunctionId: row.FunctionId, FuncId: row.FuncId, ModId: row.ModId}, nil
+		if !row.Kind.Valid() {
+			return nil, &InvalidRow{Entity: "Match", Column: "kind", Reason: "not a value of Kind"}
+		}
+		return MatchDefault{id: row.Id, type_: row.Type, default_: row.Default, new: row.New, func_: row.Func, self: row.Self, crate: row.Crate, super: row.Super, kind: row.Kind, functionId: row.FunctionId, funcId: row.FuncId, modId: row.ModId, valid_: true}, nil
 	}
 	return nil, &InvalidRow{Entity: "Match", Column: "status", Reason: "not a value of MatchStatus"}
 }
@@ -789,17 +1143,35 @@ func MatchFromRow(row MatchRow) (Match, error) {
 func MatchToRow(state Match) MatchRow {
 	switch v := state.(type) {
 	case MatchNew:
-		return MatchRow{Id: v.Id, Status: MatchStatusNew, Type: v.Type, Default: v.Default, New: v.New, Func: v.Func, Self: v.Self, Crate: v.Crate, Super: v.Super, Kind: v.Kind, FunctionId: v.FunctionId, FuncId: v.FuncId, ModId: v.ModId}
+		if !v.valid_ {
+			panic("rdra-ish: MatchNew not made by this package (the zero value)")
+		}
+		return MatchRow{Id: v.id, Status: MatchStatusNew, Type: v.type_, Default: v.default_, New: v.new, Func: v.func_, Self: v.self, Crate: v.crate, Super: v.super, Kind: v.kind, FunctionId: v.functionId, FuncId: v.funcId, ModId: v.modId}
 	case MatchReturn:
-		return MatchRow{Id: v.Id, Status: MatchStatusReturn, Type: v.Type, Default: v.Default, New: v.New, Func: v.Func, Self: v.Self, Crate: v.Crate, Super: v.Super, Kind: v.Kind, FunctionId: v.FunctionId, FuncId: v.FuncId, ModId: v.ModId}
+		if !v.valid_ {
+			panic("rdra-ish: MatchReturn not made by this package (the zero value)")
+		}
+		return MatchRow{Id: v.id, Status: MatchStatusReturn, Type: v.type_, Default: v.default_, New: v.new, Func: v.func_, Self: v.self, Crate: v.crate, Super: v.super, Kind: v.kind, FunctionId: v.functionId, FuncId: v.funcId, ModId: v.modId}
 	case MatchSelf:
-		return MatchRow{Id: v.Id, Status: MatchStatusSelf, Type: v.Type, Default: v.Default, New: v.New, Func: v.Func, Self: v.Self, Crate: v.Crate, Super: v.Super, Kind: v.Kind, FunctionId: v.FunctionId, FuncId: v.FuncId, ModId: v.ModId}
+		if !v.valid_ {
+			panic("rdra-ish: MatchSelf not made by this package (the zero value)")
+		}
+		return MatchRow{Id: v.id, Status: MatchStatusSelf, Type: v.type_, Default: v.default_, New: v.new, Func: v.func_, Self: v.self, Crate: v.crate, Super: v.super, Kind: v.kind, FunctionId: v.functionId, FuncId: v.funcId, ModId: v.modId}
 	case MatchSuper:
-		return MatchRow{Id: v.Id, Status: MatchStatusSuper, Type: v.Type, Default: v.Default, New: v.New, Func: v.Func, Self: v.Self, Crate: v.Crate, Super: v.Super, Kind: v.Kind, FunctionId: v.FunctionId, FuncId: v.FuncId, ModId: v.ModId}
+		if !v.valid_ {
+			panic("rdra-ish: MatchSuper not made by this package (the zero value)")
+		}
+		return MatchRow{Id: v.id, Status: MatchStatusSuper, Type: v.type_, Default: v.default_, New: v.new, Func: v.func_, Self: v.self, Crate: v.crate, Super: v.super, Kind: v.kind, FunctionId: v.functionId, FuncId: v.funcId, ModId: v.modId}
 	case MatchCrate:
-		return MatchRow{Id: v.Id, Status: MatchStatusCrate, Type: v.Type, Default: v.Default, New: v.New, Func: v.Func, Self: v.Self, Crate: v.Crate, Super: v.Super, Kind: v.Kind, FunctionId: v.FunctionId, FuncId: v.FuncId, ModId: v.ModId}
+		if !v.valid_ {
+			panic("rdra-ish: MatchCrate not made by this package (the zero value)")
+		}
+		return MatchRow{Id: v.id, Status: MatchStatusCrate, Type: v.type_, Default: v.default_, New: v.new, Func: v.func_, Self: v.self, Crate: v.crate, Super: v.super, Kind: v.kind, FunctionId: v.functionId, FuncId: v.funcId, ModId: v.modId}
 	case MatchDefault:
-		return MatchRow{Id: v.Id, Status: MatchStatusDefault, Type: v.Type, Default: v.Default, New: v.New, Func: v.Func, Self: v.Self, Crate: v.Crate, Super: v.Super, Kind: v.Kind, FunctionId: v.FunctionId, FuncId: v.FuncId, ModId: v.ModId}
+		if !v.valid_ {
+			panic("rdra-ish: MatchDefault not made by this package (the zero value)")
+		}
+		return MatchRow{Id: v.id, Status: MatchStatusDefault, Type: v.type_, Default: v.default_, New: v.new, Func: v.func_, Self: v.self, Crate: v.crate, Super: v.super, Kind: v.kind, FunctionId: v.functionId, FuncId: v.funcId, ModId: v.modId}
 	}
 	panic("rdra-ish: a state of Match this package does not declare")
 }

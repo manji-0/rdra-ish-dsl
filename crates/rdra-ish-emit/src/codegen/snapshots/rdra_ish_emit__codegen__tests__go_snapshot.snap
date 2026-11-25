@@ -82,6 +82,14 @@ func (v PaymentMethod) Valid() bool {
 	return false
 }
 
+// ParsePaymentMethod returns the value of PaymentMethod the model spells s, or an error when there is none.
+func ParsePaymentMethod(s string) (PaymentMethod, error) {
+	if v := PaymentMethod(s); v.Valid() {
+		return v, nil
+	}
+	return "", &InvalidValue{Type: "PaymentMethod", Value: s}
+}
+
 // OrderStatus is The values of Order.status.
 // Call Valid on a value read from outside: only the OrderStatus* constants are values.
 type OrderStatus string
@@ -105,6 +113,25 @@ func (v OrderStatus) Valid() bool {
 		}
 	}
 	return false
+}
+
+// ParseOrderStatus returns the value of OrderStatus the model spells s, or an error when there is none.
+func ParseOrderStatus(s string) (OrderStatus, error) {
+	if v := OrderStatus(s); v.Valid() {
+		return v, nil
+	}
+	return "", &InvalidValue{Type: "OrderStatus", Value: s}
+}
+
+// InvalidValue reports text that is no value of a value set.
+type InvalidValue struct {
+	Type  string
+	Value string
+}
+
+// Error names the value set and the text.
+func (e *InvalidValue) Error() string {
+	return "not a value of " + e.Type + ": " + e.Value
 }
 
 // ── Entities ──
@@ -146,15 +173,47 @@ type Order interface {
 
 // OrderPending is Order in the state `pending` of status.
 // paid_at: Null in this state by a rule.
+// Only this package makes one, in a transition function or OrderFromRow: its fields are unexported, and read by the methods of the same name. A function given the zero value panics.
 type OrderPending struct {
 	// Primary key.
-	Id OrderId `json:"id"`
-	Total Money `json:"total"`
-	Method PaymentMethod `json:"method"`
-	DeliveredAt *DateTime `json:"delivered_at"`
-	Type *string `json:"type"`
-	CustomerId CustomerId `json:"customer_id"`
+	id OrderId
+	total Money
+	method PaymentMethod
+	deliveredAt *DateTime
+	type_ *string
+	customerId CustomerId
+	valid_ bool
 }
+
+// Id returns id.
+func (s OrderPending) Id() OrderId { return s.id }
+
+// Total returns total.
+func (s OrderPending) Total() Money { return s.total }
+
+// Method returns method.
+func (s OrderPending) Method() PaymentMethod { return s.method }
+
+// DeliveredAt returns delivered_at, nil when it is null: a copy, so the state does not change.
+func (s OrderPending) DeliveredAt() *DateTime {
+	if s.deliveredAt == nil {
+		return nil
+	}
+	v := *s.deliveredAt
+	return &v
+}
+
+// Type returns type, nil when it is null: a copy, so the state does not change.
+func (s OrderPending) Type() *string {
+	if s.type_ == nil {
+		return nil
+	}
+	v := *s.type_
+	return &v
+}
+
+// CustomerId returns customer_id.
+func (s OrderPending) CustomerId() CustomerId { return s.customerId }
 
 func (OrderPending) isOrder() {}
 
@@ -162,17 +221,52 @@ func (OrderPending) isOrder() {}
 func (OrderPending) Status() OrderStatus { return OrderStatusPending }
 
 // OrderPaid is Order in the state `paid` of status.
+// Only this package makes one, in a transition function or OrderFromRow: its fields are unexported, and read by the methods of the same name. A function given the zero value panics.
 type OrderPaid struct {
 	// Primary key.
-	Id OrderId `json:"id"`
-	Total Money `json:"total"`
+	id OrderId
+	total Money
 	// Present in this state by a rule.
-	PaidAt DateTime `json:"paid_at"`
-	Method PaymentMethod `json:"method"`
-	DeliveredAt *DateTime `json:"delivered_at"`
-	Type *string `json:"type"`
-	CustomerId CustomerId `json:"customer_id"`
+	paidAt DateTime
+	method PaymentMethod
+	deliveredAt *DateTime
+	type_ *string
+	customerId CustomerId
+	valid_ bool
 }
+
+// Id returns id.
+func (s OrderPaid) Id() OrderId { return s.id }
+
+// Total returns total.
+func (s OrderPaid) Total() Money { return s.total }
+
+// PaidAt returns paid_at.
+func (s OrderPaid) PaidAt() DateTime { return s.paidAt }
+
+// Method returns method.
+func (s OrderPaid) Method() PaymentMethod { return s.method }
+
+// DeliveredAt returns delivered_at, nil when it is null: a copy, so the state does not change.
+func (s OrderPaid) DeliveredAt() *DateTime {
+	if s.deliveredAt == nil {
+		return nil
+	}
+	v := *s.deliveredAt
+	return &v
+}
+
+// Type returns type, nil when it is null: a copy, so the state does not change.
+func (s OrderPaid) Type() *string {
+	if s.type_ == nil {
+		return nil
+	}
+	v := *s.type_
+	return &v
+}
+
+// CustomerId returns customer_id.
+func (s OrderPaid) CustomerId() CustomerId { return s.customerId }
 
 func (OrderPaid) isOrder() {}
 
@@ -180,16 +274,57 @@ func (OrderPaid) isOrder() {}
 func (OrderPaid) Status() OrderStatus { return OrderStatusPaid }
 
 // OrderCancelled is Order in the state `cancelled` of status.
+// Only this package makes one, in a transition function or OrderFromRow: its fields are unexported, and read by the methods of the same name. A function given the zero value panics.
 type OrderCancelled struct {
 	// Primary key.
-	Id OrderId `json:"id"`
-	Total Money `json:"total"`
-	PaidAt *DateTime `json:"paid_at"`
-	Method PaymentMethod `json:"method"`
-	DeliveredAt *DateTime `json:"delivered_at"`
-	Type *string `json:"type"`
-	CustomerId CustomerId `json:"customer_id"`
+	id OrderId
+	total Money
+	paidAt *DateTime
+	method PaymentMethod
+	deliveredAt *DateTime
+	type_ *string
+	customerId CustomerId
+	valid_ bool
 }
+
+// Id returns id.
+func (s OrderCancelled) Id() OrderId { return s.id }
+
+// Total returns total.
+func (s OrderCancelled) Total() Money { return s.total }
+
+// PaidAt returns paid_at, nil when it is null: a copy, so the state does not change.
+func (s OrderCancelled) PaidAt() *DateTime {
+	if s.paidAt == nil {
+		return nil
+	}
+	v := *s.paidAt
+	return &v
+}
+
+// Method returns method.
+func (s OrderCancelled) Method() PaymentMethod { return s.method }
+
+// DeliveredAt returns delivered_at, nil when it is null: a copy, so the state does not change.
+func (s OrderCancelled) DeliveredAt() *DateTime {
+	if s.deliveredAt == nil {
+		return nil
+	}
+	v := *s.deliveredAt
+	return &v
+}
+
+// Type returns type, nil when it is null: a copy, so the state does not change.
+func (s OrderCancelled) Type() *string {
+	if s.type_ == nil {
+		return nil
+	}
+	v := *s.type_
+	return &v
+}
+
+// CustomerId returns customer_id.
+func (s OrderCancelled) CustomerId() CustomerId { return s.customerId }
 
 func (OrderCancelled) isOrder() {}
 
@@ -217,15 +352,19 @@ type PayResult struct {
 
 // Pay runs Pay (Pay). One run of the use case, from the states of the arguments' types. It requires what `Pay` requires and writes what it writes; the values the model leaves open are the inputs.
 func Pay(order OrderPending, orderPaidAt DateTime) PayResult {
+	if !order.valid_ {
+		panic("rdra-ish: OrderPending not made by this package (the zero value)")
+	}
 	return PayResult{
 		Order: OrderPaid{
-			Id: order.Id,
-			Total: order.Total,
-			PaidAt: orderPaidAt,
-			Method: order.Method,
-			DeliveredAt: order.DeliveredAt,
-			Type: order.Type,
-			CustomerId: order.CustomerId,
+			id: order.id,
+			total: order.total,
+			paidAt: orderPaidAt,
+			method: order.method,
+			deliveredAt: order.deliveredAt,
+			type_: order.type_,
+			customerId: order.customerId,
+			valid_: true,
 		},
 	}
 }
@@ -237,15 +376,19 @@ type CancelOrderResult struct {
 
 // CancelOrder runs Cancel (CancelOrder). One run of the use case, from the states of the arguments' types. It requires what `CancelOrder` requires and writes what it writes; the values the model leaves open are the inputs.
 func CancelOrder(order OrderPending) CancelOrderResult {
+	if !order.valid_ {
+		panic("rdra-ish: OrderPending not made by this package (the zero value)")
+	}
 	return CancelOrderResult{
 		Order: OrderCancelled{
-			Id: order.Id,
-			Total: order.Total,
-			PaidAt: nil,
-			Method: order.Method,
-			DeliveredAt: order.DeliveredAt,
-			Type: order.Type,
-			CustomerId: order.CustomerId,
+			id: order.id,
+			total: order.total,
+			paidAt: nil,
+			method: order.method,
+			deliveredAt: order.deliveredAt,
+			type_: order.type_,
+			customerId: order.customerId,
+			valid_: true,
 		},
 	}
 }
@@ -257,14 +400,18 @@ type PlaceResult struct {
 
 // Place runs Place (Place). One run of the use case, from the states of the arguments' types. It requires what `Place` requires and writes what it writes; the values the model leaves open are the inputs.
 func Place(parentCustomer Customer, orderId OrderId, orderMethod PaymentMethod) PlaceResult {
+	if !orderMethod.Valid() {
+		panic("rdra-ish: order_method is not a value of PaymentMethod")
+	}
 	return PlaceResult{
 		Order: OrderPending{
-			Id: orderId,
-			Total: 0,
-			Method: orderMethod,
-			DeliveredAt: nil,
-			Type: nil,
-			CustomerId: parentCustomer.Id,
+			id: orderId,
+			total: 0,
+			method: orderMethod,
+			deliveredAt: nil,
+			type_: nil,
+			customerId: parentCustomer.Id,
+			valid_: true,
 		},
 	}
 }
@@ -334,14 +481,23 @@ func OrderFromRow(row OrderRow) (Order, error) {
 		if row.PaidAt != nil {
 			return nil, &InvalidRow{Entity: "Order", Column: "paid_at", Reason: "null in the state pending"}
 		}
-		return OrderPending{Id: row.Id, Total: row.Total, Method: row.Method, DeliveredAt: row.DeliveredAt, Type: row.Type, CustomerId: row.CustomerId}, nil
+		if !row.Method.Valid() {
+			return nil, &InvalidRow{Entity: "Order", Column: "method", Reason: "not a value of PaymentMethod"}
+		}
+		return OrderPending{id: row.Id, total: row.Total, method: row.Method, deliveredAt: row.DeliveredAt, type_: row.Type, customerId: row.CustomerId, valid_: true}, nil
 	case OrderStatusPaid:
 		if row.PaidAt == nil {
 			return nil, &InvalidRow{Entity: "Order", Column: "paid_at", Reason: "present in the state paid"}
 		}
-		return OrderPaid{Id: row.Id, Total: row.Total, PaidAt: *row.PaidAt, Method: row.Method, DeliveredAt: row.DeliveredAt, Type: row.Type, CustomerId: row.CustomerId}, nil
+		if !row.Method.Valid() {
+			return nil, &InvalidRow{Entity: "Order", Column: "method", Reason: "not a value of PaymentMethod"}
+		}
+		return OrderPaid{id: row.Id, total: row.Total, paidAt: *row.PaidAt, method: row.Method, deliveredAt: row.DeliveredAt, type_: row.Type, customerId: row.CustomerId, valid_: true}, nil
 	case OrderStatusCancelled:
-		return OrderCancelled{Id: row.Id, Total: row.Total, PaidAt: row.PaidAt, Method: row.Method, DeliveredAt: row.DeliveredAt, Type: row.Type, CustomerId: row.CustomerId}, nil
+		if !row.Method.Valid() {
+			return nil, &InvalidRow{Entity: "Order", Column: "method", Reason: "not a value of PaymentMethod"}
+		}
+		return OrderCancelled{id: row.Id, total: row.Total, paidAt: row.PaidAt, method: row.Method, deliveredAt: row.DeliveredAt, type_: row.Type, customerId: row.CustomerId, valid_: true}, nil
 	}
 	return nil, &InvalidRow{Entity: "Order", Column: "status", Reason: "not a value of OrderStatus"}
 }
@@ -350,11 +506,20 @@ func OrderFromRow(row OrderRow) (Order, error) {
 func OrderToRow(state Order) OrderRow {
 	switch v := state.(type) {
 	case OrderPending:
-		return OrderRow{Id: v.Id, Total: v.Total, Status: OrderStatusPending, PaidAt: nil, Method: v.Method, DeliveredAt: v.DeliveredAt, Type: v.Type, CustomerId: v.CustomerId}
+		if !v.valid_ {
+			panic("rdra-ish: OrderPending not made by this package (the zero value)")
+		}
+		return OrderRow{Id: v.id, Total: v.total, Status: OrderStatusPending, PaidAt: nil, Method: v.method, DeliveredAt: v.deliveredAt, Type: v.type_, CustomerId: v.customerId}
 	case OrderPaid:
-		return OrderRow{Id: v.Id, Total: v.Total, Status: OrderStatusPaid, PaidAt: ptrTo(v.PaidAt), Method: v.Method, DeliveredAt: v.DeliveredAt, Type: v.Type, CustomerId: v.CustomerId}
+		if !v.valid_ {
+			panic("rdra-ish: OrderPaid not made by this package (the zero value)")
+		}
+		return OrderRow{Id: v.id, Total: v.total, Status: OrderStatusPaid, PaidAt: ptrTo(v.paidAt), Method: v.method, DeliveredAt: v.deliveredAt, Type: v.type_, CustomerId: v.customerId}
 	case OrderCancelled:
-		return OrderRow{Id: v.Id, Total: v.Total, Status: OrderStatusCancelled, PaidAt: v.PaidAt, Method: v.Method, DeliveredAt: v.DeliveredAt, Type: v.Type, CustomerId: v.CustomerId}
+		if !v.valid_ {
+			panic("rdra-ish: OrderCancelled not made by this package (the zero value)")
+		}
+		return OrderRow{Id: v.id, Total: v.total, Status: OrderStatusCancelled, PaidAt: v.paidAt, Method: v.method, DeliveredAt: v.deliveredAt, Type: v.type_, CustomerId: v.customerId}
 	}
 	panic("rdra-ish: a state of Order this package does not declare")
 }

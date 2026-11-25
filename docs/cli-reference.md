@@ -1942,7 +1942,7 @@ rdra-ish codegen <INPUTS...> --lang <LANG> [-o <FILE>] [--package <NAME>] [--all
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--lang` | `ts` \| `rust` \| `go` | — (required) | Language. `typescript` is an alias of `ts`. |
 | `-o`, `--out` | path | — (stdout) | Write to this file instead of stdout. |
-| `--package` | string | `domain` | The Go package name (`--lang go` only). |
+| `--package` | string | `domain` | The Go package name (`--lang go` only). Put the file in a directory of its own, as this package, and write the code that finishes it in another package: the fields of a state type are unexported, so only code outside the package is kept from building a state. |
 | `--allow-failing` | flag | off | Generate even when `check` reports errors. The state types then narrow no column, and each error is listed as an obligation the model does not meet. |
 | `--conformance` | path | — (no harness) | `--lang rust` and `go` only, on a model `check` passes: also print the conformance port and harness, and write to this file the traces the harness drives a finished service along. |
 | `--conformance-states` | integer | `65536` | The states the BFS behind the traces explores at most. |
@@ -1966,7 +1966,16 @@ present in `v`, `forbidden(E, status == v, x == present)` makes it null there, a
 `required(E, x == present)` makes it present in every state. A rule with another atom or a
 `.when(Cond)` narrows nothing. A null column is `null` in TypeScript and left out of the
 Rust and Go structs, with a doc line naming the rule. The Rust and Go variants hold no tag
-field: the variant is the tag, and writing it to a row is the code's job. An entity whose
+field: the variant is the tag, and writing it to a row is the code's job. A variant's fields are
+private in Rust and unexported in Go, and methods of the same name read them (`paid_at()`,
+`PaidAt()`). Only a transition function and `from_row` (`<Entity>FromRow` in Go) make a
+state, from the rows and the inputs the model leaves open, so code outside the generated
+module or package can neither build a state by hand nor change a field a transition keeps.
+In Go, a transition function or `<Entity>ToRow` given the zero value of a state (`OrderPaid{}`)
+panics, `<Entity>FromRow` refuses a value outside a value set, a function refuses such a
+value as an input, and every value set has `Parse<Enum>(s)`, which returns an
+`InvalidValue` error for text that is no value. Records and `<Entity>Row` row types keep
+public fields. An entity whose
 `Enum` only `sets` writes, with no `transitions` (ec-site's `Payment`), is a plain record.
 
 Each use case of one transaction gets **transition functions**, read from the transition

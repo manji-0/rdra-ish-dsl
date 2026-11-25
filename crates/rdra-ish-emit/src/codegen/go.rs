@@ -97,6 +97,15 @@ pub(super) fn print(
             "// Valid reports whether v is one of the values of {0}.\nfunc (v {0}) Valid() bool {{\n\tfor _, x := range {0}Values {{\n\t\tif v == x {{\n\t\t\treturn true\n\t\t}}\n\t}}\n\treturn false\n}}\n\n",
             decl.name
         ));
+        out.push_str(&format!(
+            "// Parse{0} returns the value of {0} the model spells s, or an error when there is none.\nfunc Parse{0}(s string) ({0}, error) {{\n\tif v := {0}(s); v.Valid() {{\n\t\treturn v, nil\n\t}}\n\treturn \"\", &InvalidValue{{Type: {1}, Value: s}}\n}}\n\n",
+            decl.name,
+            string_literal(&decl.name)
+        ));
+    }
+    if !domain.enums.is_empty() {
+        out.push_str("// InvalidValue reports text that is no value of a value set.\ntype InvalidValue struct {\n\tType  string\n\tValue string\n}\n\n");
+        out.push_str("// Error names the value set and the text.\nfunc (e *InvalidValue) Error() string {\n\treturn \"not a value of \" + e.Type + \": \" + e.Value\n}\n\n");
     }
 
     for kind in [RecordKind::Entity, RecordKind::Dto] {
@@ -169,6 +178,10 @@ pub(super) fn print(
                     field.doc.last().cloned().unwrap_or_default()
                 ));
             }
+            lines.push(format!(
+                "Only this package makes one, in a transition function or {}FromRow: its fields are unexported, and read by the methods of the same name. A function given the zero value panics.",
+                sum.name
+            ));
             out.push_str(&doc(&variant.name, &lines, ""));
             out.push_str(&format!("type {} struct {{\n", variant.name));
             for field in &variant.fields {
@@ -177,13 +190,24 @@ pub(super) fn print(
                 }
                 let ty = field_type(&field.ty);
                 let ty = if field.nullable { format!("*{ty}") } else { ty };
-                out.push_str(&format!(
-                    "\t{} {ty} `json:{}`\n",
-                    field.pascal,
-                    string_literal(&field.wire)
-                ));
+                out.push_str(&format!("\t{} {ty}\n", local(&field.wire)));
             }
-            out.push_str("}\n\n");
+            out.push_str("\tvalid_ bool\n}\n\n");
+            for field in &variant.fields {
+                let ty = field_type(&field.ty);
+                let name = local(&field.wire);
+                if field.nullable {
+                    out.push_str(&format!(
+                        "// {0} returns {1}, nil when it is null: a copy, so the state does not change.\nfunc (s {2}) {0}() *{ty} {{\n\tif s.{3} == nil {{\n\t\treturn nil\n\t}}\n\tv := *s.{3}\n\treturn &v\n}}\n\n",
+                        field.pascal, field.wire, variant.name, name
+                    ));
+                } else {
+                    out.push_str(&format!(
+                        "// {0} returns {1}.\nfunc (s {2}) {0}() {ty} {{ return s.{3} }}\n\n",
+                        field.pascal, field.wire, variant.name, name
+                    ));
+                }
+            }
             out.push_str(&format!("func ({}) {marker}() {{}}\n\n", variant.name));
             out.push_str(&format!(
                 "// {method} returns {tag_enum}{value}.\nfunc ({name}) {method}() {tag_enum} {{ return {tag_enum}{value} }}\n\n",
@@ -373,6 +397,9 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
         }
         out.push_str(&doc(&f.name, &lines, ""));
         let row = |r: usize| local(&f.row(r).name);
+        let acc = |r: usize, field: &super::ir::Field| {
+            format!("{}.{}", row(r), member(domain, &f.row(r).ty, field))
+        };
         let input = |i: usize| local(&f.inputs[i].name);
         let mut params: Vec<String> = f
             .rows
@@ -400,6 +427,28 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             f.name,
             params.join(", ")
         ));
+        for r in &f.rows {
+            if is_variant(domain, &r.ty) {
+                out.push_str(&format!(
+                    "\tif !{}.valid_ {{\n\t\tpanic({})\n\t}}\n",
+                    local(&r.name),
+                    zero_value(&r.ty)
+                ));
+            }
+        }
+        for i in &f.inputs {
+            if let FieldType::Enum(e) = &i.ty {
+                let check = if i.nullable {
+                    format!("{0} != nil && !{0}.Valid()", local(&i.name))
+                } else {
+                    format!("!{}.Valid()", local(&i.name))
+                };
+                out.push_str(&format!(
+                    "\tif {check} {{\n\t\tpanic({})\n\t}}\n",
+                    string_literal(&format!("rdra-ish: {} is not a value of {e}", i.name))
+                ));
+            }
+        }
         for check in &f.checks {
             match check {
                 ArgCheck::Link {
@@ -409,10 +458,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                     parent_field,
                     message,
                 } => {
-                    let (c, p) = (
-                        format!("{}.{}", row(*child), child_field.pascal),
-                        format!("{}.{}", row(*parent), parent_field.pascal),
-                    );
+                    let (c, p) = (acc(*child, child_field), acc(*parent, parent_field));
                     let differs = if child_field.nullable {
                         format!("{c} == nil || *{c} != {p}")
                     } else {
@@ -434,9 +480,8 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                         .as_ref()
                         .expect("an event row check has an event");
                     out.push_str(&format!(
-                        "\tif {}.{} != {}.{} {{\n\t\tpanic({})\n\t}}\n",
-                        row(*r),
-                        field.pascal,
+                        "\tif {} != {}.{} {{\n\t\tpanic({})\n\t}}\n",
+                        acc(*r, field),
                         local(&ev.name),
                         super::type_ident(event_field),
                         string_literal(message)
@@ -448,9 +493,8 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                     message,
                 } => {
                     out.push_str(&format!(
-                        "\tif {}.{} != nil {{\n\t\tpanic({})\n\t}}\n",
-                        row(*r),
-                        field.pascal,
+                        "\tif {} != nil {{\n\t\tpanic({})\n\t}}\n",
+                        acc(*r, field),
                         string_literal(message)
                     ));
                 }
@@ -459,7 +503,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
         for c in &f.conditions {
             out.push_str(&format!(
                 "\tif !({}) {{\n\t\treturn {}{{}}, &Rejected{{Condition: {}, Label: {}, Site: {}}}\n\t}}\n",
-                expr(&c.expr, &row, &input),
+                expr(&c.expr, &row, &acc, &input),
                 f.result,
                 string_literal(&c.id),
                 string_literal(&c.label),
@@ -479,7 +523,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                                 field,
                                 adapt,
                             } => {
-                                let read = format!("{}.{}", row(*r), field.pascal);
+                                let read = acc(*r, field);
                                 match adapt {
                                     Adapt::Same => read,
                                     Adapt::Wrap => format!("ptrTo({read})"),
@@ -495,7 +539,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                                 row: r,
                                 field,
                                 wrap: w,
-                            } => wrap(format!("{}.{}", row(*r), field.pascal), *w),
+                            } => wrap(acc(*r, field), *w),
                             Assigned::MarkId { mark, wrap: w } => {
                                 wrap(format!("{}.Id", local(&f.marks_in[*mark].name)), *w)
                             }
@@ -506,9 +550,8 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                                 arms,
                             } => {
                                 let mut v = format!(
-                                    "func() {enum_ty} {{\n\t\t\t\tswitch {}.{} {{\n",
-                                    row(*r),
-                                    field.pascal
+                                    "func() {enum_ty} {{\n\t\t\t\tswitch {} {{\n",
+                                    acc(*r, field)
                                 );
                                 for (from, to) in arms {
                                     v.push_str(&format!(
@@ -540,7 +583,10 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                             ),
                             Assigned::Null => "nil".to_string(),
                         };
-                        body.push_str(&format!("\t\t\t{}: {v},\n", target.pascal));
+                        body.push_str(&format!("\t\t\t{}: {v},\n", member(domain, ty, target)));
+                    }
+                    if is_variant(domain, ty) {
+                        body.push_str("\t\t\tvalid_: true,\n");
                     }
                     body.push_str("\t\t},\n");
                 }
@@ -549,10 +595,9 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                     id: Some((_, field)),
                 } => {
                     body.push_str(&format!(
-                        "\t\t{}: {}.{},\n",
+                        "\t\t{}: {},\n",
                         super::type_ident(&o.name),
-                        row(*r),
-                        field.pascal
+                        acc(*r, field)
                     ));
                 }
                 OutKind::Deleted { id: None, .. } => {}
@@ -560,9 +605,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
         }
         for m in &f.marks_out {
             let id = match &m.source {
-                super::ir::MarkSource::Row { row: r, field } => {
-                    format!("{}.{}", row(*r), field.pascal)
-                }
+                super::ir::MarkSource::Row { row: r, field } => acc(*r, field),
                 super::ir::MarkSource::Input(i) => input(*i),
                 super::ir::MarkSource::Mark(k) => format!("{}.Id", local(&f.marks_in[*k].name)),
             };
@@ -576,9 +619,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             let mut parts = Vec::new();
             for (field, source) in &event.ids {
                 let id = match source {
-                    super::ir::MarkSource::Row { row: r, field } => {
-                        format!("{}.{}", row(*r), field.pascal)
-                    }
+                    super::ir::MarkSource::Row { row: r, field } => acc(*r, field),
                     super::ir::MarkSource::Input(i) => input(*i),
                     super::ir::MarkSource::Mark(k) => {
                         format!("{}.Id", local(&f.marks_in[*k].name))
@@ -615,46 +656,47 @@ fn lit_go(lit: &super::ir::Lit, ty: &FieldType) -> String {
 fn expr(
     e: &super::ir::Expr,
     row: &dyn Fn(usize) -> String,
+    acc: &dyn Fn(usize, &super::ir::Field) -> String,
     input: &dyn Fn(usize) -> String,
 ) -> String {
     use super::ir::Expr;
     match e {
         Expr::True => "true".to_string(),
         Expr::False => "false".to_string(),
-        Expr::Not(inner) => format!("!({})", expr(inner, row, input)),
+        Expr::Not(inner) => format!("!({})", expr(inner, row, acc, input)),
         Expr::And(items) if items.is_empty() => "true".to_string(),
         Expr::Or(items) if items.is_empty() => "false".to_string(),
         Expr::And(items) => items
             .iter()
-            .map(|i| format!("({})", expr(i, row, input)))
+            .map(|i| format!("({})", expr(i, row, acc, input)))
             .collect::<Vec<_>>()
             .join(" && "),
         Expr::Or(items) => items
             .iter()
-            .map(|i| format!("({})", expr(i, row, input)))
+            .map(|i| format!("({})", expr(i, row, acc, input)))
             .collect::<Vec<_>>()
             .join(" || "),
-        Expr::IsNull { row: r, field } => format!("{}.{} == nil", row(*r), field.pascal),
+        Expr::IsNull { row: r, field } => format!("{} == nil", acc(*r, field)),
         Expr::EnumEq {
             row: r,
             field,
             enum_ty,
             value,
         } => {
-            format!("{}.{} == {enum_ty}{}", row(*r), field.pascal, value.ident)
+            format!("{} == {enum_ty}{}", acc(*r, field), value.ident)
         }
         Expr::BoolEq {
             row: r,
             field,
             value,
-        } => format!("{}.{} == {value}", row(*r), field.pascal),
+        } => format!("{} == {value}", acc(*r, field)),
         Expr::IntCmp {
             row: r,
             field,
             op,
             value,
         } => {
-            format!("{}.{} {} {value}", row(*r), field.pascal, op.symbol())
+            format!("{} {} {value}", acc(*r, field), op.symbol())
         }
         Expr::KeyEq {
             child,
@@ -662,8 +704,8 @@ fn expr(
             parent,
             parent_field,
         } => {
-            let c = format!("{}.{}", row(*child), child_field.pascal);
-            let p = format!("{}.{}", row(*parent), parent_field.pascal);
+            let c = acc(*child, child_field);
+            let p = acc(*parent, parent_field);
             if child_field.nullable {
                 format!("({c} != nil && *{c} == {p})")
             } else {
@@ -674,13 +716,13 @@ fn expr(
             "func() bool {{ for _, {} := range {} {{ if {} {{ return true }} }}; return false }}()",
             row(*elem),
             input(*i),
-            expr(body, row, input)
+            expr(body, row, acc, input)
         ),
         Expr::Forall { input: i, elem, body } => format!(
             "func() bool {{ for _, {} := range {} {{ if !({}) {{ return false }} }}; return true }}()",
             row(*elem),
             input(*i),
-            expr(body, row, input)
+            expr(body, row, acc, input)
         ),
         Expr::Count {
             input: i,
@@ -692,7 +734,7 @@ fn expr(
             "func() bool {{ n := 0; for _, {} := range {} {{ if {} {{ n++ }} }}; return n {} {n} }}()",
             row(*elem),
             input(*i),
-            expr(body, row, input),
+            expr(body, row, acc, input),
             op.symbol()
         ),
     }
@@ -707,6 +749,8 @@ pub(super) fn print_validators(domain: &DomainModel, out: &mut String) {
     out.push_str("// ── Rule checks ──\n\n");
     let row = |_: usize| "row".to_string();
     for v in &domain.validators {
+        let acc =
+            |_: usize, field: &super::ir::Field| format!("row.{}", member(domain, &v.ty, field));
         out.push_str(
             "// RuleViolations returns the rules row breaks, by the names `check` reports: empty when it keeps them all.\n",
         );
@@ -718,7 +762,7 @@ pub(super) fn print_validators(domain: &DomainModel, out: &mut String) {
             out.push_str(&format!(
                 "\t// {}\n\tif {} {{\n\t\tout = append(out, {})\n\t}}\n",
                 one_line(&rule.text),
-                expr(&fails(&rule.expr), &row, &|_| String::new()),
+                expr(&fails(&rule.expr), &row, &acc, &|_| String::new()),
                 string_literal(&rule.name)
             ));
         }
@@ -806,11 +850,23 @@ pub(super) fn print_rows(domain: &DomainModel, out: &mut String) {
                         f.pascal,
                         invalid(&f.wire, format!("present in the state {}", v.value.wire))
                     ));
-                    inits.push(format!("{0}: *row.{0}", f.pascal));
+                    inits.push(format!("{}: *row.{}", local(&f.wire), f.pascal));
                 } else {
-                    inits.push(format!("{0}: row.{0}", f.pascal));
+                    inits.push(format!("{}: row.{}", local(&f.wire), f.pascal));
+                }
+                if let FieldType::Enum(e) = &f.ty {
+                    let check = if f.nullable {
+                        format!("row.{0} != nil && !row.{0}.Valid()", f.pascal)
+                    } else {
+                        format!("!row.{}.Valid()", f.pascal)
+                    };
+                    out.push_str(&format!(
+                        "\t\tif {check} {{\n\t\t\treturn nil, {}\n\t\t}}\n",
+                        invalid(&f.wire, format!("not a value of {e}"))
+                    ));
                 }
             }
+            inits.push("valid_: true".to_string());
             out.push_str(&format!(
                 "\t\treturn {}{{{}}}, nil\n",
                 v.name,
@@ -821,12 +877,9 @@ pub(super) fn print_rows(domain: &DomainModel, out: &mut String) {
             "\t}}\n\treturn nil, {}\n}}\n\n",
             invalid(&sum.tag.wire, format!("not a value of {tag_enum}"))
         ));
-        let uses_state = sum.variants.iter().any(|v| !v.fields.is_empty());
         out.push_str(&format!(
-            "// {0}ToRow returns the flat row of a state.\nfunc {0}ToRow(state {0}) {1} {{\n\tswitch {2}state.(type) {{\n",
-            sum.name,
-            sum.row,
-            if uses_state { "v := " } else { "" }
+            "// {0}ToRow returns the flat row of a state.\nfunc {0}ToRow(state {0}) {1} {{\n\tswitch v := state.(type) {{\n",
+            sum.name, sum.row
         ));
         for v in &sum.variants {
             let mut inits = Vec::new();
@@ -837,17 +890,18 @@ pub(super) fn print_rows(domain: &DomainModel, out: &mut String) {
                     inits.push(format!("{}: nil", f.pascal));
                 } else if let Some(vf) = v.fields.iter().find(|x| x.wire == f.wire) {
                     if f.nullable && !vf.nullable {
-                        inits.push(format!("{0}: ptrTo(v.{0})", f.pascal));
+                        inits.push(format!("{}: ptrTo(v.{})", f.pascal, local(&f.wire)));
                     } else {
-                        inits.push(format!("{0}: v.{0}", f.pascal));
+                        inits.push(format!("{}: v.{}", f.pascal, local(&f.wire)));
                     }
                 }
             }
             out.push_str(&format!(
-                "\tcase {}:\n\t\treturn {}{{{}}}\n",
+                "\tcase {0}:\n\t\tif !v.valid_ {{\n\t\t\tpanic({3})\n\t\t}}\n\t\treturn {1}{{{2}}}\n",
                 v.name,
                 sum.row,
-                inits.join(", ")
+                inits.join(", "),
+                zero_value(&v.name)
             ));
         }
         out.push_str(&format!(
@@ -951,4 +1005,29 @@ pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
             string_literal(&d.usecase)
         ));
     }
+}
+
+/// Whether `ty` is the type of a state, whose fields are unexported.
+fn is_variant(domain: &DomainModel, ty: &str) -> bool {
+    domain
+        .sums
+        .iter()
+        .any(|s| s.variants.iter().any(|v| v.name == ty))
+}
+
+/// The name of `field` in a struct of type `ty`: unexported in a state, so only this package
+/// makes one; exported in a record or a row.
+fn member(domain: &DomainModel, ty: &str, field: &super::ir::Field) -> String {
+    if is_variant(domain, ty) {
+        local(&field.wire)
+    } else {
+        field.pascal.clone()
+    }
+}
+
+/// The panic message of a state the package did not make.
+fn zero_value(ty: &str) -> String {
+    string_literal(&format!(
+        "rdra-ish: {ty} not made by this package (the zero value)"
+    ))
 }

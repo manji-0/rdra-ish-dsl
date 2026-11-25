@@ -331,6 +331,7 @@ pub fn build_with(
         "NotEnabled",
         "Refused",
         "InvalidRow",
+        "InvalidValue",
     ] {
         names.claim(reserved.to_string(), "a reserved word".to_string())?;
     }
@@ -461,6 +462,10 @@ pub fn build_with(
         names.claim(
             format!("{}Values", decl.name),
             format!("the values of {}", decl.name),
+        )?;
+        names.claim(
+            format!("Parse{}", decl.name),
+            format!("the parser of {}", decl.name),
         )?;
         for value in &decl.values {
             names.claim(

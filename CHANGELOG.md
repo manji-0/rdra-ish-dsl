@@ -132,6 +132,17 @@
 
 ### Added
 
+- `codegen --lang rust|go` makes a state only in the generated code (#331). A state type's
+  fields are private in Rust and unexported in Go, read by methods of the same name
+  (`paid_at()`, `PaidAt()`), so only a transition function and `from_row` /
+  `<Entity>FromRow` build one, and code outside the module or package can neither build
+  `OrderPaid { .. }` nor change a field. In Go, a function or `<Entity>ToRow` given the zero
+  value of a state panics, `<Entity>FromRow` refuses a value outside a value set in any
+  column, a function panics on one as an input, and each value set gets `Parse<Enum>`, which
+  returns an `InvalidValue` error. The Go file belongs in its own package (`--package`).
+  Code that read a state's fields reads the methods instead; records and `<Entity>Row` keep
+  public fields. See [Who makes a state](./docs/design/algebraic-codegen.md#who-makes-a-state).
+
 - `codegen --lang rust|go --conformance <FILE>` (experimental) prints a conformance port
   and harness after the core, and writes to `FILE` the traces the harness drives a finished
   service along (#330). The service implements `ConformancePort`: it seeds an empty store,
