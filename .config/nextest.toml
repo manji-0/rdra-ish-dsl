@@ -1,0 +1,15 @@
+# cargo-nextest settings for the workspace tests, which scripts/diff-test.sh runs.
+
+[profile.default]
+# A SLOW line in the log for each test past 10 s; none is stopped.
+slow-timeout = "10s"
+
+[profile.ci]
+# CI's check job on main (scheduled or by hand): every test diff-test.sh does not leave to the
+# release jobs. Every failure, not only the first, and the slow tests again at the end.
+fail-fast = false
+final-status-level = "slow"
+
+[profile.ci.junit]
+# target/nextest/ci/junit.xml, each test's time.
+path = "junit.xml"

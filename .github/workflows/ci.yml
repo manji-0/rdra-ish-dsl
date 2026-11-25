@@ -133,7 +133,14 @@ jobs:
         # run in release in engine-equivalence, and the domain-sample reduction in formal-verify.
         # RDRA_REQUIRE_CODEGEN_TOOLS: the devShell has tsc and go, so the codegen build tests
         # may not skip a language here; portability.yml runs without them and skips.
-        run: RDRA_REQUIRE_CODEGEN_TOOLS=1 scripts/diff-test.sh --all
+        run: RDRA_REQUIRE_CODEGEN_TOOLS=1 scripts/diff-test.sh --profile ci --all
+      - name: test times
+        if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: junit
+          path: target/nextest/*/junit.xml
+          if-no-files-found: ignore
       - name: The printed Rust and Go agree with BFS on the domain samples
         # The test step runs the small samples; scripts/diff-test.sh skips this test (about
         # 100 s in debug locally). It runs where a printer bug shows: a pull request that
