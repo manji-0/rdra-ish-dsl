@@ -71,7 +71,7 @@ Goals:
   explored for the use case: the source states and guards it requires, the effects it
   writes, the events it raises, and, for a use case split into transactions, the order and
   the boundaries of its steps ([Use cases split into transactions](#split)). What the
-  model verified but a type cannot enforce is printed as a numbered **obligation** that
+  model verified but a type cannot enforce is printed as a named **obligation** that
   names the `verify` invariant it protects ([The agent contract](#agent-contract)).
 - **The agent can finish it.** Values the model leaves abstract (`present`, a chosen
   variation value, a choice among arms) are the caller's input. Business computation,
@@ -86,7 +86,10 @@ Non-goals:
   only, so a handler can be typed by them.
 - Round trip. rdra-ish does not read code back. After generation the agent owns the code;
   it stays conformant through the agent contract and the generated conformance tests, not
-  through protected regions.
+  through protected regions. `check --code` ([code-check.md](./code-check.md)) keeps this:
+  rdra-ish parses none of the user's code. It reads only its own generated files, the
+  compiler's output, and the `rdra: obligation` marker lines of the obligation ledger
+  (decided 2026-11-25).
 - A file layout. rdra-ish does not decide where code goes in a project.
 
 This widens what rdra-ish produces from review and verification artifacts to code a
@@ -319,10 +322,15 @@ Since #331, Rust and Go make a state only in the generated code:
   rules. A test outside the module or package (`codegen_behaviour.rs`) shows that the
   compiler refuses a struct literal of a state and a write to its field.
 - Go cannot forbid the zero value of a struct, nor a conversion to a `string` type, from
-  another package. A state therefore carries an unexported mark that only the package sets:
-  a transition function or `<Entity>ToRow` given the zero value panics. `<Entity>FromRow`
-  refuses a value outside a value set in any column, a function panics on one as an input,
-  and each value set has `Parse<Enum>(s)`.
+  another package. Since #363 a Go state type (`OrderPaid`) is therefore an interface, whose
+  one implementation is an unexported struct (`orderPaidState`): code outside the package
+  cannot write a literal of it, so its zero value is `nil`, which is no state. A transition
+  function refuses `nil`, or a value of a type of its own that embeds the interface, with
+  `InvalidArgument`; `<Entity>ToRow(nil)` is the zero row. `<Entity>FromRow` refuses a value
+  outside a value set and a scalar outside its shape in any column, a function refuses one as
+  an input with `InvalidArgument`, and each value set and scalar has `Parse<Type>(s)`. Nothing
+  panics. (Until #363 a state carried an unexported mark, and a function given the zero value
+  panicked.)
 - Go keeps this only when the code that finishes the output is in another package, so the
   generated file goes in a directory of its own, named by `--package`.
 
@@ -332,6 +340,177 @@ the Rust encoding is still an enum of per-state structs whose transitions consum
 source.
 
 <a id="split"></a>
+## Generated code style
+
+<!-- constrained-by ./code-check.md#decisions -->
+
+The owner decided on 2026-11-25 (#363) that the generated code follows the Kamae principles:
+`kamae` for TypeScript, `kamae-rs` for Rust, and the same principles carried over to Go. The
+Rust, Go and TypeScript pull requests of #363 each bring their language to this section; until
+one lands, that language's output differs from it as [Status of each language](#status-of-each-language) says.
+
+### What every language shares
+
+- **No external library.** The output is self-contained: its own small `Result` type and
+  boundary parsers in TypeScript (no neverthrow, no zod), the standard library only in Rust (no
+  thiserror) and in Go. No `unsafe` in Rust.
+- **Domain shape and persistence shape are separate.** A state type is a sum of one type per
+  state, told apart by a discriminant called `kind`. The model's tag column (`status`, ...)
+  is not a field of the domain types: it lives only in the flat row type `<Entity>Row`, which
+  holds every column as the data layer declares it, public and with the column's value type.
+  `fromRow` / `from_row` / `<Entity>FromRow` maps a row to its state and fails with a typed
+  error naming the column whose value its state rules out; the other direction
+  (`toRow` / `into_row` / `<Entity>ToRow`) cannot fail. A record (an entity with no lifecycle
+  column) has no states and is its own row type.
+- **The `kind` discriminant** has one value per state, the state's tag value in PascalCase
+  (`Pending`, `Paid`). It is a type of its own, `<Entity>Kind`, not the tag column's value set,
+  so renaming a column or moving the tag does not change the domain type. In TypeScript it is
+  the `kind` property of each state type; in Rust the variant of the state enum, read by
+  `kind()`; in Go the `Kind()` method of the state interface. The IR names it
+  (`SumDecl.kind`): `<Entity>Kind`, or `<Entity>StateKind` when a column's value set or a
+  state already has that name.
+- **A column named `kind`** of a state type would clash with the discriminant, so in the
+  states' domain shape it takes the reserved-word escape, a trailing `_`: `kind_` (Rust field
+  and accessor `kind_()`, Go `Kind_()`, TypeScript `kind_`). `<Entity>Row` keeps the wire name
+  `kind`, and `fromRow` / `toRow` map between the two. A record (no states) keeps `kind`. The
+  IR holds both spellings: `Field.wire` is the row's, `Field.name` (and
+  `Field::domain_pascal()`) the domain's, so every printer spells it alike.
+- **Ids and scalars are opaque.** An id type and each prelude scalar (`Money`, `Decimal`,
+  `Date`, `DateTime`) wrap their representation privately and are made only through a parser
+  that checks it and fails with a typed error: Rust `TryFrom<repr>` and `FromStr`, TypeScript
+  `parse<Type>(value): Result<Type, InvalidValue>` with a branded type, Go `Parse<Type>(value)
+  (<Type>, error)`. A value set parses its wire spelling the same way. Money and Decimal hold
+  decimal text (`-?[0-9]+(\.[0-9]+)?`), Date `YYYY-MM-DD`, DateTime ISO 8601 with a time and an
+  offset or `Z`; the check is the shape, not the calendar.
+- **The row is a boundary too.** `fromRow` / `from_row` / `<Entity>FromRow` and
+  `parse<Entity>Row` check the shape of every Money, Decimal, Date and DateTime column with the
+  same parser `TryFrom` / `parse` / `Parse<Type>` use, and refuse a bad one with `InvalidRow`
+  naming the column. In Rust the row's fields already have those types, so the check happens
+  where the row is built (`Money::try_from`); in TypeScript and Go, whose rows hold the text,
+  in `fromRow`.
+- **Errors are values, typed per use case.** A transition function returns its result or a
+  `<UseCase>Error` (Rust enum, TypeScript union on `kind`, Go error type usable with
+  `errors.As`). Its cases are the ones the use case can fail with: `NotEnabled` (the rows are in
+  states it does not run from; only the dispatcher returns it), `Rejected` (a condition applied
+  to the use case does not hold), and `InvalidArgument` (the arguments break what the verified
+  model keeps: a child row that does not name the parent passed with it, a row that is not the
+  event's row, a column the target state keeps null that holds a value). No generated code
+  panics, throws, or calls `unwrap` / `expect` / `panic`: a failure the caller can cause is an
+  error value.
+- **Transitions are pure and consume their source.** A function takes the source states by
+  value and returns new values; it reads no clock and no store. The rows it writes come back in
+  its result with the source each must still have when the write commits
+  (`<row>_expected`).
+- **Every public item is documented**: what it holds, the invariants its type keeps, the
+  errors a function returns and why, and for a transition its source and target states.
+
+### Rust
+
+Following `kamae-rs`:
+
+- Ids: `pub struct OrderId(i64)` with a private field, `impl From<i64>` (every `i64` is an id,
+  so `TryFrom` comes with it) and `FromStr`, `get()` returning the representation, and
+  `Display`. Prelude scalars over a private `String` with `TryFrom<String>`, `FromStr`,
+  `as_str()` and `Display`; the shape checks are the module's own small functions.
+- Value sets: `pub enum PaymentMethod`, with `as_str()`, `ALL`, `FromStr<Err = InvalidValue>`
+  and `Display`.
+- State types: `pub enum Order { Pending(OrderPending), ... }`, each variant's struct sealed
+  (private fields, read by methods of the column's name; #331), `Order::kind() -> OrderKind`,
+  and no `status()`. `OrderRow` has public fields, the tag `status: OrderStatus` among them;
+  `impl TryFrom<OrderRow> for Order { type Error = InvalidRow; }` with `Order::from_row` as its
+  named form, and `impl From<Order> for OrderRow` with `Order::into_row`.
+- Transitions: `pub fn pay(order: OrderPending, order_paid_at: DateTime) -> Result<PayResult,
+  PayError>`, and the dispatcher `pub fn run_pay(order: Order, ...) -> Result<PayOutcome,
+  PayError>`. `pub enum PayError { NotEnabled(NotEnabled), Rejected(Rejected),
+  InvalidArgument(InvalidArgument) }` holds only the cases the use case has, and every error
+  type implements `std::error::Error` and `Display`.
+- Lints: no crate-level `allow` of clippy. The output passes `cargo clippy -D warnings` as a
+  library module; a lint that a shape needs (`too_many_arguments` on a function with many
+  inputs) is allowed on that item with the reason in a comment.
+
+### TypeScript
+
+Following `kamae`, in the coming major release (the TypeScript types are under
+[compatibility](../compatibility.md); the TypeScript pull request rewrites that contract and the
+CHANGELOG gives the migration):
+
+- `type` aliases, not interfaces, every property `readonly`; a state type is a union of
+  `Readonly<{ kind: "Pending"; ... }>` cases.
+- A companion object per type: `Order.fromRow(row): Result<Order, InvalidRow>`,
+  `Order.toRow(state): OrderRow`, `OrderId.parse(value): Result<OrderId, InvalidValue>`.
+- Branded ids and scalars (`string & { readonly __brand: "OrderId" }`), made only by `parse`.
+- Pure transitions whose parameter types narrow the source state, returning
+  `Result<PayResult, PayError>`; error unions discriminated by `kind`.
+- A self-contained `Result<T, E>` (`{ ok: true; value: T } | { ok: false; error: E }`),
+  `assertNever` for exhaustiveness, and no `as` except `as const` / `satisfies`.
+- `parse<Entity>Row(value: unknown): Result<<Entity>Row, InvalidRow>` at the boundary.
+- Function-property notation in contract types (`prepareShipOrder: (...) => ...`), so a narrower
+  parameter type does not pass. Brand sealing of state types stays opt-in (decision 9 of
+  [code-check.md](./code-check.md#decisions)).
+- Async contracts: each `prepare*` / `commit*` returns `Promise<Result<..>>`, since a
+  TypeScript service reads and writes its store asynchronously and a synchronous contract would
+  force it to block or to fake its store. The Rust and Go contracts are sync, as their stores'
+  clients are. The split into prepare and commit, the `Result`, and the error unions are the
+  same in all three; the TypeScript `conform` awaits each call.
+
+As built: a brand is made without a type assertion through a type predicate, the companion's
+`is: (value: unknown) => value is OrderId`, which `parse` calls. A value set's companion has
+`values` and `parse`. Every record and DTO gets `parse<Name>(value: unknown)` as well. The
+module's private helpers (`$int`, `$nullable`, the tag table `$orderTag`) start with `$`,
+which no model identifier can, and only the ones the module uses are printed. A parameter a
+function does not read is printed `_name`. The output builds under `tsc --strict` with
+`noUnusedLocals`, `noUnusedParameters`, `exactOptionalPropertyTypes`,
+`noUncheckedIndexedAccess` and `noPropertyAccessFromIndexSignature`, since the probe's
+`tsconfig.rdra.json` extends the project's own.
+
+### Go
+
+The same principles, with the standard library only:
+
+- Sum types as sealed interfaces: `type Order interface { Kind() OrderKind; isOrder(); row()
+  OrderRow }`, the unexported methods implemented only by the generated state structs, and the
+  visitor of P7 of [code-check.md](./code-check.md#phases) for exhaustiveness. Each state is
+  an interface too (`OrderPaid`: `Order`, its accessors, and `isOrderPaid()`), implemented by
+  one unexported struct ([Who makes a state](#who-makes-a-state)); a type switch on the state
+  interfaces tells them apart. The visitor is `OrderVisitor[R any]`, one method per state named
+  by its kind (`Paid(OrderPaid) R`), and `MatchOrder(state, v) (R, error)`; a state the model
+  gains is a method every implementation lacks, so the compiler names each place that matches
+  states (`codegen_behaviour.rs` checks it). `<Entity>Kind` is a `string` type with one constant per state
+  (`OrderKindPaid = "Paid"`).
+- Unexported fields read by accessors of the column's name (`PaidAt()`, `Kind_()` for a
+  column `kind`); a nullable column's accessor returns a copy. Ids and scalars are defined
+  types made by `Parse<Type>(...) (<Type>, error)`; a scalar's `Valid()` checks the same shape.
+  Records, rows, DTOs, events and marks keep exported fields.
+- `<Entity>FromRow(row) (<Entity>, error)` validates the row structs (`<Entity>Row`, exported
+  fields with `json` tags), which stay separate from the domain types; `<Entity>ToRow(state)`
+  cannot fail. A state shares no pointer with a row.
+- Typed errors usable with `errors.Is` / `errors.As`, and no `panic`. Every transition
+  function and dispatcher returns `(<Result>, error)`, the error a `*PayError{Kind, Err}`:
+  `Kind` is a `PayErrorKind` constant (`PayErrorNotEnabled`, `PayErrorRejected`,
+  `PayErrorInvalidArgument`, only the ones the use case has), and `Err` the case's detail
+  (`*NotEnabled`, `*Rejected`, `*InvalidArgument`), which `Unwrap` returns, so
+  `errors.As(err, &rejected)` reaches it and `errors.Is(err, ErrRejected)` matches it. Go adds
+  `InvalidArgument` where Rust's types already rule the argument out: a nil state, a value
+  outside a value set, a scalar outside its shape. `*InvalidRow` and `*InvalidValue` likewise.
+- Value semantics: a transition returns new values and changes none of its arguments.
+- A doc comment on every exported item; the file starts with `// Code generated ... DO NOT
+  EDIT.`, and is `gofmt` and `go vet` clean (`codegen_builds.rs` checks both on every sample).
+
+Not covered: personal data (`Sensitive<T>`, `secrecy`). The language has no annotation that
+marks a column as personal, so the generator cannot know which to wrap; tracked separately.
+
+### Status of each language
+
+- Rust: in these shapes since the Rust pull request of #363. `codegen_builds.rs` runs
+  `clippy-driver -D warnings -D missing_docs` on the output of every sample, so no lint is
+  allowed crate-wide; the few per-item allows name their reason (a function of more than seven
+  arguments, an accessor named after a column such as `new`, the model's spelling of a name).
+- TypeScript: in these shapes since the TypeScript pull request of #363. `codegen_builds.rs`
+  runs `tsc --strict` with the strictest optional flags on the output of every sample, and
+  checks the text for interfaces, type assertions and throws.
+- Go: in these shapes since the Go pull request of #363. `codegen_builds.rs` runs `go vet` and
+  `gofmt -l` on the output of every sample and checks that it calls no `panic`.
+
 ## Use cases split into transactions
 
 ### What verify assumed
@@ -478,8 +657,9 @@ agent can split it into files wherever the project wants:
 1. **Header.** The model path, the rdra-ish version, the bounds and the result of the
    `check` the generator ran, a note that `verify` checks at larger bounds, and a note
    that the output is not covered by compatibility.
-2. **Obligations.** A numbered list of what the verification assumed but the types cannot
-   enforce, each naming the invariant or rule it protects and the source site. For
+2. **Obligations.** A list of what the verification assumed but the types cannot
+   enforce, each under a stable name (the invariant or rule it protects where `check` and
+   `verify` name one) and with the source site. For
    example: O1 `Unique_Settlement_Claim`, a unique key on `settlement.claim_id`; O2 one run
    mark per row and use case, committed with its step; O3 retry a `Blocked` step and never
    abandon its run; O4 publish raised events only after the last step commits; O5 load
@@ -500,6 +680,15 @@ agent can split it into files wherever the project wants:
 
 `--format json` prints the same intermediate form and obligations as data, for an agent
 that wants to generate in another language or check its work against the list.
+
+Note (2026-11-25): what was built differs. The obligations were numbered `O1`, `O2`, ... in
+model order until #363, so adding a `relate` renumbered every later one. Each now has a stable
+name built from model identifiers only: the invariant name where `check` and `verify` have one
+(`Unique_Payment_Order`, `MinCard_*`, `Check_*`), and otherwise a new one (`Ref_Product_category_id`
+for a reference, `UniqueColumns_*`, `OnDelete_*`, `Derived_*`, `OneTransaction`, `RunMarks_*`,
+`CompleteRows_*`, `RuleChecks`, `NotMet_*`). `--format json` landed as the data of P0 of
+[code-check.md](./code-check.md): the types, states, use cases, functions and obligations with
+their model locations, not the whole intermediate form.
 
 <a id="conformance"></a>
 ### The conformance harness

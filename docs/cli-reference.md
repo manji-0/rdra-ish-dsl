@@ -68,7 +68,7 @@ other finding itself.
 Parse, type-check, and run whole-model consistency checks; produce no artifact output.
 
 ```
-rdra-ish check <INPUTS...> [--strict] [--deny-deprecated] [--max-patterns <N>] [--max-states <N>] [--memory <SIZE>] [--guards] [--instance-count <N>] [--instances <ENTITY=N>]... [--int-range-max <N>] [--buc <ID>]... [--entity <ID>]... [--without-usecase <ID>]... [--without-buc <ID>]... [--actor <ID>]...
+rdra-ish check <INPUTS...> [--strict] [--deny-deprecated] [--max-patterns <N>] [--max-states <N>] [--memory <SIZE>] [--guards] [--code[=fresh|build|run]] [--instance-count <N>] [--instances <ENTITY=N>]... [--int-range-max <N>] [--buc <ID>]... [--entity <ID>]... [--without-usecase <ID>]... [--without-buc <ID>]... [--actor <ID>]...
 ```
 
 Prints each diagnostic to stderr. If any error (non-warning) is present, exits with
@@ -165,6 +165,7 @@ E can get stuck at col = v is not decided: ...`. See [Deadlocks](./state-derivat
 | `--max-states <n>` | Cap on the joint states of one target cone, printed in the `bounds:` line. Default: none; `--memory` stops a run that outgrows the machine, and the `bounds:` line says `no state cap per cone, memory 4GiB`. Past a cap you give, the run records a `StateCapReached` **error** that names what the cone's states vary in. A larger `--int-range-max` or `--instance-count` makes more states per cone, so it reaches the cap sooner. Same as [`states`](#states). |
 | `--memory <size>` | What the run may hold in memory: the states of the cones it explores at once. Default: `memory` under `[check]` in [`rdra.toml`](#project-manifest), else `4GiB`. A cone whose states pass it stops: the run records a `MemoryCapReached` **error** that names the limit, says how many states it held and what each took, and estimates what finishing needs; the findings the cone leaves are listed under `not checked:`. See [Memory limit](#memory-limit). Same as [`states`](#states). |
 | `--guards` | After a clean run, print on stdout which rules each guard protects. See [Guard dependencies](#guard-dependencies). It adds no finding and does not change the exit status. |
+| `--code[=<level>]` | After a clean run, check the service code the [`[code]` tables](#the-code-tables) of `rdra.toml` name: `fresh` (the default), `build` or `run`. Write the level with `=`. See [`check --code`](#check---code). |
 | `--instance-count <n>` | Instances (slots) per entity, `1..=255` (default `1`). A violation that needs two rows of an entity (a uniqueness or a quantifier across rows) shows only from `2`. The `bounds:` line and the final `OK:` line print the value used. Same name and validation as [`verify`](#verify); the default differs (`verify` runs `2`). A larger value also raises the default `--max-patterns`. |
 | `--instances <entity>=<n>` | One entity's slots in place of `--instance-count`, `1..=255`, as `Loan=4`; repeatable. Default: `instances` under `[check]` in [`rdra.toml`](#project-manifest). See [Per-entity instance counts](#per-entity-instance-counts). |
 | `--int-range-max <n>` | The Int domain is `0..=n`, `1..=255` (default `5`). Printed in the `bounds:` line. Same as [`verify`](#verify). |
@@ -173,6 +174,104 @@ E can get stuck at col = v is not decided: ...`. See [Deadlocks](./state-derivat
 | `--without-usecase <id>` | Assume the use case never runs and leave it out; repeatable. See [Partial runs](#partial-runs). |
 | `--without-buc <id>` | Assume the use cases the BUC reaches, and no other BUC does, never run; repeatable. See [Partial runs](#partial-runs). |
 | `--actor <id>` | Keep only the use cases the actor performs and those no actor performs; repeatable. See [Partial runs](#partial-runs). |
+
+### `check --code`
+<!-- derived-from ./design/code-check.md -->
+
+`check --code` asks whether the service code has what the model requires. Experimental, as
+`codegen` is. rdra-ish parses none of the service code: it generates every file the
+[`[code]` tables](#the-code-tables) name again and compares, and at `build` and `run` it
+reads what the language's compiler reports. It runs after the model check; on a model that
+fails `check` it checks nothing (a note says so) and the exit status is the model check's.
+
+| Level | What it checks |
+|---|---|
+| `fresh` | Each file `codegen --code` writes is what the model generates now: the domain code by its text, as [`codegen --check`](#codegen) compares it, and the traces by hash. A missing file is an error. No compiler runs. |
+| `build` | `fresh`, then the language's build command on the probe, with the errors mapped back to the model's use cases. |
+| `run` | `build`, then the conformance test. |
+
+`--code` with no level is `fresh`. Only `build` and `run` start a command, the language's
+default or the `build` / `run` of its table; the LSP never does.
+
+Each finding is one block on stderr, under the cause lines of `codegen --check`:
+
+```
+error: ../svc/src/domain.rs is not what `codegen` generates from the model
+  model changed: its source text is not the text ../svc/src/domain.rs was generated from
+  1 line(s) only in ../svc/src/domain.rs, 1 only in the generated code
+  ...
+  generate them again: rdra-ish codegen model --code
+```
+
+The last line on stdout, after the model check's `OK:` line, is
+`OK: code: what the model requires, at --code=<level>`, or
+`FAIL: code: <n> error(s) at --code=<level>` with exit status `1`.
+
+At `build`, each compiler error goes back to a use case: by the probe line it is on (the
+probe has one line per use case), or by the generated method or contract it names. In Rust
+the build is `cargo check --test <probe> --message-format=json` in the table's `root`, and
+`run` is `cargo test --test <probe> -- rdra_conformance`. In TypeScript the build is
+`tsc --noEmit --pretty false -p tsconfig.rdra.json` in the root, a generated file that
+extends the project's tsconfig and holds only the probe, and `run` is `node <probe>`: Node
+runs the probe and the service as they are, by its type stripping, so it needs Node 22.18 or
+later and the service's imports name the `.ts` files (`import * as d from "./domain.ts"`).
+An older Node fails `run` with a `CodeConformance` that says so; a project that runs
+TypeScript another way gives `run` in its table (`["npx", "tsx", "src/rdra_contract.ts"]`).
+In Go the build is
+`go test -count=1 -run ^$ -gcflags=-e ./<probe dir>` in the table's `root`, which compiles the
+service package and its probe and runs no test, and `run` is
+`go test -count=1 -run ^TestRdraConformance$ ./<probe dir>`. Go names only one missing method
+of an interface per error, so the Go probe names each method of a contract on a line of its
+own as well: a use case whose every method the compiler finds missing is
+`CodeMissingUseCase`, one with some of them `CodeIncomplete`. One block per use case and kind:
+
+```
+error[CodeMissingUseCase_Ship]: use case Ship has no implementation in svc::service::Service
+  model: model/order.rdra:22:1  usecase Ship "Ship"
+  code:  src/service.rs:70:26  E0277: the trait bound `Service: ShipUseCase` is not satisfied
+  fix:   impl ShipUseCase for svc::service::Service (prepare_ship, commit_ship)
+```
+
+| Name | When |
+|---|---|
+| `CodeMissingUseCase_<UseCase>` | The service does not implement the use case's contract (Rust E0277; TypeScript TS2739 / TS2740 / TS2741 naming every member; Go: every method of it missing). |
+| `CodeIncomplete_<UseCase>` | It implements the contract without some of its methods (E0046; TS2739 / TS2740 / TS2741; Go `missing method`, `has no field or method`). |
+| `CodeSignature_<UseCase>` | A method takes or returns other types than the contract's (E0053, E0050; TS2322; Go `wrong type for method`). |
+| `CodeError_<UseCase>` | Another error on the use case's probe line or naming its methods. |
+| `CodeUnmapped` | The count of the errors that belong to no use case, the first one quoted. |
+| `CodeBuildFailed` | The build failed with no error rdra-ish reads. |
+| `CodeConformance` | `run`: the conformance test failed; the message is the harness's first difference. |
+
+At every level, `check --code` also checks the **obligation ledger**: each obligation the
+generated code lists (`Unique_Payment_Order`, `Ref_Order_customer_id`, ...) needs an owner.
+An owner is either a marker line in the service code,
+`rdra: obligation <name> [file]` after any comment token (`//`, `#`, `--`), or an entry
+`<name> = "<file>"` under `[code.obligations]`. A marker's file is relative to the root
+the marker was found under; without one, the owner is the marker's own file. The check sees
+only the declaration, so it says an obligation **has an owner**, never that it holds. It
+confirms that the owning file exists.
+
+| Name | When |
+|---|---|
+| `CodeObligationUnowned_<name>` | The obligation has no owner. Error. |
+| `CodeObligationOwnerMissing_<name>` | Its owner names a file that does not exist. Error. |
+| `CodeObligationUnknown_<name>` | An owner names an obligation the model does not have (renamed or gone). Warning. |
+
+```
+error[CodeObligationUnowned_Unique_Order_note]: no code owns the obligation Unique_Order_note
+  model: model/order.rdra:6:1  no two Order rows share note.
+  fix:   add `// rdra: obligation Unique_Order_note <file that keeps it>` or list it under [code.obligations]
+```
+
+The ledger is kept once there is a marker or a `[code.obligations]` entry. Until then,
+`check --code` prints a note and diagnoses no obligation. Markers are searched under each
+table's `root`, skipping hidden directories, `target`, `node_modules`, `vendor`, `dist`,
+the generated files, and files over 1 MiB.
+
+`--code` on a model without a `[code.rust]`, `[code.go]` or `[code.ts]` table exits `1`, so a
+check that would check nothing never passes. `check` without `--code` on a model that has one
+prints one line, `note: rdra.toml has [code]; `check --code` also checks the service code
+against the model`, on stderr, and otherwise does what it did before.
 
 ### Partial runs
 
@@ -606,6 +705,61 @@ A loading command finds the manifest like this:
 4. With several inputs, every input's manifest is read, so a malformed one fails the command
    whatever the input order. When all are valid, the first input's manifest is the project's.
    A later change will tighten how inputs from different models combine.
+
+### The code tables
+
+`[code.rust]`, `[code.go]` and `[code.ts]` name the files `codegen --code` writes for a
+service in that language, and that [`check --code`](#check---code) holds against the
+model. Every path is relative to the directory of `rdra.toml`; rdra-ish does not decide
+where they go. Only `domain` is required.
+
+```toml
+[code.rust]
+domain = "../service/src/domain.rs"        # the codegen output
+traces = "../service/tests/traces.txt"     # with it, domain holds the conformance harness
+conformance_states = 65536                 # --conformance-states of the traces
+
+[code.ts]
+domain = "../web/src/domain.ts"
+traces = "../web/src/traces.txt"
+probe = "../web/src/rdra_contract.ts"
+service = "../web/src/order_service.ts#OrderService"
+seal = true
+
+[code.go]
+domain = "../shop/domain/domain.go"
+traces = "../shop/svc/traces.txt"
+probe = "../shop/svc/rdra_contract_test.go"    # a _test.go in the service's package
+service = "example.com/shop/svc.Service"       # <import path>.<Type>
+new = "svc.New()"
+
+[code.obligations]
+Unique_Payment_Order = "../service/migrations/003_payment.sql"
+```
+
+| Key | Description |
+|---|---|
+| `domain` | The domain code `codegen` prints for the language. |
+| `traces` | The conformance traces. With it, `domain` also holds the conformance port and harness (`--conformance`). |
+| `conformance_states` | The states the BFS behind the traces explores at most. Default `65536`. |
+| `package` | Go: the package name of `domain` (`--package`). Default `domain`. When set, the probe imports the domain package under this name, so an import path whose last element is another name (`example.com/shop/store` holding `package domain`) builds; unset, it uses the last element. |
+| `probe` | The probe `codegen --code` (or `--probe`) writes, one line per use case stating that `service` implements that use case's contract (`<UseCase>UseCase`): in Rust a file under the service crate's `tests/`; in TypeScript a `.ts` file anywhere in the project; in Go a `_test.go` file in the service's package directory (`package <svc>_test`), which also names each method of a contract on a line of its own. `build` needs it. In TypeScript `codegen --code` also writes `tsconfig.rdra.json` in `root`. |
+| `service` | The service type, as the probe names it. Rust: its path, `svc::service::Service`. TypeScript: its file, relative to `rdra.toml`, and the exported type or class after `#`, `../web/src/order_service.ts#OrderService`. Go: `<import path>.<Type>`, `example.com/shop/svc.Service`. |
+| `module` | Rust: the path of the generated module in the service's crate, `svc::domain`. Go: the import path of `domain`'s package; by default the service's import path moved as `domain`'s directory is from the probe's. |
+| `new` | An expression that makes a fresh service. With `traces`, the probe also holds the conformance test, `rdra_conformance` in Rust and `TestRdraConformance` in Go, which `run` runs. Rust: required for the test. TypeScript: default `new service.<Type>()`, where `service` is the service's module. Go: default `new(<pkg>.<Type>)`. |
+| `seal` | TypeScript: `true` writes `domain` as `codegen --seal` does. Default `false`. |
+| `tsconfig` | TypeScript: the tsconfig `tsconfig.rdra.json` extends. Default: `tsconfig.json` in `root` when it exists; without one, `tsconfig.rdra.json` sets `strict` itself. |
+| `root` | The directory the build command runs in. Default: the nearest directory above `domain` that holds `Cargo.toml`, `go.mod`, `package.json` or `tsconfig.json`. |
+| `build`, `run` | The command `check --code=build` / `--code=run` runs in place of the language's default, as a list of arguments. It runs only when that level is given on the command line, never from the LSP. |
+
+An unknown key under `[code]` or one of its tables makes every loading command exit `1`, as
+under `[check]`. `seal` or `tsconfig` under `[code.rust]` or `[code.go]` makes `--code` exit
+`1`.
+
+The LSP does not run `codegen` or a build. When the model's source text is not the text a
+file under `[code]` was generated from (its fingerprint's model hash), or the file is missing
+or has no fingerprint, it shows an information diagnostic on the table's line of
+`rdra.toml`. A comment-only edit of the model shows it too; `check --code` decides.
 
 The LSP loads a workspace the same way. It lists every `.rdra` file under the workspace roots,
 adds the open buffers, and derives the include paths from those files exactly as the CLI does.
@@ -1954,32 +2108,46 @@ Print the model's domain types as TypeScript, Rust, or Go code for an agent to f
 Most of this subcommand is experimental. One part is covered by
 [compatibility](./compatibility.md#the-typescript-types-of-codegen): the TypeScript types
 that `codegen <INPUTS...> --lang ts [-o <FILE>]` prints for a model that `check` passes.
-These types are the scalars, the id types, the value sets, the state types, and the
-`<Entity>Row` row types. Everything else may change or be removed in any release: the
+These types are `Result`, `InvalidValue`, `InvalidRow`, the scalars, the id types, the value
+sets, the state types with `<Entity>Kind`, and the `<Entity>Row` row types, with the
+signatures of their companion objects and of `parse<Entity>Row`. Everything else may change or be removed in any release: the
 transition functions, the rule checks, the dispatchers, the header and its obligations,
 `--allow-failing`, `--check` and the fingerprint line, and the Rust and Go output. [The design](./design/algebraic-codegen.md)
 describes where `codegen` is going.
 
 ```
 rdra-ish codegen <INPUTS...> --lang <LANG> [-o <FILE> | --check <FILE>] [--package <NAME>] [--allow-failing]
-                 [--conformance <FILE> [--conformance-states <N>]]
+                 [--conformance <FILE> [--conformance-states <N>]] [--seal]
+rdra-ish codegen <INPUTS...> --format json [-o <FILE>] [--allow-failing]
+rdra-ish codegen <INPUTS...> --code
 ```
 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--lang` | `ts` \| `rust` \| `go` | — (required) | Language. `typescript` is an alias of `ts`. |
+| `--lang` | `ts` \| `rust` \| `go` | — (required but with `--format json` or `--code`) | Language. `typescript` is an alias of `ts`. |
+| `--format` | `code` \| `json` | `code` | `json` prints the contract as data instead of code: see [The JSON contract](#the-json-contract). Not with `--conformance` or `--check`. |
+| `--code` | flag | off | Write every file `[code.<lang>]` in [`rdra.toml`](#the-code-tables) names (the domain code, the traces, the probe), with paths and sites relative to the directory of `rdra.toml`. Not with the other options. |
+| `--probe` | flag | off | Write only the probe of each `[code.<lang>]` table that names one. Not with the other options. |
 | `-o`, `--out` | path | — (stdout) | Write to this file instead of stdout. |
 | `--package` | string | `domain` | The Go package name (`--lang go` only). Put the file in a directory of its own, as this package, and write the code that finishes it in another package: the fields of a state type are unexported, so only code outside the package is kept from building a state. |
 | `--allow-failing` | flag | off | Generate even when `check` reports errors. The state types then narrow no column, and each error is listed as an obligation the model does not meet. |
-| `--conformance` | path | — (no harness) | `--lang rust` and `go` only, on a model `check` passes: also print the conformance port and harness, and write to this file the traces the harness drives a finished service along. |
+| `--conformance` | path | — (no harness) | On a model `check` passes: also print the conformance port and harness, and write to this file the traces the harness drives a finished service along. |
 | `--conformance-states` | integer | `65536` | The states the BFS behind the traces explores at most. |
-| `--check` | path | — | Generate again and compare the result with this file instead of printing it. Exit 1 when they differ. Not with `-o` or `--conformance`. |
+| `--seal` | flag | off | `--lang ts` only (another language is a usage error, exit `2`): every state type gets a property keyed by a `unique symbol` the module does not export, so code outside the module cannot write a state as an object literal (TS2741); only `fromRow` and the transition functions make one. A type assertion (`as`) still gets around it. Experimental, outside the compatibility contract. |
+| `--check` | path | — | Generate again and compare the result with this file instead of printing it. Exit 1 when they differ. Not with `-o`. With `--conformance <TRACES>`, the traces in `TRACES` are compared too, by hash. |
 
 The output is one compilation unit: a TypeScript module, a Rust module file, or a Go file.
-It opens with a header and the numbered **obligations**: what `check` and `verify` assume of
-the data and no type enforces, each with the invariant that checks it (`Unique_*`,
-`MinCard_*`, `Check_*`) and its source site. Then come the scalars a project may replace
+It opens with a header and the **obligations**: what `check` and `verify` assume of
+the data and no type enforces, each under a name and with its source site. The name is the
+invariant that checks it where `check` and `verify` check one (`Unique_*`, `MinCard_*`,
+`MaxCard_*`, `Check_*`, marked `[checked]`), and otherwise one built the same way from the
+model's identifiers: `Ref_<Entity>_<columns>` (a key names a present parent),
+`Unique_<Entity>_<columns>` (an `@unique` column or set `check` does not hold),
+`OnDelete_*` / `OnUpdate_*`, `Derived_<Entity>_<column>`, `OneTransaction`,
+`RunMarks_<UseCase>`, `CompleteRows_<Type>`, `RuleChecks`, and `NotMet_<error>` under
+`--allow-failing`. A name does not move when the model gains an unrelated declaration, so
+the [obligation ledger](#check---code) can name one. Then come the scalars a project may replace
 (`Money`, `Decimal`, `Date`, `DateTime`), an id type per entity with a one-column primary
 key, each variation and inline `Enum` as a value set, and each entity and DTO as a record. A
 key column takes its parent's id type, and a `@null` column is `T | null`, `Option<T>`, or
@@ -1988,23 +2156,33 @@ key column takes its parent's id type, and a `@null` column is `T | null`, `Opti
 An entity whose tag column is an inline `Enum` that `transitions` drive is a **state type**:
 one variant per value of its tag column (of the columns `transitions` names, `status`, else
 a `*_status` column, else the first by name), and the entity's type is their union, a
-TypeScript union of interfaces, a Rust enum of structs with a `status()` method, or a Go
+TypeScript union of `Readonly` types told apart by `kind` (`"Pending"`, one value of
+`<Entity>Kind` per state), a Rust enum of structs with a `status()` method, or a Go
 interface that only the generated variants implement. A variant narrows a nullable column
 only where a rule says so: `invariant(E).when(status == v).then(x == present)` makes `x`
 present in `v`, `forbidden(E, status == v, x == present)` makes it null there, and
 `required(E, x == present)` makes it present in every state. A rule with another atom or a
 `.when(Cond)` narrows nothing. A null column is `null` in TypeScript and left out of the
-Rust and Go structs, with a doc line naming the rule. The Rust and Go variants hold no tag
-field: the variant is the tag, and writing it to a row is the code's job. A variant's fields are
+Rust and Go structs, with a doc line naming the rule. No variant holds the tag
+column: in TypeScript `kind` tells the states apart, in Rust and Go the variant does, and
+`<Entity>Row` holds the tag. A column named `kind` is `kind_` in the TypeScript states. A variant's fields are
 private in Rust and unexported in Go, and methods of the same name read them (`paid_at()`,
 `PaidAt()`). Only a transition function and `from_row` (`<Entity>FromRow` in Go) make a
 state, from the rows and the inputs the model leaves open, so code outside the generated
 module or package can neither build a state by hand nor change a field a transition keeps.
-In Go, a transition function or `<Entity>ToRow` given the zero value of a state (`OrderPaid{}`)
-panics, `<Entity>FromRow` refuses a value outside a value set, a function refuses such a
-value as an input, and every value set has `Parse<Enum>(s)`, which returns an
-`InvalidValue` error for text that is no value. Records and `<Entity>Row` row types keep
-public fields. An entity whose
+In Go, each state (`OrderPaid`) is an interface of its own, implemented by one unexported
+struct, so code outside the package cannot write `OrderPaid{}`: a state variable that holds
+nothing is `nil`. A transition function refuses a `nil` state with an `InvalidArgument` error,
+`<Entity>ToRow(nil)` is the zero row, and `Kind()` returns the state's `<Entity>Kind`
+(`OrderKindPaid`); the tag column is only in `<Entity>Row`, and a column named `kind` is read
+by `Kind_()`. `<Entity>FromRow` refuses a value outside a value set or a `Money`, `Decimal`,
+`Date` or `DateTime` outside its shape, a function refuses such a value as an input, and every
+value set, id and scalar has `Parse<Type>(s)`, which returns an `InvalidValue` error for text
+that is no value. No Go function panics. A Go type switch does not say when it misses a
+state, so each Go state type also has a visitor, `OrderVisitor[R]` with a method per state
+(`Pending(OrderPending) R`), and `MatchOrder(state, v) (R, error)`, which calls the state's
+method: once the model gains a state, a visitor without its method no longer compiles. Records and `<Entity>Row` row types keep public
+fields. An entity whose
 `Enum` only `sets` writes, with no `transitions` (ec-site's `Payment`), is a plain record.
 
 Each use case of one transaction gets **transition functions**, read from the transition
@@ -2020,11 +2198,16 @@ compares two columns or reads `now`, a nullable operand, or a column whose value
 input) is an input too, and the function's doc says why. It
 returns a `<Name>Result` record with the rows it writes or creates, the id of each row it
 deletes, and a value of each event the use case raises. A condition applied to the use case
-is checked first: when it does not hold, the function returns `Rejected` (TypeScript), an
-`Err(Rejected)` (Rust), or a `*Rejected` error (Go). A row that breaks a rule the verified
-model keeps (a column the target state keeps null that has a value, a column it keeps
-present that is null) or a parent that is not the child's makes the function throw or
-panic. A use case split into transactions gets one function per step (`openSettlement1`,
+is checked first: when it does not hold, the function returns an error `Rejected`: in
+TypeScript `{ ok: false, error: { kind: "Rejected", condition, label, site } }`, in Rust
+`Err(Rejected)`, in Go a `*<UseCase>Error` whose `Kind` is `<UseCase>ErrorRejected` and
+whose detail, which `errors.As` reaches, is a `*Rejected`. A row that breaks a rule the
+verified model keeps (a column the target state keeps null that has a value, a column it
+keeps present that is null) or a parent that is not the child's makes the function return
+its `InvalidArgument` case (`<UseCase>ErrorInvalidArgument` in Go). In TypeScript every
+function returns a `Result<<Name>Result, <UseCase>Error>`, where `<UseCase>Error` is the
+union of `NotEnabled`, `Rejected` and `InvalidArgument` that the use case can return, and
+nothing throws but `assertNever`. A use case split into transactions gets one function per step (`openSettlement1`,
 `openSettlement2`), linked by **run marks**: a step that leaves a row for the next one
 returns a mark, `OpenSettlementClaimMark1 { id }`, and the next step takes it as an argument,
 so it cannot be called without the step before it. A later step reads an earlier step's row
@@ -2057,9 +2240,17 @@ multi-entity rule, a quantifier, `Unique_*`, `MinCard_*`) is listed as an obliga
 
 Each state type also has a **row type**, `<Entity>Row`, with every column as the data layer
 declares it: the flat shape a store or the wire holds, with the same column names (and, in
-Go, `json` tags). `orderFromRow(row)` / `Order::from_row(row)` / `OrderFromRow(row)` returns
-the state of a row, or `InvalidRow` naming the column whose value its state rules out;
-`orderToRow` / `into_row` / `OrderToRow` returns the flat row of a state.
+Go, `json` tags). `Order.fromRow(row)` / `Order::from_row(row)` / `OrderFromRow(row)` returns
+the state of a row, or `InvalidRow` naming the column whose value its state rules out (in
+TypeScript as a `Result`); `Order.toRow` / `into_row` / `OrderToRow` returns the flat row of
+a state. A state column marked `@null` keeps its declared values as the states: its row
+column is nullable (`Option`, a pointer, `| null`), a row whose state column is null is an
+`InvalidRow`, and the row of a state holds its value. In TypeScript,
+`parseOrderRow(value: unknown)` reads a row from outside: each
+column through its type's parser (`OrderId.parse`, `DateTime.parse`, `Method.parse`), so a
+row of the wrong shape is an `InvalidRow` before it reaches the domain types. Ids and the
+scalars are branded and made only by `parse` (or narrowed by `is`), with no type
+assertion.
 
 Each function's result also carries, per row it writes, the source that row must still have
 when the write commits: `order_expected` / `OrderExpected`, an `ExpectedSource` that is
@@ -2072,11 +2263,48 @@ matches no row rolls the transaction back and is `NotEnabled`.
 Each use case whose functions take a state type gets a **dispatcher**, `runCancel` /
 `run_cancel` / `RunCancel`, over the entity types: it calls the transition function of the
 rows' states and returns its result as a `CancelOutcome` case, or `NotEnabled` when the use
-case does not run from those states (in Rust, `Refused::NotEnabled`, beside
-`Refused::Rejected`). The code that finishes the output loads rows, converts them, calls the
-dispatcher, and stores the rows it returns.
+case does not run from those states. In Rust every transition function and dispatcher returns
+`Result<_, <UseCase>Error>` (`PayError`), an enum of `NotEnabled`, `Rejected` (when a condition
+applies), and `InvalidArgument` (when the arguments can break what the model keeps), each a type
+that implements `std::error::Error`; the generated Rust never panics. In TypeScript they return
+`Result<PayOutcome, PayError>`, where `PayError` is the union of `{ kind: "NotEnabled", usecase }`
+and the other cases, and nothing throws but `assertNever`.
+In Go they return
+`(<Result>, error)`, the error a `*PayError` whose `Kind` is `PayErrorNotEnabled`,
+`PayErrorRejected` or `PayErrorInvalidArgument` and whose detail (`*NotEnabled`, ...)
+`errors.As` reaches and `errors.Is` matches with `ErrNotEnabled`, `ErrRejected` and
+`ErrInvalidArgument`; the generated Go never panics either. The code that finishes
+the output loads rows, converts them, calls the dispatcher, and stores the rows it returns.
+The Rust ids and scalars are opaque: `OrderId::from(7)`, `"12.50".parse::<Money>()`,
+`"2026-01-01".parse::<Date>()`, which refuse text of another shape with `InvalidValue`
+([Generated code style](design/algebraic-codegen.md#generated-code-style)). In Go,
+`ParseMoney("12.50")` and the like do the same.
 
-With `--conformance <FILE>` (Rust and Go), the output ends with a **conformance harness**
+In Rust, each use case with a function or an entry point also gets a **contract**, the trait
+`<UseCase>UseCase` with its `prepare_*` / `commit_*` methods (and `run_<action>` for an action
+with no printed function), printed with or without `--conformance`. A use case that actors
+perform takes a **caller** first: `by: <UseCase>Caller`, an enum over the capabilities of those
+actors (`EndUserCapability`, made only by `EndUserCapability::issue()`). Code without a
+capability of an actor that performs the use case does not compile; whether the code that
+calls `issue` authenticated the actor is not checked. TypeScript has the same contracts as
+types (`<UseCase>UseCase`, `readonly` function members that return a `Promise`), and the same
+callers: `by: DenyDeviceCaller`, a union of capability types. A capability carries a
+`unique symbol` the module does not export, so an object literal is refused (TS2741) and
+`EndUserCapability.issue()` is the only way to make one without a type assertion; `as
+unknown as EndUserCapability` still forges one.
+
+In Go, the contract is the interface `<UseCase>UseCase` (`Prepare*` / `Commit*`, and
+`Run<Action>` for an entry point). Its caller, `by <UseCase>Caller`, is an interface with an
+unexported method that only the capabilities of the actors that perform the use case
+implement, so a call with another actor's capability does not compile
+(`RelyingPartyCapability does not implement DenyDeviceCaller (missing method
+isDenyDeviceCaller)`). A capability is a struct with an unexported field, made valid only by
+`Issue<Actor>Capability()`. Go cannot forbid two values: the zero value
+`EndUserCapability{}`, which code outside the package can write, and a nil caller. Both
+compile, `Valid()` reports false for the zero value, and `CallerValid(by)` is false for
+either, so a service refuses a call whose caller is not valid.
+
+With `--conformance <FILE>`, the output ends with a **conformance harness**
 for the service that finishes it, and `FILE` gets the traces it runs. The service
 implements `ConformancePort`: `seed` empties its store and stores the rows of an initial
 state, `snapshot` returns a `StoreSnapshot` of every row (the `<Entity>Row` of a state type,
@@ -2084,8 +2312,15 @@ the record otherwise), every pending run mark (`<UseCase><Entity>Run { id, step 
 every event a triggered use case reads, and two methods per action run the use case by the
 ids of its rows and its inputs: `prepare_pay` / `PreparePay` loads the rows and returns the
 dispatcher's result, writing nothing, and `commit_pay` / `CommitPay` stores that result in one
-transaction. Either returns an error when the use case does not run. The agent's test calls `conform(|| MyService::new(), &traces)` in Rust or
-`Conform(func() ConformancePort { return newService() }, traces)` in Go. The harness starts
+transaction. Either returns an error when the use case does not run (the use case's
+`<UseCase>Error`). The agent's test calls `conform(|| MyService::new(), &traces)` in Rust,
+`Conform(func() ConformancePort { return newService() }, traces)` in Go, or
+`await conform(() => newService(), traces)` in TypeScript. In TypeScript the port is the
+intersection of one `<UseCase>UseCase` type per use case with `seed` and `snapshot`, and
+every member is a function property that returns a `Promise` (`preparePay: (order: OrderId,
+orderPaidAt: DateTime) => Promise<Result<PayOutcome, PayError>>`): a TypeScript service reads
+its store asynchronously, so the contracts are async there, while the Rust and Go ones are
+sync. `conform` returns a `Result<ConformanceReport, string>`. The harness starts
 a fresh port per trace, seeds the trace's initial state, makes each call, and after each
 compares the store, cut down to the columns the model tracks (an enum's value, null or not,
 an integer, a key's parent id), with the state BFS reached. A call the model refuses must
@@ -2140,6 +2375,31 @@ stderr it prints the cause, how many lines differ, and the first difference. The
 
 `file edited` and `model changed` can both appear. Restore or regenerate the file. Do not
 edit it by hand: code that finishes the output belongs in other files.
+
+A traces file carries a fingerprint too, as its second line,
+`# rdra-ish codegen fingerprint: model=<hash> code=<hash>`, after the format line
+`# rdra-ish conformance traces 3`. Its code hash covers the file's lines. `--check` with
+`--conformance` compares the traces by that hash only, reading the file once without holding
+it: a traces file can be hundreds of megabytes.
+
+### The JSON contract
+
+`codegen <INPUTS...> --format json` prints what the code is generated from, as one JSON
+object, for an agent or a tool that generates in another language or checks code against the
+model. It is experimental, as the rest of `codegen` is. `--lang` does not change it.
+
+| Key | What it holds |
+|---|---|
+| `format` | `"rdra-ish codegen json 1"`; a reader refuses another. |
+| `generator`, `model`, `check` | The rdra-ish version, the inputs, and whether `check` passed (`passed`, and `bounds` or `errors`). |
+| `types` | The value sets (`kind: "enum"`, with `variation` and `site` for a variation), the id types (`"id"`, with `entity` and `repr`), and the records (`"entity"` or `"dto"`, with `id`, `site` and `fields`). A field has `name` (the column), `ident` (PascalCase), `type` (`{"kind": "scalar" \| "enum" \| "id" \| "rows", "name"}`) and `nullable`. |
+| `states` | Each state type: `name`, `entity`, `site`, `row` (the `<Entity>Row` type), `tag`, and `variants` with their `fields` and `always_null` columns. |
+| `usecases` | Every use case in model order: `id`, `label`, `site`, `kind` (`functions`, `unprinted` when an action has no function yet, or `read-only` when it writes nothing), and `actions`, each with its `functions`, its `dispatcher`, and why it is `unprinted`. |
+| `functions` | Each transition function: `name`, `usecase`, `action`, `step`, `rows`, `marks`, `event`, `inputs`, `conditions`, `result`, `writes` and `raises`. |
+| `obligations` | Each obligation: `name`, `checked`, `text` and `site`. |
+
+Sites are `path:line:col`, relative to the working directory (to the directory of
+`rdra.toml` under `--code`).
 
 ---
 

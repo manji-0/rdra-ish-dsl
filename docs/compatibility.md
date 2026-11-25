@@ -92,13 +92,24 @@ not state, and the colors in a `classDef` are not covered.
 ### The TypeScript types of `codegen`
 
 <!-- constrained-by ./cli-reference.md#codegen -->
+<!-- constrained-by ./design/algebraic-codegen.md#generated-code-style -->
 `codegen` is experimental except for the TypeScript types it prints. The contract covers
 `rdra-ish codegen <INPUTS...> --lang ts [-o <FILE>]` on a model that `check` passes.
 For such a model, the command writes one TypeScript module to stdout, or to `<FILE>`
 with `-o`, and exits 0, unless the model hits a `NameCollision` (see the list of what is
-not covered below). The module declares the types below with these names and shapes.
-`crates/rdra-ish-cli/tests/codegen_contract.rs` pins these types for a model that uses
-every column type, every naming rule, and every rule form below.
+not covered below). The module declares the types and the companion objects below with
+these names and shapes. `crates/rdra-ish-cli/tests/codegen_contract.rs` pins them for a
+model that uses every column type, every naming rule, and every rule form below.
+
+The next release changes this contract to the shapes of
+[Generated code style](./design/algebraic-codegen.md#generated-code-style) (#363): `type`
+aliases with `Readonly` properties instead of interfaces, a `kind` discriminant instead of
+the tag column, companion objects, and a `Result` from every conversion that can fail. It is
+a major release for that reason as well. The CHANGELOG has the migration.
+
+Every type is a `type` alias, and every object type is `Readonly<{ ... }>`. A companion
+object has the name of its type and is declared `as const`; a member that is a function is
+written as a property (`parse: (value: unknown) => ...`).
 
 A type name is a model id in PascalCase. `_`, `-`, and spaces split the id into words. The
 first letter of each word becomes upper case, and the other letters stay as written. A
@@ -106,28 +117,50 @@ name that does not start with an ASCII capital letter gets the prefix `V`. When 
 of one tag column give the same name, the first value keeps it. The later values get the
 suffix `2`, `3`, and so on.
 
+- **Results and errors.** `Result<T, E>` is
+  `Readonly<{ ok: true; value: T }> | Readonly<{ ok: false; error: E }>`, with the companion
+  `Result.ok(value)` and `Result.err(error)`. `InvalidValue` is
+  `Readonly<{ kind: "InvalidValue"; type: string; reason: string }>`, and `InvalidRow` is
+  `Readonly<{ kind: "InvalidRow"; entity: string; column: string | null; reason: string }>`.
+  The text of `type` and `reason` is not covered.
 - **Scalars.** `Money`, `Decimal`, `Date`, and `DateTime`, each declared as
-  `string & { readonly __brand: "<Name>" }`.
+  `string & { readonly __brand: "<Name>" }`. Each has a companion with
+  `is: (value: unknown) => value is <Name>` and
+  `parse: (value: unknown) => Result<<Name>, InvalidValue>`, the only way to make one
+  without a type assertion. `Money` and `Decimal` take decimal text
+  (`-?[0-9]+(\.[0-9]+)?`), `Date` takes `YYYY-MM-DD`, and `DateTime` takes an ISO 8601 date
+  and time with a `Z` or an offset. The check is the shape, not the calendar.
 - **Id types.** `<Entity>Id` for each entity with a one-column primary key of a type other
   than `Enum` or a variation. It is the key column's type from the table under
   **Properties**, with `& { readonly __brand: "<Entity>Id" }`. For example, an `Int` key gives
-  `number & { readonly __brand: "OrderId" }`. An entity with a key of two or more
-  columns has no id type.
+  `number & { readonly __brand: "OrderId" }`. It has the companion of a scalar: `is` and
+  `parse`, which takes a safe integer for an `Int` key and any string for a `String` key.
+  An entity with a key of two or more columns has no id type.
 - **Value sets.** `<Variation>` for each variation, and `<Entity><Column>` for each inline
   `Enum` column of an entity. Each is a union of string literals, one for each value as it
-  is written in the model. Each also has the constant
-  `<Name>Values: readonly <Name>[]`, which holds every value.
+  is written in the model. Its companion has `values`, every value in model order (a
+  `readonly` tuple), and `parse: (value: unknown) => Result<<Name>, InvalidValue>`.
 - **State types.** An entity whose tag column is an inline `Enum` with at least one value
   is a state type. The tag column is chosen from the columns that `transitions` names:
   `status`, else a column whose name ends in `_status`, else the first such column by name.
-  Each value `v` of the tag column gets an interface `<Entity><V>`, including a value that
-  no use case reaches. The interface has the property `<tag>: "<v>"`, and one property for
-  each other column of the entity. `<Entity>` is the union of these interfaces. An entity
-  whose `Enum` only `sets` writes, with no `transitions`, is not a state type.
-- **Row types.** `<Entity>Row` for each state type: an interface with one property for each
-  column of the entity. The tag column takes its value set, and no column is narrowed.
-- **Properties.** The name of a property is the column name. The property type follows
-  the column type:
+  `<Entity>Kind` is the union of one string literal per value of the tag column: the
+  value's type name (`"Pending"`). When a value set already has that name, it is
+  `<Entity>StateKind`. Each value `v` gets a type `<Entity><V>`, including a value that no
+  use case reaches, with the property `kind: "<V>"` and one property for each column of the
+  entity other than the tag. A column named `kind` is the property `kind_` there.
+  `<Entity>` is the union of these types. Its companion has
+  `fromRow: (row: <Entity>Row) => Result<<Entity>, InvalidRow>`, which fails on a row whose
+  column holds a value its state rules out, and `toRow: (state: <Entity>) => <Entity>Row`,
+  which cannot fail. An entity whose `Enum` only `sets` writes, with no `transitions`, is not
+  a state type.
+- **Row types.** `<Entity>Row` for each state type: a type with one property for each
+  column of the entity, each under its column name. The tag column takes its value set,
+  and no column is narrowed. `parse<Entity>Row(value: unknown): Result<<Entity>Row,
+  InvalidRow>` reads one from outside (a store, the wire): each column through the parser
+  of its type, so a scalar of another shape, a value outside a value set, or a number that
+  is not an integer gives `InvalidRow` naming the column.
+- **Properties.** The name of a property is the column name, except `kind_` above. The
+  property type follows the column type:
 
   | Column | TypeScript |
   |---|---|
@@ -166,13 +199,20 @@ The contract does not cover the following:
 
 - the comments and doc comments;
 - the order of declarations and properties;
+- the bodies of the companions' functions and of `parse<Entity>Row`, beyond what is said
+  above, and the private declarations (whose names start with `$`);
 - the header and its obligation and candidate lists;
-- `InvalidRow`, `<entity>FromRow`, and `<entity>ToRow`;
-- the transition functions, results, events, run marks, rule checks, `Rejected`,
-  `NotEnabled`, and dispatchers;
-- the interfaces of entities that are not state types, and of DTOs;
+- `assertNever`;
+- the transition functions, results, events, run marks, rule checks, `NotEnabled`,
+  `Rejected`, `InvalidArgument`, `<UseCase>Error`, `ExpectedSource`, and dispatchers;
+- the types of entities that are not state types, and of DTOs, and their parsers;
 - which models fail with a `NameCollision`: the experimental declarations share the
-  namespace, so a new one can collide with a model's name;
+  namespace, so a new one can collide with a model's name. A model type named `Result`,
+  `assertNever` or `Symbol` (which `--seal` calls) fails with one, and a model name that
+  takes a derived name (`parse<Row>`) pushes that name to a trailing `_`;
+- the contracts (`<UseCase>UseCase`), the conformance port and harness, and the probe and
+  `tsconfig.rdra.json` that `codegen --code` writes;
+- the output of `--seal`;
 - the output of `--allow-failing`, `--package`, and `--lang rust` or `--lang go`.
 
 ### The TLA+ export

@@ -11,6 +11,7 @@ use tower_lsp::{Client, LanguageServer};
 use url::Url;
 
 use crate::code_actions::code_actions;
+use crate::code_fingerprints::{code_notes, CodeNote};
 use crate::code_lens::code_lenses;
 use crate::completion::completion_items;
 use crate::convert::{full_document_range, position_to_byte_offset, span_to_range};
@@ -109,7 +110,16 @@ impl Backend {
 
         let analyzed = tokio::task::spawn_blocking({
             let overlays = overlays.clone();
-            move || load_project(&inputs, Some(&overlays)).map(analyze_project)
+            move || {
+                load_project(&inputs, Some(&overlays)).map(|project| {
+                    // Fingerprints only: the LSP generates nothing and runs no command.
+                    let notes = project
+                        .manifest
+                        .as_ref()
+                        .map(|m| (m.path.clone(), code_notes(m, &project.program)));
+                    (analyze_project(project), notes)
+                })
+            }
         })
         .await
         .unwrap_or_else(|err| std::panic::resume_unwind(err.into_panic()));
@@ -118,7 +128,7 @@ impl Backend {
         if self.generation.load(Ordering::SeqCst) != generation {
             return;
         }
-        let analysis = match analyzed {
+        let (analysis, notes) = match analyzed {
             Ok(analysis) => analysis,
             Err(ProjectError::NoRdraFiles) => {
                 // The last .rdra file left the workspace: nothing to analyze, and nothing
@@ -138,6 +148,9 @@ impl Backend {
             }
         };
         self.publish_diagnostics(&analysis).await;
+        if let Some((path, notes)) = notes {
+            self.publish_code_notes(&path, notes).await;
+        }
 
         let mut state = self.state.write().await;
         state.analysis = Some(analysis);
@@ -183,6 +196,28 @@ impl Backend {
                 .await;
             self.state.write().await.published.insert(uri);
         }
+    }
+
+    /// The fingerprint notes of `[code]` as information on rdra.toml; none clears them.
+    async fn publish_code_notes(&self, manifest: &std::path::Path, notes: Vec<CodeNote>) {
+        let uris = self.state.read().await.uris.clone();
+        let Ok(uri) = uris.uri(manifest) else {
+            return;
+        };
+        let diagnostics = notes
+            .into_iter()
+            .map(|n| tower_lsp::lsp_types::Diagnostic {
+                range: Range::new(Position::new(n.line, 0), Position::new(n.line, u32::MAX)),
+                severity: Some(DiagnosticSeverity::INFORMATION),
+                source: Some("rdra-ish".to_string()),
+                message: n.message,
+                ..Default::default()
+            })
+            .collect();
+        self.client
+            .publish_diagnostics(uri.clone(), diagnostics, None)
+            .await;
+        self.state.write().await.published.insert(uri);
     }
 
     async fn publish_diagnostics(&self, analysis: &WorkspaceAnalysis) {

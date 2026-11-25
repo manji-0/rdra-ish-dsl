@@ -3,6 +3,7 @@
 pub mod backend;
 pub mod catch_panic;
 pub mod code_actions;
+pub mod code_fingerprints;
 pub mod code_lens;
 pub mod completion;
 pub mod convert;

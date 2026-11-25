@@ -68,6 +68,7 @@ fn generated_from(src: &str, path: &str, lang: Lang) -> String {
             caps: CAPS,
         },
         conformance: None,
+        seal: false,
     };
     generate(&model, &options, &|_| None).expect("generates")
 }
@@ -110,6 +111,50 @@ fn keywords_go_snapshot() {
     insta::assert_snapshot!(generated_from(KEYWORDS_SRC, "keywords.rdra", Lang::Go));
 }
 
+/// A name the Go printer derives from a model name steps aside, with a trailing `_`, for a
+/// model type that has it already; the model's type keeps its name.
+#[test]
+fn go_derived_names_step_aside_for_model_types() {
+    let src = r#"
+entity Order "O" {
+  id: Int @pk
+  status: Enum(pending, paid) @default(pending)
+  qty: Int @default("1")
+}
+usecase Place "P"
+usecase Pay "Pay"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+condition Big "big"
+holds(Big, Order.qty >= 1)
+applies_to(Big, Pay)
+variation OrderVisitor "V" { a b }
+variation MatchOrder "M" { a b }
+variation OrderKindPaid "K" { a b }
+variation PayErrorKind "E" { a b }
+variation PayErrorRejected "R" { a b }
+"#;
+    let go = generated_from(src, "names.rdra", Lang::Go);
+    for line in [
+        "type OrderVisitor string",
+        "type OrderVisitor_[R any] interface {",
+        "type MatchOrder string",
+        "func MatchOrder_[R any](state Order, v OrderVisitor_[R]) (R, error) {",
+        "type OrderKindPaid string",
+        "\treturn OrderKindPaid_\n",
+        "type PayErrorKind string",
+        "type PayErrorKind_ string",
+        "type PayErrorRejected string",
+        "\tPayErrorRejected_ PayErrorKind_ = \"Rejected\"",
+        "\tPayErrorNotEnabled PayErrorKind_ = \"NotEnabled\"",
+    ] {
+        assert!(go.contains(line), "no {line:?} in:\n{go}");
+    }
+    // The other languages derive none of these names.
+    let rust = generated_from(src, "names.rdra", Lang::Rust);
+    assert!(!rust.contains("OrderVisitor_"), "{rust}");
+}
+
 /// A key column takes its parent's id type, and the obligations name the invariants the
 /// verification checks.
 #[test]
@@ -126,10 +171,100 @@ fn keys_and_obligations() {
     let names: Vec<_> = domain
         .obligations
         .iter()
-        .filter_map(|o| o.invariant.as_deref())
+        .filter(|o| o.checked)
+        .map(|o| o.name.as_str())
         .collect();
     assert!(names.contains(&"Check_Order_total_0"), "{names:?}");
     assert!(names.contains(&"MinCard_OrderLine_Order"), "{names:?}");
+}
+
+/// A column `kind` of a state type is `kind_` in its states, since `kind` is the
+/// discriminant, and keeps its name in the row; a record keeps `kind` as it is.
+#[test]
+fn a_kind_column_of_a_state_type_is_escaped_in_the_domain_only() {
+    let model = model_from(&format!(
+        "{KEYWORDS_SRC}\nentity Note \"N\" {{\n  id: Int @pk\n  kind: Kind\n}}\n"
+    ));
+    let domain = build(&model, Some(CAPS), &|_| None).unwrap();
+    let matched = domain.sums.iter().find(|s| s.entity == "Match").unwrap();
+    assert_eq!(matched.kind, "MatchKind");
+    for v in &matched.variants {
+        let kind = v.fields.iter().find(|f| f.wire == "kind").unwrap();
+        assert_eq!(
+            (kind.name.as_str(), kind.domain_pascal().as_str()),
+            ("kind_", "Kind_")
+        );
+    }
+    let row = matched
+        .row_fields
+        .iter()
+        .find(|f| f.wire == "kind")
+        .unwrap();
+    assert_eq!(row.name, "kind");
+    let note = domain.records.iter().find(|r| r.id == "Note").unwrap();
+    assert!(note.fields.iter().any(|f| f.name == "kind"));
+}
+
+/// The JSON contract of `--format json`: types, states, use cases, functions, obligations.
+#[test]
+fn json_snapshot() {
+    let model = model_from(SRC);
+    let options = Options {
+        lang: Lang::Rust,
+        package: "domain".to_string(),
+        model_path: "order.rdra".to_string(),
+        version: "x.y.z".to_string(),
+        check: CheckStatus::Passed {
+            bounds: "1 instance per entity, Int 0..5".to_string(),
+            caps: CAPS,
+        },
+        conformance: None,
+        seal: false,
+    };
+    insta::assert_snapshot!(generate_json(&model, &options, &|_| None).expect("generates"));
+}
+
+/// Every obligation has a name of its own, built from model identifiers: a declaration added
+/// to the model, ahead of the others and with keys and rules of its own, moves none of the
+/// names the model had, nor what each names.
+#[test]
+fn obligation_names_do_not_move() {
+    let names = |src: &str| -> Vec<(String, String)> {
+        build(&model_from(src), Some(CAPS), &|_| None)
+            .unwrap()
+            .obligations
+            .into_iter()
+            .map(|o| (o.name, o.text))
+            .collect()
+    };
+    let before = names(SRC);
+    let mut seen = std::collections::BTreeSet::new();
+    for (name, _) in &before {
+        assert!(seen.insert(name.clone()), "{name} twice: {before:?}");
+    }
+    assert!(
+        before.iter().any(|(n, _)| n == "Ref_OrderLine_order_id"),
+        "{before:?}"
+    );
+    let added = format!(
+        r#"
+entity Archive "Archive" {{
+  id: Int @pk
+  code: String @unique
+  total: Int @check(total >= 0)
+}}
+relate(Archive, Customer, N:1)
+relate(OrderLine, Archive, N:1)
+{SRC}"#
+    );
+    let after = names(&added);
+    for (name, text) in &before {
+        assert!(
+            after.iter().any(|(n, t)| n == name && t == text),
+            "{name} moved or changed: {after:?}"
+        );
+    }
+    assert!(after.len() > before.len(), "{after:?}");
 }
 
 /// Two declarations that generate one type name are an error naming both.
@@ -151,6 +286,80 @@ entity OrderStatus "Order Status" {
         .to_string();
     assert!(err.contains("OrderStatus"), "{err}");
     assert!(err.contains("entity OrderStatus"), "{err}");
+}
+
+/// A name a printer derives takes `_` when a model type has it, and the printer reads which
+/// from `domain.derived`.
+#[test]
+fn a_derived_name_falls_back_to_an_underscore() {
+    let mut names = Names::default();
+    names
+        .claim(
+            "OrderVisitor".to_string(),
+            "entity OrderVisitor".to_string(),
+        )
+        .unwrap();
+    let mut domain = DomainModel::default();
+    let derived = |key: &str, name: &str| DerivedName {
+        key: key.to_string(),
+        name: name.to_string(),
+        by: format!("the visitor {name}"),
+    };
+    claim_derived(
+        &mut names,
+        &mut domain,
+        vec![
+            derived("go:visitor:Order", "OrderVisitor"),
+            derived("go:visitor:Line", "LineVisitor"),
+        ],
+    )
+    .unwrap();
+    assert_eq!(domain.derived("go:visitor:Order"), Some("OrderVisitor_"));
+    assert_eq!(domain.derived("go:visitor:Line"), Some("LineVisitor"));
+    names
+        .claim("Taken_".to_string(), "entity Taken_".to_string())
+        .unwrap();
+    names
+        .claim("Taken".to_string(), "entity Taken".to_string())
+        .unwrap();
+    let err = claim_derived(&mut names, &mut domain, vec![derived("k", "Taken")])
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("Taken_"), "{err}");
+}
+
+/// The port and its contracts are built whenever `check` passed: one contract per use case,
+/// named `<UseCase>UseCase`, in the order of the port's methods, and the Rust output prints the contracts without the harness.
+#[test]
+fn contracts_are_built_and_printed_without_the_harness() {
+    let model = model_from(SRC);
+    let domain = build_with(&model, Some(CAPS), false, &|_| None).unwrap();
+    assert!(!domain.harness);
+    let port = domain.port.as_ref().expect("a port");
+    let contracts: Vec<(&str, &str, &str)> = port
+        .contracts
+        .iter()
+        .map(|c| (c.name.as_str(), c.usecase.as_str(), c.error.as_str()))
+        .collect();
+    assert_eq!(
+        contracts,
+        [
+            ("PayUseCase", "Pay", "PayError"),
+            ("CancelOrderUseCase", "CancelOrder", "CancelOrderError"),
+            ("PlaceUseCase", "Place", "PlaceError"),
+        ]
+    );
+    for c in &port.contracts {
+        assert!(c
+            .methods
+            .iter()
+            .all(|&m| port.methods[m].usecase == c.usecase));
+    }
+    let rust = generated(Lang::Rust);
+    assert!(rust.contains("pub trait PayUseCase {"));
+    assert!(!rust.contains("ConformancePort"));
+    let go = generated(Lang::Go);
+    assert!(!go.contains("ConformancePort"));
 }
 
 /// The declared refinements of the sample: `paid_at` present in `paid` by the invariant,
@@ -682,4 +891,29 @@ deletes(Cancel, Order)
         let keys = format!("{body:?}").matches("KeyEq").count();
         assert_eq!(keys, if same_row { 2 } else { 1 }, "{extra}: {body:?}");
     }
+}
+
+/// A TypeScript name the printer derives (`parse<Row>`) that a model name already takes gets a
+/// trailing `_`: here the function of the use case `ParseOrderRow` keeps `parseOrderRow`.
+#[test]
+fn a_derived_typescript_name_yields_to_a_model_name() {
+    let src = r#"
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(open, done) @default(open)
+}
+usecase Open "Open"
+usecase ParseOrderRow "Parse"
+creates(Open, Order)
+transitions(ParseOrderRow, Order.status, open -> done)
+"#;
+    let ts = generated_from(src, "derived.rdra", Lang::TypeScript);
+    assert!(
+        ts.contains("export function parseOrderRow_(value: unknown): Result<OrderRow, InvalidRow>"),
+        "{ts}"
+    );
+    assert!(
+        ts.contains("export function parseOrderRow(order: OrderOpen)"),
+        "{ts}"
+    );
 }

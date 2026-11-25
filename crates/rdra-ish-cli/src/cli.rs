@@ -197,6 +197,11 @@ pub(crate) enum Commands {
         /// keeps the use case, and print on stdout which rules each guard protects
         #[arg(long)]
         guards: bool,
+        /// Also check the service code `[code]` in rdra.toml names: `fresh` (the default) that
+        /// the generated files are what the model generates, `build` that the probe compiles,
+        /// `run` that the conformance test passes. Only `build` and `run` start a compiler
+        #[arg(long, value_name = "LEVEL", num_args = 0..=1, require_equals = true, default_missing_value = "fresh")]
+        code: Option<CodeLevel>,
         #[command(flatten)]
         bounds: BoundsArgs,
         #[command(flatten)]
@@ -292,9 +297,21 @@ pub(crate) enum Commands {
     Codegen {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Language: ts, rust, or go
+        /// Language: ts, rust, or go (required but with --code or --format json)
         #[arg(long)]
-        lang: CodegenLang,
+        lang: Option<CodegenLang>,
+        /// Output format: code, or json for the contract as data (types, states, use cases,
+        /// functions, and obligations with their model locations)
+        #[arg(long, default_value = "code")]
+        format: CodegenFormat,
+        /// Write every file `[code.<lang>]` in rdra.toml names (the domain code and its
+        /// traces), with paths and sites relative to rdra.toml's directory
+        #[arg(long, conflicts_with_all = ["lang", "out", "check", "conformance", "format", "package", "allow_failing"])]
+        code: bool,
+        /// Write only the probe of each `[code.<lang>]` table that names one: the file that
+        /// states the service implements every use case's contract (`check --code=build`)
+        #[arg(long, conflicts_with_all = ["lang", "out", "check", "conformance", "format", "package", "allow_failing", "code"])]
+        probe: bool,
         /// Write to this file instead of stdout
         #[arg(short, long)]
         out: Option<PathBuf>,
@@ -312,10 +329,15 @@ pub(crate) enum Commands {
         /// The states the BFS behind the traces explores at most (with --conformance)
         #[arg(long, value_name = "N", default_value_t = rdra_ish_emit::codegen::conformance::DEFAULT_STATES, requires = "conformance")]
         conformance_states: usize,
+        /// --lang ts only: brand each state type with a symbol only the module can name, so code
+        /// outside it cannot build a state from an object literal
+        #[arg(long, conflicts_with = "code")]
+        seal: bool,
         /// Generate again with the same options and compare with FILE instead of printing:
         /// exit 1 with a short summary on stderr when it differs (file edited, model changed,
         /// or generator changed)
-        #[arg(long, value_name = "FILE", conflicts_with_all = ["out", "conformance"])]
+        /// With --conformance, the traces in that file are compared too, by hash
+        #[arg(long, value_name = "FILE", conflicts_with = "out")]
         check: Option<PathBuf>,
     },
     /// Derive reachable state patterns per entity (aggregated across BUCs)
@@ -635,6 +657,25 @@ pub(crate) enum OutputFormat {
 pub(crate) enum StatesFormat {
     Table,
     Csv,
+    Json,
+}
+
+/// How far `check --code` goes (docs/design/code-check.md).
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum CodeLevel {
+    /// The generated files are what the model generates now; no compiler runs
+    Fresh,
+    /// `fresh`, then the probe compiles with the language's build command
+    Build,
+    /// `build`, then the conformance test in the probe runs
+    Run,
+}
+
+#[derive(ValueEnum, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CodegenFormat {
+    /// The code in --lang
+    Code,
+    /// The contract as data: types, states, use cases, functions, obligations
     Json,
 }
 

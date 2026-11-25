@@ -27,6 +27,78 @@ pub struct Manifest {
     /// `[verify]`: what `verify` runs with.
     #[serde(default)]
     pub verify: CommandSection,
+    /// `[code]`: the service code `check --code` holds against the model
+    /// (docs/design/code-check.md).
+    pub code: Option<CodeSection>,
+}
+
+/// `[code]`: one table per language whose code follows the model, and the obligation ledger.
+/// Every path is relative to the directory of `rdra.toml`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CodeSection {
+    pub rust: Option<CodeTarget>,
+    pub go: Option<CodeTarget>,
+    pub ts: Option<CodeTarget>,
+    /// `[code.obligations]`: obligation name -> the file that owns it.
+    #[serde(default)]
+    pub obligations: BTreeMap<String, PathBuf>,
+}
+
+impl CodeSection {
+    /// The configured languages, by their table name, in a fixed order.
+    pub fn targets(&self) -> Vec<(&'static str, &CodeTarget)> {
+        [("rust", &self.rust), ("go", &self.go), ("ts", &self.ts)]
+            .into_iter()
+            .filter_map(|(name, t)| t.as_ref().map(|t| (name, t)))
+            .collect()
+    }
+}
+
+/// `[code.<lang>]`: the generated files of one language and how its service binds to them.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CodeTarget {
+    /// The `codegen` output: the domain types, functions, contracts and, with `traces`, the
+    /// conformance harness.
+    pub domain: PathBuf,
+    /// The conformance traces; with it the domain code holds the harness.
+    pub traces: Option<PathBuf>,
+    /// `--conformance-states` of the traces.
+    pub conformance_states: Option<usize>,
+    /// The probe `codegen` writes: one line per use case stating that `service` implements it.
+    pub probe: Option<PathBuf>,
+    /// The type that implements the contracts, as the probe names it
+    /// (`ecsvc::service::EcService`).
+    pub service: Option<String>,
+    /// Rust: the module path the probe imports the contracts from (`ecsvc::domain`). Default:
+    /// the crate of `service` and the path of `domain` under `src/`.
+    pub module: Option<String>,
+    /// An expression the conformance test calls for a fresh service. Default: the service
+    /// type's `Default`.
+    pub new: Option<String>,
+    /// Go: the package name of `domain` (`--package`).
+    pub package: Option<String>,
+    /// The directory the build runs in and the ledger scans. Default: the nearest directory
+    /// above `domain` with `Cargo.toml`, `go.mod`, `package.json` or `tsconfig.json`.
+    pub root: Option<PathBuf>,
+    /// The command `check --code=build` runs in place of the language's default, as argv.
+    /// It runs only when `--code=build` or `--code=run` is given on the command line.
+    pub build: Option<Vec<String>>,
+    /// The command `check --code=run` runs in place of the language's default, as argv.
+    pub run: Option<Vec<String>>,
+    /// TypeScript: generate the state types sealed (`codegen --seal`).
+    pub seal: Option<bool>,
+    /// TypeScript: the project's tsconfig that the generated `tsconfig.rdra.json` extends.
+    /// Default: `tsconfig.json` in `root`, when it exists.
+    pub tsconfig: Option<PathBuf>,
+}
+
+impl Manifest {
+    /// The directory `rdra.toml` is in: every `[code]` path is relative to it.
+    pub fn dir(&self) -> &Path {
+        self.path.parent().unwrap_or(Path::new("."))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]

@@ -2,18 +2,269 @@
 //! which drives a port along the traces `conformance::traces` writes.
 
 use super::conformance::TRACES_FORMAT;
-use super::go::{doc, field_type, local};
+use super::go::{doc, field_type, local, struct_decl, Line};
 use super::ir::{DomainModel, Field, FieldType, Scalar, Track};
 use super::{string_literal, type_ident};
 
-/// The imports the harness uses, printed after the package clause.
-pub(super) const IMPORTS: &str =
-    "import (\n\t\"errors\"\n\t\"fmt\"\n\t\"sort\"\n\t\"strconv\"\n\t\"strings\"\n)\n\n";
+/// The packages the harness imports.
+pub(super) const IMPORTS: [&str; 5] = ["errors", "fmt", "sort", "strconv", "strings"];
+
+/// `Issue<Actor>Capability`.
+fn issue(domain: &DomainModel, cap: &super::ir::CapabilityDecl) -> String {
+    super::go::derived(domain, &format!("go:issue:{}", cap.actor), || {
+        format!("Issue{}", cap.name)
+    })
+}
+
+/// The unexported method that makes a capability a caller of `caller`.
+fn caller_marker(caller: &super::ir::CallerDecl) -> String {
+    format!("is{}", caller.name)
+}
+
+/// The capability of each actor and the caller interface of each use case (#337): a prepare
+/// or an entry point takes the caller first, so code that holds no capability of an actor that
+/// performs the use case does not compile. A capability is a struct with an unexported field:
+/// only `Issue<Actor>Capability` makes a valid one. Go lets code outside the package write
+/// the zero value, which `Valid` reports false for, and a nil caller; `CallerValid` refuses
+/// both, and a service calls it.
+fn print_capabilities(domain: &DomainModel, port: &super::ir::PortDecl, out: &mut String) {
+    if domain.capabilities.is_empty() {
+        return;
+    }
+    let valid = super::go::derived(domain, "go:callervalid", || "CallerValid".to_string());
+    out.push_str("// ── Capabilities: who may run each use case ──\n\n");
+    for cap in &domain.capabilities {
+        let issue = issue(domain, cap);
+        out.push_str(&doc(
+            &cap.name,
+            &[
+                format!(
+                    "is the capability of the actor {} ({}): the use cases it performs take it.",
+                    cap.actor,
+                    super::one_line(&cap.label)
+                ),
+                format!("Only {issue} makes a valid one, which the code calls once it has authenticated a {}; rdra-ish does not check who calls it. Go lets code outside this package write the zero value, {}{{}}: it is not valid (Valid reports false), and {valid} refuses it.", cap.actor, cap.name),
+            ],
+            "",
+        ));
+        out.push_str(&struct_decl(
+            &cap.name,
+            &[Line::Cells(vec!["issued".into(), "bool".into()])],
+        ));
+        out.push_str(&format!(
+            "// {issue} returns the capability, for code that has authenticated a {1}.\nfunc {issue}() {0} {{\n\treturn {0}{{issued: true}}\n}}\n\n",
+            cap.name, cap.actor
+        ));
+        out.push_str(&format!(
+            "// Valid reports whether {issue} made the capability: the zero value is not valid.\nfunc (c {}) Valid() bool {{\n\treturn c.issued\n}}\n\n",
+            cap.name
+        ));
+    }
+    out.push_str(&format!(
+        "// {valid} reports whether by is a capability an Issue function made: false for a nil caller\n// and for the zero value of a capability. A service refuses a call whose caller is not valid.\nfunc {valid}(by interface{{ Valid() bool }}) bool {{\n\treturn by != nil && by.Valid()\n}}\n\n"
+    ));
+    for c in &port.contracts {
+        let Some(caller) = &c.caller else {
+            continue;
+        };
+        let caps: Vec<&str> = caller
+            .actors
+            .iter()
+            .map(|&i| domain.capabilities[i].name.as_str())
+            .collect();
+        out.push_str(&format!(
+            "// {} is who may run {}: the capability of an actor that performs it ({}).\n// A capability of another actor does not implement it, so a call with one does not compile.\ntype {0} interface {{\n\t// Valid reports whether the capability was issued.\n\tValid() bool\n\t{}()\n}}\n\n",
+            caller.name,
+            c.usecase,
+            caps.join(", "),
+            caller_marker(caller)
+        ));
+        for cap in &caps {
+            out.push_str(&format!(
+                "func ({cap}) {}() {{}}\n\n",
+                caller_marker(caller)
+            ));
+        }
+    }
+}
+
+/// One interface per use case (docs/design/code-check.md, decision 6): the prepare and commit
+/// methods of its actions. A service implements each; the probe names each.
+fn print_contracts(domain: &DomainModel, port: &super::ir::PortDecl, out: &mut String) {
+    if port.contracts.is_empty() {
+        return;
+    }
+    print_capabilities(domain, port, out);
+    out.push_str("// ── Contracts: one per use case, which the service implements ──\n\n");
+    for c in &port.contracts {
+        let at = c
+            .site
+            .as_ref()
+            .map(|s| format!(" ({s})"))
+            .unwrap_or_default();
+        out.push_str(&doc(
+            &c.name,
+            &[
+                format!("is the use case {}{at}: {}.", c.usecase, super::one_line(&c.label)),
+                format!("Each action is two calls: Prepare* loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching Commit* stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's <Row>Expected names. Either returns an error, a *{} where the use case does not run, and changes nothing then.", c.error),
+            ],
+            "",
+        ));
+        out.push_str(&format!("type {} interface {{\n", c.name));
+        let by: Vec<String> = c
+            .caller
+            .iter()
+            .map(|caller| format!("by {}", caller.name))
+            .collect();
+        for &i in &c.methods {
+            let m = &port.methods[i];
+            out.push_str(&format!(
+                "\t// Prepare{0} loads the rows of {1} (the action {2}) and runs it, writing nothing.\n\tPrepare{0}({3}) ({4}, error)\n",
+                m.name,
+                m.usecase,
+                m.action,
+                by.iter().cloned().chain(params(m)).collect::<Vec<_>>().join(", "),
+                m.write
+            ));
+            out.push_str(&format!(
+                "\t// Commit{0} stores what Prepare{0} returned in one transaction.\n\tCommit{0}(write {1}) error\n",
+                m.name, m.write
+            ));
+        }
+        for e in &c.entries {
+            out.push_str(&format!(
+                "\t// {} runs the action {} of {} whole, by the ids of its rows: the generator printed no\n\t// function for it (#335), so the service writes it and keeps the obligations.\n\t{0}({}) error\n",
+                entry_method(e),
+                e.action,
+                c.usecase,
+                by.iter().cloned().chain(entry_params(e)).collect::<Vec<_>>().join(", ")
+            ));
+        }
+        out.push_str("}\n\n");
+    }
+}
+
+/// The method of an entry point (#335): `Run<Action>`.
+pub(super) fn entry_method(e: &super::ir::EntryDecl) -> String {
+    format!("Run{}", e.name)
+}
+
+fn entry_params(e: &super::ir::EntryDecl) -> Vec<String> {
+    e.rows
+        .iter()
+        .map(|(n, ty)| format!("{} {ty}", local(n)))
+        .collect()
+}
+
+/// The Go names of a contract's methods: `Prepare*` and `Commit*` per action with functions,
+/// and `Run*` per entry point.
+pub(super) fn method_names(port: &super::ir::PortDecl, c: &super::ir::ContractDecl) -> Vec<String> {
+    let mut out = Vec::new();
+    for &i in &c.methods {
+        let m = &port.methods[i];
+        out.push(format!("Prepare{}", m.name));
+        out.push(format!("Commit{}", m.name));
+    }
+    out.extend(c.entries.iter().map(entry_method));
+    out
+}
+
+/// The test the Go probe holds when bound to traces: `check --code=run` runs it.
+pub const CONFORMANCE_TEST: &str = "TestRdraConformance";
+
+/// The probe (docs/design/code-check.md): a test file of the service's package, `package
+/// <svc>_test`, that assigns the service to each use case's contract on the use case's line and
+/// names each of the contract's methods on a line of its own (Go names one missing method per
+/// interface; a method expression per method names them all); and `TestRdraConformance` when
+/// bound. `binding.service` is `<import path>.<Type>`, `binding.module` the domain's import
+/// path, and the traces' path is from the probe's directory, where `go test` runs a test.
+pub(super) fn probe(
+    domain: &DomainModel,
+    binding: &super::ProbeBinding,
+) -> Option<super::probe::Probe> {
+    let port = domain.port.as_ref()?;
+    if port.contracts.is_empty() {
+        return None;
+    }
+    let (svc_import, ty) = binding
+        .service
+        .rsplit_once('.')
+        .filter(|(_, ty)| !ty.contains('/'))?;
+    let qualifier = |path: &str| {
+        path.rsplit('/')
+            .next()
+            .unwrap_or(path)
+            .chars()
+            .map(|c| if c.is_alphanumeric() { c } else { '_' })
+            .collect::<String>()
+    };
+    // The domain package by its `package` clause when the binding names it: an import path
+    // need not end in the package's name.
+    let dom = binding
+        .package
+        .clone()
+        .unwrap_or_else(|| qualifier(&binding.module));
+    let same = binding.module == svc_import;
+    let svc = if same {
+        dom.clone()
+    } else {
+        qualifier(svc_import)
+    };
+    let conformance = binding.conformance.as_ref().filter(|_| domain.harness);
+    let mut w =
+        super::probe::ProbeWriter::new("// Code generated by rdra-ish codegen. DO NOT EDIT.");
+    w.line(&format!(
+        "//\n// The contract probe of `rdra-ish check --code`: each use case line states that *{svc}.{ty}\n// implements the use case's contract, and the lines under it name each of the contract's\n// methods, so the compiler names every method the service lacks. `check --code=build` compiles\n// it; `check --code=run` runs {CONFORMANCE_TEST}. `rdra-ish codegen --code` writes it again.\n\npackage {svc}_test\n"
+    ));
+    let mut imports = String::from("import (\n");
+    if conformance.is_some() {
+        imports.push_str("\t\"os\"\n\t\"testing\"\n\n");
+    }
+    if !same {
+        imports.push_str(&format!("\t{dom} {}\n", string_literal(&binding.module)));
+    }
+    imports.push_str(&format!("\t{}\n)\n", string_literal(svc_import)));
+    w.line(&imports);
+    let receiver = format!("(*{svc}.{ty})");
+    for c in &port.contracts {
+        let site = c
+            .site
+            .as_ref()
+            .map(|s| format!(" ({s})"))
+            .unwrap_or_default();
+        w.line(&format!(
+            "// usecase {} {}{site}",
+            c.usecase,
+            string_literal(&super::one_line(&c.label))
+        ));
+        w.usecase(&format!("var _ {dom}.{} = {receiver}(nil)", c.name), c);
+        for name in method_names(port, c) {
+            w.line(&format!("var _ = {receiver}.{name}"));
+        }
+        w.line("");
+    }
+    if let Some((new, traces)) = conformance {
+        w.line(&format!(
+            "// {CONFORMANCE_TEST} drives a fresh service per trace along the model's traces\n// ({traces}): `rdra-ish check --code=run` runs it.\nfunc {CONFORMANCE_TEST}(t *testing.T) {{\n\ttraces, err := os.ReadFile({})\n\tif err != nil {{\n\t\tt.Fatal(err)\n\t}}\n\treport, err := {dom}.Conform(func() {dom}.ConformancePort {{ return {new} }}, string(traces))\n\tif err != nil {{\n\t\tt.Fatal(\"rdra-ish conformance: \" + err.Error())\n\t}}\n\tt.Logf(\"ok %d traces, %d calls, %d refusals, %d interleavings\", report.Traces, report.Calls, report.Refusals, report.Interleavings)\n}}",
+            string_literal(traces)
+        ));
+    }
+    let mut probe = w.finish();
+    // The file is written with one newline at its end.
+    while probe.text.ends_with('\n') {
+        probe.text.pop();
+    }
+    Some(probe)
+}
 
 pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
     let Some(port) = &domain.port else {
         return;
     };
+    print_contracts(domain, port, out);
+    if !domain.harness {
+        return;
+    }
     out.push_str(
         "// ── Conformance: the port a finished service implements, and the harness that drives it ──\n\n",
     );
@@ -32,39 +283,35 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
         ));
     }
     out.push_str("// StoreSnapshot is everything a store holds, as the conformance harness reads it: the rows of\n// each entity, the pending run marks, and the events raised on rows that a triggered use case reads.\n");
-    out.push_str("type StoreSnapshot struct {\n");
+    let mut lines = Vec::new();
     for e in &port.entities {
-        out.push_str(&format!("\t{} []{}\n", type_ident(&e.entity), e.ty));
+        lines.push(Line::Cells(vec![
+            type_ident(&e.entity),
+            format!("[]{}", e.ty),
+        ]));
     }
     for r in &port.runs {
-        out.push_str(&format!("\t{}s []{}\n", r.name, r.name));
+        lines.push(Line::Cells(vec![
+            format!("{}s", r.name),
+            format!("[]{}", r.name),
+        ]));
     }
     for ev in &port.events {
-        out.push_str(&format!("\t{} []{}\n", ev.ty, ev.ty));
+        lines.push(Line::Cells(vec![ev.ty.clone(), format!("[]{}", ev.ty)]));
     }
-    out.push_str("}\n\n");
+    out.push_str(&struct_decl("StoreSnapshot", &lines));
 
-    out.push_str("// ConformancePort is what a finished service offers the conformance harness. A use case is two\n// calls: each Prepare* method loads its rows by id and calls the dispatcher or transition\n// function, writing nothing; the matching Commit* stores the rows, marks, and events the result\n// holds in one transaction, each row only where it still is what the result's <Row>Expected\n// names. Either returns an error and changes nothing when the use case does not run.\n");
+    out.push_str("// ConformancePort is what a finished service offers the conformance harness: every use case's\n// contract, and a store the harness can seed and read back.\n");
     out.push_str("type ConformancePort interface {\n");
+    for c in &port.contracts {
+        out.push_str(&format!("\t{}\n", c.name));
+    }
     out.push_str(
         "\t// Seed empties the store and stores these rows: the initial state of a trace.\n",
     );
     out.push_str("\tSeed(rows StoreSnapshot)\n");
     out.push_str("\t// Snapshot returns everything the store holds now.\n");
     out.push_str("\tSnapshot() StoreSnapshot\n");
-    for m in &port.methods {
-        out.push_str(&format!(
-            "\t// Prepare{0} reads what {1} (the action {2}) writes; Commit{0} writes it.\n",
-            m.name, m.usecase, m.action
-        ));
-        out.push_str(&format!(
-            "\tPrepare{}({}) ({}, error)\n",
-            m.name,
-            params(m).join(", "),
-            m.write
-        ));
-        out.push_str(&format!("\tCommit{}(write {}) error\n", m.name, m.write));
-    }
     out.push_str("}\n\n");
 
     out.push_str("// ConformanceReport is what Conform checked.\ntype ConformanceReport struct {\n\tTraces        int\n\tCalls         int\n\tRefusals      int\n\tInterleavings int\n}\n\n");
@@ -329,9 +576,21 @@ func confSet[T any](p *T) string {{
     );
     out.push_str("\tconfA := &confArgs{toks: call[1:]}\n\t_ = confA\n");
     out.push_str("\tswitch call[0] {\n");
-    for m in &port.methods {
+    for (k, m) in port.methods.iter().enumerate() {
         out.push_str(&format!("\tcase {}:\n", string_literal(&m.action)));
         let mut args = Vec::new();
+        // The harness runs each call as the first actor that performs the use case.
+        let caller = port
+            .contracts
+            .iter()
+            .find(|c| c.methods.contains(&k))
+            .and_then(|c| c.caller.as_ref());
+        if let Some(caller) = caller {
+            args.push(format!(
+                "{}()",
+                issue(domain, &domain.capabilities[caller.actors[0]])
+            ));
+        }
         for (name, ty) in m.rows.iter().chain(&m.marks) {
             let v = local(&format!("conf_{name}"));
             out.push_str(&format!(
@@ -417,25 +676,25 @@ func confSet[T any](p *T) string {{
             type_ident(&e.entity)
         ));
         let mut parts = vec![format!(
-            "{} + {}",
+            "{}+{}",
             string_literal(&format!("{} ", e.entity)),
             text(domain, &format!("row.{}", e.id.pascal), &e.id.ty)
         )];
         for (field, how) in &e.tracked {
             parts.push(format!(
-                "{} + {}",
+                "{}+{}",
                 string_literal(&format!(" {}=", field.wire)),
                 abstracted(domain, field, *how)
             ));
         }
         out.push_str(&format!(
             "\t\tout = append(out, {})\n\t}}\n",
-            parts.join(" + ")
+            parts.join("+")
         ));
     }
     for r in &port.runs {
         out.push_str(&format!(
-            "\tfor _, m := range s.{}s {{\n\t\tout = append(out, {} + {} + \" \" + strconv.Itoa(m.Step))\n\t}}\n",
+            "\tfor _, m := range s.{}s {{\n\t\tout = append(out, {}+{}+\" \"+strconv.Itoa(m.Step))\n\t}}\n",
             r.name,
             string_literal(&format!("mark {} {} ", r.usecase, r.entity)),
             text(domain, "m.Id", &FieldType::Id(r.id_ty.clone()))
@@ -446,7 +705,7 @@ func confSet[T any](p *T) string {{
         for (field, tracked) in &ev.ids {
             if *tracked {
                 out.push_str(&format!(
-                    "\t\tout = append(out, {} + {})\n",
+                    "\t\tout = append(out, {}+{})\n",
                     string_literal(&format!("raised {} {} ", ev.ty, field.entity)),
                     text(
                         domain,

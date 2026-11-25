@@ -258,6 +258,7 @@ mod tests {
                 memory: verify.map(size),
                 ..Default::default()
             },
+            code: None,
         }
     }
 

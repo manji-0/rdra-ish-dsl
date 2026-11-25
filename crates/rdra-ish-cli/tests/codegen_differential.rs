@@ -153,7 +153,7 @@ fn sentinel(domain: &DomainModel, ty: &FieldType, tag: &str) -> Json {
     match ty {
         FieldType::Scalar(Scalar::Int) => json!(1_000 + (h % 1_000_000) as i64),
         FieldType::Scalar(Scalar::Bool) => json!(h % 2 == 0),
-        FieldType::Scalar(_) => json!(format!("~{tag}")),
+        FieldType::Scalar(s) => json!(scalar_sentinel(*s, tag, h)),
         FieldType::Enum(name) => {
             let decl = domain.enums.iter().find(|e| e.name == *name).expect("enum");
             json!(decl.values[(h as usize) % decl.values.len()].wire)
@@ -161,10 +161,70 @@ fn sentinel(domain: &DomainModel, ty: &FieldType, tag: &str) -> Json {
         FieldType::Id(name) => match id_repr(domain, name) {
             Scalar::Int => json!(1_000 + (h % 1_000_000) as i64),
             Scalar::Bool => json!(true),
-            _ => json!(format!("~{tag}")),
+            s => json!(scalar_sentinel(s, tag, h)),
         },
         FieldType::Rows(_) => panic!("a list is not a column"),
     }
+}
+
+/// A text value of `s` for `tag`, of the shape the generated parsers take (the row is the
+/// boundary: `from_row` checks Money, Decimal, Date and DateTime), and with as many values as
+/// a hash gives, so two tags of one case do not share one.
+fn scalar_sentinel(s: Scalar, tag: &str, h: u64) -> String {
+    let date = |h: u64| {
+        format!(
+            "{:04}-{:02}-{:02}",
+            2000 + h % 1000,
+            1 + (h / 1000) % 12,
+            1 + (h / 12_000) % 28
+        )
+    };
+    match s {
+        Scalar::Money | Scalar::Decimal => {
+            format!("{}.{:03}", h % 1_000_000, (h / 1_000_000) % 1000)
+        }
+        Scalar::Date => date(h),
+        Scalar::DateTime => {
+            let t = (h / 336_000) % 86_400;
+            format!(
+                "{}T{:02}:{:02}:{:02}Z",
+                date(h),
+                t / 3600,
+                (t / 60) % 60,
+                t % 60
+            )
+        }
+        Scalar::String | Scalar::Int | Scalar::Bool => format!("~{tag}"),
+    }
+}
+
+#[test]
+fn scalar_sentinels_have_the_shapes_the_parsers_take() {
+    for tag in ["a", "Order.paid_at#0", "x.y#3"] {
+        let h = tag.bytes().fold(2_166_136_261u64, |h, b| {
+            (h ^ u64::from(b)).wrapping_mul(16_777_619)
+        });
+        let money = scalar_sentinel(Scalar::Money, tag, h);
+        let (whole, part) = money.split_once('.').expect("a decimal part");
+        assert!(
+            whole
+                .bytes()
+                .chain(part.bytes())
+                .all(|b| b.is_ascii_digit()),
+            "{money}"
+        );
+        let date = scalar_sentinel(Scalar::Date, tag, h);
+        assert_eq!(date.len(), 10, "{date}");
+        let at = scalar_sentinel(Scalar::DateTime, tag, h);
+        assert!(
+            at.starts_with(&date) && at.ends_with('Z') && at.len() == 20,
+            "{at}"
+        );
+    }
+    assert_ne!(
+        scalar_sentinel(Scalar::Date, "a", 1),
+        scalar_sentinel(Scalar::Date, "b", 2)
+    );
 }
 
 /// How a column's value is known.
@@ -789,7 +849,10 @@ fn rs_scalar_dec(s: Scalar, j: &str) -> String {
         Scalar::Int => format!("{j}.int()"),
         Scalar::String => format!("{j}.str()"),
         Scalar::Bool => format!("{j}.bool()"),
-        other => format!("{}({j}.str())", other.name()),
+        other => format!(
+            "{j}.str().parse::<{0}>().expect(\"driver: a {0}\")",
+            other.name()
+        ),
     }
 }
 
@@ -798,7 +861,7 @@ fn rs_scalar_enc(s: Scalar, r: &str) -> String {
         Scalar::Int => format!("DrvJ::Num(*{r})"),
         Scalar::String => format!("DrvJ::Str({r}.clone())"),
         Scalar::Bool => format!("DrvJ::Bool(*{r})"),
-        _ => format!("DrvJ::Str({r}.0.clone())"),
+        _ => format!("DrvJ::Str({r}.to_string())"),
     }
 }
 
@@ -810,9 +873,14 @@ fn rs_dec(d: &DomainModel, ty: &FieldType, nullable: bool, j: &str) -> String {
     match ty {
         FieldType::Scalar(s) => rs_scalar_dec(*s, j),
         FieldType::Enum(name) => {
-            format!("{name}::parse(&{j}.str()).expect(\"driver: a value of {name}\")")
+            format!("{j}.str().parse::<{name}>().expect(\"driver: a value of {name}\")")
         }
-        FieldType::Id(name) => format!("{name}({})", rs_scalar_dec(id_repr(d, name), j)),
+        FieldType::Id(name) => match id_repr(d, name) {
+            s @ (Scalar::Int | Scalar::Bool | Scalar::String) => {
+                format!("{name}::from({})", rs_scalar_dec(s, j))
+            }
+            _ => format!("{j}.str().parse::<{name}>().expect(\"driver: a {name}\")"),
+        },
         FieldType::Rows(name) => format!("{j}.arr().iter().map(dec_{name}).collect::<Vec<_>>()"),
     }
 }
@@ -825,7 +893,11 @@ fn rs_enc(d: &DomainModel, ty: &FieldType, nullable: bool, r: &str) -> String {
     match ty {
         FieldType::Scalar(s) => rs_scalar_enc(*s, r),
         FieldType::Enum(_) => format!("DrvJ::Str({r}.as_str().to_string())"),
-        FieldType::Id(name) => rs_scalar_enc(id_repr(d, name), &format!("(&{r}.0)")),
+        FieldType::Id(name) => match id_repr(d, name) {
+            Scalar::Int => format!("DrvJ::Num({r}.get())"),
+            Scalar::Bool => format!("DrvJ::Bool({r}.get())"),
+            _ => format!("DrvJ::Str({r}.to_string())"),
+        },
         FieldType::Rows(_) => panic!("a list is not returned"),
     }
 }
@@ -966,9 +1038,16 @@ fn rust_driver(d: &DomainModel) -> String {
             rs_ident(&snake(&f.name)),
             call.join(", ")
         );
-        if !f.conditions.is_empty() {
-            body.push_str("    let r = match r { ::core::result::Result::Ok(r) => r, ::core::result::Result::Err(e) => return drv_obj(vec![(\"rejected\", DrvJ::Str(e.condition.to_string()))]) };\n");
-        }
+        let error = &d.error_of(&f.usecase).expect("an error type").name;
+        let rejected = if f.conditions.is_empty() {
+            String::new()
+        } else {
+            format!("::core::result::Result::Err({error}::Rejected(e)) => return drv_obj(vec![(\"rejected\", DrvJ::Str(e.condition.to_string()))]), ")
+        };
+        let _ = writeln!(
+            body,
+            "    let r = match r {{ ::core::result::Result::Ok(r) => r, {rejected}::core::result::Result::Err(e) => panic!(\"driver: {{e}}\") }};"
+        );
         let mut pairs = Vec::new();
         for o in &f.outputs {
             match &o.kind {
@@ -1215,17 +1294,15 @@ fn go_driver(d: &DomainModel) -> String {
             call.push(go_dec(d, &i.ty, i.nullable, &format!("a[{at}]")));
             at += 1;
         }
+        // Only `Rejected` is a refusal; any other error (`InvalidArgument`) is reported as
+        // itself, so the judge fails it.
         let mut body = String::new();
-        if f.conditions.is_empty() {
-            let _ = writeln!(body, "\tr := {}({})", f.name, call.join(", "));
-        } else {
-            let _ = writeln!(
-                body,
-                "\tr, err := {}({})\n\tif err != nil {{\n\t\treturn map[string]any{{\"rejected\": err.(*Rejected).Condition}}\n\t}}",
-                f.name,
-                call.join(", ")
-            );
-        }
+        let _ = writeln!(
+            body,
+            "\tr, err := {}({})\n\tif err != nil {{\n\t\treturn drvErr(err)\n\t}}",
+            f.name,
+            call.join(", ")
+        );
         let mut pairs = Vec::new();
         for o in &f.outputs {
             let field = type_ident(&o.name);
@@ -1328,6 +1405,7 @@ fn printed(model: &SemanticModel, lang: Lang, package: &str) -> String {
         model_path: "sample".to_string(),
         version: "test".to_string(),
         conformance: None,
+        seal: false,
         check: CheckStatus::Passed {
             bounds: "test".to_string(),
             caps: caps(),
@@ -1482,6 +1560,16 @@ fn printed_code_agrees_on_the_domain_samples() {
 fn printed_code_computes_the_derived_columns() {
     agree_on(vec![
         "crates/rdra-ish-cli/tests/fixtures/codegen/derived.rdra".to_string(),
+    ]);
+}
+
+/// Enum and Bool columns marked `@null`, which hold null (#359): a create leaves them null
+/// where they have no default, and a set writes a value and null back
+/// (tests/fixtures/codegen/nullable_enum_bool.rdra).
+#[test]
+fn printed_code_writes_null_to_nullable_enum_and_bool_columns() {
+    agree_on(vec![
+        "crates/rdra-ish-cli/tests/fixtures/codegen/nullable_enum_bool.rdra".to_string(),
     ]);
 }
 

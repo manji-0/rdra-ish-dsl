@@ -87,13 +87,28 @@ pub struct IdDecl {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Field {
-    /// The column name, as the model and the wire spell it.
+    /// The column name, as the model and the wire spell it: the name in `<Entity>Row`.
     pub wire: String,
+    /// The field's name in the domain types, snake_case: `wire`, except a column `kind` of a
+    /// state type, which is `kind_` there, since `kind` is the discriminant
+    /// (docs/design/algebraic-codegen.md, "Generated code style").
+    pub name: String,
     /// The column name as an exported identifier: PascalCase.
     pub pascal: String,
     pub ty: FieldType,
     pub nullable: bool,
     pub doc: Vec<String>,
+}
+
+impl Field {
+    /// The domain name in PascalCase: `pascal`, with the `_` of an escaped name (`Kind_`).
+    pub fn domain_pascal(&self) -> String {
+        if self.name == self.wire {
+            self.pascal.clone()
+        } else {
+            format!("{}_", self.pascal)
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -116,8 +131,12 @@ pub struct RecordDecl {
 /// output must keep it.
 #[derive(Clone, Debug)]
 pub struct Obligation {
-    /// The invariant `check` and `verify` name it by, when they check it.
-    pub invariant: Option<String>,
+    /// A name built from model identifiers only, so it does not move when the model gains an
+    /// unrelated declaration: the invariant's name where `check` and `verify` check it
+    /// (`Unique_Payment_Order`), else one of its own (`Ref_Product_category_id`).
+    pub name: String,
+    /// Whether `check` and `verify` check it, under `name`.
+    pub checked: bool,
     pub text: String,
     pub site: Option<String>,
 }
@@ -136,6 +155,21 @@ pub struct SumDecl {
     /// shape a store or the wire holds.
     pub row: String,
     pub row_fields: Vec<Field>,
+    /// The discriminant type `<Entity>Kind` (`<Entity>StateKind` when a column's enum has that
+    /// name): one value per state, the domain's own, apart from the tag column.
+    pub kind: String,
+}
+
+/// The error type of one use case, `<UseCase>Error`: the ways its functions, its dispatcher,
+/// and a store's commit of its result fail.
+#[derive(Clone, Debug)]
+pub struct UseCaseErrorDecl {
+    pub name: String,
+    pub usecase: String,
+    /// Whether a condition applied to it can reject a call.
+    pub rejects: bool,
+    /// Whether its arguments can break what the verified model keeps.
+    pub invalid_argument: bool,
 }
 
 /// One state of a [`SumDecl`].
@@ -164,10 +198,24 @@ pub struct DomainModel {
     pub skipped: Vec<Skipped>,
     pub validators: Vec<ValidatorDecl>,
     pub dispatchers: Vec<DispatchDecl>,
+    /// One per use case with functions, in the order of their first function.
+    pub errors: Vec<UseCaseErrorDecl>,
+    /// The names a language's printer derives, by key (`crate::codegen::derived_names`):
+    /// the name as derived, or with `_` appended when a model type had it.
+    pub derived: std::collections::BTreeMap<String, String>,
+    /// One per actor that performs a use case with a contract, in id order (#337).
+    pub capabilities: Vec<CapabilityDecl>,
+    /// Whether the conformance harness is printed (`--conformance`): the snapshot,
+    /// `ConformancePort`, and `conform`. The contracts of [`PortDecl`] are printed whenever
+    /// `port` is set.
+    pub harness: bool,
     pub marks: Vec<MarkDecl>,
     /// Rules the reachable states agree with and the model does not state.
     pub candidates: Vec<String>,
     pub obligations: Vec<Obligation>,
+    /// Every use case of the model, in model order, with the actions the transition system
+    /// runs it as: empty for a model `check` rejects.
+    pub usecases: Vec<UseCaseDecl>,
     /// The conformance port and harness, when asked for.
     pub port: Option<PortDecl>,
 }
@@ -573,7 +621,93 @@ pub struct EventIn {
 #[derive(Clone, Debug)]
 pub struct Skipped {
     pub action: String,
+    /// The use case the action runs.
+    pub usecase: String,
     pub reason: String,
+}
+
+/// The type a row that fits no state of its entity is refused with (`from_row` and the like).
+pub const INVALID_ROW: &str = "InvalidRow";
+
+/// The cases of every `<UseCase>Error`, each a type of its own every use case shares: a call
+/// from states the use case does not run from (or a commit that found a row changed), a
+/// condition that does not hold, and arguments that break what the verified model keeps.
+pub const ERROR_CASES: [&str; 3] = ["NotEnabled", "Rejected", "InvalidArgument"];
+
+/// A use case of the model.
+#[derive(Clone, Debug)]
+pub struct UseCaseDecl {
+    pub id: String,
+    pub label: String,
+    /// Its declaration's site.
+    pub site: Option<String>,
+    /// The transition system's actions it runs as, in order: one, one per step of a split use
+    /// case, or one per event of a triggered one. None for a use case that writes nothing.
+    pub actions: Vec<String>,
+    /// Its error type `<UseCase>Error` ([`UseCaseErrorDecl`]), when it has functions.
+    pub error: Option<String>,
+}
+
+/// What the generated code offers for a use case.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UseCaseKind {
+    /// Every action has functions.
+    Functions,
+    /// Some action has no function yet (the vocabulary is not printed, #335).
+    Unprinted,
+    /// It writes nothing: no action, no function, no entry point (decision 13 of
+    /// docs/design/code-check.md).
+    ReadOnly,
+}
+
+impl DomainModel {
+    /// The name a printer derived under `key`, as claimed (`crate::codegen::derived_names`).
+    pub fn derived(&self, key: &str) -> Option<&str> {
+        self.derived.get(key).map(String::as_str)
+    }
+
+    /// The error type of the use case `usecase`.
+    pub fn error_of(&self, usecase: &str) -> Option<&UseCaseErrorDecl> {
+        self.errors.iter().find(|e| e.usecase == usecase)
+    }
+
+    /// Whether the arguments of `f` can break what the verified model keeps: an argument
+    /// check, a nullable column read as present, or a second lifecycle column in no `from`
+    /// state of its arms.
+    pub fn invalid_argument_possible(&self, f: &FnDecl) -> bool {
+        if !f.checks.is_empty() {
+            return true;
+        }
+        f.outputs.iter().any(|o| match &o.kind {
+            OutKind::Row { fields, .. } => fields.iter().any(|(_, a)| match a {
+                Assigned::From {
+                    adapt: Adapt::Unwrap(_),
+                    ..
+                } => true,
+                Assigned::Switch { enum_ty, arms, .. } => {
+                    arms.len()
+                        < self
+                            .enums
+                            .iter()
+                            .find(|e| e.name == *enum_ty)
+                            .map_or(0, |e| e.values.len())
+                }
+                _ => false,
+            }),
+            OutKind::Deleted { .. } => false,
+        })
+    }
+
+    /// What the code offers for the use case `uc`.
+    pub fn usecase_kind(&self, uc: &UseCaseDecl) -> UseCaseKind {
+        if uc.actions.is_empty() {
+            UseCaseKind::ReadOnly
+        } else if self.skipped.iter().any(|s| s.usecase == uc.id) {
+            UseCaseKind::Unprinted
+        } else {
+            UseCaseKind::Functions
+        }
+    }
 }
 
 // ── Rule validators ──────────────────────────────────────────────────────────
@@ -639,8 +773,67 @@ pub struct PortDecl {
     pub events: Vec<PortEvent>,
     /// One per action the generator printed functions for.
     pub methods: Vec<PortMethod>,
+    /// One contract per use case with methods, in the order of its first method:
+    /// `ConformancePort` is their composition, with `seed` and `snapshot`.
+    pub contracts: Vec<ContractDecl>,
     /// What the store holds that the harness does not compare, for the header.
     pub unchecked: Vec<String>,
+}
+
+/// The contract of one use case (docs/design/code-check.md, decision 6): a trait / interface
+/// with the prepare and commit methods of its actions, which the service implements and the
+/// probe names. One per use case, so a compiler error on it names the use case.
+#[derive(Clone, Debug)]
+pub struct ContractDecl {
+    /// `<UseCase>UseCase`, or `<UseCase>Contract` when a model type has that name.
+    pub name: String,
+    /// The use case's id.
+    pub usecase: String,
+    pub label: String,
+    /// Where the use case is declared, `path:line:col`.
+    pub site: Option<String>,
+    /// The use case's error type, `<UseCase>Error`.
+    pub error: String,
+    /// Its methods: indices into [`PortDecl::methods`], one per action with functions.
+    pub methods: Vec<usize>,
+    /// One entry point per action the generator printed no function for (#335): the service
+    /// runs it whole, so the probe still requires it.
+    pub entries: Vec<EntryDecl>,
+    /// Who may run it (#337): `None` for a use case no actor performs (an event or a timer
+    /// starts it, or the model names no actor).
+    pub caller: Option<CallerDecl>,
+}
+
+/// The capability of one actor (#337): a value the code that authenticated the actor makes,
+/// and that every prepare and entry point of a use case the actor performs takes.
+#[derive(Clone, Debug)]
+pub struct CapabilityDecl {
+    /// The actor's id.
+    pub actor: String,
+    pub label: String,
+    /// `<Actor>Capability`, or `<Actor>Cap` when a model type has that name.
+    pub name: String,
+}
+
+/// Who may run one use case: one of the capabilities of the actors that perform it.
+#[derive(Clone, Debug)]
+pub struct CallerDecl {
+    /// `<UseCase>Caller`, or `<UseCase>UseCaseCaller`.
+    pub name: String,
+    /// Indices into [`DomainModel::capabilities`], in actor id order.
+    pub actors: Vec<usize>,
+}
+
+/// The entry point of an action with no printed function: `run_<action>` / `Run<Action>`
+/// by the ids of its rows, returning the use case's error when it does not run.
+#[derive(Clone, Debug)]
+pub struct EntryDecl {
+    /// The transition system's action.
+    pub action: String,
+    /// PascalCase.
+    pub name: String,
+    /// `(name, id type)` per row of the action: an existing row, or the id of a created one.
+    pub rows: Vec<(String, String)>,
 }
 
 /// The rows of one entity in a snapshot.

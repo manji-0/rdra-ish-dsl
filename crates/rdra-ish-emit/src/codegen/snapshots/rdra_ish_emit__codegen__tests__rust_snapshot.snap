@@ -14,14 +14,14 @@ expression: "generated(Lang::Rust)"
 // `check` verified those rules within these bounds: 1 instance per entity, Int 0..5.
 // Run `rdra-ish verify` to check them at larger bounds.
 //
-// Obligations:
-// O1 no two Customer rows share email.
-// O2 Order.customer_id names a present Customer.
-// O3 [Check_Order_total_0] every Order row satisfies total >= 0 (@check on total).
-// O4 OrderLine.order_id names a present Order.
-// O5 [MinCard_OrderLine_Order] every present Order has at least one OrderLine through OrderLine.order_id.
-// O6 each function runs in one transaction with the reads of its rows, marks, and events: `check` and `verify` explore every use case, and every step of a split one, as one atomic action, and a run of another use case between the read and the write is a state they never explored. Hold what the function read until the write commits (SELECT .. FOR UPDATE, or serializable isolation), and write each row only where it still is what the result's `<row>_expected` (`<Row>Expected` in Go) names (UPDATE .. WHERE id = ? AND <tag> = ?; INSERT a created row only where none has its id; DELETE likewise); when a write matches no row, roll the transaction back and treat the call as NotEnabled. The condition catches a row another call created, deleted, or moved to another state; it does not catch a change to another column a condition read, to a row the function reads and does not write, or to a run mark or event it consumes, which only the held reads keep.
-// O7 [Check_Order_total_0] holds in every state (total >= 0); no one-row check prints it.
+// Obligations, each by a name that stays when the model changes elsewhere (`check` and
+// `verify` report the ones marked [checked] by the same name):
+// Unique_Customer_email: no two Customer rows share email.
+// Ref_Order_customer_id: Order.customer_id names a present Customer.
+// Check_Order_total_0 [checked]: every Order row satisfies total >= 0 (@check on total).
+// Ref_OrderLine_order_id: OrderLine.order_id names a present Order.
+// MinCard_OrderLine_Order [checked]: every present Order has at least one OrderLine through OrderLine.order_id.
+// OneTransaction: each function runs in one transaction with the reads of its rows, marks, and events: `check` and `verify` explore every use case, and every step of a split one, as one atomic action, and a run of another use case between the read and the write is a state they never explored. Hold what the function read until the write commits (SELECT .. FOR UPDATE, or serializable isolation), and write each row only where it still is what the result's `<row>_expected` (`<Row>Expected` in Go) names (UPDATE .. WHERE id = ? AND <tag> = ?; INSERT a created row only where none has its id; DELETE likewise); when a write matches no row, roll the transaction back and treat the call as NotEnabled. The condition catches a row another call created, deleted, or moved to another state; it does not catch a change to another column a condition read, to a row the function reads and does not write, or to a run mark or event it consumes, which only the held reads keep.
 //
 // Candidate rules: every reachable row of the state agrees, and no rule says so. A rule
 // the business holds narrows the state type; one that is an accident of the model is a gap:
@@ -29,43 +29,335 @@ expression: "generated(Lang::Rust)"
 // - Order.type is null in every reachable state: no use case writes it (a gap, or a column to drop)
 // - forbidden(Order, status == cancelled, paid_at == present)
 
-#![allow(dead_code, unused_variables, non_camel_case_types, non_snake_case, clippy::all)]
+//! The data layer and the use cases of the model, as `rdra-ish codegen` generates them.
+
+// ── Boundary: what a parser of this module refuses ──
+
+/// Text that is no value of the type a parser makes: an id, a scalar, or a value set.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvalidValue {
+    /// The type the text was parsed as.
+    pub type_name: &'static str,
+    /// The text.
+    pub value: ::std::string::String,
+}
+
+impl ::core::fmt::Display for InvalidValue {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        write!(f, "{:?} is no value of {}", self.value, self.type_name)
+    }
+}
+
+impl ::std::error::Error for InvalidValue {}
+
+/// Whether `text` is all ASCII digits, and not empty.
+fn rdra_is_digits(text: &str) -> bool {
+    !text.is_empty() && text.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// Whether `text` is groups of ASCII digits of the lengths `widths`, split by `sep`.
+fn rdra_is_groups(text: &str, sep: char, widths: &[usize]) -> bool {
+    let parts: ::std::vec::Vec<&str> = text.split(sep).collect();
+    parts.len() == widths.len()
+        && parts.iter().zip(widths).all(|(p, n)| p.len() == *n && rdra_is_digits(p))
+}
+
+/// Whether `text` is decimal text: an optional `-`, digits, and optionally `.` and digits.
+fn rdra_is_decimal(text: &str) -> bool {
+    let digits = text.strip_prefix('-').unwrap_or(text);
+    match digits.split_once('.') {
+        ::core::option::Option::Some((whole, fraction)) => rdra_is_digits(whole) && rdra_is_digits(fraction),
+        ::core::option::Option::None => rdra_is_digits(digits),
+    }
+}
+
+/// Whether `text` has the shape of an ISO 8601 date, `YYYY-MM-DD`; the calendar is not checked.
+fn rdra_is_date(text: &str) -> bool {
+    rdra_is_groups(text, '-', &[4, 2, 2])
+}
+
+/// Whether `text` has the shape of an ISO 8601 date and time with an offset:
+/// `YYYY-MM-DDTHH:MM:SS`, optionally `.` and digits, then `Z` or `+HH:MM` / `-HH:MM`.
+fn rdra_is_date_time(text: &str) -> bool {
+    let ::core::option::Option::Some((date, time)) = text.split_once('T') else {
+        return false;
+    };
+    let (clock, zone_ok) = match time.strip_suffix('Z') {
+        ::core::option::Option::Some(clock) => (clock, true),
+        ::core::option::Option::None => match time.rfind(['+', '-']) {
+            ::core::option::Option::Some(at) => (&time[..at], rdra_is_groups(&time[at + 1..], ':', &[2, 2])),
+            ::core::option::Option::None => return false,
+        },
+    };
+    let clock_ok = match clock.split_once('.') {
+        ::core::option::Option::Some((whole, fraction)) => {
+            rdra_is_groups(whole, ':', &[2, 2, 2]) && rdra_is_digits(fraction)
+        }
+        ::core::option::Option::None => rdra_is_groups(clock, ':', &[2, 2, 2]),
+    };
+    rdra_is_date(date) && clock_ok && zone_ok
+}
 
 // ── Scalars: replace with the project's own types if it has them ──
 
 /// A monetary amount as decimal text, such as "1200.50".
+/// Made only by `TryFrom<String>` and `FromStr`, which take decimal text (an optional `-`, digits, and optionally `.` and digits) and refuse other text with [`InvalidValue`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Money(pub ::std::string::String);
+pub struct Money(::std::string::String);
+
+impl Money {
+    /// The text it holds.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl ::core::convert::TryFrom<::std::string::String> for Money {
+    type Error = InvalidValue;
+
+    /// The value of `text`, or [`InvalidValue`] when it is not decimal text (an optional `-`, digits, and optionally `.` and digits).
+    fn try_from(text: ::std::string::String) -> ::core::result::Result<Self, InvalidValue> {
+        if rdra_is_decimal(&text) {
+            ::core::result::Result::Ok(Self(text))
+        } else {
+            ::core::result::Result::Err(InvalidValue { type_name: "Money", value: text })
+        }
+    }
+}
+
+impl ::core::str::FromStr for Money {
+    type Err = InvalidValue;
+
+    fn from_str(text: &str) -> ::core::result::Result<Self, InvalidValue> {
+        <Self as ::core::convert::TryFrom<::std::string::String>>::try_from(text.to_string())
+    }
+}
+
+impl ::core::fmt::Display for Money {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
 
 /// A decimal number as text, such as "0.3".
+/// Made only by `TryFrom<String>` and `FromStr`, which take decimal text (an optional `-`, digits, and optionally `.` and digits) and refuse other text with [`InvalidValue`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Decimal(pub ::std::string::String);
+pub struct Decimal(::std::string::String);
+
+impl Decimal {
+    /// The text it holds.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl ::core::convert::TryFrom<::std::string::String> for Decimal {
+    type Error = InvalidValue;
+
+    /// The value of `text`, or [`InvalidValue`] when it is not decimal text (an optional `-`, digits, and optionally `.` and digits).
+    fn try_from(text: ::std::string::String) -> ::core::result::Result<Self, InvalidValue> {
+        if rdra_is_decimal(&text) {
+            ::core::result::Result::Ok(Self(text))
+        } else {
+            ::core::result::Result::Err(InvalidValue { type_name: "Decimal", value: text })
+        }
+    }
+}
+
+impl ::core::str::FromStr for Decimal {
+    type Err = InvalidValue;
+
+    fn from_str(text: &str) -> ::core::result::Result<Self, InvalidValue> {
+        <Self as ::core::convert::TryFrom<::std::string::String>>::try_from(text.to_string())
+    }
+}
+
+impl ::core::fmt::Display for Decimal {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
 
 /// A date in ISO 8601, such as "2026-11-07".
+/// Made only by `TryFrom<String>` and `FromStr`, which take an ISO 8601 date, `YYYY-MM-DD` and refuse other text with [`InvalidValue`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Date(pub ::std::string::String);
+pub struct Date(::std::string::String);
+
+impl Date {
+    /// The text it holds.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl ::core::convert::TryFrom<::std::string::String> for Date {
+    type Error = InvalidValue;
+
+    /// The value of `text`, or [`InvalidValue`] when it is not an ISO 8601 date, `YYYY-MM-DD`.
+    fn try_from(text: ::std::string::String) -> ::core::result::Result<Self, InvalidValue> {
+        if rdra_is_date(&text) {
+            ::core::result::Result::Ok(Self(text))
+        } else {
+            ::core::result::Result::Err(InvalidValue { type_name: "Date", value: text })
+        }
+    }
+}
+
+impl ::core::str::FromStr for Date {
+    type Err = InvalidValue;
+
+    fn from_str(text: &str) -> ::core::result::Result<Self, InvalidValue> {
+        <Self as ::core::convert::TryFrom<::std::string::String>>::try_from(text.to_string())
+    }
+}
+
+impl ::core::fmt::Display for Date {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
 
 /// A date and time in ISO 8601 with offset, such as "2026-11-07T09:00:00+09:00".
+/// Made only by `TryFrom<String>` and `FromStr`, which take an ISO 8601 date and time with `Z` or an offset and refuse other text with [`InvalidValue`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct DateTime(pub ::std::string::String);
+pub struct DateTime(::std::string::String);
+
+impl DateTime {
+    /// The text it holds.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl ::core::convert::TryFrom<::std::string::String> for DateTime {
+    type Error = InvalidValue;
+
+    /// The value of `text`, or [`InvalidValue`] when it is not an ISO 8601 date and time with `Z` or an offset.
+    fn try_from(text: ::std::string::String) -> ::core::result::Result<Self, InvalidValue> {
+        if rdra_is_date_time(&text) {
+            ::core::result::Result::Ok(Self(text))
+        } else {
+            ::core::result::Result::Err(InvalidValue { type_name: "DateTime", value: text })
+        }
+    }
+}
+
+impl ::core::str::FromStr for DateTime {
+    type Err = InvalidValue;
+
+    fn from_str(text: &str) -> ::core::result::Result<Self, InvalidValue> {
+        <Self as ::core::convert::TryFrom<::std::string::String>>::try_from(text.to_string())
+    }
+}
+
+impl ::core::fmt::Display for DateTime {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
 
 // ── Ids ──
 
 /// The id of entity Customer.
+/// Any `i64` is one: made by `From` (so `TryFrom`) and `FromStr`, read by `get`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct CustomerId(pub i64);
+pub struct CustomerId(i64);
+
+impl CustomerId {
+    /// The value it holds.
+    pub fn get(self) -> i64 {
+        self.0
+    }
+}
+
+impl ::core::convert::From<i64> for CustomerId {
+    fn from(value: i64) -> Self {
+        Self(value)
+    }
+}
+
+impl ::core::str::FromStr for CustomerId {
+    type Err = InvalidValue;
+
+    fn from_str(text: &str) -> ::core::result::Result<Self, InvalidValue> {
+        text.parse::<i64>().map(Self).map_err(|_| InvalidValue { type_name: "CustomerId", value: text.to_string() })
+    }
+}
+
+impl ::core::fmt::Display for CustomerId {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        ::core::fmt::Display::fmt(&self.0, f)
+    }
+}
 
 /// The id of entity Order.
+/// Any `i64` is one: made by `From` (so `TryFrom`) and `FromStr`, read by `get`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct OrderId(pub i64);
+pub struct OrderId(i64);
+
+impl OrderId {
+    /// The value it holds.
+    pub fn get(self) -> i64 {
+        self.0
+    }
+}
+
+impl ::core::convert::From<i64> for OrderId {
+    fn from(value: i64) -> Self {
+        Self(value)
+    }
+}
+
+impl ::core::str::FromStr for OrderId {
+    type Err = InvalidValue;
+
+    fn from_str(text: &str) -> ::core::result::Result<Self, InvalidValue> {
+        text.parse::<i64>().map(Self).map_err(|_| InvalidValue { type_name: "OrderId", value: text.to_string() })
+    }
+}
+
+impl ::core::fmt::Display for OrderId {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        ::core::fmt::Display::fmt(&self.0, f)
+    }
+}
 
 /// The id of entity OrderLine.
+/// Any `i64` is one: made by `From` (so `TryFrom`) and `FromStr`, read by `get`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct OrderLineId(pub i64);
+pub struct OrderLineId(i64);
+
+impl OrderLineId {
+    /// The value it holds.
+    pub fn get(self) -> i64 {
+        self.0
+    }
+}
+
+impl ::core::convert::From<i64> for OrderLineId {
+    fn from(value: i64) -> Self {
+        Self(value)
+    }
+}
+
+impl ::core::str::FromStr for OrderLineId {
+    type Err = InvalidValue;
+
+    fn from_str(text: &str) -> ::core::result::Result<Self, InvalidValue> {
+        text.parse::<i64>().map(Self).map_err(|_| InvalidValue { type_name: "OrderLineId", value: text.to_string() })
+    }
+}
+
+impl ::core::fmt::Display for OrderLineId {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        ::core::fmt::Display::fmt(&self.0, f)
+    }
+}
 
 // ── Value sets ──
 
 /// Payment Method
+/// Parsed from its wire spelling by `FromStr`, printed by `as_str` and `Display`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum PaymentMethod {
     /// Credit card
@@ -86,14 +378,28 @@ impl PaymentMethod {
             Self::BankTransfer => "bank_transfer",
         }
     }
+}
 
-    /// The value the model spells `text`, if any.
-    pub fn parse(text: &str) -> ::core::option::Option<Self> {
-        Self::ALL.into_iter().find(|v| v.as_str() == text)
+impl ::core::str::FromStr for PaymentMethod {
+    type Err = InvalidValue;
+
+    /// The value the model spells `text`, or [`InvalidValue`].
+    fn from_str(text: &str) -> ::core::result::Result<Self, InvalidValue> {
+        Self::ALL
+            .into_iter()
+            .find(|v| v.as_str() == text)
+            .ok_or_else(|| InvalidValue { type_name: "PaymentMethod", value: text.to_string() })
+    }
+}
+
+impl ::core::fmt::Display for PaymentMethod {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
 /// The values of Order.status.
+/// Parsed from its wire spelling by `FromStr`, printed by `as_str` and `Display`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum OrderStatus {
     /// Pending
@@ -117,38 +423,59 @@ impl OrderStatus {
             Self::Cancelled => "cancelled",
         }
     }
+}
 
-    /// The value the model spells `text`, if any.
-    pub fn parse(text: &str) -> ::core::option::Option<Self> {
-        Self::ALL.into_iter().find(|v| v.as_str() == text)
+impl ::core::str::FromStr for OrderStatus {
+    type Err = InvalidValue;
+
+    /// The value the model spells `text`, or [`InvalidValue`].
+    fn from_str(text: &str) -> ::core::result::Result<Self, InvalidValue> {
+        Self::ALL
+            .into_iter()
+            .find(|v| v.as_str() == text)
+            .ok_or_else(|| InvalidValue { type_name: "OrderStatus", value: text.to_string() })
+    }
+}
+
+impl ::core::fmt::Display for OrderStatus {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
 // ── Entities ──
 
 /// Customer
+/// A record of entity Customer: it has no states, so it is its own row, and the types of its fields are what it keeps.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Customer {
     /// Primary key.
     pub id: CustomerId,
+    /// The column `email`.
     pub email: ::std::string::String,
 }
 
 /// Order Line
+/// A record of entity OrderLine: it has no states, so it is its own row, and the types of its fields are what it keeps.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OrderLine {
     /// Primary key.
     pub id: OrderLineId,
+    /// The column `qty`.
     pub qty: i64,
+    /// The column `order_id`.
     pub order_id: OrderId,
 }
 
 // ── DTOs ──
 
 /// Create order request
+/// The fields of DTO CreateOrderRequest.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CreateOrderRequest {
+    /// The column `customer_id`.
     pub customer_id: i64,
+    /// The column `note`.
     pub note: ::core::option::Option<::std::string::String>,
 }
 
@@ -156,7 +483,7 @@ pub struct CreateOrderRequest {
 
 /// Order in the state `pending` of status.
 /// `paid_at`: Null in this state by a rule.
-/// Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.
+/// Sealed: only a transition function and `from_row` make one. Its fields are private, and read by the methods of the same name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OrderPending {
     /// Primary key.
@@ -169,34 +496,34 @@ pub struct OrderPending {
 }
 
 impl OrderPending {
-    /// `id`.
+    /// The column `id`.
     pub fn id(&self) -> &OrderId {
         &self.id
     }
-    /// `total`.
+    /// The column `total`.
     pub fn total(&self) -> &Money {
         &self.total
     }
-    /// `method`.
+    /// The column `method`.
     pub fn method(&self) -> &PaymentMethod {
         &self.method
     }
-    /// `delivered_at`.
+    /// The column `delivered_at`.
     pub fn delivered_at(&self) -> ::core::option::Option<&DateTime> {
         self.delivered_at.as_ref()
     }
-    /// `type`.
+    /// The column `type`.
     pub fn r#type(&self) -> ::core::option::Option<&::std::string::String> {
         self.r#type.as_ref()
     }
-    /// `customer_id`.
+    /// The column `customer_id`.
     pub fn customer_id(&self) -> &CustomerId {
         &self.customer_id
     }
 }
 
 /// Order in the state `paid` of status.
-/// Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.
+/// Sealed: only a transition function and `from_row` make one. Its fields are private, and read by the methods of the same name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OrderPaid {
     /// Primary key.
@@ -211,38 +538,38 @@ pub struct OrderPaid {
 }
 
 impl OrderPaid {
-    /// `id`.
+    /// The column `id`.
     pub fn id(&self) -> &OrderId {
         &self.id
     }
-    /// `total`.
+    /// The column `total`.
     pub fn total(&self) -> &Money {
         &self.total
     }
-    /// `paid_at`.
+    /// The column `paid_at`.
     pub fn paid_at(&self) -> &DateTime {
         &self.paid_at
     }
-    /// `method`.
+    /// The column `method`.
     pub fn method(&self) -> &PaymentMethod {
         &self.method
     }
-    /// `delivered_at`.
+    /// The column `delivered_at`.
     pub fn delivered_at(&self) -> ::core::option::Option<&DateTime> {
         self.delivered_at.as_ref()
     }
-    /// `type`.
+    /// The column `type`.
     pub fn r#type(&self) -> ::core::option::Option<&::std::string::String> {
         self.r#type.as_ref()
     }
-    /// `customer_id`.
+    /// The column `customer_id`.
     pub fn customer_id(&self) -> &CustomerId {
         &self.customer_id
     }
 }
 
 /// Order in the state `cancelled` of status.
-/// Only a transition function and `from_row` make one: its fields are private, and read by the methods of the same name.
+/// Sealed: only a transition function and `from_row` make one. Its fields are private, and read by the methods of the same name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OrderCancelled {
     /// Primary key.
@@ -256,52 +583,67 @@ pub struct OrderCancelled {
 }
 
 impl OrderCancelled {
-    /// `id`.
+    /// The column `id`.
     pub fn id(&self) -> &OrderId {
         &self.id
     }
-    /// `total`.
+    /// The column `total`.
     pub fn total(&self) -> &Money {
         &self.total
     }
-    /// `paid_at`.
+    /// The column `paid_at`.
     pub fn paid_at(&self) -> ::core::option::Option<&DateTime> {
         self.paid_at.as_ref()
     }
-    /// `method`.
+    /// The column `method`.
     pub fn method(&self) -> &PaymentMethod {
         &self.method
     }
-    /// `delivered_at`.
+    /// The column `delivered_at`.
     pub fn delivered_at(&self) -> ::core::option::Option<&DateTime> {
         self.delivered_at.as_ref()
     }
-    /// `type`.
+    /// The column `type`.
     pub fn r#type(&self) -> ::core::option::Option<&::std::string::String> {
         self.r#type.as_ref()
     }
-    /// `customer_id`.
+    /// The column `customer_id`.
     pub fn customer_id(&self) -> &CustomerId {
         &self.customer_id
     }
 }
 
+/// Which state a Order is in: its discriminant.
+/// The domain's own: the tag column `status` lives only in [`OrderRow`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum OrderKind {
+    /// The state `pending`.
+    Pending,
+    /// The state `paid`.
+    Paid,
+    /// The state `cancelled`.
+    Cancelled,
+}
+
 /// Order
-/// One of its states, told apart by `status`.
+/// One of its states, told apart by `kind()`. A store holds it as [`OrderRow`]: `from_row` (or `TryFrom`) reads one, `into_row` (or `From`) writes one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Order {
+    /// The state `pending`.
     Pending(OrderPending),
+    /// The state `paid`.
     Paid(OrderPaid),
+    /// The state `cancelled`.
     Cancelled(OrderCancelled),
 }
 
 impl Order {
-    /// The state's `status`.
-    pub fn status(&self) -> OrderStatus {
+    /// The state it is in.
+    pub fn kind(&self) -> OrderKind {
         match self {
-            Self::Pending(_) => OrderStatus::Pending,
-            Self::Paid(_) => OrderStatus::Paid,
-            Self::Cancelled(_) => OrderStatus::Cancelled,
+            Self::Pending(_) => OrderKind::Pending,
+            Self::Paid(_) => OrderKind::Paid,
+            Self::Cancelled(_) => OrderKind::Cancelled,
         }
     }
 }
@@ -326,12 +668,145 @@ impl ::core::convert::From<OrderCancelled> for Order {
 
 // ── Use cases ──
 
-/// A condition of the use case did not hold: the use case does not run.
+/// The rows are in states the use case does not run from, or a store found a row it writes
+/// no longer what the result expects when it committed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotEnabled {
+    /// The use case.
+    pub usecase: &'static str,
+}
+
+impl ::core::fmt::Display for NotEnabled {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        write!(f, "{} does not run from the states of its rows", self.usecase)
+    }
+}
+
+impl ::std::error::Error for NotEnabled {}
+
+/// A condition applied to the use case does not hold: the use case does not run.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Rejected {
+    /// The condition's id.
     pub condition: &'static str,
+    /// The condition's label.
     pub label: &'static str,
+    /// Where the condition is declared.
     pub site: ::core::option::Option<&'static str>,
+}
+
+impl ::core::fmt::Display for Rejected {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        write!(f, "the condition {} ({}) does not hold", self.condition, self.label)
+    }
+}
+
+impl ::std::error::Error for Rejected {}
+
+/// The arguments break what the verified model keeps: a child row that does not name the
+/// parent passed with it, a row that is not the event's, or a column its state keeps null or
+/// present that is not. The caller's rows are wrong; the use case does not run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvalidArgument {
+    /// The use case.
+    pub usecase: &'static str,
+    /// What the arguments break.
+    pub reason: &'static str,
+}
+
+impl ::core::fmt::Display for InvalidArgument {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        write!(f, "{}: {}", self.usecase, self.reason)
+    }
+}
+
+impl ::std::error::Error for InvalidArgument {}
+
+/// Why Pay did not run: what its functions, its dispatcher, and the commit of its result return.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PayError {
+    /// The rows are in states Pay does not run from, or a commit found a row it writes changed.
+    NotEnabled(NotEnabled),
+}
+
+impl ::core::fmt::Display for PayError {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        match self {
+            Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
+        }
+    }
+}
+
+impl ::std::error::Error for PayError {
+    fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
+        match self {
+            Self::NotEnabled(e) => ::core::option::Option::Some(e),
+        }
+    }
+}
+
+impl ::core::convert::From<NotEnabled> for PayError {
+    fn from(e: NotEnabled) -> Self {
+        Self::NotEnabled(e)
+    }
+}
+
+/// Why CancelOrder did not run: what its functions, its dispatcher, and the commit of its result return.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CancelOrderError {
+    /// The rows are in states CancelOrder does not run from, or a commit found a row it writes changed.
+    NotEnabled(NotEnabled),
+}
+
+impl ::core::fmt::Display for CancelOrderError {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        match self {
+            Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
+        }
+    }
+}
+
+impl ::std::error::Error for CancelOrderError {
+    fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
+        match self {
+            Self::NotEnabled(e) => ::core::option::Option::Some(e),
+        }
+    }
+}
+
+impl ::core::convert::From<NotEnabled> for CancelOrderError {
+    fn from(e: NotEnabled) -> Self {
+        Self::NotEnabled(e)
+    }
+}
+
+/// Why Place did not run: what its functions, its dispatcher, and the commit of its result return.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PlaceError {
+    /// The rows are in states Place does not run from, or a commit found a row it writes changed.
+    NotEnabled(NotEnabled),
+}
+
+impl ::core::fmt::Display for PlaceError {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        match self {
+            Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
+        }
+    }
+}
+
+impl ::std::error::Error for PlaceError {
+    fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
+        match self {
+            Self::NotEnabled(e) => ::core::option::Option::Some(e),
+        }
+    }
+}
+
+impl ::core::convert::From<NotEnabled> for PlaceError {
+    fn from(e: NotEnabled) -> Self {
+        Self::NotEnabled(e)
+    }
 }
 
 /// What a row a result writes must still be when the write commits, so the store can write
@@ -343,12 +818,18 @@ pub enum ExpectedSource {
     /// The row exists.
     Present,
     /// The row exists, and its `column` holds `value`.
-    In { column: &'static str, value: &'static str },
+    In {
+        /// The column, as the row spells it.
+        column: &'static str,
+        /// The value, as the model spells it.
+        value: &'static str,
+    },
 }
 
 /// What `pay` returns.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PayResult {
+    /// The row `order` to write.
     pub order: OrderPaid,
     /// What `order` must still be when it is written.
     pub order_expected: ExpectedSource,
@@ -356,8 +837,8 @@ pub struct PayResult {
 
 /// Pay (Pay).
 /// One run of the use case, from the states of the arguments' types. It requires what `Pay` requires and writes what it writes; the values the model leaves open are the inputs.
-pub fn pay(order: OrderPending, order_paid_at: DateTime) -> PayResult {
-    PayResult {
+pub fn pay(order: OrderPending, order_paid_at: DateTime) -> ::core::result::Result<PayResult, PayError> {
+    ::core::result::Result::Ok(PayResult {
         order: OrderPaid {
             id: order.id,
             total: order.total,
@@ -368,12 +849,13 @@ pub fn pay(order: OrderPending, order_paid_at: DateTime) -> PayResult {
             customer_id: order.customer_id,
         },
         order_expected: ExpectedSource::In { column: "status", value: "pending" },
-    }
+    })
 }
 
 /// What `cancel_order` returns.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CancelOrderResult {
+    /// The row `order` to write.
     pub order: OrderCancelled,
     /// What `order` must still be when it is written.
     pub order_expected: ExpectedSource,
@@ -381,24 +863,25 @@ pub struct CancelOrderResult {
 
 /// Cancel (CancelOrder).
 /// One run of the use case, from the states of the arguments' types. It requires what `CancelOrder` requires and writes what it writes; the values the model leaves open are the inputs.
-pub fn cancel_order(order: OrderPending) -> CancelOrderResult {
-    CancelOrderResult {
+pub fn cancel_order(order: OrderPending) -> ::core::result::Result<CancelOrderResult, CancelOrderError> {
+    ::core::result::Result::Ok(CancelOrderResult {
         order: OrderCancelled {
             id: order.id,
             total: order.total,
-            paid_at: None,
+            paid_at: ::core::option::Option::None,
             method: order.method,
             delivered_at: order.delivered_at,
             r#type: order.r#type,
             customer_id: order.customer_id,
         },
         order_expected: ExpectedSource::In { column: "status", value: "pending" },
-    }
+    })
 }
 
 /// What `place` returns.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlaceResult {
+    /// The row `order` to write.
     pub order: OrderPending,
     /// What `order` must still be when it is written.
     pub order_expected: ExpectedSource,
@@ -406,18 +889,18 @@ pub struct PlaceResult {
 
 /// Place (Place).
 /// One run of the use case, from the states of the arguments' types. It requires what `Place` requires and writes what it writes; the values the model leaves open are the inputs.
-pub fn place(parent_customer: Customer, order_id: OrderId, order_method: PaymentMethod) -> PlaceResult {
-    PlaceResult {
+pub fn place(parent_customer: Customer, order_id: OrderId, order_method: PaymentMethod) -> ::core::result::Result<PlaceResult, PlaceError> {
+    ::core::result::Result::Ok(PlaceResult {
         order: OrderPending {
             id: order_id,
-            total: 0,
+            total: Money(::std::string::String::from("0")),
             method: order_method,
-            delivered_at: None,
-            r#type: None,
-            customer_id: parent_customer.id.clone(),
+            delivered_at: ::core::option::Option::None,
+            r#type: ::core::option::Option::None,
+            customer_id: parent_customer.id,
         },
         order_expected: ExpectedSource::Absent,
-    }
+    })
 }
 
 // ── Rule checks ──
@@ -470,30 +953,52 @@ impl Order {
 
 // ── Rows: the flat shape a store or the wire holds ──
 
-/// A row that breaks what the type of its state requires.
+/// A row that fits no state of its entity: `from_row` refuses it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvalidRow {
+    /// The entity.
     pub entity: &'static str,
+    /// The column that breaks what the state requires.
     pub column: &'static str,
+    /// What the state requires of it.
     pub reason: &'static str,
 }
 
-/// Every column of Order as the data layer declares it.
+impl ::core::fmt::Display for InvalidRow {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        write!(f, "{}.{}: {}", self.entity, self.column, self.reason)
+    }
+}
+
+impl ::std::error::Error for InvalidRow {}
+
+/// Every column of Order as the data layer declares it: the shape a store or the wire holds. The
+/// scalars it holds were parsed when it was built.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OrderRow {
+    /// The column `id`.
     pub id: OrderId,
+    /// The column `total`.
     pub total: Money,
+    /// The column `status`.
     pub status: OrderStatus,
+    /// The column `paid_at`.
     pub paid_at: ::core::option::Option<DateTime>,
+    /// The column `method`.
     pub method: PaymentMethod,
+    /// The column `delivered_at`.
     pub delivered_at: ::core::option::Option<DateTime>,
+    /// The column `type`.
     pub r#type: ::core::option::Option<::std::string::String>,
+    /// The column `customer_id`.
     pub customer_id: CustomerId,
 }
 
-impl Order {
+impl ::core::convert::TryFrom<OrderRow> for Order {
+    type Error = InvalidRow;
+
     /// The state of a row, or why the row fits none.
-    pub fn from_row(row: OrderRow) -> ::core::result::Result<Self, InvalidRow> {
+    fn try_from(row: OrderRow) -> ::core::result::Result<Self, InvalidRow> {
         match row.status {
             OrderStatus::Pending => {
                 if row.paid_at.is_some() {
@@ -512,56 +1017,102 @@ impl Order {
             }
         }
     }
+}
 
-    /// The flat row of this state.
-    pub fn into_row(self) -> OrderRow {
-        match self {
-            Self::Pending(state) => OrderRow { id: state.id, total: state.total, status: OrderStatus::Pending, paid_at: None, method: state.method, delivered_at: state.delivered_at, r#type: state.r#type, customer_id: state.customer_id },
-            Self::Paid(state) => OrderRow { id: state.id, total: state.total, status: OrderStatus::Paid, paid_at: Some(state.paid_at), method: state.method, delivered_at: state.delivered_at, r#type: state.r#type, customer_id: state.customer_id },
-            Self::Cancelled(state) => OrderRow { id: state.id, total: state.total, status: OrderStatus::Cancelled, paid_at: state.paid_at, method: state.method, delivered_at: state.delivered_at, r#type: state.r#type, customer_id: state.customer_id },
+impl ::core::convert::From<Order> for OrderRow {
+    /// The flat row of a state.
+    fn from(state: Order) -> Self {
+        match state {
+            Order::Pending(s) => Self { id: s.id, total: s.total, status: OrderStatus::Pending, paid_at: ::core::option::Option::None, method: s.method, delivered_at: s.delivered_at, r#type: s.r#type, customer_id: s.customer_id },
+            Order::Paid(s) => Self { id: s.id, total: s.total, status: OrderStatus::Paid, paid_at: ::core::option::Option::Some(s.paid_at), method: s.method, delivered_at: s.delivered_at, r#type: s.r#type, customer_id: s.customer_id },
+            Order::Cancelled(s) => Self { id: s.id, total: s.total, status: OrderStatus::Cancelled, paid_at: s.paid_at, method: s.method, delivered_at: s.delivered_at, r#type: s.r#type, customer_id: s.customer_id },
         }
+    }
+}
+
+impl Order {
+    /// The state of a row, or why the row fits none: [`TryFrom`] by name.
+    ///
+    /// # Errors
+    ///
+    /// [`InvalidRow`] when the row fits no state.
+    pub fn from_row(row: OrderRow) -> ::core::result::Result<Self, InvalidRow> {
+        <Self as ::core::convert::TryFrom<OrderRow>>::try_from(row)
+    }
+
+    /// The flat row of this state: [`From`] by name.
+    pub fn into_row(self) -> OrderRow {
+        OrderRow::from(self)
     }
 }
 
 // ── Dispatch: run a use case from whatever states its rows are in ──
 
-/// The rows are in states the use case does not run from.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NotEnabled {
-    pub usecase: &'static str,
-}
-
-/// Why a use case did not run.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Refused {
-    Rejected(Rejected),
-    NotEnabled(NotEnabled),
-}
-
 /// What `run_pay` returns when the use case runs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PayOutcome {
+    /// `pay` ran.
     Ran(PayResult),
 }
 
-/// Runs Pay from whatever states its rows are in: the transition function of those states, or `NotEnabled`.
-pub fn run_pay(order: Order, order_paid_at: DateTime) -> ::core::result::Result<PayOutcome, Refused> {
+/// Runs Pay from whatever states its rows are in: the transition function of those states.
+///
+/// # Errors
+///
+/// `NotEnabled` when the rows are in states it does not run from, and what the transition
+/// function returns.
+pub fn run_pay(order: Order, order_paid_at: DateTime) -> ::core::result::Result<PayOutcome, PayError> {
     match (order,) {
-        (Order::Pending(order),) => ::core::result::Result::Ok(PayOutcome::Ran(pay(order, order_paid_at))),
-        _ => ::core::result::Result::Err(Refused::NotEnabled(NotEnabled { usecase: "Pay" })),
+        (Order::Pending(order),) => pay(order, order_paid_at).map(PayOutcome::Ran),
+        _ => ::core::result::Result::Err(PayError::NotEnabled(NotEnabled { usecase: "Pay" })),
     }
 }
 
 /// What `run_cancel_order` returns when the use case runs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CancelOrderOutcome {
+    /// `cancel_order` ran.
     Ran(CancelOrderResult),
 }
 
-/// Runs CancelOrder from whatever states its rows are in: the transition function of those states, or `NotEnabled`.
-pub fn run_cancel_order(order: Order) -> ::core::result::Result<CancelOrderOutcome, Refused> {
+/// Runs CancelOrder from whatever states its rows are in: the transition function of those states.
+///
+/// # Errors
+///
+/// `NotEnabled` when the rows are in states it does not run from, and what the transition
+/// function returns.
+pub fn run_cancel_order(order: Order) -> ::core::result::Result<CancelOrderOutcome, CancelOrderError> {
     match (order,) {
-        (Order::Pending(order),) => ::core::result::Result::Ok(CancelOrderOutcome::Ran(cancel_order(order))),
-        _ => ::core::result::Result::Err(Refused::NotEnabled(NotEnabled { usecase: "CancelOrder" })),
+        (Order::Pending(order),) => cancel_order(order).map(CancelOrderOutcome::Ran),
+        _ => ::core::result::Result::Err(CancelOrderError::NotEnabled(NotEnabled { usecase: "CancelOrder" })),
     }
+}
+
+// ── Contracts: one per use case, which the service implements ──
+
+/// The use case Pay: Pay.
+/// Each action with functions is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
+pub trait PayUseCase {
+    /// Loads the rows of Pay (the action Pay) and runs it, writing nothing.
+    fn prepare_pay(&mut self, order: OrderId, order_paid_at: DateTime) -> ::core::result::Result<PayOutcome, PayError>;
+    /// Stores what `prepare_pay` returned in one transaction.
+    fn commit_pay(&mut self, write: PayOutcome) -> ::core::result::Result<(), PayError>;
+}
+
+/// The use case CancelOrder: Cancel.
+/// Each action with functions is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
+pub trait CancelOrderUseCase {
+    /// Loads the rows of CancelOrder (the action CancelOrder) and runs it, writing nothing.
+    fn prepare_cancel_order(&mut self, order: OrderId) -> ::core::result::Result<CancelOrderOutcome, CancelOrderError>;
+    /// Stores what `prepare_cancel_order` returned in one transaction.
+    fn commit_cancel_order(&mut self, write: CancelOrderOutcome) -> ::core::result::Result<(), CancelOrderError>;
+}
+
+/// The use case Place: Place.
+/// Each action with functions is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
+pub trait PlaceUseCase {
+    /// Loads the rows of Place (the action Place) and runs it, writing nothing.
+    fn prepare_place(&mut self, parent_customer: CustomerId, order_id: OrderId, order_method: PaymentMethod) -> ::core::result::Result<PlaceResult, PlaceError>;
+    /// Stores what `prepare_place` returned in one transaction.
+    fn commit_place(&mut self, write: PlaceResult) -> ::core::result::Result<(), PlaceError>;
 }

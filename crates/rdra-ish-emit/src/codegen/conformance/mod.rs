@@ -20,14 +20,14 @@ use rdra_ish_core::SemanticModel;
 
 use super::actions::snake;
 use super::ir::{
-    DomainModel, Field, FieldType, FnDecl, FnInput, OutKind, PortDecl, PortEntity, PortEvent,
-    PortMethod, PortRun, Scalar, Track,
+    CallerDecl, CapabilityDecl, ContractDecl, DomainModel, EntryDecl, Field, FieldType, FnDecl,
+    FnInput, OutKind, PortDecl, PortEntity, PortEvent, PortMethod, PortRun, Scalar, Track,
 };
 use super::{type_ident, CodegenError, Names};
 use eval::{column_var, enum_name, matching, Rows};
 
 /// The format line every traces file starts with; the harness refuses another.
-pub const TRACES_FORMAT: &str = "# rdra-ish conformance traces 2";
+pub const TRACES_FORMAT: &str = "# rdra-ish conformance traces 3";
 
 /// The states the traces explore at most by default.
 pub const DEFAULT_STATES: usize = 1 << 16;
@@ -245,7 +245,164 @@ pub(super) fn port(
             choices,
         });
     }
+    port.contracts = contracts(domain, &port.methods, names)?;
     Ok(port)
+}
+
+/// One contract per use case of `methods`, in the order of its first method.
+fn contracts(
+    domain: &DomainModel,
+    methods: &[PortMethod],
+    names: &mut Names,
+) -> Result<Vec<ContractDecl>, CodegenError> {
+    let mut out: Vec<ContractDecl> = Vec::new();
+    for (i, m) in methods.iter().enumerate() {
+        if let Some(c) = out.iter_mut().find(|c| c.usecase == m.usecase) {
+            c.methods.push(i);
+            continue;
+        }
+        let decl = domain.usecases.iter().find(|u| u.id == m.usecase);
+        let pascal = type_ident(&m.usecase);
+        out.push(ContractDecl {
+            name: super::claim_first(
+                names,
+                [format!("{pascal}UseCase"), format!("{pascal}Contract")],
+                format!("the contract of {}", m.usecase),
+            )?,
+            usecase: m.usecase.clone(),
+            label: decl.map_or_else(String::new, |d| d.label.clone()),
+            site: decl.and_then(|d| d.site.clone()),
+            error: domain
+                .error_of(&m.usecase)
+                .map_or_else(String::new, |e| e.name.clone()),
+            methods: vec![i],
+            entries: Vec::new(),
+            caller: None,
+        });
+    }
+    Ok(out)
+}
+
+/// The callers of every contract (#337): the actors that perform its use case, each by a
+/// capability type of its own, claimed once.
+pub(super) fn add_callers(
+    model: &SemanticModel,
+    domain: &mut DomainModel,
+    names: &mut Names,
+) -> Result<(), CodegenError> {
+    let Some(mut port) = domain.port.take() else {
+        return Ok(());
+    };
+    for c in &mut port.contracts {
+        let Some((uc, _)) = model.use_cases.iter().find(|(_, u)| u.id == c.usecase) else {
+            continue;
+        };
+        let mut actors = Vec::new();
+        for a in rdra_ish_core::actors_for_usecase(model, uc) {
+            let actor = &model.actors[a];
+            let i = match domain.capabilities.iter().position(|x| x.actor == actor.id) {
+                Some(i) => i,
+                None => {
+                    let pascal = type_ident(&actor.id);
+                    domain.capabilities.push(CapabilityDecl {
+                        actor: actor.id.clone(),
+                        label: actor.label.clone(),
+                        name: super::claim_first(
+                            names,
+                            [format!("{pascal}Capability"), format!("{pascal}Cap")],
+                            format!("the capability of {}", actor.id),
+                        )?,
+                    });
+                    domain.capabilities.len() - 1
+                }
+            };
+            actors.push(i);
+        }
+        if actors.is_empty() {
+            continue;
+        }
+        let pascal = type_ident(&c.usecase);
+        c.caller = Some(CallerDecl {
+            name: super::claim_first(
+                names,
+                [format!("{pascal}Caller"), format!("{pascal}UseCaseCaller")],
+                format!("the callers of {}", c.usecase),
+            )?,
+            actors,
+        });
+    }
+    domain.port = Some(port);
+    Ok(())
+}
+
+/// The entry points of the actions with no printed function (#335), added to their use
+/// cases' contracts: a contract of its own for a use case with none printed. An action whose
+/// rows have no id type gets none.
+pub(super) fn add_entries(
+    ts: &TransitionSystem,
+    domain: &mut DomainModel,
+    names: &mut Names,
+) -> Result<(), CodegenError> {
+    let Some(mut port) = domain.port.take() else {
+        return Ok(());
+    };
+    for skipped in &domain.skipped {
+        let Some(action) = ts.actions().iter().find(|a| a.name == skipped.action) else {
+            continue;
+        };
+        let mut rows = Vec::new();
+        for p in &action.params {
+            let entity = &ts.entity(p.entity).id;
+            let Some(id) = domain.ids.iter().find(|i| i.entity == *entity) else {
+                rows.clear();
+                break;
+            };
+            let base = snake(entity);
+            let mut name = base.clone();
+            let mut k = 2;
+            while rows.iter().any(|(n, _): &(String, String)| *n == name) {
+                name = format!("{base}_{k}");
+                k += 1;
+            }
+            rows.push((name, id.name.clone()));
+        }
+        if rows.is_empty() && !action.params.is_empty() {
+            continue;
+        }
+        let entry = EntryDecl {
+            action: action.name.clone(),
+            name: type_ident(&action.name),
+            rows,
+        };
+        if let Some(c) = port
+            .contracts
+            .iter_mut()
+            .find(|c| c.usecase == skipped.usecase)
+        {
+            c.entries.push(entry);
+            continue;
+        }
+        let decl = domain.usecases.iter().find(|u| u.id == skipped.usecase);
+        let pascal = type_ident(&skipped.usecase);
+        port.contracts.push(ContractDecl {
+            name: super::claim_first(
+                names,
+                [format!("{pascal}UseCase"), format!("{pascal}Contract")],
+                format!("the contract of {}", skipped.usecase),
+            )?,
+            usecase: skipped.usecase.clone(),
+            label: decl.map_or_else(String::new, |d| d.label.clone()),
+            site: decl.and_then(|d| d.site.clone()),
+            error: domain
+                .error_of(&skipped.usecase)
+                .map_or_else(String::new, |e| e.name.clone()),
+            methods: Vec::new(),
+            entries: vec![entry],
+            caller: None,
+        });
+    }
+    domain.port = Some(port);
+    Ok(())
 }
 
 fn field_id_type(field: &Field) -> String {

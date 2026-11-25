@@ -1,16 +1,27 @@
 //! The part of `codegen --lang ts` that docs/compatibility.md covers ("The TypeScript types
-//! of `codegen`"): the scalars, ids, value sets, state types, and `<Entity>Row` types, with
-//! comments left out. The snapshot holds only those declarations, so a change to the
-//! experimental rest (functions, rule checks, dispatchers, the header) leaves it as it is,
-//! and a change to a covered type shows up as a diff to review against the contract.
+//! of `codegen`"): `Result`, `InvalidValue`, `InvalidRow`, the scalars, ids, value sets, state
+//! types and `<Entity>Kind`, the `<Entity>Row` types, the signatures of their companion objects
+//! (`parse`, `is`, `values`, `fromRow`, `toRow`), and `parse<Entity>Row`, with comments and
+//! function bodies left out. The snapshot holds only those declarations, so a change to the
+//! experimental rest (functions, rule checks, dispatchers, the header, the bodies) leaves it as
+//! it is, and a change to a covered declaration shows up as a diff to review against the
+//! contract.
 
 use std::path::Path;
 use std::process::Command;
 
 const FIXTURE: &str = "tests/fixtures/codegen/covered_types.rdra";
 
-/// The sections whose every declaration is covered.
-const COVERED_SECTIONS: &[&str] = &["Scalars", "Ids", "Value sets", "Entities with states"];
+/// The sections whose every exported declaration is covered; in `Rows`, the row types and
+/// their parsers.
+const COVERED_SECTIONS: &[&str] = &[
+    "Results and errors",
+    "Scalars",
+    "Ids",
+    "Value sets",
+    "Entities with states",
+    "Rows",
+];
 
 #[test]
 fn covered_types() {
@@ -25,68 +36,115 @@ fn covered_types() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    insta::assert_snapshot!(covered(&String::from_utf8(output.stdout).unwrap()));
+    let covered = covered(&String::from_utf8(output.stdout).unwrap());
+    // Every kind of covered declaration made it through the filter.
+    for expected in [
+        "export type Result<T, E>",
+        "export type InvalidRow",
+        "export const Money = {",
+        "  parse: (value: unknown): Result<Money, InvalidValue>",
+        "export type OrderKind =",
+        "  fromRow: (row: OrderRow): Result<Order, InvalidRow>",
+        "export function parseOrderRow(value: unknown): Result<OrderRow, InvalidRow>",
+    ] {
+        assert!(covered.contains(expected), "{expected} missing:\n{covered}");
+    }
+    insta::assert_snapshot!(covered);
 }
 
-/// The covered declarations of a generated module, without comments.
+/// What one exported declaration keeps.
+enum Block {
+    /// A type: every line to its end (`}>;`, or the `;` of its last union case).
+    Type,
+    /// A companion object: the member signatures, to `} as const;`.
+    Companion,
+}
+
+/// The covered declarations of a generated module, without comments and bodies.
 fn covered(module: &str) -> String {
     let mut out = String::new();
     let mut section = "";
-    let mut block: Option<(bool, String)> = None;
+    let mut block: Option<Block> = None;
     for line in module.lines() {
-        if let Some((keep, mut text)) = block.take() {
-            text.push_str(&uncommented(line));
-            if line == "}" || line == ";" || line.starts_with("};") {
-                if keep {
-                    out.push_str(&text);
+        let code = uncommented(line);
+        match block {
+            Some(Block::Type) => {
+                if !code.is_empty() {
+                    out.push_str(&code);
                     out.push('\n');
                 }
-            } else {
-                block = Some((keep, text));
+                if code == "}>;" || (code.starts_with("  | ") && code.ends_with(';')) {
+                    block = None;
+                }
+                continue;
             }
-            continue;
+            Some(Block::Companion) => {
+                if code == "} as const;" {
+                    out.push_str("} as const;\n");
+                    block = None;
+                } else if let Some(member) = member_signature(&code) {
+                    out.push_str(&member);
+                    out.push('\n');
+                }
+                continue;
+            }
+            None => {}
         }
         if let Some(title) = line.strip_prefix("// ── ") {
             section = COVERED_SECTIONS
                 .iter()
-                .chain(&["Rows"])
                 .find(|s| title.starts_with(**s))
                 .copied()
                 .unwrap_or("");
             continue;
         }
-        if !line.starts_with("export ") {
+        if section.is_empty() || !line.starts_with("export ") {
             continue;
         }
-        let keep = COVERED_SECTIONS.contains(&section) || is_row_type(section, line);
-        let text = uncommented(line);
-        if line.ends_with(';') {
-            if keep {
-                out.push_str(&text);
+        if let Some(rest) = code.strip_prefix("export function ") {
+            // In `Rows`, `parse<Entity>Row`: its signature.
+            if section == "Rows" && rest.starts_with("parse") {
+                out.push_str(code.trim_end_matches(" {"));
                 out.push('\n');
             }
-        } else {
-            block = Some((keep, text));
+            continue;
+        }
+        if code.starts_with("export const ") {
+            out.push_str(&code);
+            out.push('\n');
+            block = Some(Block::Companion);
+            continue;
+        }
+        // `export type`: whole when it ends on its line, else to its end.
+        out.push_str(&code);
+        out.push('\n');
+        if !code.ends_with(';') {
+            block = Some(Block::Type);
         }
     }
     out
 }
 
-/// `export interface <Entity>Row {` in the rows section; `InvalidRow` is not covered.
-fn is_row_type(section: &str, line: &str) -> bool {
-    section == "Rows"
-        && line
-            .strip_prefix("export interface ")
-            .and_then(|rest| rest.strip_suffix(" {"))
-            .is_some_and(|name| name.ends_with("Row") && name != "InvalidRow")
+/// A companion member's name and type: `  parse: (value: unknown): Result<..>` from its
+/// definition, or the whole line of a member that is not a function.
+fn member_signature(code: &str) -> Option<String> {
+    let member = code.strip_prefix("  ")?;
+    if member.starts_with(' ') || !member.contains(": ") {
+        return None;
+    }
+    let head = member
+        .split_once(" =>")
+        .map_or(member, |(signature, _)| signature);
+    Some(format!("  {head}"))
 }
 
-/// `line` and its newline, or nothing for a comment line; a trailing `// label` is cut.
+/// `line` without a comment: empty for a comment line, a trailing `// label` cut.
 fn uncommented(line: &str) -> String {
     let trimmed = line.trim_start();
     if ["/**", "*", "//"].iter().any(|p| trimmed.starts_with(p)) {
         return String::new();
     }
-    let code = line.split_once(" // ").map_or(line, |(code, _)| code);
-    format!("{code}\n")
+    line.split_once(" // ")
+        .map_or(line, |(code, _)| code)
+        .to_string()
 }

@@ -3,8 +3,8 @@
 //! back, refuses a row that breaks its state's refinement, dispatches the use cases by state
 //! (`NotEnabled`, `Rejected`, the writes, the raised event), and runs the rule checks. Code
 //! outside the generated module or package cannot build a state or change one of its fields
-//! (#331): the compiler refuses it. A
-//! compiler or runtime missing from PATH skips its language, except under
+//! (#331): the compiler refuses it. In Go, a state the model gains breaks every state
+//! visitor that lacks its method (#363, P7). A compiler or runtime missing from PATH skips its language, except under
 //! `RDRA_REQUIRE_CODEGEN_TOOLS=1`, which CI sets in the dev shell.
 
 use std::path::{Path, PathBuf};
@@ -35,8 +35,14 @@ fn scratch(lang: &str) -> PathBuf {
 }
 
 fn generate(lang: &str, out: &Path) {
+    generate_with(lang, out, &[]);
+}
+
+fn generate_with(lang: &str, out: &Path, extra: &[&str]) {
     let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
-        .args(["codegen", "--lang", lang, "-o"])
+        .args(["codegen", "--lang", lang])
+        .args(extra)
+        .arg("-o")
         .arg(out)
         .arg(fixture().join("order.rdra"))
         .output()
@@ -82,23 +88,72 @@ fn typescript_behaves() {
     if !available("tsc", "--version") || !available("node", "--version") {
         return;
     }
-    let dir = scratch("ts");
-    generate("ts", &dir.join("domain.ts"));
-    std::fs::copy(fixture().join("driver.ts"), dir.join("driver.ts")).unwrap();
-    run(
+    // The driver runs the same on sealed state types (`--seal`).
+    for (name, extra) in [("ts", &[][..]), ("ts-sealed", &["--seal"][..])] {
+        let dir = scratch(name);
+        generate_with("ts", &dir.join("domain.ts"), extra);
+        std::fs::copy(fixture().join("driver.ts"), dir.join("driver.ts")).unwrap();
+        run(
+            Command::new("tsc")
+                .args([
+                    "--strict", "--target", "es2020", "--module", "commonjs", "--outDir",
+                ])
+                .arg(dir.join("out"))
+                .arg(dir.join("driver.ts")),
+            &format!("tsc on the driver ({name})"),
+        );
+        let out = run(
+            Command::new("node").arg(dir.join("out/driver.js")),
+            &format!("the TypeScript driver ({name})"),
+        );
+        assert_eq!(out.trim(), "ok");
+    }
+}
+
+/// A TypeScript state written as an object literal outside the module: what tsc says with
+/// `--seal` (decision 9 of docs/design/code-check.md), and that without it, or through a type
+/// assertion, tsc accepts it.
+const TS_FORGERY: &str = "const o: d.OrderPaid = { kind: \"Paid\", id: 1 as d.OrderId, paid_at: \"2026-01-01T00:00:00Z\" as d.DateTime, method: \"card\", qty: 9, note: \"\", customer_id: 1 as d.CustomerId };";
+const TS_CAST: &str = "const o = { kind: \"Paid\" } as unknown as d.OrderPaid;";
+
+#[test]
+fn typescript_sealed_states_are_not_built_outside() {
+    if !available("tsc", "--version") {
+        return;
+    }
+    let forge = |extra: &[&str], body: &str| {
+        let dir = scratch("ts-forge");
+        generate_with("ts", &dir.join("domain.ts"), extra);
+        std::fs::write(
+            dir.join("forge.ts"),
+            format!("import * as d from \"./domain\";\n{body}\nexport const forged = o;\n"),
+        )
+        .unwrap();
         Command::new("tsc")
-            .args([
-                "--strict", "--target", "es2020", "--module", "commonjs", "--outDir",
-            ])
-            .arg(dir.join("out"))
-            .arg(dir.join("driver.ts")),
-        "tsc on the driver",
+            .args(["--strict", "--noEmit", "--target", "es2020"])
+            .arg(dir.join("forge.ts"))
+            .output()
+            .expect("runs tsc")
+    };
+    let sealed = forge(&["--seal"], TS_FORGERY);
+    let says = String::from_utf8_lossy(&sealed.stdout);
+    assert!(!sealed.status.success(), "tsc builds a forged sealed state");
+    assert!(
+        says.contains("TS2741") && says.contains("[$sealed]"),
+        "{says}"
     );
-    let out = run(
-        Command::new("node").arg(dir.join("out/driver.js")),
-        "the TypeScript driver",
+    let open = forge(&[], TS_FORGERY);
+    assert!(
+        open.status.success(),
+        "an unsealed state is a plain object type: {}",
+        String::from_utf8_lossy(&open.stdout)
     );
-    assert_eq!(out.trim(), "ok");
+    let cast = forge(&["--seal"], TS_CAST);
+    assert!(
+        cast.status.success(),
+        "a type assertion gets around the seal: {}",
+        String::from_utf8_lossy(&cast.stdout)
+    );
 }
 
 #[test]
@@ -116,25 +171,38 @@ fn go_behaves() {
     );
 }
 
-/// Code outside the generated module that builds a state, or writes a field of one, and what
-/// rustc says.
-const RUST_FORGERIES: [(&str, &str); 2] = [
+/// Code outside the generated module that builds a state, writes a field of one, or makes a
+/// scalar or an id without its parser, and what rustc says.
+const RUST_FORGERIES: [(&str, &str); 4] = [
     (
-        "let o = OrderPaid { id: OrderId(1), paid_at: DateTime(String::new()), method: Method::Card, qty: 9, note: String::new(), customer_id: CustomerId(1) }; let _ = o;",
+        "let o = OrderPaid { id: OrderId::from(1), paid_at: \"2026-01-01T00:00:00Z\".parse().unwrap(), method: Method::Card, qty: 9, note: String::new(), customer_id: CustomerId::from(1) }; let _ = o;",
         "E0451",
     ),
     (
-        "let mut o = Order::from_row(OrderRow { id: OrderId(1), status: OrderStatus::Pending, paid_at: None, method: Method::Card, qty: 1, note: String::new(), customer_id: CustomerId(1) }).unwrap(); if let Order::Pending(p) = &mut o { p.qty = 7; }",
+        "let mut o = Order::from_row(OrderRow { id: OrderId::from(1), status: OrderStatus::Pending, paid_at: None, method: Method::Card, qty: 1, note: String::new(), customer_id: CustomerId::from(1) }).unwrap(); if let Order::Pending(p) = &mut o { p.qty = 7; }",
         "E0616",
     ),
+    ("let t = DateTime(String::from(\"t\")); let _ = t;", "E0423"),
+    ("let id = OrderId(1); let _ = id;", "E0423"),
 ];
 
-/// The same in Go, outside the generated package, and what the compiler says.
-const GO_FORGERIES: [(&str, &str); 2] = [
-    ("o := domain.OrderPaid{Qty: 9}; _ = o", "unknown field Qty"),
+/// The same in Go, outside the generated package, and what the compiler says. A state type is
+/// an interface whose one implementation is unexported, so not even its zero value is a state
+/// (#363, P7): the zero value of the interface is nil, which every function refuses.
+const GO_FORGERIES: [(&str, &str); 4] = [
+    (
+        "o := domain.OrderPaid{}; _ = o",
+        "invalid composite literal type domain.OrderPaid",
+    ),
     (
         "var o domain.OrderPaid; o.qty = 7; _ = o",
         "o.qty undefined",
+    ),
+    // `go vet` says `undefined: domain.orderPaidState` or `name orderPaidState not exported`.
+    ("o := domain.orderPaidState{}; _ = o", "orderPaidState"),
+    (
+        "var o domain.Order = struct{ domain.OrderKind }{}; _ = o",
+        "does not implement domain.Order",
     ),
 ];
 
@@ -161,6 +229,89 @@ fn rust_states_are_not_built_outside() {
     }
 }
 
+/// A visitor outside the package, over the three states of `order.rdra`'s `Order`.
+const GO_VISITOR: &str = r#"package domain_test
+
+import (
+	"errors"
+	"testing"
+
+	"example.com/domain"
+)
+
+type label struct{}
+
+func (label) Pending(domain.OrderPending) string     { return "pending" }
+func (label) Paid(domain.OrderPaid) string           { return "paid" }
+func (label) Cancelled(domain.OrderCancelled) string { return "cancelled" }
+
+func TestVisitor(t *testing.T) {
+	row := domain.OrderRow{Id: 1, Status: domain.OrderStatusPending, Method: domain.MethodCard, Qty: 1, Note: "n", CustomerId: 7}
+	order, err := domain.OrderFromRow(row)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := domain.MatchOrder[string](order, label{}); err != nil || got != "pending" {
+		t.Fatalf("MatchOrder: %q %v", got, err)
+	}
+	if _, err := domain.MatchOrder[string](nil, label{}); !errors.Is(err, domain.ErrInvalidArgument) {
+		t.Fatalf("MatchOrder refuses a nil state: %v", err)
+	}
+}
+"#;
+
+/// P7 of docs/design/code-check.md: Go's type switch says nothing of a state it misses, so the
+/// Go output has a visitor per state type. A visitor over the states of `order.rdra` runs; once
+/// the model gains a state, the same visitor no longer compiles, and the compiler names the
+/// method it lacks.
+#[test]
+fn go_visitor_fails_to_compile_on_a_new_state() {
+    if !available("go", "version") {
+        return;
+    }
+    let dir = scratch("go-visitor");
+    generate("go", &dir.join("domain.go"));
+    std::fs::write(dir.join("go.mod"), "module example.com/domain\n\ngo 1.21\n").unwrap();
+    std::fs::write(dir.join("visitor_test.go"), GO_VISITOR).unwrap();
+    run(
+        Command::new("go").args(["test", "./..."]).current_dir(&dir),
+        "go test on the visitor",
+    );
+
+    let model = std::fs::read_to_string(fixture().join("order.rdra")).unwrap();
+    let grown = model.replace(
+        "Enum(pending, paid, cancelled)",
+        "Enum(pending, paid, cancelled, refunded)",
+    );
+    assert_ne!(grown, model, "the fixture's status column moved");
+    std::fs::write(dir.join("order.rdra"), grown).unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .args(["codegen", "--lang", "go", "-o"])
+        .arg(dir.join("domain.go"))
+        .arg(dir.join("order.rdra"))
+        .output()
+        .expect("runs rdra-ish");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let output = Command::new("go")
+        .args(["vet", "./..."])
+        .current_dir(&dir)
+        .output()
+        .expect("runs go");
+    let err = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !output.status.success(),
+        "the visitor compiles with a state missing"
+    );
+    assert!(
+        err.contains("does not implement domain.OrderVisitor[string] (missing method Refunded)"),
+        "{err}"
+    );
+}
+
 #[test]
 fn go_states_are_not_built_outside() {
     if !available("go", "version") {
@@ -184,4 +335,205 @@ fn go_states_are_not_built_outside() {
         assert!(!output.status.success(), "go builds {body}");
         assert!(err.contains(says), "{body}: {err}");
     }
+}
+
+/// Code that calls a use case of oidc-auth, and what rustc says (#337): `DenyDevice` is
+/// performed by EndUser only, so its prepare takes a `DenyDeviceCaller`, which only an
+/// `EndUserCapability` makes.
+const RUST_CAPABILITY_CALLS: [(&str, Option<&str>); 3] = [
+    (
+        "fn f<S: DenyDeviceUseCase>(s: &mut S, d: DeviceAuthorizationId) { let _ = s.prepare_deny_device(DenyDeviceCaller::from(EndUserCapability::issue()), d); }",
+        None,
+    ),
+    (
+        "fn f<S: DenyDeviceUseCase>(s: &mut S, d: DeviceAuthorizationId) { let _ = s.prepare_deny_device(d); }",
+        Some("E0061"),
+    ),
+    (
+        "fn f<S: DenyDeviceUseCase>(s: &mut S, d: DeviceAuthorizationId) { let _ = s.prepare_deny_device(DenyDeviceCaller::RelyingParty(RelyingPartyCapability::issue()), d); }",
+        Some("E0599"),
+    ),
+];
+
+#[test]
+fn rust_a_use_case_takes_the_capability_of_an_actor_that_performs_it() {
+    let dir = scratch("rust-capability");
+    let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .current_dir(fixture().join("../../../../.."))
+        .args(["codegen", "samples/oidc-auth", "--lang", "rust", "-o"])
+        .arg(dir.join("domain.rs"))
+        .output()
+        .expect("runs rdra-ish");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
+    for (body, code) in RUST_CAPABILITY_CALLS {
+        std::fs::write(
+            dir.join("call.rs"),
+            format!("#[path = \"domain.rs\"]\n#[allow(dead_code)]\nmod domain;\nuse domain::*;\n#[allow(dead_code)]\n{body}\nfn main() {{}}\n"),
+        )
+        .unwrap();
+        let output = Command::new(&rustc)
+            .args(["--edition", "2021", "-o"])
+            .arg(dir.join("call"))
+            .arg(dir.join("call.rs"))
+            .output()
+            .expect("runs rustc");
+        let err = String::from_utf8_lossy(&output.stderr);
+        match code {
+            None => assert!(output.status.success(), "{body}: {err}"),
+            Some(code) => {
+                assert!(!output.status.success(), "rustc builds {body}");
+                assert!(err.contains(code), "{body}: {err}");
+            }
+        }
+    }
+}
+
+/// Code that calls a use case of oidc-auth in TypeScript, and what tsc says (#337): `DenyDevice`
+/// is performed by EndUser only, so its prepare takes a `DenyDeviceCaller`, which only
+/// `EndUserCapability.issue()` makes. An object literal cannot stand in for the capability; a
+/// type assertion can, as with the state brand.
+const TS_CAPABILITY_CALLS: [(&str, Option<&str>); 5] = [
+    (
+        "void s.prepareDenyDevice(d.EndUserCapability.issue(), id);",
+        None,
+    ),
+    ("void s.prepareDenyDevice(id);", Some("TS2554")),
+    (
+        "void s.prepareDenyDevice(d.RelyingPartyCapability.issue(), id);",
+        Some("TS2345"),
+    ),
+    (
+        "void s.prepareDenyDevice({ kind: \"EndUser\" }, id);",
+        Some("TS2741"),
+    ),
+    (
+        "void s.prepareDenyDevice({ kind: \"EndUser\" } as unknown as d.EndUserCapability, id);",
+        None,
+    ),
+];
+
+#[test]
+fn typescript_a_use_case_takes_the_capability_of_an_actor_that_performs_it() {
+    if !available("tsc", "--version") {
+        return;
+    }
+    let dir = scratch("ts-capability");
+    let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .current_dir(fixture().join("../../../../.."))
+        .args(["codegen", "samples/oidc-auth", "--lang", "ts", "-o"])
+        .arg(dir.join("domain.ts"))
+        .output()
+        .expect("runs rdra-ish");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    for (call, code) in TS_CAPABILITY_CALLS {
+        std::fs::write(
+            dir.join("call.ts"),
+            format!("import * as d from \"./domain\";\nexport function f(s: d.DenyDeviceUseCase, id: d.DeviceAuthorizationId): void {{\n  {call}\n}}\n"),
+        )
+        .unwrap();
+        let output = Command::new("tsc")
+            .args([
+                "--strict", "--noEmit", "--pretty", "false", "--target", "es2022",
+            ])
+            .arg(dir.join("call.ts"))
+            .output()
+            .expect("runs tsc");
+        let said = String::from_utf8_lossy(&output.stdout);
+        match code {
+            None => assert!(output.status.success(), "{call}: {said}"),
+            Some(code) => {
+                assert!(!output.status.success(), "tsc builds {call}");
+                assert!(said.contains(code), "{call}: {said}");
+            }
+        }
+    }
+}
+
+/// Code outside the package that calls a use case of oidc-auth, and what `go vet` says
+/// (#337): `DenyDevice` is performed by EndUser only, so its prepare takes a
+/// `DenyDeviceCaller`, which only `EndUserCapability` implements.
+const GO_CAPABILITY_CALLS: [(&str, Option<&str>); 3] = [
+    (
+        "_, _ = s.PrepareDenyDevice(domain.IssueEndUserCapability(), d)",
+        None,
+    ),
+    (
+        "_, _ = s.PrepareDenyDevice(d)",
+        Some("not enough arguments in call to s.PrepareDenyDevice"),
+    ),
+    (
+        "_, _ = s.PrepareDenyDevice(domain.IssueRelyingPartyCapability(), d)",
+        Some("domain.RelyingPartyCapability does not implement domain.DenyDeviceCaller (missing method isDenyDeviceCaller)"),
+    ),
+];
+
+/// What Go cannot refuse at compile time, refused by `CallerValid`: the zero value of a
+/// capability, and a nil caller.
+const GO_CAPABILITY_VALID: &str = "\tif !domain.CallerValid(domain.IssueEndUserCapability()) {\n\t\tt.Fatal(\"an issued capability is valid\")\n\t}\n\tif domain.CallerValid(domain.EndUserCapability{}) {\n\t\tt.Fatal(\"the zero value is no capability\")\n\t}\n\tvar none domain.DenyDeviceCaller\n\tif domain.CallerValid(none) {\n\t\tt.Fatal(\"a nil caller is no capability\")\n\t}";
+
+#[test]
+fn go_a_use_case_takes_the_capability_of_an_actor_that_performs_it() {
+    if !available("go", "version") {
+        return;
+    }
+    let dir = scratch("go-capability");
+    let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .current_dir(fixture().join("../../../../.."))
+        .args(["codegen", "samples/oidc-auth", "--lang", "go", "-o"])
+        .arg(dir.join("domain.go"))
+        .output()
+        .expect("runs rdra-ish");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    std::fs::write(dir.join("go.mod"), "module example.com/domain\n\ngo 1.21\n").unwrap();
+    let call = |decl: &str, body: &str| {
+        std::fs::write(
+            dir.join("call_test.go"),
+            format!("package domain_test\n\nimport (\n\t\"testing\"\n\n\t\"example.com/domain\"\n)\n\n{decl}\n\nfunc TestCall(t *testing.T) {{\n{body}\n}}\n"),
+        )
+        .unwrap();
+    };
+    for (body, says) in GO_CAPABILITY_CALLS {
+        call(
+            &format!("func call(s domain.DenyDeviceUseCase, d domain.DeviceAuthorizationId) {{\n\t{body}\n}}\n\nvar _ = call"),
+            "",
+        );
+        let output = Command::new("go")
+            .args(["vet", "./..."])
+            .current_dir(&dir)
+            .output()
+            .expect("runs go");
+        let err = String::from_utf8_lossy(&output.stderr);
+        match says {
+            None => assert!(output.status.success(), "{body}: {err}"),
+            Some(says) => {
+                assert!(!output.status.success(), "go builds {body}");
+                assert!(err.contains(says), "{body}: {err}");
+            }
+        }
+    }
+    call("", GO_CAPABILITY_VALID);
+    let output = Command::new("go")
+        .args(["test", "-count=1", "-run", "^TestCall$", "./..."])
+        .current_dir(&dir)
+        .output()
+        .expect("runs go");
+    assert!(
+        output.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
 }

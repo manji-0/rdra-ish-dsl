@@ -1,62 +1,104 @@
 ---
 source: crates/rdra-ish-cli/tests/codegen_contract.rs
-expression: "covered(&String::from_utf8(output.stdout).unwrap())"
+expression: covered
 ---
+export type Result<T, E> = Readonly<{ ok: true; value: T }> | Readonly<{ ok: false; error: E }>;
+export const Result = {
+  ok: <T>(value: T): Result<T, never>
+  err: <E>(error: E): Result<never, E>
+} as const;
+export type InvalidValue = Readonly<{ kind: "InvalidValue"; type: string; reason: string }>;
+export type InvalidRow = Readonly<{ kind: "InvalidRow"; entity: string; column: string | null; reason: string }>;
 export type Money = string & { readonly __brand: "Money" };
-
+export const Money = {
+  is: (value: unknown): value is Money
+  parse: (value: unknown): Result<Money, InvalidValue>
+} as const;
 export type Decimal = string & { readonly __brand: "Decimal" };
-
+export const Decimal = {
+  is: (value: unknown): value is Decimal
+  parse: (value: unknown): Result<Decimal, InvalidValue>
+} as const;
 export type Date = string & { readonly __brand: "Date" };
-
+export const Date = {
+  is: (value: unknown): value is Date
+  parse: (value: unknown): Result<Date, InvalidValue>
+} as const;
 export type DateTime = string & { readonly __brand: "DateTime" };
-
+export const DateTime = {
+  is: (value: unknown): value is DateTime
+  parse: (value: unknown): Result<DateTime, InvalidValue>
+} as const;
 export type CustomerId = string & { readonly __brand: "CustomerId" };
-
+export const CustomerId = {
+  is: (value: unknown): value is CustomerId
+  parse: (value: unknown): Result<CustomerId, InvalidValue>
+} as const;
 export type OrderId = number & { readonly __brand: "OrderId" };
-
+export const OrderId = {
+  is: (value: unknown): value is OrderId
+  parse: (value: unknown): Result<OrderId, InvalidValue>
+} as const;
 export type ShipmentId = number & { readonly __brand: "ShipmentId" };
-
+export const ShipmentId = {
+  is: (value: unknown): value is ShipmentId
+  parse: (value: unknown): Result<ShipmentId, InvalidValue>
+} as const;
 export type PaymentMethod =
-  "credit_card"
-  | "bank_transfer"
-;
-
-export const PaymentMethodValues: readonly PaymentMethod[] = ["credit_card", "bank_transfer"];
-
+  | "credit_card"
+  | "bank_transfer";
+export const PaymentMethod = {
+  values: ["credit_card", "bank_transfer"] as const satisfies readonly PaymentMethod[],
+  parse: (value: unknown): Result<PaymentMethod, InvalidValue>
+} as const;
 export type OrderStatus =
-  "pending"
+  | "pending"
   | "paid"
   | "shipped"
   | "on_hold"
   | "onHold"
-  | "_2day"
-;
-
-export const OrderStatusValues: readonly OrderStatus[] = ["pending", "paid", "shipped", "on_hold", "onHold", "_2day"];
-
+  | "_2day";
+export const OrderStatus = {
+  values: ["pending", "paid", "shipped", "on_hold", "onHold", "_2day"] as const satisfies readonly OrderStatus[],
+  parse: (value: unknown): Result<OrderStatus, InvalidValue>
+} as const;
 export type OrderChannel =
-  "web"
-  | "shop"
-;
-
-export const OrderChannelValues: readonly OrderChannel[] = ["web", "shop"];
-
+  | "web"
+  | "shop";
+export const OrderChannel = {
+  values: ["web", "shop"] as const satisfies readonly OrderChannel[],
+  parse: (value: unknown): Result<OrderChannel, InvalidValue>
+} as const;
 export type ShipmentPhase =
-  "packing"
-  | "sealed"
-;
-
-export const ShipmentPhaseValues: readonly ShipmentPhase[] = ["packing", "sealed"];
-
+  | "packing"
+  | "sealed";
+export const ShipmentPhase = {
+  values: ["packing", "sealed"] as const satisfies readonly ShipmentPhase[],
+  parse: (value: unknown): Result<ShipmentPhase, InvalidValue>
+} as const;
 export type ShipmentDeliveryStatus =
-  "waiting"
-  | "delivered"
-;
-
-export const ShipmentDeliveryStatusValues: readonly ShipmentDeliveryStatus[] = ["waiting", "delivered"];
-
-export interface OrderPending {
-  status: "pending";
+  | "waiting"
+  | "delivered";
+export const ShipmentDeliveryStatus = {
+  values: ["waiting", "delivered"] as const satisfies readonly ShipmentDeliveryStatus[],
+  parse: (value: unknown): Result<ShipmentDeliveryStatus, InvalidValue>
+} as const;
+export type ShipmentKind =
+  | "parcel"
+  | "letter";
+export const ShipmentKind = {
+  values: ["parcel", "letter"] as const satisfies readonly ShipmentKind[],
+  parse: (value: unknown): Result<ShipmentKind, InvalidValue>
+} as const;
+export type OrderKind =
+  | "Pending"
+  | "Paid"
+  | "Shipped"
+  | "OnHold"
+  | "OnHold2"
+  | "V2day";
+export type OrderPending = Readonly<{
+  kind: "Pending";
   id: OrderId;
   total: Money;
   rate: Decimal;
@@ -72,10 +114,9 @@ export interface OrderPending {
   shipped_at: null;
   memo: null;
   legacy_ref: null;
-}
-
-export interface OrderPaid {
-  status: "paid";
+}>;
+export type OrderPaid = Readonly<{
+  kind: "Paid";
   id: OrderId;
   total: Money;
   rate: Decimal;
@@ -91,10 +132,9 @@ export interface OrderPaid {
   shipped_at: null;
   memo: null;
   legacy_ref: null;
-}
-
-export interface OrderShipped {
-  status: "shipped";
+}>;
+export type OrderShipped = Readonly<{
+  kind: "Shipped";
   id: OrderId;
   total: Money;
   rate: Decimal;
@@ -110,10 +150,9 @@ export interface OrderShipped {
   customer_code: CustomerId;
   memo: null;
   legacy_ref: null;
-}
-
-export interface OrderOnHold {
-  status: "on_hold";
+}>;
+export type OrderOnHold = Readonly<{
+  kind: "OnHold";
   id: OrderId;
   total: Money;
   rate: Decimal;
@@ -129,10 +168,9 @@ export interface OrderOnHold {
   customer_code: CustomerId;
   note: null;
   legacy_ref: null;
-}
-
-export interface OrderOnHold2 {
-  status: "onHold";
+}>;
+export type OrderOnHold2 = Readonly<{
+  kind: "OnHold2";
   id: OrderId;
   total: Money;
   rate: Decimal;
@@ -148,10 +186,9 @@ export interface OrderOnHold2 {
   customer_code: CustomerId;
   memo: null;
   legacy_ref: null;
-}
-
-export interface OrderV2day {
-  status: "_2day";
+}>;
+export type OrderV2day = Readonly<{
+  kind: "V2day";
   id: OrderId;
   total: Money;
   rate: Decimal;
@@ -167,37 +204,43 @@ export interface OrderV2day {
   customer_code: CustomerId;
   memo: null;
   legacy_ref: null;
-}
-
+}>;
 export type Order =
-  OrderPending
+  | OrderPending
   | OrderPaid
   | OrderShipped
   | OrderOnHold
   | OrderOnHold2
-  | OrderV2day
-;
-
-export interface ShipmentWaiting {
-  delivery_status: "waiting";
+  | OrderV2day;
+export const Order = {
+  fromRow: (row: OrderRow): Result<Order, InvalidRow>
+  toRow: (state: Order): OrderRow
+} as const;
+export type ShipmentStateKind =
+  | "Waiting"
+  | "Delivered";
+export type ShipmentWaiting = Readonly<{
+  kind: "Waiting";
   id: ShipmentId;
   phase: ShipmentPhase;
+  kind_: ShipmentKind;
   order_id: OrderId;
-}
-
-export interface ShipmentDelivered {
-  delivery_status: "delivered";
+}>;
+export type ShipmentDelivered = Readonly<{
+  kind: "Delivered";
   id: ShipmentId;
   phase: ShipmentPhase;
+  kind_: ShipmentKind;
   order_id: OrderId;
-}
-
+}>;
 export type Shipment =
-  ShipmentWaiting
-  | ShipmentDelivered
-;
-
-export interface OrderRow {
+  | ShipmentWaiting
+  | ShipmentDelivered;
+export const Shipment = {
+  fromRow: (row: ShipmentRow): Result<Shipment, InvalidRow>
+  toRow: (state: Shipment): ShipmentRow
+} as const;
+export type OrderRow = Readonly<{
   id: OrderId;
   status: OrderStatus;
   total: Money;
@@ -214,11 +257,13 @@ export interface OrderRow {
   memo: string | null;
   legacy_ref: string | null;
   customer_code: CustomerId;
-}
-
-export interface ShipmentRow {
+}>;
+export function parseOrderRow(value: unknown): Result<OrderRow, InvalidRow>
+export type ShipmentRow = Readonly<{
   id: ShipmentId;
   phase: ShipmentPhase;
   delivery_status: ShipmentDeliveryStatus;
+  kind: ShipmentKind;
   order_id: OrderId;
-}
+}>;
+export function parseShipmentRow(value: unknown): Result<ShipmentRow, InvalidRow>

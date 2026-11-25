@@ -1,0 +1,20 @@
+// Fixture of tests/codegen_builds.rs: model types named like the names the Go printer derives
+// (`<Entity>Visitor`, `Match<Entity>`, `<Entity>Kind<State>`, `<UseCase>ErrorKind`,
+// `<UseCase>Error<Case>`). Each derived name takes a trailing `_`, and the Go output builds.
+entity Order "O" {
+  id: Int @pk
+  status: Enum(pending, paid) @default(pending)
+  qty: Int @default("1")
+}
+usecase Place "P"
+usecase Pay "Pay"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+condition Big "big"
+holds(Big, Order.qty >= 1)
+applies_to(Big, Pay)
+variation OrderVisitor "V" { a b }
+variation MatchOrder "M" { a b }
+variation OrderKindPaid "K" { a b }
+variation PayErrorKind "E" { a b }
+variation PayErrorRejected "R" { a b }

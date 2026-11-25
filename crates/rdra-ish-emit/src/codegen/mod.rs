@@ -12,23 +12,28 @@ mod actions;
 pub mod conformance;
 mod go;
 mod go_port;
+/// The test the Go probe holds when bound to traces: `check --code=run` runs it.
+pub use go_port::CONFORMANCE_TEST as GO_CONFORMANCE_TEST;
 pub mod ir;
+pub mod json;
+pub mod probe;
 mod rust;
 mod rust_port;
 mod states;
 mod ts;
+mod ts_port;
 mod validators;
 
 use std::collections::BTreeMap;
 
-use rdra_ish_core::lifecycle::Caps;
+use rdra_ish_core::lifecycle::{ActionOrigin, Caps};
 use rdra_ish_core::location::LocatedSpan;
 use rdra_ish_core::model::{ColumnType, Entity, EntityKey, Max, Min, ModelColumn, RefAction};
 use rdra_ish_core::SemanticModel;
 
 use ir::{
     DomainModel, EnumDecl, EnumValue, Field, FieldType, IdDecl, Obligation, RecordDecl, RecordKind,
-    Scalar, SumDecl, VariantDecl,
+    Scalar, SumDecl, UseCaseDecl, VariantDecl,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -49,9 +54,12 @@ pub struct Options {
     pub version: String,
     /// What `check` said of the model: the state sums refine only a model it passed.
     pub check: CheckStatus,
-    /// Print the conformance port and harness (Rust and Go), and write the traces of a BFS
+    /// Print the conformance port and harness, and write the traces of a BFS
     /// that stops at this many states.
     pub conformance: Option<usize>,
+    /// TypeScript: brand the state types with a symbol only the module can name, so only its
+    /// functions make a state (decision 9 of docs/design/code-check.md: opt-in).
+    pub seal: bool,
 }
 
 /// The result of the `check` the generator ran before printing.
@@ -81,6 +89,9 @@ pub enum CodegenError {
 pub struct Generated {
     pub code: String,
     pub traces: Option<conformance::Traces>,
+    /// The domain model the code was printed from: its contracts, for the probe and the
+    /// mapping of compiler errors (`check --code=build`).
+    pub domain: DomainModel,
 }
 
 /// The generated code for `options.lang`. `site` formats a source location as `path:line:col`.
@@ -102,29 +113,12 @@ pub fn generate_all(
         CheckStatus::Passed { caps, .. } => Some(caps),
         CheckStatus::Failed { .. } => None,
     };
-    if options.conformance.is_some() {
-        if options.lang == Lang::TypeScript {
-            return Err(CodegenError::Conformance(
-                "the harness is printed for --lang rust and go only".to_string(),
-            ));
-        }
-        if refine.is_none() {
-            return Err(CodegenError::Conformance(
-                "`check` rejects the model, so there are no transition functions to drive"
-                    .to_string(),
-            ));
-        }
+    if options.conformance.is_some() && refine.is_none() {
+        return Err(CodegenError::Conformance(
+            "`check` rejects the model, so there are no transition functions to drive".to_string(),
+        ));
     }
-    let mut domain = build_with(model, refine, options.conformance.is_some(), site)?;
-    if let CheckStatus::Failed { errors } = &options.check {
-        for error in errors {
-            domain.obligations.push(Obligation {
-                invariant: None,
-                text: format!("NOT MET by the model, which `check` rejects: {error}"),
-                site: None,
-            });
-        }
-    }
+    let domain = domain_of(model, options, options.conformance.is_some(), site)?;
     let traces = options.conformance.map(|cap| {
         let mut header = vec![format!("model: {}", options.model_path)];
         if let CheckStatus::Passed { bounds, .. } = &options.check {
@@ -133,11 +127,83 @@ pub fn generate_all(
         conformance::traces(model, &domain, cap, &header)
     });
     let code = match options.lang {
-        Lang::TypeScript => ts::print(&domain, options),
+        Lang::TypeScript => ts::print(&domain, options, traces.as_ref()),
         Lang::Rust => rust::print(&domain, options, traces.as_ref()),
         Lang::Go => go::print(&domain, options, traces.as_ref()),
     };
-    Ok(Generated { code, traces })
+    Ok(Generated {
+        code,
+        traces,
+        domain,
+    })
+}
+
+/// snake_case of a model identifier, as the printers spell function and method names.
+pub fn snake(id: &str) -> String {
+    actions::snake(id)
+}
+
+/// What the probe binds (`[code.<lang>]` in rdra.toml): the service type, the path of the
+/// generated module, and for the conformance test, the expression that makes a fresh service
+/// and the traces' path from the build directory.
+#[derive(Clone, Debug, Default)]
+pub struct ProbeBinding {
+    pub service: String,
+    pub module: String,
+    pub conformance: Option<(String, String)>,
+    /// Go: the name in the domain package's `package` clause (`[code.go] package`), which the
+    /// probe names it by; `None` names it by the last element of `module`.
+    pub package: Option<String>,
+}
+
+/// The probe of `domain` in `lang`: one line per contract stating the service implements it,
+/// and the conformance test when the binding has one. `None` for a language with no probe
+/// printer yet, or a model with no contracts.
+pub fn probe_for(lang: Lang, domain: &DomainModel, binding: &ProbeBinding) -> Option<probe::Probe> {
+    match lang {
+        Lang::Rust => rust_port::probe(domain, binding),
+        Lang::TypeScript => ts_port::probe(domain, binding),
+        Lang::Go => go_port::probe(domain, binding),
+    }
+}
+
+/// The contract as JSON (`codegen --format json`): the same choices the printers print, with
+/// model locations. `options.lang` does not change it.
+pub fn generate_json(
+    model: &SemanticModel,
+    options: &Options,
+    site: &dyn Fn(&LocatedSpan) -> Option<String>,
+) -> Result<String, CodegenError> {
+    let domain = domain_of(model, options, false, site)?;
+    Ok(json::print(model, &domain, options, site))
+}
+
+/// The domain model the options ask for: refined when `check` passed, with an unmet
+/// obligation per error when it did not.
+fn domain_of(
+    model: &SemanticModel,
+    options: &Options,
+    port: bool,
+    site: &dyn Fn(&LocatedSpan) -> Option<String>,
+) -> Result<DomainModel, CodegenError> {
+    let refine = match options.check {
+        CheckStatus::Passed { caps, .. } => Some(caps),
+        CheckStatus::Failed { .. } => None,
+    };
+    let mut domain = build_for(model, refine, port, Some(options.lang), site)?;
+    if let CheckStatus::Failed { errors } = &options.check {
+        for error in errors {
+            let name = error.split_once(':').map_or(error.as_str(), |(n, _)| n);
+            domain.obligations.push(Obligation {
+                name: format!("NotMet_{}", name.trim()),
+                checked: false,
+                text: format!("NOT MET by the model, which `check` rejects: {error}"),
+                site: None,
+            });
+        }
+        unique_names(&mut domain.obligations);
+    }
+    Ok(domain)
 }
 
 /// The header every language prints as comment lines. Compatibility covers the TypeScript
@@ -151,11 +217,15 @@ fn header_lines(options: &Options) -> Vec<String> {
                 "Generated by rdra-ish {} codegen from {}.",
                 options.version, options.model_path
             ),
-            "rdra-ish's compatibility contract covers the scalars, ids, value sets, state types,"
+            "rdra-ish's compatibility contract covers `Result`, `InvalidValue`, `InvalidRow`, the"
                 .to_string(),
-            "and `<Entity>Row` types below (docs/compatibility.md). The rest is experimental: a"
+            "scalars, ids, value sets, state types, `<Entity>Kind` and `<Entity>Row` types below,"
                 .to_string(),
-            "later release may generate different names or shapes from the same model.".to_string(),
+            "and the signatures of their companions and `parse<Entity>Row` (docs/compatibility.md)."
+                .to_string(),
+            "The rest is experimental: a later release may generate different names or shapes"
+                .to_string(),
+            "from the same model.".to_string(),
         ]
     } else {
         vec![
@@ -237,7 +307,7 @@ fn conformance_lines(
     conform: &str,
     port: &str,
 ) -> Vec<String> {
-    let (Some(decl), Some(t)) = (&domain.port, traces) else {
+    let (Some(decl), Some(t), true) = (&domain.port, traces, domain.harness) else {
         return Vec::new();
     };
     let mut lines = vec![
@@ -287,14 +357,14 @@ fn obligations_only(domain: &DomainModel) -> Vec<String> {
     if domain.obligations.is_empty() {
         return vec!["Obligations: none.".to_string()];
     }
-    let mut lines = vec!["Obligations:".to_string()];
-    for (i, o) in domain.obligations.iter().enumerate() {
-        let name = o
-            .invariant
-            .as_ref()
-            .map(|n| format!(" [{n}]"))
-            .unwrap_or_default();
-        lines.push(format!("O{}{name} {}", i + 1, o.text));
+    let mut lines = vec![
+        "Obligations, each by a name that stays when the model changes elsewhere (`check` and"
+            .to_string(),
+        "`verify` report the ones marked [checked] by the same name):".to_string(),
+    ];
+    for o in &domain.obligations {
+        let checked = if o.checked { " [checked]" } else { "" };
+        lines.push(format!("{}{checked}: {}", o.name, o.text));
         if let Some(site) = &o.site {
             lines.push(format!("    at {site}"));
         }
@@ -320,7 +390,78 @@ pub fn build_with(
     port: bool,
     site: &dyn Fn(&LocatedSpan) -> Option<String>,
 ) -> Result<DomainModel, CodegenError> {
+    build_for(model, refine, port, None, site)
+}
+
+/// The names a language's printer writes unqualified beside the generated types, so a
+/// model type of that name is a collision ([`build_for`]).
+pub fn reserved_names(lang: Lang) -> &'static [&'static str] {
+    match lang {
+        // `Symbol`: the sealed state types need the global one (`--seal`).
+        Lang::TypeScript => &["Result", "assertNever", "Symbol"],
+        // The sentinels errors.Is matches each case of a `<UseCase>Error` with.
+        Lang::Go => &["ErrNotEnabled", "ErrRejected", "ErrInvalidArgument"],
+        Lang::Rust => &[],
+    }
+}
+
+/// A name a language's printer derives from a model name (Go `<Entity>Visitor`), which a model
+/// type of the same name would break: [`build_for`] claims it after every name of the IR.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DerivedName {
+    /// What the printer looks it up by, with [`DomainModel::derived`]: `<lang>:<what>:<from>`,
+    /// such as `go:visitor:Order`.
+    pub key: String,
+    /// The name the printer would like: the claimed name is this, or this with `_` appended
+    /// when a model type has it already.
+    pub name: String,
+    /// What it is, for a collision's message.
+    pub by: String,
+}
+
+/// The names `lang`'s printer derives from the IR's names, beyond the IR's own fields.
+/// Each language's pull request fills in its arm.
+pub fn derived_names(lang: Lang, domain: &DomainModel) -> Vec<DerivedName> {
+    match lang {
+        // Every name the Rust output declares in the module scope is a field of the IR:
+        // the Rust printer derives none.
+        Lang::Rust => Vec::new(),
+        Lang::Go => go::derived_names(domain),
+        // The boundary parser of each row type, `parse<Row>`, claimed in PascalCase as the
+        // functions are (the printer writes it in camelCase).
+        Lang::TypeScript => {
+            let rows = domain
+                .records
+                .iter()
+                .map(|r| r.name.as_str())
+                .chain(domain.sums.iter().map(|s| s.row.as_str()));
+            rows.map(|row| DerivedName {
+                key: format!("ts:parse:{row}"),
+                name: format!("Parse{row}"),
+                by: format!("the parser of {row}"),
+            })
+            .collect()
+        }
+    }
+}
+
+/// [`build_with`] for the printer of `lang`: the names it writes unqualified
+/// ([`reserved_names`]) are claimed first, and the names it derives ([`derived_names`]) last,
+/// each as it is or with `_` appended, into [`DomainModel::derived`].
+pub fn build_for(
+    model: &SemanticModel,
+    refine: Option<Caps>,
+    port: bool,
+    lang: Option<Lang>,
+    site: &dyn Fn(&LocatedSpan) -> Option<String>,
+) -> Result<DomainModel, CodegenError> {
     let mut names = Names::default();
+    for name in lang.map_or(&[][..], reserved_names) {
+        names.claim(
+            name.to_string(),
+            "a name the printer of this language writes".to_string(),
+        )?;
+    }
     let mut domain = DomainModel::default();
     // The prelude's names, and `Self`, which no language takes as a type name.
     for scalar in Scalar::PRELUDE {
@@ -333,11 +474,12 @@ pub fn build_with(
         "None",
         "Ok",
         "Err",
-        "Rejected",
-        "NotEnabled",
         "Refused",
-        "InvalidRow",
+        ir::INVALID_ROW,
         "InvalidValue",
+        ir::ERROR_CASES[0],
+        ir::ERROR_CASES[1],
+        ir::ERROR_CASES[2],
     ] {
         names.claim(reserved.to_string(), "a reserved word".to_string())?;
     }
@@ -444,7 +586,21 @@ pub fn build_with(
         });
     }
 
+    // The discriminant types, once every type of the data layer has its name: the one name
+    // a column's enum or a state may already have is `<Entity>Kind`.
+    for sum in &mut domain.sums {
+        sum.kind = claim_first(
+            &mut names,
+            [
+                format!("{}Kind", sum.name),
+                format!("{}StateKind", sum.name),
+            ],
+            format!("the kind of {}", sum.entity),
+        )?;
+    }
+
     domain.obligations = obligations(model, site);
+    domain.usecases = usecases(model, site);
 
     // Transition functions and rule checks rest on the verified system: only a model `check`
     // passed gets them.
@@ -457,10 +613,40 @@ pub fn build_with(
         actions::add_functions(model, &built.ts, &mut domain, &mut names, site)?;
         validators::add_validators(&built.ts, &mut domain, &mut names, site)?;
         domain.candidates = states::candidates(model, &domain.sums, caps);
-        if port {
-            domain.port = Some(conformance::port(model, &built.ts, &domain, &mut names)?);
+        // The port's contracts are printed with or without the harness, so the probe has
+        // them; a model the harness cannot name the rows of has none, and is an error only
+        // when the harness is asked for.
+        let mut trial = names.clone();
+        match conformance::port(model, &built.ts, &domain, &mut trial) {
+            Ok(decl) => {
+                names = trial;
+                domain.port = Some(decl);
+                domain.harness = port;
+                conformance::add_entries(&built.ts, &mut domain, &mut names)?;
+                conformance::add_callers(model, &mut domain, &mut names)?;
+            }
+            Err(e) if port => return Err(e),
+            Err(_) => {}
+        }
+        for uc in &mut domain.usecases {
+            uc.actions = built
+                .ts
+                .actions()
+                .iter()
+                .filter(|a| {
+                    matches!(&a.origin, ActionOrigin::UseCase { uc: k, .. }
+                        if model.use_cases[*k].id == uc.id)
+                })
+                .map(|a| a.name.clone())
+                .collect();
+            uc.error = domain
+                .errors
+                .iter()
+                .find(|e| e.usecase == uc.id)
+                .map(|e| e.name.clone());
         }
     }
+    unique_names(&mut domain.obligations);
 
     // Go declares `<Enum>Values` and one `<Enum><Value>` constant per value in the package
     // scope the types share, so those names are claimed too.
@@ -480,7 +666,25 @@ pub fn build_with(
             )?;
         }
     }
+    if let Some(lang) = lang {
+        let derived = derived_names(lang, &domain);
+        claim_derived(&mut names, &mut domain, derived)?;
+    }
     Ok(domain)
+}
+
+/// Claims each derived name as it is, or with `_` appended when a model type has it, into
+/// `domain.derived`; a collision of both spellings is an error naming both claimants.
+fn claim_derived(
+    names: &mut Names,
+    domain: &mut DomainModel,
+    derived: Vec<DerivedName>,
+) -> Result<(), CodegenError> {
+    for d in derived {
+        let name = claim_first(names, [d.name.clone(), format!("{}_", d.name)], d.by)?;
+        domain.derived.insert(d.key, name);
+    }
+    Ok(())
 }
 
 /// The sum of an entity with a lifecycle column: one variant per value of its tag, each
@@ -519,6 +723,10 @@ fn sum_decl(
         for field in &rest {
             let refinement = refinements.get(&(value.wire.clone(), field.wire.clone()));
             let mut field = field.clone();
+            if field.wire == "kind" {
+                // `kind` is the discriminant of a state type; the column keeps its name in the row.
+                field.name = "kind_".to_string();
+            }
             let at = refinement
                 .and_then(|r| r.site.as_ref())
                 .and_then(site)
@@ -558,6 +766,7 @@ fn sum_decl(
         variants,
         row,
         row_fields,
+        kind: String::new(),
     })
 }
 
@@ -698,6 +907,7 @@ fn field(column: &ModelColumn, ty: FieldType) -> Field {
     }
     Field {
         wire: column.name.clone(),
+        name: column.name.clone(),
         pascal: type_ident(&column.name),
         ty,
         nullable: column.is_nullable,
@@ -713,20 +923,25 @@ fn doc_of(label: &str, description: Option<&str>) -> Vec<String> {
     doc
 }
 
-/// What the data layer's invariants and constraints ask of the code, in entity order.
+/// What the data layer's invariants and constraints ask of the code, in entity order. Each
+/// name is built from the model's identifiers, never from a position, so adding an unrelated
+/// declaration moves none.
 fn obligations(
     model: &SemanticModel,
     site: &dyn Fn(&LocatedSpan) -> Option<String>,
 ) -> Vec<Obligation> {
     let mut out: Vec<Obligation> = Vec::new();
-    let mut push = |invariant: Option<String>, text: String, at: Option<&LocatedSpan>| {
+    let mut push = |name: String, checked: bool, text: String, at: Option<&LocatedSpan>| {
         out.push(Obligation {
-            invariant,
+            name,
+            checked,
             text,
             site: at.and_then(site),
         });
     };
     for (key, entity) in &model.entities {
+        // An obligation with no declaration of its own is at its entity's.
+        let entity_at = model.decl_sites.located("entity", &entity.id);
         for (_, fk) in model.foreign_keys().filter(|(_, fk)| fk.child == key) {
             if fk.columns.is_empty() {
                 continue;
@@ -739,15 +954,23 @@ fn obligations(
                 .map(|(c, _)| format!("{}.{c}", entity.id))
                 .collect::<Vec<_>>()
                 .join(", ");
+            let col_names = fk
+                .columns
+                .iter()
+                .map(|(c, _)| c.as_str())
+                .collect::<Vec<_>>()
+                .join("_");
             let nullable = if fk.optional() { " when set" } else { "" };
             push(
-                None,
+                format!("Ref_{}_{col_names}", entity.id),
+                false,
                 format!("{cols} names a present {}{nullable}.", parent.id),
                 fk.site.as_ref(),
             );
             if fk.children.max == Max::One {
                 push(
-                    Some(format!("Unique_{}_{role}", entity.id)),
+                    format!("Unique_{}_{role}", entity.id),
+                    true,
                     format!(
                         "no two {} rows share one {} through {cols}.",
                         entity.id, parent.id
@@ -757,7 +980,8 @@ fn obligations(
             }
             if fk.children.min == Min::One {
                 push(
-                    Some(format!("MinCard_{}_{role}", entity.id)),
+                    format!("MinCard_{}_{role}", entity.id),
+                    true,
                     format!(
                         "every present {} has at least one {} through {cols}.",
                         parent.id, entity.id
@@ -767,7 +991,8 @@ fn obligations(
             }
             if let Some(most) = fk.children.most {
                 push(
-                    Some(format!("MaxCard_{}_{role}", entity.id)),
+                    format!("MaxCard_{}_{role}", entity.id),
+                    true,
                     format!(
                         "every present {} has at most {most} {} through {cols}.",
                         parent.id, entity.id
@@ -775,10 +1000,14 @@ fn obligations(
                     fk.site.as_ref(),
                 );
             }
-            for (what, action) in [("delete", fk.on_delete), ("update", fk.on_update)] {
+            for (what, prefix, action) in [
+                ("delete", "OnDelete", fk.on_delete),
+                ("update", "OnUpdate", fk.on_update),
+            ] {
                 if let Some(action) = action {
                     push(
-                        None,
+                        format!("{prefix}_{}_{col_names}", entity.id),
+                        false,
                         format!(
                             "on {what} of a {}, apply {} to its {} rows through {cols}.",
                             parent.id,
@@ -799,14 +1028,16 @@ fn obligations(
         for column in &entity.columns {
             if column.is_unique && !column.is_pk && !one_to_one(&column.name) {
                 push(
-                    None,
+                    format!("Unique_{}_{}", entity.id, column.name),
+                    false,
                     format!("no two {} rows share {}.", entity.id, column.name),
-                    None,
+                    entity_at.as_ref(),
                 );
             }
             for (i, check) in column.check_constraints.iter().enumerate() {
                 push(
-                    Some(format!("Check_{}_{}_{i}", entity.id, column.name)),
+                    format!("Check_{}_{}_{i}", entity.id, column.name),
+                    true,
                     format!(
                         "every {} row satisfies {} (@check on {}).",
                         entity.id,
@@ -818,14 +1049,15 @@ fn obligations(
             }
             if let Some(expr) = &column.derived_expr {
                 push(
-                    None,
+                    format!("Derived_{}_{}", entity.id, column.name),
+                    false,
                     format!(
                         "{}.{} always equals {}.",
                         entity.id,
                         column.name,
                         expr.display()
                     ),
-                    None,
+                    entity_at.as_ref(),
                 );
             }
         }
@@ -836,17 +1068,60 @@ fn obligations(
             .filter(|u| u.columns.len() > 1)
         {
             push(
-                None,
+                format!("Unique_{}_{}", entity.id, unique.columns.join("_")),
+                false,
                 format!(
                     "no two {} rows share ({}).",
                     entity.id,
                     unique.columns.join(", ")
                 ),
-                None,
+                entity_at.as_ref(),
             );
         }
     }
     out
+}
+
+/// Every use case of the model, without its actions: [`build_with`] adds them from the
+/// transition system of a model `check` passed.
+fn usecases(
+    model: &SemanticModel,
+    site: &dyn Fn(&LocatedSpan) -> Option<String>,
+) -> Vec<UseCaseDecl> {
+    model
+        .use_cases
+        .values()
+        .map(|uc| UseCaseDecl {
+            id: uc.id.clone(),
+            label: uc.label.clone(),
+            site: model
+                .decl_sites
+                .located("usecase", &uc.id)
+                .as_ref()
+                .and_then(site),
+            actions: Vec::new(),
+            error: None,
+        })
+        .collect()
+}
+
+/// Obligations that share a name. A second one of an invariant `check` names is the same
+/// invariant seen from elsewhere (an `@check` the data layer lists and no one-row check
+/// prints): it goes. Two others (two keys from one child to one parent through one role)
+/// keep the first as it is and number the rest from 2, in model order.
+fn unique_names(obligations: &mut Vec<Obligation>) {
+    let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    obligations.retain(|o| !o.checked || seen.insert(o.name.clone()));
+    for o in obligations.iter_mut().filter(|o| !o.checked) {
+        let mut candidate = o.name.clone();
+        let mut n = 2;
+        while seen.contains(&candidate) {
+            candidate = format!("{}_{n}", o.name);
+            n += 1;
+        }
+        seen.insert(candidate.clone());
+        o.name = candidate;
+    }
 }
 
 fn ref_action(action: RefAction) -> &'static str {
@@ -860,7 +1135,7 @@ fn ref_action(action: RefAction) -> &'static str {
 }
 
 /// The type names given out, with the declaration that claimed each.
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct Names(BTreeMap<String, String>);
 
 impl Names {
@@ -875,6 +1150,22 @@ impl Names {
         self.0.insert(name.clone(), by);
         Ok(name)
     }
+}
+
+/// The first of `candidates` no declaration has, claimed; a collision naming the last when
+/// every one is taken.
+fn claim_first<const N: usize>(
+    names: &mut Names,
+    candidates: [String; N],
+    by: String,
+) -> Result<String, CodegenError> {
+    let last = candidates.len() - 1;
+    for (i, name) in candidates.into_iter().enumerate() {
+        if i == last || !names.0.contains_key(&name) {
+            return names.claim(name, by);
+        }
+    }
+    unreachable!("the last candidate is always claimed")
 }
 
 /// An identifier in PascalCase: `_` and `-` split words, and the first letter of each word

@@ -1,0 +1,47 @@
+// Enum and Bool columns marked `@null`, which hold null as a value (#359), in the generated
+// functions (codegen_builds.rs, codegen_differential.rs): Make creates an Item with k and f
+// null and d and e at their defaults, Paint and Clear write k, Flag writes f, and the
+// conditions read k and f, null and not.
+entity Item "品目" {
+  id: Int @pk
+  k: Enum(red, blue) @null
+  f: Bool @null
+  d: Enum(red, blue) @null @default(blue)
+  e: Bool @null @default(true)
+}
+
+usecase Make "作成"
+usecase Paint "塗装"
+usecase Clear "消去"
+usecase Flag "旗"
+
+creates(Make, Item)
+sets(Paint, Item.k == red)
+sets(Clear, Item.k == null)
+sets(Flag, Item.f == true)
+
+condition IsRed "赤"
+holds(IsRed, Item.k == red)
+applies_to(IsRed, Clear)
+
+condition Unflagged "旗なし"
+holds(Unflagged, Item.f == null)
+applies_to(Unflagged, Flag)
+
+condition Shown "表示"
+holds(Shown, Item.e == true)
+applies_to(Shown, Paint)
+
+// A state tag column marked `@null`: the states are its declared values, and a row whose tag
+// is null fits none (`InvalidRow`).
+entity Doc "文書" {
+  id: Int @pk
+  status: Enum(draft, published) @null @default(draft)
+  note: String @null
+}
+
+usecase Write "起票"
+usecase Publish "公開"
+
+creates(Write, Doc)
+transitions(Publish, Doc.status, draft -> published)
