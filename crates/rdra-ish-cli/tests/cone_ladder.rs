@@ -63,7 +63,7 @@ const CASES: &[Case] = &[
     ),
     (
         Model::File("crates/rdra-ish-cli/tests/engine_corpus/cone_independent_loop.rdra"),
-        &[("PaidShipsUnfair", "none")],
+        &[("PaidShipsUnfair", "Independent")],
     ),
     (
         Model::File("crates/rdra-ish-cli/tests/engine_corpus/cone_outside_monotone.rdra"),
@@ -82,13 +82,83 @@ const CASES: &[Case] = &[
     ),
     (
         Model::Source("quantifier_chain", QUANTIFIER_CHAIN),
-        &[("OrderShips", "none"), ("OrderShipsPlain", "none")],
+        &[
+            ("OrderShips", "Independent"),
+            ("OrderShipsPlain", "Independent"),
+        ],
     ),
     (
         Model::Source("frees_slots", FREES_SLOTS),
         &[("PaidShips", "Exact")],
     ),
+    (
+        Model::Source("shared_writer", SHARED_WRITER),
+        &[
+            ("PaidLeadsToShipped", "none"),
+            ("EventuallyTerminal", "none"),
+        ],
+    ),
+    (
+        Model::Source("loop_needs_a_mark", LOOP_NEEDS_A_MARK),
+        &[("PaidShipsUnfair", "none")],
+    ),
 ];
+
+/// The flag toggles outside the cone, but Pay and Ship write it with the status: the flag's
+/// cone shares their writes, so it is no independent loop (step 5), and the whole model,
+/// where the flag moves only with the order, is `ok`.
+const SHARED_WRITER: &str = r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid, shipped) @default(pending)
+  open: Bool @default(true)
+}
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Ship "出荷"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+sets(Pay, Order.open == false)
+transitions(Ship, Order.status, paid -> shipped)
+sets(Ship, Order.open == true)
+property PaidLeadsToShipped leads_to(Order.status == paid, Order.status == shipped)
+property EventuallyTerminal eventually(Order.status == shipped)
+"#;
+
+/// The ticket's status can go back to open only on an escalation, and nothing escalates, since
+/// no use case makes a ticket urgent. A candidate loop that left the event's mark out would
+/// reopen tickets freely and loop; the exact one holds the mark and Escalate, finds no cycle,
+/// and step 5 does not fire. The whole model is `ok`: the ticket closes once, and the paid
+/// order must then ship.
+const LOOP_NEEDS_A_MARK: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid, shipped) @default(pending) }
+entity Ticket "問い合わせ" {
+  id: Int @pk
+  status: Enum(open, closed) @default(open)
+  urgent: Bool @default(false)
+}
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Ship "出荷"
+usecase Open "起票"
+usecase Close "完了"
+usecase Escalate "エスカレーション"
+usecase Reopen "再開"
+event EvEscalated "エスカレーション済"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+creates(Open, Ticket)
+transitions(Close, Ticket.status, open -> closed)
+updates(Escalate, Ticket)
+condition Urgent "緊急"
+holds(Urgent, Ticket.urgent == true)
+applies_to(Urgent, Escalate)
+raises(Escalate, EvEscalated)
+triggers(EvEscalated, Reopen)
+transitions(Reopen, Ticket.status, closed -> open)
+property PaidShipsUnfair leads_to(Order.status == paid, Order.status == shipped)
+"#;
 
 /// The fair use case's guard reads another entity, which is built once and only opens; the
 /// order's note is set once, outside the cone (engine_equivalence.rs, `GUARD_READS_OTHER`).

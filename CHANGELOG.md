@@ -145,6 +145,13 @@ No sample changes verdict.
   follows. `order.rdra` decides `PaidLeadsToShipped` and `EventuallyTerminal` this way (run;
   the verdicts stay `ok`). Expected, not yet run: a domain sample whose property needed the
   whole model and whose outside writes are monotone moves from `not decided` to `ok`.
+- A property whose exact cone stops at a state where a step of the cone is enabled now fails
+  when a part of the model outside the cone, sharing no use case with it, can loop forever
+  on its own: the whole model can stop the cone there while that part keeps moving (#168
+  phase 4, step 5). The line ends `<Entity> runs forever outside the cone`, and the
+  counterexample is the cone's stop. Expected, not yet run: a domain sample property that
+  ended `not decided` because its whole model did not finish may now be a counterexample;
+  `RDRA_ISH_LADDER_STATS=1` names the step that decided each property.
 - Invalid `Enum` and `Bool` defaults (#187) and out-of-range Int defaults (#180) fail to
   load. `UnresolvedPropertyAtom` is renamed `UnresolvedPropertyColumn` (#160).
 - `export --kind typescript-states` and `states --format typescript` are removed. Unknown

@@ -527,4 +527,38 @@ property Ships leads_to(Order.status == pending, Order.status == shipped)
     );
     let all: crate::lifecycle::VarSet = ts.var_ids().collect();
     assert!(ts.cyclic_outside(&all).is_empty());
+    // The ticket loops on its own; the note's state is done once and never back, so it has
+    // no cycle, and the cone of the order shares no write with either.
+    assert_eq!(
+        ts.independent_loop(&cone.vars, Caps::VERIFY),
+        Some("Ticket".to_string())
+    );
+}
+
+/// Step 5 of phase 4 (#168): a flag the cone's own use cases toggle is no independent loop,
+/// however it cycles.
+#[test]
+fn a_loop_that_shares_a_writer_with_the_cone_is_not_independent() {
+    let model = super::model_from(
+        r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid, shipped) @default(pending)
+  open: Bool @default(true)
+}
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Ship "出荷"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+sets(Pay, Order.open == false)
+transitions(Ship, Order.status, paid -> shipped)
+sets(Ship, Order.open == true)
+property PaidShips leads_to(Order.status == paid, Order.status == shipped)
+"#,
+    );
+    let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+    let cone = ts.property_cone(0);
+    assert_eq!(ts.cyclic_outside(&cone.vars).len(), 1, "the flag");
+    assert_eq!(ts.independent_loop(&cone.vars, Caps::VERIFY), None);
 }

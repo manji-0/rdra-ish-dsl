@@ -3329,11 +3329,7 @@ const TEMPORAL_CASES: &[TemporalCase] = &[
     ("explored_frees_slots", EXPLORED_FREES_SLOTS, &[]),
     ("samples/formal-verification/temporal_unmet.rdra", "", &[]),
     ("samples/formal-verification/split_run_order.rdra", "", &[]),
-    (
-        "independent_loop",
-        INDEPENDENT_LOOP,
-        &[("PaidShipsUnfair", Why::WfNext)],
-    ),
+    ("independent_loop", INDEPENDENT_LOOP, &[]),
     ("guard_reads_other", GUARD_READS_OTHER, &[]),
     ("guard_toggles", GUARD_TOGGLES, &[]),
     ("frees_slots", FREES_SLOTS, &[]),
@@ -3352,15 +3348,75 @@ const TEMPORAL_CASES: &[TemporalCase] = &[
         &[("IssueEventuallyPlain", Why::WfNext)],
     ),
     ("copy_outside", COPY_OUTSIDE, &[]),
+    ("quantifier_chain", QUANTIFIER_CHAIN, &[]),
     (
-        "quantifier_chain",
-        QUANTIFIER_CHAIN,
+        "shared_writer",
+        SHARED_WRITER,
         &[
-            ("OrderShips", Why::WfNext),
-            ("OrderShipsPlain", Why::WfNext),
+            ("PaidLeadsToShipped", Why::WfNext),
+            ("EventuallyTerminal", Why::WfNext),
         ],
     ),
+    (
+        "loop_needs_a_mark",
+        LOOP_NEEDS_A_MARK,
+        &[("PaidShipsUnfair", Why::WfNext)],
+    ),
 ];
+
+/// The flag toggles outside the cone, but Pay and Ship write it with the status, so the
+/// flag's cone shares their writes and is no independent loop (phase 4, step 5); the whole
+/// model is `ok`. The same model is `cone_ladder.rs`'s `SHARED_WRITER`.
+const SHARED_WRITER: &str = r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid, shipped) @default(pending)
+  open: Bool @default(true)
+}
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Ship "出荷"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+sets(Pay, Order.open == false)
+transitions(Ship, Order.status, paid -> shipped)
+sets(Ship, Order.open == true)
+property PaidLeadsToShipped leads_to(Order.status == paid, Order.status == shipped)
+property EventuallyTerminal eventually(Order.status == shipped)
+"#;
+
+/// The ticket reopens only on an escalation that never happens: a candidate loop that left
+/// the event's mark out would loop, the exact one does not (phase 4, step 5); the whole model
+/// is `ok`. The same model is `cone_ladder.rs`'s `LOOP_NEEDS_A_MARK`.
+const LOOP_NEEDS_A_MARK: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid, shipped) @default(pending) }
+entity Ticket "問い合わせ" {
+  id: Int @pk
+  status: Enum(open, closed) @default(open)
+  urgent: Bool @default(false)
+}
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Ship "出荷"
+usecase Open "起票"
+usecase Close "完了"
+usecase Escalate "エスカレーション"
+usecase Reopen "再開"
+event EvEscalated "エスカレーション済"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+creates(Open, Ticket)
+transitions(Close, Ticket.status, open -> closed)
+updates(Escalate, Ticket)
+condition Urgent "緊急"
+holds(Urgent, Ticket.urgent == true)
+applies_to(Urgent, Escalate)
+raises(Escalate, EvEscalated)
+triggers(EvEscalated, Reopen)
+transitions(Reopen, Ticket.status, closed -> open)
+property PaidShipsUnfair leads_to(Order.status == paid, Order.status == shipped)
+"#;
 
 /// `precedes` over two entities, along the key and over every pair: Capture captures a payment
 /// and ships the one order it belongs to (#166). The latch is per pair of slots.

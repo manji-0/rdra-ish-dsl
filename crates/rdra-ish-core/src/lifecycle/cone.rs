@@ -523,6 +523,54 @@ impl TransitionSystem {
             .collect()
     }
 
+    /// Step 5 of docs/design/native-temporal-verification.md, "Modes and the cone": a var set
+    /// `W` outside `cone` that can change forever on its own, whatever the cone does. For each
+    /// var `cyclic_outside` names, `W` is the exact cone of it (`exact_cone`), taken only when
+    /// it is disjoint from `cone` and no action writes both. Both are closed, so their actions
+    /// read only their own vars, and both are exact, so their steps are the whole system's:
+    /// the two interleave freely. When `W`'s graph under `caps` has a cycle, the whole system
+    /// can run it forever at any state of the cone. Returns the entity of the var `W` grew
+    /// from (its id), or `None` when no candidate loops.
+    pub fn independent_loop(&self, cone: &VarSet, caps: super::Caps) -> Option<String> {
+        let writes: Vec<VarSet> = self.actions.iter().map(|a| self.action_writes(a)).collect();
+        let mut tried: Vec<VarSet> = Vec::new();
+        for v in self.cyclic_outside(cone) {
+            let mut seed = VarSet::from([v]);
+            seed.extend(self.existences(v));
+            let w = self.exact_cone(&seed, &BTreeSet::new());
+            if !w.vars.is_disjoint(cone) || tried.contains(&w.vars) {
+                continue;
+            }
+            tried.push(w.vars.clone());
+            let shared = writes
+                .iter()
+                .any(|ws| !ws.is_disjoint(&w.vars) && !ws.is_disjoint(cone));
+            if shared {
+                continue;
+            }
+            debug_assert!(self.is_exact(&w));
+            let run = self.restrict_to(&w.vars, &w.keep).run(caps);
+            let (component, count) = run.graph().adjacency().components();
+            let mut size = vec![0u32; count];
+            for c in component {
+                size[c as usize] += 1;
+            }
+            if size.iter().any(|n| *n > 1) {
+                let entity = match self.var(v).kind {
+                    VarKind::Exists(e) => e,
+                    _ => {
+                        let exists = self.own_existence(v).expect("a var of an entity");
+                        self.entity_ids()
+                            .find(|e| self.entity(*e).exists == exists)
+                            .expect("an entity of the existence")
+                    }
+                };
+                return Some(self.entity(entity).id.clone());
+            }
+        }
+        None
+    }
+
     /// Some action of the cone takes a new slot of an entity outside it. That entity is
     /// unbounded in the cone, so the cone reaches a superset of the whole system's projection.
     pub fn cone_frees_slots(&self, cone: &Cone) -> bool {

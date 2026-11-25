@@ -32,7 +32,7 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rdra_ish_core::lifecycle::{
-    Caps, ComponentRun, Cone, Fairness, LassoFault, LtlKind, PropertyVerdict, QuotientCache,
+    Caps, ComponentRun, Cone, Fairness, LassoFault, Loop, LtlKind, PropertyVerdict, QuotientCache,
     StateDiag, TransitionSystem, VarSet,
 };
 use rdra_ish_emit::tla::{self, PrintMode, TlaBundle};
@@ -124,10 +124,13 @@ pub enum Step {
     /// Step 4: the exact cone's `WF_vars(Next)` run said `ok`, and every var an action writes
     /// outside it is monotone (`cyclic_outside` is empty), so nothing outside runs forever.
     Monotone,
+    /// Step 5: a var set outside the exact cone loops on its own (`independent_loop`), so the
+    /// `Plain` counterexample's stop lasts forever in the whole model.
+    Independent,
 }
 
 impl Step {
-    const ALL: [Step; 2] = [Step::Exact, Step::Monotone];
+    const ALL: [Step; 3] = [Step::Exact, Step::Monotone, Step::Independent];
 }
 
 /// How often each step decided a property in this process, for measuring how often each one
@@ -307,7 +310,7 @@ impl PropertyCone {
         debug_assert!(ts.is_exact(&exact));
         // The cone was exact already: its own runs said what the exact cone's would.
         if exact.vars == self.vars {
-            return self.beyond(ts, &exact, Settled::open(Vec::new()));
+            return self.beyond(ts, &exact, caps, None, Settled::open(Vec::new()));
         }
         let (system, i) = cone_system(ts, &exact, self.at);
         let run = system.run(caps);
@@ -334,10 +337,7 @@ impl PropertyCone {
             Ok(PropertyVerdict::Holds) if ts.cone_keeps_every_write(&exact.vars) => {
                 out.decided(Step::Exact, None)
             }
-            Ok(PropertyVerdict::Holds) => {
-                drop(run);
-                self.beyond(ts, &exact, out)
-            }
+            Ok(PropertyVerdict::Holds) => self.beyond(ts, &exact, caps, Some((run, i)), out),
         }
     }
 
@@ -350,12 +350,55 @@ impl PropertyCone {
     /// of the whole model then keeps moving the cone or ends with no step enabled, and both
     /// project to behaviors the run with `WF_vars(Next)` on the exact cone covers: its `ok`
     /// is the whole model's.
-    fn beyond(&self, ts: &TransitionSystem, exact: &Cone, out: Settled) -> Settled {
+    ///
+    /// Step 5: when a var set outside the cone loops on its own (`independent_loop`), the
+    /// whole model can reach the `Plain` run's stop and then run that loop forever. The cone
+    /// stays at the stop, where no fair instance is enabled, and the loop meets
+    /// `WF_vars(Next)`: the `Plain` counterexample stands. `run` is the exact cone's run when
+    /// `settle` made one; otherwise the exact cone is the property's cone, explored here for
+    /// the lasso.
+    fn beyond(
+        &self,
+        ts: &TransitionSystem,
+        exact: &Cone,
+        caps: Caps,
+        run: Option<(ComponentRun, usize)>,
+        mut out: Settled,
+    ) -> Settled {
         if ts.cyclic_outside(&exact.vars).is_empty() {
-            let mut out = out;
             out.notes
                 .push("nothing outside the cone runs forever".to_string());
             return out.decided(Step::Monotone, None);
+        }
+        if let Some(entity) = ts.independent_loop(&exact.vars, caps) {
+            let (run, i) = match run {
+                Some(run) => run,
+                None => {
+                    let (system, i) = cone_system(ts, exact, self.at);
+                    (system.run(caps), i)
+                }
+            };
+            out.crowded |= met_memory_limit(&run);
+            // The `Plain` counterexample is a stop: a fair cycle would have taken steps
+            // forever, and the run with `WF_vars(Next)` would have found it.
+            match decide(&run, i, Fairness::Plain) {
+                Ok(PropertyVerdict::Violated(d))
+                    if matches!(
+                        *d,
+                        StateDiag::PropertyViolated {
+                            lasso: Some(Loop::Stutter),
+                            ..
+                        }
+                    ) =>
+                {
+                    out.notes
+                        .push(format!("{entity} runs forever outside the cone"));
+                    return out.decided(Step::Independent, Some(d));
+                }
+                Err(fault) => return out.faulty(fault),
+                Ok(PropertyVerdict::Undecided) => return out.stopped(),
+                Ok(_) => {}
+            }
         }
         out
     }
