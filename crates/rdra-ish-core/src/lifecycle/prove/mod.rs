@@ -763,7 +763,12 @@ pub(super) fn value_name(domain: &Domain, i: i64) -> String {
     match domain {
         Domain::Existence => named(&["absent", "present", "deleted"]),
         Domain::Enum(values) => values.get(idx).cloned().unwrap_or(i.to_string()),
+        Domain::NullableEnum(values) => match idx {
+            0 => "null".to_string(),
+            n => values.get(n - 1).cloned().unwrap_or(i.to_string()),
+        },
         Domain::Bool => named(&["false", "true"]),
+        Domain::NullableBool => named(&["null", "false", "true"]),
         Domain::Nullable => named(&["null", "present"]),
         Domain::Int | Domain::Instance { .. } => i.to_string(),
         Domain::NullableInt => match i {

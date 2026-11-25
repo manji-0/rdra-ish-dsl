@@ -150,7 +150,7 @@ impl TransitionSystem {
                     ..
                 }
             );
-            if !lifecycle || !matches!(decl.domain, Domain::Enum(_)) {
+            if !lifecycle || decl.domain.names().is_none() {
                 continue;
             }
             let mut values = self.start_values(e, var);
@@ -674,7 +674,7 @@ impl TransitionSystem {
 
     fn no_witness(&self, e: EntId, var: VarId, value: Value) -> StateDiag {
         let text = |v: Value| match &self.var(var).domain {
-            Domain::Enum(names) => names[usize::from(v.0)].clone(),
+            d if d.names().is_some() => self.value_text(var, v),
             _ => v.0.to_string(),
         };
         let mut into = Vec::new();

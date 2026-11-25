@@ -32,8 +32,8 @@ holds one value per slot.
 | Variable | Values | Exists when |
 |---|---|---|
 | Existence | `absent`, `present`, `deleted` | Always, one per entity |
-| An Enum column | the declared variants | Always |
-| A Bool column | `false`, `true` | Always |
+| An Enum column | the declared variants (plus `null` for `@null`) | Always |
+| A Bool column | `false`, `true` (plus `null` for `@null`) | Always |
 | A `@null` column of any other type | `null`, `present` | Always |
 | An Int, Money, Decimal, Date, or DateTime column | `0..5` (plus `null` for `@null`) | A `sets`, a constraint, a `@check`, an applied condition body, the body of a `.when` guard on a `transitions` arm, a `chooses` value, or a `sets` value, an `after` assertion, or a `property` names it |
 | A column typed by a [`variation`](./language-reference.md#variations) | the variation's values | Something names it, as for Int |
@@ -73,8 +73,9 @@ A new slot starts as follows:
   When some use case creates the parent, every parent slot starts `absent`. A mandatory
   owner then starts as `Any` or `Identity` says and draws `PreExistingChildOfCreatedParent`.
 
-The base value of a column is its `@default`. Without one it is the first Enum variant,
-`false`, `null`, or `0`.
+The base value of a column is its `@default`. Without one it is `null` for a `@null`
+column of any type, as in the database, and otherwise the first Enum variant, `false`, or
+`0`.
 
 ### Actions
 
@@ -460,8 +461,8 @@ Two present rows of the entity break it when they agree on every column of the s
   `String`.
 - **Null.** A row whose column is null agrees with no row, as SQL counts NULLs as
   distinct: two tickets with no seat share nothing. That covers a `@null` Int and an
-  `.optional()` key left unlinked. A `@null` `Enum` or `Bool` has no null value in the
-  lifecycle; it starts at its default or first value, which counts as a value.
+  `.optional()` key left unlinked, and a `@null` `Enum` or `Bool`, which starts at null
+  without a default.
 - **Left to other rules.** A set that is a 1:1 key is `Unique_<Child>_<role>` already.
   A declared set on an entity with a `@soft_delete` column is not checked, because its
   index covers only live rows and the lifecycle does not read the marker. A junction's

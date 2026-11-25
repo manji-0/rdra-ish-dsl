@@ -1,6 +1,6 @@
 //! What a use case's `sets`, `copies`, and `drives` write: the guarded effects of an action.
 
-use super::{prior_write, variant_index, ActionDraft, Builder, CopyMiss, EffectRhs};
+use super::{prior_write, slots_eq, ActionDraft, Builder, CopyMiss, EffectRhs};
 use crate::analysis::AppliedBody;
 use crate::lifecycle::build::preds;
 use crate::lifecycle::diag::StateDiag;
@@ -249,16 +249,21 @@ impl<'m> Builder<'m> {
             else {
                 continue;
             };
-            let copy = Pred::Cmp(
-                Term::Slot {
-                    var,
-                    at: At::Next(p),
-                },
-                CmpOp::Eq,
-                Term::Slot {
-                    var: source_var,
-                    at: source_at,
-                },
+            let copy = slots_eq(
+                (
+                    Term::Slot {
+                        var,
+                        at: At::Next(p),
+                    },
+                    &self.ts.vars[var.index()].domain,
+                ),
+                (
+                    Term::Slot {
+                        var: source_var,
+                        at: source_at,
+                    },
+                    &self.ts.vars[source_var.index()].domain,
+                ),
             );
             if a.guards.iter().any(|g| g.pred == copy) {
                 continue;
@@ -542,11 +547,17 @@ impl<'m> Builder<'m> {
         ek: EntityKey,
     ) -> EffectRhs {
         match (domain, value) {
-            (Domain::Enum(values), EffectValue::EnumVariant(s)) => {
-                variant_index(values, s).map_or(EffectRhs::None, |i| EffectRhs::Value(Value(i)))
+            (Domain::Enum(_) | Domain::NullableEnum(_), EffectValue::EnumVariant(s)) => {
+                domain.of_name(s).map_or(EffectRhs::None, EffectRhs::Value)
             }
-            (Domain::Bool, EffectValue::Bool(b)) => {
-                EffectRhs::Value(if *b { Value::TRUE } else { Value::FALSE })
+            (Domain::Bool | Domain::NullableBool, EffectValue::Bool(b)) => {
+                EffectRhs::Value(domain.of_bool(*b))
+            }
+            (Domain::NullableEnum(_) | Domain::NullableBool, EffectValue::Null) => {
+                EffectRhs::Value(Value::NULL)
+            }
+            (Domain::NullableEnum(_) | Domain::NullableBool, EffectValue::Present) => {
+                EffectRhs::AnyNonNull
             }
             (Domain::Nullable, EffectValue::Null) => EffectRhs::Value(Value::NULL),
             (Domain::Nullable, EffectValue::Present | EffectValue::Int(_)) => {

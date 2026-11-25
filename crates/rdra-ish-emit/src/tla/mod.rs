@@ -103,6 +103,13 @@ pub fn render_value(domain: &Domain, value: Value) -> String {
     match domain {
         Domain::Existence => quote(["absent", "present", "deleted"][i]),
         Domain::Enum(values) => quote(&values[i]),
+        // A nullable Enum or Bool column holds strings only, so TLC never compares a string
+        // with a boolean.
+        Domain::NullableEnum(values) => match i {
+            0 => quote(NULL),
+            n => quote(&values[n - 1]),
+        },
+        Domain::NullableBool => quote([NULL, "false", "true"][i]),
         Domain::Bool => if value == Value::TRUE {
             "TRUE"
         } else {
@@ -110,7 +117,7 @@ pub fn render_value(domain: &Domain, value: Value) -> String {
         }
         .to_string(),
         Domain::Nullable => quote(if value == Value::NULL {
-            "null"
+            NULL
         } else {
             "present"
         }),
@@ -131,6 +138,9 @@ pub fn render_value(domain: &Domain, value: Value) -> String {
 /// with an integer.
 const NULL_INT: &str = "-1";
 
+/// The null of every other nullable column, as a string.
+const NULL: &str = "null";
+
 fn quote(s: &str) -> String {
     format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
 }
@@ -144,7 +154,11 @@ fn domain_set(ts: &TransitionSystem, names: &TlaNames, domain: &Domain) -> Strin
         format!("{{{}}}", items.join(", "))
     };
     match domain {
-        Domain::Existence | Domain::Enum(_) | Domain::Nullable => values(domain.size(ts)),
+        Domain::Existence
+        | Domain::Enum(_)
+        | Domain::NullableEnum(_)
+        | Domain::NullableBool
+        | Domain::Nullable => values(domain.size(ts)),
         Domain::Bool => "BOOLEAN".to_string(),
         Domain::Int => "IntRange".to_string(),
         Domain::NullableInt => format!("IntRange \\cup {{{NULL_INT}}}"),

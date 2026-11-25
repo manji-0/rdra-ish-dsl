@@ -21,16 +21,20 @@ pub(super) enum Write {
 /// The write of a literal value of `domain`.
 pub(super) fn literal(domain: &Domain, value: Value) -> Option<Write> {
     Some(match domain {
-        Domain::Enum(values) => {
-            let wire = values.get(usize::from(value.0))?.clone();
+        Domain::NullableEnum(_) | Domain::NullableBool | Domain::Nullable
+            if value == Value::NULL =>
+        {
+            Write::Null
+        }
+        Domain::Enum(_) | Domain::NullableEnum(_) => {
+            let wire = domain.name(value)?.to_string();
             Write::Enum(EnumValue {
                 ident: type_ident(&wire),
                 wire,
                 label: None,
             })
         }
-        Domain::Bool => Write::Lit(Lit::Bool(value == Value::TRUE)),
-        Domain::Nullable if value == Value::NULL => Write::Null,
+        Domain::Bool | Domain::NullableBool => Write::Lit(Lit::Bool(domain.truth(value)?)),
         Domain::Nullable => Write::Input,
         Domain::Int | Domain::NullableInt => match domain.number(value) {
             Some(n) => Write::Lit(Lit::Int(n)),
@@ -66,10 +70,7 @@ pub(super) fn start_value(ts: &TransitionSystem, e: EntId, tag: &str) -> Option<
         matches!(&ts.var(*v).kind, VarKind::Column { entity, column, .. } if *entity == e && column == tag)
     })?;
     let decl = ts.var(var);
-    match &decl.domain {
-        Domain::Enum(values) => values.get(usize::from(decl.base.0)).cloned(),
-        _ => None,
-    }
+    decl.domain.name(decl.base).map(str::to_string)
 }
 
 /// The id type and id field of an entity's type, when it has one.

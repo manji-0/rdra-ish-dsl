@@ -418,7 +418,7 @@ mod proofs {
 
     /// Any operand: an integer literal, a slot index, a literal value, or a value read from a
     /// var of any domain.
-    fn any_operand(domains: &[Domain; 8]) -> Operand<'_> {
+    fn any_operand(domains: &[Domain; 10]) -> Operand<'_> {
         match kani::any::<u8>() % 4 {
             0 => Operand::Number(kani::any()),
             1 => Operand::Slot(kani::any()),
@@ -432,11 +432,13 @@ mod proofs {
     }
 
     /// One of each domain. `compare` never reads an `Enum`'s names, so this one has none.
-    fn domains() -> [Domain; 8] {
+    fn domains() -> [Domain; 10] {
         [
             Domain::Existence,
             Domain::Enum(Vec::new()),
+            Domain::NullableEnum(Vec::new()),
             Domain::Bool,
+            Domain::NullableBool,
             Domain::Nullable,
             Domain::Int,
             Domain::NullableInt,

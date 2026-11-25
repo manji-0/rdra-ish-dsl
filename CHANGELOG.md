@@ -13,6 +13,26 @@
 
 ### Breaking
 
+- An `Enum` or `Bool` column marked `@null` now holds null in the lifecycle (#359), as a
+  nullable Int column does. A row created without a default starts at null, as the
+  database row of `export --kind sql` does; the lifecycle used to start it at the first
+  value (`red`, `false`) and gave the column no null at all. `check`, `states`, `verify`
+  (native, TLC, and the TLA+ export), and `verify --prove` read the column the same way,
+  by the language reference ([Null](docs/language-reference.md#null)): a null column
+  satisfies no `==` with a value or a column and satisfies every `!=`, `col == null` and
+  `col == present` now ask about null (both were always false), `col in (...)`
+  holds only when it names null or the column's value, and `sets(UC, E.col == null)` now
+  writes null (it wrote nothing). A logical `@derived` comparison of such a column is
+  neither true nor false while it is null. An Enum or Bool column with null compares with
+  one without it value by value. Verdicts and state counts change for models that read
+  such a column: `forbidden(Item, k1 != Item.k2)` now fails on a created row where both
+  are null, `required(Item, k1 == red)` fails there, and two rows left null no longer
+  share a `@unique` value. `states` lists `null` among the column's values (`k1[null|red|
+  blue]`), and `UnreachableEnumVariant` now names a first value that only the old start
+  reached. Generated code (`codegen`) creates such a row with `None` / `nil` / `null`
+  where it wrote the first value. To keep the old start, give the column a `@default`.
+  No sample changes verdict: no sample entity has a nullable Enum or Bool column.
+
 - Two `@null` columns that both hold null are no longer equal (#355). `col == other` between
   two columns holds only when both are present and equal, and `col != other` holds whenever
   either is null, as the language reference ([Null](docs/language-reference.md#null)) and the

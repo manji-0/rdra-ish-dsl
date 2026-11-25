@@ -303,18 +303,18 @@ fn functions(
         } = effect
         {
             let p = usize::from(*param);
-            let Domain::Enum(values) = &ts.var(*var).domain else {
+            let domain = &ts.var(*var).domain;
+            if domain.names().is_none() {
                 return Err("a transition on a column that is not an enum".into());
+            }
+            let name = |v: Value| {
+                domain
+                    .name(v)
+                    .expect("an arm names declared values")
+                    .to_string()
             };
-            let named: Vec<(String, String)> = a
-                .iter()
-                .map(|arm| {
-                    (
-                        values[usize::from(arm.from.0)].clone(),
-                        values[usize::from(arm.to.0)].clone(),
-                    )
-                })
-                .collect();
+            let named: Vec<(String, String)> =
+                a.iter().map(|arm| (name(arm.from), name(arm.to))).collect();
             if Some(*var) != tag_var(p) {
                 // A second lifecycle column: a branch on its value, not a state type.
                 let mut froms: Vec<&String> = named.iter().map(|(f, _)| f).collect();

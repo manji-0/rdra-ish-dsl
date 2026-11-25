@@ -94,19 +94,19 @@ fn cmp_op(op: CmpOpModel) -> CmpOp {
 /// that can be null; an ordered operator already fails on null. A bare `Pred::Cmp` of two
 /// slots is term equality, under which null equals null, as a copy between columns needs.
 fn columns_cmp((lt, ld): (Term, Domain), op: CmpOp, (rt, rd): (Term, Domain)) -> Pred {
-    let nullable = |d: &Domain| matches!(d, Domain::Nullable | Domain::NullableInt);
-    if !matches!(op, CmpOp::Eq | CmpOp::Ne) || !(nullable(&ld) || nullable(&rd)) {
+    // Two columns without null are of one domain, or both Int-typed.
+    if !matches!(op, CmpOp::Eq | CmpOp::Ne) || !(ld.has_null() || rd.has_null()) {
         return Pred::Cmp(lt, op, rt);
     }
     let present = |t: &Term| Pred::Cmp(t.clone(), CmpOp::Ne, Term::Lit(Value::NULL));
     let mut eq = Vec::new();
-    if nullable(&ld) {
+    if ld.has_null() {
         eq.push(present(&lt));
     }
-    if nullable(&rd) {
+    if rd.has_null() {
         eq.push(present(&rt));
     }
-    eq.push(Pred::Cmp(lt, CmpOp::Eq, rt));
+    eq.push(super::slots_eq((lt, &ld), (rt, &rd)));
     match op {
         CmpOp::Eq => Pred::And(eq),
         _ => Pred::Not(Box::new(Pred::And(eq))),

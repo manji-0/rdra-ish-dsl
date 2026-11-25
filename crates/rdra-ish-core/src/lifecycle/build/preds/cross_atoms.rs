@@ -53,7 +53,7 @@ impl Builder<'_> {
                         match (l, r) {
                             (Some(l), Some(r))
                                 if (l.1.is_numeric() && r.1.is_numeric())
-                                    || (!ordered && l.1 == r.1) =>
+                                    || (!ordered && l.1.compares_with(&r.1)) =>
                             {
                                 columns_cmp(l, op, r)
                             }

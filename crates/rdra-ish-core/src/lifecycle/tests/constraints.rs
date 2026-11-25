@@ -849,6 +849,72 @@ creates(Make, Item)
     ));
 }
 
+/// An Enum or Bool column marked `@null` that nothing sets is null on every created row, and
+/// every rule reads that null as the language reference (§ Null) says (#359). `a` (with
+/// null) and `b` (without) both hold `blue` after SetA and SetB, so `a == b` meets them.
+#[test]
+fn null_enum_and_bool_columns_read_as_null() {
+    let src = |rule: &str| {
+        format!(
+            r#"
+entity Item "品目" {{
+  id: Int @pk
+  k1: Enum(red, blue) @null
+  k2: Enum(red, blue) @null
+  f1: Bool @null
+  f2: Bool @null
+  a: Enum(red, blue) @null
+  b: Enum(red, blue)
+  same: Bool @null @derived(k1 == red)
+}}
+usecase Make "作成"
+usecase SetA "A設定"
+usecase SetB "B設定"
+creates(Make, Item)
+sets(SetA, Item.a == blue)
+sets(SetB, Item.b == blue)
+{rule}
+"#
+        )
+    };
+    for (rule, kind, broken) in [
+        ("forbidden(Item, k1 == red)", InvKind::Forbidden, false),
+        ("forbidden(Item, k1 != red)", InvKind::Forbidden, true),
+        ("forbidden(Item, f1 == false)", InvKind::Forbidden, false),
+        ("forbidden(Item, f1 != true)", InvKind::Forbidden, true),
+        ("forbidden(Item, k1 == null)", InvKind::Forbidden, true),
+        ("forbidden(Item, k1 == present)", InvKind::Forbidden, false),
+        ("forbidden(Item, f1 != null)", InvKind::Forbidden, false),
+        (
+            "forbidden(Item, k1 in (red, blue))",
+            InvKind::Forbidden,
+            false,
+        ),
+        (
+            "forbidden(Item, k1 not in (red, blue))",
+            InvKind::Forbidden,
+            true,
+        ),
+        (
+            "forbidden(Item, k1 in (red, null))",
+            InvKind::Forbidden,
+            true,
+        ),
+        ("forbidden(Item, k1 == Item.k2)", InvKind::Forbidden, false),
+        ("forbidden(Item, k1 != Item.k2)", InvKind::Forbidden, true),
+        ("forbidden(Item, f1 == Item.f2)", InvKind::Forbidden, false),
+        ("forbidden(Item, f1 != Item.f2)", InvKind::Forbidden, true),
+        ("forbidden(Item, a == Item.b)", InvKind::Forbidden, true),
+        ("required(Item, a != Item.b)", InvKind::Required, true),
+        ("forbidden(Item, same == true)", InvKind::Forbidden, false),
+        ("forbidden(Item, same == false)", InvKind::Forbidden, false),
+        ("forbidden(Item, same == null)", InvKind::Forbidden, true),
+    ] {
+        let d = derive_src(&src(rule));
+        assert_eq!(violated(&d, "Item", kind), broken, "{rule}");
+    }
+}
+
 #[test]
 fn a_logical_derived_column_is_its_expression_and_no_axis() {
     let src = |qty: u8| {
