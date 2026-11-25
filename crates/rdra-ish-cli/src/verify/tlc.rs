@@ -8,7 +8,7 @@ use crate::export::Modules;
 use crate::memory::TlcHeap;
 use crate::property_cone::{AfterPlain, ConeRun, Verdict, Why};
 use crate::state_findings::{render_violation, Finding, TraceSource};
-use crate::tlc_env::{current_user_heap, tlc_env_sized, xmx, Heap, Jit};
+use crate::tlc_env::{current_user_heap, heap_from_states, tlc_env_sized, xmx, Heap, Jit};
 use crate::tlc_output::{out_of_memory, progress, summarize, Banner, Outcome, TlcRun};
 use crate::tlc_replay::{explain_property, explain_violation};
 use anyhow::{Context, Result};
@@ -678,8 +678,9 @@ fn run_wholes(
 
 /// Runs the jobs `only` names, one `pool` pick at a time (`schedule::pick`): the job at the
 /// head of the order once its workers' cores are free and its heap fits beside the runs
-/// going, or alone. Its heap is `heap` at the pool's sizing share; it reruns once at twice
-/// the heap when it runs out of memory (`run_sized`). The results come back in the order of
+/// going, or alone. Its heap is `heap` at the pool's sizing share, raised by the states BFS
+/// counted under `RDRA_TLC_HEAP=states` (`TlcHeap::with_states`); it reruns once at twice the
+/// heap when it runs out of memory (`run_sized`). The results come back in the order of
 /// `only`.
 fn run_some(
     (jobs, only): (&[Job], &[usize]),
@@ -687,13 +688,21 @@ fn run_some(
     heap: &(dyn Fn(usize, u64) -> TlcHeap + Sync),
     run: impl Fn(&Job, (&str, u64)) -> Result<Ran> + Sync,
 ) -> Result<Vec<Ran>> {
-    let want = |job: usize, share: u64| -> (u64, Rank) {
-        let charge = heap(job, share).charge();
-        (charge, (charge, jobs[job].weight()))
+    let by_states = heap_from_states();
+    let sized = |job: usize, share: u64, states: Option<u64>| match (by_states, states) {
+        (true, Some(states)) => heap(job, share).with_states(states, share),
+        _ => heap(job, share),
+    };
+    let want = |job: usize, share: u64, states: Option<u64>| -> (u64, Rank) {
+        let rank = heap(job, share).charge();
+        (
+            sized(job, share, states).charge(),
+            (rank, jobs[job].weight()),
+        )
     };
     let done = pool.run(only, want, |started, slot| {
         let (job, share) = (&jobs[started.job], started.share);
-        let heap = heap(started.job, share);
+        let heap = sized(started.job, share, started.states);
         let workers = started.workers.to_string();
         run_sized(job, heap, (share, slot), |bytes| {
             run(job, (&workers, bytes))

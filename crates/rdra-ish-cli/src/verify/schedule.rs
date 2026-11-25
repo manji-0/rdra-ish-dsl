@@ -283,11 +283,13 @@ pub(super) struct Pool {
     changed: Condvar,
 }
 
-/// A job `Pool` started: its index, its workers, and the share its heap is sized by.
+/// A job `Pool` started: its index, its workers, the share its heap is sized by, and the
+/// states BFS counted of it by then.
 pub(super) struct Started {
     pub(super) job: usize,
     pub(super) workers: usize,
     pub(super) share: u64,
+    pub(super) states: Option<u64>,
 }
 
 /// What one run holds of its `Pool`.
@@ -340,12 +342,12 @@ impl Pool {
     }
 
     /// Runs the jobs `jobs` names, one `pick` at a time, on as many threads as runs can go at
-    /// once. `want` gives a job's bytes and rank at the sizing share; `run` gets the job as it
-    /// started and its slot. The results come back in the order of `jobs`.
+    /// once. `want` gives a job's bytes and rank at the sizing share and its count; `run` gets
+    /// the job as it started and its slot. The results come back in the order of `jobs`.
     pub(super) fn run<R: Send>(
         &self,
         jobs: &[usize],
-        want: impl Fn(usize, u64) -> (u64, Rank) + Sync,
+        want: impl Fn(usize, u64, Option<u64>) -> (u64, Rank) + Sync,
         run: impl Fn(Started, &mut Slot) -> R + Sync,
     ) -> Vec<R> {
         self.running.lock().expect("lock").waiting = jobs.to_vec();
@@ -371,7 +373,10 @@ impl Pool {
     }
 
     /// Waits until `pick` starts a job and holds what it takes; `None` once none waits.
-    fn next(&self, want: &impl Fn(usize, u64) -> (u64, Rank)) -> Option<(Started, Slot<'_>)> {
+    fn next(
+        &self,
+        want: &impl Fn(usize, u64, Option<u64>) -> (u64, Rank),
+    ) -> Option<(Started, Slot<'_>)> {
         let cores = self.machine.cores.max(1);
         let mut running = self.running.lock().expect("lock");
         loop {
@@ -380,7 +385,7 @@ impl Pool {
             }
             let wants: Vec<Want> = (running.waiting.iter())
                 .map(|&job| {
-                    let (bytes, rank) = want(job, self.sizing);
+                    let (bytes, rank) = want(job, self.sizing, running.states[job]);
                     Want {
                         bytes,
                         states: running.states[job],
@@ -407,6 +412,7 @@ impl Pool {
                     job,
                     workers,
                     share: self.sizing,
+                    states: running.states[job],
                 };
                 let slot = Slot {
                     pool: self,
@@ -880,7 +886,7 @@ mod pick_tests {
         let jobs: Vec<usize> = (0..12).rev().collect();
         let ran = pool.run(
             &jobs,
-            |job, _| (GIB, (GIB, (false, job))),
+            |job, _, _| (GIB, (GIB, (false, job))),
             |started, slot| {
                 let now = held.fetch_add(started.workers, Ordering::SeqCst) + started.workers;
                 most.fetch_max(now, Ordering::SeqCst);

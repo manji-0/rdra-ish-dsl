@@ -1916,7 +1916,7 @@ Sites are `path:line:col` relative to the working directory, or to `rdra.toml`'s
 | `RDRA_TLC_JAR` | `verify --with-tlc` | Path to `tla2tools.jar`, used as `--tlc-jar` when the flag is absent. |
 | `RDRA_TLC_JOBS` | `verify --with-tlc` | A whole number above 0, used as `--tlc-jobs` when the flag is absent. |
 | `RDRA_TLC_WORKERS` | `verify --with-tlc` | A whole number above 0, used as `--tlc-workers` when the flag is absent. |
-| `RDRA_TLC_HEAP` | `verify --with-tlc` | The heap of every TLC JVM, such as `4g`, with no rerun. Runs queue so their heaps fit; see [Memory limit](#memory-limit). |
+| `RDRA_TLC_HEAP` | `verify --with-tlc` | The heap of every TLC JVM, such as `4g`, with no rerun. Runs queue so their heaps fit; see [Memory limit](#memory-limit). `states` instead raises a cone run's heap to 640 bytes per state BFS counted in its module, in whole GiB, within TLC's share (experimental; the heap then depends on whether BFS counted the cone before its run started). |
 | `JAVA_TOOL_OPTIONS` | `verify --with-tlc` | Appended after the options `verify` sets (`-Xmx`, `-Djava.io.tmpdir`, and `-XX:TieredStopAtLevel=1` on a state-model run of at most 10,000 BFS states, added only after TLC started once with it), so a value here wins. |
 | `RDRA_TLC_BATCH` | `verify --with-tlc` | `0` runs each TLC job as its own process instead of in the `tlc-batch` JVM the flake provides. |
 | `RDRA_Z3` | `verify --prove` | The z3 binary, used as `--z3` when the flag is absent. |

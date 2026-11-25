@@ -684,6 +684,16 @@ fn the_tlc_knobs_fix_the_workers_and_the_runs_at_once() {
     assert_eq!(runs.most, 1);
     assert!(runs.stdout.contains(", 3 workers)"), "{}", runs.stdout);
 
+    // `RDRA_TLC_HEAP=states` names no heap: a cone of a few states keeps the module's 1g.
+    let runs = tlc_runs(
+        "memory_cli_tlc_heap_states",
+        "16GiB",
+        &[("RDRA_TLC_HEAP", "states")],
+        Some("99g"),
+    );
+    assert!(runs.heaps.iter().all(|h| h == "-Xmx1g"), "{:?}", runs.heaps);
+    assert!(runs.stdout.contains("\ntlc_result: ok"), "{}", runs.stdout);
+
     let dir = scratch("memory_cli_tlc_bad_jobs");
     let model = dir.join("m.rdra");
     std::fs::write(&model, THREE_CONES).unwrap();
