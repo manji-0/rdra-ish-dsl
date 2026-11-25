@@ -18,7 +18,9 @@ page describes `main`, so it changes in the same change as the behavior it descr
   release, after the [deprecation period](#deprecation).
 - **Meaning.** For a given model, `check` and `verify` report the same verdict within the
   same bounds: the same exit status and the same set of error names. The bounds are the
-  values the [`bounds:` line](#bounds) prints.
+  values the [`bounds:` line](#bounds) prints. A check that ends `not decided` has no
+  verdict yet: a minor release may decide it, as `ok` or as a counterexample. A run under
+  `--deny-undecided` already exits 1 on it.
 - **Diagnostic names.** The names in `error[<Name>]`, `warning[<Name>]`, and
   `info[<Name>]` (see [Diagnostics](./state-derivation.md#diagnostics)) and the lint rule
   ids (such as `api-contract-missing`) keep their meaning. A finding keeps its severity
