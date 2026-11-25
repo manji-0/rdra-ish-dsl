@@ -1181,7 +1181,72 @@ fn a_reduced_counterexample_lifts_where_the_unreduced_cone_passes_the_cap() {
             );
         }
         assert!(stderr.contains("result: counterexample"), "{stderr}");
+        // An `always` breaks on a finite path: no ending line, lifted or explored.
+        assert!(!stderr.contains("then nothing changes forever"), "{stderr}");
     }
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// A job that a fair `Finish` ends while the gate is not open and a fair `Start` once it is:
+/// the `Plain` counterexample on the reduced cone (189 states) loops through the gate's
+/// classes. With the run with `WF_vars(Next)` on the reduced cone switched off
+/// (`RDRA_ISH_NO_WF_REDUCED`) and `--max-states 500`, the unreduced cone (6,846 states) stops
+/// before it shows the loop: the `Full` run lifts it, and `Cone_JobEnds_WF` reads the stopped
+/// graph, which leaves the property `not decided`, as before the lift.
+const GATE_LOOP: &str = r#"
+entity Key "鍵" { id: Int @pk  status: Enum(locked, unlocked) @default(locked) }
+entity Gate "門" { id: Int @pk  status: Enum(shut, half, open) @default(shut)  latch: Bool @default(false) }
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+relate(Gate, Key, N:1)
+relate(Job, Gate, N:1)
+usecase Unlock "解錠"
+usecase Crack "少し開ける"
+usecase Unlatch "掛け金を外す"
+usecase Swing "開く"
+usecase Close "閉める"
+usecase Submit "投入"
+usecase Start "開始"
+usecase Finish "閉じたまま終える"
+transitions(Unlock, Key.status, locked -> unlocked)
+transitions(Crack, Gate.status, shut -> half)
+sets(Unlatch, Gate.latch == true)
+transitions(Swing, Gate.status, half -> open)
+transitions(Close, Gate.status, open -> shut)
+condition Unlatched "掛け金が外れている"
+holds(Unlatched, Gate.latch == true)
+applies_to(Unlatched, Swing)
+condition KeyOpen "鍵が開いている"
+holds(KeyOpen, Key.status == unlocked)
+applies_to(KeyOpen, Swing)
+creates(Submit, Job)
+transitions(Start, Job.status, waiting -> running)
+transitions(Finish, Job.status, waiting -> running)
+condition GateOpen "門が開いている"
+holds(GateOpen, Gate.status == open)
+applies_to(GateOpen, Start)
+condition GateNotOpen "門が開いていない"
+holds(GateNotOpen, Gate.status != open)
+applies_to(GateNotOpen, Finish)
+property JobEnds "作業はいずれ終わる" eventually(Job.status == running).fair(Start, Finish)
+"#;
+
+#[test]
+fn a_lifted_loop_leaves_the_wf_run_on_the_stopped_cone() {
+    let tmp = scratch("verify_cli_lift_a_loop");
+    let model = tmp.join("m.rdra");
+    std::fs::write(&model, GATE_LOOP).unwrap();
+    let out = verify_env(
+        &repo(),
+        &tmp,
+        &[("RDRA_ISH_NO_WF_REDUCED", "1")],
+        &[model.to_str().unwrap(), "--max-states", "500"],
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.lines().any(|l| l
+            == "Cone_JobEnds [JobEnds]: not decided (189 states, Cone_JobEnds_Full: counterexample lifted from the reduced cone, Cone_JobEnds_WF: not decided, stopped at the state cap (--max-states) or the memory limit)"),
+        "{stdout}"
+    );
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
