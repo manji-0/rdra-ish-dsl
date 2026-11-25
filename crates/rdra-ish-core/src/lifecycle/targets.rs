@@ -6,7 +6,7 @@ use std::fmt;
 
 use super::cone::{Cone, Target};
 use super::diag::{Diag, StateDiag, UnmetPremise};
-use super::explore::{Caps, Checks, ComponentRun, StoredRun};
+use super::explore::{Caps, Checks, ComponentRun, OrbitRun, StoredRun};
 use super::findings::{Progress, Runs, StateModelFindings, Taken, Witness};
 use super::types::{
     ActionOrigin, AfterAssert, AfterStep, EntId, GuardWhy, Invariant, Ltl, Pred, Premise, Site,
@@ -174,6 +174,15 @@ fn stopped_at(run: &ComponentRun) -> Option<UndecidedWhy> {
     })
 }
 
+/// Whether a `shadow` build runs every entity cone up to symmetry as well, so that the
+/// samples at small bounds reach the readers of the annotated quotient and their twin:
+/// `RDRA_ISH_FORCE_ORBITS` under `--symmetry always`. A release build never does.
+fn forced_entity_orbits(caps: Caps) -> bool {
+    cfg!(feature = "shadow")
+        && caps.entity_orbits
+        && std::env::var_os("RDRA_ISH_FORCE_ORBITS").is_some()
+}
+
 /// What `entity_findings` reads of an entity cone's graph (`read_entity`).
 #[derive(Clone)]
 struct EntityRead {
@@ -331,13 +340,63 @@ impl TransitionSystem {
                     _ => None,
                 })
                 .collect();
-            match entities {
-                Some(entities) if release && caps.memory.is_some() && !cone.run.complete => {
-                    let read = (entities.into_iter())
-                        .map(|e| (e, self.read_entity(e, &cone)))
+            match (entities, caps.memory) {
+                (Some(entities), Some(pool)) if release && !cone.run.complete => {
+                    let memory = matches!(stopped_at(&cone.run), Some(UndecidedWhy::MemoryCap(..)));
+                    let mut read: Vec<(EntId, EntityRead)> = (entities.iter())
+                        .map(|&e| (e, self.read_entity(e, &cone)))
                         .collect();
-                    reads.insert(cones.len(), read);
+                    let plain = cone.run.states.len();
                     cone.run.release();
+                    // Under `--symmetry always` the cone runs again up to symmetry in the
+                    // room its plain run held, and a run that completes decides its findings.
+                    // A cone whose plain run left nothing open keeps that run's findings.
+                    let open = read.iter().any(|(_, r)| !r.findings.decided());
+                    let mut up = None;
+                    if caps.entity_orbits
+                        && memory
+                        && open
+                        && cone.run.system.has_instance_symmetry()
+                    {
+                        let room = pool.room().saturating_sub(held);
+                        let orbits = (cone.run.system.clone())
+                            .run_annotated_orbits(caps.charged_to(pool.with_room(room)));
+                        up = Some((orbits.orbits(), orbits.estimate(), orbits.complete()));
+                        if orbits.complete() {
+                            read = (entities.iter())
+                                .map(|&e| (e, self.read_orbits(e, &cone.cone, &orbits)))
+                                .collect();
+                        }
+                    }
+                    if caps.entity_orbits && std::env::var_os("RDRA_ISH_SYMMETRY_STATS").is_some() {
+                        let names: Vec<&str> = entities
+                            .iter()
+                            .map(|&e| self.entity(e).id.as_str())
+                            .collect();
+                        eprintln!(
+                            "symmetry: entity {}: the plain run stopped at {plain} states; {}",
+                            names.join(", "),
+                            match up {
+                                Some((n, about, done)) => format!(
+                                    "up to symmetry, {n} orbits, about {about} states, {}",
+                                    if done { "complete" } else { "stopped" }
+                                ),
+                                None => "not run again up to symmetry".to_string(),
+                            }
+                        );
+                    }
+                    reads.insert(cones.len(), read);
+                }
+                (Some(entities), _) if forced_entity_orbits(caps) && cone.run.complete => {
+                    // A `shadow` build's twin of the run above, on a cone its plain run
+                    // decides: the findings on the pairs are held to that run's.
+                    if cone.run.system.has_instance_symmetry() {
+                        let orbits = cone.run.system.clone().run_annotated_orbits(caps);
+                        for &e in &entities {
+                            self.read_orbits(e, &cone.cone, &orbits);
+                        }
+                    }
+                    held += cone.run.kept;
                 }
                 _ => held += cone.run.kept,
             }
@@ -640,6 +699,28 @@ impl TransitionSystem {
         EntityRead {
             findings,
             why: stopped_at(run),
+        }
+    }
+
+    /// `read_entity` on `orbits`, a complete run of the cone's system up to instance symmetry
+    /// that keeps its edges' permutations (`OrbitRun::state_model_findings`).
+    fn read_orbits(&self, e: EntId, cone: &Cone, orbits: &OrbitRun) -> EntityRead {
+        debug_assert!(
+            orbits.complete(),
+            "only a complete run decides a cone's findings"
+        );
+        let local = orbits.system().local_entity(self.entity(e).key);
+        let mut findings = orbits.state_model_findings(local);
+        for d in &mut findings.deadlocks {
+            if let Progress::Stuck { diag, .. } = &mut d.progress {
+                if let Some(trace) = diag.trace_mut() {
+                    self.annotate(cone, trace);
+                }
+            }
+        }
+        EntityRead {
+            findings,
+            why: None,
         }
     }
 

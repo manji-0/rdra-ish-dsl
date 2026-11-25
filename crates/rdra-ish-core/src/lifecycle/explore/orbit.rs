@@ -25,6 +25,7 @@ use crate::lifecycle::reduce::Step;
 use crate::lifecycle::types::{ActId, EntId, Ltl};
 use crate::lifecycle::TransitionSystem;
 
+mod findings;
 mod liveness;
 #[cfg(feature = "shadow")]
 mod reference;

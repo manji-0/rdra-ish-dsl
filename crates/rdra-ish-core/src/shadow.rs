@@ -54,9 +54,10 @@ pub(crate) enum Twin {
     StepEnds,
     OrbitLiveness,
     Packed,
+    OrbitStateModels,
 }
 
-const TWINS: [(Twin, &str); 17] = [
+const TWINS: [(Twin, &str); 18] = [
     (Twin::EachEnabled, "each_enabled"),
     (Twin::Seen, "seen"),
     (Twin::Source, "source"),
@@ -74,6 +75,7 @@ const TWINS: [(Twin, &str); 17] = [
     (Twin::StepEnds, "step_ends"),
     (Twin::OrbitLiveness, "orbit_liveness"),
     (Twin::Packed, "packed"),
+    (Twin::OrbitStateModels, "orbit_state_models"),
 ];
 
 static COMPARED: [AtomicU64; TWINS.len()] = [const { AtomicU64::new(0) }; TWINS.len()];

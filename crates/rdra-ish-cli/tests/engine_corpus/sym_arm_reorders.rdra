@@ -1,0 +1,31 @@
+// trap: a guarded arm whose every move swaps the stored rows.
+// Two jobs on one board. Finish closes an open job only while another job of its board is
+// held (`Ready`), so it runs from a state with one job open and the other held, never from
+// one job alone. The finished job's status then sorts past the held job's where the open
+// one sorted before it, so a run up to instance symmetry stores every Finish move's target
+// with the two jobs swapped. The arm compares the job's slot across the move: a reader of
+// the stored target finds no slot that went from open to closed, and reports the arm never
+// taken (`ArmNeverTaken`) where Finish takes it; the twin of a shadow run reports that. A
+// held job stays held, so an open job beside a held one can always finish or be held: no
+// job gets stuck.
+// flags: --instances Board=1
+// expect Forbidden_Job_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+entity Board "掲示板" { id: Int @pk  open: Bool @default(true) }
+entity Job "作業" {
+  id: Int @pk
+  status: Enum(open, held, closed) @default(open)
+}
+relate(Job, Board, N:1)
+usecase Setup "設置"
+usecase Post "投稿"
+usecase Hold "保留"
+usecase Finish "完了"
+usecase Reopen "再開"
+creates(Setup, Board)
+sets(Reopen, Board.open == true)
+creates(Post, Job)
+transitions(Hold, Job.status, open -> held)
+transitions(Finish, Job.status, open -> closed).when(Ready)
+condition Ready "保留中の作業がある掲示板"
+holds(Ready, Board.open == true).has(Job.status == held)
+forbidden(Job, Job.status == held, Job.status == closed)
