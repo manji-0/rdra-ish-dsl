@@ -384,10 +384,14 @@ fn lifted_path(run: &ComponentRun, at: u32) -> (State, Vec<Step>) {
         .iter()
         .map(|e| {
             let (act, params) = run.step(e);
-            (act, params.into(), run.states[e.to as usize].to_owned())
+            (
+                act,
+                params.into(),
+                run.states.at(e.to as usize).into_state(),
+            )
         })
         .collect();
-    run.system.lifted(&run.states[first as usize], &steps)
+    run.system.lifted(&run.states.at(first as usize), &steps)
 }
 
 /// Every step of a lifted path is a move of the unreduced cone system from the state before
@@ -463,7 +467,7 @@ fn assert_reduction_exact_in(
         let project = |run: &ComponentRun| -> BTreeSet<State> {
             run.states
                 .iter()
-                .map(|s| sys.project(s, &readable))
+                .map(|s| sys.project(&s, &readable))
                 .collect()
         };
         assert_eq!(
@@ -485,7 +489,7 @@ fn assert_reduction_exact_in(
             let last = steps.last().map_or(&start, |s| &s.2);
             assert_eq!(
                 sys.project(last, &readable),
-                sys.project(&r.run.states[at as usize], &readable),
+                sys.project(&r.run.states.at(at as usize), &readable),
                 "{sample} {target:?}: the lifted path ends in the state's class"
             );
         }
@@ -531,15 +535,15 @@ fn assert_up_to_g_t(sample: &str, target: Target, system: &TransitionSystem) -> 
         system.moves(s).map(|m| orbits.canonical(&m.next)).collect()
     };
     for s in run.states.iter() {
-        let form = orbits.canonical(s);
+        let form = orbits.canonical(&s);
         assert!(
-            successors(s) == successors(&form),
+            successors(&s) == successors(&form),
             "{sample} {target:?}: G_T is no bisimulation at {:?}",
             &s.0
         );
     }
-    let stored: BTreeSet<State> = orbits.states().iter().map(|s| s.to_owned()).collect();
-    let forms: BTreeSet<State> = run.states.iter().map(|s| orbits.canonical(s)).collect();
+    let stored: BTreeSet<State> = orbits.states().iter().map(|s| s.into_state()).collect();
+    let forms: BTreeSet<State> = run.states.iter().map(|s| orbits.canonical(&s)).collect();
     assert!(
         stored == forms,
         "{sample} {target:?}: {} plain states have {} forms, {} stored",
@@ -1223,8 +1227,8 @@ fn a_steady_action_never_changes_the_inputs() {
             let sys = &cone.run.system;
             let Some(red) = sys.reduction() else { continue };
             for s in &cone.run.states {
-                let before = red.input_bytes(sys, s);
-                for (act, _, next) in sys.plain_moves(s) {
+                let before = red.input_bytes(sys, &s);
+                for (act, _, next) in sys.plain_moves(&s) {
                     if red.skips(act) {
                         continue;
                     }

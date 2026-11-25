@@ -93,7 +93,7 @@ pub(super) fn check(orbits: &OrbitRun, caps: Caps) {
     // (2) Each plain state steps into the classes its stored form steps into.
     for s in plain.states.iter() {
         let rep = form(&s.0);
-        let mine: BTreeSet<Vec<u8>> = ts.moves(s).map(|m| form(&m.next.0)).collect();
+        let mine: BTreeSet<Vec<u8>> = ts.moves(&s).map(|m| form(&m.next.0)).collect();
         let theirs: BTreeSet<Vec<u8>> = ts
             .moves(StateSlice::new(&rep))
             .map(|m| form(&m.next.0))
@@ -156,12 +156,12 @@ pub(super) fn check_liveness(
     let edges = orbits.run.edges();
     let mut out = vec![0u8; ts.width];
     for r in 0..orbits.run.states.len() as u32 {
-        let moves: Vec<_> = ts.moves(&orbits.run.states[r as usize]).collect();
+        let moves: Vec<_> = ts.moves(&orbits.run.states.at(r as usize)).collect();
         let first = edges.range_of(r).start;
         for (k, e) in edges.range_of(r).zip(edges.from_state(r)) {
             g.apply(perms.get(perms.id(k)), &moves[k - first].next.0, &mut out);
             assert!(
-                out[..] == orbits.run.states[e.to as usize].0[..],
+                out[..] == orbits.run.states.at(e.to as usize).0[..],
                 "{}",
                 name(&format!(
                     "edge {k}'s permutation does not take its move to its target"
@@ -171,8 +171,8 @@ pub(super) fn check_liveness(
     }
     // (2) The pairs against the plain bindings.
     let reference = plain.liveness_reference(i, fairness);
-    let stored: FastMap<&[u8], u32> = (orbits.run.states.iter().enumerate())
-        .map(|(r, s)| (&s.0[..], r as u32))
+    let stored: FastMap<Vec<u8>, u32> = (orbits.run.states.iter().enumerate())
+        .map(|(r, s)| (s.0.to_vec(), r as u32))
         .collect();
     let index: FastMap<&[u8], u32> = (product.bindings.iter().enumerate())
         .map(|(k, b)| (&b[..], k as u32))
@@ -211,8 +211,9 @@ pub(super) fn check_liveness(
                     !avoid[at]
                 ))
             );
-            has |=
-                avoid[at] && ts.triggers(p, b, s) && cause.is_none_or(|x| ts.holds_bound(x, s, b));
+            has |= avoid[at]
+                && ts.triggers(p, b, &s)
+                && cause.is_none_or(|x| ts.holds_bound(x, &s, b));
         }
     }
     // (3) A counterexample alike.

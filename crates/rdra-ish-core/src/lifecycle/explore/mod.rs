@@ -10,6 +10,7 @@ mod graph;
 mod liveness;
 mod moves;
 mod orbit;
+mod packing;
 #[cfg(feature = "perf")]
 mod perf;
 #[cfg(feature = "perf")]
@@ -24,7 +25,7 @@ pub(crate) mod symmetry;
 mod views;
 mod violations;
 
-pub use arena::States;
+pub use arena::{States, Unpacked};
 pub use edges::{AnEdge, EdgeIter, Edges, Ends, Listed};
 pub use graph::{Adjacency, LabelledEdges};
 pub use liveness::{LassoFault, ReducedVerdict, Spurious};
@@ -596,6 +597,8 @@ struct Bfs<'t> {
     states: States,
     /// The index of each state in `states`.
     seen: arena::Seen,
+    /// The state being looked up, packed as `states` keeps it, so a new one packs once.
+    packed: Vec<u8>,
     /// Scratch for the pattern keys `observe` reads, so an edge allocates none.
     keys: (Vec<u8>, Vec<u8>),
     /// Per `(entity, slot)`: the state being expanded, and the slot's pattern id in it, so

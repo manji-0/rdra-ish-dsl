@@ -128,7 +128,7 @@ fn record(ts: &TransitionSystem, map: &Remap, run: &ComponentRun, seen: &mut See
                 seen.rows
                     .entry((*whole, whole_vars.clone()))
                     .or_default()
-                    .insert(pattern(s, sub_vars, slot));
+                    .insert(pattern(&s, sub_vars, slot));
             }
         }
         for o in sys.var_ids() {
@@ -149,7 +149,7 @@ fn record(ts: &TransitionSystem, map: &Remap, run: &ComponentRun, seen: &mut See
             for (i, (k1, p1)) in linked.iter().enumerate() {
                 for (k2, p2) in &linked[i + 1..] {
                     if p1 == p2 {
-                        let (a, b) = (pattern(s, &c.2, *k1), pattern(s, &c.2, *k2));
+                        let (a, b) = (pattern(&s, &c.2, *k1), pattern(&s, &c.2, *k2));
                         pairs.insert((a.clone(), b.clone()));
                         pairs.insert((b, a));
                     }
@@ -166,7 +166,7 @@ fn record(ts: &TransitionSystem, map: &Remap, run: &ComponentRun, seen: &mut See
                 seen.keys
                     .entry((back[&o], c.3.clone(), p.3.clone()))
                     .or_default()
-                    .insert((pattern(s, &c.2, slot), pattern(s, &p.2, ps)));
+                    .insert((pattern(&s, &c.2, slot), pattern(&s, &p.2, ps)));
             }
         }
     }

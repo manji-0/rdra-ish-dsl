@@ -1865,7 +1865,8 @@ fn verify_on_banner(test: &str, java: &str, crash: bool) -> String {
 
 /// TLC 1.7.x fails reading a trace back on JDK 21 and later (#314): `verify` warns once when
 /// a run's banner shows that pair, and a run that stopped on the failure is a `tool_error`
-/// whose hint names the cause and says to use JDK 17 or earlier. On JDK 17 neither appears.
+/// whose hint names the cause and says to use TLC 1.8.0 or JDK 17 or earlier. On JDK 17
+/// neither appears.
 #[cfg(unix)]
 #[test]
 fn tlc_1_7_on_jdk_21_warns_once_and_its_read_back_failure_names_the_fix() {
@@ -1874,7 +1875,7 @@ fn tlc_1_7_on_jdk_21_warns_once_and_its_read_back_failure_names_the_fix() {
         "hint: TLC stopped with an ArrayIndexOutOfBoundsException while it read a trace back";
     let out = verify_on_banner("verify_cli_readback_21", "21.0.11", true);
     assert_eq!(out.matches(WARNING).count(), 1, "{out}");
-    assert!(out.contains("run TLC on JDK 17 or earlier"), "{out}");
+    assert!(out.contains("run TLC 1.7.x on JDK 17 or earlier"), "{out}");
     assert!(out.contains(HINT), "{out}");
     assert!(out.contains("tool_error"), "{out}");
 
@@ -2048,7 +2049,7 @@ fn symmetry_always_decides_a_cone_the_memory_limit_stopped_at_any_jobs() {
     let line = "Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: ";
     let never = run("never", "1");
     assert!(
-        never.contains(&format!("{line}not decided (2048 states, stopped")),
+        never.contains(&format!("{line}not decided (4096 states, stopped")),
         "{never}"
     );
     let always = run("always", "1");

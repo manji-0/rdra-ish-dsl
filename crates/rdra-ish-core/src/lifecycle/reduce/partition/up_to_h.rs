@@ -57,18 +57,18 @@ pub(super) fn check(
             h.reps.len()
         )
     };
-    let stored: HashMap<&[u8], usize> = (orbits.states().iter())
+    let stored: HashMap<Vec<u8>, usize> = (orbits.states().iter())
         .enumerate()
-        .map(|(i, s)| (&s.0[..], i))
+        .map(|(i, s)| (s.0.to_vec(), i))
         .collect();
     // (1) Each plain class goes to one class up to `H`, and no two to the same one.
     let mut to_h: Vec<Option<u32>> = vec![None; p.reps.len()];
     let key_vars: crate::lifecycle::cone::VarSet =
         ext.obs_local.union(&ext.inputs_local).copied().collect();
     for (i, s) in run.states.iter().enumerate() {
-        let form = orbits.canonical(s);
+        let form = orbits.canonical(&s);
         assert!(
-            sub.project(s, &key_vars) == sub.project(&form, &key_vars),
+            sub.project(&s, &key_vars) == sub.project(&form, &key_vars),
             "{}",
             name("a state's form moves what the quotient reads")
         );

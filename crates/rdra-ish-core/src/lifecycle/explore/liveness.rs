@@ -167,7 +167,7 @@ impl ComponentRun {
         let looping: Vec<bool> = self
             .states
             .iter()
-            .map(|s| r.class(ts, s).is_some_and(|c| r.can_loop(c)))
+            .map(|s| r.class(ts, &s).is_some_and(|c| r.can_loop(c)))
             .collect();
         let Some((fair, avoid, start)) = self.liveness_search(i, StopRule::Looping(&looping))
         else {
@@ -179,17 +179,25 @@ impl ComponentRun {
         let (first, walk, tail) = self.walk(&fair, &avoid, start);
         let step = |e: &Edge| {
             let (act, params) = self.step(e);
-            (act, params.into(), self.states[e.to as usize].to_owned())
+            (
+                act,
+                params.into(),
+                self.states.at(e.to as usize).into_state(),
+            )
         };
         let lifted = match tail {
             Loop::Stutter => {
                 let prefix: Vec<_> = walk.iter().map(step).collect();
-                ts.lift_stop(cone, &self.states[first as usize].to_owned(), &prefix)
+                ts.lift_stop(cone, &self.states.at(first as usize).into_state(), &prefix)
             }
             Loop::Back { to } => {
                 let prefix: Vec<_> = walk[..to - 1].iter().map(step).collect();
                 let cycle: Vec<_> = walk[to - 1..].iter().map(step).collect();
-                ts.lift_cycle(&self.states[first as usize].to_owned(), &prefix, &cycle)
+                ts.lift_cycle(
+                    &self.states.at(first as usize).into_state(),
+                    &prefix,
+                    &cycle,
+                )
             }
         };
         let (states, actions, tail) = match lifted {
@@ -226,7 +234,7 @@ impl ComponentRun {
         for b in ts.binder_slots(&p.binders) {
             let avoid = self.avoid(&fair, goal, &b, rule);
             let found = (0..self.states.len() as u32).find(|&s| {
-                let st = &self.states[s as usize];
+                let st = &self.states.at(s as usize);
                 avoid.toward[s as usize] != NONE
                     && ts.triggers(p, &b, st)
                     && cause.is_none_or(|x| ts.holds_bound(x, st, &b))
@@ -298,7 +306,7 @@ impl ComponentRun {
         let in_n: Vec<bool> = self
             .states
             .iter()
-            .map(|s| !ts.holds_bound(goal, s, b))
+            .map(|s| !ts.holds_bound(goal, &s, b))
             .collect();
         let inside = |e: &Edge| in_n[e.from as usize] && in_n[e.to as usize];
         let adjacency = Adjacency::new(n, || {
@@ -382,7 +390,7 @@ impl ComponentRun {
     /// end, and for a component a loop that covers every fair instance and returns.
     fn lasso(&self, fair: &FairSteps, avoid: &Avoid, start: u32) -> Lasso {
         let (first, walk, tail) = self.walk(fair, avoid, start);
-        let mut states = vec![self.states[first as usize].to_owned()];
+        let mut states = vec![self.states.at(first as usize).into_state()];
         let mut actions = Vec::with_capacity(walk.len());
         let steps = match tail {
             Loop::Stutter => walk.len(),
@@ -391,7 +399,7 @@ impl ComponentRun {
         for (k, e) in walk.iter().enumerate() {
             actions.push(self.bindings[e.binding as usize].0);
             if k < steps {
-                states.push(self.states[e.to as usize].to_owned());
+                states.push(self.states.at(e.to as usize).into_state());
             }
         }
         Lasso {
@@ -558,7 +566,7 @@ impl ComponentRun {
                 let in_n = self
                     .states
                     .iter()
-                    .map(|s| !ts.holds_bound(goal, s, &b))
+                    .map(|s| !ts.holds_bound(goal, &s, &b))
                     .collect();
                 (in_n, avoid.toward.iter().map(|&t| t != NONE).collect())
             })

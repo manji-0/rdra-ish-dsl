@@ -79,10 +79,6 @@ impl<T: Copy> Rows<T> {
         self.len
     }
 
-    pub(crate) fn width(&self) -> usize {
-        self.width
-    }
-
     /// The segments allocated so far.
     #[cfg(kani)]
     fn segments(&self) -> usize {

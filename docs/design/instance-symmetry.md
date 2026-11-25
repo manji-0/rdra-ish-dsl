@@ -363,7 +363,7 @@ its last paragraph, and leaves the class representative alone. #212's 15–22× 
 was counted with the S side permuted too, so the gain here is not known until phase 3
 measures it.
 
-As built (phase 3), `Reduction::fixed` leaves out every S entity, every entity that holds an
+As built (phase 3), `Reduction::fixed_why` leaves out every S entity, every entity that holds an
 S var or an input and every parent such a key names, the entity each bit is kept per row of,
 and every entity a param of an S action binds: a class move's params are stored with its
 class, so they cannot follow a permutation of T rows. Everything else in T moves. The run
@@ -893,11 +893,8 @@ hold `40e3783a`), so its removal needs no deprecation. `always` covers what `ret
    model and the flags before any run, not from a runtime retry.
 2. **Phase 4**, the annotated quotient, as [Phases](#phases) has it.
 3. **The flip** to `always`. Two gates come first:
-   - **Per-rule witnesses.** For each rule that leaves a class out or fixes an entity,
-     there is a corpus model in which dropping that rule alone changes a verdict or fires
-     a twin, as `sym_deleted_row_owner` does for the deleted row's key. Phase 3 found no
-     rule of `Reduction::fixed` that a sample witnesses alone. As a default, an unwitnessed
-     rule could regress silently.
+   - **Per-rule witnesses** ([The per-rule gate](#the-per-rule-gate)). With `always` as the
+     default, no single rule may regress silently.
    - **Compatibility.** [Compatibility](../compatibility.md#bounds) calls a result that
      changes within the same printed bounds a breaking change.
      - Under `always`, a cone that stops at `--max-states` under `never` can decide, since
@@ -908,3 +905,97 @@ hold `40e3783a`), so its removal needs no deprecation. `always` covers what `ret
 
      The flip therefore goes under `### Breaking`, naming those two moves and `never` as
      the way back. Which release carries it is the owner's call.
+
+### The per-rule gate
+<!-- constrained-by #the-group -->
+<!-- constrained-by #composition-with-74 -->
+
+Decided on 2026-11-25. Every rule that leaves a class out of the group, and every reason
+`G_T` or `H` keeps an entity in place for, needs one of these:
+
+- (a) A corpus witness: a model in the corpus or the samples on which dropping that rule
+  alone changes a verdict or fires a twin, as `sym_deleted_row_owner` does for the deleted
+  row's key.
+- (b) A hand-built witness, for a rule the builder cannot emit today and for a `G_T` or `H`
+  reason that can stand alone. Dropping the rule alone makes the quotient fail the
+  bisimulation check, check 2 of the `orbit_run` twin.
+- (c) For a reason another reason implies, the implication checked by an always-on
+  assertion or a test, or the two reasons merged.
+- (d) `JointTooLarge` is exempt, as a cost cap. A test shows that past `BRANCH_CAP` a state
+  is stored without its canonical form and the verdict stands.
+- (e) For a rule the owner keeps with none of these, the snapshot of the group rules. Per
+  cone of the samples and the corpus, it records which entities `G_T` keeps in place and
+  why, which entities `H` keeps in place and why, and which scan rules fire.
+
+An always-on assertion that panics when the rule is dropped also counts as a witness, since
+that failure is loud. A reason with no witness, even hand-built, stays in the code and goes
+to the owner as possibly over-conservative.
+
+A test-only switch drops one rule at a time: `RDRA_ISH_DROP_RULE=<rule>` in a `shadow`
+build, and a per-thread hook in unit tests (`dropped`). It names a scan rule by its variant
+(`OrderedId`), a `G_T` reason as `Reduced:<reason>`, and an `H` reason as
+`Observed:<reason>`.
+
+| Rule or reason | Witness |
+|---|---|
+| `OrderedId`, `IdAgainstLiteral`, `MixedIds`, `OwnerLiteral`, `OwnerChoice`, `UnlinkedCreate` | (b): `explore/symmetry/witnesses.rs`, one test each |
+| `PinnedStart` | (e), but it fires in no cone: see below |
+| `JointTooLarge` | (d): `joint_too_large_is_a_cost_cap`, `past_the_branch_cap_the_verdict_stands` |
+| `G_T` "S" | (c): implied by "S var", asserted in `Reduction::fixed_why` |
+| `H` "obs", "input" | the assertion in `up_to_h` (`reduce/partition.rs`) that `H` moves nothing the quotient reads; `each_h_reason_a_case_shows_has_a_witness` in engine_corpus |
+| `G_T` "S var", "input", "named by S", "named by an input", "bit key", "S action param" | (e): see below |
+| `H` "named by obs", "named by an input", "stub", "named by T" | (e): see below |
+
+No model the builder emits today needs a scan rule. A run of every corpus case and sample
+forced up to symmetry shows none of them, as breaks.rs says, so the witnesses of (b) are
+built models with one hand-made change each.
+
+**Kept without a witness of their own.** No witness of kinds (a) to (d) was found for the
+eleven rules and reasons below. The owner decided on 2026-11-25 that they keep their place.
+The snapshot (e) is their witness for this gate: `the_group_rules_of_every_cone_are_the_snapshot`
+in `explore/symmetry/snapshot.rs`.
+
+- **What it records.** It reduces every cone that an unscoped `verify` runs, as `verify`
+  reduces it, and runs none of them. The cones are the safety cones, the entity cones, and
+  the cones of the properties that `verify` does not decide on an explored graph. Each model runs at the
+  bounds of its `// expect verify` headers, or at its corpus `// flags:` line. A corpus case
+  whose header names BFS verdicts per bound also runs at `--instance-count 3`. Per cone and
+  entity, a line records the slots, whether the group moves the entity, the scan rules, and
+  the `G_T` reasons. On a reduced cone, the line also records the same for `H` on the
+  sub-lifecycle that S would run up to `H`. That is the innermost nested one, which
+  `Classes::of` explores unreduced. `Extended::fixed_why` gives `H`'s reasons, and
+  `Extended::fixed` is that map's set.
+- **How it bites.** A dropped reason drops out of its lines, even where another reason
+  keeps the entity in place. So a changed or dropped rule changes the snapshot, which an
+  unchanged verdict would not show. The test drops every rule and reason in turn. It fails
+  if the snapshot stays the same for a rule that some line names. It also fails if the
+  snapshot changes for a rule that no line names. The snapshot's header counts the lines
+  that name each rule and reason.
+- **`PinnedStart` fires in no cone** of the samples or the corpus, so the snapshot cannot see
+  it dropped. The header says so. That leaves `PinnedStart` with no witness at all, which
+  goes back to the owner.
+- **The runs of S.** No run of S in the test has a memory limit. A plain run of S stops at
+  2,000,000 states, or at `--max-states`. Past that cap, S runs up to `H`, as `--symmetry
+  always` does at the memory limit, and the cone line says so. Two sub-lifecycles pass the
+  cap; a run with no cap passed 40 GB before it was stopped. clinic-ops' Charge reduces up
+  to `H`. One oidc-auth safety cone passes the cap up to `H` too, so it stays unreduced. That cone may be outside
+  what the oidc-auth headers run, since the test builds every model with `Scope::ALL`, a
+  superset of the cones of a header line scoped by `--entity`.
+- **Where it runs.** The test takes about 3 s in release and about a minute in debug. So
+  `scripts/diff-test.sh` skips it, and the formal-verify job runs it in release, in the
+  step "Each group rule has a witness".
+
+Why no witness was found:
+
+- `PinnedStart`. Only the start depends on it, and the transitions do not. Dropping it on
+  `sym_identity_pair` with every Balance starting under the first Account leaves the quotient a
+  bisimulation with the same verdicts. The orbit run starts from the canonical form of the
+  initial state, so a start that pins a row is reached up to the group either way.
+- The `G_T` reasons other than "S". On the 15 reduced cones the corpus and the samples run up
+  to `G_T`, every fixed entity has at least two reasons, with one exception:
+  insurance-claim-ops' Claim, fixed for "S action param" alone. Dropping that reason there,
+  at one instance per entity and two Claims, runs Claim's cones up to `G_T`, and the
+  `reduced_orbit_run` twin compares both runs and passes. One hand-built variant of the gate
+  model, a T parent of the job, came out as part of S.
+- The `H` reasons other than "obs" and "input": dropping one alone on the corpus fires
+  nothing.

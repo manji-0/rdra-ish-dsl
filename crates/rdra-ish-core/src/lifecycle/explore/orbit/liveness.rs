@@ -252,7 +252,7 @@ impl<'r> Product<'r> {
         let mut in_n = vec![false; pairs];
         for r in 0..n {
             for (k, b) in self.bindings.iter().enumerate() {
-                in_n[r * nb + k] = !ts.holds_bound(goal, &states[r], b);
+                in_n[r * nb + k] = !ts.holds_bound(goal, &states.at(r), b);
             }
         }
         let edges = self.run.run.edges();
@@ -326,7 +326,7 @@ impl<'r> Product<'r> {
         drop(adjacency);
         let start = (0..pairs as u32).find(|&u| {
             let (s, b) = (
-                &states[self.state_of(u) as usize],
+                &states.at(self.state_of(u) as usize),
                 &self.bindings[self.binding_of(u) as usize],
             );
             toward[u as usize] != NONE
@@ -530,7 +530,7 @@ impl<'r> Product<'r> {
         let mut tau = tau.unwrap_or_else(|| g.identity());
         let start = {
             let mut out = vec![0u8; ts.width];
-            g.apply(&tau, &run.states[first as usize].0, &mut out);
+            g.apply(&tau, &run.states.at(first as usize).0, &mut out);
             State(out.into_boxed_slice())
         };
         let mut steps = Vec::with_capacity(ks.len());
@@ -539,7 +539,7 @@ impl<'r> Product<'r> {
             let (act, params) = run.step(&e);
             let place = k - run.edges().range_of(e.from).start;
             let m = ts
-                .moves(&run.states[e.from as usize])
+                .moves(&run.states.at(e.from as usize))
                 .nth(place)
                 .expect("an edge is a move of its source, at its place");
             assert!(
@@ -550,7 +550,7 @@ impl<'r> Product<'r> {
             let mut stored = vec![0u8; ts.width];
             g.apply(sigma, &m.next.0, &mut stored);
             assert!(
-                stored[..] == run.states[e.to as usize].0[..],
+                stored[..] == run.states.at(e.to as usize).0[..],
                 "symmetry: edge {k}'s permutation does not take its move to its target; a tool bug"
             );
             steps.push(concrete(ts, g, &tau, act, params, &m.next));

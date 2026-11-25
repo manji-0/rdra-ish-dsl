@@ -145,6 +145,12 @@
   system stays plain, so one plain run decides both. Without the option nothing changes. The
   `shadow` build holds the pairs to a plain run as `orbit_liveness`.
 
+- `codegen --check <FILE>` (experimental) generates again with the same options and exits 1
+  when `<FILE>` differs (#333), for CI. The second line of the output is now a fingerprint
+  (`// rdra-ish codegen fingerprint: model=<hash> code=<hash>`). From it the summary on
+  stderr tells a file edited after it was generated from a model that changed since, and
+  both from a change in rdra-ish or the options. A model edit that changes no generated
+  code passes. See [`codegen`](docs/cli-reference.md#codegen).
 - `verify --symmetry` also covers a reduced safety cone (#212, phase 3): under `always` it
   runs up to `G_T`, the
   instance symmetry of its T rows, which leaves every S entity, and with it the class
@@ -421,6 +427,31 @@
 
 ### Changed
 
+- A run keeps each state packed into the bits its variables' domains need (#296 item 2.3,
+  #207). A variable of `n` values takes `ceil(log2(n))` bits (a 3-value status takes 2, a
+  flag 1), and a state is the sum rounded up to whole bytes, where it was one byte per
+  variable: 6 to 12 bytes on the largest cones measured in #296, where it was 30 to 60. The
+  run looks a state up by its packed bytes. A plain run packs a successor by writing only
+  the cells its move changed into a copy of the source's packed bytes; a run up to instance
+  symmetry computes the canonical form on the whole state, as before, and packs that. A
+  reader gets the state back whole, and the deadlock scan reads single cells from the packed
+  bytes. On the largest cone of each run measured in #296, the bytes counted per state fall
+  from 78.3 to 42.3 on `patent-ops`, 106.3 to 62.3 on `food-permit-ops` (`view
+  BusinessPermit`), 85.6 to 54.5 on `clinic-ops`, 94.6 to 46.5 on `insurance-claim-ops` and
+  82.5 to 58.4 on `oidc-auth --instance-count 1`, and peak RSS falls 6% to 29% (1,195 MB to
+  850 MB on `insurance-claim-ops`). `--memory` counts the packed bytes, so a run that
+  stopped at the limit now stops later: `check --memory 17KiB` on `flags.rdra` stops where
+  `21KiB` stopped, and `verify samples/patent-ops` completes at `128MiB`. The stop point is
+  still computed from the counts alone, the same on every machine and thread count. The
+  output of every run that completes is unchanged at every sample's and corpus case's header
+  flags, `--symmetry always` included. This is a trade the owner accepted: packing and
+  unpacking cost instructions, and at `RDRA_JOBS=1` `verify` retires 15% to 24% more (322.1
+  G to 374.2 G on `insurance-claim-ops`, above the 325 G mark of #296 phase 1, and 104.0 G
+  to 127.0 G on `food-permit-ops`) for 6% to 29% less peak RSS and 29% to 51% fewer bytes
+  kept per state. Kani proves the packing round trip at every cell width from 0 to 8 bits,
+  across a 64-bit word boundary, and that writing the changed cells gives the whole pack. A
+  `shadow` build keeps every state unpacked beside the packed ones and compares every read
+  and every patch with them.
 - A run keeps its states, parents and edges in segments (#296 item 2.2). A buffer holds
   segments of 4, 4, 8, ... up to 16,384 rows and then of 16,384 rows each, allocates the next
   one whole when the last is full, and never copies a row: a stored row stays where it was
@@ -528,7 +559,29 @@
   JVM does not answer runs as a process, as every job does without `tlc-batch` on `PATH` or
   with `RDRA_TLC_BATCH=0`. See
   [Engine equivalence in batch JVMs](docs/formal-verification.md#engine-equivalence-in-batch-jvms).
-- `--max-patterns` caps only a run that builds an entity view (#251, #296): the cone of an
+- The flake's `tlc` and `tlc-batch` run TLC 1.8.0 on JDK 25, in place of TLC 1.7.4 on JDK 17,
+  with the class-data-sharing archive recorded for the new pair; the devShell's `java` is
+  JDK 25 (#309). nixpkgs packages TLC 1.7.4 only, so the flake takes the `tla2tools.jar` of
+  the v1.8.0 release, a pre-release that upstream rebuilds under the same tag, pinned by
+  hash to the build of 2026-11-19 (`TLC2 Version 2026.11.19.180144`, rev bc1b506) and
+  downloaded first from this repository's release `tlc-1.8.0-bc1b506`, which keeps that
+  jar with upstream's MIT license text. JDK 25
+  is the newest JDK nixpkgs packages. The run that #314 found TLC 1.7.4 failing on JDK 21
+  and 25 runs to its end on TLC 1.8.0 on both (#314).
+  - `verify` and the tests read TLC 1.8.0's output as they read 1.7.x's: a temporal
+    violation that names its property (`Error: Temporal property P was violated.`), an
+    `always` that TLC 1.8.0 checks as an invariant on its state predicate and names by
+    where the predicate is, action labels that carry their arguments (`Place(1)`) in traces
+    and in the state graph, and the `node [...]` line that starts its dot dump. Verdicts are
+    unchanged: the engine corpus and `engine_equivalence` agree on both pairs.
+  - A short TLC run takes 0.18 s of wall time and 0.48 user CPU-s, against 0.59 s and 0.31
+    on TLC 1.7.4; the archive and C1 for small state models still pay (0.28 s and 0.64 CPU-s
+    without the archive, 0.25 CPU-s with C1). The engine corpus went from 37 to 41 s of wall
+    time to 17 to 21 s, at 216 to 247 CPU-s against 164 to 182; `engine_equivalence` from 84
+    to 93 s and 849 to 884 CPU-s to 98 to 106 s and 727 to 744 CPU-s, on an 18-core Mac.
+  - A batch JVM of `engine_equivalence` gets 512 MiB of heap, not 256: a JVM keeps the data
+    of the job before past a GC, and on TLC 1.8.0 one job of the test ran out of the
+    256 MiB in two runs of four. a run that builds an entity view (#251, #296): the cone of an
   entity view in `check` and `states`. Only those runs gather view patterns now. A cone of
   invariants, `after` assertions or `can_reach` alone, a run that quotients a sub-lifecycle,
   and every run of `verify` gather none, so the pattern cap no longer stops them: a cone that
@@ -728,8 +781,8 @@
   and `verify` reported a `counterexample` for what it had printed before, or a
   `tool_error` with nothing that named the cause. `verify` now warns once when a run's
   banner shows TLC 1.7.x on JDK 21 or later. A run that stops on the exception is a
-  `tool_error` whose report starts with a hint to run TLC on JDK 17 or earlier, or to use
-  TLC 1.8.0.
+  `tool_error` whose report starts with a hint to use TLC 1.8.0, or to run TLC 1.7.x on
+  JDK 17 or earlier.
 - `codegen` escapes a name that is a keyword of the target language (#265). A use case
   named `Return` printed `pub fn return(...)` in Rust and `export function return(...)` in
   TypeScript, and neither compiled. Rust now prints a raw identifier (`r#return`), or a

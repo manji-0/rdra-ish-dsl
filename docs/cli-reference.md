@@ -827,7 +827,7 @@ the sample cones that number rises to a peak and falls about as it rose, so:
   stops early usually gets no estimate: of the 73 cones, 1 got one when stopped at half its
   states, 10 at three quarters, and 49 at nine tenths. A cone that outgrows a machine is
   often still rising; the `Complaint` cone of `insurance-claim-ops` at two instances stops
-  at the default `4GiB` with 13.5 million states, still growing 1.6 times per depth.
+  at the default `4GiB` with 1.7 million states, still growing 1.7 times per depth.
 - **Just past the peak, or a long fall.** One depth past the peak, or a fall that already
   holds more states than the mirror gives, gets no estimate either, and the message says
   which.
@@ -840,25 +840,27 @@ reached. A size is computed with `(w + 12)·p2(n) + 5·buckets(n) + (4 + b)·p2(
 `n` states of `w` bytes and `e` edges, where `b` is the 1, 2 or 4 bytes of a binding id
 (`p2` rounds up to a power of two, `buckets` to a power of two of at least `n·8/7`): the run
 keeps each state once, in one buffer, indexes it by number, and keeps an edge as its target
-and binding id. A cone that stops once every check fails keeps no edges, and its size is
+and binding id. A state is kept packed: each variable takes the bits its domain needs
+(`ceil(log2(size))`, so a 3-value status takes 2), and `w` is their sum rounded up to whole
+bytes. A cone that stops once every check fails keeps no edges, and its size is
 `(w + 8 + b)·p2(n) + 5·buckets(n)`. The size is never under what the run counts at its
 end. `e` is the edges per
 expanded state seen so far times `n`; early depths have fewer, so that part is low. Every
 figure is for the one cone; the cones share the limit, so allow more than it says.
 
 ```text
-error[MemoryCapReached_Task]: state derivation for entity 'Task': memory limit 21KiB reached at 256 states; results are incomplete: the cone has 9 variables, 9 of them vary (...); new states first reached by: Flip7 127, Flip6 64, Flip5 32, Flip4 16, Flip3 8, Flip2 4, Flip1 2, Close 1; held at 85 B per state; the frontier peaked at depth 5 and has shrunk for 3 layers since, so the cone probably holds about 258 states (its falling side taken to mirror its rising side: an estimate, not a bound); with a quarter to spare, this cone alone probably needs about 1MiB: try 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
-error[MemoryCapReached_Order]: state derivation for entity 'Order': memory limit 1KiB reached at 4 states; results are incomplete: the cone has 3 variables, 2 of them vary (values reached/domain: Order.status 3/5, Order._exists 2/3); new states first reached by: CancelOrder 1, CapturePay 1, PlaceOrder 1; held at 91 B per state; the frontier still grows (2 new states at depth 2, 2.0x the depth before), so its layers give no estimate of the states left; the cone's variables allow at most 30 states, so if all are reachable this cone alone needs at least about 1MiB; raise it to 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
+error[MemoryCapReached_Task]: state derivation for entity 'Task': memory limit 17KiB reached at 256 states; results are incomplete: the cone has 9 variables, 9 of them vary (...); new states first reached by: Flip7 127, Flip6 64, Flip5 32, Flip4 16, Flip3 8, Flip2 4, Flip1 2, Close 1; held at 71 B per state; the frontier peaked at depth 5 and has shrunk for 3 layers since, so the cone probably holds about 258 states (its falling side taken to mirror its rising side: an estimate, not a bound); with a quarter to spare, this cone alone probably needs about 1MiB: try 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
+error[MemoryCapReached_Order]: state derivation for entity 'Order': memory limit 1KiB reached at 14 states; results are incomplete: the cone has 3 variables, 3 of them vary (values reached/domain: Order.status 5/5, Order._exists 2/3, Order.delivered_at 2/2); new states first reached by: PlaceOrder 5, CancelOrder 3, CapturePay 3, DeliverOrder 1, ShipOrder 1; held at 71 B per state; the frontier still grows (5 new states at depth 3, 1.7x the depth before), so its layers give no estimate of the states left; the cone's variables allow at most 900 states, so if all are reachable this cone alone needs at least about 1MiB; raise it to 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
 ```
 
 The `Task` cone (`crates/rdra-ish-cli/tests/fixtures/memory/flags.rdra`) holds 257 states.
 
-`verify` lists what the cones leave undecided. `verify samples/patent-ops --memory 128MiB`
+`verify` lists what the cones leave undecided. `verify samples/patent-ops --memory 64MiB`
 prints (trimmed):
 
 ```text
 not checked: 10 findings not decided
-  whether some OfficeAction can get stuck at status = open is not decided: the OfficeAction cone stopped at the memory limit (128MiB; raise it with --memory or `memory` under [verify] in rdra.toml)
+  whether some OfficeAction can get stuck at status = open is not decided: the OfficeAction cone stopped at the memory limit (64MiB; raise it with --memory or `memory` under [verify] in rdra.toml)
 ...
 result: not decided
 warning: 10 findings a cone stopped at the state cap or the memory limit left undecided; the OK line holds only for what was decided (--deny-undecided fails the run)
@@ -1769,13 +1771,19 @@ Only `--with-tlc` needs TLC. `verify` looks for it in this order: `--tlc-jar`,
 - Nix: run `nix shell nixpkgs#tlaplus`, then run `verify` in that shell. If flakes are not
   enabled, add `--extra-experimental-features 'nix-command flakes'`. In this repository,
   `nix develop` provides `tlc`, and the flake's package puts the same `tlc` on the `PATH` of
-  `rdra-ish`: TLC 1.7.4, as `nixpkgs#tlaplus` packages it, on JDK 17 in place of JDK 8 and
-  with a class-data-sharing archive of TLC's classes, which starts each run sooner.
+  `rdra-ish`: TLC 1.8.0 on JDK 25, with a class-data-sharing archive of TLC's classes,
+  which starts each run sooner. `nixpkgs#tlaplus` is still TLC 1.7.4 on JDK 8.
 - The jar: download `tla2tools.jar` from the
   [TLA+ releases](https://github.com/tlaplus/tlaplus/releases), install a JDK, and pass
-  `--tlc-jar <path>` or set `RDRA_TLC_JAR=<path>`.
+  `--tlc-jar <path>` or set `RDRA_TLC_JAR=<path>`. TLC 1.8.0 needs JDK 11 or later.
 
-Run TLC 1.7.x on JDK 17 or earlier, or use TLC 1.8.0. On JDK 21 and later, TLC 1.7.x's
+`verify` reads the output of TLC 1.7.x and of TLC 1.8.0. TLC 1.8.0 is a pre-release that
+upstream rebuilds under the same tag. The flake pins the build of 2026-11-19 (`TLC2 Version
+2026.11.19.180144`) by its hash and downloads it from this repository's release
+[`tlc-1.8.0-bc1b506`](https://github.com/manji-0/rdra-ish-dsl/releases/tag/tlc-1.8.0-bc1b506)
+first, so a rebuild upstream does not break it.
+
+Use TLC 1.8.0, or run TLC 1.7.x on JDK 17 or earlier. On JDK 21 and later, TLC 1.7.x's
 own buffered file reads a trace record back wrongly once the JDK's
 `RandomAccessFile.readLong` goes through it, and a `-continue` run that prints many traces
 stops with `java.lang.ArrayIndexOutOfBoundsException` (`arraycopy: length -N is negative`
@@ -1786,7 +1794,7 @@ or `Index N out of bounds for length M`) (#314).
 - A run that stops on that exception is a `tool_error`, even when it had printed
   violations before it: it never reached the rest of the model. Its report starts with
   `hint: TLC stopped with an ArrayIndexOutOfBoundsException while it read a trace back, …`
-  and says to run TLC on JDK 17 or earlier or to use TLC 1.8.0.
+  and says to use TLC 1.8.0 or to run TLC 1.7.x on JDK 17 or earlier.
 
 #### Getting z3
 
@@ -1936,11 +1944,11 @@ that `codegen <INPUTS...> --lang ts [-o <FILE>]` prints for a model that `check`
 These types are the scalars, the id types, the value sets, the state types, and the
 `<Entity>Row` row types. Everything else may change or be removed in any release: the
 transition functions, the rule checks, the dispatchers, the header and its obligations,
-`--allow-failing`, and the Rust and Go output. [The design](./design/algebraic-codegen.md)
+`--allow-failing`, `--check` and the fingerprint line, and the Rust and Go output. [The design](./design/algebraic-codegen.md)
 describes where `codegen` is going.
 
 ```
-rdra-ish codegen <INPUTS...> --lang <LANG> [-o <FILE>] [--package <NAME>] [--allow-failing]
+rdra-ish codegen <INPUTS...> --lang <LANG> [-o <FILE> | --check <FILE>] [--package <NAME>] [--allow-failing]
 ```
 
 | Option | Type | Default | Description |
@@ -1950,6 +1958,7 @@ rdra-ish codegen <INPUTS...> --lang <LANG> [-o <FILE>] [--package <NAME>] [--all
 | `-o`, `--out` | path | — (stdout) | Write to this file instead of stdout. |
 | `--package` | string | `domain` | The Go package name (`--lang go` only). |
 | `--allow-failing` | flag | off | Generate even when `check` reports errors. The state types then narrow no column, and each error is listed as an obligation the model does not meet. |
+| `--check` | path | — | Generate again and compare the result with this file instead of printing it. Exit 1 when they differ. Not with `-o`. |
 
 The output is one compilation unit: a TypeScript module, a Rust module file, or a Go file.
 It opens with a header and the numbered **obligations**: what `check` and `verify` assume of
@@ -2041,6 +2050,29 @@ prints them in the header. It refuses a model `check` rejects (exit 1, with the 
 stderr) unless `--allow-failing` is given; the output then has no transition functions and
 no rule checks. It refuses a model with model errors. Two declarations that generate one type name, such as an entity
 `OrderStatus` beside the inline `Enum` of `Order.status`, are an error naming both.
+
+The second line of the output is a **fingerprint**:
+`// rdra-ish codegen fingerprint: model=<hash> code=<hash>`. The model hash covers the
+source text of the loaded files. The code hash covers the output without this line.
+
+`codegen --check <FILE>` checks a committed file in CI. It generates again with the same
+inputs and options and compares the result with `<FILE>`, ignoring the fingerprint line.
+Run it from the same directory with the same input paths, because the header names them.
+`--check` writes nothing and prints nothing on stdout. When the two match, it prints
+`ok: <FILE> is what the model generates` on stderr and exits 0. A model edit that changes
+no generated code, such as a comment, still passes. When the two differ, it exits 1. On
+stderr it prints the cause, how many lines differ, and the first difference. The causes are:
+
+- `file edited`: the file no longer matches its own code hash. Someone changed it after it
+  was generated.
+- `model changed`: the model's source text differs from the text the fingerprint records.
+- `generator changed`: neither the file nor the model changed, so the output of `codegen`
+  did. Another rdra-ish version, other `--lang`, `--package` or `--allow-failing`, or other
+  input paths cause this.
+- No fingerprint line: the file was not generated by `codegen`, or the line was removed.
+
+`file edited` and `model changed` can both appear. Restore or regenerate the file. Do not
+edit it by hand: code that finishes the output belongs in other files.
 
 ---
 

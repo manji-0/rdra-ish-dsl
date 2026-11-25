@@ -204,7 +204,15 @@ pub fn run() -> Result<()> {
             out,
             package,
             allow_failing,
-        } => codegen_cmd::run_codegen(&inputs, lang, out.as_deref(), &package, allow_failing)?,
+            check,
+        } => codegen_cmd::run_codegen(
+            &inputs,
+            lang,
+            out.as_deref(),
+            &package,
+            allow_failing,
+            check.as_deref(),
+        )?,
 
         Commands::Files { inputs } => {
             let files = collect_rdra_files(&inputs, None)?;
