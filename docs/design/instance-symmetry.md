@@ -498,17 +498,16 @@ runs in `cargo test` in seconds.
 
 <!-- constrained-by #tlc-and-engine-agreement -->
 
-- `verify --symmetry <never|retry|always>`, and `symmetry = "..."` under `[check]` in
-  `rdra.toml`. `retry` runs a cone up to symmetry only after its plain run stopped at the
-  memory limit ([Decisions](#decisions)); `always` runs every cone the current phase covers
-  up to symmetry, for rule 8 and the tests; `never` is today's `verify`. The default is
-  `never` until phase 5 makes it `retry`.
-- A cone line run up to symmetry shows the stored count as orbits and an estimate of the
-  plain state count, `(240,016 orbits, about 62M states)`, and a retried cone says why:
-  `retried up to instance symmetry after the memory limit at 25,266,745 states`. The
-  estimate is described under [Decisions](#decisions).
-- The notes under a cone line: a class the scan left out ([The group](#the-group)), and states
-  stored without their canonical form ([The canonical form](#the-canonical-form)).
+- `verify --symmetry <never|always>`, and `symmetry = "..."` under `[verify]` in
+  `rdra.toml`. `always` runs up to symmetry each cone the current phase covers that no plain
+  run decides ([Always by default](#always-by-default), 1); `never` is today's `verify`. The
+  default is `never` until the flip makes it `always`. `retry` was removed in step 1.
+- A cone line run up to symmetry keeps `never`'s shape and prints an estimate of the plain
+  state count, `(about 62M states)`, described under [Decisions](#decisions).
+  `RDRA_ISH_SYMMETRY_STATS` prints the orbits stored, the estimate, the states the branch cap
+  cut, and the classes the scan left out ([The group](#the-group)).
+- The note under a cone line: states stored without their canonical form
+  ([The canonical form](#the-canonical-form)).
 - `check`, `states`, `export`, and `--prove` do not read the option.
 
 ## Phases
