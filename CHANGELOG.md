@@ -132,6 +132,12 @@
 
 ### Added
 
+- `codegen --check <FILE>` (experimental) generates again with the same options and exits 1
+  when `<FILE>` differs (#333), for CI. The second line of the output is now a fingerprint
+  (`// rdra-ish codegen fingerprint: model=<hash> code=<hash>`). From it the summary on
+  stderr tells a file edited after it was generated from a model that changed since, and
+  both from a change in rdra-ish or the options. A model edit that changes no generated
+  code passes. See [`codegen`](docs/cli-reference.md#codegen).
 - `verify --symmetry` also covers a reduced safety cone (#212, phase 3): under `always` it
   runs up to `G_T`, the
   instance symmetry of its T rows, which leaves every S entity, and with it the class
