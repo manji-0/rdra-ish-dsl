@@ -1,9 +1,14 @@
-# DSL Surface for Formal Verification
+# The DSL forms verify checks
 
 <!-- derived-from ../../../docs/language-reference.md#temporal-path-properties -->
 <!-- derived-from ../../../docs/formal-verification.md -->
 
-## Temporal Properties
+This file covers what `verify` checks and how each form reads. Lifecycle effects
+(`transitions`, `sets`, copies, `chooses`, `links`, `.when` on an arm or a value, condition
+guards) are written as in `../../rdra-ish-write/references/06-lifecycle.md`, and rules as in
+`../../rdra-ish-write/references/07-rules.md`.
+
+## Temporal properties
 
 ```rdra
 entity Order "Order" {
@@ -35,42 +40,56 @@ property ShippedOnceCaptured
   leads_to(Order.status == paid, Order.status == shipped).fair(ShipOrder)
 ```
 
-- Label string after the name is **optional**.
-- Each atom names its entity (`Order.status`); an atom whose column no single entity
-  owns is the model error `UnresolvedPropertyColumn`, which `check` reports.
-- Prefer `and` / `or` / `not` (`/\` `\/` `~` remain aliases).
-- Any `eventually` / `leads_to` causes `WF_vars(Next)` in the Spec: some step is taken,
-  not a step in particular, so another instance's loop satisfies it.
-- `.fair(UC, ...)` after an `eventually` / `leads_to` assumes each listed use case is weakly
-  fair per instance it acts on: `Fair_P == \A p0 \in E_Ids : WF_vars(UC(p0))` (a created
-  slot bound inside with `\E`), and `P == Fair_P => (...)`. `Spec` is unchanged. On `always`
-  it is `FairOnSafetyProperty`; no argument, a non-use-case argument, a duplicate, or a second
-  `.fair` is `FairRequiresUseCases`; a use case that changes nothing is `FairOnInertUseCase`.
-- A property holds per present instance: `always x` is `[](present => x)`,
-  `eventually x` is `[](present => <>x)`, and `leads_to x y` is `(present /\ x) ~> y`.
-- A property whose atoms read two or more entities ranges over every combination of their
-  rows. `.along(A, B, ..)` (with `.role(role)` after it) limits it to linked rows, as on a
-  multi-entity `invariant`: the owner links join `present` in the trigger, so
-  `always x` is `[](present /\ link => x)`. Write `.global()` when every combination is
-  meant. Neither, with keys relating the entities, draws `lint` `multi-rule-unscoped`;
-  `.global()` with `.along` is `GlobalWithAlong`; a path that misses an atom's entity or a
-  hop no key binds is `UnbindableScope` (example below the table).
-- Only `verify` evaluates properties. `check` and `states` verify safety only, by state
-  exploration, and evaluate no `property`; `check` prints a `note:` that it did not.
-  `verify` checks `always`, `eventually`, and `leads_to` each alone with its native checker
-  on its cone (the whole model only when the cone does not decide it); `--with-tlc` runs TLC
-  on the same runs beside it. It decides `can_reach`, `stable`, `unchanged`, and
-  `precedes` by BFS on their cone. Under `--with-tlc` TLC checks `stable`, `unchanged`,
-  and `precedes` on the same cone; `can_reach` has no TLC run.
-- `can_reach(expr)` says the actors can still finish each present instance: from every
-  reachable state, some path on which the instance stays present reaches `expr`. It is CTL
-  `AG (present => EF expr)`, which TLC cannot check, so `verify` decides it by BFS on its
-  cone and `export --kind tla` only names it in a comment. Use it for a trap a
-  `Deadlock_*` misses, such as an instance that moves between two states forever once a
-  guard is false. A violation prints a shortest trace, then `confined:` with what `expr`
-  reads in the states the instance is left with. Deleting the instance does not reach
-  `expr`. `.along(..)` joins its link to the trigger, as for the other forms.
-  `.fair(...)` on it is `FairOnReachProperty`.
+- The label after the name is optional. Each atom names its entity (`Order.status`).
+- A property holds per present instance: `always x` is `[](present => x)`, `eventually x`
+  is `[](present => <>x)`, and `leads_to(x, y)` is `(present /\ x) ~> y`.
+- `eventually` and `leads_to` assume `WF_vars(Next)`: some step is taken, not a step in
+  particular, so another instance's loop satisfies it.
+- `.fair(UC, ...)` on `eventually` or `leads_to` assumes weak fairness per instance on the
+  listed use cases. An `ok` then holds only on runs that do not starve them; say so. On any
+  other form `.fair` is an error (`FairOnSafetyProperty`, `FairOnReachProperty`).
+- A property over two or more entities ranges over every combination of their rows.
+  `.along(A, B)` (then `.role(role)` when two keys join the pair) limits it to linked rows;
+  `.global()` says every combination is meant. With neither, `lint` reports
+  `multi-rule-unscoped`. `samples/temporal_along.rdra` shows the difference.
+
+| Form | Meaning | Decided by |
+|---|---|---|
+| `always(p)` | `[]p` | native checker; TLC under `--with-tlc` |
+| `eventually(p)` | `<>p` | native checker; TLC under `--with-tlc` |
+| `leads_to(p, q)` | `p ~> q` | native checker; TLC under `--with-tlc` |
+| `stable(p)` | once `p` holds, every step keeps it | BFS on its cone; TLC under `--with-tlc` |
+| `unchanged(E.col, ..).when(p)` | no step changes the columns while `p` holds | BFS on its cone; TLC under `--with-tlc` |
+| `precedes(p, q)` | `q` holds only in a state where `p` holds or held before | BFS on its cone; TLC under `--with-tlc` |
+| `can_reach(p)` | from every reachable state, the instance can still reach `p` (CTL `AG EF`) | BFS on its cone only |
+
+Order and stability, per present instance:
+
+```rdra
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(draft, approved, cancelled, shipped) @default(draft)
+  amount: Int @default(0)
+  paid: Bool @default(false)
+}
+
+property CancelledStaysCancelled
+  stable(Order.status == cancelled)
+
+property AmountKeptOnceApproved
+  unchanged(Order.amount).when(Order.status in (approved, shipped))
+
+property ShippedAfterPaid
+  precedes(Order.paid == true, Order.status == shipped)
+```
+
+- `stable` and `unchanged` fail at a step, `precedes` at a state; the trace has no loop.
+- `after(UC).assert` reads only the steps of `UC`. `stable` and `unchanged` read every
+  step, so they catch another use case that rewrites the column.
+- `unchanged` without `.when` means the columns never change while the row is present.
+
+`can_reach` catches a trap a `Deadlock_*` misses, such as an instance that moves between two
+states forever once a guard is false:
 
 ```rdra
 entity Order "Order" {
@@ -91,64 +110,8 @@ property OrderCanFinish "every order can still be delivered or cancelled"
   can_reach(Order.status in (delivered, cancelled))
 ```
 
-| Form | TLA+ |
-|---|---|
-| `always(expr)` | `[]expr` |
-| `eventually(expr)` | `<>expr` |
-| `leads_to(p, q)` | `p ~> q` |
-| `can_reach(expr)` | none (CTL `AG (present => EF expr)`), decided by BFS |
-| `stable(p)` | `[][(present /\ p) => (present' => p')]_vars` |
-| `unchanged(E.col, ..).when(p)` | `[][(present /\ p) => (present' => col' = col)]_vars` |
-| `precedes(p, q)` | latch `<P>_seen` set where `present /\ p` holds; `[](present /\ q => <P>_seen)` |
-
-Order and stability rules, per present instance (`.along` scopes them as above):
-
-```rdra
-entity Order "Order" {
-  id: Int @pk
-  status: Enum(draft, approved, cancelled, shipped) @default(draft)
-  amount: Int @default(0)
-  paid: Bool @default(false)
-}
-
-// A cancelled order stays cancelled: every step, not only one use case's.
-property CancelledStaysCancelled
-  stable(Order.status == cancelled)
-
-// While approved or shipped, no step changes the amount; `.when` comes right after.
-property AmountKeptOnceApproved
-  unchanged(Order.amount).when(Order.status in (approved, shipped))
-
-// Shipped only in a state where it is paid or was paid before.
-property ShippedAfterPaid
-  precedes(Order.paid == true, Order.status == shipped)
-```
-
-- `stable` and `unchanged` fail at a step, `precedes` at a state; `verify` prints the
-  shortest trace to it and no loop. `.fair` on any of them is `FairOnSafetyProperty`.
-- `after(UC).assert(...)` reads only the steps of `UC`; `stable`/`unchanged` read every
-  step, so they catch another use case that rewrites the column.
-- `unchanged` without `.when` means the columns never change while the row is present.
-  `.when` elsewhere in the chain is `UnknownChainMethod`.
-
-A property over a Payment and the Order it belongs to:
-
-```rdra
-entity Order "Order" {
-  id: Int @pk
-  status: Enum(draft, paid) @default(draft)
-}
-
-entity Payment "Payment" {
-  id: Int @pk
-  status: Enum(pending, captured) @default(pending)
-}
-
-relate(Payment, Order, N:1)
-
-property CapturedPaid
-  always((not (Payment.status == captured)) or (Order.status == paid)).along(Payment, Order)
-```
+A violation prints a shortest trace, then `confined:` with the values `p` reads in the
+states the instance is left with. Deleting the instance does not reach `p`.
 
 ## Postconditions
 
@@ -157,17 +120,12 @@ after(DeliverOrder).assert(Order.status == delivered, Order.delivered_at == pres
 after(Sell).assert(Item.sold >= 1)
 ```
 
-- Equality and comparison forms become an independent TLA `PROPERTY`
-  `AfterAssert_<UC>_<n>`, `[][(\A p : UC(p) => post')]_vars` (not injected into the
-  effects). `check` and `states` check the same predicate after the last step of the use
-  case, so a use case split into k transaction groups must satisfy it once per run, after
-  step k, on that run's rows; the states between two steps are not checked. An atom on
-  an entity no step binds is read on every present row (`UnboundAfterRead`).
-- An `after` on a use case that changes nothing is `AssertOnInertUseCase`.
-
-UC `precondition` / `postcondition` / `guard` strings are **review metadata only**
-(`list --kind usecase`); they are not checked by `states` or TLA. Use
-`after(UC).assert(...)` for machine-checked postconditions.
+- Each becomes `AfterAssert_<UC>_<n>`, checked after the last step of each run of the use
+  case, on that run's rows. A use case split into transaction groups satisfies it once per
+  run; the states between its steps are not checked.
+- An atom on an entity no step binds reads every present row (`UnboundAfterRead`).
+- `precondition`, `guard`, and `postcondition` clauses on a use case are review text that
+  nothing checks. Use `after(UC).assert(...)` for a machine-checked postcondition.
 
 ## Quantifiers
 
@@ -185,16 +143,19 @@ entity Assign "Assignment" {
 relate(Assign, Cert, N:1)
 
 invariant(Cert).when(status == revoked).none(Assign.status == active)
-
-// equivalent: invariant(Cert, Assign).when(Cert.status == revoked).none(Assign.status == active)
 ```
 
-Prefer qualified columns. The check is `Quantifier_<Entity>_<n>` over the present
-instances; the `relate` links each Assign to its Cert, and without one the related side
-is independent. `check` sees one instance of each entity, so use `verify` when the rule
-is about several related rows (`samples/quantifier_none.rdra`).
+- The check is `Quantifier_<Entity>_<n>` over the present rows. The `relate` links each
+  `Assign` to its `Cert`; without one the related side is independent.
+- `.none(Related)` and `.has(Related)` ask for no linked row, or some, and read only the
+  link.
+- `.at_most(n, ..)`, `.at_least(n, ..)`, and `.exactly(n, ..)` count the same rows.
+  `at_most(n)` fails only with `n + 1` rows; below that it is `Vacuous_*`, whose warning
+  names the `--instances Entity=k` to run.
+- `check` sees one row of each entity. Use `verify` when the rule is about several related
+  rows (`samples/quantifier_none.rdra`).
 
-## Multi-entity Rules
+## Multi-entity rules
 
 ```rdra
 forbidden(Order, Payment, Order.status == cancelled, Payment.status == captured).along(Order, Payment)
@@ -202,151 +163,17 @@ forbidden(Order, Payment, Order.status == cancelled, Payment.status == captured)
 invariant(Order, Payment).along(Order, Payment).when(Order.status == paid).then(Payment.status == captured)
 ```
 
-- Qualify columns as `Entity.column`.
-- Add `.along(...)` only for relation-scoped linked-instance intent. Each adjacent pair
-  needs a `relate` (it supplies `Child_owner_Parent`), else `UnbindableScope`.
-- A rule over every combination of rows says `.global()`; with neither `.along` nor
-  `.global()`, `lint` `multi-rule-unscoped` warns and names the `.along(...)` the shortest
-  key path gives. `.global()` with `.along` is `GlobalWithAlong`, an error.
-- Two relates between the same pair of entities (distinct `.role`s, or one each way) need
-  `.role(role)` on every join of the pair: `.along(Order, Address).role(ship_to)`,
-  `.none(Address).role(bill_to)`, `holds(C, Address.status == open).role(ship_to)`, and a copy's
-  `sets(...).role(ship_to)`. Without it the join is `AmbiguousOwnerLink`, which names the
-  candidates and the rewrite. `.role(Address)` names a key without `.role` by its parent id.
-  A use case that writes the `Address` and the `Order` puts the written address on the keys
-  its guards' or copies' `.role` name, and on neither of two keys without one.
-- `.none(Related)` / `.has(Related)` ask for no linked row, or some, and read only the link.
-- `.at_most(n, ..)`, `.at_least(n, ..)`, `.exactly(n, ..)` count the same rows as `.has`, each
-  once, on an `invariant` (`Quantifier_<E>_<n>`) or a `holds` guard (the rows before the
-  step). `at_most(n)` fails only with `n + 1` rows of the counted entity: below that the rule
-  is `Vacuous_*`, whose warning names `--instances Entity=k`. `--prove` unrolls counts up to
-  8 rows. A card's `lo..hi` with `hi` from 2 to 255 adds `MaxCard_<Child>_<role>`.
-- A `holds` guard reads an entity two hops from the use case's row through
-  `.along(A, B, C)`, with `.role(role)` after it per hop. A compared entity that no key joins
-  to the use case's rows is `UnjoinedGuardRead` (warning): any row of it satisfies the guard.
-- A use case that writes two entities a key path joins only through an entity it does not
-  write is `UnjoinedWrite` (warning): two instances can write rows of different rows between.
-  Write the entity between, or put `.apart()` on the write meant as a row of its own.
-- A multi-entity `forbidden` / `invariant` is named `MultiForbidden_<E>_<n>` / `MultiInv_<E>_<n>`.
+- Qualify every column as `Entity.column`. The names are `MultiForbidden_<E>_<n>` and
+  `MultiInv_<E>_<n>`.
+- `.along(...)` needs a `relate` for each adjacent pair, else `UnbindableScope`.
+  `.global()` with `.along` is `GlobalWithAlong`.
+- When two keys join one pair, name the key on every join with `.role(role)`, else
+  `AmbiguousOwnerLink`, which prints the rewrite.
+- A `holds` guard that compares an entity no key joins to the use case's rows is
+  `UnjoinedGuardRead`: any row satisfies it. Add the `.along(...)` the warning names.
 
-## Effects That Feed Axes
+## Null values
 
-```rdra
-transitions(SubmitOrder, Order.status, draft -> submitted)
-sets(Restock, Item.stock == 3)
-drives(ReserveStock, Inventory.stock < selling, true) // drives the comparison as a Bool
-```
-
-Several `transitions` of one use case from one state are the actor's choice: one run takes
-one arm, every arm carries the use case's other effects, and its guards and
-`after(UC).assert` apply to each arm. Two values `sets` writes to one column in one use case
-are `ConflictingEffects`, not a choice.
-
-`sets(Register, Permit.kind == Application.kind)` copies the value of the row the step
-binds: a row of `Application` the use case writes in the same step, or the parent the permit
-belongs to through a `relate`. BFS and TLC read it the same way; TLA+ writes it as a choice of
-the column's value and the guard `Permit_kind'[p] = Application_kind[q]`. A source the step
-does not bind is `UnboundCopySource`.
-
-`.when(Cond)` on one `transitions` arm guards that arm only: the arm is taken only while the
-condition's `holds` body holds, the use case runs when some arm is enabled, and the choice
-among enabled arms stays free. A guarded arm that never fires while its use case runs is the
-`ArmNeverTaken` warning (`Arm_<UseCase>_<from>_<to>`).
-
-```rdra
-entity Disclosure "届出" {
-  id: Int @pk
-  status: Enum(searched, file, secret) @default(searched)
-  acquired: Bool @default(false)
-}
-
-usecase Submit "届出"
-usecase Acquire "承継"
-usecase Decide "判断"
-creates(Submit, Disclosure)
-sets(Acquire, Disclosure.acquired == true)
-condition Acquired "権利を取得している"
-holds(Acquired, Disclosure.acquired == true)
-transitions(Decide, Disclosure.status, searched -> file).when(Acquired)
-transitions(Decide, Disclosure.status, searched -> secret)
-forbidden(Disclosure, status == file, acquired == false)
-```
-
-Use Int / Money / Decimal columns and `sets(UC, E.col == N)` when the quantity itself
-must be checked; `check` and `verify` both evaluate a comparison on the values over
-`0..--int-range-max`. Drive the comparison with `drives(UC, E.col op rhs, true|false)` only
-when the model does not track the values.
-
-## Variation columns
-
-A column typed by a `variation` (`method: PaymentMethod`) is an attribute, not a
-lifecycle. `states` and the TLA+ export give it a variable only when a `sets`, an
-entity-local or multi-entity constraint, a condition body, an `after(UC).assert`, or a
-`property` names it. A created instance takes any value unless the creating use case sets
-it, and `@default` does not pin the choice, so `check` and `verify` check the rule
-against each value.
-An update keeps the value unless the use case `chooses` it, which again takes every value,
-or only the values its `chooses(UC, E.col, value)` lines list. A `transitions` on it is an
-error, and so is `chooses` on any other column.
-
-```rdra
-variation Scope "補正の範囲" {
-  limited "限定"
-  free "限定なし"
-}
-
-entity Notice "通知" {
-  id: Int @pk
-  status: Enum(open, drafted) @default(open)
-  scope: Scope
-}
-
-usecase Receive "受領"
-usecase Draft "応答案の作成"
-creates(Receive, Notice)
-sets(Receive, Notice.scope == limited)
-transitions(Draft, Notice.status, open -> drafted)
-chooses(Draft, Notice.scope)
-```
-
-`.when(Cond)` on a `chooses(UC, E.col, value)` line offers that value only while the
-condition's `holds` body holds, read on the state the use case starts from, as an arm guard
-is; the use case runs when some listed value is enabled. One use case and column takes
-either the value-less line or value lines (`ChoosesMixedForms`). A guarded value never
-chosen while its use case runs is the `ValueNeverChosen` warning
-(`Choice_<UseCase>_<Entity>_<column>_<value>`).
-
-```rdra
-variation Scope "補正の範囲" {
-  limited "限定"
-  free "限定なし"
-}
-
-entity Notice "通知" {
-  id: Int @pk
-  status: Enum(open, drafted) @default(open)
-  final: Bool @default(false)
-  scope: Scope
-}
-
-usecase Receive "受領"
-usecase Draft "応答案の作成"
-usecase Reopen "最後の通知"
-creates(Receive, Notice)
-sets(Receive, Notice.scope == limited)
-transitions(Draft, Notice.status, open -> drafted)
-transitions(Reopen, Notice.status, drafted -> open)
-sets(Reopen, Notice.final == true)
-sets(Reopen, Notice.scope == limited)
-condition NotFinal "最後の通知でない"
-holds(NotFinal, Notice.final == false)
-chooses(Draft, Notice.scope, free).when(NotFinal)
-chooses(Draft, Notice.scope, limited)
-forbidden(Notice, final == true, scope == free)
-```
-
-## Conditions
-
-A `condition` with a `holds` body that `applies_to` a use case (or an API that the use case
-invokes) is a guard on that use case in `states`, `check`, `verify`, and the TLA+ export. A body applied to a use case that writes nothing is `UnbindableCondition`. A condition
-with only `combines` is a trace link and guards nothing.
+A `@null` Enum, Bool, or Int column holds `null` as one more value. A null operand
+satisfies no comparison but `!=`, and two null columns are not equal, in every rule form
+including `@check` and `property`. Write `col == null or ...` to admit null.
