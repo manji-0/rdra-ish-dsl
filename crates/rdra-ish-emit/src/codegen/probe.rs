@@ -4,7 +4,7 @@
 //! use case. A language prints the lines; [`ProbeWriter`] numbers them. [`ContractIndex`]
 //! takes an error in the user's code back to a use case by the generated method it names.
 
-use super::ir::{ContractDecl, PortDecl, PortMethod};
+use super::ir::{ContractDecl, EntryDecl, PortDecl, PortMethod};
 
 /// The line of a generated file the fingerprint takes: the second, after the first line.
 pub const FINGERPRINT_LINE: usize = 2;
@@ -108,6 +108,23 @@ impl ContractIndex {
         ContractIndex { entries }
     }
 
+    /// The index with the entry points of `port`'s contracts too (#335), each spelled by
+    /// `spell` (Rust `run_create_charge`).
+    pub fn with_entries(
+        mut self,
+        port: &PortDecl,
+        spell: impl Fn(&EntryDecl) -> Vec<String>,
+    ) -> Self {
+        for (c, contract) in port.contracts.iter().enumerate() {
+            for e in &contract.entries {
+                for name in spell(e) {
+                    self.entries.push((name, c, e.action.clone()));
+                }
+            }
+        }
+        self
+    }
+
     /// The first generated method `text` names as a whole word: its name, the index of its
     /// contract, and its action.
     pub fn find(&self, text: &str) -> Option<(&str, usize, &str)> {
@@ -164,6 +181,7 @@ mod tests {
             site: None,
             error: format!("{usecase}Error"),
             methods,
+            entries: Vec::new(),
         }
     }
 

@@ -65,6 +65,15 @@ pub(crate) struct Mapping<'a> {
     pub service: &'a str,
 }
 
+/// Whether `text` holds `word` as a whole word (a contract's name in a message about a bound).
+fn names(text: &str, word: &str) -> bool {
+    let w = |c: char| c.is_alphanumeric() || c == '_';
+    text.match_indices(word).any(|(at, _)| {
+        !text[..at].chars().next_back().is_some_and(w)
+            && !text[at + word.len()..].chars().next().is_some_and(w)
+    })
+}
+
 /// Whether two paths name the same file, one maybe relative to a directory above the other.
 fn same_file(a: &Path, b: &Path) -> bool {
     a.ends_with(b) || b.ends_with(a)
@@ -79,12 +88,20 @@ pub(crate) fn map_messages(
 ) -> Vec<CodeDiagnostic> {
     let mut out: Vec<CodeDiagnostic> = Vec::new();
     let mut unmapped: Vec<&CompilerMessage> = Vec::new();
-    for msg in messages {
-        let on_probe = same_file(Path::new(&msg.file), m.probe_file)
+    let on_probe = |msg: &CompilerMessage| {
+        same_file(Path::new(&msg.file), m.probe_file)
             .then(|| m.probe.at(msg.line))
             .flatten()
-            .and_then(|l| m.contracts.iter().position(|c| c.name == l.contract));
-        let contract = on_probe.or_else(|| m.index.find(&msg.text).map(|(_, c, _)| c));
+            .and_then(|l| m.contracts.iter().position(|c| c.name == l.contract))
+    };
+    // The messages on probe lines first: one names the use case where the probe states it,
+    // and the same finding elsewhere (an impl that needs the contract) adds nothing.
+    let mut ordered: Vec<&CompilerMessage> = messages.iter().collect();
+    ordered.sort_by_key(|msg| on_probe(msg).is_none());
+    for msg in ordered {
+        let contract = on_probe(msg)
+            .or_else(|| m.index.find(&msg.text).map(|(_, c, _)| c))
+            .or_else(|| m.contracts.iter().position(|c| names(&msg.text, &c.name)));
         let Some(c) = contract else {
             unmapped.push(msg);
             continue;
@@ -199,6 +216,7 @@ mod tests {
             site: Some(format!("m.rdra:{}:1", m + 1)),
             error: format!("{usecase}Error"),
             methods: vec![m],
+            entries: Vec::new(),
         }
     }
 

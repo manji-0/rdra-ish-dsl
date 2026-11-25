@@ -786,8 +786,23 @@ pub struct ContractDecl {
     pub site: Option<String>,
     /// The use case's error type, `<UseCase>Error`.
     pub error: String,
-    /// Its methods: indices into [`PortDecl::methods`], one per action.
+    /// Its methods: indices into [`PortDecl::methods`], one per action with functions.
     pub methods: Vec<usize>,
+    /// One entry point per action the generator printed no function for (#335): the service
+    /// runs it whole, so the probe still requires it.
+    pub entries: Vec<EntryDecl>,
+}
+
+/// The entry point of an action with no printed function: `run_<action>` / `Run<Action>`
+/// by the ids of its rows, returning the use case's error when it does not run.
+#[derive(Clone, Debug)]
+pub struct EntryDecl {
+    /// The transition system's action.
+    pub action: String,
+    /// PascalCase.
+    pub name: String,
+    /// `(name, id type)` per row of the action: an existing row, or the id of a created one.
+    pub rows: Vec<(String, String)>,
 }
 
 /// The rows of one entity in a snapshot.

@@ -140,6 +140,31 @@ pub fn generate_all(
     })
 }
 
+/// snake_case of a model identifier, as the printers spell function and method names.
+pub fn snake(id: &str) -> String {
+    actions::snake(id)
+}
+
+/// What the probe binds (`[code.<lang>]` in rdra.toml): the service type, the path of the
+/// generated module, and for the conformance test, the expression that makes a fresh service
+/// and the traces' path from the build directory.
+#[derive(Clone, Debug, Default)]
+pub struct ProbeBinding {
+    pub service: String,
+    pub module: String,
+    pub conformance: Option<(String, String)>,
+}
+
+/// The probe of `domain` in `lang`: one line per contract stating the service implements it,
+/// and the conformance test when the binding has one. `None` for a language with no probe
+/// printer yet, or a model with no contracts.
+pub fn probe_for(lang: Lang, domain: &DomainModel, binding: &ProbeBinding) -> Option<probe::Probe> {
+    match lang {
+        Lang::Rust => rust_port::probe(domain, binding),
+        Lang::Go | Lang::TypeScript => None,
+    }
+}
+
 /// The contract as JSON (`codegen --format json`): the same choices the printers print, with
 /// model locations. `options.lang` does not change it.
 pub fn generate_json(
@@ -574,6 +599,7 @@ pub fn build_for(
                 names = trial;
                 domain.port = Some(decl);
                 domain.harness = port;
+                conformance::add_entries(&built.ts, &mut domain, &mut names)?;
             }
             Err(e) if port => return Err(e),
             Err(_) => {}

@@ -308,6 +308,10 @@ pub(crate) enum Commands {
         /// traces), with paths and sites relative to rdra.toml's directory
         #[arg(long, conflicts_with_all = ["lang", "out", "check", "conformance", "format", "package", "allow_failing"])]
         code: bool,
+        /// Write only the probe of each `[code.<lang>]` table that names one: the file that
+        /// states the service implements every use case's contract (`check --code=build`)
+        #[arg(long, conflicts_with_all = ["lang", "out", "check", "conformance", "format", "package", "allow_failing", "code"])]
+        probe: bool,
         /// Write to this file instead of stdout
         #[arg(short, long)]
         out: Option<PathBuf>,

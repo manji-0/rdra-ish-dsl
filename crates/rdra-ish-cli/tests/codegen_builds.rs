@@ -9,6 +9,8 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+mod codegen_cases;
+
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
@@ -147,6 +149,107 @@ fn rust_builds() {
             &format!("clippy on the codegen of {sample}"),
         );
     }
+}
+
+/// The probe of every sample `check` passes names each contract on its own line: compiled
+/// against the generated module with a service that implements none, rustc reports E0277 on
+/// every use case line of the line map, and nothing else.
+#[test]
+fn rust_probes_name_every_contract() {
+    if !available("rustc") {
+        return;
+    }
+    let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
+    let mut checked = 0;
+    for sample in samples() {
+        if !codegen_cases::check_passes(&sample) {
+            continue;
+        }
+        let project = rdra_ish_core::load_project(&[repo().join(&sample)], None).expect("loads");
+        let domain = rdra_ish_emit::codegen::build_with(
+            &project.model,
+            Some(codegen_cases::caps()),
+            false,
+            &|_| None,
+        )
+        .expect("builds");
+        let binding = rdra_ish_emit::codegen::ProbeBinding {
+            service: "svc::Nothing".to_string(),
+            module: "svc::domain".to_string(),
+            conformance: None,
+        };
+        let Some(probe) = rdra_ish_emit::codegen::probe_for(
+            rdra_ish_emit::codegen::Lang::Rust,
+            &domain,
+            &binding,
+        ) else {
+            continue;
+        };
+        let dir = scratch("rust-probe", &sample);
+        generate(&sample, "rust", &dir, "domain.rs");
+        std::fs::write(
+            dir.join("lib.rs"),
+            "#[path = \"domain.rs\"]\npub mod domain;\n/// A service that implements no contract.\npub struct Nothing;\n",
+        )
+        .unwrap();
+        run(
+            Command::new(&rustc)
+                .args([
+                    "--edition",
+                    "2021",
+                    "--crate-type",
+                    "lib",
+                    "--crate-name",
+                    "svc",
+                    "-A",
+                    "warnings",
+                    "-o",
+                ])
+                .arg(dir.join("libsvc.rlib"))
+                .arg(dir.join("lib.rs")),
+            &format!("rustc on the module of {sample}"),
+        );
+        // The file as written: the fingerprint is its second line.
+        let (first, rest) = probe.text.split_once('\n').expect("a first line");
+        std::fs::write(
+            dir.join("probe.rs"),
+            format!("{first}\n// fingerprint\n{rest}"),
+        )
+        .unwrap();
+        let out = Command::new(&rustc)
+            .args([
+                "--edition",
+                "2021",
+                "--test",
+                "--error-format=json",
+                "--extern",
+            ])
+            .arg(format!("svc={}", dir.join("libsvc.rlib").display()))
+            .arg("-o")
+            .arg(dir.join("probe"))
+            .arg(dir.join("probe.rs"))
+            .output()
+            .expect("runs rustc");
+        let mut lines = std::collections::BTreeSet::new();
+        for line in String::from_utf8_lossy(&out.stderr).lines() {
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+                continue;
+            };
+            if v["level"] != "error" || v["code"].is_null() {
+                continue;
+            }
+            assert_eq!(v["code"]["code"], "E0277", "{sample}: {}", v["rendered"]);
+            let span = v["spans"]
+                .as_array()
+                .and_then(|s| s.iter().find(|s| s["is_primary"] == true))
+                .expect("a primary span");
+            lines.insert(span["line_start"].as_u64().unwrap() as usize);
+        }
+        let want: std::collections::BTreeSet<usize> = probe.lines.iter().map(|l| l.line).collect();
+        assert_eq!(lines, want, "{sample}: E0277 lines against the line map");
+        checked += want.len();
+    }
+    assert!(checked > 100, "only {checked} probe lines checked");
 }
 
 #[test]

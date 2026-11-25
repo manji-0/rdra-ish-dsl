@@ -207,6 +207,28 @@ The last line on stdout, after the model check's `OK:` line, is
 `OK: code: what the model requires, at --code=<level>`, or
 `FAIL: code: <n> error(s) at --code=<level>` with exit status `1`.
 
+At `build`, each compiler error goes back to a use case: by the probe line it is on (the
+probe has one line per use case), or by the generated method or contract it names. In Rust
+the build is `cargo check --test <probe> --message-format=json` in the table's `root`, and
+`run` is `cargo test --test <probe> -- rdra_conformance`. One block per use case and kind:
+
+```
+error[CodeMissingUseCase_Ship]: use case Ship has no implementation in svc::service::Service
+  model: model/order.rdra:22:1  usecase Ship "Ship"
+  code:  src/service.rs:70:26  E0277: the trait bound `Service: ShipUseCase` is not satisfied
+  fix:   impl ShipUseCase for svc::service::Service (prepare_ship, commit_ship)
+```
+
+| Name | When |
+|---|---|
+| `CodeMissingUseCase_<UseCase>` | The service does not implement the use case's contract (Rust E0277). |
+| `CodeIncomplete_<UseCase>` | It implements the contract without some of its methods (E0046). |
+| `CodeSignature_<UseCase>` | A method takes or returns other types than the contract's (E0053, E0050). |
+| `CodeError_<UseCase>` | Another error on the use case's probe line or naming its methods. |
+| `CodeUnmapped` | The count of the errors that belong to no use case, the first one quoted. |
+| `CodeBuildFailed` | The build failed with no error rdra-ish reads. |
+| `CodeConformance` | `run`: the conformance test failed; the message is the harness's first difference. |
+
 `--code` on a model without a `[code.rust]`, `[code.go]` or `[code.ts]` table exits `1`, so a
 check that would check nothing never passes. `check` without `--code` on a model that has one
 prints one line, `note: rdra.toml has [code]; `check --code` also checks the service code
@@ -668,7 +690,10 @@ Unique_Payment_Order = "../service/migrations/003_payment.sql"
 | `traces` | Rust and Go: the conformance traces. With it, `domain` also holds the conformance port and harness (`--conformance`). |
 | `conformance_states` | The states the BFS behind the traces explores at most. Default `65536`. |
 | `package` | Go: the package name of `domain` (`--package`). Default `domain`. |
-| `probe`, `service`, `module`, `new` | The probe that binds the service to the contracts (P2 of [the design](./design/code-check.md)). |
+| `probe` | The probe `codegen --code` (or `--probe`) writes: in Rust a file under the service crate's `tests/`, one line per use case stating that `service` implements that use case's contract (`<UseCase>UseCase`). `build` needs it. |
+| `service` | The service type, as the probe names it: `svc::service::Service`. |
+| `module` | The path of the generated module in the service's crate: `svc::domain`. |
+| `new` | An expression that makes a fresh service. With `traces`, the probe also holds the conformance test, `rdra_conformance`, which `run` runs. |
 | `root` | The directory the build command runs in. Default: the nearest directory above `domain` that holds `Cargo.toml`, `go.mod`, `package.json` or `tsconfig.json`. |
 | `build`, `run` | The command `check --code=build` / `--code=run` runs in place of the language's default, as a list of arguments. It runs only when that level is given on the command line, never from the LSP. |
 
@@ -2034,7 +2059,8 @@ rdra-ish codegen <INPUTS...> --code
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--lang` | `ts` \| `rust` \| `go` | — (required but with `--format json` or `--code`) | Language. `typescript` is an alias of `ts`. |
 | `--format` | `code` \| `json` | `code` | `json` prints the contract as data instead of code: see [The JSON contract](#the-json-contract). Not with `--conformance` or `--check`. |
-| `--code` | flag | off | Write every file `[code.<lang>]` in [`rdra.toml`](#the-code-tables) names, with paths and sites relative to the directory of `rdra.toml`. Not with the other options. |
+| `--code` | flag | off | Write every file `[code.<lang>]` in [`rdra.toml`](#the-code-tables) names (the domain code, the traces, the probe), with paths and sites relative to the directory of `rdra.toml`. Not with the other options. |
+| `--probe` | flag | off | Write only the probe of each `[code.<lang>]` table that names one. Not with the other options. |
 | `-o`, `--out` | path | — (stdout) | Write to this file instead of stdout. |
 | `--package` | string | `domain` | The Go package name (`--lang go` only). Put the file in a directory of its own, as this package, and write the code that finishes it in another package: the fields of a state type are unexported, so only code outside the package is kept from building a state. |
 | `--allow-failing` | flag | off | Generate even when `check` reports errors. The state types then narrow no column, and each error is listed as an obligation the model does not meet. |

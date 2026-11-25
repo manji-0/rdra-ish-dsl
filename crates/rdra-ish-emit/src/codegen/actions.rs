@@ -253,6 +253,26 @@ pub(super) fn add_functions(
             }),
         }
     }
+    // A use case with an action the generator printed no function for still has an entry
+    // point (#335), which returns its error.
+    for s in &domain.skipped {
+        if errors.iter().any(|e| e.usecase == s.usecase) {
+            continue;
+        }
+        errors.push(super::ir::UseCaseErrorDecl {
+            name: super::claim_first(
+                names,
+                [
+                    format!("{}Error", type_ident(&s.usecase)),
+                    format!("{}UseCaseError", type_ident(&s.usecase)),
+                ],
+                format!("the error of {}", s.usecase),
+            )?,
+            usecase: s.usecase.clone(),
+            rejects: false,
+            invalid_argument: false,
+        });
+    }
     domain.errors = errors;
     Ok(())
 }

@@ -7,6 +7,7 @@
 //! holds. A language plugs in through [`Backend`]; the rest is shared.
 
 pub(crate) mod map;
+mod rust;
 
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -132,6 +133,12 @@ pub(crate) trait Backend {
         Vec::new()
     }
 
+    /// What a failed run says: the harness's report of the first difference, when the
+    /// output holds it.
+    fn run_failure(&self, _stdout: &str, _stderr: &str) -> Option<String> {
+        None
+    }
+
     /// What a message says about the contract it belongs to.
     fn classify(&self, _message: &CompilerMessage) -> Finding {
         Finding::Other
@@ -139,6 +146,12 @@ pub(crate) trait Backend {
 
     /// A port method's generated names in this language (Rust `prepare_pay`, `commit_pay`).
     fn method_names(&self, _method: &PortMethod) -> Vec<String> {
+        Vec::new()
+    }
+
+    /// An entry point's generated names (#335), by its PascalCase name (Rust
+    /// `run_create_charge`).
+    fn entry_names(&self, _name: &str) -> Vec<String> {
         Vec::new()
     }
 
@@ -164,7 +177,8 @@ fn build(backend: &dyn Backend, t: &Target<'_>) -> Option<Result<Vec<CodeDiagnos
 }
 
 /// `run`: the run command (rdra.toml's, else the backend's) in the root; a failure is one
-/// diagnostic with the output's last line. `None` when there is no command.
+/// diagnostic with the harness's report ([`Backend::run_failure`]), else the output's last
+/// line. `None` when there is no command.
 fn run_step(backend: &dyn Backend, t: &Target<'_>) -> Option<Result<Vec<CodeDiagnostic>>> {
     let command = t.target.run.clone().or_else(|| backend.run_command(t))?;
     Some((|| {
@@ -172,18 +186,20 @@ fn run_step(backend: &dyn Backend, t: &Target<'_>) -> Option<Result<Vec<CodeDiag
         if ok {
             return Ok(Vec::new());
         }
-        let last = format!("{stdout}\n{stderr}")
-            .lines()
-            .rev()
-            .find(|l| !l.trim().is_empty())
-            .unwrap_or_default()
-            .trim()
-            .to_string();
+        let why = backend.run_failure(&stdout, &stderr).unwrap_or_else(|| {
+            format!("{stdout}\n{stderr}")
+                .lines()
+                .rev()
+                .find(|l| !l.trim().is_empty())
+                .unwrap_or_default()
+                .trim()
+                .to_string()
+        });
         Ok(vec![CodeDiagnostic {
             name: "CodeConformance".to_string(),
-            message: "the service does not conform to the model's traces".to_string(),
+            message: format!("the service does not conform to the model's traces: {why}"),
             model: None,
-            code: Some(format!("{}  {last}", command.join(" "))),
+            code: Some(command.join(" ")),
             fix: None,
             warning: false,
         }])
@@ -243,17 +259,37 @@ fn compile(
     };
     let index = port.map_or_else(ContractIndex::default, |p| {
         ContractIndex::new(p, |m| backend.method_names(m))
+            .with_entries(p, |e| backend.entry_names(&e.name))
     });
-    let contracts = port.map_or(&[][..], |p| p.contracts.as_slice());
+    // The sites are relative to rdra.toml, as the generated text has them; the diagnostics
+    // show them as the other paths of the check are shown.
+    let contracts: Vec<ContractDecl> = port
+        .map(|p| p.contracts.clone())
+        .unwrap_or_default()
+        .into_iter()
+        .map(|mut c| {
+            c.site = c.site.map(|s| rebase_site(t, &s));
+            c
+        })
+        .collect();
     let mapping = Mapping {
         probe_file,
         probe,
         index: &index,
-        contracts,
+        contracts: &contracts,
         service: t.target.service.as_deref().unwrap_or("the service"),
     };
     eprint!("{stderr}");
     Ok(map_messages(&messages, &mapping, backend))
+}
+
+/// A site `path:line:col` relative to rdra.toml, as the check shows paths.
+fn rebase_site(t: &Target<'_>, site: &str) -> String {
+    let mut parts = site.rsplitn(3, ':');
+    let (Some(col), Some(line), Some(path)) = (parts.next(), parts.next(), parts.next()) else {
+        return site.to_string();
+    };
+    format!("{}:{line}:{col}", shown(&t.path(Path::new(path))))
 }
 
 /// The generated files beyond the code and the traces of one `[code.<lang>]` table, for
@@ -282,8 +318,11 @@ type Step = fn(&dyn Backend, &Target<'_>) -> Option<Result<Vec<CodeDiagnostic>>>
 struct FreshOnly;
 impl Backend for FreshOnly {}
 
-fn backend(_name: &str) -> Box<dyn Backend> {
-    Box::new(FreshOnly)
+fn backend(name: &str) -> Box<dyn Backend> {
+    match name {
+        "rust" => Box::new(rust::Rust),
+        _ => Box::new(FreshOnly),
+    }
 }
 
 /// Checks the code `manifest`'s `[code]` names at `level`; prints the findings on stderr and

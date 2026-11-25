@@ -524,3 +524,30 @@ mirrors them instead of inventing its own:
   too, it is an error naming both claimants. `build_for(model, refine, port, Option<Lang>,
   site)` also claims `reserved_names(lang)` first. Rust derives none: every name it declares
   is an IR field.
+
+**P2 and P4, Rust.**
+
+- The probe is `[code.rust] probe`, under the service crate's `tests/`, so cargo builds it as a
+  test target with no `mod` line. Each use case is one line,
+  `const _: fn() = || { fn uc<T: svc::domain::ShipUseCase>() {} uc::<Service>(); }; // usecase Ship`.
+  With `new` and `traces`, the probe also holds `#[test] fn rdra_conformance`, which calls
+  `conform` on the traces the crate includes by `CARGO_MANIFEST_DIR`. That makes P4 a
+  `cargo test --test <probe> -- rdra_conformance`.
+- A service that implements `ConformancePort` in its library fails `cargo check` at that impl
+  before the probe compiles (E0277 on the supertrait). The message names the contract, so it
+  maps by the contract's name. Messages on probe lines are taken first; one per use case and
+  kind is kept.
+- Sites in the IR are relative to rdra.toml. The diagnostics show them relative to the
+  working directory, as the check's other paths are.
+- Entry points (#335): an action with no printed function adds an `EntryDecl { action, name,
+  rows }` to its use case's contract. The rows are the ids of the action's params. Rust prints
+  `fn run_<action>(&mut self, <rows>) -> Result<(), <UseCase>Error>`, and the use case gets
+  an error type with only `NotEnabled`. On clinic-ops these are `CheckInPatient_2`,
+  `ApplySelectedTreatmentFee`, `CreateCharge` and `RegisterPerformedProcedure`.
+- Tests:
+  - `codegen_code_build.rs` plants three omissions in the conformance service crate (a use
+    case not implemented, a method missing, an argument of another type). Each gives its named
+    diagnostic and no `CodeUnmapped`. The four harness faults fail `--code=run`.
+  - `codegen_builds.rs` `rust_probes_name_every_contract` compiles the probe of every sample
+    against a service that implements nothing. It expects E0277 on exactly the line map's
+    lines.

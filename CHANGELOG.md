@@ -170,6 +170,16 @@
 
 ### Added
 
+- **`check --code=build` and `--code=run` for Rust** (experimental, #363, P2 and P4). The
+  generated code has one contract trait per use case (`<UseCase>UseCase`), printed with or
+  without `--conformance`; `ConformancePort` is their composition with `seed` and `snapshot`.
+  An action with no printed function gets an entry point `run_<action>` in its use case's
+  contract (#335). `[code.rust]` `probe`, `service`, `module` and `new` bind the service:
+  `codegen --code` (or `codegen --probe`) writes the probe, a test file with one line per use
+  case. `build` runs `cargo check` on it and maps each rustc error to its use case and model
+  location (`CodeMissingUseCase_*`, `CodeIncomplete_*`, `CodeSignature_*`); `run` runs the
+  conformance test the probe holds (`CodeConformance`).
+
 - `check --code[=fresh|build|run]` (#363, experimental; [design](docs/design/code-check.md)):
   does the service code have what the model requires? `[code.rust]`, `[code.go]` and
   `[code.ts]` in `rdra.toml` name the generated files, `codegen <INPUTS> --code` writes them

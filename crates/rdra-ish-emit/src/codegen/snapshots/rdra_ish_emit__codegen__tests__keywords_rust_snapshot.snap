@@ -2337,7 +2337,7 @@ pub fn run_new(parent_function: Function, parent_func: Func, parent_mod: Mod, ma
 // ── Contracts: one per use case, which the service implements ──
 
 /// The use case Return: Return.
-/// Each action is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
+/// Each action with functions is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
 pub trait ReturnUseCase {
     /// Loads the rows of Return (the action Return) and runs it, writing nothing.
     fn prepare_return(&mut self, r#match: MatchId) -> ::core::result::Result<ReturnOutcome, ReturnError>;
@@ -2346,7 +2346,7 @@ pub trait ReturnUseCase {
 }
 
 /// The use case Delete: Delete.
-/// Each action is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
+/// Each action with functions is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
 pub trait DeleteUseCase {
     /// Loads the rows of Delete (the action Delete) and runs it, writing nothing.
     fn prepare_delete(&mut self, r#match: MatchId, switch: Switch) -> ::core::result::Result<DeleteOutcome, DeleteError>;
@@ -2355,7 +2355,7 @@ pub trait DeleteUseCase {
 }
 
 /// The use case Super: Super.
-/// Each action is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
+/// Each action with functions is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
 pub trait SuperUseCase {
     /// Loads the rows of Super (the action Super) and runs it, writing nothing.
     fn prepare_super(&mut self, r#match: MatchId) -> ::core::result::Result<SuperOutcome, SuperError>;
@@ -2364,7 +2364,7 @@ pub trait SuperUseCase {
 }
 
 /// The use case Crate: Crate.
-/// Each action is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
+/// Each action with functions is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
 pub trait CrateUseCase {
     /// Loads the rows of Crate (the action Crate) and runs it, writing nothing.
     fn prepare_crate(&mut self, r#match: MatchId) -> ::core::result::Result<CrateOutcome, CrateError>;
@@ -2373,7 +2373,7 @@ pub trait CrateUseCase {
 }
 
 /// The use case Default: Default.
-/// Each action is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
+/// Each action with functions is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
 pub trait DefaultUseCase {
     /// Loads the rows of Default (the action Default) and runs it, writing nothing.
     fn prepare_default(&mut self, r#match: MatchId) -> ::core::result::Result<DefaultOutcome, DefaultError>;
@@ -2382,7 +2382,7 @@ pub trait DefaultUseCase {
 }
 
 /// The use case Type: Type.
-/// Each action is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
+/// Each action with functions is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
 pub trait TypeUseCase {
     /// Loads the rows of Type (the action Type) and runs it, writing nothing.
     fn prepare_type(&mut self, func: FuncId) -> ::core::result::Result<TypeOutcome, TypeError>;
@@ -2391,7 +2391,7 @@ pub trait TypeUseCase {
 }
 
 /// The use case Class: Class.
-/// Each action is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
+/// Each action with functions is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
 pub trait ClassUseCase {
     /// Loads the rows of Class (the action Class) and runs it, writing nothing.
     fn prepare_class(&mut self, func: FuncId) -> ::core::result::Result<ClassOutcome, ClassError>;
@@ -2400,7 +2400,7 @@ pub trait ClassUseCase {
 }
 
 /// The use case New: New.
-/// Each action is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
+/// Each action with functions is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
 pub trait NewUseCase {
     /// Loads the rows of New (the action New) and runs it, writing nothing.
     #[allow(clippy::too_many_arguments)] // one argument per row and input of the use case
@@ -2410,7 +2410,7 @@ pub trait NewUseCase {
 }
 
 /// The use case Static: Static.
-/// Each action is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
+/// Each action with functions is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
 pub trait StaticUseCase {
     /// Loads the rows of Static (the action Static) and runs it, writing nothing.
     fn prepare_static(&mut self, function: FunctionId, function_default: ::std::string::String) -> ::core::result::Result<StaticResult, StaticError>;

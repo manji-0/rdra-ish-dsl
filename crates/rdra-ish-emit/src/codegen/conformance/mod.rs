@@ -20,8 +20,8 @@ use rdra_ish_core::SemanticModel;
 
 use super::actions::snake;
 use super::ir::{
-    ContractDecl, DomainModel, Field, FieldType, FnDecl, FnInput, OutKind, PortDecl, PortEntity,
-    PortEvent, PortMethod, PortRun, Scalar, Track,
+    ContractDecl, DomainModel, EntryDecl, Field, FieldType, FnDecl, FnInput, OutKind, PortDecl,
+    PortEntity, PortEvent, PortMethod, PortRun, Scalar, Track,
 };
 use super::{type_ident, CodegenError, Names};
 use eval::{column_var, enum_name, matching, Rows};
@@ -276,9 +276,79 @@ fn contracts(
                 .error_of(&m.usecase)
                 .map_or_else(String::new, |e| e.name.clone()),
             methods: vec![i],
+            entries: Vec::new(),
         });
     }
     Ok(out)
+}
+
+/// The entry points of the actions with no printed function (#335), added to their use
+/// cases' contracts: a contract of its own for a use case with none printed. An action whose
+/// rows have no id type gets none.
+pub(super) fn add_entries(
+    ts: &TransitionSystem,
+    domain: &mut DomainModel,
+    names: &mut Names,
+) -> Result<(), CodegenError> {
+    let Some(mut port) = domain.port.take() else {
+        return Ok(());
+    };
+    for skipped in &domain.skipped {
+        let Some(action) = ts.actions().iter().find(|a| a.name == skipped.action) else {
+            continue;
+        };
+        let mut rows = Vec::new();
+        for p in &action.params {
+            let entity = &ts.entity(p.entity).id;
+            let Some(id) = domain.ids.iter().find(|i| i.entity == *entity) else {
+                rows.clear();
+                break;
+            };
+            let base = snake(entity);
+            let mut name = base.clone();
+            let mut k = 2;
+            while rows.iter().any(|(n, _): &(String, String)| *n == name) {
+                name = format!("{base}_{k}");
+                k += 1;
+            }
+            rows.push((name, id.name.clone()));
+        }
+        if rows.is_empty() && !action.params.is_empty() {
+            continue;
+        }
+        let entry = EntryDecl {
+            action: action.name.clone(),
+            name: type_ident(&action.name),
+            rows,
+        };
+        if let Some(c) = port
+            .contracts
+            .iter_mut()
+            .find(|c| c.usecase == skipped.usecase)
+        {
+            c.entries.push(entry);
+            continue;
+        }
+        let decl = domain.usecases.iter().find(|u| u.id == skipped.usecase);
+        let pascal = type_ident(&skipped.usecase);
+        port.contracts.push(ContractDecl {
+            name: super::claim_first(
+                names,
+                [format!("{pascal}UseCase"), format!("{pascal}Contract")],
+                format!("the contract of {}", skipped.usecase),
+            )?,
+            usecase: skipped.usecase.clone(),
+            label: decl.map_or_else(String::new, |d| d.label.clone()),
+            site: decl.and_then(|d| d.site.clone()),
+            error: domain
+                .error_of(&skipped.usecase)
+                .map_or_else(String::new, |e| e.name.clone()),
+            methods: Vec::new(),
+            entries: vec![entry],
+        });
+    }
+    domain.port = Some(port);
+    Ok(())
 }
 
 fn field_id_type(field: &Field) -> String {

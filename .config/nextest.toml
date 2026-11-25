@@ -23,7 +23,7 @@ not (
   | (binary_id(rdra-ish-cli::codegen_differential) & (
         test(=printed_code_agrees_on_the_domain_samples)
       | test(=printed_code_agrees_on_the_small_samples)))
-  | (binary_id(rdra-ish-cli::codegen_builds) & (test(=go_builds) | test(=rust_builds) | test(=typescript_builds)))
+  | (binary_id(rdra-ish-cli::codegen_builds) & (test(=go_builds) | test(=rust_builds) | test(=typescript_builds) | test(=rust_probes_name_every_contract)))
   | (binary_id(rdra-ish-cli::codegen_behaviour) & (test(=go_behaves) | test(=go_states_are_not_built_outside)))
   | (binary_id(rdra-ish-cli::codegen_conformance) & test(=go_harness_tells_faults_apart))
   | (binary_id(rdra-ish-cli::memory_cli) & (

@@ -226,6 +226,7 @@ pub fn run() -> Result<()> {
             lang,
             format,
             code,
+            probe,
             out,
             package,
             allow_failing,
@@ -244,6 +245,7 @@ pub fn run() -> Result<()> {
                 .map(|path| (path, conformance_states)),
             check_file: check.as_deref(),
             code,
+            probe,
         })?,
 
         Commands::Files { inputs } => {

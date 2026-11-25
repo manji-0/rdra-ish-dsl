@@ -84,6 +84,7 @@ pub(crate) struct CodegenArgs<'a> {
     pub conformance: Option<(&'a Path, usize)>,
     pub check_file: Option<&'a Path>,
     pub code: bool,
+    pub probe: bool,
 }
 
 pub(crate) fn lang_of(lang: CodegenLang) -> Lang {
@@ -96,8 +97,8 @@ pub(crate) fn lang_of(lang: CodegenLang) -> Lang {
 
 pub fn run_codegen(args: CodegenArgs<'_>) -> Result<()> {
     let loaded = Loaded::load(args.inputs)?;
-    if args.code {
-        return write_configured(&loaded, args.inputs);
+    if args.code || args.probe {
+        return write_configured(&loaded, args.inputs, args.probe);
     }
     if args.json && (args.conformance.is_some() || args.check_file.is_some()) {
         bail!("--format json takes neither --conformance nor --check");
@@ -322,16 +323,19 @@ pub(crate) fn configured_request(
 }
 
 /// `codegen --code`: every file the `[code]` tables name.
-fn write_configured(loaded: &Loaded, inputs: &[PathBuf]) -> Result<()> {
+/// Writes the files `[code]` names; only the probes with `probe_only`.
+fn write_configured(loaded: &Loaded, inputs: &[PathBuf], probe_only: bool) -> Result<()> {
     let manifest = code_manifest(loaded.manifest.as_ref())?;
     let code = manifest.code.as_ref().expect("checked");
     for (name, target) in code.targets() {
         let request = configured_request(manifest, name, target, inputs);
         let generated = generate(loaded, &request)?;
         let dir = manifest.dir();
-        write_file(&dir.join(&target.domain), &generated.code)?;
-        if let (Some(path), Some((text, stats))) = (&target.traces, &generated.traces) {
-            write_traces(&dir.join(path), text, stats)?;
+        if !probe_only {
+            write_file(&dir.join(&target.domain), &generated.code)?;
+            if let (Some(path), Some((text, stats))) = (&target.traces, &generated.traces) {
+                write_traces(&dir.join(path), text, stats)?;
+            }
         }
         for (path, text) in
             crate::code_check::extra_files(name, target, manifest, request, generated)
