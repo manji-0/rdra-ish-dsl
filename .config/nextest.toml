@@ -31,7 +31,8 @@ not (
       | test(=the_generators_finish_a_cone_check_finishes)
       | test(=cones_side_by_side_stop_where_they_stop_one_at_a_time)
       | test(=verify_sizes_and_queues_tlc_runs_to_fit_the_memory)
-      | test(=verify_leaves_a_cone_past_its_bfs_share_undecided)))
+      | test(=verify_leaves_a_cone_past_its_bfs_share_undecided)
+      | test(=a_stopped_entity_cone_leaves_its_room_on_any_number_of_threads)))
   | (binary_id(rdra-ish-cli::guards_cli) & test(=oidc_auth_readme_rules_table_is_what_the_report_finds))
   | (binary_id(rdra-ish-cli::check_cli) & test(=check_defaults_to_a_pattern_cap_that_follows_the_instance_count_and_no_state_cap))
   | (binary_id(rdra-ish-cli::verify_cli) & (
