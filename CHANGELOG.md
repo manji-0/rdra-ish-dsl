@@ -499,7 +499,9 @@
   with the class-data-sharing archive recorded for the new pair; the devShell's `java` is
   JDK 25 (#309). nixpkgs packages TLC 1.7.4 only, so the flake takes the `tla2tools.jar` of
   the v1.8.0 release, a pre-release that upstream rebuilds under the same tag, pinned by
-  hash to the build of 2026-11-19 (`TLC2 Version 2026.11.19.180144`, rev bc1b506). JDK 25
+  hash to the build of 2026-11-19 (`TLC2 Version 2026.11.19.180144`, rev bc1b506) and
+  downloaded first from this repository's release `tlc-1.8.0-bc1b506`, which keeps that
+  jar with upstream's MIT license text. JDK 25
   is the newest JDK nixpkgs packages. The run that #314 found TLC 1.7.4 failing on JDK 21
   and 25 runs to its end on TLC 1.8.0 on both (#314).
   - `verify` and the tests read TLC 1.8.0's output as they read 1.7.x's: a temporal

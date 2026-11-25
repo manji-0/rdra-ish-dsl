@@ -37,10 +37,12 @@
       # of the classes TLC loads (#309). nixpkgs still packages TLC 1.7.4, so the package
       # takes the jar of the v1.8.0 release instead, pinned by its hash.
       #
-      # TLC 1.8.0 is a pre-release that upstream rebuilds from master under the same tag:
-      # this hash is the build of 2026-11-19 (rev bc1b506, `TLC2 Version 2026.11.19.180144`).
-      # When upstream replaces the jar, the download fails on the hash instead of changing
-      # TLC; to move on, update the hash and check the new build.
+      # TLC 1.8.0 is a pre-release that upstream rebuilds from master under the same tag.
+      # This hash is the build of 2026-11-19 (rev bc1b506, `TLC2 Version 2026.11.19.180144`),
+      # which this repository's release `tlc-1.8.0-bc1b506` keeps with upstream's MIT license
+      # text, so the download does not depend on upstream keeping it. Upstream's URL comes
+      # second; once it serves another build, Nix rejects that build on the hash. To move to
+      # a newer build, publish it the same way and change the URLs and the hash together.
       #
       # TLC 1.7.x cannot run on JDK 21 or later: its BufferedRandomAccessFile.read(byte[], int,
       # int) breaks when it reads back a trace record still in its write buffer, which
@@ -58,7 +60,10 @@
           tlaplus = (pkgs.tlaplus.override { jre8 = jdk; }).overrideAttrs {
             version = "1.8.0";
             src = pkgs.fetchurl {
-              url = "https://github.com/tlaplus/tlaplus/releases/download/v1.8.0/tla2tools.jar";
+              urls = [
+                "https://github.com/manji-0/rdra-ish-dsl/releases/download/tlc-1.8.0-bc1b506/tla2tools.jar"
+                "https://github.com/tlaplus/tlaplus/releases/download/v1.8.0/tla2tools.jar"
+              ];
               hash = "sha256-/f/vJH9WPvbtv9RJWNKoLbeedWTgfLZzJi2JY1P6ZxM=";
             };
           };

@@ -1769,8 +1769,10 @@ Only `--with-tlc` needs TLC. `verify` looks for it in this order: `--tlc-jar`,
   `--tlc-jar <path>` or set `RDRA_TLC_JAR=<path>`. TLC 1.8.0 needs JDK 11 or later.
 
 `verify` reads the output of TLC 1.7.x and of TLC 1.8.0. TLC 1.8.0 is a pre-release that
-upstream rebuilds under the same tag; the flake pins the build of 2026-11-19 (`TLC2 Version
-2026.11.19.180144`) by its hash.
+upstream rebuilds under the same tag. The flake pins the build of 2026-11-19 (`TLC2 Version
+2026.11.19.180144`) by its hash and downloads it from this repository's release
+[`tlc-1.8.0-bc1b506`](https://github.com/manji-0/rdra-ish-dsl/releases/tag/tlc-1.8.0-bc1b506)
+first, so a rebuild upstream does not break it.
 
 Use TLC 1.8.0, or run TLC 1.7.x on JDK 17 or earlier. On JDK 21 and later, TLC 1.7.x's
 own buffered file reads a trace record back wrongly once the JDK's
