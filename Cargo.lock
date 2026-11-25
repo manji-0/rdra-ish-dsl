@@ -943,7 +943,6 @@ dependencies = [
  "chumsky",
  "insta",
  "logos",
- "miette",
  "unicode-width 0.2.2",
 ]
 

@@ -64,14 +64,14 @@ impl std::str::FromStr for Symmetry {
 #[cfg_attr(not(any(test, feature = "shadow")), allow(unused_variables))]
 pub(crate) fn dropped(name: &str) -> bool {
     #[cfg(test)]
-    if witnesses::DROPPED.with(|d| d.borrow().as_deref() == Some(name)) {
-        return true;
-    }
+    let by_test = witnesses::DROPPED.with(|d| d.borrow().as_deref() == Some(name));
+    #[cfg(not(test))]
+    let by_test = false;
     #[cfg(feature = "shadow")]
-    if std::env::var("RDRA_ISH_DROP_RULE").is_ok_and(|v| v == name) {
-        return true;
-    }
-    false
+    let by_env = std::env::var("RDRA_ISH_DROP_RULE").is_ok_and(|v| v == name);
+    #[cfg(not(feature = "shadow"))]
+    let by_env = false;
+    by_test || by_env
 }
 
 /// Under the `shadow` feature, holds the canonical form `out` of `s` to the twin that

@@ -10,7 +10,6 @@ description.workspace = true
 [dependencies]
 logos   = { workspace = true }
 chumsky = { workspace = true }
-miette  = { workspace = true }
 unicode-width = { workspace = true }
 
 [dev-dependencies]
