@@ -377,16 +377,21 @@ impl<'t> Bfs<'t> {
             self.check_after(from, act, params, s2);
             // Under symmetry the run stores the successor's canonical form; a move into the
             // class of its own source is an orbit self-edge, a real step stored as a loop.
+            // An annotated run keeps the permutation beside the edge pushed below; a plain run
+            // reads nothing more per move (`Bfs::perms`). A run a cap stops here keeps one more
+            // permutation than edges, which `bfs_on` drops.
             let (key, found) = match self.group {
-                Some(_) => moves.canonical(i),
+                Some(_) => {
+                    if let Some(perms) = &mut self.perms {
+                        perms.push(moves.perm(i));
+                    }
+                    moves.canonical(i)
+                }
                 None => (&s2.0[..], Canonical::PLAIN),
             };
             let key = StateSlice::new(key);
             if self.group.is_some() && *key == *s {
                 let edge = u32::try_from(self.steps.moves()).expect("edges fit in u32");
-                if let Some(perms) = &mut self.perms {
-                    perms.push(moves.perm(i));
-                }
                 self.push(from, from, act, binding, &s);
                 self.orbit_self.push(edge);
                 // The step's after-asserts were read on its concrete successor above.
@@ -407,9 +412,6 @@ impl<'t> Bfs<'t> {
             };
             // The stored target: under symmetry the canonical form, which an after-assert
             // step's rows read as they read the concrete one.
-            if let Some(perms) = &mut self.perms {
-                perms.push(moves.perm(i));
-            }
             self.push(from, to, act, binding, key);
             // After the edge, so the trace of a violation at `to` reaches it.
             if self.stop_if_all_failed() {

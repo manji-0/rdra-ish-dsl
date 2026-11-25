@@ -67,6 +67,12 @@ impl EdgePerms {
         self.of.push(id);
     }
 
+    /// Keeps the first `edges` permutations: those of the edges a run that a cap stopped
+    /// recorded.
+    pub(crate) fn truncate(&mut self, edges: usize) {
+        self.of.truncate(edges);
+    }
+
     /// The next edge is a concrete self-loop.
     pub(crate) fn push_identity(&mut self) {
         self.of.push(0);

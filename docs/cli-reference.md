@@ -708,7 +708,8 @@ Cone_Inv_Encounter_2 [Inv_Encounter_2]: ok (about 820M states)
   an edge moves the binding, and each fair instance, by its permutation. Its counterexample
   repeats the stored loop until the concrete states close it, and replays and passes the
   fairness check before it prints. On a reduced cone whose run up to symmetry finds a
-  counterexample, the property is decided as under `never`.
+  counterexample, the property is decided as under `never`. A property whose reduced cone
+  is a safety cone's system stays plain, so that one plain run decides both.
 - **Shared runs.** A cone that runs up to symmetry stops once every check has failed, and its
   run decides nothing for the other passes, which have no plain graph to read off it.
 - **Branch cap.** The canonical form branches on rows it cannot tell apart that other rows

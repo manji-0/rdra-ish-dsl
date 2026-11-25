@@ -141,8 +141,9 @@
   `--instance-count 3 --memory 8GiB` patent-ops' `GrantEnds`, whose plain run stopped at
   40.0M states, takes 7,346,935 orbits for about 87M states and is decided (`ok`). On a
   reduced cone whose run up to symmetry finds a counterexample, the property is decided as
-  under `never`, which must find one too. Without the option nothing changes. The `shadow`
-  build holds the pairs to a plain run as `orbit_liveness`.
+  under `never`, which must find one too. A property whose reduced cone is a safety cone's
+  system stays plain, so one plain run decides both. Without the option nothing changes. The
+  `shadow` build holds the pairs to a plain run as `orbit_liveness`.
 
 - `verify --symmetry` also covers a reduced safety cone (#212, phase 3): under `always` it
   runs up to `G_T`, the

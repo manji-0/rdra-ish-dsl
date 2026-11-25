@@ -690,6 +690,9 @@ impl TransitionSystem {
         if let Some(charge) = &mut bfs.charge {
             charge.shrink_to(kept);
         }
+        if let Some(perms) = &mut bfs.perms {
+            perms.truncate(bfs.steps.moves() as usize);
+        }
         let Bfs {
             states,
             complete,

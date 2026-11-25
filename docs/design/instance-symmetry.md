@@ -616,15 +616,20 @@ orbits; at n=3 under 8 GiB `never` stops at 40.0M and the run up to `G_T` comple
   permutation takes its move to its target, and every plain (state, binding) fails the goal
   and can avoid it exactly when its pair does.
 - **Result.** `GrantEnds` is decided at n=3 under 8 GiB: `ok`.
-- **Cost under `always`, open.** On the 43 pairs `never` prints what `main` prints, and
-  `always` changes five lines' counts to `about <m> states` and no verdict. Instructions at
-  `RDRA_JOBS=1`: insurance-claim-ops 319.2G to 370.8G (+16.2%), patent-ops +1.5%,
-  food-permit-ops +0.8%, the others under 0.2%. insurance-claim-ops' `ClaimEventuallyDecided`
-  shares its system with `Cone_Forbidden_Claim_4`, which ran plainly to give the property
-  its plain answer (`Shared::up_to_symmetry`); now both run up to symmetry, apart, and the
-  group stores about as many orbits as the 633,787 plain states. That is above step 1's 2%
-  exit, so whether to accept it or keep such a shared system plain is the owner's choice
-  ([Order](#order)).
+- **A system a safety cone shares stays plain.** An `eventually` or `leads_to` whose
+  reduced cone is a safety cone's system does not run up to symmetry (`Shared::new`), so one
+  plain run decides both, as before this unit; which ones is read off the jobs before any
+  run. Without it, insurance-claim-ops' `ClaimEventuallyDecided` and
+  `Cone_Forbidden_Claim_4` ran up to symmetry apart, for about as many orbits as the 633,787
+  plain states, and the pair cost 16.2% more under `always` (319.20G to 370.77G instructions
+  at `RDRA_JOBS=1`). On the samples it keeps `ClaimEventuallyDecided` alone plain;
+  `GrantEnds` shares no system, at n=2 or n=3, and stays on the orbit path.
+- **Cost.** On the 43 pairs `never` prints what `main` prints, and `always` changes four
+  pairs' lines to `about <m> states`, no verdict. Instructions at `RDRA_JOBS=1`, against
+  `main`: `never` 627.70G to 629.98G (+0.36%; at most +0.61%, clinic-ops), `always` 630.20G
+  to 633.04G (+0.45%). Against this build's own `never`, `always` is +0.49% in all,
+  insurance-claim-ops +0.86% and patent-ops +0.88%, which run cones up to symmetry, and
+  clinic-ops −0.13% and oidc-auth −0.04%, which run none: within step 1's exit.
 
 **Phase 5: always by default.** Replaced on 2026-11-25: the owner chose `always`, made
 invisible, over a `retry` default. [Always by default](#always-by-default) holds the plan and
