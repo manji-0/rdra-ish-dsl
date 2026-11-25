@@ -261,7 +261,10 @@ fn go_builds() {
     if !available("go") {
         return;
     }
-    for sample in models() {
+    let mut models = models();
+    // Model types named like the names the Go printer derives: each of those takes a `_`.
+    models.push("crates/rdra-ish-cli/tests/fixtures/codegen/go_names.rdra".to_string());
+    for sample in models {
         let dir = scratch("go", &sample);
         let path = generate(&sample, "go", &dir, "domain.go");
         std::fs::write(dir.join("go.mod"), "module example.com/domain\n\ngo 1.21\n").unwrap();

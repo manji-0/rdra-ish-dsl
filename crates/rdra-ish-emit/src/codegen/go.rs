@@ -272,9 +272,114 @@ fn state_field(field: &Field) -> String {
     }
 }
 
+// ── Derived names ────────────────────────────────────────────────────────────
+
+/// The names the Go printer derives from the IR's (`super::derived_names`): each is claimed
+/// after every IR name, and read back with [`derived`], `_` appended on a collision.
+pub(super) fn derived_names(domain: &DomainModel) -> Vec<super::DerivedName> {
+    let mut out = Vec::new();
+    let mut push =
+        |key: String, name: String, by: String| out.push(super::DerivedName { key, name, by });
+    for sum in &domain.sums {
+        push(
+            format!("go:visitor:{}", sum.name),
+            format!("{}Visitor", sum.name),
+            format!("the Go visitor of {}", sum.name),
+        );
+        push(
+            format!("go:match:{}", sum.name),
+            format!("Match{}", sum.name),
+            format!("the Go match function of {}", sum.name),
+        );
+        for v in &sum.variants {
+            push(
+                format!("go:kindconst:{}:{}", sum.name, v.value.ident),
+                format!("{}{}", sum.kind, v.value.ident),
+                format!("the Go kind constant of {}", v.name),
+            );
+            push(
+                format!("go:state:{}:{}", sum.name, v.value.ident),
+                format!("{}State", lower_first(&v.name)),
+                format!("the Go struct of the state {}", v.name),
+            );
+        }
+    }
+    let mut seen: Vec<&str> = Vec::new();
+    for f in &domain.fns {
+        if seen.contains(&f.usecase.as_str()) {
+            continue;
+        }
+        seen.push(&f.usecase);
+        let name = error_name(domain, &f.usecase);
+        push(
+            format!("go:errorkind:{}", f.usecase),
+            format!("{name}Kind"),
+            format!("the Go kind of {name}"),
+        );
+        for case in error_case_names(domain, &f.usecase) {
+            push(
+                format!("go:errorcase:{}:{case}", f.usecase),
+                format!("{name}{case}"),
+                format!("the Go case {case} of {name}"),
+            );
+        }
+    }
+    out
+}
+
+/// The name claimed under `key`, else `fallback` (a domain built for no language).
+fn derived(domain: &DomainModel, key: &str, fallback: impl FnOnce() -> String) -> String {
+    domain.derived(key).map_or_else(fallback, str::to_string)
+}
+
+/// The cases of a use case's error in Go, in order.
+fn error_case_names(domain: &DomainModel, usecase: &str) -> Vec<&'static str> {
+    let (rejects, invalid) = error_cases(domain, usecase);
+    let mut cases = vec!["NotEnabled"];
+    if rejects {
+        cases.push("Rejected");
+    }
+    if invalid {
+        cases.push("InvalidArgument");
+    }
+    cases
+}
+
+/// The type of a use case error's `Kind`.
+fn error_kind(domain: &DomainModel, usecase: &str) -> String {
+    derived(domain, &format!("go:errorkind:{usecase}"), || {
+        format!("{}Kind", error_name(domain, usecase))
+    })
+}
+
+/// The constant of a use case error's case.
+fn error_case(domain: &DomainModel, usecase: &str, case: &str) -> String {
+    derived(domain, &format!("go:errorcase:{usecase}:{case}"), || {
+        format!("{}{case}", error_name(domain, usecase))
+    })
+}
+
+/// The kind constant of the state `v` of `sum`.
+fn kind_const(domain: &DomainModel, sum: &SumDecl, v: &VariantDecl) -> String {
+    derived(
+        domain,
+        &format!("go:kindconst:{}:{}", sum.name, v.value.ident),
+        || format!("{}{}", sum.kind, v.value.ident),
+    )
+}
+
 /// The unexported struct that implements the state interface `variant`: the name has no
 /// spelling a local name of the printed functions takes.
-fn concrete(variant: &str) -> String {
+fn concrete(domain: &DomainModel, variant: &str) -> String {
+    for sum in &domain.sums {
+        if let Some(v) = sum.variants.iter().find(|v| v.name == variant) {
+            return derived(
+                domain,
+                &format!("go:state:{}:{}", sum.name, v.value.ident),
+                || format!("{}State", lower_first(variant)),
+            );
+        }
+    }
     format!("{}State", lower_first(variant))
 }
 
@@ -515,7 +620,7 @@ fn print_sum(domain: &DomainModel, sum: &SumDecl, out: &mut String) {
         .iter()
         .map(|v| {
             Line::Cells(vec![
-                format!("{kind}{}", v.value.ident),
+                kind_const(domain, sum, v),
                 kind.clone(),
                 format!("= {}", string_literal(&v.value.ident)),
             ])
@@ -585,7 +690,7 @@ fn print_sum(domain: &DomainModel, sum: &SumDecl, out: &mut String) {
             variant.name
         ));
 
-        let st = concrete(&variant.name);
+        let st = concrete(domain, &variant.name);
         let mut lines = Vec::new();
         for field in &variant.fields {
             field_lines(
@@ -614,42 +719,49 @@ fn print_sum(domain: &DomainModel, sum: &SumDecl, out: &mut String) {
             ));
         }
         out.push_str(&format!(
-            "func ({st}) Kind() {kind} {{\n\treturn {kind}{}\n}}\n\n",
-            variant.value.ident
+            "func ({st}) Kind() {kind} {{\n\treturn {}\n}}\n\n",
+            kind_const(domain, sum, variant)
         ));
         out.push_str(&format!("func ({st}) {marker}() {{}}\n\n"));
         out.push_str(&format!("func ({st}) {own}() {{}}\n\n"));
     }
-    print_visitor(sum, out);
+    print_visitor(domain, sum, out);
 }
 
 /// `<Entity>Visitor`, one method per state, and `Match<Entity>`, which calls the method of a
 /// state's own: a state the model gains is a method an implementation lacks, so the code that
 /// matches states stops compiling until it handles it (P7 of docs/design/code-check.md).
-fn print_visitor(sum: &SumDecl, out: &mut String) {
-    let visitor = format!("{}Visitor", sum.name);
+fn print_visitor(domain: &DomainModel, sum: &SumDecl, out: &mut String) {
+    let visitor = derived(domain, &format!("go:visitor:{}", sum.name), || {
+        format!("{}Visitor", sum.name)
+    });
+    let matcher = derived(domain, &format!("go:match:{}", sum.name), || {
+        format!("Match{}", sum.name)
+    });
     out.push_str(&format!(
-        "// {visitor} has one method per state of {0}, which Match{0} calls. When the model gains a\n// state, {visitor} gains its method, and an implementation that lacks it no longer compiles\n// where Match{0} takes it: Go's type switch says nothing of a state it misses.\n",
+        "// {visitor} has one method per state of {0}, which {matcher} calls. When the model gains a\n// state, {visitor} gains its method, and an implementation that lacks it no longer compiles\n// where {matcher} takes it: Go's type switch says nothing of a state it misses.\n",
         sum.name
     ));
     let mut methods = String::new();
     for v in &sum.variants {
         methods.push_str(&format!(
-            "\t// {0} is called on a state of kind {1}{0}.\n\t{0}({2}) R\n",
-            v.value.ident, sum.kind, v.name
+            "\t// {0} is called on a state of kind {1}.\n\t{0}({2}) R\n",
+            v.value.ident,
+            kind_const(domain, sum, v),
+            v.name
         ));
     }
     out.push_str(&format!(
         "type {visitor}[R any] interface {{\n{methods}}}\n\n"
     ));
     out.push_str(&format!(
-        "// Match{0} calls the method of v for the state of state and returns what it returns. A nil\n// state, or a value of another type that embeds a state, is an *InvalidArgument.\nfunc Match{0}[R any](state {0}, v {visitor}[R]) (R, error) {{\n\tswitch s := state.(type) {{\n",
+        "// {matcher} calls the method of v for the state of state and returns what it returns. A nil\n// state, or a value of another type that embeds a state, is an *InvalidArgument.\nfunc {matcher}[R any](state {0}, v {visitor}[R]) (R, error) {{\n\tswitch s := state.(type) {{\n",
         sum.name
     ));
     for v in &sum.variants {
         out.push_str(&format!(
             "\tcase {}:\n\t\treturn v.{}(s), nil\n",
-            concrete(&v.name),
+            concrete(domain, &v.name),
             v.value.ident
         ));
     }
@@ -697,8 +809,12 @@ fn error_name(domain: &DomainModel, usecase: &str) -> String {
 }
 
 /// `&<UseCase>Error{Kind: .., Err: detail}`.
-fn use_case_error(name: &str, case: &str, detail: &str) -> String {
-    format!("&{name}{{Kind: {name}{case}, Err: {detail}}}")
+fn use_case_error(domain: &DomainModel, usecase: &str, case: &str, detail: &str) -> String {
+    format!(
+        "&{}{{Kind: {}, Err: {detail}}}",
+        error_name(domain, usecase),
+        error_case(domain, usecase, case)
+    )
 }
 
 /// The detail types every `<UseCase>Error` shares, and `Match<Entity>` returns.
@@ -775,35 +891,31 @@ fn print_errors(domain: &DomainModel, out: &mut String) {
         }
         seen.push(&f.usecase);
         let name = error_name(domain, &f.usecase);
-        let (rejects, invalid) = error_cases(domain, &f.usecase);
-        let mut cases = vec![(
-            "NotEnabled",
-            format!(
-                "the rows are in states {} does not run from (only its dispatcher says so), or a store's commit found a row changed.",
-                f.usecase
-            ),
-        )];
-        if rejects {
-            cases.push((
-                "Rejected",
-                "a condition applied to the use case does not hold.".to_string(),
-            ));
-        }
-        if invalid {
-            cases.push((
-                "InvalidArgument",
-                "the arguments break what the verified model keeps.".to_string(),
-            ));
-        }
+        let kind = error_kind(domain, &f.usecase);
+        let cases: Vec<(&str, String)> = error_case_names(domain, &f.usecase)
+            .into_iter()
+            .map(|case| {
+                let why = match case {
+                    "NotEnabled" => format!(
+                        "the rows are in states {} does not run from (only its dispatcher says so), or a store's commit found a row changed.",
+                        f.usecase
+                    ),
+                    "Rejected" => "a condition applied to the use case does not hold.".to_string(),
+                    _ => "the arguments break what the verified model keeps.".to_string(),
+                };
+                (case, why)
+            })
+            .collect();
         out.push_str(&format!(
-            "// {name}Kind is the case of a {name}.\ntype {name}Kind string\n\n"
+            "// {kind} is the case of a {name}.\ntype {kind} string\n\n"
         ));
         let mut consts = Vec::new();
         for (case, why) in &cases {
-            consts.push(Line::Comment(format!("{name}{case}: {why}")));
+            let constant = error_case(domain, &f.usecase, case);
+            consts.push(Line::Comment(format!("{constant}: {why}")));
             consts.push(Line::Cells(vec![
-                format!("{name}{case}"),
-                format!("{name}Kind"),
+                constant,
+                kind.clone(),
                 format!("= {}", string_literal(case)),
             ]));
         }
@@ -821,7 +933,7 @@ fn print_errors(domain: &DomainModel, out: &mut String) {
         out.push_str(&struct_decl(
             &name,
             &[
-                Line::Cells(vec!["Kind".into(), format!("{name}Kind")]),
+                Line::Cells(vec!["Kind".into(), kind.clone()]),
                 Line::Cells(vec!["Err".into(), "error".into()]),
             ],
         ));
@@ -880,7 +992,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             format!(
                 "{ind}\treturn {}{{}}, {}\n",
                 f.result,
-                use_case_error(&err, case, &detail)
+                use_case_error(domain, &f.usecase, case, &detail)
             )
         };
         let invalid = |reason: &str, ind: &str| {
@@ -985,7 +1097,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                 out.push_str(&format!(
                     "\tif _, ok := {}.({}); !ok {{\n{}\t}}\n",
                     local(&r.name),
-                    concrete(&r.ty),
+                    concrete(domain, &r.ty),
                     invalid(
                         &format!("{} is no {} this package made", r.name, r.ty),
                         "\t"
@@ -1163,7 +1275,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                         inits.push(format!("{key}: {v}"));
                     }
                     let built = if is_variant(domain, ty) {
-                        concrete(ty)
+                        concrete(domain, ty)
                     } else {
                         ty.clone()
                     };
@@ -1351,7 +1463,11 @@ pub(super) fn print_validators(domain: &DomainModel, out: &mut String) {
                 format!("row.{}", field.pascal)
             }
         };
-        let receiver = if state { concrete(&v.ty) } else { v.ty.clone() };
+        let receiver = if state {
+            concrete(domain, &v.ty)
+        } else {
+            v.ty.clone()
+        };
         out.push_str(
             "// RuleViolations returns the rules row breaks, by the names `check` reports: empty when it keeps them all.\n",
         );
@@ -1501,7 +1617,7 @@ pub(super) fn print_rows(domain: &DomainModel, out: &mut String) {
             }
             out.push_str(&format!(
                 "\t\treturn {}{{{}}}, nil\n",
-                concrete(&v.name),
+                concrete(domain, &v.name),
                 inits.join(", ")
             ));
         }
@@ -1533,7 +1649,7 @@ pub(super) fn print_rows(domain: &DomainModel, out: &mut String) {
             }
             out.push_str(&format!(
                 "func (s {}) row() {} {{\n\treturn {}{{{}}}\n}}\n\n",
-                concrete(&v.name),
+                concrete(domain, &v.name),
                 sum.row,
                 sum.row,
                 inits.join(", ")
@@ -1592,7 +1708,8 @@ pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
                     local(n),
                     d.outcome,
                     use_case_error(
-                        &err,
+                        domain,
+                        &d.usecase,
                         "InvalidArgument",
                         &format!(
                             "&InvalidArgument{{Reason: {}}}",
@@ -1646,7 +1763,8 @@ pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
             "\treturn {}{{}}, {}\n}}\n\n",
             d.outcome,
             use_case_error(
-                &err,
+                domain,
+                &d.usecase,
                 "NotEnabled",
                 &format!("&NotEnabled{{UseCase: {}}}", string_literal(&d.usecase))
             )

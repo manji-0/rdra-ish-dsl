@@ -415,12 +415,12 @@ pub struct DerivedName {
 /// The names `lang`'s printer derives from the IR's names, beyond the IR's own fields.
 /// Each language's pull request fills in its arm.
 pub fn derived_names(lang: Lang, domain: &DomainModel) -> Vec<DerivedName> {
-    let _ = domain;
     match lang {
         // Every name the Rust output declares in the module scope is a field of the IR:
         // the Rust printer derives none.
         Lang::Rust => Vec::new(),
-        Lang::Go | Lang::TypeScript => Vec::new(),
+        Lang::Go => go::derived_names(domain),
+        Lang::TypeScript => Vec::new(),
     }
 }
 
