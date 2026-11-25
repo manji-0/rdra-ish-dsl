@@ -22,6 +22,8 @@
 //! | an after-assert step's ends recorded on a run without an edge list (`StepEnds`, #296 2.1) | `ComponentRun::step_ends`'s scan of that 12-byte list |
 //! | `Classes::of` on a run of S up to `H` (`reduce/partition.rs`, #212 phase 2) | `reduce/partition/up_to_h.rs`: the classes of the plain run of S, up to `SHADOW_CAP` states |
 //! | states packed into their cells' bits (`States`, `explore/arena.rs`, #296 2.3) | the states unpacked, beside the packed rows, compared on every read; `Seen`'s twin keys the unpacked bytes |
+//! | a move the expanding thread found to repeat an earlier move of its chunk (`Probe::SameAs`, `explore/probe.rs`, #296 3.1) | `Seen`'s twin: the state it names is the one the earlier move reached |
+//! | a binding's id looked up by its number (`Bindings::id_numbered`, `explore/bfs.rs`, #296 3.1) | the map from params to ids `Bindings::id` keeps |
 //!
 //! A `shadow` build also runs the checks `shadow_assert!` makes, as a debug build does: each
 //! reader of a run's check results reads only checks the run evaluated (#251), and a steady
@@ -55,9 +57,11 @@ pub(crate) enum Twin {
     OrbitLiveness,
     Packed,
     OrbitStateModels,
+    SameAs,
+    DenseBinding,
 }
 
-const TWINS: [(Twin, &str); 18] = [
+const TWINS: [(Twin, &str); 20] = [
     (Twin::EachEnabled, "each_enabled"),
     (Twin::Seen, "seen"),
     (Twin::Source, "source"),
@@ -76,6 +80,8 @@ const TWINS: [(Twin, &str); 18] = [
     (Twin::OrbitLiveness, "orbit_liveness"),
     (Twin::Packed, "packed"),
     (Twin::OrbitStateModels, "orbit_state_models"),
+    (Twin::SameAs, "same_as"),
+    (Twin::DenseBinding, "dense_binding"),
 ];
 
 static COMPARED: [AtomicU64; TWINS.len()] = [const { AtomicU64::new(0) }; TWINS.len()];

@@ -235,12 +235,17 @@ impl States {
         self.packing.pack(&s.0, out);
     }
 
-    /// `to` packed as the store keeps it, into `out`, given `from`, which is state `i`: only
-    /// the cells where the two differ are packed. Under the `shadow` feature the whole pack
-    /// is compared with it.
+    /// `pack` into `out`, which is `packed_width()` long.
     #[inline]
-    pub(crate) fn patch(&self, i: usize, from: &StateSlice, to: &StateSlice, out: &mut Vec<u8>) {
-        out.resize(self.packing.bytes(), 0);
+    pub(crate) fn pack_into(&self, s: &StateSlice, out: &mut [u8]) {
+        self.packing.pack(&s.0, out);
+    }
+
+    /// `to` packed as the store keeps it, into `out`, which is `packed_width()` long, given
+    /// `from`, which is state `i`: only the cells where the two differ are packed. Under the
+    /// `shadow` feature the whole pack is compared with it.
+    #[inline]
+    pub(crate) fn patch(&self, i: usize, from: &StateSlice, to: &StateSlice, out: &mut [u8]) {
         self.packing.patch(&from.0, self.rows.row(i), &to.0, out);
         #[cfg(feature = "shadow")]
         {
@@ -377,7 +382,9 @@ impl FromIterator<State> for States {
     }
 }
 
-fn hash(packed: &[u8]) -> u64 {
+/// The hash `Seen` files a packed state under.
+#[inline]
+pub(super) fn hash(packed: &[u8]) -> u64 {
     let mut hasher = FastHasher::default();
     hasher.write(packed);
     hasher.finish()
@@ -395,11 +402,18 @@ pub(super) struct Seen {
 
 impl Seen {
     /// The index of `s` in `states`, if it is there, given `packed`, what `States::pack` made
-    /// of `s`.
-    pub fn find_packed(&self, states: &States, packed: &[u8], s: &StateSlice) -> Option<u32> {
+    /// of `s`, and its `hash`.
+    #[inline]
+    pub fn find_hashed(
+        &self,
+        states: &States,
+        packed: &[u8],
+        hash: u64,
+        s: &StateSlice,
+    ) -> Option<u32> {
         let found = self
             .table
-            .find(hash(packed), |&i| states.packed_row(i as usize) == packed)
+            .find(hash, |&i| states.packed_row(i as usize) == packed)
             .copied();
         #[cfg(not(feature = "shadow"))]
         let _ = s;
@@ -416,12 +430,18 @@ impl Seen {
         found
     }
 
-    /// Notes that state `at` of `states` is not yet in the table and now is.
-    pub fn insert(&mut self, states: &States, at: u32) {
+    /// The index the reference twin holds for `s`: what a `Probe::SameAs` must name.
+    #[cfg(feature = "shadow")]
+    pub fn twin_find(&self, s: &StateSlice) -> Option<u32> {
+        self.twin.find(s)
+    }
+
+    /// Notes that state `at` of `states` is not yet in the table and now is, given the hash of
+    /// its packed bytes.
+    pub fn insert_hashed(&mut self, states: &States, at: u32, hash_of_at: u64) {
+        debug_assert_eq!(hash_of_at, hash(states.packed_row(at as usize)));
         self.table
-            .insert_unique(hash(states.packed_row(at as usize)), at, |&i| {
-                hash(states.packed_row(i as usize))
-            });
+            .insert_unique(hash_of_at, at, |&i| hash(states.packed_row(i as usize)));
         #[cfg(feature = "shadow")]
         assert!(
             self.twin.insert(&states.at(at as usize), at),

@@ -16,6 +16,7 @@ mod perf;
 #[cfg(feature = "perf")]
 pub use perf::evals_line as perf_evals_line;
 mod plan;
+mod probe;
 mod properties;
 mod reach;
 mod scan;

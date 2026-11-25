@@ -4,7 +4,8 @@
 <!-- constrained-by ./instance-symmetry.md#memory -->
 <!-- constrained-by ../cli-reference.md#memory-limit -->
 
-Status: design, not built. This is phase 3 of
+Status: 3.1 is being built in parts; part 1 is built (see
+[3.1 as built](#31-as-built)). This is phase 3 of
 [#296](https://github.com/manji-0/rdra-ish-dsl/issues/296), which the owner approved
 ([decision](https://github.com/manji-0/rdra-ish-dsl/issues/296#issuecomment-7134170599) item 1:
 "phases 2 and 3 go ahead after phase 1"). It refines steps 2, 3 and 5 of
@@ -557,6 +558,91 @@ speed-up change"). The parts that compute something new do get one.
 7. **Speed gate, in instructions at 1 job:** no more than 2% above main on the five runs of
    #296. At 1 job 3.1 adds no work, only moves it. Wall time at 6, 8 and 18 jobs is
    measured on a quiet machine, as here.
+
+## 3.1 as built
+
+<!-- derived-from #workers-probe-the-reader-commits -->
+<!-- constrained-by #assumptions-about-phase-2 -->
+
+### The assumptions, checked on main
+
+Checked on e653976b, main with phase 2 (#321, #326, #347) and #212 phase 4 (#370).
+
+- **A1 holds for rows and fails for the directory.** `segments::Rows` allocates each segment
+  whole and never moves a row. But its directory, `Rows::rest`, is a `Vec` of segment `Vec`s
+  that doubles, and each segment's length is written on every push, so a worker cannot read
+  the store while the reader pushes. Per [If phase 2 lands differently](#if-phase-2-lands-differently),
+  part 2 adds its own fixed view of the segments' addresses for the workers. `Rows` and its
+  charge (`parts_with` counts the directory's slots) do not change.
+- **A2 holds.** `Packing::pack` and `Packing::patch` read only the packing, which every
+  thread of a run shares in an `Arc`.
+- **A3 holds.** `Seen` hashes and compares packed rows.
+- **A4 holds.** `Seen::bytes_with` reads hashbrown's capacity. Part 2's table copies
+  hashbrown's growth and pins it to hashbrown.
+
+### Where the time goes after phase 2
+
+Measured on e653976b's parent with the method of [Measurement method](#measurement-method):
+`sample` at 1 ms of a build with `#[inline(never)]` on the hot functions, food-permit-ops,
+1 job, at a 1-minute load of 13 to 18.
+
+| Part of `Bfs::take`, share of the run | food-permit-ops |
+|---|---:|
+| `Bfs::take`, all of it | **49.5%** |
+| · `States::patch` (2.3's pack of the successor) | 18.0% |
+| · `Seen::find`, its hash and compare included | 11.4% |
+| · `admit`: insert, rehash, push, charge | 4.3% |
+| · `Bindings::id` | 3.6% |
+| · `Packing::unpack` of the source state | 3.2% |
+| · copies and the self-loop compare | 4.2% |
+
+2.3 added the pack to the reader: `take` went from 36% to 49.5% of the run. At 8 jobs the
+reader spends 90% of its samples in `take` and each worker waits 88% to 91%.
+
+### Part 1: workers pack, hash and deduplicate
+
+The expanding thread (`expand`, a worker's or the reader's own) computes per move, into
+`Probes` (`explore/probe.rs`):
+
+- `Loop` when the successor is the source, `OrbitSelf` when its canonical form is;
+- else the key packed as the store keeps it (patched from the source's packed row, or the
+  canonical form packed whole) and its hash;
+- `SameAs(k)` when move `k` of the same chunk had the same key, else `Miss`;
+- the binding's number: per action an offset and the params in the radix of their
+  entities' slot counts (`Numbering`), up to 65,536 numbers.
+
+The reader re-probes every `Miss` with the given hash, takes `SameAs(k)` from what it found
+for `k`, reads the binding's id from an array by its number (the first sight goes through
+`Bindings::id`, so ids and bytes are unchanged), and unpacks the source only when the run
+gathers views. Chunks are claimed from a queue rather than sent: while the chunk the reader
+reads next is not done, the reader expands the oldest chunk no worker has claimed. Without
+that, 2 jobs were 11% slower than main (4.39 s against 3.95 s, measured once): the one worker
+then carries the moved work.
+
+The argument of [Why the run is the one-thread run](#why-the-run-is-the-one-thread-run) holds
+as written: part 1 has no `Hit`, and `SameAs` is its step 4.
+
+**Measured** (e653976b and the branch, median of three, interleaved, 1-minute load 4.5 to
+9.9; a run waited for a load under 10; insurance-claim-ops ran at loads up to 35, so its 1-job
+medians are rough):
+
+| | food-permit-ops | clinic-ops | insurance-claim-ops |
+|---|---:|---:|---:|
+| Main, 1 job | 6.09 s | 5.73 s | 14.77 s |
+| Main, 8 jobs | 3.55 s, 58% | 2.27 s, 40% | 6.24 s, 42% |
+| Part 1, 1 job | 6.15 s | 5.65 s | 16.45 s |
+| Part 1, 8 jobs | **2.16 s, 35%** | **1.72 s, 30%** | **4.37 s, 27%** |
+| Instructions at 1 job, part 1 against main | +0.5% | -0.4% | -0.6% |
+
+food-permit-ops at 2 / 4 / 6 jobs: main 3.50 / 3.45 / 3.39 s, part 1 3.29 / 2.22 / 2.14 s
+(53% / 36% / 35% of its 1-job time).
+
+After part 1 the reader is 22% to 23% of a 1-job food-permit-ops run (profile at 1 job),
+of which `Seen::find` is 7% to 9.5%, `admit` 3.3% to 3.8% and the edge push 2.4% to 3.4%.
+With 12% of the run outside BFS, that bounds 8 jobs at about 1 / (0.23 + 0.12) = 2.9x
+(computed), as measured. The exit needs about 1 / 0.30 - 0.12 = 0.21 or less on the
+reader, and part 2 (workers probe the table) is the lever: the reader then probes only what
+the workers could not see.
 
 ## Beyond 3.1: in-flight dedup
 

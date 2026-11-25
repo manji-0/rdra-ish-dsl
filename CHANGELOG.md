@@ -531,6 +531,14 @@
   side by side, z3 processes and `RDRA_JOBS` itself are unchanged, and the output does
   not depend on the number.
 
+- `verify` explores one large cone faster on several threads, with the same output (#296
+  item 3.1, part 1). The threads that expand a chunk of states now also pack, hash and
+  number each move and find the moves that repeat one of the same chunk, so the thread that
+  reads the moves in order does less per move, and it expands a chunk itself rather than
+  wait. At 8 jobs: food-permit-ops 3.55 s to 2.16 s (35% of its 1-job time, from 58%),
+  clinic-ops 2.27 s to 1.72 s, insurance-claim-ops 6.24 s to 4.37 s. One job takes the time
+  it took. Where `--memory` stops a run does not change.
+
 - `verify` gives back what an entity cone held once the cone stops at the memory limit
   (#284). The entity pass runs its cones one at a time in cone order, each in the room the
   results before it leave. A stopped cone used to keep everything it stored until the pass

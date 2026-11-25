@@ -4,7 +4,7 @@ use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::ops::Range;
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread::Scope;
 use std::time::Instant;
 
@@ -18,6 +18,7 @@ use crate::memory::Charge;
 use crate::parallel::Helpers;
 
 use super::edges::{StepEnds, Steps};
+use super::probe::{Dedup, Numbering, Probe, Probes};
 use super::store::binding_bytes;
 use super::symmetry::{Canon, Canonical, Group};
 use super::{
@@ -34,51 +35,89 @@ const CHUNK: usize = 128;
 /// memory at once.
 const AHEAD: usize = 4;
 
-/// The moves from a run of states, in state order, and where each state's moves end.
-type Expanded = (Moves, Vec<usize>);
+/// The moves from a run of states, in state order, where each state's moves end, and what
+/// the expanding thread read off each move (`Probes`).
+struct Expanded {
+    moves: Moves,
+    ends: Vec<usize>,
+    probes: Probes,
+}
 
-/// The moves from a run of states, and under symmetry (`sym`) each successor's canonical
-/// form beside it: a worker canonicalizes, so the reader only looks the forms up.
+/// What a thread that expands chunks reuses from one chunk to the next.
+#[derive(Default)]
+struct Scratch {
+    canon: Canon,
+    dedup: Dedup,
+}
+
+/// What expanding a chunk of a run reads besides the chunk: the same on every thread.
+#[derive(Clone, Copy)]
+struct Expander<'a> {
+    ts: &'a TransitionSystem,
+    /// The group a run up to symmetry canonicalizes successors under.
+    group: Option<&'a Group>,
+    numbering: &'a Numbering,
+}
+
+/// The moves from a run of states, under symmetry each successor's canonical form beside it,
+/// and each move's `Probe` and binding number: the expanding thread canonicalizes, packs,
+/// hashes and numbers, so the reader only looks these up.
 fn expand(
-    ts: &TransitionSystem,
+    Expander {
+        ts,
+        group,
+        numbering,
+    }: Expander,
     states: &States,
     range: Range<usize>,
-    mut sym: Option<(&Group, &mut Canon)>,
+    scratch: &mut Scratch,
 ) -> Expanded {
     let mut moves = Moves::default();
-    let Some(mut scratch) = states.get(range.start).map(Unpacked::into_state) else {
-        return (moves, Vec::new());
+    let mut probes = Probes::new(states.packed_width(), group.is_some());
+    let Some(mut next) = states.get(range.start).map(Unpacked::into_state) else {
+        return Expanded {
+            moves,
+            ends: Vec::new(),
+            probes,
+        };
     };
+    scratch.dedup.clear();
     // The state being expanded, unpacked from the store.
-    let mut at = scratch.clone();
+    let mut at = next.clone();
     let mut ends = Vec::with_capacity(range.len());
     for i in range {
         let from = moves.len();
         states.read_into(i, &mut at.0);
-        ts.moves_into(&at, &mut scratch, &mut moves);
-        if let Some((group, canon)) = &mut sym {
-            moves.canonicalize(ts, group, canon, from);
+        ts.moves_into(&at, &mut next, &mut moves);
+        if let Some(group) = group {
+            moves.canonicalize(ts, group, &mut scratch.canon, from);
         }
+        probes.read(states, i, &at, &moves, from, &mut scratch.dedup);
+        probes.number_bindings(numbering, &moves, from);
         ends.push(moves.len());
     }
-    (moves, ends)
+    Expanded {
+        moves,
+        ends,
+        probes,
+    }
 }
 
 /// Workers that expand chunks of states while the caller reads the chunks before them. A
 /// state's moves depend on that state alone, and the caller reads the chunks in the order it
-/// handed them out, so the run is the one a single thread makes.
+/// handed them out, so the run is the one a single thread makes. A chunk is claimed, not
+/// pushed: a worker takes the oldest one no thread has taken, and so does the caller while
+/// the chunk it reads next is not done, rather than wait (#296 item 3.1).
 struct Workers<'scope, 'env> {
     scope: &'scope Scope<'scope, 'env>,
-    ts: &'env TransitionSystem,
-    /// The group a run up to symmetry canonicalizes successors under.
-    group: Option<&'env Group>,
+    expander: Expander<'env>,
     /// How many workers the run starts; `None` until `Threads::Shared` has taken some.
     threads: Option<usize>,
     /// The helpers a `Threads::Shared` run holds, given back when the run ends.
     held: Option<Helpers>,
-    /// `None` until the first chunk is handed out.
-    jobs: Option<Sender<States>>,
-    /// Per chunk handed out and not yet read, in order: its result once a worker sends it.
+    /// The chunks handed out and not yet claimed; `None` until the first one is.
+    queue: Option<Arc<Queue>>,
+    /// Per chunk handed out and not yet read, in order: its result once it is expanded.
     waiting: VecDeque<Option<std::thread::Result<Expanded>>>,
     /// The chunks before `waiting[0]`: how many were handed out and read.
     read: usize,
@@ -86,24 +125,71 @@ struct Workers<'scope, 'env> {
     done_tx: Sender<(usize, std::thread::Result<Expanded>)>,
 }
 
+/// Chunks handed out and not yet claimed, each with its number in hand-out order, and
+/// whether the run has ended, which tells the workers to stop.
+#[derive(Default)]
+struct Queue {
+    chunks: Mutex<(VecDeque<(usize, States)>, bool)>,
+    ready: Condvar,
+}
+
+impl Queue {
+    /// The oldest chunk no thread has claimed, waiting for one when `wait`; `None` once the
+    /// run has ended, or when none is there and not `wait`.
+    fn claim(&self, wait: bool) -> Option<(usize, States)> {
+        let mut chunks = self.chunks.lock().expect("the chunk queue");
+        loop {
+            if chunks.1 {
+                return None;
+            }
+            if let Some(chunk) = chunks.0.pop_front() {
+                return Some(chunk);
+            }
+            if !wait {
+                return None;
+            }
+            chunks = self.ready.wait(chunks).expect("the chunk queue");
+        }
+    }
+
+    fn push(&self, number: usize, states: States) {
+        self.chunks
+            .lock()
+            .expect("the chunk queue")
+            .0
+            .push_back((number, states));
+        self.ready.notify_one();
+    }
+
+    fn close(&self) {
+        if let Ok(mut chunks) = self.chunks.lock() {
+            chunks.1 = true;
+            chunks.0.clear();
+        }
+        self.ready.notify_all();
+    }
+}
+
+impl Drop for Workers<'_, '_> {
+    fn drop(&mut self) {
+        if let Some(queue) = &self.queue {
+            queue.close();
+        }
+    }
+}
+
 impl<'scope, 'env> Workers<'scope, 'env> {
-    fn new(
-        scope: &'scope Scope<'scope, 'env>,
-        ts: &'env TransitionSystem,
-        group: Option<&'env Group>,
-        threads: Threads,
-    ) -> Self {
+    fn new(scope: &'scope Scope<'scope, 'env>, expander: Expander<'env>, threads: Threads) -> Self {
         let (done_tx, done) = mpsc::channel();
         Workers {
             scope,
-            ts,
-            group,
+            expander,
             threads: match threads {
                 Threads::Fixed(n) => Some(n),
                 Threads::Shared => None,
             },
             held: None,
-            jobs: None,
+            queue: None,
             waiting: VecDeque::new(),
             read: 0,
             done,
@@ -130,29 +216,19 @@ impl<'scope, 'env> Workers<'scope, 'env> {
     }
 
     fn hand_out(&mut self, states: States) {
-        let jobs = self.jobs.get_or_insert_with(|| {
-            let (jobs, queue) = mpsc::channel::<States>();
-            let queue = Arc::new(Mutex::new((0usize, queue)));
+        let queue = self.queue.get_or_insert_with(|| {
+            let queue = Arc::new(Queue::default());
             for _ in 0..self
                 .threads
                 .expect("a chunk is handed out once there are workers")
             {
-                let (queue, done, ts) = (queue.clone(), self.done_tx.clone(), self.ts);
-                let group = self.group;
+                let (queue, done) = (queue.clone(), self.done_tx.clone());
+                let expander = self.expander;
                 self.scope.spawn(move || {
-                    let mut canon = Canon::default();
-                    loop {
-                        // The chunk and its number are taken together, so the numbers are the
-                        // order the chunks were handed out in.
-                        let (number, states) = {
-                            let mut queue = queue.lock().expect("the chunk queue");
-                            let Ok(states) = queue.1.recv() else { break };
-                            queue.0 += 1;
-                            (queue.0 - 1, states)
-                        };
-                        let sym = group.map(|g| (g, &mut canon));
+                    let mut scratch = Scratch::default();
+                    while let Some((number, states)) = queue.claim(true) {
                         let expanded = catch_unwind(AssertUnwindSafe(|| {
-                            expand(ts, &states, 0..states.len(), sym)
+                            expand(expander, &states, 0..states.len(), &mut scratch)
                         }));
                         if done.send((number, expanded)).is_err() {
                             break;
@@ -160,16 +236,26 @@ impl<'scope, 'env> Workers<'scope, 'env> {
                     }
                 });
             }
-            jobs
+            queue
         });
-        jobs.send(states).expect("a worker takes the chunk");
+        queue.push(self.read + self.waiting.len(), states);
         self.waiting.push_back(None);
     }
 
-    /// The oldest chunk handed out and not yet read; a worker's panic resumes here.
-    fn next(&mut self) -> Expanded {
+    /// The oldest chunk handed out and not yet read; a worker's panic resumes here. While it
+    /// is not done, the caller expands the chunks no worker has claimed yet, with `scratch`.
+    fn next(&mut self, scratch: &mut Scratch) -> Expanded {
         while self.waiting[0].is_none() {
-            let (number, expanded) = self.done.recv().expect("a worker sends its chunk");
+            let (number, expanded) = match self.done.try_recv() {
+                Ok(done) => done,
+                Err(_) => match self.queue.as_ref().and_then(|q| q.claim(false)) {
+                    Some((number, states)) => {
+                        let expanded = expand(self.expander, &states, 0..states.len(), scratch);
+                        (number, Ok(expanded))
+                    }
+                    None => self.done.recv().expect("a worker sends its chunk"),
+                },
+            };
             self.waiting[number - self.read] = Some(expanded);
         }
         self.read += 1;
@@ -233,6 +319,41 @@ impl Bindings {
         self.index[act.index()].insert(params.into(), id);
         id
     }
+
+    /// `id`, looked up by the binding's `number` (`Numbering`) where it has one: an array read
+    /// in place of hashing the params. The first sight of a binding goes through `id`, so the
+    /// ids and the bytes counted are the same. A `shadow` build holds every lookup to `id`'s
+    /// map.
+    #[inline]
+    fn id_numbered(&mut self, ids: &mut [u32], number: u32, act: ActId, params: &[u8]) -> u32 {
+        let Some(slot) = ids.get_mut(number as usize) else {
+            return self.id(act, params);
+        };
+        if *slot == u32::MAX {
+            *slot = self.id(act, params);
+            return *slot;
+        }
+        let id = *slot;
+        #[cfg(feature = "shadow")]
+        {
+            let want = self.index[act.index()].get(params).copied();
+            assert!(
+                want == Some(id),
+                "shadow: Bindings::id_numbered({act:?}, {params:?}): {id}, the map {want:?}"
+            );
+            crate::shadow::compared(crate::shadow::Twin::DenseBinding);
+        }
+        id
+    }
+}
+
+/// What the reader keeps while it reads a run's chunks.
+struct Reading {
+    /// Per move of the chunk being read: the state it reached, `u32::MAX` while unread or for
+    /// a loop. A `Probe::SameAs(k)` reads it at `k`.
+    resolved: Vec<u32>,
+    /// Per binding number (`Numbering`): the binding's id, `u32::MAX` until it is first seen.
+    ids: Vec<u32>,
 }
 
 impl<'t> Bfs<'t> {
@@ -316,19 +437,27 @@ impl<'t> Bfs<'t> {
                 return;
             }
         }
-        let group = self.group;
-        std::thread::scope(|scope| self.explore(Workers::new(scope, ts, group, threads)));
+        let numbering = Numbering::of(ts);
+        let expander = Expander {
+            ts,
+            group: self.group,
+            numbering: &numbering,
+        };
+        std::thread::scope(|scope| self.explore(Workers::new(scope, expander, threads)));
     }
 
     /// Expands the states in discovery order and reads their moves in that order, until none
     /// is left or a cap stops the run.
     fn explore(&mut self, mut workers: Workers) {
-        // The successor being read, copied out of the worker's buffer.
-        let Some(mut s2) = self.states.first().map(Unpacked::into_state) else {
+        // The state being read, unpacked from the store when views are gathered.
+        let Some(mut cur) = self.states.first().map(Unpacked::into_state) else {
             return;
         };
-        // The state being read, unpacked from the store.
-        let mut cur = s2.clone();
+        let mut reading = Reading {
+            resolved: Vec::new(),
+            ids: vec![u32::MAX; workers.expander.numbering.len()],
+        };
+        let mut scratch = Scratch::default();
         // States before `next` are read; states before `sent` are read or handed out.
         let (mut next, mut sent) = (0, 0);
         loop {
@@ -337,20 +466,20 @@ impl<'t> Bfs<'t> {
                 sent += CHUNK;
             }
             let expanded = if next < sent {
-                workers.next()
+                workers.next(&mut scratch)
             } else if sent < self.states.len() {
                 let end = self.states.len().min(sent + CHUNK);
-                let sym = self.group.map(|g| (g, &mut self.canon));
-                let expanded = expand(self.ts, &self.states, sent..end, sym);
+                let expanded = expand(workers.expander, &self.states, sent..end, &mut scratch);
                 sent = end;
                 expanded
             } else {
                 return;
             };
-            let (moves, ends) = expanded;
+            reading.resolved.clear();
+            reading.resolved.resize(expanded.moves.len(), u32::MAX);
             let mut from = 0;
-            for end in ends {
-                if !self.take(next, &moves, from..end, &mut cur, &mut s2) {
+            for &end in &expanded.ends {
+                if !self.take(next, &expanded, from..end, &mut cur, &mut reading) {
                     return;
                 }
                 from = end;
@@ -359,31 +488,38 @@ impl<'t> Bfs<'t> {
         }
     }
 
-    /// Reads `moves[range]`, the moves from `states[at]`; false when a cap stops the run, or
-    /// the last open check fails under `Caps::stop_when_all_violated`.
-    /// `s` and `s2` are states of the system: `s` is overwritten with `states[at]`, and `s2`
-    /// with each successor in turn.
+    /// Reads `moves[range]` of `chunk`, the moves from `states[at]`; false when a cap stops
+    /// the run, or the last open check fails under `Caps::stop_when_all_violated`. `s` is a
+    /// state of the system, overwritten with `states[at]` when the run gathers views.
     fn take(
         &mut self,
         at: usize,
-        moves: &Moves,
+        chunk: &Expanded,
         range: Range<usize>,
         s: &mut State,
-        s2: &mut State,
+        reading: &mut Reading,
     ) -> bool {
+        let (moves, probes) = (&chunk.moves, &chunk.probes);
         self.layers.read(at);
         self.steps.read(at);
         let from = at as u32;
-        self.states.read_into(at, &mut s.0);
+        let views = self.caps.views;
+        if views {
+            self.states.read_into(at, &mut s.0);
+        }
         let s: &State = s;
         for i in range {
             let (act, params, next) = moves.get(i);
-            s2.0.copy_from_slice(next);
-            if self.caps.views && !self.observe(at, act, params, s, s2) {
+            let s2 = StateSlice::new(next);
+            if views && !self.observe(at, act, params, s, s2) {
                 return false;
             }
-            let binding = self.bindings.id(act, params);
-            if *s2 == *s {
+            let number = probes.number(i);
+            let binding = self
+                .bindings
+                .id_numbered(&mut reading.ids, number, act, params);
+            let probe = probes.probe(i);
+            if probe == Probe::Loop {
                 // A concrete self-loop: its permutation is the identity.
                 if let Some(perms) = &mut self.perms {
                     perms.push_identity();
@@ -404,12 +540,13 @@ impl<'t> Bfs<'t> {
                     }
                     moves.canonical(i)
                 }
-                None => (&s2.0[..], Canonical::PLAIN),
+                None => (next, Canonical::PLAIN),
             };
             let key = StateSlice::new(key);
-            if self.group.is_some() && *key == *s {
+            if probe == Probe::OrbitSelf {
                 let edge = u32::try_from(self.steps.moves()).expect("edges fit in u32");
-                self.push(from, from, act, binding, s);
+                // The key is the source: the stored target of the loop.
+                self.push(from, from, act, binding, key);
                 self.orbit_self.push(edge);
                 // The step's after-asserts were read on its concrete successor above.
                 if self.stop_if_all_failed() {
@@ -417,22 +554,36 @@ impl<'t> Bfs<'t> {
                 }
                 continue;
             }
-            // A plain run's key is the successor itself: patch the source's packed row with
-            // the cells the move changed. Under symmetry it is a canonical form, packed whole.
-            match self.group {
-                None => self.states.patch(at, s, key, &mut self.packed),
-                Some(_) => self.states.pack(key, &mut self.packed),
-            }
-            let to = match self.seen.find_packed(&self.states, &self.packed, key) {
-                Some(to) => to,
-                None => {
-                    let to = self.states.len() as u32;
-                    if !self.admit_packed(key, Some((from, binding)), found) {
-                        return false;
+            // The successor packed as the store keeps it, by the thread that expanded it: a
+            // plain run's patched from the source's packed row, a canonical form packed whole.
+            let (packed, hash) = probes.packed(i);
+            let to = match probe {
+                Probe::SameAs(k) => {
+                    let to = reading.resolved[k as usize];
+                    #[cfg(feature = "shadow")]
+                    {
+                        let want = self.seen.twin_find(key);
+                        assert!(
+                            want == Some(to),
+                            "shadow: Probe::SameAs({k}) at move {i} of state {at}: the earlier \
+                             move reached {to}, reference {want:?}"
+                        );
+                        crate::shadow::compared(crate::shadow::Twin::SameAs);
                     }
                     to
                 }
+                _ => match self.seen.find_hashed(&self.states, packed, hash, key) {
+                    Some(to) => to,
+                    None => {
+                        let to = self.states.len() as u32;
+                        if !self.admit_packed(key, packed, hash, Some((from, binding)), found) {
+                            return false;
+                        }
+                        to
+                    }
+                },
             };
+            reading.resolved[i] = to;
             // The stored target: under symmetry the canonical form, which an after-assert
             // step's rows read as they read the concrete one.
             self.push(from, to, act, binding, key);
@@ -469,17 +620,22 @@ impl<'t> Bfs<'t> {
     /// Adds a new state; false when the state cap or the memory limit stops the run.
     /// `parent` is the source and the binding of the move that reaches it, pushed next.
     fn admit(&mut self, s: &StateSlice, parent: Option<(u32, u32)>, found: Canonical) -> bool {
-        self.states.pack(s, &mut self.packed);
-        if (self.seen.find_packed(&self.states, &self.packed, s)).is_some() {
-            return true;
-        }
-        self.admit_packed(s, parent, found)
+        let mut packed = std::mem::take(&mut self.packed);
+        self.states.pack(s, &mut packed);
+        let hash = super::arena::hash(&packed);
+        let admitted = (self.seen.find_hashed(&self.states, &packed, hash, s)).is_some()
+            || self.admit_packed(s, &packed, hash, parent, found);
+        self.packed = packed;
+        admitted
     }
 
-    /// `admit`, of a state `seen` does not hold, which `packed` holds packed.
+    /// `admit`, of a state `seen` does not hold, given `packed`, what `States::pack` made of
+    /// it, and its `hash`.
     fn admit_packed(
         &mut self,
         s: &StateSlice,
+        packed: &[u8],
+        hash: u64,
         parent: Option<(u32, u32)>,
         found: Canonical,
     ) -> bool {
@@ -543,8 +699,9 @@ impl<'t> Bfs<'t> {
         }
         self.check_invariants(s, self.states.len() as u32);
         self.orbits.admit(found);
-        self.states.push_packed(&self.packed, s);
-        self.seen.insert(&self.states, self.states.len() as u32 - 1);
+        self.states.push_packed(packed, s);
+        self.seen
+            .insert_hashed(&self.states, self.states.len() as u32 - 1, hash);
         self.steps.admit(parent);
         self.layers.admit(parent.is_none());
         true
@@ -781,3 +938,6 @@ impl<'t> Bfs<'t> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
