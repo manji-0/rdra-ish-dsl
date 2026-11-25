@@ -5,7 +5,7 @@
 
 use std::cell::RefCell;
 
-use rdra_ish_core::lifecycle::{Domain, StateSlice, TransitionSystem, Value, VarId, VarKind};
+use rdra_ish_core::lifecycle::{StateSlice, TransitionSystem, Value, VarId, VarKind};
 use rdra_ish_core::SemanticModel;
 
 use crate::codegen::ir::{ArgCheck, CmpOp, Expr, FnDecl};
@@ -24,10 +24,7 @@ pub fn column_var(ts: &TransitionSystem, entity: &str, column: &str) -> Option<V
 
 /// The name of an enum var's value.
 pub fn enum_name(ts: &TransitionSystem, var: VarId, value: Value) -> Option<String> {
-    match &ts.var(var).domain {
-        Domain::Enum(values) => values.get(usize::from(value.0)).cloned(),
-        _ => None,
-    }
+    ts.var(var).domain.name(value).map(str::to_string)
 }
 
 /// The value of a row's column, by the row's slot; `None` when the system does not track it.
@@ -127,7 +124,8 @@ impl<'a> Rows<'a> {
                 enum_name(self.ts, var, v)? == value.wire
             }
             Expr::BoolEq { row, field, value } => {
-                (self.get(*row, &field.wire)?.1 == Value::TRUE) == *value
+                let (var, v) = self.get(*row, &field.wire)?;
+                self.ts.var(var).domain.truth(v) == Some(*value)
             }
             Expr::KeyEq {
                 child,

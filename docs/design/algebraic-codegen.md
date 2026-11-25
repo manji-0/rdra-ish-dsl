@@ -120,7 +120,7 @@ subcommand and its output to the "What is not covered" list of the compatibility
 | `@null` column | `T \| null` | `Option<T>` | `*T` |
 | `Int`, `String`, `Bool` | `number`, `string`, `boolean` | `i64`, `String`, `bool` | `int64`, `string`, `bool` |
 | `Money`, `Decimal`, `Date`, `DateTime` | names from a scalars module | same | same |
-| `@derived(expr)` | a field with the expression in its doc, and an obligation to compute it; later a function printed from the typed expression | same | same |
+| `@derived(expr)` | a field with the expression in its doc, and an obligation to compute it; a transition function computes a logical one it can (see [Transition functions](#transition-functions)) | same | same |
 | `@check(expr)` | an obligation naming `Check_<E>_<col>_<n>`; later a check in the smart constructor `parseOrder` | `TryFrom` | `func NewOrder(..) (Order, error)` |
 | `dto` | a record | a struct | a struct |
 
@@ -133,7 +133,9 @@ Phase 1 prints a `@check` and a `@derived` as obligations, not as code. The comp
 semantics of a check (how `null` and `present` compare) is the lifecycle's, and code that
 evaluates it differently would claim a check it does not make. The conformance tests of
 phase 3 print the evaluator together with the test that compares it with the lifecycle's
-verdicts.
+verdicts. A transition function computes a logical `@derived` column only where those
+semantics cannot differ: comparisons of a column that is never null with a value, and
+`== null` / `!= null`. Any other derived column stays an input of the function.
 
 ### State sums
 
@@ -195,6 +197,7 @@ system keeps only the columns some check reads.
 |---|---|
 | `Param` `Existing` of entity `E` | an argument of type `E`, narrowed by the guards below |
 | `Param` `New` of `E` (`creates`) | the function returns a new `E`; its non-defaulted, non-derived columns are inputs |
+| a logical `@derived` column of a written or created row | computed from what the function writes to the columns the expression reads: a literal folds it, a column copied from an argument row reads that row. Only comparisons of a column that is never null with a value, and `== null` / `!= null`, are printed, where the lifecycle's comparison semantics and the printed code's agree. Any other (an arithmetic one, two columns, `now`, a nullable operand, an input operand, a `drives(..)` proposition) is an input, with the reason in the function's doc |
 | `Param` `Parent` | an argument of the parent's type; the child's key is set from it |
 | `Guard` `Transition` (`from` states) | the argument type is the union of the source variants, so a call from another state does not compile |
 | `Guard` `Condition` (`holds` body) | a generated predicate; the function returns `Err(Rejected { condition })` when it fails |

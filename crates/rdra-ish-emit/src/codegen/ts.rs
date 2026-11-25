@@ -1145,6 +1145,7 @@ fn print_functions(cx: &Cx<'_>, out: &mut String) {
                                 format!("{}.id", local(&f.marks_in[*mark].name))
                             }
                             Assigned::Null => "null".to_string(),
+                            Assigned::Derived { expr: e, .. } => expr(e, &row, &input),
                         };
                         out.push_str(&format!("        {}: {v},\n", dprop(target)));
                     }

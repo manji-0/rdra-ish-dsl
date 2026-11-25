@@ -204,6 +204,58 @@ sets(usecase::Publish, Doc.metadata == present)
     assert_eq!(d.entity("Doc").axes[0].kind, AxisKind::Nullable);
 }
 
+/// An Enum or Bool column marked `@null` holds null: a created row starts there unless a
+/// `@default` names a value, and `sets` writes null, a value, or any value (`present`)
+/// (#359).
+#[test]
+fn nullable_enum_and_bool_columns_start_null() {
+    let d = derive_src(
+        r#"
+entity Item "品目" {
+  id: Int @pk
+  k: Enum(red, blue) @null
+  f: Bool @null
+  d: Enum(red, blue) @null @default(blue)
+  e: Bool @null @default(true)
+}
+usecase Make  "作成"
+usecase Paint "塗装"
+usecase Clear "消去"
+usecase Flag  "印付け"
+creates(Make, Item)
+sets(Paint, Item.k == red)
+sets(Clear, Item.k == null)
+sets(Flag, Item.f == present)
+"#,
+    );
+    let item = d.entity("Item");
+    let kinds: Vec<&AxisKind> = item.axes.iter().map(|a| &a.kind).collect();
+    let rb = vec!["red".to_string(), "blue".to_string()];
+    assert_eq!(
+        kinds,
+        vec![
+            &AxisKind::NullableEnum(rb.clone()),
+            &AxisKind::NullableBool,
+            &AxisKind::NullableEnum(rb),
+            &AxisKind::NullableBool,
+        ]
+    );
+    assert_eq!(item.bound(), 3 * 3 * 3 * 3);
+    let rows = d.rows("Item");
+    assert_eq!(rows[0], "d=blue, e=true, f=null, k=null", "{rows:?}");
+    for want in [
+        "d=blue, e=true, f=null, k=red",
+        "d=blue, e=true, f=false, k=null",
+        "d=blue, e=true, f=true, k=null",
+    ] {
+        assert!(rows.iter().any(|r| r == want), "{want} not in {rows:?}");
+    }
+    assert!(
+        !rows.iter().any(|r| r.contains("k=blue")),
+        "nothing writes blue: {rows:?}"
+    );
+}
+
 #[test]
 fn bool_axis_reaches_both_values() {
     let d = derive_src(
@@ -243,6 +295,46 @@ transitions(Deactive, Item.status, active -> inactive)
         .map(|(_, uc)| uc.as_str())
         .collect();
     assert_eq!(via, vec!["Create", "Remove"]);
+}
+
+/// A pattern's provenance names the BUC of each use case, whether the BUC contains it or
+/// holds it through a step of one of its flows (#161); of several BUCs, the first by id.
+#[test]
+fn provenance_names_the_buc_a_use_case_enters_through_a_flow_step() {
+    let d = derive_src(
+        r#"
+buc Zeta "後"
+buc Billing "請求業務"
+flow BillingFlow "フロー"
+step IssueStep "発行"
+step CloseStep "締め"
+usecase IssueBill "発行する"
+usecase CloseBill "締める"
+entity Bill "請求" { id: Int @pk  status: Enum(draft, issued, closed) @default(draft) }
+contains(Zeta, IssueBill)
+contains(Billing, BillingFlow)
+contains(Billing, IssueBill)
+contains(BillingFlow, IssueStep)
+contains(BillingFlow, CloseStep)
+precedes(IssueStep, CloseStep)
+covers(IssueStep, IssueBill)
+covers(CloseStep, CloseBill)
+creates(IssueBill, Bill)
+updates(CloseBill, Bill)
+sets(IssueBill, Bill.status == issued)
+transitions(CloseBill, Bill.status, issued -> closed)
+"#,
+    );
+    let via: Vec<(Option<&str>, &str)> = d
+        .entity("Bill")
+        .patterns
+        .iter()
+        .flat_map(|p| p.provenance.via.iter())
+        .map(|(buc, uc)| (buc.as_deref(), uc.as_str()))
+        .collect();
+    assert!(via.contains(&(Some("Billing"), "CloseBill")), "{via:?}");
+    assert!(via.contains(&(Some("Billing"), "IssueBill")), "{via:?}");
+    assert!(via.iter().all(|(buc, _)| buc.is_some()), "{via:?}");
 }
 
 /// A `deletes` removes one row; a child under an `.on_delete(cascade)` key stays, so every

@@ -95,6 +95,27 @@
   `Symbol` joins `Result` and `assertNever` as a name the TypeScript output writes, so a model
   type of that name is a `NameCollision`; a model name that takes `parse<Row>` moves the
   parser to `parse<Row>_`.
+- An `Enum` or `Bool` column marked `@null` now holds null in the lifecycle (#359), as a
+  nullable Int column does. A row created without a default starts at null, as the
+  database row of `export --kind sql` does; the lifecycle used to start it at the first
+  value (`red`, `false`) and gave the column no null at all. `check`, `states`, `verify`
+  (native, TLC, and the TLA+ export), and `verify --prove` read the column the same way,
+  by the language reference ([Null](docs/language-reference.md#null)): a null column
+  satisfies no `==` with a value or a column and satisfies every `!=`, `col == null` and
+  `col == present` now ask about null (both were always false), `col in (...)`
+  holds only when it names null or the column's value, and `sets(UC, E.col == null)` now
+  writes null (it wrote nothing). A logical `@derived` comparison of such a column is
+  neither true nor false while it is null. An Enum or Bool column with null compares with
+  one without it value by value. Verdicts and state counts change for models that read
+  such a column: `forbidden(Item, k1 != Item.k2)` now fails on a created row where both
+  are null, `required(Item, k1 == red)` fails there, and two rows left null no longer
+  share a `@unique` value. `states` lists `null` among the column's values (`k1[null|red|
+  blue]`), and `UnreachableEnumVariant` now names a first value that only the old start
+  reached. On a `@null` lifecycle column the null is no state of the state model, which
+  keeps the declared values. The TLA+ export writes the null of such a column as `"<null>"`,
+  and a nullable Bool column as the strings `"false"` and `"true"`. Generated code (`codegen`) creates such a row with `None` / `nil` / `null`
+  where it wrote the first value. To keep the old start, give the column a `@default`.
+  No sample changes verdict: no sample entity has a nullable Enum or Bool column.
 
 - Two `@null` columns that both hold null are no longer equal (#355). `col == other` between
   two columns holds only when both are present and equal, and `col != other` holds whenever
@@ -226,6 +247,12 @@
   column's values, spelled as declared (`@default(open)`, not `@default(Open)`), or
   lowercase `true` or `false`. `@default(null)` is no value of either type, even on a
   `@null` column; drop it (#187).
+- An unknown table or key in `rdra.toml` is an error. A misspelled table such as `[verfiy]`
+  or `[chek]`, or an unknown key under `[model]`, used to be ignored, so the command ran at
+  its default memory limit and instance counts without a word. Every loading command now
+  exits `1` with a message that names `rdra.toml`, the line, and the key, and the LSP
+  shows that message, as for an unknown key under `[check]` or `[verify]`. `[dependencies]` stays
+  free-form. To migrate, fix the spelling or remove the table.
 
 ### Added
 
@@ -1024,6 +1051,40 @@
 
 ### Fixed
 
+- The language server sends its results under the paths the editor opened the files by.
+  In a workspace opened through a symlink, diagnostics, definitions, references, renames,
+  code lenses and workspace symbols used to name each file by the path the symlink points
+  to, a document the editor did not have open, so the open file showed no diagnostics. A
+  document is named as the editor opened it, and another file under a workspace root as
+  the root the editor named.
+- An unfinished declaration at the end of a file, as while it is typed (`actor ` on the last
+  line), no longer empties that file's syntax tree. The parser recovered from a broken
+  declaration in the middle of a file but not at its end, so the whole file was dropped:
+  the language server's outline, code lenses and semantic colors went blank, the files
+  that import it reported `unknown module` and `undefined symbol` for what it declares,
+  and `check` reported only the syntax error. The declarations before the unfinished one
+  are now kept, with the same syntax error.
+- `codegen` computes a logical `@derived` column in the transition functions it prints, in
+  Rust, Go and TypeScript. A function used to copy the column from the row it read, so a
+  function that changed `qty` returned `bulk` as it was, against the header's obligation
+  `bulk always equals qty >= 3`, and a create function took `bulk` as an input. Now a
+  literal write folds it (`bulk: true`), and a column copied from an argument row is read
+  there (`bulk: order.qty >= 3`). A derived column the function cannot compute that way (an
+  arithmetic one, one that compares two columns or reads `now`, a nullable operand, or an
+  operand the caller passes) is an input of every function that writes the row, and the
+  function's doc says why. Functions on an entity with such a column gain that input, and a
+  create function's derived inputs come after its other inputs.
+- The language server withdraws the diagnostics of a file that leaves the analysis: one
+  deleted, renamed, or moved out of the workspace, as on a branch switch. Their errors and
+  warnings used to stay in the editor's problem list until it restarted, and so did those of
+  the last `.rdra` file of a workspace when it was deleted.
+- A use case that a BUC holds only through a step of one of its flows (`covers(Step, UC)`)
+  no longer draws the `TimerTriggeredUseCaseUnreachable` warning ("belongs to no BUC") when a
+  timer triggers it, as an event-triggered one already did not (#161). The warning failed
+  a gate that treats warnings as errors. The `VIA` column of `states` names that BUC for
+  such a use case too, where it used to print the use case without one. When several BUCs
+  hold a use case, `VIA` names the first by id, where it used to name the first whose
+  `contains` was declared.
 - The language server no longer crashes on hover, signature help, or completion right after
   a multi-byte character (#356), as inside `actor A "受付(窓口)"`, after `// 受付(`, or after
   an unclosed `"受付`. The server used to stop at a panic there. A request whose handler

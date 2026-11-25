@@ -388,6 +388,13 @@ fn values_render_as_tlc_prints_them() {
     assert_eq!(render_value(&enumd, Value(0)), "\"a\\\"b\"");
     assert_eq!(render_value(&Domain::NullableInt, Value(0)), "-1");
     assert_eq!(render_value(&Domain::NullableInt, Value(4)), "3");
+    // A nullable Enum or Bool is all strings, null first (#359).
+    let nullable = Domain::NullableEnum(vec!["red".to_string(), "blue".to_string()]);
+    assert_eq!(render_value(&nullable, Value(0)), "\"<null>\"");
+    assert_eq!(render_value(&nullable, Value(2)), "\"blue\"");
+    assert_eq!(render_value(&Domain::NullableBool, Value(0)), "\"<null>\"");
+    assert_eq!(render_value(&Domain::NullableBool, Value(1)), "\"false\"");
+    assert_eq!(render_value(&Domain::NullableBool, Value(2)), "\"true\"");
     let parent = system(&sample("order.rdra")).entity_ids().next().unwrap();
     let owner = |optional| Domain::Instance { parent, optional };
     assert_eq!(render_value(&owner(false), Value(0)), "1");

@@ -1284,6 +1284,9 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                                 *w,
                             ),
                             Assigned::Null => "nil".to_string(),
+                            Assigned::Derived { expr: e, wrap: w } => {
+                                wrap(expr(e, &row, &row_ty, &acc, &input, 3), *w)
+                            }
                         };
                         let key = if is_variant(domain, ty) {
                             state_field(target)

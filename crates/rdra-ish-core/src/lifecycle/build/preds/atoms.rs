@@ -73,12 +73,13 @@ impl<'m> Builder<'m> {
         };
         let lit = |v: Value| Pred::Cmp(term.clone(), CmpOp::Eq, Term::Lit(v));
         match (&domain, value) {
-            (Domain::Enum(values), EffectValue::EnumVariant(s)) => {
-                crate::lifecycle::build::variant_index(values, s)
-                    .map_or(Pred::False, |i| lit(Value(i)))
+            (Domain::Enum(_) | Domain::NullableEnum(_), EffectValue::EnumVariant(s)) => {
+                domain.of_name(s).map_or(Pred::False, lit)
             }
-            (Domain::Bool, EffectValue::Bool(b)) => {
-                lit(if *b { Value::TRUE } else { Value::FALSE })
+            (Domain::Bool | Domain::NullableBool, EffectValue::Bool(b)) => lit(domain.of_bool(*b)),
+            (Domain::NullableEnum(_) | Domain::NullableBool, EffectValue::Null) => lit(Value::NULL),
+            (Domain::NullableEnum(_) | Domain::NullableBool, EffectValue::Present) => {
+                Pred::Cmp(term, CmpOp::Ne, Term::Lit(Value::NULL))
             }
             (Domain::Nullable, EffectValue::Null) => lit(Value::NULL),
             (Domain::Nullable, EffectValue::Present | EffectValue::Int(_)) => lit(Value::PRESENT),
@@ -168,7 +169,8 @@ impl<'m> Builder<'m> {
     }
 
     /// `lhs == rhs` / `lhs != rhs` over two columns of one entity: both Int-typed, or of one
-    /// domain, as two Enum columns with the same values are. A null operand equals nothing.
+    /// domain apart from null, as two Enum columns with the same values are. A null operand
+    /// equals nothing.
     #[allow(clippy::too_many_arguments)]
     fn columns_eq(
         &mut self,
@@ -183,9 +185,7 @@ impl<'m> Builder<'m> {
         let l = self.read_slot(ek, lhs, at, site);
         let r = self.read_slot(ek, rhs, at, site);
         match (l, r) {
-            (Some(l), Some(r)) if l.1 == r.1 || (l.1.is_numeric() && r.1.is_numeric()) => {
-                columns_cmp(l, op, r)
-            }
+            (Some(l), Some(r)) if l.1.compares_with(&r.1) => columns_cmp(l, op, r),
             _ => {
                 self.diag(
                     vec![ek],

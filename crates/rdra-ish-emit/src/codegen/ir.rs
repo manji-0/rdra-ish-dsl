@@ -557,6 +557,12 @@ pub enum Assigned {
         wrap: bool,
     },
     Null,
+    /// A `@derived` Bool column: its expression, read on what the function writes to the
+    /// columns it names (an argument row's column it copies, or a value folded in).
+    Derived {
+        expr: Expr,
+        wrap: bool,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

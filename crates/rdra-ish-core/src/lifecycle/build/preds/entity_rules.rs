@@ -542,7 +542,10 @@ impl Builder<'_> {
                 .filter(|v| {
                     matches!(
                         self.ts.vars[v.index()].domain,
-                        Domain::NullableInt | Domain::Instance { optional: true, .. }
+                        Domain::NullableInt
+                            | Domain::NullableEnum(_)
+                            | Domain::NullableBool
+                            | Domain::Instance { optional: true, .. }
                     )
                 })
                 .map(|&v| Pred::Cmp(slot(v, 0), CmpOp::Eq, Term::Lit(Value::NULL))),

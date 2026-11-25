@@ -45,7 +45,8 @@ pub(super) fn function(
 
     let mut inputs: Vec<FnInput> = Vec::new();
     let mut checks: Vec<ArgCheck> = Vec::new();
-    let outputs = f.outputs(&effects, &mut inputs, &mut checks)?;
+    let mut doc = cx.doc();
+    let outputs = f.outputs(&effects, &mut inputs, &mut checks, &mut doc)?;
     let targets = cx.targets(&outputs);
     let (conditions, elems) = f.conditions(&targets, &mut inputs, &mut checks)?;
     f.raised_on_checks(&mut checks)?;
@@ -60,7 +61,7 @@ pub(super) fn function(
         elems,
         marks_in,
         marks_out,
-        doc: cx.doc(),
+        doc,
         rows: f.rows,
         inputs,
         checks,
@@ -293,15 +294,21 @@ impl ActionCx<'_> {
                     let is_tag = matches!(self.declared.get(&self.entity_id(p)),
                         Some(Declared::Sum(sum)) if sum.tag.wire == *column);
                     if !is_tag {
-                        let Domain::Enum(values) = &ts.var(*var).domain else {
+                        let domain = &ts.var(*var).domain;
+                        if domain.names().is_none() {
                             return Err(unsupported(
                                 "a transition on a column that is not an enum",
                             ));
-                        };
+                        }
                         let named = a
                             .iter()
                             .map(|arm| {
-                                let v = |x: Value| values[usize::from(x.0)].clone();
+                                let v = |x: Value| {
+                                    domain
+                                        .name(x)
+                                        .expect("an arm names declared values")
+                                        .to_string()
+                                };
                                 (v(arm.from), v(arm.to))
                             })
                             .collect();
@@ -351,7 +358,14 @@ impl ActionCx<'_> {
                         Domain::Nullable if matches!(&values[..], [c] if c.value == Value::PRESENT) => {
                             Write::Input
                         }
-                        Domain::Enum(_) | Domain::Bool if all => Write::Input,
+                        Domain::Enum(_)
+                        | Domain::NullableEnum(_)
+                        | Domain::Bool
+                        | Domain::NullableBool
+                            if all =>
+                        {
+                            Write::Input
+                        }
                         _ => return Err(unsupported("a choice among some values (phase 5)")),
                     };
                     writes.insert((usize::from(*param), column.clone()), w);
@@ -376,7 +390,8 @@ impl ActionCx<'_> {
                 continue;
             };
             let p = usize::from(*param);
-            let Domain::Enum(values) = &ts.var(*var).domain else {
+            let domain = &ts.var(*var).domain;
+            let Some(values) = domain.names() else {
                 continue;
             };
             let to = outputs.iter().find_map(|o| match &o.kind {
@@ -392,7 +407,7 @@ impl ActionCx<'_> {
             });
             if let Some(to) = to {
                 if let Some(i) = values.iter().position(|v| *v == to) {
-                    targets.insert(p, (*var, Value(u8::try_from(i).expect("small domain"))));
+                    targets.insert(p, (*var, domain.of_variant(i)));
                 }
             }
         }
@@ -517,6 +532,7 @@ impl Frame<'_> {
         effects: &Effects,
         inputs: &mut Vec<FnInput>,
         checks: &mut Vec<ArgCheck>,
+        doc: &mut Vec<String>,
     ) -> Result<Vec<RowOut>, Skip> {
         let mut outputs: Vec<RowOut> = Vec::new();
         for (p, param) in self.cx.action.params.iter().enumerate() {
@@ -539,10 +555,65 @@ impl Frame<'_> {
                 continue;
             }
             let target = self.target(p, param, &effects.writes)?;
+            let entity_key = self.cx.ts.entity(self.cx.action.params[p].entity).key;
+            let columns = &self.cx.model.entities[entity_key].columns;
+            // A derived column the effects do not write: computed below, from what the
+            // other fields hold.
+            let derived = |wire: &str| {
+                columns.iter().find(|c| {
+                    c.name == wire
+                        && c.derived_expr.is_some()
+                        && !effects.writes.contains_key(&(p, wire.to_string()))
+                })
+            };
             let mut fields = Vec::new();
             for field in &target.fields {
-                let assigned = self.assign(p, param, &entity, field, &effects.writes, inputs)?;
+                let assigned = if derived(&field.wire).is_some() {
+                    Assigned::Null
+                } else {
+                    self.assign(p, param, &entity, field, &effects.writes, inputs)?
+                };
                 fields.push((field.clone(), assigned));
+            }
+            for i in 0..fields.len() {
+                let field = fields[i].0.clone();
+                let Some(column) = derived(&field.wire) else {
+                    continue;
+                };
+                let values = derived::RowValues {
+                    model: self.cx.model,
+                    entity: entity_key,
+                    columns,
+                    fields: &fields,
+                    tag: target.tag.as_ref(),
+                    null: &target.null,
+                };
+                fields[i].1 = match derived::derived_value(&values, column) {
+                    Ok(assigned) => assigned,
+                    Err(why) => {
+                        let name = format!("{}_{}", snake(&entity), field.wire);
+                        let k = input_index(
+                            inputs,
+                            name.clone(),
+                            field.ty.clone(),
+                            format!("{entity}.{} of the written row.", field.wire),
+                        );
+                        inputs[k].nullable = field.nullable;
+                        doc.push(format!(
+                            "`{name}` is an input: {entity}.{} is derived ({}), and this function does not compute it because {why}. Pass the value it has on the written row.",
+                            field.wire,
+                            column
+                                .derived_expr
+                                .as_ref()
+                                .map(|e| e.display())
+                                .unwrap_or_default()
+                        ));
+                        Assigned::Input {
+                            input: k,
+                            wrap: false,
+                        }
+                    }
+                };
             }
             self.check_null(p, param, &entity, &target.null, &effects.writes, checks)?;
             // Every effect on this param lands on a field of the target type.

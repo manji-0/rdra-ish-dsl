@@ -452,6 +452,86 @@ fn functions_of(src: &str) -> DomainModel {
     build(&model, Some(CAPS), &|_| None).unwrap()
 }
 
+/// A logical `@derived` column is computed from what the function writes: folded from a
+/// literal, read from the argument row it copies the operand from, and left an input, with
+/// the reason in the doc, where the function cannot compute it.
+#[test]
+fn derived_columns_are_computed_or_left_an_input_with_the_reason() {
+    let domain = functions_of(
+        r#"
+entity Item "Item" {
+  id: Int @pk
+  status: Enum(open, done) @default(open)
+  qty: Int @default(0)
+  bulk: Bool @derived(qty >= 3)
+  closed: Bool @derived(status == done)
+  total: Int @derived(qty * 2)
+}
+usecase Make "Make"
+usecase Finish "Finish"
+usecase Grow "Grow"
+creates(Make, Item)
+transitions(Finish, Item.status, open -> done)
+sets(Grow, Item.qty == 4)
+"#,
+    );
+    let field = |f: &str, wire: &str| {
+        let fd = domain.fns.iter().find(|x| x.name == f).unwrap();
+        let ir::OutKind::Row { fields, .. } = &fd.outputs[0].kind else {
+            panic!("{f} writes a row");
+        };
+        (
+            fd,
+            fields
+                .iter()
+                .find(|(t, _)| t.wire == wire)
+                .unwrap()
+                .1
+                .clone(),
+        )
+    };
+    let lit = |b: bool| move |a: &ir::Assigned| matches!(a, ir::Assigned::Lit { lit: ir::Lit::Bool(x), .. } if *x == b);
+    // Make writes qty 0 and status open: both fold.
+    let (make, bulk) = field("Make", "bulk");
+    assert!(lit(false)(&bulk), "{bulk:?}");
+    assert!(lit(false)(&field("Make", "closed").1));
+    assert!(
+        !make.inputs.iter().any(|i| i.name == "item_bulk"),
+        "{:?}",
+        make.inputs
+    );
+    // Finish copies qty from the row it reads, and moves status to done.
+    let (_, bulk) = field("Finish", "bulk");
+    assert!(
+        matches!(
+            &bulk,
+            ir::Assigned::Derived {
+                expr: ir::Expr::IntCmp {
+                    op: ir::CmpOp::Ge,
+                    value: 3,
+                    ..
+                },
+                ..
+            }
+        ),
+        "{bulk:?}"
+    );
+    assert!(lit(true)(&field("Finish", "closed").1));
+    // Grow writes qty 4.
+    let (grow, bulk) = field("GrowFromOpen", "bulk");
+    assert!(lit(true)(&bulk), "{bulk:?}");
+    // An arithmetic expression is an input, and the doc says why.
+    let (_, total) = field("GrowFromOpen", "total");
+    assert!(matches!(total, ir::Assigned::Input { .. }), "{total:?}");
+    assert!(
+        grow.doc
+            .iter()
+            .any(|l| l.contains("`item_total` is an input") && l.contains("arithmetic")),
+        "{:?}",
+        grow.doc
+    );
+}
+
 /// A created row that a transition of the same use case moves ends where the arm from its
 /// start state goes, and takes its key from the parent it is created under.
 #[test]

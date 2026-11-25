@@ -79,10 +79,16 @@ pub(super) fn arm_conditions(
         let Some(taken) = chosen.get(&usize::from(*param)) else {
             continue;
         };
-        let Domain::Enum(values) = &ts.var(*var).domain else {
+        let domain = &ts.var(*var).domain;
+        if domain.names().is_none() {
             continue;
+        }
+        let name = |v: Value| {
+            domain
+                .name(v)
+                .expect("an arm names declared values")
+                .to_string()
         };
-        let name = |v: Value| values[usize::from(v.0)].clone();
         for arm in arms {
             if !taken.contains(&(name(arm.from), name(arm.to))) {
                 continue;

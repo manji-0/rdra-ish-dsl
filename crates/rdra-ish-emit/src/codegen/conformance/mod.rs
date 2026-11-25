@@ -974,8 +974,15 @@ impl Cx<'_> {
         if let Some(var) = column_var(ts, entity, &field.wire) {
             let v = state.get(ts, var, slot);
             return match &ts.var(var).domain {
-                Domain::Enum(values) => values[usize::from(v.0)].clone(),
-                Domain::Bool => (v == Value::TRUE).to_string(),
+                Domain::NullableEnum(_) | Domain::NullableBool if v == Value::NULL => {
+                    "~".to_string()
+                }
+                d @ (Domain::Enum(_) | Domain::NullableEnum(_)) => {
+                    d.name(v).expect("a declared value").to_string()
+                }
+                d @ (Domain::Bool | Domain::NullableBool) => {
+                    d.truth(v).expect("a truth value").to_string()
+                }
                 Domain::Int => v.0.to_string(),
                 Domain::NullableInt if v == Value::NULL => "~".to_string(),
                 Domain::NullableInt => (v.0 - 1).to_string(),

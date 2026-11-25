@@ -14,11 +14,11 @@ use std::collections::{HashMap, HashSet};
 
 use super::diag::{Diag, StateDiag};
 use super::types::{
-    Bounds, Domain, Effect, EntId, Guard, Param, ParamRole, Pred, Site, Start, Value, VarDecl,
-    VarId, VarKind,
+    Bounds, CmpOp, Domain, Effect, EntId, Guard, Param, ParamRole, Pred, Site, Start, Term, Value,
+    VarDecl, VarId, VarKind,
 };
 use super::{Built, Scope, TransitionSystem};
-use crate::model::{ConditionKey, EntityKey, FkId, NodeRef, RelKind, SemanticModel, UseCaseKey};
+use crate::model::{ConditionKey, EntityKey, FkId, SemanticModel, UseCaseKey};
 use naming::Named;
 
 pub(super) fn build(model: &SemanticModel, bounds: Bounds, scope: &Scope) -> Built {
@@ -156,7 +156,7 @@ enum CopyMiss {
 
 enum EffectRhs {
     Value(Value),
-    /// `sets(.., col == present)` on a nullable Int column: any non-null value.
+    /// `sets(.., col == present)` on a nullable Int, Enum, or Bool column: any non-null value.
     AnyNonNull,
     None,
 }
@@ -239,14 +239,12 @@ fn prior_write(a: &mut ActionDraft, var: VarId, p: u8) -> Option<Site> {
     }
 }
 
+/// The BUC a use case's actions name in `states` provenance: of the BUCs that hold it,
+/// directly or through a step of one of their flows, the first by id.
 fn first_buc(model: &SemanticModel, uc: UseCaseKey) -> Option<crate::model::BucKey> {
-    model
-        .relations
-        .iter()
-        .find_map(|rel| match (&rel.kind, &rel.from, &rel.to) {
-            (RelKind::Contains, NodeRef::Buc(b), NodeRef::UseCase(u)) if *u == uc => Some(*b),
-            _ => None,
-        })
+    crate::business_flow::bucs_of_use_case(model, uc)
+        .into_iter()
+        .next()
 }
 
 /// Declared casing wins: exact match first, then case-insensitive.
@@ -260,4 +258,26 @@ fn variant_index(values: &[String], name: &str) -> Option<u8> {
         .position(|v| v == name)
         .or_else(|| values.iter().position(|v| v.eq_ignore_ascii_case(name)))
         .map(|i| i as u8)
+}
+
+/// Term equality of two slots whose domains `compares_with` each other, under which null
+/// equals null. Every engine reads a `Pred::Cmp` of two non-numeric slots as equality of their
+/// values, which numbers an Enum or Bool column with null one past the same column without
+/// it, so such a pair compares value by value instead: `l = v /\ r = v` for some declared
+/// `v`, which a null on either side never meets.
+fn slots_eq((lt, ld): (Term, &Domain), (rt, rd): (Term, &Domain)) -> Pred {
+    if ld == rd || ld.is_numeric() || ld.without_null() != rd.without_null() {
+        return Pred::Cmp(lt, CmpOp::Eq, rt);
+    }
+    let declared = ld.names().map_or(2, <[String]>::len);
+    Pred::Or(
+        (0..declared)
+            .map(|i| {
+                Pred::And(vec![
+                    Pred::Cmp(lt.clone(), CmpOp::Eq, Term::Lit(ld.of_variant(i))),
+                    Pred::Cmp(rt.clone(), CmpOp::Eq, Term::Lit(rd.of_variant(i))),
+                ])
+            })
+            .collect(),
+    )
 }
