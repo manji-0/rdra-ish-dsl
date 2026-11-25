@@ -610,7 +610,7 @@ fn functions_agree_with_the_transition_system() {
                     checked_rows += 1;
                     let moved = run.edges().iter().any(|edge| {
                         edge.from as usize == at && {
-                            let (a, p) = run.step(edge);
+                            let (a, p) = run.step(&edge);
                             a == act && p == [slot as u8]
                         }
                     });

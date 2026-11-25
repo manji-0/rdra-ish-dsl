@@ -72,12 +72,22 @@ impl Job {
         }
     }
 
-    /// Whether the job may run up to instance symmetry in phase 1 (#212): a safety cone, or
-    /// an `always` (`PropertyJob::symmetric`), on a cone the sub-lifecycle reduction leaves
-    /// whole.
+    /// The bytes of the largest module the job runs, the `_Full` and `_WF` ones of a
+    /// property included: TLC's heap follows it (`TlcHeap::of`).
+    pub(super) fn module_bytes(&self) -> u64 {
+        let extra = match &self.kind {
+            JobKind::PropertyCone(p) => p.full.iter().chain(&p.wf).map(|s| s.tla.len()).max(),
+            JobKind::Cone(_) | JobKind::Explored(_) | JobKind::Whole(_) => None,
+        };
+        self.tla.len().max(extra.unwrap_or(0)) as u64
+    }
+
+    /// Whether the job may run up to instance symmetry (#212): a safety cone, whole (phase 1)
+    /// or reduced, up to `G_T` (phase 3), or an `always` (`PropertyJob::symmetric`) on a cone
+    /// the sub-lifecycle reduction leaves whole.
     pub(super) fn symmetric(&self) -> bool {
         match &self.kind {
-            JobKind::Cone(cone) => cone.system.reduction().is_none(),
+            JobKind::Cone(_) => true,
             JobKind::PropertyCone(p) => p.symmetric(),
             JobKind::Explored(_) | JobKind::Whole(_) => false,
         }

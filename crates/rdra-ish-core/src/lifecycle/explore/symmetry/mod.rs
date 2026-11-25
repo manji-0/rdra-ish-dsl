@@ -6,8 +6,9 @@
 //! (`Start::Identity`) couples its child and its parent. The group of a state `s`, `G_s`,
 //! permutes the slots of each class that are not absent in `s` and fixes the absent ones,
 //! so the lowest absent slot a creation takes is the same in every member of a class. An
-//! owner value on a present row is relabelled by its parent's permutation; on an absent or
-//! deleted row it holds the base value, which names no row, and stays.
+//! owner value on a present or deleted row is relabelled by its parent's permutation (a
+//! deleted row keeps the key it had, which a later step of a split use case can read); on
+//! an absent row it holds the base value, which names no row, and stays.
 //!
 //! `breaks` scans the system for what would break the group and leaves those classes out:
 //! their slots stay where they are, so every run stays sound and loses only reduction.
@@ -129,10 +130,16 @@ pub enum Rule {
     /// A block of classes that name each other's rows has more arrangements than the
     /// canonicalizer enumerates.
     JointTooLarge,
-    /// A step reads the owner of a row bound by its run mark, which a step may have
-    /// deleted: a deleted row's owner holds the base value, slot 0, which the group does
-    /// not relabel.
-    DeletedRowOwner,
+    /// The sub-lifecycle of a reduced cone runs up to `H` (#212 phase 2): its classes keep
+    /// what the quotient reads, so an entity that holds `obs`, an input or a fold bit, a stub
+    /// of a T parent, and an entity whose rows a T key can name stay where they are.
+    Observed,
+    /// A #74-reduced cone runs up to `G_T` (#212 phase 3): its state holds a class
+    /// representative for S and the class tables key on the inputs and the bits row by row,
+    /// so an S entity, an entity that holds an S var or an input or whose rows such a key
+    /// names, an entity a bit is kept per row of, and an entity an S action binds stay where
+    /// they are (`Reduction::fixed`).
+    Reduced,
 }
 
 impl Rule {
@@ -149,9 +156,8 @@ impl Rule {
             Rule::JointTooLarge => {
                 "its rows and the rows that name them have too many arrangements"
             }
-            Rule::DeletedRowOwner => {
-                "a step reads the key of a row an earlier step may have deleted"
-            }
+            Rule::Observed => "the reduction of its cone reads its rows",
+            Rule::Reduced => "the reduced sub-lifecycle of its cone keys on its rows",
         }
     }
 }
@@ -205,7 +211,7 @@ pub(crate) struct Block {
 #[derive(Clone, Debug)]
 pub(crate) struct ChildRef {
     pub(crate) off: usize,
-    /// Where the child's existence var starts: only a present row names its parent.
+    /// Where the child's existence var starts: an absent row names no parent.
     pub(crate) exists: usize,
     pub(crate) slots: usize,
     pub(crate) optional: bool,
@@ -239,13 +245,53 @@ fn find(parent: &mut [usize], x: usize) -> usize {
 }
 
 impl Group {
-    /// The group of `ts`, with every class its scan finds a reason to leave out left out.
-    /// A system #74 reduced is not one: its state holds class representatives.
+    /// The group of `ts`, with every class its scan finds a reason to leave out left out. On
+    /// a #74-reduced cone it is `G_T` (#212 phase 3): the classes of `Reduction::fixed`, which
+    /// the representative and the class tables read, are left out too (`Rule::Reduced`).
     pub(crate) fn of(ts: &TransitionSystem) -> Group {
+        let fixed: Vec<(EntId, Rule)> = match ts.reduction() {
+            Some(r) => r
+                .fixed(ts)
+                .into_iter()
+                .map(|e| (e, Rule::Reduced))
+                .collect(),
+            None => Vec::new(),
+        };
+        let g = Self::leaving_out(ts, &fixed);
+        if let Some(r) = ts.reduction() {
+            if std::env::var_os("RDRA_ISH_G_T_STATS").is_some() {
+                let why = r.fixed_why(ts);
+                let ents: Vec<String> = (0..ts.entities().len())
+                    .map(EntId::at)
+                    .map(|e| {
+                        let state = match (g.moves(e), why.get(&e)) {
+                            (true, _) => "moves".to_string(),
+                            (false, Some(w)) => format!("fixed: {}", w.join(", ")),
+                            (false, None) => "fixed by the scan or one slot".to_string(),
+                        };
+                        format!("{}[{}] {state}", ts.entity(e).id, ts.slots(e))
+                    })
+                    .collect();
+                eprintln!("g-t: {}", ents.join("; "));
+            }
+        }
+        g
+    }
+
+    /// The group of `ts` with the classes of `fixed` left out as well (`Rule::Observed`):
+    /// the subgroup `H` the sub-lifecycle of a reduced cone runs up to (#212 phase 2).
+    pub(crate) fn fixing(ts: &TransitionSystem, fixed: &[EntId]) -> Group {
         debug_assert!(
             ts.reduction().is_none(),
-            "a reduced system has no group here"
+            "the sub-lifecycle runs up to H unreduced"
         );
+        let fixed: Vec<(EntId, Rule)> = fixed.iter().map(|e| (*e, Rule::Observed)).collect();
+        Self::leaving_out(ts, &fixed)
+    }
+
+    /// The group of `ts` with the classes of `fixed` left out for the rule beside each, on
+    /// top of what the scan leaves out.
+    fn leaving_out(ts: &TransitionSystem, fixed: &[(EntId, Rule)]) -> Group {
         let n_ent = ts.entities().len();
         // Identity starts couple a child and its parent.
         let mut uf: Vec<usize> = (0..n_ent).collect();
@@ -282,7 +328,10 @@ impl Group {
         }
         // What breaks the group, by entity; a class with one such entity is left out.
         let mut left_out: Vec<LeftOut> = Vec::new();
-        for (e, rule) in breaks::scan(ts, &class_of) {
+        for (e, rule) in breaks::scan(ts, &class_of)
+            .into_iter()
+            .chain(fixed.iter().copied())
+        {
             classes[class_of[e.index()]].moves = false;
             left_out.push(LeftOut {
                 entity: ts.entity(e).id.clone(),
@@ -457,9 +506,14 @@ impl Group {
         self.class_of[e.index()]
     }
 
+    /// Whether the group moves the rows of `e`.
+    pub(crate) fn moves(&self, e: EntId) -> bool {
+        self.classes[self.class_of[e.index()]].moves
+    }
+
     /// `s` under the permutation `perm` (old slot to new position, per class at `first`), in
     /// the state's own layout: every var of a class moves with its slots, and an owner on a
-    /// present row names its parent's new position.
+    /// row that is not absent names its parent's new position.
     pub(crate) fn apply(&self, perm: &[u8], s: &[u8], out: &mut [u8]) {
         for &off in &self.free {
             out[off] = s[off];
@@ -471,7 +525,7 @@ impl Group {
                 for (old, &new) in p.iter().enumerate() {
                     let v = s[col.off + old];
                     let v = match col.owner {
-                        Some((pc, optional)) if s[exists + old] == Value::PRESENT.0 => {
+                        Some((pc, optional)) if s[exists + old] != Value::ABSENT.0 => {
                             self.relabel(perm, pc, optional, v)
                         }
                         _ => v,

@@ -132,6 +132,39 @@
 
 ### Added
 
+- `verify --symmetry` also covers a reduced safety cone (#212, phase 3): under `always`, and
+  under `retry` once its plain run stopped at the memory limit, it runs up to `G_T`, the
+  instance symmetry of its T rows, which leaves every S entity, and with it the class
+  representative, where it is, along with each entity the reduction keys on (an S var or an
+  input, the rows such a key names, a bit's rows, an S action's params). The notes under the
+  line name those entities. A counterexample is lifted through the symmetry, then through
+  the reduction, and replayed. Without the option nothing changes, and `retry` changes
+  only a cone that stops at the memory limit. At `--instance-count 3 --memory 8GiB`
+  patent-ops' `Forbidden_Patent_4`, whose plain run stopped at 40.8M states, takes
+  31,926,220 orbits for about 260M states and is decided (`ok`, 98 s at `RDRA_JOBS=4`), and
+  with it `Inv_Patent_0`. `Forbidden_OfficeAction_3` is not: `G_T` moves its one T entity,
+  so it stores at most 6 times fewer states, and it stopped at 67.1M orbits. With S fixed
+  the factor on patent-ops' complete n=3 cones is 3.0 to 5.5. The `shadow` build counts the
+  run's twin on a reduced cone as `reduced_orbit_run`.
+
+- `verify --symmetry` also covers the sub-lifecycle of a reduced cone (#212, phase 2):
+  under `retry` and `always`, a sub-lifecycle whose run stops at the memory limit, alone,
+  runs again up to `H`, the instance symmetry that keeps what the quotient reads, and the
+  cone is reduced where it was left whole. The classes are the same sets of states, so the
+  verdicts are the same; their numbering and representatives can differ, and so can such a
+  cone's TLA+ tables and its lifted traces. A cone whose sub-lifecycle fits keeps its
+  output. A trace through such a cone runs the sub-lifecycle up to `H` again and lifts its
+  path to concrete states before it is replayed. Without the option nothing changes. At
+  `--instance-count 3` the sub-lifecycle of clinic-ops' `Forbidden_ClinicalOrder_1`,
+  whose plain run stopped at the memory limit after 25.3M states, takes 240,016 orbits for
+  about 61.8M states and yields #284's 20 classes, and the cone is decided (`ok`, 5,050
+  states; `verify --entity ClinicalOrder --memory 8GiB --symmetry retry` takes 72 s at
+  `RDRA_JOBS=4`, 6.2 GiB at the peak). The `shadow` build adds the `s_up_to_h` twin, which holds the
+  classes up to `H` to those of the plain run of the same sub-lifecycle, up to 200,000
+  states, and reads `RDRA_ISH_FORCE_S_UP_TO_H`, a test-only switch that runs every
+  sub-lifecycle up to `H` at once, so that the samples at small bounds reach the path and
+  its twin; a release build ignores it.
+
 - `verify --symmetry never|retry|always` (#212, phase 1; experimental, default `never`):
   explore an unreduced safety cone, and the cone of an `always` property, up to instance
   symmetry, one stored state per orbit of states that differ only in which slot holds which
@@ -140,9 +173,10 @@
   sets the default; under `[check]` it warns and is not read. A counterexample is lifted to
   concrete slots and replayed, with the rows each step names, before it prints. A static
   scan leaves out an entity whose slots the model tells apart (an ordered id comparison, an
-  id against a literal, a key set to a literal row, and six more) and names it and the
+  id against a literal, a key set to a literal row, and five more) and names it and the
   reason under the line. A cone run up to symmetry gathers no entity view (#251) and shares
-  no run with the entity, safety and property passes (#209). Without the option nothing changes. At `--instance-count 3` the
+  no run with the entity, safety and property passes (#209). Without the option nothing
+  changes. At `--instance-count 3` the
   five clinic-ops and insurance-claim-ops lines that stopped at the memory limit are decided
   under `--memory 8GiB`. In `rdra-ish-core`, `TransitionSystem::run_orbits` returns an
   `OrbitRun`, which has no graph or adjacency to read, and the vacuity readers take any
@@ -371,6 +405,73 @@
 
 ### Changed
 
+- A run keeps fewer bytes per state (#296 item 2.1, #255). An edge is its 4-byte target
+  and a binding id in 1, 2 or 4 bytes (the fewest that the run's largest id needs, widened
+  at the same id on every machine), where it was 12 bytes with its source: the source is
+  the state whose first edge, kept per state read, comes at or before it. A parent is a
+  4-byte edge index where it was 8 bytes. A run that stops once every check has failed (a
+  safety cone of `verify` and `check`) keeps no edge list at all: its parent per state is
+  the source and the binding id, and it records per `after` step whether a move of its
+  action ran and whether one reached the rows the step reads, which is all its
+  vacuity check reads. On the largest cone of each run measured in #296, the bytes kept
+  per state fall from 159.4 to 115.7 on `patent-ops`, 288.7 to 187.7 on `food-permit-ops`
+  (`view BusinessPermit`), 179.9 to 127.4 on `clinic-ops`, 212.5 to 161.2 on
+  `insurance-claim-ops` and 234.6 to 120.3 on `oidc-auth --instance-count 1`, and peak
+  RSS falls by 13% to 23% (1,085 MB to 831 MB on `food-permit-ops`). `--memory` charges
+  these sizes, so a run that stopped at the limit now stops later: the stop point is still
+  computed from the counts, and the same on every machine and thread count. For example
+  `check --memory 4KiB` on `flags.rdra` stops at 64 states where it stopped at 38, and
+  `verify samples/patent-ops` completes its `OfficeAction` cones at `256MiB`. The output of
+  every run that completes is unchanged at every sample's and corpus case's header flags.
+  Reading an edge from three buffers costs instructions: at `RDRA_JOBS=1`, `verify`
+  retires 2% to 7% more (292.7 G to 304.1 G on `insurance-claim-ops`, 32.9 G to 34.6 G on
+  `patent-ops`, 90.4 G to 96.8 G on `food-permit-ops`). A `shadow` build compares every
+  edge, parent and recorded `after` step with the 12-byte list kept beside them.
+- `verify --with-tlc` sizes each TLC run's heap by its module and schedules the runs by
+  the memory they hold (#309).
+  - A run gets 512 MiB of heap per MiB of module text, in whole GiB: at least `1g` for a
+    cone and `2g` for a whole-model run, and at most TLC's share of `--memory`. Every
+    module under 2 MiB keeps the old heap. food-permit-ops'
+    `AfterAssert_SuspendBusiness_0` cone at `--instance-count 3` (a 7.6 MB module) now gets
+    `-Xmx4g` and passes with 7,167,444 states (`verify --instance-count 3 --entity
+    BusinessPermit --memory 16GiB --with-tlc`: 130 s). At the old `1g` TLC ran out of
+    memory on it.
+  - A run that runs out of memory runs once more at twice its heap when the share holds
+    that. Its line ends `rerun at -Xmx<2h> after -Xmx<h> ran out of memory`.
+  - A module that needs more heap than the share is not run. It is a `tool_error` whose
+    report names the heap it needs and says to raise `--memory` or set `RDRA_TLC_HEAP`.
+  - `RDRA_TLC_HEAP` and an `-Xmx` in `JAVA_TOOL_OPTIONS` still set every heap, with no
+    rerun.
+  - The runs go at once as long as their `-Xmx` plus 256 MiB per JVM fit the share, in
+    place of up to 8 at once. A run whose heap alone is past the share runs alone. At the
+    default `16GiB` that is six cone runs of `1g` at once, not eight, and at `4GiB` one,
+    not two.
+  - Each run's TLC workers are the cores divided by the runs that can go at once (those
+    going and queued, no more than fit the share), at most 8, and at least 1. Before, it
+    was at least 2 on 4 cores and up to all the cores. Past 4 to 8 workers a run gained no
+    time and spent 50 to 70% more CPU.
+- Keys of the quotient cache that explore the same sub-lifecycle share its run of S (#296):
+  keys that differ in what T observes, the inputs or the rises, or only in where their
+  actions came from, partitioned one run each, which `verify` explored again per key. A
+  complete run is held by the sub-lifecycle and the caps that can stop it, charged to the
+  command's pool while the cache holds it, and taken only by a pool that covers its peak;
+  a run that a cap or the memory limit stopped is never shared. The output is unchanged;
+  a `shadow` build holds every shared run to a fresh one, and `RDRA_ISH_QUOTIENT_STATS`
+  counts them (`runs_held`, `run_hits`, `run_bytes`). At `RDRA_JOBS=1`, `verify` retires 8%
+  fewer instructions on `insurance-claim-ops` (312.4 G to 288.6 G).
+- **Verdicts can change:** a deleted row keeps its keys (#212). `deletes(UC, E)` resets the
+  row's columns to their base values and no longer resets its keys to the first slot. The
+  only reader that sees the difference is a later step that binds the deleted row: a step
+  of a split use case whose earlier step deleted it (an `Earlier` parameter) and that reads
+  its key, in a guard or an `after` assertion. That step now reads the
+  parent the row had, where it read the first slot. The native checker, z3, and the TLA+
+  export (`<E>_owner_<P>` stays `UNCHANGED` on a delete) agree. No sample, skill example, or
+  engine-corpus case changes verdict except `sym_deleted_row_owner`, which reads that key
+  and now has a counterexample. A cone that deletes keyed rows can store more states,
+  since deleted rows that named different parents now differ; every sample's `verify`
+  output is unchanged, byte for byte. The TLA+
+  export changes text on 9 models (no verdict). Instance symmetry relabels a deleted row's
+  key with its parent, so a model that reads it is no longer left out of the group.
 - The flake's `tlc` (in `nix develop` and on the `PATH` of the flake's `rdra-ish`) runs TLC
   1.7.4 on JDK 17 instead of JDK 8, with a class-data-sharing archive of TLC's classes built
   with it (#309). `verify --with-tlc` also compiles a state-model run of at most 10,000
@@ -382,6 +483,18 @@
   and a `-continue` run that prints many traces stops with an
   `ArrayIndexOutOfBoundsException` (#314); JDK 17 is 3 to 14% slower than 21 on runs past
   about 50,000 states.
+- The flake has a second launcher beside `tlc`, `tlc-batch`: one JVM that runs TLC jobs one
+  after another (#310), so that a small run does not pay for a JVM start and stop. Only the
+  `engine_equivalence` test uses it so far, for its small TLC runs (a cone of up to 5,000
+  states, a property's cone, a state model); `verify --with-tlc` still starts a process per
+  run. On an 18-core Mac the test went from 178 s to about 100 s of wall time and from
+  1,539 to about 650 CPU-s (two test threads, single runs beside other load), and its 734
+  sample cones of up to 5,000 states from 594 to 107 worker-seconds of TLC. On a 4-core CI
+  runner, in one job, the test took 637 and 633 s without the batch JVMs and 464 and 456 s with
+  them. A job a batch
+  JVM does not answer runs as a process, as every job does without `tlc-batch` on `PATH` or
+  with `RDRA_TLC_BATCH=0`. See
+  [Engine equivalence in batch JVMs](docs/formal-verification.md#engine-equivalence-in-batch-jvms).
 - `--max-patterns` caps only a run that builds an entity view (#251, #296): the cone of an
   entity view in `check` and `states`. Only those runs gather view patterns now. A cone of
   invariants, `after` assertions or `can_reach` alone, a run that quotients a sub-lifecycle,
@@ -416,8 +529,8 @@
   food-permit-ops' `AfterAssert_SuspendBusiness_0` at `--instance-count 3` is now reduced
   to 7,167,444 states and decided (`verify --instance-count 3 --entity BusinessPermit
   --memory 8GiB` takes 158 s); unreduced, it stopped at the memory limit. TLC needs a larger heap for such a cone: the 520,704-cell module checks at
-  `RDRA_TLC_HEAP=4g` in 98 s, and at the default 1 GB heap TLC runs out of memory and
-  `--with-tlc` reports a tool error with that hint. No sample at 1 or 2 instances, no engine
+  `-Xmx4g` in 98 s and runs out of memory at `-Xmx1g`; `--with-tlc` now gives it that heap
+  (#309, below). No sample at 1 or 2 instances, no engine
   corpus case, and no `reduction-diff.py` seed CI runs has a cone in the new range, so their
   output is unchanged.
 - `verify` no longer runs a sub-lifecycle again for each cone that shares it after the run
@@ -576,6 +689,14 @@
 
 ### Fixed
 
+- `verify --with-tlc` names the cause when TLC 1.7.x fails reading a trace back on JDK 21
+  or later (#314). With `--tlc-jar`, `RDRA_TLC_JAR`, or a `tlc` that runs on such a JVM, a
+  `-continue` run that prints many traces stopped with an `ArrayIndexOutOfBoundsException`,
+  and `verify` reported a `counterexample` for what it had printed before, or a
+  `tool_error` with nothing that named the cause. `verify` now warns once when a run's
+  banner shows TLC 1.7.x on JDK 21 or later. A run that stops on the exception is a
+  `tool_error` whose report starts with a hint to run TLC on JDK 17 or earlier, or to use
+  TLC 1.8.0.
 - `codegen` escapes a name that is a keyword of the target language (#265). A use case
   named `Return` printed `pub fn return(...)` in Rust and `export function return(...)` in
   TypeScript, and neither compiled. Rust now prints a raw identifier (`r#return`), or a

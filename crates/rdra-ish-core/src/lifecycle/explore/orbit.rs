@@ -16,11 +16,13 @@
 //! predicates, and the edges' labels.
 
 use super::symmetry::{Canon, Group, LeftOut, Orbits};
-use super::{Caps, Checks, ComponentRun, Edge, PropertyVerdict, Reach, RunEnd, States, Threads};
+use super::{
+    Caps, Checks, ComponentRun, Edge, Ends, PropertyVerdict, Reach, RunEnd, States, Threads,
+};
 use crate::lifecycle::diag::{Diag, StateDiag};
 use crate::lifecycle::expr::{State, StateSlice};
 use crate::lifecycle::reduce::Step;
-use crate::lifecycle::types::{ActId, Ltl};
+use crate::lifecycle::types::{ActId, EntId, Ltl};
 use crate::lifecycle::TransitionSystem;
 
 #[cfg(feature = "shadow")]
@@ -53,22 +55,27 @@ pub struct LabelledEdge<'a> {
 
 impl TransitionSystem {
     /// Explores this system up to instance symmetry under `caps`, evaluating every invariant
-    /// and after-assert. The system must not be #74-reduced (phase 1 of the design). The run
+    /// and after-assert. On a #74-reduced cone the group is `G_T` (#212 phase 3): it moves
+    /// T rows alone and leaves the class representative where it is. The run
     /// gathers no entity view, whatever `caps` asks: an `OrbitRun` has no view to read, and a
     /// view gathered from representatives would miss the patterns of the other states of their
     /// classes. So the pattern cap does not stop it (#251).
     pub fn run_orbits(self, caps: Caps) -> OrbitRun {
-        assert!(
-            self.reduction().is_none(),
-            "a run up to symmetry takes a cone #74 left unreduced"
-        );
         let group = Group::of(&self);
-        let (mut run, violations, parts) = self.bfs_on(
-            caps.without_views(),
-            Checks::All,
-            Threads::Shared,
-            Some(&group),
-        );
+        self.run_orbits_in(caps, Checks::All, group)
+    }
+
+    /// `run_orbits` with the classes of `fixed` left out of the group as well, evaluating
+    /// `checks`: the run of the sub-lifecycle of a reduced cone up to `H` (`Group::fixing`,
+    /// #212 phase 2), which evaluates none.
+    pub(crate) fn run_orbits_fixing(self, caps: Caps, checks: Checks, fixed: &[EntId]) -> OrbitRun {
+        let group = Group::fixing(&self, fixed);
+        self.run_orbits_in(caps, checks, group)
+    }
+
+    fn run_orbits_in(self, caps: Caps, checks: Checks, group: Group) -> OrbitRun {
+        let (mut run, violations, parts) =
+            self.bfs_on(caps.without_views(), checks, Threads::Shared, Some(&group));
         crate::shadow_assert!(
             !run.gathered_views() && run.views.iter().all(|v| v.patterns.is_empty()),
             "a run up to symmetry gathers no entity view"
@@ -93,6 +100,9 @@ impl TransitionSystem {
             };
             let ts = &run.system;
             replays(ts, &start, &steps);
+            // On a reduced cone the lifted path still holds class representatives on the S
+            // side: #74's lift comes after the symmetry's, which was applied last.
+            let (start, steps) = ts.lifted(&start, &steps);
             let last = steps.last().map_or(&start, |s| &s.2);
             // The diagnostic names the binding the concrete last state violates.
             let rebuilt = match reach {
@@ -134,14 +144,30 @@ fn lift(
     at: u32,
     extra: Option<(ActId, &[u8], &StateSlice)>,
 ) -> (State, Vec<Step>) {
-    let ts = &run.system;
     let path: Vec<Edge> = run.path_to(at);
     let first = path.first().map_or(at, |e| e.from);
+    let (start, mut steps, tau) = lift_path(run, g, canon, first, &path);
+    if let Some((act, params, to)) = extra {
+        steps.push(concrete(&run.system, g, &tau, act, params, to));
+    }
+    (start, steps)
+}
+
+/// `path`, stored edges from `states[first]` on, lifted to concrete states as `lift` does,
+/// with the permutation `τ` the last concrete state is read through.
+fn lift_path(
+    run: &ComponentRun,
+    g: &Group,
+    canon: &mut Canon,
+    first: u32,
+    path: &[Edge],
+) -> (State, Vec<Step>, Vec<u8>) {
+    let ts = &run.system;
     let start = run.states[first as usize].to_owned();
     let mut tau = g.identity();
     let mut out = vec![0u8; ts.width];
     let mut steps = Vec::with_capacity(path.len() + 1);
-    for e in &path {
+    for e in path {
         let (act, params) = run.step(e);
         let target = &run.states[e.to as usize];
         let t = ts
@@ -157,13 +183,12 @@ fn lift(
         steps.push(concrete(ts, g, &tau, act, params, &t.next));
         tau = g.compose(&tau, &g.inverse(&sigma));
     }
-    if let Some((act, params, to)) = extra {
-        steps.push(concrete(ts, g, &tau, act, params, to));
-    }
-    (start, steps)
+    (start, steps, tau)
 }
 
-/// The step of `act` under `params` into `t`, read through `tau`.
+/// The step of `act` under `params` into `t`, read through `tau`. A class move of a reduced
+/// cone keeps its params: they may bind the extended sub-lifecycle's action rather than the
+/// cone's, and every row they name is one `G_T` leaves where it is (`Reduction::fixed`).
 fn concrete(
     ts: &TransitionSystem,
     g: &Group,
@@ -173,12 +198,15 @@ fn concrete(
     t: &StateSlice,
 ) -> Step {
     let action = &ts.actions()[act.index()];
-    let params: Box<[u8]> = action
-        .params
-        .iter()
-        .zip(params)
-        .map(|(p, &slot)| g.map_slot(tau, p.entity, slot))
-        .collect();
+    let params: Box<[u8]> = match ts.reduction().is_some_and(|r| r.skips(act)) {
+        true => params.into(),
+        false => action
+            .params
+            .iter()
+            .zip(params)
+            .map(|(p, &slot)| g.map_slot(tau, p.entity, slot))
+            .collect(),
+    };
     let mut next = vec![0u8; t.0.len()];
     g.apply(tau, &t.0, &mut next);
     (act, params, State(next.into_boxed_slice()))
@@ -210,6 +238,33 @@ fn replays(ts: &TransitionSystem, start: &State, steps: &[Step]) {
 }
 
 impl OrbitRun {
+    /// The stored graph, for `Classes::of` and the lift of a reduced trace alone (#212 phase
+    /// 2): a run up to `H` keeps what the quotient reads on every edge, so its stuttering
+    /// partition is the plain one's, class for class. No other reader walks it.
+    pub(crate) fn quotient_graph(&self) -> &ComponentRun {
+        &self.run
+    }
+
+    /// Whether the run's group moves the rows of `e`.
+    pub(crate) fn moves(&self, e: EntId) -> bool {
+        self.group.moves(e)
+    }
+
+    /// The canonical form of `s`, a state of the system, under the run's group.
+    pub(crate) fn canonical(&self, s: &StateSlice) -> State {
+        let mut out = vec![0u8; s.0.len()];
+        Canon::default().canonical(&self.group, &s.0, &mut out);
+        State(out.into_boxed_slice())
+    }
+
+    /// The stored edges `path` from `states[first]`, lifted to concrete states.
+    pub(crate) fn lift_path(&self, first: u32, path: &[Edge]) -> (State, Vec<Step>) {
+        let (start, steps, _) =
+            lift_path(&self.run, &self.group, &mut Canon::default(), first, path);
+        replays(&self.run.system, &start, &steps);
+        (start, steps)
+    }
+
     /// The system explored; the stored states are its states.
     pub fn system(&self) -> &TransitionSystem {
         &self.run.system
@@ -273,10 +328,16 @@ impl OrbitRun {
 
     /// Every edge, in discovery order, as its labels: sound for a reader of which actions
     /// label an edge and of state predicates of its ends.
+    /// What the edges `act` labels reach, orbit self-edges included: those of the stored
+    /// graph (`ComponentRun::step_ends`).
+    pub fn step_ends(&self, act: ActId, binders: &[EntId]) -> Ends {
+        self.run.step_ends(act, binders)
+    }
+
     pub fn labelled_edges(&self) -> impl Iterator<Item = LabelledEdge<'_>> {
         let mut orbit_self = self.orbit_self.iter().peekable();
         self.run.edges().iter().enumerate().map(move |(k, e)| {
-            let (act, params) = self.run.step(e);
+            let (act, params) = self.run.step(&e);
             let is_orbit = orbit_self.next_if(|&&o| o as usize == k).is_some();
             LabelledEdge {
                 from: e.from,

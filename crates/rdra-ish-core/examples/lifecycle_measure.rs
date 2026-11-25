@@ -88,13 +88,14 @@ fn bytes_stats(run: &ComponentRun) -> String {
     let model = store_bytes(
         run.states.len() as u64,
         run.state_width(),
-        run.edges().len() as u64,
+        run.moves(),
+        run.shape(),
     );
     format!(
         "bytes: {} states, {} edges ({:.2}/state), width {} B, peak {} B ({:.1} B/state, admitted {:.1}), kept {} B ({:.1} B/state), model {} B ({:+.1}%)",
         run.states.len(),
-        run.edges().len(),
-        run.edges().len() as f64 / n,
+        run.moves(),
+        run.moves() as f64 / n,
         run.state_width(),
         run.peak,
         run.peak as f64 / n,
@@ -137,7 +138,8 @@ fn print_layers(name: &str, system: &TransitionSystem, run: &ComponentRun) {
         let held = Held {
             bytes: stopped.peak,
             width: stopped.state_width(),
-            edges: stopped.edges().len() as u64,
+            shape: stopped.shape(),
+            edges: stopped.moves(),
             bound: None,
             layers: stopped.layers.clone(),
         };

@@ -31,7 +31,7 @@ reports the same verdicts, and prints counterexamples that replay on the model.
 | A | insurance-claim-ops `Forbidden_ClaimCase_3` | not reached; over 45M | 682,640, complete (measured) |
 | B: #74 reduced at n=2, lost at n=3 | clinic-ops `Forbidden_ClinicalOrder_1` | stopped at 27.9M | #284: S has 61,849,224 states and 20 classes; the reduced cone has 5,050 states (measured with `--memory 32GiB`) |
 | B | insurance-claim-ops `Forbidden_Claim_4` | not reached | over 41.1M orbits of the unreduced cone (measured) |
-| reduced at n=3 | patent-ops `Forbidden_OfficeAction_3` and 3 more | stopped at 33–41M | 15–22× on its complete reduced cones (measured), counted with the S side permuted too; with S fixed, not known |
+| reduced at n=3 | patent-ops `Forbidden_OfficeAction_3` and 3 more | stopped at 33–41M | 15–22× on its complete reduced cones (measured), counted with the S side permuted too; with S fixed, 3.0–5.5× (phase 3, measured) |
 
 Three facts shape the design.
 
@@ -81,9 +81,10 @@ columns, propositions, owners, run marks, raised marks) move with its slots. Ent
   (`build/vars.rs`, `owner_vars`), so the starts are closed only under the coupled
   permutation. The two entities have the same slot count, or the build already fails with
   `IdentityStartSlots`.
-- Any other owner couples nothing. Its value on a *present* child row is relabelled by the
-  parent's permutation. On an absent or deleted row it holds the base value, which names no
-  row and is not relabelled. #212's harness relabelled it at first, which was a bug.
+- Any other owner couples nothing. Its value on a present or deleted child row is
+  relabelled by the parent's permutation: a deleted row keeps the key it had (the owner's
+  decision after phase 1; see below). On an absent row it holds the base value, which names
+  no row and is not relabelled.
 - `now` belongs to no class and stays.
 
 **The group of a state fixes absent slots.** For a state `s`, `G_s` is the product, over
@@ -142,12 +143,13 @@ and no corpus model loses a class; the scan guards against a later builder chang
 name a slot, the trap #212 called `sym_index_named` cannot be a corpus case. It is a unit
 test on a hand-built `TransitionSystem` with a `Term::Index` under `<`.
 
-One shape the scan cannot see: a guard that reads the owner of a deleted row. Such a row
-holds the base value 0, which a non-optional owner reads as slot 0, and the relabelling
-skips it. The `Earlier` role binds rows by run mark, not by existence, so this needs a split
-use case that deletes a row in one step and reads its key in a later one. The bisimulation
-check of the [shadow twin](#verifying-the-reduction) catches it, and a corpus case
-(`sym_deleted_row_owner`) pins it.
+A guard can read the owner of a deleted row: the `Earlier` role binds rows by run mark, not
+by existence, so a split use case can delete a row in one step and read its key in a later
+one. Phase 1 found that a delete which reset the key to its base value made that read name
+slot 0 of a parent class the group moves, so no group that moves the parent was a
+bisimulation. The owner decided that a deleted row keeps its keys, in the native checker,
+z3, and the TLA+ export alike; the group then relabels a deleted row's key with its parent,
+and the corpus case `sym_deleted_row_owner` pins it.
 
 **Entities of a #74 reduction.** In a reduced system the state holds a class representative
 for the S side. Permuting an S entity's slots does not map a representative to a
@@ -361,6 +363,20 @@ its last paragraph, and leaves the class representative alone. #212's 15–22× 
 was counted with the S side permuted too, so the gain here is not known until phase 3
 measures it.
 
+As built (phase 3), `Reduction::fixed` leaves out every S entity, every entity that holds an
+S var or an input and every parent such a key names, the entity each bit is kept per row of,
+and every entity a param of an S action binds: a class move's params are stored with its
+class, so they cannot follow a permutation of T rows. Everything else in T moves. The run
+is an `OrbitRun` on the reduced system; its successors are the reduced step relation's (the
+T actions, the rises, and the class moves), canonicalized after the step, so a canonical
+form keeps its S part and with it its class. A counterexample is lifted through the
+symmetry first, replayed on the reduced system, then lifted through #74 by `lift`, and the
+diagnostic is rebuilt on that last concrete state. The factor, measured at n=3 against the
+plain counts of #212's complete cones: 5.5× on `Forbidden_PatentApplication_1` (29,680,875
+states, 5,413,500 orbits), 5.2× on `Unique_Patent_PatentApplication` (5,237,935 and
+1,009,760), and 3.0× on `Forbidden_DraftingOrder_0` (48,315 and 15,940), against #212's
+22.5×, 21.3× and 12.4× with S permuted.
+
 **Order.** Build S's quotient up to `H`, reduce the cone, then explore the reduced cone up to
 `G_T`. Lift in the reverse order.
 
@@ -436,7 +452,7 @@ runs in `cargo test` in seconds.
 |---|---|
 | `sym_owner_coupled` | A rule that holds only if a child's owner is relabelled with its parent; a canonicalizer that permutes children alone merges states that differ |
 | `sym_identity_pair` | A `Start::Identity` pair; permuting child and parent apart reaches starts the model does not have |
-| `sym_deleted_row_owner` | A deleted row holds base owner 0; relabelling it makes a deleted row look linked to another parent |
+| `sym_deleted_row_owner` | A deleted row keeps its key and a later step reads it; a group that does not relabel it flags the wrong parent |
 | `sym_master_ties` | Identical pre-existing rows named by children; the tie path must branch on named rows and not on others |
 | `sym_self_owned` | An entity that owns itself (a tree); one block, enumerated jointly |
 | `sym_first_absent` | A safety violation whose representative differs from the state BFS reaches first; the lifted trace must create at the lowest absent slots to replay |
@@ -447,7 +463,7 @@ runs in `cargo test` in seconds.
 
 | Planted bug | Caught by |
 |---|---|
-| Owners relabelled on deleted rows too | `sym_deleted_row_owner`, twin (2) |
+| Owners not relabelled on deleted rows | the exhaustive test, the `canonical` twin, rule 8 on `sym_deleted_row_owner` |
 | `Start::Identity` pair not coupled | `sym_identity_pair`, twin (1) |
 | Absent slots permuted (#212's group) | the replay of `sym_first_absent`'s trace (rule 3) |
 | Ties broken in slot order with no branching | the canonicalizer twin, the exhaustive test |
@@ -524,7 +540,12 @@ Expected: five undecided lines of clinic-ops and insurance-claim-ops decided (me
 the prototype), 16 to 108 times fewer stored states.
 
 **Phase 2: S up to `H`.** `Classes::of`, `init`, `lift`, and `QuotientCache` as in
-[Composition with #74](#composition-with-74), with the `Classes::of` twin. First unit: the
+[Composition with #74](#composition-with-74), with the `Classes::of` twin. As built, S runs
+up to `H` under `--symmetry retry` and `always` once its plain run stopped at the memory
+limit with the pool to itself (a run another run crowded out is no reason); `never` runs S
+as before. No sample's S stops at n≤2, so a test-only switch runs S up to `H` at once:
+`Caps::forcing_s_up_to_h` in tests, and `RDRA_ISH_FORCE_S_UP_TO_H` in a `shadow` build,
+which CI's twin step sets. A release build has neither. First unit: the
 size of S under `H` for the three clinic-ops group-B cones and insurance-claim-ops
 `Forbidden_Claim_4`, reported before the code lands. Exit: clinic-ops
 `Forbidden_ClinicalOrder_1` reduced and decided at n=3 under 8 GiB with #284's 20 classes; a
@@ -533,6 +554,25 @@ lifted counterexample on a seeded violation of that cone replays.
 **Phase 3: T up to `G_T` on reduced cones.** First unit: the factor on patent-ops' four
 undecided cones with the S side fixed. Exit: those cones decided at n=3, or the measured
 factor recorded as why not.
+
+As built, a reduced safety cone runs up to `G_T` under `--symmetry always`, and under
+`retry` once its lone plain run stopped at the memory limit, as a whole cone does; an
+`always` property on a reduced cone still runs plain. The `shadow` build counts the
+`OrbitRun` twin on a reduced cone apart, as `reduced_orbit_run`. At n=3 under 8 GiB
+(`verify --instance-count 3 --memory 8GiB --symmetry always --entity <E>`, `RDRA_JOBS=4`):
+
+| Line | Plain | Up to `G_T` | Result |
+|---|---|---|---|
+| `Forbidden_Patent_4` | stopped at 40.8M | 31,926,220 orbits, about 260M states; `G_T` moves `DraftingOrder`, `Patent`, `PatentApplication` | `ok`, 98 s |
+| `Inv_Patent_0` | stopped at 38.1M | checked in `Cone_Forbidden_Patent_4` | `ok` |
+| `Forbidden_OfficeAction_3` | stopped at 33.6M | stopped at 67,108,864 orbits, about 360M states | not decided |
+| `GrantEnds` | stopped at 40.0M | its reduced cone completes at 7,346,935 orbits, about 87M states (measured outside `verify`) | not run up to `G_T`: a `leads_to` with `.fair` |
+
+`Forbidden_OfficeAction_3` is out of phase 3's reach: its S is `DraftingOrder`, `Employee`,
+`InventionDisclosure`, `PatentApplication` and `PatentFirm`, so `G_T` moves `OfficeAction`
+alone and the factor is at most 3! = 6; the run stored 67M orbits, about 5.4× (estimated)
+fewer than the states they stand for, and still stopped. `GrantEnds` reads fair components
+per binding, which no run up to symmetry may read before phase 4.
 
 **Phase 4: the annotated quotient.** Edge permutations, the slot-wise and per-binding
 readers of [Soundness per check](#soundness-per-check), lasso unrolling, and entity cones.

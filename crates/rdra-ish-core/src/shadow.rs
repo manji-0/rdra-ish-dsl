@@ -12,10 +12,15 @@
 //! | `observe`'s skip of a row whose columns are unchanged (#251) | `explore/bfs/reference.rs`: what the edge would intern |
 //! | `quotient_blocks` (`reduce/partition.rs`, #252) | `reduce/partition/reference.rs`: the sweeps, on quotients of up to `SHADOW_CAP` states |
 //! | a `QuotientCache` hit (`reduce/cache.rs`, #252), a declined entry's included (#289) | `Classes::of` itself, through a cache that holds nothing |
+//! | a run of S another quotient key ran (`QuotientCache::run_of_s`, #296) | a fresh run of the sub-lifecycle |
 //! | the reduced step's class moves (`moves_of_into`, #252) | `reduce/reference.rs`: `moves_from` |
 //! | `Canon::canonical`, the canonical form under instance symmetry (`explore/symmetry/canon.rs`, #212) | `explore/symmetry/reference.rs`: the least layout over every element of `G_s`, when it has at most 6^4 |
 //! | `OrbitRun`, a run up to instance symmetry (`explore/orbit.rs`, #212) | `explore/orbit/reference.rs`: the plain run of the same cone, up to `SHADOW_CAP` states |
+//! | `OrbitRun` on a #74-reduced cone, up to `G_T` (#212 phase 3) | the same twin, counted as `reduced_orbit_run` |
 //! | a fold's input bit without allocations (`Fold::holds`, `reduce/fold.rs`, #296) | `reduce/fold/reference.rs`: the bit with its `Vec`s |
+//! | edges without their source, binding ids in 1 to 4 bytes, parents (`explore/edges.rs`, #296 2.1) | `explore/edges/reference.rs`: the 12-byte `Edge` list and the parent edges, as a run kept them before |
+//! | an after-assert step's ends recorded on a run without an edge list (`StepEnds`, #296 2.1) | `ComponentRun::step_ends`'s scan of that 12-byte list |
+//! | `Classes::of` on a run of S up to `H` (`reduce/partition.rs`, #212 phase 2) | `reduce/partition/up_to_h.rs`: the classes of the plain run of S, up to `SHADOW_CAP` states |
 //!
 //! A `shadow` build also runs the checks `shadow_assert!` makes, as a debug build does: each
 //! reader of a run's check results reads only checks the run evaluated (#251), and a steady
@@ -40,10 +45,15 @@ pub(crate) enum Twin {
     ClassMoves,
     Canonical,
     OrbitRun,
+    ReducedOrbitRun,
     FoldHolds,
+    SharedRun,
+    SUpToH,
+    Edges,
+    StepEnds,
 }
 
-const TWINS: [(Twin, &str); 10] = [
+const TWINS: [(Twin, &str); 15] = [
     (Twin::EachEnabled, "each_enabled"),
     (Twin::Seen, "seen"),
     (Twin::Source, "source"),
@@ -53,7 +63,12 @@ const TWINS: [(Twin, &str); 10] = [
     (Twin::ClassMoves, "class_moves"),
     (Twin::Canonical, "canonical"),
     (Twin::OrbitRun, "orbit_run"),
+    (Twin::ReducedOrbitRun, "reduced_orbit_run"),
     (Twin::FoldHolds, "fold_holds"),
+    (Twin::SharedRun, "shared_run"),
+    (Twin::SUpToH, "s_up_to_h"),
+    (Twin::Edges, "edges"),
+    (Twin::StepEnds, "step_ends"),
 ];
 
 static COMPARED: [AtomicU64; TWINS.len()] = [const { AtomicU64::new(0) }; TWINS.len()];
