@@ -1600,10 +1600,12 @@ from a pool (`crates/rdra-ish-cli/src/tlc_batch.rs`). `verify --with-tlc` does n
   size is not known when they start (a property's cone, state models, fixtures). A larger cone and a property run of the whole model are processes of
   their own, as before.
 - **Memory.** A JVM that stays up commits its whole heap and about 300 MiB beside it, so
-  a batch JVM gets 256 MiB of heap, not the 1 GiB of a process, and the pool has at most
+  a batch JVM gets 512 MiB of heap, not the 1 GiB of a process, and the pool has at most
   as many JVMs as one test has workers (the cores, up to 8); a job waits for a free one.
-  Eight held 5.6 GB together in one local run. Unbounded, and at 1 GiB each, 16 held
-  13.5 GB.
+  Unbounded, and at 1 GiB each, 16 held 13.5 GB. A JVM keeps the data of the job before,
+  and at times of the two before, past a GC: about 100 MB each on food-permit-ops'
+  `StateModel_Disposition` witnesses. At 256 MiB, which held 5.6 GB over 8 JVMs, that left
+  no room for the next such job on TLC 1.8.0 and JDK 25.
 - **When a job falls back.** A job with no answer runs again as a process: the driver did
   not start or did not find `tlc2.TLC`'s `handleParameters`, `setResolver`, and `process`;
   the JVM ended under the job (TLC called `System.exit`, or the heap ran out, which
@@ -1634,6 +1636,9 @@ from a pool (`crates/rdra-ish-cli/src/tlc_batch.rs`). `verify --with-tlc` does n
   batch JVM or one fell back, so a driver that stops working shows as a failure and not
   only as a slower job. `RDRA_TLC_BATCH=0` runs every job as a process.
 
-The driver is for TLC 1.7.4. TLC 1.8 starts and stops in 0.25 s (#309), and when it is the
-baseline the driver, the pool, and `tlc-batch` can be removed without touching a caller's
-fallback path, which is the process run.
+The driver was written for TLC 1.7.4, and it still pays on the flake's TLC 1.8.0 on JDK 25,
+whose short run takes 0.18 s where 1.7.4's took 0.59 s: the test took 122.6 s and
+1,847 CPU-s with `RDRA_TLC_BATCH=0` against 98 to 106 s and 727 to 744 CPU-s with it, on an
+18-core Mac. TLC 1.8.0 leaves no thread behind after a liveness counterexample, so its JVMs
+are replaced after 400 jobs only. Removing the driver, the pool, and `tlc-batch` would not
+touch a caller's fallback path, which is the process run.

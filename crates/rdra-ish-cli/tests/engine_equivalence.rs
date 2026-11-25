@@ -292,9 +292,14 @@ const BATCH_LIMIT: Duration = Duration::from_secs(300);
 /// The heap of a batch JVM, unless the user names one (`RDRA_TLC_HEAP`, or `-Xmx` in
 /// `JAVA_TOOL_OPTIONS`). A JVM that stays up commits its whole `-Xmx`, whatever its jobs
 /// need, and about 300 MiB beside the heap: 16 JVMs of the 1 GiB a process gets held
-/// 13.5 GB together, and the 8 the pool is bounded to hold 5.6 GB at this. No job of the
-/// test ran out of it.
-const BATCH_HEAP: u64 = 256 << 20;
+/// 13.5 GB together.
+///
+/// A JVM keeps the data of the job before, and at times of the two before, past a GC: on
+/// food-permit-ops' `StateModel_Disposition` witnesses, about 100 MB a job on TLC 1.7.4 and
+/// 1.8.0 alike. At 256 MiB that left no room for the next such job: on TLC 1.8.0 and JDK
+/// 25, which kept two jobs' data on 8 of 12 runs of it where 1.7.4 kept it on 4, one job of
+/// the test ran out of memory in two runs of four.
+const BATCH_HEAP: u64 = 512 << 20;
 
 /// The batch JVMs of this test binary (#310), or `None` without `tlc-batch` on PATH or with
 /// `RDRA_TLC_BATCH=0`: every run is then a process. `RDRA_TLC_BATCH=both` runs every job
