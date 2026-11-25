@@ -32,6 +32,12 @@ fn violated<'a>(diags: impl Iterator<Item = &'a StateDiag>) -> BTreeSet<String> 
 
 pub(super) fn check(orbits: &OrbitRun, caps: Caps) {
     let ts = orbits.system();
+    // A reduced cone runs up to `G_T` (#212 phase 3): counted apart, so a run that reaches
+    // only whole cones shows that it held no reduced one.
+    let twin = match ts.reduction() {
+        Some(_) => Twin::ReducedOrbitRun,
+        None => Twin::OrbitRun,
+    };
     // Neither run gathers views (`run_orbits`), so the pattern cap stops neither.
     let mut plain_caps = Caps::new(caps.patterns, SHADOW_CAP).without_views();
     plain_caps.stop_when_all_violated = caps.stop_when_all_violated;
@@ -42,7 +48,7 @@ pub(super) fn check(orbits: &OrbitRun, caps: Caps) {
     if stopped(plain.complete, plain.checks_failed)
         || stopped(orbits.complete(), orbits.run.checks_failed)
     {
-        skipped(Twin::OrbitRun);
+        skipped(twin);
         return;
     }
     let name = |what: &str| format!("shadow: run_orbits ({} classes): {what}", orbits.orbits());
@@ -59,7 +65,7 @@ pub(super) fn check(orbits: &OrbitRun, caps: Caps) {
     );
     assert_eq!(a, b, "{}", name("the violated checks differ"));
     if !plain.complete {
-        compared(Twin::OrbitRun);
+        compared(twin);
         return;
     }
     let g = &orbits.group;
@@ -103,5 +109,5 @@ pub(super) fn check(orbits: &OrbitRun, caps: Caps) {
             ))
         );
     }
-    compared(Twin::OrbitRun);
+    compared(twin);
 }

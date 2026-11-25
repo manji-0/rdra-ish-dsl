@@ -134,6 +134,12 @@ pub enum Rule {
     /// what the quotient reads, so an entity that holds `obs`, an input or a fold bit, a stub
     /// of a T parent, and an entity whose rows a T key can name stay where they are.
     Observed,
+    /// A #74-reduced cone runs up to `G_T` (#212 phase 3): its state holds a class
+    /// representative for S and the class tables key on the inputs and the bits row by row,
+    /// so an S entity, an entity that holds an S var or an input or whose rows such a key
+    /// names, an entity a bit is kept per row of, and an entity an S action binds stay where
+    /// they are (`Reduction::fixed`).
+    Reduced,
 }
 
 impl Rule {
@@ -151,6 +157,7 @@ impl Rule {
                 "its rows and the rows that name them have too many arrangements"
             }
             Rule::Observed => "the reduction of its cone reads its rows",
+            Rule::Reduced => "the reduced sub-lifecycle of its cone keys on its rows",
         }
     }
 }
@@ -238,10 +245,37 @@ fn find(parent: &mut [usize], x: usize) -> usize {
 }
 
 impl Group {
-    /// The group of `ts`, with every class its scan finds a reason to leave out left out.
-    /// A system #74 reduced is not one: its state holds class representatives.
+    /// The group of `ts`, with every class its scan finds a reason to leave out left out. On
+    /// a #74-reduced cone it is `G_T` (#212 phase 3): the classes of `Reduction::fixed`, which
+    /// the representative and the class tables read, are left out too (`Rule::Reduced`).
     pub(crate) fn of(ts: &TransitionSystem) -> Group {
-        Self::fixing(ts, &[])
+        let fixed: Vec<(EntId, Rule)> = match ts.reduction() {
+            Some(r) => r
+                .fixed(ts)
+                .into_iter()
+                .map(|e| (e, Rule::Reduced))
+                .collect(),
+            None => Vec::new(),
+        };
+        let g = Self::leaving_out(ts, &fixed);
+        if let Some(r) = ts.reduction() {
+            if std::env::var_os("RDRA_ISH_G_T_STATS").is_some() {
+                let why = r.fixed_why(ts);
+                let ents: Vec<String> = (0..ts.entities().len())
+                    .map(EntId::at)
+                    .map(|e| {
+                        let state = match (g.moves(e), why.get(&e)) {
+                            (true, _) => "moves".to_string(),
+                            (false, Some(w)) => format!("fixed: {}", w.join(", ")),
+                            (false, None) => "fixed by the scan or one slot".to_string(),
+                        };
+                        format!("{}[{}] {state}", ts.entity(e).id, ts.slots(e))
+                    })
+                    .collect();
+                eprintln!("g-t: {}", ents.join("; "));
+            }
+        }
+        g
     }
 
     /// The group of `ts` with the classes of `fixed` left out as well (`Rule::Observed`):
@@ -249,8 +283,15 @@ impl Group {
     pub(crate) fn fixing(ts: &TransitionSystem, fixed: &[EntId]) -> Group {
         debug_assert!(
             ts.reduction().is_none(),
-            "a reduced system has no group here"
+            "the sub-lifecycle runs up to H unreduced"
         );
+        let fixed: Vec<(EntId, Rule)> = fixed.iter().map(|e| (*e, Rule::Observed)).collect();
+        Self::leaving_out(ts, &fixed)
+    }
+
+    /// The group of `ts` with the classes of `fixed` left out for the rule beside each, on
+    /// top of what the scan leaves out.
+    fn leaving_out(ts: &TransitionSystem, fixed: &[(EntId, Rule)]) -> Group {
         let n_ent = ts.entities().len();
         // Identity starts couple a child and its parent.
         let mut uf: Vec<usize> = (0..n_ent).collect();
@@ -287,8 +328,10 @@ impl Group {
         }
         // What breaks the group, by entity; a class with one such entity is left out.
         let mut left_out: Vec<LeftOut> = Vec::new();
-        let observed = fixed.iter().map(|e| (*e, Rule::Observed));
-        for (e, rule) in breaks::scan(ts, &class_of).into_iter().chain(observed) {
+        for (e, rule) in breaks::scan(ts, &class_of)
+            .into_iter()
+            .chain(fixed.iter().copied())
+        {
             classes[class_of[e.index()]].moves = false;
             left_out.push(LeftOut {
                 entity: ts.entity(e).id.clone(),
