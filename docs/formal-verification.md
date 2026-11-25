@@ -1611,7 +1611,9 @@ from a pool (`crates/rdra-ish-cli/src/tlc_batch.rs`). `verify --with-tlc` does n
   not start or did not find `tlc2.TLC`'s `handleParameters`, `setResolver`, and `process`;
   the JVM ended under the job (TLC called `System.exit`, or the heap ran out, which
   `-XX:+ExitOnOutOfMemoryError` turns into an exit); or the job took over 300 s (the
-  longest took 93 s on a CI runner). After
+  longest took 93 s on a CI runner). A job past the time limit is a slow run, not a driver
+  that fails: it runs as a process and does not fail the test under
+  `RDRA_REQUIRE_TLC_BATCH=1`, as the other losses do. After
   three jobs in a row without an answer, every later job is a process. A JVM is replaced
   after 400 jobs, or when its jobs have left 8 threads behind: TLC 1.7.4 never shuts down
   the executor it starts to print a liveness counterexample, and that thread keeps its job's

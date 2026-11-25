@@ -699,7 +699,10 @@ Cone_Inv_Encounter_2 [Inv_Encounter_2]: ok (1696486 orbits, about 820M states)
   an S var or an input, whose rows such a key names, that a bit is kept per row of, or that
   an S action binds. The notes under the line name them (`the reduced sub-lifecycle of its
   cone keys on its rows`). Its counterexample is lifted through the symmetry, then through
-  the reduction, and replayed. An `always` property on a reduced cone runs plain.
+  the reduction, and replayed. An `always` property on a reduced cone runs plain. `retry`
+  takes the same path once a reduced cone's plain run stopped at the memory limit, but only
+  `always` has been shown to decide such a cone at 3 instances: on patent-ops,
+  `Forbidden_Patent_4` in 98 s, where `retry` was still in its plain attempts after 2,400 s.
 - **Shared runs.** Under `always` a cone that runs up to symmetry shares no run with the
   entity, safety, and property passes: none of them decides it on a plain run of the same
   system, and its run decides nothing for them. A cone run up to symmetry stops once every

@@ -144,7 +144,10 @@
   31,926,220 orbits for about 260M states and is decided (`ok`, 98 s at `RDRA_JOBS=4`), and
   with it `Inv_Patent_0`. `Forbidden_OfficeAction_3` is not: `G_T` moves its one T entity,
   so it stores at most 6 times fewer states, and it stopped at 67.1M orbits. With S fixed
-  the factor on patent-ops' complete n=3 cones is 3.0 to 5.5. The `shadow` build counts the
+  the factor on patent-ops' complete n=3 cones is 3.0 to 5.5. That result is `always`'s:
+  `retry` has not been seen to reach and decide `Forbidden_Patent_4` at n=3, since a run of
+  `verify --entity Patent --symmetry retry` at `RDRA_JOBS=4` was stopped after 2,400 s,
+  still in the plain attempts that come before the retry. The `shadow` build counts the
   run's twin on a reduced cone as `reduced_orbit_run`.
 
 - `verify --symmetry` also covers the sub-lifecycle of a reduced cone (#212, phase 2):
@@ -405,6 +408,23 @@
 
 ### Changed
 
+- A run keeps its states, parents and edges in segments (#296 item 2.2). A buffer holds
+  segments of 4, 4, 8, ... up to 16,384 rows and then of 16,384 rows each, allocates the next
+  one whole when the last is full, and never copies a row: a stored row stays where it was
+  pushed. Up to 32,768 rows a buffer holds the room a doubling buffer held; past that it
+  holds under a segment of unused room where a doubling buffer held up to as many rows
+  again. On the largest cone of each run measured in #296, the bytes counted per state fall
+  from 115.7 to 78.3 on `patent-ops`, 187.7 to 106.3 on `food-permit-ops` (`view
+  BusinessPermit`), 127.4 to 85.6 on `clinic-ops`, 161.2 to 94.6 on `insurance-claim-ops`
+  and 120.3 to 82.5 on `oidc-auth --instance-count 1`. Peak RSS stays within 2% (it falls
+  6% on `insurance-claim-ops`): the room a doubling buffer held but never wrote was counted,
+  not resident. `--memory` counts the segments, so a run of more than 32,768 states that
+  stopped at the limit now stops later; the stop point is still computed from the counts
+  alone, the same on every machine and thread count, and at a count just past a power of
+  two the list of segments (24 bytes a slot) can count tens to hundreds of bytes more than
+  before. The output of every run that completes is unchanged at every sample's and corpus
+  case's header flags. At `RDRA_JOBS=1`, `verify` retires 3% to 8% more instructions (304.4
+  G to 322.7 G on `insurance-claim-ops`, 96.7 G to 103.6 G on `food-permit-ops`).
 - A run keeps fewer bytes per state (#296 item 2.1, #255). An edge is its 4-byte target
   and a binding id in 1, 2 or 4 bytes (the fewest that the run's largest id needs, widened
   at the same id on every machine), where it was 12 bytes with its source: the source is

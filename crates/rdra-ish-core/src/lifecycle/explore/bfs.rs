@@ -467,9 +467,11 @@ impl<'t> Bfs<'t> {
         #[cfg(feature = "shadow")]
         {
             let before = self.bytes_before_with_one_more();
+            let lists = self.lists_with_one_more();
             assert!(
-                bytes <= before,
-                "shadow: Bfs::bytes_with_one_more at {} states: {bytes} B, {before} B before #296",
+                bytes - lists <= before,
+                "shadow: Bfs::bytes_with_one_more at {} states: {bytes} B ({lists} B of lists of \
+                 segments), {before} B before #296",
                 self.states.len()
             );
         }
