@@ -1,43 +1,70 @@
-# CLI Reference
+# CLI reference
 
-The `rdra-ish` command-line tool parses `.rdra` sources, type-checks them, runs
-model-consistency checks, and produces diagrams, CSV, listings, exports, and
-state-pattern derivations.
+`rdra-ish` loads `.rdra` sources, checks them, and writes diagrams, tables, exports, state
+derivations, verification results, and code. This page says what each command does. The
+[language reference](./language-reference.md) says what the DSL means.
 
 ```
-rdra-ish <SUBCOMMAND> <INPUTS...> [OPTIONS]
+rdra-ish <COMMAND> <INPUTS...> [OPTIONS]
+rdra-ish --version        # or -V; prints "rdra-ish <version>"
+rdra-ish <COMMAND> --help # or -h; every command takes it
 ```
 
-`rdra-ish --version` prints the version, such as `rdra-ish 2.3.0`.
+| Command | What it does |
+|---|---|
+| [`check`](#check) | Type-check the model and explore its lifecycle. Writes no file. |
+| [`lint`](#lint) | Report coverage and review-readiness findings. |
+| [`next`](#next) | Show each BUC's modeling stage and what the next stage asks for. |
+| [`files`](#files) | Print the `.rdra` files the inputs load. |
+| [`fmt`](#fmt) | Format `.rdra` files. |
+| [`diagram`](#diagram) | Write a Mermaid diagram. |
+| [`csv`](#csv) | Write a CSV or Markdown table. |
+| [`export`](#export) | Write OpenAPI, AsyncAPI, DBML, SQL, JSON Schema, Mermaid ER, or TLA+. |
+| [`verify`](#verify) | Verify every rule and temporal property, each on its own cone. |
+| [`list`](#list) | Print model elements as a table, JSON, CSV, or Markdown. |
+| [`states`](#states) | Derive the reachable state patterns of each entity. |
+| [`codegen`](#codegen) | Print the model's domain types and functions as TypeScript, Rust, or Go. |
 
-`<INPUTS...>` is one or more files and/or directories. Directories are searched
-recursively for `.rdra` files. At least one input is required. When loading, the tool
-merges all reachable `.rdra` files into a single semantic model and resolves imports
-against include paths derived from the input layout (it walks up from each input so that,
-e.g., `shared/actors.rdra` resolves from a root containing both `shared/` and `buc/`).
+[compatibility.md](./compatibility.md) says which commands, flags, exit codes, and output
+formats are stable.
 
-Diagnostics are written to stderr. A load or consistency diagnostic is `error: ...` or
+## Conventions
+
+**Inputs.** `<INPUTS...>` is one or more files or directories; at least one is required. A
+directory is searched recursively for `.rdra` files. Every loading command collects inputs
+the same way: each file as given, then each directory walked with the entries of every
+directory sorted by name, so the load order is the same on every platform. All reachable
+files merge into one model. Imports resolve against include paths derived from the input
+layout (see [Modules and imports](./language-reference.md#modules-and-imports)). Each
+loading command reads the [project manifest](#project-manifest).
+
+**Diagnostics** go to stderr. A load or consistency diagnostic is `error: ...` or
 `warning: ...`. A lifecycle finding carries its stable name: `error[<Name>]: ...`,
-`warning[<Name>]: ...`, or `info[<Name>]: ...`. The names are listed in
-[Diagnostics](./state-derivation.md#diagnostics).
+`warning[<Name>]: ...`, or `info[<Name>]: ...`. [Diagnostics](./state-derivation.md#diagnostics)
+lists the names. A source site prints as `file:line:col` with the resolved absolute path;
+this page shortens it.
 
-- `check` and `lint` exit non-zero when semantic errors (or lint errors) are present.
-- Every generator subcommand refuses to emit when the model has parse or resolve errors.
-  Whether an Error-severity lifecycle finding also stops it depends on what the output
-  reads, as [Lifecycle errors](#lifecycle-errors) lists.
-- `fmt` only requires a parseable source; it does not run semantic analysis.
+**Exit codes.**
+
+| Code | Meaning |
+|---|---|
+| `0` | Success. Warnings and info findings do not change it. |
+| `1` | The command failed: a load error, an error finding, a refused output, a failed `--check`, or a malformed `rdra.toml`. |
+| `2` | Usage error: an unknown flag, a bad flag value, a removed value (its message names the replacement), or two flags that do not go together. |
+
+Every generator refuses to write when the model has parse or resolve errors. `fmt` needs
+only a parseable file and runs no analysis. `files` and `fmt` read no manifest.
 
 ---
 
 ## Lifecycle errors
 
 An output that prints a reachability result is **fail-closed**: it refuses while `check`
-reports a lifecycle error. An output that prints none is written, and the exit status is 0.
-An output of declared facts or the data layer does not explore the lifecycle, so it prints
-nothing about it: run `rdra-ish check` for the lifecycle errors. The TLA+ export explores
-it and prints one stderr note that gives the error count and points to `rdra-ish check`.
-`crates/rdra-ish-cli/src/lifecycle_gate.rs` classifies every `--kind` by what it reads, and
-`crates/rdra-ish-cli/tests/export_gate.rs` runs every kind against this table.
+reports a lifecycle error. Any other output is written and exits 0. An output of declared
+facts or of the data layer does not explore the lifecycle and says nothing about it; run
+`check` for the lifecycle errors. `crates/rdra-ish-cli/src/lifecycle_gate.rs` classifies
+every `--kind` by what it reads, and `crates/rdra-ish-cli/tests/export_gate.rs` holds every
+kind to this table.
 
 | Output | Reads | On a lifecycle error |
 |---|---|---|
@@ -45,46 +72,88 @@ it and prints one stderr note that gives the error count and points to `rdra-ish
 | `csv`, every kind | declared facts and the data layer | writes |
 | `diagram --kind state` | each state model's start states and reachable states | refuses, unless every error is a deadlock, which it colours |
 | `diagram`, every other kind | declared facts, `sequence` included | writes |
-| `export --kind tla` | the transition system, built at `--instance-count` / `--int-range-max` | writes, with a note that the whole-model `.cfg` checks the rules only and names the `StateModel_` specs, which check the deadlocks and witnesses with TLC, and `verify`; a build error of the system refuses |
+| `export --kind tla` | the transition system, built at `--instance-count` / `--int-range-max` | writes, with a note: the error count, that the whole-model `.cfg` checks the rules only, that the `StateModel_` specs check the deadlocks and witnesses with TLC, and `verify`; a build error of the system refuses |
 | `export`, every other kind | the data layer | writes |
 | `states` | the derivation, which is its output | prints the report with its `[error]` rows and exits 1 |
 
-[`codegen`](#codegen) refuses (exit 1) while `check` reports an error, lifecycle errors
-included, unless `--allow-failing` is given.
+[`codegen`](#codegen) refuses (exit 1) while `check` reports any error, unless
+`--allow-failing` is given. `verify` refuses on a build error of its transition system and
+reports every other finding itself.
 
-The generators that explore the lifecycle (`codegen`, `next`, `diagram --kind state`, and
-`export --kind tla`) explore it at the caps `check` runs at by default, within `memory` under
-`[check]` (see [Memory limit](#memory-limit)). A cone past that limit is the lifecycle error
-`MemoryCapReached_<E>`: it refuses `codegen` and the state diagram, and is counted in the
-note of the TLA+ export.
-
-`verify` refuses on a build error of the transition system it checks and reports every
-other finding itself.
+The generators that explore the lifecycle (`codegen`, `next`, `diagram --kind state`,
+`export --kind tla`) explore it at `check`'s default caps, within `memory` under `[check]`
+(see [Memory limit](#memory-limit)). A cone past that limit is the error
+`MemoryCapReached_<E>`: it refuses `codegen` and the state diagram, and the TLA+ export
+counts it in its note.
 
 ---
 
 ## `check`
 
-Parse, type-check, and run whole-model consistency checks; produce no artifact output.
+<!-- derived-from ./state-derivation.md#diagnostics -->
+
+Type-check the model, run the consistency checks, and explore the lifecycle. Writes no file.
 
 ```
-rdra-ish check <INPUTS...> [--strict] [--deny-deprecated] [--max-patterns <N>] [--max-states <N>] [--memory <SIZE>] [--guards] [--code[=fresh|build|run]] [--instance-count <N>] [--instances <ENTITY=N>]... [--int-range-max <N>] [--buc <ID>]... [--entity <ID>]... [--without-usecase <ID>]... [--without-buc <ID>]... [--actor <ID>]...
+rdra-ish check <INPUTS...> [--strict] [--deny-deprecated] [--guards] [--code[=fresh|build|run]]
+               [--max-patterns <N>] [--max-states <N>] [--memory <SIZE>]
+               [--instance-count <N>] [--instances <ENTITY=N>]... [--int-range-max <N>]
+               [--buc <ID>]... [--entity <ID>]... [--without-usecase <ID>]...
+               [--without-buc <ID>]... [--actor <ID>]...
 ```
 
-Prints each diagnostic to stderr. If any error (non-warning) is present, exits with
-status `1` before running secondary consistency checks. Otherwise it reports unresolved
-model warnings and state-pattern findings. State diagnostics share severity with
-`states`: Error-severity findings print as `error:` and cause exit `1`; only a clean
-run prints `OK: no errors within <bounds>` (for example `OK: no errors within 1 instance per entity, Int 0..5`), or `OK: no errors in the selected scope, within <bounds>` under `--buc` or `--entity` (see [Partial runs](#partial-runs)). A failed run ends with a summary line on stdout instead: `FAIL: <E> errors, <W> warnings within <bounds>` (for example `FAIL: 1 error, 0 warnings within 1 instance per entity, Int 0..5`), with `in the selected scope,` under a scope, or `FAIL: <E> errors, <W> warnings; the model did not load, so nothing was explored` when a load error stops the run before exploration. Info findings are not counted. When the model has temporal `property` declarations,
-`check` prints `note: <n> temporal properties were not model-checked by check; use verify`
-on stderr before the `OK:` or `FAIL:` line.
+`check` stops at the first load error. Otherwise it runs the consistency checks and
+explores the lifecycle, one cone per rule and entity view. It checks safety only: the rules,
+the `after` assertions, and the state-model findings. It evaluates no `property`; that is
+[`verify`](#verify)'s, and `check` prints `note: <n> temporal properties were not
+model-checked by check; use verify` when the model has some.
 
-`check` and `states` do safety verification by state exploration only: the rules, the
-`after` assertions, and the state-model findings. They evaluate no `property`, whatever its
-form, including `can_reach`, `stable`, `unchanged`, and `precedes`, which BFS could decide. Temporal
-properties and inductive proofs (`verify --prove`) are `verify`'s.
+The consistency checks cover:
 
-A violated constraint or `after` assertion prints once, with a shortest counterexample. Sites (`file:line:col`) print as the resolved absolute path; the examples in this page show them shortened.
+- actor permissions for `requires_permission` on use cases and the APIs they invoke,
+  missing and excess, inferred from performer paths;
+- API invocation and API entity-operation gaps;
+- system boundaries and cross-system entity coordination;
+- FK and API transaction boundaries;
+- event links: an event never raised, a raised event that nothing consumes (`outbox(Event)`
+  silences this one), a triggered use case in no BUC;
+- the lifecycle findings of [Diagnostics](./state-derivation.md#diagnostics): unreachable
+  values, states with no witness, deadlocks, use cases that never run, violated rules and
+  `after` assertions, vacuous rules (`Vacuous_<name>`), unbindable conditions, and cones
+  stopped at a cap.
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--strict` | off | Make permission and access gaps (`ActorPermissionMissing`, a path with no actor, ...) errors. |
+| `--deny-deprecated` | off | Make each `DeprecatedSyntax` warning (a [deprecated form](./language-reference.md#deprecated-and-removed-forms)) an error. |
+| `--guards` | off | After a clean run, print which rules each guard protects. See [Guard dependencies](#guard-dependencies). |
+| `--code[=<LEVEL>]` | off; `fresh` when given bare | After a clean run, check the service code the [`[code]` tables](#the-code-tables) name: `fresh`, `build`, or `run`. Write the level with `=`. See [`check --code`](#check---code). |
+| `--max-patterns <N>` | 2^(10 + 8·(n − 1)) for n = `--instance-count` (`1024`, `262144`, ...) | Cap on each entity's distinct patterns in its view's cone. Past it: the `PatternCapReached` error. A cone of a rule gathers no pattern, so the cap does not stop it. |
+| `--max-states <N>` | none | Cap on the joint states of one cone. Past it: the `StateCapReached` error, which names what the states vary in. |
+| `--memory <SIZE>` | `memory` under `[check]`, else `4GiB` | What the run may hold. A cone past it stops with the `MemoryCapReached` error. See [Memory limit](#memory-limit). |
+| `--instance-count <N>` | `1` | Slots per entity, `1..=255`. A violation that needs two rows of an entity shows only from `2`. A larger value raises the default `--max-patterns`. |
+| `--instances <ENTITY=N>` | `instances` under `[check]` | One entity's slots, `1..=255`; repeatable. See [Per-entity instance counts](#per-entity-instance-counts). |
+| `--int-range-max <N>` | `5` | The Int domain is `0..=N`, `1..=255`. |
+| `--buc`, `--entity`, `--without-usecase`, `--without-buc`, `--actor` `<ID>` | whole model | Check part of the model; each repeatable. See [Partial runs](#partial-runs). |
+
+**Output.** stderr opens with a `bounds:` line (the slots per entity, the Int range, the state
+cap or `no state cap per cone, memory 4GiB`, and that entities a check does not read are
+unbounded). The last stdout line is the verdict:
+
+| Line | When |
+|---|---|
+| `OK: no errors within <bounds>` | No error. |
+| `OK: no errors in the selected scope, within <bounds>` | No error, under `--buc` or `--entity`. |
+| `FAIL: <E> errors, <W> warnings within <bounds>` | Some error (`in the selected scope,` under a scope). Info findings are not counted. |
+| `FAIL: <E> errors, <W> warnings; the model did not load, so nothing was explored` | A load error. |
+
+`<bounds>` reads like `1 instance per entity, Int 0..5`.
+
+**Exit codes.** `0` with no error; `1` on any error, including an Error-severity lifecycle
+finding.
+
+**Findings.** A violated rule or `after` assertion prints once, with a shortest
+counterexample:
 
 ```
 error[MultiForbidden_Order_0]: invariant MultiForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order(status=cancelled); Payment(status=captured)
@@ -99,49 +168,26 @@ error[MultiForbidden_Order_0]: invariant MultiForbidden_Order_0 is violated: mul
          Order#1.status: pending -> cancelled                cross_order_payment_split.rdra:38:1
 ```
 
-A step names the use case (`Pay_1, transaction 1 of Pay` for a split one), the instances
-it binds, and the use case's declaration. Under it, `+ E#k` is a creation with the values
-the check reads, `- E#k` a deletion, `now: a -> b` a clock tick, and `E#k.col: a -> b` a
-change with the `transitions` arm or `sets` that wrote it. `start` lists the instances
-present before the first step. The trace shows only what the rule's cone reads. When the
-cone does not count an entity's slots and the trace creates more of them than the bound,
-a `note:` says that the whole model may not reach that state at this bound.
+Each step names the use case (`Pay_1, transaction 1 of Pay` for a split one), the instances
+it binds, and its site. Under it, `+ E#k` is a creation with the values the check reads,
+`- E#k` a deletion, `now: a -> b` a clock tick, and `E#k.col: a -> b` a change with the
+`transitions` arm or `sets` that wrote it. `start` lists the instances present before the
+first step. The trace shows only what the rule's cone reads. When the cone does not count an
+entity's slots and the trace creates more of them than the bound, a `note:` says the whole
+model may not reach that state at this bound.
 
-A state of a state model (a `transitions` endpoint, or a value a creating use case sets)
-that no reachable state holds is one `error:` with each arm that would enter it:
+The state-model findings ([State models and witnesses](./state-derivation.md#state-models-and-witnesses),
+[Use cases that never run](./state-derivation.md#use-cases-that-never-run),
+[Deadlocks](./state-derivation.md#deadlocks)):
 
 ```
 error[Witness_Order_status_refunded]: state Order.status = refunded has no reachability witness: no sequence of use cases from the start reaches it
   state model: Order.status, entered by Refund (shipped -> refunded)   unwitnessed_state.rdra:31:1
-```
 
-When an entity's cone stops at a cap, its unwitnessed states are not decided, and each
-is listed under `not checked:` as `state E.col = v is not decided: ...`, naming the cap.
-Such a state is neither an error nor a warning. See
-[State models and witnesses](./state-derivation.md#state-models-and-witnesses).
-
-A use case, or one transaction group of a split use case, that no edge of its entity cones
-carries is one `warning:`. It names the use case's declaration and only what blocks it:
-`needs:` for an instance no reachable state has, or for a free slot when its guards hold
-only in states where the instance bound leaves none, `guard:` with its site for each guard
-that holds in no reachable state, or, when each guard holds somewhere, a first line that
-says they never hold together:
-
-```
 warning[Runs_Pay_2]: transaction 2 of Pay (Pay_2) can never run: in no reachable state do its guards hold
   declared: transaction 2 of Pay (Pay_2)   never_runs.rdra:5:1
   guard: condition Settled                 never_runs.rdra:20:1
-```
 
-A capped cone leaves such an action undecided, listed under `not checked:` as `whether
-Pay_2 can run is not decided: ...`. See
-[Use cases that never run](./state-derivation.md#use-cases-that-never-run).
-
-An instance at a state with a way out that no path ever moves is one `error:`. It names each
-way out (a `transitions` arm, or a deletion) with what blocks it, read off the states the
-instance stays stuck in, and a shortest path into the first such state:
-
-```
 error[Deadlock_Order_status_paid]: deadlock: Order#1 stays at status = paid forever, and paid is not an end state
   leaves paid: Ship (paid -> shipped)   deadlock.rdra:29:1
     guard: condition Packed             deadlock.rdra:33:1
@@ -152,48 +198,62 @@ error[Deadlock_Order_status_paid]: deadlock: Order#1 stays at status = paid fore
          Order#1.status: pending -> paid   deadlock.rdra:28:1
 ```
 
-When a way out lacks only a free slot of an entity it creates, the instance bound blocks
-it, not the model, and the line is `warning[Deadlock_<E>_<col>_<v>]: deadlock at the bound: ...`. A capped cone
-leaves each state with a way out undecided, listed under `not checked:` as `whether some
-E can get stuck at col = v is not decided: ...`. See [Deadlocks](./state-derivation.md#deadlocks).
+- `Witness_*` (error): a state of a state model that no reachable state holds, with each arm
+  that would enter it.
+- `Runs_*` (warning): a use case, or one transaction of a split one, that no edge carries. It
+  names only what blocks it: `needs:` for an instance no reachable state has (or a free slot
+  the bound never leaves), `guard:` for each guard that holds nowhere, or a first line that
+  says the guards never hold together.
+- `Deadlock_*` (error): an instance at a state with a way out that no path takes. It lists
+  each way out with what blocks it, and a shortest path into the state. When a way out lacks
+  only a free slot of an entity it creates, the bound blocks it, not the model: it is the
+  warning `deadlock at the bound`.
 
-| Option | Description |
-|---|---|
-| `--strict` | Promote permission / access consistency gaps (`ActorPermissionMissing`, no-actor paths, etc.) from warnings to errors for exit. |
-| `--deny-deprecated` | Promote each `DeprecatedSyntax` warning (a [deprecated form](./language-reference.md#deprecated-and-removed-forms) that still loads) to an error, so `check` prints it as `error:` and exits `1`. Without the flag a deprecated form does not change the exit status. |
-| `--max-patterns <n>` | Cap on each entity's distinct patterns within the cone of its entity view; a cone of other targets gathers no pattern, so the cap does not stop it. Default: 2^(10 + 8 * (n - 1)) for `n` = `--instance-count` (`1024` at one instance, `262144` at two). Past it, the run records a `PatternCapReached` **error**. Same as [`states`](#states). |
-| `--max-states <n>` | Cap on the joint states of one target cone, printed in the `bounds:` line. Default: none; `--memory` stops a run that outgrows the machine, and the `bounds:` line says `no state cap per cone, memory 4GiB`. Past a cap you give, the run records a `StateCapReached` **error** that names what the cone's states vary in. A larger `--int-range-max` or `--instance-count` makes more states per cone, so it reaches the cap sooner. Same as [`states`](#states). |
-| `--memory <size>` | What the run may hold in memory: the states of the cones it explores at once. Default: `memory` under `[check]` in [`rdra.toml`](#project-manifest), else `4GiB`. A cone whose states pass it stops: the run records a `MemoryCapReached` **error** that names the limit, says how many states it held and what each took, and estimates what finishing needs; the findings the cone leaves are listed under `not checked:`. See [Memory limit](#memory-limit). Same as [`states`](#states). |
-| `--guards` | After a clean run, print on stdout which rules each guard protects. See [Guard dependencies](#guard-dependencies). It adds no finding and does not change the exit status. |
-| `--code[=<level>]` | After a clean run, check the service code the [`[code]` tables](#the-code-tables) of `rdra.toml` name: `fresh` (the default), `build` or `run`. Write the level with `=`. See [`check --code`](#check---code). |
-| `--instance-count <n>` | Instances (slots) per entity, `1..=255` (default `1`). A violation that needs two rows of an entity (a uniqueness or a quantifier across rows) shows only from `2`. The `bounds:` line and the final `OK:` line print the value used. Same name and validation as [`verify`](#verify); the default differs (`verify` runs `2`). A larger value also raises the default `--max-patterns`. |
-| `--instances <entity>=<n>` | One entity's slots in place of `--instance-count`, `1..=255`, as `Loan=4`; repeatable. Default: `instances` under `[check]` in [`rdra.toml`](#project-manifest). See [Per-entity instance counts](#per-entity-instance-counts). |
-| `--int-range-max <n>` | The Int domain is `0..=n`, `1..=255` (default `5`). Printed in the `bounds:` line. Same as [`verify`](#verify). |
-| `--buc <id>` | Keep only the use cases reachable from the BUC; repeatable. See [Partial runs](#partial-runs). |
-| `--entity <id>` | Check only the entity's view and the invariants and after-asserts that read it; repeatable. See [Partial runs](#partial-runs). |
-| `--without-usecase <id>` | Assume the use case never runs and leave it out; repeatable. See [Partial runs](#partial-runs). |
-| `--without-buc <id>` | Assume the use cases the BUC reaches, and no other BUC does, never run; repeatable. See [Partial runs](#partial-runs). |
-| `--actor <id>` | Keep only the use cases the actor performs and those no actor performs; repeatable. See [Partial runs](#partial-runs). |
+A cone stopped at a cap leaves these undecided. Each is listed under `not checked:`
+(`state E.col = v is not decided: ...`, `whether Pay_2 can run is not decided: ...`, `whether
+some E can get stuck at col = v is not decided: ...`) and is neither an error nor a warning.
 
 ### `check --code`
 <!-- derived-from ./design/code-check.md -->
 
-`check --code` asks whether the service code has what the model requires. Experimental, as
-`codegen` is. rdra-ish parses none of the service code: it generates every file the
+`check --code` asks whether the service code has what the model requires. It is
+experimental, as `codegen` is. rdra-ish parses no service code: it generates every file the
 [`[code]` tables](#the-code-tables) name again and compares, and at `build` and `run` it
-reads what the language's compiler reports. It runs after the model check; on a model that
-fails `check` it checks nothing (a note says so) and the exit status is the model check's.
+reads the compiler's errors. It runs after the model check; on a model that fails `check` it
+checks nothing, a note says so, and the exit status is the model check's.
 
 | Level | What it checks |
 |---|---|
 | `fresh` | Each file `codegen --code` writes is what the model generates now: the domain code by its text, as [`codegen --check`](#codegen) compares it, and the traces by hash. A missing file is an error. No compiler runs. |
-| `build` | `fresh`, then the language's build command on the probe, with the errors mapped back to the model's use cases. |
+| `build` | `fresh`, then the language's build command on the probe. Each compiler error maps back to a use case. |
 | `run` | `build`, then the conformance test. |
 
-`--code` with no level is `fresh`. Only `build` and `run` start a command, the language's
-default or the `build` / `run` of its table; the LSP never does.
+Only `build` and `run` start a command: the language's default, or `build` / `run` from the
+table. The LSP never does.
 
-Each finding is one block on stderr, under the cause lines of `codegen --check`:
+| Language | `build` | `run` |
+|---|---|---|
+| Rust | `cargo check --test <probe> --message-format=json` in `root` | `cargo test --test <probe> -- rdra_conformance` |
+| TypeScript | `tsc --noEmit --pretty false -p tsconfig.rdra.json` in `root` | `node <probe>` (Node 22.18 or later, by type stripping; the service imports name the `.ts` files) |
+| Go | `go test -count=1 -run ^$ -gcflags=-e ./<probe dir>` in `root` | `go test -count=1 -run ^TestRdraConformance$ ./<probe dir>` |
+
+`tsconfig.rdra.json` is a generated file that extends the project's tsconfig and holds only
+the probe. An older Node fails `run` with a `CodeConformance` that says so; a project that
+runs TypeScript another way sets `run` (`["npx", "tsx", "src/rdra_contract.ts"]`). Go names
+one missing method per error, so the Go probe names each method of a contract on a line of
+its own.
+
+A compiler error maps to a use case by the probe line it is on (one line per use case), or by
+the generated method or contract it names. One block per use case and kind:
+
+```
+error[CodeMissingUseCase_Ship]: use case Ship has no implementation in svc::service::Service
+  model: model/order.rdra:22:1  usecase Ship "Ship"
+  code:  src/service.rs:70:26  E0277: the trait bound `Service: ShipUseCase` is not satisfied
+  fix:   impl ShipUseCase for svc::service::Service (prepare_ship, commit_ship)
+```
+
+A stale file prints under the cause lines of `codegen --check`:
 
 ```
 error: ../svc/src/domain.rs is not what `codegen` generates from the model
@@ -203,59 +263,16 @@ error: ../svc/src/domain.rs is not what `codegen` generates from the model
   generate them again: rdra-ish codegen model --code
 ```
 
-The last line on stdout, after the model check's `OK:` line, is
-`OK: code: what the model requires, at --code=<level>`, or
-`FAIL: code: <n> error(s) at --code=<level>` with exit status `1`.
-
-At `build`, each compiler error goes back to a use case: by the probe line it is on (the
-probe has one line per use case), or by the generated method or contract it names. In Rust
-the build is `cargo check --test <probe> --message-format=json` in the table's `root`, and
-`run` is `cargo test --test <probe> -- rdra_conformance`. In TypeScript the build is
-`tsc --noEmit --pretty false -p tsconfig.rdra.json` in the root, a generated file that
-extends the project's tsconfig and holds only the probe, and `run` is `node <probe>`: Node
-runs the probe and the service as they are, by its type stripping, so it needs Node 22.18 or
-later and the service's imports name the `.ts` files (`import * as d from "./domain.ts"`).
-An older Node fails `run` with a `CodeConformance` that says so; a project that runs
-TypeScript another way gives `run` in its table (`["npx", "tsx", "src/rdra_contract.ts"]`).
-In Go the build is
-`go test -count=1 -run ^$ -gcflags=-e ./<probe dir>` in the table's `root`, which compiles the
-service package and its probe and runs no test, and `run` is
-`go test -count=1 -run ^TestRdraConformance$ ./<probe dir>`. Go names only one missing method
-of an interface per error, so the Go probe names each method of a contract on a line of its
-own as well: a use case whose every method the compiler finds missing is
-`CodeMissingUseCase`, one with some of them `CodeIncomplete`. One block per use case and kind:
-
-```
-error[CodeMissingUseCase_Ship]: use case Ship has no implementation in svc::service::Service
-  model: model/order.rdra:22:1  usecase Ship "Ship"
-  code:  src/service.rs:70:26  E0277: the trait bound `Service: ShipUseCase` is not satisfied
-  fix:   impl ShipUseCase for svc::service::Service (prepare_ship, commit_ship)
-```
-
-| Name | When |
-|---|---|
-| `CodeMissingUseCase_<UseCase>` | The service does not implement the use case's contract (Rust E0277; TypeScript TS2739 / TS2740 / TS2741 naming every member; Go: every method of it missing). |
-| `CodeIncomplete_<UseCase>` | It implements the contract without some of its methods (E0046; TS2739 / TS2740 / TS2741; Go `missing method`, `has no field or method`). |
-| `CodeSignature_<UseCase>` | A method takes or returns other types than the contract's (E0053, E0050; TS2322; Go `wrong type for method`). |
-| `CodeError_<UseCase>` | Another error on the use case's probe line or naming its methods. |
-| `CodeUnmapped` | The count of the errors that belong to no use case, the first one quoted. |
-| `CodeBuildFailed` | The build failed with no error rdra-ish reads. |
-| `CodeConformance` | `run`: the conformance test failed; the message is the harness's first difference. |
-
-At every level, `check --code` also checks the **obligation ledger**: each obligation the
-generated code lists (`Unique_Payment_Order`, `Ref_Order_customer_id`, ...) needs an owner.
-An owner is either a marker line in the service code,
-`rdra: obligation <name> [file]` after any comment token (`//`, `#`, `--`), or an entry
-`<name> = "<file>"` under `[code.obligations]`. A marker's file is relative to the root
-the marker was found under; without one, the owner is the marker's own file. The check sees
-only the declaration, so it says an obligation **has an owner**, never that it holds. It
-confirms that the owning file exists.
-
-| Name | When |
-|---|---|
-| `CodeObligationUnowned_<name>` | The obligation has no owner. Error. |
-| `CodeObligationOwnerMissing_<name>` | Its owner names a file that does not exist. Error. |
-| `CodeObligationUnknown_<name>` | An owner names an obligation the model does not have (renamed or gone). Warning. |
+**The obligation ledger.** At every level, each obligation the generated code lists
+(`Unique_Payment_Order`, `Ref_Order_customer_id`, ...) needs an owner: a marker line
+`rdra: obligation <name> [file]` after any comment token (`//`, `#`, `--`) in the service
+code, or `<name> = "<file>"` under `[code.obligations]`. A marker's file is relative to the
+root it was found under; without one, the owner is the marker's own file. The check says an
+obligation **has an owner**, never that it holds, and confirms the owning file exists.
+Markers are searched under each table's `root`, skipping hidden directories, `target`,
+`node_modules`, `vendor`, `dist`, the generated files, and files over 1 MiB. Until there is a
+marker or a `[code.obligations]` entry, `check --code` prints a note and checks no
+obligation.
 
 ```
 error[CodeObligationUnowned_Unique_Order_note]: no code owns the obligation Unique_Order_note
@@ -263,49 +280,47 @@ error[CodeObligationUnowned_Unique_Order_note]: no code owns the obligation Uniq
   fix:   add `// rdra: obligation Unique_Order_note <file that keeps it>` or list it under [code.obligations]
 ```
 
-The ledger is kept once there is a marker or a `[code.obligations]` entry. Until then,
-`check --code` prints a note and diagnoses no obligation. Markers are searched under each
-table's `root`, skipping hidden directories, `target`, `node_modules`, `vendor`, `dist`,
-the generated files, and files over 1 MiB.
+| Name | Severity | When |
+|---|---|---|
+| `CodeMissingUseCase_<UseCase>` | error | The service does not implement the use case's contract (Rust E0277; TS2739 / TS2740 / TS2741 naming every member; Go: every method missing). |
+| `CodeIncomplete_<UseCase>` | error | It implements the contract without some methods (E0046; TS2739 / TS2740 / TS2741; Go `missing method`, `has no field or method`). |
+| `CodeSignature_<UseCase>` | error | A method takes or returns other types than the contract's (E0053, E0050; TS2322; Go `wrong type for method`). |
+| `CodeError_<UseCase>` | error | Another error on the use case's probe line or naming its methods. |
+| `CodeUnmapped` | error | The count of errors that belong to no use case, the first one quoted. |
+| `CodeBuildFailed` | error | The build failed with no error rdra-ish reads. |
+| `CodeConformance` | error | `run`: the conformance test failed; the message is the harness's first difference. |
+| `CodeObligationUnowned_<name>` | error | The obligation has no owner. |
+| `CodeObligationOwnerMissing_<name>` | error | Its owner names a file that does not exist. |
+| `CodeObligationUnknown_<name>` | warning | An owner names an obligation the model does not have. |
 
-`--code` on a model without a `[code.rust]`, `[code.go]` or `[code.ts]` table exits `1`, so a
-check that would check nothing never passes. `check` without `--code` on a model that has one
-prints one line, `note: rdra.toml has [code]; `check --code` also checks the service code
-against the model`, on stderr, and otherwise does what it did before.
+**Output and exit codes.** The last stdout line, after the model check's `OK:` line, is
+`OK: code: what the model requires, at --code=<level>`, or `FAIL: code: <n> error(s) at
+--code=<level>` with exit 1. `--code` on a model with no `[code.rust]`, `[code.go]`, or
+`[code.ts]` table exits 1, so a check of nothing never passes. Without `--code`, a model that
+has one gets `note: rdra.toml has [code]; `check --code` also checks the service code against
+the model` on stderr.
 
 ### Partial runs
 
-`check`, `states`, and `verify` take the same flags. Each id is checked against the
-model, and an unknown one is an error.
+`check`, `states`, and `verify` take the same scope flags, each repeatable. Each id is
+checked against the model; an unknown one is an error.
 
-- `--buc <id>` keeps only the use cases reachable from the BUC, when the system is built.
-  A run without the other use cases cannot rule out what they would reach, enable, or
-  unblock. So a state with no witness, a use case that never runs, and a deadlock are each
-  **not decided**: they are listed under `not checked:` and are neither errors nor warnings.
-- `--entity <id>` selects targets: the entity's view, each invariant that binds the entity,
-  and each after-assert whose anchor or predicate binds it. Each target is explored on its
-  own cone, as in a whole run, so every finding on a selected target is exact. A use case
-  that no selected entity's cone keeps is not decided. One such use case gets its own line;
-  two or more get one line that counts them and names the first three (`whether 39 use cases
-  (A, B, C, ...) can run is not decided: ...`), and the `findings not decided` count still
-  includes each.
-- `--without-usecase <id>`, `--without-buc <id>`, and `--actor <id>` assume that some use
-  cases never run and leave them out of the system. `--without-usecase` names one use
-  case; `--without-buc` names the use cases the BUC reaches that no other BUC reaches;
-  `--actor` keeps the use cases the actor performs and those no actor performs (started by
-  an event or a timer, or with no `performs`), and leaves out every other one. Unlike
-  `--buc`, the run decides witnesses, deadlocks, and use cases that never run under that
-  assumption, so a deadlock that another actor's use case hides is an error here. For
-  example, `check --actor Staff` finds the state a staff member cannot leave by their own
-  use cases, though an operator's deletion leaves every state. The `scope:` line names the
-  use cases left out.
+| Flag | Keeps | Decides witnesses, deadlocks, use cases that never run |
+|---|---|---|
+| `--buc <ID>` | The use cases reachable from the BUC. | No: each is **not decided**, since the use cases left out could reach, enable, or unblock them. |
+| `--entity <ID>` | The entity's view, each invariant that binds the entity, and each `after` assertion whose anchor or predicate binds it, each on its own cone as in a whole run. | Yes for the selected targets; a use case no selected cone keeps is not decided. |
+| `--without-usecase <ID>` | Every use case but this one, which is assumed never to run. | Yes, under that assumption. |
+| `--without-buc <ID>` | Every use case but those the BUC reaches and no other BUC reaches. | Yes, under that assumption. |
+| `--actor <ID>` | The use cases the actor performs, and those no actor performs (started by an event or a timer, or with no `performs`). | Yes, under that assumption. |
 
-A build error whose entities no selected cone reads is **deferred**. It is listed under
-`not checked:` and does not fail the run. A build error that alters a use case (a guard
-or an effect that the error dropped) also involves every entity that use case writes, so a
-selection whose cones read that use case still fails on it. A build error that names no
-entity always fails the run. A run without `--entity` reports every build error as an error,
-so the whole model still fails:
+A deadlock that another actor's use case hides is an error under `--actor`: `check --actor
+Staff` finds a state a staff member cannot leave by their own use cases, even though an
+operator's deletion leaves it.
+
+A build error whose entities no selected cone reads is **deferred**: listed under `not
+checked:`, it does not fail the run. A build error that alters a use case (a dropped guard or
+effect) also involves every entity that use case writes. A build error that names no entity
+always fails the run. Without `--entity`, every build error fails the run.
 
 ```
 $ rdra-ish check samples/formal-verification/partial_scope.rdra --entity Order
@@ -317,53 +332,25 @@ not checked: 1 entity view (Audit), 1 invariant (Forbidden_Audit_1), 0 after-ass
 OK: no errors in the selected scope, within 1 instance per entity, Int 0..5
 ```
 
-The `scope:` line follows the `bounds:` line and names each flag; for `--buc` it counts the
-use cases outside the BUCs, and for `--without-usecase`, `--without-buc`, and `--actor` it
-lists the use cases assumed not to run. The `not checked:` block lists the targets the scope leaves
-out, the deferred build errors, and each finding a scope or a cap left undecided. A whole
-run prints it only when a cap left something undecided. `verify` under a scope also lists
-the temporal properties, `can_reach` ones included: a scoped run checks none.
-
-<!-- derived-from ./state-derivation.md#diagnostics -->
-`check` includes the same broad review signals exposed elsewhere:
-
-- actor permission coverage for `requires_permission` on use cases and invoked APIs,
-  including missing and excess actor-side assignments inferred from performer paths;
-- API invocation and API entity-operation gaps;
-- system boundary derivation and cross-system entity coordination gaps;
-- FK/API transaction-boundary warnings;
-- event link gaps, including events that are never raised, raised events that trigger
-  no transition/use case/BUC, or triggered use cases with no containing BUC. Mark
-  intentional external publications with `outbox(Event)` to suppress only the
-  raised-but-unconsumed warning;
-- state diagnostics (same severity as `states`), including missing creation paths,
-  unreachable enum variants, a state of a state model with no reachability witness, an
-  instance that can never leave a state (deadlock), a use case that never runs, a reachable
-  state that breaks a `forbidden`, `invariant`,
-  `required`, `exclusive`, multi-entity, quantifier, or `@unique` (`Unique_*`) rule, a
-  failed `after` assertion, a rule or `after` assertion that holds vacuously
-  (`Vacuous_<name>`), a condition body that no use case can bind, and a cone stopped at a
-  cap or the memory limit. See
-  [Diagnostics](./state-derivation.md#diagnostics).
-
-| Argument | Type | Description |
-|---|---|---|
-| `<INPUTS...>` | paths (required) | Files and/or directories to load. |
+The `scope:` line follows `bounds:` and names each flag. For `--buc` it counts the use cases
+left out; for `--without-usecase`, `--without-buc`, and `--actor` it lists them. The `not
+checked:` block lists the targets the scope leaves out, the deferred build errors, and each
+finding a scope or a cap left undecided. Two or more use cases not decided share one line that
+counts them and names the first three (`whether 39 use cases (A, B, C, ...) can run is not
+decided: ...`). A whole run prints the block only when a cap left something undecided. A
+scoped `verify` also lists its temporal properties there: it checks none.
 
 ### Guard dependencies
 
-`check --guards` reports which rules each guard protects. A guard here is a condition the
-model applies to a use case: a `holds` condition that `applies_to` it, or the `.when`
-conditions on one column's `transitions` arms, `chooses` values, or `sets` values. For each
-guard, the run removes it from every action of the use case (each transaction group and
-each `<UC>_by_<Ev>` copy), explores again the cone of each rule (`forbidden`, `invariant`,
-the other constraints, and `after` assertions) that keeps the use case, and lists the rules
-that now fail. Triggers, `transitions` sources, keys, and links are not removed. A
-condition with no `holds` body, or one applied to something other than a use case, puts no
-guard on the lifecycle and is not listed. Removing the `.when` conditions of a column opens
-every arm or value of it to the use case at once; that is not the same as deleting one
-`.when(...)` from the source, which can leave two unguarded `sets` of one column that
-conflict.
+`check --guards` reports which rules each guard protects. A guard is a condition the model
+applies to a use case: a `holds` condition that `applies_to` it, or the `.when` conditions of
+one column's `transitions` arms, `chooses` values, or `sets` values. For each guard, the run
+removes it from every action of the use case (each transaction and each `<UC>_by_<Ev>` copy),
+explores again each rule cone that keeps the use case, and lists the rules that now fail.
+Triggers, `transitions` sources, keys, and links are not removed. A condition with no `holds`
+body, or one applied to something other than a use case, guards nothing and is not listed.
+Removing a column's `.when` conditions opens every arm or value at once, which differs from
+deleting one `.when(...)` from the source.
 
 ```
 $ rdra-ish check crates/rdra-ish-cli/tests/fixtures/guards/unprotected.rdra --guards
@@ -378,192 +365,102 @@ rules:
 OK: no errors within 1 instance per entity, Int 0..5
 ```
 
-The report is on stdout, before the final `OK:` line. Each `guard:` line names the guard
-and its site (the `holds` body, or the first guarded arm or value), then one line per rule
-it protects, named by its `.label` or else by its check name. The `rules:` block turns the
-table around: each rule with the guards it depends on, or `no guard`.
-
-A guard no rule depends on is not wrong. Either it states a business rule that nobody
-wrote as a `forbidden` or `invariant`, so `check` cannot tell when it is lost, or the
-model does not need it. A guard that backs up another guard or a trigger lands here too:
-removing one of the two keeps the rule.
-
-The rule is `not decided` without a guard when, without the guard, its cone stops at
-`--max-states` or `--memory` before a counterexample. Such a guard is
-neither protecting nor unprotected, and the `rules:` line names it after `not decided
-without`.
-
-The run explores one set of cones per guard, one guard after another, under the same
-caps and memory limit as `check`. Only the rule cones that keep the use case run again,
-and rules that share a cone share a run. Under a scope (`--entity`, `--buc`, ...) only the
-selected rules are explored. A model that fails `check` gets no report, only a `note:` to
-fix the errors first. Temporal properties are `verify`'s and are not counted, so a guard
-that serves only a `property` is one no rule depends on. The report is text only; it has
-no `--format json`. The order is the build's order of the use
-cases and their guards, so two runs print the same report.
+- The report is on stdout, before `OK:`, in the build's order of use cases and guards, so two
+  runs print the same. It is text only.
+- A `guard:` line names the guard and its site (the `holds` body, or the first guarded arm or
+  value), then each rule it protects, by its `.label` or check name. The `rules:` block lists
+  each rule with the guards it depends on, or `no guard`.
+- A guard no rule depends on is not wrong. It states a business rule nobody wrote as a
+  `forbidden` or `invariant`, or the model does not need it. A guard that backs up another
+  guard or a trigger lands here too.
+- A rule is `not decided without` a guard when its cone, without the guard, stops at
+  `--max-states` or `--memory` before a counterexample.
+- The runs use `check`'s caps and memory limit. Under a scope, only the selected rules run. A
+  model that fails `check` gets only a `note:`. A guard that serves only a `property` is one
+  no rule depends on. `--guards` adds no finding and does not change the exit status.
 
 ---
 
 ## `lint`
 
-Audit model coverage and review readiness.
+Report coverage and review-readiness findings beside the `check` diagnostics.
 
 ```
-rdra-ish lint <INPUTS...> [--format <FORMAT>]
+rdra-ish lint <INPUTS...> [--format table|json|csv|markdown]
 ```
 
-`lint` is review-oriented rather than a replacement for `check`. It includes
-parse/model diagnostics and whole-model consistency warnings, then adds modeling
-coverage findings such as orphan nodes, untraced requirements, unscoped NFRs or
-constraints, empty BUCs/flows, unmapped screen fields, unused APIs/DTOs, incomplete
-API method/path contracts, and naming convention warnings.
+| Flag | Default | Meaning |
+|---|---|---|
+| `--format` | `table` | `table`, `json`, `csv`, or `markdown` (a Markdown table with the CSV columns). |
 
-It also emits these `info` rows:
-
-- `coverage-score` is a lightweight 0-100 readiness signal. Empty models score `0`.
-  Finding penalties are scaled by model size (`×25/elements`); each model layer with no
-  element (`scope`, `business-flow`, `data`, `interaction`, `system-boundary`, `rules`)
-  subtracts 8 (floor 0).
-- `stage-readiness` gives the stage of each BUC and the stage after it, as
-  [`next`](#next) decides them: `BucOrder stage 2 (next 3); BucPayment stage 6 (required
-  stages complete)`.
-- `requirement-no-goal` marks a `requirement` that achieves no `goal`, unless its status is
-  `out-of-scope`. The hint is to add `achieves(Requirement, Goal)`, or to mark a non-goal
-  `status "out-of-scope"` with a `rationale`.
-- `goal-unmeasured` marks a `goal` with no `metric` or no `target`.
-- `screen-no-transition` marks a `screen` that no `navigates` enters or leaves and that no
-  business flow reaches in order, so it stands alone in `diagram --kind screen`. The hint is
-  to add `navigates(FromScreen, ToScreen).via(UseCase)`.
-- `rule-unlabeled` marks a `forbidden`, `invariant`, `required`, `exclusive`,
-  `invariant(...).when(...).none/has(...)`, or `after(...).assert(...)` with no
-  [`.label("...")`](./language-reference.md#labelling-a-rule), so `list --kind rule` shows it
-  with an empty label. It is not shown in the editor.
-- `triggered-usecase-unguarded` marks a use case that only an event or a timer starts (no
-  `performs` names it), that writes something, and that no condition guards and no
-  `transitions` gives a from-state. The event orders the use case after its raise, but the
-  record of the raise is a latch, so once the event was raised on a row `check` and `verify`
-  run the use case there in every state its guards allow, as often as they allow. The hint
-  is to add the state the event follows as a `holds` body applied to the use case, or as a
-  `transitions` arm.
-- `condition-applied-without-body` marks a condition with no `holds` body and no `combines`
-  that `applies_to` a use case or an API. It guards nothing and links no variation or state
-  model: `check` and `verify` run the use case whether or not it holds. The hint is to write
-  the body when it should guard the use case. A condition that `combines` is an RDRA trace
-  link and is not marked.
-
-These rules are `warning` rows:
-
-- `flow-cycle` warns when `precedes` / `branches` edges form a cycle among steps.
-- `enum-attribute` warns on an inline `Enum` column that no `transitions` and no `sets`
-  moves. Its value is chosen by an actor, so the hint is to type the column by a
-  [`variation`](./language-reference.md#variations).
-- `field-column-unwritten` warns on a screen field mapped by `maps_field` to a `@null` column
-  that no `sets` and no `chooses` gives a value. `states` keeps the column at `null`, so the
-  field shows a value the model never produces. The hint is to add `sets(UseCase,
-  Entity.column == present)`.
-- `rdra-*` rules are the RDRA definition sheet's 不整合 columns that lint enforces: an actor,
-  external system, entity, condition, variation, or timer that no BUC reaches
-  (`rdra-actor-no-buc`, `rdra-extsystem-no-buc`, `rdra-entity-no-buc`,
-  `rdra-condition-no-buc`, `rdra-variation-no-buc`, `rdra-timer-no-buc`), and a use case
-  named by `transitions` that no BUC contains (`rdra-transition-uc-no-buc`). They replace
-  `orphan-node` for those kinds. The "undefined" columns are `check` errors. See
-  [RDRA lint rules](./language-reference.md#rdra-lint-rules).
-- `condition-no-rdra-anchor` warns on a [condition](./language-reference.md#conditions) whose
-  `holds` body names neither a variation-typed column nor a lifecycle column and guards no use
-  case. A body that `applies_to` a use case or an API, or that a `transitions` arm or a
-  `chooses` value names in `.when`, is a guard and is not flagged.
-
-- `comparison-unsatisfiable-in-range` warns on a comparison of an Int, Money, or Decimal
-  column with a literal that no value in `0..5`, the Int range `check` and `verify` explore,
-  satisfies, such as `qty > 5` or `qty < 0`, in a rule or a `holds` body. What it guards or
-  forbids never applies there.
-- `comparison-trivial-in-range` warns on such a comparison that every value in `0..5`
-  satisfies, such as `qty >= 0` or `qty <= 5`, on a column that is not `@null`. It constrains
-  nothing there. The hint of both is to compare with a value inside the range, or to drop the
-  comparison.
-
-- `deprecated-syntax` warns on a
-  [deprecated form](./language-reference.md#deprecated-and-removed-forms): the model loads
-  with the form rewritten, and the message names the rewrite and the version that removes
-  it. `fmt --write` rewrites it.
-
-Lint warnings do not fail the command. Existing parse/model errors are emitted as
-`semantic-error` rows and make the command exit with status `1`.
-
-Every rule `lint` reports, by name:
+Each row has a severity, a rule, the subject's kind and id, a message, and a hint. Load and
+model errors are `semantic-error` rows. **Exit codes:** `1` when a `semantic-error` row is
+present, else `0`; warnings do not fail.
 
 | Rule | Severity | Marks |
 |---|---|---|
 | `api-contract-incomplete` | warning | An API that declares only one of `method` and `path`. |
 | `api-contract-missing` | warning | An API with neither `method` nor `path`; the OpenAPI export omits it. |
 | `api-unused` | warning | An API no use case `invokes`. |
-| `buc-empty` | warning | A BUC that contains no use case; `info` while the BUC has not reached the skeleton stage. |
-| `comparison-trivial-in-range` | warning | See above. |
-| `comparison-unsatisfiable-in-range` | warning | See above. |
-| `condition-applied-without-body` | info | See above. |
-| `condition-no-rdra-anchor` | warning | See above. |
-| `consistency-warning` | warning | A whole-model consistency diagnostic of `check`, such as a missing relation or metadata. |
-| `constraint-unscoped` | warning | A `constraint` that `constrains` no use case, API, system, entity, or DTO. |
-| `coverage-score` | info | See above. |
-| `deprecated-syntax` | warning | See above. |
-| `dto-unused` | warning | A DTO that no API names in `request`, `response`, or `error_response`. |
-| `end-redundant` | warning | An `@end` value that no `transitions` arm leaves, which is an end state without `@end`. |
-| `enum-attribute` | warning | See above. |
-| `field-column-unwritten` | warning | See above. |
-| `field-unmapped` | warning | A screen field that no `maps_field` maps to an entity column. |
+| `buc-empty` | warning | A BUC that contains no use case; `info` while the BUC is before the skeleton stage. |
+| `comparison-trivial-in-range` | warning | A comparison of an Int, Money, or Decimal column with a literal that every value in `0..5` meets (`qty >= 0`), on a column that is not `@null`. It constrains nothing. |
+| `comparison-unsatisfiable-in-range` | warning | Such a comparison that no value in `0..5` meets (`qty > 5`), in a rule or a `holds` body. What it guards never applies. |
+| `condition-applied-without-body` | info | A condition with no `holds` body and no `combines` that `applies_to` a use case or an API. It guards nothing. |
+| `condition-no-rdra-anchor` | warning | A [condition](./language-reference.md#conditions) whose body names neither a variation-typed nor a lifecycle column and that guards no use case (by `applies_to` or `.when`). |
+| `consistency-warning` | warning | A whole-model consistency diagnostic of `check`, such as a missing relation. |
+| `constraint-unscoped` | warning | A `constraint` that `constrains` nothing. |
+| `coverage-score` | info | A readiness signal from 0 to 100. An empty model scores `0`. The score is 100, minus the findings' penalty times 25 divided by the number of model elements, minus 8 for each empty layer (`scope`, `business-flow`, `data`, `interaction`, `system-boundary`, `rules`), and never below 0. |
+| `deprecated-syntax` | warning | A [deprecated form](./language-reference.md#deprecated-and-removed-forms). The message names the rewrite and the version that removes it; `fmt --write` rewrites it. |
+| `dto-unused` | warning | A DTO no API names in `request`, `response`, or `error_response`. |
+| `end-redundant` | warning | An `@end` value that no `transitions` arm leaves: an end state already. |
+| `enum-attribute` | warning | An inline `Enum` column that no `transitions` and no `sets` moves: an actor chooses it, so type it by a [`variation`](./language-reference.md#variations). |
+| `field-column-unwritten` | warning | A field mapped to a `@null` column that no `sets` and no `chooses` fills, so it shows a value the model never produces. |
+| `field-unmapped` | warning | A screen field that no `maps_field` maps. |
 | `field-unplaced` | warning | A screen field that no screen `contains`. |
-| `flow-cycle` | warning | See above. |
-| `flow-empty` | warning | A business flow that contains no step. |
-| `goal-unmeasured` | info | See above. |
-| `multi-rule-unscoped` | warning | A multi-entity `forbidden`, `invariant` or `property` with no `.along(...)` and no `.global()`, when keys relate its entities; the message names the `.along(...)` the shortest key path gives. |
-| `naming-column` | warning | An entity column that is not snake_case. |
+| `flow-cycle` | warning | `precedes` / `branches` edges that form a cycle. |
+| `flow-empty` | warning | A flow that contains no step. |
+| `goal-unmeasured` | info | A `goal` with no `metric` or no `target`. |
+| `multi-rule-unscoped` | warning | A multi-entity `forbidden`, `invariant`, or `property` with no `.along(...)` and no `.global()`, when keys relate its entities. The message names the `.along(...)` of the shortest key path. |
+| `naming-column` | warning | A column that is not snake_case. |
 | `naming-dto-field` | warning | A DTO field that is not snake_case. |
 | `naming-id` | warning | An element id that is not UpperCamelCase. |
-| `nfr-unscoped` | warning | An `nfr` that `applies_to` no use case, API, or system. |
-| `orphan-node` | warning | An element no predicate connects to another; the `rdra-*` rules replace it for the kinds they cover. |
-| `query-index-missing` | warning | A lookup the model implies that no index serves; skipped for an entity under 10,000 `rows`. See [`export --kind sql`](#export). |
-| `rdra-*` | warning | See above. |
-| `requirement-no-goal` | info | See above. |
+| `nfr-unscoped` | warning | An `nfr` that `applies_to` nothing. |
+| `orphan-node` | warning | An element no predicate connects; the `rdra-*` rules replace it for their kinds. |
+| `query-index-missing` | warning | A lookup no index serves; skipped below 10,000 `rows`. See [Query shapes](./language-reference.md#query-shapes). |
+| `rdra-*` | warning | The RDRA sheet's 不整合 columns that `lint` enforces: an actor, external system, entity, condition, variation, or timer no BUC reaches, and a `transitions` use case in no BUC. See [RDRA lint rules](./language-reference.md#rdra-lint-rules). |
+| `requirement-no-goal` | info | A `requirement` that achieves no `goal`, unless its status is `out-of-scope`. |
 | `requirement-untraced` | warning | A requirement that `motivates` no BUC. |
-| `rule-unlabeled` | info | See above. |
+| `rule-unlabeled` | info | A rule with no [`.label("...")`](./language-reference.md#labelling-a-rule), so `list --kind rule` shows it unlabelled. Not shown in the editor. |
 | `screen-no-fields` | warning | A screen that contains no field. |
-| `screen-no-transition` | info | See above. |
-| `semantic-error` | error | A parse or model error of `check`; the command exits with status `1`. |
+| `screen-no-transition` | info | A screen that no `navigates` enters or leaves and that no flow reaches in order. |
+| `semantic-error` | error | A load or model error of `check`. |
 | `semantic-warning` | warning | Any other warning of `check`. |
-| `stage-readiness` | info | See above. |
-| `step-no-cover` | warning | A business step that `covers` no use case, API, or event. |
-| `triggered-usecase-unguarded` | info | See above. |
-
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--format` | `table` \| `json` \| `csv` \| `markdown` | `table` | Output format. `markdown` is a Markdown table with the CSV columns. |
+| `stage-readiness` | info | Each BUC's stage and the stage after it, as [`next`](#next) decides them: `BucOrder stage 2 (next 3); BucPayment stage 6 (required stages complete)`. |
+| `step-no-cover` | warning | A step that `covers` nothing. |
+| `triggered-usecase-unguarded` | info | A use case only an event or timer starts, that writes, and that no condition guards and no `transitions` gives a from-state. Once the event was raised on a row, the use case may run there in every state its guards allow, as often as they allow. |
 
 ---
 
 ## `next`
 
-Show the incremental modeling stage of each BUC, and what the next stage asks for.
+Show each BUC's incremental modeling stage and what the next stage asks for.
 
 ```
-rdra-ish next <INPUTS...> [--buc <ID>]... [--format <FORMAT>]
+rdra-ish next <INPUTS...> [--buc <ID>]... [--format text|json]
 ```
 
-| Option | Default | Description |
+| Flag | Default | Meaning |
 |---|---|---|
-| `--buc <ID>` | every BUC | Show only these BUCs; repeatable. An unknown id is an error |
-| `--format <FORMAT>` | `text` | `text` or `json` |
+| `--buc <ID>` | every BUC | Show only these BUCs; repeatable. An unknown id is an error. |
+| `--format` | `text` | `text` or `json`. |
 
-`next` places each BUC on the [stage map](./incremental-modeling.md#stage-map). Every
-stage has a gate of one or more clauses. A blocking clause that fails is a gap, and the
-stage is **open**; an advisory clause that fails is a review note, which never holds a BUC
-back. A stage whose clauses pass but which owns an error of [`check`](#check) (a
-`Witness_`, `Deadlock_`, or violated rule on an entity the BUC touches) is **blocked**: the
-elements exist, but the model has to be fixed before the next stage's detail is added.
-Otherwise the stage is **met**. A BUC is at the last stage of the met prefix of the
-required stages, 0 to 6; the rule stages 7A to 7C are optional, so a BUC with a
-lifecycle and no rule is complete, and `next` offers the rule stages instead of
-demanding them:
+`next` places each BUC on the [stage map](./incremental-modeling.md#stage-map). Each stage
+has a gate of clauses. A blocking clause that fails is a gap, and the stage is **open**; an
+advisory clause that fails is a review note and never holds a BUC back. A stage whose clauses
+pass but which owns a [`check`](#check) error (a `Witness_`, `Deadlock_`, or violated rule on
+an entity the BUC touches) is **blocked**. Otherwise it is **met**. A BUC is at the last stage
+of the met prefix of the required stages, 0 to 6. The rule stages 7A to 7C are optional:
+`next` offers them and does not demand them.
 
 <!-- stage-spec: gates -->
 | Stage | The gate passes when | Review notes |
@@ -580,25 +477,21 @@ demanding them:
 | 7C Advanced rules (optional) | a rule that holds a comparison or names more than one entity reads a column this BUC moves |  |
 <!-- /stage-spec -->
 
-A gate passing is evidence, not a verdict. The stage sections of
-[Incremental Modeling Flow](./incremental-modeling.md) say when a stage is stable enough
-to move on; `next` shows where the model stands, so you only need to ask the next stage's
-questions.
+A gate is evidence, not a verdict; the stage sections of
+[Incremental Modeling Flow](./incremental-modeling.md) say when a stage is stable enough to
+move on.
 
-The text output prints one block per BUC, after a summary table when there is more than
-one: each stage with what its gate counted (`[x]` met, `[ ]` open, `[!]` blocked, and the
-count of notes and `check` findings), then the first required stage that is not met, with
-its main question, the elements that fail the gate (`Gaps:`, at most 8; `--format json`
-lists every one), the review notes (`Notes:`), the `check` findings the stage owns
-(`Findings:`, by name; `check` prints the traces), the questions to ask, the commands that
-review the stage once it is added, and its section in the modeling guide:
+**Text output.** A summary table when there are several BUCs, then one block per BUC: each
+stage with what its gate counted (`[x]` met, `[ ]` open, `[!]` blocked, and the counts of notes
+and findings), then the first required stage not met, with its question, `Gaps:` (at most 8;
+JSON lists all), `Notes:`, `Findings:` (by name; `check` prints the traces), `Ask:`, the
+commands that review the stage, and its guide section. Findings no BUC owns print first.
 
 ```text
 BucStoreRestock "Maintain Store Restock": stage 1 BUC skeleton
   [x] 0  Scope sketch             belongs to StoreOperations
   [x] 1  BUC skeleton             2 use cases, 1 `performs` / `triggers` starting them
   [ ] 2  Screens                  0/2 use cases display a screen or run on a trigger
-  [ ] 3  Data touchpoints         0/2 use cases touch an entity
   ...
 
 Next: stage 2 Screens
@@ -617,25 +510,23 @@ Next: stage 2 Screens
 ```
 
 Once every required stage is met the block reads `stage 6 Lifecycle, required stages
-complete`, and `Every required stage is met.` is followed by the met rule stages and an
-`Optional: stage 7C Advanced rules` block for each open one. A blocked stage reads
-`Next: stage 6 Lifecycle is blocked: the elements exist, but check rejects them`. Findings
-of `check` that no BUC owns are printed before the BUC blocks.
+complete`, then `Every required stage is met.`, the met rule stages, and an `Optional: stage
+7C Advanced rules` block per open one. A blocked stage reads `Next: stage 6 Lifecycle is
+blocked: the elements exist, but check rejects them`.
 
-`--format json` writes `{"bucs": [...], "unowned_findings": [...]}`. Each BUC has `id`,
-`label`, `stage` (`"2"`, `"7A"`, or `null` before stage 0), `stage_name`, `slug` (a
-stable id such as `data-touchpoints`, which a reorder of the stages does not change),
-`required_complete`, `gates` (`stage`, `stage_name`, `slug`, `passed`, `verdict` as
-`met`, `open`, or `blocked`, `evidence`, the counts `gaps` and `notes`, and `findings`),
-and `next`. `next.kind` is `required` while a required stage is not met, with that stage's
-`stage`, `stage_name`, `slug`, `verdict`, `question`, `doc`, `asks`, `validate`, `gaps`
-and `notes` (`kind` as `buc`, `usecase`, `screen`, `api`, or `entity`, `id`, `message`), and `findings` (`name`, `severity`); once every
-required stage is met it is `optional`, with the same fields for each rule stage under
-`stages`. Skills key on `slug`, and read `next.asks` and `next.gaps` for what to ask.
+**JSON output.** `{"bucs": [...], "unowned_findings": [...]}`. Each BUC has `id`, `label`,
+`stage` (`"2"`, `"7A"`, or `null` before stage 0), `stage_name`, `slug` (a stable id such as
+`data-touchpoints`), `required_complete`, `gates`, and `next`. A gate has `stage`,
+`stage_name`, `slug`, `passed`, `verdict` (`met`, `open`, `blocked`), `evidence`, the counts
+`gaps` and `notes`, and `findings`. `next.kind` is `required` while a required stage is not
+met, with that stage's `stage`, `stage_name`, `slug`, `verdict`, `question`, `doc`, `asks`,
+`validate`, `gaps` and `notes` (each with `kind`, one of `buc`, `usecase`, `screen`, `api`, or
+`entity`; `id`; and `message`), and `findings` (`name`, `severity`). Once every required
+stage is met it is `optional`, with the same fields per rule stage under `stages`. Skills
+key on `slug` and read `next.asks` and `next.gaps`.
 
-`next` refuses a model with parse or model errors, as the generators do; run `check`
-first. It derives the states as `check` does, so it takes as long. It exits 0 at every
-stage and verdict.
+**Exit codes.** `0` at every stage and verdict; `1` when the model has load or model errors
+(run `check` first). `next` explores the lifecycle as `check` does, so it takes as long.
 
 ---
 
@@ -647,77 +538,73 @@ Print the `.rdra` files the inputs load, one path per line, in load order.
 rdra-ish files <INPUTS...>
 ```
 
-Every loading command collects its inputs the same way: each file as given, then each
-directory walked recursively with the entries of every directory sorted by file name. So
-the order is the same on every platform. Exits `1` when the inputs hold no `.rdra` file.
-`scripts/verify-samples.sh` reads a sample's `// expect` header from the first path it
-prints (see [Sample expectations](./formal-verification.md#sample-expectations)).
-
-| Argument | Type | Description |
-|---|---|---|
-| `<INPUTS...>` | paths (required) | Files and/or directories to list. |
-
-`files` and `fmt` read no manifest, so a malformed `rdra.toml` does not stop them.
+The order is the one every loading command uses (see [Conventions](#conventions)).
+`scripts/verify-samples.sh` reads a sample's `// expect` header from the first path (see
+[Sample expectations](./formal-verification.md#sample-expectations)). **Exit codes:** `1`
+when the inputs hold no `.rdra` file, else `0`.
 
 ---
 
 ## Project manifest
 
-A model may carry an `rdra.toml` at its root:
+A model may have an `rdra.toml`. Every loading command but `files` and `fmt` reads it.
 
 ```toml
 [model]
-name = "shop"
+name = "shop"                       # required
 
-[dependencies]
+[dependencies]                      # parsed, not used yet; free-form
 auth = { path = "../auth-model" }
-```
 
-`[model] name` is required. The `[dependencies]` table is parsed and not used yet. The
-`[check]` and `[verify]` tables set the [memory limit](#memory-limit) and the
-[per-entity instance counts](#per-entity-instance-counts) of those commands, and
-`[verify]` sets [instance symmetry](#instance-symmetry) (`symmetry`, read by `verify` only;
-under `[check]` it warns and is not read):
-
-```toml
-[check]           # check, states, and (memory only) the generators
+[check]                             # check, states; memory also for the generators
 memory = "4GiB"
+instances = { Loan = 4 }
 
-[verify]          # verify and export --kind tla
+[verify]                            # verify and export --kind tla
 memory = "16GiB"
 instances = { Loan = 4 }
 symmetry = "always"
 ```
 
-A malformed manifest, one without `[model] name`, an unknown table (a misspelled
-`[verfiy]`), an unknown key in `[model]`, `[check]` or `[verify]`, a `memory` value that is not a [size](#memory-limit), or an `instances` count outside
-`1..=255`, makes every loading command exit `1` with a message that names `rdra.toml` and
-the line.
+| Table | Key | Meaning |
+|---|---|---|
+| `[model]` | `name` | The model's name. Required. |
+| `[dependencies]` | any | Parsed and not used yet. |
+| `[check]`, `[verify]` | `memory` | The command's [memory limit](#memory-limit), a size such as `4GiB`. |
+| `[check]`, `[verify]` | `instances` | Per-entity slot counts, `1..=255`; see [Per-entity instance counts](#per-entity-instance-counts). |
+| `[verify]` | `symmetry` | `never` or `always`; see [Instance symmetry](#instance-symmetry). Under `[check]` it is accepted but not read, and `verify` warns about it. |
+| `[code]` | `obligations`, `rust`, `go`, `ts` | See [The code tables](#the-code-tables). |
 
-A loading command finds the manifest like this:
+A flag overrides its key. Every loading command exits 1, naming `rdra.toml` and the line, on a
+malformed file, a missing `[model] name`, an unknown table or key (a misspelled `[verfiy]`;
+only `[dependencies]` is free-form), a `memory` that is not a [size](#memory-limit), or an
+`instances` count outside `1..=255`:
 
-1. Take each input as given, made absolute without resolving symlinks. A `..` component is
-   collapsed before the walk.
-2. Start in the input's directory, or in the directory of a file input, and look for
-   `rdra.toml` there, then in each parent.
-3. Stop after the first directory that holds `.git`, which is searched too, or at the
-   filesystem root. A stray `rdra.toml` above a repository never applies.
+```
+Error: /work/shop/rdra.toml:3: unknown field `verfiy`, expected one of `model`, `dependencies`, `check`, `verify`, `code`
+```
+
+**Discovery.**
+
+1. Take each input as given, made absolute without resolving symlinks, with `..` collapsed.
+2. Look for `rdra.toml` in the input's directory (a file input's directory), then in each
+   parent.
+3. Stop after the first directory that holds `.git` (searched too), or at the filesystem
+   root. A stray `rdra.toml` above a repository never applies.
 4. With several inputs, every input's manifest is read, so a malformed one fails the command
-   whatever the input order. When all are valid, the first input's manifest is the project's.
-   A later change will tighten how inputs from different models combine.
+   in any order. When all are valid, the first input's manifest is the project's.
 
 ### The code tables
 
-`[code.rust]`, `[code.go]` and `[code.ts]` name the files `codegen --code` writes for a
-service in that language, and that [`check --code`](#check---code) holds against the
-model. Every path is relative to the directory of `rdra.toml`; rdra-ish does not decide
-where they go. Only `domain` is required.
+`[code.rust]`, `[code.go]`, and `[code.ts]` name the files `codegen --code` writes for a
+service in that language, which [`check --code`](#check---code) holds against the model. Each
+path is relative to the directory of `rdra.toml`. Only `domain` is required.
 
 ```toml
 [code.rust]
-domain = "../service/src/domain.rs"        # the codegen output
-traces = "../service/tests/traces.txt"     # with it, domain holds the conformance harness
-conformance_states = 65536                 # --conformance-states of the traces
+domain = "../service/src/domain.rs"
+traces = "../service/tests/traces.txt"
+conformance_states = 65536
 
 [code.ts]
 domain = "../web/src/domain.ts"
@@ -737,38 +624,23 @@ new = "svc.New()"
 Unique_Payment_Order = "../service/migrations/003_payment.sql"
 ```
 
-| Key | Description |
+| Key | Meaning |
 |---|---|
-| `domain` | The domain code `codegen` prints for the language. |
+| `domain` | The file `codegen` writes for the language. |
 | `traces` | The conformance traces. With it, `domain` also holds the conformance port and harness (`--conformance`). |
-| `conformance_states` | The states the BFS behind the traces explores at most. Default `65536`. |
-| `package` | Go: the package name of `domain` (`--package`). Default `domain`. When set, the probe imports the domain package under this name, so an import path whose last element is another name (`example.com/shop/store` holding `package domain`) builds; unset, it uses the last element. |
-| `probe` | The probe `codegen --code` (or `--probe`) writes, one line per use case stating that `service` implements that use case's contract (`<UseCase>UseCase`): in Rust a file under the service crate's `tests/`; in TypeScript a `.ts` file anywhere in the project; in Go a `_test.go` file in the service's package directory (`package <svc>_test`), which also names each method of a contract on a line of its own. `build` needs it. In TypeScript `codegen --code` also writes `tsconfig.rdra.json` in `root`. |
-| `service` | The service type, as the probe names it. Rust: its path, `svc::service::Service`. TypeScript: its file, relative to `rdra.toml`, and the exported type or class after `#`, `../web/src/order_service.ts#OrderService`. Go: `<import path>.<Type>`, `example.com/shop/svc.Service`. |
-| `module` | Rust: the path of the generated module in the service's crate, `svc::domain`. Go: the import path of `domain`'s package; by default the service's import path moved as `domain`'s directory is from the probe's. |
-| `new` | An expression that makes a fresh service. With `traces`, the probe also holds the conformance test, `rdra_conformance` in Rust and `TestRdraConformance` in Go, which `run` runs. Rust: required for the test. TypeScript: default `new service.<Type>()`, where `service` is the service's module. Go: default `new(<pkg>.<Type>)`. |
+| `conformance_states` | `--conformance-states` of the traces. Default `65536`. |
+| `probe` | The file `codegen --code` (or `--probe`) writes: one line per use case stating that `service` implements its contract (`<UseCase>UseCase`). Rust: a file under the service crate's `tests/`. TypeScript: a `.ts` file in the project; `codegen --code` also writes `tsconfig.rdra.json` in `root`. Go: a `_test.go` in the service's package directory (`package <svc>_test`). `build` needs it. |
+| `service` | The type that implements the contracts. Rust: its path, `svc::service::Service`. TypeScript: its file relative to `rdra.toml`, `#`, and the exported type, `../web/src/order_service.ts#OrderService`. Go: `<import path>.<Type>`. |
+| `module` | Rust: the path of the generated module in the service's crate, `svc::domain`; the Rust probe needs it. Go: the import path of `domain`'s package; default: the service's import path moved as `domain`'s directory is from the probe's. |
+| `new` | An expression that makes a fresh service. With `traces`, the probe also holds the conformance test (`rdra_conformance` in Rust, `TestRdraConformance` in Go) that `run` runs. Rust: required for the test. TypeScript: default `new service.<Type>()`. Go: default `new(<pkg>.<Type>)`. |
+| `package` | Go: the package name of `domain` (`--package`), default `domain`. When set, the probe imports the domain package under this name, so an import path whose last element differs builds. |
+| `root` | The directory the build runs in and the ledger scans. Default: the nearest directory above `domain` with `Cargo.toml`, `go.mod`, `package.json`, or `tsconfig.json`. |
+| `build`, `run` | The command `--code=build` / `--code=run` runs in place of the default, as a list of arguments. Runs only when that level is given on the command line. |
 | `seal` | TypeScript: `true` writes `domain` as `codegen --seal` does. Default `false`. |
-| `tsconfig` | TypeScript: the tsconfig `tsconfig.rdra.json` extends. Default: `tsconfig.json` in `root` when it exists; without one, `tsconfig.rdra.json` sets `strict` itself. |
-| `root` | The directory the build command runs in. Default: the nearest directory above `domain` that holds `Cargo.toml`, `go.mod`, `package.json` or `tsconfig.json`. |
-| `build`, `run` | The command `check --code=build` / `--code=run` runs in place of the language's default, as a list of arguments. It runs only when that level is given on the command line, never from the LSP. |
+| `tsconfig` | TypeScript: the tsconfig `tsconfig.rdra.json` extends. Default: `tsconfig.json` in `root` when it exists; else `tsconfig.rdra.json` sets `strict` itself. |
 
-An unknown key under `[code]` or one of its tables makes every loading command exit `1`, as
-under `[check]`. `seal` or `tsconfig` under `[code.rust]` or `[code.go]` makes `--code` exit
-`1`.
-
-The LSP does not run `codegen` or a build. When the model's source text is not the text a
-file under `[code]` was generated from (its fingerprint's model hash), or the file is missing
-or has no fingerprint, it shows an information diagnostic on the table's line of
-`rdra.toml`. A comment-only edit of the model shows it too; `check --code` decides.
-
-The LSP loads a workspace the same way. It lists every `.rdra` file under the workspace roots,
-adds the open buffers, and derives the include paths from those files exactly as the CLI does.
-The workspace roots are no longer include paths of their own, so `import m.a.shared` from
-`m/a/b/c.rdra`, with no loaded file declaring `module m.a.shared`, reports "unknown module"
-in the editor, as `check` does. An import resolves by the `module` a loaded file declares
-before it is looked up by path, in both.
-A malformed `rdra.toml` clears the LSP's diagnostics and shows the error in a message, and in
-a diagnostic on an open `.rdra` file.
+An unknown key fails every loading command, as under `[check]`. `seal` or `tsconfig` under
+`[code.rust]` or `[code.go]` makes `--code` exit 1.
 
 ### Per-entity instance counts
 <!-- constrained-by #project-manifest -->
@@ -777,46 +649,36 @@ a diagnostic on an open `.rdra` file.
 gives one entity its own, `1..=255`, and is repeatable:
 
 ```sh
-rdra-ish verify model/ --instances Loan=4
+rdra-ish verify model/ --instances Loan=4      # two slots of everything, four of Loan
 rdra-ish verify model/ --instance-count 1 --instances Loan=3 --instances Room=3
 ```
 
-The first run explores two rows of every entity and four of `Loan`, so a rule that breaks
-only with four loans shows without growing every other entity. `check`, `states`,
-`verify`, and `export --kind tla` take the flag. `instances = { Loan = 4 }` under `[check]`
-sets it for `check` and `states`, and under `[verify]` for `verify` and `export --kind
-tla`, which writes the modules `verify` checks. A flag replaces the table's count of its
-entity and keeps the others. An id that names no entity of the model is an error that
-lists the entity ids. The generators (`codegen`, `next`, and the lifecycle gate of the
-outputs) run at one instance per entity and read neither table.
-
-The `bounds:` line and the final line name each count: `OK: no errors within 2 instances per
-entity (Loan=4), Int 0..5`. The TLA+ module's header names them too, and the entity's
-id set is `Loan_Ids == 1..4` while the others stay `1..InstanceCount`. The largest count
-sets the default `--max-patterns` of `check` and `states`.
-
-A pre-existing child that starts linked to the parent slot of its own index (a 1:1 key or
-a `1..` range under a pre-existing parent) needs as many slots as its parent; other counts
-are the `IdentityStartSlots` error. Without `--instances` and the tables every output is the
-same as before the flag existed.
-
-A counted rule names the count it needs. `.at_most(3, Loan)` and a card `0..3:1` break
-only with four rows of `Loan`; below that they hold vacuously, and the `Vacuous_*` warning
-ends `(Loan has 2 slots; --instances Loan=4 gives it 4)`. `.at_least(3, Loan)` and
-`.exactly(3, Loan)` with fewer slots fail wherever they apply, and the
-`CountAboveBound` warning names the same flag (see
-[Counted quantifiers](./language-reference.md#counted-quantifiers)).
+- `check`, `states`, `verify`, and `export --kind tla` take the flag. `instances` under
+  `[check]` sets it for `check` and `states`; under `[verify]`, for `verify` and `export --kind
+  tla`. A flag replaces the table's count of its entity and keeps the others. An id that names
+  no entity is an error that lists the entity ids.
+- The generators (`codegen`, `next`, and the lifecycle gate of the outputs) run at one slot
+  per entity and read neither table.
+- The `bounds:` and final lines name each count: `OK: no errors within 2 instances per entity
+  (Loan=4), Int 0..5`. The TLA+ module's header names them, and the entity's id set is
+  `Loan_Ids == 1..4`. The largest count sets the default `--max-patterns`.
+- A pre-existing child that starts linked to the parent slot of its own index (a 1:1 key, or
+  a `1..` range under a pre-existing parent) needs as many slots as its parent; other counts
+  are the `IdentityStartSlots` error.
+- A counted rule names the count it needs. `.at_most(3, Loan)` and a card `0..3:1` break only
+  with four rows of `Loan`; below that the `Vacuous_*` warning ends `(Loan has 2 slots;
+  --instances Loan=4 gives it 4)`. `.at_least(3, Loan)` and `.exactly(3, Loan)` with fewer
+  slots draw the `CountAboveBound` warning with the same flag (see
+  [Counted quantifiers](./language-reference.md#counted-quantifiers)).
 
 ### Instance symmetry
 <!-- constrained-by ./design/instance-symmetry.md -->
 
-The slots of an entity are interchangeable unless the model tells them apart: two states that
-differ only in which slot holds which row reach the same verdicts. `verify --symmetry always`
-stores one state per class of such states, an orbit, so a cone that outgrows the memory limit
-slot by slot can finish. [Instance symmetry](./design/instance-symmetry.md) covers the safety
-cones (`Cone_<check>`), reduced or not, the cones of `always` properties that `verify`
-leaves unreduced, the cones of `eventually` and `leads_to` properties, and the entity cones,
-when no plain run decides them. Every other cone runs as before.
+The slots of an entity are interchangeable unless the model tells them apart: two states
+that differ only in which slot holds which row reach the same verdicts. `verify --symmetry
+always` (experimental) stores one state per class of such states, an orbit, so a cone that
+outgrows the memory limit slot by slot can finish. [The design](./design/instance-symmetry.md)
+has the group, the canonical form, and the soundness of each check.
 
 ```sh
 rdra-ish verify samples/clinic-ops --instance-count 3 --memory 8GiB --symmetry always
@@ -826,204 +688,114 @@ rdra-ish verify samples/clinic-ops --instance-count 3 --memory 8GiB --symmetry a
 Cone_Inv_Encounter_2 [Inv_Encounter_2]: ok (about 820M states)
 ```
 
-- **Which cones.** A cone that a complete plain run of the entity pass decides keeps that
-  result and prints what `never` prints, and so does a safety cone whose system is the cone
-  of a property not yet decided, which its plain run decides too. Only the other cones run
-  up to symmetry. Which runs are complete is what each gives alone, since a run that meets
-  the memory limit beside others runs again alone, so `RDRA_JOBS` does not change the
-  output. A cone whose group moves no row runs as under `never`.
-- **The line.** `(about <m> states)`: the sum of the orbit sizes, rounded to two figures. The
-  sum counts every image of a stored state under the group, and the model need not reach
-  each one, so it can exceed the states a plain run stores: on the samples it was exact on
-  three cones and 5% and 83% over on two. `RDRA_ISH_SYMMETRY_STATS=1` prints on stderr, per
-  run up to symmetry, the orbits it stored, the estimate, the states the branch cap cut, and
-  each entity the group leaves out and why (`Item (a comparison orders its row ids)`). That
-  entity's slots stay fixed and the other entities still permute.
-- **Counterexamples** name concrete slots: the stored path is lifted back through every
-  permutation the run applied, and the lifted trace is replayed through the step relation,
-  with the rows each step names, before it prints. A trace that does not replay is a tool bug
-  and stops the run.
-- **Reduced cones** (phase 2). The sub-lifecycle a reduced cone quotients runs up to `H`,
-  the subgroup that leaves in place every entity whose rows the quotient reads (`obs`, the
-  inputs, the fold bits, the stubs of T parents, and the rows a T key can name), under
-  `always`, once its plain run stopped at the memory limit, alone. The
-  classes are the plain run's, so the verdicts are too; their numbering, their
-  representatives, the cone's TLA+ tables, and its lifted traces can differ. A cone whose
-  sub-lifecycle fits keeps its output. A trace through
-  such a cone runs the sub-lifecycle up to `H` again and lifts its path to concrete states.
-- **Reduced safety cones** (phase 3). A safety cone `verify` reduces runs up to `G_T`, the
-  group of its T rows: every S entity stays where it is, and so does every entity that holds
-  an S var or an input, whose rows such a key names, that a bit is kept per row of, or that
-  an S action binds. `RDRA_ISH_SYMMETRY_STATS` names them (`the reduced sub-lifecycle of
-  its cone keys on its rows`). Its counterexample is lifted through the symmetry, then through
-  the reduction, and replayed. An `always` property on a reduced cone runs plain.
-- **Liveness** (phase 4). An `eventually` or `leads_to` cone, `.fair` included, runs up to
-  symmetry with each edge's permutation kept, and its fair components are read per binding:
-  an edge moves the binding, and each fair instance, by its permutation. Its counterexample
-  repeats the stored loop until the concrete states close it, and replays and passes the
-  fairness check before it prints. On a reduced cone whose run up to symmetry finds a
-  counterexample, the property is decided as under `never`. A property whose reduced cone
-  is a safety cone's system stays plain, so that one plain run decides both.
-- **Entity cones** (phase 4). An entity cone whose plain run stops at the memory limit runs
-  again up to symmetry, with each edge's permutation kept, in the room its plain run held.
-  When that run completes, it decides the cone's state models: the witnesses, the use cases
-  that never run, the `.when` arms taken, and the deadlocks. A deadlock's trace is lifted and
-  replayed like a counterexample, and names the slot its instance holds at the end, which can
-  be another instance than `never` names. A run that stops too leaves the plain run's
-  findings, and a cone whose plain run left no finding open keeps them without running
-  again. `RDRA_ISH_SYMMETRY_STATS` prints, per stopped entity cone, the states its plain run
-  stopped at and the orbits of its run up to symmetry (`symmetry: entity Appointment: the
-  plain run stopped at 81920 states; up to symmetry, 26929 orbits, about 242015 states,
-  complete`).
-- **Shared runs.** A cone that runs up to symmetry stops once every check has failed, and its
-  run decides nothing for the other passes, which have no plain graph to read off it.
-- **Branch cap.** The canonical form branches on rows it cannot tell apart that other rows
-  name. Past 4096 branches a state is stored without its canonical form, which keeps the
-  verdict and can store one orbit more than once; the line then adds `note: <n> states
-  stored without their canonical form (branch cap); the count is an upper bound`.
-- **What breaks the symmetry.** A comparison that orders row ids, a row id compared with a
-  literal, a key set to a literal row or chosen among some rows, a start that pins a slot, a
-  creation that leaves a key at its first row, a row id compared with another value, too
-  many arrangements of rows that name each other. Each leaves the entity's class out, and
-  `RDRA_ISH_SYMMETRY_STATS` says which. A deleted row's key moves with its parent like any other, since a
-  deleted row keeps the row it names.
+- **Which cones.** The safety cones (on a reduced cone, up to the group of its T rows, and
+  its sub-lifecycle up to the group that keeps what the quotient reads), the cones of
+  `always` properties left unreduced, the cones of `eventually` and `leads_to` (`.fair`
+  included), and entity cones whose plain run stops at the memory limit. A cone that a
+  complete plain run decides keeps that result and prints what `never` prints. Runs are
+  judged alone, so `RDRA_JOBS` does not change the output. A cone whose group moves no row
+  runs as under `never`.
+- **The line.** `(about <m> states)`: the sum of the orbit sizes, to two figures. It counts
+  every image of a stored state, reachable or not, so it can exceed what a plain run stores.
+- **Counterexamples and deadlock traces** name concrete slots: the path is lifted back
+  through every permutation the run applied and replayed through the step relation before it
+  prints. A trace that does not replay is a tool bug and stops the run. A deadlock's trace
+  may name another instance than `never` names.
+- **Branch cap.** Past 4096 branches of the canonical form, a state is stored without it.
+  The verdict stands, an orbit may be stored twice, and the line adds `note: <n> states stored
+  without their canonical form (branch cap); the count is an upper bound`.
+- **What breaks the symmetry** of an entity, which then keeps its slots fixed while the
+  others permute: a comparison that orders row ids, a row id compared with a literal or
+  another value, a key set to a literal row or chosen among some rows, a start that pins a
+  slot, a creation that leaves a key at its first row, too many arrangements of rows that name
+  each other. `RDRA_ISH_SYMMETRY_STATS=1` prints, per run up to symmetry, the orbits, the
+  estimate, the states the branch cap cut, and each entity left out with the reason
+  (`Item (a comparison orders its row ids)`); per stopped entity cone, the plain run's stop
+  and the orbits of its symmetric run.
+- **Shared runs.** A cone run up to symmetry stops once every check has failed, and decides
+  nothing for the other passes.
 
 ### Memory limit
 <!-- constrained-by #project-manifest -->
 
-> **Known issue: the limit does not yet bound the whole process** (#237, #242, #243).
-> The limit bounds what the state stores are counted to hold, not what the process takes.
-> On macOS the process has been measured well past it: `verify samples/oidc-auth
-> --instance-count 2` peaked at 1.85 times a `2GiB` limit, and at the default `16GiB` it passed
-> 19.5 GB. Until the fixes land, set `--memory` (or `memory` in `rdra.toml`) to about half the
-> memory you can spare when cones stop at the limit. Runs whose cones finish below the limit,
-> as every sample does at the default limits, are not affected.
+> **Known issue: the limit does not yet bound the whole process** (#237, #242, #243). It
+> bounds what the state stores are counted to hold. On macOS the process has been measured
+> past it: `verify samples/oidc-auth --instance-count 2` peaked at 1.85 times a `2GiB` limit,
+> and passed 19.5 GB at the default `16GiB`. Until the fixes land, set `--memory` (or
+> `memory`) to about half the memory you can spare when cones stop at the limit. Runs whose
+> cones finish below it, as every sample does at the default limits, are not affected.
 
-`check`, `states`, and `verify` each run within a memory limit: `--memory`, else `memory` in
-the command's `rdra.toml` table (`[check]` for `check` and `states`, `[verify]` for
-`verify`), else `4GiB` for `check` and `states` and `16GiB` for `verify`.
+| Command | Limit |
+|---|---|
+| `check`, `states` | `--memory`, else `memory` under `[check]`, else `4GiB` |
+| `verify` | `--memory`, else `memory` under `[verify]`, else `16GiB` |
+| `codegen`, `next`, `diagram --kind state`, `export --kind tla` | `memory` under `[check]`, else `4GiB`; no flag |
 
-The generators explore within the limit of `check`: `codegen`, `next`, `diagram --kind
-state`, and `export --kind tla` take `memory` under `[check]`, else `4GiB`, and no
-`--memory` flag. The other outputs of `diagram`, `export`, `list`, and `csv` do not explore. They run at the other caps of `check` at its defaults too, so a
-model `check` passes with no flags explores the same in them.
-
-A size is a whole number and a binary unit: `4GiB`, `512MiB`, `64KiB`, `1TiB`. `G` and `GB`
-mean `GiB` too, and likewise `K`, `M`, and `T`, so `4G` and `4GB` are 4 × 2^30 bytes. A bare
+The other outputs do not explore. A **size** is a whole number and a binary unit: `4GiB`,
+`512MiB`, `64KiB`, `1TiB`. `G` and `GB` mean `GiB`, and likewise `K`, `M`, `T`. A bare
 number, `0`, and a fraction are refused.
 
-What the limit counts:
+**What the limit counts.**
 
-- **BFS.** The states a cone has reached are counted in bytes as they are stored: each
-  state once (in one buffer, with its number in the index of seen states), its parent, every
-  edge, and the bindings, by the length and capacity of each collection. The count is the same on every
-  machine and with any number of threads, so a cone stops at the same state wherever it
-  runs. A finished cone keeps its states and edges until its findings are read, so they
-  stay counted, and the next cone has the rest of the limit. `verify` reads the findings
-  of an entity cone that stops at the limit at once, then gives back what it held, so the
-  next cone has the room the stopped one had (#284). The cones run side by side,
-  yet each stops where it would stop if they ran one at a time in order: a cone that met a
-  pool the others had filled, or that grew past the room left to it, runs again on its own.
-- **Shared quotients** (`verify`). Cones whose sub-lifecycles are equal share one quotient
-  (#252): the first cone that needs it explores and partitions the sub-lifecycle, and the
-  others reuse its classes. The classes stay counted while `verify` holds them, in the bytes
-  their tables take, and are given back after the last cone is reduced. A cone reuses them
-  only when the runs that computed them fit the room it has, asking the limit for that room
-  as those runs did; otherwise it computes its own and stops where it would without the
-  cache. The safety and property cones are reduced one at a time in order, so the classes
-  held, and their count, are the same with any number of threads; the entity cones are
-  reduced side by side, where each still stops as it would alone in its turn. The classes
-  held shrink the room of the safety and property cones' quotient runs that come after
-  them, so under a tight limit such a cone can stay unreduced where it would be reduced
-  without the sharing. `RDRA_ISH_NO_QUOTIENT_CACHE=1` turns the sharing off.
-- **What the count leaves out.** The transition system, the per-entity views, the states a
-  worker holds while it expands them, and the memory that reading the findings of a cone
-  takes. On `insurance-claim-ops` at two instances, where most cones stop at the limit, the
-  process peaked at 1.2 to 1.4 times the limit run one cone at a time (`RDRA_JOBS=1`) and at
-  up to twice the limit with eight. A single cone that stops at the limit can take 1.35 to
-  1.6 times what it is counted while it grows (on macOS, memory the allocator keeps after a
-  buffer is freed), and the cones that run again alone after a crowded pool can be counted
-  past the limit together (#242, #237). The default limits stop no cone of the samples.
-- **TLC** (`verify --with-tlc` only). Each TLC run's `-Xmx`, and `256MiB` per JVM for what
-  it holds beside its heap. Without `--with-tlc` BFS has the whole limit. With it, `verify`
-  gives the TLC cone runs half the limit (at least `64MiB`) and BFS the rest. The whole-model
-  property runs start after BFS has finished and may take the whole limit.
-  - A run's heap follows its module: 512 MiB per MiB of module text, in whole GiB, at least
-    `1g` for a cone and `2g` for a whole-model run, and no more than the share. Every module
-    under 2 MiB gets the default; the 7.6 MB cone of food-permit-ops'
-    `AfterAssert_SuspendBusiness_0` at `--instance-count 3` gets `4g`. A heap shrinks to the
-    share only when the default does not fit.
-  - A run starts once its heap and 256 MiB fit in the share beside the runs going, or when
-    no other run goes, so at `16GiB` six cone runs of `1g` go at once.
-  - A run that runs out of memory runs once more at twice its heap when the share holds
-    that, and its line says `rerun at -Xmx<2h> after -Xmx<h> ran out of memory`. Otherwise
-    it is a `tool_error` with the hint.
-  - A module that needs more heap than the share holds is not run: a `tool_error` whose
-    report names the heap it needs and the hint.
+- **BFS.** Each cone's reached states, counted in bytes as stored: each state once, its
+  parent, every edge, and the bindings. The count is the same on every machine and thread
+  count, so a cone stops at the same state wherever it runs. A finished cone stays counted
+  until its findings are read. `verify` gives back what a cone stopped at the limit held once
+  it has read its findings. Cones run side by side, yet each stops where it would alone in
+  order: a cone that met a pool the others filled runs again alone.
+- **Shared quotients** (`verify`). Cones with equal sub-lifecycles share one quotient (#252),
+  counted while held. A cone reuses it only when the runs that computed it fit its room;
+  under a tight limit a later cone can stay unreduced. `RDRA_ISH_NO_QUOTIENT_CACHE=1` turns
+  sharing off.
+- **Not counted:** the transition system, the per-entity views, the states a worker holds
+  while it expands them, and reading a cone's findings. On `insurance-claim-ops` at two
+  instances the process peaked at 1.2 to 1.4 times the limit at `RDRA_JOBS=1` and up to twice it
+  with eight. A cone can take 1.35 to 1.6 times what it is counted while it grows.
+- **TLC** (`verify --with-tlc`). The TLC cone runs get half the limit (at least `64MiB`) and
+  BFS the rest; the whole-model property runs start after BFS and may take all of it. Each
+  run counts its `-Xmx` plus `256MiB`. A run's heap is 512 MiB per MiB of module text in whole
+  GiB, at least `1g` (cone) or `2g` (whole model), at most the share. A run starts once its
+  heap fits beside the running ones, or when none runs. A run that runs out of memory runs
+  once more at twice its heap if the share holds it (`rerun at -Xmx<2h> after -Xmx<h> ran out
+  of memory`), else it is a `tool_error`. A module that needs more than the share is not run:
+  a `tool_error` naming the heap. `RDRA_TLC_HEAP` or an `-Xmx` in `JAVA_TOOL_OPTIONS` sets the
+  heap as given, with no rerun. A `--memory` that leaves BFS nothing beside `64MiB` of TLC heap
+  is refused.
+- **z3** (`verify --prove`) is not counted and runs unbounded: z3 at its own
+  `memory_max_size` exits, which would end the proof.
 
-  `RDRA_TLC_HEAP` and an `-Xmx` in `JAVA_TOOL_OPTIONS` still set the heap as given, with no
-  rerun; the runs then queue so that their heaps fit, and run one at a time when one heap
-  alone is past the share. Under `--with-tlc`, a `--memory` that leaves no BFS beside
-  `64MiB` of TLC heap is refused.
-- **z3** (`verify --prove`) is not counted. A z3 that reaches its own `memory_max_size`
-  exits, which would end the proof, so `verify` leaves z3 unbounded.
+**A cone that reaches the limit** stops as one at `--max-states` does. `check` reports the
+error `MemoryCapReached_<E>` and exits 1; `states` marks the views it cut; `verify` lists the
+findings the cone leaves under `not checked:`, warns, and exits 0 (1 under
+`--deny-undecided`), with `result: not decided`.
 
-A cone that reaches the limit stops as a cone that reaches `--max-states` does. `check`
-reports a `MemoryCapReached` error that names the limit, says what the held states took, and
-estimates what finishing needs, and exits `1`.
-`states` marks the views it cut. `verify` lists the findings the cone leaves under `not
-checked:`, ends with a warning, and exits `0`, or `1` under `--deny-undecided`; its
-`result:` line says `not decided` either way. Examples of both close this section.
+The `check` message names the limit, the states held, the bytes per state, and what the
+cone's BFS layers say:
 
-What `check` and `states` say when a cone stops at the limit: the states it held, the bytes
-each took (the store counted above, with the state that did not fit), and what the cone's
-BFS layers say about the states it reaches. BFS reaches the cone depth by depth, and the
-run counts the new states of each depth (one number per depth, counted in the store). On
-the sample cones that number rises to a peak and falls about as it rose, so:
+- **Past the peak** (two whole depths past the largest): the fall is taken to mirror the rise,
+  and the message estimates the states and the memory for a quarter more. On 73 sample cones
+  stopped at a tenth to nine tenths of their states, the 61 estimates came out at 0.51 to 1.37 times
+  the true count.
+- **Still rising:** no estimate; the message says how fast the frontier grows. Sample cones
+  peaked after 36% to 100% of their states, so an early stop usually gets none.
+- **Just past the peak, or a long fall:** no estimate, and the message says which.
+- **No estimate from the layers:** the product of the variables' domains bounds the states,
+  and when finishing at that many takes at most `1TiB` the message names it as a lower bound
+  on what finishing needs. Most of the product is never reached.
 
-- **Past the peak.** Once two whole depths lie past the largest one, the message takes the
-  fall to mirror the rise: the cone probably holds twice the states before the peak plus
-  the peak. It is an estimate, not a bound. On 73 sample cones at `check` and `verify`
-  bounds, stopped at a tenth to nine tenths of their states, the 61 estimates came out at
-  0.51 to 1.37 of the true count, and at 0.74 or more but once. The message names the
-  memory for a quarter more states than the estimate; rerun at those caps, that size
-  covered the store of all but one of the 61 and stood at most 2.6 times over it.
-- **Still rising.** While the last whole depth is the largest yet, nothing says where the
-  peak is, and the message says the frontier still grows and by how much. The peak of the
-  sample cones came after 36% to 100% of their states (63% at the median), so a run that
-  stops early usually gets no estimate: of the 73 cones, 1 got one when stopped at half its
-  states, 10 at three quarters, and 49 at nine tenths. A cone that outgrows a machine is
-  often still rising; the `Complaint` cone of `insurance-claim-ops` at two instances stops
-  at the default `4GiB` with 1.7 million states, still growing 1.7 times per depth.
-- **Just past the peak, or a long fall.** One depth past the peak, or a fall that already
-  holds more states than the mirror gives, gets no estimate either, and the message says
-  which.
-
-Without an estimate from the layers, the message falls back on the cone's variables: the
-most states the cone can have is the product of their domains, and if finishing at that
-many takes no more than `1TiB` the message names that size as what finishing needs at the
-least, if all of them are reachable. The bound is loose: most of the product is never
-reached. A size is computed with `(w + 12)·p2(n) + 5·buckets(n) + (4 + b)·p2(e)` bytes for
-`n` states of `w` bytes and `e` edges, where `b` is the 1, 2 or 4 bytes of a binding id
-(`p2` rounds up to a power of two, `buckets` to a power of two of at least `n·8/7`): the run
-keeps each state once, in one buffer, indexes it by number, and keeps an edge as its target
-and binding id. A state is kept packed: each variable takes the bits its domain needs
-(`ceil(log2(size))`, so a 3-value status takes 2), and `w` is their sum rounded up to whole
-bytes. A cone that stops once every check fails keeps no edges, and its size is
-`(w + 8 + b)·p2(n) + 5·buckets(n)`. The size is never under what the run counts at its
-end. `e` is the edges per
-expanded state seen so far times `n`; early depths have fewer, so that part is low. Every
-figure is for the one cone; the cones share the limit, so allow more than it says.
+A size is `(w + 12)·p2(n) + 5·buckets(n) + (4 + b)·p2(e)` bytes for `n` states of `w` bytes and
+`e` edges, `b` the 1, 2, or 4 bytes of a binding id, `p2` rounding up to a power of two, and
+`buckets` to a power of two of at least `n·8/7`. A state is packed: each variable takes
+`ceil(log2(domain size))` bits, and `w` is their sum in whole bytes. A cone that stops once
+every check fails keeps no edges: `(w + 8 + b)·p2(n) + 5·buckets(n)`. `e` is extrapolated
+from the edges so far, so that part runs low. Every figure is for one cone; allow more.
 
 ```text
-error[MemoryCapReached_Task]: state derivation for entity 'Task': memory limit 17KiB reached at 256 states; results are incomplete: the cone has 9 variables, 9 of them vary (...); new states first reached by: Flip7 127, Flip6 64, Flip5 32, Flip4 16, Flip3 8, Flip2 4, Flip1 2, Close 1; held at 71 B per state; the frontier peaked at depth 5 and has shrunk for 3 layers since, so the cone probably holds about 258 states (its falling side taken to mirror its rising side: an estimate, not a bound); with a quarter to spare, this cone alone probably needs about 1MiB: try 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
-error[MemoryCapReached_Order]: state derivation for entity 'Order': memory limit 1KiB reached at 14 states; results are incomplete: the cone has 3 variables, 3 of them vary (values reached/domain: Order.status 5/5, Order._exists 2/3, Order.delivered_at 2/2); new states first reached by: PlaceOrder 5, CancelOrder 3, CapturePay 3, DeliverOrder 1, ShipOrder 1; held at 71 B per state; the frontier still grows (5 new states at depth 3, 1.7x the depth before), so its layers give no estimate of the states left; the cone's variables allow at most 900 states, so if all are reachable this cone alone needs at least about 1MiB; raise it to 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
+error[MemoryCapReached_Task]: state derivation for entity 'Task': memory limit 17KiB reached at 256 states; results are incomplete: the cone has 9 variables, 9 of them vary (...); new states first reached by: Flip7 127, Flip6 64, ...; held at 71 B per state; the frontier peaked at depth 5 and has shrunk for 3 layers since, so the cone probably holds about 258 states (its falling side taken to mirror its rising side: an estimate, not a bound); with a quarter to spare, this cone alone probably needs about 1MiB: try 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
 ```
 
-The `Task` cone (`crates/rdra-ish-cli/tests/fixtures/memory/flags.rdra`) holds 257 states.
-
-`verify` lists what the cones leave undecided. `verify samples/patent-ops --memory 64MiB`
-prints (trimmed):
+(`check crates/rdra-ish-cli/tests/fixtures/memory/flags.rdra --memory 17KiB`; the cone holds
+257 states.) `verify samples/patent-ops --memory 64MiB` prints, trimmed:
 
 ```text
 not checked: 10 findings not decided
@@ -1033,346 +805,249 @@ result: not decided
 warning: 10 findings a cone stopped at the state cap or the memory limit left undecided; the OK line holds only for what was decided (--deny-undecided fails the run)
 ```
 
-Under `--with-tlc` the reason also names the share BFS has: `BFS has 256MiB of it` at
-`--memory 512MiB`.
+Under `--with-tlc` the reason adds the BFS share: `BFS has 256MiB of it` at `--memory
+512MiB`.
 
-Under `verify --prove`, an invariant cone that stops at the memory limit before a
-violation is decided when z3 proves every rule in it for any number of rows. Its line reads
-`ok`, it counts as decided for `result:` and `--deny-undecided`, and it still says where BFS
-stopped. `samples/formal-verification/check_met.rdra` at `--instance-count 4 --memory 1KiB
---prove`:
+Under `verify --prove`, an invariant cone stopped at the limit before a violation is decided
+when z3 proves every rule in it for any number of rows. It reads `ok`, counts as decided, and
+still says where BFS stopped. A cone with an `after` assertion, with a rule z3 leaves
+unproved or out of scope, or stopped at `--max-states` stays `not decided`. See
+[Proofs for any number of rows](./formal-verification.md#proofs-for-any-number-of-rows).
 
 ```text
-Cone_Forbidden_CartLine_0 [Forbidden_CartLine_0, Check_CartLine_qty_0]: ok (8 states, BFS stopped at the memory limit, decided by proof: --prove proved every check for any number of rows)
+Cone_Forbidden_CartLine_0 [Forbidden_CartLine_0, Check_CartLine_qty_0]: ok (16 states, BFS stopped at the memory limit, decided by proof: --prove proved every check for any number of rows)
 ```
 
-A cone with an `after` assertion, or with a rule z3 leaves unproved or out of scope, stays
-`not decided`, as does a cone stopped at `--max-states`. See
-[Proofs for any number of rows](./formal-verification.md#proofs-for-any-number-of-rows).
+(`verify samples/formal-verification/check_met.rdra --instance-count 4 --memory 1KiB --prove`.)
 
 ---
 
 ## `fmt`
 
-Format RDRA DSL source files.
+Format `.rdra` files.
 
 ```
 rdra-ish fmt <INPUTS...> [--write | --check]
 ```
 
-The formatter parses each `.rdra` file and prints a canonical source layout:
+| Flag | Default | Meaning |
+|---|---|---|
+| `--write` | off | Rewrite the files in place. |
+| `--check` | off | Change nothing; print a `needs formatting:` row per file that differs and exit 1. |
 
-- The `module` line is followed by one blank line. Consecutive `import` lines form one
-  block with no blank line inside it, and one blank line follows the block.
-- A declaration whose only clause is `description` keeps it on the declaration's line
-  while that line is at most 120 display columns wide; a wide character, such as most
-  Japanese text, counts as two columns, and a trailing comment does not count. A longer
-  declaration, or one with several clauses, puts each clause on its own line indented by
-  two spaces. Entity and DTO columns and variation values are indented by two spaces.
-- A declaration that prints on several lines is set off by one blank line on each side.
-  Between two one-line items the source's grouping stands: a blank line there is kept
-  (several become one), and none is added. Ids are not aligned into columns.
-- Annotations use compact spacing, and a predicate call keeps its chain on one line.
-- A comment stays where it was: a trailing comment at the end of its line, and an
-  own-line comment above the line that follows it, so a citation above a declaration
-  stays attached to it. A comment from a line that `fmt` joins, such as a metadata clause
-  or a wrapped chain call, moves above its item.
+Without a flag, the formatted source goes to stdout, each file under a `// <path>` line when
+there are several, and no file changes. **Exit codes:** `1` on a parse error or under
+`--check` when a file differs, else `0`.
 
-This is an AST-based formatter. It preserves model structure, identifiers, labels,
-metadata values, columns, predicates, chains, tuples, and comparison expressions, and a
-second run changes nothing. A [deprecated form](./language-reference.md#deprecated-and-removed-forms)
-prints in its current form, so `fmt --write` is the migration for it; a removed form is a
-parse error, and `fmt` refuses the file.
+`fmt` reprints the parsed file. It keeps the model, identifiers, labels, metadata values,
+columns, predicates, chains, tuples, and comparisons; a second run changes nothing. A
+[deprecated form](./language-reference.md#deprecated-and-removed-forms) prints in its current
+form, so `fmt --write` migrates it; a removed form is a parse error. The layout:
 
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `<INPUTS...>` | paths (required) | — | Files and/or directories to format. Directories are searched recursively for `.rdra` files. |
-| `--write` | flag | off | Rewrite files in place. |
-| `--check` | flag | off | Exit with status `1` and print `needs formatting:` rows when any file differs from the canonical format. |
-
-Without `--write` or `--check`, formatted source is written to stdout and no file
-changes: `rdra-ish fmt src/` only prints, and `rdra-ish fmt --write src/` rewrites the
-files. With multiple input files, each output block is prefixed by a `// <path>` marker.
+- The `module` line, one blank line, the `import` lines as one block, one blank line.
+- A declaration whose only clause is `description` keeps it on its line while the line is at
+  most 120 display columns (a wide character, such as most Japanese text, counts as two; a
+  trailing comment does not count). Otherwise each clause gets its own line, indented two
+  spaces, as do entity and DTO columns and variation values.
+- A declaration on several lines is set off by one blank line each side. Between one-line
+  items the source's grouping stands: a blank line is kept (several become one), none is
+  added. Ids are not aligned.
+- Annotations use compact spacing; a predicate call keeps its chain on one line.
+- A trailing comment stays at the end of its line; an own-line comment stays above the line
+  after it. A comment from a line `fmt` joins moves above its item.
 
 ---
 
 ## `diagram`
 
-Generate one RDRA diagram as Mermaid text (`.mmd`).
+Write one RDRA diagram as Mermaid text (`.mmd`).
 
 ```
-rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]... [--usecase <ID>]... [--entity <ID>]... [--actor <ID>]... [--node-kind <KIND>]... [--edge-kind <KIND>]... [--title] [--legend] [-o <OUT>]
+rdra-ish diagram <INPUTS...> [--kind <KIND>] [--buc <ID>]... [--usecase <ID>]... [--entity <ID>]...
+                 [--actor <ID>]... [--node-kind <KIND>]... [--edge-kind <KIND>]...
+                 [--title] [--legend] [--format mermaid] [-o <OUT>]
 rdra-ish diagram <INPUTS...> --all [--title] [--legend] -o <DIR>
 ```
 
-The `.mmd` is written for a reader that redraws it, a person or a tool such as an AI that
-draws SVG. It carries the RDRA meaning in text, under the [encoding
-contract](#encoding-contract): a `%%` header, node ids `<kind>__<DSL id>` that are the same
-in every kind, a `:::<kind>` tag and a shape per kind on each node, the RDRA layer names,
-and the DSL predicate names as edge labels where the ends do not already say the relation.
-Colours and direction carry no meaning beyond the `:::<kind>` tag, so a renderer is free to
-replace them.
+The text is written for a reader that redraws it, a person or a tool, under the
+[encoding contract](#encoding-contract): a `%%` header, node ids `<kind>__<DSL id>` that are the
+same in every kind, a `:::<kind>` tag and a shape per kind, the RDRA layer names, and the
+predicate names as edge labels where the ends do not already say the relation. Colours and
+direction mean nothing beyond the tag.
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--kind <KIND>` | `rdra` | One of the [kinds](#kinds). |
+| `--buc <ID>` | whole model | Draw what the BUCs reach, the union over every id; repeatable; every kind. The [kinds](#kinds) table says what each keeps. |
+| `--usecase <ID>` | whole model | Draw these use cases; repeatable. `usecase`, `robustness`, and `sequence` (which needs exactly one, or `--buc`). |
+| `--entity <ID>` | whole model | Repeatable. `state`: these entities' state models, every lifecycle column, whole (an entity with none is an error). `er`, `information`: these entities and those a `relate` joins to them. `usecase`, `robustness`: the use cases that read or write them, through an API included. |
+| `--actor <ID>` | whole model | The use cases the actors perform, directly or through a BUC; repeatable. `usecase` and `robustness`; an actor that performs no use case is an error. |
+| `--node-kind <KIND>` | all | `rdra` only: draw only these node kinds (`actor`, `buc`, `usecase`, `entity`, ...); repeatable. Alias `--kind-filter`. |
+| `--edge-kind <KIND>` | all | `rdra` only: draw only these relations (`contains`, `invokes`, `reads`, `maps-field`, `relate`, ...); repeatable. Alias `--edge-filter`. |
+| `--all` | off | Write the [review set](#the-review-set) into the directory `-o` names. Not with a scope, `--node-kind`, or `--edge-kind`; `--kind` is not read. |
+| `--title` | off | Open with a Mermaid title (`---`, `title: "UC複合図: Order"`, `---`): the RDRA name and the labels of the scope. |
+| `--legend` | off | Add a `凡例` subgraph to a `flowchart`, one node per node kind in its colour. Other diagram types are unchanged. |
+| `--format` | `mermaid` | The only format. Render with `mmdc` or any Mermaid tool for an image. |
+| `-o`, `--out <OUT>` | stdout | The output file. The extension is always `.mmd`: `-o out` writes `out.mmd`, `-o x.foo` writes `x.mmd`, `-o d.tar.gz` writes `d.tar.mmd`. With `--all`, the directory. |
+
+`--usecase`, `--entity`, `--actor`, and `--buc` go one at a time, except where the table
+pairs them. An unknown id is an error. `--node-kind` and `--edge-kind` hide nodes and the
+edges whose ends are hidden; the `omitted:` line names what they hid.
+
+**Removed values** fail (exit 2) with the replacement: `--kind boundaryless-graph`,
+`business-area`, `technical-area`, `diff`, `event-flow`; `--format puml`, `svg`, `png`.
+`--show-description`, `--view-preset`, and `--diff-base` are unknown arguments; descriptions
+are always written as `%% desc` lines.
+
+**stderr.**
+
+- `warning: this diagram has 73725 characters and 475 edges; Mermaid's defaults stop at 50000
+  characters (maxTextSize) and 500 edges (maxEdges), so it does not render as is.` The text is
+  written anyway. The warning names the flags that narrow that kind; or raise both limits in
+  the renderer.
+- `note: nothing to draw: the model declares nothing --kind flow draws in this scope`. The
+  text is the header alone, with `%% kinds: (none)`.
+
+**Exit codes.** `0` when written; `1` on a load error, an unknown id, or a refused `state`
+diagram ([Lifecycle errors](#lifecycle-errors)).
 
 ### Kinds
 
-Each kind is one diagram of RDRA 3.0, or `rdra`, the base graph of every element and
-relation, from which the RDRAGraph views can be derived.
+Each kind is one RDRA 3.0 diagram, or `rdra`, the base graph of every element and relation.
 
 | Kind | RDRA diagram | Draws | Leaves out | With `--buc` |
 |---|---|---|---|---|
-| `rdra` (default) | RDRAGraph, the whole graph | Every element in its layer and every relation; `--node-kind` / `--edge-kind` narrow it | ADRs; columns (`er`), variation values and condition bodies (`condition`) | Everything reachable from the BUCs, and the states their use cases move between |
-| `context` | システムコンテキスト | The system boundary: one edge per actor, labelled with the BUCs it performs, and one edge per external system and direction, labelled with the events exchanged; every edge derived, no RDRA layer subgraphs | BUCs, use cases, and events as nodes; `%% derived` names the BUCs and events behind each label | The actors and external systems with an edge through the BUCs, and the systems they reach |
-| `requirement` | 要求モデル | A value tree, left to right: goals (with metric and `baseline → target`), the requirements that achieve them, and the BUCs those requirements `motivate`; a requirement with `status "out-of-scope"` is drawn apart in `やらないこと` with dashed edges | NFRs, constraints, qualities, entities, and systems (`list --kind nfr`, `list --kind constraint`), ADRs, and BUCs no requirement motivates; named in `omitted:` | The BUCs and the requirements that motivate them, with those requirements' goals |
-| `business` | 業務の流れ図 (ビジネスコンテキスト, ビジネスユースケース) | The business flow: each business holding its BUCs, and an edge from a BUC to the BUC it hands off to, labelled with the event that passes it | Actors and external systems (`list --kind buc-roles`); use cases, steps, and events as nodes; a hand-off no event carries | The named BUCs and the BUCs they hand off to or from, with their businesses |
-| `usecase` | UC複合図 | Each use case with its actors, screens and what they show, the entities it reads and writes, its events, external systems, and timers, the conditions on it, and its transitions | BUCs, steps, media, permissions, fields, APIs (their CRUD is folded into the use case), and DTOs | The use cases the BUCs contain, directly or through a step; `--usecase` names use cases instead |
-| `robustness` | ロバストネス図 | The use cases as an ICONIX robustness diagram: actors, boundaries (screens, external systems, timers), controls (APIs, or the use case itself), and the entities each control reads and writes | BUCs, steps, events (named in edge labels), conditions, states, media, permissions, fields, and DTOs | The use cases the BUCs contain, directly or through a step; `--usecase` names use cases instead |
-| `sequence` | シーケンス図 | One use case in order: the actors, screen, controls (APIs, or the use case itself), entities, and external systems that take part, the guards, each control's reads and writes with the `sets` values and the lifecycle move, and the events it raises | BUCs, steps, other use cases (a triggered one is one message to its control), permissions, media, fields, and DTOs | The BUCs' use cases one after another, each under a numbered note; without `--buc`, exactly one `--usecase` |
-| `flow` | 業務フロー | Each flow with its steps, their `precedes`, `branches`, `excepts`, and `repeats` edges, what each step `covers`, and a lane per actor | Actors without `performs(Actor, Step)`; screens and entities | The flows the BUCs contain |
-| `screen` | 画面遷移図 | Each screen; a solid edge per `navigates`, labelled with its `.via` use case; where none is declared, a dashed `業務上の順番` edge between the screens of consecutive steps in one actor's lane | Use cases, fields, and entities as nodes | The screens the BUCs' use cases display, and the business order of the BUCs' flows |
-| `information` | 情報モデル | Entities with their `relate` links, state models, and the variations their columns take | Columns (`er`) and use cases | The entities `er` draws for the BUCs |
-| `condition` | バリエーション・条件 | Each condition with the variations and state models it combines and what it applies to; each variation with its values | Entities (a state model stands for its column) | The conditions on the BUCs' use cases and their APIs, and what those combine |
-| `state` | 状態モデル | Without a scope, an index: one composite state per state model holding one note, `<n> 状態 / <m> 遷移 (--entity <Entity>)`. With `--entity` or `--buc`, each state model whole: its states, the use case of each transition, start and end states, coloured by what the lifecycle check found | `Enum` columns that no `transitions` drive, named in `omitted:` | Each state model one of the BUCs' use cases moves, whole |
-| `event` | システム間連携（イベント） | `raises` and `triggers` between use cases, BUCs, external systems, events, and timers | States and transitions (`state`) | The events reachable from the BUCs and their links |
-| `er` | (RDRASpec logical data model) | Entities with their columns and `relate` cardinality, as an `erDiagram` | Variation values and state models, shown only as column types | The entities reachable from the BUCs |
+| `rdra` | RDRAGraph | Every element in its layer and every relation | ADRs; columns (`er`), variation values and condition bodies (`condition`) | Everything reachable from the BUCs, and the states their use cases move between |
+| `context` | システムコンテキスト | One derived edge per actor, labelled with the BUCs it performs, and one per external system and direction, labelled with the events exchanged | BUCs, use cases, and events as nodes | The actors and external systems with an edge through the BUCs, and the systems they reach |
+| `requirement` | 要求モデル | Goals (with metric and `baseline → target`), the requirements that achieve them, and the BUCs they `motivate`; out-of-scope requirements apart in `やらないこと` | NFRs, constraints, qualities, entities, systems (`list --kind nfr`, `--kind constraint`), ADRs, BUCs no requirement motivates | The BUCs, the requirements that motivate them, and those requirements' goals |
+| `business` | 業務の流れ図 | Each business with its BUCs, and a BUC-to-BUC hand-off edge labelled with the event that passes it | Actors and external systems (`list --kind buc-roles`); use cases, steps, events as nodes; a hand-off no event carries | The BUCs and the BUCs they hand off to or from, with their businesses |
+| `usecase` | UC複合図 | Each use case with its actors, screens and what they show, entities read and written, events, external systems, timers, conditions, and transitions | BUCs, steps, media, permissions, fields, APIs (their CRUD folds into the use case), DTOs | The use cases the BUCs contain, directly or through a step |
+| `robustness` | ロバストネス図 | Actors, boundaries (screens, external systems, timers), controls (APIs, or the use case), and the entities each control reads and writes | BUCs, steps, events (in edge labels), conditions, states, media, permissions, fields, DTOs | The use cases the BUCs contain |
+| `sequence` | シーケンス図 | One use case in order: its starter, screen, controls, entities, external systems, guards, writes with `sets` values and the lifecycle move, and raised events | BUCs, steps, other use cases (a triggered one is one message), permissions, media, fields, DTOs | The BUCs' use cases one after another, each under a numbered note |
+| `flow` | 業務フロー | Each flow with its steps, their `precedes`, `branches`, `excepts`, `repeats`, what each step `covers`, and a lane per actor | Actors without `performs(Actor, Step)`; screens; entities | The flows the BUCs contain |
+| `screen` | 画面遷移図 | Each screen; a solid edge per `navigates`, labelled with its `.via` use case; where none is declared, a dashed `業務上の順番` edge between the screens of consecutive steps in one actor's lane | Use cases, fields, entities as nodes | The screens the BUCs' use cases display, and the order of the BUCs' flows |
+| `information` | 情報モデル | Entities with their `relate` links, state models, and the variations their columns take | Columns (`er`), use cases | The entities `er` draws for the BUCs |
+| `condition` | バリエーション・条件 | Each condition with the variations and state models it combines and what it applies to; each variation with its values | Entities (a state model stands for its column) | The conditions on the BUCs' use cases and their APIs, and what they combine |
+| `state` | 状態モデル | Without a scope, an index of state models. With `--entity` or `--buc`, each state model whole, coloured by the lifecycle check | `Enum` columns no `transitions` drive (`omitted:`) | Each state model one of the BUCs' use cases moves |
+| `event` | システム間連携（イベント） | `raises` and `triggers` between use cases, BUCs, external systems, events, and timers | States and transitions | The events reachable from the BUCs and their links |
+| `er` | (RDRASpec logical data model) | Entities with columns and `relate` cardinality, as an `erDiagram` | Variation values and state models (column types only) | The entities reachable from the BUCs |
 
-`state` is the one kind that reads the lifecycle (for its start states and the colours of
-its states). It refuses to write while the lifecycle has errors other than a deadlock,
-which it colours; every other kind draws declared facts, explores nothing, and writes.
+`state` is the one kind that reads the lifecycle. Every other kind draws declared facts.
 
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | one of the [kinds](#kinds) | `rdra` | The diagram kind. |
-| `--format` | `mermaid` | `mermaid` | Output format. Mermaid text (`.mmd`) is the only one; to get an image, render the `.mmd` with `mmdc` or any Mermaid-aware tool, or hand it to a tool that redraws it. |
-| `--buc <id>` | string (repeatable) | — (whole model) | Draw the part of the model the named BUCs reach, the union over every id. Applies to every kind; the [kinds](#kinds) table says what each one keeps. An unknown id is an error. |
-| `--usecase <id>` | string (repeatable) | — (whole model) | Draw only the named use cases. Applies to `usecase`, `robustness`, and `sequence`; an unknown id is an error. `sequence` needs exactly one, or `--buc` for a BUC's use cases in order. One of `--buc`, `--usecase`, `--entity`, and `--actor` at a time. |
-| `--entity <id>` | string (repeatable) | — (whole model) | Draw by entity; an unknown entity is an error. `state`: the named entities' state models, every lifecycle column, whole; the `omitted:` and `set-only:` header lines name only those entities' columns, and an entity with no state model is an error. `er` and `information`: the named entities and the ones a `relate` joins them to. `usecase` and `robustness`: the use cases that read or write them, an invoked API's operations included. |
-| `--actor <id>` | string (repeatable) | — (whole model) | Draw the use cases the named actors perform, directly or through a BUC. Applies to `usecase` and `robustness`; an unknown actor, or one that performs no use case, is an error. |
-| `--node-kind <kind>` | string (repeatable) | — (all nodes) | Draw only these node kinds. Applies to `rdra`. Examples: `actor`, `buc`, `flow`, `step`, `usecase`, `api`, `entity`, `field`. Alias: `--kind-filter`. |
-| `--edge-kind <kind>` | string (repeatable) | — (all edges) | Draw only these relation kinds. Applies to `rdra`. Examples: `contains`, `invokes`, `reads`, `creates`, `maps-field`, `owns`, `relate`. Alias: `--edge-filter`. |
-| `--all` | flag | off | Write the [review set](#the-review-set) under `--out`, a directory. Not together with a scope, `--node-kind`, or `--edge-kind`; `--kind` is not read. |
-| `--title` | flag | off | Open the text with a Mermaid title (`---`, `title: "UC複合図: Order"`, `---`): the diagram's RDRA name and the labels of what it is scoped to. A renderer shows it, and drops the `%%` header that says the same. |
-| `--legend` | flag | off | Add a `凡例` subgraph to a `flowchart` diagram, one node per node kind in its colour, before the `classDef` lines. The other diagram types have no node classes and stay as they are. |
-| `-o`, `--out` | path | — (stdout) | Output file path. Without it the Mermaid text goes to stdout and no file is written, as `list`, `states`, and `next` print theirs. With it, the extension is always `.mmd`: a path without one gets it added (`-o out` writes `out.mmd`), and an existing one is replaced (`-o x.foo` writes `x.mmd`; `x.mmd` stays; `-o d.tar.gz` writes `d.tar.mmd`). With `--all`, the directory the files go to. |
+**Per kind.**
+
+- **`rdra`.** Layers: システム価値 (`actor`, `extsystem`, `requirement`, `nfr`), システム外部環境
+  (`quality`, `constraint`, `business`, `buc`, `flow`, `step`, `timer`, `medium`, `permission`),
+  システム境界 (`usecase`, `screen`, `field`, `event`), システム (`system`, `api`, `dto`,
+  `entity`, `state`, `variation`, `condition`).
+- **`context`.** No layers. An actor has one `-.->` edge to the system, labelled with the
+  labels of the BUCs it performs, joined by `、`: a `performs` to a BUC counts it; one to a use
+  case or step counts each BUC that contains it. An external system has one edge per
+  direction, labelled with the events exchanged: toward the system for each event it raises
+  that triggers a use case or BUC of the system, away for each event a use case raises that
+  triggers it. Each edge is followed by `%% derived ... via <ids>`. With one declared system
+  every edge ends there; with several, at each system that contains an API the use cases
+  behind the edge invoke. With none, or none traceable, it ends at `system__Model["システム"]`,
+  followed by `%% synthesized system__Model: <reason>`. `--buc` labels edges with the scoped
+  BUCs only.
+- **`requirement`.** No layers. A goal's label adds a line with its `metric` and `baseline →
+  target`. Edges: `motivates` (requirement to BUC) and `achieves`, drawn goal to requirement
+  and followed by `%% derived <goal> -> <requirement> via <requirement>`. A `status
+  "out-of-scope"` requirement sits in `subgraph group_out_of_scope["やらないこと"]` with dashed
+  edges. The whole model draws every goal and requirement, linked or not.
+- **`business`.** No layers. Each business is `subgraph business__<id>["<label>"]`. A BUC in
+  several businesses sits in the first by id, with a `belongs` edge to each other; a BUC of no
+  business sits outside. `buc__A -->|<event label>| buc__B` is a hand-off: a use case of A
+  (directly or through a step) raises the event, which triggers a use case of B or B itself.
+  It is drawn once per `(A, B, event)` with `%% derived <A> -> <B> via event__<Id>`. A BUC with
+  no edge is a gap to look at.
+- **`usecase`.** Nodes keep their `rdra` layers and ids. Derived edges carry `%% derived`: an
+  API's CRUD drawn from the invoking use case (`via api__<Api>`), and an actor performing the
+  use cases of the BUC or step it performs (`via buc__<Buc>`, `via step__<Step>`). A use case
+  an event or timer starts gets only its explicit `performs`. A condition has `-.->|applies_to|`
+  to a use case, and a derived `-.->|when|` to a use case whose arm or `chooses` value its
+  `.when` guards. A declared edge wins over a derived one. `omitted:` names the left-out kinds
+  linked to a drawn node.
+- **`robustness`.** One flat list, ordered actor, boundary, control, entity, each by id; no
+  layers. Boundary: a displayed `screen`; an `extsystem` that raises an event starting a use
+  case in scope, or that an event a use case in scope raises triggers; a `timer` that triggers
+  a use case in scope. Control: each invoked `api`, and the use case itself when it reads or
+  writes an entity directly or invokes no API. Edges: `actor --> screen`; `screen -->|<use case
+  label>| control`; `control -->|<CRUD letters>| entity`; and dotted `-.->|<event label>|`
+  between controls and external systems, and `timer -.-> control`, when both ends are in
+  scope. Never drawn: actor to control, or screen, external system, or timer to entity. An
+  actor whose use cases display no screen is left out.
+- **`sequence`.** A `sequenceDiagram` of one use case; with `--buc`, the BUC's use cases in
+  the order the model places them (`contains`, or a step's `covers`; a use case after those
+  whose events trigger it), each under `Note over <screen>: <n>. <label>`. Participants, in
+  order and only those taking part: the actors that perform it (an event- or timer-started
+  one only its explicit `performs`) or the external system, timer, or raising use case that
+  starts it; the screen; each control, as in `robustness`; the entities; and the controls and
+  external systems its events reach. Messages:
+  1. The actor calls the screen with the use case label, or the starter sends its event to
+     the control.
+  2. The screen calls the control with the use case or API label.
+  3. With guards, `alt <guards>` opens: each applied condition with a body (label, then body),
+     and per moved column `Entity.column == <from>` (or `in (<from>, ...)`) unless a condition
+     says it. `else guard fails` ends with `rejected` to the screen.
+  4. Each control `->>` its entities: `read`, then one transaction at a time, each write
+     `create`, `update`, or `delete` with the lifecycle move (`status <from> -> <to>`) and the
+     `sets` values (`paid_at=set`). Arms from one state to several are an `alt` with one branch
+     per arm. A transaction of several writes, or inferred from keys, opens with `Note over
+     <control>: transaction (...)`.
+  5. For each raised event, `-)` to the control of each triggered use case and to each
+     triggered external system; an event that triggers nothing is a `Note`.
+  6. The control replies `done` to the screen, or to the starter.
+- **`flow`.** `flowchart TD`, no layers. Each flow is `subgraph flow__<id>["<label>"]`; the
+  whole model also draws steps of no flow. Edges: `-->|precedes|`, `-->|branches|`,
+  `-.->|excepts|`, `-->|repeats|`, and `-.->` (`covers`) to the use cases, APIs, events, and
+  timers a step covers. A step that exactly one actor performs sits in
+  `subgraph lane__<Flow>__<Actor>`, whose first line is `%% lane lane__<Flow>__<Actor>:
+  actor__<Actor>`. A step several actors perform has a `performs` edge from each. A BUC with no
+  flow draws the header only.
+- **`screen`.** `flowchart LR`, no layers, every screen in scope. `navigates(A, B)` is
+  `screen__A -->|<use case label>| screen__B` (`-->|navigates|` without `.via`), and a `.via`
+  adds `%% via screen__A -> screen__B usecase__<id>`. Where no `navigates` goes from A to B, two
+  consecutive steps of one flow (`precedes`, `branches`, `excepts`) that the same single actor
+  performs give `screen__A -.->|業務上の順番| screen__B` for each pair of screens their use cases
+  display, with `%% derived ... via <flow and step ids>`. A dashed edge is the order the work
+  visits screens, not a transition the UI offers.
+- **`information`.** No layers. Each `relate` is `entity__<Child> ---|<card>| entity__<Parent>`
+  (no child-side minimum). Each state model is `statemodel__<Entity>_<column>` with a
+  `statemodel` edge; each variation a column takes has `-.->|variation <column>|`.
+- **`condition`.** No layers. Each condition has `%% holds <id>: <body>` when it has a body,
+  and `combines` edges to its variations and state models (`%% derived ... from holds` when read
+  from the body). `applies_to` edges go to APIs and systems unlabelled and to use cases
+  labelled. A `.when` guard adds a derived `-.->|when|` edge to the use case with `%% derived
+  <condition> -> <usecase> via transitions <Entity>.<column> <from>-><to>` or `via chooses
+  <Entity>.<column> <value>`. Each variation is `subgraph variation__<id>` with one
+  `variation__<Variation>__<value>:::value` node per value. The whole model draws every
+  variation.
+- **`state`.** See the `stateDiagram-v2` part of the [encoding contract](#encoding-contract).
+- **`event`.** Node ids `event__`, `usecase__`, `buc__`, `extsystem__`, `timer__`. Prints the
+  event-integrity warnings (never raised, raised but never consumed, triggers a use case in no
+  BUC); `outbox(Event)` silences the second. `%% omitted: state transitions` says a drawn use
+  case drives one.
+- **`er`.** The header only, then the `erDiagram`, whose entity names stay the DSL ids.
+  `export --kind mermaid-er` writes the same text without `model=` in the header.
 
 #### The review set
 
 `--all -o <dir>` writes one file per diagram:
 
-- `<kind>.mmd` for the kinds that stay readable on a whole model: `context`, `requirement`,
-  `business`, `information`, `condition`, `er`, `screen`, `event`, and `state` (its index).
-- `<kind>__<BucId>.mmd` for each BUC: `usecase`, `robustness`, `flow`, and `sequence`.
-- `state__<EntityId>.mmd` for each entity with a state model.
+- `<kind>.mmd` for the kinds readable on a whole model: `context`, `requirement`, `business`,
+  `information`, `condition`, `er`, `screen`, `event`, and `state` (the index).
+- `<kind>__<BucId>.mmd` per BUC: `usecase`, `robustness`, `flow`, `sequence`.
+- `state__<EntityId>.mmd` per entity with a state model.
 
-A diagram with nothing to draw is left out, and the last line counts them:
-`wrote 58 diagrams to docs/diagrams (1 with nothing to draw left out)`. A model whose
-lifecycle has errors gets no `state` diagrams, with a note; the rest are written.
-
-#### What `diagram` says on stderr
-
-- `warning: this diagram has 73725 characters and 475 edges; Mermaid's defaults stop at
-  50000 characters (maxTextSize) and 500 edges (maxEdges), so it does not render as is.`
-  The text is written all the same. The warning names the options that narrow that kind;
-  the alternative is to raise both limits in the renderer's config.
-- `note: nothing to draw: the model declares nothing --kind flow draws in this scope`. The
-  text is the header alone, with `%% kinds: (none)`.
-
-Notes:
-
-- Removed names fail with a message that names the replacement: `--kind
-  boundaryless-graph`, `business-area`, `technical-area`, `diff`, and
-  `event-flow`, and `--format puml`, `svg`, and `png`. `--show-description`,
-  `--view-preset`, and `--diff-base` are rejected as unknown arguments; descriptions are
-  always written as `%% desc` lines. The CHANGELOG lists each replacement.
-- `--node-kind` and `--edge-kind` hide nodes and any edges whose endpoints are hidden;
-  they do not change the model or diagnostics. The header's `omitted:` line names the
-  node kinds and relation kinds they hid.
-- `--kind er` takes only the contract's header: the body is the `erDiagram`, whose
-  entity names stay the DSL ids (a `__` prefix would read as part of a column), and the
-  diagram type says each node is an entity. `export --kind mermaid-er` writes the same
-  text, its header without `model=`.
-
-The notes below say how each kind reads, in the order of the table.
-
-- For `--kind rdra`, model objects are placed into the four RDRA layers:
-  システム価値 (`actor`, `extsystem`, `requirement`, `nfr`), システム外部環境
-  (`quality`, `constraint`, `business`, `buc`, `flow`, `step`, `timer`, `medium`,
-  `permission`), システム境界 (`usecase`, `screen`, `field`, `event`), and システム
-  (`system`, `api`, `dto`, `entity`, `state`, `variation`, `condition`). An `adr` is not
-  drawn. A `--buc` scope also holds the states its use cases move between.
-- For `--kind context`, the nodes sit in no layer subgraph, and the header has no
-  `layers:` line. Every edge is derived and followed by its `%% derived ... via <ids>`
-  line. An actor has one `-.->` edge to the system, labelled with the labels of the BUCs
-  it performs, joined by `、`: a `performs` to a BUC counts that BUC, and a `performs` to
-  a use case or step counts each BUC that contains it (the node itself when none does).
-  An external system has one edge per direction, labelled with the labels of the events
-  exchanged, joined by `、`: toward the system for each event it raises that triggers one
-  of the system's use cases or BUCs, and from the system for each event one of its use
-  cases raises that triggers the external system. `via` names the BUC or event ids behind
-  the label. With one declared system every edge ends there. With
-  several, an edge ends at each system that contains an API the use cases behind it
-  invoke. When no system is declared, or several are and none can be traced, the edge
-  ends at `system__Model["システム"]`, followed by
-  `%% synthesized system__Model: <reason>`; it is the one node no other kind draws.
-  The whole model draws every actor, external system, and system; `--buc` draws those
-  with an edge through the BUC's use cases, steps, and APIs, and labels an edge with the
-  scoped BUCs only.
-- For `--kind requirement`, the nodes sit in no layer subgraph, and the header has no
-  `layers:` line. The tree reads goal, requirement, BUC. A goal's label adds a second
-  line (`<br/>`) with its `metric` and `baseline → target`, whichever of them it has. The
-  edges are the declared `motivates` (requirement to BUC, unlabelled) and `achieves`, drawn from the
-  goal as an unlabelled `-->` (`achieved_by`) to the requirement and followed by
-  `%% derived <goal> -> <requirement> via <requirement>`. A requirement with
-  `status "out-of-scope"` sits in `subgraph group_out_of_scope["やらないこと"]`, and its
-  edges are dashed (`-.->`); every other edge is `-->`. The whole model draws every goal
-  and requirement, linked or not, and the BUCs a requirement motivates; `--buc` draws the
-  named BUCs, the requirements that motivate them, and those requirements' goals. NFRs,
-  constraints, qualities, entities, and systems are not drawn: the `omitted:` line names
-  them, and `list --kind nfr` and `list --kind constraint` write them as tables.
-- For `--kind business`, the nodes sit in no layer subgraph, and the header has no
-  `layers:` line. Each business is `subgraph business__<id>["<label>"]` holding its BUCs.
-  A BUC that belongs to several businesses sits in the first by id, with a
-  unlabelled `-->` (`belongs`) edge to each other; a BUC of no business sits outside every subgraph. An
-  edge `buc__A -->|<event label>| buc__B` is a hand-off: a use case contained in A (directly
-  or through a step) raises the event, and the event triggers a use case contained in B, or
-  B itself (`triggers(Event, Buc)`). It is drawn once per `(A, B, event)` and followed by
-  `%% derived <A> -> <B> via event__<Id>`. A hand-off with no event on it, such as one
-  BUC feeding the next through data only, has no edge, so a BUC left unconnected is a gap
-  to look at in the model. No actor or external-system node is drawn: `list --kind
-  buc-roles` is the table of who takes part. `--buc` draws the named BUCs, the BUCs they
-  hand off to or from, and their businesses.
-- For `--kind usecase`, the use cases and what they touch sit in the `rdra` layers with
-  the `rdra` ids, so a node matches its `rdra` node. An edge `rdra` does not draw is
-  derived and followed by its `%% derived` line: an API's CRUD drawn from the use case
-  that invokes it (`via api__<Api>`), and an actor drawn performing the use cases of the
-  BUC or step it performs (`via buc__<Buc>` or `via step__<Step>`). A use case that an
-  event or a timer starts gets no derived actor: only a `performs(Actor, UseCase)` draws
-  who performs it. A condition is drawn with its `-.->|applies_to|` edge to a use case, and
-  with a derived `-.->|when|` edge to a use case whose `transitions` arm or `chooses` value
-  its `.when(Cond)` guards (the `%% derived ... via transitions ...` / `via chooses ...`
-  line of `rdra`). A declared edge wins over a derived one. APIs, DTOs, permissions, media, fields, and BUCs are not drawn;
-  `omitted:` names the ones linked to a drawn use case or screen.
-- For `--kind flow`, the type line is `flowchart TD` and there are no layers. Each flow is
-  `subgraph flow__<id>["<label>"]` holding its steps; the whole model also draws a step
-  of no flow, outside any. The edges are the declared ones: `-->|precedes|`,
-  `-->|branches|`, `-.->|excepts|`, and `-->|repeats|` between steps, and an unlabelled `-.->`
-  (`covers`) from a step to the use cases, APIs, events, and timers it covers, drawn outside the
-  flows. A step of a flow that exactly one actor performs sits in that actor's lane,
-  `subgraph lane__<Flow>__<Actor>["<actor label>"]` inside the flow, whose first line is
-  `%% lane lane__<Flow>__<Actor>: actor__<Actor>`. A lane is not an element, so its id
-  is unique per flow; the `lane` kind appears in `kinds:`. A step several actors perform
-  has an unlabelled `-.->` (`performs`) edge from each. Without `performs(Actor, Step)` there are no
-  lanes. `--buc` draws the flows the BUCs contain; a BUC without a flow draws an empty
-  diagram, its header only.
-- For `--kind screen`, the type line is `flowchart LR` and there are no layers. Each
-  screen of the scope is drawn, connected or not. Each `navigates(A, B)` is
-  `screen__A -->|<use case label>| screen__B`, labelled with the use case of its `.via`,
-  or `-->|navigates|` without one, and a `.via` adds `%% via screen__A -> screen__B
-  usecase__<id>` after the edges. Where no `navigates` goes from A to B, two consecutive
-  steps of one flow (`precedes`, `branches`, or `excepts`) that the same single actor
-  performs give `screen__A -.->|業務上の順番| screen__B` for each screen A the first
-  step's use cases display and each screen B the second step's display (A and B
-  different), followed by `%% derived screen__A -> screen__B via <flow and step ids>`.
-  A dashed edge is the order the work visits the screens, not a transition the UI offers.
-  `--buc` keeps the screens the BUCs' use cases display, and the business order of the
-  steps of their flows.
-- For `--kind information`, there are no layers. Each entity of the scope is drawn (the
-  entities `--kind er` draws), each `relate` between two of them as
-  `entity__<Child> ---|<card>| entity__<Parent>` with the DSL cardinality (the same
-  relates as `er`, without a child-side minimum), each state model, a column that
-  `transitions` drive, as `statemodel__<Entity>_<column>` (the composite state id of
-  `--kind state`) with an unlabelled `-.->` edge (`statemodel`), and each variation a column takes
-  with an `-.->|variation <column>|` edge. An `Enum` column no `transitions` drive is no
-  state model. `omitted:` starts with `columns`, which `er` draws.
-- For `--kind condition`, there are no layers. Each condition is drawn with a
-  `%% holds <id>: <body>` line under it when it has a `holds` body, and an
-  unlabelled `-.->` (`combines`) edge to each variation and state model it combines
-  (`statemodel__<Entity>_<column>`, the composite state id of `--kind state`). A link
-  read from the `holds` body rather than a `combines` declaration is followed by
-  `%% derived <from> -> <to> from holds`, as in `rdra`. Unlabelled `-.->` (`applies_to`) edges go to
-  the APIs and systems it applies to, and `-.->|applies_to|` edges to the use cases. A
-  condition that guards a `transitions` arm or a `chooses` value with `.when(Cond)` has a
-  derived `-.->|when|` edge to that use case, followed by `%% derived <condition> ->
-  <usecase> via transitions <Entity>.<column> <from>-><to>` or `via chooses
-  <Entity>.<column> <value>` (`, `-joined when it guards more than one), as in `rdra` and
-  `usecase`. Each variation is
-  `subgraph variation__<id>["<label>"]` holding one
-  `variation__<Variation>__<value>["<value label>"]:::value` node per value, its label
-  the value's label or else its name. The whole model draws every variation, a
-  condition's or not (the RDRA variation sheet); `--buc` draws the conditions that
-  apply to a use case of the BUC (one `--kind usecase --buc` draws) or to an API such a
-  use case invokes, and the variations and state models they combine.
-- For `--kind state`, see the `stateDiagram-v2` part of the [encoding
-  contract](#encoding-contract).
-- For `--kind event`, the tool runs event-integrity diagnostics and emits `warning:`
-  lines for events that are never raised, raised but consume nothing, or trigger a use
-  case belonging to no BUC. `outbox(Event)` suppresses the raised-but-unconsumed warning
-  for events intentionally published outside the local model. Event targets may be either
-  BUCs, use cases, or external systems. Node ids follow the encoding contract
-  (`event__`, `usecase__`, `buc__`, `extsystem__`, `timer__`), so they do not collide
-  when model elements of different kinds share a DSL identifier. The diagram draws no
-  states; `%% omitted: state transitions` says a drawn use case drives one, which
-  `--kind state` shows.
+A diagram with nothing to draw is left out; the last line counts them: `wrote 58 diagrams to
+docs/diagrams (1 with nothing to draw left out)`. With lifecycle errors, the `state` diagrams
+are left out with a note.
 
 ### Encoding contract
 
-Every kind but `state` and `er` is a `flowchart`, written so that every fact it draws can
-be read back from the text. The `rdra` diagram shows each part:
-
-- For `--kind sequence`, the file is a Mermaid `sequenceDiagram` of one use case, so
-  `--usecase` must name exactly one. With `--buc` it plays the BUC's use cases one after
-  another in the same diagram, each under a note that numbers and names it
-  (`Note over screen__Cart: 2. Place order`), in the order the model first places them
-  (`contains`, or a step's `covers`), a use case after the ones whose events trigger it. The header, `%% kinds:` line, and ids (`<kind>__<DSL id>`,
-  as `participant actor__Clerk as Clerk`) are those of the other kinds, and every
-  participant id is a node of `rdra`. Participants appear in this order, only those that
-  take part: the actors that perform the use case (an event- or timer-triggered one has only
-  its explicit `performs`) or the external system, timer, or raising use case that starts it;
-  the screen it `displays`; each control, as in `robustness`; each entity the controls read
-  and write; and the controls and external systems an event it raises reaches. Messages
-  follow in order:
-  1. The actor calls the screen with the use case label, or the starter sends its event
-     to the control.
-  2. The screen calls the control with the use case or API label.
-  3. When the use case has guards, `alt <guards>` opens: each condition with a `holds` body
-     that applies to it (the condition label, then its body), and for each column its
-     `transitions` move, `Entity.column == <from>`, or `Entity.column in (<from>, ...)` when
-     the arms leave from several states, unless a condition already says it. `else guard
-     fails` ends with the control replying `rejected` to the screen.
-  4. Each control `->>` its entities: `read`, then one transaction at a time in the
-     order of the transaction inference, each write labelled `create`, `update`, or `delete`
-     with the lifecycle move (`status <from label> -> <to label>`) and the other columns
-     `sets` fixes (`paid_at=set`). Arms that leave one state for several are the actor's
-     choice: after the write, `alt status <from> -> <to>` holds one branch per arm, each a
-     message `status = <to>`, and `end` closes it. A transaction with more than one write, or
-     inferred from foreign keys, opens with a `Note over <control>: transaction (...)`.
-  5. For each event the use case `raises`, the control sends `-)` to the control of each use
-     case it `triggers` (one message, never expanded) and to each external system it
-     `triggers`; an event that triggers nothing is a `Note`.
-  6. The control replies `done` to the screen, or to the starter when no screen is drawn.
-- For `--kind robustness`, nodes sit in one flat list in the order actor, boundary, control,
-  entity, each sorted by id, and the edge grammar is the whole point: an actor reaches a
-  screen, a screen reaches a control, a control reaches an entity, and nothing skips a
-  step. The kind is not layered, so the header has no `layers:` line.
-  - Boundary: a `screen` a use case `displays`; an `extsystem` that `raises` an event
-    starting a use case in scope, or that an event a use case in scope `raises` triggers;
-    a `timer` that `triggers` a use case in scope.
-  - Control: each `api` a use case `invokes`, and the use case itself when it reads or
-    writes an entity directly or invokes no API. A use case with an API and direct CRUD
-    draws both.
-  - Entity: each entity a control `reads`, `creates`, `updates`, or `deletes`.
-  - Edges, labelled so a reader finds the use case without a use case node:
-    `actor --> screen` (`uses`, the one relation from an actor, so unlabelled) (the actor performs a use case that displays the screen;
-    one an event or a timer starts takes only its declared performer, as in `usecase`);
-    `screen -->|<use case label>| control` (the use case displays the screen and the
-    control is its API, or it); `control -->|CRUD letters| entity` (the union of the
-    control's operations on the entity); and the dotted
-    `control -.->|<event label>| control`, `extsystem -.->|<event label>| control`,
-    `control -.->|<event label>| extsystem`, and `timer -.-> control` (`triggers`, the one
-    relation from a timer, so unlabelled) when both ends are in scope.
-  - Never drawn: an edge from an actor to a control, or from a screen, an external system,
-    or a timer to an entity. An actor whose use cases display no screen has no edge and
-    is left out. Events, conditions, states, and `%% derived` lines are not drawn.
+Every kind but `state` and `er` is a `flowchart` from which each fact it draws can be read
+back:
 
 ```
 %% rdra-ish diagram=rdra scope=buc:BucPayment model=samples/ec-site
@@ -1391,31 +1066,28 @@ flowchart LR
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
 ```
 
-- The header comes first. `scope` is `whole`, `buc:<id>[,<id>]`,
-  `usecase:<id>[,<id>]` (also the use cases `--entity` or `--actor` keeps in `usecase` and
-  `robustness`), or `entity:<id>[,<id>]` (`--entity` in `state`, `er`, and `information`); `model` is the input paths as given. `layers:` (in the kinds
-  with RDRA layers: `rdra` and `usecase`) and `kinds:`
-  list only what the body draws. `omitted:` names the node kinds linked to a drawn node
-  that the kind leaves out, and in `rdra` the node and relation kinds a filter hid; it
-  says `(none)` when there are none.
-- Each node id is `<kind>__<DSL id>`, with the kind tokens of `--node-kind`, so one
-  element has one id in every kind. The label is the DSL label, unchanged. A few ids name
-  what is not a DSL element of its own:
+- **Header.** `scope` is `whole`, `buc:<id>[,<id>]`, `usecase:<id>[,<id>]` (also what
+  `--entity` or `--actor` keeps in `usecase` and `robustness`), or `entity:<id>[,<id>]`
+  (`--entity` in `state`, `er`, `information`). `model` is the inputs as given. `layers:` (in
+  `rdra` and `usecase`) and `kinds:` list only what the body draws. `omitted:` names the node
+  kinds linked to a drawn node that the kind leaves out, and in `rdra` what a filter hid, or
+  `(none)`.
+- **Ids.** `<kind>__<DSL id>`, with the `--node-kind` tokens, so an element has one id in
+  every kind. The label is the DSL label, always quoted, `"` written `#quot;`. Ids that name
+  no DSL element of their own:
 
-  | Id | `:::` | Kind | What it is |
+  | Id | `:::` | Kinds | What it is |
   |---|---|---|---|
-  | `state__<Entity>_<variant>` | `state` | `rdra`, `usecase`, `state` | A state of a state model |
-  | `statemodel__<Entity>_<column>` | `statemodel` | `information`, `condition`, `state` | A state model, a column that `transitions` drive |
-  | `variation__<Variation>__<value>` | `value` | `condition` | One value of a variation, inside its `subgraph variation__<Variation>` |
-  | `lane__<Flow>__<Actor>` | `lane` (a subgraph) | `flow` | The swimlane of one actor in one flow |
-  | `system__Model` | `system` | `context` | The system when no declared system can stand for it |
+  | `state__<Entity>_<variant>` | `state` | `rdra`, `usecase`, `state` | A state of a state model (`<Entity>_<column>_<variant>` with several lifecycle columns) |
+  | `statemodel__<Entity>_<column>` | `statemodel` | `information`, `condition`, `state` | A state model |
+  | `variation__<Variation>__<value>` | `value` | `condition` | One value, inside `subgraph variation__<Variation>` |
+  | `lane__<Flow>__<Actor>` | `lane` (subgraph) | `flow` | One actor's lane in one flow |
+  | `system__Model` | `system` | `context` | The system when no declared one stands for it |
 
-- Each node is `<id><open>"<label>"<close>:::<kind>`, in the Mermaid shape of its kind
-  (`rdra_ish_emit::NODE_SHAPES`), so kinds tell apart in black and white too. The label
-  is always quoted, with `"` written `#quot;`. The kinds one focused diagram draws together
-  have different shapes (except a `value`, which sits inside its variation's subgraph
-  and is a rectangle like `system` in `condition`); the `rdra` diagram has more kinds than Mermaid has shapes, so
-  there a shape repeats across layers.
+- **Shapes** (`rdra_ish_emit::NODE_SHAPES`). Each node is `<id><open>"<label>"<close>:::<kind>`,
+  so kinds differ in black and white too. The kinds one focused diagram draws have distinct
+  shapes (a `value` sits inside its subgraph); `rdra` repeats shapes across layers. A subgraph
+  is `subgraph <id>["<label>"]` whatever its kind.
 
   | Shape | Mermaid | Kinds |
   |---|---|---|
@@ -1434,56 +1106,40 @@ flowchart LR
   | parallelogram, leaning left | `[\..\]` | `nfr`, `constraint`, `variation` |
   | trapezoid, upside down | `[\../]` | `business` |
 
-  A subgraph keeps `subgraph <id>["<label>"]` whatever its kind.
-- Each node carries `:::<kind>`, and one `classDef <kind>` per kind closes the diagram.
-  Each RDRA element family has its own light fill (actors red, BUCs and flows green, use
-  cases blue, screens violet, events pink, information yellow, variations and conditions
-  purple), so a plain Mermaid render tells the kinds apart. The colour says no more than
-  the `:::<kind>` tag, and a renderer is free to replace it.
-- Each layer is `subgraph layer_<token>["<RDRA name>"]`. A subgraph with an element id
-  (`business__<id>`, `flow__<id>`, `variation__<id>`) is that element, holding its parts.
-- An edge is `<from> <arrow>|<label>| <to>`, or `<from> <arrow> <to>` without a label. A
-  label is left off when, in that kind, the kinds of the two ends have exactly one
-  relation and the label would only name it: the relation is then read back from the ends
-  (`rdra_ish_emit::implied_relation`, from the table `rdra_ish_emit::EDGE_RELATIONS`).
-  So `performs`, `invokes`, `displays`, `shows`, `raises`, `triggers`, `contains`,
-  `covers`, `belongs`, `motivates`, `achieves` / `achieved_by`, `applies_to`,
-  `combines`, and the other single-relation pairs go unlabelled, as do the robustness
-  diagram's actor-to-screen `uses` and timer-to-control `triggers`, and the information
-  diagram's `statemodel`. A condition to
-  a use case is two relations in `rdra`, `usecase`, and `condition`: the declared
-  `applies_to` and the `when` derived from a `.when(Cond)` guard, so both are labelled there
-  (`-.->|applies_to|`, `-.->|when|`); a condition to an API or a system stays unlabelled. A label stays
-  where it says something the ends do not: the CRUD verb (`reads`, `creates`,
-  `updates`, `deletes`) and the API's `request` / `response` / `error_response`, a
-  step order (`precedes`, `branches`, `excepts`, `repeats`), a relate's cardinality
-  (`N:1`), a transition, the robustness diagram's use case, CRUD letters, and events, the
-  BUCs on a context actor edge (a `performs`) and the events on a context external-system
-  or business edge, an information diagram's `variation <column>`,
-  and every screen-diagram edge (its `.via` use case, `navigates`, or `業務上の順番`). A
-  transition is drawn from the use case to the state it enters, labelled `transitions
-  <Entity>.<column> <from>-><to>`. The direction is from the predicate's first argument to
-  its second.
-- The line style is the RDRAGraph relation kind: `-->` for hierarchy (`contains`,
-  `belongs`, `owns`) and flow order (`precedes`, `branches`, `repeats`), `---` for
-  `relate`, and `-.->` for every other association.
-- A fact drawn more than once in the model is drawn once.
-- A `%%` line in the body says what the shapes cannot. A renderer ignores it:
+- **Classes.** One `classDef <kind>` per kind closes the diagram. Each family has a light
+  fill (actors red, BUCs and flows green, use cases blue, screens violet, events pink,
+  information yellow, variations and conditions purple). A renderer may replace the colours.
+- **Subgraphs.** A layer is `subgraph layer_<token>["<RDRA name>"]`. A subgraph with an element
+  id (`business__<id>`, `flow__<id>`, `variation__<id>`) is that element.
+- **Edges.** `<from> <arrow>|<label>| <to>`, from the predicate's first argument to its
+  second. The label is left off when the two end kinds have exactly one relation in that kind;
+  `rdra_ish_emit::implied_relation` reads it back from `rdra_ish_emit::EDGE_RELATIONS`. So
+  `performs`, `invokes`, `displays`, `shows`, `raises`, `triggers`, `contains`, `covers`,
+  `belongs`, `motivates`, `achieves` / `achieved_by`, `applies_to` (to an API or system),
+  `combines`, robustness `uses` and timer `triggers`, and information `statemodel` go
+  unlabelled. A condition to a use case is two relations in `rdra`, `usecase`, and
+  `condition`, so `-.->|applies_to|` and `-.->|when|` are labelled. Labels stay where they add
+  something: CRUD verbs, `request` / `response` / `error_response`, step order, a relate's
+  cardinality (`N:1`), a transition (`transitions <Entity>.<column> <from>-><to>`, from the use
+  case to the state it enters), robustness use cases, CRUD letters, and events, context and
+  business labels, `variation <column>`, and every screen edge.
+- **Line style** is the relation kind: `-->` for hierarchy (`contains`, `belongs`, `owns`) and
+  flow order (`precedes`, `branches`, `repeats`), `---` for `relate`, `-.->` for every other
+  association. A fact is drawn once.
+- **Comment lines** say what shapes cannot; a renderer ignores them. An edge without a `%%
+  derived` line is a declared relation.
 
   | Line | Follows | Kinds |
   |---|---|---|
-  | `%% desc <id>: <text>` | A node with a `description`, its lines joined by a space | every flowchart |
-  | `%% derived <from> -> <to> via <ids>` | An edge rdra-ish derived through the nodes it names | `business`, `usecase`, `context` |
-  | `%% derived <from> -> <to> from holds` | A condition's `combines` link read from its `holds` body | `rdra`, `condition` |
-  | `%% derived <from> -> <to> via transitions <Entity>.<column> <from>-><to>` / `via chooses <Entity>.<column> <value>` | A `when` edge: the `transitions` arms and `chooses` values of the use case that the condition's `.when` guards, `, `-joined | `rdra`, `usecase`, `condition` |
-  | `%% holds <id>: <body>` | A condition with a `holds` body | `condition` |
-  | `%% lane <lane>: actor__<id>` | A lane subgraph's first line: the actor who performs its steps | `flow` |
+  | `%% desc <id>: <text>` | A node with a `description`, lines joined by a space | every flowchart |
+  | `%% derived <from> -> <to> via <ids>` | An edge derived through the named nodes | `business`, `usecase`, `context` |
+  | `%% derived <from> -> <to> from holds` | A `combines` link read from a `holds` body | `rdra`, `condition` |
+  | `%% derived <from> -> <to> via transitions <Entity>.<column> <from>-><to>` / `via chooses <Entity>.<column> <value>` | A `when` edge, `, `-joined | `rdra`, `usecase`, `condition` |
+  | `%% holds <id>: <body>` | A condition with a body | `condition` |
+  | `%% lane <lane>: actor__<id>` | A lane's first line | `flow` |
   | `%% synthesized system__Model: <reason>` | The synthesized system node | `context` |
 
-  An edge without a `%% derived` line is a declared relation, the same edge `rdra` draws.
-
-`--kind state` is a `stateDiagram-v2`, where `classDef` and layers do not apply, so the
-header and the id prefixes carry the kinds:
+**`--kind state`** is a `stateDiagram-v2`; the header and id prefixes carry the kinds:
 
 ```
 %% rdra-ish diagram=state scope=buc:BucPayment model=samples/ec-site
@@ -1502,142 +1158,130 @@ stateDiagram-v2
   }
 ```
 
-- Each state model, a column that `transitions` drive, is one composite state
-  `statemodel__<Entity>_<column>` labelled `<Entity>.<column>`. Its states follow the
-  column's `Enum` order, with the ids `--kind rdra` gives them.
-- Each transition is labelled with the label of the use case that drives it, then
-  `[...]` with the label of each condition whose `holds` body guards that use case (UML
-  guard notation). The line before it, `%% transition <usecase id>`, names the use case
-  by the id `--kind rdra` gives it, for tools that read the diagram.
-- `[*] -->` marks the start state the lifecycle gives the column. `--> [*]` marks an end
-  state, one with no transition to another state.
-- `omitted:` names the `Enum` columns in scope that no `transitions` drive and no `sets`
-  writes. One that a `sets` writes is still a state axis of `states` and `check`, so it is
-  named apart, on a `%% set-only: <Entity>.<column> ... (...)` line after `omitted:`, as
-  `Payment.status` above. It has no composite state either: without `transitions` it has no
-  states to draw.
-- `--buc` draws each state model that one of the BUC's use cases moves, whole.
-  `--entity <Entity>` (repeatable, not with `--buc`) draws the named entities' state
-  models, every lifecycle column, whole. The header's scope reads `entity:<ids>`.
-- With neither, the diagram is an index. Each state model is its composite state holding
-  one note, `<n> 状態 / <m> 遷移 (--entity <Entity>)`, with `n` the declared values of
-  the column and `m` its transitions, and nothing else: no transition, no start or end
-  marker, no class. The header's kinds are `statemodel state`. Read a model's states with
-  the `--entity` named in its note.
-- A full model colours a state by what the lifecycle check found, one `class <state id>
-  <class>` line each, with the `classDef` of each class used and a `%% legend:` comment
-  before `stateDiagram-v2`:
+- Each state model is a composite state `statemodel__<Entity>_<column>` labelled
+  `<Entity>.<column>`, its states in the `Enum` order with their `rdra` ids.
+- A transition is labelled with the use case label, then `[...]` with each condition whose
+  body guards it. The line before, `%% transition <usecase id>`, names the use case.
+- `[*] -->` marks the start state; `--> [*]` an end state (no transition out).
+- `omitted:` names the in-scope `Enum` columns no `transitions` drive and no `sets` writes. One
+  a `sets` writes is a state axis of `check`, not a state model, and is named on `%% set-only:`.
+- `--buc` draws each state model a BUC's use case moves; `--entity` (not with `--buc`) the
+  entities' state models. With neither, the diagram is an index: each composite state holds
+  one note, `<n> 状態 / <m> 遷移 (--entity <Entity>)`, and nothing else; the header's kinds are
+  `statemodel state`.
+- A full diagram colours each state by the first class that applies, in this order, with a
+  `class <state id> <class>` line, a `classDef` per class used, and the `%% legend:` line:
 
   | Class | State | Found by |
   |---|---|---|
-  | `stateunreachable` | A declared value no reachable state holds, drawn with no transition | `UnreachableEnumVariant` (a `warning`) |
-  | `statedeadlock` | A state an instance cannot leave though it has a way out | `Deadlock_<Entity>_<column>_<value>` |
-  | `stateend` | A state with no transition to another state, the one drawn `--> [*]` | The transitions |
-
-  A state has one class, the first that applies in the order deadlock, unreachable, end.
+  | `statedeadlock` | One an instance cannot leave though it has a way out | `Deadlock_<Entity>_<column>_<value>` |
+  | `stateunreachable` | A declared value no reachable state holds, drawn with no transition | `UnreachableEnumVariant` (warning) |
+  | `stateend` | One with no transition out, drawn `--> [*]` | The transitions |
 
 ---
 
-## Sample Artifact Snapshots
+## Sample artifact snapshots
 
-`scripts/sample-artifacts.tsv` lists every committed `out/` file of `samples/ec-site`,
-`samples/clinic-ops`, `samples/patent-ops`, `samples/food-permit-ops`,
-`samples/insurance-claim-ops`, `samples/oidc-auth`, `samples/personal-info`, each `samples/incremental-order`
-step, and `samples/api-contract`. Each row holds the output path and the `rdra-ish` command that
-writes it. CI runs `scripts/check-sample-artifacts.sh` after the Rust snapshot tests. The
-script builds the binary once and runs every row. It then rewrites the documents that
-embed the artifacts: `scripts/embed-sample-artifacts.py` copies each file into the fenced
-block under its `<!-- embed: <path> -->` line in the step `design.md` files and
-`docs/diagram-sample-review.md`, and fails when a command those documents print is not
-the manifest row for its `--out`; `scripts/gen-clinic-ops-docs.py` writes
-`design-doc.md` and `prd.md` for `samples/clinic-ops`, `samples/patent-ops`,
-`samples/food-permit-ops`, and `samples/insurance-claim-ops` (the sample is its second argument) from `list` and `csv` output and the committed diagrams. The script fails if a tracked file changes. A generator change
-therefore shows up as a diff of Mermaid diagrams, CSV review tables,
-state-pattern output, and exports such as OpenAPI, AsyncAPI, DBML, and JSON Schema. After
-an intended change, run the script and commit the regenerated files.
+`scripts/sample-artifacts.tsv` lists every committed `out/` file of the samples (`ec-site`,
+`clinic-ops`, `patent-ops`, `food-permit-ops`, `insurance-claim-ops`, `oidc-auth`,
+`personal-info`, each `incremental-order` step, `api-contract`), each with the command that
+writes it. CI runs `scripts/check-sample-artifacts.sh <binary>`, which runs every row, then
+`scripts/embed-sample-artifacts.py` (copies each file into the block under its `<!-- embed:
+<path> -->` line in the step `design.md` files and `docs/diagram-sample-review.md`, and fails
+when a printed command is not the row for its `--out`) and `scripts/gen-clinic-ops-docs.py`
+(writes `design-doc.md` and `prd.md` of the four operations samples). It fails if a tracked
+file changes, so a generator change shows as a diff. After an intended change, run the script
+and commit the files.
 
-To compare the data layer of every sample across two builds, run
-`scripts/data-diff.sh LABEL` with each build. The script writes the DBML, JSON Schema,
-and entity CSV of every `samples.txt` root, with each exit code and log, under
-`target/data-diff/LABEL/`. It uses `target/release/rdra-ish` (override with `RDRA_BIN`).
-Compare two runs with `diff -r target/data-diff/A target/data-diff/B`.
-
+`scripts/data-diff.sh LABEL` writes the DBML, JSON Schema, and entity CSV of every
+`samples.txt` root, with exit codes and logs, under `target/data-diff/LABEL/`, using
+`target/release/rdra-ish` (`RDRA_BIN` overrides). Compare two builds with `diff -r`.
 `scripts/verify-samples.sh <binary>` runs `check` and `verify` on every `samples.txt` root
-and compares each run with the root's `// expect` header. CI runs it on the release binary.
-The header grammar is in
-[Sample expectations](./formal-verification.md#sample-expectations).
+against its `// expect` header ([Sample expectations](./formal-verification.md#sample-expectations)).
 
 ---
 
 ## `csv`
 
-Generate CSV output.
+Write one table as CSV or Markdown to a file.
 
 ```
-rdra-ish csv <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [-o <OUT>]
+rdra-ish csv <INPUTS...> [--kind <KIND>] [--format csv|markdown] [-o <OUT>]
 ```
 
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `actor` \| `entity` \| `matrix` \| `api` \| `api-matrix` \| `screen-constraints` \| `permission-callables` \| `actor-permission-audit` \| `business-inputs` | `entity` | CSV kind. `actor` = actor list; `entity` = entity/column list; `matrix` = use-case × entity CRUD matrix; `api` = API contract list including method/path/idempotency/mode/auth; `api-matrix` = API × entity CRUD matrix; `screen-constraints` = screen × UC/API permission/medium paths; `permission-callables` = permission × callable UC/API list derived from `requires_permission`, including `UseCase->Api` paths for API-level requirements; `actor-permission-audit` = actor × permission assignment audit inferred from UC/API requirements; `business-inputs` = Actor x inferred input field x UseCase rows derived from C/U paths. |
-| `--format` | `csv` \| `markdown` | `csv` | `markdown` writes the same rows as a Markdown table, to paste into a design doc or a PRD, with the extension `.<kind>.md`. A `\|` in a cell is escaped and a line break becomes `<br>`. |
-| `-o`, `--out` | path | `out` | Output file path. A path with an extension is used as is (`-o x.dat` writes `x.dat`). Otherwise `.<kind>.csv` is appended to the path: `-o out` (the default) writes `out.matrix.csv` for `--kind matrix` and `out.entity.csv` for `--kind entity`, and `-o foo` writes `foo.matrix.csv`. |
+| Flag | Default | Meaning |
+|---|---|---|
+| `--kind <KIND>` | `entity` | The table; see below. |
+| `--format` | `csv` | `markdown` writes the rows as a Markdown table, `\|` escaped and line breaks as `<br>`. |
+| `-o`, `--out <OUT>` | `out` | A path with an extension is used as is. Otherwise `.<kind>.csv` (or `.<kind>.md`) is appended: `-o out` writes `out.matrix.csv` for `--kind matrix`. |
 
-The command writes the CSV, or the Markdown table, to the output path and prints `wrote <path>`;
-it prints no rows to stdout. Without `-o`, `rdra-ish csv src/ --kind matrix` writes
-`out.matrix.csv` in the current directory.
+| Kind | Rows |
+|---|---|
+| `actor` | Actors. |
+| `entity` | Each entity column with its type and key, index, check, and marker flags. |
+| `matrix` | Use case × entity CRUD. |
+| `api` | API contracts: `id,label,method,path,idempotency,mode,auth_scheme`. |
+| `api-matrix` | API × entity CRUD. |
+| `screen-constraints` | Screen × use case / API permission and medium paths. |
+| `permission-callables` | Each permission with the use cases and APIs that require it, with `UseCase->Api` paths for API-level requirements. |
+| `actor-permission-audit` | Actor × permission: `missing` and `excess` assignments inferred from the requirements. |
+| `business-inputs` (alias `actor-inputs`) | Actor × inferred input field × use case, from C/U paths. |
+
+The command prints `wrote <path>` and no rows. **Exit codes:** `0` when written; `1` on a
+load error.
 
 ---
 
 ## `export`
 
-Export machine-readable or review artifacts from the model.
+Write one machine-readable artifact.
 
 ```
-rdra-ish export <INPUTS...> [--kind <KIND>] [-o <OUT>] [--dialect <DIALECT>] [--instance-count <N>] [--instances <ENTITY=N>]... [--int-range-max <N>]
+rdra-ish export <INPUTS...> [--kind <KIND>] [-o <OUT>] [--dialect postgres|sqlite]
+                [--instance-count <N>] [--instances <ENTITY=N>]... [--int-range-max <N>]
 ```
 
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `openapi` \| `asyncapi` \| `dbml` \| `sql` \| `json-schema` \| `mermaid-er` \| `tla` | `openapi` | Export kind. `openapi` emits an OpenAPI 3.0 JSON document from API `method`/`path` metadata and DTO `request` / `response` / `error_response` relations. `asyncapi` emits an AsyncAPI 3.1 event catalog from `event`, `raises`, `triggers`, `transitions`, and `outbox`. `dbml` emits a DBML schema from logical `entity` declarations, indexes, unique constraints, generated FK columns, and `relate` options. `sql` emits SQL DDL from the same model, with `CHECK` constraints from the entity-local rules (see [SQL export](#sql-export)). `json-schema` emits JSON Schema Draft 2020-12 definitions for DTO and Entity structures. `mermaid-er` emits a textual ER review artifact from the same logical data model projection used by `diagram --kind er`. `tla` emits a TLA+ module plus TLC config from entity lifecycles and state constraints (see [formal-verification.md](./formal-verification.md)). |
-| `-o`, `--out` | path | `out` | Output file path. For every kind except `tla`, a path with an extension is used as is. Otherwise the kind's suffix is appended to the path: `-o out` (the default) writes `out.openapi.json`, `out.asyncapi.json`, `out.schema.dbml`, `out.schema.sql`, `out.json-schema.json`, or `out.er.mmd`, and `-o foo` writes `foo.openapi.json`. For `--kind tla`, a path ending in `.tla` is the TLA+ file, uses its file stem as the module name, and gets a sibling `.cfg` (`-o m.tla` writes `m.tla` and `m.cfg`). Any other path is a directory (created if missing) that receives `RdraSpec.tla` and `RdraSpec.cfg`: `-o out` (the default) writes `out/RdraSpec.tla`. A path with a non-`.tla` extension writes them into its parent directory. Beside the pair, `tla` writes `StateModel_<E>.tla`, `StateModel_<E>.cfg`, and `StateModel_<E>_witnesses.cfg` for each entity cone with a state model, which check its deadlocks and witnesses with TLC ([formal-verification.md](./formal-verification.md#state-models-with-tlc-alone)). |
-| `--dialect` | `postgres` \| `sqlite` | `postgres` | SQL only: the dialect `--kind sql` writes. |
-| `--instance-count` | unsigned integer | `2` | TLA+ only: multi-instance `InstanceCount` (`1..=255`). Value `1` is accepted with a warning (singleton ids cannot distinguish multi-entity instances). |
-| `--instances` | `<entity>=<n>` (repeatable) | `instances` under `[verify]` in `rdra.toml` | TLA+ only: one entity's slots in place of `--instance-count`, as `Loan=4` (see [Per-entity instance counts](#per-entity-instance-counts)). |
-| `--int-range-max` | unsigned integer | `5` | TLA+ only: upper bound for `IntRange == 0..N` (`1..=255`; `0` is rejected). |
+| Flag | Default | Meaning |
+|---|---|---|
+| `--kind <KIND>` | `openapi` | `openapi`, `asyncapi`, `dbml`, `sql`, `json-schema`, `mermaid-er`, or `tla`. |
+| `-o`, `--out <OUT>` | `out` | See below. |
+| `--dialect` | `postgres` | `sql` only: `postgres` or `sqlite`. |
+| `--instance-count <N>` | `2` | `tla` only: slots per entity, `1..=255`; `1` warns (one id cannot tell instances apart). |
+| `--instances <ENTITY=N>` | `instances` under `[verify]` | `tla` only: one entity's slots; repeatable. See [Per-entity instance counts](#per-entity-instance-counts). |
+| `--int-range-max <N>` | `5` | `tla` only: `IntRange == 0..N`, `1..=255`. |
 
-For OpenAPI export, only APIs that declare both `method` and `path` become
-`paths` operations. Path segments `{name}` become required `parameters` (`in: path`,
-`schema: string`). Known `auth` values `bearer` / `api_key` map to standard security
-schemes; unknown schemes fall back to an `apiKey` header `X-Auth` with
-`x-rdra-ish-auth-scheme` holding the raw value. `requires_permission(Api, Permission)`
-is projected as operation extension `x-rdra-ish-requires-permission` (not OpenAPI
-`security`, so it is not mistaken for a runtime scheme). DTOs are emitted under
-`components.schemas`.
+**Output path.** For every kind but `tla`, a path with an extension is used as is; otherwise
+the kind's suffix is appended: `out.openapi.json`, `out.asyncapi.json`, `out.schema.dbml`,
+`out.schema.sql`, `out.json-schema.json`, `out.er.mmd`. For `tla`, a path ending in `.tla` is
+the module (its stem the module name) with a sibling `.cfg`; any other path is a directory,
+created if missing, that receives `RdraSpec.tla` and `RdraSpec.cfg` (`-o out` writes
+`out/RdraSpec.tla`); a path with another extension writes into its parent. Beside them, `tla`
+writes `StateModel_<E>.tla`, `StateModel_<E>.cfg`, and `StateModel_<E>_witnesses.cfg` per
+entity cone with a state model, which check its deadlocks and witnesses with TLC
+([State models with TLC alone](./formal-verification.md#state-models-with-tlc-alone)). The
+command prints `wrote <path>`.
 
-For AsyncAPI export, each RDRA `event` becomes a channel and message. `raises`
-and `outbox` produce `send` operations; `triggers` produce `receive` operations,
-which list the `transitions` of the triggered use cases. An external system that
-`raises` an event is listed as the channel's `x-publisher`, and one that the event
-`triggers` (is delivered to) as its `x-subscriber`; both keys appear only when non-empty.
-RDRA does not yet model broker protocol, server topology,
-or event payload DTOs directly, so those details are left unspecified and RDRA
-facts are preserved with `x-rdra-ish-*` extensions.
+**Removed kinds** fail (exit 2) with the replacement: `plantuml-er` (use `mermaid-er`), and
+`typescript-states` / `type-script-states` (use `codegen <INPUTS> --lang ts -o <FILE>.ts`).
 
-For DBML export, each `entity` becomes a table with its Enum types (one per inline
-Enum column, plus one per `variation` shared by every column typed by it), indexes, and
-foreign-key references. Every `relate` key prints as a `Ref`: a `1:1` key as `-` on a
-`[unique]` column, a composite key as `Ref: Stock.(bin_site, bin_shelf) >
-Bin.(site, shelf)`. DBML does not have native equivalents for every review annotation, so `@check`,
-`@soft_delete`, `@history`, `@tenant`, and `@derived` are preserved as column notes.
+**Exit codes.** `0` when written; `1` on a load error or a refused `tla`
+([Lifecycle errors](#lifecycle-errors)).
 
-#### SQL export
+| Kind | What it writes |
+|---|---|
+| `openapi` | OpenAPI 3.0 JSON. Only APIs with both `method` and `path` become operations. `{name}` path segments are required `in: path` string parameters. `auth` `bearer` / `api_key` map to standard schemes; another value is an `apiKey` header `X-Auth` with `x-rdra-ish-auth-scheme`. `requires_permission(Api, P)` is `x-rdra-ish-requires-permission`, not `security`. DTOs are `components.schemas`. |
+| `asyncapi` | AsyncAPI 3.1. Each `event` is a channel and message. `raises` and `outbox` are `send` operations; `triggers` are `receive` operations listing the triggered use cases' `transitions`. An external system that raises the event is `x-publisher`; one it triggers, `x-subscriber` (each only when non-empty). Protocols, servers, and payloads are not modeled; other facts are `x-rdra-ish-*`. |
+| `dbml` | One table per `entity`, with its Enum types (one per inline Enum column, one per variation), indexes, unique sets, and a `Ref` per key (`-` for 1:1, the composite form `Ref: Stock.(bin_site, bin_shelf) > Bin.(site, shelf)`). `@check`, `@soft_delete`, `@history`, `@tenant`, and `@derived` are column notes; a table's rules are listed in its `Note` by name, label, and text (a multi-entity rule on its first entity). |
+| `sql` | SQL DDL; see [SQL export](#sql-export). |
+| `json-schema` | Draft 2020-12 definitions under `$defs` as `Dto.<id>` and `Entity.<id>`. Keys, indexes, checks, soft delete, history, tenant, and derived expressions are `x-rdra-ish-*`: `x-rdra-ish-foreign-key`, `x-rdra-ish-fk-target`, `x-rdra-ish-fk-target-column` (composite or `.references` keys), `x-rdra-ish-fk-role` (explicit `.role`), `x-rdra-ish-fk-min-children: 1`, `x-rdra-ish-version`, `x-rdra-ish-maps-to`, `x-rdra-ish-check-constraints`, `x-rdra-ish-derived`. |
+| `mermaid-er` | The text of `diagram --kind er`, without `model=` in the header. |
+| `tla` | A TLA+ module and TLC config of the lifecycle and rules. See [formal-verification.md](./formal-verification.md). |
 
-`export --kind sql` writes one script that creates the logical data model in an empty
-database: `CREATE TABLE` per `entity`, in id order, then the indexes, then (PostgreSQL) the
-foreign keys. Every sample's script loads into SQLite, and into PostgreSQL 16.
+### SQL export
+
+`export --kind sql` writes one script that creates the data model in an empty database:
+`CREATE TABLE` per entity in id order, the indexes, then (PostgreSQL) the foreign keys. Every
+sample's script loads into SQLite and PostgreSQL 16.
 
 | Model | PostgreSQL | SQLite |
 |---|---|---|
@@ -1647,248 +1291,200 @@ foreign keys. Every sample's script loads into SQLite, and into PostgreSQL 16.
 | `DateTime`, `DateTime(tz)` / `DateTime(local)` | `TIMESTAMPTZ` / `TIMESTAMP` | `TEXT` (ISO 8601) |
 | `Date` | `DATE` | `TEXT` (ISO 8601) |
 | `Bool` | `BOOLEAN` | `BOOLEAN` |
-| `Enum(...)` | `CREATE TYPE "<Entity>_<column>" AS ENUM (...)` | `TEXT` with `CHECK ("<col>" IN (...))`, named `<Entity>_<column>_values` |
-| variation `V` | `CREATE TYPE "V" AS ENUM (...)` | the same as an `Enum` |
+| `Enum(...)` | `CREATE TYPE "<Entity>_<column>" AS ENUM (...)` | `TEXT` with `CHECK ("<col>" IN (...))` named `<Entity>_<column>_values` |
+| variation `V` | `CREATE TYPE "V" AS ENUM (...)` | as an `Enum` |
 
-- **Keys.** `@pk` / `@pk(a, b)` is the `PRIMARY KEY`. `@unique`, `@unique(a, b)`, a junction
-  pair, and a 1:1 key are `UNIQUE`. Each `relate` key is a `FOREIGN KEY` named
-  `<Child>_<columns>_fkey` with its `.on_delete` / `.on_update` action, referring to the
-  parent's primary key or to the columns `.references(...)` names. PostgreSQL adds it with
-  `ALTER TABLE` after every table exists; SQLite declares it in the table.
-- **Soft delete.** On an entity with a `@soft_delete` column, a declared unique set holds
-  among live rows: `CREATE UNIQUE INDEX "<Entity>_<columns>_live_key" ... WHERE` the marker
-  is null (or `FALSE` for a `Bool` marker), so a deleted row frees its value. The primary
-  key, a key a `relate` makes unique, and a set a foreign key refers to stay a full
+- **Keys.** `@pk` / `@pk(a, b)` is the `PRIMARY KEY`. `@unique`, `@unique(a, b)`, a junction pair,
+  and a 1:1 key are `UNIQUE`. Each `relate` key is a `FOREIGN KEY` `<Child>_<columns>_fkey` with
+  its `.on_delete` / `.on_update`, referring to the primary key or the `.references(...)`
+  columns; PostgreSQL adds it by `ALTER TABLE`, SQLite in the table.
+- **Soft delete.** With a `@soft_delete` column, a declared unique set holds among live rows:
+  `CREATE UNIQUE INDEX "<Entity>_<columns>_live_key" ... WHERE` the marker is null (or `FALSE`).
+  The primary key, a key a `relate` makes unique, and a set a foreign key refers to stay full
   `UNIQUE`.
-- **Names.** A table takes the entity's `table` name when it has one, else the entity id,
-  and so do its key, index, and Enum-check names. Rule constraints keep the entity id, the
-  name `check` reports.
+- **Names.** A table takes the entity's `table` name, else its id, and so do its key, index,
+  and Enum-check names. Rule constraints keep the entity id.
 - **Computed values.** `@default(now())` is `DEFAULT CURRENT_TIMESTAMP` (`CURRENT_DATE` on a
-  `Date`). `@generated(identity)` is `GENERATED BY DEFAULT AS IDENTITY` in PostgreSQL; in
-  SQLite a single `INTEGER` primary key is the rowid, which SQLite numbers.
-  `@version` is `DEFAULT 1` with a comment that each update checks it and adds 1.
-  `@generated(uuid)` and `@default(uuid())` are `DEFAULT gen_random_uuid()::text` in
-  PostgreSQL. What a dialect cannot compute (a UUID in SQLite, a ULID, `@on_update(now())`)
-  stays as a comment on the column, for a trigger or the application.
-- **Columns.** A column without `@null` is `NOT NULL`. `@default(v)` is `DEFAULT v`. A
-  `@derived` column is `GENERATED ALWAYS AS (...)` (`STORED` in PostgreSQL, `VIRTUAL` in
-  SQLite); a logical one keeps SQL's three-valued logic, as its value does in the model.
-  `@label`, `@soft_delete`, `@history`, `@tenant`, and `@derived` stay as a comment on the
-  column.
+  `Date`). `@generated(identity)` is `GENERATED BY DEFAULT AS IDENTITY` (SQLite: a single
+  `INTEGER` primary key is the rowid). `@version` is `DEFAULT 1` with a comment.
+  `@generated(uuid)` and `@default(uuid())` are `DEFAULT gen_random_uuid()::text` in PostgreSQL.
+  What a dialect cannot compute (a UUID in SQLite, a ULID, `@on_update(now())`) is a comment.
+- **Columns.** No `@null` is `NOT NULL`. `@default(v)` is `DEFAULT v`. `@derived` is `GENERATED
+  ALWAYS AS (...)` (`STORED` in PostgreSQL, `VIRTUAL` in SQLite). `@label`, `@soft_delete`,
+  `@history`, `@tenant`, and `@derived` are comments.
 - **Indexes.** `@index` / `@index(a, b)` is `CREATE INDEX "<Entity>_<columns>_idx"`. Each
-  foreign key gets one too, unless the primary key, a unique set, or an `@index` already
-  starts with its columns.
-- **Rules.** Each entity-local rule is a `CHECK` constraint named as `check` and `verify`
-  name it: `@check` (`Check_<E>_<column>_<n>`), `forbidden(E, ...)` (`Forbidden_<E>_<n>`),
-  `invariant(E).when(...).then(...)` (`Inv_<E>_<n>`), `required` (`Required_<E>_<n>`), and
-  `exclusive` (`Exclusive_<E>_<n>`, at most one condition holds). A rule reads a null
-  operand as false, except `!=` (see [Null](./language-reference.md#null)), while SQL reads
-  it as unknown, which a `CHECK` accepts; so each comparison on a nullable column spells out
-  its null case: `qty: Int @null @check(qty >= 1)` is
-  `CHECK (("qty" IS NOT NULL AND "qty" >= 1))`, and a row with a null `qty` is rejected.
-  `col in (a, b)` is `"col" IN ('a', 'b')` and `not in` is `NOT IN`, with the same null
-  case. A rule's `.label("...")` is a comment on the line above its `CHECK`.
-- **Reads.** The script ends with the model's reads as comments. First the indexes the
-  lookups want and no key or `@index` gives, as `-- CREATE INDEX ... ; -- <readers>`: the
-  `reads` [query shapes](./language-reference.md#query-shapes), each use case a timer
-  starts that finds rows by their state, each `.has` / `.none` over an entity of
-  `rows` 1,000,000 or more, and each guard that compares an entity no written row joins. An entity under 10,000 `rows` adds `small table, <n> rows: a
-  scan is cheap` to the line. Then, when `reads` declare shapes, each read as the `SELECT` it runs:
-  the tenant and `.by` columns compared to parameters (`$1` in PostgreSQL, `?1` in SQLite),
-  live rows only on an entity with `@soft_delete`, then `ORDER BY` and the page. A cursor
-  page continues after the last row: `("created_at", "id") < ($2, $3)` for a sort one way,
-  one disjunct per key for a sort that mixes directions. The first page passes a key before
-  every row. `.count()` and `.sum(column)` select `count(*)` and `sum("column")`. A read by an API
-  selects the columns its response DTO fields map, else `*`.
-- **What the schema does not enforce.** A rule over several entities (`MultiForbidden_*`,
-  `MultiInv_*`), a `.has` / `.none` (`Quantifier_*`), a minimum cardinality (`MinCard_*`), a
-  rule with a `.when(Condition)` guard, and a rule that reads `now` have no `CHECK` form. The
-  script ends with a comment that lists each by name, with the reason, its label when it
-  has one, and the rule, as an obligation of the application or a trigger.
-- **Layout.** Comments head the parts of the script: `-- Types` (PostgreSQL), `-- Tables`,
-  and `-- Foreign keys` (PostgreSQL). A variation's label and its values' labels are a
-  comment above its type, `-- PaymentMethod (Payment method): cash = Cash, card`; SQLite,
-  which has no enum type, lists those comments under `-- Value sets`.
-
-
-For JSON Schema export, DTOs and Entities are emitted under `$defs` as
-`Dto.<id>` and `Entity.<id>` so cross-kind ids cannot collide. Standard structural
-shape is represented with JSON Schema keywords; RDRA-specific metadata such as PK,
-FK, indexes, checks, soft delete, history, tenant scope, and derived expressions is
-preserved with `x-rdra-ish-*` extensions.
-
-For Mermaid ER export, the output is intentionally the same text-level
-review artifact as `diagram --kind er`. `plantuml-er` was removed and fails with a
-message that names `mermaid-er`. Use `diagram` when choosing a diagram view during
-interactive review; use `export` when a downstream tool or CI job expects a named
-artifact kind.
-
-`--kind typescript-states` (also `type-script-states`) was removed: it is a usage error
-(exit 2) that writes nothing and names the rewrite, `codegen <INPUTS> --lang ts -o
-<FILE>.ts` (see [`codegen`](#codegen)).
-
-The command writes the artifact to the output path and prints `wrote <path>`.
+  foreign key gets one unless the primary key, a unique set, or an `@index` starts with its
+  columns.
+- **Rules.** Each entity-local rule is a `CHECK` named as `check` names it: `@check`
+  (`Check_<E>_<column>_<n>`), `forbidden` (`Forbidden_<E>_<n>`), `invariant ... .then`
+  (`Inv_<E>_<n>`), `required` (`Required_<E>_<n>`), `exclusive` (`Exclusive_<E>_<n>`). SQL reads
+  a null operand as unknown, which a `CHECK` accepts, so each comparison on a nullable column
+  spells out the [null](./language-reference.md#null) case: `qty: Int @null @check(qty >= 1)`
+  is `CHECK (("qty" IS NOT NULL AND "qty" >= 1))`. `in` / `not in` are `IN` / `NOT IN` with the
+  same null case. A rule's `.label` is a comment above its `CHECK`.
+- **Reads.** The script ends with comments: first the indexes lookups want and nothing gives,
+  as `-- CREATE INDEX ... ; -- <readers>` (the `reads` [query shapes](./language-reference.md#query-shapes),
+  a timer-started use case that finds rows by state, a `.has` / `.none` over 1,000,000 or more
+  `rows`, a guard over an unjoined entity), with `small table, <n> rows: a scan is cheap` under
+  10,000 `rows`. Then each declared read as its `SELECT`: tenant and `.by` columns compared to
+  parameters (`$1` / `?1`), live rows only under `@soft_delete`, `ORDER BY`, and the page. A
+  cursor page continues after the last row (`("created_at", "id") < ($2, $3)`; one disjunct per
+  key for mixed directions). `.count()` and `.sum(col)` select `count(*)` and `sum("col")`. A
+  read by an API selects the columns its response DTO maps, else `*`.
+- **Not enforced.** A multi-entity rule (`MultiForbidden_*`, `MultiInv_*`), a `.has` / `.none`
+  (`Quantifier_*`), a minimum cardinality (`MinCard_*`), a rule with `.when(Condition)`, and a
+  rule that reads `now` have no `CHECK`. A closing comment lists each by name, reason, label,
+  and rule, as an obligation of the application or a trigger.
+- **Layout.** `-- Types` (PostgreSQL), `-- Tables`, `-- Foreign keys` (PostgreSQL). A variation's
+  label and value labels are a comment above its type, `-- PaymentMethod (Payment method): cash =
+  Cash, card`; SQLite lists them under `-- Value sets`.
 
 ---
 
 ## `verify`
 
-Check every invariant, `after` assertion, and property of a model, each on its own cone,
-with the native checker. No JVM starts. `--with-tlc` runs TLC beside it as a second
-opinion. See [formal-verification.md](./formal-verification.md).
+Check every invariant, `after` assertion, and temporal property, each on its own cone, with
+the native checker. No JVM starts unless `--with-tlc` is given. See
+[formal-verification.md](./formal-verification.md).
 
 ```
-rdra-ish verify <INPUTS...> [--with-tlc] [-o <OUT>] [--instance-count <N>] [--instances <ENTITY=N>]... [--int-range-max <N>] [--max-patterns <N>] [--max-states <N>] [--temporal-budget <SECS>] [--deny-undecided] [--prove [--deny-unproved] [--z3 <PATH>]] [--tlc-jar <PATH>] [--memory <SIZE>] [--symmetry <MODE>] [--buc <ID>]... [--entity <ID>]... [--without-usecase <ID>]... [--without-buc <ID>]... [--actor <ID>]...
+rdra-ish verify <INPUTS...> [--with-tlc [--tlc-jar <PATH>]] [-o <DIR>]
+                [--instance-count <N>] [--instances <ENTITY=N>]... [--int-range-max <N>]
+                [--max-states <N>] [--max-patterns <N>] [--memory <SIZE>] [--symmetry never|always]
+                [--temporal-budget <SECS>] [--deny-undecided]
+                [--prove [--deny-unproved] [--z3 <PATH>]]
+                [--buc <ID>]... [--entity <ID>]... [--without-usecase <ID>]...
+                [--without-buc <ID>]... [--actor <ID>]...
 ```
 
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--with-tlc` | flag | off | Also run TLC on every cone and property run the native checker makes, on each `stable`, `unchanged`, and `precedes` on its cone, and on the state models (deadlocks and witnesses) of each entity cone BFS explored to the end, up to 100,000 states, and fail the run (exit 1) when the two decide a check differently. `can_reach` has no TLC run. Requires `tlc` or `tlc2` on `PATH`, or `tla2tools.jar` named by `--tlc-jar` (see [Getting TLC](#getting-tlc)); without one the run exits 1. |
-| `--backend` | `tlc` | none | Deprecated. `--backend tlc` is a spelling of `--with-tlc` that prints `warning: --backend tlc is deprecated: ...` on stderr. The next major release removes it. |
-| `-o`, `--out` | path | none; under `--with-tlc` a temp dir, deleted when TLC passes every check and kept when it does not | Directory for the specs, for a TLC run by hand: one `Cone_<check>.tla` / `.cfg` pair per cone, named after the first invariant or after-assert that reads it, one `Cone_<Property>.tla` / `.cfg` pair per `always`, `eventually`, and `leads_to` with a `Cone_<Property>_WF` pair beside it for an `eventually` or `leads_to` and a `Cone_<Property>_Full` pair for a reduced cone, under `--with-tlc` a `Cone_<Property>` pair per `stable`, `unchanged`, and `precedes` and the `StateModel_<E>` specs of each entity cone TLC checks, `cones.txt` listing each module and the checks it answers, and, when the model declares temporal properties, the whole-model `RdraSpec.tla` / `.cfg` with every `PROPERTY` and a `RdraSpec_<Property>` pair for each property its cone leaves undecided. A path ending in `.tla` writes into its directory and names the whole-model module after its stem, and each whole-model property module `<stem>_<Property>`. With `-o`, stdout says `wrote <n> specs and <dir>/cones.txt`. The native checker reads none of these files. |
-| `--instance-count` | unsigned integer | `2` | Multi-instance `InstanceCount` (`1..=255`; `1` warns). |
-| `--instances` | `<entity>=<n>` (repeatable) | `instances` under `[verify]` in `rdra.toml` | One entity's slots in place of `--instance-count`, as `Loan=4` (see [Per-entity instance counts](#per-entity-instance-counts)). |
-| `--int-range-max` | unsigned integer | `5` | Upper bound for `IntRange == 0..N` (`1..=255`; `0` rejected). |
-| `--max-states` | unsigned integer | none | The state cap of every BFS run `verify` makes: each entity, safety, and property cone (`_Full` and `_WF` included) and the whole-model run. Without it BFS has no state cap: `--memory` stops a cone, and `--memory` and `--temporal-budget` stop the whole-model run, as `not decided`. The `bounds:` line says `no state cap per BFS cone, memory <limit>`, or the cap given. Under `--with-tlc` TLC's whole-model run needs a bound, and keeps 2,097,152 states unless `--max-states` is given; TLC's cone runs have no state cap. |
-| `--max-patterns` | unsigned integer | `256` | The cap on each entity's distinct patterns in a run that builds an entity view, as `check` and `states` do. No run of `verify` builds one, so the flag stops none of them; it is accepted for scripts that pass it. |
-| `--temporal-budget` | unsigned integer | `300` | Seconds a temporal property's whole-model run gets when its cone does not decide it. Past them, or past `--max-states` states or `--memory`, the run stops and, unless it had already found a counterexample, the property is `not decided`, which warns and does not fail the run. Under `--with-tlc` TLC's whole-model run gets the same budget, and its state count is read from its progress lines (about one a minute). |
-| `--tlc-jar` | path | `RDRA_TLC_JAR`, else none | With `--with-tlc`: run TLC as `java -cp <PATH> tlc2.TLC` from `tla2tools.jar` instead of a `tlc` / `tlc2` launcher on `PATH`. Needs `java` on `PATH`. Without `--with-tlc` it prints a warning and starts no TLC. |
-| `--memory` | size | `memory` under `[verify]` in `rdra.toml`, else `16GiB` | What the run may hold in memory, such as `16GiB` or `512MiB` (`G` and `GB` also mean GiB). BFS takes all of it; under `--with-tlc` BFS takes half and the TLC cone runs going at once the other half, at least `64MiB`. A BFS cone past its share stops and leaves its findings undecided. See [Memory limit](#memory-limit). |
-| `--symmetry` | `never`, `always` | `symmetry` under `[verify]` in `rdra.toml`, else `never` | Experimental. Explore a safety cone (on a reduced one, its T rows), the unreduced cone of an `always` property, and the cone of an `eventually` or `leads_to`, up to instance symmetry: one stored state per class of states that differ only in which slots hold which rows. `always` does it on every such cone that no plain run decides; `never` changes nothing. A cone run up to symmetry prints `(about <m> states)`. See [Instance symmetry](#instance-symmetry). |
-| `--deny-undecided` | flag | off | Fail the run (exit 1) when it leaves a finding undecided: a temporal property past `--temporal-budget`, or a check, state, deadlock, or use case a BFS cone left at its state cap or the memory limit. Findings a `--buc` or `--entity` scope leaves open do not count. Without it, `verify` prints `warning: <what> undecided; the OK line holds only for what was decided (--deny-undecided fails the run)` on stderr and passes. |
-| `--prove` | flag | off | Experimental. Beside the cones, try to prove each selected state rule (`forbidden`, `invariant`, `required`, `@check`, quantifier rules, `Unique_*`, `MinCard_*`) for any number of rows and any non-negative Int value (`now` has no top) with z3, and print one `proved:`, `unproved:`, or `out of scope:` line per rule. The `OK:` line gains `; <n> of <m> rules proved for any number of rows and any Int value`. A rule the SQL export's schema does not enforce is marked `[not enforced by the SQL schema: <why>]`, and a `proof: the SQL schema leaves ...` line counts those rules. An invariant cone BFS stopped at the memory limit is `ok` when z3 proves every rule in it (see [Memory limit](#memory-limit)). Each z3 check has a fixed budget of z3 resource units, not of time, so the verdicts do not depend on the machine or its load. Needs z3 (see [Getting z3](#getting-z3)). See [Proofs for any number of rows](./formal-verification.md#proofs-for-any-number-of-rows). |
-| `--deny-unproved` | flag | off | With `--prove`: fail the run (exit 1) when a rule is unproved. A rule out of scope does not count. |
-| `--z3` | path | `RDRA_Z3`, else `z3` on `PATH` | With `--prove`: the z3 binary to run. |
-| `--buc <id>` | string (repeatable) | — (whole model) | Keep only the use cases reachable from the BUC. See [Partial runs](#partial-runs). |
-| `--entity <id>` | string (repeatable) | — (all entities) | Check only the entity's view and the invariants and after-asserts that read it, each on its selected cone. See [Partial runs](#partial-runs). |
-| `--without-usecase <id>` | string (repeatable) | — | Assume the use case never runs and leave it out. See [Partial runs](#partial-runs). |
-| `--without-buc <id>` | string (repeatable) | — | Assume the use cases the BUC reaches, and no other BUC does, never run. See [Partial runs](#partial-runs). |
-| `--actor <id>` | string (repeatable) | — (every actor) | Keep only the use cases the actor performs and those no actor performs. See [Partial runs](#partial-runs). |
+| Flag | Default | Meaning |
+|---|---|---|
+| `--with-tlc` | off | Also run TLC on every cone and property run, on each `stable`, `unchanged`, and `precedes` cone, and on the state models of each entity cone BFS finished, up to 100,000 states. Fails (exit 1) when the engines decide a check differently. `can_reach` has no TLC run. Needs TLC ([Getting TLC](#getting-tlc)). |
+| `--backend tlc` | none | Deprecated spelling of `--with-tlc`; prints `warning: --backend tlc is deprecated: ...`. The next major release removes it. |
+| `-o`, `--out <DIR>` | none; a temp dir under `--with-tlc` | Write the specs for a TLC run by hand; see [Specs](#with-tlc). The native checker reads none of them. |
+| `--instance-count <N>` | `2` | Slots per entity, `1..=255`; `1` warns. |
+| `--instances <ENTITY=N>` | `instances` under `[verify]` | One entity's slots; repeatable. See [Per-entity instance counts](#per-entity-instance-counts). |
+| `--int-range-max <N>` | `5` | `IntRange == 0..N`, `1..=255`. |
+| `--max-states <N>` | none | State cap of every BFS run (entity, safety, and property cones, `_Full` and `_WF` included, and the whole-model run). A run past it is `not decided`. Under `--with-tlc` TLC's whole-model run keeps 2,097,152 states without it; its cone runs have no cap. |
+| `--max-patterns <N>` | `256` | Accepted for scripts; no `verify` run builds an entity view, so it stops nothing. |
+| `--memory <SIZE>` | `memory` under `[verify]`, else `16GiB` | BFS takes all of it; under `--with-tlc`, half, and the TLC runs the rest (at least `64MiB`). See [Memory limit](#memory-limit). |
+| `--symmetry` | `symmetry` under `[verify]`, else `never` | Experimental. `always` explores cones up to instance symmetry; see [Instance symmetry](#instance-symmetry). |
+| `--temporal-budget <SECS>` | `300` | Seconds a property's whole-model run gets when its cone does not decide it. Past them (or `--max-states`, or `--memory`) the property is `not decided` unless a counterexample was found. Under `--with-tlc`, TLC's whole-model run gets the same. |
+| `--deny-undecided` | off | Exit 1 when a finding is left undecided: a property past the budget, or a check, state, deadlock, or use case a cone left at a cap. What `--buc` or `--entity` leaves open does not count. |
+| `--prove` | off | Experimental. Also try to prove each selected state rule (`forbidden`, `invariant`, `required`, `@check`, quantifiers, `Unique_*`, `MinCard_*`) for any number of rows and any non-negative Int (`now` has no top) with z3. See [Proofs](#proofs). Needs z3 ([Getting z3](#getting-z3)). |
+| `--deny-unproved` | off | With `--prove`: exit 1 when a rule is unproved. A rule out of scope does not count. |
+| `--z3 <PATH>` | `RDRA_Z3`, else `z3` on `PATH` | The z3 binary for `--prove`. |
+| `--tlc-jar <PATH>` | `RDRA_TLC_JAR` | With `--with-tlc`: run `java -cp <PATH> tlc2.TLC` from `tla2tools.jar` instead of a `tlc` / `tlc2` launcher. Needs `java`. Without `--with-tlc` it warns and starts nothing. |
+| `--buc`, `--entity`, `--without-usecase`, `--without-buc`, `--actor` `<ID>` | whole model | See [Partial runs](#partial-runs). A scoped run checks no property. |
 
-A `holds` body applied to a use case is a guard of the step relation, and of the spec TLC
-checks under `--with-tlc`. `verify` prints no notice for conditions.
+**What runs.** Warnings and errors of the transition system print first; a build error stops
+`verify` before any cone runs.
 
-Warnings and errors of the lifecycle transition system are printed on stderr, and an
-error stops `verify` before any cone runs. Each invariant and `after(..).assert` is checked
-on its own cone of influence, a restriction of the system whose reachable states are the
-whole model's projected onto it (a superset where an action of the cone creates an entity
-the cone does not read, since the cone does not bound that entity), with the cones explored
-side by side. A `.lemma()` rule gets no cone: `check` checks it, and `--prove` uses it once
-it proves it. Each `always`, `eventually`, and `leads_to` is checked on a cone of its own,
-of what it reads and of the use cases its `.fair` lists, in one run (`Cone_<P>`) or two
-(`Cone_<P>_WF` adds `WF_vars(Next)`), and only when neither decides it on the whole model
-(`RdraSpec_<P>`), after the cone runs, under `--temporal-budget`; see
-[formal-verification.md](./formal-verification.md#temporal-properties-on-a-cone) for what
-decides. The labels name the runs and the modules `-o` writes, whichever engine runs them.
-`stable`, `unchanged`, and `precedes` are decided by BFS on their cones, with no run of
-their own: `verify` prints `order and stability properties: <n>, each decided by BFS on its
-cone` and a `property <P> (BFS on its cone): ok|violated|not decided: ...` line per property
-(see [formal-verification.md](./formal-verification.md#order-and-stability-properties)).
-Under `--with-tlc` TLC checks each one on the same cone, module `Cone_<P>`, and the state
-models of the entity cones, one `tlc: StateModel_<E> ...` line per cone (see
-[formal-verification.md](./formal-verification.md#state-models-with-tlc-alone)).
-`can_reach` is decided by BFS on its cone too, with no TLC run: `verify` prints
-`can_reach properties: <n>, decided natively by BFS on each one's cone (TLC cannot check AG
-EF)` and `can_reach (BFS on <k> cones): <n> checked, <v> violated`, with `, <u> not decided`
-when a cone stopped at a cap or the memory limit; each such property is listed under
-`not checked:` (see
-[formal-verification.md](./formal-verification.md#recoverability-on-a-cone)).
-Stdout names the bounds, the cone count, and each run's result. A whole-model run the budget
-stops before it decides prints `not decided` and is listed under `not checked:`.
+- Each invariant and `after(..).assert` is checked on its own **cone of influence**, a
+  restriction of the system whose reachable states are the whole model's projected onto it (a
+  superset where a cone action creates an entity the cone does not read). Cones run side by
+  side. A `.lemma()` rule gets no cone: `check` checks it, and `--prove` uses it once proved.
+- Each `always`, `eventually`, and `leads_to` is checked on a cone of what it reads and of the
+  use cases its `.fair` lists: one run (`Cone_<P>`) or two (`Cone_<P>_WF` adds `WF_vars(Next)`).
+  When neither decides it, the whole model decides it (`RdraSpec_<P>`) after the cones, under
+  `--temporal-budget`. See [Temporal properties on a cone](./formal-verification.md#temporal-properties-on-a-cone).
+- `stable`, `unchanged`, and `precedes` are decided by BFS on their cones: `order and stability
+  properties: <n>, each decided by BFS on its cone`, then `property <P> (BFS on its cone):
+  ok|violated|not decided: ...` per property
+  ([Order and stability properties](./formal-verification.md#order-and-stability-properties)).
+- `can_reach` is decided by BFS on its cone, with no TLC run: `can_reach properties: <n>,
+  decided natively by BFS on each one's cone (TLC cannot check AG EF)`, then `can_reach (BFS on
+  <k> cones): <n> checked, <v> violated` (and `, <u> not decided`)
+  ([Recoverability on a cone](./formal-verification.md#recoverability-on-a-cone)).
+- Each **entity cone** is explored with BFS at the same bounds, before the cone lines. It
+  reports what `check` reports for state models: a state with no witness and a deadlock are
+  errors that fail the run even when every check holds; a deadlock at the bound and a use case
+  that never runs are warnings. It also warns `Vacuous_<name>` for a rule, assertion, or
+  property that holds vacuously ([Rules that hold vacuously](./state-derivation.md#rules-that-hold-vacuously)).
+  Then: `state models (BFS on 2 entity cones): 2 state models, 5 states witnessed, 0 deadlocks,
+  0 use cases that never run`.
 
-Every run that reaches its checks prints one `result: ok|not decided|counterexample|tool_error`
-line, the verdict of the whole run: `ok` on stdout when the run exits 0 with nothing
-undecided, otherwise on stderr. `counterexample` means a check is violated or a state-model
-finding of the entity cones, below, fails the run (a deadlock, a state with no witness, a
-`can_reach` error). `not decided` means nothing failed, but a cap, the budget, or
-`--deny-unproved` left something open: the run exits 0, or 1 under `--deny-undecided` or
-`--deny-unproved`, and never prints `ok`. `tool_error` means a native counterexample failed its
-own check, the engines disagree, or a TLC run failed without a model violation: a tool bug
-or a broken run. A run that fails or leaves a finding undecided never prints `result: ok`.
-Under `--with-tlc` a `tlc_result: ok|counterexample|tool_error` line of the same form
-follows it with TLC's verdict, and each TLC run prints its own line prefixed `tlc: `, after
-the native lines.
+A condition's `holds` body applied to a use case is a guard of the step relation and of the
+TLC spec; `verify` prints no notice for conditions.
 
-`verify` also explores each entity's cone with BFS at the same bounds, with no state cap but `--memory` (or `--max-states`), and prints what it finds before the cone lines; the `bounds:` line names
-the cap as `no state cap per BFS cone, memory 16GiB`, or `<N> states per BFS cone` under `--max-states`. It reads off each cone's run whether a rule, an
-`after` assertion, or a property holds there and says nothing, and warns `Vacuous_<name>`
-(see [Rules that hold vacuously](./state-derivation.md#rules-that-hold-vacuously)). A state
-of a state model with no witness there, and a deadlock, print as in `check` and fail the run
-even when every check holds: stderr carries `result: counterexample`, no `OK:` line
-follows, and the exit status is 1. A deadlock at the bound and a use case that never runs print as in
-`check`, as a `warning:` that does not fail the run. A cone that stops at the state cap or the memory limit lists each
-state, each deadlock, and each use case it leaves undecided under `not checked:` on stdout.
-Then one summary line follows on stdout:
-
-```
-state models (BFS on 2 entity cones): 2 state models, 5 states witnessed, 0 deadlocks, 0 use cases that never run
-```
-
-The line counts the distinct entity cones, the columns with a state model, the states with
-a witness, the deadlocks (errors and warnings at the bound), and the `NeverRuns` warnings.
-
-Each violated invariant or `after` assertion of a cone prints once in model terms, through
-the renderer `check` uses, with BFS's shortest trace to it. A check several cones hold is
-reported from the first cone that breaks it. The run fails with `verification failed: <n>
-invariant or after-assert violation(s)`, and with `<n> property violation(s)` for the
-properties:
+**Output.** stdout names the bounds (`bounds: 2 instances per entity, Int 0..5 (TLA+
+InstanceCount=2, IntRange=0..5); no state cap per BFS cone, memory 16GiB; ...`), the cone
+count, and each run's result. A violation prints once in model terms, through `check`'s
+renderer, with BFS's shortest trace, from the first cone that breaks it:
 
 ```
 $ rdra-ish verify samples/formal-verification/cross_order_payment_split.rdra
 ...
 Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: counterexample (31 states)
-error[MultiForbidden_Order_0]: invariant MultiForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order[1](status=cancelled); Payment[1](status=captured)
-  rule: skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:44:1
+error[MultiForbidden_Order_0]: invariant MultiForbidden_Order_0 is violated: ...
+  rule: cross_order_payment_split.rdra:44:1
   counterexample (3 steps):
-    1. Place [Order#1, Payment#1]                            skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:17:1
-         + Order#1 (status=pending)
-         + Payment#1 (status=pending, owner Order=Order#1)
-    2. Pay_1, transaction 1 of Pay [Payment#1]               skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:18:1
-         Payment#1.status: pending -> captured               skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:39:1
-    3. Cancel [Order#1]                                      skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:19:1
-         Order#1.status: pending -> cancelled                skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:38:1
+    ...
 result: counterexample
 Error: verification failed: 1 invariant or after-assert violation(s)
 ```
 
-A violated temporal property prints in model terms the same way, as
-`error[<Property>]: property <Property> is violated: ...`. The head names the instance and
-the step that shows the failure (for `leads_to`, the step after which the trigger holds).
-An `always` counterexample ends at the state that breaks it. An `eventually` or `leads_to`
-counterexample is a lasso: it ends in a loop, whose step back prints as the last numbered
-step followed by `then loops back to step K` (the behavior repeats steps K through the last
-one forever), or in a stop, `then nothing changes forever`. A native counterexample that
-does not replay, does not violate the property, or loops unfairly prints
-`error[LassoFault]: <module> [<P>]: ...; a tool bug, not a finding about the model`, and
-the run fails with `result: tool_error`. An example is in
-[formal-verification.md](./formal-verification.md#what-verify-checks).
+A violated property prints `error[<Property>]: property <Property> is violated: ...`. The head
+names the instance and the step that shows the failure (for `leads_to`, the step after which
+the trigger holds). An `always` counterexample ends at the breaking state. An `eventually` or
+`leads_to` counterexample is a lasso: its last numbered step is followed by `then loops back to
+step K` or `then nothing changes forever`. A native counterexample that does not replay, does
+not violate the property, or loops unfairly prints `error[LassoFault]: <module> [<P>]: ...; a
+tool bug, not a finding about the model` ([What verify checks](./formal-verification.md#what-verify-checks)).
+
+**Result line.** Every run that reaches its checks prints `result:
+ok|not decided|counterexample|tool_error`: `ok` on stdout only when the run exits 0 with
+nothing undecided, otherwise on stderr.
+
+| Result | Meaning | Exit |
+|---|---|---|
+| `ok` | Every check holds and nothing is undecided. | `0` |
+| `not decided` | Nothing failed, but a cap, the budget, or `--deny-unproved` left something open. stderr: `warning: <what> undecided; the OK line holds only for what was decided (--deny-undecided fails the run)`. | `0`; `1` under `--deny-undecided` or `--deny-unproved` |
+| `counterexample` | A check or property is violated, or a state-model finding fails (a deadlock, a state with no witness, a `can_reach` error). Ends `Error: verification failed: <n> invariant or after-assert violation(s)` and/or `<n> property violation(s)`. | `1` |
+| `tool_error` | A native counterexample failed its own check, the engines disagree, or a TLC run failed without a model violation. | `1` |
+
+Usage errors exit 2.
 
 ### With TLC
 
-Under `--with-tlc`, `verify` writes the specs and runs TLC on the modules above while BFS
-runs, then the whole-model module of each property TLC's cones leave undecided. Each cone's
-TLC runs with `-continue`, so every violated check of a cone prints its own counterexample.
-TLC reports one violated check per state or step, the first in the cfg, so a cone run with a
-violation is rerun without the checks it has reported (`<module>_rest<n>.cfg` next to the
-spec) until a rerun reports no new one.
+Under `--with-tlc`, `verify` writes the specs and runs TLC on them while BFS runs, then on
+the whole-model module of each property TLC's cones leave undecided. Each cone run uses
+`-continue`. TLC reports one violated check per state, so a cone run with a violation reruns
+without the checks it reported (`<module>_rest<n>.cfg`) until no new one appears.
 
-`verify` then compares the two engines check by check: each safety cone's verdict and the
-checks its counterexample breaks, and each property's verdict on every run both made and in
-the end. A check one engine leaves `not decided` is no disagreement. A check with two
-verdicts prints `error[EngineDisagreement]: <module> [<checks>]: native <verdict>, TLC
-<verdict>; one engine is wrong (a tool bug, not a finding about the model)`, and neither
-verdict is the result: both lines read `tool_error`, the specs are kept, and the run fails
-with `<n> check(s) the native checker and TLC decide differently (a tool bug)`.
+**Specs** (`-o`, or a temp dir kept when TLC fails or the engines disagree):
 
-TLC's failed runs print after the native findings, each under `tlc: <module> (<path>):`:
-the counterexample in model terms, decoded from TLC's states and replayed through the step
-relation BFS uses (the lowest binding when several give the same state), marked `from TLC`,
-then TLC's own `violated: Error: ... is violated.` line and raw trace. A TLC run that fails
-without a model violation fails the run with `<n> TLC run(s) that failed without a model
-violation`. A run in which TLC does not pass, or the engines disagree, ends with
-`specs: <dir>`; without `-o` it adds `(kept because a check failed)` or `(kept because the
-engines disagree)`. No other run prints a `specs:` line.
+- `Cone_<check>.tla` / `.cfg` per safety cone, named after its first invariant or `after`
+  assertion;
+- `Cone_<Property>` per `always`, `eventually`, and `leads_to`, with `Cone_<Property>_WF` for an
+  `eventually` or `leads_to` and `Cone_<Property>_Full` for a reduced cone;
+- under `--with-tlc`, `Cone_<Property>` per `stable`, `unchanged`, and `precedes`, and the
+  `StateModel_<E>` specs of each entity cone TLC checks;
+- `cones.txt`, listing each module and the checks it answers;
+- with temporal properties, `RdraSpec.tla` / `.cfg` with every `PROPERTY`, and
+  `RdraSpec_<Property>` per property its cone leaves undecided.
+
+A `-o` path ending in `.tla` writes into its directory and names the whole-model module after
+its stem (`<stem>_<Property>` per property). With `-o`, stdout says `wrote <n> specs and
+<dir>/cones.txt`.
+
+**Comparison.** `verify` compares the engines check by check: each safety cone's verdict and
+the checks its counterexample breaks, and each property's verdict on every run both made.
+`not decided` on one side is no disagreement. Two verdicts print `error[EngineDisagreement]:
+<module> [<checks>]: native <verdict>, TLC <verdict>; one engine is wrong (a tool bug, not a
+finding about the model)`; both result lines read `tool_error`, and the run fails with `<n>
+check(s) the native checker and TLC decide differently (a tool bug)`.
+
+**TLC's output** prints after the native lines. Each TLC run prints a `tlc: ` line, and a
+`tlc_result: ok|counterexample|tool_error` line follows `result:`. A failed run prints under
+`tlc: <module> (<path>):` the counterexample decoded and replayed through BFS's step relation
+(the lowest binding when several give the same state), marked `from TLC`, then TLC's
+`violated: ...` line and raw trace. A TLC step that matches no move prints `error: TLC step <n>
+(label <action>) matches no move of the cone; BFS and TLC disagree (a tool bug). Raw TLC trace
+follows.` TLC's lasso ends `State N: Stuttering` or `Back to state K: <action>`. A TLC run that
+fails without a model violation fails the run with `<n> TLC run(s) that failed without a model
+violation`. When TLC does not pass or the engines disagree, the run ends `specs: <dir>`, with
+`(kept because a check failed)` or `(kept because the engines disagree)` for a temp dir.
 
 ```
 $ rdra-ish verify samples/formal-verification/cross_order_payment_split.rdra --with-tlc
@@ -1898,13 +1494,11 @@ tlc: StateModel_Order (31 states): 1 deadlock and 3 witness checks; found none
 tlc: StateModel_Payment (31 states): 1 deadlock and 2 witness checks; found none
 tlc: Cone_MultiForbidden_Order_0 (/tmp/rdra-ish-tlc-4242/Cone_MultiForbidden_Order_0.tla):
 error[MultiForbidden_Order_0]: invariant MultiForbidden_Order_0 is violated: ...
-  rule: skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:44:1
   counterexample (3 steps, from TLC):
     ...
 violated: Error: Invariant MultiForbidden_Order_0 is violated.
 counterexample:
   State 1: Initial predicate
-    Order_exists[1] = "absent"
     ...
 result: counterexample
 tlc_result: counterexample
@@ -1912,129 +1506,119 @@ specs: /tmp/rdra-ish-tlc-4242 (kept because a check failed)
 Error: verification failed: 1 invariant or after-assert violation(s)
 ```
 
-If a TLC step matches no move of the cone, `verify` prints `error: TLC step <n> (label
-<action>) matches no move of the cone; BFS and TLC disagree (a tool bug). Raw TLC trace
-follows.` in place of the model-term block. TLC's lasso ends with `State N: Stuttering` or
-`Back to state K: <action>`, and `verify` replays it the same way.
-
-| Environment variable | Effect |
-|---|---|
-| `RDRA_TLC_HEAP` | With `--with-tlc`: heap of every TLC JVM, such as `4g`. Without it a run's heap follows its module: 512 MiB per MiB of module text in whole GiB, at least `1g` for a cone and `2g` for a whole-model run, at most what the [memory limit](#memory-limit) gives TLC, and twice that once after the run runs out of memory. The runs queue so that their heaps fit the limit. |
-| `RDRA_TLC_JAR` | With `--with-tlc`: path to `tla2tools.jar`, used as `--tlc-jar` when the flag is absent. |
-| `RDRA_Z3` | Path to the z3 binary, used as `--z3` when the flag is absent. |
-| `RDRA_JOBS` | How many cones `check`, `states`, and `verify` explore at once by BFS, how many threads compute the moves of one large cone, and how many z3 processes `verify --prove` starts. It does not limit the TLC runs, which `verify --with-tlc` starts beside the BFS. Without it, cones side by side and z3 processes are the machine's cores, at most 8, and the threads that compute one cone's moves are a third of the cores, at least 4 and at most 12 (never more than the cores). Each cone holds its reached states, so a lower number uses less memory; `1` explores them one after another on one thread. The result does not depend on it. |
-| `JAVA_TOOL_OPTIONS` | Appended after the options `verify --with-tlc` sets (`-Xmx`, `-Djava.io.tmpdir`, and `-XX:TieredStopAtLevel=1` on a state-model run of at most 10,000 states by BFS), so a value here wins. `verify` adds `-XX:TieredStopAtLevel=1` only after TLC started once with it, so a JVM that does not take it runs without it. |
-
-A TLC run that runs out of memory runs once more at twice its heap when the memory limit
-holds that; when it does not, or the rerun runs out too, the run is a `tool_error` whose
-message names both variables.
+TLC's heap and the memory it shares are under [Memory limit](#memory-limit). A run that runs
+out of memory twice, or cannot rerun, is a `tool_error` whose message names `RDRA_TLC_HEAP`
+and `JAVA_TOOL_OPTIONS`.
 
 #### Getting TLC
 
-Only `--with-tlc` needs TLC. `verify` looks for it in this order: `--tlc-jar`,
-`RDRA_TLC_JAR`, then `tlc` and `tlc2` on `PATH`. Homebrew has no formula that puts `tlc` on
-`PATH` (the `tla+-toolbox` cask is the GUI). Use one of these:
+`verify` looks for TLC in this order: `--tlc-jar`, `RDRA_TLC_JAR`, then `tlc` and `tlc2` on
+`PATH`. Without one, `--with-tlc` exits 1. Homebrew has no formula that puts `tlc` on `PATH`.
 
-- Nix: run `nix shell nixpkgs#tlaplus`, then run `verify` in that shell. If flakes are not
-  enabled, add `--extra-experimental-features 'nix-command flakes'`. In this repository,
-  `nix develop` provides `tlc`, and the flake's package puts the same `tlc` on the `PATH` of
-  `rdra-ish`: TLC 1.8.0 on JDK 25, with a class-data-sharing archive of TLC's classes,
-  which starts each run sooner. `nixpkgs#tlaplus` is still TLC 1.7.4 on JDK 8.
-- The jar: download `tla2tools.jar` from the
-  [TLA+ releases](https://github.com/tlaplus/tlaplus/releases), install a JDK, and pass
-  `--tlc-jar <path>` or set `RDRA_TLC_JAR=<path>`. TLC 1.8.0 needs JDK 11 or later.
+- **Nix:** `nix shell nixpkgs#tlaplus` (add `--extra-experimental-features 'nix-command flakes'`
+  if flakes are off); this gives TLC 1.7.4 on JDK 8. In this repository `nix develop`, and the
+  flake's package on the `PATH` of `rdra-ish`, give TLC 1.8.0 on JDK 25 with a class-data
+  archive that starts runs sooner.
+- **The jar:** download `tla2tools.jar` from the
+  [TLA+ releases](https://github.com/tlaplus/tlaplus/releases), install a JDK (11 or later for
+  TLC 1.8.0), and pass `--tlc-jar` or set `RDRA_TLC_JAR`.
 
-`verify` reads the output of TLC 1.7.x and of TLC 1.8.0. TLC 1.8.0 is a pre-release that
-upstream rebuilds under the same tag. The flake pins the build of 2026-11-19 (`TLC2 Version
-2026.11.19.180144`) by its hash and downloads it from this repository's release
-[`tlc-1.8.0-bc1b506`](https://github.com/manji-0/rdra-ish-dsl/releases/tag/tlc-1.8.0-bc1b506)
-first, so a rebuild upstream does not break it.
+`verify` reads TLC 1.7.x and 1.8.0. TLC 1.8.0 is a pre-release rebuilt under one tag; the flake
+pins the build of 2026-11-19 (`TLC2 Version 2026.11.19.180144`) and downloads it from this
+repository's release
+[`tlc-1.8.0-bc1b506`](https://github.com/manji-0/rdra-ish-dsl/releases/tag/tlc-1.8.0-bc1b506).
 
-Use TLC 1.8.0, or run TLC 1.7.x on JDK 17 or earlier. On JDK 21 and later, TLC 1.7.x's
-own buffered file reads a trace record back wrongly once the JDK's
-`RandomAccessFile.readLong` goes through it, and a `-continue` run that prints many traces
-stops with `java.lang.ArrayIndexOutOfBoundsException` (`arraycopy: length -N is negative`
-or `Index N out of bounds for length M`) (#314).
-
-- `verify` prints `warning: TLC 2.19 (TLC 1.7.x) runs on Java 21.0.11; …` once, when the
-  first TLC run's banner names TLC 1.7.x (`TLC2 Version 2.x`) and a JVM of 21 or later.
-- A run that stops on that exception is a `tool_error`, even when it had printed
-  violations before it: it never reached the rest of the model. Its report starts with
-  `hint: TLC stopped with an ArrayIndexOutOfBoundsException while it read a trace back, …`
-  and says to use TLC 1.8.0 or to run TLC 1.7.x on JDK 17 or earlier.
+Use TLC 1.8.0, or TLC 1.7.x on JDK 17 or earlier. On JDK 21 and later, TLC 1.7.x reads a trace
+record back wrongly, and a `-continue` run that prints many traces stops with
+`java.lang.ArrayIndexOutOfBoundsException` (#314). `verify` warns once (`warning: TLC 2.19 (TLC
+1.7.x) runs on Java 21.0.11; …`) when the first banner shows that pair. A run that stops on the
+exception is a `tool_error`, even after printing violations; its report starts `hint: TLC
+stopped with an ArrayIndexOutOfBoundsException while it read a trace back, …`.
 
 #### Getting z3
 
 `verify --prove` looks for z3 in this order: `--z3`, `RDRA_Z3`, then `z3` on `PATH`. Without
-one, the run stops with an error. Use one of these:
+one, the run stops with an error.
 
-- Nix: run `nix shell nixpkgs#z3`. In this repository, `nix develop` provides `z3`.
-- A package manager: `apt install z3`, `brew install z3`, or `pip install z3-solver`, which
-  installs a `z3` command.
+- **Nix:** `nix shell nixpkgs#z3`; `nix develop` here provides it.
+- **A package manager:** `apt install z3`, `brew install z3`, or `pip install z3-solver`.
+
+### Proofs
+
+`--prove` prints one `proved:`, `unproved:`, or `out of scope:` line per selected rule. The
+`OK:` line gains `; <n> of <m> rules proved for any number of rows and any Int value`. A rule
+the SQL schema does not enforce is marked `[not enforced by the SQL schema: <why>]`, and a
+`proof: the SQL schema leaves ...` line counts them. Each z3 check has a fixed budget of z3
+resource units, not time, so the verdicts do not depend on the machine or its load. An
+invariant cone stopped at the memory limit is `ok` when z3 proves every rule in it (see
+[Memory limit](#memory-limit)). See
+[Proofs for any number of rows](./formal-verification.md#proofs-for-any-number-of-rows).
 
 ---
 
 ## `list`
 
-List model elements in a human-readable form.
+Print model elements to stdout.
 
 ```
-rdra-ish list <INPUTS...> [--kind <KIND>] [--format <FORMAT>]
+rdra-ish list <INPUTS...> [--kind <KIND>] [--format table|json|csv|markdown]
 ```
 
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `actor` \| `entity` \| `requirement` \| `adr` \| `adr-impact` \| `goal` \| `nfr` \| `quality` \| `constraint` \| `buc` \| `flow` \| `step` \| `usecase` \| `field` \| `system` \| `api` \| `dto` \| `variation` \| `screen` \| `event` \| `timer` \| `condition` \| `rule` \| `permission-callables` \| `actor-permission-audit` \| `business-inputs` \| `buc-roles` \| `transition` \| `surface` | `actor` | The element kind to list. `quality` / `flow` / `step` / `system` / `variation` / `screen` / `event` / `timer` list id+label; `actor` lists id, label, and description; `buc` lists id, label, the business it belongs to, the use cases it contains, and description; `usecase` lists UC preconditions, guards, postconditions, alternatives, errors, description, and the BUCs that contain it, the screens it displays, and the APIs it invokes; `requirement` lists requirement metadata; `adr` lists decision metadata plus impacted targets from `decides`; `adr-impact` lists one row per ADR-target pair; `nfr` and `constraint` list non-functional metadata; `field` lists screen-field metadata plus Entity.column mappings; `api` lists API contract metadata; `dto` lists DTO fields; `condition` lists the `holds` body, the variations and state models it combines (derived from the body, or from `combines` when there is none), and the targets of `applies_to`; `rule` lists the business rules as one table with the columns `kind,label,entities,rule,applies_to,site`: every `forbidden`, `invariant`, `required`, `exclusive`, `invariant(...).when(...).none/has(...)` (`quantifier`) and `after(...).assert(...)` with its `.label("...")` (empty when it has none), plus every condition with its label, `rule` is the formula, `applies_to` is the use case an `after` follows or the use cases and APIs a condition guards, and `site` is `file:line`; `entity` lists each column with type, PK/unique/index/FK flags, FK optionality/actions, check constraints, soft-delete/history/tenant markers, and derived expressions; `permission-callables` lists each permission with callable use case/API ids and API-level `UseCase->Api` paths derived from `requires_permission`; `actor-permission-audit` lists inferred actor-side assignment gaps; `business-inputs` lists inferred actor-entered fields; `surface` prints the published surface (`exposes` and `shares`) as canonical text. |
-| `--format` | `table` \| `json` \| `csv` \| `markdown` | `table` | Output format. `markdown` is a Markdown table with the CSV columns, to paste into a design doc or a PRD. `--kind surface` has the canonical text only, and any other `--format` exits `2`. |
+| Flag | Default | Meaning |
+|---|---|---|
+| `--kind <KIND>` | `actor` | The kind to list; see below. |
+| `--format` | `table` | `table`, `json`, `csv`, or `markdown` (a Markdown table with the CSV columns). `--kind surface` prints its canonical text only; another `--format` exits 2. |
 
-Output is written to stdout.
+An empty `table` result says so (`No APIs found.`), except for `surface`. CSV prints the header
+only, Markdown the header and separator, JSON `[]`. **Exit codes:** `0`; `1` on a load error;
+`2` on a usage error.
 
-`--kind goal` has the columns `id,label,metric,baseline,target,window,description,requirements`.
-`requirements` holds the ids of the requirements that achieve the goal, joined with `|`.
-`--kind requirement` ends with the columns `rationale,goals,bucs,description`; `goals` holds
-the ids of the goals the requirement achieves and `bucs` the BUCs it motivates, each joined
-with `|`.
-`--kind actor` has the columns `id,label,description`, and `--kind buc` has
-`id,label,business,usecases,description`, with the use cases in declaration order.
-`--kind usecase` ends with the columns `description,bucs,screens,apis`.
+| Kind | Columns or content |
+|---|---|
+| `actor` | `id,label,description` |
+| `buc` | `id,label,business,usecases,description` (use cases in declaration order) |
+| `usecase` | Preconditions, guards, postconditions, alternatives, errors, then `description,bucs,screens,apis` |
+| `goal` | `id,label,metric,baseline,target,window,description,requirements` (achieving requirements, `\|`-joined) |
+| `requirement` | Requirement metadata, ending `rationale,goals,bucs,description` (`\|`-joined) |
+| `adr` | Decision metadata and the targets of `decides` |
+| `adr-impact` | One row per pair of an ADR and a target |
+| `nfr`, `constraint` | Non-functional metadata |
+| `quality`, `flow`, `step`, `system`, `variation`, `screen`, `event`, `timer` | Id and label |
+| `field` | Field metadata and `Entity.column` mappings |
+| `api` | API contract metadata: `api_id,api_label,method,path,idempotency,mode,auth_scheme` |
+| `dto` | DTO fields |
+| `entity` | Each column with type, PK / unique / index / FK flags, FK optionality and actions, checks, soft-delete / history / tenant markers, derived expressions |
+| `condition` | The `holds` body, the variations and state models it combines (from the body, or `combines` when there is none), and the `applies_to` targets |
+| `rule` | Every rule and condition: `kind,label,entities,rule,applies_to,site`. `kind` is `forbidden`, `invariant`, `required`, `exclusive`, `quantifier`, `after`, or `condition`; `label` is the `.label` (empty when none); `applies_to` is the use case an `after` follows or what a condition guards; `site` is `file:line` |
+| `permission-callables` | Each permission with the use cases and APIs that require it, and `UseCase->Api` paths |
+| `actor-permission-audit` | Inferred actor-side assignment gaps |
+| `business-inputs` (alias `actor-inputs`) | Inferred actor-entered fields |
+| `buc-roles` | See below |
+| `transition` | See below |
+| `surface` | See [Surface text](#surface-text) |
 
-`--kind buc-roles` is a matrix. The rows are the actors, then the external systems, each
-sorted by id; the columns are `role` (the label), `kind` (`actor` or `extsystem`), and one
-column per BUC, headed by its label. The BUCs run business by business (businesses sorted by
-id, each BUC under the first business it belongs to, BUCs of no business last). A cell says
-how the row takes part in the BUC, and is empty when it does not: `担当` for an actor that
-`performs` the BUC, a use case in it, or a step in it; `イベント送信` for an external system
-that raises an event starting one of the BUC's use cases or the BUC; `イベント受信` for an
-external system that an event raised by one of its use cases reaches. An external system
-that does both has both, joined with `、`. Every `--format` works; `markdown` pastes into a
-PRD or a design document, and the other formats take the BUC labels as column names.
+**`--kind buc-roles`** is a matrix: rows are the actors, then the external systems, each by
+id; columns are `role` (the label), `kind` (`actor` or `extsystem`), and one per BUC, headed by
+its label, ordered business by business (each BUC under its first business; BUCs of no
+business last). A cell is `担当` for an actor that `performs` the BUC, a use case in it, or a
+step in it; `イベント送信` for an external system that raises an event starting the BUC or one
+of its use cases; `イベント受信` for one an event raised by its use cases reaches; both joined
+with `、`; empty otherwise.
 
-`--kind transition` is the state-transition table behind `diagram --kind state`: one row
-per transition the diagram draws, with the columns `entity,column,from,to,usecase,guards,actors,site`.
-The rows run by state model (entity id, then column), then by the Enum order of `from` and
-`to`, then by use case id. `from` and `to` are `label (value)`, such as `予約済
-(scheduled)`; a value with no label shows the value twice. `usecase` is `label (id)`.
-`guards` holds the labels of the conditions whose `holds` body guards the use case, the
-same labels the diagram writes in `[...]`; a condition without a `holds` body guards
-nothing. `actors` holds the labels of the actors that perform the use case: a direct
-`performs`, plus the performers of each BUC that contains it, except that a use case an
-event or a timer starts takes only its direct `performs`. `site` is the `transitions`
-declaration as `file:line`. Several values in a cell are joined with `|`. Every `--format`
-works.
-
-For `--format table`, an empty result is explicit rather than silent, for example
-`No APIs found.`, except for `--kind surface` (see below). CSV still prints only the
-header row, Markdown prints the header row and its separator, and JSON prints `[]`.
+**`--kind transition`** is the table behind `diagram --kind state`, one row per drawn
+transition: `entity,column,from,to,usecase,guards,actors,site`, ordered by state model, then the
+Enum order of `from` and `to`, then use case id. `from` and `to` are `label (value)` (`予約済
+(scheduled)`); `usecase` is `label (id)`; `guards` are the labels of conditions whose body
+guards the use case; `actors` are the labels of its direct performers plus those of each
+containing BUC (an event- or timer-started use case: direct `performs` only); `site` is the
+`transitions` line. Several values are `|`-joined.
 
 ### Surface text
 
-`--kind surface` prints one line per published element, sorted by kind and then id, so
-declaration order cannot change the text. The kinds come in a fixed order: `usecase`,
-`event`, `entity`, `writer`, then `shared`. A model that publishes nothing prints nothing;
-the surface is the one `--format table` result with no empty-result line, because the
-text is the contract and an empty contract is empty. The format is frozen: a consumer's
-lock records this text.
+`--kind surface` prints one line per published element (`exposes` and `shares`; see
+[Publishing to other models](./language-reference.md#publishing-to-other-models)), by kind in
+the order `usecase`, `event`, `entity`, `writer`, `shared`, then by id. A model that publishes
+nothing prints nothing. The format is frozen: a consumer's lock records this text.
 
 ```text
 usecase Login "Log in" caller(actor) requires(CanLogin) raises(EvLoggedIn)
@@ -2043,370 +1627,327 @@ writer SessionView Login: status == active
 writer SessionView (unexposed): status == ended
 ```
 
-- `usecase <Id> "<label>" caller(<kind>)`, then `requires(<permissions>)` and
-  `raises(<events>)` when the use case has them, each list sorted.
-- `event <Id> "<label>"` per exposed event.
-- `entity <Id> "<label>" <append | upsert> { <columns> }`. Each column is
-  `name: Type`, then `@pk`, `@unique`, and `@null` flags; two spaces separate columns.
-- `writer <Entity> <UseCase>: <effect, ...>` per exposed use case that writes the
-  entity, grouped per entity in entity order, with the use cases sorted by id. A `sets`
-  on a column is `col == val`; a `sets` on a proposition is `<prop> == true` or
-  `<prop> == false`; the effects are sorted. The writers that are not exposed collapse
-  into one `writer <Entity> (unexposed)` line, last in the entity's group, that holds
-  the union of their effects, so internal use case names never leak. A writer with no
-  `sets` has no colon.
-- `shared <Id> "<label>" { <columns> }` per `shares` line.
-- A `<label>` is the declared label between double quotes, with a backslash written as
-  `\\`, a double quote as `\"`, a newline as `\n`, and a carriage return as `\r`.
-  Ids, column names, types, and values never need escaping.
+- `usecase <Id> "<label>" caller(<kind>)`, then `requires(<permissions>)` and `raises(<events>)`
+  when present, each sorted.
+- `event <Id> "<label>"`.
+- `entity <Id> "<label>" <append | upsert> { <columns> }`: each column `name: Type` with `@pk`,
+  `@unique`, `@null`, two spaces between columns.
+- `writer <Entity> <UseCase>: <effects>` per exposed use case that writes the entity, use cases
+  by id. A column `sets` is `col == val`; a proposition is `<prop> == true|false`; effects are
+  sorted; a writer with no `sets` has no colon. The unexposed writers merge into one last line,
+  `writer <Entity> (unexposed)`, so internal names never leak.
+- `shared <Id> "<label>" { <columns> }` per `shares`.
+- A `<label>` is quoted, with `\\`, `\"`, `\n`, and `\r` escapes. Ids, column names, types, and
+  values never need escaping.
 
 ---
 
 ## `states`
 
-Derive the reachable state patterns per entity, aggregated across BUCs. See
-[state-derivation.md](./state-derivation.md) for the algorithm.
+Derive each entity's reachable state patterns, across BUCs. See
+[state-derivation.md](./state-derivation.md).
 
 ```
-rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns <N>] [--max-states <N>] [--memory <SIZE>] [--instance-count <N>] [--instances <ENTITY=N>]... [--int-range-max <N>] [--entity <ID>]... [--without-usecase <ID>]... [--without-buc <ID>]... [--actor <ID>]...
+rdra-ish states <INPUTS...> [--format table|csv|json]
+                [--max-patterns <N>] [--max-states <N>] [--memory <SIZE>]
+                [--instance-count <N>] [--instances <ENTITY=N>]... [--int-range-max <N>]
+                [--buc <ID>]... [--entity <ID>]... [--without-usecase <ID>]...
+                [--without-buc <ID>]... [--actor <ID>]...
 ```
 
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--format` | `table` \| `csv` \| `json` | `table` | Output format. For TypeScript state types, use [`codegen --lang ts`](#codegen): `--format typescript` (also `type-script`) was removed, and is a usage error (exit 2) that names that rewrite. |
-| `--buc <id>` | string (repeatable) | — (whole model) | Keep only the use cases reachable from the named BUCs. See [Partial runs](#partial-runs). |
-| `--max-patterns` | unsigned integer | 2^(10 + 8 * (n - 1)) for `n` = `--instance-count`: `1024`, `262144`, ... | Cap on each entity's distinct patterns within the cone of its entity view (each target is explored on the variables it reads; a cone of an invariant or after-assert alone gathers no pattern, so the cap does not stop it). Only entities the target reads are bounded to one instance: a use case that also creates an entity outside the cone (an audit row, say) never runs out of slots for it. When the cap is hit, the result is marked `truncated` and a fail-closed `PatternCapReached` **error** is recorded (exit non-zero for all formats). |
-| `--max-states` | unsigned integer | none | Cap on the joint states of one target cone, printed in the `bounds:` line (`no state cap per cone, memory 4GiB` without it). When the cap is hit, the result is marked `truncated` and a fail-closed `StateCapReached` **error** is recorded (exit non-zero for all formats). The message names what the reached states vary in, so you can see which entity's columns a guard pulled into the cone (see the example in [Exploration by cone of influence](./state-derivation.md#exploration-by-cone-of-influence)). |
-| `--memory` | size | `memory` under `[check]` in `rdra.toml`, else `4GiB` | What the run may hold in memory, such as `4GiB` or `512MiB` (`G` and `GB` also mean GiB). A cone whose states pass it stops, with a fail-closed `MemoryCapReached` error that estimates what finishing needs. See [Memory limit](#memory-limit). |
-| `--instance-count` | unsigned integer | `1` | Instances (slots) per entity, `1..=255`. The `bounds:` line prints the value used. A larger value makes more states per cone and raises the default `--max-patterns` (see it above); a run that outgrows the machine stops at `--memory`. |
-| `--instances` | `<entity>=<n>` (repeatable) | `instances` under `[check]` in `rdra.toml` | One entity's slots in place of `--instance-count`, as `Loan=4`. See [Per-entity instance counts](#per-entity-instance-counts). |
-| `--int-range-max` | unsigned integer | `5` | The Int domain is `0..=N`, `1..=255` (`0` is rejected). |
-| `--entity <id>` | string (repeatable) | — (all entities) | Derive only the named entities' views, and the invariants and after-asserts that read them, each on its own cone. Every output format holds only those views. Exit severity considers the selected targets and the build errors their cones read; a build error outside them is deferred and listed under `not checked:`. See [Partial runs](#partial-runs). |
-| `--without-usecase <id>` | string (repeatable) | — | Assume the use case never runs and leave it out. See [Partial runs](#partial-runs). |
-| `--without-buc <id>` | string (repeatable) | — | Assume the use cases the BUC reaches, and no other BUC does, never run. See [Partial runs](#partial-runs). |
-| `--actor <id>` | string (repeatable) | — (every actor) | Keep only the use cases the actor performs and those no actor performs. See [Partial runs](#partial-runs). |
+| Flag | Default | Meaning |
+|---|---|---|
+| `--format` | `table` | `table`, `csv`, or `json` ([Output formats](./state-derivation.md#output-formats)). `typescript` / `type-script` were removed: exit 2, naming [`codegen --lang ts`](#codegen). |
+| `--max-patterns <N>` | as `check` | As [`check`](#check). Past it, the result is `truncated` and `PatternCapReached` is an error. Only entities the target reads are bounded. |
+| `--max-states <N>` | none | As `check`. Past it, `truncated` and `StateCapReached`, which names what the states vary in ([example](./state-derivation.md#exploration-by-cone-of-influence)). |
+| `--memory <SIZE>` | `memory` under `[check]`, else `4GiB` | As `check`. |
+| `--instance-count <N>` | `1` | As `check`. |
+| `--instances <ENTITY=N>` | `instances` under `[check]` | As `check`. |
+| `--int-range-max <N>` | `5` | As `check`. |
+| `--buc`, `--entity`, `--without-usecase`, `--without-buc`, `--actor` `<ID>` | whole model | See [Partial runs](#partial-runs). Under `--entity`, every format holds only those views. |
 
-Output is written to stdout. In the table, each entity opens with an `axes:` line, the
-value domain of each state axis, and a `labels:` line when an inline `Enum` axis has
-labeled values (`status[pending=受付前|paid=支払済]`). Exit is based on structured severity
-(all formats), not string-scanning `[error]`. stderr starts with a `bounds:` line: the instances per entity,
-the Int range, the state cap per target cone (`no state cap per cone, memory 4GiB` without
-`--max-states`), and that entities a check does not read are unbounded.
-`check` prints the same line, and `verify` prints it on stdout with the TLA+ constants. Diagnostics that name no entity are printed
-on stderr too, and so is the `not checked:` block, which lists each state of a state model,
-each deadlock, and each use case the run does not decide (a capped cone, or `--buc`, which
-leaves use cases out). With `--format json`, each pattern
-carries a `witness`: a shortest path to the first state that holds it, as `start` and
-`steps` objects with sites (see [Output formats](./state-derivation.md#output-formats)).
+The views go to stdout. In the table each entity opens with an `axes:` line, the domain of each
+axis, and a `labels:` line when an inline `Enum` has labelled values
+(`status[pending=受付前|paid=支払済]`). With `--format json`, each pattern carries a `witness`:
+a shortest path to its first state, as `start` and `steps` with sites. stderr carries the
+`bounds:` line, diagnostics that name no entity, and the `not checked:` block.
+
+**Exit codes.** By structured severity, in every format: `1` when an error finding is present
+(the report still prints), else `0`.
 
 ---
 
 ## `codegen`
 
-Print the model's domain types as TypeScript, Rust, or Go code for an agent to finish.
-Most of this subcommand is experimental. One part is covered by
-[compatibility](./compatibility.md#the-typescript-types-of-codegen): the TypeScript types
-that `codegen <INPUTS...> --lang ts [-o <FILE>]` prints for a model that `check` passes.
-These types are `Result`, `InvalidValue`, `InvalidRow`, the scalars, the id types, the value
-sets, the state types with `<Entity>Kind`, and the `<Entity>Row` row types, with the
-signatures of their companion objects and of `parse<Entity>Row`. Everything else may change or be removed in any release: the
-transition functions, the rule checks, the dispatchers, the header and its obligations,
-`--allow-failing`, `--check` and the fingerprint line, and the Rust and Go output. [The design](./design/algebraic-codegen.md)
-describes where `codegen` is going.
+Print the model's domain types and functions as TypeScript, Rust, or Go, for an agent to
+finish.
 
 ```
-rdra-ish codegen <INPUTS...> --lang <LANG> [-o <FILE> | --check <FILE>] [--package <NAME>] [--allow-failing]
-                 [--conformance <FILE> [--conformance-states <N>]] [--seal]
+rdra-ish codegen <INPUTS...> --lang ts|rust|go [-o <FILE> | --check <FILE>] [--package <NAME>]
+                 [--allow-failing] [--conformance <FILE> [--conformance-states <N>]] [--seal]
 rdra-ish codegen <INPUTS...> --format json [-o <FILE>] [--allow-failing]
 rdra-ish codegen <INPUTS...> --code
+rdra-ish codegen <INPUTS...> --probe
 ```
 
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--lang` | `ts` \| `rust` \| `go` | — (required but with `--format json` or `--code`) | Language. `typescript` is an alias of `ts`. |
-| `--format` | `code` \| `json` | `code` | `json` prints the contract as data instead of code: see [The JSON contract](#the-json-contract). Not with `--conformance` or `--check`. |
-| `--code` | flag | off | Write every file `[code.<lang>]` in [`rdra.toml`](#the-code-tables) names (the domain code, the traces, the probe), with paths and sites relative to the directory of `rdra.toml`. Not with the other options. |
-| `--probe` | flag | off | Write only the probe of each `[code.<lang>]` table that names one. Not with the other options. |
-| `-o`, `--out` | path | — (stdout) | Write to this file instead of stdout. |
-| `--package` | string | `domain` | The Go package name (`--lang go` only). Put the file in a directory of its own, as this package, and write the code that finishes it in another package: the fields of a state type are unexported, so only code outside the package is kept from building a state. |
-| `--allow-failing` | flag | off | Generate even when `check` reports errors. The state types then narrow no column, and each error is listed as an obligation the model does not meet. |
-| `--conformance` | path | — (no harness) | On a model `check` passes: also print the conformance port and harness, and write to this file the traces the harness drives a finished service along. |
-| `--conformance-states` | integer | `65536` | The states the BFS behind the traces explores at most. |
-| `--seal` | flag | off | `--lang ts` only (another language is a usage error, exit `2`): every state type gets a property keyed by a `unique symbol` the module does not export, so code outside the module cannot write a state as an object literal (TS2741); only `fromRow` and the transition functions make one. A type assertion (`as`) still gets around it. Experimental, outside the compatibility contract. |
-| `--check` | path | — | Generate again and compare the result with this file instead of printing it. Exit 1 when they differ. Not with `-o`. With `--conformance <TRACES>`, the traces in `TRACES` are compared too, by hash. |
+Most of `codegen` is experimental. [compatibility.md](./compatibility.md#the-typescript-types-of-codegen)
+covers one part: the TypeScript types `--lang ts` prints for a model `check` passes (`Result`,
+`InvalidValue`, `InvalidRow`, the scalars, the id types, the value sets, the state types with
+`<Entity>Kind`, the `<Entity>Row` types, and the signatures of their companion objects and of
+`parse<Entity>Row`). Everything else may change in any release: the functions, rule checks,
+dispatchers, header and obligations, `--allow-failing`, `--check` and the fingerprint, `--seal`,
+and the Rust and Go output. [The design](./design/algebraic-codegen.md) describes where it is
+going, and [Generated code style](./design/algebraic-codegen.md#generated-code-style) the shapes.
 
-The output is one compilation unit: a TypeScript module, a Rust module file, or a Go file.
-It opens with a header and the **obligations**: what `check` and `verify` assume of
-the data and no type enforces, each under a name and with its source site. The name is the
-invariant that checks it where `check` and `verify` check one (`Unique_*`, `MinCard_*`,
-`MaxCard_*`, `Check_*`, marked `[checked]`), and otherwise one built the same way from the
-model's identifiers: `Ref_<Entity>_<columns>` (a key names a present parent),
-`Unique_<Entity>_<columns>` (an `@unique` column or set `check` does not hold),
-`OnDelete_*` / `OnUpdate_*`, `Derived_<Entity>_<column>`, `OneTransaction`,
-`RunMarks_<UseCase>`, `CompleteRows_<Type>`, `RuleChecks`, and `NotMet_<error>` under
-`--allow-failing`. A name does not move when the model gains an unrelated declaration, so
-the [obligation ledger](#check---code) can name one. Then come the scalars a project may replace
-(`Money`, `Decimal`, `Date`, `DateTime`), an id type per entity with a one-column primary
-key, each variation and inline `Enum` as a value set, and each entity and DTO as a record. A
-key column takes its parent's id type, and a `@null` column is `T | null`, `Option<T>`, or
-`*T`.
+| Flag | Default | Meaning |
+|---|---|---|
+| `--lang` | none | `ts` (alias `typescript`), `rust`, or `go`. Required, except with `--format json`, `--code`, or `--probe`. |
+| `--format` | `code` | `json` prints the contract as data; see [The JSON contract](#the-json-contract). Not with `--conformance` or `--check`. |
+| `--code` | off | Write every file the [`[code.<lang>]` tables](#the-code-tables) name (domain code, traces, probe), paths and sites relative to `rdra.toml`. Not with other flags. |
+| `--probe` | off | Write only the probe of each table that names one. Not with other flags. |
+| `-o`, `--out <FILE>` | stdout | Write to this file. |
+| `--package <NAME>` | `domain` | Go only: the package name. Put the file in its own directory and finish it in another package, so only code outside it is kept from building a state. |
+| `--allow-failing` | off | Generate when `check` fails. The state types then narrow no column, there are no functions or rule checks, and each error is an obligation `NotMet_<error>`. |
+| `--conformance <FILE>` | none | On a model `check` passes, also print the conformance port and harness, and write the traces to `FILE`. |
+| `--conformance-states <N>` | `65536` | The most states the BFS behind the traces explores. |
+| `--seal` | off | `--lang ts` only (else exit 2): each state type gets a property keyed by an unexported `unique symbol`, so code outside the module cannot write a state as an object literal (TS2741). A type assertion still gets around it. |
+| `--check <FILE>` | none | Generate again and compare with `FILE` instead of printing. Not with `-o`. With `--conformance <TRACES>`, also compares the traces by hash. |
 
-An entity whose tag column is an inline `Enum` that `transitions` drive is a **state type**:
-one variant per value of its tag column (of the columns `transitions` names, `status`, else
-a `*_status` column, else the first by name), and the entity's type is their union, a
-TypeScript union of `Readonly` types told apart by `kind` (`"Pending"`, one value of
-`<Entity>Kind` per state), a Rust enum of structs with a `status()` method, or a Go
-interface that only the generated variants implement. A variant narrows a nullable column
-only where a rule says so: `invariant(E).when(status == v).then(x == present)` makes `x`
-present in `v`, `forbidden(E, status == v, x == present)` makes it null there, and
-`required(E, x == present)` makes it present in every state. A rule with another atom or a
-`.when(Cond)` narrows nothing. A null column is `null` in TypeScript and left out of the
-Rust and Go structs, with a doc line naming the rule. No variant holds the tag
-column: in TypeScript `kind` tells the states apart, in Rust and Go the variant does, and
-`<Entity>Row` holds the tag. A column named `kind` is `kind_` in the TypeScript states. A variant's fields are
-private in Rust and unexported in Go, and methods of the same name read them (`paid_at()`,
-`PaidAt()`). Only a transition function and `from_row` (`<Entity>FromRow` in Go) make a
-state, from the rows and the inputs the model leaves open, so code outside the generated
-module or package can neither build a state by hand nor change a field a transition keeps.
-In Go, each state (`OrderPaid`) is an interface of its own, implemented by one unexported
-struct, so code outside the package cannot write `OrderPaid{}`: a state variable that holds
-nothing is `nil`. A transition function refuses a `nil` state with an `InvalidArgument` error,
-`<Entity>ToRow(nil)` is the zero row, and `Kind()` returns the state's `<Entity>Kind`
-(`OrderKindPaid`); the tag column is only in `<Entity>Row`, and a column named `kind` is read
-by `Kind_()`. `<Entity>FromRow` refuses a value outside a value set or a `Money`, `Decimal`,
-`Date` or `DateTime` outside its shape, a function refuses such a value as an input, and every
-value set, id and scalar has `Parse<Type>(s)`, which returns an `InvalidValue` error for text
-that is no value. No Go function panics. A Go type switch does not say when it misses a
-state, so each Go state type also has a visitor, `OrderVisitor[R]` with a method per state
-(`Pending(OrderPending) R`), and `MatchOrder(state, v) (R, error)`, which calls the state's
-method: once the model gains a state, a visitor without its method no longer compiles. Records and `<Entity>Row` row types keep public
-fields. An entity whose
-`Enum` only `sets` writes, with no `transitions` (ec-site's `Payment`), is a plain record.
+**Exit codes.** `0` when written or matched; `1` when `check` fails (without
+`--allow-failing`), on model errors, on a name collision (two declarations that generate one
+type name, such as an entity `OrderStatus` beside the inline `Enum` of `Order.status`), or when
+`--check` finds a difference; `2` on a usage error.
 
-Each use case of one transaction gets **transition functions**, read from the transition
-system `check` and `verify` explore. A use case gets one function per combination of the
-source states of its rows (`cancelFromPending`, `cancelFromPaid`), so every argument and
-result type is concrete: a call from another state does not compile. The function takes the
-rows it reads, then an input for each value the model leaves open (a column `sets` makes
-`present`, a variation the actor chooses, a column of a created row that no var holds). A
-logical `@derived` column of a row it writes is computed from what the function writes to
-the columns its expression reads (`bulk: qty >= 3` on the new `qty`), never copied from the
-row it read. A derived column it cannot compute that way (an arithmetic expression, one that
-compares two columns or reads `now`, a nullable operand, or a column whose value is an
-input) is an input too, and the function's doc says why. It
-returns a `<Name>Result` record with the rows it writes or creates, the id of each row it
-deletes, and a value of each event the use case raises. A condition applied to the use case
-is checked first: when it does not hold, the function returns an error `Rejected`: in
-TypeScript `{ ok: false, error: { kind: "Rejected", condition, label, site } }`, in Rust
-`Err(Rejected)`, in Go a `*<UseCase>Error` whose `Kind` is `<UseCase>ErrorRejected` and
-whose detail, which `errors.As` reaches, is a `*Rejected`. A row that breaks a rule the
-verified model keeps (a column the target state keeps null that has a value, a column it
-keeps present that is null) or a parent that is not the child's makes the function return
-its `InvalidArgument` case (`<UseCase>ErrorInvalidArgument` in Go). In TypeScript every
-function returns a `Result<<Name>Result, <UseCase>Error>`, where `<UseCase>Error` is the
-union of `NotEnabled`, `Rejected` and `InvalidArgument` that the use case can return, and
-nothing throws but `assertNever`. A use case split into transactions gets one function per step (`openSettlement1`,
-`openSettlement2`), linked by **run marks**: a step that leaves a row for the next one
-returns a mark, `OpenSettlementClaimMark1 { id }`, and the next step takes it as an argument,
-so it cannot be called without the step before it. A later step reads an earlier step's row
-only through its mark (a child it creates under that row takes the mark's id), and the last
-step returns the use case's events. The header's obligations say what the code that stores
-the marks keeps: one mark of a use case per row, stored in the step's transaction; step 1
-only on a row with none; and a run never abandoned, its step retried when it returns
-`NotEnabled` or `Rejected`. An **event** a use case raises carries the id of each row the
-raise marks (`EvOrderExecuted { certificate_order_id }`), as the event order of `check` and
-`verify` records it. A use case the event triggers takes the event as an argument, after any
-run marks, and checks that the row it runs on is the event's row; a row it reads only through
-the event (`Triggered`) is an argument in its flat row type. Arms that leave one state for
-several are a **choice**: each target is a function of its own (`decideFilingToDecidedFile`),
-guarded by the `.when` conditions of its arm, and the dispatcher takes the chosen state as an
-argument (`decision_to`). A **second lifecycle column** is a branch on its value: the field
-takes the `to` of the arm its `from` matches, and a row in no `from` state is `Rejected` by
-`TransitionFrom`. A condition that ends in `.has(..)` or `.none(..)` ranges over a **list of
-related rows**, an input in the related entity's flat row type (`terminalCertAssignmentRows`):
-the caller passes every present row of that entity, and the function keeps those the key
-links. A use case whose vocabulary is not printed yet ( `now`, `.has` / `.none`, a second lifecycle column, a choice among arms, a
-`.when`, a copy, `links`) gets no function. The header lists it with the reason, and the
-code that finishes the output writes it.
+`codegen` runs `check` first, at its bounds, and prints them in the header. Everything below
+rests on the rules `check` verifies.
 
-Each record and state type gets a **rule check**: `orderPaidRuleViolations(row)` in
-TypeScript, `rule_violations(&self)` in Rust, `RuleViolations()` in Go, which returns the names
-`check` reports (`Forbidden_Order_0`, `Check_Order_qty_0`) of the entity-local rules the row
-breaks, and an empty list when it keeps them all. A state type's union dispatches on its
-tag. A rule its state type already guarantees is left out. A rule over several rows (a
-multi-entity rule, a quantifier, `Unique_*`, `MinCard_*`) is listed as an obligation instead.
+**Header and obligations.** The output is one compilation unit: a TypeScript module, a Rust
+module file, or a Go file (`// Code generated by rdra-ish codegen. DO NOT EDIT.`, as `gofmt`
+prints it). It opens with the **obligations**: what `check` and `verify` assume of the data and
+no type enforces, each named and with its site. The name is the invariant's where `check`
+checks one (`Unique_*`, `MinCard_*`, `MaxCard_*`, `Check_*`, marked `[checked]`), else
+`Ref_<Entity>_<columns>`, `Unique_<Entity>_<columns>`, `OnDelete_*`, `OnUpdate_*`,
+`Derived_<Entity>_<column>`, `OneTransaction`, `RunMarks_<UseCase>`, `CompleteRows_<Type>`,
+`RuleChecks`, or `NotMet_<error>`. A name does not move when the model gains an unrelated
+declaration, so the [obligation ledger](#check---code) can name it. The header also lists the
+use cases with no function and why, and **candidate rules**: a nullable column that every
+reachable row of a state holds present (or null) with no rule saying so, printed as the
+`invariant` or `forbidden` that would narrow the type (a column null everywhere is listed once,
+as one no use case writes).
 
-Each state type also has a **row type**, `<Entity>Row`, with every column as the data layer
-declares it: the flat shape a store or the wire holds, with the same column names (and, in
-Go, `json` tags). `Order.fromRow(row)` / `Order::from_row(row)` / `OrderFromRow(row)` returns
-the state of a row, or `InvalidRow` naming the column whose value its state rules out (in
-TypeScript as a `Result`); `Order.toRow` / `into_row` / `OrderToRow` returns the flat row of
-a state. A state column marked `@null` keeps its declared values as the states: its row
-column is nullable (`Option`, a pointer, `| null`), a row whose state column is null is an
-`InvalidRow`, and the row of a state holds its value. In TypeScript,
-`parseOrderRow(value: unknown)` reads a row from outside: each
-column through its type's parser (`OrderId.parse`, `DateTime.parse`, `Method.parse`), so a
-row of the wrong shape is an `InvalidRow` before it reaches the domain types. Ids and the
-scalars are branded and made only by `parse` (or narrowed by `is`), with no type
-assertion.
+**Types.** The scalars a project may replace (`Money`, `Decimal`, `Date`, `DateTime`), an id
+type per entity with a one-column primary key, each variation and inline `Enum` as a value
+set, and each entity and DTO as a record. A key column takes its parent's id type; a `@null`
+column is `T | null`, `Option<T>`, or `*T`. Ids and scalars are opaque and made only by parsing:
+`OrderId.parse(1)` / `OrderId::from(7)` / `ParseOrderId`, `"12.50".parse::<Money>()`,
+`ParseMoney("12.50")`; text of another shape is `InvalidValue`.
 
-Each function's result also carries, per row it writes, the source that row must still have
-when the write commits: `order_expected` / `OrderExpected`, an `ExpectedSource` that is
-`Absent` for a created row, `In { column, value }` (the tag column and the state the function
-read) for a state type, and `Present` for a record. The header's obligations ask the code to
-run each function in one transaction with its reads and to write each row only where it
-still is what the result expects (`UPDATE .. WHERE id = ? AND status = ?`); a write that
-matches no row rolls the transaction back and is `NotEnabled`.
+**State types.** An entity whose tag column is an inline `Enum` that `transitions` drive is a
+state type: one variant per value of the tag (among the columns `transitions` names: `status`,
+else a `*_status` column, else the first by name). It is a TypeScript union of `Readonly`
+types told apart by `kind` (`"Pending"`, one value of `<Entity>Kind` per state), a Rust enum of
+structs with `kind()`, or a Go interface per state implemented by one unexported struct, with
+`Kind()` returning `<Entity>Kind` (`OrderKindPaid`). No variant holds the tag column; a column
+named `kind` is `kind_` (TypeScript, Rust) or `Kind_()` (Go). A variant narrows a nullable
+column only where a rule says so: `invariant(E).when(status == v).then(x == present)` makes `x`
+present in `v`, `forbidden(E, status == v, x == present)` null there, `required(E, x ==
+present)` present everywhere; a rule with another atom or a `.when(Cond)` narrows nothing.
+Fields are private in Rust and unexported in Go, read by methods (`paid_at()`, `PaidAt()`).
+Only a transition function and `from_row` make a state. In Go a state variable that holds
+nothing is `nil`; a function refuses a `nil` state with `InvalidArgument`, and each state type
+has a visitor (`OrderVisitor[R]`, `MatchOrder(state, v) (R, error)`), so a visitor that lacks a
+new state's method no longer compiles. An entity whose `Enum` only `sets` writes is a plain
+record.
 
-Each use case whose functions take a state type gets a **dispatcher**, `runCancel` /
-`run_cancel` / `RunCancel`, over the entity types: it calls the transition function of the
-rows' states and returns its result as a `CancelOutcome` case, or `NotEnabled` when the use
-case does not run from those states. In Rust every transition function and dispatcher returns
-`Result<_, <UseCase>Error>` (`PayError`), an enum of `NotEnabled`, `Rejected` (when a condition
-applies), and `InvalidArgument` (when the arguments can break what the model keeps), each a type
-that implements `std::error::Error`; the generated Rust never panics. In TypeScript they return
-`Result<PayOutcome, PayError>`, where `PayError` is the union of `{ kind: "NotEnabled", usecase }`
-and the other cases, and nothing throws but `assertNever`.
-In Go they return
-`(<Result>, error)`, the error a `*PayError` whose `Kind` is `PayErrorNotEnabled`,
-`PayErrorRejected` or `PayErrorInvalidArgument` and whose detail (`*NotEnabled`, ...)
-`errors.As` reaches and `errors.Is` matches with `ErrNotEnabled`, `ErrRejected` and
-`ErrInvalidArgument`; the generated Go never panics either. The code that finishes
-the output loads rows, converts them, calls the dispatcher, and stores the rows it returns.
-The Rust ids and scalars are opaque: `OrderId::from(7)`, `"12.50".parse::<Money>()`,
-`"2026-01-01".parse::<Date>()`, which refuse text of another shape with `InvalidValue`
-([Generated code style](design/algebraic-codegen.md#generated-code-style)). In Go,
-`ParseMoney("12.50")` and the like do the same.
+**Row types.** Each state type has `<Entity>Row`, every column as the data layer declares it
+(Go: with `json` tags). `Order.fromRow` / `Order::from_row` / `OrderFromRow` returns the state
+or `InvalidRow` naming the column; `Order.toRow` / `into_row` / `OrderToRow` the row. A state
+column marked `@null` keeps its declared values as states: its row column is nullable, and a
+row whose state column is null is an `InvalidRow`. TypeScript's `parseOrderRow(value:
+unknown)` reads a row from outside, each column through its type's parser.
 
-In Rust, each use case with a function or an entry point also gets a **contract**, the trait
-`<UseCase>UseCase` with its `prepare_*` / `commit_*` methods (and `run_<action>` for an action
-with no printed function), printed with or without `--conformance`. A use case that actors
-perform takes a **caller** first: `by: <UseCase>Caller`, an enum over the capabilities of those
-actors (`EndUserCapability`, made only by `EndUserCapability::issue()`). Code without a
-capability of an actor that performs the use case does not compile; whether the code that
-calls `issue` authenticated the actor is not checked. TypeScript has the same contracts as
-types (`<UseCase>UseCase`, `readonly` function members that return a `Promise`), and the same
-callers: `by: DenyDeviceCaller`, a union of capability types. A capability carries a
-`unique symbol` the module does not export, so an object literal is refused (TS2741) and
-`EndUserCapability.issue()` is the only way to make one without a type assertion; `as
-unknown as EndUserCapability` still forges one.
+**Transition functions.** Each use case gets one function per combination of its rows'
+source states (`cancelFromPending`, `cancelFromPaid`), so a call from another state does not
+compile. It takes the rows it reads, then an input per value the model leaves open (a column
+`sets` makes `present`, a chosen variation value, a created row's column no var holds). A
+logical `@derived` column of a written row is computed from the new values; one it cannot
+compute (arithmetic, two columns, `now`, a nullable operand, an input) is an input, and the
+doc says why. It returns `<Name>Result` with the rows written or created, the id of each
+deleted row, the raised events, and per written row the source it must still have at commit
+(`order_expected`: `Absent`, `In { column, value }`, or `Present`); the obligations ask for one
+transaction per call and a guarded write (`UPDATE .. WHERE id = ? AND status = ?`), a write that
+matches no row rolling back as `NotEnabled`.
 
-In Go, the contract is the interface `<UseCase>UseCase` (`Prepare*` / `Commit*`, and
-`Run<Action>` for an entry point). Its caller, `by <UseCase>Caller`, is an interface with an
-unexported method that only the capabilities of the actors that perform the use case
-implement, so a call with another actor's capability does not compile
-(`RelyingPartyCapability does not implement DenyDeviceCaller (missing method
-isDenyDeviceCaller)`). A capability is a struct with an unexported field, made valid only by
-`Issue<Actor>Capability()`. Go cannot forbid two values: the zero value
-`EndUserCapability{}`, which code outside the package can write, and a nil caller. Both
-compile, `Valid()` reports false for the zero value, and `CallerValid(by)` is false for
-either, so a service refuses a call whose caller is not valid.
+- **Errors.** A condition applied to the use case is checked first; when it fails the
+  function returns `Rejected` (TypeScript `{ kind: "Rejected", condition, label, site }`). A row
+  that breaks what the model keeps, or a parent that is not the child's, is
+  `InvalidArgument`. Rust returns `Result<_, <UseCase>Error>` (`NotEnabled`, `Rejected`,
+  `InvalidArgument`, each `std::error::Error`); TypeScript `Result<<Name>Result,
+  <UseCase>Error>`; Go `(<Result>, error)` with a `*<UseCase>Error` whose `Kind` is
+  `<UseCase>ErrorNotEnabled`, `...Rejected`, or `...InvalidArgument`, reachable by `errors.As`
+  and `errors.Is` (`ErrNotEnabled`, `ErrRejected`, `ErrInvalidArgument`). Nothing panics or
+  throws but TypeScript's `assertNever`.
+- **Split use cases** get one function per step (`openSettlement1`, `openSettlement2`), linked
+  by **run marks**: a step that leaves a row for the next returns a mark
+  (`OpenSettlementClaimMark1 { id }`) the next takes. The obligations say how to store marks:
+  one per row, stored in the step's transaction, step 1 only on a row with none, and a run
+  never abandoned.
+- **Events** carry the id of each row the raise marks (`EvOrderExecuted {
+  certificate_order_id }`). A triggered use case takes the event after any marks and checks
+  its row is the event's.
+- **Choices.** Arms from one state to several are one function per target
+  (`decideFilingToDecidedFile`), guarded by the arm's `.when`; the dispatcher takes the chosen
+  state. A second lifecycle column is a branch on its value; a row in no `from` state is
+  `Rejected` by `TransitionFrom`. A `.has(..)` / `.none(..)` condition takes a list of related
+  rows (`terminalCertAssignmentRows`), every present row of that entity; the function keeps
+  those the key links.
+- **Not printed yet:** a use case that reads `now`, copies a value from another row, `links` /
+  `relinks` / `unlinks`, makes a choice among arms of a second lifecycle column, guards on a
+  comparison proposition or on a nullable Enum or Bool column, joins by a key over several
+  columns, or raises or handles a counted event. It gets no function; the header lists it with
+  the reason, and the code that finishes the output writes it.
 
-With `--conformance <FILE>`, the output ends with a **conformance harness**
-for the service that finishes it, and `FILE` gets the traces it runs. The service
-implements `ConformancePort`: `seed` empties its store and stores the rows of an initial
-state, `snapshot` returns a `StoreSnapshot` of every row (the `<Entity>Row` of a state type,
-the record otherwise), every pending run mark (`<UseCase><Entity>Run { id, step }`), and
-every event a triggered use case reads, and two methods per action run the use case by the
-ids of its rows and its inputs: `prepare_pay` / `PreparePay` loads the rows and returns the
-dispatcher's result, writing nothing, and `commit_pay` / `CommitPay` stores that result in one
-transaction. Either returns an error when the use case does not run (the use case's
-`<UseCase>Error`). The agent's test calls `conform(|| MyService::new(), &traces)` in Rust,
-`Conform(func() ConformancePort { return newService() }, traces)` in Go, or
-`await conform(() => newService(), traces)` in TypeScript. In TypeScript the port is the
-intersection of one `<UseCase>UseCase` type per use case with `seed` and `snapshot`, and
-every member is a function property that returns a `Promise` (`preparePay: (order: OrderId,
-orderPaidAt: DateTime) => Promise<Result<PayOutcome, PayError>>`): a TypeScript service reads
-its store asynchronously, so the contracts are async there, while the Rust and Go ones are
-sync. `conform` returns a `Result<ConformanceReport, string>`. The harness starts
-a fresh port per trace, seeds the trace's initial state, makes each call, and after each
-compares the store, cut down to the columns the model tracks (an enum's value, null or not,
-an integer, a key's parent id), with the state BFS reached. A call the model refuses must
-fail and leave the store as it was, and so must a commit after another call changed the
-state of a row it writes (the harness prepares one call, runs another, then commits the
-first). It returns the first difference, naming the traces line and the rows only the model
-or only the store holds.
+**Rule checks.** Each record and state type gets `orderPaidRuleViolations(row)` /
+`rule_violations(&self)` / `RuleViolations()`: the names `check` reports (`Forbidden_Order_0`,
+`Check_Order_qty_0`) of the entity-local rules the row breaks. A rule the state type
+guarantees is left out; a rule over several rows is an obligation instead.
 
-The traces are a text file, not code. They come from a BFS of the whole transition system
-at `check`'s bounds (one row per entity), from its initial states, and take every move of a
-use case with a printed function between the states those moves reach, in as few traces as
-a greedy walk finds. In each state they also try every use case over one row that the model
-does not run on a present row, as a call that must be refused. A BFS that stops at
-`--conformance-states` covers only the states it reached and tries no refused call. The
-header of the code says how many moves the traces take, and what the harness does not
-compare (a counted trigger, a comparison proposition, the clock). A service whose store
-abstracts to the model's state after every call passes even when it does not call the core;
-the harness checks what is stored, not how.
+**Dispatchers.** Each use case whose functions take a state type gets `runCancel` /
+`run_cancel` / `RunCancel`: it calls the function of the rows' states and returns its result
+as a `CancelOutcome` case, or `NotEnabled`.
 
-The header also lists **candidate rules**: a nullable column that every reachable row of a
-state holds present (or null) with no rule saying so, printed as the `invariant` or
-`forbidden` that would narrow the state type. A column null in every reachable state is
-listed once, as a column no use case writes. The modeler decides whether a candidate is a
-rule of the business (state it, and the type narrows) or an accident of the model (a gap).
-The list reads the states `check` reaches at its bounds.
+**Contracts and callers.** Each use case with a function or entry point gets a contract:
+`<UseCase>UseCase` with `prepare_*` / `commit_*` (and `run_<action>` for an action with no
+function). It is a Rust trait, a TypeScript type of `readonly` members returning `Promise`, a Go
+interface (`Prepare*`, `Commit*`, `Run<Action>`). A use case actors perform takes a caller
+first, `by: <UseCase>Caller`, over the capabilities of those actors: a Rust enum of
+`EndUserCapability`-style types made only by `issue()`; a TypeScript union of capability types
+with an unexported `unique symbol` (an object literal is refused, TS2741; `as unknown as`
+still forges one); a Go interface with an unexported method only those capabilities implement,
+made valid only by `Issue<Actor>Capability()`. Go cannot forbid the zero value or a nil
+caller; `Valid()` and `CallerValid(by)` report them. Whether the code that calls `issue`
+authenticated the actor is not checked.
 
-Since the state types, functions, and rule checks rest on rules, `codegen` runs `check` first, at its bounds, and
-prints them in the header. It refuses a model `check` rejects (exit 1, with the errors on
-stderr) unless `--allow-failing` is given; the output then has no transition functions and
-no rule checks. It refuses a model with model errors. Two declarations that generate one type name, such as an entity
-`OrderStatus` beside the inline `Enum` of `Order.status`, are an error naming both.
+**Conformance harness** (`--conformance <FILE>`). The service implements `ConformancePort`:
+`seed` empties its store and stores an initial state; `snapshot` returns every row (the
+`<Entity>Row` of a state type, else the record), every pending run mark (`<UseCase><Entity>Run
+{ id, step }`), and every event a triggered use case reads; `prepare_pay` / `PreparePay` loads
+the rows and returns the dispatcher's result, writing nothing, and `commit_pay` / `CommitPay`
+stores it in one transaction; either returns the use case's error when it does not run. The
+test calls `conform(|| MyService::new(), &traces)` (Rust), `Conform(func() ConformancePort {
+return newService() }, traces)` (Go), or `await conform(() => newService(), traces)`
+(TypeScript, whose port members return `Promise`s; it returns `Result<ConformanceReport,
+string>`). Per trace, the harness starts a fresh port, seeds it, makes each call, and compares
+the store, cut down to what the model tracks (an enum's value, null or not, an integer, a key's
+parent), with the state BFS reached. A refused call must fail and change nothing, and so must
+a commit after another call changed a row it writes. It returns the first difference, with
+the traces line and the rows only one side holds. It checks what is stored, not how.
 
-The second line of the output is a **fingerprint**:
-`// rdra-ish codegen fingerprint: model=<hash> code=<hash>`. The model hash covers the
-source text of the loaded files. The code hash covers the output without this line.
+**Traces.** A text file from a BFS of the whole system at `check`'s bounds, taking every move
+of a use case with a function in as few traces as a greedy walk finds, and in each state
+trying every one-row use case the model refuses, as a call that must fail. A BFS that stops at
+`--conformance-states` covers only what it reached and tries no refusal. The header says how
+many moves are covered and what the harness does not compare (a counted trigger, a comparison
+proposition, the clock). The file opens `# rdra-ish conformance traces 3`, then a fingerprint
+line.
 
-`codegen --check <FILE>` checks a committed file in CI. It generates again with the same
-inputs and options and compares the result with `<FILE>`, ignoring the fingerprint line.
-Run it from the same directory with the same input paths, because the header names them.
-`--check` writes nothing and prints nothing on stdout. When the two match, it prints
-`ok: <FILE> is what the model generates` on stderr and exits 0. A model edit that changes
-no generated code, such as a comment, still passes. When the two differ, it exits 1. On
-stderr it prints the cause, how many lines differ, and the first difference. The causes are:
+**Fingerprint.** The output's second line is `// rdra-ish codegen fingerprint: model=<hash>
+code=<hash>` (`#` in a traces file). The model hash covers the loaded files' source text; the
+code hash, the output without this line.
 
-- `file edited`: the file no longer matches its own code hash. Someone changed it after it
-  was generated.
-- `model changed`: the model's source text differs from the text the fingerprint records.
-- `generator changed`: neither the file nor the model changed, so the output of `codegen`
-  did. Another rdra-ish version, other `--lang`, `--package` or `--allow-failing`, or other
-  input paths cause this.
-- No fingerprint line: the file was not generated by `codegen`, or the line was removed.
+**`--check <FILE>`** generates with the same inputs and options and compares, ignoring the
+fingerprint line. Run it from the same directory with the same input paths: the header names
+them. It writes nothing to stdout. A match prints `ok: <FILE> is what the model generates` on
+stderr and exits 0; a model edit that changes no code (a comment) passes. A difference exits 1
+and prints the causes, the count of differing lines, and the first difference:
 
-`file edited` and `model changed` can both appear. Restore or regenerate the file. Do not
-edit it by hand: code that finishes the output belongs in other files.
+| Cause | Meaning |
+|---|---|
+| `file edited` | The file no longer matches its own code hash. |
+| `model changed` | The model's source text differs from the text the fingerprint records. |
+| `generator changed` | Neither changed, so `codegen`'s output did: another version, `--lang`, `--package`, `--allow-failing`, or other input paths. |
+| no fingerprint line | The file was not generated by `codegen`, or the line was removed. |
 
-A traces file carries a fingerprint too, as its second line,
-`# rdra-ish codegen fingerprint: model=<hash> code=<hash>`, after the format line
-`# rdra-ish conformance traces 3`. Its code hash covers the file's lines. `--check` with
-`--conformance` compares the traces by that hash only, reading the file once without holding
-it: a traces file can be hundreds of megabytes.
+Restore or regenerate the file; code that finishes the output belongs in other files. With
+`--conformance`, the traces are compared by their hash, reading the file once without holding
+it.
 
 ### The JSON contract
 
-`codegen <INPUTS...> --format json` prints what the code is generated from, as one JSON
-object, for an agent or a tool that generates in another language or checks code against the
-model. It is experimental, as the rest of `codegen` is. `--lang` does not change it.
+`codegen --format json` prints what the code is generated from as one JSON object, for a tool
+that generates another language or checks code against the model. Experimental. `--lang` does
+not change it.
 
 | Key | What it holds |
 |---|---|
 | `format` | `"rdra-ish codegen json 1"`; a reader refuses another. |
 | `generator`, `model`, `check` | The rdra-ish version, the inputs, and whether `check` passed (`passed`, and `bounds` or `errors`). |
-| `types` | The value sets (`kind: "enum"`, with `variation` and `site` for a variation), the id types (`"id"`, with `entity` and `repr`), and the records (`"entity"` or `"dto"`, with `id`, `site` and `fields`). A field has `name` (the column), `ident` (PascalCase), `type` (`{"kind": "scalar" \| "enum" \| "id" \| "rows", "name"}`) and `nullable`. |
-| `states` | Each state type: `name`, `entity`, `site`, `row` (the `<Entity>Row` type), `tag`, and `variants` with their `fields` and `always_null` columns. |
-| `usecases` | Every use case in model order: `id`, `label`, `site`, `kind` (`functions`, `unprinted` when an action has no function yet, or `read-only` when it writes nothing), and `actions`, each with its `functions`, its `dispatcher`, and why it is `unprinted`. |
-| `functions` | Each transition function: `name`, `usecase`, `action`, `step`, `rows`, `marks`, `event`, `inputs`, `conditions`, `result`, `writes` and `raises`. |
-| `obligations` | Each obligation: `name`, `checked`, `text` and `site`. |
+| `types` | Value sets (`kind: "enum"`, with `variation` and `site` for a variation), id types (`"id"`, with `entity` and `repr`), records (`"entity"` or `"dto"`, with `id`, `site`, `fields`). A field has `name`, `ident` (PascalCase), `type` (`{"kind": "scalar" \| "enum" \| "id" \| "rows", "name"}`), and `nullable`. |
+| `states` | Each state type: `name`, `entity`, `site`, `row`, `tag`, and `variants` with their `fields` and `always_null` columns. |
+| `usecases` | Every use case in model order: `id`, `label`, `site`, `kind` (`functions`, `unprinted`, or `read-only`), and `actions`, each with its `functions`, `dispatcher`, and why it is `unprinted`. |
+| `functions` | Each function: `name`, `usecase`, `action`, `step`, `rows`, `marks`, `event`, `inputs`, `conditions`, `result`, `writes`, `raises`. |
+| `obligations` | Each obligation: `name`, `checked`, `text`, `site`. |
 
-Sites are `path:line:col`, relative to the working directory (to the directory of
-`rdra.toml` under `--code`).
+Sites are `path:line:col` relative to the working directory, or to `rdra.toml`'s directory under
+`--code`.
 
 ---
 
-## See Also
+## Environment variables
 
-- [language-reference.md](./language-reference.md) — the DSL syntax.
-- [incremental-modeling.md](./incremental-modeling.md) — staged abstract-to-concrete modeling flow.
-- [state-derivation.md](./state-derivation.md) — how `states` computes its output.
-- [formal-verification.md](./formal-verification.md) — `export --kind tla` / `verify`.
-- [compatibility.md](./compatibility.md) — which subcommands, flags, exit codes, and output formats are stable.
+| Variable | Read by | Effect |
+|---|---|---|
+| `RDRA_JOBS` | `check`, `states`, `verify`, the generators | A whole number above 0: the cones explored at once, the threads that compute one cone's moves, and the z3 processes of `--prove`. Default: cones and z3 processes are the cores, at most 8; one cone's threads are a third of the cores, at least 4 and at most 12, never more than the cores. `1` runs everything one after another on one thread. Lower uses less memory; the output does not change. TLC runs are not counted. |
+| `RDRA_TLC_JAR` | `verify --with-tlc` | Path to `tla2tools.jar`, used as `--tlc-jar` when the flag is absent. |
+| `RDRA_TLC_HEAP` | `verify --with-tlc` | The heap of every TLC JVM, such as `4g`, with no rerun. Runs queue so their heaps fit; see [Memory limit](#memory-limit). |
+| `JAVA_TOOL_OPTIONS` | `verify --with-tlc` | Appended after the options `verify` sets (`-Xmx`, `-Djava.io.tmpdir`, and `-XX:TieredStopAtLevel=1` on a state-model run of at most 10,000 BFS states, added only after TLC started once with it), so a value here wins. |
+| `RDRA_TLC_BATCH` | `verify --with-tlc` | `0` runs each TLC job as its own process instead of in the `tlc-batch` JVM the flake provides. |
+| `RDRA_Z3` | `verify --prove` | The z3 binary, used as `--z3` when the flag is absent. |
+| `RDRA_BIN` | `scripts/data-diff.sh` | The binary to run (default `target/release/rdra-ish`). |
+
+For developers. These change only diagnostics or turn an optimisation off; the verdicts stay:
+
+| Variable | Effect |
+|---|---|
+| `RDRA_ISH_SYMMETRY_STATS` | Per run up to symmetry, a stderr line of orbits, estimate, branch-cap cuts, and entities left out; see [Instance symmetry](#instance-symmetry). |
+| `RDRA_ISH_G_T_STATS`, `RDRA_ISH_S_UP_TO_H_STATS` | A stderr line per reduced cone run up to its group (`G_T`) or sub-lifecycle run up to `H`. |
+| `RDRA_ISH_QUOTIENT_STATS`, `RDRA_ISH_DIVERGENCE_STATS`, `RDRA_ISH_WF_REDUCED_STATS` | What the quotient cache did, the divergence marks of a reduction, and each `WF_vars(Next)` run on a reduced cone. |
+| `RDRA_ISH_NO_QUOTIENT_CACHE` | Do not share quotients between cones. |
+| `RDRA_ISH_NO_REDUCE` | Do not reduce cones to their quotient. |
+| `RDRA_ISH_NO_WF_REDUCED` | Do not run `WF_vars(Next)` on a reduced cone first. |
+| `RDRA_ISH_FORCE_ORBITS` | Test only: under `--symmetry always`, run every eligible job up to symmetry, sharing nothing. |
+
+A `shadow` build also reads `RDRA_ISH_SHADOW_STATS`, `RDRA_ISH_DROP_RULE`, and
+`RDRA_ISH_FORCE_S_UP_TO_H`, and a `perf` build `RDRA_PERF` (`1` the pass and run lines, `2` the
+costly columns too) and `RDRA_PERF_EVAL_TWICE`. The test suites read `RDRA_REQUIRE_*` and other
+variables of their own.
+
+---
+
+## Editor support
+
+`rdra-ish-lsp` is the language server. It offers diagnostics, go to definition, references,
+rename, completion, hover, signature help, document and workspace symbols, formatting (as
+`fmt`), semantic tokens, code actions, code lenses, inlay hints, linked editing, and folding.
+
+- It loads a workspace as the CLI does: every `.rdra` file under the workspace roots plus the
+  open buffers, with include paths derived from those files. An import resolves by the
+  `module` a loaded file declares before its path, so an import no loaded file declares is
+  "unknown module" in the editor, as in `check`.
+- It publishes results under the URIs the editor opened the files by.
+- A malformed `rdra.toml` clears the diagnostics, shows the error in a message, and adds a
+  diagnostic on an open `.rdra` file; the server keeps running.
+- It runs no `codegen` and no build. When a file under `[code]` is missing, has no
+  fingerprint, or was generated from other source text, it shows an information diagnostic on
+  the table's line of `rdra.toml` (a comment-only edit shows it too; `check --code` decides).
+- A key's role is a symbol: see [Which key a join follows](./language-reference.md#which-key-a-join-follows).
+
+---
+
+## See also
+
+- [language-reference.md](./language-reference.md): what the DSL means.
+- [incremental-modeling.md](./incremental-modeling.md): the staged modeling flow `next` follows.
+- [state-derivation.md](./state-derivation.md): how `check` and `states` explore, and every finding name.
+- [formal-verification.md](./formal-verification.md): `verify` and `export --kind tla`.
+- [compatibility.md](./compatibility.md): which commands, flags, exit codes, and formats are stable.
