@@ -145,9 +145,9 @@
   `@null` column; drop it (#187).
 - An unknown table or key in `rdra.toml` is an error. A misspelled table such as `[verfiy]`
   or `[chek]`, or an unknown key under `[model]`, used to be ignored, so the command ran at
-  its default memory limit and instance counts without a word. Every loading command, and
-  the LSP, now exits `1` with a message that names `rdra.toml`, the line, and the key, as
-  an unknown key under `[check]` or `[verify]` already did. `[dependencies]` stays
+  its default memory limit and instance counts without a word. Every loading command now
+  exits `1` with a message that names `rdra.toml`, the line, and the key, and the LSP
+  shows that message, as for an unknown key under `[check]` or `[verify]`. `[dependencies]` stays
   free-form. To migrate, fix the spelling or remove the table.
 
 ### Added
