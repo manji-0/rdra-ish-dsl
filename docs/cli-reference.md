@@ -661,8 +661,8 @@ differ only in which slot holds which row reach the same verdicts. `verify --sym
 stores one state per class of such states, an orbit, so a cone that outgrows the memory limit
 slot by slot can finish. [Instance symmetry](./design/instance-symmetry.md) covers the safety
 cones (`Cone_<check>`), reduced or not, the cones of `always` properties that `verify`
-leaves unreduced, and the cones of `eventually` and `leads_to` properties, when no plain run
-decides them. Every other cone runs as before.
+leaves unreduced, the cones of `eventually` and `leads_to` properties, and the entity cones,
+when no plain run decides them. Every other cone runs as before.
 
 ```sh
 rdra-ish verify samples/clinic-ops --instance-count 3 --memory 8GiB --symmetry always
@@ -710,6 +710,17 @@ Cone_Inv_Encounter_2 [Inv_Encounter_2]: ok (about 820M states)
   fairness check before it prints. On a reduced cone whose run up to symmetry finds a
   counterexample, the property is decided as under `never`. A property whose reduced cone
   is a safety cone's system stays plain, so that one plain run decides both.
+- **Entity cones** (phase 4). An entity cone whose plain run stops at the memory limit runs
+  again up to symmetry, with each edge's permutation kept, in the room its plain run held.
+  When that run completes, it decides the cone's state models: the witnesses, the use cases
+  that never run, the `.when` arms taken, and the deadlocks. A deadlock's trace is lifted and
+  replayed like a counterexample, and names the slot its instance holds at the end, which can
+  be another instance than `never` names. A run that stops too leaves the plain run's
+  findings, and a cone whose plain run left no finding open keeps them without running
+  again. `RDRA_ISH_SYMMETRY_STATS` prints, per stopped entity cone, the states its plain run
+  stopped at and the orbits of its run up to symmetry (`symmetry: entity Appointment: the
+  plain run stopped at 81920 states; up to symmetry, 26929 orbits, about 242015 states,
+  complete`).
 - **Shared runs.** A cone that runs up to symmetry stops once every check has failed, and its
   run decides nothing for the other passes, which have no plain graph to read off it.
 - **Branch cap.** The canonical form branches on rows it cannot tell apart that other rows

@@ -631,6 +631,42 @@ orbits; at n=3 under 8 GiB `never` stops at 40.0M and the run up to `G_T` comple
   insurance-claim-ops +0.86% and patent-ops +0.88%, which run cones up to symmetry, and
   clinic-ops −0.13% and oidc-auth −0.04%, which run none: within step 1's exit.
 
+As built, second unit: entity cones. Measured first, on `clinic-ops` at n=3 under 8 GiB
+(#284): the 117 findings left open were cones starved of room, not cones past the limit
+(the owner's decision of [Decisions](#decisions), a stopped entity cone gives back its room,
+came first, in its own change). The cones still stopped after it are what this unit runs up
+to symmetry.
+
+- **When.** Under `always`, an entity cone of `verify`'s entity pass whose plain run stops
+  at the memory limit runs again up to symmetry (`run_annotated_orbits`) in the room the
+  released plain run held, when that run left a finding open. A run that completes decides
+  the cone's findings; one that stops leaves the plain run's.
+- **The readers.** `OrbitRun::state_model_findings` reads the witnesses, the runs and the
+  never-runs on stored states and action labels, as on a plain run. A `.when` arm compares
+  the bound slot across an edge, so it reads the edge's concrete successor, the stored
+  target taken back through the edge's permutation (`guarded_arms_by`); on an orbit
+  self-edge that is not the source. The deadlock pass runs on (stored state, slot) pairs: a
+  move keeps its source's slots, and the edge's permutation `σ` takes slot `j` of the
+  concrete successor to slot `σ(j)` of the target, so `can_leave` and the walk to the held
+  states follow the instance through `σ`. The held states are scanned each at the slot it
+  keeps the instance on (`scan_guards_pinned`).
+- **Traces.** A deadlock's trace is the lifted path to its pair, replayed; the lift's last
+  permutation `τ` gives the slot the concrete instance holds, `τ(k)`, which the deadlock
+  names. It can name another instance than `never`, as a counterexample can.
+- **Twin.** `orbit_state_models` holds the findings to a plain run under `SHADOW_CAP`: the
+  same witnesses, runs and arms; deadlocks at the same values; and each deadlock on a
+  concrete state the plain run reaches, its instance stuck there, with the deadlock the plain
+  pass gives that instance, but for the trace. A `shadow` build under
+  `RDRA_ISH_FORCE_ORBITS` runs it on every entity cone of `--symmetry always`.
+  `sym_arm_reorders` is a corpus case whose every guarded move swaps the stored rows.
+- **Result.** On `clinic-ops` at n=3 under 8 GiB (`RDRA_JOBS=8`), `always` leaves 3 of the
+  17 findings `never` leaves open. `Appointment` (stopped at 100,133,268 states) finishes in
+  14,346,108 orbits for about 3.9G states, `Encounter` in 1,696,486, `PatientAccount` in
+  3,885,148 and `PaymentTransaction` in 1,022,613; the rerun up to `H` of phase 2 decides
+  `CarePlan`, as it does without this unit; `EligibilityCheck` stops again at 25,681,245
+  orbits. Seven stopped cones (`AccountBalance` at 83,486,263 states among them) left nothing
+  open and do not run again. The run peaks at 37.1 GB RSS, where `never` peaks at 35.6 GB.
+
 **Phase 5: always by default.** Replaced on 2026-11-25: the owner chose `always`, made
 invisible, over a `retry` default. [Always by default](#always-by-default) holds the plan and
 its measurements.
