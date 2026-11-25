@@ -1,14 +1,11 @@
 # Step 0: Scope Sketch
 
-Use this context when the request names a business area or problem but does not yet
-identify stable BUCs, actors, use cases, or data.
+<!-- derived-from ../../../docs/incremental-modeling.md#stage-0-scope-sketch -->
 
-## Goal
+Name the business area and its candidate BUCs, and nothing more. Use this step when the
+request names a business problem but no stable BUC, actor, or data.
 
-Create only enough structure to name the business area and one or more candidate BUCs.
-This step protects business intent before implementation detail enters the model.
-
-## Ask For
+## Ask
 
 <!-- stage-spec: asks scope -->
 - Which business area or value stream is in scope?
@@ -16,23 +13,16 @@ This step protects business intent before implementation detail enters the model
 - Which BUC should be modeled first?
 <!-- /stage-spec -->
 
-Also ask:
+Also ask which requirement source, stakeholder, owner, priority, or acceptance criteria
+to keep now.
 
-- Which requirement, source, stakeholder, owner, priority, or acceptance criteria
-  should be preserved now?
+## Do
 
-## Procedure
-
-1. Create or update `shared/biz.rdra` with a `business` declaration.
-2. Create one BUC file under `buc/` for each candidate BUC that is stable enough to
-   name.
-3. Add `belongs(Buc, Business)` for each BUC.
-4. Add stable `requirement` metadata and `motivates(Requirement, Buc)` only when
-   the requirement source is explicit.
-5. Avoid actors, use cases, entities, APIs, states, and rules unless they are needed
-   only as names for discussion.
-
-## Minimal Pattern
+1. Declare the `business` in `shared/biz.rdra`.
+2. Create one `buc/buc_<name>.rdra` per BUC stable enough to name, with
+   `belongs(Buc, Business)`.
+3. Add a `requirement` and `motivates(Requirement, Buc)` only when the source is explicit.
+4. Leave actors, use cases, and data as open questions.
 
 ```rdra
 module shared.biz
@@ -48,8 +38,8 @@ requirement ReqOrder "Order processing must be reliable"
   status "proposed"
 ```
 
-A metadata value is a quoted string for free text, or a bare word or number
-(`priority must`). `source`, `stakeholder`, and `acceptance_criteria` may repeat.
+A metadata value is a quoted string, or a bare word or number (`priority must`).
+`source`, `stakeholder`, and `acceptance_criteria` may repeat.
 
 ```rdra
 module buc.order
@@ -61,7 +51,7 @@ belongs(BucOrder, Commerce)
 motivates(ReqOrder, BucOrder)
 ```
 
-## Validation
+## Validate
 
 <!-- stage-spec: review scope -->
 ```sh
@@ -71,24 +61,12 @@ rdra-ish diagram src/ --kind rdra --format mermaid --buc BucOrder
 ```
 <!-- /stage-spec -->
 
-Also run:
+Also `rdra-ish list src/ --kind requirement --format table`.
 
-```sh
-rdra-ish lint src/ --format table
-rdra-ish list src/ --kind requirement --format table
-```
+## Done when
 
-## Achievement Conditions
+- The business and each candidate BUC have reviewable labels, and each BUC `belongs` to it.
+- Requirement metadata is what the source gives, with no invented stakeholder.
+- Missing actors, use cases, and data are listed as questions.
 
-- The business scope has a named `business`.
-- Candidate BUCs are named with reviewable labels.
-- Each BUC belongs to the intended business area.
-- Stable requirement metadata is captured without inventing missing stakeholder
-  detail.
-- Any missing actor/usecase/data detail is recorded as a next-step question rather
-  than invented.
-
-## Next Step
-
-Load `references/01-buc-skeleton.md` when at least one BUC is stable enough
-to ask who performs it and which visible actions compose it.
+Next: `references/01-buc-skeleton.md`, once a BUC is stable enough to ask who performs it.

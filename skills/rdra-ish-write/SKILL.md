@@ -6,13 +6,29 @@ license: MIT
 
 ## Write RDRA DSL
 
-Create RDRA DSL files from requirements or specifications.
+### When to use
 
-### Context Loading Rule
+Write or extend `.rdra` files from requirements. Model one refinement stage at a time: a
+guessed column, endpoint, or state machine reads as a decision to reviewers. To start or
+change one BUC, skills `rdra-ish-buc-create` and `rdra-ish-buc-update` add their steps to
+these.
 
-This file is the routing layer. Load only the step file for the model's current
-abstraction level. If the level is unclear, read the previous, current, and next step
-files, classify the model, then continue with the single most relevant step.
+### Steps
+
+1. Find the model root and its stage. `rdra-ish next src/` prints each BUC's stage and the
+   gaps that block the next one; `rdra-ish next src/ --buc <BucId> --format json` gives
+   the next stage's `asks` and `gaps`.
+2. Load the step file of that stage (table below). If the stage is unclear, read the
+   previous, current, and next step files, classify, then keep one.
+3. Ask only that stage's questions, unless the code already answers them.
+4. Edit the fewest `.rdra` files. Place each declaration as `references/layout.md` says.
+   Add `nfr`, `quality`, `constraint`, `goal`, and `adr` at any stage once the source gives
+   them, scoped with `applies_to`, `qualifies`, `constrains`, `achieves`, or `decides`.
+5. Run the step file's validation. Before handoff, also run `rdra-ish lint src/` and
+   `rdra-ish fmt --check src/`.
+6. Stop when the step's conditions hold, or list what is open. Paste the `bounds:` line
+   and the last line of `check` exactly as printed, in a code block; never paraphrase them
+   as "OK".
 
 <!-- stage-spec: skill-table -->
 | Stage | Concern | Main question | Add |
@@ -29,286 +45,11 @@ files, classify the model, then continue with the single most relevant step.
 | 7C Advanced rules | Tech-enforced rules | Which comparison or cross-entity facts are reviewable from the abstract state space? | comparison propositions, multi-entity `forbidden` / `invariant` |
 <!-- /stage-spec -->
 
-The step files are `references/00-scope.md` for stage 0, `references/01-buc-skeleton.md`
-for 1, `references/02-screens.md` for 2, `references/03-data-touchpoints.md` for 3,
-`references/04-api-access-boundary.md` for 4, `references/05-entity-structure.md` for 5,
-`references/06-lifecycle.md` for 6, and `references/07-rules.md` for 7A to 7C.
+### References
 
-Do not skip ahead because a downstream detail is tempting: a guessed column or state
-machine reads as a commitment to reviewers. Model the smallest useful increment, run
-validation, then advance one level.
-
-### Core Workflow
-
-1. Locate the existing model root and current abstraction level. `rdra-ish next src/`
-   prints the stage of each BUC and the gaps that block the next one;
-   `rdra-ish next src/ --buc <BucId> --format json` gives the next stage's `asks` and
-   `gaps` to work from.
-2. Load the matching step file from `references/`.
-3. Ask only for information required by that step, unless the codebase already answers it.
-4. Edit the smallest set of `.rdra` files needed for the step.
-5. Run the validation commands from the step file. `check` prints a `bounds:` line first
-   and ends with `OK: no errors within 1 instance per entity, Int 0..5` on success, or
-   `FAIL: <E> errors, <W> warnings within ...` on failure.
-6. Stop when the step's achievement conditions are met, or report the remaining open items.
-   In the report, paste the `bounds:` line and the last line of `check` exactly as
-   printed, in a code block. Do not paraphrase them as "OK" or "no errors".
-
-### File Layout
-
-Start small. Split files only when reviewability or ownership demands it.
-
-```text
-src/
-  shared/
-    actors.rdra      # module shared.actors
-    biz.rdra         # module shared.biz
-    entities.rdra    # module shared.entities
-  buc/
-    buc_<name>.rdra  # module buc.<name>
-```
-
-An import names a module, not a file: with the directory loaded, `import buc.<name>.{Screen}`
-finds `buc/buc_<name>.rdra` by its `module` line, so a BUC can `navigates` to another BUC's
-screen.
-
-Growth pattern:
-
-```text
-src/
-  shared/
-    actors.rdra
-    biz.rdra
-    entities/
-      order.rdra      # module shared.entities.order
-      payment.rdra    # module shared.entities.payment
-    lifecycle/
-      order.rdra      # module shared.lifecycle.order
-    rules.rdra        # module shared.rules
-  buc/
-    buc_order.rdra
-    buc_payment.rdra
-```
-
-Placement rules:
-
-- Shared vocabulary goes in `shared/`: actors, external systems, businesses,
-  stable requirements/NFRs/qualities/constraints, reusable entities and variations, ADRs,
-  systems, timers, media, permissions, cross-BUC lifecycle, and cross-BUC / cross-entity
-  rules.
-- BUC-local flow goes in `buc/buc_<name>.rdra`: `buc`, `flow`, `step`,
-  `usecase`, `screen`, `field`, BUC-local `api`/`dto`, CRUD, `displays`,
-  `invokes`, API contract links, `raises`, `triggers`, `coordinates`, access
-  constraints, conditions applied to the BUC's use cases, compensations, and `sets`.
-- Do not put BUC-specific predicates in shared files.
-- A `condition` or `property` that names a use case (`applies_to(Cond, UseCase)`,
-  `.fair(UseCase)`) goes in that use case's `buc/buc_<name>.rdra`, with its `holds` body.
-  In `shared/rules.rdra` it would import the BUC module, which imports `shared.rules`: a
-  circular import, which `check` warns about. Keep `shared/rules.rdra` to rules and
-  conditions that name only entities, variations, and other shared vocabulary.
-- Every file starts with `module <dotted.name>`, and the dotted module should mirror
-  the file path.
-- Keep broad imports during exploration; narrow imports after shared files split.
-
-### Syntax Quick Reference
-
-#### Instance Declarations
-
-```rdra
-actor Customer "Customer"
-business Commerce "Commerce"
-requirement ReqOrder "Order processing must be reliable"
-buc BucOrder "Process Order"
-flow CheckoutFlow "Checkout Flow"
-step ReviewCart "Review Cart"
-usecase PlaceOrder "Place Order"
-screen CheckoutScreen "Checkout"
-field OrderIdField "Order ID"
-
-api PlaceOrderApi "Place Order API"
-  method POST
-  path "/orders"
-
-dto PlaceOrderRequest "Place Order Request"
-
-entity Order "Order" {
-  id: Int @pk
-  status: Enum(draft, submitted) @default(draft)
-  submitted_at: DateTime @null
-}
-```
-
-Kinds commonly used by this skill:
-
-| Kind | Use |
-|---|---|
-| `actor` / `extsystem` | people and outside systems |
-| `goal` / `requirement` / `adr` / `nfr` / `quality` / `constraint` | outcomes with their metric, traceability, decisions, and non-functional intent |
-| `business` / `buc` / `flow` / `step` / `usecase` | business value, flow order, and action boundaries |
-| `screen` / `field` / `api` / `dto` / `system` | UI items, payloads, interaction, and implementation boundaries |
-| `entity` | logical data modeling |
-| `event` | the interface between use cases, or between a use case and an external system |
-| `timer` | schedule that triggers a use case |
-| `variation` / `condition` | values an actor chooses; the variation x state-model combination a use case applies under |
-| `medium` / `permission` | context and access vocabulary |
-
-States are not declared: they are the variants a `transitions` names. The removed
-words `state`, `location`, `timing`, `uses`, `usagescene`, and the conceptual-model
-kinds fail to parse, with a hint naming the replacement.
-
-#### Predicate Signatures
-
-| Predicate | Signature | Meaning |
-|---|---|---|
-| `performs` | `(Actor, UseCase\|Buc\|Step)` | actor performs a use case, every use case of a BUC, or a business step |
-| `contains` | `(Buc, UseCase)` / `(Buc, Flow)` / `(Flow, Step)` / `(System, Api)` / `(Screen, Field)` | composition |
-| `precedes/branches/excepts/repeats` | `(Step, Step)` | business flow order, alternatives, exceptions, loops |
-| `covers` | `(Step, UseCase\|Api\|Event\|Timer)` | business step covers model behavior |
-| `belongs` | `(Buc, Business)` | BUC ownership, optionally chained with `.by(Medium\|"text")` |
-| `reads/creates/updates/deletes` | `(UseCase\|Api, Entity)` | data touchpoint or API operation; `reads` may chain a query shape `.by(cols).order(col.desc).page(cursor\|offset)` or `.count()`/`.sum(col)`; a use case's `creates/updates/deletes` may chain `.apart()` |
-| `displays` | `(UseCase, Screen)` | UI path |
-| `shows` | `(Screen, Entity)` | screen data exposure |
-| `navigates` | `(Screen, Screen)` | screen transition, optionally `.via(UseCase)` for the operation that causes it |
-| `invokes` | `(UseCase, Api)` | UC delegates to an API boundary |
-| `maps_field` | `(Field\|Dto.field, Entity.column)` | screen field or DTO field to the column it carries |
-| `request/response/error_response` | `(Api, Dto)` | API payload contract |
-| `coordinates` | `(UseCase, Entity, Entity)` | UC coordinates cross-system consistency |
-| `compensates` | `(UseCase, UseCase)` | the first use case compensates the second |
-| `owns` | `(System, Entity)` | explicit intended ownership before CRUD is complete |
-| `raises` | `(UseCase\|ExtSystem, Event)` | a use case emits an event; an external system raising one is inbound |
-| `triggers` | `(Event\|Timer, UseCase\|Buc\|ExtSystem)` | an event or timer starts a use case or a BUC; an event delivered to an external system is outbound (a timer never triggers one) |
-| `outbox` | `(Event)` | the event is published outside the model, so it needs no local consumer |
-| `transitions` | `(UseCase, Entity.col, from -> to)` | the use case moves the Enum column from -> to |
-| `sets` | `(UseCase, Entity.col == val)` | explicit column effect |
-| `drives` | `(UseCase, Entity.col op rhs, true\|false)` | comparison proposition effect |
-| `forbidden` | `(Entity, col == val\|col op rhs, ...)` | forbidden reachable state combination |
-| `invariant` | `(Entity).when(...).then(...)` | required co-occurrence inside one entity |
-| `required` | `(Entity, col == val\|col op rhs, ...)` | always-required state facts |
-| `exclusive` | `(Entity, col == val\|col op rhs, ...)` | mutually exclusive state facts |
-| `forbidden` (multi-entity) | `(Entity..., Entity.col == val\|Entity.col op rhs, ...)[.along(...)[.role(role)] \| .global()]` | forbidden combination across entities; `.global()` for every combination, else `lint` `multi-rule-unscoped` |
-| `invariant` (multi-entity) | `(Entity...).when(...).then(...)[.along(...)[.role(role)] \| .global()]` | required co-occurrence across entities |
-| `invariant` (quantifier) | `(Entity).when(...).none/has(...)` | to-many quantifier over related rows (prefer `Entity.col`) |
-| `property` | `Name ["label"] always\|eventually\|leads_to(...)[.along(...)[.role(role)] \| .global()][.fair(UC, ...)]` | temporal path property, checked by `verify` only; over several entities `.along` limits it to linked rows |
-| `property` | `Name ["label"] stable(p) \| unchanged(E.col, ..)[.when(p)] \| precedes(p, q)` then `[.along(...)[.role(role)] \| .global()]` | order and stability: `p` keeps holding, the columns keep their values while `p` holds, `q` only after `p`; `verify` decides each by BFS, `check` never; no `.fair` |
-| `property` | `Name ["label"] can_reach(p)` then `[.along(...)[.role(role)] \| .global()]` | recoverability: from every reachable state each present instance can still reach `p` (it need not); `verify` decides it by BFS, `check` never; no `.fair` |
-| `after` | `(UseCase).assert(...)` | predicate on the state each run of the use case leaves, read after its last step |
-| `relate` | `(Entity, Entity, 1:1\|1:N\|N:1\|N:M)` | ER relation and generated key; see below |
-| `has_permission` | `(Actor, Permission)` | actor-side grant |
-| `requires_permission` | `(UseCase\|Api, Permission)` | UC/API required authority |
-| `requires_medium` | `(UseCase\|Api, Medium)` | UC/API required operation medium |
-| `applies_to` | `(Nfr\|Condition, UseCase\|Api\|System)` | NFR scope; a condition's rule applies to the use case (a body guards it) |
-| `qualifies` / `constrains` | `(Nfr\|Constraint, Quality)` / `(Constraint, UseCase\|Api\|System\|Entity\|Dto)` | quality category and guardrail scope |
-| `combines` | `(Condition, Variation\|Entity.column)` | traceability link to a variation or a lifecycle column |
-| `holds` | `(Condition, Entity.col == value, ...)` | condition body (implicit AND); links are then derived, so no `combines` |
-| `motivates` / `achieves` / `decides` | `(Requirement, Buc)` / `(Requirement, Goal)` / `(Adr, target)` | requirement, goal, and decision traceability; a non-goal is a requirement with `status "out-of-scope"` and a `rationale` |
-
-`relate(Child, Parent, N:1)` generates the key column `{role}_{parent key column}` on the
-child (`order_id`); `1:N` puts it on the right entity, and `1:1` on the left, marked
-unique. `N:M` needs `.via(Junction)`. The child side may be a range: `1..*:1` says every
-parent has a child. Chain `.optional()`, `.on_delete(..)`, `.on_update(..)`,
-`.role(x)` (name the key), `.key(cols)` (adopt declared columns), or `.references(cols)`
-(refer to a parent unique set instead of its primary key).
-
-#### Imports
-
-```rdra
-import shared.actors
-import shared.actors as a
-import shared.actors.{Staff}
-import shared.actors.{Staff as S}
-```
-
-### Cross-Step Principles
-
-- Preserve staged refinement: direct UC CRUD is acceptable in early stages; prefer
-  `api` plus `invokes` once an implementation boundary matters.
-- Treat API CRUD as an atomic entity-operation boundary. Split APIs by consistency
-  contract, not by screen button count. The lifecycle runs a use case as one atomic
-  action per transaction group, in the order of its `invokes` lines, so the split and the
-  order decide what can interleave between the steps of one run.
-- Treat system ownership as derived from `contains(System, Api)` plus API CRUD by
-  default. Add `owns(System, Entity)` only to record intentional ownership before
-  CRUD APIs are complete, and review any difference from derived ownership.
-- A use case's actors are its direct performers plus the performers of every BUC that
-  contains it or whose flow has a step that `covers` it. So `performs(Actor, Buc)` says the actor runs every use case of the BUC,
-  and the permission check requires each of those actors to hold each use case's
-  permissions. When an actor runs only some of the use cases, write
-  `performs(Actor, UseCase)` for those instead.
-- Model screen constraints indirectly through `displays`, `invokes`,
-  `requires_permission`, and `requires_medium`.
-- Use `field` + `maps_field` when screen input/output mapping matters; do not
-  overload `entity` columns as UI fields.
-- Model persistent structure with `entity` (and `dto` for payloads). There is no
-  separate conceptual-model kind.
-- Put API method/path/idempotency/mode/auth metadata on `api`, and use `dto`
-  declarations plus `request`/`response`/`error_response` relations when OpenAPI or
-  payload review is needed.
-- Use `nfr`/`quality`/`constraint` plus `applies_to`, `qualifies`, and `constrains`
-  for performance, availability, SLO, audit/logging, retention, privacy, and other
-  non-functional requirements.
-- Link ADRs with `decides` only when a real design decision affects a BUC, use case,
-  API, system, entity, requirement, NFR, or constraint.
-- Review access with `rdra-ish csv src/ --kind permission-callables` (what each
-  permission enables) and `rdra-ish csv src/ --kind actor-permission-audit` (whether
-  each actor holds what its use cases need). `rdra-ish check src/ --strict` makes a
-  permission gap an error.
-- Prefer `triggers(Event, Buc)` when an event starts a downstream BUC. Add
-  `triggers(Event, UseCase)` later when the concrete entry action is known.
-- A use case drives each state change: `transitions(CapturePay, Order.status, pending ->
-  paid)`. An event only connects use cases (or a use case and an external system), so
-  declare one only when something consumes it.
-- Type a column by a `variation` (`method: PaymentMethod`) when an actor chooses its
-  value; keep an inline `Enum(...)` for lifecycle columns and values that use cases set.
-- A `condition` is an RDRA 条件. Without a body it is a trace link; with a `holds` body
-  it guards each use case it `applies_to` (Step 6).
-- `check` evaluates every rule, quantifier, and `after(UC).assert` at one instance per
-  entity. A rule that needs two instances (a 1:1 key or a `@unique` set, `Unique_*`)
-  needs `check --instance-count 2` or `verify`, and a temporal `property` needs `verify`
-  (skill `rdra-ish-verify`); `check` notes the properties it skipped. A deadlock can also
-  come from the one slot: when a way out needs a row of an entity some use case creates
-  and the slot was used up, the `check` error ends with `the deadlock may clear at --instance-count 2`. Run `verify` before
-  changing the model for it.
-
-### Common Mistakes
-
-- Swapping predicate argument order: CRUD predicates take `(UseCase|Api, Entity)`.
-- Naming an event in `transitions` or as the origin of `sets`: both take a use case,
-  and the event form is a `TypeMismatch`.
-- Declaring `state`, `timing`, `location`, or `uses`: they were removed. States come
-  from `transitions`, a schedule is a `timer`, and an external system talks to use cases
-  through `raises` and `triggers`.
-- Adding quotes inside `Enum(...)` values or around `sets` values (`flag == true`,
-  `at == present`, not `"true"`).
-- Quoting the `@check(...)` or `@derived(...)` expression: write `@check(qty >= 1)`.
-- A `@default` that is not one of the column's values: an `Enum` takes a value as declared
-  (`@default(open)`, not `Open`) and a `Bool` takes `true` or `false`; otherwise the model
-  does not load. `@default(null)` is no value of either, even on a `@null` column: drop it.
-- Writing an inline `Enum(...)` for a value the actor picks (payment method, channel):
-  `states` then reports its unchosen variants unreachable. Declare a `variation`.
-- Forgetting `module`, or using a module name that does not match the file path.
-- Adding FK columns manually when `relate` already generates them (`FkConflict`, unless
-  you adopt the column with `.key(...)`).
-- Writing `performs(Actor, Buc)` for an actor who runs only some of the BUC's use cases.
-- Declaring `api` without `invokes(UseCase, Api)`, or `system` without
-  `contains(System, Api)`.
-- Adding `owns(System, Entity)` that contradicts API CRUD ownership without
-  reviewing the warning.
-- Adding a cross-system `relate` without `coordinates(UseCase, Entity, Entity)`.
-- Using `entity` for every business noun, including nouns that are never
-  persisted or exchanged.
-- Adding `field` without `contains(Screen, Field)` or mapping actor-entered values
-  when the entity column exists.
-- Adding API method/path metadata without DTO request/response links when payload
-  review or OpenAPI export is expected.
-- Forgetting `rdra-ish lint` and `rdra-ish fmt --check` before final handoff.
-- Running `rdra-ish fmt src/` and expecting the files to change: without a flag, `fmt`
-  prints the formatted source to stdout. `fmt --write src/` rewrites the files, and
-  `fmt --check src/` only lists the files that differ.
-- Looking for `rdra-ish csv` rows on stdout: `csv` writes a file and prints
-  `wrote <path>`. Without `-o` the file is `out.<kind>.csv` in the current directory
-  (`out.matrix.csv` for `--kind matrix`); `-o review/crud` writes `review/crud.matrix.csv`.
-- Checking only `screen-constraints` for access review; also run
-  `permission-callables` and `actor-permission-audit`.
-- Modeling event-started BUCs only as `triggers(Event, UseCase)` when the BUC
-  boundary itself should remain swappable between human and event initiation.
-- Writing bare column names in multi-entity cross constraints; use `Entity.column`.
+- `references/00-scope.md`, `references/01-buc-skeleton.md`, `references/02-screens.md`,
+  `references/03-data-touchpoints.md`, `references/04-api-access-boundary.md`,
+  `references/05-entity-structure.md`, `references/06-lifecycle.md`,
+  `references/07-rules.md`: one step file per stage (7A to 7C share `07-rules.md`).
+- `references/layout.md`: files, where each declaration goes, who performs a use case.
+- `references/syntax.md`: declarations, predicate signatures, common mistakes.

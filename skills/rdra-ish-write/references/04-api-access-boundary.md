@@ -1,18 +1,12 @@
 # Step 4: API and Access Boundary
 
-Use this context when screens and data touchpoints exist and the next task is to express
-which actions go through an API, which system owns it, and which media and authority they
-need.
+<!-- derived-from ../../../docs/incremental-modeling.md#stage-4-api-and-access-boundary -->
 
-## Goal
+Say which actions go through an API, which system owns it, and which permission and medium
+the work needs. Every part is optional: a use case may keep its direct CRUD. The gate asks
+only that every API a use case invokes belongs to a system.
 
-Make the system boundary concrete enough to review actor/screen/API/entity paths,
-atomic API boundaries, system ownership, media constraints, and actor permission
-assignment. Every part of it is optional: a use case can keep its direct CRUD, and a
-model with no `permission` or `medium` has nothing to assign. The gate asks only that
-every API a use case invokes belongs to a system.
-
-## Ask For
+## Ask
 
 <!-- stage-spec: asks api-access-boundary -->
 - Does the use case write data directly, or through an API boundary?
@@ -20,34 +14,28 @@ every API a use case invokes belongs to a system.
 - Which actor permission and physical/device medium are required for the use case or API?
 <!-- /stage-spec -->
 
-Also ask:
+Also ask which method, path, idempotency, sync or async mode, auth scheme, and DTOs form the
+contract, and which actors hold each permission.
 
-- Which HTTP method/path, idempotency, sync/async mode, auth scheme, and DTO payloads
-  are part of the contract?
-- Which internal system owns each stable API?
-- Which actors should hold those permissions?
+## Do
 
-## Procedure
-
-1. Add `api`, `dto`, `system`, `medium`, and `permission` vocabulary as needed.
-2. Introduce `api` plus `invokes(UseCase, Api)` when backend mediation or atomic
-   consistency matters.
-3. Put method/path/idempotency/sync-async/auth metadata on the `api`, and connect
-   payloads with `request`, `response`, and `error_response`. Map a response field to
-   the column it carries with `maps_field(PlaceOrderResponse.order_id, Order.id)`; a key
-   column `relate` generates counts, and a second mapping of one field is
-   `DuplicateFieldMapping`. JSON Schema marks a mapped field `x-rdra-ish-maps-to`, and a
-   read by the API with a query shape selects the mapped columns under the field names.
-4. Move CRUD from the use case to the API when the API owns the entity operation.
-5. Use `contains(System, Api)` to group each API into the internal system that owns it.
-6. Add `requires_permission` and `requires_medium` to UC/API nodes.
-7. Add actor-side `has_permission` where the grant is expected. Every actor of a use
-   case needs it: the direct performers and the performers of each BUC that contains
-   the use case.
-8. Use `coordinates(UseCase, Entity, Entity)` only when a relation crosses derived
-   system entity sets and the use case coordinates both sides.
-
-## Minimal Pattern
+1. Add `api` and `invokes(UseCase, Api)` where backend mediation or atomic consistency
+   matters, and move the CRUD from the use case to the API.
+2. Split APIs by consistency contract, not by button. A use case runs as one atomic action
+   per transaction group, in its `invokes` order, so the split decides what can interleave.
+3. Put `method`, `path`, `idempotency`, `mode`, and `auth` on the `api`. Link payloads with
+   `request`, `response`, and `error_response`. Map a response field to its column with
+   `maps_field(PlaceOrderResponse.order_id, Order.id)`; mapping one field twice is
+   `DuplicateFieldMapping`.
+4. Group each API in its system with `contains(System, Api)`. A system's entities derive
+   from its APIs' CRUD.
+5. Put `requires_permission` and `requires_medium` on the use case for the whole
+   interaction, or on the API for that backend operation. Never on a screen: screen access
+   derives from `displays` and `invokes`.
+6. Grant `has_permission` to every actor of the use case
+   ([layout.md](layout.md#who-performs-a-use-case)).
+7. When a `relate` crosses two systems' entities, add `coordinates(UseCase, Entity,
+   Entity)`, and have that use case invoke an API on each side.
 
 ```rdra
 api OrderApi "Order API"
@@ -81,7 +69,7 @@ requires_medium(PlaceOrder, CustomerDevice)
 has_permission(Customer, OrderWrite)
 ```
 
-## Validation
+## Validate
 
 <!-- stage-spec: review api-access-boundary -->
 ```sh
@@ -94,31 +82,18 @@ rdra-ish csv src/ --kind actor-permission-audit
 ```
 <!-- /stage-spec -->
 
-Also run:
+Also `rdra-ish check src/ --strict` (a permission gap is an error) and
+`rdra-ish export src/ --kind openapi --out out/openapi.json`. Read the CSVs with
+`../../rdra-ish-buc-analyze/references/access-permissions.md` and the boundary warnings
+with `../../rdra-ish-buc-analyze/references/api-system-boundaries.md`.
 
-```sh
-rdra-ish check src/ --strict   # permission gaps become errors
-rdra-ish csv src/ --kind permission-callables
-rdra-ish csv src/ --kind business-inputs
-rdra-ish export src/ --kind json-schema --out out/json-schema.json
-rdra-ish export src/ --kind openapi --out out/openapi.json
-```
+## Done when
 
-## Achievement Conditions
+- The RDRA graph shows the intended actor, screen, API, entity path, with no unexpected
+  transaction or API warning from `check`.
+- Each invoked API belongs to a system, and its CRUD is one consistency boundary.
+- Each `actor-permission-audit` row is `ok`, or an intended `missing` or `excess`.
+- Each cross-system relation has a coordinating use case, or is listed as open.
 
-- The RDRA graph shows the intended actor -> screen -> API -> entity path, and `check`
-  prints no unexpected transaction or API warning.
-- API CRUD represents atomic data operation boundaries.
-- OpenAPI export is meaningful when method/path and DTO contracts are modeled.
-- Every API a use case invokes belongs to a system.
-- Screen constraints are derivable from UC/API requirements; any screen-local
-  exception is explicitly justified instead of becoming hidden authority.
-- `actor-permission-audit` rows are explained as `ok`, intentional `missing`, or
-  intentional `excess`.
-- Cross-system relations either have a coordinating use case or are intentionally
-  deferred.
-
-## Next Step
-
-Load `references/05-entity-structure.md` when entity fields, identifiers,
-relations, and ownership constraints are ready to become design commitments.
+Next: `references/05-entity-structure.md`, once fields, keys, and relations are ready to
+commit to.

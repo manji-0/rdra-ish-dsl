@@ -1,14 +1,11 @@
 # Step 1: BUC Skeleton
 
-Use this context when BUC names exist and the next task is to express business value:
-who participates, which actions are visible, and which BUC owns each action.
+<!-- derived-from ../../../docs/incremental-modeling.md#stage-1-buc-skeleton -->
 
-## Goal
+Say who gets value from each BUC and which visible actions compose it. Commit to no data,
+screen, API, or state yet.
 
-Define actor and use-case coverage without committing to data structures, screens,
-APIs, or lifecycle internals.
-
-## Ask For
+## Ask
 
 <!-- stage-spec: asks skeleton -->
 - Who initiates or receives value from this BUC?
@@ -18,31 +15,22 @@ APIs, or lifecycle internals.
 
 Also ask:
 
-- Does the business order, branch, exception, or loop need to be reviewed explicitly?
-- Are there known preconditions, guards, postconditions, business errors,
-  alternative flows, or compensations for a use case?
-- Which actions are intentionally out of scope for this BUC?
+- Does the business order, a branch, an exception, or a loop need review?
+- Are preconditions, guards, postconditions, or compensations known?
+- Which actions are out of scope?
 
-## Procedure
+## Do
 
-1. Declare stable `actor` and `extsystem` vocabulary in `shared/actors.rdra`.
-2. In the BUC file, declare the `buc` and candidate `usecase` nodes.
-3. Add `contains(Buc, UseCase)` for each visible action.
-4. Add `performs(Actor, Buc)` for an actor who takes part in every use case of the BUC.
-   A use case's actors are its direct performers plus the performers of each BUC that
-   contains it (or covers it from a flow step), and the permission check later holds each of them to the use case's
-   permissions. For an actor who runs only some use cases, write
-   `performs(Actor, UseCase)` for those instead.
-5. Add `flow` and `step` only when the business sequence itself must be reviewed.
-   Connect BUC -> flow -> step with `contains`, then connect ordered steps with
-   `precedes`, `branches`, `excepts`, or `repeats`; use
-   `covers(Step, UseCase|Api|Event|Timer)` to bind flow steps to model behavior.
-6. Add `precondition`, `guard`, `postcondition`, or compensation links
-   (`compensates(UseCase, UseCase)`) only when the business rule is already known and
-   stable. The three clauses are review metadata; `check` does not evaluate them.
-7. Leave data CRUD, screens, APIs, permissions, and states for later steps.
-
-## Minimal Pattern
+1. Declare `actor` and `extsystem` in `shared/actors.rdra`.
+2. Declare the `buc` and its `usecase`s, each with `contains(Buc, UseCase)`. Name a use
+   case for the business action, not a button or an endpoint.
+3. Add performers. Use `performs(Actor, Buc)` only for an actor who runs every use case
+   of the BUC ([layout.md](layout.md#who-performs-a-use-case)).
+4. Add `flow` and `step` only when the order itself needs review: `contains(Buc, Flow)`,
+   `contains(Flow, Step)`, then `precedes`, `branches`, `excepts`, or `repeats`, and
+   `covers(Step, UseCase|Api|Event|Timer)`.
+5. Add `precondition`, `guard`, `postcondition`, and `compensates(UseCase, UseCase)` only
+   when stable. The three clauses are review metadata; no check reads them.
 
 ```rdra
 actor Customer "Customer"
@@ -66,7 +54,7 @@ precedes(ReviewCart, SubmitOrder)
 covers(SubmitOrder, PlaceOrder)
 ```
 
-## Validation
+## Validate
 
 <!-- stage-spec: review skeleton -->
 ```sh
@@ -75,26 +63,13 @@ rdra-ish diagram src/ --kind rdra --format mermaid --buc BucOrder
 ```
 <!-- /stage-spec -->
 
-Also run:
+Also `rdra-ish list src/ --kind flow --format table`.
 
-```sh
-rdra-ish lint src/ --format table
-rdra-ish list src/ --kind flow --format table
-rdra-ish list src/ --kind step --format table
-```
+## Done when
 
-## Achievement Conditions
+- Each use case has a performer, directly or through its BUC, or is started by an event
+  or timer later.
+- Each use case belongs to the intended BUC.
+- Order is explicit with `flow` / `step` when the requirement depends on it.
 
-- Every important use case has a performer, directly or through its BUC, or a
-  documented reason for being event-started later.
-- Each `performs(Actor, Buc)` holds for every use case of the BUC.
-- Every important use case belongs to exactly the intended BUC.
-- Business order is explicit with `flow`/`step` when order is part of the
-  requirement.
-- Use-case names describe business actions, not UI buttons or API endpoints.
-- Data and implementation omissions are acceptable and visible as next questions.
-
-## Next Step
-
-Load `references/02-screens.md` when reviewers can name the
-business objects each use case creates, reads, updates, or deletes.
+Next: `references/02-screens.md`, once the actors and use cases hold.
