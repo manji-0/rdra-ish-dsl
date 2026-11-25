@@ -792,6 +792,37 @@ mod pick_tests {
         assert!(end <= 9, "{end}: {runs:?}");
     }
 
+    /// The cost of ranking uncounted jobs as large: when BFS counts nothing until its entity
+    /// pass ends (here at 5 s), a 4-core machine runs one job at a time on 4 workers until
+    /// then, where `tlc_workers` ran 4 at once on 1. Counted from then on, the rest go 4 at
+    /// once. This is owner decision 6 of docs/design/tlc-scheduling.md.
+    #[test]
+    fn until_bfs_counts_a_small_machine_runs_one_uncounted_job_at_a_time() {
+        let m = machine(4);
+        let jobs: Vec<Sim> = (0..15)
+            .map(|_| Sim {
+                bytes: GIB + OVERHEAD,
+                states: 300,
+                counted_at: Some(5),
+                work: 2,
+            })
+            .collect();
+        let runs = simulate(m, (8 * GIB, 16 * GIB, 5), &jobs);
+        let early: Vec<&Run> = runs.iter().filter(|r| r.start < 5).collect();
+        assert!(early.iter().all(|r| r.workers == 4), "{runs:?}");
+        for t in 0..5 {
+            let going = early.iter().filter(|r| r.start <= t && t < r.end).count();
+            assert!(going <= 1, "{going} at {t}: {runs:?}");
+        }
+        assert!(
+            runs.iter().filter(|r| r.start >= 5).all(|r| r.workers == 1),
+            "{runs:?}"
+        );
+        // 30 worker-seconds: 8 s on 4 cores one worker each, 11 s here.
+        let end = runs.iter().map(|r| r.end).max().unwrap();
+        assert!(end <= 11, "{end}: {runs:?}");
+    }
+
     /// #384's model on 64 cores: two giants and property cones of 2M to 6.7M states that BFS
     /// counts late, and small cones it counts at once. The large ones start first on the cap,
     /// the small ones fill the cores left on one worker each, the jobs going never hold more
