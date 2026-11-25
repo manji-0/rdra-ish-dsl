@@ -222,6 +222,63 @@ impl Reduction {
         self.s_entity[e.index()]
     }
 
+    /// The entities of `ts`, this reduced cone, that a run up to instance symmetry leaves
+    /// where they are (#212 phase 3, `G_T`): the state holds a class representative for S,
+    /// which a permutation of S rows does not map to a representative, and the class tables
+    /// key on the inputs and the bits slot by slot. So every S entity stays; so does every
+    /// entity that holds an S var or an input, and every parent such a key names; every
+    /// entity a bit is kept per row of; and every entity a param of an S action binds, since
+    /// a class move's params are stored with its class and do not follow the T rows.
+    pub(crate) fn fixed(&self, ts: &TransitionSystem) -> Vec<EntId> {
+        self.fixed_why(ts).into_keys().collect()
+    }
+
+    /// `fixed`, each entity with every reason found for it, for the stats line of
+    /// `RDRA_ISH_G_T_STATS`.
+    pub(crate) fn fixed_why(&self, ts: &TransitionSystem) -> BTreeMap<EntId, Vec<&'static str>> {
+        let mut fixed: BTreeMap<EntId, Vec<&'static str>> = BTreeMap::new();
+        let mut add = |e: EntId, why: &'static str| {
+            let reasons = fixed.entry(e).or_default();
+            if !reasons.contains(&why) {
+                reasons.push(why);
+            }
+        };
+        for e in (0..ts.entities.len()).map(EntId::at) {
+            if self.is_s_entity(e) {
+                add(e, "S");
+            }
+        }
+        for v in &self.all {
+            let d = ts.var(*v);
+            let input = !self.is_s_var(*v);
+            if let Some(e) = d.kind.entity() {
+                add(e, if input { "input" } else { "S var" });
+            }
+            if let super::types::Domain::Instance { parent, .. } = d.domain {
+                add(
+                    parent,
+                    if input {
+                        "named by an input"
+                    } else {
+                        "named by S"
+                    },
+                );
+            }
+        }
+        for f in self.bits.iter().flatten() {
+            add(f.key_entity(ts), "bit key");
+        }
+        for a in (0..ts.actions.len())
+            .map(ActId::at)
+            .filter(|a| self.skips(*a))
+        {
+            for p in &ts.actions[a.index()].params {
+                add(p.entity, "S action param");
+            }
+        }
+        fixed
+    }
+
     /// The S and input bytes of a state, as the extended sub-lifecycle's state: its vars in
     /// their layout, the stubs, then the input bits.
     pub(crate) fn key(&self, ts: &TransitionSystem, s: &StateSlice) -> Vec<u8> {

@@ -4,12 +4,13 @@
 
 use std::collections::BTreeSet;
 
+use crate::lifecycle::expr::StateSlice;
 use crate::memory::{MemoryPool, MemorySize};
 
 use super::cone::{load, SAMPLES};
 use super::*;
 use crate::lifecycle::{
-    Action, ActionOrigin, ComponentRun, Fold, FoldKey, QuotientCache, State, Step, Target,
+    Action, ActionOrigin, ComponentRun, EntId, Fold, FoldKey, QuotientCache, State, Step, Target,
     TargetExploration, VarSet,
 };
 
@@ -414,18 +415,20 @@ fn assert_real_path(plain: &TransitionSystem, start: &State, steps: &[Step]) {
 /// The reduced cones of a model decide what its cones decide, and their traces lift, with S
 /// run plainly and up to `H` (#212 phase 2). Returns the cones the plain quotient reduces.
 fn assert_reduction_exact(sample: &str, model: &SemanticModel, bounds: Bounds) -> usize {
-    let n = assert_reduction_exact_in(sample, model, bounds.clone(), false);
+    let (n, _) = assert_reduction_exact_in(sample, model, bounds.clone(), false);
     assert_reduction_exact_in(sample, model, bounds, true);
     n
 }
 
-/// `assert_reduction_exact`, with S forced up to `H` at once when `up_to_h` says so.
+/// `assert_reduction_exact`, with S forced up to `H` at once when `up_to_h` says so. Without
+/// it, each complete reduced safety cone also runs up to `G_T` (`assert_up_to_g_t`). Returns
+/// the cones the quotient reduces, and the safety cones among them whose rows `G_T` moved.
 fn assert_reduction_exact_in(
     sample: &str,
     model: &SemanticModel,
     bounds: Bounds,
     up_to_h: bool,
-) -> usize {
+) -> (usize, usize) {
     let caps = Caps::new(usize::MAX, 200_000);
     let reduce_caps = match up_to_h {
         true => caps.forcing_s_up_to_h(),
@@ -438,8 +441,13 @@ fn assert_reduction_exact_in(
     let plain_views = plain.entity_views(&ts, model, &[]);
     let reduced_views = reduced.entity_views(&ts, model, &[]);
     let mut reductions = 0;
+    let mut moved = 0;
     for target in &targets {
         let (p, r) = (plain.cone_of(*target), reduced.cone_of(*target));
+        let safety = matches!(target, Target::Invariant(_) | Target::AfterAssert(_));
+        if safety && !up_to_h && r.run.system.reduction().is_some() {
+            moved += usize::from(assert_up_to_g_t(sample, *target, &r.run.system));
+        }
         if !p.run.complete || !r.run.complete {
             continue;
         }
@@ -493,24 +501,83 @@ fn assert_reduction_exact_in(
             "{sample}: {a:?} vs {b:?}"
         );
     }
-    reductions
+    (reductions, moved)
 }
 
-fn reductions_in(samples: &[&str], up_to_h: bool) -> usize {
-    let mut reductions = 0;
+/// `system`, a reduced safety cone, run plainly and up to `G_T` (#212 phase 3), when its
+/// plain run stays under 200,000 states. The group is a bisimulation: the canonical forms of
+/// the successors of every plain state are those of the successors of its canonical form,
+/// which a group that moves a row the reduction keys on fails. The stored states are the
+/// canonical forms of the plain run's, the two runs report the same violated checks, each
+/// with a trace the run lifted through the symmetry and then through #74 and replayed, and
+/// every S entity, and so the class representative, stays where it is. Returns whether
+/// `G_T` stored fewer states than the plain run.
+fn assert_up_to_g_t(sample: &str, target: Target, system: &TransitionSystem) -> bool {
+    let run = system.clone().run(Caps::new(usize::MAX, 200_000));
+    if !run.complete {
+        return false;
+    }
+    let orbits = system.clone().run_orbits(Caps::new(usize::MAX, usize::MAX));
+    assert!(orbits.complete(), "{sample} {target:?}: up to G_T");
+    let names = |diags: &[crate::lifecycle::diag::Diag]| -> BTreeSet<String> {
+        diags.iter().map(|d| d.diag.name(&[])).collect()
+    };
+    assert_eq!(
+        names(&run.diags),
+        names(orbits.diags()),
+        "{sample} {target:?}: violated checks up to G_T"
+    );
+    let successors = |s: &StateSlice| -> BTreeSet<State> {
+        system.moves(s).map(|m| orbits.canonical(&m.next)).collect()
+    };
+    for s in run.states.iter() {
+        let form = orbits.canonical(s);
+        assert!(
+            successors(s) == successors(&form),
+            "{sample} {target:?}: G_T is no bisimulation at {:?}",
+            &s.0
+        );
+    }
+    let stored: BTreeSet<State> = orbits.states().iter().map(|s| s.to_owned()).collect();
+    let forms: BTreeSet<State> = run.states.iter().map(|s| orbits.canonical(s)).collect();
+    assert!(
+        stored == forms,
+        "{sample} {target:?}: {} plain states have {} forms, {} stored",
+        run.states.len(),
+        forms.len(),
+        stored.len()
+    );
+    let r = system.reduction().expect("a reduced cone");
+    for e in (0..system.entities().len()).map(EntId::at) {
+        assert!(
+            !r.is_s_entity(e) || !orbits.moves(e),
+            "{sample} {target:?}: G_T moves the S rows of {}",
+            system.entity(e).id
+        );
+    }
+    orbits.orbits() < run.states.len()
+}
+
+/// The cones of `samples` the quotient reduces, and the safety cones among them whose rows
+/// `G_T` moved (`assert_reduction_exact_in`).
+fn reductions_in(samples: &[&str], up_to_h: bool) -> (usize, usize) {
+    let (mut reductions, mut moved) = (0, 0);
     for sample in samples {
         let model = load(sample);
         for bounds in [Bounds::STATES, Bounds::VERIFY] {
-            reductions += assert_reduction_exact_in(sample, &model, bounds, up_to_h);
+            let (r, m) = assert_reduction_exact_in(sample, &model, bounds, up_to_h);
+            reductions += r;
+            moved += m;
         }
     }
-    reductions
+    (reductions, moved)
 }
 
 /// Most bundled sample cones quotient to themselves and stay unreduced (#101); two reduce.
+/// Each reduced safety cone also runs up to `G_T` (#212 phase 3).
 #[test]
 fn reduced_cones_decide_what_the_cones_decide() {
-    let reductions = reductions_in(SAMPLES, false);
+    let (reductions, _) = reductions_in(SAMPLES, false);
     assert!(reductions >= 2, "{reductions} cones reduced");
 }
 
@@ -519,15 +586,16 @@ fn reduced_cones_decide_what_the_cones_decide() {
 /// each quotient to the plain one.
 #[test]
 fn reduced_cones_up_to_h_decide_what_the_cones_decide() {
-    let reductions = reductions_in(SAMPLES, true);
+    let (reductions, _) = reductions_in(SAMPLES, true);
     assert!(reductions >= 2, "{reductions} cones reduced");
 }
 
 /// The domain samples explore millions of states; CI runs this in release in formal-verify.
 #[test]
 fn reduced_domain_cones_decide_what_the_cones_decide() {
-    let reductions = reductions_in(DOMAIN_SAMPLES, false);
+    let (reductions, moved) = reductions_in(DOMAIN_SAMPLES, false);
     assert!(reductions >= 53, "{reductions} cones reduced");
+    assert!(moved >= 1, "{moved} reduced safety cones G_T moves rows of");
 }
 
 /// Every target and property cone of the samples, reduced through one shared quotient cache,
@@ -689,6 +757,61 @@ fn a_sub_lifecycle_up_to_h_stores_fewer_states_and_lifts_its_traces() {
         let (start, steps) = lifted_path(&u.run, at);
         assert_real_path(&unreduced, &start, &steps);
     }
+}
+
+/// A reduced cone up to `G_T` (#212 phase 3): the job's cone reduces the gate, and at two
+/// instances `G_T` swaps the jobs, which the reduction does not key on, while it leaves the
+/// gate, the key and the card where they are. It stores fewer states than the plain reduced
+/// run, finds the same violation, and lifts its trace through the swap and then through the
+/// class moves, so the printed trace spells the gate's and the key's steps and ends in the
+/// job's start, as the plain reduced run's does.
+#[test]
+fn a_reduced_cone_up_to_g_t_stores_fewer_states_and_lifts_its_trace() {
+    let model = model_from(GATE);
+    let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+    let rule = Target::Invariant(0);
+    let caps = Caps::new(usize::MAX, 200_000);
+    let plain = ts.explore_targets_reduced(&[rule], caps);
+    let cone = &plain.cone_of(rule).run;
+    cone.system
+        .reduction()
+        .expect("the job's cone reduces the gate");
+    // The cone's run stopped at its violation; the whole reduced cone, run plainly.
+    let p = &cone.system.clone().run(caps);
+    assert!(
+        assert_up_to_g_t("gate", rule, &cone.system),
+        "G_T stores fewer states"
+    );
+    let orbits = p.system.clone().run_orbits(caps);
+    let job = (0..p.system.entities().len())
+        .map(EntId::at)
+        .find(|e| p.system.entity(*e).id == "Job")
+        .expect("the job is in its cone");
+    assert!(orbits.moves(job), "G_T swaps the jobs");
+    let a = violated(&plain);
+    let b: Vec<&StateDiag> = orbits
+        .diags()
+        .iter()
+        .map(|d| &d.diag)
+        .filter(|d| matches!(d, StateDiag::ConstraintViolated { .. }))
+        .collect();
+    assert_eq!((a.len(), b.len()), (1, 1));
+    assert_eq!(a[0].name(&[]), b[0].name(&[]));
+    let steps = |d: &StateDiag| -> Vec<String> {
+        d.trace()
+            .expect("a violation has a trace")
+            .steps
+            .iter()
+            .map(|s| s.action.clone())
+            .collect()
+    };
+    assert_eq!(steps(a[0]), steps(b[0]), "the same lifted trace");
+    let lifted = steps(b[0]);
+    assert!(
+        lifted.contains(&"Unlatch".to_string()) && lifted.contains(&"Unlock".to_string()),
+        "the lifted trace spells the gate's and the key's steps: {lifted:?}"
+    );
+    assert_eq!(lifted.last().map(String::as_str), Some("Start"));
 }
 
 /// Two actions of one name are two actions: the reduced cone relates the gate's action to

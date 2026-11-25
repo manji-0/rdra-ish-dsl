@@ -82,12 +82,12 @@ impl Job {
         self.tla.len().max(extra.unwrap_or(0)) as u64
     }
 
-    /// Whether the job may run up to instance symmetry in phase 1 (#212): a safety cone, or
-    /// an `always` (`PropertyJob::symmetric`), on a cone the sub-lifecycle reduction leaves
-    /// whole.
+    /// Whether the job may run up to instance symmetry (#212): a safety cone, whole (phase 1)
+    /// or reduced, up to `G_T` (phase 3), or an `always` (`PropertyJob::symmetric`) on a cone
+    /// the sub-lifecycle reduction leaves whole.
     pub(super) fn symmetric(&self) -> bool {
         match &self.kind {
-            JobKind::Cone(cone) => cone.system.reduction().is_none(),
+            JobKind::Cone(_) => true,
             JobKind::PropertyCone(p) => p.symmetric(),
             JobKind::Explored(_) | JobKind::Whole(_) => false,
         }

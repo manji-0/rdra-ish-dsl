@@ -132,6 +132,21 @@
 
 ### Added
 
+- `verify --symmetry` also covers a reduced safety cone (#212, phase 3): under `always`, and
+  under `retry` once its plain run stopped at the memory limit, it runs up to `G_T`, the
+  instance symmetry of its T rows, which leaves every S entity, and with it the class
+  representative, where it is, along with each entity the reduction keys on (an S var or an
+  input, the rows such a key names, a bit's rows, an S action's params). The notes under the
+  line name those entities. A counterexample is lifted through the symmetry, then through
+  the reduction, and replayed. Without the option nothing changes, and `retry` changes
+  only a cone that stops at the memory limit. At `--instance-count 3 --memory 8GiB`
+  patent-ops' `Forbidden_Patent_4`, whose plain run stopped at 40.8M states, takes
+  31,926,220 orbits for about 260M states and is decided (`ok`, 98 s at `RDRA_JOBS=4`), and
+  with it `Inv_Patent_0`. `Forbidden_OfficeAction_3` is not: `G_T` moves its one T entity,
+  so it stores at most 6 times fewer states, and it stopped at 67.1M orbits. With S fixed
+  the factor on patent-ops' complete n=3 cones is 3.0 to 5.5. The `shadow` build counts the
+  run's twin on a reduced cone as `reduced_orbit_run`.
+
 - `verify --symmetry` also covers the sub-lifecycle of a reduced cone (#212, phase 2):
   under `retry` and `always`, a sub-lifecycle whose run stops at the memory limit, alone,
   runs again up to `H`, the instance symmetry that keeps what the quotient reads, and the
