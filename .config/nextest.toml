@@ -53,7 +53,8 @@ not (
   | (binary_id(rdra-ish-cli::engine_corpus) & test(=a_capped_graph_decides_nothing_the_full_graph_contradicts))
   | (binary_id(rdra-ish-cli::engine_equivalence) & (
         test(=a_job_past_the_time_limit_runs_as_a_process_and_is_no_fault)
-      | test(=a_job_that_exits_the_batch_jvm_runs_as_a_process)))
+      | test(=a_job_that_exits_the_batch_jvm_runs_as_a_process)
+      | test(=a_tlc_the_batch_driver_cannot_call_runs_as_a_process)))
   | (binary_id(rdra-ish-cli::key_facts) & test(=key_facts_hold_on_every_sample))
   | (binary_id(rdra-ish-lsp::manifest_error) & test(=a_burst_of_edits_ends_on_the_diagnostics_of_the_last_text))
   | (binary_id(rdra-ish-syntax::fmt_samples) & test(=fmt_keeps_every_sample_the_same_model_and_is_idempotent))
@@ -65,7 +66,8 @@ not (
       | test(=lifecycle::explore::plan_tests::planned_enabled_bindings_agree_with_eval_on_every_shipped_model)
       | test(=lifecycle::explore::symmetry::tests::a_parent_and_an_owner_child)
       | test(=lifecycle::tests::reduce::a_count_over_t_in_a_guard_reduces_exactly)
-      | test(=lifecycle::tests::reduce::a_sub_lifecycle_that_reads_inputs_of_t_is_reduced_and_decides_the_same)))
+      | test(=lifecycle::tests::reduce::a_sub_lifecycle_that_reads_inputs_of_t_is_reduced_and_decides_the_same)
+      | test(=lifecycle::tests::reduce::a_cone_between_the_old_and_the_new_cell_budget_is_reduced)))
 )
 """
 # Every failure, not only the first, and the slow tests again at the end of the log.

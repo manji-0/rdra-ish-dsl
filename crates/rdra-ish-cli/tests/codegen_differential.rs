@@ -15,8 +15,8 @@
 //!   function returns `Rejected`.
 //!
 //! The cases are deduplicated by function and arguments. The domain samples are a test of
-//! their own, which `scripts/diff-test.sh` skips and CI's check job runs when a change
-//! touches codegen, and on main. `RDRA_CODEGEN_SAMPLE=<part>` keeps the samples whose path contains `<part>`. A
+//! their own. Both tests are on the slow list of `.config/nextest.toml`: CI's check job runs
+//! them when a change touches codegen, and on main. `RDRA_CODEGEN_SAMPLE=<part>` keeps the samples whose path contains `<part>`. A
 //! missing `go` skips Go, except under `RDRA_REQUIRE_CODEGEN_TOOLS=1`. The driver preludes
 //! are `tests/fixtures/codegen/differential/prelude.{rs,go}`.
 
@@ -1337,8 +1337,8 @@ fn printed_code_agrees_on_the_small_samples() {
     agree(|s| !DOMAIN.contains(&s));
 }
 
-/// The domain samples: about 100 s in a debug build. `scripts/diff-test.sh` skips it; CI's
-/// check job runs it when a change touches codegen, and on main.
+/// The domain samples: about 100 s in a debug build, on the slow list of
+/// `.config/nextest.toml`; CI's check job runs it when a change touches codegen, and on main.
 #[test]
 fn printed_code_agrees_on_the_domain_samples() {
     agree(|s| DOMAIN.contains(&s));

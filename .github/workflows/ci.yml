@@ -32,8 +32,8 @@ jobs:
     # says whether the change can break the nix package while cargo still builds: the flake
     # takes the whole repository as its source, so only its own files, the manifests, the
     # lock file and this workflow can. `codegen` says whether the change touches the codegen
-    # printers, the subcommand or their tests: `check` then runs codegen_differential's
-    # domain samples too.
+    # printers, the subcommand or their tests: `check` then runs the slow tests of the
+    # codegen_* binaries too.
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -180,13 +180,13 @@ jobs:
       - name: slow tests
         # On main (scheduled or by hand), the tests the test step's `pr` profile skips: the
         # `slow` profile inherits its list as `default()`.
-        if: needs.changes.outputs.code != 'false' && (github.event_name != 'pull_request' || github.head_ref == 'ci/pr-skip-slow-tests')
+        if: ${{ !cancelled() && needs.changes.outputs.code != 'false' && github.event_name != 'pull_request' }}
         run: RDRA_REQUIRE_CODEGEN_TOOLS=1 scripts/diff-test.sh --profile slow --filter 'not default()' --all
       - name: no test a pull request runs takes over 10 s
         # On main, from the test step's times: a test past 10 s fails the run until it joins
         # the `pr` profile's list in .config/nextest.toml or gets faster. A warning would scroll
         # by unread; the red run is what keeps the list true.
-        if: ${{ !cancelled() && needs.changes.outputs.code != 'false' && (github.event_name != 'pull_request' || github.head_ref == 'ci/pr-skip-slow-tests') }}
+        if: ${{ !cancelled() && needs.changes.outputs.code != 'false' && github.event_name != 'pull_request' }}
         run: python3 -I scripts/check-test-times.py target/nextest/pr/junit.xml 10
       - name: test times
         # Each test's time, target/nextest/{pr,slow}/junit.xml.
