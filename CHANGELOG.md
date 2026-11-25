@@ -20,6 +20,9 @@
 - `verify --with-tlc`: `RDRA_TLC_HEAP=states` raises a cone run's heap to 640 bytes per
   state BFS counted in its module, in whole GiB within TLC's share, when that is more than
   the module's rule gives (experimental; #384).
+- `verify --with-tlc --plan <FILE> -o <DIR>` (experimental) writes as JSON the TLC launches
+  `verify` would start, with BFS's verdict and states and the heap, workers and arguments of
+  each, and starts no TLC (#384).
 
 ## v3.0.0 - 2026-11-26
 
