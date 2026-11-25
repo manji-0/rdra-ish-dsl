@@ -557,7 +557,10 @@ factor recorded as why not.
 
 As built, a reduced safety cone runs up to `G_T` under `--symmetry always`, and under
 `retry` once its lone plain run stopped at the memory limit, as a whole cone does; an
-`always` property on a reduced cone still runs plain. The `shadow` build counts the
+`always` property on a reduced cone still runs plain. The table below is `always`'s. Under
+`retry`, `Forbidden_Patent_4` has not been seen to get that far at n=3: a run of
+`verify --entity Patent --symmetry retry` at `RDRA_JOBS=4` was stopped after 2,400 s, still
+in the plain attempts that come before the retry, where `always` takes 98 s. The `shadow` build counts the
 `OrbitRun` twin on a reduced cone apart, as `reduced_orbit_run`. At n=3 under 8 GiB
 (`verify --instance-count 3 --memory 8GiB --symmetry always --entity <E>`, `RDRA_JOBS=4`):
 

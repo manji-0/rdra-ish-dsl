@@ -72,9 +72,11 @@ every case, whatever the case's header says.
 
 **The native checker up to instance symmetry**, on `verify --symmetry always`:
 
-8. With `--symmetry always` and reduction off (`RDRA_ISH_NO_REDUCE=1`, so that every safety
-   cone and `always` cone goes through the orbit run), each check that both runs decide gets
-   the verdict the plain run gives, at 2 instances and at every bound the case runs BFS at.
+8. With `--symmetry always`, once with reduction off (`RDRA_ISH_NO_REDUCE=1`, so that every
+   safety cone and `always` cone goes through the orbit run) and once with it on (so that a
+   reduced safety cone goes through the run up to `G_T`), each check that both runs decide
+   gets the verdict the plain run gives, at 2 instances and at every bound the case runs BFS
+   at.
    The run prints no fault and does not panic: a lifted counterexample that does not replay
    through the step relation, or whose steps do not bind the rows they name, panics. See
    [Instance symmetry](./cli-reference.md#instance-symmetry).
@@ -318,6 +320,14 @@ and 3 instances on a `shadow` build. Each bug was reverted afterwards.
 Rule 8 misses the uncoupled identity pair and the permuted absent slots: the wrong
 canonical form there still gives the plain run's verdicts on every case, so only the
 exhaustive test and the `canonical` twin see it.
+
+Phase 3 (a reduced safety cone up to `G_T`) planted one bug the same way. No single rule
+of `Reduction::fixed` other than the S entities can be dropped so that a check sees it: on
+the samples every T entity it fixes for an input, a key S holds, or a bit is also bound by
+an S action, and the reverse. Dropping the input, the key and the S-action rules together
+moves `PermitApplication` in a food-permit-ops cone whose S reads it; the `OrbitRun` twin
+on a `shadow` build (`reduced_orbit_run`) and the unit test
+`reduced_domain_cones_decide_what_the_cones_decide` report that `G_T` is no bisimulation.
 
 ## Mutation run
 
