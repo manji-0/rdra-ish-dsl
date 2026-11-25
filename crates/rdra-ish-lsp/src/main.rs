@@ -1,3 +1,4 @@
+use rdra_ish_lsp::catch_panic::CatchPanic;
 use rdra_ish_lsp::Backend;
 use tower_lsp::{LspService, Server};
 
@@ -7,5 +8,7 @@ async fn main() {
     let stdout = tokio::io::stdout();
 
     let (service, socket) = LspService::new(Backend::new);
-    Server::new(stdin, stdout, socket).serve(service).await;
+    Server::new(stdin, stdout, socket)
+        .serve(CatchPanic(service))
+        .await;
 }

@@ -3,7 +3,7 @@
 use rdra_ish_core::{SemanticModel, KNOWN_PREDICATES};
 use tower_lsp::lsp_types::{CompletionItem, CompletionItemKind};
 
-use crate::predicates::{predicate_arg_context, predicate_arg_kinds};
+use crate::predicates::{predicate_arg_context, predicate_arg_kinds, trailing_word};
 
 const KIND_KEYWORDS: &[&str] = &[
     "actor",
@@ -121,10 +121,9 @@ fn identifier_prefix(source: &str, offset: usize) -> &str {
         .rfind('\n')
         .map(|index| index + 1)
         .unwrap_or(0);
-    let line = &source[line_start..offset];
-    line.rfind(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_')
-        .map(|index| &line[index + 1..])
-        .unwrap_or(line)
+    trailing_word(&source[line_start..offset], |ch| {
+        ch.is_ascii_alphanumeric() || ch == '_'
+    })
 }
 
 fn completing_predicate_name(source: &str, offset: usize) -> bool {
@@ -242,6 +241,19 @@ usecase Book "Book"
             let items = completion_items(&model, prefix, prefix.len());
             assert!(items.iter().any(|item| item.label == name), "{name}");
         }
+    }
+
+    #[test]
+    fn completes_at_every_offset_of_japanese_text() {
+        let src = "actor A \"顧客(法人)\"\nperforms(A, ) // 受付(\nactor B \"受付";
+        let (ast, _) = parse(src);
+        let (model, _) = build_model(&ast);
+        for (offset, _) in src.char_indices().chain([(src.len(), ' ')]) {
+            let _ = completion_items(&model, src, offset);
+        }
+        assert_eq!(identifier_prefix(src, src.len()), "");
+        let typed = format!("{src}\nper");
+        assert_eq!(identifier_prefix(&typed, typed.len()), "per");
     }
 
     #[test]

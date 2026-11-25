@@ -77,7 +77,8 @@ fn metadata_block_range(text: &str, span: &std::ops::Range<usize>) -> Option<Fol
     }
 
     let start_line = first_meta_line?;
-    let end_line = byte_offset_to_position(text, last_meta_line_end.saturating_sub(1)).line;
+    // The end of a line, its `\n` or the end of the span, is still on that line.
+    let end_line = byte_offset_to_position(text, last_meta_line_end).line;
     if end_line <= start_line {
         return None;
     }
@@ -123,5 +124,23 @@ mod tests {
         assert!(errs.is_empty());
         let ranges = folding_ranges(&ast, src);
         assert!(ranges.iter().any(|range| range.start_line == 1));
+    }
+
+    #[test]
+    fn folds_metadata_block_with_japanese_text() {
+        for src in [
+            "api CreateOrder \"注文\"\n  method POST // 受付\n  path \"/受付\"\n",
+            "api CreateOrder \"注文\"\n  method POST\n  path \"/受付\" // 受付",
+        ] {
+            let (ast, errs) = parse(src);
+            assert!(errs.is_empty(), "{errs:?}");
+            let ranges = folding_ranges(&ast, src);
+            assert!(
+                ranges
+                    .iter()
+                    .any(|range| range.start_line == 1 && range.end_line == 2),
+                "{src:?}: {ranges:?}"
+            );
+        }
     }
 }
