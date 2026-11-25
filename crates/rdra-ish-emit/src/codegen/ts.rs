@@ -39,7 +39,11 @@ fn sum_prop(sum: &SumDecl, wire: &str) -> String {
         .map_or_else(|| property(wire), dprop)
 }
 
-pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
+pub(super) fn print(
+    domain: &DomainModel,
+    options: &Options,
+    traces: Option<&super::conformance::Traces>,
+) -> String {
     let cx = Cx { domain };
     let mut head = String::new();
     for line in header_lines(options) {
@@ -47,6 +51,9 @@ pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
     }
     head.push_str("//\n");
     for line in obligation_lines(domain) {
+        head.push_str(&comment(&line));
+    }
+    for line in super::conformance_lines(domain, traces, "conform", "ConformancePort") {
         head.push_str(&comment(&line));
     }
     head.push('\n');
@@ -61,6 +68,8 @@ pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
     print_functions(&cx, &mut body);
     print_validators(&cx, &mut body);
     print_dispatchers(&cx, &mut body);
+    super::ts_port::print_contracts(domain, &mut body);
+    super::ts_port::print_port(domain, &mut body);
     out.push_str(&helpers(&body));
     out.push_str(&body);
     while out.ends_with("\n\n") {
@@ -69,7 +78,7 @@ pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
     head + &out
 }
 
-fn field_type(ty: &FieldType) -> String {
+pub(super) fn field_type(ty: &FieldType) -> String {
     match ty {
         FieldType::Scalar(s) => scalar(*s).to_string(),
         FieldType::Enum(name) | FieldType::Id(name) => name.clone(),
@@ -78,7 +87,7 @@ fn field_type(ty: &FieldType) -> String {
 }
 
 /// The type of a column, with `| null` when it is nullable.
-fn column_type(ty: &FieldType, nullable: bool) -> String {
+pub(super) fn column_type(ty: &FieldType, nullable: bool) -> String {
     let ty = field_type(ty);
     if nullable {
         format!("{ty} | null")
@@ -97,7 +106,7 @@ fn scalar(s: Scalar) -> &'static str {
 }
 
 /// A property name as written: bare when it is an ASCII identifier, quoted otherwise.
-fn property(name: &str) -> String {
+pub(super) fn property(name: &str) -> String {
     let mut chars = name.chars();
     let plain = chars
         .next()
@@ -111,19 +120,19 @@ fn property(name: &str) -> String {
 }
 
 /// A function name: camelCase of the PascalCase name, with a reserved word given a trailing `_`.
-fn fn_name(pascal: &str) -> String {
+pub(super) fn fn_name(pascal: &str) -> String {
     binding(super::camel(pascal))
 }
 
 /// A parameter or local name: camelCase of the snake_case name, with a reserved word given
 /// a trailing `_`.
-fn local(snake_name: &str) -> String {
+pub(super) fn local(snake_name: &str) -> String {
     binding(super::camel(&super::type_ident(snake_name)))
 }
 
 /// A name a declaration binds: the words strict-mode TypeScript reserves there take a
 /// trailing `_`. A property name needs no escape (see [`property`]).
-fn binding(name: String) -> String {
+pub(super) fn binding(name: String) -> String {
     const RESERVED: [&str; 46] = [
         "break",
         "case",
@@ -189,7 +198,7 @@ fn comment(line: &str) -> String {
     }
 }
 
-fn doc(lines: &[String], indent: &str) -> String {
+pub(super) fn doc(lines: &[String], indent: &str) -> String {
     let lines: Vec<String> = lines
         .iter()
         .map(|l| one_line(l).replace("*/", "* /"))
@@ -210,7 +219,7 @@ fn doc(lines: &[String], indent: &str) -> String {
 }
 
 /// The cases of a union type, one per line, each with its trailing comment, the last ended by `;`.
-fn union(cases: impl Iterator<Item = (String, String)>) -> String {
+pub(super) fn union(cases: impl Iterator<Item = (String, String)>) -> String {
     let cases: Vec<_> = cases.collect();
     let mut out = String::new();
     for (i, (case, comment)) in cases.iter().enumerate() {
@@ -220,7 +229,7 @@ fn union(cases: impl Iterator<Item = (String, String)>) -> String {
     out
 }
 
-fn doc1(line: &str) -> String {
+pub(super) fn doc1(line: &str) -> String {
     doc(&[line.to_string()], "")
 }
 
@@ -1334,7 +1343,7 @@ fn print_validators(cx: &Cx<'_>, out: &mut String) {
             sum.name
         )));
         out.push_str(&format!(
-            "export function {}RuleViolations(row: {}): readonly string[] {{\n  switch (row.kind) {{\n",
+            "export function {}RuleViolations(row: {}): readonly string[] {{\n  const kind = row.kind;\n  switch (kind) {{\n",
             super::camel(&sum.name),
             sum.name,
         ));
@@ -1345,7 +1354,7 @@ fn print_validators(cx: &Cx<'_>, out: &mut String) {
                 super::camel(&variant.name)
             ));
         }
-        out.push_str("    default:\n      return assertNever(row);\n  }\n}\n\n");
+        out.push_str("    default:\n      return assertNever(kind);\n  }\n}\n\n");
     }
 }
 

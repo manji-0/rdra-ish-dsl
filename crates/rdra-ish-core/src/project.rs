@@ -59,7 +59,7 @@ pub struct CodeTarget {
     /// The `codegen` output: the domain types, functions, contracts and, with `traces`, the
     /// conformance harness.
     pub domain: PathBuf,
-    /// The conformance traces (Rust and Go); with it the domain code holds the harness.
+    /// The conformance traces; with it the domain code holds the harness.
     pub traces: Option<PathBuf>,
     /// `--conformance-states` of the traces.
     pub conformance_states: Option<usize>,

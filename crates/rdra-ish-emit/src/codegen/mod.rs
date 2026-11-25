@@ -19,6 +19,7 @@ mod rust;
 mod rust_port;
 mod states;
 mod ts;
+mod ts_port;
 mod validators;
 
 use std::collections::BTreeMap;
@@ -51,7 +52,7 @@ pub struct Options {
     pub version: String,
     /// What `check` said of the model: the state sums refine only a model it passed.
     pub check: CheckStatus,
-    /// Print the conformance port and harness (Rust and Go), and write the traces of a BFS
+    /// Print the conformance port and harness, and write the traces of a BFS
     /// that stops at this many states.
     pub conformance: Option<usize>,
 }
@@ -107,18 +108,10 @@ pub fn generate_all(
         CheckStatus::Passed { caps, .. } => Some(caps),
         CheckStatus::Failed { .. } => None,
     };
-    if options.conformance.is_some() {
-        if options.lang == Lang::TypeScript {
-            return Err(CodegenError::Conformance(
-                "the harness is printed for --lang rust and go only".to_string(),
-            ));
-        }
-        if refine.is_none() {
-            return Err(CodegenError::Conformance(
-                "`check` rejects the model, so there are no transition functions to drive"
-                    .to_string(),
-            ));
-        }
+    if options.conformance.is_some() && refine.is_none() {
+        return Err(CodegenError::Conformance(
+            "`check` rejects the model, so there are no transition functions to drive".to_string(),
+        ));
     }
     let domain = domain_of(model, options, options.conformance.is_some(), site)?;
     let traces = options.conformance.map(|cap| {
@@ -129,7 +122,7 @@ pub fn generate_all(
         conformance::traces(model, &domain, cap, &header)
     });
     let code = match options.lang {
-        Lang::TypeScript => ts::print(&domain, options),
+        Lang::TypeScript => ts::print(&domain, options, traces.as_ref()),
         Lang::Rust => rust::print(&domain, options, traces.as_ref()),
         Lang::Go => go::print(&domain, options, traces.as_ref()),
     };

@@ -2091,7 +2091,7 @@ rdra-ish codegen <INPUTS...> --code
 | `-o`, `--out` | path | — (stdout) | Write to this file instead of stdout. |
 | `--package` | string | `domain` | The Go package name (`--lang go` only). Put the file in a directory of its own, as this package, and write the code that finishes it in another package: the fields of a state type are unexported, so only code outside the package is kept from building a state. |
 | `--allow-failing` | flag | off | Generate even when `check` reports errors. The state types then narrow no column, and each error is listed as an obligation the model does not meet. |
-| `--conformance` | path | — (no harness) | `--lang rust` and `go` only, on a model `check` passes: also print the conformance port and harness, and write to this file the traces the harness drives a finished service along. |
+| `--conformance` | path | — (no harness) | On a model `check` passes: also print the conformance port and harness, and write to this file the traces the harness drives a finished service along. |
 | `--conformance-states` | integer | `65536` | The states the BFS behind the traces explores at most. |
 | `--check` | path | — | Generate again and compare the result with this file instead of printing it. Exit 1 when they differ. Not with `-o`. With `--conformance <TRACES>`, the traces in `TRACES` are compared too, by hash. |
 
@@ -2223,7 +2223,7 @@ actors (`EndUserCapability`, made only by `EndUserCapability::issue()`). Code wi
 capability of an actor that performs the use case does not compile; whether the code that
 calls `issue` authenticated the actor is not checked.
 
-With `--conformance <FILE>` (Rust and Go), the output ends with a **conformance harness**
+With `--conformance <FILE>`, the output ends with a **conformance harness**
 for the service that finishes it, and `FILE` gets the traces it runs. The service
 implements `ConformancePort`: `seed` empties its store and stores the rows of an initial
 state, `snapshot` returns a `StoreSnapshot` of every row (the `<Entity>Row` of a state type,
@@ -2231,9 +2231,15 @@ the record otherwise), every pending run mark (`<UseCase><Entity>Run { id, step 
 every event a triggered use case reads, and two methods per action run the use case by the
 ids of its rows and its inputs: `prepare_pay` / `PreparePay` loads the rows and returns the
 dispatcher's result, writing nothing, and `commit_pay` / `CommitPay` stores that result in one
-transaction. Either returns an error when the use case does not run (in Rust, the use
-case's `<UseCase>Error`). The agent's test calls `conform(|| MyService::new(), &traces)` in Rust or
-`Conform(func() ConformancePort { return newService() }, traces)` in Go. The harness starts
+transaction. Either returns an error when the use case does not run (the use case's
+`<UseCase>Error`). The agent's test calls `conform(|| MyService::new(), &traces)` in Rust,
+`Conform(func() ConformancePort { return newService() }, traces)` in Go, or
+`await conform(() => newService(), traces)` in TypeScript. In TypeScript the port is the
+intersection of one `<UseCase>UseCase` type per use case with `seed` and `snapshot`, and
+every member is a function property that returns a `Promise` (`preparePay: (order: OrderId,
+orderPaidAt: DateTime) => Promise<Result<PayOutcome, PayError>>`): a TypeScript service reads
+its store asynchronously, so the contracts are async there, while the Rust and Go ones are
+sync. `conform` returns a `Result<ConformanceReport, string>`. The harness starts
 a fresh port per trace, seeds the trace's initial state, makes each call, and after each
 compares the store, cut down to the columns the model tracks (an enum's value, null or not,
 an integer, a key's parent id), with the state BFS reached. A call the model refuses must

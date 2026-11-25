@@ -227,6 +227,11 @@
   location (`CodeMissingUseCase_*`, `CodeIncomplete_*`, `CodeSignature_*`); `run` runs the
   conformance test the probe holds (`CodeConformance`).
 
+- `codegen --lang ts --conformance <FILE>` (#363, experimental): the TypeScript output gets the
+  contracts, one `<UseCase>UseCase` type per use case with `prepare*` / `commit*` function
+  properties that return `Promise<Result<..>>`, the `ConformancePort` that composes them with
+  `seed` and `snapshot`, and `conform(newPort, traces)`, the harness the Rust and Go output
+  already had. It reports the same differences, refusals, and interleaved commits.
 - `check --code[=fresh|build|run]` (#363, experimental; [design](docs/design/code-check.md)):
   does the service code have what the model requires? `[code.rust]`, `[code.go]` and
   `[code.ts]` in `rdra.toml` name the generated files, `codegen <INPUTS> --code` writes them

@@ -1254,7 +1254,8 @@ export function matchDefaultRuleViolations(row: MatchDefault): readonly string[]
 
 /** The rules a Func row breaks, by its state: empty when it keeps them all. */
 export function funcRuleViolations(row: Func): readonly string[] {
-  switch (row.kind) {
+  const kind = row.kind;
+  switch (kind) {
     case "New":
       return funcNewRuleViolations(row);
     case "Return":
@@ -1262,13 +1263,14 @@ export function funcRuleViolations(row: Func): readonly string[] {
     case "Func":
       return funcFuncRuleViolations(row);
     default:
-      return assertNever(row);
+      return assertNever(kind);
   }
 }
 
 /** The rules a Match row breaks, by its state: empty when it keeps them all. */
 export function matchRuleViolations(row: Match): readonly string[] {
-  switch (row.kind) {
+  const kind = row.kind;
+  switch (kind) {
     case "New":
       return matchNewRuleViolations(row);
     case "Return":
@@ -1282,7 +1284,7 @@ export function matchRuleViolations(row: Match): readonly string[] {
     case "Default":
       return matchDefaultRuleViolations(row);
     default:
-      return assertNever(row);
+      return assertNever(kind);
   }
 }
 

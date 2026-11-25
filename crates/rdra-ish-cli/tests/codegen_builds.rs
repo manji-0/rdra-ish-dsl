@@ -2,9 +2,9 @@
 //! `tests/fixtures/codegen/keywords.rdra`, whose names are keywords of the targets, the
 //! TypeScript output passes `tsc --strict`, the Rust output compiles as a library with no
 //! clippy warning and no undocumented public item (`clippy-driver -D warnings -D missing_docs`),
-//! and the Go output passes `go vet`, the Rust and Go output with the conformance harness of
-//! `--conformance`. A compiler missing from PATH skips its language, except under
-//! `RDRA_REQUIRE_CODEGEN_TOOLS=1`, which CI sets in the dev shell that provides them all.
+//! and the Go output passes `go vet`, each with the conformance harness of `--conformance`. A
+//! compiler missing from PATH skips its language, except under `RDRA_REQUIRE_CODEGEN_TOOLS=1`,
+//! which CI sets in the dev shell that provides them all.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -69,8 +69,7 @@ fn generate(sample: &str, lang: &str, dir: &Path, file: &str) -> PathBuf {
         "--conformance-states",
         "4096",
     ];
-    let first: &[&str] = if lang == "ts" { &[] } else { &harness };
-    let mut output = codegen(sample, lang, &path, first);
+    let mut output = codegen(sample, lang, &path, &harness);
     if !output.status.success()
         && String::from_utf8_lossy(&output.stderr).contains("refusing to generate code")
     {

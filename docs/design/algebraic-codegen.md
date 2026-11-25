@@ -439,6 +439,11 @@ CHANGELOG gives the migration):
 - Function-property notation in contract types (`prepareShipOrder: (...) => ...`), so a narrower
   parameter type does not pass. Brand sealing of state types stays opt-in (decision 9 of
   [code-check.md](./code-check.md#decisions)).
+- Async contracts: each `prepare*` / `commit*` returns `Promise<Result<..>>`, since a
+  TypeScript service reads and writes its store asynchronously and a synchronous contract would
+  force it to block or to fake its store. The Rust and Go contracts are sync, as their stores'
+  clients are. The split into prepare and commit, the `Result`, and the error unions are the
+  same in all three; the TypeScript `conform` awaits each call.
 
 As built: a brand is made without a type assertion through a type predicate, the companion's
 `is: (value: unknown) => value is OrderId`, which `parse` calls. A value set's companion has

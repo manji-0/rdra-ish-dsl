@@ -632,7 +632,8 @@ export function orderCancelledRuleViolations(_row: OrderCancelled): readonly str
 
 /** The rules a Order row breaks, by its state: empty when it keeps them all. */
 export function orderRuleViolations(row: Order): readonly string[] {
-  switch (row.kind) {
+  const kind = row.kind;
+  switch (kind) {
     case "Pending":
       return orderPendingRuleViolations(row);
     case "Paid":
@@ -640,7 +641,7 @@ export function orderRuleViolations(row: Order): readonly string[] {
     case "Cancelled":
       return orderCancelledRuleViolations(row);
     default:
-      return assertNever(row);
+      return assertNever(kind);
   }
 }
 
