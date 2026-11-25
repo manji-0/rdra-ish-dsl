@@ -728,6 +728,22 @@ fn print_sums(cx: &Cx<'_>, out: &mut String) {
             }
             out.push_str("          },\n        };\n      }\n");
         }
+        // A tag column marked `@null` holds null in no state.
+        if sum
+            .row_fields
+            .iter()
+            .any(|f| f.wire == sum.tag.wire && f.nullable)
+        {
+            out.push_str("      case null:\n");
+            out.push_str(&fail(
+                "        ",
+                &format!(
+                    "{{ kind: \"InvalidRow\", entity: {}, column: {}, reason: \"null, which is no state\" }}",
+                    string_literal(&sum.entity),
+                    string_literal(&sum.tag.wire)
+                ),
+            ));
+        }
         out.push_str(&format!(
             "      default:\n        return assertNever(row.{});\n    }}\n  }},\n",
             property(&sum.tag.wire)

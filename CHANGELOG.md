@@ -1051,6 +1051,11 @@
 
 ### Fixed
 
+- `codegen` output compiles for an entity whose state column is marked `@null` (#363). The
+  Rust `TryFrom<Row>`, the TypeScript `fromRow` and the Go `<Entity>FromRow` compared the
+  nullable column with the bare values; a row whose state column is null is now an
+  `InvalidRow`, and the row of a state holds `Some(..)` / a pointer / the value.
+
 - The language server sends its results under the paths the editor opened the files by.
   In a workspace opened through a symlink, diagnostics, definitions, references, renames,
   code lenses and workspace symbols used to name each file by the path the symlink points

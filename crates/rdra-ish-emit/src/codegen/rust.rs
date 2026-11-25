@@ -1519,7 +1519,27 @@ impl ::std::error::Error for InvalidRow {{}}
         }
         out.push_str("}\n\n");
 
-        // TryFrom<Row>.
+        // TryFrom<Row>. A tag column marked `@null` holds null in no state: such a row is an
+        // `InvalidRow`, and the row of a state holds its tag.
+        let tag_nullable = sum
+            .row_fields
+            .iter()
+            .any(|f| f.wire == sum.tag.wire && f.nullable);
+        let tag_value = |vi: &str| {
+            if tag_nullable {
+                format!("{OPTION}::Some({tag_enum}::{vi})")
+            } else {
+                format!("{tag_enum}::{vi}")
+            }
+        };
+        let invalid = |column: &str, reason: String| {
+            format!(
+                "InvalidRow {{ entity: {}, column: {}, reason: {} }}",
+                string_literal(&sum.entity),
+                string_literal(column),
+                string_literal(&reason)
+            )
+        };
         out.push_str(&format!(
             "impl ::core::convert::TryFrom<{row}> for {sum} {{\n    type Error = InvalidRow;\n\n    /// The state of a row, or why the row fits none.\n    fn try_from(row: {row}) -> {RESULT}<Self, InvalidRow> {{\n        match row.{tag} {{\n",
             row = sum.row,
@@ -1528,15 +1548,7 @@ impl ::std::error::Error for InvalidRow {{}}
         ));
         for v in &sum.variants {
             let vi = variant_ident(&v.value.ident);
-            out.push_str(&format!("            {tag_enum}::{vi} => {{\n"));
-            let invalid = |column: &str, reason: String| {
-                format!(
-                    "InvalidRow {{ entity: {}, column: {}, reason: {} }}",
-                    string_literal(&sum.entity),
-                    string_literal(column),
-                    string_literal(&reason)
-                )
-            };
+            out.push_str(&format!("            {} => {{\n", tag_value(&vi)));
             for f in &v.always_null {
                 out.push_str(&format!(
                     "                if row.{}.is_some() {{\n                    return {RESULT}::Err({});\n                }}\n",
@@ -1568,6 +1580,12 @@ impl ::std::error::Error for InvalidRow {{}}
                 "                {RESULT}::Ok(Self::{vi}({state}))\n            }}\n"
             ));
         }
+        if tag_nullable {
+            out.push_str(&format!(
+                "            {OPTION}::None => {RESULT}::Err({}),\n",
+                invalid(&sum.tag.wire, "null, which is no state".to_string())
+            ));
+        }
         out.push_str("        }\n    }\n}\n\n");
 
         // From<Sum> for Row.
@@ -1582,7 +1600,7 @@ impl ::std::error::Error for InvalidRow {{}}
             for f in &sum.row_fields {
                 let name = ident(&f.wire);
                 if f.wire == sum.tag.wire {
-                    inits.push(format!("{name}: {tag_enum}::{vi}"));
+                    inits.push(format!("{name}: {}", tag_value(&vi)));
                 } else if v.always_null.iter().any(|n| n.wire == f.wire) {
                     inits.push(format!("{name}: {OPTION}::None"));
                 } else if let Some(vf) = v.fields.iter().find(|x| x.wire == f.wire) {

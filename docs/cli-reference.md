@@ -2243,7 +2243,10 @@ declares it: the flat shape a store or the wire holds, with the same column name
 Go, `json` tags). `Order.fromRow(row)` / `Order::from_row(row)` / `OrderFromRow(row)` returns
 the state of a row, or `InvalidRow` naming the column whose value its state rules out (in
 TypeScript as a `Result`); `Order.toRow` / `into_row` / `OrderToRow` returns the flat row of
-a state. In TypeScript, `parseOrderRow(value: unknown)` reads a row from outside: each
+a state. A state column marked `@null` keeps its declared values as the states: its row
+column is nullable (`Option`, a pointer, `| null`), a row whose state column is null is an
+`InvalidRow`, and the row of a state holds its value. In TypeScript,
+`parseOrderRow(value: unknown)` reads a row from outside: each
 column through its type's parser (`OrderId.parse`, `DateTime.parse`, `Method.parse`), so a
 row of the wrong shape is an `InvalidRow` before it reaches the domain types. Ids and the
 scalars are branded and made only by `parse` (or narrowed by `is`), with no type

@@ -31,3 +31,17 @@ applies_to(Unflagged, Flag)
 condition Shown "表示"
 holds(Shown, Item.e == true)
 applies_to(Shown, Paint)
+
+// A state tag column marked `@null`: the states are its declared values, and a row whose tag
+// is null fits none (`InvalidRow`).
+entity Doc "文書" {
+  id: Int @pk
+  status: Enum(draft, published) @null @default(draft)
+  note: String @null
+}
+
+usecase Write "起票"
+usecase Publish "公開"
+
+creates(Write, Doc)
+transitions(Publish, Doc.status, draft -> published)

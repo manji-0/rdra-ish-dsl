@@ -1588,10 +1588,26 @@ pub(super) fn print_rows(domain: &DomainModel, out: &mut String) {
                 string_literal(&reason)
             )
         };
+        // A tag column marked `@null` holds null in no state: such a row is an InvalidRow, and
+        // the row of a state points at its tag.
+        let tag_nullable = sum
+            .row_fields
+            .iter()
+            .any(|f| f.wire == sum.tag.wire && f.nullable);
         out.push_str(&format!(
-            "// {0}FromRow returns the state row holds, or an *InvalidRow naming the column whose value no\n// state of {0} takes: a tag or a value outside its value set, a text not in its scalar's shape,\n// or a null or a value where the state's rules say otherwise.\nfunc {0}FromRow(row {1}) ({0}, error) {{\n\tswitch row.{2} {{\n",
-            sum.name, sum.row, sum.tag.pascal
+            "// {0}FromRow returns the state row holds, or an *InvalidRow naming the column whose value no\n// state of {0} takes: a tag or a value outside its value set, a text not in its scalar's shape,\n// or a null or a value where the state's rules say otherwise.\nfunc {0}FromRow(row {1}) ({0}, error) {{\n",
+            sum.name, sum.row
         ));
+        if tag_nullable {
+            out.push_str(&format!(
+                "\tif row.{} == nil {{\n\t\treturn nil, {}\n\t}}\n\tswitch *row.{} {{\n",
+                sum.tag.pascal,
+                invalid(&sum.tag.wire, "null, which is no state".to_string()),
+                sum.tag.pascal
+            ));
+        } else {
+            out.push_str(&format!("\tswitch row.{} {{\n", sum.tag.pascal));
+        }
         for v in &sum.variants {
             out.push_str(&format!("\tcase {tag_enum}{}:\n", v.value.ident));
             for f in &v.always_null {
@@ -1653,7 +1669,9 @@ pub(super) fn print_rows(domain: &DomainModel, out: &mut String) {
         for v in &sum.variants {
             let mut inits = Vec::new();
             for f in &sum.row_fields {
-                if f.wire == sum.tag.wire {
+                if f.wire == sum.tag.wire && tag_nullable {
+                    inits.push(format!("{}: ptrTo({tag_enum}{})", f.pascal, v.value.ident));
+                } else if f.wire == sum.tag.wire {
                     inits.push(format!("{}: {tag_enum}{}", f.pascal, v.value.ident));
                 } else if v.always_null.iter().any(|n| n.wire == f.wire) {
                     inits.push(format!("{}: nil", f.pascal));
