@@ -147,7 +147,8 @@ impl StateModelFindings {
 
 impl TransitionSystem {
     /// The states of `e`'s state models: on each lifecycle column (variation columns are the
-    /// actor's choice), the `transitions` endpoints and the values a fresh slot starts at.
+    /// actor's choice), the `transitions` endpoints and the values a fresh slot starts at. The
+    /// null of a `@null` column is no state: no `transitions` arm leaves or enters it.
     pub(crate) fn state_model_values(&self, e: EntId) -> Vec<(VarId, Value)> {
         let mut out = Vec::new();
         for &var in &self.entity(e).columns {
@@ -160,7 +161,7 @@ impl TransitionSystem {
                     ..
                 }
             );
-            if !lifecycle || !matches!(decl.domain, Domain::Enum(_)) {
+            if !lifecycle || decl.domain.names().is_none() {
                 continue;
             }
             let mut values = self.start_values(e, var);
@@ -173,6 +174,7 @@ impl TransitionSystem {
                     }
                 }
             }
+            values.retain(|v| decl.domain.name(*v).is_some());
             values.sort();
             values.dedup();
             out.extend(values.into_iter().map(|v| (var, v)));
@@ -708,9 +710,9 @@ impl TransitionSystem {
     }
 
     fn no_witness(&self, e: EntId, var: VarId, value: Value) -> StateDiag {
-        let text = |v: Value| match &self.var(var).domain {
-            Domain::Enum(names) => names[usize::from(v.0)].clone(),
-            _ => v.0.to_string(),
+        let text = |v: Value| match self.var(var).domain.name(v) {
+            Some(name) => name.to_string(),
+            None => v.0.to_string(),
         };
         let mut into = Vec::new();
         for action in &self.actions {

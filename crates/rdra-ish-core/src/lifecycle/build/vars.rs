@@ -99,25 +99,39 @@ impl Builder<'_> {
             return None;
         }
         let key = (ek, col.name.clone());
+        // A row created without a default holds null in a `@null` column, as the SQL
+        // export's nullable column does; a `@default(null)` names that null.
+        let default = col
+            .default_val
+            .as_deref()
+            .filter(|d| !(col.is_nullable && *d == "null"));
         let (domain, base, variation) = match &col.col_type {
             ColumnType::Enum(values) => {
-                let base = col
-                    .default_val
-                    .as_deref()
-                    .and_then(|d| variant_index(values, d))
-                    .unwrap_or(0);
-                (Domain::Enum(values.clone()), Value(base), false)
+                let domain = if col.is_nullable {
+                    Domain::NullableEnum(values.clone())
+                } else {
+                    Domain::Enum(values.clone())
+                };
+                let unset = if col.is_nullable {
+                    Value::NULL
+                } else {
+                    domain.of_variant(0)
+                };
+                let base = default.and_then(|d| domain.of_name(d)).unwrap_or(unset);
+                (domain, base, false)
             }
             ColumnType::Bool => {
-                let on = col
-                    .default_val
-                    .as_deref()
-                    .is_some_and(|d| d.eq_ignore_ascii_case("true"));
-                (
-                    Domain::Bool,
-                    if on { Value::TRUE } else { Value::FALSE },
-                    false,
-                )
+                let domain = if col.is_nullable {
+                    Domain::NullableBool
+                } else {
+                    Domain::Bool
+                };
+                let base = match default {
+                    Some(d) => domain.of_bool(d.eq_ignore_ascii_case("true")),
+                    None if col.is_nullable => Value::NULL,
+                    None => domain.of_bool(false),
+                };
+                (domain, base, false)
             }
             ColumnType::Variation(vk) => {
                 if !self.named.any.contains(&key) {
@@ -194,12 +208,12 @@ impl Builder<'_> {
         if variation && birth == Birth::PreExisting {
             self.ts.vars[var.index()].start = Start::Any;
         }
-        if let Domain::Enum(values) = &self.ts.vars[var.index()].domain {
+        let domain = &self.ts.vars[var.index()].domain;
+        if domain.names().is_some() {
             let ends = col
                 .end_values
                 .iter()
-                .filter_map(|v| variant_index(values, v))
-                .map(Value)
+                .filter_map(|v| domain.of_name(v))
                 .collect();
             self.ts.vars[var.index()].ends = ends;
         }

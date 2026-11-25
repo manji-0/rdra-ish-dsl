@@ -263,11 +263,16 @@ impl Conc<'_> {
         };
         let value = state.get(ts, var, slot);
         match &ts.var(var).domain {
-            Domain::Enum(_) => (
+            Domain::NullableEnum(_) | Domain::NullableBool if value == Value::NULL => {
+                (Json::Null, Known::Exact)
+            }
+            Domain::Enum(_) | Domain::NullableEnum(_) => (
                 json!(enum_name(ts, var, value).expect("an enum value")),
                 Known::Exact,
             ),
-            Domain::Bool => (json!(value == Value::TRUE), Known::Exact),
+            d @ (Domain::Bool | Domain::NullableBool) => {
+                (json!(d.truth(value).expect("a truth value")), Known::Exact)
+            }
             Domain::Int | Domain::NullableInt => match ts.var(var).domain.number(value) {
                 Some(n) => (json!(n), Known::Exact),
                 None => (Json::Null, Known::Exact),

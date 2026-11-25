@@ -203,7 +203,7 @@ fn functions_agree_with_the_transition_system() {
                                         enum_name(ts, var, got).as_deref()
                                             == Some(value.wire.as_str())
                                     }
-                                    Lit::Bool(b) => (got == Value::TRUE) == *b,
+                                    Lit::Bool(b) => ts.var(var).domain.truth(got) == Some(*b),
                                     Lit::Int(n) => ts.var(var).domain.number(got) == Some(*n),
                                 },
                                 Assigned::Null => got == Value::NULL,

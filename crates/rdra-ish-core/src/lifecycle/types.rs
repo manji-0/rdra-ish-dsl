@@ -222,7 +222,12 @@ pub enum Domain {
     Existence,
     /// Declared values in declared casing and order.
     Enum(Vec<String>),
+    /// null | the declared values: an `Enum` column marked `@null`. As in `NullableInt`, null
+    /// is value 0 and declared value `i` is value `i + 1`.
+    NullableEnum(Vec<String>),
     Bool,
+    /// null | false | true: a `Bool` column marked `@null`, null first as in `NullableEnum`.
+    NullableBool,
     /// null | present
     Nullable,
     /// 0..=int_max
@@ -243,7 +248,9 @@ impl Domain {
         match self {
             Domain::Existence => 3,
             Domain::Enum(values) => values.len(),
+            Domain::NullableEnum(values) => values.len() + 1,
             Domain::Bool | Domain::Nullable => 2,
+            Domain::NullableBool => 3,
             Domain::Int => ints,
             Domain::NullableInt => ints + 1,
             Domain::Instance { parent, optional } => ts.slots(*parent) + usize::from(*optional),
@@ -290,6 +297,88 @@ impl Domain {
 
     pub fn is_numeric(&self) -> bool {
         matches!(self, Domain::Int | Domain::NullableInt)
+    }
+
+    /// The domain has a null value, `Value::NULL`: a column marked `@null`.
+    pub fn has_null(&self) -> bool {
+        matches!(
+            self,
+            Domain::Nullable | Domain::NullableInt | Domain::NullableEnum(_) | Domain::NullableBool
+        )
+    }
+
+    /// The declared values of an Enum domain, with or without null.
+    pub fn names(&self) -> Option<&[String]> {
+        match self {
+            Domain::Enum(values) | Domain::NullableEnum(values) => Some(values),
+            _ => None,
+        }
+    }
+
+    /// The value of declared value `i` of an Enum domain (`false` is 0 and `true` 1 of a Bool
+    /// one): `i`, or `i + 1` past the null of a nullable one.
+    pub fn of_variant(&self, i: usize) -> Value {
+        let shift = usize::from(matches!(
+            self,
+            Domain::NullableEnum(_) | Domain::NullableBool
+        ));
+        Value((i + shift) as u8)
+    }
+
+    /// The declared value an Enum or Bool value stands for, as `of_variant` numbers it; `None`
+    /// for null.
+    pub fn variant(&self, value: Value) -> Option<usize> {
+        match self {
+            Domain::NullableEnum(_) | Domain::NullableBool => {
+                value.0.checked_sub(1).map(usize::from)
+            }
+            _ => Some(usize::from(value.0)),
+        }
+    }
+
+    /// The value of the declared value `name` of an Enum domain, matched exactly or else
+    /// ignoring ASCII case.
+    pub fn of_name(&self, name: &str) -> Option<Value> {
+        let values = self.names()?;
+        values
+            .iter()
+            .position(|v| v == name)
+            .or_else(|| values.iter().position(|v| v.eq_ignore_ascii_case(name)))
+            .map(|i| self.of_variant(i))
+    }
+
+    /// The name of an Enum value; `None` for null or a value of another domain.
+    pub fn name(&self, value: Value) -> Option<&str> {
+        self.names()?.get(self.variant(value)?).map(String::as_str)
+    }
+
+    /// The value standing for `b` in a Bool domain.
+    pub fn of_bool(&self, b: bool) -> Value {
+        self.of_variant(usize::from(b))
+    }
+
+    /// The truth a Bool value stands for; `None` for null or a value of another domain.
+    pub fn truth(&self, value: Value) -> Option<bool> {
+        match self {
+            Domain::Bool | Domain::NullableBool => self.variant(value).map(|i| i == 1),
+            _ => None,
+        }
+    }
+
+    /// The domain without its null: what a column holds while it is present.
+    pub fn without_null(&self) -> Domain {
+        match self {
+            Domain::NullableEnum(values) => Domain::Enum(values.clone()),
+            Domain::NullableBool => Domain::Bool,
+            Domain::NullableInt => Domain::Int,
+            other => other.clone(),
+        }
+    }
+
+    /// Two columns of these domains compare with `==` / `!=`: both Int-typed, or of one
+    /// domain apart from null.
+    pub fn compares_with(&self, other: &Domain) -> bool {
+        (self.is_numeric() && other.is_numeric()) || self.without_null() == other.without_null()
     }
 }
 
@@ -462,19 +551,18 @@ impl Guard {
     }
 
     /// The var a `GuardWhy::Copy` guard pins in the successor. The guard constrains nothing
-    /// else, so a system without that var drops it.
+    /// else, so a system without that var drops it. The guard is `target' = source`, or, between
+    /// an Enum or Bool column with null and one without, a disjunction of `target' = v /\
+    /// source = v`; either way its first term is the target.
     pub fn copy_target(&self) -> Option<VarId> {
-        match (&self.why, &self.pred) {
-            (
-                GuardWhy::Copy,
-                Pred::Cmp(
-                    Term::Slot {
-                        var,
-                        at: At::Next(_),
-                    },
-                    ..,
-                ),
-            ) => Some(*var),
+        if self.why != GuardWhy::Copy {
+            return None;
+        }
+        match self.pred.terms().next() {
+            Some(Term::Slot {
+                var,
+                at: At::Next(_),
+            }) => Some(*var),
             _ => None,
         }
     }
@@ -1039,5 +1127,36 @@ impl LtlKind {
             self,
             LtlKind::Stable | LtlKind::Unchanged | LtlKind::Precedes
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A nullable Enum or Bool domain puts null at value 0, as `NullableInt` does, and numbers
+    /// the declared values one past it (#359).
+    #[test]
+    fn a_nullable_enum_or_bool_numbers_its_values_past_null() {
+        let names = vec!["red".to_string(), "blue".to_string()];
+        let plain = Domain::Enum(names.clone());
+        let nullable = Domain::NullableEnum(names);
+        assert_eq!(plain.of_name("blue"), Some(Value(1)));
+        assert_eq!(nullable.of_name("blue"), Some(Value(2)));
+        assert_eq!(nullable.of_name("BLUE"), Some(Value(2)));
+        assert_eq!(nullable.of_name("green"), None);
+        assert_eq!(nullable.name(Value::NULL), None);
+        assert_eq!(nullable.name(Value(1)), Some("red"));
+        assert_eq!(Domain::Bool.of_bool(true), Value::TRUE);
+        assert_eq!(Domain::NullableBool.of_bool(false), Value(1));
+        assert_eq!(Domain::NullableBool.of_bool(true), Value(2));
+        assert_eq!(Domain::NullableBool.truth(Value::NULL), None);
+        assert_eq!(Domain::NullableBool.truth(Value(2)), Some(true));
+        assert!(nullable.has_null() && Domain::NullableBool.has_null());
+        assert!(!plain.has_null() && !Domain::Bool.has_null());
+        assert!(nullable.compares_with(&plain));
+        assert!(Domain::NullableBool.compares_with(&Domain::Bool));
+        assert!(!nullable.compares_with(&Domain::Bool));
+        assert!(!Domain::NullableBool.compares_with(&Domain::Nullable));
     }
 }

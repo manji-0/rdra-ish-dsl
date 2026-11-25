@@ -1,9 +1,9 @@
 //! What a use case's `transitions` and `chooses` do: arm guards, chosen columns, and creation choices.
 
-use super::{variant_index, ActionDraft, Builder, GuardedArm};
+use super::{ActionDraft, Builder, GuardedArm};
 use crate::lifecycle::types::{
-    Arm, At, Choice, CmpOp, Domain, Effect, Guard, GuardWhy, ModelRef, Param, ParamRole, Pred,
-    Site, Term, Value, VarKind,
+    Arm, At, Choice, CmpOp, Effect, Guard, GuardWhy, ModelRef, Param, ParamRole, Pred, Site, Term,
+    Value, VarKind,
 };
 use crate::model::{ConditionKey, UseCaseKey};
 
@@ -23,16 +23,10 @@ impl Builder<'_> {
             else {
                 continue;
             };
-            let Domain::Enum(values) = &self.ts.vars[var.index()].domain else {
+            let domain = &self.ts.vars[var.index()].domain;
+            let (Some(from), Some(to)) = (domain.of_name(&st.from), domain.of_name(&st.to)) else {
                 continue;
             };
-            let (Some(from), Some(to)) = (
-                variant_index(values, &st.from),
-                variant_index(values, &st.to),
-            ) else {
-                continue;
-            };
-            let (from, to) = (Value(from), Value(to));
             let site = Site::new(ModelRef::Transition(idx), &st.site);
             let guard: Vec<(ConditionKey, String)> = st
                 .guard
@@ -189,12 +183,9 @@ impl Builder<'_> {
                     })
                     .collect();
             }
-            let names = match &self.ts.vars[var.index()].domain {
-                Domain::Enum(names) => names.as_slice(),
-                _ => &[],
-            };
+            let domain = self.ts.vars[var.index()].domain.clone();
             for chosen in &choice.values {
-                let Some(v) = variant_index(names, &chosen.value).map(Value) else {
+                let Some(v) = domain.of_name(&chosen.value) else {
                     continue;
                 };
                 let guard: Vec<(ConditionKey, String)> = chosen

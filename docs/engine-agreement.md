@@ -258,6 +258,8 @@ under a load average of 30 to 60, measured.
 | `safety_null_columns_ne` | The model of #355: two `@null` columns that both hold null; `!=` holds and `==` fails | counterexample, z3 unproved |
 | `safety_null_columns_eq` | The reverse: `==` on two null columns never holds and `!=` always does, in rules and an `always`, over Int and String columns and a logical `@derived`; two columns that reach 2 still meet `==` | null pairs ok, z3 proved; present pair counterexample |
 | `safety_null_columns_cross` | The same reading across two entities | null `==` ok, z3 proved; null `!=` and present `==` counterexample |
+| `safety_null_enum_bool_literals` | An Enum or Bool column marked `@null` starts null and holds null (#359): `== null`, `!= null`, a value, `in` and `not in`, defaults, a logical `@derived`, and a `@unique` column two rows leave null | `== null` and `not in (<values>)` counterexample; the rest ok, z3 proved, but `dk == true` counterexample |
+| `safety_null_enum_bool_columns` | The model of #359: two null Enum or Bool columns are not equal; a column with null and one without compare value by value | null `!=` and present mixed `==` counterexample; null `==` ok, z3 proved |
 | `safety_unique_sets` | A unique column set over column vars, owner vars, and a nullable Int that two rows leave null | single column and junction counterexample; guarded set and null set ok, z3 proved |
 | `sym_owner_coupled` | A child's key moves with its parent's row, a deleted child's too | ok, z3 proved; BFS ok, ok, ok |
 | `sym_identity_pair` | A pre-existing 1:1 child starts at its parent's slot, so the two permute as one class | counterexample |

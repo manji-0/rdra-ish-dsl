@@ -3,7 +3,7 @@
 use crate::lifecycle::build::naming::is_driven;
 use crate::lifecycle::build::Builder;
 use crate::lifecycle::types::{
-    At, CmpOp, Domain, InvText, Invariant, ModelRef, Pred, Premise, Site, Term, Value,
+    At, CmpOp, InvText, Invariant, ModelRef, Pred, Premise, Site, Term, Value,
 };
 use crate::model::{CheckExpr, CmpRhs, ComparisonProp, EffectValue, EntityKey};
 
@@ -71,21 +71,27 @@ impl Builder<'_> {
     }
 
     /// `operand = null` for each nullable operand of an undriven comparison: a nullable Int, or
-    /// a nullable column compared with another column.
+    /// a nullable column (of any type) compared with another column.
     fn null_operands(&self, ek: EntityKey, at: At, prop: &ComparisonProp) -> Vec<Pred> {
         if is_driven(self.model, ek, prop) {
             return Vec::new();
         }
+        // A value of an Enum or Bool column (`k == red`, `f in (true)`) meets no null, as
+        // an integer literal does; `n == null` / `n == present` ask about null itself, so null
+        // is no unknown there.
+        let declared =
+            |v: &EffectValue| matches!(v, EffectValue::EnumVariant(_) | EffectValue::Bool(_));
         let rhs = match &prop.rhs {
             CmpRhs::Column(c) => Some(c.as_str()),
             CmpRhs::IntLit(_) | CmpRhs::Now => None,
-            // `n == null` / `n == present` ask about null itself, so null is no unknown.
+            CmpRhs::Value(v) if declared(v) => None,
+            CmpRhs::Values(vs) if vs.iter().all(declared) => None,
             CmpRhs::Value(_) | CmpRhs::Values(_) => return Vec::new(),
         };
         std::iter::once(prop.lhs_column.as_str())
             .chain(rhs)
             .filter_map(|column| match self.slot(ek, column, at)? {
-                (term, Domain::NullableInt | Domain::Nullable) => {
+                (term, domain) if domain.has_null() => {
                     Some(Pred::Cmp(term, CmpOp::Eq, Term::Lit(Value::NULL)))
                 }
                 _ => None,

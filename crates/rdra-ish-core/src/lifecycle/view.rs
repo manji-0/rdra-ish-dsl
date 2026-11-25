@@ -14,11 +14,21 @@ use crate::model::SemanticModel;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AxisKind {
     Enum(Vec<String>),
+    /// null, then the declared values: an `Enum` column marked `@null`.
+    NullableEnum(Vec<String>),
     Bool,
+    /// null, false, true: a `Bool` column marked `@null`.
+    NullableBool,
     Nullable,
-    Int { max: u8 },
-    NullableInt { max: u8 },
-    Proposition { axis_key: String },
+    Int {
+        max: u8,
+    },
+    NullableInt {
+        max: u8,
+    },
+    Proposition {
+        axis_key: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,7 +51,15 @@ impl AbstractValue {
         match domain {
             Domain::Enum(values) => AbstractValue::Enum(values[usize::from(value.0)].clone()),
             Domain::Bool => AbstractValue::Bool(value == Value::TRUE),
-            Domain::Nullable if value == Value::NULL => AbstractValue::Null,
+            Domain::NullableEnum(_) | Domain::NullableBool | Domain::Nullable
+                if value == Value::NULL =>
+            {
+                AbstractValue::Null
+            }
+            Domain::NullableEnum(_) => {
+                AbstractValue::Enum(domain.name(value).expect("a declared value").to_string())
+            }
+            Domain::NullableBool => AbstractValue::Bool(domain.truth(value) == Some(true)),
             Domain::Nullable => AbstractValue::Present,
             Domain::Int | Domain::NullableInt => match domain.number(value) {
                 Some(n) => AbstractValue::Int(n),
@@ -107,7 +125,9 @@ impl EntityStateResult {
             .iter()
             .map(|a| match &a.kind {
                 AxisKind::Enum(v) => v.len(),
+                AxisKind::NullableEnum(v) => v.len() + 1,
                 AxisKind::Bool | AxisKind::Nullable | AxisKind::Proposition { .. } => 2,
+                AxisKind::NullableBool => 3,
                 AxisKind::Int { max } => usize::from(*max) + 1,
                 AxisKind::NullableInt { max } => usize::from(*max) + 2,
             })
@@ -170,7 +190,9 @@ fn axis(ts: &TransitionSystem, var: super::types::VarId) -> StateAxis {
             axis_key: key.clone(),
         },
         (_, Domain::Enum(values)) => AxisKind::Enum(values.clone()),
+        (_, Domain::NullableEnum(values)) => AxisKind::NullableEnum(values.clone()),
         (_, Domain::Bool) => AxisKind::Bool,
+        (_, Domain::NullableBool) => AxisKind::NullableBool,
         (_, Domain::Int) => AxisKind::Int { max },
         (_, Domain::NullableInt) => AxisKind::NullableInt { max },
         _ => AxisKind::Nullable,
@@ -290,18 +312,19 @@ pub(crate) fn entity_view(
     // A state of a state model is witnessed or `NoWitness`; only other values warn.
     let state_model = ts.state_model_values(e);
     for &var in &decl.columns {
+        let domain = &ts.var(var).domain;
         let (
             VarKind::Column {
                 variation: false, ..
             },
-            Domain::Enum(values),
-        ) = (&ts.var(var).kind, &ts.var(var).domain)
+            Some(values),
+        ) = (&ts.var(var).kind, domain.names())
         else {
             continue;
         };
         let column = ts.var_name(var);
         for (i, variant) in values.iter().enumerate() {
-            if state_model.contains(&(var, Value(i as u8))) {
+            if state_model.contains(&(var, domain.of_variant(i))) {
                 continue;
             }
             let held = AbstractValue::Enum(variant.clone());

@@ -41,7 +41,11 @@ fn axis_domain(kind: &AxisKind) -> Vec<String> {
     let ints = |max: u8| (0..=max).map(|n| n.to_string());
     match kind {
         AxisKind::Enum(v) => v.clone(),
+        AxisKind::NullableEnum(v) => std::iter::once("null".to_string())
+            .chain(v.iter().cloned())
+            .collect(),
         AxisKind::Bool | AxisKind::Proposition { .. } => vec!["false".into(), "true".into()],
+        AxisKind::NullableBool => vec!["null".into(), "false".into(), "true".into()],
         AxisKind::Nullable => vec!["null".into(), "present".into()],
         AxisKind::Int { max } => ints(*max).collect(),
         AxisKind::NullableInt { max } => std::iter::once("null".to_string())
@@ -231,7 +235,7 @@ fn value_labels(model: &SemanticModel, r: &EntityStateResult) -> Vec<String> {
     r.axes
         .iter()
         .filter_map(|ax| {
-            let AxisKind::Enum(values) = &ax.kind else {
+            let (AxisKind::Enum(values) | AxisKind::NullableEnum(values)) = &ax.kind else {
                 return None;
             };
             let column = entity.columns.iter().find(|c| c.name == ax.column)?;

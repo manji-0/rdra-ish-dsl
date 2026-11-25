@@ -209,8 +209,8 @@ pub(super) fn atom(
         _ => Err(unsupported()),
     };
     match (domain, rhs) {
-        (Domain::Enum(values), Term::Lit(v)) => {
-            let wire = values.get(usize::from(v.0)).ok_or_else(unsupported)?;
+        (Domain::Enum(_) | Domain::NullableEnum(_), Term::Lit(v)) if domain.name(*v).is_some() => {
+            let wire = &domain.name(*v).ok_or_else(unsupported)?.to_string();
             // The tag of a state type is fixed by the source state.
             if let Some(variant) = state {
                 if !row.fields.iter().any(|f| f.wire == *column) {
@@ -240,7 +240,7 @@ pub(super) fn atom(
                 },
             })
         }
-        (Domain::Bool, Term::Lit(v)) => {
+        (Domain::Bool | Domain::NullableBool, Term::Lit(v)) if domain.truth(*v).is_some() => {
             let field = row
                 .fields
                 .iter()
@@ -252,10 +252,11 @@ pub(super) fn atom(
             negate(Expr::BoolEq {
                 row: r,
                 field: field.clone(),
-                value: *v == Value::TRUE,
+                value: domain.truth(*v) == Some(true),
             })
         }
-        (Domain::Nullable, Term::Lit(v)) => {
+        // `col == null` / `col == present` on any nullable column.
+        (Domain::Nullable | Domain::NullableEnum(_) | Domain::NullableBool, Term::Lit(v)) => {
             let is_null = match row.fields.iter().find(|f| f.wire == *column) {
                 None if row.always_null.contains(column) => Expr::True,
                 None => return Err(unsupported()),

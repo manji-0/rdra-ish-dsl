@@ -293,15 +293,21 @@ impl ActionCx<'_> {
                     let is_tag = matches!(self.declared.get(&self.entity_id(p)),
                         Some(Declared::Sum(sum)) if sum.tag.wire == *column);
                     if !is_tag {
-                        let Domain::Enum(values) = &ts.var(*var).domain else {
+                        let domain = &ts.var(*var).domain;
+                        if domain.names().is_none() {
                             return Err(unsupported(
                                 "a transition on a column that is not an enum",
                             ));
-                        };
+                        }
                         let named = a
                             .iter()
                             .map(|arm| {
-                                let v = |x: Value| values[usize::from(x.0)].clone();
+                                let v = |x: Value| {
+                                    domain
+                                        .name(x)
+                                        .expect("an arm names declared values")
+                                        .to_string()
+                                };
                                 (v(arm.from), v(arm.to))
                             })
                             .collect();
@@ -351,7 +357,14 @@ impl ActionCx<'_> {
                         Domain::Nullable if matches!(&values[..], [c] if c.value == Value::PRESENT) => {
                             Write::Input
                         }
-                        Domain::Enum(_) | Domain::Bool if all => Write::Input,
+                        Domain::Enum(_)
+                        | Domain::NullableEnum(_)
+                        | Domain::Bool
+                        | Domain::NullableBool
+                            if all =>
+                        {
+                            Write::Input
+                        }
                         _ => return Err(unsupported("a choice among some values (phase 5)")),
                     };
                     writes.insert((usize::from(*param), column.clone()), w);
@@ -376,7 +389,8 @@ impl ActionCx<'_> {
                 continue;
             };
             let p = usize::from(*param);
-            let Domain::Enum(values) = &ts.var(*var).domain else {
+            let domain = &ts.var(*var).domain;
+            let Some(values) = domain.names() else {
                 continue;
             };
             let to = outputs.iter().find_map(|o| match &o.kind {
@@ -392,7 +406,7 @@ impl ActionCx<'_> {
             });
             if let Some(to) = to {
                 if let Some(i) = values.iter().position(|v| *v == to) {
-                    targets.insert(p, (*var, Value(u8::try_from(i).expect("small domain"))));
+                    targets.insert(p, (*var, domain.of_variant(i)));
                 }
             }
         }

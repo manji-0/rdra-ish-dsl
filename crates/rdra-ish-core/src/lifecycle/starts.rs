@@ -1,7 +1,7 @@
 //! The start values of an entity's lifecycle column, for diagrams that draw the initial edge.
 
 use super::{
-    Action, Birth, Domain, Effect, EntId, ParamRole, Start, TransitionSystem, Value, VarId, VarKind,
+    Action, Birth, Effect, EntId, ParamRole, Start, TransitionSystem, Value, VarId, VarKind,
 };
 use crate::model::EntityKey;
 
@@ -25,12 +25,10 @@ impl TransitionSystem {
         ) else {
             return Vec::new();
         };
-        let Domain::Enum(names) = &self.var(var).domain else {
-            return Vec::new();
-        };
+        let domain = &self.var(var).domain;
         self.start_values(ent_id, var)
             .into_iter()
-            .filter_map(|v| names.get(v.0 as usize).map(String::as_str))
+            .filter_map(|v| domain.name(v))
             .collect()
     }
 
