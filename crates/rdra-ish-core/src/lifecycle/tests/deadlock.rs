@@ -281,6 +281,32 @@ fn an_end_value_is_no_deadlock() {
     );
 }
 
+/// A `@null` lifecycle column starts null without a default, and its null is no state of the
+/// state model, which keeps the declared values a `transitions` arm or a start names (#359).
+#[test]
+fn the_null_of_a_nullable_lifecycle_column_is_no_state() {
+    let model = model_from(
+        r#"
+entity Doc "文書" { id: Int @pk  status: Enum(draft, done) @null }
+usecase Write "作成"
+usecase Finish "完了"
+creates(Write, Doc)
+transitions(Finish, Doc.status, draft -> done)
+"#,
+    );
+    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
+    let doc = built.ts.entity_ids().next().expect("Doc");
+    let states: Vec<String> = built
+        .ts
+        .state_model_states(doc)
+        .into_iter()
+        .map(|s| built.ts.value_text(s.var, s.value))
+        .collect();
+    assert_eq!(states, ["draft", "done"]);
+    let d = derive(&model);
+    assert_eq!(d.rows("Doc"), vec!["status=null"]);
+}
+
 /// The `Cert` stock of issue #116: free waits for an Account to take it, and every Account
 /// may be deleted first, so free is a state to stay at by design.
 #[test]

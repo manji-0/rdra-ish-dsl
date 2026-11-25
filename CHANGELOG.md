@@ -29,7 +29,9 @@
   are null, `required(Item, k1 == red)` fails there, and two rows left null no longer
   share a `@unique` value. `states` lists `null` among the column's values (`k1[null|red|
   blue]`), and `UnreachableEnumVariant` now names a first value that only the old start
-  reached. Generated code (`codegen`) creates such a row with `None` / `nil` / `null`
+  reached. On a `@null` lifecycle column the null is no state of the state model, which
+  keeps the declared values. The TLA+ export writes the null of such a column as `"<null>"`,
+  and a nullable Bool column as the strings `"false"` and `"true"`. Generated code (`codegen`) creates such a row with `None` / `nil` / `null`
   where it wrote the first value. To keep the old start, give the column a `@default`.
   No sample changes verdict: no sample entity has a nullable Enum or Bool column.
 

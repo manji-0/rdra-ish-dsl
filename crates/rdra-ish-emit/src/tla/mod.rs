@@ -106,10 +106,10 @@ pub fn render_value(domain: &Domain, value: Value) -> String {
         // A nullable Enum or Bool column holds strings only, so TLC never compares a string
         // with a boolean.
         Domain::NullableEnum(values) => match i {
-            0 => quote(NULL),
+            0 => quote(NULL_VALUE),
             n => quote(&values[n - 1]),
         },
-        Domain::NullableBool => quote([NULL, "false", "true"][i]),
+        Domain::NullableBool => quote([NULL_VALUE, "false", "true"][i]),
         Domain::Bool => if value == Value::TRUE {
             "TRUE"
         } else {
@@ -117,7 +117,7 @@ pub fn render_value(domain: &Domain, value: Value) -> String {
         }
         .to_string(),
         Domain::Nullable => quote(if value == Value::NULL {
-            NULL
+            "null"
         } else {
             "present"
         }),
@@ -138,8 +138,9 @@ pub fn render_value(domain: &Domain, value: Value) -> String {
 /// with an integer.
 const NULL_INT: &str = "-1";
 
-/// The null of every other nullable column, as a string.
-const NULL: &str = "null";
+/// The null of a nullable Enum or Bool column: no Enum value is spelled `<null>`, since a value
+/// is an identifier, so TLC never takes a value named `null` for it.
+const NULL_VALUE: &str = "<null>";
 
 fn quote(s: &str) -> String {
     format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
