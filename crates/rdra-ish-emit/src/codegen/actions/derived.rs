@@ -121,7 +121,16 @@ impl RowValues<'_> {
                 field,
                 adapt: Adapt::Same | Adapt::Wrap,
             } => Operand::Field(*row, field),
-            Assigned::Input { .. } => Operand::Passed(&written.wire),
+            // A value the caller passes is present when it is wrapped or the column is never
+            // null; a nullable input may be null, which no comparison here can read.
+            Assigned::Input { wrap, .. } if *wrap || !written.nullable => {
+                Operand::Passed(&written.wire)
+            }
+            Assigned::Input { .. } => {
+                return Err(format!(
+                    "it reads {column}, which the caller passes and may be null"
+                ))
+            }
             _ => return Err(format!("it reads {column}, which the function computes")),
         })
     }
