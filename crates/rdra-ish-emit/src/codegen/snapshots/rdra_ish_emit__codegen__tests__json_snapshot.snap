@@ -154,6 +154,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
   "states": [
     {
       "entity": "Order",
+      "kind": "OrderKind",
       "name": "Order",
       "row": "OrderRow",
       "site": null,
@@ -533,6 +534,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
           "unprinted": null
         }
       ],
+      "error": "PlaceError",
       "id": "Place",
       "kind": "functions",
       "label": "Place",
@@ -549,6 +551,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
           "unprinted": null
         }
       ],
+      "error": "PayError",
       "id": "Pay",
       "kind": "functions",
       "label": "Pay",
@@ -565,6 +568,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
           "unprinted": null
         }
       ],
+      "error": "CancelOrderError",
       "id": "CancelOrder",
       "kind": "functions",
       "label": "Cancel",

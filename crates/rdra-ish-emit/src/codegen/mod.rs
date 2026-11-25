@@ -155,7 +155,7 @@ fn domain_of(
         CheckStatus::Passed { caps, .. } => Some(caps),
         CheckStatus::Failed { .. } => None,
     };
-    let mut domain = build_with(model, refine, port, site)?;
+    let mut domain = build_for(model, refine, port, reserved_names(options.lang), site)?;
     if let CheckStatus::Failed { errors } = &options.check {
         for error in errors {
             let name = error.split_once(':').map_or(error.as_str(), |(n, _)| n);
@@ -351,7 +351,34 @@ pub fn build_with(
     port: bool,
     site: &dyn Fn(&LocatedSpan) -> Option<String>,
 ) -> Result<DomainModel, CodegenError> {
+    build_for(model, refine, port, &[], site)
+}
+
+/// The names a language's printer writes unqualified beside the generated types, so a
+/// model type of that name is a collision ([`build_for`]).
+pub fn reserved_names(lang: Lang) -> &'static [&'static str] {
+    match lang {
+        Lang::TypeScript => &["Result", "assertNever"],
+        Lang::Rust | Lang::Go => &[],
+    }
+}
+
+/// [`build_with`], with `reserved` claimed too: the names one language's printer adds
+/// ([`reserved_names`]).
+pub fn build_for(
+    model: &SemanticModel,
+    refine: Option<Caps>,
+    port: bool,
+    reserved: &[&str],
+    site: &dyn Fn(&LocatedSpan) -> Option<String>,
+) -> Result<DomainModel, CodegenError> {
     let mut names = Names::default();
+    for name in reserved {
+        names.claim(
+            name.to_string(),
+            "a name the printer of this language writes".to_string(),
+        )?;
+    }
     let mut domain = DomainModel::default();
     // The prelude's names, and `Self`, which no language takes as a type name.
     for scalar in Scalar::PRELUDE {
@@ -364,11 +391,12 @@ pub fn build_with(
         "None",
         "Ok",
         "Err",
-        "Rejected",
-        "NotEnabled",
         "Refused",
-        "InvalidRow",
+        ir::INVALID_ROW,
         "InvalidValue",
+        ir::ERROR_CASES[0],
+        ir::ERROR_CASES[1],
+        ir::ERROR_CASES[2],
     ] {
         names.claim(reserved.to_string(), "a reserved word".to_string())?;
     }
@@ -475,6 +503,19 @@ pub fn build_with(
         });
     }
 
+    // The discriminant types, once every type of the data layer has its name: the one name
+    // a column's enum or a state may already have is `<Entity>Kind`.
+    for sum in &mut domain.sums {
+        sum.kind = claim_first(
+            &mut names,
+            [
+                format!("{}Kind", sum.name),
+                format!("{}StateKind", sum.name),
+            ],
+            format!("the kind of {}", sum.entity),
+        )?;
+    }
+
     domain.obligations = obligations(model, site);
     domain.usecases = usecases(model, site);
 
@@ -503,6 +544,11 @@ pub fn build_with(
                 })
                 .map(|a| a.name.clone())
                 .collect();
+            uc.error = domain
+                .errors
+                .iter()
+                .find(|e| e.usecase == uc.id)
+                .map(|e| e.name.clone());
         }
     }
     unique_names(&mut domain.obligations);
@@ -603,6 +649,7 @@ fn sum_decl(
         variants,
         row,
         row_fields,
+        kind: String::new(),
     })
 }
 
@@ -933,6 +980,7 @@ fn usecases(
                 .as_ref()
                 .and_then(site),
             actions: Vec::new(),
+            error: None,
         })
         .collect()
 }
@@ -982,6 +1030,22 @@ impl Names {
         self.0.insert(name.clone(), by);
         Ok(name)
     }
+}
+
+/// The first of `candidates` no declaration has, claimed; a collision naming the last when
+/// every one is taken.
+fn claim_first<const N: usize>(
+    names: &mut Names,
+    candidates: [String; N],
+    by: String,
+) -> Result<String, CodegenError> {
+    let last = candidates.len() - 1;
+    for (i, name) in candidates.into_iter().enumerate() {
+        if i == last || !names.0.contains_key(&name) {
+            return names.claim(name, by);
+        }
+    }
+    unreachable!("the last candidate is always claimed")
 }
 
 /// An identifier in PascalCase: `_` and `-` split words, and the first letter of each word

@@ -37,6 +37,7 @@ pub fn print(
             "entity": s.entity,
             "site": at("entity", &s.entity),
             "row": s.row,
+            "kind": s.kind,
             "tag": field(&s.tag),
             "variants": s.variants.iter().map(variant).collect::<Vec<_>>(),
         })).collect::<Vec<_>>(),
@@ -44,6 +45,7 @@ pub fn print(
             "id": uc.id,
             "label": uc.label,
             "site": uc.site,
+            "error": uc.error,
             "kind": match domain.usecase_kind(uc) {
                 UseCaseKind::Functions => "functions",
                 UseCaseKind::Unprinted => "unprinted",

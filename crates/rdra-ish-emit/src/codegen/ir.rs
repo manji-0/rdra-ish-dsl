@@ -140,6 +140,21 @@ pub struct SumDecl {
     /// shape a store or the wire holds.
     pub row: String,
     pub row_fields: Vec<Field>,
+    /// The discriminant type `<Entity>Kind` (`<Entity>StateKind` when a column's enum has that
+    /// name): one value per state, the domain's own, apart from the tag column.
+    pub kind: String,
+}
+
+/// The error type of one use case, `<UseCase>Error`: the ways its functions, its dispatcher,
+/// and a store's commit of its result fail.
+#[derive(Clone, Debug)]
+pub struct UseCaseErrorDecl {
+    pub name: String,
+    pub usecase: String,
+    /// Whether a condition applied to it can reject a call.
+    pub rejects: bool,
+    /// Whether its arguments can break what the verified model keeps.
+    pub invalid_argument: bool,
 }
 
 /// One state of a [`SumDecl`].
@@ -168,6 +183,8 @@ pub struct DomainModel {
     pub skipped: Vec<Skipped>,
     pub validators: Vec<ValidatorDecl>,
     pub dispatchers: Vec<DispatchDecl>,
+    /// One per use case with functions, in the order of their first function.
+    pub errors: Vec<UseCaseErrorDecl>,
     pub marks: Vec<MarkDecl>,
     /// Rules the reachable states agree with and the model does not state.
     pub candidates: Vec<String>,
@@ -579,6 +596,14 @@ pub struct Skipped {
     pub reason: String,
 }
 
+/// The type a row that fits no state of its entity is refused with (`from_row` and the like).
+pub const INVALID_ROW: &str = "InvalidRow";
+
+/// The cases of every `<UseCase>Error`, each a type of its own every use case shares: a call
+/// from states the use case does not run from (or a commit that found a row changed), a
+/// condition that does not hold, and arguments that break what the verified model keeps.
+pub const ERROR_CASES: [&str; 3] = ["NotEnabled", "Rejected", "InvalidArgument"];
+
 /// A use case of the model.
 #[derive(Clone, Debug)]
 pub struct UseCaseDecl {
@@ -589,6 +614,8 @@ pub struct UseCaseDecl {
     /// The transition system's actions it runs as, in order: one, one per step of a split use
     /// case, or one per event of a triggered one. None for a use case that writes nothing.
     pub actions: Vec<String>,
+    /// Its error type `<UseCase>Error` ([`UseCaseErrorDecl`]), when it has functions.
+    pub error: Option<String>,
 }
 
 /// What the generated code offers for a use case.
@@ -604,6 +631,38 @@ pub enum UseCaseKind {
 }
 
 impl DomainModel {
+    /// The error type of the use case `usecase`.
+    pub fn error_of(&self, usecase: &str) -> Option<&UseCaseErrorDecl> {
+        self.errors.iter().find(|e| e.usecase == usecase)
+    }
+
+    /// Whether the arguments of `f` can break what the verified model keeps: an argument
+    /// check, a nullable column read as present, or a second lifecycle column in no `from`
+    /// state of its arms.
+    pub fn invalid_argument_possible(&self, f: &FnDecl) -> bool {
+        if !f.checks.is_empty() {
+            return true;
+        }
+        f.outputs.iter().any(|o| match &o.kind {
+            OutKind::Row { fields, .. } => fields.iter().any(|(_, a)| match a {
+                Assigned::From {
+                    adapt: Adapt::Unwrap(_),
+                    ..
+                } => true,
+                Assigned::Switch { enum_ty, arms, .. } => {
+                    arms.len()
+                        < self
+                            .enums
+                            .iter()
+                            .find(|e| e.name == *enum_ty)
+                            .map_or(0, |e| e.values.len())
+                }
+                _ => false,
+            }),
+            OutKind::Deleted { .. } => false,
+        })
+    }
+
     /// What the code offers for the use case `uc`.
     pub fn usecase_kind(&self, uc: &UseCaseDecl) -> UseCaseKind {
         if uc.actions.is_empty() {

@@ -228,6 +228,32 @@ pub(super) fn add_functions(
     domain.events = events.into_values().collect();
     domain.fns = fns;
     domain.skipped = skipped;
+    // One error type per use case with functions: what its functions, its dispatcher, and the
+    // commit of its result can fail with.
+    let mut errors: Vec<super::ir::UseCaseErrorDecl> = Vec::new();
+    for f in &domain.fns {
+        let invalid = domain.invalid_argument_possible(f);
+        match errors.iter_mut().find(|e| e.usecase == f.usecase) {
+            Some(e) => {
+                e.rejects |= !f.conditions.is_empty();
+                e.invalid_argument |= invalid;
+            }
+            None => errors.push(super::ir::UseCaseErrorDecl {
+                name: super::claim_first(
+                    names,
+                    [
+                        format!("{}Error", type_ident(&f.usecase)),
+                        format!("{}UseCaseError", type_ident(&f.usecase)),
+                    ],
+                    format!("the error of {}", f.usecase),
+                )?,
+                usecase: f.usecase.clone(),
+                rejects: !f.conditions.is_empty(),
+                invalid_argument: invalid,
+            }),
+        }
+    }
+    domain.errors = errors;
     Ok(())
 }
 
