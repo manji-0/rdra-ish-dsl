@@ -12,8 +12,8 @@ cd "$(git rev-parse --show-toplevel)"
 
 # Run in release by engine-equivalence, formal-verify, and engine-corpus; proof_equivalence
 # runs whole in engine-equivalence (in debug its solver-count test alone took 4 minutes).
-# codegen_differential's domain samples take about 90 s in debug; engine-equivalence runs
-# them in release.
+# codegen_differential's domain samples take about 100 s in debug; CI's check job runs them
+# when a change touches codegen, and on main.
 # `--skip` matches a part of the name, so a new `bfs_and_tlc_*` or `tlc_alone_*` test is
 # skipped too.
 skips=(
