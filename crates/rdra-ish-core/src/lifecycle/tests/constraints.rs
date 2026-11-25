@@ -915,6 +915,50 @@ sets(SetB, Item.b == blue)
     }
 }
 
+/// `in` and `not in` in a logical `@derived` are the `or` of their equalities (#374): a list
+/// of values is neither true nor false on a null `qty` or `k`, one that lists `null` holds
+/// there, and `present` adds nothing there. A rule reads `in` two-valued, so a null `qty` is
+/// in no list and outside every one.
+#[test]
+fn a_derived_in_over_a_null_column_is_null() {
+    let src = |rule: &str| {
+        format!(
+            r#"
+entity Item "品目" {{
+  id: Int @pk
+  qty: Int @null
+  k: Enum(red, blue) @null
+  dq: Bool @null @derived(qty in (1, 2))
+  dn: Bool @null @derived(qty not in (1, 2))
+  dz: Bool @null @derived(qty in (1, null))
+  dp: Bool @null @derived(k in (red, present))
+}}
+usecase Make "作成"
+creates(Make, Item)
+{rule}
+"#
+        )
+    };
+    for (rule, kind, broken) in [
+        ("forbidden(Item, dq == false)", InvKind::Forbidden, false),
+        ("forbidden(Item, dq == null)", InvKind::Forbidden, true),
+        ("forbidden(Item, dn == true)", InvKind::Forbidden, false),
+        ("forbidden(Item, dn == null)", InvKind::Forbidden, true),
+        ("forbidden(Item, dz == true)", InvKind::Forbidden, true),
+        ("forbidden(Item, dp == false)", InvKind::Forbidden, false),
+        ("forbidden(Item, dp == null)", InvKind::Forbidden, true),
+        ("forbidden(Item, qty in (1, 2))", InvKind::Forbidden, false),
+        (
+            "forbidden(Item, qty not in (1, 2))",
+            InvKind::Forbidden,
+            true,
+        ),
+    ] {
+        let d = derive_src(&src(rule));
+        assert_eq!(violated(&d, "Item", kind), broken, "{rule}");
+    }
+}
+
 #[test]
 fn a_logical_derived_column_is_its_expression_and_no_axis() {
     let src = |qty: u8| {

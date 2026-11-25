@@ -76,16 +76,16 @@ impl Builder<'_> {
         if is_driven(self.model, ek, prop) {
             return Vec::new();
         }
-        // A value of an Enum or Bool column (`k == red`, `f in (true)`) meets no null, as
-        // an integer literal does; `n == null` / `n == present` ask about null itself, so null
-        // is no unknown there.
-        let declared =
-            |v: &EffectValue| matches!(v, EffectValue::EnumVariant(_) | EffectValue::Bool(_));
+        // A value (`k == red`, `f in (true)`, `qty in (1, 2)`) meets no null, as an integer
+        // literal does; `n == null` / `n == present` ask about null itself, so null is no
+        // unknown there. `in` is the `or` of its equalities (#374): a list with a value is
+        // unknown on a null operand unless it lists `null`, which holds there.
+        let value = |v: &EffectValue| !v.is_nullable_axis();
         let rhs = match &prop.rhs {
             CmpRhs::Column(c) => Some(c.as_str()),
             CmpRhs::IntLit(_) | CmpRhs::Now => None,
-            CmpRhs::Value(v) if declared(v) => None,
-            CmpRhs::Values(vs) if vs.iter().all(declared) => None,
+            CmpRhs::Value(v) if value(v) => None,
+            CmpRhs::Values(vs) if vs.iter().any(value) && !vs.contains(&EffectValue::Null) => None,
             CmpRhs::Value(_) | CmpRhs::Values(_) => return Vec::new(),
         };
         std::iter::once(prop.lhs_column.as_str())

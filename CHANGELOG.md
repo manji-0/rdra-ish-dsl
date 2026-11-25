@@ -99,6 +99,7 @@ No sample changes verdict.
 |---|---|---|
 | An `Enum` or `Bool` column marked `@null` holds null (#359) | A created row without a default starts null, not at the first value; `col == null` and `col == present` now ask about null | Add `@default(<value>)` to keep the old start |
 | Two null columns are not equal (#355) | `col == other` holds only when both are present and equal; `col != other` holds when either is null | Write `qty == lim or (qty == null and lim == null)` where two nulls should match |
+| A derived `in` over a null column is null (#374) | `@derived(qty in (1, 2))` is neither true nor false while `qty` is null, where it was false (`not in`: true) | Write `qty in (1, 2, null)` or `qty == null or qty not in (1, 2)` where a null should count |
 | A delete waits for the children (#199) | `deletes(UC, Parent)` is disabled while a child names the row and the key's `.on_delete` is `restrict`, `no_action` or unset | Delete or unlink the children first |
 | Unique column sets are checked (#222) | `@unique`, `@unique(a, b)` and N:M junction keys become `Unique_<Entity>_<columns>` | Add a guard that keeps the set free, such as `.none(Booking.slot == am)` |
 | A deleted row keeps its keys (#212) | A later step of a split use case that reads the deleted row's key reads its old parent | None |
@@ -121,6 +122,8 @@ No sample changes verdict.
 - Verdicts change for nullable `Enum` and `Bool` columns (#359), comparisons of two nullable
   columns (#355), restrict-family deletes (#199), unique column sets (#222), the keys of a
   deleted row (#212), and a `can_reach` whose cone stops at a cap (#246).
+- `in` and `not in` in a logical `@derived` are null while the column is, as `==` is; a list
+  with `null` holds there (#374). Rules and guards still read a null as in no list.
 - `verify --prove` (experimental) budgets z3 by resource units, and decides a cone stopped
   at the memory limit when z3 proves every rule it checks (#232).
 - Invalid `Enum` and `Bool` defaults (#187) and out-of-range Int defaults (#180) fail to
@@ -299,6 +302,11 @@ No sample changes verdict.
   instance (#231).
 - `verify --with-tlc` names the cause when TLC 1.7.x fails reading a trace back on JDK 21
   or later (#314).
+
+**export**
+
+- `export --kind sql`: a `@derived` `in` list with `null` or `present` tests `IS NULL` /
+  `IS NOT NULL`, not `= NULL` (#374).
 
 **Model, diagrams and lint**
 
