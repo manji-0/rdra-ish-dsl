@@ -415,6 +415,10 @@ pub(crate) struct Moves {
     /// canonicalizing it found (`canonicalize`).
     canon: Vec<u8>,
     found: Vec<symmetry::Canonical>,
+    /// Under symmetry: per successor, the permutation that takes it to its canonical form,
+    /// `Group::slots` bytes each, for a run that keeps its edges' permutations (#212 phase 4).
+    perm: Vec<u8>,
+    perm_width: usize,
     /// What the reduced step reuses from one state to the next.
     pub(crate) reduced: super::reduce::StepBuffers,
 }
@@ -454,6 +458,7 @@ impl Moves {
     ) {
         let w = self.width;
         self.canon.resize(self.len() * w, 0);
+        self.perm_width = group.slots;
         for i in from..self.len() {
             let (next, out) = (
                 &self.next[i * w..(i + 1) * w],
@@ -462,7 +467,14 @@ impl Moves {
             let found = canon.canonical(group, next, out);
             symmetry::check(ts, group, next, out, found);
             self.found.push(found);
+            self.perm.extend_from_slice(canon.perm());
         }
+    }
+
+    /// The permutation that takes move `i`'s successor to its canonical form, after
+    /// `canonicalize`.
+    pub(crate) fn perm(&self, i: usize) -> &[u8] {
+        &self.perm[i * self.perm_width..(i + 1) * self.perm_width]
     }
 
     /// Move `i`'s canonical successor and what canonicalizing it found, after
@@ -620,12 +632,16 @@ struct Bfs<'t> {
     /// of its own source, which is stored as a loop but is a real step.
     orbit_self: Vec<u32>,
     orbits: symmetry::Orbits,
+    /// Under symmetry, for a run whose readers follow a binding along its edges (#212 phase
+    /// 4): each edge's permutation, from its concrete successor to the stored target.
+    perms: Option<orbit::EdgePerms>,
 }
 
 /// What a run up to symmetry found beside its plain run's result.
 pub(crate) struct OrbitParts {
     pub(crate) orbit_self: Vec<u32>,
     pub(crate) orbits: symmetry::Orbits,
+    pub(crate) perms: Option<orbit::EdgePerms>,
 }
 
 impl TransitionSystem {
@@ -644,7 +660,7 @@ impl TransitionSystem {
     /// `run_checking` with `threads` workers. The run does not depend on the number: the
     /// states, the edges, and the findings come out in the order one thread finds them.
     fn run_on(self, caps: Caps, checks: Checks, threads: Threads) -> ComponentRun {
-        let (mut run, violations, _) = self.bfs_on(caps, checks, threads, None);
+        let (mut run, violations, _) = self.bfs_on(caps, checks, threads, None, false);
         run.trace_violations(&violations);
         run
     }
@@ -657,6 +673,7 @@ impl TransitionSystem {
         checks: Checks,
         threads: Threads,
         group: Option<&symmetry::Group>,
+        annotate: bool,
     ) -> (ComponentRun, Vec<(usize, Reach)>, OrbitParts) {
         crate::shadow_assert!(
             !caps.stop_when_all_violated || checks == Checks::All,
@@ -665,12 +682,19 @@ impl TransitionSystem {
         #[cfg(feature = "perf")]
         let clock = perf::Clock::start();
         let mut bfs = Bfs::new(&self, caps, &checks, group);
+        if annotate {
+            let g = group.expect("only a run up to symmetry keeps edge permutations");
+            bfs.perms = Some(orbit::EdgePerms::new(g));
+        }
         bfs.go(threads);
         let kept = bfs.kept();
         let peak_admitted = bfs.peak_admitted;
         let peak = bfs.bytes_with_one_more().max(peak_admitted);
         if let Some(charge) = &mut bfs.charge {
             charge.shrink_to(kept);
+        }
+        if let Some(perms) = &mut bfs.perms {
+            perms.truncate(bfs.steps.moves() as usize);
         }
         let Bfs {
             states,
@@ -686,6 +710,7 @@ impl TransitionSystem {
             layers,
             orbit_self,
             orbits,
+            perms,
             ..
         } = bfs;
         let run = ComponentRun {
@@ -708,7 +733,15 @@ impl TransitionSystem {
         };
         #[cfg(feature = "perf")]
         perf::line(&run, clock, caps.stop_when_all_violated);
-        (run, violations, OrbitParts { orbit_self, orbits })
+        (
+            run,
+            violations,
+            OrbitParts {
+                orbit_self,
+                orbits,
+                perms,
+            },
+        )
     }
 }
 

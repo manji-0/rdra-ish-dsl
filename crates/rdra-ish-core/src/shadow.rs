@@ -52,10 +52,11 @@ pub(crate) enum Twin {
     SUpToH,
     Edges,
     StepEnds,
+    OrbitLiveness,
     Packed,
 }
 
-const TWINS: [(Twin, &str); 16] = [
+const TWINS: [(Twin, &str); 17] = [
     (Twin::EachEnabled, "each_enabled"),
     (Twin::Seen, "seen"),
     (Twin::Source, "source"),
@@ -71,6 +72,7 @@ const TWINS: [(Twin, &str); 16] = [
     (Twin::SUpToH, "s_up_to_h"),
     (Twin::Edges, "edges"),
     (Twin::StepEnds, "step_ends"),
+    (Twin::OrbitLiveness, "orbit_liveness"),
     (Twin::Packed, "packed"),
 ];
 

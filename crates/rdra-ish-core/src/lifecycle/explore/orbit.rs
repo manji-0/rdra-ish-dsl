@@ -25,8 +25,87 @@ use crate::lifecycle::reduce::Step;
 use crate::lifecycle::types::{ActId, EntId, Ltl};
 use crate::lifecycle::TransitionSystem;
 
+mod liveness;
 #[cfg(feature = "shadow")]
 mod reference;
+
+/// Each edge's permutation `σ`, which takes the edge's concrete successor to its stored
+/// target (docs/design/instance-symmetry.md, "Soundness per check": the annotated
+/// quotient). The permutations are kept once each, and an edge names its own by index.
+pub(crate) struct EdgePerms {
+    table: Vec<Box<[u8]>>,
+    index: crate::fasthash::FastMap<Box<[u8]>, u32>,
+    /// Per edge, in the order of the run's edges: its permutation in `table`.
+    of: Vec<u32>,
+}
+
+impl EdgePerms {
+    /// No edge yet; the identity of `g` is permutation 0.
+    pub(crate) fn new(g: &Group) -> Self {
+        let mut perms = EdgePerms {
+            table: Vec::new(),
+            index: Default::default(),
+            of: Vec::new(),
+        };
+        perms.intern(&g.identity());
+        perms
+    }
+
+    fn intern(&mut self, perm: &[u8]) -> u32 {
+        if let Some(&id) = self.index.get(perm) {
+            return id;
+        }
+        let id = u32::try_from(self.table.len()).expect("permutations fit in u32");
+        self.table.push(perm.into());
+        self.index.insert(perm.into(), id);
+        id
+    }
+
+    /// The next edge's permutation.
+    pub(crate) fn push(&mut self, perm: &[u8]) {
+        let id = self.intern(perm);
+        self.of.push(id);
+    }
+
+    /// Keeps the first `edges` permutations: those of the edges a run that a cap stopped
+    /// recorded.
+    pub(crate) fn truncate(&mut self, edges: usize) {
+        self.of.truncate(edges);
+    }
+
+    /// The next edge is a concrete self-loop.
+    pub(crate) fn push_identity(&mut self) {
+        self.of.push(0);
+    }
+
+    /// What the permutations hold, in the bytes `Caps::memory` counts: one id per edge, and
+    /// each distinct permutation with its index entry.
+    pub(crate) fn bytes(&self) -> u64 {
+        let cap = self.of.capacity().max(self.of.len() + 1);
+        let per = self.table.first().map_or(0, |p| p.len()) as u64;
+        (cap * size_of::<u32>()) as u64 + self.table.len() as u64 * (2 * per + 48)
+    }
+
+    /// Edge `k`'s permutation, by its id.
+    pub(crate) fn id(&self, k: usize) -> u32 {
+        self.of[k]
+    }
+
+    /// Permutation `id`.
+    pub(crate) fn get(&self, id: u32) -> &[u8] {
+        &self.table[id as usize]
+    }
+
+    /// How many distinct permutations the edges name.
+    pub(crate) fn len(&self) -> usize {
+        self.table.len()
+    }
+
+    /// How many edges have a permutation.
+    pub(crate) fn edges(&self) -> usize {
+        self.of.len()
+    }
+}
 
 /// A run of a system up to instance symmetry.
 pub struct OrbitRun {
@@ -39,6 +118,9 @@ pub struct OrbitRun {
     /// its class loop.
     orbit_self: Vec<u32>,
     orbits: Orbits,
+    /// Each edge's permutation, on a run made for a reader that follows a binding along the
+    /// edges (`run_annotated_orbits`); `None` otherwise.
+    perms: Option<EdgePerms>,
 }
 
 /// One edge as the label readers see it: the stored states it joins, its action, and its
@@ -65,6 +147,20 @@ impl TransitionSystem {
         self.run_orbits_in(caps, Checks::All, group)
     }
 
+    /// `run_orbits` with each edge's permutation kept (the annotated quotient of
+    /// docs/design/instance-symmetry.md), so that a reader may follow one binding along the
+    /// edges: `OrbitRun::decide_liveness` (#212 phase 4). The permutations are charged to
+    /// `caps.memory`, so only such a reader's run keeps them, and every other run up to
+    /// symmetry stops where it did.
+    pub fn run_annotated_orbits(self, caps: Caps) -> OrbitRun {
+        assert!(
+            !caps.stop_when_all_violated,
+            "a run whose graph is read keeps its edges"
+        );
+        let group = Group::of(&self);
+        self.run_orbits_annotating(caps, Checks::All, group, true)
+    }
+
     /// Whether a run up to instance symmetry could store fewer states than a plain run: its
     /// group (`G_T` on a reduced cone) moves some rows. `verify` runs a cone whose group moves
     /// nothing plainly, so it costs and prints what it does without `--symmetry`
@@ -82,9 +178,24 @@ impl TransitionSystem {
     }
 
     fn run_orbits_in(self, caps: Caps, checks: Checks, group: Group) -> OrbitRun {
+        self.run_orbits_annotating(caps, checks, group, false)
+    }
+
+    fn run_orbits_annotating(
+        self,
+        caps: Caps,
+        checks: Checks,
+        group: Group,
+        annotate: bool,
+    ) -> OrbitRun {
         group.g_t_stats(&self);
-        let (mut run, violations, parts) =
-            self.bfs_on(caps.without_views(), checks, Threads::Shared, Some(&group));
+        let (mut run, violations, parts) = self.bfs_on(
+            caps.without_views(),
+            checks,
+            Threads::Shared,
+            Some(&group),
+            annotate,
+        );
         crate::shadow_assert!(
             !run.gathered_views() && run.views.iter().all(|v| v.patterns.is_empty()),
             "a run up to symmetry gathers no entity view"
@@ -132,7 +243,14 @@ impl TransitionSystem {
             group,
             orbit_self: parts.orbit_self,
             orbits: parts.orbits,
+            perms: parts.perms,
         };
+        crate::shadow_assert!(
+            out.perms
+                .as_ref()
+                .is_none_or(|p| p.edges() as u64 == out.run.moves()),
+            "an annotated run keeps one permutation per edge"
+        );
         #[cfg(feature = "shadow")]
         reference::check(&out, caps);
         out

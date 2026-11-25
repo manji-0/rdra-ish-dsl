@@ -32,6 +32,9 @@ pub enum LassoFault {
     Satisfies,
     /// The lasso's loop is not fair (`TransitionSystem::unfair_loop`).
     Unfair(Unfair),
+    /// A loop of a run up to instance symmetry, repeated, did not come back to its first
+    /// concrete state within the copies tried (`OrbitRun::decide_liveness`).
+    Unclosed,
 }
 
 const NONE: u32 = u32::MAX;
@@ -288,7 +291,7 @@ impl ComponentRun {
     /// The states the run expanded: all of them on a complete graph. A cap stops the run
     /// inside the expansion of the state its last edge leaves, so on a capped graph only the
     /// states before that one have every move recorded.
-    fn expanded(&self) -> usize {
+    pub(super) fn expanded(&self) -> usize {
         match self.complete {
             true => self.states.len(),
             false => self.edges().last().map_or(0, |e| e.from as usize),
@@ -537,6 +540,37 @@ impl ComponentRun {
         self.edges_from(from)
             .find(|e| e.to == to)
             .expect("the adjacency holds only recorded moves")
+    }
+}
+
+#[cfg(feature = "shadow")]
+impl ComponentRun {
+    /// Per binding of `properties()[i]`, in `binder_slots` order: per state, whether the goal
+    /// fails there, and whether it can avoid the goal forever under `fairness`. What the twin
+    /// of `OrbitRun::decide_liveness` holds the pairs to.
+    pub(crate) fn liveness_reference(
+        &self,
+        i: usize,
+        fairness: Fairness,
+    ) -> Vec<(Vec<bool>, Vec<bool>)> {
+        let ts = &self.system;
+        let p = &ts.properties()[i];
+        let goal = match &p.formula {
+            Ltl::Eventually(g) | Ltl::LeadsTo(_, g) => g,
+            other => panic!("liveness_reference on {:?}", other.kind()),
+        };
+        let fair = self.fair_steps(i);
+        ts.binder_slots(&p.binders)
+            .map(|b| {
+                let avoid = self.avoid(&fair, goal, &b, StopRule::Fair(fairness));
+                let in_n = self
+                    .states
+                    .iter()
+                    .map(|s| !ts.holds_bound(goal, &s, &b))
+                    .collect();
+                (in_n, avoid.toward.iter().map(|&t| t != NONE).collect())
+            })
+            .collect()
     }
 }
 

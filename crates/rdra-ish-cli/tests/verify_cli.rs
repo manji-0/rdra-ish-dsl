@@ -2065,18 +2065,21 @@ fn symmetry_always_decides_a_cone_the_memory_limit_stopped_at_any_jobs() {
 /// A counterexample found up to instance symmetry may name other rows than a plain run's,
 /// but the same ones in every run and at every `RDRA_JOBS` (docs/design/instance-symmetry.md,
 /// "Always by default", 8): on an unreduced cone (`sym_lift_compose`) and on a reduced one
-/// whose `G_T` moves rows (`gate_reduced`), both forced up to symmetry. Each trace replays
-/// through the step relation before the #74 lift, or the run panics, which the exit code
-/// would show; that every lifted path of the gate's cone is a path of the unreduced cone is
+/// whose `G_T` moves rows (`gate_reduced`), both forced up to symmetry, and a liveness lasso
+/// whose loop is an orbit self-edge, repeated until it closes (`sym_relink_loop`, #212 phase
+/// 4). Each trace replays through the step relation before the #74 lift, or the run panics,
+/// which the exit code would show; that every lifted path of the gate's cone is a path of the unreduced cone is
 /// `a_reduced_cone_up_to_g_t_stores_fewer_states_and_lifts_its_trace`'s.
 #[test]
 fn symmetry_counterexamples_are_the_same_in_every_run() {
     let tmp = scratch("verify_cli_symmetry_same");
     let lift = repo().join("crates/rdra-ish-cli/tests/engine_corpus/sym_lift_compose.rdra");
     let gate = repo().join("crates/rdra-ish-cli/tests/fixtures/symmetry/gate_reduced.rdra");
+    let relink = repo().join("crates/rdra-ish-cli/tests/engine_corpus/sym_relink_loop.rdra");
     for args in [
         vec![lift.to_str().unwrap(), "--instances", "Queue=1"],
         vec![gate.to_str().unwrap()],
+        vec![relink.to_str().unwrap(), "--instances", "Ticket=1"],
     ] {
         let args: Vec<&str> = args.into_iter().chain(["--symmetry", "always"]).collect();
         let run = |jobs: &str| {

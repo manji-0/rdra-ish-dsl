@@ -583,6 +583,54 @@ Exit: rule 8 holds for every check kind, `presence_first_absent_asymmetry` repor
 `Order#2` only with `--symmetry always`, and `verify --with-tlc` reports no disagreement on the
 samples at their `// expect` flags.
 
+As built, first unit: `eventually` and `leads_to`, `.fair` included. Measured first, on
+patent-ops `GrantEnds` (a reduced cone; `G_T` moves `DraftingOrder`, `Patent` and
+`PatentApplication`): at n=2 `never` stores 75,017 states and the run up to `G_T` 30,313
+orbits; at n=3 under 8 GiB `never` stops at 40.0M and the run up to `G_T` completes at
+7,346,935 orbits, about 87M states, with 52.7M edges and no orbit self-edge.
+
+- **Edge permutations.** `run_annotated_orbits` keeps, per edge, an index into a table of
+  the distinct permutations its edges name, charged to the memory pool. Only a liveness
+  reader asks for them, so every other run up to symmetry stops where it did.
+- **The reader.** `OrbitRun::decide_liveness` runs `liveness.rs`'s search on (stored state,
+  binding) pairs. An orbit self-edge is a real move: it enables, is taken, and is a loop of
+  its pair when it keeps the binding, so a component of one pair can be a fair cycle.
+- **Fair instances.** The sentence above that fairness "is per binding already" is looser
+  than the code: an instance is keyed by its action's param slots (`keys_fair_instance`),
+  which need not be the binding's, and an edge moves them by its permutation too (a class
+  move keeps its params, as `concrete` does). So fairness is read on threads, (pair,
+  instance) nodes. The threads over one component fall apart into pieces that each stand
+  for one concrete instance over one concrete component, so the component admits a fair
+  cycle exactly when it has a cycle, is expanded, and every piece takes its instance on some
+  edge or meets a pair where it is not enabled.
+- **Lasso.** The loop from the end's pair covers every instance enabled there; it is
+  repeated until the concrete states close it, and the concrete lasso must replay, fail the
+  property and pass `unfair_loop`, as a plain one must.
+- **In `verify`.** Under `always`, such a property runs up to symmetry when no plain run
+  decides it (`PropertyJob::symmetric`): the `Plain` run, and on an unreduced cone the
+  `WfNext` run on the same graph. On a reduced cone a `Plain` counterexample asks for the
+  `WF_vars(Next)` run on the reduced graph or for the unreduced cone, which this unit does
+  not run up to symmetry: the property is decided as under `never`, and a plain `Plain` run
+  that finds no counterexample is a tool error.
+- **Twin.** `orbit_liveness` holds the pairs to a plain run under `SHADOW_CAP`: each edge's
+  permutation takes its move to its target, and every plain (state, binding) fails the goal
+  and can avoid it exactly when its pair does.
+- **Result.** `GrantEnds` is decided at n=3 under 8 GiB: `ok`.
+- **A system a safety cone shares stays plain.** An `eventually` or `leads_to` whose
+  reduced cone is a safety cone's system does not run up to symmetry (`Shared::new`), so one
+  plain run decides both, as before this unit; which ones is read off the jobs before any
+  run. Without it, insurance-claim-ops' `ClaimEventuallyDecided` and
+  `Cone_Forbidden_Claim_4` ran up to symmetry apart, for about as many orbits as the 633,787
+  plain states, and the pair cost 16.2% more under `always` (319.20G to 370.77G instructions
+  at `RDRA_JOBS=1`). On the samples it keeps `ClaimEventuallyDecided` alone plain;
+  `GrantEnds` shares no system, at n=2 or n=3, and stays on the orbit path.
+- **Cost.** On the 43 pairs `never` prints what `main` prints, and `always` changes four
+  pairs' lines to `about <m> states`, no verdict. Instructions at `RDRA_JOBS=1`, against
+  `main`: `never` 627.70G to 629.98G (+0.36%; at most +0.61%, clinic-ops), `always` 630.20G
+  to 633.04G (+0.45%). Against this build's own `never`, `always` is +0.49% in all,
+  insurance-claim-ops +0.86% and patent-ops +0.88%, which run cones up to symmetry, and
+  clinic-ops −0.13% and oidc-auth −0.04%, which run none: within step 1's exit.
+
 **Phase 5: always by default.** Replaced on 2026-11-25: the owner chose `always`, made
 invisible, over a `retry` default. [Always by default](#always-by-default) holds the plan and
 its measurements.
@@ -791,8 +839,10 @@ On `main` at `7e464c43` (phases 1 to 3), each run alone.
 9. **`--with-tlc`.** TLC still explores the plain module and prints its state counts beside
    the native line, and the two are compared on verdicts only. *Acceptable.*
 10. **Checks that stay plain until phase 4.** Entity cones, `stable`, `unchanged`,
-    `precedes`, `can_reach`, the liveness properties, and an `always` property on a reduced
-    cone run as under `never`, so they print `never`'s lines.
+    `precedes`, `can_reach`, and an `always` property on a reduced cone run as under
+    `never`, so they print `never`'s lines. The liveness properties run up to symmetry since
+    phase 4's first unit, but on a reduced cone a counterexample still sends the property to
+    the plain runs.
 
 ### What a user still sees differ
 

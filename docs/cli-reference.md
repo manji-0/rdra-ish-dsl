@@ -660,8 +660,9 @@ The slots of an entity are interchangeable unless the model tells them apart: tw
 differ only in which slot holds which row reach the same verdicts. `verify --symmetry always`
 stores one state per class of such states, an orbit, so a cone that outgrows the memory limit
 slot by slot can finish. [Instance symmetry](./design/instance-symmetry.md) covers the safety
-cones (`Cone_<check>`), reduced or not, and the cones of `always` properties that `verify`
-leaves unreduced, when no plain run decides them. Every other cone runs as before.
+cones (`Cone_<check>`), reduced or not, the cones of `always` properties that `verify`
+leaves unreduced, and the cones of `eventually` and `leads_to` properties, when no plain run
+decides them. Every other cone runs as before.
 
 ```sh
 rdra-ish verify samples/clinic-ops --instance-count 3 --memory 8GiB --symmetry always
@@ -702,6 +703,13 @@ Cone_Inv_Encounter_2 [Inv_Encounter_2]: ok (about 820M states)
   an S action binds. `RDRA_ISH_SYMMETRY_STATS` names them (`the reduced sub-lifecycle of
   its cone keys on its rows`). Its counterexample is lifted through the symmetry, then through
   the reduction, and replayed. An `always` property on a reduced cone runs plain.
+- **Liveness** (phase 4). An `eventually` or `leads_to` cone, `.fair` included, runs up to
+  symmetry with each edge's permutation kept, and its fair components are read per binding:
+  an edge moves the binding, and each fair instance, by its permutation. Its counterexample
+  repeats the stored loop until the concrete states close it, and replays and passes the
+  fairness check before it prints. On a reduced cone whose run up to symmetry finds a
+  counterexample, the property is decided as under `never`. A property whose reduced cone
+  is a safety cone's system stays plain, so that one plain run decides both.
 - **Shared runs.** A cone that runs up to symmetry stops once every check has failed, and its
   run decides nothing for the other passes, which have no plain graph to read off it.
 - **Branch cap.** The canonical form branches on rows it cannot tell apart that other rows
@@ -1580,7 +1588,7 @@ rdra-ish verify <INPUTS...> [--with-tlc] [-o <OUT>] [--instance-count <N>] [--in
 | `--temporal-budget` | unsigned integer | `300` | Seconds a temporal property's whole-model run gets when its cone does not decide it. Past them, or past `--max-states` states or `--memory`, the run stops and, unless it had already found a counterexample, the property is `not decided`, which warns and does not fail the run. Under `--with-tlc` TLC's whole-model run gets the same budget, and its state count is read from its progress lines (about one a minute). |
 | `--tlc-jar` | path | `RDRA_TLC_JAR`, else none | With `--with-tlc`: run TLC as `java -cp <PATH> tlc2.TLC` from `tla2tools.jar` instead of a `tlc` / `tlc2` launcher on `PATH`. Needs `java` on `PATH`. Without `--with-tlc` it prints a warning and starts no TLC. |
 | `--memory` | size | `memory` under `[verify]` in `rdra.toml`, else `16GiB` | What the run may hold in memory, such as `16GiB` or `512MiB` (`G` and `GB` also mean GiB). BFS takes all of it; under `--with-tlc` BFS takes half and the TLC cone runs going at once the other half, at least `64MiB`. A BFS cone past its share stops and leaves its findings undecided. See [Memory limit](#memory-limit). |
-| `--symmetry` | `never`, `always` | `symmetry` under `[verify]` in `rdra.toml`, else `never` | Experimental. Explore a safety cone (on a reduced one, its T rows), and the unreduced cone of an `always` property, up to instance symmetry: one stored state per class of states that differ only in which slots hold which rows. `always` does it on every such cone that no plain run decides; `never` changes nothing. A cone run up to symmetry prints `(about <m> states)`. See [Instance symmetry](#instance-symmetry). |
+| `--symmetry` | `never`, `always` | `symmetry` under `[verify]` in `rdra.toml`, else `never` | Experimental. Explore a safety cone (on a reduced one, its T rows), the unreduced cone of an `always` property, and the cone of an `eventually` or `leads_to`, up to instance symmetry: one stored state per class of states that differ only in which slots hold which rows. `always` does it on every such cone that no plain run decides; `never` changes nothing. A cone run up to symmetry prints `(about <m> states)`. See [Instance symmetry](#instance-symmetry). |
 | `--deny-undecided` | flag | off | Fail the run (exit 1) when it leaves a finding undecided: a temporal property past `--temporal-budget`, or a check, state, deadlock, or use case a BFS cone left at its state cap or the memory limit. Findings a `--buc` or `--entity` scope leaves open do not count. Without it, `verify` prints `warning: <what> undecided; the OK line holds only for what was decided (--deny-undecided fails the run)` on stderr and passes. |
 | `--prove` | flag | off | Experimental. Beside the cones, try to prove each selected state rule (`forbidden`, `invariant`, `required`, `@check`, quantifier rules, `Unique_*`, `MinCard_*`) for any number of rows and any non-negative Int value (`now` has no top) with z3, and print one `proved:`, `unproved:`, or `out of scope:` line per rule. The `OK:` line gains `; <n> of <m> rules proved for any number of rows and any Int value`. A rule the SQL export's schema does not enforce is marked `[not enforced by the SQL schema: <why>]`, and a `proof: the SQL schema leaves ...` line counts those rules. An invariant cone BFS stopped at the memory limit is `ok` when z3 proves every rule in it (see [Memory limit](#memory-limit)). Each z3 check has a fixed budget of z3 resource units, not of time, so the verdicts do not depend on the machine or its load. Needs z3 (see [Getting z3](#getting-z3)). See [Proofs for any number of rows](./formal-verification.md#proofs-for-any-number-of-rows). |
 | `--deny-unproved` | flag | off | With `--prove`: fail the run (exit 1) when a rule is unproved. A rule out of scope does not count. |

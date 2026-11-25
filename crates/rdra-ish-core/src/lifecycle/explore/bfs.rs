@@ -276,6 +276,7 @@ impl<'t> Bfs<'t> {
             canon: Canon::default(),
             orbit_self: Vec::new(),
             orbits: Default::default(),
+            perms: None,
         }
     }
 
@@ -383,14 +384,26 @@ impl<'t> Bfs<'t> {
             }
             let binding = self.bindings.id(act, params);
             if *s2 == *s {
+                // A concrete self-loop: its permutation is the identity.
+                if let Some(perms) = &mut self.perms {
+                    perms.push_identity();
+                }
                 self.push(from, from, act, binding, s2);
                 continue;
             }
             self.check_after(from, act, params, s2);
             // Under symmetry the run stores the successor's canonical form; a move into the
             // class of its own source is an orbit self-edge, a real step stored as a loop.
+            // An annotated run keeps the permutation beside the edge pushed below; a plain run
+            // reads nothing more per move (`Bfs::perms`). A run a cap stops here keeps one more
+            // permutation than edges, which `bfs_on` drops.
             let (key, found) = match self.group {
-                Some(_) => moves.canonical(i),
+                Some(_) => {
+                    if let Some(perms) = &mut self.perms {
+                        perms.push(moves.perm(i));
+                    }
+                    moves.canonical(i)
+                }
                 None => (&s2.0[..], Canonical::PLAIN),
             };
             let key = StateSlice::new(key);

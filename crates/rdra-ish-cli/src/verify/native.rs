@@ -8,8 +8,8 @@ use crate::property_cone::{AfterPlain, ConeRun, Verdict};
 use crate::tlc_output::Outcome;
 use rdra_ish_core::in_parallel;
 use rdra_ish_core::lifecycle::{
-    Caps, ComponentRun, Diag, Fairness, LassoFault, PropertyVerdict, ReducedVerdict, StateDiag,
-    TransitionSystem,
+    Caps, ComponentRun, Diag, Fairness, LassoFault, OrbitRun, PropertyVerdict, ReducedVerdict,
+    StateDiag, TransitionSystem,
 };
 use rdra_ish_emit::tla::TlaNames;
 
@@ -68,6 +68,17 @@ impl Answer {
             false => Ok(run.decide_property(i).expect("an always")),
         };
         match verdict {
+            Ok(PropertyVerdict::Holds) => Answer::Verdict(Outcome::Ok, None),
+            Ok(PropertyVerdict::Violated(d)) => Answer::Verdict(Outcome::Counterexample, Some(d)),
+            Ok(PropertyVerdict::Undecided) => Answer::Stopped,
+            Err(fault) => Answer::Fault(fault),
+        }
+    }
+
+    /// `properties()[i]`, an `eventually` or `leads_to`, of `run`'s system on its stored
+    /// graph under `fairness` (`OrbitRun::decide_liveness`).
+    fn of_orbits(run: &OrbitRun, i: usize, fairness: Fairness) -> Answer {
+        match run.decide_liveness(i, fairness) {
             Ok(PropertyVerdict::Holds) => Answer::Verdict(Outcome::Ok, None),
             Ok(PropertyVerdict::Violated(d)) => Answer::Verdict(Outcome::Counterexample, Some(d)),
             Ok(PropertyVerdict::Undecided) => Answer::Stopped,
@@ -163,7 +174,10 @@ fn native_property(
     orbits: bool,
 ) -> (Native, Option<Diag>) {
     if orbits {
-        return always_up_to_symmetry(ts, p, caps);
+        return match p.cone.kind.is_liveness() {
+            true => liveness_up_to_symmetry(ts, p, caps),
+            false => always_up_to_symmetry(ts, p, caps),
+        };
     }
     let plain = Plain::of(ts, p, &p.cone.reduced.clone().run(caps));
     native_property_after(p, caps, plain)
@@ -302,6 +316,84 @@ fn always_up_to_symmetry(
                 AfterPlain::Decided(verdict) => (out.decided(verdict), vacuous),
                 AfterPlain::NeedsWfNext => unreachable!("an always needs no WF_vars(Next)"),
             }
+        }
+        Answer::Stopped => (out.capped(), vacuous),
+        Answer::Fault(fault) => (out.faulty(&fault), vacuous),
+    }
+}
+
+/// `p`, an `eventually` or `leads_to`, on its cone explored up to instance symmetry with
+/// each edge's permutation kept (#212 phase 4), decided per binding on (stored state, binding)
+/// pairs: the `Plain` run, and on a cone the sub-lifecycle reduction leaves whole the `WfNext`
+/// run on the same graph when the `Plain` one finds a counterexample, as `native_property`
+/// runs them. On a reduced cone, a `Plain` counterexample asks for the `WF_vars(Next)` run on
+/// the reduced graph or for the unreduced cone (`native_property_after`), which this phase
+/// does not run up to symmetry: the property is decided plainly instead, and that run must
+/// find a counterexample too.
+fn liveness_up_to_symmetry(
+    ts: &TransitionSystem,
+    p: &PropertyJob,
+    caps: Caps,
+) -> (Native, Option<Diag>) {
+    let cone = &p.cone;
+    let mut out = Native {
+        decision: Decision::Decided(Outcome::Ok),
+        states: None,
+        notes: Vec::new(),
+        runs: Vec::new(),
+        found: None,
+        fault: None,
+        cone_capped: false,
+        crowded: false,
+    };
+    let run = cone.reduced.clone().run_annotated_orbits(caps);
+    out.crowded = run
+        .diags()
+        .iter()
+        .any(|d| matches!(d.diag, StateDiag::MemoryCapReached { .. }));
+    let vacuous = ts.property_vacuity(p.index, &run);
+    super::bfs::symmetry_stats(&ts.properties()[p.index].name, &run);
+    out.notes
+        .push(format!("about {} states", about(run.estimate())));
+    let first = Answer::of_orbits(&run, cone.reduced_index, Fairness::Plain);
+    out.runs.push((ConeRun::Plain, first.outcome()));
+    let found = match first {
+        Answer::Verdict(Outcome::Counterexample, found) => found,
+        Answer::Verdict(outcome, _) => {
+            return match cone.after_plain(outcome) {
+                AfterPlain::Decided(verdict) => (out.decided(verdict), vacuous),
+                AfterPlain::NeedsWfNext => unreachable!("only a counterexample asks for WfNext"),
+            };
+        }
+        Answer::Stopped => return (out.capped(), vacuous),
+        Answer::Fault(fault) => return (out.faulty(&fault), vacuous),
+    };
+    if cone.is_reduced() {
+        drop(run);
+        let (plain, vacuous) = native_property(ts, p, caps, false);
+        if plain.runs.first().map(|(_, o)| *o) == Some(Outcome::Ok) {
+            let mut plain = plain;
+            plain.fault = Some(
+                "the run up to symmetry finds a counterexample the plain run does not".to_string(),
+            );
+            plain.decision = Decision::Decided(Outcome::ToolError);
+            plain.found = None;
+            return (plain, vacuous);
+        }
+        return (plain, vacuous);
+    }
+    let wf =
+        p.wf.as_ref()
+            .expect("an eventually or leads_to has a WF module");
+    let second = Answer::of_orbits(&run, cone.reduced_index, Fairness::WfNext);
+    out.runs.push((ConeRun::WfNext, second.outcome()));
+    out.notes
+        .push(format!("{}: {}", wf.module, second.as_str()));
+    match second {
+        Answer::Verdict(outcome, again) => {
+            out.found = again.or(found);
+            let verdict = cone.after_wf(Outcome::Counterexample, outcome);
+            (out.decided(verdict), vacuous)
         }
         Answer::Stopped => (out.capped(), vacuous),
         Answer::Fault(fault) => (out.faulty(&fault), vacuous),

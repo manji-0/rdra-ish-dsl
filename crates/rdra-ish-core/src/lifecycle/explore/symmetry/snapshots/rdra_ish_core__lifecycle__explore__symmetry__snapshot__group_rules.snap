@@ -1647,6 +1647,10 @@ Entity lines that name each rule or reason:
     Room[3] moves
   [entity Room] unreduced
     Room[3] moves
+== engine_corpus/sym_relink_loop.rdra --instances Ticket=1
+  [entity Desk, entity Ticket, property TicketCloses, property TicketClosesFair] unreduced
+    Desk[2] moves
+    Ticket[1] stays
 == engine_corpus/sym_self_owned.rdra
   [entity Task, Forbidden_Task_0] unreduced
     Task[2] moves
