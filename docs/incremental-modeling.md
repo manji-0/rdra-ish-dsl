@@ -1,8 +1,11 @@
 # Incremental Modeling Flow
 
-This guide describes how to build an RDRA model from coarse intent to concrete
-behavior without forcing all details up front. Each stage has a small modeling goal,
-a validation command, and a focused set of questions that unlocks the next stage.
+This guide is for modelers, and the agents that help them, who build an RDRA model
+step by step: from a business area and its BUCs to lifecycles and rules, without writing
+every detail up front. It covers the file layout, the stages, what to add and ask at each,
+and how `rdra-ish next` finds the stage a BUC is at. The syntax is in
+[language-reference.md](./language-reference.md), and the commands are in
+[cli-reference.md](./cli-reference.md).
 
 <!-- constrained-by ./language-reference.md -->
 <!-- constrained-by ./language-reference.md#access-constraints -->
@@ -13,32 +16,22 @@ a validation command, and a focused set of questions that unlocks the next stage
 
 ## Principle
 
-The stages can also be read as a shift of concern from **business intent** to
-**technical design**. Early stages keep the model close to business language: value
-streams, actors, the screens they work on, and the data that work touches. Later stages
-add technical commitments: API boundaries, ownership, access/media constraints,
-persistence structure, lifecycle, and rules that the implementation must preserve. The
-order follows RDRA's layers from the outside in: the screen sits with the use case on
-the system boundary, nearest the actor, and the information the system keeps sits inside
-it.
+Start with the smallest model that answers the current question, and move to the next
+stage only when the current one is stable enough to make the added detail useful. The
+stages move from **business intent** to **technical design**. Early stages stay in
+business language: value streams, actors, the screens they work on, and the data that work
+touches. Later stages add API boundaries, access and media constraints, persistence
+structure, lifecycle, and rules. The order follows RDRA's layers from the outside in: the
+screen sits with the use case on the system boundary, and the information the system keeps
+sits inside it. BUC, business flow, and UC have the meanings in
+[RDRA-ish Interpretation](./rdra-ish-interpretation.md).
 
-Start with the smallest model that can answer the current question. Move to the next
-stage only when the current abstraction is stable enough to make the added detail
-useful.
+The model can stay incomplete while you explore it:
 
-The terms BUC, business flow, and UC are used in the RDRA-ish sense described in
-[RDRA-ish Interpretation](./rdra-ish-interpretation.md): BUCs are business-value
-review containers, business flow is the concrete realization of a BUC through UCs and
-events, and UCs are effect-bearing interactions. The flow is reviewed through prose
-plus generated RDRA, event, CRUD, ER, and state views.
-
-The model can stay intentionally incomplete while it is being explored:
-
-- warnings are review signals, not always blockers;
-- `check` errors are blockers because the semantic model cannot be trusted;
-- BUC filters let you validate one slice without finishing the whole system;
-- Mermaid output is the preferred early review format because it is text and easy to
-  diff.
+- Warnings are review signals, not always blockers.
+- `check` errors are blockers, since the model cannot be trusted with them.
+- `--buc` filters let you validate one slice without finishing the whole system.
+- Mermaid output is text, so it diffs well in early reviews.
 
 ## Model Directory Layout
 
@@ -171,10 +164,9 @@ main question, the gaps, notes and findings, the questions to ask the user, and 
 validation commands of the stage section below. The gates are listed in the
 [CLI Reference](./cli-reference.md#next).
 
-Different BUCs can be at different stages. Refine one BUC at a time, and run `next`
-again after each stage to see what is left and what the next question is. A met gate
-means the elements exist; whether the stage is stable enough to move on is still a
-review decision, as each stage's "Move on when" says.
+Different BUCs can be at different stages. Refine one BUC at a time and run `next` after
+each stage. A met gate means the elements exist; whether the stage is stable enough to move
+on is still a review decision, as each stage's "Move on when" says.
 
 <!-- stage-spec: heading scope -->
 ## Stage 0: Scope sketch
@@ -639,8 +631,8 @@ sees one pair of rows only. Run `rdra-ish check src/ --instance-count 2` or
 
 ## Choosing the Next Question
 
-`rdra-ish next` answers this per BUC from the stage gates. Use the current abstraction
-level to decide what to ask next:
+`rdra-ish next` answers this per BUC from the stage gates. Without it, read the model's
+current level:
 
 | If the model has... | Ask next for... |
 |---|---|
@@ -662,8 +654,6 @@ level to decide what to ask next:
 <!-- derived-from #api-boundary-rules -->
 <!-- derived-from #choosing-the-next-question -->
 
-Incremental modeling works best when each stage answers one question and leaves later
-detail out until it becomes useful. The model should move from BUC intent, to use-case
-coverage, to the screens the actor works on, to data touchpoints, to consistency-oriented
-API boundaries and access constraints, to entity structure, to lifecycle, and finally to
-business-rule constraints.
+Each stage answers one question and leaves later detail out until it is useful: BUC
+intent, use cases, screens, data touchpoints, API and access boundaries, entity structure,
+lifecycle, and finally rules.

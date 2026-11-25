@@ -2,519 +2,345 @@
 
 <!-- derived-from ./language-reference.md#entity-state-constraints -->
 
-State derivation answers the question: *for each entity, which combinations of its
-state columns are reachable, and does any reachable state break a declared rule?*
+This reference is for modelers and contributors who need to know exactly what the lifecycle
+explores: *for each entity, which combinations of its state columns are reachable, and does
+any reachable state break a declared rule?* It defines the transition system, its bounds, how
+it is explored, and every finding it reports. The syntax is in
+[language-reference.md](./language-reference.md); how `verify` checks the same system is in
+[formal-verification.md](./formal-verification.md).
 
-The tool builds one transition system from the model and explores it by breadth-first
-search (BFS). `states`, `check`, `next`, `diagram`, `csv`, `list`, `export`, and
-`codegen` read the explored states, and `verify` decides its checks by BFS on the same
-system. `export --kind tla` prints it as TLA+ for TLC, as `verify --with-tlc` does for its
-second opinion (see [formal-verification.md](./formal-verification.md)),
-and `verify --prove` encodes it for z3, for any number of rows
-([Proofs for any number of rows](./formal-verification.md#proofs-for-any-number-of-rows)).
-No second reading of the model exists, so the native checker and TLC cannot disagree on what a use case
-does. The test `engine_equivalence` checks that on every sample.
-
-The implementation lives in `crates/rdra-ish-core/src/lifecycle/`.
+The tool builds one transition system from the model and explores it by breadth-first search
+(BFS). `states`, `check`, `next`, `diagram`, `csv`, `list`, `export`, and `codegen` read the
+explored states. `verify` decides its checks on the same system, `export --kind tla` prints it
+for TLC, and `verify --prove` encodes it for z3
+([Proofs for any number of rows](./formal-verification.md#proofs-for-any-number-of-rows)). No
+second reading of the model exists, so the engines cannot disagree on what a use case does.
+The code is in `crates/rdra-ish-core/src/lifecycle/`.
 
 ---
 
 ## The transition system
 
-A transition system has variables, actions, and checks. `lifecycle::TransitionSystem`
-builds all three from the model under explicit bounds.
+A transition system has variables, actions, and checks. `lifecycle::TransitionSystem` builds
+all three from the model under explicit bounds.
 
 ### Variables
 
-Each entity has a fixed number of instance slots (see [Bounds](#bounds)). Every variable
-holds one value per slot.
+Each entity has a fixed number of instance slots (see [Bounds](#bounds)). Every variable holds
+one value per slot.
 
 | Variable | Values | Exists when |
 |---|---|---|
 | Existence | `absent`, `present`, `deleted` | Always, one per entity |
-| An Enum column | the declared variants (plus `null` for `@null`) | Always |
-| A Bool column | `false`, `true` (plus `null` for `@null`) | Always |
+| An Enum column | the declared variants, plus `null` for `@null` | Always |
+| A Bool column | `false`, `true`, plus `null` for `@null` | Always |
 | A `@null` column of any other type | `null`, `present` | Always |
-| An Int, Money, Decimal, Date, or DateTime column | `0..5` (plus `null` for `@null`) | A `sets`, a constraint, a `@check`, an applied condition body, the body of a `.when` guard on a `transitions` arm, a `chooses` value, or a `sets` value, an `after` assertion, or a `property` names it |
+| An Int, Money, Decimal, Date, or DateTime column | `0..5`, plus `null` for `@null` | A `sets`, a constraint, a `@check`, an applied condition body, a `.when` guard, a `chooses` or `sets` value, an `after` assertion, or a `property` names it |
 | A column typed by a [`variation`](./language-reference.md#variations) | the variation's values | Something names it, as for Int |
 | A comparison proposition (`stock < selling`) | `false`, `true` | `drives(UC, E.col op rhs, bool)` drives the comparison |
 | An owner (a `relate` foreign key) | the parent's slot, or `null` for an optional relate | The entity is the child of an N:1, 1:N, or 1:1 `relate` |
-| A run mark `<E>._run_<UC>` | `none`, `1`, .., `k-1` | A use case split into k transaction groups writes the entity in a group before its last (see [Runs of a split use case](#runs)) |
-| A raised mark `<E>._raised_<Ev>` | `false`, `true` | Every use case that raises `Ev` has an action, some use case with an action is triggered by it, and `E` is a mark entity of the event (see [Triggers](#triggers)) |
-| A counter `<E>._pending_<Ev>_<UC>` | `0`, `1`, .., `k`, `over` | As for a raised mark, for an edge `triggers(Ev, UC).counted(k)` (see [Counted triggers](#counted-triggers)) |
+| A run mark `<E>._run_<UC>` | `none`, `1`, .., `k-1` | A use case split into k transaction groups writes the entity before its last group ([Runs](#runs)) |
+| A raised mark `<E>._raised_<Ev>` | `false`, `true` | `E` is a mark entity of a tracked event ([Triggers](#triggers)) |
+| A counter `<E>._pending_<Ev>_<UC>` | `0`, `1`, .., `k`, `over` | As for a raised mark, for `triggers(Ev, UC).counted(k)` ([Counted triggers](#counted-triggers)) |
 | `now` | `0..5` | Something compares a column to `now` |
 
-A `@derived` column is never a variable. A construct that reads a Bool `@derived` column
-reads its expression instead, so the columns of the expression become variables. A
-construct that reads an arithmetic `@derived` column is `DerivedColumnRead`.
-
-An undriven comparison (`stock < selling` with no matching `sets`) is not a variable. Both
-engines evaluate it on the Int values of its columns. A foreign key column is the owner
-variable and is not a state column, so it is not an axis of `states`.
+A `@derived` column is never a variable. A construct that reads a Bool `@derived` column reads
+its expression instead; one that reads an arithmetic `@derived` column is the error
+`DerivedColumnRead`. An undriven comparison (`stock < selling` with no `drives`) is evaluated
+on the Int values of its columns. A foreign key column is the owner variable, not an axis of
+`states`.
 
 A new slot starts as follows:
 
-- An entity that some use case creates starts `absent`. The creating use case sets the
-  columns.
-- An entity that no use case creates is **pre-existing**. Every slot starts `present`,
-  every column at its base value, and `NoCreationPath` (info) says so. A variation column
-  of a pre-existing entity starts at any value. [vision.md](./vision.md#decisions)
-  records why.
-- The owner of a pre-existing child starts linked. The code names the three start rules
-  `Base`, `Any`, and `Identity`:
-  - `Any`: an N:1 child starts under any parent slot, or unlinked when the `relate` is
-    `.optional()`.
-  - `Identity`: a 1:1 child, and the child of a key whose card has a minimum of 1
-    (`1..*:1`), starts under the parent slot with its own index. No two children share a
-    parent at the start, and every parent has a child.
-  - `Base`: the owner of a created entity, and an optional owner whose parent some use
-    case creates, starts unlinked.
+- An entity some use case creates starts `absent`, and the creating use case sets the columns.
+- An entity no use case creates is **pre-existing**: every slot starts `present` with its
+  columns at their base values, and the info `NoCreationPath` says so. Its variation columns
+  start at any value ([vision.md](./vision.md#decisions) says why).
+- The owner of a pre-existing child starts linked, by one of three rules:
+  - `Any`: an N:1 child starts under any parent slot, or unlinked under `.optional()`.
+  - `Identity`: a 1:1 child, or the child of a `1..*:1` key, starts under the parent slot of
+    its own index. No two children share a parent, and every parent has a child.
+  - `Base`: the owner of a created entity, and an optional owner whose parent some use case
+    creates, starts unlinked.
 
-  When some use case creates the parent, every parent slot starts `absent`. A mandatory
-  owner then starts as `Any` or `Identity` says and draws `PreExistingChildOfCreatedParent`.
+  When some use case creates the parent, a mandatory owner still starts as `Any` or
+  `Identity` says, under a parent slot that is `absent`, and draws
+  `PreExistingChildOfCreatedParent`.
 
-The base value of a column is its `@default`. Without one it is `null` for a `@null`
-column of any type, as in the database, and otherwise the first Enum variant, `false`, or
-`0`.
+The base value of a column is its `@default`. Without one it is `null` for a `@null` column of
+any type, as in the database, and otherwise the first Enum variant, `false`, or `0`.
 
 ### Actions
 
-Each use case becomes one atomic action per transaction group of its writes. The
-actions interleave: in each step the tool picks any enabled action and applies it.
+Each use case becomes one atomic action per transaction group of its writes. The actions
+interleave: in each step any enabled action applies.
 
-- **One action when the writes form one group.** `Pay` that moves an Order and its
-  Payment in one FK-connected group is one action. Nothing can run between the two
-  writes.
-- **k actions when the writes form k groups, and one run takes them in order.** The
-  groups that `tx.rs` infers bound atomicity: the writes of each invoked API, in the
-  order of the use case's `invokes` lines, then the FK-connected groups of the direct
-  writes, then each isolated write. `UsecaseTx::groups()` yields them in that order,
-  each as a `TxGroup` of kind `Api`, `Fk`, or `Isolated`. The lifecycle, the sequence
-  diagram, and the `SeparateTxInferred` warning of `check` read this one list. The use
-  case becomes `<UC>_1` to `<UC>_k` in that order. One run of the use case is `<UC>_1`,
-  then `<UC>_2`, up to `<UC>_k`, each on the rows the earlier steps bound (see
-  [Runs of a split use case](#runs)). Between two steps of a run any other action runs,
-  another run of the same use case on other rows included: the steps are separate
-  transactions.
+- **One group, one action.** `Pay` that moves an Order and its Payment in one FK-connected
+  group is one action. Nothing runs between the two writes.
+- **k groups, k actions in one run.** `tx.rs` infers the groups: the writes of each invoked
+  API in `invokes` order, then the FK-connected groups of the direct writes, then each isolated
+  write (`UsecaseTx::groups()`; the sequence diagram and the `SeparateTxInferred` warning read
+  the same list). The use case becomes `<UC>_1` to `<UC>_k`, run in order on the rows the
+  earlier steps bound ([Runs](#runs)). Any other action can run between two steps, since they
+  are separate transactions:
   [`cross_order_payment_split`](../samples/formal-verification/cross_order_payment_split.rdra)
-  routes `Pay` through two APIs, the capture first, so `Cancel` runs between `Pay_1`
-  and `Pay_2`.
-- **A published entity is not in the lifecycle, and its write joins the internal
-  change.** An entity published with `exposes(System, E).append()` or `.upsert()` gets no
-  variables and no view. A use case's direct write to it joins the use case's one
-  internal transaction group whether or not a key links them, so `Login` that creates
-  `Session` and the published `LoginRecord` is one action, where two unrelated writes
-  would be `Login_1` and `Login_2`. A write through an API stays in that API's group.
-  With no or several internal groups, or a published write through an API of its own,
-  the owner's `check` reports `PublishedNotInSourceTx` instead.
+  runs `Cancel` between `Pay_1` and `Pay_2`.
+- **A published entity is not in the lifecycle.** An entity published with
+  `exposes(System, E).append()` or `.upsert()` gets no variables and no view. A direct write to
+  it joins the use case's one internal group, so `Login` that creates `Session` and the
+  published `LoginRecord` is one action. With no or several internal groups, or a published
+  write through an API of its own, `check` reports `PublishedNotInSourceTx`.
 - **A use case with no write has no action.**
 
-<a id="runs"></a>**Runs of a split use case.** A run is the rows its steps bound. Every
-entity a step before the last writes gets a run mark per slot for the use case,
-`<E>._run_<UC>`, whose value is the last step of a pending run that wrote the row, or
-`none` outside a run. Step 1 binds its rows as any action does, takes only rows marked
-`none`, and marks them `1`. Step i > 1 binds one row of every entity steps 1 to i-1
-wrote, as an `Earlier` parameter matched by its mark `i-1`, and marks them `i`, or `none`
-at the last step, which ends the run. An `Earlier` parameter is the step's row of that
-entity: a key between it and a row the step writes links the two as a written parent and
-child are linked (a child is created under it, an updated child must belong to it), a
-condition atom on the entity reads it, a copy reads it, and an `after` assert reads it.
-It is matched by its mark, not by its existence, so a row step 1 deleted still finishes
-its run, and its keys still name the rows they named before the delete. A row carries one mark per use case, so one run per row is in flight at a time:
-step 1 waits for a row in a run. A step whose guard fails when its turn comes waits too;
-the run is never abandoned, since its earlier transactions are committed, and a row that
-no step can move then shows as a `Deadlock` or a use case that never runs, with the mark
-guard among what blocks it. The mark is not an axis of `states`, and a delete does not
-reset it.
+<a id="runs"></a>**Runs of a split use case.** Every entity a step before the last writes gets a
+run mark per slot, `<E>._run_<UC>`: the last step of a pending run that wrote the row, or
+`none`. Step 1 takes only rows marked `none` and marks them `1`. Step i > 1 binds one row of
+every entity steps 1 to i-1 wrote, as an `Earlier` parameter matched by the mark `i-1`, and
+marks it `i`, or `none` at the last step. An `Earlier` parameter is the step's row of that
+entity for keys, conditions, copies, and `after` assertions. It is matched by its mark, not its
+existence, so a row step 1 deleted still finishes its run. One run per row is in flight at a
+time: step 1 waits for a row in a run. A step whose guard fails waits too, since the earlier
+transactions are committed, so a row no step can move shows as a `Deadlock` or a use case that
+never runs. The mark is not an axis of `states`, and a delete does not reset it. It multiplies
+the states only of a cone that holds the use case's steps, by the rows of the runs in flight.
 
-The cost is k values per slot of each marked entity: the reachable states multiply by the
-rows of the runs in flight, at most k^slots per marked entity, and only in a cone that
-holds the use case's steps. One counter per use case would be k states, but it would
-serialize the runs of one use case on different rows, so an interleaving of two runs on
-two cases would never be explored; a mark on one anchor entity only would leave the other
-rows of the run unbound, so a later step could act on a row no earlier step touched.
-Marking every row a step bound costs no more states than the rows in flight and keeps
-the business reading: the settlement is created under the case step 1 moved.
+<a id="triggers"></a>**Triggers.** `raises(UC, Ev)` and `triggers(Ev, UC2)` order the two use
+cases: `UC2` runs only after `UC` ran, on the rows `UC` ran on (the design is in
+[event order](./design/event-order.md)).
 
-<a id="triggers"></a>**Triggers.** `raises(UC, Ev)` and `triggers(Ev, UC2)` order the two
-use cases: `UC2` runs only after `UC` ran, on the rows `UC` ran on. An event is *tracked*
-when every `raises` of it names a use case that has an action. An event with no `raises`,
-raised by an external system, or raised by a use case that writes nothing is *free*, and so
-is a timer. A use case that only free triggers, or nothing, start runs whenever its required
-states and guards hold, as in 1.x; a use case that a free trigger starts beside a tracked
-event is free too, with no mark guard. `performs(Actor, UC)` adds no trigger and frees
-nothing.
+- **Tracked and free events.** An event is *tracked* when every `raises` of it names a use case
+  with an action. An event with no `raises`, raised by an external system, or raised by a use
+  case that writes nothing is *free*, as is a timer. A use case started only by free triggers,
+  or by none, runs whenever its states and guards hold; one a free trigger starts beside a
+  tracked event is free too. `performs(Actor, UC)` adds no trigger.
+- **The mark.** The entities that the last step of every raiser binds are the event's
+  candidates, and the candidates some triggered use case reads are its *mark entities*. Each
+  gets a raised mark per slot, `<E>._raised_<Ev>`: `false` at the start, `true` once a raiser
+  ran on the row, and never `false` again. The last step of each raiser sets it on every
+  parameter it has on `E` and never waits. Raisers that bind no entity in common make the event
+  free, and the info `UnanchoredTrigger` says so.
+- **The guard.** The first step of a triggered use case reads the mark on each parameter that
+  is the raiser's row: the step's only parameter on `E`, either its own row of `E` or a
+  `Parent` through a key some raiser's last step also binds `E` through. It prints as `event
+  <Ev> was raised on the bound row (triggers)`. Two parameters on `E` (`.role(src)` and
+  `.role(dst)`) get no guard. With no such parameter the step binds one extra `Triggered`
+  parameter, a present row of the first candidate that one direct key links to a row of the
+  step ([Joins](#joins)); with no such key it is any raised row, and the info `UnjoinedTrigger`
+  says so. It prints as `needs: an existing <E> its event was raised on`.
+- **Several events.** A use case several tracked events trigger has one copy of its first step
+  per event, `<UC>_by_<Ev>`. The variants are one use case to every finding: `Runs_<UC>` and
+  `Arm_<UC>_<from>_<to>` report only when no variant runs or takes the arm, and a variant that
+  never runs while another does is the info `TriggerNeverRuns`. `after(UC).assert` is checked
+  after the last step of each variant.
+- **Findings.** A row whose only way out is a triggered use case waiting for its mark is stuck,
+  with the mark guard among what blocks it. A use case whose mark never holds is `NeverRuns`,
+  which a self-triggering use case and an event cycle with no free entry get.
+- **The mark counts no events.** Two raises on a row are one mark, and a handler that ran once
+  can run again without a new raise. The order is "not before the first raise on these rows".
+  A use case that in the domain also starts without the event states that with a second event
+  ([A use case that also starts on its own](./language-reference.md#a-use-case-that-also-starts-on-its-own)).
+  The mark is not an axis of `states`, a delete does not reset it, and it costs one Bool per
+  slot only in a cone that reads it
+  ([Exploration by cone of influence](#exploration-by-cone-of-influence)).
 
-For each tracked event `Ev` that triggers a use case with an action, the entities that the
-last step of every raiser binds, in the first raiser's parameter order, are the event's
-candidates; the candidates some triggered use case reads are its *mark entities*, and each
-such `E` gets a raised mark per slot, `<E>._raised_<Ev>`: `false` at the start, `true` once a
-raiser ran on the row, and never `false` again. The last step of each raiser sets it on every
-parameter it has on `E`, a `Parent` or `Earlier` one included, and has no guard for it, so a
-raiser never waits for a handler. When the raisers bind no entity in common, the event is
-free and `UnanchoredTrigger` (info) says so on each `triggers` line.
+<a id="counted-triggers"></a>**Counted triggers.** `triggers(Ev, UC).counted(k)`, with `k` from
+1 to 16, replaces the latch of that one edge with a counter
+([design](./design/counted-events.md)). Each mark entity `E` gets `<E>._pending_<Ev>_<UC>` per
+slot, `0` at the start. The last step of every raiser takes it from `i` to `i + 1` on its row,
+and from `k` to `over`, and never waits. The first step of `UC` runs only where the counter is
+not `0` and takes it from `i` to `i - 1`. At `over` a raise changes nothing and the handler runs
+as under the latch. The state rule `EventOverflow_<E>_<Ev>_<UC>` says no present row is at
+`over`, so a raise with `k` already pending is a violation with a trace. The counter belongs to
+its edge: a latch edge of the same event keeps the latch, and two counted handlers have a
+counter each. It is not an axis of `states`, and a delete does not reset it.
 
-The first step of a triggered use case reads the mark through the parameter that is the
-raiser's row, as the guard `<E>._raised_<Ev>[p] = true` (`GuardWhy::Raised`, printed as
-`event <Ev> was raised on the bound row (triggers)`). A parameter `p` on a mark entity `E`
-corresponds to the raiser's row when it is the step's only parameter on `E` and either is
-its row of `E` (a role other than `Parent`) or is a `Parent` through a key that some raiser's
-last step also binds `E` through. The step reads the mark on every corresponding parameter.
-A parameter that does not correspond gets no guard: two parameters on `E`
-(`relate(Transfer, Account).role(src)` and `.role(dst)`) say nothing about which one the
-event was about, and a parent through a key the raiser never binds is a different row, so
-requiring the mark on each would hide a run the order allows. With no corresponding
-parameter the step binds one extra `Triggered` parameter, a present row of the first
-candidate entity that one direct key links to a row the step writes or reads as a parent,
-with that key's owner guard ([Joins](#joins)); with no such key it is any raised row, and
-`UnjoinedTrigger` (info) says so on the `triggers` line, as `UnjoinedGuardRead` says any
-present row satisfies a guard. A `Triggered` parameter prints as `needs: an existing <E> its
-event was raised on`. The later steps of a split use case carry nothing new, since they
-continue the run by its run marks.
+`.counted` is the error `UncountedTrigger`, naming the reason, on a free event, on a handler a
+free trigger also starts or that writes nothing, on raisers with no entity in common, on a
+handler that raises the event itself, or on a raiser that binds a mark entity twice. An edge
+whose raiser or handler the run's scope leaves out is not checked in that run.
 
-A use case that several tracked events trigger has one copy of its first step per event,
-`<UC>_by_<Ev>`, each with that event's guards; a use case one tracked event triggers keeps
-its name. The variants are one use case to every finding: `Runs_<UC>` and
-`Arm_<UC>_<from>_<to>` are reported once, under the use case's name, and only when no
-variant runs or takes the arm, and a variant that never runs while another does is
-`TriggerNeverRuns` (info) naming its event. `after(UC).assert` is checked after the last step
-of each variant, so once per run. Deadlocks, witnesses, and `NeverRuns` are decided as
-before: a row whose only way out is a triggered use case that waits for its mark is stuck,
-with the mark guard among what blocks it, and a use case whose mark never holds is
-`NeverRuns` with that guard, which is what a self-triggering use case and an event cycle
-with no free entry get. A set mark is never a finding by itself.
-
-The mark counts no events. Two raises on a row are one mark, and a triggered use case that
-ran once can run again without a new raise, as it could before. The order is "not before
-the first raise on these rows", nothing more, whatever actor performs the use case. A use
-case that in the domain also starts without the event states where it starts with a second
-event, raised at that point and triggering it ([A use case that also starts on its
-own](./language-reference.md#a-use-case-that-also-starts-on-its-own)); `triggers` has no
-opt-out. The mark is not an axis of `states`, a delete does not reset it, and it costs one
-Bool per slot of each mark entity, only in a cone that reads it
-([Exploration by cone of influence](#exploration-by-cone-of-influence)).
-
-<a id="counted-triggers"></a>**Counted triggers.** `triggers(Ev, UC).counted(k)`, with `k`
-from 1 to 16, replaces the latch of that one edge with a counter
-([design](./design/counted-events.md)). Each mark entity `E` the edge reads gets
-`<E>._pending_<Ev>_<UC>` per slot, `0` at the start. The last step of every raiser takes it
-from `i` to `i + 1` on its row, and from `k` to `over`; it has no guard, so a raiser never
-waits. The first step of `UC` (each variant) runs only where the counter is not `0`, printed
-as the same `event <Ev> was raised on the bound row (triggers)`, and takes it from `i` to
-`i - 1`. At `over` a raise changes nothing and the handler runs as under the latch, with no
-decrement. The state rule `EventOverflow_<E>_<Ev>_<UC>` says no present row is at `over`,
-so a raise with `k` already pending is a violation with a trace; it has no premise, so it
-is never vacuous. The counter belongs to its edge: a latch edge of the same event keeps the
-shared latch, and two counted handlers have a counter each. The counter is not an axis of
-`states`, and a delete does not reset it.
-
-A counted edge needs a tracked edge. On a free event, on a handler that a free trigger also
-starts or that writes nothing, on raisers with no entity in common, on a handler that raises
-the event itself, or on a raiser that binds a mark entity twice, `.counted` is the error
-`UncountedTrigger`, naming the reason. An edge whose raiser or handler the run's scope leaves
-out (`--buc`, `--without-usecase`) is not checked in that run, and draws no error.
-
-An action takes one parameter per entity it writes. A `creates` takes the lowest
-`absent` slot. An `updates` or `deletes` takes any `present` slot. The
-effects apply together to the pre-state:
+**Parameters and effects.** An action takes one parameter per entity it writes. A `creates`
+takes the lowest `absent` slot; an `updates` or `deletes` takes any `present` slot. The effects
+apply together to the pre-state:
 
 | Source | Effect and guard |
 |---|---|
-| `creates(UC, E)` | The slot becomes `present`, with the columns at their base values. The creating use case's `sets` and transitions then apply. |
-| `deletes(UC, E)` | The slot becomes `deleted` and its columns return to the base value; its keys keep the rows they name. A deleted slot is never reused. Only that slot. Guard, per key to `E` whose `.on_delete` is unset, `restrict`, or `no_action` (the database rejects the delete): no present child names the slot, apart from a child the same step deletes, unlinks, or relinks. A child of a `cascade`, `set_null`, or `set_default` key stays present and still names the deleted slot, since the lifecycle does not run those actions, and every rule still sees it; such a key gets no `DanglingKey_*`. Info `DeleteLeavesChildren` names each use case that deletes a `cascade` parent and not the child. An `E` with a `@soft_delete` column gets no guard. |
+| `creates(UC, E)` | The slot becomes `present`, with the columns at their base values; the use case's `sets` and transitions then apply. A `creates(Api, E)` reached through `invokes(UC, Api)` counts as a creation by `UC`. |
+| `deletes(UC, E)` | The slot becomes `deleted` and its columns return to the base value; its keys keep the rows they name. A deleted slot is never reused. Per key to `E` whose `.on_delete` is unset, `restrict`, or `no_action`, a guard: no present child names the slot, apart from a child the same step deletes, unlinks, or relinks. A child of a `cascade`, `set_null`, or `set_default` key stays present and names the deleted slot, since the lifecycle does not run those actions; such a key gets no `DanglingKey_*`, and the info `DeleteLeavesChildren` names each use case that deletes a `cascade` parent and not the child. An `E` with a `@soft_delete` column gets no guard. |
 | `sets(UC, E.col == val)` | `col := val`. A `sets` counts as a write even without a CRUD edge. |
-| `sets(UC, E.col == F.src)` | `col` takes the value of `F.src` in the row of `F` that the step binds (see [Copies](#actions)). |
+| `sets(UC, E.col == F.src)` | `col` takes the value of `F.src` in the row of `F` the step binds (see Copies below). |
 | `drives(UC, E.col op rhs, bool)` | The comparison variable becomes `bool`. |
-| `links(UC, Child, Parent)` | Guard: the child's owner on the key is unlinked. Effect: the owner becomes the parent row the step binds, the one it writes, the one an earlier step of its run wrote, or else any present parent, bound as a parameter of the key (see Owners). A `links` counts as a write of the child. |
-| `relinks(UC, Child, Parent)` | Guard: the owner is linked (none on a mandatory key, whose child always is). Effect: the owner becomes the parent row the step binds, as for `links`, the one it already has included. Counts as a write of the child. |
-| `unlinks(UC, Child, Parent)` | Guard: the owner is the parent row the step binds when it writes one (or an earlier step of its run wrote one), else that the owner is linked. Effect: the owner becomes unlinked. Binds no parent otherwise. Counts as a write of the child. |
-| `transitions(UC, E.col, a -> b)` | Guard `col == a`, effect `col := b`. The arms of one use case on one column make one guard, `col` is one of their `from` values, and one effect. Arms from one state to several (`a -> b`, `a -> c`) are a choice: one successor per arm. |
-| `transitions(UC, E.col, (a, b) -> z)` | One arm per listed source, `a -> z` and `b -> z`, as if each were written on its own line; a `.when(Cond)` after the list guards each arm. |
-| `transitions(UC, E.col, a -> b).when(Cond)` | The arm is taken only when the body of `Cond` holds on the pre-state. A column with a guarded arm gets one more guard, on the pre-state and the successor: the step takes some arm whose guard held, `\/ (col = a /\ col' = b /\ body)` over the column's arms (an unguarded arm's body is `TRUE`). |
-| a variation column of a created instance | The instance takes any value of the variation, unless the creating use case sets it. `@default` never pins the choice; info `DefaultOnVariationIgnored` says so where some row starts at any value. |
-| `chooses(UC, E.col)` | The variation column takes any value of the variation: one successor per value, as on a creation. On a created instance it is the creation's choice. A column no rule, condition, assert, `property`, or `sets` reads has no variable, so nothing tells its values apart and the `chooses` adds no successor. |
-| `chooses(UC, E.col, v).when(Cond)` | The column takes one of the listed values: one successor per value. A guarded value is taken only when the body of `Cond` holds on the pre-state; the column gets one guard on the successor, `\/ (col' = v /\ body)` over its listed values (an unguarded value's body is `TRUE`), built as an arm guard is. A guarded value gives the column a variable. |
-| `sets(UC, E.col == v).when(Cond)` | One listed value per line, read as a guarded `chooses` value: one successor per value, taken only when the body of `Cond` holds, on the pre-state for an updated instance and after the step for a created one. The column gets one guard on the successor, `\/ (col' = v /\ body)` over the lines. No line enabled, no successor. An unguarded `sets` or a copy of the same column in the action is `ConflictingEffects`. |
+| `links(UC, Child, Parent)` | Guard: the owner is unlinked. Effect: the owner becomes the parent row the step binds (see Relinking). Counts as a write of the child. |
+| `relinks(UC, Child, Parent)` | Guard: the owner is linked (none on a mandatory key). Effect: the owner becomes the parent row the step binds. Counts as a write of the child. |
+| `unlinks(UC, Child, Parent)` | Guard: the owner is the parent row the step writes (or an earlier step of its run wrote), else linked. Effect: the owner becomes unlinked. Counts as a write of the child. |
+| `transitions(UC, E.col, a -> b)` | Guard `col == a`, effect `col := b`. The arms of one use case on one column make one guard and one effect. Arms from one state to several (`a -> b`, `a -> c`) are a choice. |
+| `transitions(UC, E.col, (a, b) -> z)` | One arm per listed source, as if each were written on its own line; a `.when(Cond)` after the list guards each arm. |
+| `transitions(UC, E.col, a -> b).when(Cond)` | The arm is taken only when the body of `Cond` holds. The column gets one more guard, on the pre-state and the successor: `\/ (col = a /\ col' = b /\ body)` over its arms (an unguarded arm's body is `TRUE`). |
+| a variation column of a created instance | Any value of the variation, unless the creating use case sets it. `@default` never pins it; the info `DefaultOnVariationIgnored` says so. |
+| `chooses(UC, E.col)` | Any value of the variation: one successor per value. A column nothing reads has no variable, so the `chooses` adds no successor. |
+| `chooses(UC, E.col, v).when(Cond)` | One of the listed values; a guarded value only when the body of `Cond` holds, as a guard on the successor. |
+| `sets(UC, E.col == v).when(Cond)` | One listed value per line, read as a guarded `chooses` value. No line enabled, no successor. An unguarded `sets` or a copy of the same column is `ConflictingEffects`. |
 | a column the use case does not write | Unchanged. |
 
-A `creates(Api, E)` reached through `invokes(UC, Api)` counts as a creation by `UC`.
-
 **Choices.** An action has one successor per choice it makes. A `transitions` choice, a
-`chooses`, and a variation column of a created instance, fork the post-state after every other effect has
-applied, so each successor carries the action's other effects. Two choices in one action
-multiply: each combination of one value per choice is a successor. The guards read the
-pre-state, so they hold or fail for every arm together, and `after(UC).assert` is checked
-on every successor. In the TLA+ export a choice of transitions is
-`\E v \in (CASE col = a -> {b, c} [] ... [] OTHER -> {col}) : col' = [col EXCEPT ![p] = v]`;
-a column whose arms all move to one state writes that state, and one whose arms leave each
-state for its own target keeps the deterministic `CASE`. An
-unguarded `sets` is never a choice: two values for one column in one use case are
-`ConflictingEffects`. Guarded `sets` lines of one column are a choice, as listed `chooses`
-values are.
+`chooses`, and a variation column of a created instance fork the post-state after every other
+effect, and two choices multiply. The guards read the pre-state, and `after(UC).assert` is
+checked on every successor. An unguarded `sets` is never a choice: two values for one column in
+one use case are `ConflictingEffects`.
 
-**Arm guards.** `.when(Cond)` filters the successors of a choice: the explorer forks every
-arm, or every listed value of a `chooses`, from the pre-state, then keeps the successors
-whose arm or value guard held. So the use case
-runs when some arm is enabled, the choice among enabled arms stays free, and an action
-whose every arm is disabled has no successor, which `NeverRuns` reports with the arm guard
-as what blocks it. The TLA+ export writes the same guard after the assignment, as it writes
-every guard that reads the successor:
-`(col[p] = a /\ col'[p] = b /\ body) \/ (col[p] = a /\ col'[p] = c) \/ ...`. A guarded arm
-that no edge takes, while its use case runs and some instance holds its `from`, is the
-`ArmNeverTaken` warning; one cone that takes it is enough. A guarded value no edge leaves an
-instance at, with its row written, while its use case runs is the `ValueNeverChosen`
-warning.
+**Arm guards.** `.when(Cond)` filters the successors of a choice: the explorer forks every arm
+or listed value and keeps those whose guard held. So the use case runs when some arm is enabled,
+the choice among enabled arms stays free, and an action whose every arm is disabled has no
+successor, which `NeverRuns` reports. A guarded arm no edge takes, while its use case runs and
+some instance holds its `from`, is the warning `ArmNeverTaken`; a guarded value no edge picks is
+`ValueNeverChosen`. One cone that takes it is enough.
 
-**When a guard reads.** An arm or value guard, like an `applies_to` guard, reads an instance
-the use case updates on the pre-state and an instance the use case creates on the
-post-state, after the step's effects. A guard on the chosen column of a created instance
-therefore sees the chosen value. The body's columns become variables, as an applied body's
-do.
+**When a guard reads.** An arm, value, or `applies_to` guard reads an updated instance on the
+pre-state and a created instance on the post-state, so a guard on the chosen column of a created
+instance sees the chosen value. The body's columns become variables.
 
-**Owners.** An action that writes two entities joined by a `relate` binds them. A
-created child gets its parent's slot as its owner. An action that updates a child
-requires that the child belongs to the parent the action also writes. A mandatory
-`relate` adds the parent as a parameter when a created child needs one. An
-`.optional()` `relate` does not: the child is created unlinked, and a parent
-that the action writes links it. One more case links it: a `holds` guard on the use case
-that compares a column of the parent and joins the child to it through that key (see
-[Joins](#joins)) adds the parent as a parameter, as a mandatory key does, so the child is
-created linked to a present parent the guard holds for. An unlinked owner is not linked for
-`.along`, quantifiers, or owner guards. A guard that reads the parent of a child the action
-creates unlinked only through a `.has/.none(...)` therefore never holds, and the
-`Runs_<UseCase>` warning adds a `note:` row: the use case creates the child without writing
-the parent. Compare a parent column in a `holds` guard, write the parent in the use case
-(`updates(UseCase, Parent)`), or drop `.optional()` so the parent is a parameter.
+**Owners.** An action that writes two entities joined by a `relate` binds them. A created child
+gets its parent's slot as its owner, and an updated child must belong to the parent the action
+also writes. A mandatory `relate` adds the parent as a parameter when a created child needs one;
+an `.optional()` one does not, so the child is created unlinked unless the action writes the
+parent or a `holds` guard compares a column of the parent through that key ([Joins](#joins)). An
+unlinked owner is not linked for `.along`, quantifiers, or owner guards, so a guard that reads
+such a parent only through `.has/.none(...)` never holds, and the `Runs_<UseCase>` warning adds a
+`note:` row. Compare a parent column in a `holds` guard, write the parent, or drop `.optional()`.
 
-A parent parameter is a row the action reads. It is never relinked: when it is also the
-child of another key whose parent the action creates, that key keeps its owner. Each key has
-its own parent parameter. Two keys from one child to one parent that the action does not
-write (`ship_to` and `bill_to` from `Order` to `Address`) therefore range over the parent's
-rows independently, so a child created under both may point at one row or at two. A parent
-the action writes is the child's parent only on the keys it takes: the one key from the child
-to the parent, or, among several, each key that a `.role` of the use case's `holds` guards (after
-the body or an `.along` hop) or copies names. On every other key the action binds the child as
-if it did not write the parent: a created child gets a parent parameter of that key, and an
-updated child gets no owner guard. So `.role` names the written row as it names any other: the
-row of the key the use case reads it through.
+A parent parameter is a row the action reads and is never relinked. Each key has its own parent
+parameter, so two keys from `Order` to `Address` (`ship_to`, `bill_to`) range independently. A
+parent the action writes is the child's parent only on the keys it takes: the one key between
+them, or among several, each key a `.role` of the use case's `holds` guards or copies names. On
+every other key the child is bound as if the action did not write the parent.
 
-**Relinking.** An action that creates the parent and updates an existing child links the
-child to the new parent. The rule depends on the key:
+**Relinking.** An action that creates the parent and updates an existing child links the child
+to the new parent. An `.optional()` key adds the guard `owner == null`, so a linked child keeps
+its first parent; a mandatory key moves the child. `links` follows the same rule
+(`GuardWhy::Link`, "the child is not linked to a parent yet"), so no `links` moves a child.
+`relinks` moves one: guard `owner != null`, and the new owner is the parent row the step binds,
+the one it already has included. `unlinks` frees one. One use case states one of the three per
+key (`ConflictingLinks`).
 
-- An `.optional()` key links the child only while it is unlinked. The action adds the
-  guard `owner == null` before it assigns the owner, so a child that already has a
-  parent stays with its first parent.
-- A mandatory key always has a parent, so the same action moves the child to the new
-  parent.
-
-`links(UC, Child, Parent)` links an existing child by the same rule: the key is
-`.optional()`, the guard is `owner == null` (`GuardWhy::Link`, "the child is not linked
-to a parent yet"), and the owner becomes the parent row the step binds. A linked child
-waits, so no `links` moves a child. `relinks(UC, Child, Parent)` moves one: the guard is
-`owner != null` (none on a mandatory key), and the owner becomes the parent row the step
-binds, the one it already has included, since a move that had to differ could never run
-at `Bounds::STATES`, one instance per entity. `unlinks(UC, Child, Parent)` frees one: the
-guard is `owner == p` for the parent row `p` the step writes or an earlier step of its run
-wrote, else `owner != null`, and the owner becomes `null`; no parent is bound otherwise.
-Each is `GuardWhy::Link` at its `ModelRef::Link`, whose kind picks the guard text. One use
-case states one of the three per key (`ConflictingLinks`).
-
-<a id="joins"></a>**Joins.** A `.along(A, B)` hop, a `.has/.none(...)`, the link between a `holds`
-body's existing instance and the other instances of the guard, and a copy source each read
-the owner of one key. `SemanticModel::join_key` picks it: the one key between the two
-entities, or among several the one a `.role(role)` names. Several keys with no selector naming
-one is `AmbiguousOwnerLink` (an error), and the two are left unlinked (see
-[language-reference.md](./language-reference.md#which-key-a-join-follows)). The builder never
-picks a key itself, so the explorer and the TLA+ printer read the same owner. A `Triggered`
-parameter ([Triggers](#triggers)) is linked by the one direct key between its entity and a
-row of the step; `triggers` takes no `.role`, so with several keys, or none, the parameter is
-unjoined (`UnjoinedTrigger`, an info) rather than an error.
+<a id="joins"></a>**Joins.** A `.along(A, B)` hop, a `.has/.none(...)`, the link between a
+`holds` body's instances, and a copy source each read the owner of one key.
+`SemanticModel::join_key` picks it: the one key between the two entities, or among several the
+one a `.role(role)` names. Several keys and no selector is the error `AmbiguousOwnerLink`
+([Which key a join follows](./language-reference.md#which-key-a-join-follows)). A `Triggered`
+parameter is linked by the one direct key between its entity and a row of the step; `triggers`
+takes no `.role`, so with several keys or none the parameter is unjoined (`UnjoinedTrigger`).
 
 **Conditions as guards.** `applies_to(Condition, UseCase)` with a `holds` body, or
-`applies_to(Condition, Api)` for each use case that invokes the API, guards the use
-case's action:
+`applies_to(Condition, Api)` for each use case that invokes the API, guards the use case's
+action:
 
-- An atom on an entity the action writes reads that parameter. The action reads the
-  parameter before the effects, except for a created entity, where it reads the
-  instance as the action leaves it, so the condition constrains the creation.
-- An atom on a parent the action only reads follows the key [Joins](#joins) picks for the
-  body, with the body's `.role`: it reads that key's parent parameter. One parent parameter
-  of the entity, with several keys and no `.role` naming one, is the row the atom reads.
-  Several parent parameters of the entity and no `.role` naming one is `AmbiguousOwnerLink`.
-  A `.role` naming a key with no parent parameter reads an existing instance through that
-  key, as the next item says. So `.role` names the same row whether or not the action binds
-  the entity: the row the key joins to the child.
-- An atom on any other entity reads an existing instance. The atoms on one such
-  entity share one instance, which a direct `relate` owner links to the parameters it
-  relates to. Without a `relate`, the instance is independent.
+- An atom on an entity the action writes reads that parameter, before the effects, or as the
+  action leaves it for a created entity.
+- An atom on a parent the action only reads follows the key [Joins](#joins) picks, with the
+  body's `.role`. Several parent parameters of the entity and no `.role` is
+  `AmbiguousOwnerLink`.
+- An atom on any other entity reads an existing instance. Atoms on one such entity share one
+  instance, which a direct `relate` links to the action's parameters; without one it is
+  independent. A compared instance no chain of links reaches is the warning
+  `UnjoinedGuardRead`: any present row satisfies the guard.
 - With `.along(A, B, ..)`, each path entity the action does not bind is such an instance,
-  and the owner of each hop's key (the key [Joins](#joins) picks, with the `.role` after
-  the `.along`) links neighbours; no other link is added. The guard reads the instances
-  the path joins to the action's parameters, as `.along` binds a multi-entity rule. A path
-  entity a `.has`/`.none` quantifies, and no atom reads, is no such instance: it and the
-  path entities between it and the nearest earlier path entity the action binds or an
-  atom reads are bound inside the quantifier, with the hops' owner links, every one
-  `Forall` for `.none` (no chain from the anchor's instance reaches a matching instance)
-  and `Exists` for `.has` (some chain does). The hop into such an entity links inside the
-  quantifier only, so the guard needs no instance on the path to exist.
-- An instance of a compared entity that no chain of links reaches from a parameter of the action is
-  `UnjoinedGuardRead`, a warning: any present row of the entity satisfies the guard.
-- In a use case with k groups, the body is the precondition of the run: step 1 carries
-  it, read on its pre-state with the bindings above, and the later steps run because step
-  1 ran (see [Runs of a split use case](#runs)). An atom on an entity a later step writes
-  reads an existing instance there, so a body that must constrain what a later step
-  creates is applied to that step's API instead. A body applied to an API,
-  `applies_to(Condition, Api)`, is the precondition of that API's transaction: the step of
-  that API's group carries it, in every use case that invokes the API. Its atom on an
-  entity an earlier step wrote reads the `Earlier` parameter, the row of the run. A
-  `.when` on a `transitions` arm or a `chooses` value guards only the step that writes its
-  column. No step re-reads a guard an earlier step carried, so a use case that falsifies
-  the condition between two steps is explored, not blocked: a rule that the in-between
-  state breaks reports it.
-- A `.has(...)` or `.none(...)` on the body quantifies over the related instances
-  present in the pre-state, linked by a `relate` owner to the parameters and the other
-  instances, through the key [Joins](#joins) picks. `.has(Related)` and `.none(Related)`
-  name no condition, so they read the owner and the instance's existence only. The instance a created parameter takes is absent there, so the quantifier
-  never reads it; an updated parameter's instance is present and is quantified with its
-  pre-state values. The quantified instance is its own binder even when the action or
-  another atom binds the same entity. With `.along`, a quantified entity the path names
-  and no atom reads is counted along the path (above), and its `.role` is not read.
-- `applies_to(Condition, System)` adds no guard, and a condition with no body is a
-  trace link.
-- A body applied to a use case that writes nothing is `UnbindableCondition`.
+  linked by each hop's key. A path entity that a `.has`/`.none` quantifies and no atom reads is
+  bound inside the quantifier: `Forall` for `.none`, `Exists` for `.has`.
+- In a use case with k groups, the body is the precondition of the run: step 1 carries it. A
+  body applied to an API is the precondition of that API's step, in every use case that
+  invokes it, and reads the run's rows through `Earlier` parameters. A `.when` on an arm or a
+  value guards only the step that writes its column. No step re-reads an earlier step's guard.
+- `.has(...)` and `.none(...)` quantify over the related instances present in the pre-state,
+  linked through the key [Joins](#joins) picks. `.has(Related)` and `.none(Related)` read the
+  owner and the existence only.
+- `applies_to(Condition, System)` adds no guard, and a condition with no body is a trace link.
+  A body applied to a use case that writes nothing is `UnbindableCondition`.
 
-The order of `raises` and `triggers` between use cases is a guard of its own: the first
-step of a triggered use case reads the raised mark of its event ([Triggers](#triggers)), so
-it never runs before the use case that raises the event. A condition guard that only
-restates the order (the state the raise left the row in) is no longer needed; one that is
-kept documents the precondition the handler relies on, and it stays true if the use case is
-later started some other way
+The `raises`/`triggers` order is a guard of its own ([Triggers](#triggers)). A condition that
+only restates the order is no longer needed; one that is kept documents the precondition the
+handler relies on
 ([`triggers` and event-driven BUC chaining](./language-reference.md#triggers-and-event-driven-buc-chaining)).
 
-**Copies.** `sets(UC, E.col == F.src)` reads the row of `F` that a condition atom on `F`
-would read, with one restriction: the row must be bound to the step, never an independent
-witness.
+**Copies.** `sets(UC, E.col == F.src)` reads the row of `F` a condition atom would read, but only
+a row bound to the step: a parameter of the action for `F` (an `Earlier` one for an `F` an
+earlier step wrote), or the target's parent through the key `join_key` picks, which joins as a
+parameter with the guard `owner[target] == F`. Any other `F` is the error `UnboundCopySource`,
+and the copy is not applied. The copy is a choice of the target's value filtered by
+`col'[p] = src[q]` (`GuardWhy::Copy`). The analysis checks that every source value is a target
+value.
 
-- When the action has a parameter for `F`, the copy reads that parameter: an updated,
-  parent, or `Earlier` parameter before the effects, a created one as the action leaves
-  it. Among the parent parameters of several keys to `F`, it reads the one of the key
-  `.role` names, as a condition atom does. An `F` an earlier step of the use case wrote is
-  the `Earlier` parameter, the row of the run.
-- When `F` is the parent of the target through the key `join_key` picks (with the copy's
-  `.role(role)`), and the action updates the target, `F` joins the action as a parent
-  parameter, with the owner guard
-  `owner[target] == F`. An unlinked `.optional()` owner fails that guard, so the action
-  waits. A created target under a mandatory `relate` already has its parent as a parameter
-  (see Owners).
-- Any other `F` is `UnboundCopySource`, an error, and the action has no copy. That
-  includes a child of the target, an entity a later step of the use case writes, and the
-  parent of a created child under an `.optional()` key.
-
-The copy is a choice of the target's value, one successor per value of its domain, which
-the guard `col'[p] = src[q]` (`GuardWhy::Copy`) filters, as an arm guard filters a choice.
-The choice replaces a creation's choice of a variation column. A literal `sets` or a second
-copy of the same column in the action is `ConflictingEffects`. The analysis checks that every
-value of the source is a value of the target, so the guard always keeps one successor.
-
-**Clock.** When something compares a column to `now`, a `Tick` action adds one to
-`now` until it reaches the top of the Int range. A `Date` or `DateTime` column is a point
-on the same clock: `sets(UC, E.due == 3)` places it at 3, and `due < now` holds once the
-clock has ticked past it. A deadline that depends on the row is one guarded `sets` per case,
-`sets(UC, E.due == 3).when(Cond)`, and the timer's use case waits for it with a guard such as
-`holds(Due, E.due <= now)` (see
-[A deadline that depends on a reason](./language-reference.md#a-deadline-that-depends-on-a-reason)).
+**Clock.** When something compares a column to `now`, a `Tick` action adds one to `now` until
+the top of the Int range. A `Date` or `DateTime` column is a point on that clock:
+`sets(UC, E.due == 3)` places it at 3. A deadline that depends on the row is one guarded `sets`
+per case, and the timer's use case waits with a guard such as `holds(Due, E.due <= now)`
+([A deadline that depends on a reason](./language-reference.md#a-deadline-that-depends-on-a-reason)).
 
 ### Checks
 
 | Declaration | Check |
 |---|---|
-| `forbidden`, `invariant`, `required`, `exclusive` | An invariant over the present slots of the entity, evaluated in every reachable state. A `.when(Cond)` on a `forbidden` or an `invariant` adds the comparisons of the condition's `holds` body to the rule before it is built, so the check is the one the comparisons written in place give. |
-| Multi-entity `forbidden`, `invariant` | An invariant over every combination of present slots. `.along(A, B)` restricts it to combinations that the `relate` owners link. |
-| `invariant(E).when(...).has/none(R.col == v)` | An invariant over the present slots of `E` and the related slots of `R`. A `relate` links them through its owner; without one, `R` is independent. |
-| `relate(Child, Parent, 1:1)` | `Unique_<Child>_<role>`: no two present children belong to one parent slot. An unlinked optional child belongs to none. It holds vacuously at one instance. |
-| `@unique`, `@unique(a, b)`, `relate(A, B, N:M).via(J)` | `Unique_<Entity>_<columns>`: no two present rows agree on every column of the set. See [Unique column sets](#unique-column-sets). |
-| `relate(Child, Parent, ..)` with no `.on_delete`, `restrict`, or `no_action`, whose parent a use case `deletes` | `DanglingKey_<Child>_<role>`: every present child names a present parent, or none under `.optional()`. The delete's guard keeps it. A `cascade`, `set_null`, or `set_default` key has no such rule: the lifecycle does not run those actions yet, and its unguarded delete leaves the children as before. A parent with a `@soft_delete` column, and a pre-existing child of a created parent (`PreExistingChildOfCreatedParent`), have no such rule. |
-| `relate(Child, Parent, 0..3:1)` | `MaxCard_<Child>_<role>`: no present parent slot owns more than 3 present children, in every state, a count as `.at_most(3, Child)` makes. It needs 4 slots of the child to fail; below that it is `Vacuous_MaxCard_*`. |
-| `relate(Child, Parent, 1..*:1)` | `MinCard_<Child>_<role>`: every present parent slot is owned by a present child, in every state. Info `MinCardNeedsCreate` names each use case that creates the parent and no child in the same transaction group. A pre-existing parent of a created child fails at the start and draws a warning; a pre-existing child of a pre-existing parent starts linked slot for slot. |
-| `col: T @check(expr)` | `Check_<Entity>_<column>_<n>`: every present slot satisfies `expr`, read as every rule reads a comparison (see [Null](./language-reference.md#null) in the language reference): a null operand satisfies no comparison but `!=`, so `qty: Int @null @check(qty >= 1)` fails while `qty` is null, and `@check(qty == null or qty >= 1)` admits it. A comparison with a value reads the column's slot: `@check(status == open or closed_at == present)` is `status = open \/ closed_at = present`. A created slot starts at the base value: `@check(qty >= 1)` without `@default(1)` or a creating `sets` fails at creation, and so does a `@null` column with no default. A logical `@derived` column keeps SQL semantics: its value is neither `true` nor `false` while an operand is null. |
-| `after(UC).assert(...)` | A predicate on the state each run of `UC` leaves, checked on every step of the last action of `UC`. An entity an earlier step wrote is read on the run's row; an entity no step binds is read on every present row, with the `UnboundAfterRead` warning. |
-| `property` with `always`, `eventually`, `leads_to`, `stable`, `unchanged`, `precedes`, or `can_reach` | Data only for `check` and `states`: their BFS evaluates no property, and `check` prints a `note:` that says to use `verify`. `verify` checks every form, each on its own cone (see [Temporal properties on a cone](./formal-verification.md#temporal-properties-on-a-cone)). |
+| `forbidden`, `invariant`, `required`, `exclusive` | An invariant over the present slots of the entity, in every reachable state. A `.when(Cond)` adds the comparisons of the condition's `holds` body to the rule. |
+| Multi-entity `forbidden`, `invariant` | An invariant over every combination of present slots. `.along(A, B)` keeps the combinations the owners link. |
+| `invariant(E).when(...).has/none(R.col == v)` | An invariant over the present slots of `E` and the related slots of `R`, linked by an owner or independent without one |
+| `relate(Child, Parent, 1:1)` | `Unique_<Child>_<role>`: no two present children belong to one parent slot. Vacuous at one instance. |
+| `@unique`, `@unique(a, b)`, `relate(A, B, N:M).via(J)` | `Unique_<Entity>_<columns>` ([Unique column sets](#unique-column-sets)) |
+| `relate(Child, Parent, ..)` with no `.on_delete`, `restrict`, or `no_action`, whose parent a use case `deletes` | `DanglingKey_<Child>_<role>`: every present child names a present parent, or none under `.optional()`. None for a `cascade`, `set_null`, or `set_default` key, a parent with a `@soft_delete` column, or a pre-existing child of a created parent. |
+| `relate(Child, Parent, 0..3:1)` | `MaxCard_<Child>_<role>`: no present parent owns more than 3 present children. It needs 4 child slots to fail; below that it is `Vacuous_MaxCard_*`. |
+| `relate(Child, Parent, 1..*:1)` | `MinCard_<Child>_<role>`: every present parent has a present child, in every state. The info `MinCardNeedsCreate` names each use case that creates the parent and no child in one group; a child the action links by update counts. |
+| `col: T @check(expr)` | `Check_<Entity>_<column>_<n>`: every present slot satisfies `expr`. A null operand satisfies no comparison but `!=` ([Null](./language-reference.md#null)), so `qty: Int @null @check(qty >= 1)` fails while `qty` is null. A created slot starts at the base value, so `@check(qty >= 1)` without `@default(1)` or a creating `sets` fails at creation. |
+| `after(UC).assert(...)` | A predicate on the state each run of `UC` leaves ([Temporal anchor assertions](#temporal-anchor-assertions)) |
+| `property` (`always`, `eventually`, `leads_to`, `stable`, `unchanged`, `precedes`, `can_reach`) | Not evaluated by `check` and `states`, which print a `note:` to use `verify`. `verify` checks every form ([Temporal properties on a cone](./formal-verification.md#temporal-properties-on-a-cone)). |
 
-Every check reads the instances that exist. A rule over an entity with no instance
-holds vacuously in that state.
+Every check reads the instances that exist; a rule over an entity with no instance holds in that
+state. Comparisons with null follow [Null](./language-reference.md#null): two null columns are
+not equal (#360), and a `@null` Enum or Bool column holds null as a value of its own (#367). A
+logical `@derived` column is neither true nor false while an operand is null.
 
 ### Unique column sets
 
 <!-- constrained-by ./language-reference.md#column-annotations -->
 
 Each unique set whose every column the lifecycle holds by value becomes the invariant
-`Unique_<Entity>_<columns>`, the columns joined by `_`: a single `@unique` column, a
-`@unique(a, b)`, and the two keys of an N:M junction (`Unique_Enrollment_course_id_student_id`).
-Two present rows of the entity break it when they agree on every column of the set.
+`Unique_<Entity>_<columns>`, the columns joined by `_`: a `@unique` column, a `@unique(a, b)`,
+or the two keys of an N:M junction (`Unique_Enrollment_course_id_student_id`). Two present rows
+that agree on every column break it.
 
-- **Which columns count.** An `Enum` or `Bool` column, a variation column a rule names, and an `Int`, `Money`,
-  `Decimal`, `Date`, or `DateTime` column that a rule compares, so it has a value var. A
-  key column reads as the owner of its key: `@unique(room_id, slot)` compares the Room each
-  Booking belongs to, and the set must hold every column of a composite key. A column with
-  no var, such as a `String`, or a `@null` one held only as null or present, leaves the set
-  to the database, with no finding. So does most of `samples/`: its `@unique` columns are
-  `String`.
-- **Null.** A row whose column is null agrees with no row, as SQL counts NULLs as
-  distinct: two tickets with no seat share nothing. That covers a `@null` Int and an
-  `.optional()` key left unlinked, and a `@null` `Enum` or `Bool`, which starts at null
-  without a default.
-- **Left to other rules.** A set that is a 1:1 key is `Unique_<Child>_<role>` already.
-  A declared set on an entity with a `@soft_delete` column is not checked, because its
-  index covers only live rows and the lifecycle does not read the marker. A junction's
-  pair is checked there, as its index covers every row.
+- **Which columns count.** An Enum or Bool column, a variation column a rule names, and an Int,
+  Money, Decimal, Date, or DateTime column a rule compares. A key column reads as its owner, and
+  the set must hold every column of a composite key. A set with a column that has no value
+  variable, such as a `String`, is left to the database, with no finding; most `@unique`
+  columns in `samples/` are `String`.
+- **Null.** A row whose column is null agrees with no row, as SQL counts NULLs as distinct.
+  That covers a `@null` Int, Enum, or Bool and an unlinked `.optional()` key.
+- **Left to other rules.** A set that is a 1:1 key is `Unique_<Child>_<role>` already. A set on
+  an entity with a `@soft_delete` column is not checked, since its index covers live rows only.
 
 A use case that writes the set needs a guard that keeps it free, such as
-`holds(AmFree, Room.open == true).none(Booking.slot == am)` on the use case that books a
-room for the morning: a guard that compares the Room links the created Booking to it (see
-`samples/formal-verification/unique_booking_guarded.rdra`). At one instance per entity
-there are no two rows, so the rule holds and, like the 1:1 `Unique_*`, draws no
-`Vacuous_` warning.
+`holds(AmFree, Room.open == true).none(Booking.slot == am)`
+(`samples/formal-verification/unique_booking_guarded.rdra`). At one instance per entity the rule
+holds with no `Vacuous_` warning.
 
 ### Rules that hold vacuously
 
-A check that holds may still say nothing. `check` and `verify` look, on the check's own
-cone, for a reachable state that meets each *premise* of it, and warn `Vacuous_<name>` when
-none does:
+A check that holds may still say nothing. `check` and `verify` look, on the check's own cone,
+for a reachable state that meets each *premise*, and warn `Vacuous_<name>` when none does:
 
 | Rule | Premises |
 |---|---|
-| Every state rule | Rows of the entities it ranges over exist, linked as its `.along` says. For `Unique_*` that is two rows of the child, so it has no premise at one instance per entity. |
+| Every state rule | Rows of the entities it ranges over exist, linked as its `.along` says. `Unique_*` needs two rows of the child, so it has no premise at one instance per entity. |
 | `invariant(...).when(G)`, a quantifier rule with guards | The guards `G` hold for some rows. |
-| `invariant(E).none(R...)` | A row of `R` exists beside a row of `E`. A `.has(R...)` asks for a row itself, so it has no such premise. |
-| `after(UC).assert(...)` | `UC` runs to its last step, the one the assertion follows (a split use case may run its earlier transactions without it). When the assertion reads an entity the step does not bind, some such step ends in a state with a row of it. |
-| `property` | Rows of the entities it ranges over exist together, linked as its `.along` says. Beyond that, some such rows meet the condition the form speaks from: the trigger of a `leads_to`, what a `stable` keeps, the `.when` of an `unchanged`, the second condition of a `precedes`. |
-| `forbidden` of several conditions | Each condition holds for some row, on its own. A rule over two entities meets a condition on one of them with a row of that entity alone. |
+| `invariant(E).none(R...)` | A row of `R` exists beside a row of `E`. |
+| `after(UC).assert(...)` | `UC` runs to its last step. When the assertion reads an entity the step does not bind, some such step ends with a row of it. |
+| `property` | Rows of its entities exist together, and some meet the condition the form speaks from: the trigger of a `leads_to`, what a `stable` keeps, the `.when` of an `unchanged`, the second condition of a `precedes`. |
+| `forbidden` of several conditions | Each condition holds for some row, on its own. |
 
-That the conditions of a `forbidden` never hold together is what the rule claims, so their
-conjunction is no premise, and neither is the one condition of a rule that has no other.
-`forbidden(Order, status == void, flagged == true)` is vacuous when no order is ever
-`void`: it would hold whatever its second condition said, and the value is often a typo or
-a state no use case enters. `forbidden(Order, Payment, Order.status == cancelled,
-Payment.status == captured)` is not vacuous when cancelled orders exist and captured
-payments exist, even if no cancelled order keeps a payment.
-
-The warning names the rows each premise asks for: `no reachable state has a row of Order
-with Order.status=void`. It does not fail `check`, and `states` and `next` list it with the
-other findings of an entity; a vacuous property, which belongs to no one entity, is listed
-by `check` and `verify` only. It is not raised for a rule that is violated, on a cone a cap stopped, where
-an unseen state may meet the premise, or under `--buc`, which drops use cases that may reach
-it. `check` explores one instance per entity, where a state that needs a second row of some
-entity is not reached: a rule may be vacuous there and violated at `--instance-count 2`, and
-the warning says so at one instance.
-
-`verify` reads the premises off the run that decides each check: the BFS of each cone,
-reduced as TLC under `--with-tlc` gets it and at the same bounds. It warns of the cone's own
-rules, assertions, and property that hold vacuously there. A rule that is vacuous at one instance in `check` and not in `verify` needed a
-second row. The warning does not change `verify`'s result.
-
-`check` evaluates no property, so it warns of a vacuous property without saying whether it
-holds; `verify` says both. An `after` assertion on a use case that never runs
-is reported beside the `Runs_<UseCase>` warning that says why.
+The conjunction of a `forbidden`'s conditions is what the rule claims, so it is no premise.
+`forbidden(Order, status == void, flagged == true)` is vacuous when no order is ever `void`,
+which is often a typo or a state no use case enters. The warning names the rows each premise
+asks for: `no reachable state has a row of Order with Order.status=void`. It never fails a
+command, and it is not raised for a violated rule, on a cone a cap stopped, or under `--buc`. At
+one instance per entity a rule may be vacuous and still break at two, and the warning says so.
+`verify` reads the premises off the cones that decide each check.
 
 ---
 
@@ -528,183 +354,124 @@ The bounds are inputs of the system, and every result states them.
 | the generators | 1 | `0..5` |
 | `export --kind tla`, `verify` | `--instance-count` (default 2) | `0..--int-range-max` (default 5) |
 
-`check` and `states` also scale their default pattern cap with the instance count; see
-[Exploration by cone of influence](#exploration-by-cone-of-influence).
-
-`states` prints its bounds on stderr first:
+`--instances <Entity>=<n>` gives one entity its own count
+([Per-entity instance counts](./cli-reference.md#per-entity-instance-counts)). `states` and
+`check` print their bounds on stderr first:
 
 ```
 bounds: 1 instance per entity, Int 0..5; no state cap per cone, memory 4GiB; entities a check does not read are unbounded
 ```
 
-With one slot, an entity is created once, and deleting it does not free the slot.
-An entity that a target does not read has no slot limit: a use case that creates an
-audit row on every write never stops for want of a free slot. An Int literal outside `0..5` in a `sets`, a constraint, a condition, or the `@default`
-of a column a rule reads is `IntLiteralOutOfBounds`.
+With one slot, an entity is created once, and deleting it does not free the slot. An entity a
+target does not read has no slot limit ([Exploration by cone of influence](#exploration-by-cone-of-influence)).
+An Int literal outside the range, in a `sets`, a rule, a condition, or the `@default` of a column
+a rule reads, is `IntLiteralOutOfBounds`.
 
 ---
 
 ## Exploration by cone of influence
 
-`states` does not explore the whole system once. It explores each **target** on its
-cone of influence:
+The system is not explored whole. Each **target** (an entity view, an invariant, an `after`
+assertion) is explored on its cone of influence:
 
-- **Targets.** Each entity view, each invariant, and each `after` assertion.
-- **Cone.** The smallest set of variables that holds the target's variables and, for
-  every action that writes one of them, every variable the action reads: its guards,
-  the existence of the entities it selects, its transition sources, and the clock.
-  Actions that write nothing in the set drop out, and an action keeps only its effects
-  on the set. A copy's guard is read only when the cone holds the column it pins. Without
-  that column the guard holds for some value of the column, so the action drops it with
-  the column's choice. A set that lists every value of its column (`Child.status in
-  (<every value>)`) is true when the system is built, so `.none(Child.status in (<every
-  value>))` says "no child row" and reads the link alone, not the column (#71). `.none(Child)`
-  is the same predicate, written without the values (#73).
-- **Exact.** The reachable states of the cone are the reachable states of the whole
-  system projected onto the cone, except where an action of the cone also creates an
-  entity the cone does not read: the cone drops that creation and never runs out of that
-  entity's slots (see [Bounds](#bounds)), so it reaches a superset. The cone is not an
-  approximation. The test `cone_exploration_equals_the_projection_of_the_whole_system` in
-  `crates/rdra-ish-core/src/lifecycle/tests/cone.rs` checks equality on `ec-site`,
-  `personal-info`, and the formal-verification samples, and the superset where a cone
-  frees slots.
-- **Raised marks.** A raised mark ([Triggers](#triggers)) belongs to its entity. A cone
-  reads it exactly only when every action that writes it, the last step of each raiser, is
-  in the cone by its own writes, or when the reader is an action the cone keeps (an entity
-  view keeps every action with a written parameter on the entity). Otherwise the mark stays
-  out of the cone: the handler's guard on it is dropped, a `Triggered` parameter goes with
-  its existence and link guards, and the handler runs unordered there. A mark only ever
-  rises, so the cone reaches a superset of the states, as a cone that frees slots does: an
-  OK of an invariant, an assert, or a property on such a cone is sound, and a finding there
-  can be a run the order prevents, as every finding was in 1.x. Its trace then carries a
-  `note:` row, `runs <UC> without <Ev> having been raised`, naming each step that ran
-  without its event. A witness, a deadlock, or a `NeverRuns` of the view's entity is judged
-  with the order, since the view keeps its own use cases' marks. The `bounds:` line is
-  unchanged. The exact cone of a handler pulls each raiser's reads in, along a chain of
-  events, so a view grows where an event joins two lifecycles that 1.x explored apart.
-  A counter of a [counted trigger](#counted-triggers) is never left out: the raisers and
-  the handler read it through their own transitions, so a cone that holds any of them holds
-  the counter and every action that writes it. A cone of a raiser therefore holds the
-  handler too, which the latch did not need.
+- **Cone.** The smallest set of variables that holds the target's variables and, for every
+  action that writes one of them, every variable the action reads: its guards, the existence of
+  the entities it binds, its transition sources, and the clock. An action that writes nothing
+  in the set drops out, and an action keeps only its effects on the set. A copy's guard is read
+  only when the cone holds the column it writes. A set that lists every value of its column is
+  true when the system is built, so `.none(Child.status in (<every value>))` and `.none(Child)`
+  read the link alone (#71, #73).
+- **Exact.** The reachable states of the cone are those of the whole system projected onto it,
+  with one exception: an action of the cone that creates an entity the cone does not read drops
+  that creation and never runs out of its slots, so the cone reaches a superset. The test
+  `cone_exploration_equals_the_projection_of_the_whole_system` in
+  `crates/rdra-ish-core/src/lifecycle/tests/cone.rs` checks both.
+- **Raised marks.** A cone reads a raised mark ([Triggers](#triggers)) exactly only when every
+  raiser's last step is in the cone by its own writes, or the reader is an action the cone keeps
+  (an entity view keeps every action with a written parameter on the entity). Otherwise the mark
+  stays out: the handler's guard on it and its `Triggered` parameter are dropped, and the handler
+  runs unordered there. The cone then reaches a superset, so an `ok` is sound, and a finding can
+  be a run the order prevents; its trace carries the `note:` row `runs <UC> without <Ev> having
+  been raised`. The view's own witnesses, deadlocks, and `NeverRuns` are judged with the order.
+  A counter of a [counted trigger](#counted-triggers) is never left out, so a cone of a raiser
+  holds the handler too.
 - **Shared.** Targets with the same cone are explored once.
-- **Reduced in `verify`.** `verify` explores each cone reduced by its independent
-  sub-lifecycle, the entities of the cone that its targets' actions never write, quotiented
-  by what they read of it; the reduced cone decides what the cone decides (see
-  [formal-verification.md](./formal-verification.md#reduction-by-an-independent-sub-lifecycle)).
-  `check` and `states` explore the cone unreduced.
+- **Reduced in `verify`.** `verify` explores a cone reduced by its independent sub-lifecycle
+  ([Reduction](./formal-verification.md#reduction-by-an-independent-sub-lifecycle)). `check` and
+  `states` explore it unreduced.
 
-BFS starts from every initial state, applies every enabled action, and stops when
-no new state appears or a cap is hit.
-
-A cone that answers only invariants and `after` assertions also stops once every check of
-its system has a counterexample (#213). Each counterexample is the first BFS found, so the
-shortest, and any further state could only repeat a violation. A cone that also answers an
-entity view, a `can_reach`, or a temporal property runs to the end, since those read the
-whole graph. A cone stopped this way is not complete: it reports no cap, and it reports no
-vacuity, which a violated check does not have. Under `verify` its run line counts the
-states it reached before it stopped, so a failing cone prints fewer states than TLC's line
-for the same module. A safety cone whose system is also an entity cone's or a property
-cone's is explored once for all of them (#209), so it runs to the end and its line counts
-the whole cone.
-
-A cone evaluates only the checks something reads from it (#251). A cone of checks alone
-evaluates every check its system holds, since the stop above reads them all. A cone that
-answers an entity view or a `can_reach` evaluates only the checks among its own targets, so
-a cone of entity targets alone evaluates none, unless `verify` also explores its system as
-a safety or property cone: then the one run evaluates every check. A check is always
+BFS starts from every initial state, applies every enabled action, and stops when no new state
+appears or a cap is hit. A cone that answers only invariants and `after` assertions also stops
+once every check has a counterexample (#213); each is the first BFS found, so the shortest. Such
+a cone reports no cap and no vacuity, and its `verify` line counts the states reached before it
+stopped. A cone that also answers an entity view, a `can_reach`, or a temporal property runs to
+the end, and so does a safety cone whose system is also an entity or property cone, which is
+explored once for all of them (#209); its line then counts the whole cone. A cone evaluates only the checks something reads from it (#251); a check is always
 reported from its own cone, so this changes no finding.
 
-Two caps and the memory limit stop a cone, and `check` and `states` take all three:
+Two caps and the memory limit stop a cone:
 
-- `--max-patterns` caps the distinct patterns of one entity view within a cone. Default:
-  2^(10 + 8 * (n - 1)) for `n` = `--instance-count`: 1,024 at one instance, 2^18 at two,
-  2^26 at three. Only a run that builds an entity view gathers patterns (#251): the cone of
-  an entity view in `check` and `states`. A cone of other targets, a run that quotients a
-  sub-lifecycle, and every run of `verify` gather none, so the cap does not stop them.
-- `--max-states` caps the joint states of one cone. The `bounds:` line prints it. Default:
-  none, and the line says `no state cap per cone, memory 4GiB`.
-- `--memory` (4GiB by default) stops a cone whose stored states pass the limit, which the
-  cones of one run share (see [Memory limit](./cli-reference.md#memory-limit)). It is what
-  stops a run without `--max-states`, and the cone it stops is reported as not decided.
+- `--max-patterns` caps the distinct patterns of one entity view. Default:
+  2^(10 + 8 * (n - 1)) for `n` = `--instance-count`: 1,024 at one instance, 2^18 at two. Only a
+  run that builds an entity view gathers patterns, so it stops no `verify` run.
+- `--max-states` caps the joint states of one cone. Default: none.
+- `--memory` (default `4GiB` for `check` and `states`) stops a cone whose stored states pass the
+  limit, which the cones of one run share ([Memory limit](./cli-reference.md#memory-limit)).
 
-The default pattern cap grows with `--instance-count` because each added instance
-multiplies a cone's states. A shift past the machine's word size saturates, so a very large
-count has no pattern cap of its own. A flag you pass always replaces its default. The
-generators (`codegen`, `next`, and the lifecycle gate of `diagram`, `export`, `list`, and
-`csv`) explore at the caps `check` runs at by default: no state cap, 1,024 patterns, and
-`memory` under `[check]` in `rdra.toml` (4GiB by default). They take no `--memory` flag. A
-model `check` passes at its defaults explores the same in them. A cone past the memory
-limit is `MemoryCapReached`, which refuses `codegen` and the outputs that read the
-explored states, and is a note on the others.
+The generators (`codegen`, `next`, and the lifecycle gate of `diagram`, `export`, `list`, and
+`csv`) explore at `check`'s default caps and `memory` under `[check]` in `rdra.toml`, with no
+`--memory` flag. A model `check` passes at its defaults explores the same in them.
 
-When a cap or the memory limit is hit, the view is marked `truncated` and
-`PatternCapReached`, `StateCapReached`, or `MemoryCapReached` is an error: a rule checked on
-a partial set is not sound. The `StateCapReached` and `MemoryCapReached` messages name what
-the cone's reached states vary in: each variable with the values it reached out of its
-domain (an Int column says `Int 0..5`, the clock says `clock`), and the use cases that first
-reached the most states. A variable of another entity in that list was pulled into the cone
-by a guard or a transition source that reads it. `check samples/patent-ops --max-states 1000`
-prints:
+At a cap the view is marked `truncated`, and `PatternCapReached`, `StateCapReached`, or
+`MemoryCapReached` is an error, since a rule checked on part of a cone is not sound. The
+`StateCapReached` and `MemoryCapReached` messages name what the reached states vary in, with the
+values reached out of each domain, and the use cases that first reached the most states. A
+variable of another entity in that list was pulled into the cone by a guard or a transition
+source that reads it:
 
 ```
+$ rdra-ish check samples/patent-ops --max-states 1000
+...
 error[StateCapReached_OfficeAction]: state derivation for entity 'OfficeAction': state cap 1000 reached; results are incomplete: the cone has 23 variables, 20 of them vary (values reached/domain: PatentApplication.status 12/12, InventionDisclosure.status 8/8, OfficeAction.status 6/6, ...); new states first reached by: DraftResponse 110, ExpireResponseTerm 107, ...; raise --max-states, or narrow with --entity or --buc
 ```
 
-`MemoryCapReached` also says what the cone held and what finishing it needs: the bytes each
-held state took and, once the frontier has shrunk for two BFS depths past its peak, an
-estimate of the states the cone holds, its falling side taken to mirror its rising side, with
-the limit that leaves a quarter to spare, for the cone alone. While the frontier still grows,
-or has only just peaked, or the cone stopped before its layers show how the frontier grows
-(as when the shared limit is already full), the message says so and gives no estimate; it then falls back on
-the most states the cone's variables allow (`at least about 33MiB`, if all are reachable)
-when that is no more than `1TiB`. `check samples/insurance-claim-ops --memory 512KiB`
-prints:
-
-```
-error[MemoryCapReached_Claim]: state derivation for entity 'Claim': memory limit 512KiB reached at 2316 states; results are incomplete: the cone has 33 variables, 29 of them vary (values reached/domain: Claim.status 9/9, ClaimCase.status 6/6, ...); new states first reached by: WithdrawClaim 386, TimeBarClaim 306, ...; held at 226 B per state; the frontier peaked at depth 11 and has shrunk for 2 layers since, so the cone probably holds about 2520 states (its falling side taken to mirror its rising side: an estimate, not a bound); with a quarter to spare, this cone alone probably needs about 1MiB: try 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
-```
-
-A run costs time and memory up to its cap or the memory limit. Measured on a release build, a cone
-of 65,536 states takes about 0.1 s and 24 MB; on a debug build, about 1.4 s. A cone
-that reaches 262,144 states takes about 0.7 s and 80 MB on a release build. The
-example `crates/rdra-ish-core/examples/lifecycle_measure.rs` prints the size of each
-cone of every sample, at the bounds of `check` or of `verify`.
+`MemoryCapReached` also gives the bytes each state took and an estimate of the memory the cone
+needs; [Memory limit](./cli-reference.md#memory-limit) explains the estimate. In `verify` a
+stopped cone's findings are `not decided` instead. The example
+`crates/rdra-ish-core/examples/lifecycle_measure.rs` prints the size of each cone of every
+sample, at the bounds of `check` or of `verify`.
 
 ---
 
 ## Views
 
-Each entity view lists the patterns that some present slot holds, one per distinct
-assignment of the entity's state columns.
+Each entity view lists the patterns some present slot holds, one per distinct assignment of the
+entity's state columns.
 
 | Field | Meaning |
 |---|---|
-| Pattern | Values of the entity's columns, in a present slot. |
-| `INITIAL` | A create action produces the pattern, or it is the start of a pre-existing entity. |
-| `TERMINAL` | Some enabled action deletes a slot in the pattern, or no enabled action moves a slot off it. |
-| `VIA` | The `(BUC, use case)` pairs of the actions on some path to the pattern: the least set closed under the moves between patterns, so it does not depend on the order BFS finds them. The BUC is one that holds the use case, through `contains` or through a step of one of its flows that `covers` it; of several, the first by id. |
-| `reachable` / `bound` | The count of patterns, and the product of the column domain sizes. |
+| Pattern | Values of the entity's columns, in a present slot |
+| `INITIAL` | A create action produces it, or it is the start of a pre-existing entity |
+| `TERMINAL` | Some enabled action deletes a slot in it, or no enabled action moves a slot off it |
+| `VIA` | The `(BUC, use case)` pairs of the actions on some path to it, the least set closed under the moves between patterns. The BUC is one that holds the use case, the first by id. |
+| `reachable` / `bound` | The count of patterns, and the product of the column domain sizes |
 
-An entity with no state column has one trivial pattern that is both initial and terminal.
+An entity with no state column has one pattern, both initial and terminal.
 
 ### State models and witnesses
 
-A lifecycle column (one that `transitions` names, and not a `variation`) has a **state
-model**. An entity may have several; each is its own model, and its findings name the
-column (`Witness_<entity>_<column>_<value>`). Its states are the `from` and `to` endpoints of its `transitions` and the values a
-fresh instance starts at (`column_start_values`: what each creating use case sets, or the
-start of a pre-existing entity). Each state is either witnessed or an error:
+A lifecycle column, one that `transitions` names and that is not a `variation`, has a **state
+model**. Its states are the endpoints of its `transitions` and the values a fresh instance starts
+at. The null of a `@null` lifecycle column is not a state of the model. Each state is:
 
-- **Witnessed.** Some reachable state of the entity's cone has an instance that holds it.
-- **`NoWitness`.** No reachable state holds it. `check` prints it once, with each
-  `transitions` arm or creation that would enter it and that arm's site.
-- **Not decided.** No state holds it, but the cone stopped at a cap, or `--buc` left use
-  cases out, so the run cannot rule it out. `check` and `states` list it under `not
-  checked:` with the cap or the scope. It is neither an error nor a warning.
+- **Witnessed**: some reachable state of the entity's cone has an instance at it.
+- **`NoWitness`**: no reachable state has one. `check` prints it once, with each arm or creation
+  that would enter it.
+- **Not decided**: none was found, but the cone stopped at a cap or `--buc` left use cases out.
+  It is listed under `not checked:` and is neither an error nor a warning.
 
-Every other declared Enum variant that no pattern holds draws the `UnreachableEnumVariant`
-warning, as do Enum columns without a state model. For example, `untriggered_sets` declares
-`draft`, which no `transitions` arm names and no use case sets.
+Every other declared Enum variant that no pattern holds draws the warning
+`UnreachableEnumVariant`.
 
 ```
 $ rdra-ish check samples/formal-verification/unwitnessed_state.rdra
@@ -714,46 +481,32 @@ error[Witness_Order_status_refunded]: state Order.status = refunded has no reach
 ...
 ```
 
-Each pattern's **witness** is a shortest path from an initial state to the first state in
-BFS order where an instance holds the pattern. `states --format json` prints it per pattern
-as `witness`. The witness is computed by `state_model_findings` in
-`crates/rdra-ish-core/src/lifecycle/findings.rs`, a pure function of the system and one
-cone's `Graph` (its states and `(from, to, action)` edges).
+Each pattern's **witness** is a shortest path from an initial state to the first state in BFS
+order with an instance at the pattern. `states --format json` prints it per pattern.
+`state_model_findings` in `crates/rdra-ish-core/src/lifecycle/findings.rs` computes the witnesses
+and the findings below from one cone's graph.
 
 ### Use cases that never run
 
-An action is one use case, or one transaction group of a split use case (`Pay_1`, `Pay_2`).
-A generated name that is a use case's id, or an earlier generated name, takes the first free
-`<name>_<k>` from `_2` (a use case `Pay_1` beside the split `Pay` leaves the step `Pay_1_2`;
-a use case `Tick` beside the clock leaves it `Tick_2`), so action names are unique; a model
-whose generated names collide with nothing keeps every name.
-It runs when some edge of a cone that keeps it carries its label. A self-loop counts: an
-action that changes nothing still runs. An entity's cone keeps every action with a param on
-the entity that is not only a parent, with all of its guards, so each such cone decides the
-action exactly. `NeverRuns` is the warning for an action that no edge of any of these cones
-carries. It prints once per action, not once per cone.
+An action is one use case, or one transaction group of a split use case (`Pay_1`, `Pay_2`). A
+generated name that collides with a use case's id or an earlier generated name takes the first
+free `<name>_<k>` from `_2`. An action runs when some edge of a cone that keeps it carries its
+label, self-loops included. An entity's cone keeps every action with a non-parent parameter on
+the entity, with all its guards, so it decides the action exactly. `NeverRuns` is the warning for
+an action no such edge carries, printed once per action.
 
-The warning names only what blocks the action. `state_model_findings` scans the reachable
-states of the cone for each check that `moves` makes, one check at a time:
+The warning names only what blocks the action:
 
-- **No instance.** A param finds no slot in any reachable state: a free slot for a created
-  entity, a present instance otherwise. Each one prints as `needs:`.
-- **Not at once.** Each param finds a slot in some state, but no state has them all. Each
-  param prints as `needs:`. At one instance per entity this is often the bound: in
-  `min_card_met`, an `Order` exists only with its one `OrderLine` slot taken, so `AddLine`
-  never runs in `check` and runs in `verify`.
-- **No free slot while enabled.** In some reachable state every guard that reads the
-  current state holds and every other param finds an instance, but an entity the action
-  creates has no free slot there. Each such entity prints as `needs: a free E slot within
-  the instance bound`, and no guard prints: a guard that fails only in the states where a
-  slot is still free does not block the action.
-- **Guards.** Each guard (a `transitions` from-state, an `applies_to` condition, a relate
-  link, a raised mark, the clock) that holds under no binding of any reachable state prints as `guard:`
-  with its site. A guard that holds somewhere is left out. A condition guard of a split use case that reads
-  an entity only a later group creates ends in `read before the transaction that creates
-  <Entity> (GuardReadsLaterStep)`.
-- **Never together.** Every guard holds in some reachable state, but never all of them in
-  one. The warning says so in its first line.
+- **No instance.** A parameter finds no slot in any reachable state. Each prints as `needs:`.
+- **Not at once.** Each parameter finds a slot in some state, but no state has them all. At one
+  instance this is often the bound: in `min_card_met`, `AddLine` never runs in `check` and runs
+  in `verify`.
+- **No free slot while enabled.** The guards hold and the other parameters find instances, but a
+  created entity has no free slot: `needs: a free E slot within the instance bound`.
+- **Guards.** Each guard that holds under no binding of any reachable state prints as `guard:`
+  with its site. A condition guard of a split use case that reads an entity only a later group
+  creates ends in `(GuardReadsLaterStep)`.
+- **Never together.** Every guard holds somewhere, but never all at once.
 
 ```
 $ rdra-ish check samples/formal-verification/unwitnessed_state.rdra
@@ -762,39 +515,22 @@ warning[Runs_Refund]: use case Refund can never run: each of its guards holds in
   declared: use case Refund   skills/rdra-ish-verify/samples/unwitnessed_state.rdra:16:1
 ```
 
-A cone that stops at a cap, or a `--buc` run, leaves an action with no edge undecided. It
-is listed under `not checked:` as `whether Refund can run is not decided: ...` and is not a
-warning. Under `--entity`, an action that no selected entity's cone keeps is not decided
-the same way. A cone that
-frees an unread entity's slots (see [Bounds](#bounds)) can run an action the whole model
-cannot, so that case can miss a warning, and never adds a false one.
+A cone stopped at a cap, a `--buc` run, or an `--entity` run that selects no cone keeping the
+action leaves it undecided, under `not checked:`. A cone that frees an unread entity's slots can
+run an action the whole model cannot, so it can miss a warning, never add one.
 
 ### Deadlocks
 
-An **end state** of a state model has no way out: no `transitions` arm leads from it to
-another state. An arm back to the same state does not count. A deletion leaves every state,
-and a deleted instance is never checked. A state the column declares with
-[`@end(...)`](./language-reference.md#column-annotations) is also an end state, although an
-arm leaves it: a row may wait there for good, such as a stock row at `free` that no one
-takes. A **deadlock** is a reachable state of the entity's
-cone with a present instance at a state that is not an end state, from which no path moves
-that instance: no edge changes the column of that instance or deletes it.
+An **end state** of a state model has no way out: no arm leads from it to another state. A state
+the column declares with [`@end(...)`](./language-reference.md#column-annotations) is an end
+state too, though an arm leaves it. A deletion leaves every state. A **deadlock** is a reachable
+state of the entity's cone with a present instance at a state that is not an end state, from
+which no path moves that instance: no edge changes its column or deletes it.
 
-The check is per instance, so another use case that keeps running does not hide a stuck
-instance. A state where some action is enabled is still a deadlock for an instance that
-action never moves. An action that is disabled now and enabled later is not a deadlock.
-
-`state_model_findings` computes it on the cone's graph, linear in the edges. For each column
-and slot, the states that can leave are the sources of the edges that change the column at
-that slot or delete it, and backwards, every state with that slot present that steps into
-one. A present instance at a state with a way out, outside that set, is stuck. Each
-`(entity, column, state)` is reported once, at the first stuck state in BFS order, with a
-shortest path into it. The cone is closed, so this equals the whole model's answer within
-the bounds (see [Bounds](#bounds) for the exception of entities a check does not read).
-
-`check` prints each way out of the state with what blocks it, read off the states the
-instance stays stuck in, as `NeverRuns` reads them (see
-[Use cases that never run](#use-cases-that-never-run)), then the path:
+The check is per instance, so another use case that keeps running does not hide a stuck instance,
+and an action disabled now and enabled later is no deadlock. It is linear in the edges, and each
+`(entity, column, state)` is reported once, at the first stuck state in BFS order, with a shortest
+path. `check` prints each way out with what blocks it, then the path:
 
 ```
 $ rdra-ish check samples/formal-verification/deadlock.rdra
@@ -809,46 +545,28 @@ error[Deadlock_Order_status_paid]: deadlock: Order#1 stays at status = paid fore
          Order#1.status: pending -> paid   skills/rdra-ish-verify/samples/deadlock.rdra:28:1
 warning[Runs_Ship]: use case Ship can never run: each of its guards holds in some reachable state, but never all of them in one
   declared: use case Ship   skills/rdra-ish-verify/samples/deadlock.rdra:14:1
+FAIL: 1 error, 1 warning within 1 instance per entity, Int 0..5
 ```
 
-At one instance per entity, a way out that needs a row of an entity some use case creates may
-find none: the one slot was deleted, or never freed for it. `check` then ends the deadlock error
-with a row that says so, and that the deadlock may clear at `--instance-count 2`, which
-`verify` runs. The error keeps its name and severity:
+- **At one instance.** A way out that needs a row of a created entity may find none, since the
+  one slot was used. The error then adds a row saying the deadlock may clear at
+  `--instance-count 2`, which `verify` runs.
+- **At the bound.** When some way out lacks only a free slot of an entity it creates, in every
+  state the instance stays stuck in, the deadlock is a warning:
+  `warning[Deadlock_Order_status_awaiting_retry]: deadlock at the bound: ...; RetryPayment needs
+  a free Payment slot within the instance bound`. When an invoked API does the creating, the
+  message adds `RetryPayment creates Payment via api 'PaymentApi'`.
+- **Not decided.** A cone stopped at a cap, or a `--buc` run, lists each state with a way out
+  under `not checked:`.
 
-```
-  at one instance per entity, a way out needs a Voucher row the one slot never leaves for it; the deadlock may clear at --instance-count 2 (`rdra-ish verify` runs two)
-```
-
-A deadlock is an error, unless some way out lacks only a free slot of an entity it creates,
-in every state the instance stays stuck in. That is the instance bound, not the model, so it
-is a warning:
-
-```
-warning[Deadlock_Order_status_awaiting_retry]: deadlock at the bound: Order#1 stays at status = awaiting_retry forever; RetryPayment needs a free Payment slot within the instance bound
-```
-
-A use case creates an entity also when an API it invokes `creates` it. Then the message
-names the API, since the use case declares no `creates` of its own:
-
-```
-warning[Deadlock_Order_status_awaiting_retry]: deadlock at the bound: Order#1 stays at status = awaiting_retry forever; RetryPayment needs a free Payment slot within the instance bound; RetryPayment creates Payment via api 'PaymentApi'
-```
-
-A `NeverRuns` warning ends the same way (`...; it creates Payment via api 'PaymentApi'`), and
-each such `needs:` row ends in `(created via api 'PaymentApi')`.
-
-A cone that stops at a cap, or a `--buc` run, decides no deadlock. Each state with a way out
-is listed under `not checked:` as `whether some Order can get stuck at status = paid is not
-decided: ...`, and is neither an error nor a warning. TLC's own deadlock check stays off (`CHECK_DEADLOCK FALSE`):
-every bounded model ends with no enabled action, because a deleted slot is never reused; a
-cone spec drops actions; and TLC cannot see one instance stuck while other actions keep
-running. The `StateModel_` specs of `export --kind tla` check each deadlock with TLC as an
-invariant instead, which a cycle in the column's cone can hide (see
-[formal-verification.md](./formal-verification.md#state-models-with-tlc-alone)).
+TLC's own deadlock check stays off (`CHECK_DEADLOCK FALSE`): every bounded model ends with no
+enabled action, and TLC cannot see one instance stuck while others move. The `StateModel_` specs
+check each deadlock as an invariant instead
+([State models with TLC alone](./formal-verification.md#state-models-with-tlc-alone)).
 
 ```
 $ rdra-ish states samples/formal-verification/order.rdra
+bounds: 1 instance per entity, Int 0..5; no state cap per cone, memory 4GiB; entities a check does not read are unbounded
 Entity: Order (注文)
   axes: status[pending|paid|shipped|delivered|cancelled], delivered_at[null|present]
 
@@ -863,191 +581,146 @@ Entity: Order (注文)
   reachable: 5 / bound: 10
 ```
 
-`states` and `check` print the `bounds:` line on stderr, and `verify` prints it on stdout. One
-type, `BoundsLine`, renders all three. The pattern cap shows in the `PatternCapReached` message;
-the line shows the state cap (`--max-states`) or `no state cap` and the memory limit.
+`states` and `check` print the `bounds:` line on stderr, and `verify` on stdout.
 
 ---
 
 ## Constraint checking
 
-A violation is reported only when a reachable state witnesses it. Unreachable bad states
-never trigger a diagnostic. Each constraint reports its first violation only: the
-diagnostic names the constraint, for example `Forbidden_Order_0`, the offending state, and
-a shortest trace to it. BFS reaches states in depth order, so the first violation found is
-the shallowest. `check` prints the trace; see [`check`](./cli-reference.md#check).
+A violation is reported only when a reachable state witnesses it; a rule that forbids an
+unreachable state reports nothing. Each rule reports its first violation, which BFS finds at the
+least depth: the diagnostic names the rule (`Forbidden_Order_0`), the state, and a shortest trace
+([`check`](./cli-reference.md#check)).
 
-### `forbidden`
-
-For each `forbidden(E, col == val, ...)`, the conditions are AND-ed. If a reachable state
-matches **all** of them, `ConstraintViolated` names the state. Forbidding an
-unreachable state produces no diagnostic.
-
-Comparison conditions (`forbidden(Item, stock < selling)`) evaluate on the Int values,
-or on the comparison variable when a `sets` drives it.
-
-### `invariant`
-
-For each `invariant(E).when(...).then(...)`, the guards and the requirements are each
-AND-ed. A reachable state that satisfies every guard but misses a requirement is a
-`ConstraintViolated`.
-
-### `required` and `exclusive`
-
-`required(E, ...)` holds when every reachable state matches all conditions.
-`exclusive(E, ...)` holds when no reachable state matches two or more of the listed
-conditions.
+- `forbidden(E, ...)` AND-s its conditions; a reachable state that matches all of them is
+  `ConstraintViolated`. A comparison condition (`stock < selling`) reads the Int values, or the
+  proposition when a `drives` drives it.
+- `invariant(E).when(...).then(...)` AND-s the guards and the requirements; a state that meets
+  every guard and misses a requirement is a violation.
+- `required(E, ...)` holds when every reachable state matches all conditions, and
+  `exclusive(E, ...)` when none matches two or more.
 
 ### Temporal anchor assertions
 
-`after(UseCase).assert(...)` checks a predicate on the state that each run of the use
-case leaves. A use case split into k groups is checked once per run, after its last step
-(see [Runs of a split use case](#runs)): an entity an earlier step wrote is read on the
-run's row (the last step's `Earlier` parameter), and the state between two steps is not
-checked. Another use case that runs between two steps changes the run's rows, and the
-assert sees that.
+`after(UseCase).assert(...)` checks a predicate on the state each run of the use case leaves. A
+use case split into k groups is checked once per run, after its last step
+([Runs](#runs)), and the state between two steps is not checked.
 
 ```rdra
 after(ExecuteCertIssue).assert(CertificateOrder.status == executed, ClientCertificate.status == active)
 ```
 
-An entity the last step binds reads that row: the row the step writes, the row an earlier
-step wrote, else its one parent parameter. An entity the step binds through several parent
-parameters (two keys to it, see **Owners** under [Actions](#actions)) is read on every
-present row, since an `after` has no `.role` to pick one. An entity no step binds is read on
-every present row too, and that is the `UnboundAfterRead` warning: the assert says
-nothing about the run's rows there. A step that ends in a state that fails the predicate
-is `AfterAssertViolated`, naming the state the step reached. Equality and comparison forms
-both work. An `after` on a use case with no action is `AssertOnInertUseCase`.
+An entity the last step binds is read on that row: the row the step writes, the row an earlier
+step wrote, or else its one parent parameter. An entity bound through several parent parameters
+is read on every present row, since an `after` has no `.role`. An entity no step binds is read on
+every present row too, with the warning `UnboundAfterRead`. A step that ends in a state that
+fails the predicate is `AfterAssertViolated`. An `after` on a use case with no action is
+`AssertOnInertUseCase`.
 
 ### Multi-entity and quantifier constraints
 
-`forbidden(A, B, ...)` and `invariant(A, B)` evaluate over every combination of present
-slots of `A` and `B`. With `.along(A, B)`, only the combinations that a `relate`
-links count. Both forms get a real verdict, not a warning. `.along` needs a
-`relate` that binds each adjacent pair, else the rule is `UnbindableScope`. A path entity
-outside the scope is bound under the link, so a pair counts when some instances of the
-middle entities connect it.
+`forbidden(A, B, ...)` and `invariant(A, B)` range over every combination of present slots of `A`
+and `B`; `.along(A, B)` keeps the combinations a `relate` links, and needs a `relate` for each
+hop, else `UnbindableScope`. A path entity outside the rule is bound under the link.
 
-`invariant(E).when(...).none(R.col == v)` and `.has(...)` evaluate over the present slots,
-the related slot linked to the anchor's by the owner of the one key between them (the key
-[Joins](#joins) picks), or independent without one. With `.along(E, .., R)`, the related
-entity and every entity between are bound inside the quantifier, with the hops' owner links,
-as a quantified entity of a `holds` path is ([Actions](#actions)): every one `Forall` for
-`.none`, so no chain of linked instances from the anchor's reaches a matching one, and
-`Exists` for `.has`, so some chain does. No instance on the path has to exist. The path
-runs from the anchor to the counted entity, each entity once, or the analysis reports
-`QuantifierAlongShape`; a hop no key joins is `UnbindableScope`. At one
-instance per entity, `states` sees one `E` and one `R`. Use `verify` with
-`--instance-count 2` or more for rules that need two instances.
-
-See [language-reference.md](./language-reference.md#entity-state-constraints) for the
-syntax.
+`invariant(E).when(...).none(R.col == v)` and `.has(...)` range over the present slots of `E` and
+the related slots of `R` linked by the key [Joins](#joins) picks, or independent without one.
+With `.along(E, .., R)` every entity between is bound inside the quantifier: `Forall` for
+`.none`, `Exists` for `.has`. The path runs from the anchor to the counted entity, each entity
+once, or the analysis reports `QuantifierAlongShape`. At one instance per entity `states` sees
+one `E` and one `R`; use `verify` for rules that need two. The syntax is in
+[language-reference.md](./language-reference.md#entity-state-constraints).
 
 ---
 
 ## Diagnostics
 
-`StateDiag` in `crates/rdra-ish-core/src/lifecycle/diag.rs` lists every diagnostic.
-`states`, `check`, `export --kind tla`, and `verify` share the severities. An error
-makes the command exit non-zero in every format, and the generators refuse to emit, except
-that `MemoryCapReached` refuses only `codegen` and the outputs that read the explored states
-and is a note on the others.
+`StateDiag` in `crates/rdra-ish-core/src/lifecycle/diag.rs` lists every diagnostic. `states`,
+`check`, `export --kind tla`, and `verify` share the severities. An error makes the command exit
+non-zero in every format and the generators refuse to emit, except that `MemoryCapReached`
+refuses only `codegen` and the outputs that read the explored states, and is a note on the others.
 
-Every diagnostic has a stable name (`StateDiag::name`), and the commands print it after
-the severity: `error[Deadlock_Order_status_paid]: deadlock: ...`. `states --format table`
-and `--format json` print `[error][<name>] ...`. A violated rule or `after` assertion keeps
-the name of its TLA+ check, which TLC reports too. The other names join the variant, the
-ids of the entities whose view reports the finding (`<E>` in the table), and the key
-fields, so one finding on two entity views prints two names. A finding that names no
-entity has no `<E>` part. Any character outside `[A-Za-z0-9_]` becomes `_`. The test `engine_equivalence` compares the BFS and TLC findings by
-these names, and the `// expect` headers of the samples list the names of the errors
-(see [Sample expectations](./formal-verification.md#sample-expectations)).
+Every diagnostic has a stable name, printed after the severity:
+`error[Deadlock_Order_status_paid]: deadlock: ...`. `states --format table` and `--format json`
+print `[error][<name>] ...`. A violated rule or `after` assertion keeps the name of its TLA+
+check. The other names join the variant, the ids of the entities whose view reports the finding
+(`<E>` below), and the key fields; any character outside `[A-Za-z0-9_]` becomes `_`. The `// expect`
+headers of the samples list these names
+([Sample expectations](./formal-verification.md#sample-expectations)).
 
 | Diagnostic | Name | Severity | When |
 |---|---|---|---|
 | `UnreachableEnumVariant { column, variant }` | `UnreachableEnumVariant_<E>_<column>_<variant>` | warning | No reachable pattern holds a declared Enum variant that is not a state of a state model. |
-| `NoWitness { entity, column, value, into }` | `Witness_<entity>_<column>_<value>` | error | No reachable state holds a state of a state model: a `transitions` endpoint or a start value of a lifecycle column. Not raised when a cap stopped the cone or `--buc` drops use cases; those are listed under `not checked:`. |
-| `Deadlock { entity, column, value, at, exits, trace }` | `Deadlock_<entity>_<column>_<value>` | error, or warning at the bound | A reachable state has a present instance at a state of a state model that is not an end state (one with no way out, or one `@end` declares), and no path moves it: no edge changes its column or deletes it. Reported once per state, at the first such state, with a shortest path and each way out (`exits`, a `transitions` arm or a deletion) with what blocks it. A warning when some way out lacks only a free slot of an entity it creates. Not raised when a cap stopped the cone or `--buc` drops use cases; those are listed under `not checked:`. |
-| `VacuousRule { name, unmet, one_instance, site }` | `Vacuous_<name>` | warning | The rule, `after` assertion, or property holds on its cone and no reachable state meets one of its premises (see [Rules that hold vacuously](#rules-that-hold-vacuously)). `unmet` lists the premises as written, each with the entities whose rows it asks for; when no state has the rows the rule ranges over, that alone. `one_instance` marks a run at one instance per entity. Not raised for a violated rule, on a cone a cap stopped, or under `--buc`. |
-| `NeverRuns { action, origin, site, why }` | `Runs_<action>` | warning | No edge of any entity cone that keeps the action carries it, self-loops included. `why` is `NoInstance`, `Apart` (the instances are never present at once), `Crowded` (the guards hold only where a created entity has no free slot), `Guards` (only the guards that hold in no reachable state, each with its site), or `Together`. Not raised when a cap stopped every such cone, `--buc` drops use cases, or `--entity` selects no cone that keeps the action; those are listed under `not checked:`. |
-| `ArmNeverTaken { action, column, from, to, conditions, site }` | `Arm_<action>_<from>_<to>` | warning | A `transitions(..).when(Cond)` arm that no edge of any entity cone takes, while its action runs there and some present instance holds its `from`: the guard never holds where the use case could take the arm. One cone that takes it is enough. An action that never runs is `NeverRuns` instead, and a `from` no state holds is the witness check's. Not raised when a cap stopped the cones that keep the action or `--buc` drops use cases; those are listed under `not checked:` (`whether <action> can take <Entity.column> <from> -> <to> is not decided`). |
-| `ValueNeverChosen { action, column, value, conditions, site }` | `Choice_<action>_<column>_<value>` | warning | A `chooses(.., value).when(Cond)` value that no edge of any entity cone picks while its action runs there: the guard never holds where the use case runs. One cone that picks it is enough. An action that never runs is `NeverRuns` instead. Not raised when a cap stopped the cones that keep the action or `--buc` drops use cases; those are listed under `not checked:` (`whether <action> can choose <Entity.column> = <value> is not decided`). |
-| `UnwrittenConstrainedVar { column }` | `UnwrittenConstrainedVar_<E>_<column>` | warning | A constraint or a condition guard reads a column that no use case writes, so it checks only the start value. |
+| `NoWitness { entity, column, value, into }` | `Witness_<entity>_<column>_<value>` | error | No reachable state holds a state of a state model. Not raised when a cap stopped the cone or `--buc` drops use cases. |
+| `Deadlock { entity, column, value, at, exits, trace }` | `Deadlock_<entity>_<column>_<value>` | error, or warning at the bound | A present instance at a state that is not an end state, from which no path moves it ([Deadlocks](#deadlocks)). Not raised when a cap stopped the cone or `--buc` drops use cases. |
+| `VacuousRule { name, unmet, one_instance, site }` | `Vacuous_<name>` | warning | The rule, assertion, or property holds and no reachable state meets one of its premises ([Rules that hold vacuously](#rules-that-hold-vacuously)). |
+| `NeverRuns { action, origin, site, why }` | `Runs_<action>` | warning | No edge of any entity cone that keeps the action carries it. `why` is `NoInstance`, `Apart`, `Crowded`, `Guards`, or `Together` ([Use cases that never run](#use-cases-that-never-run)). |
+| `ArmNeverTaken { action, column, from, to, conditions, site }` | `Arm_<action>_<from>_<to>` | warning | A `transitions(..).when(Cond)` arm no edge takes while its action runs and some instance holds its `from`. |
+| `ValueNeverChosen { action, column, value, conditions, site }` | `Choice_<action>_<column>_<value>` | warning | A `chooses(.., value).when(Cond)` value no edge picks while its action runs. |
+| `UnwrittenConstrainedVar { column }` | `UnwrittenConstrainedVar_<E>_<column>` | warning | A rule or guard reads a column no use case writes, so it checks only the start value. |
 | `NoCreationPath` | `NoCreationPath_<E>` | info | No use case creates the entity. It starts present. |
-| `MinCardNeedsCreate { usecase, child }` | `MinCardNeedsCreate_<E>_<usecase>_<child>` | info | A use case creates the parent of a `1..*` key and no child in the same transaction group, so `MinCard_*` fails after it unless the use case also creates a child. A child that the action links by update counts. |
-| `DeleteLeavesChildren { usecase, parent, child }` | `DeleteLeavesChildren_<E>_<usecase>_<child>` | info | A use case deletes the parent of a key with `.on_delete(cascade)`, which the lifecycle does not read: the child rows stay and every rule still sees them. Add `deletes(UC, Child)` to remove them with the parent. |
-| `DefaultOnVariationIgnored { column, value, created }` | `DefaultOnVariationIgnored_<E>_<column>` | info | A variation column has a `@default`, and some row starts at any value of the variation: the entity is not created, or a use case creates it without setting the column. Not raised when every creating use case sets the column. |
-| `MinCardOfPreExistingParent { child }` | `MinCardOfPreExistingParent_<E>_<child>` | warning | The parent of a `1..*` key starts present but every child starts absent, so `MinCard_*` fails at the start. |
-| `CountAboveBound { rule, entity, n, slots }` | `CountAboveBound_<E>_<rule>` | warning | An `.at_least(n, ..)` or `.exactly(n, ..)` counts more rows of the entity than the bounds give it slots, so every state where the rule applies breaks it. The message names the `--instances` that gives the entity `n`. |
-| `PreExistingChildOfCreatedParent { parent }` | `PreExistingChildOfCreatedParent_<E>_<parent>` | warning | No use case creates the entity, but some use case creates the parent of its mandatory `relate`. Each slot starts owned by a parent slot that is still `absent`. |
+| `MinCardNeedsCreate { usecase, child }` | `MinCardNeedsCreate_<E>_<usecase>_<child>` | info | A use case creates the parent of a `1..*` key and no child in the same group. |
+| `DeleteLeavesChildren { usecase, parent, child }` | `DeleteLeavesChildren_<E>_<usecase>_<child>` | info | A use case deletes the parent of a `.on_delete(cascade)` key and not the child. Add `deletes(UC, Child)`. |
+| `DefaultOnVariationIgnored { column, value, created }` | `DefaultOnVariationIgnored_<E>_<column>` | info | A variation column has a `@default`, and some row starts at any value. |
+| `MinCardOfPreExistingParent { child }` | `MinCardOfPreExistingParent_<E>_<child>` | warning | The parent of a `1..*` key starts present and every child absent, so `MinCard_*` fails at the start. |
+| `CountAboveBound { rule, entity, n, slots }` | `CountAboveBound_<E>_<rule>` | warning | An `.at_least(n, ..)` or `.exactly(n, ..)` counts more rows than the entity has slots. The message names the `--instances` that gives it `n`. |
+| `PreExistingChildOfCreatedParent { parent }` | `PreExistingChildOfCreatedParent_<E>_<parent>` | warning | No use case creates the entity, but one creates the parent of its mandatory `relate`. |
 | `ConflictingEffects { usecase, column }` | `ConflictingEffects_<E>_<usecase>_<column>` | error | One use case assigns two values to one column. |
-| `DoubleModeledEnum { column, usecase }` | `DoubleModeledEnum_<E>_<usecase>_<column>` | error | A use case that does not create the entity `sets` a lifecycle column that `transitions` drive. The creating use case's `sets` of the status is the start state and is not an error. |
+| `DoubleModeledEnum { column, usecase }` | `DoubleModeledEnum_<E>_<usecase>_<column>` | error | A use case that does not create the entity `sets` a lifecycle column that `transitions` drive. |
 | `ContradictoryDrivenComparison { usecase, proposition, driven }` | `ContradictoryDrivenComparison_<E>_<usecase>_<proposition>` | error | A use case drives a comparison to one truth while its own Int `sets` make it the other. |
-| `DrivenComparisonColumnWritten { usecase, column, proposition, drivers }` | `DrivenComparisonColumnWritten_<E>_<usecase>_<column>` | warning | A use case `sets` a column that a driven comparison reads and does not drive the comparison, so the comparison keeps the truth its last `drives` gave whatever the column holds. Add a `drives` of the comparison to the use case with the truth the new value gives. |
-| `IntLiteralOutOfBounds { value, max }` | `IntLiteralOutOfBounds_<E>_<value>` | error | An Int literal or an integer `@default` lies outside `0..max`. |
-| `UnsupportedComparison { comparison }` | `UnsupportedComparison_<E>_<comparison>` | error | An order comparison has a non-numeric operand, or `==` / `!=` compares two columns of different domains. |
-| `UnbindableScope { constraint }` | `UnbindableScope_<E>_<constraint>` | error | The `.along` of a multi-entity rule or `property`, or of an `invariant` with `.has`/`.none`, names a hop that no `relate` binds, or misses an entity the rule names. |
-| `UnbindableCondition { condition, usecase }` | `UnbindableCondition_<E>_<condition>_<usecase>` | error | A condition body is applied to a use case that writes nothing, or its `.along` names a hop that no `relate` binds, or names an entity a `.has`/`.none` counts before any entity the use case binds or the body compares, goes on past it to an entity nothing reads, or joins a compared entity through it. |
-| `UnjoinedGuardRead { condition, usecase, entity, fix }` | `UnjoinedGuardRead_<E>_<condition>_<usecase>` | warning | A `holds` body compares an entity that no key joins, directly or along its `.along` path, to a row the guarded use case binds, so any row of it satisfies the guard. `fix` names the `.along(...)` of the shortest key path, or writing the entity in the use case. |
-| `UnjoinedWrite { usecase, a, b, path }` | `UnjoinedWrite_<usecase>_<a>_<b>` | warning | A step of the use case writes or binds rows of `a` and `b` that no owner guard or assignment joins, while the shortest key path between them (`path`) runs through entities the step does not bind, so one run may write rows that belong to different rows of those entities. One instance per entity cannot show it; two can. Fixed by writing the entities between, or silenced by `.apart()` on the write meant as a row of its own. |
-| `GuardReadsLaterStep { condition, usecase, entity, step, apis }` | `GuardReadsLaterStep_<E>_<condition>_<usecase>` | warning | A `holds` body applied to a split use case compares an entity that only a later transaction group creates. The guard is read before the first group, when the run has no row of the entity yet, so it reads rows that are not the run's, and often never holds. The message names `applies_to(Cond, Api)` for each API of that group that creates the entity. The `guard:` row of the first group's `Runs_` warning says the same. |
-| `UnboundAfterRead { anchor, entity }` | `UnboundAfterRead_<E>_<anchor>` | warning | An `after(UC).assert` atom reads an entity that no step of the use case's run binds, so every present row of it must satisfy the atom. Write the entity in the use case to read the run's row. |
-| `UnanchoredTrigger { event, usecase, raisers, site }` | `UnanchoredTrigger_<E>_<event>_<usecase>` | info | The use cases that raise the event bind no entity in common, so the event has no row to be raised on: the use case it triggers runs as if the event were free (see [Triggers](#triggers)). Reported on the `triggers` line. |
-| `UnjoinedTrigger { event, usecase, entity, site }` | `UnjoinedTrigger_<E>_<event>_<usecase>` | info | The triggered use case binds no row of the entity the event is raised on, and no key joins its rows to one, so any row the event was raised on lets it run: its `Triggered` parameter is unjoined. Reported on the `triggers` line. |
-| `TriggerNeverRuns { usecase, event, site }` | `TriggerNeverRuns_<E>_<usecase>_<event>` | info | A use case that several tracked events trigger never runs after this event, while it runs after another: the variant `<usecase>_by_<event>` carries no edge on a cone that ran to the end. `Runs_<usecase>` is not raised, since the use case runs. A variant that did not fire only on cones that stopped at the cap is not decided (`whether <usecase>_by_<event> can run`). |
-| `UncountedTrigger { event, usecase, why, site }` | `UncountedTrigger_<E>_<event>_<usecase>` | error | A `triggers(Ev, UC).counted(k)` edge has no counter: the event is free, the use case writes nothing or a free trigger also starts it, the raisers share no entity, the use case raises the event itself, or a raiser binds the event's entity twice. `why` names which (see [Counted triggers](#counted-triggers)). Reported on the `triggers` line. |
-| `UnboundCopySource { usecase, column, source, reason }` | `UnboundCopySource_<E>_<usecase>_<column>` | error | A `sets(UC, E.col == F.src)` names an `F` that the step binds to no one row: not written by this or an earlier step of the use case and not the target's parent, a child of the target, or the parent of a child created unlinked. The copy is not applied. |
-| `AmbiguousOwnerLink { statement, a, b, roles, rewrite }` | `AmbiguousOwnerLink_<E>_<a>_<b>` | error | A `.has/.none(...)`, a `holds` body, or a copy joins two entities that several keys join, and no `.role(role)` names one. The message names the candidate roles and the statement with the `.role` to add; the join is left unlinked. |
-| `DerivedColumnRead { column }` | `DerivedColumnRead_<entity>_<column>` | error | A constraint, condition, assertion, or property reads an arithmetic `@derived` column, which the lifecycle cannot evaluate. |
-| `ConstraintViolated { name, ... }` | the rule's name, such as `Forbidden_Order_0` | error | A reachable state breaks a `forbidden`, `invariant`, `required`, `exclusive`, `@check`, multi-entity, or quantifier rule, a unique set (`Unique_<Entity>_<columns>`, see [Unique column sets](#unique-column-sets)), or a counted trigger's `EventOverflow_<E>_<Ev>_<UC>` ([Counted triggers](#counted-triggers)). |
+| `DrivenComparisonColumnWritten { usecase, column, proposition, drivers }` | `DrivenComparisonColumnWritten_<E>_<usecase>_<column>` | warning | A use case `sets` a column a driven comparison reads without driving the comparison. |
+| `IntLiteralOutOfBounds { value, max }` | `IntLiteralOutOfBounds_<E>_<value>` | error | An Int literal or integer `@default` lies outside `0..max`. |
+| `UnsupportedComparison { comparison }` | `UnsupportedComparison_<E>_<comparison>` | error | An order comparison has a non-numeric operand, or `==` / `!=` compares columns of different domains. |
+| `UnbindableScope { constraint }` | `UnbindableScope_<E>_<constraint>` | error | An `.along` names a hop no `relate` binds, or misses an entity the rule names. |
+| `UnbindableCondition { condition, usecase }` | `UnbindableCondition_<E>_<condition>_<usecase>` | error | A condition body is applied to a use case that writes nothing, or its `.along` cannot be bound. |
+| `UnjoinedGuardRead { condition, usecase, entity, fix }` | `UnjoinedGuardRead_<E>_<condition>_<usecase>` | warning | A `holds` body compares an entity no key joins to a row the use case binds; `fix` names the `.along(...)` to add. |
+| `UnjoinedWrite { usecase, a, b, path }` | `UnjoinedWrite_<usecase>_<a>_<b>` | warning | One step writes rows of `a` and `b` that nothing joins, while their key path runs through entities the step does not bind, so one run may write rows of different parents. One instance per entity cannot show it; two can. Fix it by writing the entities between, or silence it with `.apart()`. |
+| `GuardReadsLaterStep { condition, usecase, entity, step, apis }` | `GuardReadsLaterStep_<E>_<condition>_<usecase>` | warning | A `holds` body on a split use case compares an entity only a later group creates. The message names `applies_to(Cond, Api)` for that group's APIs. |
+| `UnboundAfterRead { anchor, entity }` | `UnboundAfterRead_<E>_<anchor>` | warning | An `after` atom reads an entity no step of the run binds. |
+| `UnanchoredTrigger { event, usecase, raisers, site }` | `UnanchoredTrigger_<E>_<event>_<usecase>` | info | The raisers bind no entity in common, so the event is free ([Triggers](#triggers)). |
+| `UnjoinedTrigger { event, usecase, entity, site }` | `UnjoinedTrigger_<E>_<event>_<usecase>` | info | The triggered use case binds no row the event is raised on, and no key joins one, so any raised row lets it run. |
+| `TriggerNeverRuns { usecase, event, site }` | `TriggerNeverRuns_<E>_<usecase>_<event>` | info | A use case several events trigger never runs after this event, while it runs after another. |
+| `UncountedTrigger { event, usecase, why, site }` | `UncountedTrigger_<E>_<event>_<usecase>` | error | A `.counted(k)` edge has no counter; `why` names the reason ([Counted triggers](#counted-triggers)). |
+| `UnboundCopySource { usecase, column, source, reason }` | `UnboundCopySource_<E>_<usecase>_<column>` | error | A copy names an `F` the step binds to no one row. The copy is not applied. |
+| `AmbiguousOwnerLink { statement, a, b, roles, rewrite }` | `AmbiguousOwnerLink_<E>_<a>_<b>` | error | A join between entities several keys join names no `.role`. The message gives the statement with the `.role` to add. |
+| `DerivedColumnRead { column }` | `DerivedColumnRead_<entity>_<column>` | error | A rule, condition, assertion, or property reads an arithmetic `@derived` column. |
+| `ConstraintViolated { name, ... }` | the rule's name, such as `Forbidden_Order_0` | error | A reachable state breaks a rule, a unique set, or a counted trigger's `EventOverflow_<E>_<Ev>_<UC>`. |
 | `AfterAssertViolated { anchor, ... }` | `AfterAssert_<anchor>_<i>` | error | A step of the anchor use case ends in a state that fails the assertion. |
-| `PropertyViolated { name, kind, instance, witness, lasso, ... }` | the property's name, such as `NeverShipped` | error | A property fails: an `always` at a state, an `eventually` or `leads_to` on a lasso that replays through the step relation and passes the property's fairness, a `stable` or `unchanged` at the step that breaks it, or a `precedes` at the state where its second condition first holds without the first. Only `verify` reports it; `check` and `states` evaluate no property. |
-| `GoalUnreachable { name, instance, confined, states, .. }` | the property's name, such as `OrderCanFinish` | error | A `can_reach` property fails: from the last state of a shortest trace, no path on which the instance stays present reaches the goal. `confined` lists what the goal reads of the instance in the states it can still reach. Only `verify` reports it. |
+| `PropertyViolated { name, kind, instance, witness, lasso, ... }` | the property's name, such as `NeverShipped` | error | A property fails. Only `verify` reports it. |
+| `GoalUnreachable { name, instance, confined, states, .. }` | the property's name, such as `OrderCanFinish` | error | A `can_reach` property fails; `confined` lists what the goal reads in the states left. Only `verify` reports it. |
 | `AssertOnInertUseCase { anchor }` | `AssertOnInertUseCase_<E>_<anchor>` | error | `after(UC).assert` names a use case with no action. |
-| `FairOnInertUseCase { property, usecase }` | `FairOnInertUseCase_<E>_<property>_<usecase>` | error | A property's `.fair(...)` names a use case with no action, so its fairness constrains no step. |
-| `PatternCapReached { cap, bound }` | `PatternCapReached_<E>` | error | An entity view exceeded `--max-patterns`. Raise the flag or narrow `--buc`. |
-| `StateCapReached { cap, growth }` | `StateCapReached_<E>` | error | A cone exceeded `--max-states`. The message names the variables the reached states vary in and the use cases that reached the most of them. Raise the flag, narrow `--entity` or `--buc`, or drop the guard that pulls another entity into the cone. |
-| `MemoryCapReached { limit, states, growth, held, .. }` | `MemoryCapReached_<E>` | error | A cone's states outgrew the [memory limit](./cli-reference.md#memory-limit) (`--memory`, else `memory` under `[check]`, else `4GiB`). The message names the limit, the states reached, what they vary in, the bytes each state took, and an estimate of what finishing the cone needs, for the cone alone: from its BFS layers once the frontier has shrunk past its peak (`the cone probably holds about 2520 states`), else, when the cone's variables bound its states, from that bound (`at least about 33MiB`), with the size to give `--memory` (see [Exploration by cone of influence](#exploration-by-cone-of-influence)). Raise it, or narrow the cone as for `StateCapReached`. In `verify`, the findings of the cone are `not decided` instead. |
-| `TimeBudgetReached { states }` | `TimeBudgetReached` | error | A run passed its deadline. Only the whole-model run of a property in `verify` has one (`--temporal-budget`, 300 s by default), and it prints no line of its own: the property is `not decided`, with the note `stopped at the time budget of <n> s`, unless the run had already found a counterexample. |
+| `FairOnInertUseCase { property, usecase }` | `FairOnInertUseCase_<E>_<property>_<usecase>` | error | A property's `.fair(...)` names a use case with no action. |
+| `PatternCapReached { cap, bound }` | `PatternCapReached_<E>` | error | An entity view exceeded `--max-patterns`. |
+| `StateCapReached { cap, growth }` | `StateCapReached_<E>` | error | A cone exceeded `--max-states`. The message names what the states vary in. |
+| `MemoryCapReached { limit, states, growth, held, .. }` | `MemoryCapReached_<E>` | error | A cone outgrew the [memory limit](./cli-reference.md#memory-limit). The message estimates what finishing needs. In `verify`, the cone's findings are `not decided` instead. |
+| `TimeBudgetReached { states }` | `TimeBudgetReached` | error | The whole-model run of a property in `verify` passed `--temporal-budget`. It prints no line of its own: the property is `not decided`. |
 
 ---
 
 ## Output formats
 
-`rdra-ish states` renders the views in one of three formats (`--format`).
+`rdra-ish states` renders the views in one of three formats (`--format`):
 
-- `table` (default). One table per entity with an axis legend, one column per axis, and
-  the `INITIAL`, `TERMINAL`, and `VIA` columns. `VIA` is the least set of use cases on some
-  path into the row: the use cases that create the instance in it or move it into it, those
-  that lead into a row that reaches it, and those that delete an instance in it. A use case
-  that touches the entity without changing a column is not listed. An Int axis prints its
-  values (`stock[0..5]`). An entity with no state column prints `(no state axes)`.
-- `csv`. One row per pattern and column, with `entity_id`, `entity_label`, `pattern_idx`,
+- `table` (default): one table per entity with an axis legend, one column per axis, and the
+  `INITIAL`, `TERMINAL`, and `VIA` columns. An Int axis prints its range (`stock[0..5]`), and an
+  entity with no state column prints `(no state axes)`.
+- `csv`: one row per pattern and column, with `entity_id`, `entity_label`, `pattern_idx`,
   `column`, `value`, `is_initial`, `is_terminal`, and `via`.
-- `json`. One object per entity with `axes` (each with its `domain`), `patterns`,
-  `diagnostics`, `no_creation_path`, `reachable`, `truncated`, and the entity id and
-  label. An Int domain lists `"0"` to `"5"`. Each pattern has a `witness`: `start` (the
-  instances a pre-existing entity starts with), `steps` (each with `action`, `usecase`,
-  `bound`, `changes`, and the use case's `site`), `over_bound`, and `free_triggers` (each
-  `usecase` that ran without its `event` having been raised, see **Raised marks** under
-  [Exploration by cone of influence](#exploration-by-cone-of-influence)). A change is
-  `create`, `delete`, `set` (with the `site` of the arm or `sets` that wrote it), or `tick`.
+- `json`: one object per entity with `axes` (each with its `domain`), `patterns`, `diagnostics`,
+  `no_creation_path`, `reachable`, `truncated`, and the entity id and label. Each pattern has a
+  `witness`: `start`, `steps` (each with `action`, `usecase`, `bound`, `changes`, and `site`),
+  `over_bound`, and `free_triggers` (each use case that ran without its event having been
+  raised). A change is `create`, `delete`, `set` (with its `site`), or `tick`.
 
-All formats honor `--entity <id>`, `--buc <id>`, `--max-patterns <n>`, `--max-states <n>`, and `--memory <size>`. `--buc`
-keeps the use cases reachable from the named BUCs. It does not change how an entity
-starts: whether an entity is pre-existing is decided on the whole model. `--entity`
-derives only the named entities' views, each on its own cone, and the invariants and
-after-asserts that read them. Both are described in
-[Partial runs](./cli-reference.md#partial-runs).
+Every format honors `--entity <id>`, `--buc <id>`, `--max-patterns <n>`, `--max-states <n>`, and
+`--memory <size>` ([Partial runs](./cli-reference.md#partial-runs)). Whether an entity is
+pre-existing is decided on the whole model.
 
 ---
 
 ## See Also
 
-- [language-reference.md](./language-reference.md) — DSL syntax for entities, predicates,
-  and state constraints.
-- [cli-reference.md](./cli-reference.md) — the `states` subcommand and its options.
-- [formal-verification.md](./formal-verification.md) — the TLA+/TLC printing of the
-  same system, with two instances, and temporal `property` formulas.
-- [vision.md](./vision.md) — the six lifecycle rules this layer implements.
+- [language-reference.md](./language-reference.md): the syntax of entities, predicates, and rules.
+- [cli-reference.md](./cli-reference.md): the `states` subcommand and its options.
+- [formal-verification.md](./formal-verification.md): `verify`, TLA+, temporal properties, and proofs.
+- [vision.md](./vision.md): the lifecycle rules this layer implements.

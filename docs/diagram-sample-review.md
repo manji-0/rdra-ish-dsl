@@ -4,31 +4,26 @@
 <!-- constrained-by ./incremental-modeling.md -->
 <!-- derived-from ../samples/incremental-order/step-7-business-rules/design.md -->
 
-This guide embeds one generated diagram of each `diagram --kind` (see the
-[kinds](./cli-reference.md#kinds)), and for `state` both the index and one entity's
-state model, and explains how to read each during review. The kinds follow the RDRA 3.0
-diagrams, in the order a review usually walks them: system context and requirements,
-business, use cases and their robustness and sequence views, flows and screens,
-information and conditions, lifecycle and events, then the data model and the whole
-graph.
+This guide is for reviewers of a model's diagrams. It shows one generated diagram of each
+[`diagram --kind`](./cli-reference.md#kinds), and for `state` both the index and one
+entity's state model, and says how to read each and what to ask. The kinds follow the RDRA
+3.0 diagrams in the order a review usually walks them: context and requirements, business,
+use cases with their robustness and sequence views, flows and screens, information and
+conditions, lifecycle and events, then the data model and the whole graph.
 
 Most examples use `samples/incremental-order/step-7-business-rules`, a small model with
-business scope, permissions, UI, APIs, entities, lifecycle, and two systems. It declares
-no requirement, flow, condition, or event, and only one screen, so those sections use
-`samples/clinic-ops` and `samples/ec-site`.
-
-Regenerate the artifacts with:
+permissions, screens, APIs, entities, a lifecycle, and two systems. It has no requirement,
+flow, condition, or event, and only one screen, so those sections use `samples/clinic-ops`
+and `samples/ec-site`. The diagrams below are generated; regenerate them with:
 
 ```sh
 bash scripts/check-sample-artifacts.sh
 ```
 
-The same command runs in CI, so intentional emitter or DSL changes appear as a normal
-diff of the `out/` files and of the blocks below.
-
-`rdra-ish` writes Mermaid text (`.mmd`) only, for a reader that redraws it: a person
-with Mermaid CLI (`mmdc`), or a tool such as an AI that draws SVG from the text. The
-text carries the meaning, so shapes, colours, and direction are free to change.
+CI runs the same command, so an emitter or DSL change shows as a diff of the `out/` files
+and of the blocks below. `rdra-ish` writes Mermaid text (`.mmd`) only, for a person with
+Mermaid CLI (`mmdc`) or a tool that draws from the text. The text carries the meaning, so
+shapes, colours, and direction are free to change.
 
 ## Reading Any Diagram
 
