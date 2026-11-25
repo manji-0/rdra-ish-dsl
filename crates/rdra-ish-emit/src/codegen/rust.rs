@@ -858,6 +858,11 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
         }
     }
     if domain.fns.is_empty() {
+        // The use cases with no printed function still have their errors (#335).
+        if !domain.errors.is_empty() {
+            out.push_str("// ── Use cases ──\n\n");
+            print_errors(domain, out);
+        }
         return;
     }
     if !domain.marks.is_empty() {
@@ -987,7 +992,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
         for c in &f.conditions {
             body.push_str(&format!(
                 "    if {} {{\n        return {RESULT}::Err({error}::Rejected(Rejected {{\n            condition: {},\n            label: {},\n            site: {},\n        }}));\n    }}\n",
-                expr(domain, &fails(&c.expr), &row, &input),
+                expr(&fails(&c.expr), &row, &input),
                 string_literal(&c.id),
                 string_literal(&c.label),
                 c.site.as_ref().map_or(format!("{OPTION}::None"), |s| format!("{OPTION}::Some({})", string_literal(s)))
@@ -1294,13 +1299,12 @@ fn lit_rust(lit: &super::ir::Lit, ty: &FieldType) -> String {
 }
 
 fn expr(
-    domain: &DomainModel,
     e: &super::ir::Expr,
     row: &dyn Fn(usize) -> String,
     input: &dyn Fn(usize) -> String,
 ) -> String {
     use super::ir::Expr;
-    let go = |e: &Expr| expr(domain, e, row, input);
+    let go = |e: &Expr| expr(e, row, input);
     let place = |r: &usize, field: &Field| format!("{}.{}", row(*r), ident(&field.name));
     match e {
         Expr::True => "true".to_string(),
@@ -1411,7 +1415,7 @@ pub(super) fn print_validators(domain: &DomainModel, out: &mut String) {
             out.push_str(&format!(
                 "        // {}\n        if {} {{\n            out.push({});\n        }}\n",
                 one_line(&rule.text),
-                expr(domain, &fails(&rule.expr), &row, &|_| String::new()),
+                expr(&fails(&rule.expr), &row, &|_| String::new()),
                 string_literal(&rule.name)
             ));
         }
