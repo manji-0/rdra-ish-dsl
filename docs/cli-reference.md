@@ -763,8 +763,9 @@ number, `0`, and a fraction are refused.
   heap as given, with no rerun. A `--memory` that leaves BFS nothing beside `64MiB` of TLC heap
   is refused.
 - **TLC's cores** (`verify --with-tlc`). Each TLC run holds its `-workers` of the cores while
-  it goes. A run gets one worker per 50,000 states BFS counted in its module, from 1 to 8, or
-  8 while BFS has not counted it. When memory, not the number of runs waiting, bounds the
+  it goes. A run gets one worker per 50,000 states BFS counted in its module, from 1 to 8. A
+  run BFS has not counted gets 8 on 16 cores or more, and otherwise the cores divided among
+  the runs left. When memory, not the number of runs waiting, bounds the
   runs at once, a run gets the cores divided among those that fit, up to 32. The largest runs
   start first. A run starts once the cores for its workers are free and its heap fits, or
   when none runs, and a smaller run does not pass it. Whole-model runs go 2 at once.
