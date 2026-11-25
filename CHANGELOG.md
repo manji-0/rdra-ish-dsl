@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v3.0.0 - 2026-11-26
+
 This is a major release. `verify` decides every check with its own checker and needs no JVM;
 TLC (`--with-tlc`) and z3 (`--prove`) check it from outside. `codegen` prints domain code in
 the Kamae style for TypeScript, Rust and Go, and `check --code` holds service code to the
@@ -315,6 +317,11 @@ No sample changes verdict.
 
 ### Known issues
 
+- Phases 4 and 5 of the native temporal plan are not in this release (#168). A temporal
+  property whose cone leaves it open, such as patent-ops' `GrantEnds`, still ends as
+  `not decided` where the whole model is too large, and a counterexample on a reduced cone
+  is repeated on the unreduced one. A minor release may decide such a property, as
+  [compatibility](docs/compatibility.md) allows.
 - `--memory` bounds what the state stores hold, not the whole process (#237, #242, #243).
   A run that stops at the limit has been measured at up to 1.85 times it. Set `--memory` to about half
   the memory you can spare. See [Memory limit](docs/cli-reference.md#memory-limit).
