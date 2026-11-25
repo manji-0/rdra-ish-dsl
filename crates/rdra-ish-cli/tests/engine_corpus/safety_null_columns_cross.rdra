@@ -1,0 +1,33 @@
+// trap: a cross-entity comparison of two null columns reads null as equal to no column (#355).
+// A Line belongs to an Order. Nothing writes Line.qty or Order.limit, so both stay null on
+// every row: Line.qty == Order.limit never holds and Line.qty != Order.limit always does
+// (language reference, § Null). The first rule holds, and z3 proves it from the creation
+// steps; the second fails as soon as Open and AddLine give a linked pair. SetCap and SetN
+// write 2 into Order.cap and Line.n, so after Open, AddLine, SetCap, SetN the pair is equal
+// and present and the third rule fails. An engine that read null == null as true would
+// swap the verdicts of the first two.
+// expect MultiForbidden_Line_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+// expect MultiForbidden_Line_1: native=counterexample tlc=counterexample z3=unproved
+// expect MultiForbidden_Line_2: native=counterexample tlc=counterexample z3=unproved
+entity Order "注文" {
+  id: Int @pk
+  limit: Int @null
+  cap: Int @null
+}
+entity Line "明細" {
+  id: Int @pk
+  qty: Int @null
+  n: Int @null
+}
+relate(Line, Order, N:1)
+usecase Open "起票"
+usecase AddLine "明細追加"
+usecase SetCap "上限設定"
+usecase SetN "数設定"
+creates(Open, Order)
+creates(AddLine, Line)
+sets(SetCap, Order.cap == 2)
+sets(SetN, Line.n == 2)
+forbidden(Line, Order, Line.qty == Order.limit).along(Line, Order)
+forbidden(Line, Order, Line.qty != Order.limit).along(Line, Order)
+forbidden(Line, Order, Line.n == Order.cap).along(Line, Order)

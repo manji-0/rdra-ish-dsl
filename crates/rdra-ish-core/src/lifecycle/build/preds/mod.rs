@@ -10,7 +10,7 @@ mod guards;
 mod temporal;
 
 use crate::lifecycle::diag::StateDiag;
-use crate::lifecycle::types::{At, CmpOp, Pred, Premise, Site, Term, VarId};
+use crate::lifecycle::types::{At, CmpOp, Domain, Pred, Premise, Site, Term, Value, VarId};
 use crate::model::{CmpOpModel, CrossCmpRhs, CrossEntityCondition, EntityKey, FkId};
 
 /// Binds each entity of a predicate to a slot reference.
@@ -85,6 +85,31 @@ fn cmp_op(op: CmpOpModel) -> CmpOp {
         CmpOpModel::In | CmpOpModel::NotIn => {
             unreachable!("`in` / `not in` is read by `member_atom`")
         }
+    }
+}
+
+/// `lhs op rhs` over two columns, each read with its domain. A comparison is two-valued: a
+/// null column equals no column, so `==` holds only when both operands are present and `!=`
+/// holds whenever either is null (language reference, § Null). The guard goes on each operand
+/// that can be null; an ordered operator already fails on null. A bare `Pred::Cmp` of two
+/// slots is term equality, under which null equals null, as a copy between columns needs.
+fn columns_cmp((lt, ld): (Term, Domain), op: CmpOp, (rt, rd): (Term, Domain)) -> Pred {
+    let nullable = |d: &Domain| matches!(d, Domain::Nullable | Domain::NullableInt);
+    if !matches!(op, CmpOp::Eq | CmpOp::Ne) || !(nullable(&ld) || nullable(&rd)) {
+        return Pred::Cmp(lt, op, rt);
+    }
+    let present = |t: &Term| Pred::Cmp(t.clone(), CmpOp::Ne, Term::Lit(Value::NULL));
+    let mut eq = Vec::new();
+    if nullable(&ld) {
+        eq.push(present(&lt));
+    }
+    if nullable(&rd) {
+        eq.push(present(&rt));
+    }
+    eq.push(Pred::Cmp(lt, CmpOp::Eq, rt));
+    match op {
+        CmpOp::Eq => Pred::And(eq),
+        _ => Pred::Not(Box::new(Pred::And(eq))),
     }
 }
 

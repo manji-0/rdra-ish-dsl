@@ -1488,6 +1488,47 @@ Entity lines that name each rule or reason:
   [MaxCard_Copy_Shelf] unreduced
     Copy[3] moves
     Shelf[3] moves
+== engine_corpus/safety_null_columns_cross.rdra
+  [entity Line] unreduced
+    Line[2] moves
+    Order[2] moves
+  [entity Order] unreduced
+    Order[2] moves
+  [MultiForbidden_Line_0, MultiForbidden_Line_1] unreduced
+    Line[2] moves
+    Order[2] moves
+  [MultiForbidden_Line_2] unreduced
+    Line[2] moves
+    Order[2] moves
+== engine_corpus/safety_null_columns_cross.rdra --instance-count 3
+  [entity Line] unreduced
+    Line[3] moves
+    Order[3] moves
+  [entity Order] unreduced
+    Order[3] moves
+  [MultiForbidden_Line_0, MultiForbidden_Line_1] unreduced
+    Line[3] moves
+    Order[3] moves
+  [MultiForbidden_Line_2] unreduced
+    Line[3] moves
+    Order[3] moves
+== engine_corpus/safety_null_columns_eq.rdra
+  [entity Item] unreduced
+    Item[2] moves
+  [Forbidden_Item_0, Required_Item_0, property LimNeverMet] unreduced
+    Item[2] moves
+  [Forbidden_Item_1, property ABNeverMet] unreduced
+    Item[2] moves
+== engine_corpus/safety_null_columns_eq.rdra --instance-count 3
+  [entity Item] unreduced
+    Item[3] moves
+  [Forbidden_Item_0, Required_Item_0, property LimNeverMet] unreduced
+    Item[3] moves
+  [Forbidden_Item_1, property ABNeverMet] unreduced
+    Item[3] moves
+== engine_corpus/safety_null_columns_ne.rdra
+  [entity Item, Forbidden_Item_0, Required_Item_0] unreduced
+    Item[2] moves
 == engine_corpus/safety_precedes_latch.rdra
   [entity Order] unreduced
     Order[2] moves

@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 
 use super::display::cross_display;
-use super::{at_of, cmp_op, collect_vars, Binding};
+use super::{at_of, cmp_op, collect_vars, columns_cmp, Binding};
 use crate::lifecycle::build::Builder;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::types::{
@@ -232,7 +232,7 @@ impl Builder<'_> {
                             self.read_slot(ek, &atom.column, at, site),
                             self.read_slot(rk, column, rat, site),
                         ) {
-                            (Some((l, _)), Some((r, _))) => Pred::Cmp(l, op, r),
+                            (Some(l), Some(r)) => columns_cmp(l, op, r),
                             _ => Pred::False,
                         }
                     }

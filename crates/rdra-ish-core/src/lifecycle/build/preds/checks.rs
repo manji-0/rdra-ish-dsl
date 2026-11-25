@@ -70,7 +70,8 @@ impl Builder<'_> {
         }
     }
 
-    /// `operand = null` for each nullable Int operand of an undriven comparison.
+    /// `operand = null` for each nullable operand of an undriven comparison: a nullable Int, or
+    /// a nullable column compared with another column.
     fn null_operands(&self, ek: EntityKey, at: At, prop: &ComparisonProp) -> Vec<Pred> {
         if is_driven(self.model, ek, prop) {
             return Vec::new();
@@ -84,7 +85,7 @@ impl Builder<'_> {
         std::iter::once(prop.lhs_column.as_str())
             .chain(rhs)
             .filter_map(|column| match self.slot(ek, column, at)? {
-                (term, Domain::NullableInt) => {
+                (term, Domain::NullableInt | Domain::Nullable) => {
                     Some(Pred::Cmp(term, CmpOp::Eq, Term::Lit(Value::NULL)))
                 }
                 _ => None,
