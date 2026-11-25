@@ -240,6 +240,12 @@ No sample changes verdict.
   a failing cone line can differ from earlier releases.
 - `verify` reduces cones whose TLA+ tables print up to 530,000 cells (#284), and decides a
   property on the reduced cone first (`Cone_<P>_WF: ok on the reduced cone`).
+- A counterexample on a reduced cone whose unreduced cone stops at `--max-states` or the
+  memory limit before it shows one is lifted to the unreduced cone, replayed there, and
+  checked against the property and its fairness, then printed (`Cone_<P>_Full:
+  counterexample lifted from the reduced cone`); it used to be `not decided` (#168, phase
+  5). After a lifted `eventually` or `leads_to`, `Cone_<P>_WF` reads the stopped unreduced
+  graph, whose counterexample is real. A lift that fails its checks keeps the old answer.
 - Only a run that builds an entity view gathers view patterns, so the pattern cap stops no
   run of `verify` (#251).
 

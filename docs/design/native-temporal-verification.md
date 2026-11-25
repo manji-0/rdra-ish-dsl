@@ -15,8 +15,14 @@ Status (2026-11-26): in progress. The plan started after
 - **Landed.** Phases 0 to 3 (#176, #177, #178, #179): `verify` decides every check natively
   by default, and TLC runs only under `--with-tlc`. The conservative divergence trial C,
   adopted (#227, [Decisions](#decisions)).
+- **In progress.** Phase 5, first half: where the `Full` run stops at the cap or the memory
+  limit, the reduced counterexample is lifted (`ReducedLasso::lift`) and printed once it
+  replays and passes both checks; a lift that fails falls back. The second half, the lift
+  on every cone, waits behind `RDRA_ISH_LIFT_EVERYWHERE` for the owner to compare lengths
+  (`RDRA_ISH_LIFT_STATS`). On `reduced_gate` both lassos lift with no exploration of the
+  cone (`reduced_gate_lifts_both_counterexamples_without_the_full_run`).
 - **Open.** Phase 4, with #206 on the safety side (`order.rdra` still prints `RdraSpec_`
-  lines). Phase 5, the lift of a reduced lasso. Phase 6, the release gate.
+  lines). Phase 6, the release gate.
 - **Superseded.** Nothing.
 
 The owner decided three questions on 2026-11-23: `verify` defaults to the native checker

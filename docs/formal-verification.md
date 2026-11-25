@@ -409,7 +409,10 @@ An `ok` of that run is the `ok` of `Cone_<P>_WF` on the full cone
 a candidate: `verify` lifts it to the full cone and replays it there. A candidate that does
 not lift is dropped, and `verify` runs `Cone_<P>_Full` and `Cone_<P>_WF` on the full cone.
 The line then notes `Cone_P_WF: ok on the reduced cone`, `Cone_P_WF: counterexample on the
-reduced cone`, or `Cone_P_Full: counterexample` before the `_WF` note.
+reduced cone`, or `Cone_P_Full: counterexample` before the `_WF` note. A full cone that stops
+at the cap or the memory limit before it shows the reduced cone's counterexample gets that
+counterexample lifted instead: it prints only once it replays on the full cone and passes the
+property and fairness checks (`Cone_P_Full: counterexample lifted from the reduced cone`).
 
 ### Instance symmetry
 
