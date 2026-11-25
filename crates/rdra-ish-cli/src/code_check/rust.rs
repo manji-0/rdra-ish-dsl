@@ -68,6 +68,20 @@ impl Backend for Rust {
         rest.lines().next().map(str::to_string)
     }
 
+    /// E0046: "not all trait items implemented, missing: `a`, `b`".
+    fn missing_members(&self, m: &CompilerMessage) -> Option<(Vec<String>, usize)> {
+        if m.code.as_deref() != Some("E0046") {
+            return None;
+        }
+        let (_, list) = m.text.split_once("missing: ")?;
+        let names = list
+            .split(", ")
+            .map(|n| n.trim().trim_matches('`').to_string())
+            .filter(|n| !n.is_empty())
+            .collect();
+        Some((names, 0))
+    }
+
     fn classify(&self, m: &CompilerMessage) -> Finding {
         match m.code.as_deref() {
             Some("E0277") => Finding::NotImplemented,
@@ -141,6 +155,19 @@ mod tests {
         assert_eq!(
             compiler_message(r#"{"reason":"build-finished","success":false}"#),
             None
+        );
+        let e0046 = CompilerMessage {
+            code: Some("E0046".to_string()),
+            text: "not all trait items implemented, missing: `prepare_ship`, `commit_ship`"
+                .to_string(),
+            ..m
+        };
+        assert_eq!(
+            Rust.missing_members(&e0046),
+            Some((
+                vec!["prepare_ship".to_string(), "commit_ship".to_string()],
+                0
+            ))
         );
     }
 }

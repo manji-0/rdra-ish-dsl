@@ -144,7 +144,7 @@ fn each_omission_is_a_named_diagnostic() {
     let service = dir.join("svc/src/service.rs");
     let original = std::fs::read_to_string(&service).unwrap();
     type Plant = fn(&Path);
-    let plants: [(&str, Plant, &[&str]); 3] = [
+    let plants: [(&str, Plant, &[&str]); 4] = [
         (
             "Ship not implemented",
             |p| cut(p, "impl ShipUseCase for Service {", "\n}\n"),
@@ -156,6 +156,15 @@ fn each_omission_is_a_named_diagnostic() {
                 "E0277: the trait bound `Service: ShipUseCase` is not satisfied",
                 "fix:   impl ShipUseCase for svc::service::Service (prepare_ship, commit_ship)",
             ],
+        ),
+        (
+            "Ship's impl empty",
+            |p| {
+                cut(p, "impl ShipUseCase for Service {", "\n}\n");
+                let text = std::fs::read_to_string(p).unwrap();
+                std::fs::write(p, format!("{text}\nimpl ShipUseCase for Service {{}}\n")).unwrap();
+            },
+            &["error[CodeMissingUseCase_Ship]", "E0046"],
         ),
         (
             "commit_cancel missing",

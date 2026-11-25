@@ -106,7 +106,8 @@ pub(crate) fn map_messages(
             unmapped.push(msg);
             continue;
         };
-        let d = diagnostic(&m.contracts[c], c, msg, backend.classify(msg), m, backend);
+        let finding = whole_contract(backend.classify(msg), msg, c, m, backend);
+        let d = diagnostic(&m.contracts[c], c, msg, finding, m, backend);
         if !out.iter().any(|x| x.name == d.name) {
             out.push(d);
         }
@@ -125,6 +126,32 @@ pub(crate) fn map_messages(
         });
     }
     out
+}
+
+/// `Incomplete` is `NotImplemented` when the members the message says are missing are every
+/// member of contract `c`: a compiler that has no code for "not implemented" (tsc) or an
+/// empty impl block (E0046 listing them all).
+fn whole_contract(
+    finding: Finding,
+    msg: &CompilerMessage,
+    c: usize,
+    m: &Mapping<'_>,
+    backend: &dyn Backend,
+) -> Finding {
+    if finding != Finding::Incomplete {
+        return finding;
+    }
+    let Some((names, more)) = backend.missing_members(msg) else {
+        return finding;
+    };
+    let members = m.index.methods_of(c);
+    let all =
+        names.iter().all(|n| members.contains(&n.as_str())) && names.len() + more == members.len();
+    if all {
+        Finding::NotImplemented
+    } else {
+        finding
+    }
 }
 
 fn diagnostic(
@@ -228,6 +255,51 @@ mod tests {
             code: Some(code.to_string()),
             text: text.to_string(),
         }
+    }
+
+    /// A backend whose code `X3` lists missing members, `M: a, b (+N)`.
+    struct Lister;
+    impl Backend for Lister {
+        fn classify(&self, _m: &CompilerMessage) -> Finding {
+            Finding::Incomplete
+        }
+        fn missing_members(&self, m: &CompilerMessage) -> Option<(Vec<String>, usize)> {
+            let list = m.text.strip_prefix("M: ")?;
+            let (names, more) = match list.split_once(" (+") {
+                Some((names, n)) => (names, n.trim_end_matches(')').parse().ok()?),
+                None => (list, 0),
+            };
+            Some((names.split(", ").map(str::to_string).collect(), more))
+        }
+    }
+
+    #[test]
+    fn a_message_missing_every_member_is_the_contract_not_implemented() {
+        let port = PortDecl {
+            methods: vec![method("Ship")],
+            contracts: vec![contract("Ship", 0)],
+            ..PortDecl::default()
+        };
+        let probe = Probe::default();
+        let index = ContractIndex::new(&port, |m| {
+            vec![format!("prep_{}", m.action), format!("commit_{}", m.action)]
+        });
+        let m = Mapping {
+            probe_file: Path::new("tests/probe.x"),
+            probe: &probe,
+            index: &index,
+            contracts: &port.contracts,
+            service: "Svc",
+        };
+        let name = |text: &str| {
+            map_messages(&[msg("src/svc.x", 3, "X3", text)], &m, &Lister)[0]
+                .name
+                .clone()
+        };
+        assert_eq!(name("M: prep_Ship, commit_Ship"), "CodeMissingUseCase_Ship");
+        assert_eq!(name("M: prep_Ship (+1)"), "CodeMissingUseCase_Ship");
+        assert_eq!(name("M: commit_Ship"), "CodeIncomplete_Ship");
+        assert_eq!(name("M: prep_Ship, other"), "CodeIncomplete_Ship");
     }
 
     #[test]

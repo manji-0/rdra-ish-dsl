@@ -144,6 +144,12 @@ pub(crate) trait Backend {
             .map(|l| l.trim().to_string())
     }
 
+    /// The members a message says are missing from a contract, and how many more it only
+    /// counts ("and 3 more"): a message missing them all is the contract not implemented.
+    fn missing_members(&self, _message: &CompilerMessage) -> Option<(Vec<String>, usize)> {
+        None
+    }
+
     /// What a message says about the contract it belongs to.
     fn classify(&self, _message: &CompilerMessage) -> Finding {
         Finding::Other
