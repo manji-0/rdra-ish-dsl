@@ -242,6 +242,80 @@ entity OrderStatus "Order Status" {
     assert!(err.contains("entity OrderStatus"), "{err}");
 }
 
+/// A name a printer derives takes `_` when a model type has it, and the printer reads which
+/// from `domain.derived`.
+#[test]
+fn a_derived_name_falls_back_to_an_underscore() {
+    let mut names = Names::default();
+    names
+        .claim(
+            "OrderVisitor".to_string(),
+            "entity OrderVisitor".to_string(),
+        )
+        .unwrap();
+    let mut domain = DomainModel::default();
+    let derived = |key: &str, name: &str| DerivedName {
+        key: key.to_string(),
+        name: name.to_string(),
+        by: format!("the visitor {name}"),
+    };
+    claim_derived(
+        &mut names,
+        &mut domain,
+        vec![
+            derived("go:visitor:Order", "OrderVisitor"),
+            derived("go:visitor:Line", "LineVisitor"),
+        ],
+    )
+    .unwrap();
+    assert_eq!(domain.derived("go:visitor:Order"), Some("OrderVisitor_"));
+    assert_eq!(domain.derived("go:visitor:Line"), Some("LineVisitor"));
+    names
+        .claim("Taken_".to_string(), "entity Taken_".to_string())
+        .unwrap();
+    names
+        .claim("Taken".to_string(), "entity Taken".to_string())
+        .unwrap();
+    let err = claim_derived(&mut names, &mut domain, vec![derived("k", "Taken")])
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("Taken_"), "{err}");
+}
+
+/// The port and its contracts are built whenever `check` passed: one contract per use case,
+/// named `<UseCase>UseCase`, in the order of the port's methods, and the Rust output prints the contracts without the harness.
+#[test]
+fn contracts_are_built_and_printed_without_the_harness() {
+    let model = model_from(SRC);
+    let domain = build_with(&model, Some(CAPS), false, &|_| None).unwrap();
+    assert!(!domain.harness);
+    let port = domain.port.as_ref().expect("a port");
+    let contracts: Vec<(&str, &str, &str)> = port
+        .contracts
+        .iter()
+        .map(|c| (c.name.as_str(), c.usecase.as_str(), c.error.as_str()))
+        .collect();
+    assert_eq!(
+        contracts,
+        [
+            ("PayUseCase", "Pay", "PayError"),
+            ("CancelOrderUseCase", "CancelOrder", "CancelOrderError"),
+            ("PlaceUseCase", "Place", "PlaceError"),
+        ]
+    );
+    for c in &port.contracts {
+        assert!(c
+            .methods
+            .iter()
+            .all(|&m| port.methods[m].usecase == c.usecase));
+    }
+    let rust = generated(Lang::Rust);
+    assert!(rust.contains("pub trait PayUseCase {"));
+    assert!(!rust.contains("ConformancePort"));
+    let go = generated(Lang::Go);
+    assert!(!go.contains("ConformancePort"));
+}
+
 /// The declared refinements of the sample: `paid_at` present in `paid` by the invariant,
 /// null in `pending` by the forbidden rule, and nullable in `cancelled`, where no rule says.
 #[test]

@@ -11,7 +11,7 @@ pub(super) const IMPORTS: &str =
     "import (\n\t\"errors\"\n\t\"fmt\"\n\t\"sort\"\n\t\"strconv\"\n\t\"strings\"\n)\n\n";
 
 pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
-    let Some(port) = &domain.port else {
+    let Some(port) = domain.port.as_ref().filter(|_| domain.harness) else {
         return;
     };
     out.push_str(

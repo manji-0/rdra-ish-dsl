@@ -20,8 +20,8 @@ use rdra_ish_core::SemanticModel;
 
 use super::actions::snake;
 use super::ir::{
-    DomainModel, Field, FieldType, FnDecl, FnInput, OutKind, PortDecl, PortEntity, PortEvent,
-    PortMethod, PortRun, Scalar, Track,
+    ContractDecl, DomainModel, Field, FieldType, FnDecl, FnInput, OutKind, PortDecl, PortEntity,
+    PortEvent, PortMethod, PortRun, Scalar, Track,
 };
 use super::{type_ident, CodegenError, Names};
 use eval::{column_var, enum_name, matching, Rows};
@@ -245,7 +245,40 @@ pub(super) fn port(
             choices,
         });
     }
+    port.contracts = contracts(domain, &port.methods, names)?;
     Ok(port)
+}
+
+/// One contract per use case of `methods`, in the order of its first method.
+fn contracts(
+    domain: &DomainModel,
+    methods: &[PortMethod],
+    names: &mut Names,
+) -> Result<Vec<ContractDecl>, CodegenError> {
+    let mut out: Vec<ContractDecl> = Vec::new();
+    for (i, m) in methods.iter().enumerate() {
+        if let Some(c) = out.iter_mut().find(|c| c.usecase == m.usecase) {
+            c.methods.push(i);
+            continue;
+        }
+        let decl = domain.usecases.iter().find(|u| u.id == m.usecase);
+        let pascal = type_ident(&m.usecase);
+        out.push(ContractDecl {
+            name: super::claim_first(
+                names,
+                [format!("{pascal}UseCase"), format!("{pascal}Contract")],
+                format!("the contract of {}", m.usecase),
+            )?,
+            usecase: m.usecase.clone(),
+            label: decl.map_or_else(String::new, |d| d.label.clone()),
+            site: decl.and_then(|d| d.site.clone()),
+            error: domain
+                .error_of(&m.usecase)
+                .map_or_else(String::new, |e| e.name.clone()),
+            methods: vec![i],
+        });
+    }
+    Ok(out)
 }
 
 fn field_id_type(field: &Field) -> String {

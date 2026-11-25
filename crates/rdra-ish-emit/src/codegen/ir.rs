@@ -200,6 +200,13 @@ pub struct DomainModel {
     pub dispatchers: Vec<DispatchDecl>,
     /// One per use case with functions, in the order of their first function.
     pub errors: Vec<UseCaseErrorDecl>,
+    /// The names a language's printer derives, by key (`crate::codegen::derived_names`):
+    /// the name as derived, or with `_` appended when a model type had it.
+    pub derived: std::collections::BTreeMap<String, String>,
+    /// Whether the conformance harness is printed (`--conformance`): the snapshot,
+    /// `ConformancePort`, and `conform`. The contracts of [`PortDecl`] are printed whenever
+    /// `port` is set.
+    pub harness: bool,
     pub marks: Vec<MarkDecl>,
     /// Rules the reachable states agree with and the model does not state.
     pub candidates: Vec<String>,
@@ -646,6 +653,11 @@ pub enum UseCaseKind {
 }
 
 impl DomainModel {
+    /// The name a printer derived under `key`, as claimed (`crate::codegen::derived_names`).
+    pub fn derived(&self, key: &str) -> Option<&str> {
+        self.derived.get(key).map(String::as_str)
+    }
+
     /// The error type of the use case `usecase`.
     pub fn error_of(&self, usecase: &str) -> Option<&UseCaseErrorDecl> {
         self.errors.iter().find(|e| e.usecase == usecase)
@@ -753,8 +765,29 @@ pub struct PortDecl {
     pub events: Vec<PortEvent>,
     /// One per action the generator printed functions for.
     pub methods: Vec<PortMethod>,
+    /// One contract per use case with methods, in the order of its first method:
+    /// `ConformancePort` is their composition, with `seed` and `snapshot`.
+    pub contracts: Vec<ContractDecl>,
     /// What the store holds that the harness does not compare, for the header.
     pub unchecked: Vec<String>,
+}
+
+/// The contract of one use case (docs/design/code-check.md, decision 6): a trait / interface
+/// with the prepare and commit methods of its actions, which the service implements and the
+/// probe names. One per use case, so a compiler error on it names the use case.
+#[derive(Clone, Debug)]
+pub struct ContractDecl {
+    /// `<UseCase>UseCase`, or `<UseCase>Contract` when a model type has that name.
+    pub name: String,
+    /// The use case's id.
+    pub usecase: String,
+    pub label: String,
+    /// Where the use case is declared, `path:line:col`.
+    pub site: Option<String>,
+    /// The use case's error type, `<UseCase>Error`.
+    pub error: String,
+    /// Its methods: indices into [`PortDecl::methods`], one per action.
+    pub methods: Vec<usize>,
 }
 
 /// The rows of one entity in a snapshot.

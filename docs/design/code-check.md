@@ -476,3 +476,51 @@ declaration cannot reach.
 - A language plugs into `check --code` through `Backend` (`crates/rdra-ish-cli/src/code_check`):
   the files beyond the domain code and traces that `fresh` compares (the probe), `build`, and
   `run`. A language without them stops at the level before, with a note.
+
+**P2, the shared part.** The names the Rust, Go and TypeScript pull requests share, so each
+mirrors them instead of inventing its own:
+
+- Contracts are in the IR. `PortDecl.contracts` holds one `ContractDecl` per use case with
+  methods, in the order of the port's methods. It has `name` (`<UseCase>UseCase`, or
+  `<UseCase>Contract` when a model type has that name), `usecase`, `label`, `site`, `error`
+  (`<UseCase>Error`) and `methods` (indices into `PortDecl.methods`). `ConformancePort` is
+  their composition with `seed` and `snapshot`: a Rust supertrait list, Go interface embedding,
+  TypeScript `extends`.
+- `domain.port` is built whenever `check` passed, so the contracts are printed without
+  `--conformance` and the probe always has them. `DomainModel.harness` is true only with
+  `--conformance`, and only then are `StoreSnapshot`, `ConformancePort` and `conform` printed.
+  A model the harness cannot name the rows of gets no port without `--conformance`, and stays
+  an error with it.
+- The probe is a module of its own, `rdra_ish_emit::codegen::probe`.
+  - `Probe { text, lines: Vec<ProbeLine> }` and `ProbeLine { line, usecase, contract }`, with
+    `Probe::at(line)`.
+  - `ProbeWriter::new(first)`, `.line(text)`, `.usecase(text, &ContractDecl)`, `.finish()`.
+    It numbers the lines of the file as written: the fingerprint is line 2
+    (`FINGERPRINT_LINE`).
+  - `ContractIndex::new(&PortDecl, spell)` takes a method name in the language's spelling back
+    to its contract and action. `.find(text)` returns the first whole-word method name a
+    message holds, and `.methods_of(c)` lists a contract's methods.
+- Compiler errors map in `crates/rdra-ish-cli/src/code_check/map.rs`.
+  - `CompilerMessage { file, line, column, code, text }`.
+  - `Finding { NotImplemented, Incomplete, Signature, Other }`.
+  - `Mapping { probe_file, probe, index, contracts, service }`.
+  - `map_messages(&[CompilerMessage], &Mapping, &dyn Backend)` routes each message. A message
+    on a probe line goes to that line's use case; another that names a generated method goes
+    to that method's use case.
+  - The diagnostics are `CodeMissingUseCase_<UC>`, `CodeIncomplete_<UC>`,
+    `CodeSignature_<UC>`, `CodeError_<UC>`, one per use case and kind, plus one
+    `CodeUnmapped` that counts the rest.
+  - A failed build that the backend reads no error from is `CodeBuildFailed`, and a failed run
+    is `CodeConformance`.
+- `Backend` has only language hooks: `probe`, `extra_files` (the stamped probe by default),
+  `build_command`, `run_command`, `parse_messages`, `classify`, `method_names` and
+  `implement_hint`. The shared `build` / `run` run rdra.toml's `build` / `run`, or else the
+  backend's command, in `Target::root()`, then parse and map. `codegen --code` also writes
+  the backend's extra files.
+- Names a printer derives from model names (Go `<Entity>Visitor`) come from
+  `derived_names(Lang, &DomainModel) -> Vec<DerivedName { key, name, by }>`. `build_for`
+  claims them after every IR name. On a collision the name takes a trailing `_`, and the
+  printer reads the claimed name with `DomainModel::derived(key)`. When that spelling is taken
+  too, it is an error naming both claimants. `build_for(model, refine, port, Option<Lang>,
+  site)` also claims `reserved_names(lang)` first. Rust derives none: every name it declares
+  is an IR field.

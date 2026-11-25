@@ -6,16 +6,23 @@
 //! and maps its errors back to model locations; `run` runs the conformance test the probe
 //! holds. A language plugs in through [`Backend`]; the rest is shared.
 
+pub(crate) mod map;
+
 use std::fmt;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use rdra_ish_core::project::{CodeTarget, Manifest};
+use rdra_ish_emit::codegen::ir::{ContractDecl, PortMethod};
+use rdra_ish_emit::codegen::probe::{ContractIndex, Probe};
 
 use crate::cli::CodeLevel;
 use crate::codegen_cmd::{
-    check_code, check_traces, configured_request, generate, shown, Generated, Loaded, Request,
+    check_code, check_traces, configured_request, generate, shown, stamp, Generated, Loaded,
+    Request,
 };
+use map::{map_messages, CompilerMessage, Finding, Mapping};
 
 /// One finding of the code check, printed as `error[Name]: message` with the model location,
 /// the code location, and the fix on the lines under it.
@@ -88,30 +95,187 @@ impl Target<'_> {
     }
 }
 
-/// A language's part of `check --code`: the files only it writes and the compiler it runs.
-/// The default commands run only for `--code=build` / `--code=run`, and so does a command
-/// `rdra.toml` gives in their place (decision 7).
+/// A language's part of `check --code`: the probe it prints, the compiler it runs, and how
+/// it reads the compiler's messages. The rest (freshness, running the command, mapping the
+/// messages to use cases, the diagnostics) is shared. The default commands run only for
+/// `--code=build` / `--code=run`, and so does a command `rdra.toml` gives in their place
+/// (decision 7).
 pub(crate) trait Backend {
-    /// The generated files beyond the domain code and the traces that `fresh` compares
-    /// (the probe): `(path, text)`.
-    fn extra_files(&self, _target: &Target<'_>) -> Result<Vec<(PathBuf, String)>> {
-        Ok(Vec::new())
-    }
-
-    /// `build`: compile the probe and map the errors; `None` when the language has no build
-    /// check yet.
-    fn build(&self, _target: &Target<'_>) -> Option<Result<Vec<CodeDiagnostic>>> {
+    /// The probe: its path (relative to rdra.toml) and text with the line map; `None` when
+    /// the language has none yet or the table names no `probe`.
+    fn probe(&self, _target: &Target<'_>) -> Option<(PathBuf, Probe)> {
         None
     }
 
-    /// `run`: run the conformance test and map its failure; `None` when the language has no
-    /// run check yet.
-    fn run(&self, _target: &Target<'_>) -> Option<Result<Vec<CodeDiagnostic>>> {
+    /// The generated files beyond the domain code and the traces that `fresh` compares and
+    /// `codegen --code` writes: `(path relative to rdra.toml, stamped text)`. The probe by
+    /// default.
+    fn extra_files(&self, target: &Target<'_>) -> Vec<(PathBuf, String)> {
+        self.probe(target)
+            .map(|(path, probe)| (path, stamp(&probe.text, &target.generated.model_hash)))
+            .into_iter()
+            .collect()
+    }
+
+    /// The command `build` runs in [`Target::root`] when rdra.toml gives none.
+    fn build_command(&self, _target: &Target<'_>) -> Option<Vec<String>> {
         None
+    }
+
+    /// The command `run` runs in [`Target::root`] when rdra.toml gives none.
+    fn run_command(&self, _target: &Target<'_>) -> Option<Vec<String>> {
+        None
+    }
+
+    /// The compiler's errors in its output.
+    fn parse_messages(&self, _stdout: &str, _stderr: &str) -> Vec<CompilerMessage> {
+        Vec::new()
+    }
+
+    /// What a message says about the contract it belongs to.
+    fn classify(&self, _message: &CompilerMessage) -> Finding {
+        Finding::Other
+    }
+
+    /// A port method's generated names in this language (Rust `prepare_pay`, `commit_pay`).
+    fn method_names(&self, _method: &PortMethod) -> Vec<String> {
+        Vec::new()
+    }
+
+    /// The `fix:` line of a contract not implemented, or implemented in part.
+    fn implement_hint(&self, contract: &ContractDecl, service: &str, methods: &[&str]) -> String {
+        format!(
+            "implement {} for {service} ({})",
+            contract.name,
+            methods.join(", ")
+        )
     }
 }
 
-/// A level past `fresh`: the backend's `build` or `run`.
+/// `build`: the build command (rdra.toml's, else the backend's) in the root, its errors
+/// mapped to use cases; `None` when there is no command.
+fn build(backend: &dyn Backend, t: &Target<'_>) -> Option<Result<Vec<CodeDiagnostic>>> {
+    let command = t
+        .target
+        .build
+        .clone()
+        .or_else(|| backend.build_command(t))?;
+    Some(compile(backend, t, &command))
+}
+
+/// `run`: the run command (rdra.toml's, else the backend's) in the root; a failure is one
+/// diagnostic with the output's last line. `None` when there is no command.
+fn run_step(backend: &dyn Backend, t: &Target<'_>) -> Option<Result<Vec<CodeDiagnostic>>> {
+    let command = t.target.run.clone().or_else(|| backend.run_command(t))?;
+    Some((|| {
+        let (ok, stdout, stderr) = execute(t, &command)?;
+        if ok {
+            return Ok(Vec::new());
+        }
+        let last = format!("{stdout}\n{stderr}")
+            .lines()
+            .rev()
+            .find(|l| !l.trim().is_empty())
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+        Ok(vec![CodeDiagnostic {
+            name: "CodeConformance".to_string(),
+            message: "the service does not conform to the model's traces".to_string(),
+            model: None,
+            code: Some(format!("{}  {last}", command.join(" "))),
+            fix: None,
+            warning: false,
+        }])
+    })())
+}
+
+/// Runs `command` in the target's root: whether it succeeded, its stdout and stderr.
+fn execute(t: &Target<'_>, command: &[String]) -> Result<(bool, String, String)> {
+    let (program, args) = command
+        .split_first()
+        .context("an empty command in [code]")?;
+    let root = t.root();
+    let output = Command::new(program)
+        .args(args)
+        .current_dir(&root)
+        .output()
+        .with_context(|| format!("failed to run `{}` in {}", command.join(" "), shown(&root)))?;
+    Ok((
+        output.status.success(),
+        String::from_utf8_lossy(&output.stdout).into_owned(),
+        String::from_utf8_lossy(&output.stderr).into_owned(),
+    ))
+}
+
+/// Runs the build command and maps its errors; a failure with no error the backend reads is
+/// one `CodeBuildFailed`.
+fn compile(
+    backend: &dyn Backend,
+    t: &Target<'_>,
+    command: &[String],
+) -> Result<Vec<CodeDiagnostic>> {
+    let (ok, stdout, stderr) = execute(t, command)?;
+    let messages = backend.parse_messages(&stdout, &stderr);
+    if ok && messages.is_empty() {
+        return Ok(Vec::new());
+    }
+    if !ok && messages.is_empty() {
+        eprint!("{stderr}");
+        return Ok(vec![CodeDiagnostic {
+            name: "CodeBuildFailed".to_string(),
+            message: format!(
+                "`{}` failed with no error rdra-ish reads",
+                command.join(" ")
+            ),
+            model: None,
+            code: None,
+            fix: None,
+            warning: false,
+        }]);
+    }
+    let probe = backend.probe(t);
+    let port = t.generated.domain.as_ref().and_then(|d| d.port.as_ref());
+    let empty = Probe::default();
+    let (probe_file, probe) = match &probe {
+        Some((path, probe)) => (path.as_path(), probe),
+        None => (Path::new(""), &empty),
+    };
+    let index = port.map_or_else(ContractIndex::default, |p| {
+        ContractIndex::new(p, |m| backend.method_names(m))
+    });
+    let contracts = port.map_or(&[][..], |p| p.contracts.as_slice());
+    let mapping = Mapping {
+        probe_file,
+        probe,
+        index: &index,
+        contracts,
+        service: t.target.service.as_deref().unwrap_or("the service"),
+    };
+    eprint!("{stderr}");
+    Ok(map_messages(&messages, &mapping, backend))
+}
+
+/// The generated files beyond the code and the traces of one `[code.<lang>]` table, for
+/// `codegen --code` to write.
+pub(crate) fn extra_files(
+    name: &'static str,
+    target: &CodeTarget,
+    manifest: &Manifest,
+    request: Request,
+    generated: Generated,
+) -> Vec<(PathBuf, String)> {
+    let t = Target {
+        name,
+        target,
+        manifest,
+        request,
+        generated,
+    };
+    backend(name).extra_files(&t)
+}
+
+/// A level past `fresh`: [`build`] or [`run_step`].
 type Step = fn(&dyn Backend, &Target<'_>) -> Option<Result<Vec<CodeDiagnostic>>>;
 
 /// A language with no build or run check yet: `fresh` only.
@@ -149,8 +313,10 @@ pub(crate) fn run(inputs: &[PathBuf], manifest: &Manifest, level: CodeLevel) -> 
                 check_traces(p, text, &t.generated.model_hash)
             })?;
         }
-        for (path, text) in backend.extra_files(&t)? {
-            fresh &= compare(&path, |p| check_code(p, &text, &t.generated.model_hash))?;
+        for (path, text) in backend.extra_files(&t) {
+            fresh &= compare(&t.path(&path), |p| {
+                check_code(p, &text, &t.generated.model_hash)
+            })?;
         }
         if !fresh {
             failed += 1;
@@ -165,8 +331,8 @@ pub(crate) fn run(inputs: &[PathBuf], manifest: &Manifest, level: CodeLevel) -> 
             continue;
         }
         let steps: [(CodeLevel, &str, Step); 2] = [
-            (CodeLevel::Build, "build", |b, t| b.build(t)),
-            (CodeLevel::Run, "run", |b, t| b.run(t)),
+            (CodeLevel::Build, "build", build),
+            (CodeLevel::Run, "run", run_step),
         ];
         for (at, what, step) in steps {
             if level < at {

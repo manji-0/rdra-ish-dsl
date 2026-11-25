@@ -19,6 +19,7 @@ use rdra_ish_core::lifecycle::{Bounds, Scope, Severity};
 use rdra_ish_core::project::{CodeTarget, Manifest};
 use rdra_ish_core::{format_location, ResolvedProgram, SemanticModel};
 use rdra_ish_emit::codegen::conformance::{Traces, DEFAULT_STATES};
+use rdra_ish_emit::codegen::ir::DomainModel;
 use rdra_ish_emit::codegen::{generate_all, generate_json, CheckStatus, Lang, Options};
 
 use crate::cli::CodegenLang;
@@ -47,6 +48,8 @@ pub(crate) struct Generated {
     pub code: String,
     pub traces: Option<(String, Traces)>,
     pub model_hash: String,
+    /// The domain model the code was printed from (its contracts); none for JSON.
+    pub domain: Option<DomainModel>,
 }
 
 /// The model loaded for generating, with the hash of its source text.
@@ -198,6 +201,7 @@ pub(crate) fn generate(loaded: &Loaded, request: &Request) -> Result<Generated> 
             code: generate_json(model, &options, &site)?,
             traces: None,
             model_hash,
+            domain: None,
         });
     }
     let generated = generate_all(model, &options, &site)?;
@@ -207,6 +211,7 @@ pub(crate) fn generate(loaded: &Loaded, request: &Request) -> Result<Generated> 
             .traces
             .map(|t| (stamp_traces(&t.text, &model_hash), t)),
         model_hash,
+        domain: Some(generated.domain),
     })
 }
 
@@ -328,6 +333,11 @@ fn write_configured(loaded: &Loaded, inputs: &[PathBuf]) -> Result<()> {
         if let (Some(path), Some((text, stats))) = (&target.traces, &generated.traces) {
             write_traces(&dir.join(path), text, stats)?;
         }
+        for (path, text) in
+            crate::code_check::extra_files(name, target, manifest, request, generated)
+        {
+            write_file(&dir.join(path), &text)?;
+        }
     }
     Ok(())
 }
@@ -395,7 +405,7 @@ fn body(text: &str) -> String {
 }
 
 /// `code` with the fingerprint as its second line, in the header comment.
-fn stamp(code: &str, model_hash: &str) -> String {
+pub(crate) fn stamp(code: &str, model_hash: &str) -> String {
     let line = format!(
         "{CODE_FINGERPRINT} model={model_hash} code={}",
         fingerprint::hash(body(code).as_bytes())

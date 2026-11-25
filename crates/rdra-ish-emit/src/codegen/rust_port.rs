@@ -14,6 +14,10 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
     let Some(port) = &domain.port else {
         return;
     };
+    print_contracts(port, out);
+    if !domain.harness {
+        return;
+    }
     out.push_str(
         "// ── Conformance: the port a finished service implements, and the harness that drives it ──\n\n",
     );
@@ -58,44 +62,20 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
     }
     out.push_str("}\n\n");
 
-    out.push_str("/// What a finished service offers the conformance harness. A use case is two calls: each\n/// `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing\n/// nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one\n/// transaction, each row only where it still is what the result's `<row>_expected` names. Either\n/// returns the use case's error and changes nothing when the use case does not run.\n");
-    out.push_str("pub trait ConformancePort {\n");
+    out.push_str("/// What a finished service offers the conformance harness: every use case's contract, and\n/// a store the harness can seed and read back.\n");
+    let supers: Vec<&str> = port.contracts.iter().map(|c| c.name.as_str()).collect();
+    let bound = if supers.is_empty() {
+        String::new()
+    } else {
+        format!(": {}", supers.join(" + "))
+    };
+    out.push_str(&format!("pub trait ConformancePort{bound} {{\n"));
     out.push_str(
         "    /// Empties the store and stores these rows: the initial state of a trace.\n",
     );
     out.push_str("    fn seed(&mut self, rows: StoreSnapshot);\n");
     out.push_str("    /// Everything the store holds now.\n");
     out.push_str("    fn snapshot(&mut self) -> StoreSnapshot;\n");
-    for m in &port.methods {
-        let error = error_of(domain, &m.usecase);
-        out.push_str(&doc(
-            &[format!(
-                "Loads the rows of {} (the action {}) and runs it, writing nothing.",
-                m.usecase, m.action
-            )],
-            "    ",
-        ));
-        let params = params(m);
-        out.push_str(&super::rust::allow_arguments(params.len() + 1, "    "));
-        out.push_str(&format!(
-            "    fn prepare_{}(&mut self{}) -> {RESULT}<{}, {error}>;\n",
-            snake(&m.name),
-            params.iter().map(|p| format!(", {p}")).collect::<String>(),
-            m.write
-        ));
-        out.push_str(&doc(
-            &[format!(
-                "Stores what `prepare_{}` returned in one transaction.",
-                snake(&m.name)
-            )],
-            "    ",
-        ));
-        out.push_str(&format!(
-            "    fn commit_{}(&mut self, write: {}) -> {RESULT}<(), {error}>;\n",
-            snake(&m.name),
-            m.write
-        ));
-    }
     out.push_str("}\n\n");
 
     out.push_str("/// What `conform` checked.\n");
@@ -400,6 +380,62 @@ where
     out.push_str("    out.sort();\n    out.dedup();\n    out\n}\n\n");
 }
 
+/// One trait per use case (docs/design/code-check.md, decision 6): the prepare and commit
+/// methods of its actions. A service implements each; the probe names each.
+fn print_contracts(port: &super::ir::PortDecl, out: &mut String) {
+    if port.contracts.is_empty() {
+        return;
+    }
+    out.push_str("// ── Contracts: one per use case, which the service implements ──\n\n");
+    for c in &port.contracts {
+        let at = c
+            .site
+            .as_ref()
+            .map(|s| format!(" ({s})"))
+            .unwrap_or_default();
+        out.push_str(&doc(
+            &[
+                format!("The use case {}{at}: {}.", c.usecase, c.label),
+                "Each action is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.".to_string(),
+            ],
+            "",
+        ));
+        out.push_str(&format!("pub trait {} {{\n", c.name));
+        for &i in &c.methods {
+            let m = &port.methods[i];
+            let error = &c.error;
+            out.push_str(&doc(
+                &[format!(
+                    "Loads the rows of {} (the action {}) and runs it, writing nothing.",
+                    m.usecase, m.action
+                )],
+                "    ",
+            ));
+            let params = params(m);
+            out.push_str(&super::rust::allow_arguments(params.len() + 1, "    "));
+            out.push_str(&format!(
+                "    fn prepare_{}(&mut self{}) -> {RESULT}<{}, {error}>;\n",
+                snake(&m.name),
+                params.iter().map(|p| format!(", {p}")).collect::<String>(),
+                m.write
+            ));
+            out.push_str(&doc(
+                &[format!(
+                    "Stores what `prepare_{}` returned in one transaction.",
+                    snake(&m.name)
+                )],
+                "    ",
+            ));
+            out.push_str(&format!(
+                "    fn commit_{}(&mut self, write: {}) -> {RESULT}<(), {error}>;\n",
+                snake(&m.name),
+                m.write
+            ));
+        }
+        out.push_str("}\n\n");
+    }
+}
+
 fn params(m: &super::ir::PortMethod) -> Vec<String> {
     let mut out: Vec<String> = m
         .rows
@@ -423,13 +459,6 @@ fn params(m: &super::ir::PortMethod) -> Vec<String> {
         out.push(format!("{}: {ty}", ident(n)));
     }
     out
-}
-
-/// The error type of the use case `usecase`.
-fn error_of(domain: &DomainModel, usecase: &str) -> String {
-    domain
-        .error_of(usecase)
-        .map_or_else(|| "InvalidArgument".to_string(), |e| e.name.clone())
 }
 
 /// An expression that reads the next value of `conf_args` as `ty`, through the parser of the

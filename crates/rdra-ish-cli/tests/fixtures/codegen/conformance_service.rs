@@ -96,7 +96,9 @@ impl ConformancePort for Service {
             ev_shipped: self.ev_shipped.clone(),
         }
     }
+}
 
+impl PlaceUseCase for Service {
     fn prepare_place(
         &mut self,
         parent_customer: CustomerId,
@@ -118,7 +120,9 @@ impl ConformancePort for Service {
         self.orders.insert(id.get(), Order::Pending(r.order).into_row());
         Ok(())
     }
+}
 
+impl PayUseCase for Service {
     fn prepare_pay(&mut self, order: OrderId, order_paid_at: DateTime) -> Result<PayOutcome, PayError> {
         run_pay(self.order(order, "Pay")?, order_paid_at)
     }
@@ -136,7 +140,9 @@ impl ConformancePort for Service {
         self.orders.insert(id.get(), Order::Paid(r.order).into_row());
         Ok(())
     }
+}
 
+impl ShipUseCase for Service {
     fn prepare_ship(&mut self, order: OrderId, shipment_id: ShipmentId) -> Result<ShipOutcome, ShipError> {
         run_ship(self.order(order, "Ship")?, shipment_id)
     }
@@ -157,7 +163,9 @@ impl ConformancePort for Service {
         self.ev_shipped.push(r.ev_shipped);
         Ok(())
     }
+}
 
+impl SendUseCase for Service {
     fn prepare_send(&mut self, shipment: ShipmentId, ev_shipped: EvShipped) -> Result<SendOutcome, SendError> {
         if !self.ev_shipped.contains(&ev_shipped) {
             return Err(not_enabled("Send"));
@@ -181,7 +189,9 @@ impl ConformancePort for Service {
             .insert(id.get(), Shipment::Sent(r.shipment).into_row());
         Ok(())
     }
+}
 
+impl CancelUseCase for Service {
     fn prepare_cancel(&mut self, order: OrderId) -> Result<CancelOutcome, CancelError> {
         let state = self.order(order, "Cancel")?;
         match run_cancel(state.clone()) {

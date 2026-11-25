@@ -14,6 +14,7 @@ mod go;
 mod go_port;
 pub mod ir;
 pub mod json;
+pub mod probe;
 mod rust;
 mod rust_port;
 mod states;
@@ -82,6 +83,9 @@ pub enum CodegenError {
 pub struct Generated {
     pub code: String,
     pub traces: Option<conformance::Traces>,
+    /// The domain model the code was printed from: its contracts, for the probe and the
+    /// mapping of compiler errors (`check --code=build`).
+    pub domain: DomainModel,
 }
 
 /// The generated code for `options.lang`. `site` formats a source location as `path:line:col`.
@@ -129,7 +133,11 @@ pub fn generate_all(
         Lang::Rust => rust::print(&domain, options, traces.as_ref()),
         Lang::Go => go::print(&domain, options, traces.as_ref()),
     };
-    Ok(Generated { code, traces })
+    Ok(Generated {
+        code,
+        traces,
+        domain,
+    })
 }
 
 /// The contract as JSON (`codegen --format json`): the same choices the printers print, with
@@ -155,7 +163,7 @@ fn domain_of(
         CheckStatus::Passed { caps, .. } => Some(caps),
         CheckStatus::Failed { .. } => None,
     };
-    let mut domain = build_for(model, refine, port, reserved_names(options.lang), site)?;
+    let mut domain = build_for(model, refine, port, Some(options.lang), site)?;
     if let CheckStatus::Failed { errors } = &options.check {
         for error in errors {
             let name = error.split_once(':').map_or(error.as_str(), |(n, _)| n);
@@ -268,7 +276,7 @@ fn conformance_lines(
     conform: &str,
     port: &str,
 ) -> Vec<String> {
-    let (Some(decl), Some(t)) = (&domain.port, traces) else {
+    let (Some(decl), Some(t), true) = (&domain.port, traces, domain.harness) else {
         return Vec::new();
     };
     let mut lines = vec![
@@ -351,7 +359,7 @@ pub fn build_with(
     port: bool,
     site: &dyn Fn(&LocatedSpan) -> Option<String>,
 ) -> Result<DomainModel, CodegenError> {
-    build_for(model, refine, port, &[], site)
+    build_for(model, refine, port, None, site)
 }
 
 /// The names a language's printer writes unqualified beside the generated types, so a
@@ -363,17 +371,44 @@ pub fn reserved_names(lang: Lang) -> &'static [&'static str] {
     }
 }
 
-/// [`build_with`], with `reserved` claimed too: the names one language's printer adds
-/// ([`reserved_names`]).
+/// A name a language's printer derives from a model name (Go `<Entity>Visitor`), which a model
+/// type of the same name would break: [`build_for`] claims it after every name of the IR.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DerivedName {
+    /// What the printer looks it up by, with [`DomainModel::derived`]: `<lang>:<what>:<from>`,
+    /// such as `go:visitor:Order`.
+    pub key: String,
+    /// The name the printer would like: the claimed name is this, or this with `_` appended
+    /// when a model type has it already.
+    pub name: String,
+    /// What it is, for a collision's message.
+    pub by: String,
+}
+
+/// The names `lang`'s printer derives from the IR's names, beyond the IR's own fields.
+/// Each language's pull request fills in its arm.
+pub fn derived_names(lang: Lang, domain: &DomainModel) -> Vec<DerivedName> {
+    let _ = domain;
+    match lang {
+        // Every name the Rust output declares in the module scope is a field of the IR:
+        // the Rust printer derives none.
+        Lang::Rust => Vec::new(),
+        Lang::Go | Lang::TypeScript => Vec::new(),
+    }
+}
+
+/// [`build_with`] for the printer of `lang`: the names it writes unqualified
+/// ([`reserved_names`]) are claimed first, and the names it derives ([`derived_names`]) last,
+/// each as it is or with `_` appended, into [`DomainModel::derived`].
 pub fn build_for(
     model: &SemanticModel,
     refine: Option<Caps>,
     port: bool,
-    reserved: &[&str],
+    lang: Option<Lang>,
     site: &dyn Fn(&LocatedSpan) -> Option<String>,
 ) -> Result<DomainModel, CodegenError> {
     let mut names = Names::default();
-    for name in reserved {
+    for name in lang.map_or(&[][..], reserved_names) {
         names.claim(
             name.to_string(),
             "a name the printer of this language writes".to_string(),
@@ -530,8 +565,18 @@ pub fn build_for(
         actions::add_functions(model, &built.ts, &mut domain, &mut names, site)?;
         validators::add_validators(&built.ts, &mut domain, &mut names, site)?;
         domain.candidates = states::candidates(model, &domain.sums, caps);
-        if port {
-            domain.port = Some(conformance::port(model, &built.ts, &domain, &mut names)?);
+        // The port's contracts are printed with or without the harness, so the probe has
+        // them; a model the harness cannot name the rows of has none, and is an error only
+        // when the harness is asked for.
+        let mut trial = names.clone();
+        match conformance::port(model, &built.ts, &domain, &mut trial) {
+            Ok(decl) => {
+                names = trial;
+                domain.port = Some(decl);
+                domain.harness = port;
+            }
+            Err(e) if port => return Err(e),
+            Err(_) => {}
         }
         for uc in &mut domain.usecases {
             uc.actions = built
@@ -571,7 +616,25 @@ pub fn build_for(
             )?;
         }
     }
+    if let Some(lang) = lang {
+        let derived = derived_names(lang, &domain);
+        claim_derived(&mut names, &mut domain, derived)?;
+    }
     Ok(domain)
+}
+
+/// Claims each derived name as it is, or with `_` appended when a model type has it, into
+/// `domain.derived`; a collision of both spellings is an error naming both claimants.
+fn claim_derived(
+    names: &mut Names,
+    domain: &mut DomainModel,
+    derived: Vec<DerivedName>,
+) -> Result<(), CodegenError> {
+    for d in derived {
+        let name = claim_first(names, [d.name.clone(), format!("{}_", d.name)], d.by)?;
+        domain.derived.insert(d.key, name);
+    }
+    Ok(())
 }
 
 /// The sum of an entity with a lifecycle column: one variant per value of its tag, each
@@ -1020,7 +1083,7 @@ fn ref_action(action: RefAction) -> &'static str {
 }
 
 /// The type names given out, with the declaration that claimed each.
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct Names(BTreeMap<String, String>);
 
 impl Names {

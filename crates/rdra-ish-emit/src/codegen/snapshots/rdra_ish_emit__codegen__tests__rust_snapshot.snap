@@ -1087,3 +1087,32 @@ pub fn run_cancel_order(order: Order) -> ::core::result::Result<CancelOrderOutco
         _ => ::core::result::Result::Err(CancelOrderError::NotEnabled(NotEnabled { usecase: "CancelOrder" })),
     }
 }
+
+// ── Contracts: one per use case, which the service implements ──
+
+/// The use case Pay: Pay.
+/// Each action is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
+pub trait PayUseCase {
+    /// Loads the rows of Pay (the action Pay) and runs it, writing nothing.
+    fn prepare_pay(&mut self, order: OrderId, order_paid_at: DateTime) -> ::core::result::Result<PayOutcome, PayError>;
+    /// Stores what `prepare_pay` returned in one transaction.
+    fn commit_pay(&mut self, write: PayOutcome) -> ::core::result::Result<(), PayError>;
+}
+
+/// The use case CancelOrder: Cancel.
+/// Each action is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
+pub trait CancelOrderUseCase {
+    /// Loads the rows of CancelOrder (the action CancelOrder) and runs it, writing nothing.
+    fn prepare_cancel_order(&mut self, order: OrderId) -> ::core::result::Result<CancelOrderOutcome, CancelOrderError>;
+    /// Stores what `prepare_cancel_order` returned in one transaction.
+    fn commit_cancel_order(&mut self, write: CancelOrderOutcome) -> ::core::result::Result<(), CancelOrderError>;
+}
+
+/// The use case Place: Place.
+/// Each action is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
+pub trait PlaceUseCase {
+    /// Loads the rows of Place (the action Place) and runs it, writing nothing.
+    fn prepare_place(&mut self, parent_customer: CustomerId, order_id: OrderId, order_method: PaymentMethod) -> ::core::result::Result<PlaceResult, PlaceError>;
+    /// Stores what `prepare_place` returned in one transaction.
+    fn commit_place(&mut self, write: PlaceResult) -> ::core::result::Result<(), PlaceError>;
+}

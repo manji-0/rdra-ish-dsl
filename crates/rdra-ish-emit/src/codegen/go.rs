@@ -28,7 +28,7 @@ pub(super) fn print(
         out.push_str(&comment(&line, ""));
     }
     out.push_str(&format!("package {}\n\n", options.package));
-    if domain.port.is_some() {
+    if domain.harness {
         out.push_str(super::go_port::IMPORTS);
     }
 
