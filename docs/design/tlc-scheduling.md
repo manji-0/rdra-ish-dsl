@@ -157,14 +157,14 @@ an owner decision.
 
 ### Heap from states
 
-When a job is known, its heap is
-`max(text rule, ceil_GiB(1 GiB + s × 512 B))`, clamped to the share. It only ever raises
-the text rule's heap. It never makes a run `not run` that runs today: the clamp is to the
-share, never `OverShare`. 12.8M states give 8 GiB, which is #384's floor where 8g and 16g
-were equal. 512 B per state and the 1 GiB floor are fitted to that one point, and #309 shows
-that a safety cone needs far less: 1.34M states ran in 64 MiB at full speed. So the rule is
-opt-in, as `RDRA_TLC_HEAP=states`, until a many-core run with per-run cost (below) measures
-it.
+When a job is known when it starts, its heap is
+`max(text rule, min(ceil_GiB(s × 640 B), share))`. It only ever raises the text rule's heap.
+It never makes a run `not run` that runs today: the over-share check stays the text rule's.
+12.8M states give 8 GiB, which is #384's floor where 8g and 16g were equal. 640 B per state is
+fitted to that one point, and #309 shows that a safety cone needs far less: 1.34M states ran
+in 64 MiB at full speed. Unlike the text rule, the heap depends on whether BFS counted the job
+before its run started, and so may whether the run runs out of memory. So the rule is opt-in,
+as `RDRA_TLC_HEAP=states`, until a many-core run with per-run cost (below) measures it.
 
 ## Knobs
 
@@ -254,7 +254,7 @@ and the comparison, and only the launching moves out.
 | `W`, the worker cap | 8 | #309: no gain past 4 to 8 workers on cones up to 1.34M states (18 cores) |
 | `4W` | 32 | #384: 2 × 32 on 64 cores kept 25 to 30 cores busy. A guess for the top |
 | States per worker | 50,000 | #309's local curve (48k gains nothing past 2 workers, 203k gains up to 4). A guess past 1.34M |
-| Heap per state | 512 B over 1 GiB | Fitted to #384's 8g floor at about 12.8M states. A guess |
+| Heap per state | 640 B | Fitted to #384's 8g floor at about 12.8M states. A guess |
 | Memory after BFS | all of `--memory` | A guess. See #237 |
 
 ## For the owner to decide
