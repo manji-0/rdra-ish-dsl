@@ -29,8 +29,9 @@ business rule (条件) decides when a use case may run, and which states are end
 - Several arms of one use case from one state are the actor's choice: a run takes one arm.
 - An entity may have several lifecycle columns, each its own state model. A use case that
   moves two takes one arm of each in one step, so it runs only where both have an arm.
-- Mark a state an instance may rest in with `@end(free)` on the column; otherwise `check`
-  reports a deadlock there.
+- Mark a state an instance may rest in, though an arm leaves it, with `@end(free)` on the
+  column; otherwise `check` reports a deadlock there. A state no arm leaves is an end state
+  already, and `@end` on it draws `lint` `end-redundant`.
 
 ## Events and timers
 
@@ -55,6 +56,8 @@ nothing is `UnbindableCondition`.
 
 - Guard one arm, not the use case, with `transitions(..).when(Cond)`, or one pickable value
   with `chooses(UC, E.col, value).when(Cond)`. Keep one use case; do not split it per value.
+  An arm the guard never lets run warns `ArmNeverTaken` (`Arm_<UseCase>_<from>_<to>`); a
+  value never chosen warns `ValueNeverChosen`.
 - A body that reads a related entity follows the `relate`; name one of two keys with
   `.role(r)` after the body. "No related row" is `.none(Related)`.
 - An entity two hops away needs the path:
@@ -71,14 +74,19 @@ nothing is `UnbindableCondition`.
 - One `sets` per value with `.when(Cond)` lets the row pick:
   `sets(Extend, Extension.due_on == 3).when(ExpertInquiry)`. Keep the guards disjoint; an
   unguarded `sets` beside them is `ConflictingEffects`.
-- A variation column keeps its value on update unless the use case lets the actor pick
-  again: `chooses(UseCase, Entity.col)`, or one `chooses(UseCase, Entity.col, value)` line
-  per offered value. `chooses` and `sets` on one column in one use case are an error.
+- A variation column takes any value on a created row, whatever its `@default`, unless the
+  creating use case `sets` it. An update keeps the value unless the use case lets the actor
+  pick again: `chooses(UseCase, Entity.col)`, or one `chooses(UseCase, Entity.col, value)`
+  line per offered value, never both forms (`ChoosesMixedForms`). `chooses` and `sets` on
+  one column in one use case are an error, and so is `chooses` on a column no variation
+  types.
 - Copy a value from a row the step binds: `sets(Register, Permit.kind == Application.kind)`.
   The source is an entity the use case writes, or the target's parent through a `relate`;
-  any other is `UnboundCopySource`.
+  any other is `UnboundCopySource`. Both columns hold one set of values
+  (`SetsCopyMismatch`).
 - Give an existing row a parent with `links(Assign, Case, Handler)` (the key must be
-  `.optional()`), move it with `relinks`, drop it with `unlinks`. One per key per use case.
+  `.optional()`), move it with `relinks`, drop it with `unlinks`. A use case states one of
+  the three per key (`ConflictingLinks`).
 - A use case that writes two entities joined only through a third it does not write draws
   `UnjoinedWrite`: also write the entity between, or mark a write `.apart()`.
 - `drives(UC, E.col op rhs, true|false)` makes a comparison a Bool when the model does not

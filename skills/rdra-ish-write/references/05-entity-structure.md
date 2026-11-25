@@ -34,7 +34,9 @@ relation, and whether a relation crosses systems.
    | `@generated(identity\|uuid\|ulid)`, `@default(now())`, `@on_update(now())`, `@version` | Storage detail; `@version` is one `Int` optimistic-lock column |
 
    Give a type the storage detail the schema needs: `String(255)`, `Decimal(10, 2)`,
-   `DateTime(tz)` (`InvalidTypeArgs` otherwise). Write `@check` and `@derived` unquoted.
+   `DateTime(tz)` (`InvalidTypeArgs` otherwise); a function on a column of the wrong type is
+   `InvalidColumnFunction`. A key unique within a tenant is `@unique(tenant_id, code)`.
+   Write `@check` and `@derived` unquoted.
    An integer `@default` on a column a rule reads lies in `0..--int-range-max`, or
    `check` fails `IntLiteralOutOfBounds_<Entity>_<value>`. Write `table "order_lines"`
    under the entity when the table name differs; only the SQL and DBML exports read it.
@@ -52,8 +54,11 @@ relation, and whether a relation crosses systems.
    - A key with no `.on_delete`, or `restrict` / `no_action`: `deletes(UC, Parent)` waits
      until no child names the row, and `DanglingKey_<Child>_<role>` checks it. `cascade`,
      `set_null`, and `set_default` are not run yet: the delete leaves the children.
-   - Two relates between one pair: chain `.role(name)` on each, and name it on every rule,
-     guard, and copy that joins the pair (`AmbiguousOwnerLink` otherwise).
+   - Two relates between one pair: chain `.role(name)` on each (`DuplicateRelateRole` when
+     they clash), and name it on every rule, guard, and copy that joins the pair
+     (`AmbiguousOwnerLink` otherwise).
+   - `.references(cols)` names a parent unique set other than the primary key
+     (`ReferencesNotUnique` when it is not one).
 4. A unique set is checked when the lifecycle holds every column (an Enum, Bool, variation,
    compared Int, or key), and needs two instances to break. Guard the use case that writes
    it, such as `holds(AmFree, Room.open == true).none(Booking.slot == am)`. A set with a

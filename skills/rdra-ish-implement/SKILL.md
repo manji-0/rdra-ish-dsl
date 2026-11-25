@@ -2,7 +2,7 @@
 name: rdra-ish-implement
 description: >-
   Implement a service in Rust, TypeScript, or Go from an RDRA-ish model: name the
-  files in a [code.<lang>] table of rdra.toml, generate the domain types, state
+  files in a [code.rust], [code.ts], or [code.go] table of rdra.toml, generate the domain types, state
   types, use case contracts, probe, and conformance traces with rdra-ish codegen,
   write the service against those contracts, and hold it to the model with
   rdra-ish check --code (fresh, build, run) and the obligation ledger. Use when
@@ -18,11 +18,11 @@ license: MIT
 Write or change service code that a model specifies. `codegen` prints the model's data
 layer and use case contracts; you write the service that stores rows and calls them;
 `check --code` proves the service still has what the model requires. `codegen` and
-`check --code` are experimental: their output may change in any release.
+`check --code` are experimental, and their output may change in any release.
 
 ## Steps
 
-1. Make the model pass `rdra-ish check model/`: `codegen` refuses a model `check` rejects.
+1. Make the model pass `rdra-ish check model/`. `codegen` refuses a model `check` rejects.
    Run `rdra-ish verify model/` for rules that need two rows.
 2. Name the files in `model/rdra.toml`, paths relative to it. Only `domain` is required.
    `probe` and `service` enable `build`; `traces` adds the conformance test that `run`
@@ -59,7 +59,8 @@ layer and use case contracts; you write the service that stores rows and calls t
    `FAIL: code: <n> error(s) at --code=<level>`; paste it as printed.
 8. After a model change, run `rdra-ish codegen model --code` again and repeat step 7. In
    CI, `rdra-ish check model --code` (`fresh`, no compiler) fails when a generated file is
-   stale.
+   stale. The editor's LSP flags a stale file on its table's line of `rdra.toml`, and runs
+   no build.
 
 `--code` needs the table:
 

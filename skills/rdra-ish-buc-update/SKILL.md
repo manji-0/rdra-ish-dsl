@@ -7,7 +7,7 @@ license: MIT
 ## When to use
 
 A BUC file exists and a request adds, changes, or removes part of it. Keep the BUC at its
-stage: when it is a skeleton, ask for the next stage's facts instead of adding columns,
+stage. When it is a skeleton, ask for the next stage's facts instead of adding columns,
 APIs, or rules. Skill `rdra-ish-write` holds the stage table, the step files, and the
 syntax.
 
@@ -25,7 +25,7 @@ syntax.
    as the step file of its stage shows (`../rdra-ish-write/references/`). Do not remove or
    rename a predicate unless the request deletes that behavior.
 5. Run `rdra-ish check src/` and `rdra-ish lint src/ --format table`. A new
-   `error[...]` or `warning[...]` is the change's: fix it. Paste the `bounds:` line and the
+   `error[...]` or `warning[...]` comes from the change, so fix it. Paste the `bounds:` line and the
    last line of each `check` or `verify` run exactly as printed, in a code block (for
    `verify`, also `result:`).
 
@@ -49,7 +49,7 @@ its permissions. When that is wrong, move the actor to `performs` on the use cas
    `displays`, `navigates(...).via`, `invokes`, `raises`, `triggers`, `transitions`,
    `sets`, `applies_to`, `after`, `compensates`, `covers`.
 2. Remove an `import` whose last use you deleted.
-3. Run `check`: a state only that use case entered, which another arm still leaves, now
+3. Run `check`. A state only that use case entered, which another arm still leaves, now
    fails as `Witness_*`.
 
 ## After the change

@@ -15,8 +15,8 @@ a verdict over every area, use skill `rdra-ish-review`.
 1. Run `rdra-ish check <src-dir>/` first, unless the user only asks what a command does.
    Paste the `bounds:` line and the last line exactly as printed.
 2. Pick the question's reference below and run only its commands.
-3. Judge each gap at the model's stage: screens and data touchpoints are business-facing;
-   the API boundary, entity structure, lifecycle, and rules are technical commitments.
+3. Judge each gap at the model's stage. Screens and data touchpoints are business-facing.
+   The API boundary, entity structure, lifecycle, and rules are technical commitments.
 4. Report with `../rdra-ish-review/references/output-format.md`: each finding with the
    command and diagnostic behind it, the `bounds:` line, and everything under
    `not checked:` as not checked.

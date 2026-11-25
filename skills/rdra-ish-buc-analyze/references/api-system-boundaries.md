@@ -20,9 +20,11 @@ rdra-ish diagram src/ --kind rdra --format mermaid --buc <BucId>
 
 | Signal | Action |
 |---|---|
-| An API no use case invokes | Add `invokes`, or remove or defer the API |
-| An invoked API with no CRUD | Add its CRUD, or reconsider it |
+| `ApiNeverInvoked` | Add `invokes`, or remove or defer the API |
+| `ApiInvokedButNoEntity` | Add the API's CRUD, or reconsider it |
 | An API in no system | `contains(System, Api)` once ownership matters |
+| `ApiInMultipleSystems` | Keep the API in one system |
+| `SeparateTxInferred` | A direct write with no key link runs as a transaction of its own; put the writes that must agree behind one API |
 | An API with method and path but no DTO | `request`, `response`, `error_response` |
 | One API touches unrelated consistency groups | Split it by atomic boundary |
 | `OwnedEntityWithoutApiOperation` | Add the API operation, or accept it as future ownership |

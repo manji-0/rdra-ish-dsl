@@ -40,14 +40,17 @@ property ShippedOnceCaptured
   leads_to(Order.status == paid, Order.status == shipped).fair(ShipOrder)
 ```
 
-- The label after the name is optional. Each atom names its entity (`Order.status`).
+- The label after the name is optional. Each atom names its entity (`Order.status`); an
+  atom whose column no single entity owns is `UnresolvedPropertyColumn`.
 - A property holds per present instance: `always x` is `[](present => x)`, `eventually x`
   is `[](present => <>x)`, and `leads_to(x, y)` is `(present /\ x) ~> y`.
 - `eventually` and `leads_to` assume `WF_vars(Next)`: some step is taken, not a step in
   particular, so another instance's loop satisfies it.
 - `.fair(UC, ...)` on `eventually` or `leads_to` assumes weak fairness per instance on the
   listed use cases. An `ok` then holds only on runs that do not starve them; say so. On any
-  other form `.fair` is an error (`FairOnSafetyProperty`, `FairOnReachProperty`).
+  other form `.fair` is an error (`FairOnSafetyProperty`, `FairOnReachProperty`). No
+  argument, a non-use-case argument, a duplicate, or a second `.fair` is
+  `FairRequiresUseCases`; a use case that changes nothing is `FairOnInertUseCase`.
 - A property over two or more entities ranges over every combination of their rows.
   `.along(A, B)` (then `.role(role)` when two keys join the pair) limits it to linked rows;
   `.global()` says every combination is meant. With neither, `lint` reports
@@ -87,6 +90,7 @@ property ShippedAfterPaid
 - `after(UC).assert` reads only the steps of `UC`. `stable` and `unchanged` read every
   step, so they catch another use case that rewrites the column.
 - `unchanged` without `.when` means the columns never change while the row is present.
+  `.when` anywhere else in the chain is `UnknownChainMethod`.
 
 `can_reach` catches a trap a `Deadlock_*` misses, such as an instance that moves between two
 states forever once a guard is false:
@@ -124,6 +128,7 @@ after(Sell).assert(Item.sold >= 1)
   case, on that run's rows. A use case split into transaction groups satisfies it once per
   run; the states between its steps are not checked.
 - An atom on an entity no step binds reads every present row (`UnboundAfterRead`).
+- An `after` on a use case that changes nothing is `AssertOnInertUseCase`.
 - `precondition`, `guard`, and `postcondition` clauses on a use case are review text that
   nothing checks. Use `after(UC).assert(...)` for a machine-checked postcondition.
 

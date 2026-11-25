@@ -19,7 +19,8 @@ In RDRA the screen sits with the use case on the system boundary, nearest the ac
 1. Add a `screen` per surface the actor works on, named for what the actor does there.
 2. Add `displays(UseCase, Screen)`. A use case an event or timer starts needs no screen.
 3. Add `navigates(From, To).via(UseCase)` for each move the UI offers.
-4. Add `field` and `contains(Screen, Field)` only for items that need review. Leave
+4. Add `field` and `contains(Screen, Field)` only for items that need review, with `access`
+   (`editable`, `readonly`), `required`, and `source` (`actor` or `system`). Leave
    `maps_field` for step 3, once the entity exists; `lint` `field-unmapped` is expected now.
 5. Keep entities, CRUD, APIs, and permissions out.
 
@@ -30,6 +31,13 @@ screen CheckoutScreen "Checkout"
 displays(PlaceOrder, CheckoutScreen)
 displays(CancelOrder, CartScreen)
 navigates(CartScreen, CheckoutScreen).via(PlaceOrder)
+
+field AddressField "Delivery address"
+  access editable
+  required true
+  source actor
+
+contains(CheckoutScreen, AddressField)
 ```
 
 ## Validate

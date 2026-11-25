@@ -6,7 +6,7 @@ license: MIT
 
 ## When to use
 
-Write or extend `.rdra` files from requirements. Model one refinement stage at a time: a
+Write or extend `.rdra` files from requirements. Model one refinement stage at a time. A
 guessed column, endpoint, or state machine reads as a decision to reviewers. To start or
 change one BUC, skills `rdra-ish-buc-create` and `rdra-ish-buc-update` add their steps to
 these.

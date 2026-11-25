@@ -29,6 +29,19 @@ entity Order "Order" {
   status: Enum(draft, submitted) @default(draft)
   submitted_at: DateTime @null
 }
+
+quality Performance "Performance"
+
+nfr PlaceOrderLatency "Place order latency"
+  metric p95_latency_ms
+  target "<=300"
+  slo "99.9%"
+
+qualifies(PlaceOrderLatency, Performance)
+applies_to(PlaceOrderLatency, PlaceOrderApi)
+
+adr AdrOrderApi "Place orders through the order API"
+decides(AdrOrderApi, PlaceOrderApi)
 ```
 
 | Kind | Use |
@@ -95,8 +108,9 @@ child. Chain `.optional()`, `.on_delete(..)`, `.on_update(..)`, `.role(x)`, `.ke
 - Swapping arguments: CRUD takes `(UseCase|Api, Entity)`.
 - Naming an event in `transitions` or `sets`: both take the use case (`TypeMismatch`).
 - Quoting values: write `flag == true`, `@check(qty >= 1)`, `Enum(a, b)`, not `"true"`.
-- A `@default` that is not a value of the column. An Enum takes a declared value
-  (`@default(open)`, not `Open`); a `Bool` takes `true` or `false`. A `@null` column starts
+- A `@default` that is not a value of the column (`InvalidEnumVariant`, `InvalidBoolValue`).
+  An Enum takes a declared value (`@default(open)`, not `Open`); a `Bool` takes `true` or
+  `false`. A `@null` column starts
   at null, so drop `@default(null)`:
 
 <!-- expect-error: invalid enum value -->

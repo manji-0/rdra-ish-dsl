@@ -7,7 +7,7 @@ license: MIT
 ## When to use
 
 A requirement or feature description needs a new BUC file, and the shared declarations it
-uses. Build only the stage the requirement supports: invented columns, endpoints, or state
+uses. Build only the stage the requirement supports. Invented columns, endpoints, or state
 machines read as decisions. Skill `rdra-ish-write` holds the stage table, the step file of
 each stage, and the syntax.
 
