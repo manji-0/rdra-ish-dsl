@@ -2,1194 +2,311 @@
 
 ## Unreleased
 
-### Known issues
+This is a major release. `verify` decides every check with its own checker and needs no JVM;
+TLC (`--with-tlc`) and z3 (`--prove`) check it from outside. `codegen` prints domain code in
+the Kamae style for TypeScript, Rust and Go, and `check --code` holds service code to the
+model. Some verdicts change where the lifecycle used to disagree with SQL. The upgrade guide
+lists what to change.
 
-- `--memory` does not yet bound the whole process (#237, #242, #243). It bounds what the
-  state stores are counted to hold. When cones stop at the limit, the process has been
-  measured on macOS at up to 1.85 times it (`verify samples/oidc-auth --instance-count 2
-  --memory 2GiB`), and past 19.5 GB at the default `16GiB`. Set `--memory` to about half the
-  memory you can spare until the fixes land. Runs whose cones finish below the limit are not
-  affected. See [Memory limit](docs/cli-reference.md#memory-limit).
+### Upgrading from v2.3.0
 
-### Breaking
+**Scripts that run `verify`**
 
-- **Rust codegen output takes the Kamae shapes** (experimental output, #363): ids and the
-  prelude scalars are opaque (`OrderId::from(7)`, `get()`, `"12.50".parse::<Money>()`, with
-  `Money` / `Decimal` / `Date` / `DateTime` checked for their shape); value sets parse with
-  `FromStr` instead of `parse() -> Option`; a state type has `kind() -> <Entity>Kind` instead of
-  the tag column's accessor, `TryFrom<<Entity>Row>` and `From<state> for <Entity>Row` beside
-  `from_row` / `into_row`, and a column named `kind` is `kind_` in the states. Every transition
-  function and dispatcher returns `Result<_, <UseCase>Error>` (`NotEnabled`, `Rejected`,
-  `InvalidArgument`) instead of the result, `Result<_, Rejected>` or `Result<_, Refused>`;
-  `Refused` is gone, and so are the `panic!`, `expect` and `unreachable!` of the output.
-  `ConformancePort` methods return the use case's error. The crate-level
-  `#![allow(..., clippy::all)]` is gone: the output passes `clippy -D warnings -D missing_docs`.
+- `verify` no longer needs `tlc`. Read the `result:` line (`ok`, `not decided`,
+  `counterexample` or `tool_error`) in place of `tlc_result:`, which prints only under
+  `--with-tlc`.
+- Replace `--backend tlc` with `--with-tlc`, or drop it. `--backend tlc` still works and
+  prints a deprecation warning; the next major release removes it.
+- In a sample's `// expect verify:` header, write `ok` for `tlc=ok` and `fail <Names>` for
+  `tlc=counterexample fail <Names>`. `tlc=` is allowed only on a line whose flags hold
+  `--with-tlc`.
+- Without `-o` and `--with-tlc`, `verify` writes no TLA+ spec and prints no `specs:` line.
+  `--tlc-jar`, `RDRA_TLC_JAR` and `RDRA_TLC_HEAP` apply only with `--with-tlc`.
+- A counterexample is the native checker's shortest trace. TLC's trace, its `violated:` line
+  and the raw trace print only under `--with-tlc`.
+- To keep a result reproducible, pass the bounds as flags. The defaults of `--max-states` and
+  `--max-patterns` changed, and `--memory` now counts fewer bytes per state, so a run that
+  stopped at the limit can now finish.
 
-- A `[code]` table in `rdra.toml` is read now (#363), and an unknown key under it makes every
-  loading command exit 1 with the line, as under `[check]`. It used to be ignored.
-- `codegen` (experimental): the obligations are no longer numbered `O1`, `O2`, ... (#363). Each
-  has a name built from the model's identifiers, which does not move when the model gains an
-  unrelated declaration: the invariant's name where `check` and `verify` check it (marked
-  `[checked]`), else `Ref_<Entity>_<columns>`, `Unique_<Entity>_<columns>`, `OnDelete_*`,
-  `OnUpdate_*`, `Derived_*`, `OneTransaction`, `RunMarks_<UseCase>`, `CompleteRows_<Type>`,
-  `RuleChecks`, or `NotMet_<error>`. The traces file of `--conformance` is format 3, with a
-  fingerprint line after the format line; generate the code and the traces again. The
-  fingerprint's model hash no longer depends on the order the files load in, so a file
-  generated before reads as "model changed" in `codegen --check` once.
-- `codegen --lang go` (experimental) prints the Kamae shapes of
-  [Generated code style](docs/design/algebraic-codegen.md#generated-code-style) (#363), and no
-  generated function panics. Generate the Go code again, and change the code that uses it:
-  - A state type's discriminant is `Kind()`, an `<Entity>Kind` constant (`OrderKindPaid`), in
-    place of `Status()`; the tag column lives only in `<Entity>Row`. A column named `kind` of a
-    state type is read by `Kind_()`.
-  - Each state (`OrderPaid`) is an interface implemented by an unexported struct, so code
-    outside the package can no longer write `OrderPaid{}`. Type switches and accessors work as
-    before; a variable of a state type that holds nothing is `nil`.
-  - Every transition function and dispatcher returns `(<Result>, error)`. The error is a
-    `*<UseCase>Error` (`*PayError`) with a `Kind` (`PayErrorNotEnabled`, `PayErrorRejected`,
-    `PayErrorInvalidArgument`) and the detail in `Err`: `errors.As(err, &rejected)` and
-    `errors.Is(err, ErrRejected)` reach it, where `err.(*Rejected)` used to. A nil state, a
-    value outside a value set, or a `Money` / `Decimal` / `Date` / `DateTime` outside its shape
-    is refused with `InvalidArgument`, where the function used to panic.
-  - `<Entity>FromRow` also refuses a scalar column outside its shape (`*InvalidRow` naming the
-    column). Ids and scalars have `Parse<Type>`, and scalars `Valid()`.
-  - The file starts with `// Code generated by rdra-ish codegen. DO NOT EDIT.`, and is what
-    `gofmt` prints.
-  - New: `<Entity>Visitor[R]`, one method per state (`Pending(OrderPending) R`), and
-    `Match<Entity>(state, visitor) (R, error)`. Go's type switch does not say when it misses a
-    state; a visitor does: once the model gains a state, a visitor that lacks its method no
-    longer compiles.
+**TypeScript types**
 
-- `codegen --lang ts`: the TypeScript output and its compatibility contract
-  ([The TypeScript types of `codegen`](docs/compatibility.md#the-typescript-types-of-codegen))
-  move to the Kamae shapes of
-  [Generated code style](docs/design/algebraic-codegen.md#generated-code-style) (#363). The
-  module imports nothing: it brings its own `Result` and parsers. To migrate, generate the
-  module again and change the code that uses it:
+- `export --kind typescript-states` and `states --format typescript` are removed. Each is a
+  usage error (exit 2) that names the rewrite:
 
   | Before | After |
   |---|---|
-  | `export interface OrderPaid { status: "paid"; ... }` | `export type OrderPaid = Readonly<{ kind: "Paid"; ... }>`: no tag column in a state, every property `readonly` |
-  | `order.status === "paid"`, `switch (order.status)` | `order.kind === "Paid"`, `switch (order.kind)` with `default: return assertNever(order)`; the values of `<Entity>Kind` are the states' type names |
+  | `rdra-ish export <INPUTS> --kind typescript-states -o x` | `rdra-ish codegen <INPUTS> --lang ts -o x.ts` |
+  | `rdra-ish states <INPUTS> --format typescript` | `rdra-ish codegen <INPUTS> --lang ts` (to stdout) |
+
+  `codegen` gives one state type per value of the tag column, reached or not, and every
+  column with its declared type. It narrows a `@null` column only where a rule says so. Only
+  an entity whose tag column is an inline `Enum` that `transitions` drives is a state type.
+  `codegen` refuses a model that `check` rejects, and has no `--buc` or `--entity`.
+- `codegen --lang ts` now prints the Kamae shapes, and the
+  [compatibility contract](docs/compatibility.md#the-typescript-types-of-codegen) covers its
+  types. Generate the module again and change the code that uses it:
+
+  | Before | After |
+  |---|---|
+  | `export interface OrderPaid { status: "paid"; ... }` | `export type OrderPaid = Readonly<{ kind: "Paid"; ... }>`: no tag column in a state |
+  | `order.status === "paid"` | `order.kind === "Paid"`; end a `switch` with `default: return assertNever(order)` |
   | a column named `kind` of a state type | `kind_` in the states; `<Entity>Row` keeps `kind` |
-  | `orderFromRow(row): Order \| InvalidRow`, `"invalid" in x` | `Order.fromRow(row): Result<Order, InvalidRow>`, `if (!r.ok) r.error.column` |
+  | `orderFromRow(row): Order \| InvalidRow` | `Order.fromRow(row): Result<Order, InvalidRow>` |
   | `orderToRow(state)` | `Order.toRow(state)` |
-  | `InvalidRow { invalid, column, reason }` | `InvalidRow { kind: "InvalidRow", entity, column, reason }`, `column` null for a value that is no object |
-  | `1 as OrderId`, `"2026-01-01" as Date` | `OrderId.parse(1)`, `Date.parse("2026-01-01")`, each a `Result`, or `OrderId.is(x)` to narrow |
-  | `MethodValues` | `Method.values`, and `Method.parse(text)` |
-  | a row read from a store or the wire, typed by hand | `parseOrderRow(value: unknown): Result<OrderRow, InvalidRow>`, which checks every column, the shapes of `Money`, `Decimal`, `Date` and `DateTime` among them |
+  | `InvalidRow { invalid, column, reason }` | `InvalidRow { kind: "InvalidRow", entity, column, reason }` |
+  | `1 as OrderId`, `"2026-01-01" as Date` | `OrderId.parse(1)`, `Date.parse("2026-01-01")`, each a `Result`; `OrderId.is(x)` narrows |
+  | `MethodValues` | `Method.values`, `Method.parse(text)` |
+  | a row typed by hand | `parseOrderRow(value: unknown): Result<OrderRow, InvalidRow>` |
 
-  The experimental part changes with it. A transition function or dispatcher returns
-  `Result<PayResult, PayError>`, where `<UseCase>Error` is the union of `NotEnabled`,
-  `Rejected` and `InvalidArgument` the use case can return, each with a `kind`
-  (`{ kind: "Rejected", condition, label, site }` in place of `{ rejected, label, site }`,
-  `{ kind: "NotEnabled", usecase }` in place of `{ notEnabled }`). Arguments that break what
-  the verified model keeps (a child that does not name its parent, a column the target state
-  keeps null that holds a value) return `InvalidArgument` instead of throwing; no generated
-  function throws but `assertNever`. Events are told apart by `kind` in place of `event`.
-  Every result, event, run mark and record is a `Readonly` type, a rule check returns
-  `readonly string[]`, and each record and DTO has a parser, `parse<Name>(value: unknown)`.
-  The output builds under `tsc --strict` with `noUnusedLocals`, `noUnusedParameters`,
-  `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess` and
-  `noPropertyAccessFromIndexSignature`; it needs TypeScript 4.9 or later (`satisfies`).
-  `Symbol` joins `Result` and `assertNever` as a name the TypeScript output writes, so a model
-  type of that name is a `NameCollision`; a model name that takes `parse<Row>` moves the
-  parser to `parse<Row>_`.
-- An `Enum` or `Bool` column marked `@null` now holds null in the lifecycle (#359), as a
-  nullable Int column does. A row created without a default starts at null, as the
-  database row of `export --kind sql` does; the lifecycle used to start it at the first
-  value (`red`, `false`) and gave the column no null at all. `check`, `states`, `verify`
-  (native, TLC, and the TLA+ export), and `verify --prove` read the column the same way,
-  by the language reference ([Null](docs/language-reference.md#null)): a null column
-  satisfies no `==` with a value or a column and satisfies every `!=`, `col == null` and
-  `col == present` now ask about null (both were always false), `col in (...)`
-  holds only when it names null or the column's value, and `sets(UC, E.col == null)` now
-  writes null (it wrote nothing). A logical `@derived` comparison of such a column is
-  neither true nor false while it is null. An Enum or Bool column with null compares with
-  one without it value by value. Verdicts and state counts change for models that read
-  such a column: `forbidden(Item, k1 != Item.k2)` now fails on a created row where both
-  are null, `required(Item, k1 == red)` fails there, and two rows left null no longer
-  share a `@unique` value. `states` lists `null` among the column's values (`k1[null|red|
-  blue]`), and `UnreachableEnumVariant` now names a first value that only the old start
-  reached. On a `@null` lifecycle column the null is no state of the state model, which
-  keeps the declared values. The TLA+ export writes the null of such a column as `"<null>"`,
-  and a nullable Bool column as the strings `"false"` and `"true"`. Generated code (`codegen`) creates such a row with `None` / `nil` / `null`
-  where it wrote the first value. To keep the old start, give the column a `@default`.
-  No sample changes verdict: no sample entity has a nullable Enum or Bool column.
+  The module imports nothing and needs TypeScript 4.9 or later. Transition functions and
+  dispatchers (experimental) return `Result<..., <UseCase>Error>` and throw nothing but
+  `assertNever`. A model type named `Result`, `assertNever` or `Symbol` is a
+  `NameCollision`.
 
-- Two `@null` columns that both hold null are no longer equal (#355). `col == other` between
-  two columns holds only when both are present and equal, and `col != other` holds whenever
-  either is null, as the language reference ([Null](docs/language-reference.md#null)) and the
-  SQL CHECKs of `export --kind sql` read it. `check`, `states`, `verify` (native, TLC, and the
-  TLA+ export), and `verify --prove` used to read null == null as true, so `verify --prove`
-  could prove a rule that the SQL CHECK rejects on the first row. Verdicts change for models
-  that compare two nullable columns with `==` or `!=`, in any rule form, a condition, a
-  `property`, or a cross-entity comparison: `forbidden(Item, qty != lim)` now fails on a row
-  where both are null, and `forbidden(Item, qty == lim)` no longer does. A logical
-  `@derived` comparison of two nullable `String` (or other presence-only) columns is now
-  neither true nor false while one is null, as it already was for nullable Int columns.
-  A rule that admits two nulls says so: `@check(qty == lim or (qty == null and lim ==
-  null))`. No sample changes verdict: no sample compares two nullable columns.
+**Rust and Go code** (experimental)
 
-- A `deletes(UC, Parent)` waits until no present child names the row when the key's
-  `.on_delete` is `restrict`, `no_action`, or unset (#199). Unset is the SQL default, which
-  the export leaves in place, so the database rejects such a delete; the lifecycle used to
-  delete the row anyway and explore states the database never reaches. `check`, `states`,
-  `verify` (with its TLA+ export under `--with-tlc`), and `verify --prove` read the same
-  guard. A model that deletes a parent while its children stay now finds that delete
-  disabled, which can turn a passing liveness or `can_reach` property into a
-  counterexample, add a deadlock, or make the use case one that never runs. To migrate,
-  delete the children first, in a use case that `deletes(UC, Child)` or `unlinks` them. A
-  step that unlinks a child and deletes its parent is enabled. Each such key whose parent
-  some use case deletes also gets the invariant `DanglingKey_<Child>_<role>`: every present
-  child names a present parent. The guard keeps it, and z3 proves it. `DanglingKey_*`
-  covers these restrict-family keys only. The lifecycle does not run `cascade`, `set_null`,
-  or `set_default` deletes yet: they still remove the one row with no guard, as before, and
-  their keys get no `DanglingKey_*`, so a model that declares one gives the same verdict as
-  before, with the info `DeleteLeavesChildren` for `cascade`. A parent with a
-  `@soft_delete` column is marked, not removed, so its keys get no guard and no rule. A
-  pre-existing child of a created parent, which `PreExistingChildOfCreatedParent` already
-  reports, gets no rule. No sample changes verdict: no sample deletes a row that a key
-  names.
+- Generate the code again. Rust and Go take the Kamae shapes too: a state has `kind()` /
+  `Kind()` in place of the tag column, its fields are private, and only the generated code
+  builds one (#331). Every transition function and dispatcher returns a `<UseCase>Error`
+  (`NotEnabled`, `Rejected`, `InvalidArgument`) and nothing panics. Go states are interfaces,
+  and functions return `(<Result>, error)`.
+- Obligations have names (`Unique_Order_note`, `Ref_<Entity>_<columns>`, ...) in place of
+  `O1`, `O2`. The `--conformance` traces file is format 3; generate it again.
 
-- `verify --prove` decides an invariant cone that BFS stopped at the memory limit (#232).
-  When z3 proves every rule the cone checks for any number of rows, the rules hold at the
-  run's bounds too, so the cone's line reads `ok (<n> states, BFS stopped at the memory
-  limit, decided by proof: --prove proved every check for any number of rows)` where it read
-  `not decided`. The cone no longer counts toward the closing warning or `--deny-undecided`,
-  and a run with nothing else open prints `result: ok`. A cone with an `after` assertion, or
-  with a rule z3 leaves unproved or out of scope, stays `not decided`, as does a cone stopped
-  at `--max-states` or `--max-patterns`. Without `--prove` nothing changes.
+**`rdra.toml`**
 
-- `verify --prove` gives each z3 check a budget of z3 resource units (`rlimit`) instead of
-  wall-clock time: 20,000,000 units for a check of a rule and 2,000,000 for a lemma, where
-  it gave 10 s and 0.5 s. Whether a rule is proved, and which lemmas it keeps, no longer
-  depends on the machine, its load, or `RDRA_JOBS`, so a proof can decide a verdict. No
-  flag sets the budgets. On every sample and engine-corpus case the proofs are the same as
-  with no practical limit, and a lemma check past its budget drops the lemma as a breaking
-  step does. In `rdra-ish-core`, `ProveOptions` has `rlimit` and `lemma_rlimit` in place of
-  `timeout_ms` and `lemma_timeout_ms`, and `Solver::check_sat` takes the check's budget.
-  `examples/prove_rlimit.rs` measures what each check spends.
+- An unknown table or key is an error (exit 1, naming the line): a misspelled `[verfiy]`, an
+  unknown key under `[model]`, or one under `[code]`. Fix the spelling. `[dependencies]`
+  stays free-form.
 
-- The lifecycle checks unique column sets (#222). A `@unique` column, a `@unique(a, b)`,
-  and the pair of keys of a `relate(A, B, N:M).via(J)` junction become the invariant
-  `Unique_<Entity>_<columns>` when the lifecycle holds every column's value: an `Enum`,
-  `Bool`, or variation column, a compared `Int`, or a key column, read as its key's owner.
-  Two present rows that agree on every column break it; a null column exempts its row, as
-  in SQL. `check`, `states`, `verify` (with its TLA+ export under `--with-tlc`), and
-  `verify --prove` check it. A model whose use case creates a second row at the same values,
-  such as two bookings of one room at one slot, now fails `check --instance-count 2` and
-  `verify`, where the database used to be the first to reject it. Add a guard that keeps the
-  set free, such as `holds(AmFree, Room.open == true).none(Booking.slot == am)`. Sets with a
-  `String` column, or on an entity with a `@soft_delete` column, are not checked. No sample
-  changes verdict.
+**Models that no longer load**
 
-- `verify` decides every invariant, `after` assertion, and property with its native
-  checker and starts no JVM: `tlc` is no longer needed, and `verify` no longer fails when it
-  is missing. TLC runs only under the new `--with-tlc`, beside the native checker, on the
-  same cones and runs; a check the two decide differently prints
-  `error[EngineDisagreement]: <module> [<checks>]: native <a>, TLC <b>; ...`, keeps the
-  specs, and fails the run with `result: tool_error`. `--with-tlc` without `tlc` exits 1.
-  The verdicts, the run labels (`Cone_<name>`, `_Full`, `_WF`, `RdraSpec_<P>`), and the
-  counterexamples' shape stay. To migrate:
-  - Read `result: ok|not decided|counterexample|tool_error` in place of `tlc_result:`, which
-    prints beside it only under `--with-tlc`. `result:` is the verdict of the whole run: `ok`
-    means exit 0 with nothing undecided, a state-model error (a deadlock, a state with no
-    witness) makes it `counterexample`, and a cap, the budget, or `--deny-unproved` that
-    leaves a finding open makes it `not decided`.
-  - Replace `--backend tlc` with `--with-tlc` where you want TLC. `--backend tlc` still
-    works, means `--with-tlc`, and prints a deprecation warning; the next major release
-    removes it. Drop it where you do not.
-  - In a sample's `// expect verify:` header, write `ok` for `tlc=ok` and `fail <Names>`
-    for `tlc=counterexample fail <Names>`. `tlc=` is allowed only on a line whose flags hold
-    `--with-tlc`, which `scripts/verify-samples.sh --with-tlc` runs.
-  - A native counterexample is BFS's shortest trace, so it may differ from TLC's and has
-    no `from TLC` mark, `violated:` line, or raw trace; those print under `--with-tlc`
-    after a `tlc: <module> (<path>):` line.
-  - Without `-o` and `--with-tlc`, `verify` writes no spec to a temp dir and prints no
-    `specs:` line. `--tlc-jar`, `RDRA_TLC_JAR`, and `RDRA_TLC_HEAP` apply only with
-    `--with-tlc`, and `--memory` gives BFS the whole limit without it.
-  - The `RDRA_ISH_NATIVE` test hook is gone; the default does what it did and more.
-- `export --kind typescript-states` (also spelled `type-script-states`) and
-  `states --format typescript` (also `type-script`) are removed. `codegen --lang ts` is the
-  one way to get TypeScript state types. Each removed spelling is a usage error (exit 2)
-  that names the rewrite and writes nothing:
-  - `rdra-ish export <INPUTS> --kind typescript-states -o x` becomes
-    `rdra-ish codegen <INPUTS> --lang ts -o x.ts`.
-  - `rdra-ish states <INPUTS> --format typescript` becomes
-    `rdra-ish codegen <INPUTS> --lang ts`, which prints to stdout.
+| Model | Now | Fix |
+|---|---|---|
+| `@default` on an `Enum` column that is not one of its values, or on a `Bool` other than `true` / `false`, `@default(null)` included (#187) | `InvalidEnumVariant`, `InvalidBoolValue` | Write a declared value, spelled as declared |
+| An integer `@default` outside `0..--int-range-max` on a column a rule reads (#180) | `IntLiteralOutOfBounds_<E>_<value>` | Raise `--int-range-max` or lower the default |
+| A `property` atom whose column no single entity owns (#160) | `UnresolvedPropertyColumn`, a model error, in place of the lifecycle's `UnresolvedPropertyAtom` | Name the entity's column |
 
-  The output has a different shape. Code that imports the old unions needs these changes:
-  - A state is a named interface, `<Entity><Value>`, one for each value of the tag column,
-    including values that no use case reaches. `<Entity>` is their union. The old union
-    had one inline object for each reachable pattern, so one tag could have several
-    shapes.
-  - A variant narrows a `@null` column only where a rule states it (`required`,
-    `forbidden` with a tag atom, `invariant(..).when(tag == v)`), not where every reachable
-    pattern agrees. A column that no use case writes is `T | null`, not `null`, and
-    `codegen` lists it as a candidate rule in the header.
-  - Every column appears with its declared type, and keys take their id type
-    (`OrderId`). An `Int` column is `number`, and an `@null` column is `T | null`. The old
-    union listed only the state axes.
-  - Only an entity whose tag column is an inline `Enum` that `transitions` drives is a
-    state type. An entity whose `Enum` only `sets` writes (ec-site's `Payment`) is a plain
-    interface. The old export made a union of it from its first `Enum` axis.
-  - `codegen` refuses a model that `check` rejects (exit 1), as the export did, and has
-    no `--buc` or `--entity` scope. `--allow-failing` prints the types without narrowing
-    any column.
-- An `@default` on an `Enum` column that is not one of its values is `InvalidEnumVariant`,
-  and one on a `Bool` column other than `true` or `false` is `InvalidBoolValue`, on an
-  entity or a DTO, as a variation's default outside its values already was. The state
-  model used to drop the default and start the row at the first value or `false`, so
-  `check`, `states`, `verify`, `--with-tlc`, `--prove`, and the TLA+ export explored from a
-  start the model never declared, and the SQL export wrote `DEFAULT 'bogus'`. Such a model
-  now fails to load in every command, the LSP included. To migrate, write one of the
-  column's values, spelled as declared (`@default(open)`, not `@default(Open)`), or
-  lowercase `true` or `false`. `@default(null)` is no value of either type, even on a
-  `@null` column; drop it (#187).
-- An unknown table or key in `rdra.toml` is an error. A misspelled table such as `[verfiy]`
-  or `[chek]`, or an unknown key under `[model]`, used to be ignored, so the command ran at
-  its default memory limit and instance counts without a word. Every loading command now
-  exits `1` with a message that names `rdra.toml`, the line, and the key, and the LSP
-  shows that message, as for an unknown key under `[check]` or `[verify]`. `[dependencies]` stays
-  free-form. To migrate, fix the spelling or remove the table.
+**Models whose verdict can change**
+
+No sample changes verdict.
+
+| Change | Affects | Migrate |
+|---|---|---|
+| An `Enum` or `Bool` column marked `@null` holds null (#359) | A created row without a default starts null, not at the first value; `col == null` and `col == present` now ask about null | Add `@default(<value>)` to keep the old start |
+| Two null columns are not equal (#355) | `col == other` holds only when both are present and equal; `col != other` holds when either is null | Write `qty == lim or (qty == null and lim == null)` where two nulls should match |
+| A delete waits for the children (#199) | `deletes(UC, Parent)` is disabled while a child names the row and the key's `.on_delete` is `restrict`, `no_action` or unset | Delete or unlink the children first |
+| Unique column sets are checked (#222) | `@unique`, `@unique(a, b)` and N:M junction keys become `Unique_<Entity>_<columns>` | Add a guard that keeps the set free, such as `.none(Booking.slot == am)` |
+| A deleted row keeps its keys (#212) | A later step of a split use case that reads the deleted row's key reads its old parent | None |
+| A `can_reach` whose cone stops at a cap is `not decided` (#246) | It used to pass; it now fails `--deny-undecided` | Raise the cap or `--memory` |
+
+### Breaking
+
+- **verify:** native checker by default; `tlc_result:` only under `--with-tlc`; `--backend tlc`
+  deprecated; new `// expect verify:` grammar (#176 to #179, plan in #168).
+- **verify:** null semantics of nullable `Enum` / `Bool` (#359) and of column comparisons
+  (#355); restrict-family deletes (#199); unique sets (#222); deleted rows keep their keys
+  (#212); a capped `can_reach` is `not decided` (#246).
+- **verify --prove** (experimental): z3 checks get a budget in resource units, not seconds,
+  so a proof no longer depends on the machine or its load. A cone that BFS stopped at the
+  memory limit is decided when z3 proves every rule it checks (#232).
+- **Language:** invalid Enum and Bool defaults (#187), out-of-range Int defaults (#180), and
+  `UnresolvedPropertyColumn` (#160) fail to load.
+- **CLI:** `export --kind typescript-states` and `states --format typescript` removed; unknown
+  `rdra.toml` tables and keys are errors.
+- **codegen:** TypeScript, Rust and Go output in the Kamae shapes; named obligations;
+  traces format 3 (#363).
 
 ### Added
 
-- **Actor capabilities in the Rust contracts** (experimental, #363 P6, #337): each actor that
-  performs a use case with a contract gets a capability type (`<Actor>Capability`, made by
-  `issue()`), and the use case a caller type (`<UseCase>Caller`) that its `prepare_*` and
-  `run_*` take first. A call without the capability of an actor that performs the use case
-  does not compile. The conformance harness calls as the first such actor. TypeScript has them
-  too: `<Actor>Capability` is branded with a module-private `unique symbol` and made by its
-  companion's `issue()`, `<UseCase>Caller` is the union of the allowed capabilities, and a
-  type assertion still forges one.
+**verify and the native checker**
 
-- **Actor capabilities in the Go contracts** (experimental, #363 P6, #337): the same in Go.
-  `<Actor>Capability` is a struct with an unexported field, made by
-  `Issue<Actor>Capability()`, and `<UseCase>Caller` is an interface only the capabilities of
-  the actors that perform the use case implement. `Prepare*` and `Run*` take it first, so
-  another actor's capability does not compile. Go cannot refuse the zero value of a
-  capability or a nil caller at compile time; `CallerValid(by)` is false for both.
+- `verify` checks every invariant, `after` assertion and property, `always`, `eventually`
+  and `leads_to` included, on the graph BFS explores, under each property's fairness (#176
+  to #179).
+- `--with-tlc` runs TLC on the same cones and fails the run with `error[EngineDisagreement]`
+  when the two disagree. It also cross-checks `stable`, `unchanged`, `precedes` and the
+  state models of entity cones up to 100,000 states (#201).
+- New `property` forms: `stable(p)`, `unchanged(E.col, ..).when(p)` and `precedes(p, q)`
+  (#166), and `can_reach(p)`, which finds an instance that can never finish (#167). A
+  property over several entities takes `.along(..)` and `.global()` (#165).
+- `--max-states`, `--max-patterns` and `--temporal-budget` on `verify`. Without
+  `--max-states`, `verify` has no state cap; `--memory` stops a run.
+- `--memory` on `check`, `states` and `verify`, and `memory` under `[check]` / `[verify]`
+  in `rdra.toml`: 4GiB for `check` and `states`, 16GiB for `verify` (#174).
+  `MemoryCapReached` estimates the states the cone holds and the `--memory` that finishes it.
+- `Vacuous_<rule>` warns when a rule holds only because nothing it reads exists or its
+  trigger never holds, in `check` and `verify` (#170, #173).
+- `verify --prove` (experimental) proves state rules for any number of rows, any Int value
+  and any time with z3, as inductive invariants. It mines helper lemmas, takes user lemmas
+  marked `.lemma()`, prints a counterexample to induction for an unproved rule, and marks the
+  rules the SQL schema does not enforce. `--deny-unproved` and `--z3` (or `RDRA_Z3`) go with
+  it (#141, #147). See [Proofs](docs/formal-verification.md#proofs-for-any-number-of-rows).
+- `triggers(Event, UseCase).counted(k)` runs a handler once per raise, up to `k` pending, and
+  reports `EventOverflow_<E>_<Ev>_<UC>` past it (#220).
+- `--instances <Entity>=<n>` and `instances = { Loan = 4 }` give one entity its own slot
+  count (#216).
+- `.at_most(n, ..)`, `.at_least(n, ..)` and `.exactly(n, ..)` count related rows, and a
+  card's child side takes a maximum (`0..3:1`), checked as `MaxCard_<Child>_<role>` (#216).
+- A delete that a restrict-family key blocks adds the invariant `DanglingKey_<Child>_<role>`
+  (#199).
+- `check --guards` prints the rules each guard protects, and the guards no rule needs (#198).
+- New diagnostics: `CountedTriggerInvalid` and `UncountedTrigger` (`.counted`),
+  `QuantifierCountSpelling` and `CountAboveBound` (counted quantifiers),
+  `FairOnSafetyProperty`, `FairOnReachProperty`, `GlobalWithAlong` and `UnbindableScope`
+  (properties), `IdentityStartSlots` (`--instances`), `InvalidRowEstimate` (`rows`),
+  `DeleteLeavesChildren` (info on a `cascade` delete), and `LassoFault` (a checker bug).
 
-- **The obligation ledger** (`check --code`, #363, P5): each obligation the generated code
-  lists needs an owner, declared by a `rdra: obligation <name> [file]` marker line in the
-  service code or under `[code.obligations]`. An obligation with no owner is
-  `CodeObligationUnowned_<name>`, and an owner whose file is missing is
-  `CodeObligationOwnerMissing_<name>`; the check says an obligation has an owner, never that it
-  holds. The ledger is kept once one owner is declared. Obligations with no declaration of
-  their own (`@unique`, derived columns, unique sets) now carry their entity's site.
+**Instance symmetry** (#212)
 
-- **`check --code=build` and `--code=run` for Rust** (experimental, #363, P2 and P4). The
-  generated code has one contract trait per use case (`<UseCase>UseCase`), printed with or
-  without `--conformance`; `ConformancePort` is their composition with `seed` and `snapshot`.
-  An action with no printed function gets an entry point `run_<action>` in its use case's
-  contract (#335). `[code.rust]` `probe`, `service`, `module` and `new` bind the service:
-  `codegen --code` (or `codegen --probe`) writes the probe, a test file with one line per use
-  case. `build` runs `cargo check` on it and maps each rustc error to its use case and model
-  location (`CodeMissingUseCase_*`, `CodeIncomplete_*`, `CodeSignature_*`); `run` runs the
-  conformance test the probe holds (`CodeConformance`).
+- `verify --symmetry never|always`, or `symmetry` under `[verify]`, explores a cone up to
+  instance symmetry: one stored state per orbit of states that differ only in which slot
+  holds which row. It covers safety cones, reduced cones and their sub-lifecycles,
+  `always`, `eventually` and `leads_to` properties, and the state models of an entity cone
+  that stops at the memory limit. A counterexample is lifted to concrete states and replayed
+  before it prints. The default is `never`. See
+  [Instance symmetry](docs/cli-reference.md#instance-symmetry).
 
-- `codegen --lang ts --conformance <FILE>` (#363, experimental): the TypeScript output gets the
-  contracts, one `<UseCase>UseCase` type per use case with `prepare*` / `commit*` function
-  properties that return `Promise<Result<..>>`, the `ConformancePort` that composes them with
-  `seed` and `snapshot`, and `conform(newPort, traces)`, the harness the Rust and Go output
-  already had. It reports the same differences, refusals, and interleaved commits. The
-  contracts are printed without `--conformance` too, as `type <UseCase>UseCase = { readonly
-  ... }`, so tsc names them in its messages; an action with no printed function is a
-  `run<Action>` member (#335).
-- `check --code=build` and `--code=run` for TypeScript (#363, experimental): `[code.ts]`
-  `probe` and `service` (`<file>#<ExportedType>`) bind the service, and `codegen --code`
-  writes the probe and a `tsconfig.rdra.json` that extends the project's tsconfig
-  (`[code.ts] tsconfig`, else the root's `tsconfig.json`) and holds only the probe. `build`
-  runs `tsc --noEmit -p tsconfig.rdra.json` and maps TS2739 / TS2740 / TS2741 / TS2322 to
-  `CodeMissingUseCase_*`, `CodeIncomplete_*` and `CodeSignature_*`; `run` runs the probe's
-  conformance test with `node <probe>`, which needs Node 22.18 or later (type stripping) or a
-  `run` command in the table.
-- `codegen --lang ts --seal` and `[code.ts] seal = true` (#363, experimental): each state type
-  carries a property keyed by a `unique symbol` the module does not export, so code outside it
-  cannot build a state from an object literal (TS2741); a type assertion still can.
-  `--seal` with another language is a usage error (exit 2), and `seal` or `tsconfig` under
-  `[code.rust]` or `[code.go]` makes `--code` exit 1.
-- **`check --code=build` and `--code=run` for Go** (experimental, #363, P2 and P4). The Go
-  output has one contract interface per use case (`<UseCase>UseCase`, `Prepare*` / `Commit*`
-  and `Run*` for an entry point); `ConformancePort` embeds them with `Seed` and `Snapshot`.
-  `[code.go]` `probe`, `service` (`<import path>.<Type>`), `module` and `new` bind the service:
-  the probe is a `_test.go` in the service's package that assigns the service to each
-  contract and names each method on a line of its own, since Go names one missing method per
-  interface. `build` runs `go test -run ^$` on the package and maps `missing method`, `has no
-  field or method` and `wrong type for method` to the use case; `run` runs
-  `TestRdraConformance`, and its `CodeConformance` quotes the harness's first difference.
+**`check --code` and codegen** (experimental, #363)
 
-- `check --code[=fresh|build|run]` (#363, experimental; [design](docs/design/code-check.md)):
-  does the service code have what the model requires? `[code.rust]`, `[code.go]` and
-  `[code.ts]` in `rdra.toml` name the generated files, `codegen <INPUTS> --code` writes them
-  (with paths and sites relative to `rdra.toml`), and `check --code` generates them again and
-  compares, the traces by hash only. `--code` without a `[code]` table exits 1. `check`
-  without `--code` on a model with one prints a one-line note and otherwise does what it did.
-  The LSP shows an information diagnostic on `rdra.toml` when a configured file's fingerprint
-  names another model text. See [`check --code`](docs/cli-reference.md#check---code).
-- `codegen --format json` (#363, experimental): the contract as data, without `--lang`: the
-  types, states, use cases (with whether each has functions, has an action not printed yet,
-  or only reads), functions and named obligations, with their model locations. See
-  [The JSON contract](docs/cli-reference.md#the-json-contract).
-- `codegen --check <FILE> --conformance <TRACES>` compares the traces too, by hash.
+- `check --code[=fresh|build|run]` asks whether the service code has what the model
+  requires. `[code.rust]`, `[code.go]` and `[code.ts]` in `rdra.toml` name the files, and
+  `codegen --code` writes them. `fresh` regenerates and compares, `build` compiles a probe
+  and maps each compiler error to a use case (`CodeMissingUseCase_*`, `CodeIncomplete_*`,
+  `CodeSignature_*`), and `run` runs the conformance test. An obligation ledger requires an
+  owner for each obligation (`rdra: obligation <name> [file]` or `[code.obligations]`). See
+  [`check --code`](docs/cli-reference.md#check---code) and the
+  [design](docs/design/code-check.md).
+- The generated code has a contract per use case. `codegen --conformance <FILE>` adds a
+  conformance port and a harness, and writes the traces the harness drives a service along,
+  in all three languages (#330). An action with no printed function gets an entry point
+  `run_<action>` in its contract (#335). Each function runs in one transaction, and each result names what the
+  written rows must still be at commit (#332). See
+  [The conformance harness](docs/design/algebraic-codegen.md#conformance). `codegen --probe`
+  writes only the probe `check --code=build` compiles.
+- `codegen --check <FILE>` exits 1 when the file is not what the model generates, and says
+  whether the file, the model or the generator changed (#333).
+- `codegen --format json` prints the contract as data.
+- `codegen --lang ts --seal` (or `seal = true`) stops code outside the module from building a
+  state from an object literal.
+- Actor capabilities in the contracts: a use case's entry points take a capability of an
+  actor that performs it, so a call by another actor does not compile (#337).
 
-- `verify --symmetry` also covers `eventually` and `leads_to` properties, `.fair` included,
-  on reduced and unreduced cones (#212, phase 4). Under `always` such a cone runs up to
-  instance symmetry with each edge's permutation kept, and the fair components are read on
-  pairs of a stored state and a binding, each edge moving the binding and the fair instances
-  by its permutation. A counterexample is lifted to concrete states, its loop repeated until
-  it closes, and it must replay, fail the property, and be fair before it prints. At
-  `--instance-count 3 --memory 8GiB` patent-ops' `GrantEnds`, whose plain run stopped at
-  40.0M states, takes 7,346,935 orbits for about 87M states and is decided (`ok`). On a
-  reduced cone whose run up to symmetry finds a counterexample, the property is decided as
-  under `never`, which must find one too. A property whose reduced cone is a safety cone's
-  system stays plain, so one plain run decides both. Without the option nothing changes. The
-  `shadow` build holds the pairs to a plain run as `orbit_liveness`.
+**Model and lint**
 
-- `verify --symmetry always` also decides the state models of an entity cone whose plain run
-  stops at the memory limit (#212, phase 4; #284). When its plain run left a finding open,
-  the cone runs again up to instance symmetry, each edge's permutation kept, in the room the
-  plain run held, and when that run completes the witnesses, the use cases that never run,
-  the `.when` arms taken, and the deadlocks are read on it. An arm reads each edge's
-  concrete successor, and the deadlock pass follows the instance through pairs of a stored
-  state and a slot. A deadlock's trace is lifted to concrete states and replayed, and it
-  names the slot the instance holds at its end, which can be another instance than `never`
-  names. On `clinic-ops` at three instances under `--memory 8GiB`, `always` leaves 3
-  findings open where `never` leaves 17: `Appointment` (14,346,108 orbits for about 3.9G
-  states), `Encounter`, `PatientAccount` and `PaymentTransaction` finish up to symmetry,
-  the rerun up to `H` decides `CarePlan`, and `EligibilityCheck` stops again. That run
-  peaks at 37.1 GB RSS. Without the option nothing changes. The `shadow` build holds the
-  findings to a plain run as `orbit_state_models`.
+- An entity takes a `rows` estimate (`rows 5000`). `lint` `query-index-missing` and the SQL
+  export's index comments cover timer sweeps, large quantifiers, and guards that read an
+  entity across the table (#140, #142).
 
-- `codegen --lang rust|go` makes a state only in the generated code (#331). A state type's
-  fields are private in Rust and unexported in Go, read by methods of the same name
-  (`paid_at()`, `PaidAt()`), so only a transition function and `from_row` /
-  `<Entity>FromRow` build one, and code outside the module or package can neither build
-  `OrderPaid { .. }` nor change a field. In Go, a function or `<Entity>ToRow` given the zero
-  value of a state panics, `<Entity>FromRow` refuses a value outside a value set in any
-  column, a function panics on one as an input, and each value set gets `Parse<Enum>`, which
-  returns an `InvalidValue` error. The Go file belongs in its own package (`--package`).
-  Code that read a state's fields reads the methods instead; records and `<Entity>Row` keep
-  public fields. See [Who makes a state](./docs/design/algebraic-codegen.md#who-makes-a-state).
+**Samples, skills and developer builds**
 
-- `codegen` asks for one transaction per function (#332). The header gains the obligation
-  that each function runs in one transaction with its reads, and each result (Rust, Go, and
-  TypeScript) gains, per row it writes, `<row>_expected` / `<Row>Expected`: an
-  `ExpectedSource` naming what the row must still be when the write commits (`Absent` for a
-  created row, the tag column and the state read, or `Present`), so a store can write
-  conditionally and return `NotEnabled` when the write matches no row. The `--conformance`
-  port splits each `run_*` / `Run*` method into `prepare_*` (read and call the core) and
-  `commit_*` (write), the traces file is format 2, and its new `I` records prepare a call,
-  run another that changes a row it writes, and require the commit to fail and change
-  nothing. `tests/codegen_conformance.rs` shows that a service whose commits write
-  unconditionally fails. See
-  [One transaction per function](./docs/design/algebraic-codegen.md#atomicity).
-
-- `codegen --lang rust|go --conformance <FILE>` (experimental) prints a conformance port
-  and harness after the core, and writes to `FILE` the traces the harness drives a finished
-  service along (#330). The service implements `ConformancePort`: it seeds an empty store,
-  returns a `StoreSnapshot` of every row, pending run mark, and raised event, and runs each
-  use case by the ids of its rows. `conform` (Rust) or `Conform` (Go) seeds each trace's
-  initial state, makes each call, and after each compares the store, abstracted to the
-  columns the model tracks, with the state BFS reaches. A call the model refuses must fail
-  and change nothing. The traces come from a BFS of the whole system at `check`'s bounds
-  and take every move of a printed use case between the states it reaches, up to
-  `--conformance-states` (default 65,536); the header says how many. On
-  `tests/fixtures/codegen/conformance.rdra`, `tests/codegen_conformance.rs` shows that a
-  service built on the generated core passes in both languages, and that one which writes
-  the tag itself, drops a returned row, or runs a refused call fails. See
-  [The conformance harness](./docs/design/algebraic-codegen.md#conformance).
-
-- `verify --symmetry` also covers a reduced safety cone (#212, phase 3): under `always`, and
-  under `retry` once its plain run stopped at the memory limit, it runs up to `G_T`, the
-- `codegen --check <FILE>` (experimental) generates again with the same options and exits 1
-  when `<FILE>` differs (#333), for CI. The second line of the output is now a fingerprint
-  (`// rdra-ish codegen fingerprint: model=<hash> code=<hash>`). From it the summary on
-  stderr tells a file edited after it was generated from a model that changed since, and
-  both from a change in rdra-ish or the options. A model edit that changes no generated
-  code passes. See [`codegen`](docs/cli-reference.md#codegen).
-- `verify --symmetry` also covers a reduced safety cone (#212, phase 3): under `always` it
-  runs up to `G_T`, the
-  instance symmetry of its T rows, which leaves every S entity, and with it the class
-  representative, where it is, along with each entity the reduction keys on (an S var or an
-  input, the rows such a key names, a bit's rows, an S action's params).
-  `RDRA_ISH_SYMMETRY_STATS` names those entities. A counterexample is lifted through the
-  symmetry, then through the reduction, and replayed. Without the option nothing changes.
-  At `--instance-count 3 --memory 8GiB`
-  patent-ops' `Forbidden_Patent_4`, whose plain run stopped at 40.8M states, takes
-  31,926,220 orbits for about 260M states and is decided (`ok`, 98 s at `RDRA_JOBS=4`), and
-  with it `Inv_Patent_0`. `Forbidden_OfficeAction_3` is not: `G_T` moves its one T entity,
-  so it stores at most 6 times fewer states, and it stopped at 67.1M orbits. With S fixed
-  the factor on patent-ops' complete n=3 cones is 3.0 to 5.5. The `shadow` build counts the
-  run's twin on a reduced cone as `reduced_orbit_run`.
-
-- `verify --symmetry` also covers the sub-lifecycle of a reduced cone (#212, phase 2):
-  under `always`, a sub-lifecycle whose run stops at the memory limit, alone,
-  runs again up to `H`, the instance symmetry that keeps what the quotient reads, and the
-  cone is reduced where it was left whole. The classes are the same sets of states, so the
-  verdicts are the same; their numbering and representatives can differ, and so can such a
-  cone's TLA+ tables and its lifted traces. A cone whose sub-lifecycle fits keeps its
-  output. A trace through such a cone runs the sub-lifecycle up to `H` again and lifts its
-  path to concrete states before it is replayed. Without the option nothing changes. At
-  `--instance-count 3` the sub-lifecycle of clinic-ops' `Forbidden_ClinicalOrder_1`,
-  whose plain run stopped at the memory limit after 25.3M states, takes 240,016 orbits for
-  about 61.8M states and yields #284's 20 classes, and the cone is decided (`ok`, 5,050
-  states; `verify --entity ClinicalOrder --memory 8GiB --symmetry always` took 72 s at
-  `RDRA_JOBS=4`, 6.2 GiB at the peak). The `shadow` build adds the `s_up_to_h` twin, which holds the
-  classes up to `H` to those of the plain run of the same sub-lifecycle, up to 200,000
-  states, and reads `RDRA_ISH_FORCE_S_UP_TO_H`, a test-only switch that runs every
-  sub-lifecycle up to `H` at once, so that the samples at small bounds reach the path and
-  its twin; a release build ignores it.
-
-- `verify --symmetry never|always` (#212, phase 1; experimental, default `never`):
-  explore an unreduced safety cone, and the cone of an `always` property, up to instance
-  symmetry, one stored state per orbit of states that differ only in which slot holds which
-  row. Such a cone line reads `(about <m> states)`, the sum of the orbit sizes, which can
-  exceed what a plain run stores. A cone that a complete plain run of the entity pass
-  decides, a safety cone whose plain run a property not yet decided needs, and a cone whose
-  group moves no row run and print as under `never`, at every `RDRA_JOBS`.
-  `RDRA_ISH_SYMMETRY_STATS=1` prints the orbits, the estimate and what the group leaves out
-  per run up to symmetry, on stderr. `symmetry` under `[verify]` in `rdra.toml` sets the
-  default; under `[check]` it warns and is not read. A counterexample is lifted to
-  concrete slots and replayed, with the rows each step names, before it prints. A static
-  scan leaves out an entity whose slots the model tells apart (an ordered id comparison, an
-  id against a literal, a key set to a literal row, and five more). A cone run up to
-  symmetry gathers no entity view (#251), and its run decides no other job (#209). Without
-  the option nothing changes. At `--instance-count 3` the
-  five clinic-ops and insurance-claim-ops lines that stopped at the memory limit are decided
-  under `--memory 8GiB`. In `rdra-ish-core`, `TransitionSystem::run_orbits` returns an
-  `OrbitRun`, which has no graph or adjacency to read, and the vacuity readers take any
-  `StoredRun`. The `shadow` build adds two twins: `canonical` (against every element of the
-  group, up to 1,296) and `orbit_run` (against the plain run, up to 200,000 states).
-
-- A `perf` cargo feature (#296): `cargo build --release -p rdra-ish-cli --features perf`
-  builds a CLI that, under `RDRA_PERF=1`, prints on stderr a `perf-pass` line per pass of
-  `verify` (wall and CPU time, allocations, the live heap and the memory pool at their
-  peaks) and a `perf-run` line per BFS run (its pass, states, edges, width, the bits its
-  domains need, what its store keeps, its thread CPU). `RDRA_PERF=2` adds the columns that
-  read every state or edge, hashes of the states, edges and bindings among them, which tell
-  two runs of one graph apart. Its global allocator counts every allocation.
-  `scripts/perf-tables.py <binary>` runs the five measured `verify` runs of #296 one at a
-  time at `RDRA_JOBS=1` and prints the totals, the passes, the BFS CPU per pass and the
-  largest runs. A build without the feature is unchanged.
-
-- A `shadow` cargo feature (#275): `cargo build --release -p rdra-ish-cli --features shadow`
-  builds a CLI in which every fast function that has a reference twin also runs the twin and
-  panics, naming the call, when the two differ. The twins are the enabled bindings
-  (`bindings` filtered by the pre-guards, #253), the state index (`Seen`, against an ordered
-  map of the state bytes), the source pattern and the unchanged-row skip of a BFS edge
-  (#251), the quotient partition (the sweeps the worklist replaced, on quotients of up to
-  2,500,000 states), a quotient cache hit (computed again through an empty cache) and the
-  reduced step's class moves (#252). Each twin lives in a file of its own, a `reference.rs`
-  beside its fast path; the cache hit's twin is `Classes::of` itself. A new CI job,
-  `shadow`, runs `verify-samples.sh` and the engine corpus on that build. A build without
-  the feature is unchanged.
-- `check --guards` reports which rules each guard protects (#198). A guard is a `holds`
-  condition applied to a use case, or the `.when` conditions of one column's arms or
-  values. For each guard, after a clean `check`, the run removes it from every action of
-  the use case, explores again the cones of the rules that keep the use case, under the
-  same caps and `--memory`, and prints on stdout the rules that now fail (`protects:`), a
-  `rules:` block with the guards each rule depends on, and, for a guard no rule depends
-  on, `no rule depends on this guard; it is either a business rule nobody wrote as a rule,
-  or not needed`. A rule whose cone stops at a cap without the guard is `not decided`. The
-  report adds no finding and leaves the exit status to `check`. On `samples/oidc-auth` it
-  takes about 3 s (34 guards, 131 cones), and `tests/guards_cli.rs` reads the sample
-  README's table of rules and guards and checks each row against it. The table now has one
-  row per rule, also names `AccountChoiceAsked` on `SelectAccount` for the `prompt=login`
-  rule, and no longer names `ConsentOnRecord`, whose removal alone fails no rule.
-- `triggers(Event, UseCase).counted(k)` makes a handler run once per raise (#220). Each
-  counted edge has a counter per row of the event's entity, `<E>._pending_<Ev>_<UC>`
-  (`<E>_pending_<Ev>_<UC>` in TLA+), with the values `0` to `k` and `over`: the last step
-  of every raiser adds one, the handler runs only while a raise is pending and takes one,
-  and a raise with `k` already pending is the state rule `EventOverflow_<E>_<Ev>_<UC>`,
-  which `check`, `states`, `verify`, `verify --with-tlc`, and `verify --prove` report. The
-  raiser never waits, and after an overflow the handler runs as under the latch. `k` is a
-  whole number from 1 to 16; `.counted` on a timer, a BUC, or an external system, or with
-  any other argument, is the error `CountedTriggerInvalid`, and on an edge the event order
-  does not track (a free event, a handler a free trigger also starts, raisers with no entity
-  in common, a handler that raises the event itself, a raiser that binds the entity twice)
-  it is the error `UncountedTrigger`. A counted mark is never left out of a cone and never
-  reduced across, so a cone of its raiser holds the handler too. `codegen` reports a use
-  case that raises or handles a counted event as unsupported. Edges without `.counted` keep
-  the latch, and every model without it builds the same transition system as before.
-  Design: `docs/design/counted-events.md`.
-- Per-entity instance counts (#216). `--instances <Entity>=<n>`, repeatable, gives one
-  entity its own slots in place of `--instance-count` on `check`, `states`, `verify`, and
-  `export --kind tla`: `verify --instances Loan=4` explores four loans and two rows of every
-  other entity. `instances = { Loan = 4 }` under `[check]` or `[verify]` in `rdra.toml` sets
-  it for those commands (`[verify]` also for `export --kind tla`), and a flag replaces the
-  table's count of its entity. The `bounds:` line, the `OK:` line, and the TLA+ header name
-  each count (`2 instances per entity (Loan=4)`), and the TLA+ module's id set of the entity
-  is `Loan_Ids == 1..4`. An id that names no entity is an error. A pre-existing child that
-  starts linked one to one to its parent's slots needs the parent's count, else
-  `IdentityStartSlots`. Without the flag and the tables every output is unchanged. The
-  corpus case `presence_per_entity_slots` checks a child with more slots than its parent and
-  a parent with more than its child, with the native checker and TLC.
-- Counted quantifiers and cardinality maxima (#216). `invariant(E)` and a `holds` body take
-  `.at_most(n, Related...)`, `.at_least(n, Related...)`, and `.exactly(n, Related...)`
-  beside `.has` and `.none`, with the same rows, `.along`, and `.role`: the present linked
-  rows that match, each counted once, compared with `n` (1 to 255). A guard counts the rows
-  before its use case runs. `at_least(0)`, `at_least(1)`, `at_most(0)`, and `exactly(0)` are
-  `QuantifierCountSpelling`, which names the shorter form. A card's child side takes a high
-  end from 2 to 255, `relate(Loan, Member, 0..3:1)`, checked as `MaxCard_<Child>_<role>`.
-  `check`, `states`, `verify` (TLC through `Cardinality`, its module extending
-  `FiniteSets`), and `verify --prove` (counts of up to 8 rows, unrolled into distinct
-  witnesses) check both; generated code checks a counted guard over the related rows'
-  list. An `at_most` count or a maximum that needs more rows than the bounds give is
-  `Vacuous_<rule>`, naming the `--instances` that lifts it; `at_least` and `exactly` above
-  the bound warn `CountAboveBound`. The corpus cases
-  `safety_at_most_bound`, `safety_at_least_guard`, and `safety_count_per_entity` check it
-  with the native checker at 1 to 4 instances, TLC, and z3, and the sample
-  `formal-verification/counting_rules.rdra` shows it. No sample changes verdict.
-- A `MemoryCapReached` error of `check` and `states` says what the cone held and what
-  finishing needs: the bytes each held state took, and an estimate of the states the cone
-  reaches from its BFS layers. Once the frontier has shrunk for two depths past its peak,
-  the fall is taken to mirror the rise (`the cone probably holds about 258 states`), and
-  the message names the `--memory` for a quarter more states than that, for the cone
-  alone. On 73 sample cones stopped at a tenth to nine tenths of their states, the
-  estimates came out at 0.51 to 1.37 of the true count. While the frontier still grows, or
-  has only just peaked, the message says so and gives no estimate. Without one, it falls
-  back on the most states the cone's variables allow (`at least about 12GiB`, if all are
-  reachable) when that is no more than `1TiB`. The sizes use the store model `store_bytes`
-  of `rdra-ish-core`, which stood 2.4% to 6.7% over the bytes a run counts on the 52
-  sample cones of a thousand states and more.
-- `verify --max-states <N>` and `--max-patterns <N>` raise the exploration caps that were
-  fixed: `--max-states` is the state cap of every BFS run `verify` makes (entity, safety, and
-  property cones, and the whole-model run), `--max-patterns` the patterns per entity (default
-  still 256). Without `--max-states`, `verify` has no state cap: the 8,388,608 per cone and
-  2,097,152 for the whole model are gone, and `--memory` (and `--temporal-budget` for the
-  whole-model run) stops a run as `not decided`. The `bounds:` line says `no state cap per
-  BFS cone, memory <limit>`, or the cap given, and the hints name the flag. Under
-  `--with-tlc` the whole-model TLC run keeps its 2,097,152 cap unless `--max-states` is
-  given. Not settable in `rdra.toml`.
-
-- `verify --with-tlc` runs TLC beside the native checker as a second opinion and fails the
-  run when the two disagree on a check; a check one engine leaves `not decided` is no
-  disagreement. `scripts/verify-samples.sh --with-tlc` and `scripts/reduction-diff.py
-  --with-tlc` run the samples and random models that way.
-- `verify --with-tlc` also cross-checks `stable`, `unchanged`, `precedes`, and the state
-  models, which only the native checker decided before (#201):
-  - Each of those properties runs in TLC on the unreduced cone the native checker reads,
-    module `Cone_<Property>`, and on the whole model (`RdraSpec_<Property>`) when a
-    counterexample on a cone that frees slots asks for it. The final verdicts must agree.
-  - Each entity cone that BFS explored to the end, up to 100,000 states, runs its
-    `StateModel_<E>` deadlocks and witnesses cfgs on the system BFS explored, and prints
-    `tlc: StateModel_<E> (<n> states): <counts>; found <checks>`. TLC must name the same
-    states without a witness as BFS, and each deadlock TLC reports must be one BFS reports.
-    A deadlock only BFS finds is no disagreement, since a cycle in the column's cone hides
-    it from TLC. A larger cone prints `not run, over the limit of 100000 states`.
-  - Any other difference prints `error[EngineDisagreement]` and fails the run. A state-model
-    run moves `tlc_result:` only when it fails as a tool, since its findings are BFS's.
-  - `can_reach` and the use cases that never run stay native-only. A run without
-    `--with-tlc` builds none of these jobs, and its output does not change.
-
-  The cross-check found that the `Deadlock_` invariant `export --kind tla` prints leaves out
-  the vars a writing step reads outside the column's cone, such as an event mark, so TLC
-  can report a deadlock that does not exist (#261). Until it is fixed, `verify --with-tlc`
-  on a correct model of that shape prints `error[EngineDisagreement]` and exits 1 with
-  `result: tool_error`. The engine corpus records it as a known disagreement in
-  `fair_triggered_handler.rdra`.
-- `--temporal-budget` bounds the native whole-model run of a property its cone does not
-  decide: past the budget, the memory limit, or `--max-states` when given, the run stops
-  and the property is `not decided` unless the partial graph already holds a
-  counterexample.
-- The `Vacuous_<name>` warning also covers an `after` assertion whose use case never runs
-  and a temporal property whose rows never exist or whose `leads_to` trigger never holds.
-  `verify` warns too: it explores by BFS each cone it hands to TLC, at the same bounds, so
-  a check that is vacuous only at one instance is not reported there (#173).
-- `samples/oidc-auth` models an OpenID Provider and every OpenID Connect authentication
-  scenario: discovery and dynamic registration, the code, implicit, and hybrid flows with
-  all six response types, PKCE, `prompt` / `max_age` / `acr_values` and the `prompt=none`
-  errors, consent, code redemption and replay, UserInfo, refresh-token rotation, revocation,
-  introspection, the device authorization grant, CIBA in poll, ping, and push mode,
-  RP-initiated, front-channel, and back-channel logout, session management, third-party
-  initiated login, and signing-key rotation. `check` reports nothing, and 13 labelled rules
-  each fail when the guard that protects them is removed.
-- `check` warns `Vacuous_<rule>` when a state rule holds and says nothing: no reachable
-  state has the rows it ranges over, the guards of its `.when` never hold, or one condition
-  of a `forbidden` of several is one no row ever meets, such as a state no use case enters.
-  What a `forbidden` forbids being unreachable is its claim and draws no warning (#170).
-- Three `property` forms for order and stability: `stable(p)` keeps `p` once it holds,
-  `unchanged(E.col, ..).when(p)` keeps the columns while `p` holds, and `precedes(p, q)`
-  lets `q` hold only after `p` has. `verify` decides each by BFS on its cone, with no TLC
-  run, and prints the shortest trace to the step or state that breaks it. `check` and
-  `states` still evaluate no property. `export --kind tla` writes `stable` and `unchanged`
-  as action properties and `precedes` as an invariant over a latch `<P>_seen`. `.along`
-  scopes them, and `.fair` on them is `FairOnSafetyProperty` (#166).
-- A `property` over two or more entities takes `.along(A, B, ..)` with `.role(role)`, and
-  `.global()`, as a multi-entity `invariant` does. The owner links of the path join the
-  trigger, so `verify` no longer reports a pair of unrelated rows as a counterexample.
-  `.global()` with `.along` is `GlobalWithAlong`, a path that misses an entity is
-  `UnbindableScope`, and `lint` `multi-rule-unscoped` now warns on a property with
-  neither. A property without the chain keeps its meaning (#165).
-- `property P can_reach(p)` says the actors can still finish each instance: from every
-  reachable state where it is present, some path reaches `p` for it (CTL
-  `AG (present => EF p)`). It finds a trap a `Deadlock_*` misses, such as an Order that
-  moves between `pending` and `on_hold` forever once a guard is false. TLC cannot check
-  it, so `verify` decides it by BFS on its cone, and a violation prints a shortest trace
-  and the states the instance is then confined to. `check` and `states` verify safety
-  only and evaluate no property, as the docs now say explicitly. `export --kind tla`
-  names it in a comment, and `.fair(...)` on it is `FairOnReachProperty` (#167).
-- `check`, `states`, and `verify` run within a memory limit: `--memory`, else `memory`
-  under `[check]` or `[verify]` in `rdra.toml`, else `4GiB` for `check` and `states` and
-  `16GiB` for `verify`. A size takes binary units (`4GiB`, `4G`, `4GB`, `4096MiB` are the
-  same). A BFS cone whose states pass the limit stops as at `--max-states`:
-  `MemoryCapReached_<E>` in `check`, findings `not decided` in `verify`. `verify` gives
-  BFS half and starts only as many TLC runs at once as their `-Xmx` fit in the other half;
-  `RDRA_TLC_HEAP` and an `-Xmx` in `JAVA_TOOL_OPTIONS` still set the heap (#174).
-- insurance-claim-ops states 「賠償責任の事故は示談交渉の前に請求を完了しない」 as a
-  `.lemma()`, so `verify --prove` proves every state rule of every domain sample. The docs
-  and the `rdra-ish-verify` skill show how to find a lemma behind a CTI that turns on a
-  run mark (#147).
-- `verify --prove` also mines lemmas that pair one column of a child row with one column of
-  the parent its key names. The insurance lemma closes its rule only together with them.
-  They join only when a rule stays unproved without them, so a model that needs none takes
-  no longer (#147).
-- `verify` runs no TLC cone for a `.lemma()` rule. The proof uses a lemma only once it
-  proves it, and the insurance lemma, which reads both the claim's and the case's columns,
-  joined their two large cones into one that TLC did not finish in 10 minutes. `check` still
-  checks lemmas (#147).
-- `verify --prove` marks each rule the SQL export's schema does not enforce (the rules under
-  `Not enforced by this schema`) with `[not enforced by the SQL schema: <why>]`, and counts
-  how many of them the use cases are proved to keep (#141).
-- `verify --prove` also proves for any Int value and any time: Int columns and `now` have no
-  top in the proof, `Tick` always runs, and a write of any value takes any number. A rule
-  that held only because numbers stop at `--int-range-max` is now unproved, with a CTI
-  that shows the larger value (#141).
-- `.lemma()` on a `forbidden` or an `invariant` marks a fact written to help
-  `verify --prove`. `check` checks it as a rule, and `verify` runs no TLC cone for it
-  (the proof uses a lemma only once it proves it); the proof reports it as
-  `proved: lemma <name>` and counts it apart from the rules (#141). The `rdra-ish-verify`
-  skill gains `references/prove.md`: reading a counterexample to induction and proposing a
-  lemma.
-- `verify --prove` (experimental) tries to prove each state rule for any number of rows with
-  z3, as an inductive invariant. Each rule prints `proved:`, `unproved:` with a
-  counterexample to induction (a step that breaks the rule from a state where the proved
-  rules hold, not necessarily reachable), or `out of scope:`. Helper lemmas are mined from
-  the states BFS reaches and kept only when they are inductive too; the ones a proof used
-  print as `lemma:` lines. `--deny-unproved` fails the run on an unproved rule, and `--z3` or
-  `RDRA_Z3` names the binary (#141).
-- An entity takes a `rows` estimate (`rows 5000`, `rows "1e6"`); a value that is not a
-  whole number is `InvalidRowEstimate`. `lint` `query-index-missing` skips an entity under
-  10,000 rows, and the SQL export marks its suggested index as a small table.
-- Index suggestions cover the lookups the model implies, not only declared `reads`: a use
-  case a `timer` triggers finds the rows at the states its `transitions` move off, and a
-  `.has` / `.none` over an entity of 1,000,000 rows or more reads by the foreign key and
-  the columns it compares. Both appear in `lint` `query-index-missing` and in the SQL
-  export's index comments. A `holds` guard that compares an entity the use case neither
-  writes nor joins by one key to a written row reads across the table, and wants the
-  columns it compares with `==`; the hint offers `.along(...)` when a related row is meant.
-  The food-permit and insurance-claim samples declare `@index` on
-  the state columns their timers sweep.
+- `samples/oidc-auth` models an OpenID Provider with every OpenID Connect authentication
+  scenario.
+- The `rdra-ish-diagram` skill gives the structure of a PRD and a design document built from
+  the model ([guide](skills/rdra-ish-diagram/references/documents.md)). The sample design
+  documents open each BUC with its sequence diagram (#139).
+- Cargo features for development: `perf` prints time and memory per pass and run under
+  `RDRA_PERF=1`, and `shadow` checks each fast path against its reference twin (#275, #296).
 
 ### Changed
 
-- Without `RDRA_JOBS`, one BFS run computes its moves on a third of the cores, at least 4 and
-  at most 12 (never more than the cores), instead of on as many threads as cones run side
-  by side (the cores, at most 8). One run gains nothing past 4 to 6 threads (#296). Cones
-  side by side, z3 processes and `RDRA_JOBS` itself are unchanged, and the output does
-  not depend on the number.
+**Memory and speed** (#296)
 
-- `verify` explores one large cone faster on several threads, with the same output (#296
-  item 3.1, part 1). The threads that expand a chunk of states now also pack, hash and
-  number each move and find the moves that repeat one of the same chunk, so the thread that
-  reads the moves in order does less per move, and it expands a chunk itself rather than
-  wait. At 8 jobs: food-permit-ops 3.55 s to 2.16 s (35% of its 1-job time, from 58%),
-  clinic-ops 2.27 s to 1.72 s, insurance-claim-ops 6.24 s to 4.37 s. One job takes the time
-  it took. Where `--memory` stops a run does not change.
+- A run keeps far fewer bytes per state: states packed into the bits their domains need,
+  compact edges, and segmented buffers (#207, #255). `--memory` counts those bytes, so a run
+  that stopped at the limit now stops later or finishes. The stop point is still the same on
+  every machine.
+- `verify` is faster with the same output. BFS runs on several threads and cones that
+  reduce to the same system share one run (#163, #209, #372). Reduced cones share their
+  quotients (#252, #289), one cone at a time, so the result under a tight limit no longer
+  depends on the thread count (#244). BFS pre-filters guards and evaluates only the checks
+  a cone reads (#251, #253).
+- Without `RDRA_JOBS`, one BFS run uses a third of the cores, 4 to 12 (#371).
+- A safety cone stops once every check on it has a counterexample (#213), and an entity cone
+  that stops at the memory limit frees its room for the next cone (#284). The `(N states)` of
+  a failing cone line can differ from earlier releases.
+- `verify` reduces cones whose TLA+ tables print up to 530,000 cells (#284), and decides a
+  property on the reduced cone first (`Cone_<P>_WF: ok on the reduced cone`).
+- Only a run that builds an entity view gathers view patterns, so the pattern cap stops no
+  run of `verify` (#251).
 
-- `verify` gives back what an entity cone held once the cone stops at the memory limit
-  (#284). The entity pass runs its cones one at a time in cone order, each in the room the
-  results before it leave. A stopped cone used to keep everything it stored until the pass
-  ended, though only its own findings read it, so every cone after it ran in what was left:
-  on `clinic-ops` at three instances under `--memory 8GiB`, `AccountBalance` stopped at
-  83,486,263 states holding 7.9 GB, and the 17 cones after it had no room at all. `verify`
-  now reads a stopped entity cone's findings when it stops and then frees its states and
-  edges, so the next cone has the room the stopped one had. **A `never` verdict can change
-  from not decided to decided**, and nothing else changes: the 43 sample pairs print what
-  they printed. Under a tight limit `verify` decides more (`samples/patent-ops --memory
-  1MiB`: 43 findings not decided before, 13 now; `samples/clinic-ops --memory 4MiB`: 158 to
-  19). On `clinic-ops` at three instances under `--memory 8GiB`, 117 findings were not
-  decided and 17 are now. The cones that had no room now explore, so that run takes
-  5,578 s where it took 1,707 s, and its peak RSS is 35.6 GB where it was 29.2 GB: the
-  limit bounds what the stores hold, not the process (#237, #296). `check` and `states`
-  keep every run, since they read a stopped cone's views.
+**check, states and the generators**
 
-- A run keeps each state packed into the bits its variables' domains need (#296 item 2.3,
-  #207). A variable of `n` values takes `ceil(log2(n))` bits (a 3-value status takes 2, a
-  flag 1), and a state is the sum rounded up to whole bytes, where it was one byte per
-  variable: 6 to 12 bytes on the largest cones measured in #296, where it was 30 to 60. The
-  run looks a state up by its packed bytes. A plain run packs a successor by writing only
-  the cells its move changed into a copy of the source's packed bytes; a run up to instance
-  symmetry computes the canonical form on the whole state, as before, and packs that. A
-  reader gets the state back whole, and the deadlock scan reads single cells from the packed
-  bytes. On the largest cone of each run measured in #296, the bytes counted per state fall
-  from 78.3 to 42.3 on `patent-ops`, 106.3 to 62.3 on `food-permit-ops` (`view
-  BusinessPermit`), 85.6 to 54.5 on `clinic-ops`, 94.6 to 46.5 on `insurance-claim-ops` and
-  82.5 to 58.4 on `oidc-auth --instance-count 1`, and peak RSS falls 6% to 29% (1,195 MB to
-  850 MB on `insurance-claim-ops`). `--memory` counts the packed bytes, so a run that
-  stopped at the limit now stops later: `check --memory 17KiB` on `flags.rdra` stops where
-  `21KiB` stopped, and `verify samples/patent-ops` completes at `128MiB`. The stop point is
-  still computed from the counts alone, the same on every machine and thread count. The
-  output of every run that completes is unchanged at every sample's and corpus case's header
-  flags, `--symmetry always` included. This is a trade the owner accepted: packing and
-  unpacking cost instructions, and at `RDRA_JOBS=1` `verify` retires 15% to 24% more (322.1
-  G to 374.2 G on `insurance-claim-ops`, above the 325 G mark of #296 phase 1, and 104.0 G
-  to 127.0 G on `food-permit-ops`) for 6% to 29% less peak RSS and 29% to 51% fewer bytes
-  kept per state. Kani proves the packing round trip at every cell width from 0 to 8 bits,
-  across a 64-bit word boundary, and that writing the changed cells gives the whole pack. A
-  `shadow` build keeps every state unpacked beside the packed ones and compares every read
-  and every patch with them.
-- A run keeps its states, parents and edges in segments (#296 item 2.2). A buffer holds
-  segments of 4, 4, 8, ... up to 16,384 rows and then of 16,384 rows each, allocates the next
-  one whole when the last is full, and never copies a row: a stored row stays where it was
-  pushed. Up to 32,768 rows a buffer holds the room a doubling buffer held; past that it
-  holds under a segment of unused room where a doubling buffer held up to as many rows
-  again. On the largest cone of each run measured in #296, the bytes counted per state fall
-  from 115.7 to 78.3 on `patent-ops`, 187.7 to 106.3 on `food-permit-ops` (`view
-  BusinessPermit`), 127.4 to 85.6 on `clinic-ops`, 161.2 to 94.6 on `insurance-claim-ops`
-  and 120.3 to 82.5 on `oidc-auth --instance-count 1`. Peak RSS stays within 2% (it falls
-  6% on `insurance-claim-ops`): the room a doubling buffer held but never wrote was counted,
-  not resident. `--memory` counts the segments, so a run of more than 32,768 states that
-  stopped at the limit now stops later; the stop point is still computed from the counts
-  alone, the same on every machine and thread count, and at a count just past a power of
-  two the list of segments (24 bytes a slot) can count tens to hundreds of bytes more than
-  before. The output of every run that completes is unchanged at every sample's and corpus
-  case's header flags. At `RDRA_JOBS=1`, `verify` retires 3% to 8% more instructions (304.4
-  G to 322.7 G on `insurance-claim-ops`, 96.7 G to 103.6 G on `food-permit-ops`).
-- A run keeps fewer bytes per state (#296 item 2.1, #255). An edge is its 4-byte target
-  and a binding id in 1, 2 or 4 bytes (the fewest that the run's largest id needs, widened
-  at the same id on every machine), where it was 12 bytes with its source: the source is
-  the state whose first edge, kept per state read, comes at or before it. A parent is a
-  4-byte edge index where it was 8 bytes. A run that stops once every check has failed (a
-  safety cone of `verify` and `check`) keeps no edge list at all: its parent per state is
-  the source and the binding id, and it records per `after` step whether a move of its
-  action ran and whether one reached the rows the step reads, which is all its
-  vacuity check reads. On the largest cone of each run measured in #296, the bytes kept
-  per state fall from 159.4 to 115.7 on `patent-ops`, 288.7 to 187.7 on `food-permit-ops`
-  (`view BusinessPermit`), 179.9 to 127.4 on `clinic-ops`, 212.5 to 161.2 on
-  `insurance-claim-ops` and 234.6 to 120.3 on `oidc-auth --instance-count 1`, and peak
-  RSS falls by 13% to 23% (1,085 MB to 831 MB on `food-permit-ops`). `--memory` charges
-  these sizes, so a run that stopped at the limit now stops later: the stop point is still
-  computed from the counts, and the same on every machine and thread count. For example
-  `check --memory 4KiB` on `flags.rdra` stops at 64 states where it stopped at 38, and
-  `verify samples/patent-ops` completes its `OfficeAction` cones at `256MiB`. The output of
-  every run that completes is unchanged at every sample's and corpus case's header flags.
-  Reading an edge from three buffers costs instructions: at `RDRA_JOBS=1`, `verify`
-  retires 2% to 7% more (292.7 G to 304.1 G on `insurance-claim-ops`, 32.9 G to 34.6 G on
-  `patent-ops`, 90.4 G to 96.8 G on `food-permit-ops`). A `shadow` build compares every
-  edge, parent and recorded `after` step with the 12-byte list kept beside them.
-- `verify --with-tlc` sizes each TLC run's heap by its module and schedules the runs by
-  the memory they hold (#309).
-  - A run gets 512 MiB of heap per MiB of module text, in whole GiB: at least `1g` for a
-    cone and `2g` for a whole-model run, and at most TLC's share of `--memory`. Every
-    module under 2 MiB keeps the old heap. food-permit-ops'
-    `AfterAssert_SuspendBusiness_0` cone at `--instance-count 3` (a 7.6 MB module) now gets
-    `-Xmx4g` and passes with 7,167,444 states (`verify --instance-count 3 --entity
-    BusinessPermit --memory 16GiB --with-tlc`: 130 s). At the old `1g` TLC ran out of
-    memory on it.
-  - A run that runs out of memory runs once more at twice its heap when the share holds
-    that. Its line ends `rerun at -Xmx<2h> after -Xmx<h> ran out of memory`.
-  - A module that needs more heap than the share is not run. It is a `tool_error` whose
-    report names the heap it needs and says to raise `--memory` or set `RDRA_TLC_HEAP`.
-  - `RDRA_TLC_HEAP` and an `-Xmx` in `JAVA_TOOL_OPTIONS` still set every heap, with no
-    rerun.
-  - The runs go at once as long as their `-Xmx` plus 256 MiB per JVM fit the share, in
-    place of up to 8 at once. A run whose heap alone is past the share runs alone. At the
-    default `16GiB` that is six cone runs of `1g` at once, not eight, and at `4GiB` one,
-    not two.
-  - Each run's TLC workers are the cores divided by the runs that can go at once (those
-    going and queued, no more than fit the share), at most 8, and at least 1. Before, it
-    was at least 2 on 4 cores and up to all the cores. Past 4 to 8 workers a run gained no
-    time and spent 50 to 70% more CPU.
-- Keys of the quotient cache that explore the same sub-lifecycle share its run of S (#296):
-  keys that differ in what T observes, the inputs or the rises, or only in where their
-  actions came from, partitioned one run each, which `verify` explored again per key. A
-  complete run is held by the sub-lifecycle and the caps that can stop it, charged to the
-  command's pool while the cache holds it, and taken only by a pool that covers its peak;
-  a run that a cap or the memory limit stopped is never shared. The output is unchanged;
-  a `shadow` build holds every shared run to a fresh one, and `RDRA_ISH_QUOTIENT_STATS`
-  counts them (`runs_held`, `run_hits`, `run_bytes`). At `RDRA_JOBS=1`, `verify` retires 8%
-  fewer instructions on `insurance-claim-ops` (312.4 G to 288.6 G).
-- **Verdicts can change:** a deleted row keeps its keys (#212). `deletes(UC, E)` resets the
-  row's columns to their base values and no longer resets its keys to the first slot. The
-  only reader that sees the difference is a later step that binds the deleted row: a step
-  of a split use case whose earlier step deleted it (an `Earlier` parameter) and that reads
-  its key, in a guard or an `after` assertion. That step now reads the
-  parent the row had, where it read the first slot. The native checker, z3, and the TLA+
-  export (`<E>_owner_<P>` stays `UNCHANGED` on a delete) agree. No sample, skill example, or
-  engine-corpus case changes verdict except `sym_deleted_row_owner`, which reads that key
-  and now has a counterexample. A cone that deletes keyed rows can store more states,
-  since deleted rows that named different parents now differ; every sample's `verify`
-  output is unchanged, byte for byte. The TLA+
-  export changes text on 9 models (no verdict). Instance symmetry relabels a deleted row's
-  key with its parent, so a model that reads it is no longer left out of the group.
-- The flake's `tlc` (in `nix develop` and on the `PATH` of the flake's `rdra-ish`) runs TLC
-  1.7.4 on JDK 17 instead of JDK 8, with a class-data-sharing archive of TLC's classes built
-  with it (#309). `verify --with-tlc` also compiles a state-model run of at most 10,000
-  states by BFS with C1 only (`-XX:TieredStopAtLevel=1`), once TLC has started with that
-  flag; cone runs, whose size is not known when they start, keep the default JIT. The
-  engine corpus (306 TLC runs, 159 of them state models) went from 45 s wall and 275 CPU-s
-  to 33 s and 151 CPU-s on an 18-core Mac. Verdicts and the parsing of TLC's output are
-  unchanged. Not JDK 21: TLC 1.7.4 reads a trace record back wrongly on JDK 21 and later,
-  and a `-continue` run that prints many traces stops with an
-  `ArrayIndexOutOfBoundsException` (#314); JDK 17 is 3 to 14% slower than 21 on runs past
-  about 50,000 states.
-- The flake has a second launcher beside `tlc`, `tlc-batch`: one JVM that runs TLC jobs one
-  after another (#310), so that a small run does not pay for a JVM start and stop. Only the
-  `engine_equivalence` test uses it so far, for its small TLC runs (a cone of up to 5,000
-  states, a property's cone, a state model); `verify --with-tlc` still starts a process per
-  run. On an 18-core Mac the test went from 178 s to about 100 s of wall time and from
-  1,539 to about 650 CPU-s (two test threads, single runs beside other load), and its 734
-  sample cones of up to 5,000 states from 594 to 107 worker-seconds of TLC. On a 4-core CI
-  runner, in one job, the test took 637 and 633 s without the batch JVMs and 464 and 456 s with
-  them. A job a batch
-  JVM does not answer runs as a process, as every job does without `tlc-batch` on `PATH` or
-  with `RDRA_TLC_BATCH=0`. See
-  [Engine equivalence in batch JVMs](docs/formal-verification.md#engine-equivalence-in-batch-jvms).
-- The flake's `tlc` and `tlc-batch` run TLC 1.8.0 on JDK 25, in place of TLC 1.7.4 on JDK 17,
-  with the class-data-sharing archive recorded for the new pair; the devShell's `java` is
-  JDK 25 (#309). nixpkgs packages TLC 1.7.4 only, so the flake takes the `tla2tools.jar` of
-  the v1.8.0 release, a pre-release that upstream rebuilds under the same tag, pinned by
-  hash to the build of 2026-11-19 (`TLC2 Version 2026.11.19.180144`, rev bc1b506) and
-  downloaded first from this repository's release `tlc-1.8.0-bc1b506`, which keeps that
-  jar with upstream's MIT license text. JDK 25
-  is the newest JDK nixpkgs packages. The run that #314 found TLC 1.7.4 failing on JDK 21
-  and 25 runs to its end on TLC 1.8.0 on both (#314).
-  - `verify` and the tests read TLC 1.8.0's output as they read 1.7.x's: a temporal
-    violation that names its property (`Error: Temporal property P was violated.`), an
-    `always` that TLC 1.8.0 checks as an invariant on its state predicate and names by
-    where the predicate is, action labels that carry their arguments (`Place(1)`) in traces
-    and in the state graph, and the `node [...]` line that starts its dot dump. Verdicts are
-    unchanged: the engine corpus and `engine_equivalence` agree on both pairs.
-  - A short TLC run takes 0.18 s of wall time and 0.48 user CPU-s, against 0.59 s and 0.31
-    on TLC 1.7.4; the archive and C1 for small state models still pay (0.28 s and 0.64 CPU-s
-    without the archive, 0.25 CPU-s with C1). The engine corpus went from 37 to 41 s of wall
-    time to 17 to 21 s, at 216 to 247 CPU-s against 164 to 182; `engine_equivalence` from 84
-    to 93 s and 849 to 884 CPU-s to 98 to 106 s and 727 to 744 CPU-s, on an 18-core Mac.
-  - A batch JVM of `engine_equivalence` gets 512 MiB of heap, not 256: a JVM keeps the data
-    of the job before past a GC, and on TLC 1.8.0 one job of the test ran out of the
-    256 MiB in two runs of four. a run that builds an entity view (#251, #296): the cone of an
-  entity view in `check` and `states`. Only those runs gather view patterns now. A cone of
-  invariants, `after` assertions or `can_reach` alone, a run that quotients a sub-lifecycle,
-  and every run of `verify` gather none, so the pattern cap no longer stops them: a cone that
-  stopped there is now explored to its end, `--max-states` or `--memory`, and a sub-lifecycle
-  that failed to quotient at the cap can now quotient (the quotient cache no longer keys on
-  the pattern cap). `verify` still takes
-  `--max-patterns`, which stops none of its runs, and its run lines say `stopped at the state
-  cap (--max-states) or the memory limit`. The output at every sample's and corpus case's
-  header flags is unchanged. At `RDRA_JOBS=1`, `verify` retires 12% fewer instructions on
-  `patent-ops` and 5% fewer on `insurance-claim-ops`.
-- `verify` explores a cone once when its entity, safety and property passes reduce it to the
-  same system (#209, #296). The pass that runs such a system first runs it with every check
-  and to the end, and the later passes decide their cones on that run. Two cones share a run
-  only when their reduced systems are equal, and only a complete run is shared. A failing
-  safety cone that shares the run of an entity or property cone now prints the state count
-  of the whole cone, where a run of its own stops once every check has failed (#213): for
-  example `Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: counterexample (31 states)`
-  instead of `(7 states)` on `samples/formal-verification/cross_order_payment_split.rdra`.
-  The verdicts, the counterexamples and every other line are unchanged. At `RDRA_JOBS=1`,
-  `verify` retires 37% fewer instructions on `patent-ops` (59.0 G to 36.9 G), whose safety
-  pass explored the entity pass's two largest cones again, and 9% fewer on
-  `insurance-claim-ops`, whose property `ClaimEventuallyDecided` explored the cone of
-  `Forbidden_Claim_4` again.
-- A reduced cone computes the input bits it reads from T without allocating (#296):
-  `Fold::holds` allocated its params, the free T params and their radix on every call. The
-  output is unchanged; a `shadow` build holds every call to the old function. At
-  `RDRA_JOBS=1`, `verify` retires 21% fewer instructions on `insurance-claim-ops` (458.8 G
-  to 364.5 G); samples without folds are unchanged.
-- `verify` reduces a cone whose TLA+ tables print up to 530,000 cells, not 200,000 (#284),
-  for the native checker and TLC alike, so both still check the same cones.
-  food-permit-ops' `AfterAssert_SuspendBusiness_0` at `--instance-count 3` is now reduced
-  to 7,167,444 states and decided (`verify --instance-count 3 --entity BusinessPermit
-  --memory 8GiB` takes 158 s); unreduced, it stopped at the memory limit. TLC needs a larger heap for such a cone: the 520,704-cell module checks at
-  `-Xmx4g` in 98 s and runs out of memory at `-Xmx1g`; `--with-tlc` now gives it that heap
-  (#309, below). No sample at 1 or 2 instances, no engine
-  corpus case, and no `reduction-diff.py` seed CI runs has a cone in the new range, so their
-  output is unchanged.
-- `verify` no longer runs a sub-lifecycle again for each cone that shares it after the run
-  stopped at the memory limit (#289). The declined quotient is shared through the quotient
-  cache of #252 when no other run's bytes decided the stop: a cone with the same extended
-  sub-lifecycle and caps takes it when its pool has no more room than the one the run was
-  refused in and covers what the run was granted, and computes otherwise. The output is
-  unchanged.
-- `diagram`, `list`, `csv`, and `export` explore the lifecycle only for an output that
-  reads it: the state diagram and the TLA+ export (#285). Every other kind draws declared
-  facts and the data layer, and explored the whole lifecycle only to print the stderr note
-  `note: the lifecycle has N error(s) ...; this output does not read the lifecycle`. That
-  note is gone; run `check` for the lifecycle errors. The
-  outputs themselves are unchanged. On oidc-auth a debug `diagram --kind flow` takes 0.1 s
-  instead of 3.5 s, and `scripts/check-sample-artifacts.sh`'s commands take 120 s instead
-  of 429 s in a debug build.
-- `verify` reduces cones faster (#252). A sub-lifecycle's quotient is shared across the
-  cones whose extended sub-lifecycles are equal: it is explored and partitioned once, and
-  each cone maps its classes into its own ids. A shared quotient is matched by `==` on the
-  extended sub-lifecycle, its `obs`, inputs and rises, and the caps that can stop its runs;
-  it is taken only where its runs fit the room the cone has, and it stays charged to
-  `--memory`, in the bytes its tables take, until the entity cones are reduced. The safety
-  and property cones are now reduced one at a time in order, so which of them are reduced
-  no longer depends on the number of threads under a tight limit (#244). A quotient with
-  more classes than any cone's TLA+ tables may print is no longer built in full. The
-  stuttering partition refines by a worklist of splitters instead of sweeping every block
-  until nothing splits, and a reduced state is stepped without allocating. The output is
-  unchanged on every sample and corpus case. At `RDRA_JOBS=1`, `verify` retires 33%
-  fewer instructions on `insurance-claim-ops`, 9% fewer on `patent-ops` and 28% fewer on
-  `oidc-auth` at one instance. `RDRA_ISH_NO_QUOTIENT_CACHE=1` turns the sharing off, and
-  `RDRA_ISH_QUOTIENT_STATS=1` prints what it did.
-- BFS finds a state's enabled bindings without walking every guard (#253), and prints what
-  it printed. Each system works out once which guards read the successor, and turns each
-  guard conjunct that reads one var of one param's row into a test of that byte, taken from
-  the evaluator itself on every byte value; a slot that fails is no candidate, so no guard is
-  evaluated for it. `verify` at `RDRA_JOBS=1` retires 29% fewer instructions on
-  food-permit-ops, 30% fewer on patent-ops, and 25% fewer on oidc-auth at
-  `--instance-count 1`.
-- A BFS run evaluates only the invariants and `after` assertions its caller reads (#251). An
-  entity cone and a `can_reach` cone evaluate the checks among their own targets, so a cone
-  of entity targets alone evaluates none, and the run that quotients a sub-lifecycle
-  evaluates none. A cone of checks alone and `verify`'s safety cones still evaluate every
-  check their system holds: the early stop of #213 reads them all. Each check is decided on
-  its own cone, as before, so no output changes. BFS also looks up the pattern a move
-  starts from once per expanded state instead of once per move, and skips a written row
-  whose columns the move leaves as they were. `rdra-ish-core` adds `Checks`,
-  `TransitionSystem::run_checking`, and `ComponentRun::checks`.
-- A safety cone stops once every invariant and `after` assertion on it has a
-  counterexample (#213), in `verify` and in `check` and `states`. The counterexamples are
-  BFS's first, so they stay the shortest, and the verdicts and traces do not change. A cone
-  that also answers an entity view, a `can_reach`, or a temporal property runs to the end. A
-  stopped cone counts as neither complete nor capped: it reports no vacuity, which a
-  violated check does not have, and no cap note. The `(N states)` of a failing
-  `Cone_<name>` run line now counts the states BFS reached before it stopped, so it can be
-  smaller than TLC's line for the same module (`samples/formal-verification-fail`: 7 to 3).
-  On `crates/rdra-ish-cli/tests/fixtures/early_stop/flags_fail.rdra` at
-  `--instance-count 3` the rule's cone stops at 3 of its 16,843,009 states; in one run on a
-  shared machine `verify` took 108 s where it took 206 s, the rest being the Task entity
-  cone, which runs to the end.
-  BFS also tracks violated checks as a bit per check name instead of a set of strings.
-- `verify` runs `Cone_<P>_WF` on the reduced cone first, with every class whose
-  sub-lifecycle can loop taken as a place a behavior may stop. An `ok` there is the
-  unreduced cone's `ok`, and a counterexample there prints only after it lifts to the
-  unreduced cone and replays, fails the property, and passes the fairness check; anything
-  else runs `Cone_<P>_Full` and `Cone_<P>_WF` on the unreduced cone as before. The note reads
-  `Cone_<P>_WF: ok on the reduced cone` and has no `Cone_<P>_Full` part. A property whose
-  unreduced cone passes the state cap or the memory limit can now be decided where it was
-  `not decided`. No sample's verdict changes. The argument is in
-  [WF_vars(Next) on a reduced cone](docs/formal-verification.md#wf_varsnext-on-a-reduced-cone);
-  `RDRA_ISH_NO_WF_REDUCED` turns the run off for measurement.
-- BFS keeps each explored state once, in one buffer, with a table of state numbers to find
-  it by, in place of a heap block per state and a second copy as the key of the seen
-  set. The store per state on the sample cones of a thousand states and more falls from
-  215 to 125 bytes at the median at `check` bounds (260 to 154 at the most) and from 248 to
-  159 at `verify` bounds (403 to 316). States, edges, verdicts, and counterexamples do not
-  change, but a cone fits more states under `--memory`: a cone that stopped at the limit
-  stops later or finishes, and the `held at <N> B per state` of `MemoryCapReached` is
-  smaller. The memory estimate follows the new store, `(w + 12)·p2(n) + 5·buckets(n) +
-  12·p2(e)` bytes.
-- The TypeScript types of `codegen --lang ts` are covered by the compatibility contract
-  ([The TypeScript types of `codegen`](./docs/compatibility.md#the-typescript-types-of-codegen)).
-  The contract covers the scalars, the `<Entity>Id` types, the value sets with their
-  `<Name>Values` constants, the state types, and the `<Entity>Row` types that
-  `codegen <INPUTS> --lang ts [-o <FILE>]` prints for a model `check` passes. It covers
-  their names, their property names and types, and the rules that narrow a nullable
-  column. The rest of `codegen` stays experimental: the functions, rule checks,
-  dispatchers, header, `--allow-failing`, and the Rust and Go output. The generated header
-  says which part is covered. `tests/codegen_contract.rs` pins the covered types.
-- `check` and `states` have no state cap by default: `--memory` (4GiB, or `memory` under
-  `[check]`) is what stops a cone, and `--max-states <N>` still caps it. The `bounds:` line
-  says `no state cap per cone, memory 4GiB`, or `<N> states per cone` under the flag. A cone
-  past 65,536 states, which `check` used to refuse at the default cap, now completes within
-  the memory limit. The default `--max-patterns` follows `--instance-count`: 2^(10 + 8 * (n -
-  1)) patterns (1,024, 2^18, 2^26, ...) for `n` instances, up from 256 at one; a shift past
-  the word size saturates, and a flag you pass always wins. The generators (`codegen`,
-  `next`, and the lifecycle gate of `diagram`, `export`, `list`, and `csv`) explore at the
-  caps `check` runs at by default: no state cap, 1,024 patterns, and `memory` under
-  `[check]` in `rdra.toml` (4GiB by default). A cone past 65,536 states that `check` passes
-  no longer makes `codegen` or a state diagram refuse with `StateCapReached`. They take no
-  `--memory` flag; a cone past the limit is `MemoryCapReached`, which refuses `codegen`
-  and the outputs that read the explored states, and is a note on the others. `verify`'s
-  caps do not change.
-- `verify` checks `always`, `eventually`, and `leads_to` natively on the graph BFS
-  explores, under each property's fairness, through the same ladder of runs TLC took: the
-  reduced cone, the full cone, the cone with `WF_vars(Next)`, and the whole model. A
-  `leads_to` or `eventually` counterexample is a lasso that replays through the step
-  relation and passes the fairness check; one that does not is `error[LassoFault]`, a tool
-  bug. One run each on 4 cores: patent-ops 2.0 s and 0.5 GB, food-permit-ops 6.3 s and
-  1.6 GB, insurance-claim-ops 10.7 s and 2.1 GB, where TLC took 33 s, 24 s, and 127 s.
-- `check` says of a model's properties `note: <n> temporal properties were not
-  model-checked by check; use verify`.
+- `check` and `states` have no state cap by default; `--memory` stops a cone. The default
+  `--max-patterns` follows `--instance-count`: 1,024 at one instance, 2^18 at two.
+  `codegen`, `next` and the lifecycle gate run at `check`'s caps.
+- `diagram`, `list`, `csv` and `export` explore the lifecycle only for the state diagram
+  and the TLA+ export (#285). The stderr note about lifecycle errors on the other outputs is
+  gone; run `check` for them.
+- `check` notes the temporal properties it does not check: `note: <n> temporal properties
+  were not model-checked by check; use verify`.
 
-- `verify` runs less TLC: 194 s to 113 s on insurance-claim-ops and 28 s to 23 s on
-  food-permit-ops (4 cores). A cone whose checks all stand in the module of a larger cone
-  that takes every step it takes is not run when the larger cone passes, and prints `ok (checked in Cone_<larger>)` in place
-  of its state count; when the larger cone fails it runs as before. A reduced cone no
-  longer recomputes the sub-lifecycle's class on a step that writes none of its inputs,
-  in TLA+ and in BFS (#164).
-- `verify` is faster and prints what it printed: 43 s to 20 s on clinic-ops, 53 s to 30 s on
-  patent-ops, 101 s to 27 s on food-permit-ops, and 355 s to 194 s on insurance-claim-ops
-  (4 cores). BFS computes the moves of one large cone on several threads and reaches the
-  states in the order one thread does. The TLC cone runs start while BFS and the proof run,
-  the long ones first, each with at least 2 TLC workers on 4 cores or more; a safety cone
-  that does not pass runs again on one worker, so a counterexample is the one a single
-  worker finds. `verify --prove` shares the checks of a step over several z3 processes.
-  `RDRA_JOBS` also sets the BFS threads of one cone and the number of z3 processes. The peak
-  memory is now BFS plus the TLC heaps. A counterexample to induction may show another value
-  for a column its step does not constrain: the solver that reads it starts over first, so
-  the CTI does not depend on the number of z3 processes (#163).
-- Skill `rdra-ish-diagram` says how to lay out a PRD and a design document from the model
-  (`references/documents.md`): which diagrams and tables go into each section, in which
-  order, and the rules for embedding them (generate, stay under Mermaid's limits, tables as
-  tables, `--title` for images). It is the base structure: the user's own document
-  instructions or skill take precedence. The reader table of
-  `docs/rdra-ish-interpretation.md` names the new `diagram` scopes, and the README says
-  the diagrams are made for a PRD or a design document and links the guide.
-- The sample design documents open each BUC section's processing with the BUC's sequence
-  diagram (`diagram --kind sequence --buc`), before the per-use-case ones.
-- A predicate whose arguments have the wrong kinds adds no relation. `invokes(UseCase,
-  Entity)` reports its type mismatch and stops, as a wrong `contains` or `triggers` pair
-  already did, so the diagnostics that followed from the bad edge, and the edge in
-  diagrams and in the LSP, are gone (#159).
-- A `property` atom whose column no single entity owns is the model error
-  `UnresolvedPropertyColumn`, which `check` and the LSP report while building the model.
-  It was the lifecycle's `UnresolvedPropertyAtom`, and until then the atom's bare
-  right-hand side was read by its spelling. The lifecycle diagnostic is gone (#160).
-- `rdra-ish-core` keeps the conditions of a single-entity rule in one list of
-  `EntityCondition` (`Equals { column, value }` or `Comparison`), in the order written, as
-  cross-entity rules keep `CrossEntityCondition`. `forbidden_constraints`,
-  `required_constraints` and `exclusive_constraints` hold `EntityRule`, which replaces
-  `ForbiddenConstraint`, `RequiredConstraint` and `ExclusiveConstraint`; its `equals()`
-  and `comparisons()` read one kind. `EntityInvariant` has `guards` and `requireds` only.
-  `EffectValue::TypedPresent`, `EffectValue::normalize()` and the always-empty `pg_type`
-  of `AxisKind::Nullable` and `StateFieldValue::Present` are gone, and
-  `AbstractValue::display_with_type(None)` is `display()`. Output is unchanged (#162).
+**TLC**
+
+- The flake's `tlc` runs TLC 1.8.0 on JDK 25, with a class-data-sharing archive, and a
+  `tlc-batch` launcher runs small jobs in one JVM (#309, #310, #314).
+- `verify --with-tlc` sizes each TLC heap by its module, reruns once at twice the heap after
+  an out-of-memory error, and runs as many TLC jobs at once as `--memory` holds (#309).
+  `RDRA_TLC_HEAP` and an `-Xmx` in `JAVA_TOOL_OPTIONS` still set every heap.
+
+**CI and release**
+
+- A `v*` tag push now also publishes to PyPI: `release.yml` dispatches
+  `publish-pypi.yml` once the GitHub release is out. Both check that the tag,
+  `Cargo.toml` and `pyproject.toml` name one version (#362).
+- `nix profile install github:manji-0/rdra-ish-dsl` installs `rdra-ish` and `rdra-ish-lsp`
+  with the `tlc` and `z3` that `verify` runs.
 
 ### Fixed
 
-- The Go probe of `check --code` imports the domain package under `[code.go] package` when
-  that is set, and the service's package under it when the domain shares the service's package,
-  instead of always using the last element of the import path (#363).
+**Language server**
 
-- `codegen` output compiles for an entity whose state column is marked `@null` (#363). The
-  Rust `TryFrom<Row>`, the TypeScript `fromRow` and the Go `<Entity>FromRow` compared the
-  nullable column with the bare values; a row whose state column is null is now an
-  `InvalidRow`, and the row of a state holds `Some(..)` / a pointer / the value.
+- Results use the paths the editor opened, so a workspace opened through a symlink shows its
+  diagnostics.
+- Diagnostics of a deleted, renamed or moved file are withdrawn.
+- No crash on hover, signature help or completion after a multi-byte character (#356).
+- Formatting gives the same text as `rdra-ish fmt`; format on save no longer adds a blank
+  line (#357).
+- Analysis runs off the message loop and publishes only the latest result (#157).
+- An unfinished declaration at the end of a file no longer empties the file's outline and
+  symbols.
 
-- The language server sends its results under the paths the editor opened the files by.
-  In a workspace opened through a symlink, diagnostics, definitions, references, renames,
-  code lenses and workspace symbols used to name each file by the path the symlink points
-  to, a document the editor did not have open, so the open file showed no diagnostics. A
-  document is named as the editor opened it, and another file under a workspace root as
-  the root the editor named.
-- An unfinished declaration at the end of a file, as while it is typed (`actor ` on the last
-  line), no longer empties that file's syntax tree. The parser recovered from a broken
-  declaration in the middle of a file but not at its end, so the whole file was dropped:
-  the language server's outline, code lenses and semantic colors went blank, the files
-  that import it reported `unknown module` and `undefined symbol` for what it declares,
-  and `check` reported only the syntax error. The declarations before the unfinished one
-  are now kept, with the same syntax error.
-- `codegen` computes a logical `@derived` column in the transition functions it prints, in
-  Rust, Go and TypeScript. A function used to copy the column from the row it read, so a
-  function that changed `qty` returned `bulk` as it was, against the header's obligation
-  `bulk always equals qty >= 3`, and a create function took `bulk` as an input. Now a
-  literal write folds it (`bulk: true`), and a column copied from an argument row is read
-  there (`bulk: order.qty >= 3`). A derived column the function cannot compute that way (an
-  arithmetic one, one that compares two columns or reads `now`, a nullable operand, or an
-  operand the caller passes) is an input of every function that writes the row, and the
-  function's doc says why. Functions on an entity with such a column gain that input, and a
-  create function's derived inputs come after its other inputs.
-- The language server withdraws the diagnostics of a file that leaves the analysis: one
-  deleted, renamed, or moved out of the workspace, as on a branch switch. Their errors and
-  warnings used to stay in the editor's problem list until it restarted, and so did those of
-  the last `.rdra` file of a workspace when it was deleted.
-- A use case that a BUC holds only through a step of one of its flows (`covers(Step, UC)`)
-  no longer draws the `TimerTriggeredUseCaseUnreachable` warning ("belongs to no BUC") when a
-  timer triggers it, as an event-triggered one already did not (#161). The warning failed
-  a gate that treats warnings as errors. The `VIA` column of `states` names that BUC for
-  such a use case too, where it used to print the use case without one. When several BUCs
-  hold a use case, `VIA` names the first by id, where it used to name the first whose
-  `contains` was declared.
-- The language server no longer crashes on hover, signature help, or completion right after
-  a multi-byte character (#356), as inside `actor A "受付(窓口)"`, after `// 受付(`, or after
-  an unclosed `"受付`. The server used to stop at a panic there. A request whose handler
-  panics now gets an internal-error response, and the server keeps running.
-- Formatting through the language server gives the same text as `rdra-ish fmt` (#357). Its
-  edit stopped before the file's final line break, so each format, and each save with
-  `editor.formatOnSave`, left one more blank line at the end. `rdra-ish fmt --check` then
-  failed on the file. The edit now covers the whole file, with LF or CRLF line breaks.
+**codegen**
+
+- A logical `@derived` column is computed in the transition functions, not copied from the
+  row read.
+- A name that is a keyword of the target language is escaped (`r#return`, `return_`)
+  (#265).
+- Output compiles for an entity whose state column is `@null`; the Go probe imports the
+  domain package under `[code.go] package` (#363).
+
+**verify**
+
+- `verify --prove` above one instance also offers the lemma candidates mined at one
+  instance (#231).
 - `verify --with-tlc` names the cause when TLC 1.7.x fails reading a trace back on JDK 21
-  or later (#314). With `--tlc-jar`, `RDRA_TLC_JAR`, or a `tlc` that runs on such a JVM, a
-  `-continue` run that prints many traces stopped with an `ArrayIndexOutOfBoundsException`,
-  and `verify` reported a `counterexample` for what it had printed before, or a
-  `tool_error` with nothing that named the cause. `verify` now warns once when a run's
-  banner shows TLC 1.7.x on JDK 21 or later. A run that stops on the exception is a
-  `tool_error` whose report starts with a hint to use TLC 1.8.0, or to run TLC 1.7.x on
-  JDK 17 or earlier.
-- `codegen` escapes a name that is a keyword of the target language (#265). A use case
-  named `Return` printed `pub fn return(...)` in Rust and `export function return(...)` in
-  TypeScript, and neither compiled. Rust now prints a raw identifier (`r#return`), or a
-  trailing `_` for the words a raw identifier cannot be (`self`, `super`, `crate`); an enum
-  value `self` is the variant `Self_` in the enum's declaration as well as in its uses.
-  TypeScript gives a reserved word a trailing `_` (`return_`) in function, parameter and
-  local names; property names stay as the model spells them. Go already escaped its
-  keywords. Names that are not keywords print as before.
-- `verify --prove` above one instance now offers every lemma candidate it would offer at
-  one instance (#231). Candidates were mined only at the run's bounds, and each mining run
-  stops at 50,000 states. On oidc-auth at two instances, 13 of 24 cones stopped there, and
-  the proof lost 2 of the 16 rules it proves at one instance. The prover now also mines every
-  cone at one instance per entity, where these cones finish, and offers both sets of
-  candidates. A kept `lemma:` that only the one-instance run offers ends with
-  `(mined at 1 instance per entity)`. oidc-auth proves 16 of 16 rules at both counts.
-- An integer `@default` outside `0..--int-range-max` on an Int, Money, Decimal, Date, or
-  DateTime column that a rule reads is `error[IntLiteralOutOfBounds_<E>_<value>]`, as a
-  literal there is: `@default(7) of stock is outside the bounded domain 0..5`. The column
-  used to start at 0 (or `null`) in `check`, `states`, `verify`, `--with-tlc`, `--prove`,
-  and the TLA+ export, so every engine reported violations the model does not have. A model
-  with such a default now fails `check` and stops `verify` and `export --kind tla` before
-  any engine runs; raise `--int-range-max` or lower the default. The top of the range is
-  still a valid default (#180).
-- `check`, `lint` and the LSP print the warnings for an API or an entity in several
-  systems, an entity owned by several systems or without an API of its owner, and a
-  permission no actor can reach in id order. They came in the order of a hash map, which
-  could change from one run to the next (#152).
-- The ER diagram lists its relations by the ids of the two entities they join. They were
-  sorted by the debug text of internal keys, so the tenth entity of a model came before
-  the second (#153).
-- A second definition of the same kind and id in one module no longer leaves a node with
-  no symbol and no declaration site in the model. Diagrams, lists and exports of a model
-  that `check` rejects for the duplicate show the node once (#154).
-- A key column copied from an enum key column keeps the labels of its values, so SQL
-  comments, DBML notes and the other outputs that print labels show them on the copy too
-  (#155).
-- `diagram --all` fails on an error from an emitter and names the diagram. It counted
-  every error as a diagram with nothing to draw and left it out. A sequence diagram of a
-  BUC with no use case is still left out, and its error no longer opens with `IO error:`
-  (#156).
-- The language server analyzes the workspace off its message loop and publishes a result
-  only while it is the latest. A slower analysis of older text could otherwise publish
-  over a newer one, and every analysis held up the requests behind it: in the new test, 38
-  quick edits to a large file settled in about 3 seconds, where they took about a minute
-  before (#157).
-- A BUC whose id another kind also uses (`buc Order` with `entity Order`) reaches its use
-  cases again. It reached nothing, so `lint` drew false findings on it and `--buc`
-  diagrams of it came out empty (#158).
-- A use case that a step of a BUC's flow covers is one of the BUC's use cases for
-  permissions, actor inputs and the `TriggeredUseCaseUnreachable` warning too, as it
-  already was for `next` and the BUC hand-offs. `performs(Actor, Buc)` now lends the actor
-  to it, so its required permissions find the actor (#161).
-- `verify` no longer passes a `can_reach` whose cone stops at `--max-states`, the pattern
-  cap, or the `--memory` limit. Such a property is `not decided`: it is listed under
-  `not checked:` as `can_reach <P> is not decided: the <P> cone stopped at the state cap
-  (<n> states)` (or at the memory limit), the `can_reach (BFS on ...)` line adds
-  `, <n> not decided`, the `result:` line says `not decided`, and `--deny-undecided` fails
-  the run. The stop was dropped, so a run whose entity cones finished printed
-  `result: ok` and passed `--deny-undecided`, even where the full cone breaks the property.
-  `stable`, `unchanged`, `precedes`, `always`, `eventually`, and `leads_to` already counted
-  a stopped cone as undecided (#246).
-- `diagram --help` describes `--all` and `--kind sequence` as the command runs them
-  (#247). The help said `--all` could not be combined with `--kind`. In fact `--all` ignores
-  `--kind`, and refuses `--buc`, `--usecase`, `--entity`, `--actor`, `--node-kind`, and
-  `--edge-kind`. It also said the sequence diagram needs exactly one `--usecase`. It takes
-  one `--usecase`, or `--buc` for the BUC's use cases one after another.
+  or later (#314).
+
+**Model, diagrams and lint**
+
+- A use case a BUC holds through a flow step counts as the BUC's for permissions, actor
+  inputs, the `VIA` column of `states`, and the `TimerTriggeredUseCaseUnreachable` and
+  `TriggeredUseCaseUnreachable` warnings (#161).
+- A BUC whose id another kind also uses reaches its use cases (#158).
+- `invokes(UseCase, Entity)` with the wrong kinds adds no relation, so no follow-on
+  diagnostics (#159).
+- Warnings print in id order (#152); ER relations sort by entity id (#153); a duplicate
+  definition leaves no ghost node (#154); a copied enum key column keeps its labels (#155).
+- `diagram --all` fails on an emitter error (#156), and `diagram --help` describes `--all`
+  and `--kind sequence` as they run (#247).
+
+### Known issues
+
+- `--memory` bounds what the state stores hold, not the whole process (#237, #242, #243).
+  A run that stops at the limit has been measured at up to 1.85 times it. Set `--memory` to about half
+  the memory you can spare. See [Memory limit](docs/cli-reference.md#memory-limit).
+- TLC 1.7.x on JDK 21 or later fails reading traces back (#314). Use the flake's TLC 1.8.0,
+  or run TLC 1.7.x on JDK 17.
 
 ## v2.3.0 - 2026-11-18
 
