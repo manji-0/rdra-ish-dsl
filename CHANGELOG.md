@@ -408,6 +408,23 @@
 
 ### Changed
 
+- A run keeps its states, parents and edges in segments (#296 item 2.2). A buffer holds
+  segments of 4, 4, 8, ... up to 16,384 rows and then of 16,384 rows each, allocates the next
+  one whole when the last is full, and never copies a row: a stored row stays where it was
+  pushed. Up to 32,768 rows a buffer holds the room a doubling buffer held; past that it
+  holds under a segment of unused room where a doubling buffer held up to as many rows
+  again. On the largest cone of each run measured in #296, the bytes counted per state fall
+  from 115.7 to 78.3 on `patent-ops`, 187.7 to 106.3 on `food-permit-ops` (`view
+  BusinessPermit`), 127.4 to 85.6 on `clinic-ops`, 161.2 to 94.6 on `insurance-claim-ops`
+  and 120.3 to 82.5 on `oidc-auth --instance-count 1`. Peak RSS stays within 2% (it falls
+  6% on `insurance-claim-ops`): the room a doubling buffer held but never wrote was counted,
+  not resident. `--memory` counts the segments, so a run of more than 32,768 states that
+  stopped at the limit now stops later; the stop point is still computed from the counts
+  alone, the same on every machine and thread count, and at a count just past a power of
+  two the list of segments (24 bytes a slot) can count tens to hundreds of bytes more than
+  before. The output of every run that completes is unchanged at every sample's and corpus
+  case's header flags. At `RDRA_JOBS=1`, `verify` retires 3% to 8% more instructions (304.4
+  G to 322.7 G on `insurance-claim-ops`, 96.7 G to 103.6 G on `food-permit-ops`).
 - A run keeps fewer bytes per state (#296 item 2.1, #255). An edge is its 4-byte target
   and a binding id in 1, 2 or 4 bytes (the fewest that the run's largest id needs, widened
   at the same id on every machine), where it was 12 bytes with its source: the source is
