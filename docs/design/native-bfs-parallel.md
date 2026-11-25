@@ -35,12 +35,14 @@ number is marked **measured**, **computed** (arithmetic on measured numbers) or
    miss, assigns numbers, and pushes edges in order. Estimated reader share after 3.1: 15%,
    14% and 10% of the one-thread run (from 36%, 32% and 24%). Estimated gain for
    food-permit-ops: from 1.94x to 3.5x to 3.9x at 6 to 18 jobs.
-4. **#296's exit criterion sits just above that estimate.** The criterion is 4x: a quarter
-   of the one-thread time at 8 jobs. The model gives 3.9x for 3.1. The same model gives
-   2.16x for today's code against 1.94x measured, and corrected by that ratio it gives
-   3.5x. 3.3 ([Beyond 3.1](#beyond-31-in-flight-dedup)) gives 4.2x to 4.7x. Outside BFS,
-   10% of the food-permit-ops run is serial (the findings and adjacency of the one large
-   cone, start and exit), which bounds any design at about 10x. See [Decisions for the owner](#decisions-for-the-owner).
+4. **Exits (owner, 2026-11-25).** 3.1's exit is food-permit-ops at 8 jobs in at most 30%
+   of its one-thread wall time, with the same output at every job count. #296's 4x (a
+   quarter of the one-thread time) is the exit of 3.3. The model gives 3.9x for 3.1. The
+   same model gives 2.16x for today's code against 1.94x measured, and corrected by that
+   ratio it gives 3.5x: both meet 30% (3.3x). 3.3
+   ([Beyond 3.1](#beyond-31-in-flight-dedup)) gives 4.2x to 4.7x. Outside BFS, 10% of the
+   food-permit-ops run is serial (the findings and adjacency of the one large cone, start
+   and exit), which bounds any design at about 10x. See [Decisions](#decisions).
 5. **The output stays the one-thread output.** A worker's hit is final, because the table
    and the store only grow. A worker's miss is a hint, and the reader probes again. Every
    stop point is decided on the reader, in move order, from reader-owned lengths. The new
@@ -580,7 +582,8 @@ run. Two ways remove them:
 
 Either takes the reader to about 9% on food-permit-ops (computed: 15.4% less the probes
 and the rehash). Then the expansion bounds the run at 8 jobs: 4.7x by the model, 4.2x less
-its 11%, and only if all 7 helpers run at full speed. Decide after 3.1 is measured, as
+its 11%, and only if all 7 helpers run at full speed. 4x is 3.3's exit
+([Decisions](#decisions)). Decide after 3.1 is measured, as
 #254 says. Independently, the 10.2% outside BFS (the findings and `Adjacency::new` of the
 one large cone, start and exit) bounds every design at about 10x on food-permit-ops. A
 parallel adjacency build is the lever there, and it is outside #296's list.
@@ -607,20 +610,28 @@ parallel adjacency build is the lever there, and it is outside #296's list.
 - **2.1 drops `from` from `Edge`.** The reader writes the compact edge in the same order.
   The argument does not change.
 
-## Decisions for the owner
+## Decisions
 
 <!-- derived-from #what-31-buys -->
 <!-- derived-from #beyond-31-in-flight-dedup -->
 
-1. **The exit criterion.** "food-permit-ops at 8 jobs at or under a quarter of one job" is
-   estimated just out of reach for 3.1 alone: 3.5x to 3.9x. Choose one:
-   - keep it as the exit of phase 3, and build 3.3 only if 3.1 measures under 4x; or
-   - restate it for 3.1 as "at or under 30% of one job at 6 or 8 jobs, same output at
-     every job count", and make 4x the exit of 3.3.
-2. **Helpers and cones split** (3.2). `RDRA_JOBS` keeps setting both. Should the default
+1. **The exits of 3.1 and 3.3** (owner, 2026-11-25, on
+   [#320](https://github.com/manji-0/rdra-ish-dsl/pull/320)). #296's exit, food-permit-ops
+   at 8 jobs in at most a quarter of its one-thread wall time, was estimated just out of
+   reach for 3.1 alone (3.5x to 3.9x). The owner chose to split it:
+   - **3.1's exit:** food-permit-ops wall time at 8 jobs at or under 30% of its one-thread
+     wall time, with the same output at every job count.
+   - **3.3's exit:** the same at or under a quarter (4x).
+
+## Open questions for the owner
+
+<!-- derived-from #helpers-by-need-and-the-jobs-cap -->
+<!-- derived-from #the-memory-pool -->
+
+1. **Helpers and cones split** (3.2). `RDRA_JOBS` keeps setting both. Should the default
    helper count become `available_parallelism() - 1`, with cones side by side staying at
    `min(cores, 8)`? This is a documented behavior of `RDRA_JOBS` in `cli-reference.md`.
-3. **Uncharged transients.** The old table generation and the larger `Moves` are not
+2. **Uncharged transients.** The old table generation and the larger `Moves` are not
    charged, like today's hashbrown resize and #237's worker buffers. Leave them to phase
    4, or charge them now? Charging changes `store_bytes` and the stop points.
 
