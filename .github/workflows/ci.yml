@@ -193,6 +193,12 @@ jobs:
         timeout-minutes: 20
       - name: A reduced cone decides what its cone decides on the domain samples
         run: cargo test --release -p rdra-ish-core --lib reduced_domain_cones_decide_what_the_cones_decide
+      - name: Each group rule has a witness, and the cost caps keep the verdict
+        # The witnesses run in the debug test step too, but for the one that enumerates up
+        # to BRANCH_CAP arrangements a state, which takes minutes there. The snapshot of the
+        # group rules is the witness of the rules kept without one of their own; it runs
+        # here alone: about 3 s in release, a minute in debug.
+        run: cargo test --release -p rdra-ish-core --lib -- symmetry::witnesses symmetry::snapshot
       - name: The reduced-unreduced comparison gets each saved output pair right
         run: python3 -I scripts/reduction-diff.py selfcheck
       - name: Reduced and unreduced verify agree on random models, and TLC agrees with both

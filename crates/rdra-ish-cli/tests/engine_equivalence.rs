@@ -43,8 +43,8 @@ use rdra_ish_cli::tlc_output::{parse_dot, CanonState, InvariantScan, Outcome, Tl
 use rdra_ish_cli::tlc_replay::{explain_property, explain_violation};
 use rdra_ish_core::lifecycle::{
     ActId, Bounds, Caps, ComponentRun, Cone, Fairness, LabelledEdges, Loop, Progress,
-    PropertyVerdict, Runs, Scope, Seed, State, StateDiag, StateModelFindings, StateSlice, Taken,
-    Target, TransitionSystem, Witness,
+    PropertyVerdict, Runs, Scope, Seed, State, StateDiag, StateModelFindings, Taken, Target,
+    TransitionSystem, Witness,
 };
 use rdra_ish_core::{load_project, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
@@ -292,9 +292,14 @@ const BATCH_LIMIT: Duration = Duration::from_secs(300);
 /// The heap of a batch JVM, unless the user names one (`RDRA_TLC_HEAP`, or `-Xmx` in
 /// `JAVA_TOOL_OPTIONS`). A JVM that stays up commits its whole `-Xmx`, whatever its jobs
 /// need, and about 300 MiB beside the heap: 16 JVMs of the 1 GiB a process gets held
-/// 13.5 GB together, and the 8 the pool is bounded to hold 5.6 GB at this. No job of the
-/// test ran out of it.
-const BATCH_HEAP: u64 = 256 << 20;
+/// 13.5 GB together.
+///
+/// A JVM keeps the data of the job before, and at times of the two before, past a GC: on
+/// food-permit-ops' `StateModel_Disposition` witnesses, about 100 MB a job on TLC 1.7.4 and
+/// 1.8.0 alike. At 256 MiB that left no room for the next such job: on TLC 1.8.0 and JDK
+/// 25, which kept two jobs' data on 8 of 12 runs of it where 1.7.4 kept it on 4, one job of
+/// the test ran out of memory in two runs of four.
+const BATCH_HEAP: u64 = 512 << 20;
 
 /// The batch JVMs of this test binary (#310), or `None` without `tlc-batch` on PATH or with
 /// `RDRA_TLC_BATCH=0`: every run is then a process. `RDRA_TLC_BATCH=both` runs every job
@@ -953,11 +958,11 @@ fn recorded_tlc_runs_are_the_same_in_a_batch_jvm() {
 /// BFS's.
 fn tlc_edges(dir: &Path, label: &str, run: &ComponentRun, names: &TlaNames) -> Vec<Move> {
     let ts = &run.system;
-    let index: HashMap<&StateSlice, u32> = run
+    let index: HashMap<State, u32> = run
         .states
         .iter()
         .enumerate()
-        .map(|(i, s)| (s, i as u32))
+        .map(|(i, s)| (s.into_state(), i as u32))
         .collect();
     let decoder = names.decoder(ts);
     let file = std::fs::File::open(dir.join("graph.dot")).expect("graph.dot");
@@ -972,7 +977,7 @@ fn tlc_edges(dir: &Path, label: &str, run: &ComponentRun, names: &TlaNames) -> V
         let only_bfs: Vec<_> = (0..run.states.len() as u32)
             .filter(|i| !distinct.contains(i))
             .take(3)
-            .map(|i| names.canon(ts, &run.states[i as usize]))
+            .map(|i| names.canon(ts, &run.states.at(i as usize)))
             .collect();
         panic!(
             "{label}: reachable sets differ (TLC {} nodes, {} distinct; BFS {})\nonly BFS: {only_bfs:#?}",
@@ -1034,8 +1039,8 @@ fn describe_moves(run: &ComponentRun, names: &TlaNames, moves: &[&Move]) -> Stri
         .iter()
         .take(3)
         .map(|&&(from, to, act)| {
-            let pre = names.canon(ts, &run.states[from as usize]);
-            let post = names.canon(ts, &run.states[to as usize]);
+            let pre = names.canon(ts, &run.states.at(from as usize));
+            let post = names.canon(ts, &run.states.at(to as usize));
             let changed: Vec<String> = post
                 .iter()
                 .filter(|(k, v)| pre.get(*k) != Some(v))
@@ -2701,7 +2706,7 @@ fn tla_names_cover_every_slot() {
                 "{sample}: VARIABLES does not list the names"
             );
             let run = ts.clone().run(Caps::new(usize::MAX, 1));
-            let canon = names.canon(&run.system, &run.states[0]);
+            let canon = names.canon(&run.system, &run.states.at(0));
             let canon_keys: BTreeSet<&String> = canon.keys().collect();
             assert_eq!(
                 canon_keys, unique,

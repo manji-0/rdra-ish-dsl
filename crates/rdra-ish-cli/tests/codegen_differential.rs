@@ -573,8 +573,8 @@ fn cases(sample: &str, x: &Explored) -> (Vec<Case>, Vec<String>) {
         if domain.skipped.iter().any(|s| s.action == action.name) {
             continue;
         }
-        let pre = &run.states[edge.from as usize];
-        let post = &run.states[edge.to as usize];
+        let pre = &run.states.at(edge.from as usize);
+        let post = &run.states.at(edge.to as usize);
         let f = match pick(domain, model, ts, action, params, pre, post) {
             Ok(f) => f,
             Err(why) => {
@@ -626,7 +626,7 @@ fn cases(sample: &str, x: &Explored) -> (Vec<Case>, Vec<String>) {
                 let rows = Rows::new(
                     ts,
                     model,
-                    state,
+                    &state,
                     vec![(entity.clone(), slot)],
                     f.elems.iter().map(|e| e.entity.clone()).collect(),
                 );
@@ -635,7 +635,7 @@ fn cases(sample: &str, x: &Explored) -> (Vec<Case>, Vec<String>) {
                 {
                     continue;
                 }
-                let args = arguments(&c, f, action, &[slot as u8], state, None);
+                let args = arguments(&c, f, action, &[slot as u8], &state, None);
                 push(
                     Case {
                         f: fi,

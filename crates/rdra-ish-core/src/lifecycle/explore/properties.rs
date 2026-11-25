@@ -82,7 +82,7 @@ impl ComponentRun {
         };
         let states: Vec<State> = std::iter::once(first)
             .chain(path.iter().map(|e| e.to))
-            .map(|k| self.states[k as usize].to_owned())
+            .map(|k| self.states.at(k as usize).into_state())
             .collect();
         let (instance, at) = ts
             .property_failure(p, &states, states.len() - 1)
@@ -118,7 +118,7 @@ impl ComponentRun {
         let at = self.states.iter().position(|s| {
             bindings
                 .iter()
-                .any(|bd| ts.triggers(p, bd, s) && !ts.holds_bound(x, s, bd))
+                .any(|bd| ts.triggers(p, bd, &s) && !ts.holds_bound(x, &s, bd))
         })? as u32;
         let path = self.path_to(at);
         Some((path.first().map_or(at, |e| e.from), path))
@@ -131,7 +131,10 @@ impl ComponentRun {
         let ts = &self.system;
         let bindings: Vec<Vec<u8>> = ts.binder_slots(&p.binders).collect();
         let edge = self.edges().iter().find(|e| {
-            let (a, b) = (&self.states[e.from as usize], &self.states[e.to as usize]);
+            let (a, b) = (
+                &self.states.at(e.from as usize),
+                &self.states.at(e.to as usize),
+            );
             e.from != e.to && bindings.iter().any(|bd| ts.step_breaks(p, bd, a, b))
         })?;
         let mut path = self.path_to(edge.from);
@@ -155,7 +158,7 @@ impl ComponentRun {
             let on = |s: &StateSlice, pred: &Pred| {
                 ts.triggers(p, &bd, s) && ts.holds_bound(pred, s, &bd)
             };
-            let open: Vec<bool> = self.states.iter().map(|s| !on(s, x)).collect();
+            let open: Vec<bool> = self.states.iter().map(|s| !on(&s, x)).collect();
             // Per reached state: the edge into it, or `None` for an initial state.
             let mut via: Vec<Option<Option<u32>>> = vec![None; self.states.len()];
             let mut queue: VecDeque<u32> = VecDeque::new();
@@ -167,7 +170,7 @@ impl ComponentRun {
             }
             let mut found = None;
             while let Some(k) = queue.pop_front() {
-                if on(&self.states[k as usize], y) {
+                if on(&self.states.at(k as usize), y) {
                     found = Some(k);
                     break;
                 }

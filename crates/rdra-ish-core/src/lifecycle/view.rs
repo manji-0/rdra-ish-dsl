@@ -196,7 +196,7 @@ fn first_states(run: &ComponentRun, e: EntId) -> Vec<Option<u32>> {
             if !s.is_present(ts, e, slot) {
                 continue;
             }
-            if let Some(id) = view.id(&ts.pattern_key(s, e, slot)) {
+            if let Some(id) = view.id(&ts.pattern_key(&s, e, slot)) {
                 first[id].get_or_insert(at as u32);
             }
         }

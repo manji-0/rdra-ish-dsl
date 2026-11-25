@@ -6,7 +6,7 @@ use super::partition::{quotient_blocks, split_edges, Succ};
 use super::*;
 use crate::lifecycle::cone::VarSet;
 use crate::lifecycle::explore::{Adjacency, Caps, Spurious};
-use crate::lifecycle::expr::{State, StateSlice};
+use crate::lifecycle::expr::State;
 use crate::lifecycle::lasso::Loop;
 use crate::lifecycle::types::ActId;
 use crate::lifecycle::TransitionSystem;
@@ -33,7 +33,7 @@ impl TransitionSystem {
             sub.clone().run_orbits_fixing(
                 Caps::new(usize::MAX, usize::MAX),
                 crate::lifecycle::explore::Checks::none(),
-                &ext.fixed,
+                &ext.fixed(),
             )
         });
         let plain;
@@ -51,19 +51,13 @@ impl TransitionSystem {
             .states
             .iter()
             .map(|st| {
-                let key = run.system.project(st, &key_vars);
+                let key = run.system.project(&st, &key_vars);
                 let len = index.len() as u32;
                 *index.entry(key).or_insert(len)
             })
             .collect();
         let (silent, rise_edges) = split_edges(run, &ext.rise);
         let blocks = quotient_blocks(n, &silent, &rise_edges, &initial);
-        let at: HashMap<&StateSlice, u32> = run
-            .states
-            .iter()
-            .enumerate()
-            .map(|(i, s)| (s, i as u32))
-            .collect();
         let block_of_class: HashMap<u32, u32> = run
             .states
             .iter()
@@ -76,13 +70,11 @@ impl TransitionSystem {
         let start_block = block_of_class[&r
             .class(self, start)
             .expect("a reduced state holds a representative")];
-        let s0 = run
-            .states
-            .iter()
-            .take(sub.initial_states().len())
-            .find(|s| blocks[at[*s] as usize] == start_block)
-            .expect("the start's class holds an initial S state")
-            .to_owned();
+        // A run keeps each state once, so a state's index is where it sits.
+        let s0_at = (0..sub.initial_states().len().min(n))
+            .find(|&i| blocks[i] == start_block)
+            .expect("the start's class holds an initial S state");
+        let s0 = run.states.at(s0_at).into_state();
         enum Lifted {
             /// A T step, and the rises of the extended sub-lifecycle it makes.
             T(ActId, Box<[u8]>, State, usize),
@@ -90,7 +82,7 @@ impl TransitionSystem {
         }
         let mut level: Vec<Lifted> = Vec::new();
         let mut s_steps: Vec<Step> = Vec::new();
-        let mut s_at = at[&*s0];
+        let mut s_at = s0_at as u32;
         // The stored edges the S path takes, for its lift up to `H`.
         let s_first = s_at;
         let mut s_edges = Vec::new();
@@ -101,21 +93,21 @@ impl TransitionSystem {
                     .project(&State(r.key(self, post).into()), &ext.inputs_local);
                 let before = run
                     .system
-                    .project(&run.states[s_at as usize], &ext.inputs_local);
+                    .project(&run.states.at(s_at as usize), &ext.inputs_local);
                 let stages = r.stages(&before.0, &after.0);
                 for stage in &stages {
                     let e = succ
                         .rises_from(s_at)
                         .find(|e| {
                             run.system
-                                .project(&run.states[e.to as usize], &ext.inputs_local)
+                                .project(&run.states.at(e.to as usize), &ext.inputs_local)
                                 .0
                                 .as_ref()
                                 == stage.as_slice()
                         })
                         .expect("a T step's rise is a rise of the extended sub-lifecycle");
                     let (a, p) = run.step(&e);
-                    s_steps.push((a, p.into(), run.states[e.to as usize].to_owned()));
+                    s_steps.push((a, p.into(), run.states.at(e.to as usize).into_state()));
                     s_at = e.to;
                     s_edges.push(e);
                 }
@@ -127,7 +119,7 @@ impl TransitionSystem {
             let mut count = 0;
             for e in path {
                 let (a, p) = run.step(&e);
-                s_steps.push((a, p.into(), run.states[e.to as usize].to_owned()));
+                s_steps.push((a, p.into(), run.states.at(e.to as usize).into_state()));
                 s_at = e.to;
                 s_edges.push(e);
                 count += 1;

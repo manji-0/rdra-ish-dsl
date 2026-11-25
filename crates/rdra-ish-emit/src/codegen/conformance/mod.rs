@@ -354,8 +354,8 @@ pub fn traces(
             out.left_out += 1;
             continue;
         };
-        let pre = &run.states[edge.from as usize];
-        let post = &run.states[edge.to as usize];
+        let pre = &run.states.at(edge.from as usize);
+        let post = &run.states.at(edge.to as usize);
         let Some(f) = cx.function(&action.name, params, pre, post) else {
             out.left_out += 1;
             continue;
@@ -409,7 +409,7 @@ pub fn traces(
         if !run.complete {
             return Vec::new();
         }
-        cx.refusals(port, &run.states[s as usize], |act, slot| {
+        cx.refusals(port, &run.states.at(s as usize), |act, slot| {
             moved.contains(&(s, act, vec![slot]))
         })
     };
@@ -464,7 +464,7 @@ pub fn traces(
         out.traces += 1;
         used_states.insert(init);
         body.push_str(&format!("T {init}\n"));
-        for line in cx.seed(port, &run.states[init as usize]) {
+        for line in cx.seed(port, &run.states.at(init as usize)) {
             body.push_str(&format!("R {line}\n"));
         }
         body.push_str("G\n");
@@ -536,7 +536,7 @@ pub fn traces(
                         &ca.action,
                         &ca.function,
                         &ca.params,
-                        &run.states[cb.to as usize],
+                        &run.states.at(cb.to as usize),
                     )
                 {
                     continue;
@@ -548,7 +548,7 @@ pub fn traces(
                 used_states.insert(init);
                 used_states.insert(cb.to);
                 body.push_str(&format!("T {init}\n"));
-                for line in cx.seed(port, &run.states[init as usize]) {
+                for line in cx.seed(port, &run.states.at(init as usize)) {
                     body.push_str(&format!("R {line}\n"));
                 }
                 body.push_str("G\n");
@@ -584,7 +584,7 @@ pub fn traces(
     // The states first, so the harness knows each before a trace names it.
     for s in &used_states {
         text.push_str(&format!("S {s}\n"));
-        for line in cx.abstract_state(port, &run.states[*s as usize]) {
+        for line in cx.abstract_state(port, &run.states.at(*s as usize)) {
             text.push_str(&format!("A {line}\n"));
         }
     }

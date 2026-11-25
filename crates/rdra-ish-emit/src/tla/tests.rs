@@ -473,10 +473,10 @@ fn decode_inverts_canon() {
         let ts = &run.system;
         let names = TlaNames::new(ts);
         for s in &run.states {
-            let canon = names.canon(ts, s);
-            assert_eq!(names.decode(ts, &canon).as_deref(), Some(s), "{name}");
+            let canon = names.canon(ts, &s);
+            assert_eq!(names.decode(ts, &canon).as_deref(), Some(&*s), "{name}");
         }
-        let canon = names.canon(ts, &run.states[0]);
+        let canon = names.canon(ts, &run.states.at(0));
         let key = canon
             .keys()
             .find(|k| k.contains("_exists"))
@@ -1025,7 +1025,7 @@ sets(Mark, Job.owner_Gate == true)
     unique.dedup();
     assert_eq!(unique, vars);
     for s in &run.states {
-        assert_eq!(names.decode(ts, &names.canon(ts, s)).as_deref(), Some(s));
+        assert_eq!(names.decode(ts, &names.canon(ts, &s)).as_deref(), Some(&*s));
     }
 }
 
@@ -1093,9 +1093,9 @@ forbidden(Job, status == running)
     for s in &run.states {
         assert_eq!(
             names
-                .decode(&run.system, &names.canon(&run.system, s))
+                .decode(&run.system, &names.canon(&run.system, &s))
                 .as_deref(),
-            Some(s)
+            Some(&*s)
         );
     }
 }

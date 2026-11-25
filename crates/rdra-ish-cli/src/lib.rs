@@ -206,6 +206,7 @@ pub fn run() -> Result<()> {
             allow_failing,
             conformance,
             conformance_states,
+            check,
         } => codegen_cmd::run_codegen(
             &inputs,
             lang,
@@ -215,6 +216,7 @@ pub fn run() -> Result<()> {
             conformance
                 .as_deref()
                 .map(|path| (path, conformance_states)),
+            check.as_deref(),
         )?,
 
         Commands::Files { inputs } => {

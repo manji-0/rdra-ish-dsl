@@ -286,7 +286,7 @@ impl ComponentRun {
                 ends.ran = true;
                 if self
                     .system
-                    .meets(binders, &Pred::True, &self.states[e.to as usize])
+                    .meets(binders, &Pred::True, &self.states.at(e.to as usize))
                 {
                     ends.with_rows = true;
                     break;
@@ -351,12 +351,16 @@ impl ComponentRun {
             .iter()
             .map(|e| {
                 let (act, params) = self.step(e);
-                (act, params.into(), self.states[e.to as usize].to_owned())
+                (
+                    act,
+                    params.into(),
+                    self.states.at(e.to as usize).into_state(),
+                )
             })
             .collect();
         steps.extend(extra);
         let ts = &self.system;
-        let (start, steps) = ts.lifted(&self.states[first as usize], &steps);
+        let (start, steps) = ts.lifted(&self.states.at(first as usize), &steps);
         (
             ts.trace_from(&start, &steps),
             steps.last().map_or(start, |s| s.2.clone()),
