@@ -6,18 +6,26 @@
 // as true would find all three broken by Make. SetA and SetB each write 2, so after Make,
 // SetA, SetB the columns a and b are equal and present: Forbidden_Item_1 and the property
 // ABNeverMet fail there, which an engine that made every column `==` false would miss.
-// After Make, SetA alone, a is 2 and b is null, which a == b does not meet either.
+// After Make, SetA alone, a is 2 and b is null, which a == b does not meet either. The
+// String columns s and t, which only say null or present, read the same way: s == t never
+// holds (Forbidden_Item_2), and the logical `@derived(s == t)` is neither true nor false
+// while they are null, so `alike == null` holds (Required_Item_1).
 // expect Forbidden_Item_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 // expect Required_Item_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 // expect Forbidden_Item_1: native=counterexample tlc=counterexample z3=unproved
 // expect LimNeverMet: native=ok tlc=ok
 // expect ABNeverMet: native=counterexample tlc=counterexample
+// expect Forbidden_Item_2: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+// expect Required_Item_1: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 entity Item "品目" {
   id: Int @pk
   qty: Int @null
   lim: Int @null
   a: Int @null
   b: Int @null
+  s: String @null
+  t: String @null
+  alike: Bool @null @derived(s == t)
 }
 usecase Make "作成"
 usecase SetA "A設定"
@@ -28,5 +36,7 @@ sets(SetB, Item.b == 2)
 forbidden(Item, qty == lim)
 required(Item, qty != lim)
 forbidden(Item, a == b)
+forbidden(Item, s == t)
+required(Item, alike == null)
 property LimNeverMet always(Item.qty != lim)
 property ABNeverMet always(Item.a != b)

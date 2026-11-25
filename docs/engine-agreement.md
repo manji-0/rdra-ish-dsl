@@ -256,7 +256,7 @@ under a load average of 30 to 60, measured.
 | `safety_counted_once_per_raise` | A counted handler runs once per raise; the latch runs twice after one | counted ok, z3 proved; latch counterexample |
 | `safety_event_overflow` | A raise past `k` is `EventOverflow`, and the raiser never waits | `k = 2` counterexample; `k = 3` ok, z3 proved |
 | `safety_null_columns_ne` | The model of #355: two `@null` columns that both hold null; `!=` holds and `==` fails | counterexample, z3 unproved |
-| `safety_null_columns_eq` | The reverse: `==` on two null columns never holds and `!=` always does, in rules and an `always`; two columns that reach 2 still meet `==` | null pair ok, z3 proved; present pair counterexample |
+| `safety_null_columns_eq` | The reverse: `==` on two null columns never holds and `!=` always does, in rules and an `always`, over Int and String columns and a logical `@derived`; two columns that reach 2 still meet `==` | null pairs ok, z3 proved; present pair counterexample |
 | `safety_null_columns_cross` | The same reading across two entities | null `==` ok, z3 proved; null `!=` and present `==` counterexample |
 | `safety_unique_sets` | A unique column set over column vars, owner vars, and a nullable Int that two rows leave null | single column and junction counterexample; guarded set and null set ok, z3 proved |
 | `sym_owner_coupled` | A child's key moves with its parent's row, a deleted child's too | ok, z3 proved; BFS ok, ok, ok |
