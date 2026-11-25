@@ -590,8 +590,8 @@ instances = { Loan = 4 }
 symmetry = "always"
 ```
 
-A malformed manifest, one without `[model] name`, an unknown key in `[check]` or `[verify]`,
-a `memory` value that is not a [size](#memory-limit), or an `instances` count outside
+A malformed manifest, one without `[model] name`, an unknown table (a misspelled
+`[verfiy]`), an unknown key in `[model]`, `[check]` or `[verify]`, a `memory` value that is not a [size](#memory-limit), or an `instances` count outside
 `1..=255`, makes every loading command exit `1` with a message that names `rdra.toml` and
 the line.
 

@@ -143,6 +143,12 @@
   column's values, spelled as declared (`@default(open)`, not `@default(Open)`), or
   lowercase `true` or `false`. `@default(null)` is no value of either type, even on a
   `@null` column; drop it (#187).
+- An unknown table or key in `rdra.toml` is an error. A misspelled table such as `[verfiy]`
+  or `[chek]`, or an unknown key under `[model]`, used to be ignored, so the command ran at
+  its default memory limit and instance counts without a word. Every loading command, and
+  the LSP, now exits `1` with a message that names `rdra.toml`, the line, and the key, as
+  an unknown key under `[check]` or `[verify]` already did. `[dependencies]` stays
+  free-form. To migrate, fix the spelling or remove the table.
 
 ### Added
 
