@@ -15,6 +15,12 @@
   the runs at once and every run's workers ([design](./docs/design/tlc-scheduling.md),
   #384).
 
+### Added
+
+- `verify --with-tlc`: `RDRA_TLC_HEAP=states` raises a cone run's heap to 640 bytes per
+  state BFS counted in its module, in whole GiB within TLC's share, when that is more than
+  the module's rule gives (experimental; #384).
+
 ## v3.0.0 - 2026-11-26
 
 This is a major release. `verify` decides every check with its own checker and needs no JVM;
