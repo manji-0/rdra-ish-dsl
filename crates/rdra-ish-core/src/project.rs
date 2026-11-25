@@ -71,11 +71,11 @@ pub struct CodeTarget {
     /// The type that implements the contracts, as the probe names it
     /// (`ecsvc::service::EcService`).
     pub service: Option<String>,
-    /// Rust: the module path the probe imports the contracts from (`ecsvc::domain`). Default:
-    /// the crate of `service` and the path of `domain` under `src/`.
+    /// Rust: the module path the probe imports the contracts from (`ecsvc::domain`).
+    /// Required for a Rust probe: without it, no probe is written.
     pub module: Option<String>,
-    /// An expression the conformance test calls for a fresh service. Default: the service
-    /// type's `Default`.
+    /// An expression the conformance test calls for a fresh service. Without it, there is no
+    /// conformance run.
     pub new: Option<String>,
     /// Go: the package name of `domain` (`--package`).
     pub package: Option<String>,
