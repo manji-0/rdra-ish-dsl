@@ -523,10 +523,16 @@ impl TransitionSystem {
     }
 
     /// What keeps `cone` from being exact: the existence of each entity outside it that an
-    /// action of it creates (`cone_frees_slots`). Empty when the cone is exact, so that a step
-    /// it allows the whole system allows (docs/design/native-temporal-verification.md, "Modes
-    /// and the cone").
+    /// action of it creates (`cone_frees_slots`), and each raised mark outside it that an
+    /// action of it reads, whose guard `restrict_to` drops so that the handler runs without
+    /// its event. Empty when the cone is exact, so that a step it allows the whole system
+    /// allows (docs/design/native-temporal-verification.md, "Modes and the cone").
     pub fn inexact_vars(&self, cone: &Cone) -> VarSet {
+        self.left_out(cone, true)
+    }
+
+    /// `inexact_vars`; without `slots`, the raised marks alone.
+    fn left_out(&self, cone: &Cone, slots: bool) -> VarSet {
         let mut out = VarSet::new();
         for (i, a) in self.actions.iter().enumerate() {
             let inside = cone.keep.contains(&ActId::at(i))
@@ -534,14 +540,42 @@ impl TransitionSystem {
             if !inside {
                 continue;
             }
-            for p in a.params.iter().filter(|p| p.role == ParamRole::New) {
+            for p in a
+                .params
+                .iter()
+                .filter(|p| slots && p.role == ParamRole::New)
+            {
                 let exists = self.entity(p.entity).exists;
                 if !cone.vars.contains(&exists) {
                     out.insert(exists);
                 }
             }
+            for (mark, _) in self.mark_reads(a) {
+                if !cone.vars.contains(&mark) {
+                    out.insert(mark);
+                }
+            }
         }
         out
+    }
+
+    /// The cone of a safety check widened with every raised mark it leaves out, and so with
+    /// the use cases that raise it (#206): on it each handler runs only after its event, so a
+    /// counterexample there runs the use cases in the order the whole system allows. The
+    /// slots of an entity the cone does not count stay uncounted.
+    pub fn ordered_cone(&self, target: Target) -> Cone {
+        let (mut seed, keep) = self.target_seed(target);
+        loop {
+            let cone = Cone {
+                vars: self.cone(&seed, &keep),
+                keep: keep.clone(),
+            };
+            let missing = self.left_out(&cone, false);
+            if missing.is_empty() {
+                return cone;
+            }
+            seed.extend(missing);
+        }
     }
 
     /// No action of `cone` takes a step the whole system does not allow (`inexact_vars`).

@@ -44,7 +44,8 @@ pub(super) struct ExploredJob {
     pub(super) system: TransitionSystem,
     pub(super) cone_index: usize,
     pub(super) names: TlaNames,
-    pub(super) frees_slots: bool,
+    /// The cone is not exact (`is_exact`), so a counterexample there may not be real.
+    pub(super) inexact: bool,
 }
 
 /// A property on its cone; the `_Full` module beside it is the unreduced cone, run after a
@@ -291,7 +292,7 @@ pub(super) fn explored_jobs(
                 checks: vec![name.to_string()],
                 kind: JobKind::Explored(Box::new(ExploredJob {
                     index: i,
-                    frees_slots: ts.cone_frees_slots(&cone),
+                    inexact: !ts.is_exact(&cone),
                     system,
                     cone_index,
                     names: bundle.names,

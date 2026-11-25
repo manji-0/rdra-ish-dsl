@@ -631,8 +631,14 @@ says how to see it in a run and what to do. The
   events are free. A cone that does not hold every raiser by its own writes leaves the mark
   out, and the handler runs unordered there: an `ok` is sound, and a finding can be a run the
   order prevents ([Exploration by cone of influence](./state-derivation.md#exploration-by-cone-of-influence)).
+  `verify` checks such a finding again on the cone widened with the raisers (#206): a trace
+  that runs there loses its note, and otherwise the check reruns there and its verdict
+  replaces the cone's; the cone line says `rechecked on the cone widened ...`. A property's
+  cone is widened the same way before its counterexample counts. `check` still prints the
+  finding as the cone found it.
   See it: the infos on the `triggers` line, and the `note:` row of a trace, `runs <UC> without
-  <Ev> having been raised`. What to do: give the handler a from-state the raiser sets, make the
+  <Ev> having been raised`, which `verify` keeps only when the rerun stops at a cap. What to
+  do: give the handler a from-state the raiser sets, make the
   rule read something the raiser writes, or use `.counted(k)`
   ([`triggers` and event-driven BUC chaining](./language-reference.md#triggers-and-event-driven-buc-chaining)).
 - **A cone can stop at the memory limit or `--max-states`.** A stopped cone decides none of

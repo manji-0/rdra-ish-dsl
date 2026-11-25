@@ -323,6 +323,12 @@ pub(super) enum BfsCone {
         memory: bool,
         /// The run was up to instance symmetry (`--symmetry`).
         orbits: Option<Box<Orbits>>,
+        /// What the cone's own run found, when a counterexample that ran a use case without
+        /// its event was checked again on a widened cone (`recheck_unordered`): TLC's run of
+        /// the same cone is compared with this.
+        unwidened: Option<Box<(Vec<Diag>, RunEnd)>>,
+        /// What the checks on widened cones said, for the run line.
+        rechecked: Vec<String>,
     },
     /// The cone at this index of the jobs covers this one (`covering`) and passed.
     Covered(usize),
@@ -418,6 +424,8 @@ impl BfsCone {
             end,
             memory: met_memory_limit(diags),
             orbits: None,
+            unwidened: None,
+            rechecked: Vec::new(),
         }
     }
 
@@ -478,6 +486,28 @@ impl BfsCone {
         }
     }
 
+    /// The verdict of the cone's own run and the checks its counterexamples break, before any
+    /// was checked again on a widened cone (`recheck_unordered`): what TLC's run of the same
+    /// cone must say.
+    pub(super) fn cone_verdict(&self) -> (Option<Outcome>, Vec<&Diag>) {
+        match self {
+            BfsCone::Ran {
+                unwidened: Some(own),
+                ..
+            } => {
+                let (found, end) = own.as_ref();
+                let verdict = match (found.is_empty(), end) {
+                    (false, _) => Some(Outcome::Counterexample),
+                    (true, RunEnd::Complete) => Some(Outcome::Ok),
+                    (true, _) => None,
+                };
+                (verdict, found.iter().collect())
+            }
+            BfsCone::Ran { found, .. } => (self.verdict(), found.iter().collect()),
+            BfsCone::Covered(_) | BfsCone::Proved { .. } => (self.verdict(), Vec::new()),
+        }
+    }
+
     /// The run line, in the form of `Ran::line`.
     pub(super) fn line(&self, module: &str, checks: &[String], jobs: &[Job]) -> String {
         let verdict = self.verdict().map_or("not decided", Outcome::as_str);
@@ -486,6 +516,7 @@ impl BfsCone {
                 states,
                 end,
                 orbits,
+                rechecked,
                 ..
             } => {
                 let mut notes = Vec::new();
@@ -499,6 +530,7 @@ impl BfsCone {
                         "stopped at the state cap (--max-states) or the memory limit".to_string(),
                     );
                 }
+                notes.extend(rechecked.iter().cloned());
                 let mut line = run_line(module, checks, verdict, count, &notes);
                 // The note under the line: what the canonicalizer cut. What the group left
                 // out goes to `RDRA_ISH_SYMMETRY_STATS` (`symmetry_stats`).
@@ -547,6 +579,143 @@ pub(super) fn decide_by_proof(
             (_, cone) => cone,
         })
         .collect()
+}
+
+/// Each counterexample of a safety cone that runs a use case without its event having been
+/// raised (`Trace::free_triggers`), checked again on the check's cone widened with the
+/// event's raisers (`TransitionSystem::ordered_cone`, #206). A trace that runs there step by
+/// step (`runs_trace`) is real and loses its note. Otherwise the check runs alone on the
+/// widened cone under `caps`: its counterexample there replaces the cone's, a complete run
+/// without one drops it, and a run that stops keeps the cone's counterexample with its note.
+pub(super) fn recheck_unordered(
+    ts: &TransitionSystem,
+    jobs: &[Job],
+    cones: Vec<Option<BfsCone>>,
+    caps: Caps,
+) -> Vec<Option<BfsCone>> {
+    jobs.iter()
+        .zip(cones)
+        .map(|(job, cone)| match (&job.kind, cone) {
+            (JobKind::Cone(system), Some(cone)) => Some(cone.rechecked(ts, system, caps)),
+            (_, cone) => cone,
+        })
+        .collect()
+}
+
+impl BfsCone {
+    /// `recheck_unordered` for this cone.
+    fn rechecked(self, ts: &TransitionSystem, cone: &ConeSystem, caps: Caps) -> BfsCone {
+        let BfsCone::Ran {
+            states,
+            found,
+            end,
+            memory,
+            orbits,
+            unwidened: None,
+            mut rechecked,
+        } = self
+        else {
+            return self;
+        };
+        let unordered = |d: &Diag| d.diag.trace().is_some_and(|t| !t.free_triggers.is_empty());
+        if !found.iter().any(unordered) {
+            return BfsCone::Ran {
+                states,
+                found,
+                end,
+                memory,
+                orbits,
+                unwidened: None,
+                rechecked,
+            };
+        }
+        let own = (found.clone(), end);
+        let (mut replayed, mut held, mut real, mut open) = (0, 0, 0, 0);
+        let mut kept = Vec::new();
+        for d in found {
+            let Some(target) = (unordered(&d))
+                .then(|| target_of(ts, cone, &d.diag.name(&[])))
+                .flatten()
+            else {
+                kept.push(d);
+                continue;
+            };
+            let wide = ts.ordered_cone(target);
+            let system = ts.restrict_to(&wide.vars, &wide.keep);
+            let trace = d.diag.trace().expect("checked above");
+            if system.runs_trace(trace) {
+                let mut d = d;
+                if let Some(t) = d.diag.trace_mut() {
+                    t.free_triggers.clear();
+                }
+                replayed += 1;
+                kept.push(d);
+                continue;
+            }
+            let run = system.run(caps.until_all_violated());
+            let name = d.diag.name(&[]);
+            let again = run.diags.iter().find(|x| {
+                matches!(
+                    x.diag,
+                    StateDiag::ConstraintViolated { .. } | StateDiag::AfterAssertViolated { .. }
+                ) && x.diag.name(&[]) == name
+            });
+            match (again, run.complete) {
+                (Some(again), _) => {
+                    let mut again = again.clone();
+                    if let Some(trace) = again.diag.trace_mut() {
+                        ts.annotate(&wide, trace);
+                    }
+                    real += 1;
+                    kept.push(again);
+                }
+                (None, true) => held += 1,
+                (None, false) => {
+                    open += 1;
+                    kept.push(d);
+                }
+            }
+        }
+        let say = |n: usize, what: &str| (n > 0).then(|| format!("{n} {what}"));
+        let parts: Vec<String> = [
+            say(replayed, "replayed"),
+            say(real, "found again"),
+            say(held, "held"),
+            say(open, "not decided"),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        rechecked.push(format!(
+            "rechecked on the cone widened by the raisers of the events it ran without: {}",
+            parts.join(", ")
+        ));
+        // A check dropped here held on its widened cone, which ran to the end; the cone's own
+        // run stopped early only because every check had a counterexample, so every check is
+        // decided.
+        let end = match (end, open) {
+            (RunEnd::ChecksFailed, 0) => RunEnd::Complete,
+            (end, _) => end,
+        };
+        BfsCone::Ran {
+            states,
+            found: kept,
+            end,
+            memory,
+            orbits,
+            unwidened: Some(Box::new(own)),
+            rechecked,
+        }
+    }
+}
+
+/// The invariant or after-assert of `cone` named `name`, as a target of `ts`.
+fn target_of(ts: &TransitionSystem, cone: &ConeSystem, name: &str) -> Option<Target> {
+    cone.targets.iter().copied().find(|t| match t {
+        Target::Invariant(i) => ts.invariants()[*i].name == name,
+        Target::AfterAssert(i) => ts.after_asserts()[*i].name == name,
+        Target::Entity(_) | Target::Reach(_) => false,
+    })
 }
 
 /// The run met the memory limit, maybe only because the runs beside it held the rest.

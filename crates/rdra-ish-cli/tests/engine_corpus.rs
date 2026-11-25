@@ -384,6 +384,9 @@ struct RunLine {
     verdict: V,
     /// The other runs the line names, `Cone_P_WF: ok`, by module.
     notes: BTreeMap<String, V>,
+    /// The native checker checked a counterexample of this safety cone again on the cone
+    /// widened with the raisers of the events it ran without (#206), which TLC does not.
+    rechecked: bool,
 }
 
 fn line_verdict(text: &str) -> Option<V> {
@@ -422,6 +425,7 @@ fn parse_run_line(line: &str) -> Option<RunLine> {
         checks: checks.split(", ").map(str::to_string).collect(),
         verdict,
         notes,
+        rechecked: rest.contains("rechecked on the cone widened"),
     })
 }
 
@@ -761,8 +765,13 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
                 e.tlc.to_string(),
                 tlc.to_string(),
             );
-            // Rule 1: both engines decided, so they agree.
-            if native.decided() && tlc.decided() && native != tlc {
+            // Rule 1: both engines decided, so they agree, unless the native checker decided
+            // the check on a widened cone TLC does not run (#206).
+            let rechecked = main
+                .native_lines
+                .iter()
+                .any(|l| l.rechecked && l.checks.iter().any(|c| c == check));
+            if native.decided() && tlc.decided() && native != tlc && !rechecked {
                 fail(&mut report, format!("{check}: native {native}, TLC {tlc}"));
             }
         }
@@ -806,7 +815,7 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
     }
     // Rule 2: per run. Each module both engines ran, and each run a line names, has the same
     // verdict where both decided it.
-    for mine in &main.native_lines {
+    for mine in main.native_lines.iter().filter(|l| !l.rechecked) {
         let Some(theirs) = main.tlc_lines.iter().find(|l| l.module == mine.module) else {
             continue;
         };

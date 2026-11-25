@@ -1,0 +1,31 @@
+// trap: a safety cone whose only counterexample runs a handler before its raiser (#206).
+// Ship runs on EvApproved, which Approve raises, and Approve needs the order paid. The rule
+// reads the status and the payment, not the approval, so its cone leaves the mark and
+// Approve out and runs Ship unordered: place, ship, and the order is shipped unpaid. In the
+// whole model Ship runs only after Approve, so only on a paid order, and no delete resets the
+// payment: the rule holds. The counterexample does not replay on the cone widened with the
+// mark and its raiser, and the widened cone holds, so the native checker says ok. TLC checks
+// the cone as it is and finds the unordered run (docs/engine-agreement.md, rule 1). z3 reads
+// the order and proves the rule.
+// expect Forbidden_Order_0: native=ok tlc=counterexample z3=proved bfs=ok,ok,ok
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, shipped) @default(pending)
+  paid: Bool @default(false)
+  approved: Bool @default(false)
+}
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Approve "承認"
+usecase Ship "出荷"
+event EvApproved "承認済"
+creates(Place, Order)
+sets(Pay, Order.paid == true)
+sets(Approve, Order.approved == true)
+raises(Approve, EvApproved)
+triggers(EvApproved, Ship)
+transitions(Ship, Order.status, pending -> shipped)
+condition Paid "支払済"
+holds(Paid, Order.paid == true)
+applies_to(Paid, Approve)
+forbidden(Order, status == shipped, paid == false)

@@ -301,6 +301,60 @@ impl TransitionSystem {
         trace.free_triggers = self.free_triggers(cone, trace);
     }
 
+    /// Whether `trace`, found on a cone of this system or of the system this one is a cone of,
+    /// runs here step by step: from an initial state holding the trace's start, each step is a
+    /// move of the action of the same name that binds the step's instances and makes the
+    /// step's changes, maybe with more of its own on vars the trace's system does not hold.
+    /// The vars the trace's system holds then follow the trace, so a check that reads only
+    /// those fails here where it fails there (#206).
+    pub fn runs_trace(&self, trace: &Trace) -> bool {
+        // The columns the trace's system holds, as its creations show them: a move that sets
+        // one of them where the trace does not (an actor's other choice) leaves the trace.
+        let shown: Vec<(&str, &str)> = trace
+            .start
+            .iter()
+            .chain(trace.steps.iter().flat_map(|s| &s.changes))
+            .filter_map(|c| match c {
+                Change::Create { at, values } => Some((at, values)),
+                _ => None,
+            })
+            .flat_map(|(at, values)| values.iter().map(|(f, _)| (at.entity.as_str(), f.as_str())))
+            .collect();
+        let unshown = |here: &TraceStep, step: &TraceStep| {
+            here.changes.iter().all(|c| match c {
+                Change::Set { at, field, .. } if !step.changes.contains(c) => {
+                    !shown.contains(&(at.entity.as_str(), field.as_str()))
+                }
+                _ => true,
+            })
+        };
+        'start: for init in self.initial_states() {
+            let start = self.trace_start(&init);
+            if !trace.start.iter().all(|c| covers(&start, c)) {
+                continue;
+            }
+            let mut at = init;
+            for step in &trace.steps {
+                let next = self.moves(&at).find_map(|m| {
+                    if self.actions[m.act.index()].name != step.action {
+                        return None;
+                    }
+                    let here = self.trace_step(m.act, &m.params, &at, &m.next);
+                    let same = step.bound.iter().all(|i| here.bound.contains(i))
+                        && step.changes.iter().all(|c| covers(&here.changes, c))
+                        && unshown(&here, step);
+                    same.then_some(m.next)
+                });
+                match next {
+                    Some(next) => at = next,
+                    None => continue 'start,
+                }
+            }
+            return true;
+        }
+        false
+    }
+
     /// The `(use case, event)` of each step whose event's mark the cone leaves out, in step
     /// order without repeats.
     fn free_triggers(&self, cone: &Cone, trace: &Trace) -> Vec<(String, String)> {
@@ -354,6 +408,21 @@ impl TransitionSystem {
             .map(|(id, _)| id)
             .collect()
     }
+}
+
+/// Some change of `here` makes `c`: the same change, or the creation of the same instance
+/// with at least `c`'s values, since a wider system shows more columns of a created row.
+fn covers(here: &[Change], c: &Change) -> bool {
+    here.iter().any(|h| match (h, c) {
+        (
+            Change::Create {
+                at: a,
+                values: more,
+            },
+            Change::Create { at: b, values },
+        ) => a == b && values.iter().all(|v| more.contains(v)),
+        (h, c) => h == c,
+    })
 }
 
 impl TransitionSystem {

@@ -1392,29 +1392,36 @@ forbidden(E, v == true, status == raised)
 
 /// A module that holds a cone's checks does not cover the cone when it takes fewer steps
 /// than the cone does: it lacks a var the cone's use case writes, or it keeps a guard the
-/// cone drops. Each cone runs and reports its counterexample.
+/// cone drops. Each cone runs itself. The assert's counterexample is real; the dropped
+/// guard's runs Handle without its event, so it is checked again on the cone widened with
+/// the raiser (#206), where Handle never runs and the rule holds.
 #[test]
 fn a_cone_that_takes_steps_the_larger_module_does_not_still_runs() {
-    for (test, src, failing) in [
+    for (test, src, line_of, said, exit) in [
         (
             "verify_cli_assert_cone",
             ASSERT_BEYOND_THE_LARGER_MODULE,
             "Cone_AfterAssert_Mark_0 ",
+            ": counterexample (",
+            1,
         ),
         (
             "verify_cli_dropped_guard_cone",
             GUARD_ONLY_THE_LARGER_CONE_KEEPS,
             "Cone_Forbidden_E_0 ",
+            ": ok (3 states, rechecked on the cone widened by the raisers of the events it ran without: 1 held)",
+            // The states Raise needs have no witness.
+            1,
         ),
     ] {
         let (stdout, stderr, code, _) = verify_model(test, src, "specs");
-        assert_eq!(code, Some(1), "{test}\n{stdout}\n{stderr}");
+        assert_eq!(code, Some(exit), "{test}\n{stdout}\n{stderr}");
         assert!(!stdout.contains("checked in"), "{test}\n{stdout}");
         let line = stdout
             .lines()
-            .find(|l| l.starts_with(failing))
-            .unwrap_or_else(|| panic!("{test}: no line for {failing}\n{stdout}"));
-        assert!(line.contains(": counterexample ("), "{test}: {line}");
+            .find(|l| l.starts_with(line_of))
+            .unwrap_or_else(|| panic!("{test}: no line for {line_of}\n{stdout}"));
+        assert!(line.contains(said), "{test}: {line}");
     }
 }
 

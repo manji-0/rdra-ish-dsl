@@ -26,8 +26,14 @@ case, whatever the case's header says.
    engine is no disagreement. TLC has no run for `can_reach` (`AG EF`) or for a use case
    that never runs. The other checks that BFS decides alone get a TLC run of their own:
    - `stable`, `unchanged`, and `precedes` run on the unreduced cone (`Cone_<Property>`).
-     When that cone frees slots, a counterexample there goes to the whole-model run
-     (`RdraSpec_<Property>`) in both engines. The final verdicts must agree.
+     When that cone is not exact, a counterexample there goes to the cone made exact in the
+     native checker and to the whole-model run (`RdraSpec_<Property>`) in TLC. The final
+     verdicts must agree.
+   - A safety cone's counterexample that runs a use case before its event is raised is
+     checked again natively on the cone widened with the event's raisers (#206), and TLC
+     checks the cone as it is. A check whose native line says `rechecked on the cone
+     widened` is therefore no disagreement under this rule or rule 2; its header states
+     each engine's own verdict.
    - The state models of each entity cone that BFS explored to the end, up to 100,000
      states, run on the `StateModel_<E>` specs
      ([State models with TLC alone](./formal-verification.md#state-models-with-tlc-alone)).
@@ -191,6 +197,8 @@ skips TLC, since `verify` refuses `--with-tlc` under `64MiB`.
 | `cone_outside_monotone` | A var outside the cone that is monotone only because nothing deletes it |  | `PaidShipsStamp`, `PaidShipsNotes` ok |
 | `cone_receipt_frees_slots` | The receipt model: a cone that frees slots passes with `WF_vars(Next)`, and the whole model fails |  | `PendingPays` cex |
 | `cone_reduced_class_loops` | A reduced class that loops inside itself looks like a stop |  | `JobStarts`, `JobStartsUnfair`, `JobWaits` cex |
+| `cone_unordered_real` | The twin of `cone_unordered_spurious`, whose violation is real either way |  | `Forbidden_Order_0` cex |
+| `cone_unordered_spurious` | A safety cone whose only counterexample runs a handler before its raiser (#206) |  | `Forbidden_Order_0` ok, TLC cex |
 | `cone_reduced_inner_class_loops` | The loop is inside a class of a nested reduction, invisible to the outer one | `--instance-count 1` | `JobStarts` cex |
 | `cone_reduced_loop_fair_enabled` | A reduced class loops, but the fair step is enabled there, so it is no place to stop | `--instance-count 1` | `JobStarts` ok |
 | `cone_reduced_loop_unreached` | A reduced class can loop, but not from the states the cone reaches it in | `--instance-count 1` | `SeenFinishes` ok; `Deadlock_Gate_phase_pa`, `Deadlock_Job_status_waiting` cex |

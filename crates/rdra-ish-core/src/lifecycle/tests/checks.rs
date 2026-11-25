@@ -98,6 +98,8 @@ fn an_entity_cone_reports_no_check_and_the_rule_cone_reports_its_own() {
 /// safety cones). A new reader belongs here once it does; it fails this test until then.
 const CHECK_READERS: &[(&str, &str)] = &[
     ("rdra-ish-cli/src/verify/bfs.rs", "of_parts"),
+    // Reads the one check it reruns, on a run that evaluates every check (`run`).
+    ("rdra-ish-cli/src/verify/bfs.rs", "rechecked"),
     (
         "rdra-ish-core/src/lifecycle/explore/bfs.rs",
         "stop_if_all_failed",

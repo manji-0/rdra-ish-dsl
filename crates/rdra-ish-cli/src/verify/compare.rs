@@ -37,7 +37,10 @@ pub(super) fn disagreements(
                 let Some(native) = &natives.safety[k] else {
                     continue;
                 };
-                let (a, b) = (native.verdict(), tlc.decision.verdict());
+                // TLC ran the cone itself, so it is compared with the cone's own run, before a
+                // counterexample was checked again on a widened cone.
+                let (a, found) = native.cone_verdict();
+                let b = tlc.decision.verdict();
                 if differ(a, b) {
                     out.push(line(&job.module, &job.checks, as_str(a), as_str(b)));
                     continue;
@@ -45,9 +48,9 @@ pub(super) fn disagreements(
                 if (a, b) != (Some(Outcome::Counterexample), Some(Outcome::Counterexample)) {
                     continue;
                 }
-                let BfsCone::Ran { found, .. } = native else {
+                if !matches!(native, BfsCone::Ran { .. }) {
                     continue;
-                };
+                }
                 let mine: BTreeSet<String> = found.iter().map(|d| d.diag.name(&[])).collect();
                 let theirs: Option<BTreeSet<String>> = tlc
                     .run

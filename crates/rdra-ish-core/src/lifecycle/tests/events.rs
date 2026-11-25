@@ -357,6 +357,60 @@ forbidden(Doc, status == final, seen == true).label("確認したら確定しな
     assert_eq!(trace_of(&d, "Forbidden_Doc_0").free_triggers, []);
 }
 
+/// #206: the cone widened with the left-out mark holds the raiser, and a trace that runs the
+/// handler before its event does not run on it or on the whole system, while a trace found on
+/// the widened cone runs on the whole system step by step.
+#[test]
+fn a_trace_without_its_event_does_not_run_on_the_ordered_cone() {
+    let ts = TransitionSystem::build(
+        &model_from(
+            r#"
+entity Doc "文書" { id: Int @pk  status: Enum(draft, final) @default(draft)  seen: Bool @default(false) }
+usecase Write "作成"
+usecase Review "確認"
+usecase Finalize "確定"
+event EvReviewed "確認済"
+creates(Write, Doc)
+updates(Review, Doc)
+sets(Review, Doc.seen == true)
+raises(Review, EvReviewed)
+triggers(EvReviewed, Finalize)
+transitions(Finalize, Doc.status, draft -> final)
+forbidden(Doc, status == final).label("確定しない")
+"#,
+        ),
+        Bounds::VERIFY,
+        &Scope::ALL,
+    )
+    .ts;
+    let target = crate::lifecycle::Target::Invariant(0);
+    let trace = |cone: &crate::lifecycle::Cone| {
+        let run = ts.restrict_to(&cone.vars, &cone.keep).run(Caps::VERIFY);
+        let mut d = run
+            .diags
+            .iter()
+            .find(|x| x.diag.name(&[]) == "Forbidden_Doc_0")
+            .expect("a violation")
+            .clone();
+        let trace = d.diag.trace_mut().expect("a trace");
+        ts.annotate(cone, trace);
+        trace.clone()
+    };
+    let cone = ts.target_cone(target);
+    let ordered = ts.ordered_cone(target);
+    assert!(ordered.vars.is_superset(&cone.vars) && ordered.vars != cone.vars);
+    let unordered = trace(&cone);
+    assert_eq!(unordered.free_triggers.len(), 1, "{unordered:?}");
+    let widened = ts.restrict_to(&ordered.vars, &ordered.keep);
+    assert!(!widened.runs_trace(&unordered));
+    assert!(!ts.runs_trace(&unordered));
+    let in_order = trace(&ordered);
+    assert!(in_order.free_triggers.is_empty(), "{in_order:?}");
+    assert_eq!(in_order.steps.len(), 3, "write, review, finalize");
+    assert!(widened.runs_trace(&in_order));
+    assert!(ts.runs_trace(&in_order), "the whole system runs it too");
+}
+
 /// A counted edge (#220): a box shipped twice, received once per shipment.
 const COUNTED: &str = r#"
 entity Box "箱" { id: Int @pk  sent: Enum(none, one, two) @default(none)  got: Enum(none, one, two) @default(none) }

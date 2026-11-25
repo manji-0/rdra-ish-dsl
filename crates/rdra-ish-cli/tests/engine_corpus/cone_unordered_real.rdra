@@ -1,0 +1,24 @@
+// trap: the twin of cone_unordered_spurious.rdra, whose violation is real either way.
+// Approve needs no payment here, so the whole model can place, approve, and ship an unpaid
+// order. The cone's counterexample still runs Ship unordered and does not replay on the
+// widened cone; the check runs again there, finds place, approve, ship, and prints that
+// trace without the note. Both engines report the counterexample.
+// expect Forbidden_Order_0: native=counterexample tlc=counterexample z3=unproved
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, shipped) @default(pending)
+  paid: Bool @default(false)
+  approved: Bool @default(false)
+}
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Approve "承認"
+usecase Ship "出荷"
+event EvApproved "承認済"
+creates(Place, Order)
+sets(Pay, Order.paid == true)
+sets(Approve, Order.approved == true)
+raises(Approve, EvApproved)
+triggers(EvApproved, Ship)
+transitions(Ship, Order.status, pending -> shipped)
+forbidden(Order, status == shipped, paid == false)

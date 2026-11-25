@@ -59,7 +59,7 @@ const CASES: &[Case] = &[
     ),
     (
         Model::File("crates/rdra-ish-cli/tests/engine_corpus/cone_handler_mark_left_out.rdra"),
-        &[("ShipsUnfair", "none")],
+        &[("ShipsUnfair", "Exact")],
     ),
     (
         Model::File("crates/rdra-ish-cli/tests/engine_corpus/cone_independent_loop.rdra"),

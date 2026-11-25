@@ -129,6 +129,16 @@ No sample changes verdict.
   goes to that cone instead of the whole model. The line reads `decided on the cone made
   exact (N more vars, M states)`. Expected, not yet run: patent-ops `GrantEnds`, whose cone
   frees slots and whose whole model did not finish, may move off `not decided`.
+- The cone made exact also holds each raised mark its handlers read, with the raisers, so a
+  property's counterexample that ran a handler before its event is decided there (#168
+  phase 4). A safety cone's counterexample that ran a use case before its event is checked
+  again on the cone widened with the raisers (#206): a trace that runs there loses its
+  `note:` row, and otherwise the check reruns there under the same memory limit and its
+  verdict replaces the cone's, so an invariant or after-assert can move from a
+  counterexample to `ok`. The line reads `rechecked on the cone widened by the raisers of the
+  events it ran without: ...`. Under `--with-tlc` TLC still checks the cone as it is; its
+  verdict is compared with the cone's own run. Expected, not yet run: a sample whose `verify`
+  printed that `note:` row may now pass.
 - Invalid `Enum` and `Bool` defaults (#187) and out-of-range Int defaults (#180) fail to
   load. `UnresolvedPropertyAtom` is renamed `UnresolvedPropertyColumn` (#160).
 - `export --kind typescript-states` and `states --format typescript` are removed. Unknown

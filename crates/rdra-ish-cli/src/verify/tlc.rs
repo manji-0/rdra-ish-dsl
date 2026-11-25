@@ -245,8 +245,8 @@ fn run_job(
         // there may create instances past the bound when the cone frees slots, and the
         // whole-model run decides.
         JobKind::Explored(e) => {
-            if let (Outcome::Counterexample, true) = (ran.decision.outcome(), e.frees_slots) {
-                let why = Why::FreesSlots.as_str().to_string();
+            if let (Outcome::Counterexample, true) = (ran.decision.outcome(), e.inexact) {
+                let why = Why::Inexact.as_str().to_string();
                 ran.notes.push(why.clone());
                 ran.decision = Decision::Undecided { why, stop: None };
             }

@@ -38,8 +38,8 @@ mod tlc;
 mod tlc_tool;
 
 use self::bfs::{
-    bfs_cones, decide_by_proof, explored_properties, report_bfs_cones, state_models, Explored,
-    Safety, STATE_MODEL_TLC_STATES,
+    bfs_cones, decide_by_proof, explored_properties, recheck_unordered, report_bfs_cones,
+    state_models, Explored, Safety, STATE_MODEL_TLC_STATES,
 };
 use self::compare::disagreements;
 use self::end::{End, TlcEnd};
@@ -272,6 +272,7 @@ pub fn run(
         );
         rdra_ish_core::perf::pass("safety_pass");
         let (safety, mut vacuous) = bfs_cones(&ts, &jobs, caps, &covers, &mut shared);
+        let safety = recheck_unordered(&ts, &jobs, safety, caps);
         rdra_ish_core::perf::pass("property_pass");
         let (properties, property_vacuous) =
             native_properties(&ts, &jobs, caps, budget, &mut shared);
