@@ -81,4 +81,28 @@ mod tests {
         assert_eq!(pos.character, 0);
         assert_eq!(position_to_byte_offset(src, pos), Some(offset));
     }
+
+    #[test]
+    fn positions_count_utf16_units_on_japanese_lines() {
+        // 受 and 付 are one UTF-16 unit and three bytes each; 𠮷 is two units and four bytes.
+        let src = "actor A \"受付\"\r\nusecase 𠮷 \"𠮷(x)\"\n";
+        for (offset, _) in src.char_indices().chain([(src.len(), ' ')]) {
+            let pos = byte_offset_to_position(src, offset);
+            assert_eq!(position_to_byte_offset(src, pos), Some(offset), "{offset}");
+        }
+        let paren = src.find("(x").unwrap();
+        assert_eq!(
+            byte_offset_to_position(src, paren),
+            Position {
+                line: 1,
+                character: 14
+            }
+        );
+        // The second unit of 𠮷 is not a character boundary.
+        let inside = Position {
+            line: 1,
+            character: 9,
+        };
+        assert_eq!(position_to_byte_offset(src, inside), None);
+    }
 }

@@ -16,6 +16,7 @@ rdra-ish-core   = { path = "../rdra-ish-core" }
 rdra-ish-syntax = { path = "../rdra-ish-syntax" }
 serde_json      = { workspace = true }
 tower-lsp       = { workspace = true }
+tower-service   = { workspace = true }
 tokio           = { workspace = true }
 url             = { workspace = true }
 dunce           = { workspace = true }

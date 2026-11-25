@@ -816,6 +816,10 @@
 
 ### Fixed
 
+- The language server no longer crashes on hover, signature help, or completion right after
+  a multi-byte character (#356), as inside `actor A "受付(窓口)"`, after `// 受付(`, or after
+  an unclosed `"受付`. The server used to stop at a panic there. A request whose handler
+  panics now gets an internal-error response, and the server keeps running.
 - `verify --with-tlc` names the cause when TLC 1.7.x fails reading a trace back on JDK 21
   or later (#314). With `--tlc-jar`, `RDRA_TLC_JAR`, or a `tlc` that runs on such a JVM, a
   `-continue` run that prints many traces stopped with an `ArrayIndexOutOfBoundsException`,
