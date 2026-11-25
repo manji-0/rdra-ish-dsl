@@ -11,12 +11,12 @@ projects the model into diagrams, review tables, exports and domain code.
 |---|---|---|
 | PyPI | `uv tool install rdra-ish` | `rdra-ish` |
 | Nix (flakes) | `nix profile install github:manji-0/rdra-ish-dsl` | `rdra-ish`, `rdra-ish-lsp`, and the `tlc` and `z3` that `verify` runs |
-| Cargo | `cargo install --git https://github.com/manji-0/rdra-ish-dsl rdra-ish-cli rdra-ish-lsp` | `rdra-ish`, `rdra-ish-lsp` |
+| Cargo | `cargo install --locked --git https://github.com/manji-0/rdra-ish-dsl rdra-ish-cli rdra-ish-lsp` | `rdra-ish`, `rdra-ish-lsp` |
 
 Each [GitHub release](https://github.com/manji-0/rdra-ish-dsl/releases) also has `rdra-ish`
-binaries for Linux, macOS and Windows. Add `/<tag>` to the Nix URL for a release;
-`nix run github:manji-0/rdra-ish-dsl -- --help` runs without installing. A `tlc` or `z3`
-already on `PATH` takes precedence over the ones Nix brings.
+binaries for Linux, macOS and Windows. For a Nix install of a release after v2.3.0, add
+`/<tag>` to the URL. `nix run github:manji-0/rdra-ish-dsl -- --help` runs without
+installing. A `tlc` or `z3` already on `PATH` takes precedence over the ones Nix brings.
 
 ## Five-minute tour
 
@@ -33,7 +33,8 @@ rdra-ish diagram samples/clinic-ops --all --out diagrams
 rdra-ish states samples/clinic-ops --entity Appointment
 rdra-ish list samples/clinic-ops --kind rule --format markdown
 
-# Verify every rule and property; cross-check with TLC and prove with z3
+# Verify every rule and property; then cross-check with TLC and prove with z3
+# (needs tlc and z3 on PATH, which the Nix install brings)
 rdra-ish verify samples/formal-verification/order.rdra
 rdra-ish verify samples/formal-verification/order.rdra --with-tlc --prove
 
@@ -50,7 +51,7 @@ rdra-ish codegen samples/ec-site --lang ts -o domain.ts
 | `export` | OpenAPI, AsyncAPI, DBML, SQL DDL, JSON Schema, TLA+ | [`export`](./docs/cli-reference.md#export) |
 | `states` | The reachable states of each entity and the state rules they break | [State derivation](./docs/state-derivation.md) |
 | `verify` | Every invariant, `after` assertion and temporal property, decided by a native checker with no JVM; `--with-tlc` cross-checks it with TLC, and `--prove` (experimental) proves state rules for any number of rows with z3 | [Formal verification](./docs/formal-verification.md) |
-| `verify --symmetry always` | Explores a cone up to instance symmetry, so larger instance counts fit in memory | [Instance symmetry](./docs/cli-reference.md#instance-symmetry) |
+| `verify --symmetry always` | Explores a cone up to instance symmetry, so larger instance counts fit in memory (experimental) | [Instance symmetry](./docs/cli-reference.md#instance-symmetry) |
 | `codegen` | Domain code in the Kamae style for TypeScript, Rust and Go: states, rows, transition functions, contracts and a conformance harness. The TypeScript types are covered by the compatibility contract; the rest is experimental | [`codegen`](./docs/cli-reference.md#codegen), [design](./docs/design/algebraic-codegen.md#generated-code-style) |
 | `check --code` | Checks that the service code is what the model generates, compiles against the contracts, and passes the conformance test (experimental) | [`check --code`](./docs/cli-reference.md#check---code) |
 | `rdra-ish-lsp` | Language server: diagnostics, completion, hover, definitions, references, rename, formatting, code lenses and semantic colors | [VS Code extension](./editors/vscode/) |

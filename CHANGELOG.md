@@ -83,9 +83,13 @@ lists what to change.
 
 | Model | Now | Fix |
 |---|---|---|
-| `@default` on an `Enum` column that is not one of its values, or on a `Bool` other than `true` / `false`, `@default(null)` included (#187) | `InvalidEnumVariant`, `InvalidBoolValue` | Write a declared value, spelled as declared |
+| `@default` on an `Enum` column that is not one of its values, or on a `Bool` other than `true` / `false` (#187) | `InvalidEnumVariant`, `InvalidBoolValue` | Write a declared value, spelled as declared |
+| `@default(null)` on an `Enum` or `Bool` column, `@null` or not (#187) | `InvalidEnumVariant`, `InvalidBoolValue` | Drop it |
 | An integer `@default` outside `0..--int-range-max` on a column a rule reads (#180) | `IntLiteralOutOfBounds_<E>_<value>` | Raise `--int-range-max` or lower the default |
-| A `property` atom whose column no single entity owns (#160) | `UnresolvedPropertyColumn`, a model error, in place of the lifecycle's `UnresolvedPropertyAtom` | Name the entity's column |
+
+A `property` atom whose column no single entity owns is now the model error
+`UnresolvedPropertyColumn`, which the LSP shows too. It was the lifecycle error
+`UnresolvedPropertyAtom`; a script that matches the name needs the new one (#160).
 
 **Models whose verdict can change**
 
@@ -100,22 +104,31 @@ No sample changes verdict.
 | A deleted row keeps its keys (#212) | A later step of a split use case that reads the deleted row's key reads its old parent | None |
 | A `can_reach` whose cone stops at a cap is `not decided` (#246) | It used to pass; it now fails `--deny-undecided` | Raise the cap or `--memory` |
 
+**`verify --prove`** (experimental)
+
+- A cone that BFS stopped at the memory limit is decided when z3 proves every rule it checks
+  (#232). Its line reads `ok (..., decided by proof: ...)` where it read `not decided`, and
+  it no longer counts toward `--deny-undecided`. No action needed.
+- Each z3 check gets a budget in z3 resource units, not seconds, so whether a rule is proved
+  no longer depends on the machine, its load or `RDRA_JOBS`. No flag sets the budget. No
+  action needed.
+
 ### Breaking
 
-- **verify:** native checker by default; `tlc_result:` only under `--with-tlc`; `--backend tlc`
-  deprecated; new `// expect verify:` grammar (#176 to #179, plan in #168).
-- **verify:** null semantics of nullable `Enum` / `Bool` (#359) and of column comparisons
-  (#355); restrict-family deletes (#199); unique sets (#222); deleted rows keep their keys
-  (#212); a capped `can_reach` is `not decided` (#246).
-- **verify --prove** (experimental): z3 checks get a budget in resource units, not seconds,
-  so a proof no longer depends on the machine or its load. A cone that BFS stopped at the
-  memory limit is decided when z3 proves every rule it checks (#232).
-- **Language:** invalid Enum and Bool defaults (#187), out-of-range Int defaults (#180), and
-  `UnresolvedPropertyColumn` (#160) fail to load.
-- **CLI:** `export --kind typescript-states` and `states --format typescript` removed; unknown
+- `verify` decides every check with its native checker. `tlc_result:` prints only under
+  `--with-tlc`, `--backend tlc` is deprecated, and `// expect verify:` lines read `ok` or
+  `fail <Names>` (#176 to #179, plan in #168).
+- Verdicts change for nullable `Enum` and `Bool` columns (#359), comparisons of two nullable
+  columns (#355), restrict-family deletes (#199), unique column sets (#222), the keys of a
+  deleted row (#212), and a `can_reach` whose cone stops at a cap (#246).
+- `verify --prove` (experimental) budgets z3 by resource units, and decides a cone stopped
+  at the memory limit when z3 proves every rule it checks (#232).
+- Invalid `Enum` and `Bool` defaults (#187) and out-of-range Int defaults (#180) fail to
+  load. `UnresolvedPropertyAtom` is renamed `UnresolvedPropertyColumn` (#160).
+- `export --kind typescript-states` and `states --format typescript` are removed. Unknown
   `rdra.toml` tables and keys are errors.
-- **codegen:** TypeScript, Rust and Go output in the Kamae shapes; named obligations;
-  traces format 3 (#363).
+- `codegen` prints TypeScript, Rust and Go in the Kamae shapes, names its obligations, and
+  writes traces in format 3 (#363).
 
 ### Added
 
@@ -157,7 +170,7 @@ No sample changes verdict.
   (properties), `IdentityStartSlots` (`--instances`), `InvalidRowEstimate` (`rows`),
   `DeleteLeavesChildren` (info on a `cascade` delete), and `LassoFault` (a checker bug).
 
-**Instance symmetry** (#212)
+**Instance symmetry** (experimental, #212)
 
 - `verify --symmetry never|always`, or `symmetry` under `[verify]`, explores a cone up to
   instance symmetry: one stored state per orbit of states that differ only in which slot
