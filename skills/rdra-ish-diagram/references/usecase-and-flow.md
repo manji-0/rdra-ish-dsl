@@ -1,123 +1,80 @@
-# Use Cases and Business Flows
+# Use cases, flows, and screens
 
-Use this reference for what happens inside a BUC: the robustness diagram, the sequence diagram of one use case, and the UC複合図
-of its use cases, and the business flow of its steps.
-
-## Commands
+Use these views for what happens inside a BUC.
 
 ```sh
-# ロバストネス図 — the use cases of one BUC, or the named use cases, as boundary / control / entity
-rdra-ish diagram src/ --kind robustness --buc <BucId> --format mermaid
-rdra-ish diagram src/ --kind robustness --usecase <UcId> --format mermaid
-
-# シーケンス図 — one use case in order (exactly one --usecase), or a BUC's use cases one after another
-rdra-ish diagram src/ --kind sequence --usecase <UcId> --format mermaid
-rdra-ish diagram src/ --kind sequence --buc <BucId> --format mermaid
-
-# UC複合図 — the use cases of one BUC, or the named use cases
-rdra-ish diagram src/ --kind usecase --buc <BucId> --format mermaid
-rdra-ish diagram src/ --kind usecase --usecase <UcId> --format mermaid
-# ...or by who performs them, or by the entity they read or write
-rdra-ish diagram src/ --kind usecase --actor <ActorId> --format mermaid
-rdra-ish diagram src/ --kind usecase --entity <EntityId> --format mermaid
-
-# 業務フロー — the flows of one BUC
-rdra-ish diagram src/ --kind flow --buc <BucId> --format mermaid
+rdra-ish diagram src/ --kind robustness --buc BucOrder --format mermaid
+rdra-ish diagram src/ --kind sequence --usecase PlaceOrder --format mermaid
+rdra-ish diagram src/ --kind usecase --actor Customer --format mermaid
+rdra-ish diagram src/ --kind flow --buc BucOrder --format mermaid
+rdra-ish diagram src/ --kind screen --buc BucOrder --format mermaid
 ```
 
-## Reading the ロバストネス図
+`usecase` and `robustness` take one scope: `--buc`, `--usecase` (repeatable), `--actor`
+(the use cases the actor performs), or `--entity` (the use cases that read or write it).
 
-- Nodes: actors; boundaries (`screen`, `extsystem`, `timer`); controls (`api`, or
-  `usecase` when the use case has no API or reads and writes entities itself); `entity`.
-  A node's class says which; the ids are those of `rdra`.
-- Edges follow one grammar: `actor --> screen` (`uses`, unlabelled), then
-  `screen -->|<use case label>| control`, then `control -->|CRUD| entity`. The use case
-  label on the screen edge is how to find the use case. `CRUD` is the letters of the
-  control's operations on the entity.
-- Dotted edges carry events and timers: `control -.->|<event>| control` when one use case
-  raises an event that starts another, and between a control and an `extsystem`. An
-  unlabelled `timer -.-> control` is the timer that starts the use case (`triggers`).
-- There is no edge from an actor to a control or from a boundary to an entity. A use case
-  that displays no screen has no incoming screen edge, and its actor is not drawn.
-- Use it as the main structural view of a BUC. Reach for the UC複合図 when the conditions,
-  states, or what a screen shows matter.
+## Robustness (`robustness`)
 
-## Reading the シーケンス図
+The main structural view of a BUC.
 
-- Read it after the robustness diagram: it says what one control does, in order. Participants
-  are the performing actors (or the external system, timer, or use case that starts it), the
+- Nodes: actors; boundaries (`screen`, `extsystem`, `timer`); controls (`api`, or the
+  `usecase` when it invokes no API); `entity`.
+- Edges follow one grammar: `actor --> screen`, then `screen -->|<use case label>| control`,
+  then `control -->|CRUD| entity`. The screen edge's label names the use case; `CRUD` is the
+  control's operation letters.
+- Dotted edges carry events and timers: `control -.->|<event>| control`, the same to or
+  from an `extsystem`, and an unlabelled `timer -.-> control` for `triggers`.
+- No edge runs from an actor to a control or from a boundary to an entity. A use case with
+  no screen has no incoming screen edge, and its actor is not drawn.
+
+## Sequence (`sequence`)
+
+- Takes exactly one `--usecase`, or `--buc` for the BUC's use cases one after another.
+- Participants: the starter (actor, external system, timer, or triggering use case), the
   screen, the controls, the entities, and the systems an event reaches.
-- `alt <guards>` holds the work. The guards are the conditions with a `holds` body applied to
-  the use case and the `from` states of each transitioned column (`status in (A, B)` for
-  several); `else guard fails` replies `rejected`.
-- Each write names the operation, the lifecycle move (`status A -> B`), the columns
-  `sets` fixes, and each column the actor picks again (`chooses`) as `col in (A, B)`, the
-  listed values only when `chooses` lines list them, each value's own `.when(Cond)` in
-  `[...]` after it. Arms from one state to several are the actor's choice: an `alt` after the
-  write has one branch per arm (`status = B`, `else` `status = C`). An arm's own
-  `.when(Cond)` follows its move in `[...]`, on the branch header or the write. A `Note over` names a transaction. An event the use case raises is a `-)`
-  message to the control it triggers, shown as one message and not expanded.
-- It needs exactly one `--usecase`; `--buc` is refused.
+- `alt <guards>` holds the work. The guards are the conditions with a `holds` body applied
+  to the use case and the `from` states of each moved column. `else guard fails` replies
+  `rejected`.
+- Each write names the operation, the move (`status A -> B`), the `sets` values, and each
+  re-chosen column (`chooses`) as `col in (A, B)`. Arms to several states are an `alt` after
+  the write, one branch per arm. An arm's or value's `.when(Cond)` shows in `[...]`.
+- `Note over` names a transaction. A raised event is one `-)` message to the control it
+  triggers.
 
-## Reading the UC複合図
+## UC複合図 (`usecase`)
 
-- Each use case in scope sits in システム境界 with the screens it displays and its events;
-  actors and external systems in システム価値; timers in システム外部環境; the entities it
-  touches, the conditions on it, and the states it moves in システム. The ids are those of
-  `rdra`.
-- Edges: `performs`, `displays`, `shows` (screen to entity), `reads` /
-  `creates` / `updates` / `deletes`, `raises` / `triggers` (with the events' external
-  systems), `-.->|applies_to|` (condition to use case), `-.->|when|` (a condition whose
-  `.when(Cond)` guards a `transitions` arm or `chooses` value of the use case, followed by
-  `%% derived ... via transitions ...` or `via chooses ...`), and
-  `transitions <Entity>.<column> <from>-><to>` to the state entered.
-- APIs are folded into the use case that invokes them: an API's CRUD is drawn from the
-  use case, followed by `%% derived <uc> -> <entity> via api__<Api>`. An actor who
-  performs the use case's BUC or step is drawn performing the use case, followed by
-  `%% derived ... via buc__<Buc>` (or `step__<Step>`). A declared edge is never marked
-  derived.
-- `omitted:` names the kinds linked to a drawn use case or screen that are left out,
-  such as `buc`, `api`, `permission`, and `medium`; `rdra` draws them.
-- `--buc` keeps the use cases the BUC contains, directly or through a step of its flows;
-  `--usecase` (repeatable, not with `--buc`) keeps the named ones.
+- Layers: actors and external systems in システム価値, use cases with their screens and
+  events in システム境界, timers in システム外部環境, entities, conditions, and states in
+  システム.
+- Edges: `performs`, `displays`, `shows`, CRUD, `raises` / `triggers`, `-.->|applies_to|`
+  from a condition, `-.->|when|` from a condition that guards an arm or `chooses` value of
+  the use case, and `transitions <Entity>.<column> <from>-><to>` to the state entered.
+- An API's CRUD is drawn from the use case that invokes it, with
+  `%% derived <uc> -> <entity> via api__<Api>`. An actor who performs the BUC or a step
+  is drawn performing the use case, with `%% derived ... via buc__<Buc>`.
+- `--buc` keeps the use cases the BUC contains, directly or through a step.
 
-## Reading the Business Flow
+## Business flow (`flow`)
 
-- The type line is `flowchart TD`. Each flow is `subgraph flow__<id>` holding its steps.
-- `-->|precedes|`, `-->|branches|`, `-.->|excepts|`, and `-->|repeats|` run between steps;
-  an unlabelled `-.->` (`covers`) runs from a step to the use cases, APIs, events, and timers it covers,
-  which sit outside the flows.
-- A step of a flow that exactly one actor performs (`performs(Actor, Step)`) sits in
-  `subgraph lane__<Flow>__<Actor>`, whose first line is
-  `%% lane lane__<Flow>__<Actor>: actor__<Actor>`. A step several actors perform has a
-  unlabelled `-.->` (`performs`) edge from each. Without `performs(Actor, Step)` there are no lanes.
-- `--buc` draws the flows the BUC contains. A BUC without a flow gives an empty diagram
-  (`%% kinds: (none)`).
+- `flowchart TD`; each flow is `subgraph flow__<id>` holding its steps.
+- Between steps: `-->|precedes|`, `-->|branches|`, `-.->|excepts|`, `-->|repeats|`. An
+  unlabelled `-.->` (`covers`) runs from a step to the use cases, APIs, events, and timers
+  it covers.
+- A step one actor performs (`performs(Actor, Step)`) sits in `lane__<Flow>__<Actor>`. A
+  step several actors perform has an unlabelled `-.->` from each. Without
+  `performs(Actor, Step)` there are no lanes.
+- A BUC without a flow gives `%% kinds: (none)`.
 
-## Reading the Screen Transitions
+## Screen transitions (`screen`)
 
-- The type line is `flowchart LR`, with one `screen__<id>` node per screen of the scope,
-  connected or not.
-- `screen__A -->|<use case label>| screen__B` is a declared
-  `navigates(A, B).via(UseCase)`; `-->|navigates|` has no `.via`. The use case id is on a
-  `%% via screen__A -> screen__B usecase__<id>` line after the edges, so match by that,
-  not by the label.
-- `screen__A -.->|業務上の順番| screen__B`, followed by
-  `%% derived screen__A -> screen__B via <flow and step ids>`, is not a transition: two
-  consecutive steps of a flow in one actor's lane (`precedes`, `branches`, `excepts`)
-  display A, then B, and no `navigates` goes from A to B. Treat it as a candidate for a
-  `navigates`, not as one.
-- A screen with no edge is what `lint` reports as `screen-no-transition` (info).
-- `--buc` keeps the screens the BUC's use cases display and the business order of its
-  flows; a `navigates` to a screen of another BUC is drawn only without `--buc`.
+- `screen__A -->|<use case label>| screen__B` is `navigates(A, B).via(UseCase)`; match the
+  use case by the `%% via screen__A -> screen__B usecase__<id>` line, not the label.
+  `-->|navigates|` has no `.via`.
+- `screen__A -.->|業務上の順番| screen__B` with a `%% derived` line is no transition: two
+  consecutive steps in one actor's lane display A, then B, and no `navigates` joins them.
+  Treat it as a candidate `navigates`.
+- A screen with no edge is `lint` `screen-no-transition`.
+- `--buc` keeps the BUC's screens and flows; a `navigates` to another BUC's screen shows
+  only without `--buc`.
 
-## When To Use
-
-- Use `usecase --buc <BucId>` to review what each use case of a BUC shows and touches,
-  without the API and permission detail.
-- Use `flow --buc <BucId>` when the order of the work matters: every step should cover a
-  use case, and every exception should rejoin the flow.
-- Use `screen --buc <BucId>` when designing the UI or the front end: write `navigates` for
-  each dashed edge that is a real transition, and for each lone screen.
-- Add `rdra-ish csv src/ --kind matrix` when the question is CRUD coverage rather than
-  connectivity.
+For CRUD coverage use `rdra-ish csv src/ --kind matrix`, not a diagram.
