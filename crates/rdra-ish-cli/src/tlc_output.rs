@@ -581,7 +581,8 @@ pub const READBACK_HINT: &str = "hint: TLC stopped with an ArrayIndexOutOfBounds
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Banner {
-    /// `2.19` above. TLC 1.7.x is `2.15` to `2.19`; 1.8.0 prints a date, `2026.11.19.180144`.
+    /// `2.19` above. TLC 1.7.x is `2.15` to `2.19`; the TLC 1.8.0 build the flake pins prints
+    /// a date, `2026.11.19.180144`.
     pub tlc: Option<String>,
     /// `21.0.11` above; JDK 8 prints `1.8.0_492`.
     pub java: Option<String>,

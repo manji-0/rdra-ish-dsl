@@ -500,8 +500,8 @@
   JDK 25 (#309). nixpkgs packages TLC 1.7.4 only, so the flake takes the `tla2tools.jar` of
   the v1.8.0 release, a pre-release that upstream rebuilds under the same tag, pinned by
   hash to the build of 2026-11-19 (`TLC2 Version 2026.11.19.180144`, rev bc1b506). JDK 25
-  is the newest JDK nixpkgs packages. TLC 1.8.0 reads its trace file back correctly on any
-  JDK (#314).
+  is the newest JDK nixpkgs packages. The run that #314 found TLC 1.7.4 failing on JDK 21
+  and 25 runs to its end on TLC 1.8.0 on both (#314).
   - `verify` and the tests read TLC 1.8.0's output as they read 1.7.x's: a temporal
     violation that names its property (`Error: Temporal property P was violated.`), an
     `always` that TLC 1.8.0 checks as an invariant on its state predicate and names by

@@ -328,8 +328,9 @@ This keeps clinic-ops tractable: a whole-model run at `InstanceCount=2` took 62 
 A temporal property is checked on a cone of its own, and on the whole model only when that
 cone does not decide it (see [Temporal properties on a cone](#temporal-properties-on-a-cone)).
 The native checker explores the property's cone and decides the property on the graph it
-reached. TLC reports a temporal violation as `Temporal properties were violated.` without
-naming the property, so under `--with-tlc` each property runs alone: module
+reached. TLC 1.7.x reports a temporal violation as `Temporal properties were violated.`
+without naming the property, and TLC 1.8.0 names an `always` only by where its state
+predicate is, so under `--with-tlc` each property runs alone: module
 `Cone_<Property>` with a `.cfg` that names that one `PROPERTY`. The property cones run with
 the other cones, in parallel.
 
