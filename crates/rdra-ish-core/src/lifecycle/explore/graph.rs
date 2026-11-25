@@ -227,6 +227,7 @@ impl ComponentRun {
     /// order. Panics on a run that stopped once every check failed
     /// (`Caps::stop_when_all_violated`), which keeps no edge list: nothing may read its graph.
     pub fn edges(&self) -> Edges<'_> {
+        self.assert_held();
         self.steps.edges()
     }
 
@@ -266,6 +267,7 @@ impl ComponentRun {
 
     /// The BFS path from an initial state to `states[at]`, first edge first.
     pub fn path_to(&self, mut at: u32) -> Vec<Edge> {
+        self.assert_held();
         let mut path = Vec::new();
         while let Some(edge) = self.parent(at) {
             path.push(edge);

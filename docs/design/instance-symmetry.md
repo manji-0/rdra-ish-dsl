@@ -701,6 +701,26 @@ results was proposed with the measurements of item 1 and accepted by the coordin
   exit of step 1, per-rule witnesses before the flip, the flip as a `### Breaking` entry,
   and any residual-cost choice back to the owner.
 
+The owner decided this on 2026-11-25, before the entity cones of phase 4 (#284).
+
+- **A stopped entity cone gives back its room.** The rule was that under a memory limit the
+  cones run one at a time in cone order, each in the room the results before it leave
+  ([Memory limit](../cli-reference.md#memory-limit)). Measured on `clinic-ops` at n=3 under
+  8 GiB, the 117 findings `verify` left open were not cones too large for the limit, but
+  cones with no room: `AccountBalance`, first in cone order, stopped at 83,486,263 states and
+  held 7.9 GB until the pass ended, and the 17 cones after it got no room and stored no
+  state, `InsurancePolicy` (about 1 KB alone) and `Prescription` (about 400 MB) among them.
+  Now `verify` reads a stopped entity cone's findings (witnesses, runs, arms taken) when it
+  stops and releases its run, which leaves no result, so the cones after it run in the room
+  it held. Only an undecided finding may change, to decided: the 43 sample pairs under
+  `never` print what they printed, the output does not depend on `RDRA_JOBS`, and a reader
+  of a released run's graph panics, so nothing but `entity_findings` reads a stopped entity
+  cone. `check` and `states` keep every run, since they read a stopped cone's views. On
+  `clinic-ops` at n=3 under 8 GiB, 17 findings stay open where 117 did. The cones that had
+  no room now explore, so the run takes 5,578 s where it took 1,707 s and peaks at 35.6 GB
+  RSS where it peaked at 29.2 GB (the limit bounds the stores, not the process: #237,
+  #296).
+
 ## Always by default
 
 <!-- derived-from #phases -->

@@ -754,7 +754,9 @@ What the limit counts:
   edge, and the bindings, by the length and capacity of each collection. The count is the same on every
   machine and with any number of threads, so a cone stops at the same state wherever it
   runs. A finished cone keeps its states and edges until its findings are read, so they
-  stay counted, and the next cone has the rest of the limit. The cones run side by side,
+  stay counted, and the next cone has the rest of the limit. `verify` reads the findings
+  of an entity cone that stops at the limit at once, then gives back what it held, so the
+  next cone has the room the stopped one had (#284). The cones run side by side,
   yet each stops where it would stop if they ran one at a time in order: a cone that met a
   pool the others had filled, or that grew past the room left to it, runs again on its own.
 - **Shared quotients** (`verify`). Cones whose sub-lifecycles are equal share one quotient

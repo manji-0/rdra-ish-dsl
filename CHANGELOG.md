@@ -482,6 +482,23 @@
 
 ### Changed
 
+- `verify` gives back what an entity cone held once the cone stops at the memory limit
+  (#284). The entity pass runs its cones one at a time in cone order, each in the room the
+  results before it leave. A stopped cone used to keep everything it stored until the pass
+  ended, though only its own findings read it, so every cone after it ran in what was left:
+  on `clinic-ops` at three instances under `--memory 8GiB`, `AccountBalance` stopped at
+  83,486,263 states holding 7.9 GB, and the 17 cones after it had no room at all. `verify`
+  now reads a stopped entity cone's findings when it stops and then frees its states and
+  edges, so the next cone has the room the stopped one had. **A `never` verdict can change
+  from not decided to decided**, and nothing else changes: the 43 sample pairs print what
+  they printed. Under a tight limit `verify` decides more (`samples/patent-ops --memory
+  1MiB`: 43 findings not decided before, 13 now; `samples/clinic-ops --memory 4MiB`: 158 to
+  19). On `clinic-ops` at three instances under `--memory 8GiB`, 117 findings were not
+  decided and 17 are now. The cones that had no room now explore, so that run takes
+  5,578 s where it took 1,707 s, and its peak RSS is 35.6 GB where it was 29.2 GB: the
+  limit bounds what the stores hold, not the process (#237, #296). `check` and `states`
+  keep every run, since they read a stopped cone's views.
+
 - A run keeps each state packed into the bits its variables' domains need (#296 item 2.3,
   #207). A variable of `n` values takes `ceil(log2(n))` bits (a 3-value status takes 2, a
   flag 1), and a state is the sum rounded up to whole bytes, where it was one byte per

@@ -188,6 +188,10 @@ fn state_model_cones(ts: &TransitionSystem, run: &TargetExploration) -> StateMod
     }
     for (at, shared) in groups {
         let cone = &run.cones[at].run;
+        // A stopped cone decides nothing to compare, and the entity pass released it.
+        if !cone.complete {
+            continue;
+        }
         let modelled: Vec<EntId> = shared
             .into_iter()
             .filter(|e| !ts.state_model_states(*e).is_empty())
@@ -197,9 +201,6 @@ fn state_model_cones(ts: &TransitionSystem, run: &TargetExploration) -> StateMod
         };
         let first = format!("StateModel_{}", ts.entity(*first).id);
         let states = cone.states.len();
-        if !cone.complete {
-            continue;
-        }
         if states > STATE_MODEL_TLC_STATES {
             out.skipped.push((first, states));
             continue;
@@ -795,4 +796,38 @@ pub(super) fn report_bfs_cones(
     }
     out.violated = reported.len();
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::state_model_cones;
+    use rdra_ish_core::lifecycle::{Bounds, Caps, QuotientCache, Scope, Target, TransitionSystem};
+    use rdra_ish_core::load_project;
+    use rdra_ish_core::memory::{MemoryPool, MemorySize};
+    use std::path::Path;
+
+    /// Under a memory limit the entity pass releases each entity cone that stops, and the TLC
+    /// side reads none of them: a reader of a released cone's graph panics (#284).
+    #[test]
+    fn tlc_reads_no_stopped_entity_cone() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let model = load_project(&[root.join("samples/patent-ops")], None)
+            .expect("load patent-ops")
+            .model;
+        let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+        let entities: Vec<Target> = (ts.targets().into_iter())
+            .filter(|t| matches!(t, Target::Entity(_)))
+            .collect();
+        let limit = MemorySize::from_bytes(1 << 20).expect("a size");
+        let caps = Caps::VERIFY.charged_to(MemoryPool::for_command(limit, "--memory"));
+        let run = ts.explore_targets_reduced_in(&entities, caps, &QuotientCache::new(), &[]);
+        let stopped = run.cones.iter().filter(|c| !c.run.complete).count();
+        assert!(stopped > 0, "some entity cone stops at 1MiB");
+        let complete = run.cones.iter().filter(|c| c.run.complete).count();
+        let models = state_model_cones(&ts, &run);
+        assert!(
+            models.cones.len() + models.skipped.len() <= complete,
+            "TLC takes complete cones alone"
+        );
+    }
 }
