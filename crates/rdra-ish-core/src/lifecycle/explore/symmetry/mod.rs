@@ -21,6 +21,8 @@ mod canon;
 pub(super) mod reference;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod witnesses;
 
 pub(crate) use canon::{Canon, Canonical};
 
@@ -49,6 +51,25 @@ impl std::str::FromStr for Symmetry {
             other => Err(format!("`{other}` is not a symmetry mode: never or always")),
         }
     }
+}
+
+/// Whether a `shadow` build drops the group rule `name` (`RDRA_ISH_DROP_RULE=<name>`): a
+/// scan rule by its variant (`OrderedId`), a reason `Reduction::fixed_why` gives as
+/// `Reduced:<reason>` (`Reduced:S var`), and a reason the extended sub-lifecycle fixes an
+/// entity for as `Observed:<reason>` (`Observed:obs`). A test-only switch that plants a bug
+/// per rule, so that a witness can show the rule is needed (`witnesses`, and engine_corpus
+/// under `shadow`); a unit test sets it per thread. A release build drops nothing.
+#[cfg_attr(not(any(test, feature = "shadow")), allow(unused_variables))]
+pub(crate) fn dropped(name: &str) -> bool {
+    #[cfg(test)]
+    if witnesses::DROPPED.with(|d| d.borrow().as_deref() == Some(name)) {
+        return true;
+    }
+    #[cfg(feature = "shadow")]
+    if std::env::var("RDRA_ISH_DROP_RULE").is_ok_and(|v| v == name) {
+        return true;
+    }
+    false
 }
 
 /// Under the `shadow` feature, holds the canonical form `out` of `s` to the twin that
@@ -133,7 +154,7 @@ pub enum Rule {
     /// representative for S and the class tables key on the inputs and the bits row by row,
     /// so an S entity, an entity that holds an S var or an input or whose rows such a key
     /// names, an entity a bit is kept per row of, and an entity an S action binds stay where
-    /// they are (`Reduction::fixed`).
+    /// they are (`Reduction::fixed_why`).
     Reduced,
 }
 
@@ -241,14 +262,15 @@ fn find(parent: &mut [usize], x: usize) -> usize {
 
 impl Group {
     /// The group of `ts`, with every class its scan finds a reason to leave out left out. On
-    /// a #74-reduced cone it is `G_T` (#212 phase 3): the classes of `Reduction::fixed`, which
+    /// a #74-reduced cone it is `G_T` (#212 phase 3): the classes of `Reduction::fixed_why`, which
     /// the representative and the class tables read, are left out too (`Rule::Reduced`).
     pub(crate) fn of(ts: &TransitionSystem) -> Group {
         let fixed: Vec<(EntId, Rule)> = match ts.reduction() {
             Some(r) => r
-                .fixed(ts)
+                .fixed_why(ts)
                 .into_iter()
-                .map(|e| (e, Rule::Reduced))
+                .filter(|(_, why)| why.iter().any(|w| !dropped(&format!("Reduced:{w}"))))
+                .map(|(e, _)| (e, Rule::Reduced))
                 .collect(),
             None => Vec::new(),
         };
@@ -256,7 +278,7 @@ impl Group {
     }
 
     /// Under `RDRA_ISH_G_T_STATS`, one line on stderr for a run of `ts`, a reduced cone, up
-    /// to this group: per entity, whether it moves, and why `Reduction::fixed` leaves it out.
+    /// to this group: per entity, whether it moves, and why `Reduction::fixed_why` leaves it out.
     pub(crate) fn g_t_stats(&self, ts: &TransitionSystem) {
         let Some(r) = ts.reduction() else {
             return;
@@ -331,6 +353,7 @@ impl Group {
         let mut left_out: Vec<LeftOut> = Vec::new();
         for (e, rule) in breaks::scan(ts, &class_of)
             .into_iter()
+            .filter(|(_, rule)| !dropped(&format!("{rule:?}")))
             .chain(fixed.iter().copied())
         {
             classes[class_of[e.index()]].moves = false;
@@ -472,7 +495,7 @@ impl Group {
                 .filter(|c| self.classes[**c].moves)
                 .map(|c| factorial(self.classes[*c].slots))
                 .fold(1u128, u128::saturating_mul);
-            if size <= JOINT_CAP {
+            if size <= JOINT_CAP || dropped("JointTooLarge") {
                 continue;
             }
             for &c in &self.blocks[b].classes {

@@ -1097,3 +1097,32 @@ fn a_reduced_wf_next_run_decides_what_the_unreduced_one_decides() {
         Some("found what the blind run misses")
     );
 }
+
+/// The witnesses of the reasons `H` keeps an entity in place for that a corpus case shows
+/// (docs/design/instance-symmetry.md, "Always by default", the per-rule gate): with the
+/// sub-lifecycle run up to `H` at once and one reason dropped (`RDRA_ISH_DROP_RULE`), the
+/// run stops loudly at the assertion that `H` moves nothing the quotient reads. Only a
+/// `shadow` build reads the switches.
+#[cfg(feature = "shadow")]
+#[test]
+fn each_h_reason_a_case_shows_has_a_witness() {
+    for (case, reason) in [
+        ("presence_first_absent_asymmetry", "Observed:obs"),
+        ("presence_first_absent_asymmetry", "Observed:input"),
+    ] {
+        let out = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+            .args(["verify", "--symmetry", "always"])
+            .arg(corpus_dir().join(format!("{case}.rdra")))
+            .env("RDRA_ISH_FORCE_ORBITS", "1")
+            .env("RDRA_ISH_FORCE_S_UP_TO_H", "1")
+            .env("RDRA_ISH_DROP_RULE", reason)
+            .env_remove("RDRA_TLC_JAR")
+            .output()
+            .expect("rdra-ish runs");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            stderr.contains("symmetry: H moves the rows of"),
+            "{case} with {reason} dropped: {stderr}"
+        );
+    }
+}

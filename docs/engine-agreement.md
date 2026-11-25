@@ -324,7 +324,7 @@ canonical form there still gives the plain run's verdicts on every case, so only
 exhaustive test and the `canonical` twin see it.
 
 Phase 3 (a reduced safety cone up to `G_T`) planted one bug the same way. No single rule
-of `Reduction::fixed` other than the S entities can be dropped so that a check sees it: on
+of `Reduction::fixed_why` other than the S entities can be dropped so that a check sees it: on
 the samples every T entity it fixes for an input, a key S holds, or a bit is also bound by
 an S action, and the reverse. Dropping the input, the key and the S-action rules together
 moves `PermitApplication` in a food-permit-ops cone whose S reads it; the `OrbitRun` twin
