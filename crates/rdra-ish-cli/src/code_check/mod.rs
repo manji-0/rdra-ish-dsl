@@ -133,10 +133,14 @@ pub(crate) trait Backend {
         Vec::new()
     }
 
-    /// What a failed run says: the harness's report of the first difference, when the
-    /// output holds it.
-    fn run_failure(&self, _stdout: &str, _stderr: &str) -> Option<String> {
-        None
+    /// The `code:` line of a failed run: by default the output's last non-empty line; a
+    /// language gives the harness's report of the first difference instead.
+    fn run_failure(&self, stdout: &str, stderr: &str) -> Option<String> {
+        format!("{stdout}\n{stderr}")
+            .lines()
+            .rev()
+            .find(|l| !l.trim().is_empty())
+            .map(|l| l.trim().to_string())
     }
 
     /// What a message says about the contract it belongs to.
@@ -186,24 +190,31 @@ fn run_step(backend: &dyn Backend, t: &Target<'_>) -> Option<Result<Vec<CodeDiag
         if ok {
             return Ok(Vec::new());
         }
-        let why = backend.run_failure(&stdout, &stderr).unwrap_or_else(|| {
-            format!("{stdout}\n{stderr}")
-                .lines()
-                .rev()
-                .find(|l| !l.trim().is_empty())
-                .unwrap_or_default()
-                .trim()
-                .to_string()
-        });
-        Ok(vec![CodeDiagnostic {
-            name: "CodeConformance".to_string(),
-            message: format!("the service does not conform to the model's traces: {why}"),
-            model: None,
-            code: Some(command.join(" ")),
-            fix: None,
-            warning: false,
-        }])
+        // The whole output first: the diagnostic quotes one line of it.
+        eprint!("{stdout}");
+        eprint!("{stderr}");
+        Ok(vec![run_diagnostic(backend, &command, &stdout, &stderr)])
     })())
+}
+
+/// The diagnostic of a failed run: the command, and the `code:` line its backend reads.
+fn run_diagnostic(
+    backend: &dyn Backend,
+    command: &[String],
+    stdout: &str,
+    stderr: &str,
+) -> CodeDiagnostic {
+    CodeDiagnostic {
+        name: "CodeConformance".to_string(),
+        message: format!(
+            "the service does not conform to the model's traces (`{}`)",
+            command.join(" ")
+        ),
+        model: None,
+        code: backend.run_failure(stdout, stderr),
+        fix: None,
+        warning: false,
+    }
 }
 
 /// Runs `command` in the target's root: whether it succeeded, its stdout and stderr.
@@ -420,4 +431,32 @@ fn compare(path: &Path, check: impl FnOnce(&Path) -> Result<bool>) -> Result<boo
         return Ok(false);
     }
     check(path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A backend of a made-up language whose harness reports `DIFF: <why>`.
+    struct Toy;
+    impl Backend for Toy {
+        fn run_failure(&self, stdout: &str, _stderr: &str) -> Option<String> {
+            stdout
+                .lines()
+                .find_map(|l| l.strip_prefix("DIFF: "))
+                .map(str::to_string)
+        }
+    }
+
+    #[test]
+    fn a_failed_run_quotes_the_line_its_backend_reads() {
+        let command = ["toy".to_string(), "test".to_string()];
+        let d = run_diagnostic(&Toy, &command, "start\nDIFF: Order 1 differs\nFAIL\n", "");
+        assert_eq!(d.name, "CodeConformance");
+        assert_eq!(d.code.as_deref(), Some("Order 1 differs"));
+        assert!(d.message.contains("`toy test`"), "{}", d.message);
+        // The default: the output's last non-empty line.
+        let d = run_diagnostic(&FreshOnly, &command, "a\n", "b\nFAIL\n\n");
+        assert_eq!(d.code.as_deref(), Some("FAIL"));
+    }
 }

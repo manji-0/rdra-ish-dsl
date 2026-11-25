@@ -60,16 +60,12 @@ impl Backend for Rust {
         stdout.lines().filter_map(compiler_message).collect()
     }
 
-    /// The probe's test panics with `rdra-ish conformance: <report>`; the report runs to the
-    /// line before the test harness's `note:`.
+    /// The probe's test panics with `rdra-ish conformance: <report>`: the report's first
+    /// line (`traces line N: ...`); the rest is in the output printed above.
     fn run_failure(&self, stdout: &str, stderr: &str) -> Option<String> {
         let all = format!("{stdout}\n{stderr}");
         let (_, rest) = all.split_once("rdra-ish conformance: ")?;
-        let report: Vec<&str> = rest
-            .lines()
-            .take_while(|l| !l.starts_with("note:") && !l.trim().is_empty())
-            .collect();
-        Some(report.join("\n"))
+        rest.lines().next().map(str::to_string)
     }
 
     fn classify(&self, m: &CompilerMessage) -> Finding {
