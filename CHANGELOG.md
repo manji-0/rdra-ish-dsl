@@ -525,6 +525,12 @@
 
 ### Changed
 
+- Without `RDRA_JOBS`, one BFS run computes its moves on a third of the cores, at least 4 and
+  at most 12 (never more than the cores), instead of on as many threads as cones run side
+  by side (the cores, at most 8). One run gains nothing past 4 to 6 threads (#296). Cones
+  side by side, z3 processes and `RDRA_JOBS` itself are unchanged, and the output does
+  not depend on the number.
+
 - `verify` gives back what an entity cone held once the cone stops at the memory limit
   (#284). The entity pass runs its cones one at a time in cone order, each in the room the
   results before it leave. A stopped cone used to keep everything it stored until the pass
