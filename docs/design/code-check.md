@@ -4,10 +4,15 @@
 <!-- constrained-by ./algebraic-codegen.md#goals-and-non-goals -->
 <!-- constrained-by ../compatibility.md -->
 
-Status: design study of 2026-11-25 (against `14de5558` on main), accepted by the owner the
-same day with the [decisions](#decisions) below. Tracking issue: #363. One pull request per
-language delivers it: the Rust one carries the language-neutral base (this note, P0, P1, and
-the shared parts of P2, P4, and P5), and the Go and TypeScript ones stack on it.
+Status (2026-11-26): design study of 2026-11-25 (against `14de5558` on main), accepted by
+the owner the same day with the [decisions](#decisions) below. Tracking issue: #363 (open).
+
+- **Landed.** One pull request per language. Rust with the language-neutral base: P0, P1,
+  P2, P4 and P5 (#366). TypeScript: P3 and P4, `--seal` included (#368). Go: P2, P4 and P7
+  (#369). `check --code=fresh|build|run` works for all three languages. P6's static plan, a
+  capability type per actor in the contract arguments, is in all three.
+- **Open.** P6's refused trace for a call by another actor, in every language (#337).
+- **Superseded.** Nothing. [What exists today](#what-exists-today) describes main before P0.
 
 ## Summary
 
@@ -29,6 +34,9 @@ up only when the conformance harness runs; for the last one the check can confir
 someone declared they own it.
 
 ## What exists today
+
+[As of `14de5558`, before P0. `codegen --format json`, the TypeScript port and harness, and the
+probes have landed since; see the status above.]
 
 - The TypeScript output already has transition functions, rule checks, `orderFromRow` and the
   dispatchers (`runCancel`). It lacks sealed state types and the conformance port and harness.

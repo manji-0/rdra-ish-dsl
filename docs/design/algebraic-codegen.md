@@ -5,15 +5,25 @@
 <!-- derived-from ../state-derivation.md -->
 <!-- derived-from ../language-reference.md#data-layer -->
 
-Status: accepted in scope on 2026-11-07 as an experimental extra
-([vision.md](../vision.md#decisions)). On 2026-11-24 the TypeScript types of the output
-became covered by
-[compatibility](../compatibility.md#the-typescript-types-of-codegen), and
-`export --kind typescript-states` was removed (see
-[The state unions before codegen](#the-state-unions-before-codegen)). The rest of the
-subcommand and its output stays experimental. Phases 0 to 4 have landed, phase 5
-has landed except for 11 use cases on the samples (see
-[Phases](#phases)), and every question is [decided](#decisions).
+Status (2026-11-26): accepted in scope on 2026-11-07 as an experimental extra
+([vision.md](../vision.md#decisions)); every question is [decided](#decisions).
+
+- **Landed.** [Phases](#phases) 0 to 4, and phase 5 but for the use cases below. The
+  conformance harness, private state fields and one transaction per function (#348, for
+  #330, #331, #332). `codegen --check` (#343). The printed Rust and Go run on every BFS edge
+  of the samples (#342). The Kamae shapes in all three languages, `--format json`, `--code`,
+  `--probe` and `--seal` (#366, #368, #369, for #363).
+- **Open.** 19 use cases on the samples get no function yet (#335): the 11 of phase 5 on
+  clinic-ops, patent-ops, food-permit-ops and insurance-claim-ops, and 8 on oidc-auth.
+  Validators for rules over several rows (#336), timer and fairness obligations (#338),
+  intent in doc comments (#339), and the refused trace of P6 (#337). `--refine reachable`,
+  `--part`, `--buc` and `--scalars` have not landed.
+- **Superseded.** `export --kind typescript-states` and `states --format typescript`, removed
+  on 2026-11-24 for `codegen --lang ts` (#238; see
+  [The state unions before codegen](#the-state-unions-before-codegen)). Since then the
+  TypeScript types are covered by
+  [compatibility](../compatibility.md#the-typescript-types-of-codegen); the rest of the
+  subcommand and its output stays experimental.
 
 The model already states the shape of the domain: the values an actor chooses
 (`variation`), the records the system keeps (`entity`), the keys between them (`relate`),
@@ -676,7 +686,7 @@ agent can split it into files wherever the project wants:
    through the scaffold's ports, against the finished services. When an agent edit breaks
    one, the code has left what was verified. As built, the core's part is the rule checks,
    and the finished service's part is [the conformance harness](#conformance), for Rust
-   and Go.
+   and Go. [TypeScript too, since #368.]
 
 `--format json` prints the same intermediate form and obligations as data, for an agent
 that wants to generate in another language or check its work against the list.
@@ -700,7 +710,7 @@ what the model does. Nothing showed that the service an agent writes around the 
 a service that writes the store directly, stores only some of the rows a function returns,
 or runs a use case from a state the model refuses passes every other check.
 `codegen --lang rust|go --conformance <FILE>` prints a port and a harness after the core,
-and writes the traces the harness runs to `FILE`.
+and writes the traces the harness runs to `FILE`. [Since #368 `--lang ts` prints them too.]
 
 **The port.** The service implements `ConformancePort`: `seed` empties the store and stores
 the rows of an initial state, `snapshot` returns everything the store holds (each entity's
@@ -828,7 +838,8 @@ rules ────────► refinements ──┘                         
   types|core|scaffold|tests` limits the stream, `--buc` scopes it as the removed
   `typescript-states` did, and `--scalars` names the scalars module. `export --kind
   typescript-states` and `states --format typescript` were removed on 2026-11-24 (see
-  [The state unions before codegen](#the-state-unions-before-codegen)).
+  [The state unions before codegen](#the-state-unions-before-codegen)). [`--format json`
+  landed with P0 of #363 (#366); `--part`, `--buc` and `--scalars` have not.]
 - The generator runs the same `check` first and refuses when it fails, because the code
   would then encode a model that was not verified. `cross_order_payment_split` is refused
   this way. `--allow-failing` prints anyway and lists each failing invariant as an
@@ -959,7 +970,7 @@ the function's source state with no BFS move must get `Rejected`. The dispatcher
    That leaves 11 use cases on the samples: a `.when` on a chosen value (2), a choice on a
    second lifecycle column (1), copies (2), a condition on what a use case creates (2),
    comparison propositions and other assignments (3), and a link between two rows of an
-   earlier step (1).
+   earlier step (1). [19 today: oidc-auth adds 8; see the status above.]
 
 ## Decisions
 

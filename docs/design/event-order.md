@@ -4,6 +4,16 @@
 <!-- derived-from ../state-derivation.md#runs -->
 <!-- derived-from ../language-reference.md#triggers-and-event-driven-buc-chaining -->
 
+Status (2026-11-26): shipped in 2.0.0; #112 and #30 are closed.
+
+- **Built on it since.** An opt-in counter per edge, `.counted(k)`
+  ([counted events](./counted-events.md), #249 for #220), which answers open question 1 for
+  one form. Instance symmetry ([instance symmetry](./instance-symmetry.md), #212).
+- **Open.** #206: confirm a counterexample whose handler ran without its event, planned as
+  phase 4 of [native temporal verification](./native-temporal-verification.md#phases).
+- **Superseded.** The [implementation plan](#implementation-plan), by the
+  [landing plan](#landing-plan).
+
 Design for #112, the 2.0 item of #107 and option 2 of #30. It was decided on paper, measured
 with a throwaway prototype, and landed on `main` as the units of the [landing
 plan](#landing-plan). It replaces the decision of 2026-11-01 in
@@ -796,6 +806,9 @@ every one is a deadlock or an arm.
 
 The explorer keys a state by its bytes (`seen: HashMap<State, u32>` in `explore/bfs.rs`, `admit`) and nothing under `lifecycle/explore/` canonicalizes two interchangeable instances of an entity; the only canonical form in the engine is `reduce/mod.rs`'s `canonical_initial`, which picks a class representative, not a slot order. The swap symmetry is partly broken already: a create takes the lowest absent slot (`FirstAbsent`) and a deleted slot is never reused, so for 2 instances the states with slot 2 present and slot 1 absent do not exist, and owner keys couple the swaps of a child and its parent. The ceiling is 2^k for k entities in the cone (32 for the `Claim` view, 16 for `BusinessPermit`), the floor well under it. `symmetry_count` measures the factor on the first 1,000,000 BFS states of the `Claim`, `ClaimCase`, and `BusinessPermit` cones under the latch and of the `Claim` cone at 1.2.0; it runs after the timed `verify` in the same chain and writes `d112-sym.txt`. The TLC runs on the exported view cones (`View_Claim`, `View_BusinessPermit`, `View_ClaimCase`, printed by `view_cone_tla` as `verify` prints an invariant cone, `-workers auto`, 12 GB heap, 30 minutes each, one at a time) are queued behind them (`m3.sh`, logs `d112-tlc-*.log`). Both numbers were still pending when this section was committed; the chain keeps running and the files name the result.
 
+[Since #311, `explore/symmetry/` canonicalizes interchangeable rows under `--symmetry always`;
+see [instance symmetry](./instance-symmetry.md).]
+
 ### What follows
 
 Two changes, of which the second is the root-level one.
@@ -1067,7 +1080,8 @@ S.status[b1] = 2`, and the predicate reads `∃ c : owner[p0] = c ∧ in[c]`. Wi
 has no raw input and two bits per case, so its extended system is the claim's side times at
 most 16 bit values, which the `Claim` view's 255,292-state extended system (the same two
 sides, the other way round) puts under the cap with room. It is the first unit of the plan
-below that is not yet built.
+below that is not yet built. [Built since, as unit 6 of the [landing plan](#landing-plan),
+and shipped in 2.0.0.]
 
 ### Implementation plan
 

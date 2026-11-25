@@ -5,6 +5,9 @@
 <!-- constrained-by ./event-order.md#cones-and-the-reduction -->
 <!-- constrained-by ../compatibility.md -->
 
+Status (2026-11-26): built in #249, which closed #220. It is in the `Unreleased` part of the
+changelog, in no release yet. Nothing is open or superseded.
+
 Design for #220. The event order of #112 records a raise as a latch: after the first raise
 on a row, the triggered use case runs as often as its states and guards allow, and a second
 raise queues nothing ([event order, rule 9](./event-order.md#the-rules)). The native plan

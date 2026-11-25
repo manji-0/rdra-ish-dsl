@@ -4,8 +4,22 @@
 <!-- constrained-by ./instance-symmetry.md#memory -->
 <!-- constrained-by ../cli-reference.md#memory-limit -->
 
-Status: 3.1 is being built in parts; part 1 is built (see
-[3.1 as built](#31-as-built)). This is phase 3 of
+Status (2026-11-26): 3.1 is being built in parts.
+
+- **Landed.** Part 1 of 3.1: workers pack, hash and deduplicate (#372,
+  [3.1 as built](#31-as-built)). One BFS run takes `max(4, cores / 3)` threads, at most 12
+  and never more than the cores (#371).
+- **Open on #296.** Part 2 of 3.1, workers probe the shared table. 3.1's exit is not met:
+  food-permit-ops at 8 jobs took 35% of its one-job time, against 30%. 3.2's shared helper
+  pool and its sweep (`Helpers::take` still gives one run every free helper). 3.3.
+- **Superseded.** The helper default `available_parallelism() - 1` of
+  [Helpers by need and the jobs cap](#helpers-by-need-and-the-jobs-cap), by the owner's
+  `max(4, cores / 3)` of 2026-11-26
+  ([comment](https://github.com/manji-0/rdra-ish-dsl/issues/296#issuecomment-7166110226)). Both
+  [open questions](#open-questions-for-the-owner) were answered on 2026-11-25
+  ([comment](https://github.com/manji-0/rdra-ish-dsl/issues/296#issuecomment-7164434628)).
+
+This is phase 3 of
 [#296](https://github.com/manji-0/rdra-ish-dsl/issues/296), which the owner approved
 ([decision](https://github.com/manji-0/rdra-ish-dsl/issues/296#issuecomment-7134170599) item 1:
 "phases 2 and 3 go ahead after phase 1"). It refines steps 2, 3 and 5 of
@@ -455,6 +469,9 @@ food-permit-ops stops gaining at about 6. Proposal:
   `available_parallelism() - 1`. `RDRA_JOBS` sets both, as today.
 - Choose the final helper default from a sweep after 3.1: 4, 6, 8, 12 and 17 helpers on
   food-permit-ops, clinic-ops and insurance-claim-ops, here and on #315's base M5.
+
+[Since #371 `jobs()` sets only the cones side by side. The threads of one run are
+`bfs_threads()`, `max(4, cores / 3)` and at most 12. `RDRA_JOBS` still sets both.]
 
 ## Efficiency cores
 
