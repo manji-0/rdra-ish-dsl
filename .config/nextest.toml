@@ -6,27 +6,66 @@ slow-timeout = "10s"
 
 [profile.pr]
 # CI's check job. On a pull request it runs this profile alone: every test but the ones
-# below, which take over 10 s on the runner. On main (scheduled or by hand) it runs this
-# profile, fails when a test of it took over 10 s (scripts/check-test-times.py), and then runs
-# the tests below. A test is listed by its binary and its exact name.
+# below. On main (scheduled or by hand) it runs this profile, fails when a test of it took
+# over 10 s (scripts/check-test-times.py), and then runs the tests below.
+#
+# Listed: a test that took over 8 s on the runner in a run of this profile, 2 s short of the
+# 10 s the check fails at, so that a test near the line does not turn main red at random.
+# A test is listed by its binary and its exact name. The diagram_contract tests are slow
+# under nextest alone: each runs in a process of its own and loads and explores its samples
+# again, where `cargo test` shares one load across the binary.
 default-filter = """
 not (
     (binary_id(rdra-ish-cli::codegen_equivalence) & test(=functions_agree_with_the_transition_system))
-  | (binary_id(rdra-ish-cli::codegen_differential) & test(=printed_code_agrees_on_the_domain_samples))
+  | (binary_id(rdra-ish-cli::codegen_differential) & (
+        test(=printed_code_agrees_on_the_domain_samples)
+      | test(=printed_code_agrees_on_the_small_samples)))
   | (binary_id(rdra-ish-cli::codegen_builds) & (test(=go_builds) | test(=rust_builds) | test(=typescript_builds)))
+  | (binary_id(rdra-ish-cli::codegen_behaviour) & test(=go_behaves))
   | (binary_id(rdra-ish-cli::memory_cli) & (
         test(=shared_quotients_stop_no_cone_elsewhere_on_any_number_of_threads)
-      | test(=the_generators_finish_a_cone_check_finishes)))
+      | test(=the_generators_finish_a_cone_check_finishes)
+      | test(=cones_side_by_side_stop_where_they_stop_one_at_a_time)
+      | test(=verify_sizes_and_queues_tlc_runs_to_fit_the_memory)
+      | test(=verify_leaves_a_cone_past_its_bfs_share_undecided)))
   | (binary_id(rdra-ish-cli::guards_cli) & test(=oidc_auth_readme_rules_table_is_what_the_report_finds))
   | (binary_id(rdra-ish-cli::check_cli) & test(=check_defaults_to_a_pattern_cap_that_follows_the_instance_count_and_no_state_cap))
-  | (binary_id(rdra-ish-cli::verify_cli) & test(=a_safety_cone_stops_once_every_check_on_it_has_failed))
+  | (binary_id(rdra-ish-cli::verify_cli) & (
+        test(=a_safety_cone_stops_once_every_check_on_it_has_failed)
+      | test(=a_safety_cone_shared_with_an_entity_cone_counts_the_whole_cone)
+      | test(=liveness_is_decided_without_tlc_and_tlc_agrees)
+      | test(=verify_reports_every_rule_that_fails_in_the_same_state)
+      | test(=a_native_verify_decides_the_safety_checks_without_tlc)
+      | test(=a_rerun_cfg_named_like_a_property_module_leaves_that_cfg)))
+  | (binary_id(rdra-ish-cli::diagram_contract) & (
+        test(=a_state_and_its_use_cases_have_the_ids_the_rdra_diagram_gives_them)
+      | test(=a_state_axis_set_by_sets_is_not_omitted)
+      | test(=a_condition_diagram_node_has_the_id_the_rdra_and_state_diagrams_give_it)
+      | test(=every_state_diagram_of_every_sample_keeps_the_contract)
+      | test(=the_unscoped_state_diagram_is_an_index_and_each_entity_draws_its_models)
+      | test(=an_information_diagram_node_has_the_id_the_rdra_and_state_diagrams_give_it)
+      | test(=the_cli_writes_what_the_library_draws)
+      | test(=lint_reports_each_screen_the_screen_diagram_leaves_unconnected)
+      | test(=every_drawn_kind_has_a_shape_and_every_unlabelled_edge_one_relation)
+      | test(=a_when_guard_is_a_labelled_derived_edge_wherever_applies_to_is_drawn)
+      | test(=a_sequence_diagram_of_a_buc_plays_its_use_cases_in_one_diagram)
+      | test(=a_context_diagram_node_has_the_id_the_rdra_diagram_gives_it)))
+  | (binary_id(rdra-ish-cli::engine_corpus) & test(=a_capped_graph_decides_nothing_the_full_graph_contradicts))
+  | (binary_id(rdra-ish-cli::engine_equivalence) & (
+        test(=a_job_past_the_time_limit_runs_as_a_process_and_is_no_fault)
+      | test(=a_job_that_exits_the_batch_jvm_runs_as_a_process)))
+  | (binary_id(rdra-ish-cli::key_facts) & test(=key_facts_hold_on_every_sample))
+  | (binary_id(rdra-ish-lsp::manifest_error) & test(=a_burst_of_edits_ends_on_the_diagnostics_of_the_last_text))
+  | (binary_id(rdra-ish-syntax::fmt_samples) & test(=fmt_keeps_every_sample_the_same_model_and_is_idempotent))
   | (binary_id(rdra-ish-core) & (
         test(=lifecycle::explore::tests::a_run_is_the_same_on_any_number_of_threads)
       | test(=lifecycle::explore::tests::a_run_stops_at_the_memory_limit_at_the_same_state_on_any_number_of_threads)
       | test(=lifecycle::explore::tests::a_run_stops_once_every_check_has_failed)
       | test(=lifecycle::explore::tests::store_bytes_models_the_store_a_run_counts)
       | test(=lifecycle::explore::plan_tests::planned_enabled_bindings_agree_with_eval_on_every_shipped_model)
-      | test(=lifecycle::tests::reduce::a_count_over_t_in_a_guard_reduces_exactly)))
+      | test(=lifecycle::explore::symmetry::tests::a_parent_and_an_owner_child)
+      | test(=lifecycle::tests::reduce::a_count_over_t_in_a_guard_reduces_exactly)
+      | test(=lifecycle::tests::reduce::a_sub_lifecycle_that_reads_inputs_of_t_is_reduced_and_decides_the_same)))
 )
 """
 # Every failure, not only the first, and the slow tests again at the end of the log.
