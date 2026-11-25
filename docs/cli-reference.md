@@ -2067,8 +2067,9 @@ Print the model's domain types as TypeScript, Rust, or Go code for an agent to f
 Most of this subcommand is experimental. One part is covered by
 [compatibility](./compatibility.md#the-typescript-types-of-codegen): the TypeScript types
 that `codegen <INPUTS...> --lang ts [-o <FILE>]` prints for a model that `check` passes.
-These types are the scalars, the id types, the value sets, the state types, and the
-`<Entity>Row` row types. Everything else may change or be removed in any release: the
+These types are `Result`, `InvalidValue`, `InvalidRow`, the scalars, the id types, the value
+sets, the state types with `<Entity>Kind`, and the `<Entity>Row` row types, with the
+signatures of their companion objects and of `parse<Entity>Row`. Everything else may change or be removed in any release: the
 transition functions, the rule checks, the dispatchers, the header and its obligations,
 `--allow-failing`, `--check` and the fingerprint line, and the Rust and Go output. [The design](./design/algebraic-codegen.md)
 describes where `codegen` is going.
@@ -2113,14 +2114,16 @@ key column takes its parent's id type, and a `@null` column is `T | null`, `Opti
 An entity whose tag column is an inline `Enum` that `transitions` drive is a **state type**:
 one variant per value of its tag column (of the columns `transitions` names, `status`, else
 a `*_status` column, else the first by name), and the entity's type is their union, a
-TypeScript union of interfaces, a Rust enum of structs with a `status()` method, or a Go
+TypeScript union of `Readonly` types told apart by `kind` (`"Pending"`, one value of
+`<Entity>Kind` per state), a Rust enum of structs with a `status()` method, or a Go
 interface that only the generated variants implement. A variant narrows a nullable column
 only where a rule says so: `invariant(E).when(status == v).then(x == present)` makes `x`
 present in `v`, `forbidden(E, status == v, x == present)` makes it null there, and
 `required(E, x == present)` makes it present in every state. A rule with another atom or a
 `.when(Cond)` narrows nothing. A null column is `null` in TypeScript and left out of the
-Rust and Go structs, with a doc line naming the rule. The Rust and Go variants hold no tag
-field: the variant is the tag, and writing it to a row is the code's job. A variant's fields are
+Rust and Go structs, with a doc line naming the rule. No variant holds the tag
+column: in TypeScript `kind` tells the states apart, in Rust and Go the variant does, and
+`<Entity>Row` holds the tag. A column named `kind` is `kind_` in the TypeScript states. A variant's fields are
 private in Rust and unexported in Go, and methods of the same name read them (`paid_at()`,
 `PaidAt()`). Only a transition function and `from_row` (`<Entity>FromRow` in Go) make a
 state, from the rows and the inputs the model leaves open, so code outside the generated
@@ -2140,11 +2143,15 @@ rows it reads, then an input for each value the model leaves open (a column `set
 `present`, a variation the actor chooses, a column of a created row that no var holds). It
 returns a `<Name>Result` record with the rows it writes or creates, the id of each row it
 deletes, and a value of each event the use case raises. A condition applied to the use case
-is checked first: when it does not hold, the function returns `Rejected` (TypeScript), an
-`Err(Rejected)` (Rust), or a `*Rejected` error (Go). A row that breaks a rule the verified
-model keeps (a column the target state keeps null that has a value, a column it keeps
-present that is null) or a parent that is not the child's makes the function throw or
-panic. A use case split into transactions gets one function per step (`openSettlement1`,
+is checked first: when it does not hold, the function returns an error `Rejected`: in
+TypeScript `{ ok: false, error: { kind: "Rejected", condition, label, site } }`, in Rust
+`Err(Rejected)`, in Go a `*Rejected` error. A row that breaks a rule the verified model
+keeps (a column the target state keeps null that has a value, a column it keeps present
+that is null) or a parent that is not the child's makes the TypeScript function return the
+error `InvalidArgument`, and the Rust or Go function panic. In TypeScript every function
+returns a `Result<<Name>Result, <UseCase>Error>`, where `<UseCase>Error` is the union of
+`NotEnabled`, `Rejected` and `InvalidArgument` that the use case can return, and nothing
+throws but `assertNever`. A use case split into transactions gets one function per step (`openSettlement1`,
 `openSettlement2`), linked by **run marks**: a step that leaves a row for the next one
 returns a mark, `OpenSettlementClaimMark1 { id }`, and the next step takes it as an argument,
 so it cannot be called without the step before it. A later step reads an earlier step's row
@@ -2177,9 +2184,14 @@ multi-entity rule, a quantifier, `Unique_*`, `MinCard_*`) is listed as an obliga
 
 Each state type also has a **row type**, `<Entity>Row`, with every column as the data layer
 declares it: the flat shape a store or the wire holds, with the same column names (and, in
-Go, `json` tags). `orderFromRow(row)` / `Order::from_row(row)` / `OrderFromRow(row)` returns
-the state of a row, or `InvalidRow` naming the column whose value its state rules out;
-`orderToRow` / `into_row` / `OrderToRow` returns the flat row of a state.
+Go, `json` tags). `Order.fromRow(row)` / `Order::from_row(row)` / `OrderFromRow(row)` returns
+the state of a row, or `InvalidRow` naming the column whose value its state rules out (in
+TypeScript as a `Result`); `Order.toRow` / `into_row` / `OrderToRow` returns the flat row of
+a state. In TypeScript, `parseOrderRow(value: unknown)` reads a row from outside: each
+column through its type's parser (`OrderId.parse`, `DateTime.parse`, `Method.parse`), so a
+row of the wrong shape is an `InvalidRow` before it reaches the domain types. Ids and the
+scalars are branded and made only by `parse` (or narrowed by `is`), with no type
+assertion.
 
 Each function's result also carries, per row it writes, the source that row must still have
 when the write commits: `order_expected` / `OrderExpected`, an `ExpectedSource` that is
@@ -2195,8 +2207,10 @@ rows' states and returns its result as a `CancelOutcome` case, or `NotEnabled` w
 case does not run from those states. In Rust every transition function and dispatcher returns
 `Result<_, <UseCase>Error>` (`PayError`), an enum of `NotEnabled`, `Rejected` (when a condition
 applies), and `InvalidArgument` (when the arguments can break what the model keeps), each a type
-that implements `std::error::Error`; the generated Rust never panics. The code that finishes
-the output loads rows, converts them, calls the dispatcher, and stores the rows it returns.
+that implements `std::error::Error`; the generated Rust never panics. In TypeScript they return
+`Result<PayOutcome, PayError>`, where `PayError` is the union of `{ kind: "NotEnabled", usecase }`
+and the other cases, and nothing throws but `assertNever`. The code that finishes the output
+loads rows, converts them, calls the dispatcher, and stores the rows it returns.
 The Rust ids and scalars are opaque: `OrderId::from(7)`, `"12.50".parse::<Money>()`,
 `"2026-01-01".parse::<Date>()`, which refuse text of another shape with `InvalidValue`
 ([Generated code style](design/algebraic-codegen.md#generated-code-style)).

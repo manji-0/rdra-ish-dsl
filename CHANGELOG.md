@@ -37,6 +37,39 @@
   fingerprint's model hash no longer depends on the order the files load in, so a file
   generated before reads as "model changed" in `codegen --check` once.
 
+- `codegen --lang ts`: the TypeScript output and its compatibility contract
+  ([The TypeScript types of `codegen`](docs/compatibility.md#the-typescript-types-of-codegen))
+  move to the Kamae shapes of
+  [Generated code style](docs/design/algebraic-codegen.md#generated-code-style) (#363). The
+  module imports nothing: it brings its own `Result` and parsers. To migrate, generate the
+  module again and change the code that uses it:
+
+  | Before | After |
+  |---|---|
+  | `export interface OrderPaid { status: "paid"; ... }` | `export type OrderPaid = Readonly<{ kind: "Paid"; ... }>`: no tag column in a state, every property `readonly` |
+  | `order.status === "paid"`, `switch (order.status)` | `order.kind === "Paid"`, `switch (order.kind)` with `default: return assertNever(order)`; the values of `<Entity>Kind` are the states' type names |
+  | a column named `kind` of a state type | `kind_` in the states; `<Entity>Row` keeps `kind` |
+  | `orderFromRow(row): Order \| InvalidRow`, `"invalid" in x` | `Order.fromRow(row): Result<Order, InvalidRow>`, `if (!r.ok) r.error.column` |
+  | `orderToRow(state)` | `Order.toRow(state)` |
+  | `InvalidRow { invalid, column, reason }` | `InvalidRow { kind: "InvalidRow", entity, column, reason }`, `column` null for a value that is no object |
+  | `1 as OrderId`, `"2026-01-01" as Date` | `OrderId.parse(1)`, `Date.parse("2026-01-01")`, each a `Result`, or `OrderId.is(x)` to narrow |
+  | `MethodValues` | `Method.values`, and `Method.parse(text)` |
+  | a row read from a store or the wire, typed by hand | `parseOrderRow(value: unknown): Result<OrderRow, InvalidRow>`, which checks every column, the shapes of `Money`, `Decimal`, `Date` and `DateTime` among them |
+
+  The experimental part changes with it. A transition function or dispatcher returns
+  `Result<PayResult, PayError>`, where `<UseCase>Error` is the union of `NotEnabled`,
+  `Rejected` and `InvalidArgument` the use case can return, each with a `kind`
+  (`{ kind: "Rejected", condition, label, site }` in place of `{ rejected, label, site }`,
+  `{ kind: "NotEnabled", usecase }` in place of `{ notEnabled }`). Arguments that break what
+  the verified model keeps (a child that does not name its parent, a column the target state
+  keeps null that holds a value) return `InvalidArgument` instead of throwing; no generated
+  function throws but `assertNever`. Events are told apart by `kind` in place of `event`.
+  Every result, event, run mark and record is a `Readonly` type, a rule check returns
+  `readonly string[]`, and each record and DTO has a parser, `parse<Name>(value: unknown)`.
+  The output builds under `tsc --strict` with `noUnusedLocals`, `noUnusedParameters`,
+  `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess` and
+  `noPropertyAccessFromIndexSignature`; it needs TypeScript 4.9 or later (`satisfies`).
+
 - Two `@null` columns that both hold null are no longer equal (#355). `col == other` between
   two columns holds only when both are present and equal, and `col != other` holds whenever
   either is null, as the language reference ([Null](docs/language-reference.md#null)) and the

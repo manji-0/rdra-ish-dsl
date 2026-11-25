@@ -112,13 +112,82 @@ fn typescript_builds() {
     }
     for sample in models() {
         let path = generate(&sample, "ts", &scratch("ts", &sample), "domain.ts");
+        // The strictest flags a project may set: the probe's tsconfig.rdra.json extends the
+        // project's own, so the domain module is checked under them.
         run(
             Command::new("tsc")
-                .args(["--strict", "--noEmit", "--target", "es2020"])
+                .args([
+                    "--strict",
+                    "--noEmit",
+                    "--target",
+                    "es2020",
+                    "--module",
+                    "esnext",
+                    "--noUnusedLocals",
+                    "--noUnusedParameters",
+                    "--exactOptionalPropertyTypes",
+                    "--noUncheckedIndexedAccess",
+                    "--noImplicitReturns",
+                    "--noFallthroughCasesInSwitch",
+                    "--noPropertyAccessFromIndexSignature",
+                    "--isolatedModules",
+                ])
                 .arg(&path),
             &format!("tsc on the codegen of {sample}"),
         );
+        kamae_shapes(&sample, &std::fs::read_to_string(&path).unwrap());
     }
+}
+
+/// The TypeScript output keeps the Kamae rules a compiler does not check: no interface, no
+/// type assertion but `as const`, and no `throw` but the one in `assertNever`.
+fn kamae_shapes(sample: &str, code: &str) {
+    let lines: Vec<&str> = code
+        .lines()
+        .filter(|l| {
+            let t = l.trim_start();
+            !(t.starts_with("//") || t.starts_with("/*") || t.starts_with('*'))
+        })
+        .collect();
+    for line in &lines {
+        let line = &without_strings(line);
+        assert!(!line.contains("interface "), "{sample}: {line}");
+        let casts = line.matches(" as ").count();
+        let allowed = line.matches(" as const").count();
+        assert_eq!(casts, allowed, "{sample}: a type assertion: {line}");
+    }
+    let throws = lines
+        .iter()
+        .filter(|l| without_strings(l).contains("throw "))
+        .count();
+    assert_eq!(throws, 1, "{sample}: only assertNever throws");
+}
+
+/// `line` with the text of its `"..."` literals and trailing `//` comment left out, so a
+/// model label cannot look like code.
+fn without_strings(line: &str) -> String {
+    let mut out = String::new();
+    let mut chars = line.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => {
+                out.push('"');
+                while let Some(c) = chars.next() {
+                    match c {
+                        '\\' => {
+                            chars.next();
+                        }
+                        '"' => break,
+                        _ => {}
+                    }
+                }
+                out.push('"');
+            }
+            '/' if chars.clone().next() == Some('/') => break,
+            c => out.push(c),
+        }
+    }
+    out
 }
 
 /// The Rust output passes clippy as it is printed: no crate-level allow hides a lint, and every

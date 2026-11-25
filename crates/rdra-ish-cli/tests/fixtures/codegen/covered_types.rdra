@@ -41,11 +41,14 @@ entity Order "Order" {
   legacy_ref: String @null
 }
 
-// The tag is the `*_status` column, though `phase` sorts first.
+// The tag is the `*_status` column, though `phase` sorts first. The column `kind` is
+// `kind_` in the states, since `kind` tells them apart, and keeps its name in the row; its
+// value set takes the name `ShipmentKind`, so the discriminant type is `ShipmentStateKind`.
 entity Shipment "Shipment" {
   id: Int @pk
   phase: Enum(packing, sealed) @default(packing)
   delivery_status: Enum(waiting, delivered) @default(waiting)
+  kind: Enum(parcel, letter)
 }
 
 // A two-column primary key: no id type.
