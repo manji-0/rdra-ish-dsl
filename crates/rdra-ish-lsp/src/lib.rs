@@ -1,6 +1,7 @@
 //! RDRA-ish Language Server.
 
 pub mod backend;
+pub mod catch_panic;
 pub mod code_actions;
 pub mod code_lens;
 pub mod completion;

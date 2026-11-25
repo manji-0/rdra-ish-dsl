@@ -53,18 +53,14 @@ pub fn position_to_byte_offset(source: &str, position: Position) -> Option<usize
     None
 }
 
+/// The range of the whole of `text`, through its final line break.
 pub fn full_document_range(text: &str) -> Range {
-    let line_count = text.lines().count().max(1);
-    let last_line = text.lines().last().unwrap_or("");
     Range {
         start: Position {
             line: 0,
             character: 0,
         },
-        end: Position {
-            line: (line_count - 1) as u32,
-            character: last_line.encode_utf16().count() as u32,
-        },
+        end: byte_offset_to_position(text, text.len()),
     }
 }
 
@@ -80,5 +76,46 @@ mod tests {
         assert_eq!(pos.line, 1);
         assert_eq!(pos.character, 0);
         assert_eq!(position_to_byte_offset(src, pos), Some(offset));
+    }
+
+    #[test]
+    fn positions_count_utf16_units_on_japanese_lines() {
+        // 受 and 付 are one UTF-16 unit and three bytes each; 𠮷 is two units and four bytes.
+        let src = "actor A \"受付\"\r\nusecase 𠮷 \"𠮷(x)\"\n";
+        for (offset, _) in src.char_indices().chain([(src.len(), ' ')]) {
+            let pos = byte_offset_to_position(src, offset);
+            assert_eq!(position_to_byte_offset(src, pos), Some(offset), "{offset}");
+        }
+        let paren = src.find("(x").unwrap();
+        assert_eq!(
+            byte_offset_to_position(src, paren),
+            Position {
+                line: 1,
+                character: 14
+            }
+        );
+        // The second unit of 𠮷 is not a character boundary.
+        let inside = Position {
+            line: 1,
+            character: 9,
+        };
+        assert_eq!(position_to_byte_offset(src, inside), None);
+    }
+
+    #[test]
+    fn full_document_range_ends_after_the_last_character() {
+        for (text, line, character) in [
+            ("", 0, 0),
+            ("actor A \"受付\"", 0, 12),
+            ("actor A \"受付\"\n", 1, 0),
+            ("actor A \"受付\"\r\n", 1, 0),
+            ("actor A \"a\"\n\n\n", 3, 0),
+            ("actor A \"a\"\n// 𠮷", 1, 5),
+        ] {
+            let range = full_document_range(text);
+            assert_eq!(range.start, Position::default(), "{text:?}");
+            assert_eq!(range.end, Position { line, character }, "{text:?}");
+            assert_eq!(position_to_byte_offset(text, range.end), Some(text.len()));
+        }
     }
 }

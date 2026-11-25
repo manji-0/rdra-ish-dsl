@@ -48,11 +48,11 @@ pub fn predicate_arg_context(source: &str, offset: usize) -> Option<(String, usi
     }
     let paren_start = paren_start?;
     let prefix = before[..paren_start].trim_end();
-    let name_start = prefix
-        .rfind(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_' && ch != '.')
-        .map(|index| index + 1)
-        .unwrap_or(0);
-    let pred_name = prefix[name_start..].trim_start_matches('.').to_string();
+    let pred_name = trailing_word(prefix, |ch| {
+        ch.is_ascii_alphanumeric() || ch == '_' || ch == '.'
+    })
+    .trim_start_matches('.')
+    .to_string();
     if pred_name.is_empty() || !is_ident_segment(&pred_name) {
         return None;
     }
@@ -111,6 +111,18 @@ pub fn predicate_arg_kinds(pred_name: &str, arg_index: usize) -> Option<Vec<&'st
     }
 }
 
+/// The longest suffix of `text` whose characters all satisfy `in_word`. It starts after the
+/// last character that does not, at that character's end, so it never splits a multi-byte
+/// character.
+pub fn trailing_word(text: &str, in_word: impl Fn(char) -> bool) -> &str {
+    let start = text
+        .char_indices()
+        .rev()
+        .find(|&(_, ch)| !in_word(ch))
+        .map_or(0, |(index, ch)| index + ch.len_utf8());
+    &text[start..]
+}
+
 fn is_ident_segment(value: &str) -> bool {
     let mut chars = value.chars();
     let Some(first) = chars.next() else {
@@ -139,5 +151,39 @@ mod tests {
         let (name, index) = predicate_arg_context(src, offset).unwrap();
         assert_eq!(name, "performs");
         assert_eq!(index, 1);
+    }
+
+    #[test]
+    fn a_paren_after_a_multibyte_character_is_not_a_call() {
+        for src in [
+            "actor A \"受付(窓口)\"",
+            "usecase U \"顧客(法人)\"",
+            "performs(A, U) // 受付(",
+        ] {
+            for (offset, _) in src.char_indices().chain([(src.len(), ' ')]) {
+                let _ = predicate_call_context(src, offset);
+            }
+            let after_paren = src.rfind('(').unwrap() + 1;
+            assert_eq!(predicate_arg_context(src, after_paren), None, "{src}");
+        }
+    }
+
+    #[test]
+    fn finds_a_call_after_multibyte_text() {
+        let src = "// 受付\nperforms(受付, ";
+        assert_eq!(
+            predicate_arg_context(src, src.len()),
+            Some(("performs".to_string(), 1))
+        );
+    }
+
+    #[test]
+    fn trailing_word_starts_at_a_character_boundary() {
+        let ident = |ch: char| ch.is_ascii_alphanumeric() || ch == '_';
+        assert_eq!(trailing_word("\"受付", ident), "");
+        assert_eq!(trailing_word("受付abc", ident), "abc");
+        assert_eq!(trailing_word("𠮷x_1", ident), "x_1");
+        assert_eq!(trailing_word("abc", ident), "abc");
+        assert_eq!(trailing_word("", ident), "");
     }
 }
