@@ -41,7 +41,8 @@ not (
       | test(=liveness_is_decided_without_tlc_and_tlc_agrees)
       | test(=verify_reports_every_rule_that_fails_in_the_same_state)
       | test(=a_native_verify_decides_the_safety_checks_without_tlc)
-      | test(=a_rerun_cfg_named_like_a_property_module_leaves_that_cfg)))
+      | test(=a_rerun_cfg_named_like_a_property_module_leaves_that_cfg)
+      | test(=symmetry_always_decides_entity_cones_the_memory_limit_stopped_at_any_jobs)))
   | (binary_id(rdra-ish-cli::engine_corpus) & test(=a_capped_graph_decides_nothing_the_full_graph_contradicts))
   | (binary_id(rdra-ish-cli::engine_equivalence) & (
         test(=a_job_past_the_time_limit_runs_as_a_process_and_is_no_fault)
@@ -60,7 +61,10 @@ not (
       | test(=lifecycle::explore::symmetry::witnesses::past_the_branch_cap_the_verdict_stands)
       | test(=lifecycle::tests::reduce::a_count_over_t_in_a_guard_reduces_exactly)
       | test(=lifecycle::tests::reduce::a_sub_lifecycle_that_reads_inputs_of_t_is_reduced_and_decides_the_same)
-      | test(=lifecycle::tests::reduce::a_cone_between_the_old_and_the_new_cell_budget_is_reduced)))
+      | test(=lifecycle::tests::reduce::a_cone_between_the_old_and_the_new_cell_budget_is_reduced)
+      | test(=lifecycle::tests::reduce::a_stopped_entity_cone_leaves_its_room_to_the_cones_after_it)
+      | test(=lifecycle::tests::reduce::an_entity_cone_up_to_symmetry_decides_what_its_plain_run_left_open)))
+  | (binary_id(rdra-ish-cli) & test(=verify::bfs::tests::tlc_reads_no_stopped_entity_cone))
 )
 """
 # Every failure, not only the first, and the slow tests again at the end of the log.

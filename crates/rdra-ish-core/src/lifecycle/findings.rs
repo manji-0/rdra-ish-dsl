@@ -2,7 +2,7 @@
 //! the graph, so any engine that produces the graph gets the same findings.
 
 use super::diag::{Blocked, Entry, Exit, StateDiag};
-use super::explore::{Adjacency, Graph, Scan, Unpacked};
+use super::explore::{Adjacency, Graph, Scan, States, Unpacked};
 use super::expr::StateSlice;
 use super::trace::Trace;
 use super::types::{
@@ -103,7 +103,7 @@ pub struct ValueProgress {
 
 /// A way out of one state, as the system has it: the param it moves, and the state it enters
 /// (`None` for a deletion).
-struct ExitArm {
+pub(crate) struct ExitArm {
     act: ActId,
     param: usize,
     to: Option<Value>,
@@ -133,6 +133,16 @@ pub struct StateModelFindings {
     pub deadlocks: Vec<ValueProgress>,
     /// Each guarded `transitions` arm on the entity's columns, in action and arm order.
     pub arms: Vec<ArmTaken>,
+}
+
+impl StateModelFindings {
+    /// Whether a cap left nothing here open: every finding of a stopped run is one it found.
+    pub(crate) fn decided(&self) -> bool {
+        (self.witnesses.iter()).all(|w| w.witness != Witness::NotDecided)
+            && (self.deadlocks.iter()).all(|d| d.progress != Progress::NotDecided)
+            && (self.runs.iter()).all(|a| a.runs != Runs::NotDecided)
+            && (self.arms.iter()).all(|a| a.taken != Taken::NotDecided)
+    }
 }
 
 impl TransitionSystem {
@@ -193,7 +203,7 @@ impl TransitionSystem {
 
     /// Some way out moves to another state; a state whose only way out deletes the instance is
     /// an end state.
-    fn has_way_on(exits: &[ExitArm]) -> bool {
+    pub(crate) fn has_way_on(exits: &[ExitArm]) -> bool {
         exits.iter().any(|x| x.to.is_some())
     }
 
@@ -216,9 +226,27 @@ impl TransitionSystem {
     /// Witnesses of `e`'s state models on `g`, a graph of this system.
     pub fn state_model_findings(&self, e: EntId, g: &Graph) -> StateModelFindings {
         let targets = self.state_model_values(e);
+        StateModelFindings {
+            witnesses: self.witnesses(e, &targets, g.states, g.complete),
+            runs: self.runs(e, g),
+            deadlocks: self.deadlocks(e, &targets, g),
+            arms: self.guarded_arms(e, g),
+        }
+    }
+
+    /// Per value of `targets`, the first state of `states` where a present slot of `e` holds
+    /// it, or why there is none. A state predicate over every slot: a run up to instance
+    /// symmetry reads it on its stored states as is.
+    pub(crate) fn witnesses(
+        &self,
+        e: EntId,
+        targets: &[(VarId, Value)],
+        states: &States,
+        complete: bool,
+    ) -> Vec<ValueWitness> {
         let mut first: Vec<Option<u32>> = vec![None; targets.len()];
         let mut open = targets.len();
-        for (at, s) in g.states.iter().enumerate() {
+        for (at, s) in states.iter().enumerate() {
             if open == 0 {
                 break;
             }
@@ -234,7 +262,7 @@ impl TransitionSystem {
                 }
             }
         }
-        let witnesses = targets
+        targets
             .iter()
             .copied()
             .zip(first)
@@ -243,25 +271,17 @@ impl TransitionSystem {
                 value,
                 witness: match at {
                     Some(at) => Witness::At(at),
-                    None if g.complete => {
-                        Witness::Missing(Box::new(self.no_witness(e, var, value)))
-                    }
+                    None if complete => Witness::Missing(Box::new(self.no_witness(e, var, value))),
                     None => Witness::NotDecided,
                 },
             })
-            .collect();
-        StateModelFindings {
-            witnesses,
-            runs: self.runs(e, g),
-            deadlocks: self.deadlocks(e, &targets, g),
-            arms: self.guarded_arms(e, g),
-        }
+            .collect()
     }
 
     /// The ways out of `value` on `var` of `e`: each `transitions` arm `value -> w` with
     /// `w != value`, and each deletion of an `e`. A state with no such arm is an end state, a
     /// state whose only arm leads back to itself included.
-    fn exits(&self, e: EntId, var: VarId, value: Value) -> Vec<ExitArm> {
+    pub(crate) fn exits(&self, e: EntId, var: VarId, value: Value) -> Vec<ExitArm> {
         let mut out = Vec::new();
         for (ai, action) in self.actions.iter().enumerate() {
             for effect in &action.effects {
@@ -348,8 +368,9 @@ impl TransitionSystem {
                 None => Progress::Leaves,
                 Some((at, k)) => {
                     let held = Self::forward(&adjacency, at as u32);
-                    let held: Vec<Unpacked> =
-                        held.iter().map(|&i| g.states.at(i as usize)).collect();
+                    let held: Vec<(Unpacked, u8)> = (held.iter())
+                        .map(|&i| (g.states.at(i as usize), k as u8))
+                        .collect();
                     Progress::Stuck {
                         at: at as u32,
                         diag: Box::new(self.deadlock(e, var, value, k, &exits, &held)),
@@ -367,7 +388,7 @@ impl TransitionSystem {
 
     /// Which states have a path that changes `var` at slot `k` of `e` or deletes `k`: the
     /// sources of such edges, and, backwards, every state with `k` present that steps into one.
-    fn can_leave(
+    pub(crate) fn can_leave(
         &self,
         e: EntId,
         var: VarId,
@@ -403,7 +424,7 @@ impl TransitionSystem {
     }
 
     /// `at` and every state a path from it reaches.
-    fn forward(adjacency: &Adjacency, at: u32) -> Vec<u32> {
+    pub(crate) fn forward(adjacency: &Adjacency, at: u32) -> Vec<u32> {
         let mut seen = std::collections::HashSet::from([at]);
         let mut out = vec![at];
         let mut next = 0;
@@ -419,22 +440,23 @@ impl TransitionSystem {
     }
 
     /// The `Deadlock` of slot `k` at `value`, each exit with what blocks it over `held`, the
-    /// states the stuck instance stays in.
-    fn deadlock(
+    /// states the stuck instance stays in, each with the slot it holds there: `k` on a plain
+    /// run, the slot the stored state keeps it on in a run up to instance symmetry.
+    pub(crate) fn deadlock(
         &self,
         e: EntId,
         var: VarId,
         value: Value,
         k: usize,
         exits: &[ExitArm],
-        held: &[Unpacked],
+        held: &[(Unpacked, u8)],
     ) -> StateDiag {
         let exits = exits
             .iter()
             .map(|x| {
                 let action = &self.actions[x.act.index()];
-                let scan =
-                    self.scan_guards(x.act, held.iter().map(|s| &**s), Some((x.param, k as u8)));
+                let pinned = held.iter().map(|(s, j)| (&**s, Some((x.param, *j))));
+                let scan = self.scan_guards_pinned(x.act, pinned);
                 Exit {
                     action: action.name.clone(),
                     origin: action.origin.clone(),
@@ -456,7 +478,7 @@ impl TransitionSystem {
 
     /// Whether each action the cone of `e` keeps labels an edge of `g`. `observe` sees a
     /// self-loop as any other move, so a self-loop counts.
-    fn runs(&self, e: EntId, g: &Graph) -> Vec<ActionRuns> {
+    pub(crate) fn runs(&self, e: EntId, g: &Graph) -> Vec<ActionRuns> {
         let mut fired = vec![false; self.actions.len()];
         g.edges().for_each(|(_, _, act)| fired[act.index()] = true);
         self.action_ids()
@@ -487,6 +509,19 @@ impl TransitionSystem {
     /// `.when` value of a `chooses` is taken when some edge of its action leaves a present
     /// instance at the value with its row written (changed, or the edge a self-loop).
     fn guarded_arms(&self, e: EntId, g: &Graph) -> Vec<ArmTaken> {
+        self.guarded_arms_by(e, g, |_, to| g.states.at(to as usize))
+    }
+
+    /// `guarded_arms`, with `successor(k, to)` the concrete successor of edge `k` into
+    /// `states[to]`: the stored target itself on a plain run, and the target taken back
+    /// through the edge's permutation on a run up to instance symmetry (#212 phase 4), since
+    /// an arm compares a slot across the edge.
+    pub(crate) fn guarded_arms_by<T: std::ops::Deref<Target = StateSlice>>(
+        &self,
+        e: EntId,
+        g: &Graph,
+        successor: impl Fn(usize, u32) -> T,
+    ) -> Vec<ArmTaken> {
         let mut out = Vec::new();
         let row = &self.entity(e).columns;
         for act in self.action_ids() {
@@ -539,12 +574,12 @@ impl TransitionSystem {
                     };
                     let mut fired = false;
                     let mut taken = false;
-                    for (a, b, by) in g.edges() {
+                    for (k, (a, b, by)) in g.edges().enumerate() {
                         if by != act {
                             continue;
                         }
                         fired = true;
-                        if moves(&g.states.at(a as usize), &g.states.at(b as usize)) {
+                        if moves(&g.states.at(a as usize), &successor(k, b)) {
                             taken = true;
                             break;
                         }
