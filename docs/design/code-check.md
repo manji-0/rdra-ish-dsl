@@ -584,3 +584,54 @@ mirrors them instead of inventing its own:
   principal that a service would check at run time. A refusal trace fits a language where a
   capability can be forged (a Go zero value, a TypeScript cast). Doing it in Rust would need a
   decision on a dynamic `Caller` that the service converts from its authenticated principal.
+
+**P3 and P4, TypeScript.**
+
+- The contracts are `type <UseCase>UseCase = { readonly prepareX: (..) => Promise<Result<..>>;
+  ... }`: `readonly` members rather than `Readonly<{..}>`, because tsc prints an alias of a
+  mapped type expanded and an alias of an object type by name. A message then says
+  `from type 'ShipUseCase': prepareShip, commitShip`. An entry point (#335) is
+  `run<Action>`. They are async: a TypeScript store is.
+- `[code.ts] service` is `<file relative to rdra.toml>#<exported type>`. The probe imports the
+  domain and the service as namespaces (type-only without the harness) by `.ts` specifiers,
+  and has one line per use case: `export const _Ship = (it: Service): domain.ShipUseCase =>
+  it;`. It is valid at runtime, so the same file holds the conformance test, which calls
+  `domain.conform` with `new` (default `new service.<Type>()`) and prints
+  `rdra-ish conformance: ...`.
+- `codegen --code` also writes `tsconfig.rdra.json` in the root. It extends `[code.ts]
+  tsconfig`, else the root's `tsconfig.json`, else sets `strict` itself. It adds `noEmit` and
+  `allowImportingTsExtensions` and holds only the probe. `build` is `tsc --noEmit --pretty
+  false -p tsconfig.rdra.json`. `run` is `node <probe>`: Node 22.18 strips the types without a
+  flag. An older Node's `ERR_UNKNOWN_FILE_EXTENSION` becomes a `CodeConformance` that names
+  the version.
+- tsc has no code for "not implemented". TS2741 (one member), TS2739 (the list) and TS2740
+  (four and "N more") are `Incomplete`. `missing_members` reads the list, so the shared rule
+  turns a message that misses every member into `NotImplemented`. TS2322 is `Signature`.
+- `--seal` / `[code.ts] seal` adds `[$sealed]: true` to each state type, keyed by a `unique
+  symbol` the module does not export. A literal outside the module fails with TS2741, and
+  `as unknown as` still passes (`codegen_behaviour.rs`). `Symbol` is reserved for it.
+- Tests:
+  - `codegen_code_build_ts.rs` plants five omissions in `fixtures/codegen/ts_service`: a use
+    case missing, one member missing, a narrower argument, another result type, a misspelled
+    member. Each gives its named diagnostic and no `CodeUnmapped`. A service with no member
+    gives `CodeMissingUseCase_*` for a two-member contract (TS2739) and a six-member one
+    (TS2740). The four harness faults fail `--code=run`.
+  - `codegen_builds.rs` `typescript_probes_name_every_contract` checks every sample's probe
+    against a service type with no member. It expects TS2739 / TS2740 / TS2741 on exactly the
+    line map's lines.
+
+**P6, TypeScript (the S plan).**
+
+- The same IR (`DomainModel.capabilities`, `ContractDecl.caller`). Each capability is
+  `Readonly<{ kind: "<Actor>"; [$capability]: true }>`, where `$capability` is a `unique
+  symbol` the module does not export, and its companion `<Actor>Capability.issue()` is the only
+  way to make one without a type assertion. `<UseCase>Caller` is the union of its actors'
+  capabilities, and every `prepare*` and `run*` member takes `by: <UseCase>Caller` first. The
+  harness calls as the first actor.
+- `codegen_behaviour.rs` tests it on oidc-auth. `DenyDevice` builds with
+  `EndUserCapability.issue()`. Without a caller it fails with TS2554, with a RelyingParty
+  capability with TS2345, and with an object literal with TS2741. `as unknown as` passes.
+- A service whose `prepare*` ignores `by` still implements the contract, because TypeScript
+  accepts a function with fewer parameters. A service that takes another caller type fails
+  the probe with TS2322 (`CodeSignature_*`).
+- The R plan is not done, as in Rust and Go (#337 stays open).

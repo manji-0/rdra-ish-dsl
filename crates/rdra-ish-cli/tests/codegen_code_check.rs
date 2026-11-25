@@ -304,3 +304,25 @@ fn the_ledger_wants_an_owner_per_obligation() {
         "{stderr}"
     );
 }
+
+/// `--seal` and the `[code.ts]` keys `seal` and `tsconfig` are TypeScript's: on another
+/// language, `--seal` is a usage error (exit 2) and the keys an error naming the table.
+#[test]
+fn seal_is_for_typescript_only() {
+    let dir = project("seal", MANIFEST);
+    let (code, _, stderr) = text(&rdra(
+        &dir,
+        &["codegen", "model/order.rdra", "--lang", "rust", "--seal"],
+    ));
+    assert_eq!(code, Some(2), "{stderr}");
+    assert!(stderr.contains("--seal is for --lang ts only"), "{stderr}");
+    let dir = project("seal-key", &format!("{MANIFEST}seal = true\n"));
+    let (code, _, stderr) = text(&rdra(&dir, &["codegen", "model", "--code"]));
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(
+        stderr.contains(
+            "[code.rust] in model/rdra.toml: `seal` and `tsconfig` are for [code.ts] only"
+        ),
+        "{stderr}"
+    );
+}

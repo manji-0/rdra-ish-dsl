@@ -9,6 +9,7 @@
 mod ledger;
 pub(crate) mod map;
 mod rust;
+mod ts;
 
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -344,6 +345,7 @@ impl Backend for FreshOnly {}
 fn backend(name: &str) -> Box<dyn Backend> {
     match name {
         "rust" => Box::new(rust::Rust),
+        "ts" => Box::new(ts::TypeScript),
         _ => Box::new(FreshOnly),
     }
 }

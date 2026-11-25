@@ -35,8 +35,14 @@ fn scratch(lang: &str) -> PathBuf {
 }
 
 fn generate(lang: &str, out: &Path) {
+    generate_with(lang, out, &[]);
+}
+
+fn generate_with(lang: &str, out: &Path, extra: &[&str]) {
     let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
-        .args(["codegen", "--lang", lang, "-o"])
+        .args(["codegen", "--lang", lang])
+        .args(extra)
+        .arg("-o")
         .arg(out)
         .arg(fixture().join("order.rdra"))
         .output()
@@ -82,23 +88,72 @@ fn typescript_behaves() {
     if !available("tsc", "--version") || !available("node", "--version") {
         return;
     }
-    let dir = scratch("ts");
-    generate("ts", &dir.join("domain.ts"));
-    std::fs::copy(fixture().join("driver.ts"), dir.join("driver.ts")).unwrap();
-    run(
+    // The driver runs the same on sealed state types (`--seal`).
+    for (name, extra) in [("ts", &[][..]), ("ts-sealed", &["--seal"][..])] {
+        let dir = scratch(name);
+        generate_with("ts", &dir.join("domain.ts"), extra);
+        std::fs::copy(fixture().join("driver.ts"), dir.join("driver.ts")).unwrap();
+        run(
+            Command::new("tsc")
+                .args([
+                    "--strict", "--target", "es2020", "--module", "commonjs", "--outDir",
+                ])
+                .arg(dir.join("out"))
+                .arg(dir.join("driver.ts")),
+            &format!("tsc on the driver ({name})"),
+        );
+        let out = run(
+            Command::new("node").arg(dir.join("out/driver.js")),
+            &format!("the TypeScript driver ({name})"),
+        );
+        assert_eq!(out.trim(), "ok");
+    }
+}
+
+/// A TypeScript state written as an object literal outside the module: what tsc says with
+/// `--seal` (decision 9 of docs/design/code-check.md), and that without it, or through a type
+/// assertion, tsc accepts it.
+const TS_FORGERY: &str = "const o: d.OrderPaid = { kind: \"Paid\", id: 1 as d.OrderId, paid_at: \"2026-01-01T00:00:00Z\" as d.DateTime, method: \"card\", qty: 9, note: \"\", customer_id: 1 as d.CustomerId };";
+const TS_CAST: &str = "const o = { kind: \"Paid\" } as unknown as d.OrderPaid;";
+
+#[test]
+fn typescript_sealed_states_are_not_built_outside() {
+    if !available("tsc", "--version") {
+        return;
+    }
+    let forge = |extra: &[&str], body: &str| {
+        let dir = scratch("ts-forge");
+        generate_with("ts", &dir.join("domain.ts"), extra);
+        std::fs::write(
+            dir.join("forge.ts"),
+            format!("import * as d from \"./domain\";\n{body}\nexport const forged = o;\n"),
+        )
+        .unwrap();
         Command::new("tsc")
-            .args([
-                "--strict", "--target", "es2020", "--module", "commonjs", "--outDir",
-            ])
-            .arg(dir.join("out"))
-            .arg(dir.join("driver.ts")),
-        "tsc on the driver",
+            .args(["--strict", "--noEmit", "--target", "es2020"])
+            .arg(dir.join("forge.ts"))
+            .output()
+            .expect("runs tsc")
+    };
+    let sealed = forge(&["--seal"], TS_FORGERY);
+    let says = String::from_utf8_lossy(&sealed.stdout);
+    assert!(!sealed.status.success(), "tsc builds a forged sealed state");
+    assert!(
+        says.contains("TS2741") && says.contains("[$sealed]"),
+        "{says}"
     );
-    let out = run(
-        Command::new("node").arg(dir.join("out/driver.js")),
-        "the TypeScript driver",
+    let open = forge(&[], TS_FORGERY);
+    assert!(
+        open.status.success(),
+        "an unsealed state is a plain object type: {}",
+        String::from_utf8_lossy(&open.stdout)
     );
-    assert_eq!(out.trim(), "ok");
+    let cast = forge(&["--seal"], TS_CAST);
+    assert!(
+        cast.status.success(),
+        "a type assertion gets around the seal: {}",
+        String::from_utf8_lossy(&cast.stdout)
+    );
 }
 
 #[test]
@@ -239,6 +294,71 @@ fn rust_a_use_case_takes_the_capability_of_an_actor_that_performs_it() {
             Some(code) => {
                 assert!(!output.status.success(), "rustc builds {body}");
                 assert!(err.contains(code), "{body}: {err}");
+            }
+        }
+    }
+}
+
+/// Code that calls a use case of oidc-auth in TypeScript, and what tsc says (#337): `DenyDevice`
+/// is performed by EndUser only, so its prepare takes a `DenyDeviceCaller`, which only
+/// `EndUserCapability.issue()` makes. An object literal cannot stand in for the capability; a
+/// type assertion can, as with the state brand.
+const TS_CAPABILITY_CALLS: [(&str, Option<&str>); 5] = [
+    (
+        "void s.prepareDenyDevice(d.EndUserCapability.issue(), id);",
+        None,
+    ),
+    ("void s.prepareDenyDevice(id);", Some("TS2554")),
+    (
+        "void s.prepareDenyDevice(d.RelyingPartyCapability.issue(), id);",
+        Some("TS2345"),
+    ),
+    (
+        "void s.prepareDenyDevice({ kind: \"EndUser\" }, id);",
+        Some("TS2741"),
+    ),
+    (
+        "void s.prepareDenyDevice({ kind: \"EndUser\" } as unknown as d.EndUserCapability, id);",
+        None,
+    ),
+];
+
+#[test]
+fn typescript_a_use_case_takes_the_capability_of_an_actor_that_performs_it() {
+    if !available("tsc", "--version") {
+        return;
+    }
+    let dir = scratch("ts-capability");
+    let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .current_dir(fixture().join("../../../../.."))
+        .args(["codegen", "samples/oidc-auth", "--lang", "ts", "-o"])
+        .arg(dir.join("domain.ts"))
+        .output()
+        .expect("runs rdra-ish");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    for (call, code) in TS_CAPABILITY_CALLS {
+        std::fs::write(
+            dir.join("call.ts"),
+            format!("import * as d from \"./domain\";\nexport function f(s: d.DenyDeviceUseCase, id: d.DeviceAuthorizationId): void {{\n  {call}\n}}\n"),
+        )
+        .unwrap();
+        let output = Command::new("tsc")
+            .args([
+                "--strict", "--noEmit", "--pretty", "false", "--target", "es2022",
+            ])
+            .arg(dir.join("call.ts"))
+            .output()
+            .expect("runs tsc");
+        let said = String::from_utf8_lossy(&output.stdout);
+        match code {
+            None => assert!(output.status.success(), "{call}: {said}"),
+            Some(code) => {
+                assert!(!output.status.success(), "tsc builds {call}");
+                assert!(said.contains(code), "{call}: {said}");
             }
         }
     }

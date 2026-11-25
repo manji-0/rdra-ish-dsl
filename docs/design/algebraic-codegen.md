@@ -439,6 +439,21 @@ CHANGELOG gives the migration):
 - Function-property notation in contract types (`prepareShipOrder: (...) => ...`), so a narrower
   parameter type does not pass. Brand sealing of state types stays opt-in (decision 9 of
   [code-check.md](./code-check.md#decisions)).
+- Async contracts: each `prepare*` / `commit*` returns `Promise<Result<..>>`, since a
+  TypeScript service reads and writes its store asynchronously and a synchronous contract would
+  force it to block or to fake its store. The Rust and Go contracts are sync, as their stores'
+  clients are. The split into prepare and commit, the `Result`, and the error unions are the
+  same in all three; the TypeScript `conform` awaits each call.
+
+As built: a brand is made without a type assertion through a type predicate, the companion's
+`is: (value: unknown) => value is OrderId`, which `parse` calls. A value set's companion has
+`values` and `parse`. Every record and DTO gets `parse<Name>(value: unknown)` as well. The
+module's private helpers (`$int`, `$nullable`, the tag table `$orderTag`) start with `$`,
+which no model identifier can, and only the ones the module uses are printed. A parameter a
+function does not read is printed `_name`. The output builds under `tsc --strict` with
+`noUnusedLocals`, `noUnusedParameters`, `exactOptionalPropertyTypes`,
+`noUncheckedIndexedAccess` and `noPropertyAccessFromIndexSignature`, since the probe's
+`tsconfig.rdra.json` extends the project's own.
 
 ### Go
 
@@ -465,7 +480,10 @@ marks a column as personal, so the generator cannot know which to wrap; tracked 
   `clippy-driver -D warnings -D missing_docs` on the output of every sample, so no lint is
   allowed crate-wide; the few per-item allows name their reason (a function of more than seven
   arguments, an accessor named after a column such as `new`, the model's spelling of a name).
-- TypeScript, Go: the output keeps its earlier shape until their pull requests of #363 land.
+- TypeScript: in these shapes since the TypeScript pull request of #363. `codegen_builds.rs`
+  runs `tsc --strict` with the strictest optional flags on the output of every sample, and
+  checks the text for interfaces, type assertions and throws.
+- Go: the output keeps its earlier shape until its pull request of #363 lands.
 
 ## Use cases split into transactions
 

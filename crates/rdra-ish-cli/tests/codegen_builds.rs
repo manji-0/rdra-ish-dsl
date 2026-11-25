@@ -2,9 +2,9 @@
 //! `tests/fixtures/codegen/keywords.rdra`, whose names are keywords of the targets, the
 //! TypeScript output passes `tsc --strict`, the Rust output compiles as a library with no
 //! clippy warning and no undocumented public item (`clippy-driver -D warnings -D missing_docs`),
-//! and the Go output passes `go vet`, the Rust and Go output with the conformance harness of
-//! `--conformance`. A compiler missing from PATH skips its language, except under
-//! `RDRA_REQUIRE_CODEGEN_TOOLS=1`, which CI sets in the dev shell that provides them all.
+//! and the Go output passes `go vet`, each with the conformance harness of `--conformance`. A
+//! compiler missing from PATH skips its language, except under `RDRA_REQUIRE_CODEGEN_TOOLS=1`,
+//! which CI sets in the dev shell that provides them all.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -69,8 +69,7 @@ fn generate(sample: &str, lang: &str, dir: &Path, file: &str) -> PathBuf {
         "--conformance-states",
         "4096",
     ];
-    let first: &[&str] = if lang == "ts" { &[] } else { &harness };
-    let mut output = codegen(sample, lang, &path, first);
+    let mut output = codegen(sample, lang, &path, &harness);
     if !output.status.success()
         && String::from_utf8_lossy(&output.stderr).contains("refusing to generate code")
     {
@@ -112,13 +111,82 @@ fn typescript_builds() {
     }
     for sample in models() {
         let path = generate(&sample, "ts", &scratch("ts", &sample), "domain.ts");
+        // The strictest flags a project may set: the probe's tsconfig.rdra.json extends the
+        // project's own, so the domain module is checked under them.
         run(
             Command::new("tsc")
-                .args(["--strict", "--noEmit", "--target", "es2020"])
+                .args([
+                    "--strict",
+                    "--noEmit",
+                    "--target",
+                    "es2020",
+                    "--module",
+                    "esnext",
+                    "--noUnusedLocals",
+                    "--noUnusedParameters",
+                    "--exactOptionalPropertyTypes",
+                    "--noUncheckedIndexedAccess",
+                    "--noImplicitReturns",
+                    "--noFallthroughCasesInSwitch",
+                    "--noPropertyAccessFromIndexSignature",
+                    "--isolatedModules",
+                ])
                 .arg(&path),
             &format!("tsc on the codegen of {sample}"),
         );
+        kamae_shapes(&sample, &std::fs::read_to_string(&path).unwrap());
     }
+}
+
+/// The TypeScript output keeps the Kamae rules a compiler does not check: no interface, no
+/// type assertion but `as const`, and no `throw` but the one in `assertNever`.
+fn kamae_shapes(sample: &str, code: &str) {
+    let lines: Vec<&str> = code
+        .lines()
+        .filter(|l| {
+            let t = l.trim_start();
+            !(t.starts_with("//") || t.starts_with("/*") || t.starts_with('*'))
+        })
+        .collect();
+    for line in &lines {
+        let line = &without_strings(line);
+        assert!(!line.contains("interface "), "{sample}: {line}");
+        let casts = line.matches(" as ").count();
+        let allowed = line.matches(" as const").count();
+        assert_eq!(casts, allowed, "{sample}: a type assertion: {line}");
+    }
+    let throws = lines
+        .iter()
+        .filter(|l| without_strings(l).contains("throw "))
+        .count();
+    assert_eq!(throws, 1, "{sample}: only assertNever throws");
+}
+
+/// `line` with the text of its `"..."` literals and trailing `//` comment left out, so a
+/// model label cannot look like code.
+fn without_strings(line: &str) -> String {
+    let mut out = String::new();
+    let mut chars = line.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => {
+                out.push('"');
+                while let Some(c) = chars.next() {
+                    match c {
+                        '\\' => {
+                            chars.next();
+                        }
+                        '"' => break,
+                        _ => {}
+                    }
+                }
+                out.push('"');
+            }
+            '/' if chars.clone().next() == Some('/') => break,
+            c => out.push(c),
+        }
+    }
+    out
 }
 
 /// The Rust output passes clippy as it is printed: no crate-level allow hides a lint, and every
@@ -247,6 +315,94 @@ fn rust_probes_name_every_contract() {
         }
         let want: std::collections::BTreeSet<usize> = probe.lines.iter().map(|l| l.line).collect();
         assert_eq!(lines, want, "{sample}: E0277 lines against the line map");
+        checked += want.len();
+    }
+    assert!(checked > 100, "only {checked} probe lines checked");
+}
+
+/// The TypeScript probe of every sample `check` passes names each contract on its own line:
+/// checked against the generated module with a service type that has no member of any
+/// contract, tsc reports a missing member (TS2739, TS2740 or TS2741) on every use case line of
+/// the line map, and nothing else.
+#[test]
+fn typescript_probes_name_every_contract() {
+    if !available("tsc") {
+        return;
+    }
+    let mut checked = 0;
+    for sample in samples() {
+        if !codegen_cases::check_passes(&sample) {
+            continue;
+        }
+        let project = rdra_ish_core::load_project(&[repo().join(&sample)], None).expect("loads");
+        let domain = rdra_ish_emit::codegen::build_with(
+            &project.model,
+            Some(codegen_cases::caps()),
+            false,
+            &|_| None,
+        )
+        .expect("builds");
+        let binding = rdra_ish_emit::codegen::ProbeBinding {
+            service: "./nothing.ts#Nothing".to_string(),
+            module: "./domain.ts".to_string(),
+            conformance: None,
+        };
+        let Some(probe) = rdra_ish_emit::codegen::probe_for(
+            rdra_ish_emit::codegen::Lang::TypeScript,
+            &domain,
+            &binding,
+        ) else {
+            continue;
+        };
+        let dir = scratch("ts-probe", &sample);
+        generate(&sample, "ts", &dir, "domain.ts");
+        std::fs::write(
+            dir.join("nothing.ts"),
+            "/** A service that implements no contract. */\nexport type Nothing = Readonly<{ nothing: true }>;\n",
+        )
+        .unwrap();
+        // The file as written: the fingerprint is its second line.
+        let (first, rest) = probe.text.split_once('\n').expect("a first line");
+        std::fs::write(
+            dir.join("probe.ts"),
+            format!("{first}\n// fingerprint\n{rest}"),
+        )
+        .unwrap();
+        let out = Command::new("tsc")
+            .args([
+                "--strict",
+                "--noEmit",
+                "--pretty",
+                "false",
+                "--target",
+                "es2022",
+                "--module",
+                "nodenext",
+                "--allowImportingTsExtensions",
+                "--noUnusedLocals",
+            ])
+            .arg(dir.join("probe.ts"))
+            .output()
+            .expect("runs tsc");
+        let mut lines = std::collections::BTreeSet::new();
+        for line in String::from_utf8_lossy(&out.stdout).lines() {
+            let Some((head, text)) = line.split_once("): error ") else {
+                continue;
+            };
+            assert!(head.contains("probe.ts("), "{sample}: {line}");
+            let code = text.split(':').next().unwrap_or_default();
+            assert!(
+                ["TS2739", "TS2740", "TS2741"].contains(&code),
+                "{sample}: {line}"
+            );
+            let at = head.rsplit_once('(').unwrap().1;
+            lines.insert(at.split(',').next().unwrap().parse::<usize>().unwrap());
+        }
+        let want: std::collections::BTreeSet<usize> = probe.lines.iter().map(|l| l.line).collect();
+        assert_eq!(
+            lines, want,
+            "{sample}: missing-member lines against the line map"
+        );
         checked += want.len();
     }
     assert!(checked > 100, "only {checked} probe lines checked");

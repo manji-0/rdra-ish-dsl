@@ -1,7 +1,7 @@
 //! The conformance harness `codegen --conformance` prints tells a service that keeps to the
 //! model from one that does not. On `tests/fixtures/codegen/conformance.rdra`, an in-memory
-//! service per language built on the generated core passes `conform` / `Conform` along the
-//! traces, and each planted fault fails it at the call that shows it:
+//! service per language (Rust, Go, TypeScript) built on the generated core passes `conform` /
+//! `Conform` along the traces, and each planted fault fails it at the call that shows it:
 //!
 //! - `skip-core`: Pay writes the tag itself, so `paid_at` and `qty` are not what the model
 //!   holds after Pay.
@@ -156,5 +156,36 @@ fn go_harness_tells_faults_apart() {
             .env("TRACES", dir.join("traces.txt"))
             .output()
             .expect("runs go test")
+    });
+}
+
+#[test]
+fn typescript_harness_tells_faults_apart() {
+    if !available("tsc", "--version") || !available("node", "--version") {
+        return;
+    }
+    let dir = scratch("ts");
+    generate("ts", &dir, "domain.ts");
+    std::fs::copy(
+        fixture().join("conformance_service.ts"),
+        dir.join("service.ts"),
+    )
+    .unwrap();
+    let built = Command::new("tsc")
+        .args([
+            "--strict", "--target", "es2020", "--module", "commonjs", "--outDir",
+        ])
+        .arg(dir.join("out"))
+        .arg(dir.join("service.ts"))
+        .output()
+        .expect("runs tsc");
+    assert!(built.status.success(), "tsc:\n{}", text(&built));
+    check("ts", |fault| {
+        Command::new("node")
+            .arg(dir.join("out/service.js"))
+            .arg(dir.join("traces.txt"))
+            .env("FAULT", fault)
+            .output()
+            .expect("runs the service")
     });
 }

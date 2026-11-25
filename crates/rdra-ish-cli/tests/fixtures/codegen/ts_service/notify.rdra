@@ -1,0 +1,28 @@
+// Fixture of tests/codegen_code_build_ts.rs: Notify runs on three events, so its contract has
+// six members, more than tsc lists in one message (TS2740 "and 2 more").
+entity Order "O" {
+  id: Int @pk
+  status: Enum(open, paid, shipped, done) @default(open)
+}
+entity Note "N" {
+  id: Int @pk
+}
+usecase Place "P"
+usecase Pay "Pay"
+usecase Ship "Ship"
+usecase Finish "Finish"
+usecase Notify "Notify"
+event EvPaid "paid"
+event EvShipped "shipped"
+event EvDone "done"
+creates(Place, Order)
+transitions(Pay, Order.status, open -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+transitions(Finish, Order.status, shipped -> done)
+raises(Pay, EvPaid)
+raises(Ship, EvShipped)
+raises(Finish, EvDone)
+triggers(EvPaid, Notify)
+triggers(EvShipped, Notify)
+triggers(EvDone, Notify)
+creates(Notify, Note)

@@ -37,6 +37,42 @@
   fingerprint's model hash no longer depends on the order the files load in, so a file
   generated before reads as "model changed" in `codegen --check` once.
 
+- `codegen --lang ts`: the TypeScript output and its compatibility contract
+  ([The TypeScript types of `codegen`](docs/compatibility.md#the-typescript-types-of-codegen))
+  move to the Kamae shapes of
+  [Generated code style](docs/design/algebraic-codegen.md#generated-code-style) (#363). The
+  module imports nothing: it brings its own `Result` and parsers. To migrate, generate the
+  module again and change the code that uses it:
+
+  | Before | After |
+  |---|---|
+  | `export interface OrderPaid { status: "paid"; ... }` | `export type OrderPaid = Readonly<{ kind: "Paid"; ... }>`: no tag column in a state, every property `readonly` |
+  | `order.status === "paid"`, `switch (order.status)` | `order.kind === "Paid"`, `switch (order.kind)` with `default: return assertNever(order)`; the values of `<Entity>Kind` are the states' type names |
+  | a column named `kind` of a state type | `kind_` in the states; `<Entity>Row` keeps `kind` |
+  | `orderFromRow(row): Order \| InvalidRow`, `"invalid" in x` | `Order.fromRow(row): Result<Order, InvalidRow>`, `if (!r.ok) r.error.column` |
+  | `orderToRow(state)` | `Order.toRow(state)` |
+  | `InvalidRow { invalid, column, reason }` | `InvalidRow { kind: "InvalidRow", entity, column, reason }`, `column` null for a value that is no object |
+  | `1 as OrderId`, `"2026-01-01" as Date` | `OrderId.parse(1)`, `Date.parse("2026-01-01")`, each a `Result`, or `OrderId.is(x)` to narrow |
+  | `MethodValues` | `Method.values`, and `Method.parse(text)` |
+  | a row read from a store or the wire, typed by hand | `parseOrderRow(value: unknown): Result<OrderRow, InvalidRow>`, which checks every column, the shapes of `Money`, `Decimal`, `Date` and `DateTime` among them |
+
+  The experimental part changes with it. A transition function or dispatcher returns
+  `Result<PayResult, PayError>`, where `<UseCase>Error` is the union of `NotEnabled`,
+  `Rejected` and `InvalidArgument` the use case can return, each with a `kind`
+  (`{ kind: "Rejected", condition, label, site }` in place of `{ rejected, label, site }`,
+  `{ kind: "NotEnabled", usecase }` in place of `{ notEnabled }`). Arguments that break what
+  the verified model keeps (a child that does not name its parent, a column the target state
+  keeps null that holds a value) return `InvalidArgument` instead of throwing; no generated
+  function throws but `assertNever`. Events are told apart by `kind` in place of `event`.
+  Every result, event, run mark and record is a `Readonly` type, a rule check returns
+  `readonly string[]`, and each record and DTO has a parser, `parse<Name>(value: unknown)`.
+  The output builds under `tsc --strict` with `noUnusedLocals`, `noUnusedParameters`,
+  `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess` and
+  `noPropertyAccessFromIndexSignature`; it needs TypeScript 4.9 or later (`satisfies`).
+  `Symbol` joins `Result` and `assertNever` as a name the TypeScript output writes, so a model
+  type of that name is a `NameCollision`; a model name that takes `parse<Row>` moves the
+  parser to `parse<Row>_`.
+
 - Two `@null` columns that both hold null are no longer equal (#355). `col == other` between
   two columns holds only when both are present and equal, and `col != other` holds whenever
   either is null, as the language reference ([Null](docs/language-reference.md#null)) and the
@@ -174,7 +210,10 @@
   performs a use case with a contract gets a capability type (`<Actor>Capability`, made by
   `issue()`), and the use case a caller type (`<UseCase>Caller`) that its `prepare_*` and
   `run_*` take first. A call without the capability of an actor that performs the use case
-  does not compile. The conformance harness calls as the first such actor.
+  does not compile. The conformance harness calls as the first such actor. TypeScript has them
+  too: `<Actor>Capability` is branded with a module-private `unique symbol` and made by its
+  companion's `issue()`, `<UseCase>Caller` is the union of the allowed capabilities, and a
+  type assertion still forges one.
 
 - **The obligation ledger** (`check --code`, #363, P5): each obligation the generated code
   lists needs an owner, declared by a `rdra: obligation <name> [file]` marker line in the
@@ -194,6 +233,27 @@
   location (`CodeMissingUseCase_*`, `CodeIncomplete_*`, `CodeSignature_*`); `run` runs the
   conformance test the probe holds (`CodeConformance`).
 
+- `codegen --lang ts --conformance <FILE>` (#363, experimental): the TypeScript output gets the
+  contracts, one `<UseCase>UseCase` type per use case with `prepare*` / `commit*` function
+  properties that return `Promise<Result<..>>`, the `ConformancePort` that composes them with
+  `seed` and `snapshot`, and `conform(newPort, traces)`, the harness the Rust and Go output
+  already had. It reports the same differences, refusals, and interleaved commits. The
+  contracts are printed without `--conformance` too, as `type <UseCase>UseCase = { readonly
+  ... }`, so tsc names them in its messages; an action with no printed function is a
+  `run<Action>` member (#335).
+- `check --code=build` and `--code=run` for TypeScript (#363, experimental): `[code.ts]`
+  `probe` and `service` (`<file>#<ExportedType>`) bind the service, and `codegen --code`
+  writes the probe and a `tsconfig.rdra.json` that extends the project's tsconfig
+  (`[code.ts] tsconfig`, else the root's `tsconfig.json`) and holds only the probe. `build`
+  runs `tsc --noEmit -p tsconfig.rdra.json` and maps TS2739 / TS2740 / TS2741 / TS2322 to
+  `CodeMissingUseCase_*`, `CodeIncomplete_*` and `CodeSignature_*`; `run` runs the probe's
+  conformance test with `node <probe>`, which needs Node 22.18 or later (type stripping) or a
+  `run` command in the table.
+- `codegen --lang ts --seal` and `[code.ts] seal = true` (#363, experimental): each state type
+  carries a property keyed by a `unique symbol` the module does not export, so code outside it
+  cannot build a state from an object literal (TS2741); a type assertion still can.
+  `--seal` with another language is a usage error (exit 2), and `seal` or `tsconfig` under
+  `[code.rust]` or `[code.go]` makes `--code` exit 1.
 - `check --code[=fresh|build|run]` (#363, experimental; [design](docs/design/code-check.md)):
   does the service code have what the model requires? `[code.rust]`, `[code.go]` and
   `[code.ts]` in `rdra.toml` name the generated files, `codegen <INPUTS> --code` writes them

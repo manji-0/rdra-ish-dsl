@@ -68,6 +68,7 @@ fn generated_from(src: &str, path: &str, lang: Lang) -> String {
             caps: CAPS,
         },
         conformance: None,
+        seal: false,
     };
     generate(&model, &options, &|_| None).expect("generates")
 }
@@ -174,6 +175,7 @@ fn json_snapshot() {
             caps: CAPS,
         },
         conformance: None,
+        seal: false,
     };
     insta::assert_snapshot!(generate_json(&model, &options, &|_| None).expect("generates"));
 }
@@ -765,4 +767,29 @@ deletes(Cancel, Order)
         let keys = format!("{body:?}").matches("KeyEq").count();
         assert_eq!(keys, if same_row { 2 } else { 1 }, "{extra}: {body:?}");
     }
+}
+
+/// A TypeScript name the printer derives (`parse<Row>`) that a model name already takes gets a
+/// trailing `_`: here the function of the use case `ParseOrderRow` keeps `parseOrderRow`.
+#[test]
+fn a_derived_typescript_name_yields_to_a_model_name() {
+    let src = r#"
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(open, done) @default(open)
+}
+usecase Open "Open"
+usecase ParseOrderRow "Parse"
+creates(Open, Order)
+transitions(ParseOrderRow, Order.status, open -> done)
+"#;
+    let ts = generated_from(src, "derived.rdra", Lang::TypeScript);
+    assert!(
+        ts.contains("export function parseOrderRow_(value: unknown): Result<OrderRow, InvalidRow>"),
+        "{ts}"
+    );
+    assert!(
+        ts.contains("export function parseOrderRow(order: OrderOpen)"),
+        "{ts}"
+    );
 }
