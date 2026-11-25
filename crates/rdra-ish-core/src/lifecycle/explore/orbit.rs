@@ -60,17 +60,25 @@ impl TransitionSystem {
     /// view gathered from representatives would miss the patterns of the other states of their
     /// classes. So the pattern cap does not stop it (#251).
     pub fn run_orbits(self, caps: Caps) -> OrbitRun {
+        let group = Group::of(&self);
+        self.run_orbits_in(caps, Checks::All, group)
+    }
+
+    /// `run_orbits` with the classes of `fixed` left out of the group as well, evaluating
+    /// `checks`: the run of the sub-lifecycle of a reduced cone up to `H` (`Group::fixing`,
+    /// #212 phase 2), which evaluates none.
+    pub(crate) fn run_orbits_fixing(self, caps: Caps, checks: Checks, fixed: &[EntId]) -> OrbitRun {
+        let group = Group::fixing(&self, fixed);
+        self.run_orbits_in(caps, checks, group)
+    }
+
+    fn run_orbits_in(self, caps: Caps, checks: Checks, group: Group) -> OrbitRun {
         assert!(
             self.reduction().is_none(),
             "a run up to symmetry takes a cone #74 left unreduced"
         );
-        let group = Group::of(&self);
-        let (mut run, violations, parts) = self.bfs_on(
-            caps.without_views(),
-            Checks::All,
-            Threads::Shared,
-            Some(&group),
-        );
+        let (mut run, violations, parts) =
+            self.bfs_on(caps.without_views(), checks, Threads::Shared, Some(&group));
         crate::shadow_assert!(
             !run.gathered_views() && run.views.iter().all(|v| v.patterns.is_empty()),
             "a run up to symmetry gathers no entity view"
@@ -136,14 +144,30 @@ fn lift(
     at: u32,
     extra: Option<(ActId, &[u8], &StateSlice)>,
 ) -> (State, Vec<Step>) {
-    let ts = &run.system;
     let path: Vec<Edge> = run.path_to(at);
     let first = path.first().map_or(at, |e| e.from);
+    let (start, mut steps, tau) = lift_path(run, g, canon, first, &path);
+    if let Some((act, params, to)) = extra {
+        steps.push(concrete(&run.system, g, &tau, act, params, to));
+    }
+    (start, steps)
+}
+
+/// `path`, stored edges from `states[first]` on, lifted to concrete states as `lift` does,
+/// with the permutation `τ` the last concrete state is read through.
+fn lift_path(
+    run: &ComponentRun,
+    g: &Group,
+    canon: &mut Canon,
+    first: u32,
+    path: &[Edge],
+) -> (State, Vec<Step>, Vec<u8>) {
+    let ts = &run.system;
     let start = run.states[first as usize].to_owned();
     let mut tau = g.identity();
     let mut out = vec![0u8; ts.width];
     let mut steps = Vec::with_capacity(path.len() + 1);
-    for e in &path {
+    for e in path {
         let (act, params) = run.step(e);
         let target = &run.states[e.to as usize];
         let t = ts
@@ -159,10 +183,7 @@ fn lift(
         steps.push(concrete(ts, g, &tau, act, params, &t.next));
         tau = g.compose(&tau, &g.inverse(&sigma));
     }
-    if let Some((act, params, to)) = extra {
-        steps.push(concrete(ts, g, &tau, act, params, to));
-    }
-    (start, steps)
+    (start, steps, tau)
 }
 
 /// The step of `act` under `params` into `t`, read through `tau`.
@@ -212,6 +233,33 @@ fn replays(ts: &TransitionSystem, start: &State, steps: &[Step]) {
 }
 
 impl OrbitRun {
+    /// The stored graph, for `Classes::of` and the lift of a reduced trace alone (#212 phase
+    /// 2): a run up to `H` keeps what the quotient reads on every edge, so its stuttering
+    /// partition is the plain one's, class for class. No other reader walks it.
+    pub(crate) fn quotient_graph(&self) -> &ComponentRun {
+        &self.run
+    }
+
+    /// Whether the run's group moves the rows of `e`.
+    pub(crate) fn moves(&self, e: EntId) -> bool {
+        self.group.moves(e)
+    }
+
+    /// The canonical form of `s`, a state of the system, under the run's group.
+    pub(crate) fn canonical(&self, s: &StateSlice) -> State {
+        let mut out = vec![0u8; s.0.len()];
+        Canon::default().canonical(&self.group, &s.0, &mut out);
+        State(out.into_boxed_slice())
+    }
+
+    /// The stored edges `path` from `states[first]`, lifted to concrete states.
+    pub(crate) fn lift_path(&self, first: u32, path: &[Edge]) -> (State, Vec<Step>) {
+        let (start, steps, _) =
+            lift_path(&self.run, &self.group, &mut Canon::default(), first, path);
+        replays(&self.run.system, &start, &steps);
+        (start, steps)
+    }
+
     /// The system explored; the stored states are its states.
     pub fn system(&self) -> &TransitionSystem {
         &self.run.system

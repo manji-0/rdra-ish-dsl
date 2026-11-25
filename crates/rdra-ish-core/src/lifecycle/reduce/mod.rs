@@ -58,9 +58,10 @@ use split::Split;
 /// until #284 raised it past the largest module measured with a larger heap: food-permit-ops'
 /// `AfterAssert_SuspendBusiness_0` cone at 3 instances, 520,704 cells (a 7.6 MB module) and
 /// 7,167,444 states, which TLC checks in 98 s at `-Xmx4g` (4.1 GB peak) and not at `-Xmx1g`
-/// (out of heap in semantic processing) or `-Xmx2g` (out of heap after 5 minutes). A cone
-/// between 200,000 cells and this budget needs `RDRA_TLC_HEAP=4g` under `--with-tlc`;
-/// without it TLC stops with a tool error and that hint.
+/// (out of heap in semantic processing) or `-Xmx2g` (out of heap after 5 minutes). Under
+/// `--with-tlc` a run's heap follows its module, 512 MiB per MiB of module text (#309), so
+/// that cone gets `-Xmx4g` at the default `--memory`; a module past TLC's share of the memory
+/// limit is a tool error with the hint to raise `--memory` or set `RDRA_TLC_HEAP`.
 pub(crate) const TLA_CELL_BUDGET: usize = 530_000;
 
 /// Why one attempt at `reduced` left the cone unreduced.
@@ -134,6 +135,9 @@ pub struct Reduction {
     loops: Vec<bool>,
     /// The divergence marks, counted.
     pub divergence: Divergence,
+    /// S was explored up to `H` (#212 phase 2), after its plain run stopped at the memory
+    /// limit: the lift explores it so again.
+    up_to_h: bool,
 }
 
 impl Reduction {
@@ -523,6 +527,7 @@ impl TransitionSystem {
             states: n,
             loops,
             divergence,
+            up_to_h: classes.up_to_h,
         };
         if reduction.tla_cells() > TLA_CELL_BUDGET {
             return Err(over_budget());

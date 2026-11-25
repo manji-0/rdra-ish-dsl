@@ -7,9 +7,10 @@ use rdra_ish_core::lifecycle::{Bounds, Caps};
 use rdra_ish_core::memory::{MemoryPool, MemorySize};
 use rdra_ish_core::project::Manifest;
 
-use crate::tlc_env::Heap;
+use crate::tlc_env::{xmx, Heap};
 
 const MIB: u64 = 1 << 20;
+const GIB: u64 = 1 << 30;
 
 /// A command with a memory limit, and the `rdra.toml` section that sets it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -89,9 +90,9 @@ pub(crate) struct VerifySplit {
     pub(crate) limit: MemorySize,
     /// What the BFS state stores may hold at once.
     pub(crate) bfs: MemorySize,
-    /// What the `-Xmx` of the TLC cone runs going at once may add up to.
+    /// What the TLC cone runs going at once may hold: their `-Xmx` and `JVM_OVERHEAD` each.
     pub(crate) cones: u64,
-    /// What the `-Xmx` of the whole-model runs going at once may add up to.
+    /// What the whole-model runs going at once may hold, counted the same way.
     pub(crate) wholes: u64,
 }
 
@@ -122,25 +123,114 @@ impl VerifySplit {
     }
 }
 
-/// How many TLC runs of one kind go at once, and the heap each gets.
+/// What a TLC JVM holds beside its heap: 64 MiB of fingerprints off the heap, metaspace, code
+/// cache, and stacks, about 250 MB once the heap fills (#309). A run is charged its `-Xmx`
+/// and this.
+pub(crate) const JVM_OVERHEAD: u64 = 256 * MIB;
+
+/// Heap per byte of module text: 512 MiB per MiB. TLC was measured to need 183 to 269 MiB per
+/// MiB to parse and process a module (#309), and twice that also holds the 7,167,444 states
+/// of the 7.6 MB cone of #299, which checks at 4 GiB and not at 2.
+const HEAP_PER_MODULE_BYTE: u64 = 512;
+
+/// The heap of one TLC run.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct TlcPlan {
-    pub(crate) at_once: usize,
-    /// `-Xmx` in bytes.
-    pub(crate) heap: u64,
+pub(crate) enum TlcHeap {
+    /// Sized by the module (`TlcHeap::of`); doubled once when the run runs out of memory and
+    /// the share holds twice it (`TlcHeap::doubled`).
+    Sized(u64),
+    /// The heap the user named (`RDRA_TLC_HEAP`, or `-Xmx` in `JAVA_TOOL_OPTIONS`), kept as
+    /// given. A user `-Xmx` comes after the one `verify` passes, so a rerun at twice the heap
+    /// would rerun at the same one: there is none.
+    User(u64),
+    /// The module needs `need` bytes of heap, more than the share: no run.
+    OverShare { need: u64 },
 }
 
-/// Up to `wanted` runs of `kind` at once within `share` bytes of heap. Runs are queued before a
-/// heap is shrunk: fewer at once only costs time, a smaller heap may fail a run. `set` is a
-/// heap the user named (`RDRA_TLC_HEAP`, or `-Xmx` in `JAVA_TOOL_OPTIONS`); it is kept as
-/// given, and runs one at a time when it alone is past the share. Otherwise the kind's
-/// default heap shrinks to the share when the share is smaller.
-pub(crate) fn tlc_plan(share: u64, wanted: usize, kind: Heap, set: Option<u64>) -> TlcPlan {
-    let heap = set.unwrap_or_else(|| kind.default_bytes().min(share).max(LEAST_HEAP));
-    let fits = usize::try_from(share / heap).unwrap_or(usize::MAX);
-    TlcPlan {
-        at_once: wanted.min(fits).max(1),
-        heap,
+impl TlcHeap {
+    /// The heap of a run of `kind` on a module of `module_bytes` bytes within `share`: 512 MiB
+    /// per MiB of module, rounded up to whole GiB, at least the kind's default (`Heap`) and at
+    /// most the share; at the share, or `LEAST_HEAP`, when the default is more than the share
+    /// holds. A module that needs more than the share gets no run, since a run that runs out
+    /// of memory spends far more than it would queueing (a 12.6 MB module spent 303 CPU-s in
+    /// garbage collection before it stopped at 2 GiB). `set`, the heap the user named, wins.
+    pub(crate) fn of(module_bytes: u64, kind: Heap, share: u64, set: Option<u64>) -> TlcHeap {
+        if let Some(set) = set {
+            return TlcHeap::User(set);
+        }
+        let need = module_bytes.saturating_mul(HEAP_PER_MODULE_BYTE);
+        let whole_gib = need.div_ceil(GIB).saturating_mul(GIB);
+        if need > share {
+            return TlcHeap::OverShare { need: whole_gib };
+        }
+        TlcHeap::Sized(
+            whole_gib
+                .max(kind.default_bytes())
+                .min(share)
+                .max(LEAST_HEAP),
+        )
+    }
+
+    /// `-Xmx` in bytes; `None` for a run over the share.
+    pub(crate) fn bytes(self) -> Option<u64> {
+        match self {
+            TlcHeap::Sized(bytes) | TlcHeap::User(bytes) => Some(bytes),
+            TlcHeap::OverShare { .. } => None,
+        }
+    }
+
+    /// What the run holds of its share while it goes: its heap and `JVM_OVERHEAD`.
+    pub(crate) fn charge(self) -> u64 {
+        self.bytes().map_or(0, |bytes| bytes + JVM_OVERHEAD)
+    }
+
+    /// The run-line note of a run over the share, and the report in place of TLC's output:
+    /// why it did not run, and what to change.
+    pub(crate) fn over_share(
+        module: &str,
+        module_bytes: u64,
+        need: u64,
+        share: u64,
+    ) -> (String, String) {
+        let size =
+            |bytes: u64| MemorySize::from_bytes(bytes).map_or("0B".to_string(), |s| s.to_string());
+        let flag = xmx(need);
+        let note = format!(
+            "not run: needs a {} heap, more than the {} TLC has of --memory",
+            size(need),
+            size(share)
+        );
+        let report = format!(
+            "not run: {module}.tla is {:.1} MB, and TLC needs about 512 MiB of heap per MiB of module, so {}; TLC's runs have {} of --memory\n\
+             hint: TLC would run out of memory; raise --memory (TLC's cone runs get half of it, a whole-model run all of it), or set the heap with RDRA_TLC_HEAP={flag} or JAVA_TOOL_OPTIONS=-Xmx{flag}",
+            module_bytes as f64 / 1e6,
+            size(need),
+            size(share),
+        );
+        (note, report)
+    }
+
+    /// The heap of the one rerun of a run that ran out of memory: twice this one, when the
+    /// heap was sized here and the share holds twice it.
+    pub(crate) fn doubled(self, share: u64) -> Option<TlcHeap> {
+        match self {
+            TlcHeap::Sized(bytes) if bytes.saturating_mul(2) <= share => {
+                Some(TlcHeap::Sized(bytes * 2))
+            }
+            _ => None,
+        }
+    }
+}
+
+/// TLC workers per run when `in_flight` runs, this one included, are running or queued on
+/// `cores`: the cores divided by the runs that share them, at most 8, and 1 once the runs
+/// outnumber the cores. Past 4 to 8 workers a run gains no time and spends 50 to 70% more
+/// CPU, and with more runs than cores a JVM per core on one worker each uses the CPU best
+/// (#309).
+pub(crate) fn tlc_workers(cores: usize, in_flight: usize) -> usize {
+    match in_flight > cores {
+        true => 1,
+        false => (cores / in_flight.max(1)).clamp(1, 8),
     }
 }
 
@@ -148,8 +238,6 @@ pub(crate) fn tlc_plan(share: u64, wanted: usize, kind: Heap, set: Option<u64>) 
 mod tests {
     use super::*;
     use rdra_ish_core::project::CommandSection;
-
-    const GIB: u64 = 1 << 30;
 
     fn size(text: &str) -> MemorySize {
         text.parse().unwrap()
@@ -194,86 +282,119 @@ mod tests {
         }
     }
 
+    const MB: u64 = 1 << 20;
+
+    /// 512 MiB per MiB of module, in whole GiB, at least 1 GiB for a cone and 2 GiB for a
+    /// whole-model run: every module under 2 MiB keeps today's heap, and #299's 7.6 MB cone
+    /// gets 4 GiB.
     #[test]
-    fn the_default_verify_budget_runs_today_plan() {
+    fn the_heap_follows_the_module_in_whole_gib_above_the_kind_default() {
         let split = VerifySplit::of(MemorySize::VERIFY, true).unwrap();
         assert_eq!(split.bfs.to_string(), "8GiB");
-        assert_eq!(
-            tlc_plan(split.cones, 8, Heap::Cone, None),
-            TlcPlan {
-                at_once: 8,
-                heap: GIB
-            }
-        );
-        assert_eq!(
-            tlc_plan(split.wholes, 2, Heap::Temporal, None),
-            TlcPlan {
-                at_once: 2,
-                heap: 2 * GIB
-            }
-        );
+        let cone = |bytes: u64| TlcHeap::of(bytes, Heap::Cone, split.cones, None);
+        assert_eq!(cone(0), TlcHeap::Sized(GIB));
+        assert_eq!(cone(94 * 1024), TlcHeap::Sized(GIB));
+        assert_eq!(cone(2 * MB), TlcHeap::Sized(GIB));
+        assert_eq!(cone(2 * MB + 1), TlcHeap::Sized(2 * GIB));
+        assert_eq!(cone(2_800_000), TlcHeap::Sized(2 * GIB));
+        assert_eq!(cone(7_600_000), TlcHeap::Sized(4 * GIB));
+        assert_eq!(cone(12_600_000), TlcHeap::Sized(7 * GIB));
+        assert_eq!(cone(16 * MB), TlcHeap::Sized(8 * GIB));
+        let whole = |bytes: u64| TlcHeap::of(bytes, Heap::Temporal, split.wholes, None);
+        assert_eq!(whole(50 * 1024), TlcHeap::Sized(2 * GIB));
+        assert_eq!(whole(7_600_000), TlcHeap::Sized(4 * GIB));
     }
 
+    /// A module that needs more than the share gets no run; one whose need fits but whose
+    /// default does not runs at the share, as before.
     #[test]
-    fn a_smaller_budget_queues_the_runs_before_it_shrinks_a_heap() {
-        let split = VerifySplit::of(size("4GiB"), true).unwrap();
+    fn a_module_past_the_share_gets_no_run_and_a_small_share_shrinks_the_default() {
+        let split = VerifySplit::of(MemorySize::VERIFY, true).unwrap();
         assert_eq!(
-            tlc_plan(split.cones, 8, Heap::Cone, None),
-            TlcPlan {
-                at_once: 2,
-                heap: GIB
-            }
-        );
-        assert_eq!(
-            tlc_plan(split.wholes, 2, Heap::Temporal, None),
-            TlcPlan {
-                at_once: 2,
-                heap: 2 * GIB
-            }
+            TlcHeap::of(16 * MB + 1, Heap::Cone, split.cones, None),
+            TlcHeap::OverShare { need: 9 * GIB }
         );
         let split = VerifySplit::of(size("1GiB"), true).unwrap();
         assert_eq!(
-            tlc_plan(split.cones, 8, Heap::Cone, None),
-            TlcPlan {
-                at_once: 1,
-                heap: GIB / 2
-            }
+            TlcHeap::of(50 * 1024, Heap::Cone, split.cones, None),
+            TlcHeap::Sized(GIB / 2)
         );
         assert_eq!(
-            tlc_plan(split.wholes, 2, Heap::Temporal, None),
-            TlcPlan {
-                at_once: 1,
-                heap: GIB
-            }
+            TlcHeap::of(50 * 1024, Heap::Temporal, split.wholes, None),
+            TlcHeap::Sized(GIB)
+        );
+        assert_eq!(
+            TlcHeap::of(2 * MB, Heap::Cone, split.cones, None),
+            TlcHeap::OverShare { need: GIB }
         );
         let split = VerifySplit::of(size("80MiB"), true).unwrap();
         assert_eq!(split.bfs.to_string(), "16MiB");
         assert_eq!(
-            tlc_plan(split.cones, 8, Heap::Cone, None),
-            TlcPlan {
-                at_once: 1,
-                heap: 64 * MIB
-            }
+            TlcHeap::of(1024, Heap::Cone, split.cones, None),
+            TlcHeap::Sized(64 * MIB)
         );
     }
 
+    /// A run over the share says what it needs, what TLC has, and what to change.
     #[test]
-    fn a_heap_the_user_names_is_kept_and_queued_to_fit() {
+    fn a_run_over_the_share_names_the_heap_it_needs_and_the_hint() {
+        let (note, report) = TlcHeap::over_share("Cone_Big", 16_800_000, 9 * GIB, 8 * GIB);
+        assert_eq!(
+            note,
+            "not run: needs a 9GiB heap, more than the 8GiB TLC has of --memory"
+        );
+        assert!(
+            report.starts_with("not run: Cone_Big.tla is 16.8 MB, and TLC needs about 512 MiB of heap per MiB of module, so 9GiB; TLC's runs have 8GiB of --memory\nhint: "),
+            "{report}"
+        );
+        assert!(
+            report.ends_with("RDRA_TLC_HEAP=9g or JAVA_TOOL_OPTIONS=-Xmx9g"),
+            "{report}"
+        );
+    }
+
+    /// The heap the user names is kept whatever the module and the share, and never doubled.
+    #[test]
+    fn a_heap_the_user_names_is_kept_and_not_doubled() {
         let split = VerifySplit::of(MemorySize::VERIFY, true).unwrap();
+        for bytes in [1024, 7_600_000, 64 * MB] {
+            let heap = TlcHeap::of(bytes, Heap::Cone, split.cones, Some(32 * GIB));
+            assert_eq!(heap, TlcHeap::User(32 * GIB));
+            assert_eq!(heap.doubled(split.cones), None);
+        }
+    }
+
+    /// A run that runs out of memory reruns once at twice its heap when the share holds it.
+    #[test]
+    fn a_rerun_doubles_the_heap_within_the_share() {
+        let share = 8 * GIB;
         assert_eq!(
-            tlc_plan(split.cones, 8, Heap::Cone, Some(4 * GIB)),
-            TlcPlan {
-                at_once: 2,
-                heap: 4 * GIB
-            }
+            TlcHeap::Sized(GIB).doubled(share),
+            Some(TlcHeap::Sized(2 * GIB))
         );
         assert_eq!(
-            tlc_plan(split.cones, 8, Heap::Cone, Some(32 * GIB)),
-            TlcPlan {
-                at_once: 1,
-                heap: 32 * GIB
-            }
+            TlcHeap::Sized(4 * GIB).doubled(share),
+            Some(TlcHeap::Sized(8 * GIB))
         );
+        assert_eq!(TlcHeap::Sized(5 * GIB).doubled(share), None);
+        assert_eq!(TlcHeap::OverShare { need: 9 * GIB }.doubled(share), None);
+        assert_eq!(TlcHeap::Sized(GIB).charge(), GIB + 256 * MIB);
+        assert_eq!(TlcHeap::OverShare { need: GIB }.charge(), 0);
+    }
+
+    #[test]
+    fn workers_share_the_cores_up_to_8_and_drop_to_1_past_them() {
+        assert_eq!(tlc_workers(18, 1), 8);
+        assert_eq!(tlc_workers(18, 2), 8);
+        assert_eq!(tlc_workers(18, 3), 6);
+        assert_eq!(tlc_workers(18, 18), 1);
+        assert_eq!(tlc_workers(18, 19), 1);
+        assert_eq!(tlc_workers(4, 1), 4);
+        assert_eq!(tlc_workers(4, 2), 2);
+        assert_eq!(tlc_workers(4, 3), 1);
+        assert_eq!(tlc_workers(4, 9), 1);
+        assert_eq!(tlc_workers(1, 1), 1);
+        assert_eq!(tlc_workers(4, 0), 4);
     }
 
     #[test]

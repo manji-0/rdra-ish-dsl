@@ -6,7 +6,7 @@ use std::mem::size_of;
 
 use crate::lifecycle::types::ActId;
 
-use super::segments::SEG;
+use super::segments::SHIFT;
 use super::{Bfs, ComponentRun, Layers};
 
 /// A heap block for `n` bytes: the allocator rounds up to 16.
@@ -58,44 +58,71 @@ pub struct Shape {
 /// (`store_bytes_models_the_store_a_run_counts`). It is computed from the counts alone, so it
 /// is the same on every machine and thread count. Saturates at `u64::MAX`.
 pub fn store_bytes(states: u64, width: usize, edges: u64, shape: Shape) -> u64 {
-    store_bytes_in(SEG as u128, true, states, width, edges, shape)
+    store_bytes_in::<SHIFT>(true, states, width, edges, shape)
 }
 
-/// `store_bytes` with segments of `seg` rows, and with the lists of segments when `lists`:
+/// `store_bytes` with segments of `2^S` rows, and with the lists of segments when `lists`:
 /// what the harnesses read at the segment of a build, where Kani's own build has segments of
-/// 4, and without the lists, which a doubling `Vec` had no counterpart of.
-fn store_bytes_in(
-    seg: u128,
+/// 4, and without the lists, which a doubling `Vec` had no counterpart of. Segments are
+/// counted by shifts, not division, which keeps the harnesses fast.
+fn store_bytes_in<const S: u32>(
     lists: bool,
     states: u64,
     width: usize,
     edges: u64,
     shape: Shape,
 ) -> u64 {
-    let doubled = 2 * seg;
-    let room = |x: u128| match x <= doubled {
-        true => x.max(4).next_power_of_two(),
-        false => doubled + (x - doubled).div_ceil(seg) * seg,
-    };
-    let list = |x: u128| match lists && x > doubled {
-        true => 24 * (x - doubled).div_ceil(seg).max(4).next_power_of_two(),
-        false => 0,
-    };
-    let n = u128::from(states);
-    let e = u128::from(edges);
-    let b = shape.binding as u128;
-    let (per_state, per_edge, edge_buffers) = match shape.graph {
-        true => (4 + 4, 4 + b, 2),
-        false => (4 + b, 0, 0),
-    };
+    let (n, e) = (u128::from(states), u128::from(edges));
+    let (per_state, per_edge, edge_buffers) = coefficients(shape);
+    let list = |x: u128| if lists { list::<S>(x) } else { 0 };
     // Each term fits in u128; the product with a width near `usize::MAX` and the sums need not.
     let total = (width as u128 + per_state + 4)
-        .saturating_mul(room(n))
+        .saturating_mul(room::<S>(n))
         .saturating_add(3 * list(n))
-        .saturating_add(5 * (n * 8).div_ceil(7).max(4).next_power_of_two())
-        .saturating_add(per_edge.saturating_mul(room(e)))
+        .saturating_add(5 * buckets(n))
+        .saturating_add(per_edge.saturating_mul(room::<S>(e)))
         .saturating_add(edge_buffers * list(e));
     u64::try_from(total).unwrap_or(u64::MAX)
+}
+
+/// The bytes per state besides the state, per edge, and the buffers of edges a run of
+/// `shape` keeps.
+fn coefficients(shape: Shape) -> (u128, u128, u128) {
+    let b = shape.binding as u128;
+    match shape.graph {
+        true => (4 + 4, 4 + b, 2),
+        false => (4 + b, 0, 0),
+    }
+}
+
+/// The rows a buffer of segments of `2^S` holds room for once it holds `x`: the least power
+/// of two of at least `x` (4 at the least) up to `2^(S+1)`, then whole segments.
+fn room<const S: u32>(x: u128) -> u128 {
+    let doubled = 2 << S;
+    match x <= doubled {
+        true => x.max(4).next_power_of_two(),
+        false => doubled + (whole::<S>(x) << S),
+    }
+}
+
+/// The bytes of the list of the whole segments that `x` rows take: 24 a slot, doubling from
+/// four, and none up to `2^(S+1)` rows.
+fn list<const S: u32>(x: u128) -> u128 {
+    match x > 2 << S {
+        true => 24 * whole::<S>(x).max(4).next_power_of_two(),
+        false => 0,
+    }
+}
+
+/// The whole segments of `2^S` rows past the doubling ones that `x > 2^(S+1)` rows take,
+/// counted by shifts, not division, which keeps the harnesses fast.
+fn whole<const S: u32>(x: u128) -> u128 {
+    (x - (2 << S) + (1 << S) - 1) >> S
+}
+
+/// The buckets `seen` holds for `n` states: the least power of two of at least `n * 8 / 7`.
+fn buckets(n: u128) -> u128 {
+    (n * 8).div_ceil(7).max(4).next_power_of_two()
 }
 
 /// What a run held when the memory limit stopped it, to say what finishing would take.
@@ -240,18 +267,24 @@ mod proofs {
         store_bytes(kani::any(), kani::any(), kani::any(), any_shape());
     }
 
-    /// A store of more states, wider states, more edges, wider binding ids, or with an edge
-    /// list where the other has none never counts as fewer bytes: past `u64` the count stays
-    /// at `u64::MAX` and does not wrap to a small one.
+    /// Each term of `store_bytes` only grows: more rows never take less room, a longer list or
+    /// more buckets, at the build's segments and at Kani's, and a wider binding id or an edge
+    /// list never takes fewer bytes per state, per edge or buffers of edges. `store_bytes`
+    /// adds and multiplies these terms, all at least 0, saturating, so a store of more states,
+    /// wider states, more edges, wider binding ids, or with an edge list where the other has
+    /// none counts at least as many bytes, and past `u64` the count stays at `u64::MAX`.
+    /// (A harness of `store_bytes` itself took past 30 minutes on segments.)
     #[kani::proof]
     fn store_bytes_only_grows() {
-        let (n, m): (u64, u64) = (kani::any(), kani::any());
-        let (w, v): (usize, usize) = (kani::any(), kani::any());
-        let (e, f): (u64, u64) = (kani::any(), kani::any());
+        let (x, y): (u128, u128) = (kani::any(), kani::any());
+        kani::assume(x <= y && y <= u128::from(u64::MAX));
+        assert!(room::<2>(x) <= room::<2>(y) && room::<14>(x) <= room::<14>(y));
+        assert!(list::<2>(x) <= list::<2>(y) && list::<14>(x) <= list::<14>(y));
+        assert!(buckets(x) <= buckets(y));
         let (s, t) = (any_shape(), any_shape());
-        kani::assume(n <= m && w <= v && e <= f);
         kani::assume(s.binding <= t.binding && (!s.graph || t.graph));
-        assert!(store_bytes(n, w, e, s) <= store_bytes(m, v, f, t));
+        let ((a, b, c), (d, e, f)) = (coefficients(s), coefficients(t));
+        assert!(a <= d && b <= e && c <= f);
     }
 
     /// Without the lists of segments, the model of #296 never counts more than the one before
@@ -270,7 +303,7 @@ mod proofs {
                 .saturating_add(12 * p2(u128::from(e)));
             u64::try_from(total).unwrap_or(u64::MAX)
         };
-        assert!(store_bytes_in(1 << 14, false, n, w, e, any_shape()) <= before(n, w, e));
+        assert!(store_bytes_in::<14>(false, n, w, e, any_shape()) <= before(n, w, e));
     }
 
     /// A heap block holds what was asked, in whole 16-byte units, and wastes under 16 bytes.

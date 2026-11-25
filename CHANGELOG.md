@@ -132,6 +132,24 @@
 
 ### Added
 
+- `verify --symmetry` also covers the sub-lifecycle of a reduced cone (#212, phase 2):
+  under `retry` and `always`, a sub-lifecycle whose run stops at the memory limit, alone,
+  runs again up to `H`, the instance symmetry that keeps what the quotient reads, and the
+  cone is reduced where it was left whole. The classes are the same sets of states, so the
+  verdicts are the same; their numbering and representatives can differ, and so can such a
+  cone's TLA+ tables and its lifted traces. A cone whose sub-lifecycle fits keeps its
+  output. A trace through such a cone runs the sub-lifecycle up to `H` again and lifts its
+  path to concrete states before it is replayed. Without the option nothing changes. At
+  `--instance-count 3` the sub-lifecycle of clinic-ops' `Forbidden_ClinicalOrder_1`,
+  whose plain run stopped at the memory limit after 25.3M states, takes 240,016 orbits for
+  about 61.8M states and yields #284's 20 classes, and the cone is decided (`ok`, 5,050
+  states; `verify --entity ClinicalOrder --memory 8GiB --symmetry retry` takes 72 s at
+  `RDRA_JOBS=4`, 6.2 GiB at the peak). The `shadow` build adds the `s_up_to_h` twin, which holds the
+  classes up to `H` to those of the plain run of the same sub-lifecycle, up to 200,000
+  states, and reads `RDRA_ISH_FORCE_S_UP_TO_H`, a test-only switch that runs every
+  sub-lifecycle up to `H` at once, so that the samples at small bounds reach the path and
+  its twin; a release build ignores it.
+
 - `verify --symmetry never|retry|always` (#212, phase 1; experimental, default `never`):
   explore an unreduced safety cone, and the cone of an `always` property, up to instance
   symmetry, one stored state per orbit of states that differ only in which slot holds which
@@ -394,6 +412,29 @@
   retires 2% to 7% more (292.7 G to 304.1 G on `insurance-claim-ops`, 32.9 G to 34.6 G on
   `patent-ops`, 90.4 G to 96.8 G on `food-permit-ops`). A `shadow` build compares every
   edge, parent and recorded `after` step with the 12-byte list kept beside them.
+- `verify --with-tlc` sizes each TLC run's heap by its module and schedules the runs by
+  the memory they hold (#309).
+  - A run gets 512 MiB of heap per MiB of module text, in whole GiB: at least `1g` for a
+    cone and `2g` for a whole-model run, and at most TLC's share of `--memory`. Every
+    module under 2 MiB keeps the old heap. food-permit-ops'
+    `AfterAssert_SuspendBusiness_0` cone at `--instance-count 3` (a 7.6 MB module) now gets
+    `-Xmx4g` and passes with 7,167,444 states (`verify --instance-count 3 --entity
+    BusinessPermit --memory 16GiB --with-tlc`: 130 s). At the old `1g` TLC ran out of
+    memory on it.
+  - A run that runs out of memory runs once more at twice its heap when the share holds
+    that. Its line ends `rerun at -Xmx<2h> after -Xmx<h> ran out of memory`.
+  - A module that needs more heap than the share is not run. It is a `tool_error` whose
+    report names the heap it needs and says to raise `--memory` or set `RDRA_TLC_HEAP`.
+  - `RDRA_TLC_HEAP` and an `-Xmx` in `JAVA_TOOL_OPTIONS` still set every heap, with no
+    rerun.
+  - The runs go at once as long as their `-Xmx` plus 256 MiB per JVM fit the share, in
+    place of up to 8 at once. A run whose heap alone is past the share runs alone. At the
+    default `16GiB` that is six cone runs of `1g` at once, not eight, and at `4GiB` one,
+    not two.
+  - Each run's TLC workers are the cores divided by the runs that can go at once (those
+    going and queued, no more than fit the share), at most 8, and at least 1. Before, it
+    was at least 2 on 4 cores and up to all the cores. Past 4 to 8 workers a run gained no
+    time and spent 50 to 70% more CPU.
 - Keys of the quotient cache that explore the same sub-lifecycle share its run of S (#296):
   keys that differ in what T observes, the inputs or the rises, or only in where their
   actions came from, partitioned one run each, which `verify` explored again per key. A
@@ -427,6 +468,18 @@
   and a `-continue` run that prints many traces stops with an
   `ArrayIndexOutOfBoundsException` (#314); JDK 17 is 3 to 14% slower than 21 on runs past
   about 50,000 states.
+- The flake has a second launcher beside `tlc`, `tlc-batch`: one JVM that runs TLC jobs one
+  after another (#310), so that a small run does not pay for a JVM start and stop. Only the
+  `engine_equivalence` test uses it so far, for its small TLC runs (a cone of up to 5,000
+  states, a property's cone, a state model); `verify --with-tlc` still starts a process per
+  run. On an 18-core Mac the test went from 178 s to about 100 s of wall time and from
+  1,539 to about 650 CPU-s (two test threads, single runs beside other load), and its 734
+  sample cones of up to 5,000 states from 594 to 107 worker-seconds of TLC. On a 4-core CI
+  runner, in one job, the test took 637 and 633 s without the batch JVMs and 464 and 456 s with
+  them. A job a batch
+  JVM does not answer runs as a process, as every job does without `tlc-batch` on `PATH` or
+  with `RDRA_TLC_BATCH=0`. See
+  [Engine equivalence in batch JVMs](docs/formal-verification.md#engine-equivalence-in-batch-jvms).
 - `--max-patterns` caps only a run that builds an entity view (#251, #296): the cone of an
   entity view in `check` and `states`. Only those runs gather view patterns now. A cone of
   invariants, `after` assertions or `can_reach` alone, a run that quotients a sub-lifecycle,
@@ -461,8 +514,8 @@
   food-permit-ops' `AfterAssert_SuspendBusiness_0` at `--instance-count 3` is now reduced
   to 7,167,444 states and decided (`verify --instance-count 3 --entity BusinessPermit
   --memory 8GiB` takes 158 s); unreduced, it stopped at the memory limit. TLC needs a larger heap for such a cone: the 520,704-cell module checks at
-  `RDRA_TLC_HEAP=4g` in 98 s, and at the default 1 GB heap TLC runs out of memory and
-  `--with-tlc` reports a tool error with that hint. No sample at 1 or 2 instances, no engine
+  `-Xmx4g` in 98 s and runs out of memory at `-Xmx1g`; `--with-tlc` now gives it that heap
+  (#309, below). No sample at 1 or 2 instances, no engine
   corpus case, and no `reduction-diff.py` seed CI runs has a cone in the new range, so their
   output is unchanged.
 - `verify` no longer runs a sub-lifecycle again for each cone that shares it after the run

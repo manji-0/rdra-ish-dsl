@@ -19,6 +19,7 @@
 //! | a fold's input bit without allocations (`Fold::holds`, `reduce/fold.rs`, #296) | `reduce/fold/reference.rs`: the bit with its `Vec`s |
 //! | edges without their source, binding ids in 1 to 4 bytes, parents (`explore/edges.rs`, #296 2.1) | `explore/edges/reference.rs`: the 12-byte `Edge` list and the parent edges, as a run kept them before |
 //! | an after-assert step's ends recorded on a run without an edge list (`StepEnds`, #296 2.1) | `ComponentRun::step_ends`'s scan of that 12-byte list |
+//! | `Classes::of` on a run of S up to `H` (`reduce/partition.rs`, #212 phase 2) | `reduce/partition/up_to_h.rs`: the classes of the plain run of S, up to `SHADOW_CAP` states |
 //!
 //! A `shadow` build also runs the checks `shadow_assert!` makes, as a debug build does: each
 //! reader of a run's check results reads only checks the run evaluated (#251), and a steady
@@ -45,11 +46,12 @@ pub(crate) enum Twin {
     OrbitRun,
     FoldHolds,
     SharedRun,
+    SUpToH,
     Edges,
     StepEnds,
 }
 
-const TWINS: [(Twin, &str); 13] = [
+const TWINS: [(Twin, &str); 14] = [
     (Twin::EachEnabled, "each_enabled"),
     (Twin::Seen, "seen"),
     (Twin::Source, "source"),
@@ -61,6 +63,7 @@ const TWINS: [(Twin, &str); 13] = [
     (Twin::OrbitRun, "orbit_run"),
     (Twin::FoldHolds, "fold_holds"),
     (Twin::SharedRun, "shared_run"),
+    (Twin::SUpToH, "s_up_to_h"),
     (Twin::Edges, "edges"),
     (Twin::StepEnds, "step_ends"),
 ];

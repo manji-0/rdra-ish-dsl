@@ -287,6 +287,33 @@ mod proofs {
         }
     }
 
+    /// For rows of one byte and every run of up to 9 pushes, over the two doubling segments
+    /// and into a fixed one: each row reads back as pushed and stays at the address it was
+    /// pushed to, and `bytes_with(1)` before a push is `bytes_with(0)` after it and what the
+    /// `Vec`s hold. (At widths up to 2, or 14 pushes, CBMC passed 8 GB.)
+    #[kani::proof]
+    #[kani::unwind(11)]
+    fn rows_take_what_bytes_with_said_and_never_move() {
+        let pushes: usize = kani::any();
+        kani::assume(pushes <= 9);
+        let probe: usize = kani::any();
+        kani::assume(probe < pushes);
+        let mut rows: Rows<u8> = Rows::new(1);
+        let mut probed = (0u8, std::ptr::null());
+        for i in 0..pushes {
+            let r: u8 = kani::any();
+            let said = rows.bytes_with(1);
+            rows.push(&[r]);
+            assert_eq!(rows.bytes_with(0), said);
+            assert_eq!(rows.allocated(), said);
+            if i == probe {
+                probed = (r, rows.row(i).as_ptr());
+            }
+        }
+        assert_eq!(rows.row(probe), &[probed.0]);
+        assert_eq!(rows.row(probe).as_ptr(), probed.1);
+    }
+
     /// The segments that hold `n` rows hold room for all of them, and never for more than a
     /// doubling `Vec` of `n` rows (4 at the least) holds; up to `DOUBLED` rows, for exactly
     /// as many. For every `n` up to 2^40. (A harness that pushes into the `Vec`s themselves

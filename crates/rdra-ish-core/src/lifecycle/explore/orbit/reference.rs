@@ -12,7 +12,7 @@ use std::collections::BTreeSet;
 use super::OrbitRun;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::explore::symmetry::Canon;
-use crate::lifecycle::explore::{Caps, Checks, ComponentRun, Threads};
+use crate::lifecycle::explore::{Caps, ComponentRun, Threads};
 use crate::lifecycle::expr::StateSlice;
 use crate::shadow::{compared, skipped, Twin};
 
@@ -35,7 +35,9 @@ pub(super) fn check(orbits: &OrbitRun, caps: Caps) {
     // Neither run gathers views (`run_orbits`), so the pattern cap stops neither.
     let mut plain_caps = Caps::new(caps.patterns, SHADOW_CAP).without_views();
     plain_caps.stop_when_all_violated = caps.stop_when_all_violated;
-    let plain: ComponentRun = ts.clone().run_on(plain_caps, Checks::All, Threads::Shared);
+    let plain: ComponentRun =
+        ts.clone()
+            .run_on(plain_caps, orbits.checks().clone(), Threads::Shared);
     let stopped = |complete: bool, failed: bool| !complete && !failed;
     if stopped(plain.complete, plain.checks_failed)
         || stopped(orbits.complete(), orbits.run.checks_failed)

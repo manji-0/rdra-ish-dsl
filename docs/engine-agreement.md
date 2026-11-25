@@ -365,11 +365,12 @@ compile it.
 | `compare_negates_and_mirrors` | `expr.rs` | `compare` does not panic, `!=` is the negation of `==`, and swapping the operands mirrors the operator | every operand kind, every domain, every value |
 | `a_block_rounds_up_to_16` | `explore/store.rs` | `block(n)` is a multiple of 16 that holds `n` and wastes under 16 bytes | every `n` up to `usize::MAX - 16` |
 | `locate_numbers_rows_in_order` | `explore/segments.rs` | `locate` puts each row in one segment, right after the row before it, at a place under that segment's rows | every row up to 40, segments of 4, 4 and then 4 |
+| `rows_take_what_bytes_with_said_and_never_move` | `explore/segments.rs` | a buffer of segments reads each row back and keeps it at the address it was pushed to, and `bytes_with(1)` before a push is `bytes_with(0)` after it and what its `Vec`s hold | rows of one byte, up to 9 pushes, past the doubling segments |
 | `segments_hold_every_row_and_no_more_than_a_doubling_vec` | `explore/segments.rs` | the segments that hold `n` rows hold room for all of them and never for more than a doubling `Vec` of `n` rows, and up to `2 * SEG` rows for exactly as many | every `n` up to 2^40, segments of 4 |
 | `store_bytes_never_overflows` | `explore/store.rs` | `store_bytes` neither overflows nor panics | every input, every shape |
-| `store_bytes_only_grows` | `explore/store.rs` | more states, wider states, more edges, wider binding ids, or an edge list never count as fewer bytes, so past `u64` the count stays at `u64::MAX` | every input |
+| `store_bytes_only_grows` | `explore/store.rs` | each term of the model only grows: room, list of segments and buckets with the rows, and the bytes per state, per edge and buffers of edges with the shape; summed and multiplied with saturation, more states, wider states, more edges, wider binding ids or an edge list never count as fewer bytes, and past `u64` the count stays at `u64::MAX` | every count up to `u64::MAX`, segments of 4 and of 2^14, every pair of shapes |
 | `store_bytes_is_at_most_the_model_before` | `explore/store.rs` | at segments of 2^14 rows, the model without its lists of segments never counts more than the one before #296 (8-byte parents, 12-byte edges, doubling buffers) | every input, every shape |
-| `a_push_takes_the_bytes_bytes_with_said_and_reads_back` | `explore/arena.rs` | a pushed state reads back, no index leaves the buffer, and `bytes_with(1)` before a push is `bytes_with(0)` after it and what the store's buffers hold, from an empty store or a `slice` of one | width up to 2, up to 9 pushes, past the doubling segments |
+| `a_push_takes_the_bytes_bytes_with_said_and_reads_back` | `explore/arena.rs` | a pushed state reads back and stays at the address it was pushed to, no index leaves the buffer, and `bytes_with(1)` before a push is `bytes_with(0)` after it and what the store's buffers hold | states of one byte, up to 9 pushes, past the doubling segments |
 | `apply_of_a_composition_is_the_composition_of_applies` | `explore/symmetry/mod.rs` | `apply(g ∘ h) = apply(g) ∘ apply(h)`, keys relabelled on present rows only | a 2-slot parent and a 2-slot child with a key to it, every state, every pair of permutations |
 
 A result holds up to its bound and no further, and for one thread.
@@ -388,14 +389,17 @@ cargo kani -p rdra-ish-core                                        # every harne
 cargo kani -p rdra-ish-core --harness compare_negates_and_mirrors  # one harness
 ```
 
-Three harnesses take most of the time. On an 18-core Mac `store_bytes_only_grows` takes about
-4 minutes, the `States` harness in `explore/arena.rs` about a minute and 8 GB of memory, and
-`apply_of_a_composition_is_the_composition_of_applies` about 7 minutes; on the CI runner the
-first two take about 9 and 3.5 minutes. The symmetry harness stays at 2 slots per class: at
-3 it did not finish in 20 minutes, and a harness of the canonical form itself did not finish
-in 30 at 2, so the exhaustive unit test and the `canonical` twin check the canonical form. The others take under 20
-seconds each. At width 3 and 9 pushes the `States` harness did not finish in
-10 minutes (#275), so its bound stays small.
+Two harnesses take most of the time. On an 18-core Mac `store_bytes_is_at_most_the_model_before`
+takes about 7 minutes and `apply_of_a_composition_is_the_composition_of_applies` about 7
+minutes. `store_bytes_only_grows` proves the model's terms one by one: a harness of the model
+itself took past 30 minutes once its buffers were segments.
+The symmetry harness stays at 2 slots per class: at 3 it did not finish in 20 minutes, and a
+harness of the canonical form itself did not finish in 30 at 2, so the exhaustive unit test
+and the `canonical` twin check the canonical form. The others take under 20 seconds each.
+The `States` harness in `explore/arena.rs` and the `Rows` harness in `explore/segments.rs`
+push rows of one byte: at widths up to 2, the `States` harness held 8 GB before #296 2.2 and
+ran past 20 minutes on segments, and the `Rows` harness passed 8 GB. The unit tests of
+`segments` push wider rows at the build's own segment size.
 
 ### In CI
 
