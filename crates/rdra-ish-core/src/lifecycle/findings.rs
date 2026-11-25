@@ -323,7 +323,9 @@ impl TransitionSystem {
         }
         let n = g.states.len();
         let adjacency = g.adjacency();
-        let present = |at: usize, k: usize| g.states.at(at).is_present(self, e, k);
+        // Each cell read from the packed states alone.
+        let exists = self.offset(self.entity(e).exists);
+        let present = |at: usize, k: usize| g.states.cell(at, exists + k) == Value::PRESENT.0;
         let mut out = Vec::new();
         let mut columns: Vec<(VarId, Vec<Vec<bool>>)> = Vec::new();
         for (var, value, exits) in open {
@@ -335,7 +337,9 @@ impl TransitionSystem {
             }
             let (_, leave) = columns.iter().find(|(v, _)| *v == var).expect("just added");
             let stuck = |at: usize, k: usize| {
-                present(at, k) && g.states.at(at).get(self, var, k) == value && !leave[k][at]
+                present(at, k)
+                    && g.states.cell(at, self.offset(var) + k) == value.0
+                    && !leave[k][at]
             };
             let first = (0..self.slots(e))
                 .filter_map(|k| (0..n).find(|&at| stuck(at, k)).map(|at| (at, k)))
@@ -373,20 +377,23 @@ impl TransitionSystem {
     ) -> Vec<bool> {
         let mut leave = vec![false; g.states.len()];
         let mut stack = Vec::new();
+        // The two cells read, each from the packed states alone.
+        let (exists, cell) = (self.offset(self.entity(e).exists) + k, self.offset(var) + k);
+        let present = |at: u32| g.states.cell(at as usize, exists) == Value::PRESENT.0;
         // `for_each` folds a run's edges a state at a time (`EdgeIter::fold`).
         g.edges().for_each(|(from, to, _)| {
-            let (s, t) = (&g.states.at(from as usize), &g.states.at(to as usize));
-            if leave[from as usize] || !s.is_present(self, e, k) {
+            if leave[from as usize] || !present(from) {
                 return;
             }
-            if !t.is_present(self, e, k) || t.get(self, var, k) != s.get(self, var, k) {
+            let value = |at: u32| g.states.cell(at as usize, cell);
+            if !present(to) || value(to) != value(from) {
                 leave[from as usize] = true;
                 stack.push(from);
             }
         });
         while let Some(at) = stack.pop() {
             for &p in adjacency.preds(at) {
-                if !leave[p as usize] && g.states.at(p as usize).is_present(self, e, k) {
+                if !leave[p as usize] && present(p) {
                     leave[p as usize] = true;
                     stack.push(p);
                 }

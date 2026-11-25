@@ -255,6 +255,7 @@ impl<'t> Bfs<'t> {
             after,
             states: States::packed(std::sync::Arc::new(super::packing::Packing::of(ts))),
             seen: Default::default(),
+            packed: Vec::new(),
             keys: Default::default(),
             sources: vec![(usize::MAX, 0); ts.entities.len() * ts.most_slots()],
             source_slots: ts.most_slots(),
@@ -325,6 +326,8 @@ impl<'t> Bfs<'t> {
         let Some(mut s2) = self.states.first().map(Unpacked::into_state) else {
             return;
         };
+        // The state being read, unpacked from the store.
+        let mut cur = s2.clone();
         // States before `next` are read; states before `sent` are read or handed out.
         let (mut next, mut sent) = (0, 0);
         loop {
@@ -346,7 +349,7 @@ impl<'t> Bfs<'t> {
             let (moves, ends) = expanded;
             let mut from = 0;
             for end in ends {
-                if !self.take(next, &moves, from..end, &mut s2) {
+                if !self.take(next, &moves, from..end, &mut cur, &mut s2) {
                     return;
                 }
                 from = end;
@@ -357,20 +360,29 @@ impl<'t> Bfs<'t> {
 
     /// Reads `moves[range]`, the moves from `states[at]`; false when a cap stops the run, or
     /// the last open check fails under `Caps::stop_when_all_violated`.
-    /// `s2` is a state of the system, overwritten with each successor in turn.
-    fn take(&mut self, at: usize, moves: &Moves, range: Range<usize>, s2: &mut State) -> bool {
+    /// `s` and `s2` are states of the system: `s` is overwritten with `states[at]`, and `s2`
+    /// with each successor in turn.
+    fn take(
+        &mut self,
+        at: usize,
+        moves: &Moves,
+        range: Range<usize>,
+        s: &mut State,
+        s2: &mut State,
+    ) -> bool {
         self.layers.read(at);
         self.steps.read(at);
         let from = at as u32;
-        let s = self.states.at(at).into_state();
+        self.states.read_into(at, &mut s.0);
+        let s: &State = s;
         for i in range {
             let (act, params, next) = moves.get(i);
             s2.0.copy_from_slice(next);
-            if self.caps.views && !self.observe(at, act, params, &s, s2) {
+            if self.caps.views && !self.observe(at, act, params, s, s2) {
                 return false;
             }
             let binding = self.bindings.id(act, params);
-            if *s2 == s {
+            if *s2 == *s {
                 self.push(from, from, act, binding, s2);
                 continue;
             }
@@ -384,7 +396,7 @@ impl<'t> Bfs<'t> {
             let key = StateSlice::new(key);
             if self.group.is_some() && *key == *s {
                 let edge = u32::try_from(self.steps.moves()).expect("edges fit in u32");
-                self.push(from, from, act, binding, &s);
+                self.push(from, from, act, binding, s);
                 self.orbit_self.push(edge);
                 // The step's after-asserts were read on its concrete successor above.
                 if self.stop_if_all_failed() {
@@ -392,11 +404,17 @@ impl<'t> Bfs<'t> {
                 }
                 continue;
             }
-            let to = match self.seen.find(&self.states, key) {
+            // A plain run's key is the successor itself: patch the source's packed row with
+            // the cells the move changed. Under symmetry it is a canonical form, packed whole.
+            match self.group {
+                None => self.states.patch(at, s, key, &mut self.packed),
+                Some(_) => self.states.pack(key, &mut self.packed),
+            }
+            let to = match self.seen.find_packed(&self.states, &self.packed, key) {
                 Some(to) => to,
                 None => {
                     let to = self.states.len() as u32;
-                    if !self.admit(key, Some((from, binding)), found) {
+                    if !self.admit_packed(key, Some((from, binding)), found) {
                         return false;
                     }
                     to
@@ -438,9 +456,20 @@ impl<'t> Bfs<'t> {
     /// Adds a new state; false when the state cap or the memory limit stops the run.
     /// `parent` is the source and the binding of the move that reaches it, pushed next.
     fn admit(&mut self, s: &StateSlice, parent: Option<(u32, u32)>, found: Canonical) -> bool {
-        if self.seen.find(&self.states, s).is_some() {
+        self.states.pack(s, &mut self.packed);
+        if (self.seen.find_packed(&self.states, &self.packed, s)).is_some() {
             return true;
         }
+        self.admit_packed(s, parent, found)
+    }
+
+    /// `admit`, of a state `seen` does not hold, which `packed` holds packed.
+    fn admit_packed(
+        &mut self,
+        s: &StateSlice,
+        parent: Option<(u32, u32)>,
+        found: Canonical,
+    ) -> bool {
         if self.states.len() >= self.caps.states {
             self.complete = false;
             let entities = self.ts.entities.iter().map(|e| e.key).collect();
@@ -501,7 +530,7 @@ impl<'t> Bfs<'t> {
         }
         self.check_invariants(s, self.states.len() as u32);
         self.orbits.admit(found);
-        self.states.push(s);
+        self.states.push_packed(&self.packed, s);
         self.seen.insert(&self.states, self.states.len() as u32 - 1);
         self.steps.admit(parent);
         self.layers.admit(parent.is_none());

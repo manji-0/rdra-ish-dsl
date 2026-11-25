@@ -212,6 +212,48 @@ impl States {
         }
     }
 
+    /// Cell `c` of state `i`, read from its packed bits alone.
+    #[inline]
+    pub(crate) fn cell(&self, i: usize, c: usize) -> u8 {
+        let got = self.packing.cell(self.rows.row(i), c);
+        #[cfg(feature = "shadow")]
+        {
+            let want = self.twin.row(i)[c];
+            assert!(
+                got == want,
+                "shadow: States::cell({i}, {c}): packed {got}, reference {want}"
+            );
+            crate::shadow::compared(crate::shadow::Twin::Packed);
+        }
+        got
+    }
+
+    /// `s` packed as the store keeps it, into `out`.
+    #[inline]
+    pub(crate) fn pack(&self, s: &StateSlice, out: &mut Vec<u8>) {
+        out.resize(self.packing.bytes(), 0);
+        self.packing.pack(&s.0, out);
+    }
+
+    /// `to` packed as the store keeps it, into `out`, given `from`, which is state `i`: only
+    /// the cells where the two differ are packed. Under the `shadow` feature the whole pack
+    /// is compared with it.
+    #[inline]
+    pub(crate) fn patch(&self, i: usize, from: &StateSlice, to: &StateSlice, out: &mut Vec<u8>) {
+        out.resize(self.packing.bytes(), 0);
+        self.packing.patch(&from.0, self.rows.row(i), &to.0, out);
+        #[cfg(feature = "shadow")]
+        {
+            let mut want = vec![0u8; self.packing.bytes()];
+            self.packing.pack(&to.0, &mut want);
+            assert!(
+                *out == want,
+                "shadow: States::patch({i}): patched {out:?}, packed {want:?}"
+            );
+            crate::shadow::compared(crate::shadow::Twin::Packed);
+        }
+    }
+
     /// State `i`'s packed bytes.
     fn packed_row(&self, i: usize) -> &[u8] {
         self.rows.row(i)
@@ -256,6 +298,16 @@ impl States {
         });
         #[cfg(feature = "shadow")]
         self.twin.push(&s.0);
+    }
+
+    /// `push(s)`, given `packed`, what `pack` made of `s`.
+    pub(crate) fn push_packed(&mut self, packed: &[u8], s: &StateSlice) {
+        debug_assert_eq!(packed.len(), self.packing.bytes());
+        self.rows.push(packed);
+        #[cfg(feature = "shadow")]
+        self.twin.push(&s.0);
+        #[cfg(not(feature = "shadow"))]
+        let _ = s;
     }
 
     /// The states the buffer holds room for.
@@ -342,15 +394,15 @@ pub(super) struct Seen {
 }
 
 impl Seen {
-    /// The index of `s` in `states`, if it is there.
-    pub fn find(&self, states: &States, s: &StateSlice) -> Option<u32> {
-        let found = with_scratch(states.packing.bytes(), |packed| {
-            states.packing.pack(&s.0, packed);
-            let packed = &*packed;
-            self.table
-                .find(hash(packed), |&i| states.packed_row(i as usize) == packed)
-                .copied()
-        });
+    /// The index of `s` in `states`, if it is there, given `packed`, what `States::pack` made
+    /// of `s`.
+    pub fn find_packed(&self, states: &States, packed: &[u8], s: &StateSlice) -> Option<u32> {
+        let found = self
+            .table
+            .find(hash(packed), |&i| states.packed_row(i as usize) == packed)
+            .copied();
+        #[cfg(not(feature = "shadow"))]
+        let _ = s;
         #[cfg(feature = "shadow")]
         {
             let want = self.twin.find(s);

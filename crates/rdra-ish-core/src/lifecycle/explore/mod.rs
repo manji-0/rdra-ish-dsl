@@ -585,6 +585,8 @@ struct Bfs<'t> {
     states: States,
     /// The index of each state in `states`.
     seen: arena::Seen,
+    /// The state being looked up, packed as `states` keeps it, so a new one packs once.
+    packed: Vec<u8>,
     /// Scratch for the pattern keys `observe` reads, so an edge allocates none.
     keys: (Vec<u8>, Vec<u8>),
     /// Per `(entity, slot)`: the state being expanded, and the slot's pattern id in it, so
