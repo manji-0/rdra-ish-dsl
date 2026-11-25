@@ -71,6 +71,9 @@ pub struct TlcRun {
     /// TLC said it finished model checking.
     pub completed: bool,
     pub distinct_states: Option<u64>,
+    /// The run stopped on TLC 1.7.x's trace read-back failure (`readback_failed`): the
+    /// violations it printed are real, but it never reached the rest of the model.
+    pub readback_failed: bool,
 }
 
 impl TlcRun {
@@ -102,12 +105,16 @@ impl TlcRun {
                 lasso,
             });
         }
+        run.readback_failed = readback_failed(output);
         run
     }
 
-    /// Violations decide first, then the exit status and TLC's own success line.
+    /// A run TLC's trace read-back stopped is a tool error, whatever it printed before (#314).
+    /// Violations decide next, then the exit status and TLC's own success line.
     pub fn outcome(&self, exit_ok: bool) -> Outcome {
-        if !self.violations.is_empty() {
+        if self.readback_failed {
+            Outcome::ToolError
+        } else if !self.violations.is_empty() {
             Outcome::Counterexample
         } else if exit_ok && self.completed {
             Outcome::Ok
@@ -511,10 +518,101 @@ pub fn out_of_memory(output: &str) -> bool {
     output.contains("OutOfMemoryError") || output.contains("out of memory")
 }
 
+/// Whether a run's log shows TLC 1.7.x failing to read a trace back (#314). To print a trace,
+/// TLC reads state records back from its trace file, a `BufferedRandomAccessFile`. From JDK 21
+/// on, `RandomAccessFile.readLong` goes through that class's bulk `read(byte[], int, int)`,
+/// which in TLC 1.7.x computes a negative length for a record still in its write buffer; TLC
+/// then prints `java.lang.ArrayIndexOutOfBoundsException` with `arraycopy: length -N is
+/// negative` or `Index N out of bounds for length M`, and stops.
+pub fn readback_failed(output: &str) -> bool {
+    output.contains("TLC threw an unexpected exception")
+        && output.contains("ArrayIndexOutOfBoundsException")
+        && (output.contains("arraycopy: length -") || output.contains("out of bounds for length"))
+}
+
+/// What a run that `readback_failed` says to do.
+pub const READBACK_HINT: &str = "hint: TLC stopped with an ArrayIndexOutOfBoundsException while it read a trace back, which TLC 1.7.x does on JDK 21 and later (#314); run TLC on JDK 17 or earlier (the repository flake's `tlc` does), or use TLC 1.8.0";
+
+/// The TLC and the JVM a run names in its first lines, as TLC prints them:
+///
+/// ```text
+/// TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+/// Running breadth-first search Model-Checking with fp 6 and seed -19 with 1 worker on 18 cores with 1024MB heap and 64MB offheap memory [pid: 30808] (Mac OS X 27.0 aarch64, Azul Systems, Inc. 21.0.11 x86_64, MSBDiskFPSet, DiskStateQueue).
+/// ```
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Banner {
+    /// `2.19` above. TLC 1.7.x is `2.15` to `2.19`; 1.8.0 prints a date, `2026.11.19.180144`.
+    pub tlc: Option<String>,
+    /// `21.0.11` above; JDK 8 prints `1.8.0_492`.
+    pub java: Option<String>,
+}
+
+impl Banner {
+    /// The banner of a whole log.
+    pub fn read(output: &str) -> Banner {
+        let mut banner = Banner::default();
+        for line in output.lines() {
+            if banner.complete() {
+                break;
+            }
+            banner.line(line);
+        }
+        banner
+    }
+
+    /// Reads one line of a log.
+    pub fn line(&mut self, line: &str) {
+        if let Some(rest) = line.strip_prefix("TLC2 Version ") {
+            self.tlc = rest.split_whitespace().next().map(str::to_string);
+        } else if line.starts_with("Running ") {
+            self.java = running_java(line).map(str::to_string);
+        }
+    }
+
+    pub fn complete(&self) -> bool {
+        self.tlc.is_some() && self.java.is_some()
+    }
+
+    /// The warning for TLC 1.7.x (a `2.` version) on JDK 21 or later, which fails reading a
+    /// trace back (`readback_failed`); `None` for any other pair, and while either is unknown.
+    pub fn readback_warning(&self) -> Option<String> {
+        let (tlc, java) = (self.tlc.as_deref()?, self.java.as_deref()?);
+        let feature = java_feature(java)?;
+        (tlc.starts_with("2.") && feature >= 21).then(|| {
+            format!(
+                "TLC {tlc} (TLC 1.7.x) runs on Java {java}; TLC 1.7.x fails reading a trace back on JDK 21 and later, and a run that prints many traces stops with an ArrayIndexOutOfBoundsException (#314); run TLC on JDK 17 or earlier (the repository flake's `tlc` does), or use TLC 1.8.0"
+            )
+        })
+    }
+}
+
+/// The Java version in a `Running ...` line: TLC ends it with `(<os> <version> <arch>,
+/// <vendor> <java version> <arch>, <fp set>, <queue>).`, and a vendor can hold a comma.
+fn running_java(line: &str) -> Option<&str> {
+    let open = line.rfind(" (")?;
+    let inner = line[open + 2..].trim_end_matches('.').strip_suffix(')')?;
+    let mut parts = inner.rsplitn(3, ", ");
+    let (_queue, _fp_set, rest) = (parts.next()?, parts.next()?, parts.next()?);
+    rest.split_whitespace().rev().nth(1)
+}
+
+/// The JDK feature release of a Java version: 8 for `1.8.0_492`, 21 for `21.0.11` or `21-ea`.
+fn java_feature(version: &str) -> Option<u32> {
+    let mut parts = version.split(['.', '_', '-', '+']);
+    let first: u32 = parts.next()?.parse().ok()?;
+    match first {
+        1 => parts.next()?.parse().ok(),
+        n => Some(n),
+    }
+}
+
 /// A short report of a failed run: each violated check's error line and its first trace, or
-/// the log's tail when nothing was violated.
+/// the log's tail when nothing was violated. A run that `readback_failed` starts with its hint.
 pub fn summarize(run: &TlcRun, output: &str) -> String {
     let mut lines = Vec::new();
+    if run.readback_failed {
+        lines.push(READBACK_HINT.to_string());
+    }
     if !run.violations.is_empty() {
         let mut seen = BTreeSet::new();
         for v in run.violations.iter().filter(|v| seen.insert(&v.line)) {
@@ -820,5 +918,66 @@ color="white";
         assert!(s.starts_with("hint: TLC ran out of memory"), "{s}");
         assert!(s.contains("RDRA_TLC_HEAP=4g"), "{s}");
         assert!(s.contains("OutOfMemoryError"), "{s}");
+    }
+
+    /// The end of a `-continue` run of TLC 1.7.4 on JDK 21 that stopped printing a trace.
+    const READBACK: &str = r#"Error: Invariant I1 is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ x = 0
+
+Error: Action property P is violated.
+Error: Evaluating action property P failed.
+arraycopy: length -1536 is negative
+Error: TLC threw an unexpected exception.
+This was probably caused by an error in the spec or model.
+The exception was a java.lang.RuntimeException
+: java.lang.ArrayIndexOutOfBoundsException: arraycopy: length -1536 is negative
+53565 states generated, 10179 distinct states found, 1356 states left on queue.
+"#;
+
+    #[test]
+    fn a_trace_read_back_failure_is_a_tool_error_with_its_hint() {
+        let run = TlcRun::parse(READBACK);
+        assert!(run.readback_failed);
+        assert!(!run.violations.is_empty());
+        assert_eq!(run.outcome(false), Outcome::ToolError);
+        let s = summarize(&run, READBACK);
+        assert!(s.starts_with(READBACK_HINT), "{s}");
+        assert!(s.contains("JDK 17 or earlier"), "{s}");
+        let index = "Error: TLC threw an unexpected exception.\nThe exception was a java.lang.ArrayIndexOutOfBoundsException\n: Index 120 out of bounds for length 1\n";
+        assert!(readback_failed(index));
+        let other = "Error: TLC threw an unexpected exception.\nThe exception was a java.lang.NullPointerException\n";
+        assert!(!readback_failed(other));
+        assert!(!TlcRun::parse(RUN).readback_failed);
+    }
+
+    #[test]
+    fn the_banner_warns_only_for_tlc_1_7_on_jdk_21_or_later() {
+        let banner = |tlc: &str, java: &str| {
+            Banner::read(&format!(
+                "TLC2 Version {tlc} (rev: 5a47802)\nRunning breadth-first search Model-Checking with fp 6 and seed -1 with 1 worker on 18 cores with 1024MB heap and 64MB offheap memory [pid: 1] (Mac OS X 27.0 aarch64, Azul Systems, Inc. {java} x86_64, MSBDiskFPSet, DiskStateQueue).\nParsing file M.tla\n"
+            ))
+        };
+        let jdk21 = banner("2.19 of 08 August 2024", "21.0.11");
+        assert_eq!(jdk21.tlc.as_deref(), Some("2.19"));
+        assert_eq!(jdk21.java.as_deref(), Some("21.0.11"));
+        let warning = jdk21.readback_warning().expect("TLC 1.7.4 on JDK 21");
+        assert!(warning.contains("JDK 17 or earlier"), "{warning}");
+        let date = "2026.11.19.180144";
+        assert!(banner("2.19 of 08 August 2024", "25.0.3")
+            .readback_warning()
+            .is_some());
+        assert!(banner("2.19 of 08 August 2024", "17.0.19")
+            .readback_warning()
+            .is_none());
+        assert!(banner("2.19 of 08 August 2024", "1.8.0_492")
+            .readback_warning()
+            .is_none());
+        assert!(banner(date, "21.0.11").readback_warning().is_none());
+        assert!(Banner::read("TLC2 Version 2.19\n")
+            .readback_warning()
+            .is_none());
+        assert_eq!(java_feature("21-ea"), Some(21));
     }
 }
