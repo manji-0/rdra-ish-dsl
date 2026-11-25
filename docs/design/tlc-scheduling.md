@@ -88,8 +88,10 @@ module prints, and **unknown** until then. Only a complete plain run counts:
 
 A safety cone's count is the count of its `Cone_` module. A property cone's count is that of
 its plain (reduced) module. Its `_Full` and `_WF` follow-ups are larger, so the count is a
-lower bound for them. The BFS passes write the count as each run finishes (`bfs_cones`,
-`Shared::decide_on`, `native_properties`), and the scheduler reads it when it picks a job.
+lower bound for them. The counts reach the scheduler at the end of each BFS pass: after the
+entity pass (`Shared::decide_on`), after `bfs_cones`, and after `native_properties`. The
+scheduler reads them when it picks a job. The `stable`, `unchanged`, and `precedes` jobs,
+and the whole-model runs, are never counted.
 
 ### Workers
 
@@ -98,7 +100,9 @@ The **target** of a job:
 - `--tlc-workers N` (or `RDRA_TLC_WORKERS`): `N`.
 - Known, with `s` states: `clamp(ceil(s / 50_000), 1, W)`. Then a 48k-state cone gets 1
   worker, a 203k-state cone 5, and a cone of 400k states or more gets `W`.
-- Unknown: `W`, as if it were large.
+- Unknown while BFS runs: `W`, as if it were large.
+- Unknown once BFS has ended: the cores divided among the runs left, at most `W`, as before
+  #384.
 
 `W` is 8, the cap of #309. When memory, not the queue, bounds the runs at once, the cores
 those runs leave idle go to them: a job whose target is `W` gets
@@ -135,7 +139,7 @@ sequence). Cores, memory and counts are the inputs, so no test needs the machine
 
 | Case | Today | Under the rule |
 |---|---|---|
-| 64 cores, 48 GiB share, heap 16g | 2 runs × 8 workers | 2 × 32. After BFS ends (below), 5 fit, and a run that starts then gets 12 |
+| 64 cores, 48 GiB share, heap 16g | 2 runs × 8 workers | 2 × 32. After BFS ends (below), 5 fit in 96 GiB, and a run that starts then gets 12 |
 | 64 cores, 48 GiB, heap unset, 27 unknown jobs | 24 × 2 | 8 × 8 at first. A job BFS has counted takes its target as cores free, and small jobs run on 1 worker |
 | 4 cores, 15 jobs of a few hundred states each (a sample in CI) | 4 × 1 | 1 × 4 until BFS has counted the jobs, a second at most, then 4 × 1 |
 | 18 cores, heap set so 1 fits | 1 × 8 | 1 × 18 (`cores / fit`, at most `4W`) |
@@ -143,9 +147,10 @@ sequence). Cores, memory and counts are the inputs, so no test needs the machine
 ### Memory after BFS
 
 When BFS, the native property runs and the proof have ended, the cone runs' budget grows
-from half of `--memory` to all of it (`Budget::grow`). A run already going keeps its heap. A
-run that starts later sees the larger share in `TlcHeap::of`, and in the rerun at twice the
-heap. On #384's model BFS takes about 13 minutes and TLC 30 to 60, so for most of the run
+from half of `--memory` to all of it (`Pool::bfs_ended`), so more runs fit at once. A run's
+heap, and its rerun at twice the heap, are still sized by the half, whenever the run starts.
+Otherwise whether a module is `not run` over the share, or gets its rerun, would depend on
+when BFS ended, and a verdict would depend on the schedule. On #384's model BFS takes about 13 minutes and TLC 30 to 60, so for most of the run
 TLC would have 96 GiB rather than 48. BFS does not give everything back: it keeps the state
 models and findings, and the process overshoots the limit (#237). How much to hand over is
 an owner decision.
@@ -225,10 +230,11 @@ and the comparison, and only the launching moves out.
 
 ## How this fits #309, #310 and #323
 
-- **#309 decision 3** (heap per module, byte budget) stays. The core budget sits beside it in
-  the same `Budget`, and `Budget::new`, `hold`, `Hold::regrow` and `run_budgeted` keep their
-  signatures. Cone and whole-model runs use the new picker. State-model runs keep
-  `run_budgeted` and `tlc_workers`, which #323 changes.
+- **#309 decision 3** (heap per module, byte budget) stays. The cone and whole-model runs go
+  through a `Pool` that holds bytes the way `Budget` does and cores beside them.
+  `Budget::new`, `hold`, `Hold::regrow` and `run_budgeted` keep their signatures. The
+  state-model runs keep `run_budgeted` and `tlc_workers`, which #323 changes. Whole-model
+  runs still go 2 at once unless `--tlc-jobs` says otherwise.
 - **#323** runs small state models in batch JVMs, which it does not overlap with process runs
   because `tlc_workers` does not count the batch JVMs. With a core budget, a batch JVM holds
   one core like a one-worker run, and the two can overlap. That is a change for after #323,
