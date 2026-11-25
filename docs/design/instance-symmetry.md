@@ -4,7 +4,24 @@
 <!-- constrained-by ../engine-agreement.md#agreement-rules -->
 <!-- constrained-by ../formal-verification.md#reduction-by-an-independent-sub-lifecycle -->
 
-Status: design, not built. It answers
+Status (2026-11-26): built in part. `verify --symmetry never|always` ships, and `never` is the
+default.
+
+- **Landed.** The design (#292, #340). [Phases](#phases) 1 (#311), 2 (#319) and 3 (#324,
+  #328); a deleted row keeps its keys (#317). Step 1 of
+  [Always by default](#always-by-default), which removed `retry` (#344). The per-rule
+  witnesses and the snapshot (#350, #353). Two units of phase 4: `eventually` and
+  `leads_to` (#352), and entity cones (#370), after a stopped entity cone gives back its
+  room (#361).
+- **Open.** The rest of phase 4: `stable`, `unchanged`, `precedes`, `can_reach`, and an
+  `always` property on a reduced cone still run plain. The flip of the default to `always`,
+  a `### Breaking` entry whose release is the owner's call. `PinnedStart` has no witness
+  and goes back to the owner. #212 and #284 stay open.
+- **Superseded.** The `retry` default of [Decisions](#decisions), by
+  [Always by default](#always-by-default) (2026-11-25). The cone line with an orbit count,
+  by `(about <m> states)`.
+
+The note answers
 [#212](https://github.com/manji-0/rdra-ish-dsl/issues/212) after its measurement
 ([comment](https://github.com/manji-0/rdra-ish-dsl/issues/212#issuecomment-7130227315)) and
 [#284](https://github.com/manji-0/rdra-ish-dsl/issues/284)'s analysis of why the #74 reduction
@@ -898,7 +915,8 @@ On `main` at `7e464c43` (phases 1 to 3), each run alone.
     `precedes`, `can_reach`, and an `always` property on a reduced cone run as under
     `never`, so they print `never`'s lines. The liveness properties run up to symmetry since
     phase 4's first unit, but on a reduced cone a counterexample still sends the property to
-    the plain runs.
+    the plain runs. [Since #370 an entity cone whose plain run stops at the memory limit
+    with a finding left open runs again up to symmetry.]
 
 ### What a user still sees differ
 

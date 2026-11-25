@@ -7,26 +7,32 @@
 <!-- derived-from ../state-derivation.md#exploration-by-cone-of-influence -->
 <!-- derived-from ../language-reference.md#fairness-fairusecase- -->
 
-Status: in progress. The plan started after
+Status (2026-11-26): in progress. The plan started after
 [#165](https://github.com/manji-0/rdra-ish-dsl/issues/165),
 [#166](https://github.com/manji-0/rdra-ish-dsl/issues/166), and
-[#167](https://github.com/manji-0/rdra-ish-dsl/issues/167) landed. Phases 0 to 3 have landed
-on `main` (#176, #177, #178, #179): `verify` decides every check natively by default, and
-TLC runs only under `--with-tlc`. The conservative divergence trial landed and was adopted
-(#227, [Decisions](#decisions)). Phases 4 to 6 have not landed. The owner decided three
-questions on 2026-11-23: `verify` defaults to the native checker and `--with-tlc` adds
-TLC, each phase lands on `main` when it passes while the next release waits until the
-native checker is stable, and `check` and `states` evaluate no `property`. The same day
-the owner settled `--backend tlc`, the verdict line, verdicts that move off `not decided`,
-and the release gate, and then the wait of the release gate, step 5, a trial of a
-conservative divergence, and where the samples run with `--with-tlc`.
+[#167](https://github.com/manji-0/rdra-ish-dsl/issues/167) landed.
+
+- **Landed.** Phases 0 to 3 (#176, #177, #178, #179): `verify` decides every check natively
+  by default, and TLC runs only under `--with-tlc`. The conservative divergence trial C,
+  adopted (#227, [Decisions](#decisions)).
+- **Open.** Phase 4, with #206 on the safety side (`order.rdra` still prints `RdraSpec_`
+  lines). Phase 5, the lift of a reduced lasso. Phase 6, the release gate.
+- **Superseded.** Nothing.
+
+The owner decided three questions on 2026-11-23: `verify` defaults to the native checker
+and `--with-tlc` adds TLC, each phase lands on `main` when it passes while the next release
+waits until the native checker is stable, and `check` and `states` evaluate no `property`.
+The same day the owner settled `--backend tlc`, the verdict line, verdicts that move off
+`not decided`, and the release gate, and then the wait of the release gate, step 5, a trial
+of a conservative divergence, and where the samples run with `--with-tlc`.
 [Decisions](#decisions) records them.
 
 `verify` needs a JVM and TLC today. TLC decides every invariant cone, every `after`
 assertion, and every temporal property, while the explorer in `rdra-ish-core` reaches the
 same states and keeps every edge. This document plans a checker inside `rdra-ish-core` that
 decides the properties an rdra-ish model can state, so that TLC becomes a second opinion
-that a run may ask for and no longer a tool that `verify` cannot run without.
+that a run may ask for and no longer a tool that `verify` cannot run without. [Since phase 3
+(#179) `verify` needs no JVM and no TLC; TLC runs only under `--with-tlc`.]
 
 **Purpose.** `verify` gives the verdicts it gives today, at the same bounds, with no
 external tool. It prints each counterexample in the form it prints now. TLC stays as the
@@ -34,6 +40,8 @@ oracle of the tests, and `verify --with-tlc` runs it beside the native checker a
 when the two disagree.
 
 ## What exists today
+
+[As of 2026-11-23, before phase 0. Phase 3 moved every check off TLC; see the status above.]
 
 **The explorer keeps the graph a temporal check needs.** `ComponentRun` holds the reached
 states, the edge that first reached each state, and every move as an `Edge` of three `u32`

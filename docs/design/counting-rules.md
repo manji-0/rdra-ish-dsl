@@ -7,10 +7,16 @@
 <!-- derived-from ../formal-verification.md#proofs-for-any-number-of-rows -->
 <!-- derived-from ../formal-verification.md#reduction-by-an-independent-sub-lifecycle -->
 
-Status: proposed for [#216](https://github.com/manji-0/rdra-ish-dsl/issues/216). The owner
-agreed to per-entity instance counts as its prerequisite. The note shapes `Bounds` so
-[#205](https://github.com/manji-0/rdra-ish-dsl/issues/205) can derive per-parent child counts
-from the same place; it does not implement #205.
+Status (2026-11-26): built, as the two stacked PRs of
+[decision 1](#decisions-to-review).
+
+- **Landed.** Per-entity instance counts, `--instances E=n` and `instances` in `rdra.toml`
+  (#263). Counted quantifiers and cardinality maxima (#264), which closed
+  [#216](https://github.com/manji-0/rdra-ish-dsl/issues/216).
+- **Open.** [#205](https://github.com/manji-0/rdra-ish-dsl/issues/205), per-parent child
+  counts. The owner agreed to per-entity instance counts as its prerequisite. The note
+  shapes `Bounds` so #205 can derive them from the same place; it does not implement #205.
+- **Superseded.** Nothing.
 
 Each section states the choice, then the alternative it rejects. The choices the owner
 should review are collected in [Decisions to review](#decisions-to-review).
