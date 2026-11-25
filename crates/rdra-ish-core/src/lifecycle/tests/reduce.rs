@@ -1422,3 +1422,42 @@ fn a_stopped_entity_cone_leaves_its_room_to_the_cones_after_it() {
         assert!(read.is_err(), "a reader of a released run's graph panics");
     }
 }
+
+/// Under `--symmetry always` an entity cone that stops at the memory limit runs again up to
+/// instance symmetry in the room its plain run held, and a run that completes decides its
+/// findings on the annotated quotient (#212 phase 4). It decides what the plain run left
+/// open, and every check the plain runs decide keeps its verdict.
+#[test]
+fn an_entity_cone_up_to_symmetry_decides_what_its_plain_run_left_open() {
+    let ts = TransitionSystem::build(&load("samples/clinic-ops"), Bounds::VERIFY, &Scope::ALL).ts;
+    let entities: Vec<Target> = (ts.targets().into_iter())
+        .filter(|t| matches!(t, Target::Entity(_)))
+        .collect();
+    let explore = |orbits: bool| {
+        let limit = MemorySize::from_bytes(4 << 20).expect("a size");
+        let caps = (Caps::VERIFY.charged_to(MemoryPool::for_command(limit, "--memory")))
+            .with_entity_orbits(orbits);
+        ts.explore_targets_reduced_in(&entities, caps, &QuotientCache::new(), &[])
+    };
+    let (plain, up) = (explore(false), explore(true));
+    let names = |run: &TargetExploration| -> BTreeSet<String> {
+        run.verdicts().iter().map(|d| d.diag.name(&[])).collect()
+    };
+    assert!(
+        names(&plain).is_subset(&names(&up)),
+        "every verdict stands: {:?} lost",
+        names(&plain).difference(&names(&up)).collect::<Vec<_>>()
+    );
+    for u in up.undecided() {
+        assert!(
+            plain.undecided().iter().any(|p| p.subject == u.subject),
+            "left undecided only where the plain runs left it: {u:?}"
+        );
+    }
+    assert!(
+        up.undecided().len() < plain.undecided().len(),
+        "up to symmetry decides more: {} undecided, {} plain",
+        up.undecided().len(),
+        plain.undecided().len()
+    );
+}

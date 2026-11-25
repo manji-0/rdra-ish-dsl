@@ -413,8 +413,9 @@ pub(crate) enum Commands {
         #[arg(long, value_name = "SIZE")]
         memory: Option<MemorySize>,
         /// Explore an invariant or after-assert cone, an `always` property's cone that the
-        /// sub-lifecycle reduction leaves whole, and an `eventually` or `leads_to` property's
-        /// cone, up to instance symmetry, storing one
+        /// sub-lifecycle reduction leaves whole, an `eventually` or `leads_to` property's
+        /// cone, and an entity cone that stops at the memory limit, up to instance symmetry,
+        /// storing one
         /// state per permutation of rows (on a reduced cone, of the rows its reduced
         /// sub-lifecycle does not key on) when no plain run of the entity pass decides it:
         /// `never` or `always`. Default: `symmetry` under [verify] in rdra.toml, else never

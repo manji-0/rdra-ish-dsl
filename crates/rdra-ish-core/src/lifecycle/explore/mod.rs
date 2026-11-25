@@ -112,6 +112,11 @@ pub struct Caps {
     /// that the samples at small bounds reach the path and its twin. Only a test build or a
     /// `shadow` build can set it (`forcing_s_up_to_h`, `RDRA_ISH_FORCE_S_UP_TO_H`).
     pub(crate) force_s_up_to_h: bool,
+    /// An entity cone of `verify`'s entity pass whose plain run stops at the memory limit
+    /// runs again up to instance symmetry, its edges' permutations kept, and its state-model
+    /// findings are read on that run when it completes (#212 phase 4; `verify --symmetry
+    /// always`).
+    pub entity_orbits: bool,
 }
 
 impl Caps {
@@ -142,6 +147,7 @@ impl Caps {
             views: true,
             s_up_to_h: false,
             force_s_up_to_h: false,
+            entity_orbits: false,
         }
     }
 
@@ -155,6 +161,15 @@ impl Caps {
     pub const fn with_s_up_to_h(self, on: bool) -> Self {
         Caps {
             s_up_to_h: on,
+            ..self
+        }
+    }
+
+    /// These caps, with an entity cone that stops at the memory limit run again up to
+    /// instance symmetry (`entity_orbits`).
+    pub const fn with_entity_orbits(self, on: bool) -> Self {
+        Caps {
+            entity_orbits: on,
             ..self
         }
     }

@@ -187,6 +187,9 @@ pub fn run(
     // Under `always`, a sub-lifecycle whose run stops at the memory limit runs
     // again up to `H` (#212 phase 2): only a cone that stopped there changes.
     .with_s_up_to_h(symmetry != Symmetry::Never)
+    // Under `always`, an entity cone that stops at the memory limit runs again up to
+    // symmetry (#212 phase 4): only a cone that stopped there changes.
+    .with_entity_orbits(symmetry != Symmetry::Never)
     .charged_to(MemoryPool::share_of(
         memory.limit,
         memory.bfs,

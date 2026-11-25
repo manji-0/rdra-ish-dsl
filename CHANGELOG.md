@@ -159,6 +159,21 @@
   system stays plain, so one plain run decides both. Without the option nothing changes. The
   `shadow` build holds the pairs to a plain run as `orbit_liveness`.
 
+- `verify --symmetry always` also decides the state models of an entity cone whose plain run
+  stops at the memory limit (#212, phase 4; #284). When its plain run left a finding open,
+  the cone runs again up to instance symmetry, each edge's permutation kept, in the room the
+  plain run held, and when that run completes the witnesses, the use cases that never run,
+  the `.when` arms taken, and the deadlocks are read on it. An arm reads each edge's
+  concrete successor, and the deadlock pass follows the instance through pairs of a stored
+  state and a slot. A deadlock's trace is lifted to concrete states and replayed, and it
+  names the slot the instance holds at its end, which can be another instance than `never`
+  names. On `clinic-ops` at three instances under `--memory 8GiB`, `always` leaves 3
+  findings open where `never` leaves 17: `Appointment` (14,346,108 orbits for about 3.9G
+  states), `Encounter`, `PatientAccount` and `PaymentTransaction` finish up to symmetry,
+  the rerun up to `H` decides `CarePlan`, and `EligibilityCheck` stops again. That run
+  peaks at 37.1 GB RSS. Without the option nothing changes. The `shadow` build holds the
+  findings to a plain run as `orbit_state_models`.
+
 - `codegen --lang rust|go` makes a state only in the generated code (#331). A state type's
   fields are private in Rust and unexported in Go, read by methods of the same name
   (`paid_at()`, `PaidAt()`), so only a transition function and `from_row` /

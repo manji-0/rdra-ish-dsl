@@ -2062,6 +2062,52 @@ fn symmetry_always_decides_a_cone_the_memory_limit_stopped_at_any_jobs() {
     }
 }
 
+/// Under `--memory`, an entity cone whose plain run stops runs again up to instance symmetry
+/// under `always`, and its state models are decided on that run (#212 phase 4): fewer
+/// findings stay open than under `never`, every error `never` reports is reported, and the
+/// output is the same at every `RDRA_JOBS`.
+#[test]
+fn symmetry_always_decides_entity_cones_the_memory_limit_stopped_at_any_jobs() {
+    let tmp = scratch("verify_cli_symmetry_entity_memory");
+    let run = |mode: &str, jobs: &str| {
+        let out = verify_env(
+            &repo(),
+            &tmp,
+            &[("RDRA_JOBS", jobs)],
+            &["samples/clinic-ops", "--memory", "4MiB", "--symmetry", mode],
+        );
+        let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+        assert!(!stderr.contains("panicked"), "{stderr}");
+        String::from_utf8_lossy(&out.stdout).into_owned() + &stderr
+    };
+    let open = |out: &str| -> usize {
+        out.lines()
+            .find_map(|l| l.strip_prefix("not checked: "))
+            .and_then(|l| l.split(' ').next())
+            .map_or(0, |n| n.parse().unwrap())
+    };
+    let errors = |out: &str| -> Vec<String> {
+        let mut names: Vec<String> = (out.lines())
+            .filter_map(|l| l.strip_prefix("error["))
+            .filter_map(|l| l.split(']').next())
+            .map(str::to_string)
+            .collect();
+        names.sort();
+        names
+    };
+    let never = run("never", "1");
+    let always = run("always", "1");
+    assert!(
+        open(&always) < open(&never),
+        "always leaves {} open, never {}\n{always}",
+        open(&always),
+        open(&never)
+    );
+    assert_eq!(errors(&always), errors(&never), "the same errors");
+    assert_eq!(run("always", "8"), always, "RDRA_JOBS=8");
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 /// A counterexample found up to instance symmetry may name other rows than a plain run's,
 /// but the same ones in every run and at every `RDRA_JOBS` (docs/design/instance-symmetry.md,
 /// "Always by default", 8): on an unreduced cone (`sym_lift_compose`) and on a reduced one
