@@ -12,25 +12,25 @@
 //! recorded as it went (`StepEnds`). `edges()` on such a run panics: an empty list would read
 //! as "no moves".
 
-use std::mem::size_of;
-
 use crate::lifecycle::expr::StateSlice;
 use crate::lifecycle::types::{ActId, EntId, Pred};
 use crate::lifecycle::TransitionSystem;
 
+use super::segments::Rows;
 use super::Edge;
 
 #[cfg(feature = "shadow")]
 mod reference;
 
-/// Items in a buffer that grows to twice its items when full, four at the least, and to no
-/// more: it holds `capacity() * size_of::<T>()` bytes, which `bytes_with` says before a push.
+/// Items in segments (`segments::Rows`, #296 2.2) of 4, 4, 8, ... items up to a fixed size:
+/// growing allocates a segment whole and copies no item, and `bytes` says before a push what
+/// the buffer takes after it.
 #[derive(Clone, Debug)]
-pub(crate) struct Buf<T>(Vec<T>);
+pub(crate) struct Buf<T>(Rows<T>);
 
-impl<T> Default for Buf<T> {
+impl<T: Copy> Default for Buf<T> {
     fn default() -> Self {
-        Buf(Vec::new())
+        Buf(Rows::new(1))
     }
 }
 
@@ -39,39 +39,50 @@ impl<T: Copy> Buf<T> {
         self.0.len()
     }
 
+    #[inline]
     pub(crate) fn push(&mut self, x: T) {
-        if self.0.len() == self.0.capacity() {
-            let room = (self.0.len() * 2).max(4);
-            self.0.reserve_exact(room - self.0.len());
-        }
-        self.0.push(x);
+        self.0.push_item(x);
     }
 
+    #[inline]
     pub(crate) fn get(&self, i: usize) -> T {
-        self.0[i]
+        self.0.item(i)
     }
 
-    pub(crate) fn as_slice(&self) -> &[T] {
-        &self.0
+    /// Items `at`, which lie in one segment (`segment_end`), as a slice.
+    pub(crate) fn run(&self, at: std::ops::Range<usize>) -> &[T] {
+        self.0.run(at)
     }
 
-    /// The buffer with room for `cap` items and none in it.
-    fn with_capacity(cap: usize) -> Self {
-        Buf(Vec::with_capacity(cap))
+    /// The end of the segment that holds item `i`.
+    pub(crate) fn segment_end(i: usize) -> usize {
+        Rows::<T>::segment_end(i)
     }
 
-    fn capacity(&self) -> usize {
-        self.0.capacity()
+    /// The first index whose item `pred` rejects, the items being those it accepts first.
+    pub(crate) fn partition_point(&self, pred: impl Fn(T) -> bool) -> usize {
+        let (mut lo, mut hi) = (0, self.len());
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2;
+            match pred(self.get(mid)) {
+                true => lo = mid + 1,
+                false => hi = mid,
+            }
+        }
+        lo
     }
 
-    /// The bytes the buffer takes once `more` items are pushed.
-    pub(crate) fn bytes_with(&self, more: usize) -> u64 {
-        let cap = if self.0.len() + more <= self.0.capacity() {
-            self.0.capacity()
-        } else {
-            (self.0.capacity() * 2).max(self.0.len() + more).max(4)
-        };
-        (cap * size_of::<T>()) as u64
+    /// The bytes the buffer takes once `more` items are pushed: its segments, and with
+    /// `list` the list of them, which the harnesses leave out to compare the segments with
+    /// the one `Vec` each buffer was before #296.
+    pub(crate) fn bytes(&self, more: usize, list: bool) -> u64 {
+        let (items, segments) = self.0.parts_with(more);
+        items + if list { segments } else { 0 }
+    }
+
+    /// The items as `W`, a segment at a time, in the room these had (`Rows::map`).
+    fn widen<W: Copy + From<T>>(self) -> Buf<W> {
+        Buf(self.0.map(W::from))
     }
 }
 
@@ -106,12 +117,12 @@ impl Ids {
         // unwind into copies of the whole function.
         if let Ids::One(b) = self {
             if u8::try_from(id).is_err() {
-                *self = Ids::Two(widen(b));
+                *self = Ids::Two(std::mem::take(b).widen());
             }
         }
         if let Ids::Two(b) = self {
             if u16::try_from(id).is_err() {
-                *self = Ids::Four(widen(b));
+                *self = Ids::Four(std::mem::take(b).widen());
             }
         }
         match self {
@@ -129,20 +140,13 @@ impl Ids {
         }
     }
 
-    pub(crate) fn bytes_with(&self, more: usize) -> u64 {
+    pub(crate) fn bytes(&self, more: usize, list: bool) -> u64 {
         match self {
-            Ids::One(b) => b.bytes_with(more),
-            Ids::Two(b) => b.bytes_with(more),
-            Ids::Four(b) => b.bytes_with(more),
+            Ids::One(b) => b.bytes(more, list),
+            Ids::Two(b) => b.bytes(more, list),
+            Ids::Four(b) => b.bytes(more, list),
         }
     }
-}
-
-/// `narrow`'s ids in a wider buffer with the same room.
-fn widen<N: Copy, W: Copy + From<N>>(narrow: &Buf<N>) -> Buf<W> {
-    let mut wide = Buf::with_capacity(narrow.capacity());
-    wide.0.extend(narrow.as_slice().iter().map(|&x| W::from(x)));
-    wide
 }
 
 /// Every move of a run, grouped by the state it leaves, in the order BFS found them.
@@ -170,8 +174,7 @@ impl EdgeList {
 
     /// The state edge `k` leaves: the last state read whose first edge is at or before it.
     fn source_of(&self, k: usize) -> u32 {
-        let read = self.first.as_slice();
-        (read.partition_point(|&f| f as usize <= k) - 1) as u32
+        (self.first.partition_point(|f| f as usize <= k) - 1) as u32
     }
 
     fn get(&self, k: usize) -> Edge {
@@ -197,12 +200,14 @@ impl EdgeList {
         }
     }
 
-    fn bytes_with(&self) -> u64 {
-        self.first.bytes_with(0) + self.to.bytes_with(0) + self.binding.bytes_with(0)
+    fn bytes(&self, list: bool) -> u64 {
+        self.first.bytes(0, list) + self.to.bytes(0, list) + self.binding.bytes(0, list)
     }
 }
 
 /// The parent of each state: the move that first reached it.
+// One per run: the doubling segments' headers sit inline in each buffer (`segments::Rows`).
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug)]
 enum Parents {
     /// On a run that keeps its edge list: the index of that edge, `INITIAL` for an initial
@@ -341,11 +346,22 @@ impl Steps {
 
     /// The bytes the parents and the edges take once `more` states are admitted.
     pub(crate) fn bytes_with(&self, more: usize) -> u64 {
+        self.bytes(more, true)
+    }
+
+    /// The bytes of `bytes_with` that the lists of segments take.
+    #[cfg(feature = "shadow")]
+    pub(crate) fn list_bytes_with(&self, more: usize) -> u64 {
+        self.bytes(more, true) - self.bytes(more, false)
+    }
+
+    /// `bytes_with`, with the lists of segments when `list`.
+    fn bytes(&self, more: usize, list: bool) -> u64 {
         let parents = match &self.parents {
-            Parents::Edge(parents) => parents.bytes_with(more),
-            Parents::Step { from, binding } => from.bytes_with(more) + binding.bytes_with(more),
+            Parents::Edge(parents) => parents.bytes(more, list),
+            Parents::Step { from, binding } => from.bytes(more, list) + binding.bytes(more, list),
         };
-        parents + self.edges.as_ref().map_or(0, EdgeList::bytes_with)
+        parents + self.edges.as_ref().map_or(0, |e| e.bytes(list))
     }
 
     /// The 12-byte edge list the shadow build keeps beside the run's own, on any run.
@@ -522,11 +538,18 @@ impl Iterator for EdgeIter<'_> {
                 from += 1;
                 next = edges.list.first_after(from);
             }
-            let run = k..next.min(at.end);
+            // A state's edges, cut where a segment of the buffers ends.
+            let run = k..next.min(at.end).min(Buf::<u32>::segment_end(k));
             acc = match &edges.list.binding {
-                Ids::One(b) => fold_state(edges, b.as_slice(), from, run.clone(), acc, &mut f),
-                Ids::Two(b) => fold_state(edges, b.as_slice(), from, run.clone(), acc, &mut f),
-                Ids::Four(b) => fold_state(edges, b.as_slice(), from, run.clone(), acc, &mut f),
+                Ids::One(b) => {
+                    fold_state(edges, b.run(run.clone()), from, run.clone(), acc, &mut f)
+                }
+                Ids::Two(b) => {
+                    fold_state(edges, b.run(run.clone()), from, run.clone(), acc, &mut f)
+                }
+                Ids::Four(b) => {
+                    fold_state(edges, b.run(run.clone()), from, run.clone(), acc, &mut f)
+                }
             };
             k = run.end;
         }
@@ -543,8 +566,8 @@ fn fold_state<T: Copy + Into<u32>, B>(
     mut acc: B,
     f: &mut impl FnMut(B, Edge) -> B,
 ) -> B {
-    let to = &edges.list.to.as_slice()[at.clone()];
-    for ((k, &to), &b) in at.clone().zip(to).zip(&ids[at]) {
+    let to = edges.list.to.run(at.clone());
+    for ((k, &to), &b) in at.zip(to).zip(ids) {
         let e = Edge {
             from,
             to,
@@ -616,26 +639,25 @@ impl StepEnds {
     }
 }
 
-/// Kani harnesses (`cargo kani -p rdra-ish-core`).
-#[cfg(kani)]
-mod proofs {
+#[cfg(test)]
+mod tests {
     use super::*;
 
-    /// `Buf::bytes_with` is what the buffer grows to: what it says before a push is what the
-    /// buffer takes after it, and the buffer holds room for at most twice its items (four at
-    /// the least), for every run of up to 17 pushes.
-    #[kani::proof]
-    #[kani::unwind(19)]
-    fn a_buf_takes_what_bytes_with_said() {
-        let pushes: usize = kani::any();
-        kani::assume(pushes <= 17);
-        let mut b: Buf<u32> = Buf::default();
-        for i in 0..pushes {
-            let said = b.bytes_with(1);
-            b.push(i as u32);
-            assert_eq!((b.capacity() * size_of::<u32>()) as u64, said);
-            assert_eq!(b.bytes_with(0), said);
-            assert!(b.capacity() <= (2 * b.len()).max(4));
+    /// The binary search over a segmented buffer finds what `slice::partition_point` finds,
+    /// for an ascending run with repeats past the doubling segments, at every bound.
+    #[test]
+    fn a_buf_partition_point_is_the_slices() {
+        let n = 3 * super::super::segments::SEG + 7;
+        let (mut b, mut v) = (Buf::<u32>::default(), Vec::new());
+        for i in 0..n as u32 {
+            b.push(i / 3);
+            v.push(i / 3);
+        }
+        for bound in 0..=(n as u32 / 3 + 1) {
+            assert_eq!(
+                b.partition_point(|x| x <= bound),
+                v.partition_point(|&x| x <= bound)
+            );
         }
     }
 }
