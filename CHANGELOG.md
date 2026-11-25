@@ -853,6 +853,16 @@
 
 ### Fixed
 
+- `codegen` computes a logical `@derived` column in the transition functions it prints, in
+  Rust, Go and TypeScript. A function used to copy the column from the row it read, so a
+  function that changed `qty` returned `bulk` as it was, against the header's obligation
+  `bulk always equals qty >= 3`, and a create function took `bulk` as an input. Now a
+  literal write folds it (`bulk: true`), and a column copied from an argument row is read
+  there (`bulk: order.qty >= 3`). A derived column the function cannot compute that way (an
+  arithmetic one, one that compares two columns or reads `now`, a nullable operand, or an
+  operand the caller passes) is an input of every function that writes the row, and the
+  function's doc says why. Functions on an entity with such a column gain that input, and a
+  create function's derived inputs come after its other inputs.
 - The language server withdraws the diagnostics of a file that leaves the analysis: one
   deleted, renamed, or moved out of the workspace, as on a branch switch. Their errors and
   warnings used to stay in the editor's problem list until it restarted, and so did those of

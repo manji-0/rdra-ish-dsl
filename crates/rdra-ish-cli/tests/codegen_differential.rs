@@ -9,7 +9,9 @@
 //!   (a value, null or present, the slot a key names); the id of a returned, deleted, marked
 //!   or raised row names the slot BFS bound. A column BFS does not track holds what the IR
 //!   writes (the source row's value, the input, a literal), so a printer that copies the
-//!   wrong column fails here too.
+//!   wrong column fails here too. A logical `@derived` column, which BFS never tracks, holds
+//!   what its expression gives on the other columns of the returned row, read here from the
+//!   model, not from the IR; one the IR leaves to an input holds the input.
 //! - **Refused.** On a row in the function's source state where BFS makes no move of it (the
 //!   converse scope of `codegen_equivalence.rs`: one existing row, no run guard), the
 //!   function returns `Rejected`.
@@ -34,6 +36,7 @@ use codegen_cases::{
 use rdra_ish_core::lifecycle::{
     Action, ActionOrigin, Domain, GuardWhy, ParamRole, StateSlice, TransitionSystem, Value, VarKind,
 };
+use rdra_ish_core::model::{CheckExpr, CmpOpModel, CmpRhs, DerivedExpr, EffectValue, ModelColumn};
 use rdra_ish_core::SemanticModel;
 use rdra_ish_emit::codegen::ir::{
     Adapt, Assigned, DomainModel, Field, FieldType, FnDecl, Lit, MarkSource, OutKind, Scalar,
@@ -173,6 +176,8 @@ enum Known {
     Present,
     /// BFS does not track the column: the value is a stand-in.
     Untracked,
+    /// A `@derived` column: what its expression gives on the row's other columns.
+    Derived,
 }
 
 struct Conc<'a> {
@@ -472,7 +477,28 @@ fn expected(
             }
             OutKind::Deleted { id: None, .. } => {}
             OutKind::Row { fields, .. } => {
+                let columns = &c
+                    .model
+                    .entities
+                    .values()
+                    .find(|e| e.id == entity)
+                    .expect("entity")
+                    .columns;
+                // A logical `@derived` column holds what its expression gives, whatever the
+                // IR writes there, unless the IR leaves it to an input.
+                let by_expression = |wire: &str| {
+                    let assigned = fields.iter().find(|(t, _)| t.wire == wire).map(|(_, a)| a);
+                    let column = columns.iter().find(|col| col.name == wire)?;
+                    match (&column.derived_expr, assigned) {
+                        (_, Some(Assigned::Input { .. })) => None,
+                        (Some(DerivedExpr::Logical(e)), Some(_)) => Some(e),
+                        _ => None,
+                    }
+                };
                 for field in entity_fields(c.domain, &entity) {
+                    if by_expression(&field.wire).is_some() {
+                        continue;
+                    }
                     let path = format!("row.{}.{}", o.name, field.wire);
                     let (bfs, known) = c.column(post, &entity, slot, field);
                     match known {
@@ -482,7 +508,7 @@ fn expected(
                         }
                         // Present in BFS, and the value the IR writes.
                         Known::Present => out.push((path.clone(), Json::Null, known)),
-                        Known::Untracked => {}
+                        Known::Untracked | Known::Derived => {}
                     }
                     let ir = match fields.iter().find(|(t, _)| t.wire == field.wire) {
                         None => Json::Null,
@@ -512,9 +538,39 @@ fn expected(
                                 .unwrap_or(Json::Null),
                             Assigned::MarkId { mark, .. } => args[n_rows + *mark].clone(),
                             Assigned::Null => Json::Null,
+                            Assigned::Derived { .. } => {
+                                panic!("{}: {entity}.{} is printed as derived", f.name, field.wire)
+                            }
                         },
                     };
                     out.push((path, ir, Known::Untracked));
+                }
+                // The derived columns, on the values the checks above expect of the row.
+                let prefix = format!("row.{}.", o.name);
+                let row: BTreeMap<String, Json> = out
+                    .iter()
+                    .filter_map(|(path, value, known)| {
+                        let wire = path.strip_prefix(&prefix)?;
+                        (*known != Known::Present).then(|| (wire.to_string(), value.clone()))
+                    })
+                    .collect();
+                for (target, _) in fields {
+                    let Some(e) = by_expression(&target.wire) else {
+                        continue;
+                    };
+                    let value = derived(c.model, columns, e, &row).unwrap_or_else(|| {
+                        panic!(
+                            "{}: this test cannot evaluate {entity}.{} = {} on {row:?}",
+                            f.name,
+                            target.wire,
+                            e.display()
+                        )
+                    });
+                    out.push((
+                        format!("{prefix}{}", target.wire),
+                        json!(value),
+                        Known::Derived,
+                    ));
                 }
             }
         }
@@ -539,6 +595,74 @@ fn expected(
         }
     }
     out
+}
+
+/// A logical `@derived` expression on a row's columns, as the language reference reads it:
+/// `None` when an operand is missing or a comparison would read a null as unknown.
+fn derived(
+    model: &SemanticModel,
+    columns: &[ModelColumn],
+    e: &CheckExpr,
+    row: &BTreeMap<String, Json>,
+) -> Option<bool> {
+    Some(match e {
+        CheckExpr::Not(inner) => !derived(model, columns, inner, row)?,
+        CheckExpr::And(a, b) => {
+            derived(model, columns, a, row)? && derived(model, columns, b, row)?
+        }
+        CheckExpr::Or(a, b) => derived(model, columns, a, row)? || derived(model, columns, b, row)?,
+        CheckExpr::Cmp(prop) => {
+            let lhs = row.get(&prop.lhs_column)?;
+            let column = columns.iter().find(|col| col.name == prop.lhs_column)?;
+            let eq = |v: &EffectValue| -> Option<bool> {
+                Some(match v {
+                    EffectValue::Null => lhs.is_null(),
+                    EffectValue::Present => !lhs.is_null(),
+                    EffectValue::Bool(b) => lhs.as_bool()? == *b,
+                    EffectValue::Int(n) => lhs.as_i64()? == *n,
+                    EffectValue::EnumVariant(name) => {
+                        let declared = model.column_values(column)?;
+                        let spelled = declared
+                            .iter()
+                            .find(|d| **d == name.as_str())
+                            .or_else(|| declared.iter().find(|d| d.eq_ignore_ascii_case(name)))?;
+                        lhs.as_str()? == *spelled
+                    }
+                })
+            };
+            match (&prop.op, &prop.rhs) {
+                (op, CmpRhs::IntLit(n)) => {
+                    let v = lhs.as_i64()?;
+                    match op {
+                        CmpOpModel::Eq => v == *n,
+                        CmpOpModel::Ne => v != *n,
+                        CmpOpModel::Lt => v < *n,
+                        CmpOpModel::Le => v <= *n,
+                        CmpOpModel::Gt => v > *n,
+                        CmpOpModel::Ge => v >= *n,
+                        CmpOpModel::In | CmpOpModel::NotIn => return None,
+                    }
+                }
+                (CmpOpModel::Eq | CmpOpModel::In, CmpRhs::Value(v)) => eq(v)?,
+                (CmpOpModel::Ne | CmpOpModel::NotIn, CmpRhs::Value(v)) => !eq(v)?,
+                (CmpOpModel::Eq | CmpOpModel::In, CmpRhs::Values(vs)) => {
+                    let mut any = false;
+                    for v in vs {
+                        any |= eq(v)?;
+                    }
+                    any
+                }
+                (CmpOpModel::Ne | CmpOpModel::NotIn, CmpRhs::Values(vs)) => {
+                    let mut none = true;
+                    for v in vs {
+                        none &= !eq(v)?;
+                    }
+                    none
+                }
+                _ => return None,
+            }
+        }
+    })
 }
 
 /// Every case of a sample: a move of each BFS edge, and a refusal on each row in a
@@ -1290,6 +1414,7 @@ fn judge(
                     if !ok {
                         let by = match known {
                             Known::Untracked => "the IR writes",
+                            Known::Derived => "its @derived expression gives",
                             _ => "BFS holds",
                         };
                         failures.push(say(format!(
@@ -1345,7 +1470,21 @@ fn printed_code_agrees_on_the_domain_samples() {
     agree(|s| DOMAIN.contains(&s));
 }
 
+/// The `@derived` columns the functions compute, on a model of its own: a Bool derived from
+/// an Int, from the state tag, and from a nullable column, by a create, transitions, and
+/// updates (tests/fixtures/codegen/derived.rdra).
+#[test]
+fn printed_code_computes_the_derived_columns() {
+    agree_on(vec![
+        "crates/rdra-ish-cli/tests/fixtures/codegen/derived.rdra".to_string(),
+    ]);
+}
+
 fn agree(pick_sample: impl Fn(&str) -> bool) {
+    agree_on(samples().into_iter().filter(|s| pick_sample(s)).collect());
+}
+
+fn agree_on(samples: Vec<String>) {
     let only = std::env::var("RDRA_CODEGEN_SAMPLE").ok();
     let go = go_available();
     let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
@@ -1353,8 +1492,8 @@ fn agree(pick_sample: impl Fn(&str) -> bool) {
     let mut rust = Tally::default();
     let mut golang = Tally::default();
     let mut total = 0usize;
-    for sample in samples() {
-        if !pick_sample(&sample) || only.as_ref().is_some_and(|o| !sample.contains(o.as_str())) {
+    for sample in samples {
+        if only.as_ref().is_some_and(|o| !sample.contains(o.as_str())) {
             continue;
         }
         let start = Instant::now();

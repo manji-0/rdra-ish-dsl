@@ -1,0 +1,30 @@
+// The @derived columns codegen computes in its functions (codegen_differential.rs): a Bool
+// column derived from an Int, from the state tag, and from a nullable column, written by a
+// create, a transition that copies the operands, and an update that writes one. `total` is
+// arithmetic, which the functions take as an input.
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(open, paid, shipped) @default(open)
+  qty: Int @default(0)
+  note: String @null
+  bulk: Bool @derived(qty >= 3)
+  settled: Bool @derived(status in (paid, shipped))
+  flagged: Bool @derived(note != null and qty > 1)
+  total: Int @derived(qty * 2)
+}
+
+usecase Make "作成"
+usecase Pay "支払"
+usecase Ship "出荷"
+usecase Grow "増やす"
+usecase Annotate "注記"
+
+creates(Make, Order)
+transitions(Pay, Order.status, open -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+sets(Grow, Order.qty == 4)
+sets(Annotate, Order.note == present)
+
+condition HasQty "数量あり"
+holds(HasQty, Order.qty >= 1)
+applies_to(HasQty, Pay)

@@ -2001,7 +2001,12 @@ system `check` and `verify` explore. A use case gets one function per combinatio
 source states of its rows (`cancelFromPending`, `cancelFromPaid`), so every argument and
 result type is concrete: a call from another state does not compile. The function takes the
 rows it reads, then an input for each value the model leaves open (a column `sets` makes
-`present`, a variation the actor chooses, a column of a created row that no var holds). It
+`present`, a variation the actor chooses, a column of a created row that no var holds). A
+logical `@derived` column of a row it writes is computed from what the function writes to
+the columns its expression reads (`bulk: qty >= 3` on the new `qty`), never copied from the
+row it read. A derived column it cannot compute that way (an arithmetic expression, one that
+compares two columns or reads `now`, a nullable operand, or a column whose value is an
+input) is an input too, and the function's doc says why. It
 returns a `<Name>Result` record with the rows it writes or creates, the id of each row it
 deletes, and a value of each event the use case raises. A condition applied to the use case
 is checked first: when it does not hold, the function returns `Rejected` (TypeScript), an

@@ -589,6 +589,9 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                                 *w,
                             ),
                             Assigned::Null => "nil".to_string(),
+                            Assigned::Derived { expr: e, wrap: w } => {
+                                wrap(expr(e, &row, &acc, &input), *w)
+                            }
                         };
                         body.push_str(&format!("\t\t\t{}: {v},\n", member(domain, ty, target)));
                     }

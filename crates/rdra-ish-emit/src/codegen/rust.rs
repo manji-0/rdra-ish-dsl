@@ -524,6 +524,22 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             };
             out.push_str(&format!("    let out_{} = {value};\n", snake(&event.ty)));
         }
+        // The derived columns too: their expressions read the rows the result moves.
+        let derived = |o: &str, wire: &str| ident(&format!("derived_{o}_{wire}"));
+        for o in &f.outputs {
+            let OutKind::Row { fields, .. } = &o.kind else {
+                continue;
+            };
+            for (target, assigned) in fields {
+                if let Assigned::Derived { expr: e, .. } = assigned {
+                    out.push_str(&format!(
+                        "    let {} = {};\n",
+                        derived(&o.name, &target.wire),
+                        expr(e, &row, &input)
+                    ));
+                }
+            }
+        }
         let mut body = format!("{} {{\n", f.result);
         for o in &f.outputs {
             match &o.kind {
@@ -602,6 +618,9 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                                 wrap(format!("{}.id.clone()", ident(&f.marks_in[*mark].name)), *w)
                             }
                             Assigned::Null => "None".to_string(),
+                            Assigned::Derived { wrap: w, .. } => {
+                                wrap(derived(&o.name, &target.wire), *w)
+                            }
                         };
                         body.push_str(&format!("            {}: {v},\n", ident(&target.wire)));
                     }

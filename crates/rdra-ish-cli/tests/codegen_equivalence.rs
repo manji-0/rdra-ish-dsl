@@ -226,7 +226,8 @@ fn functions_agree_with_the_transition_system() {
                                 },
                                 Assigned::ParentId { .. }
                                 | Assigned::MarkId { .. }
-                                | Assigned::EventId { .. } => true,
+                                | Assigned::EventId { .. }
+                                | Assigned::Derived { .. } => true,
                             };
                             if !ok {
                                 failures.push(format!(
