@@ -820,6 +820,10 @@
   a multi-byte character (#356), as inside `actor A "受付(窓口)"`, after `// 受付(`, or after
   an unclosed `"受付`. The server used to stop at a panic there. A request whose handler
   panics now gets an internal-error response, and the server keeps running.
+- Formatting through the language server gives the same text as `rdra-ish fmt` (#357). Its
+  edit stopped before the file's final line break, so each format, and each save with
+  `editor.formatOnSave`, left one more blank line at the end. `rdra-ish fmt --check` then
+  failed on the file. The edit now covers the whole file, with LF or CRLF line breaks.
 - `verify --with-tlc` names the cause when TLC 1.7.x fails reading a trace back on JDK 21
   or later (#314). With `--tlc-jar`, `RDRA_TLC_JAR`, or a `tlc` that runs on such a JVM, a
   `-continue` run that prints many traces stopped with an `ArrayIndexOutOfBoundsException`,
