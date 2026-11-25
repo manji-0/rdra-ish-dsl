@@ -44,6 +44,22 @@ fn verify(cwd: &Path, tmpdir: &Path, args: &[&str]) -> Output {
     verify_on_path(cwd, tmpdir, &empty, args)
 }
 
+/// Runs `verify` with no TLC or Z3 on PATH and `env` set.
+fn verify_env(cwd: &Path, tmpdir: &Path, env: &[(&str, &str)], args: &[&str]) -> Output {
+    let empty = tmpdir.join("no-tools");
+    std::fs::create_dir_all(&empty).unwrap();
+    Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .current_dir(cwd)
+        .env("TMPDIR", tmpdir)
+        .env("PATH", &empty)
+        .env_remove("RDRA_TLC_JAR")
+        .envs(env.iter().copied())
+        .arg("verify")
+        .args(args)
+        .output()
+        .expect("rdra-ish runs")
+}
+
 /// Runs `verify` with `path` as PATH and no jar.
 fn verify_on_path(cwd: &Path, tmpdir: &Path, path: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
@@ -1950,18 +1966,18 @@ fn a_safety_cone_shared_with_an_entity_cone_counts_the_whole_cone() {
         "{stderr}"
     );
     assert!(stderr.contains("  counterexample (2 steps):"), "{stderr}");
-    // Up to instance symmetry the cone shares nothing (#212): it runs on its own and stops
-    // once its check has failed, where the entity pass's plain run would decide it.
-    let output = verify(
-        &repo(),
-        &tmp,
-        &[model.to_str().unwrap(), "--symmetry", "always"],
-    );
+    // `--symmetry always` keeps the entity pass's plain result (#212): the line is
+    // `never`'s. Forced up to symmetry (`RDRA_ISH_FORCE_ORBITS`), the cone shares nothing,
+    // runs on its own and stops once its check has failed.
+    let args = [model.to_str().unwrap(), "--symmetry", "always"];
+    let always = verify(&repo(), &tmp, &args);
+    assert_eq!(always.stdout, output.stdout);
+    let output = verify_env(&repo(), &tmp, &[("RDRA_ISH_FORCE_ORBITS", "1")], &args);
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert_eq!(output.status.code(), Some(1), "{stdout}");
     assert!(
         stdout.contains(
-            "\nCone_Forbidden_Task_0 [Forbidden_Task_0]: counterexample (3 orbits, about 3 states)\n"
+            "\nCone_Forbidden_Task_0 [Forbidden_Task_0]: counterexample (about 3 states)\n"
         ),
         "{stdout}"
     );
@@ -2004,16 +2020,19 @@ fn a_safety_cone_stops_once_every_check_on_it_has_failed() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// `--symmetry retry` runs a cone as before and, when the memory limit stops it, runs it
-/// again up to instance symmetry, which decides it; `never` leaves it undecided (#212).
+/// Under `--memory`, `never` leaves the cone undecided, and `always` runs it up to instance
+/// symmetry, which decides it (#212). The pool is tight enough that runs side by side meet
+/// the limit, and the output is the same at every `RDRA_JOBS`: whether the cone runs up to
+/// symmetry follows from what its plain runs give alone, not from which finishes first.
 #[test]
-fn symmetry_retry_decides_a_cone_the_memory_limit_stopped() {
-    let tmp = scratch("verify_cli_symmetry_retry");
+fn symmetry_always_decides_a_cone_the_memory_limit_stopped_at_any_jobs() {
+    let tmp = scratch("verify_cli_symmetry_memory");
     let case = repo().join("crates/rdra-ish-cli/tests/engine_corpus/sym_owner_coupled.rdra");
-    let run = |mode: &str| {
-        let out = verify(
+    let run = |mode: &str, jobs: &str| {
+        let out = verify_env(
             &repo(),
             &tmp,
+            &[("RDRA_JOBS", jobs)],
             &[
                 case.to_str().unwrap(),
                 "--instance-count",
@@ -2027,19 +2046,59 @@ fn symmetry_retry_decides_a_cone_the_memory_limit_stopped() {
         String::from_utf8_lossy(&out.stdout).into_owned()
     };
     let line = "Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: ";
-    let never = run("never");
+    let never = run("never", "1");
     assert!(
         never.contains(&format!("{line}not decided (2048 states, stopped")),
         "{never}"
     );
-    let retry = run("retry");
+    let always = run("always", "1");
     assert!(
-        retry.contains(&format!(
-            "{line}ok (393 orbits, about 4.7K states, retried up to instance symmetry after \
-             the memory limit at 2048 states)"
-        )),
-        "{retry}"
+        always.contains(&format!("{line}ok (about 4.7K states)\n")),
+        "{always}"
     );
+    for jobs in ["4", "8"] {
+        assert_eq!(run("always", jobs), always, "RDRA_JOBS={jobs}");
+    }
+}
+
+/// A counterexample found up to instance symmetry may name other rows than a plain run's,
+/// but the same ones in every run and at every `RDRA_JOBS` (docs/design/instance-symmetry.md,
+/// "Always by default", 8): on an unreduced cone (`sym_lift_compose`) and on a reduced one
+/// whose `G_T` moves rows (`gate_reduced`), both forced up to symmetry. Each trace replays
+/// through the step relation before the #74 lift, or the run panics, which the exit code
+/// would show; that every lifted path of the gate's cone is a path of the unreduced cone is
+/// `a_reduced_cone_up_to_g_t_stores_fewer_states_and_lifts_its_trace`'s.
+#[test]
+fn symmetry_counterexamples_are_the_same_in_every_run() {
+    let tmp = scratch("verify_cli_symmetry_same");
+    let lift = repo().join("crates/rdra-ish-cli/tests/engine_corpus/sym_lift_compose.rdra");
+    let gate = repo().join("crates/rdra-ish-cli/tests/fixtures/symmetry/gate_reduced.rdra");
+    for args in [
+        vec![lift.to_str().unwrap(), "--instances", "Queue=1"],
+        vec![gate.to_str().unwrap()],
+    ] {
+        let args: Vec<&str> = args.into_iter().chain(["--symmetry", "always"]).collect();
+        let run = |jobs: &str| {
+            let out = verify_env(
+                &repo(),
+                &tmp,
+                &[("RDRA_JOBS", jobs), ("RDRA_ISH_FORCE_ORBITS", "1")],
+                &args,
+            );
+            assert_eq!(out.status.code(), Some(1), "{args:?}");
+            format!(
+                "{}{}",
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr)
+            )
+        };
+        let first = run("1");
+        assert!(first.contains("counterexample ("), "{first}");
+        assert!(first.contains("about "), "{first}");
+        for jobs in ["1", "4", "8", "8"] {
+            assert_eq!(run(jobs), first, "{args:?} at RDRA_JOBS={jobs}");
+        }
+    }
 }
 
 /// A counterexample found up to instance symmetry names concrete rows: the stored path,
@@ -2048,9 +2107,10 @@ fn symmetry_retry_decides_a_cone_the_memory_limit_stopped() {
 fn symmetry_lifts_a_counterexample_to_the_rows_it_names() {
     let tmp = scratch("verify_cli_symmetry_lift");
     let case = repo().join("crates/rdra-ish-cli/tests/engine_corpus/sym_lift_compose.rdra");
-    let out = verify(
+    let out = verify_env(
         &repo(),
         &tmp,
+        &[("RDRA_ISH_FORCE_ORBITS", "1")],
         &[
             case.to_str().unwrap(),
             "--instances",
@@ -2064,8 +2124,7 @@ fn symmetry_lifts_a_counterexample_to_the_rows_it_names() {
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
-    let line =
-        "Cone_Quantifier_Queue_0 [Quantifier_Queue_0]: counterexample (10 orbits, about 13 states)";
+    let line = "Cone_Quantifier_Queue_0 [Quantifier_Queue_0]: counterexample (about 13 states)";
     assert!(text.contains(line), "{text}");
     let steps: Vec<&str> = text
         .lines()

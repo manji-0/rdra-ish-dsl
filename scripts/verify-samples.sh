@@ -34,7 +34,7 @@ while [[ "${1:-}" == --* ]]; do
       shift 2
       ;;
     --symmetry)
-      symmetry=(--symmetry "${2:?--symmetry needs never, retry, or always; $usage}")
+      symmetry=(--symmetry "${2:?--symmetry needs never or always; $usage}")
       shift 2
       ;;
     *)

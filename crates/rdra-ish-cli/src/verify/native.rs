@@ -9,7 +9,7 @@ use crate::tlc_output::Outcome;
 use rdra_ish_core::in_parallel;
 use rdra_ish_core::lifecycle::{
     Caps, ComponentRun, Diag, Fairness, LassoFault, PropertyVerdict, ReducedVerdict, StateDiag,
-    Symmetry, TransitionSystem,
+    TransitionSystem,
 };
 use rdra_ish_emit::tla::TlaNames;
 
@@ -155,16 +155,15 @@ impl Plain {
 /// Also returns the vacuity the plain run shows.
 ///
 /// With `orbits`, an `always` on a cone the sub-lifecycle reduction leaves whole runs up to
-/// instance symmetry instead (`always_up_to_symmetry`); `orbits` holds the states of a
-/// plain run that stopped at the memory limit first, under `--symmetry retry`.
+/// instance symmetry instead (`always_up_to_symmetry`).
 fn native_property(
     ts: &TransitionSystem,
     p: &PropertyJob,
     caps: Caps,
-    orbits: Option<Option<usize>>,
+    orbits: bool,
 ) -> (Native, Option<Diag>) {
-    if let (Some(retried_at), true) = (orbits, p.symmetric()) {
-        return always_up_to_symmetry(ts, p, caps, retried_at);
+    if orbits {
+        return always_up_to_symmetry(ts, p, caps);
     }
     let plain = Plain::of(ts, p, &p.cone.reduced.clone().run(caps));
     native_property_after(p, caps, plain)
@@ -268,7 +267,6 @@ fn always_up_to_symmetry(
     ts: &TransitionSystem,
     p: &PropertyJob,
     caps: Caps,
-    retried_at: Option<usize>,
 ) -> (Native, Option<Diag>) {
     let cone = &p.cone;
     let mut out = Native {
@@ -287,16 +285,9 @@ fn always_up_to_symmetry(
         .iter()
         .any(|d| matches!(d.diag, StateDiag::MemoryCapReached { .. }));
     let vacuous = ts.property_vacuity(p.index, &run);
-    out.notes.push(format!(
-        "{} orbits, about {} states",
-        run.orbits(),
-        about(run.estimate())
-    ));
-    if let Some(at) = retried_at {
-        out.notes.push(format!(
-            "retried up to instance symmetry after the memory limit at {at} states"
-        ));
-    }
+    super::bfs::symmetry_stats(&ts.properties()[p.index].name, &run);
+    out.notes
+        .push(format!("about {} states", about(run.estimate())));
     let answer = match run.decide_always(cone.reduced_index) {
         Some(PropertyVerdict::Holds) => Answer::Verdict(Outcome::Ok, None),
         Some(PropertyVerdict::Violated(d)) => Answer::Verdict(Outcome::Counterexample, Some(d)),
@@ -394,17 +385,18 @@ impl Native {
 /// `native_property` for every property job, side by side, `None` for a safety cone. A
 /// property whose plain answer `shared` holds, read off an earlier pass's run of its reduced
 /// cone (#209), goes on from there. A property whose runs met the memory limit beside others
-/// is decided again alone. Also returns the vacuous properties. `--symmetry` runs an `always`
-/// on a cone the reduction leaves whole up to instance symmetry: always, when `shared` holds
-/// no plain answer for it (`Shared::up_to_symmetry`), or under `retry` once its lone plain
-/// run also stopped at the memory limit.
+/// is decided again alone. Also returns the vacuous properties. Under `--symmetry always` an
+/// `always` on a cone the reduction leaves whole runs up to instance symmetry when `shared`
+/// holds no plain answer for it (`Shared::up_to_symmetry`).
 pub(super) fn native_properties(
     ts: &TransitionSystem,
     jobs: &[Job],
     caps: Caps,
     shared: &mut Shared,
-    symmetry: Symmetry,
 ) -> (Vec<Option<Native>>, Vec<Diag>) {
+    let orbits: Vec<bool> = (0..jobs.len())
+        .map(|k| shared.up_to_symmetry(jobs, k))
+        .collect();
     let at: Vec<(usize, Option<Plain>)> = (0..jobs.len())
         .filter(|&k| matches!(jobs[k].kind, JobKind::PropertyCone(_)))
         .map(|k| (k, shared.plain[k].take()))
@@ -415,10 +407,9 @@ pub(super) fn native_properties(
             unreachable!("a property's job")
         }
     };
-    let orbits = (symmetry == Symmetry::Always).then_some(None);
     let decide = |(k, plain): (usize, Option<Plain>)| match plain {
         Some(plain) => native_property_after(job(k), caps, plain),
-        None => native_property(ts, job(k), caps, orbits),
+        None => native_property(ts, job(k), caps, orbits[k]),
     };
     let ks: Vec<usize> = at.iter().map(|(k, _)| *k).collect();
     let ran = in_parallel(at, rdra_ish_core::jobs(), decide);
@@ -431,14 +422,6 @@ pub(super) fn native_properties(
                 decide((k, None))
             }
             false => (native, vacuity),
-        };
-        let retry = symmetry == Symmetry::Retry && native.crowded && job(k).symmetric();
-        let (native, vacuity) = match (retry, native.states) {
-            (true, Some(states)) => {
-                drop((native, vacuity));
-                native_property(ts, job(k), caps, Some(Some(states as usize)))
-            }
-            _ => (native, vacuity),
         };
         vacuous.extend(vacuity);
         out[k] = Some(native);

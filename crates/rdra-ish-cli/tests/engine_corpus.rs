@@ -842,7 +842,9 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
     // no panic: a lifted counterexample that does not replay panics. Each run takes the
     // flags of the plain run it is compared with, less `--with-tlc`, once unreduced, so that
     // every cone goes through the orbit run of phase 1, and once reduced as `verify` reduces,
-    // so that a reduced safety cone goes through the run up to `G_T` (phase 3).
+    // so that a reduced safety cone goes through the run up to `G_T` (phase 3). Both force
+    // the run up to symmetry (`RDRA_ISH_FORCE_ORBITS`), which a plain run of the entity pass
+    // would otherwise decide.
     let counts: Vec<u8> = std::iter::once(2).chain(bounded.keys().copied()).collect();
     for n in counts {
         let count = n.to_string();
@@ -857,8 +859,11 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
             n => &bounded[&n],
         };
         for (how, env) in [
-            ("unreduced", &[("RDRA_ISH_NO_REDUCE", "1")][..]),
-            ("reduced", &[][..]),
+            (
+                "unreduced",
+                &[("RDRA_ISH_NO_REDUCE", "1"), ("RDRA_ISH_FORCE_ORBITS", "1")][..],
+            ),
+            ("reduced", &[("RDRA_ISH_FORCE_ORBITS", "1")][..]),
         ] {
             let sym = verify_with(case, &args, env);
             for line in sym.panics.iter().chain(&sym.faults) {
