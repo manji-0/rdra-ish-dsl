@@ -1,85 +1,52 @@
-# Stage Readiness Analysis
+# Stage Readiness
 
-Use this reference when the user asks whether a BUC or model is ready for the next
-refinement step, or when the request is broad enough that you need to classify the
-current stage before analyzing details.
+<!-- derived-from ../../../docs/incremental-modeling.md#finding-the-current-stage -->
 
-## Concept
-
-RDRA-ish refinement intentionally moves from business concern to technical concern.
-Early omissions are not always defects. A BUC with no entity may be perfectly fine at the
-screens stage, while the same omission is a real gap once data touchpoints are being
-reviewed. Stage readiness analysis separates "wrong" from "not yet
-modeled".
-
-The stage question is: what information is already stable enough to commit to source?
-Do not force columns, APIs, states, or rules just because later stages exist.
+Tell "wrong" from "not modeled yet". A BUC with no entity is fine at the screens stage and
+a gap once data touchpoints are under review. Commit to source only what is stable.
 
 ## Commands
 
-Start with `next`: it classifies each BUC by the stage gates and lists the elements that
-block the next stage. Use the other commands for the evidence a gate does not count.
+`next` classifies each BUC by the stage gates and lists what blocks the next stage. Use the
+others for evidence a gate does not count, and only for stages the model has reached.
 
 ```sh
 rdra-ish next src/
 rdra-ish next src/ --buc BucOrder --format json
-rdra-ish check src/
-rdra-ish list src/ --kind buc --format table
 rdra-ish list src/ --kind usecase --format table
-rdra-ish list src/ --kind actor --format table
-rdra-ish list src/ --kind flow --format table
-rdra-ish list src/ --kind step --format table
-rdra-ish list src/ --kind field --format table
-rdra-ish list src/ --kind requirement --format table
-rdra-ish list src/ --kind nfr --format table
 rdra-ish csv src/ --kind matrix
 rdra-ish csv src/ --kind business-inputs
-rdra-ish list src/ --kind api --format table
 rdra-ish csv src/ --kind api-matrix
-rdra-ish states src/
 ```
 
-Use the later commands only when earlier signals suggest the model has reached that
-stage.
+## Signals
 
-## Stage Signals
-
-| Current signal | Likely stage | Ask next |
+| Signal | Stage | Ask next |
 |---|---|---|
-| Business names exist but BUCs are tentative | Scope sketch | Which business area and candidate BUCs matter first? |
-| BUCs exist but actors/use cases are sparse | BUC skeleton | Which actors perform which user-visible actions? |
-| BUC has multiple ordered actions but no `flow`/`step` | BUC skeleton / business flow | Does the business sequence, branch, exception, or loop need review? |
-| Use cases exist but none `displays` a screen | BUC skeleton | Which screen does the actor work on in each use case? |
-| Screens exist but the CRUD matrix is empty | Screens | Which business objects does each use case create/read/update/delete, and which does each screen show? |
-| CRUD exists but entities are coarse | Data touchpoints | Which objects are logical data structures versus business vocabulary? |
-| CRUD exists but no use case `invokes` an API | Data touchpoints | Which operations need an API boundary, and which permission and medium do they need? |
-| APIs/systems/permissions/media appear | API and access boundary | Which system owns each API, which fields map to data, and which constraints apply to UC/API paths? |
-| APIs have method/path metadata | Contract boundary | Which request/response/error DTOs are part of the contract? |
-| Entities have columns, keys, and `relate` | Entity structure | Which fields represent lifecycle state or cross-system coordination? |
-| `business-inputs` has surprising or missing field rows | Entity structure | Which fields are actor-entered versus derived by defaults, FK relations, APIs, events, or `sets`? |
-| Inline `Enum` columns that nothing moves (`lint` `enum-attribute`) | Entity structure | Does an actor choose this value? Then type it by a `variation` |
-| Enum/Bool/nullable columns exist without lifecycle effects | Entity structure | Which use case moves each one (`transitions`), or sets it (`sets`)? |
-| `check` reports `Witness_*`, `Deadlock_*`, or `Runs_*` | Lifecycle | Which use case enters, leaves, or unblocks that state? |
-| `check` passes and `states` has reviewed reachable patterns | Lifecycle | Which local guardrails (`forbidden`, `exclusive`) should be checked first? |
-| local guardrails exist and are stable | Business rules | Which local obligations need `invariant`, and are any `required` facts truly global? |
-| `invariant`, `required`, comparison propositions, or multi-entity `forbidden` / `invariant` exists | Business rules | Are violations fixed, intentionally accepted, left under `not checked:` by a cap, unbindable (`UnbindableScope`), or still unresolved requirements? |
-| NFR/quality/constraint or ADR nodes exist | Traceability overlay | Which model elements do they apply to or decide? |
+| Business names, tentative BUCs | Scope sketch | Which business area and BUCs come first? |
+| BUCs with few actors or use cases | BUC skeleton | Who performs which visible action? Does the order need a `flow`? |
+| Use cases, no `displays` | BUC skeleton | Which screen does the actor use in each use case? |
+| Screens, empty CRUD matrix | Screens | Which objects does each use case touch, and each screen show? |
+| CRUD, no API | Data touchpoints | Which operations need an API, a permission, a medium? |
+| APIs, systems, permissions, or media | API and access boundary | Which system owns each API? Which DTOs form its contract? |
+| Columns, keys, `relate` | Entity structure | Which fields are state? Which are actor-entered (`business-inputs`)? |
+| An inline Enum nothing moves (`lint` `enum-attribute`) | Entity structure | Does an actor choose it? Then type it by a `variation` |
+| `Witness_*`, `Deadlock_*`, or `Runs_*` from `check` | Lifecycle | Which use case enters, leaves, or unblocks that state? |
+| `check` passes, states reviewed | Lifecycle | Which combinations must never occur (`forbidden`, `exclusive`)? |
+| Local rules stable | Rules | Which facts need `invariant`? Is any `required` fact truly global? |
+| Multi-entity or comparison rules | Rules | Is each violation fixed, accepted, or open? |
 
-## How To Analyze
+## Analyze
 
-1. Start with the strongest stable signal, not the most advanced isolated detail.
-2. Classify the stage and name the evidence: command, row count, warning, or missing
-   predicate family.
-3. Identify omissions that are acceptable for the current stage.
-4. Identify omissions that block the next stage.
-5. Ask only the next-stage questions; avoid jumping two stages ahead.
-
-## Output Shape
+1. Start from the strongest stable signal, not the most advanced detail.
+2. Name the stage and its evidence (a command, a row count, a warning).
+3. List the omissions this stage allows, and the ones that block the next stage.
+4. Ask only the next stage's questions.
 
 ```text
 Stage: <stage>
-Evidence: <commands and model signals>
-Appropriate omissions: <things not required yet>
-Blocking gaps: <things needed before the next stage>
-Next question: <one focused refinement question>
+Evidence: <commands and signals>
+Fine at this stage: <omissions>
+Blocking: <what the next stage needs>
+Next question: <one question>
 ```

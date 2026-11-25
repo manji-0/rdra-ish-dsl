@@ -1,19 +1,12 @@
 # Step 7: Rules
 
-Use this context when lifecycle paths are modeled and the next task is to express
-invalid, conditional, mandatory, or mutually exclusive state facts as executable checks.
+<!-- derived-from ../../../docs/incremental-modeling.md#stage-7a-local-guardrails -->
 
-## Goal
+State the facts that must never, always, or together hold, as rules `check` tests against
+every reachable state. Go in three passes: local guardrails (7A), local obligations (7B),
+then comparisons and cross-entity rules (7C).
 
-Add business rules that can be type-checked as model predicates. Move in three passes:
-local guardrails, local obligations, then advanced comparison or cross-entity rules.
-Every rule is validated against the reachable states of the lifecycle transition system.
-Cross-entity rules range over every combination of the participating entities' instances.
-Use `.along(EntityA, EntityB, ...)` only for rules that should quantify over instances
-linked by a declared `relate` path; each adjacent pair needs a `relate`, else the rule is
-`UnbindableScope`.
-
-## Ask For
+## Ask
 
 <!-- stage-spec: asks local-guardrails -->
 - Which combinations must never be reachable?
@@ -31,76 +24,34 @@ linked by a declared `relate` path; each adjacent pair needs a `relate`, else th
 - Is a cross-entity rule a global cross-product rule, or only intended along a declared relation path?
 <!-- /stage-spec -->
 
-Also ask:
+## Do
 
-- Are the rules hard invariants or review warnings for future refinement?
-- Does an apparent violation mean the rule is wrong, or a missing `sets`/transition
-  effect exists upstream?
-
-## Procedure
-
-1. Add `forbidden(Entity, ...)` for invalid combinations inside one entity.
-2. Add `exclusive(Entity, ...)` for mutually exclusive state facts.
-3. Add `invariant(Entity).when(...).then(...)` for single-entity required
-   co-occurrences. When the guard is a business rule the model already states as a
-   `condition` with a `holds` body (one that `applies_to` a use case, say), name it:
-   `invariant(Entity).when(Cond).then(...)` and `forbidden(Entity, ...).when(Cond)` read
-   the body's comparisons as if written in place, so the rule and the guard stay one
-   statement. The body must compare the rule's entities only and carry no
-   `.has/.none/.along`; write those on the rule.
-4. Add `required(Entity, ...)` only for facts that truly apply to every reachable state.
-5. Use comparison propositions when rules depend on expressions such as
-   `stock < selling`, and add matching `drives(UC, E.col op rhs, true/false)` effects.
-   On an Enum, variation, or Bool column, a bare right-hand side is a value
-   (`status == paid`, `status != cancelled`) even when a column has the same name, so
-   name values as plain words without a prefix. Compare two such columns with a
-   qualified right-hand side: `status != Order.previous`. For a choice among the
-   values of one column write `status in (paid, shipped)` or
-   `status not in (draft, cancelled)`, not a chain of `!=`; every rule, `holds`,
-   `after`, `@check`, and `property` takes it, and `sets` does not.
-6. Add `forbidden(...)` or `invariant(...)` when a rule mentions columns
-   from more than one entity; qualify columns as `Entity.column`.
-7. Add `.along(...)` when the intended semantics is relation-scoped rather than global
-   cross-product; keep it off rules that truly forbid global co-existence, and write
-   `.global()` on those so `lint` `multi-rule-unscoped` does not ask for an `.along`
-   (`.global()` with `.along` is `GlobalWithAlong`). A rule that a
-   row agrees with its parent (`forbidden(Permit, Application, Permit.kind !=
-   Application.kind).along(Permit, Application)`) holds only when the use case that
-   creates the row copies the value (`sets(Register, Permit.kind == Application.kind)`);
-   without the copy the value is a free choice and `check` reports the rule. The guard
-   that makes such a rule hold takes the same path:
-   `holds(SettlementSigned, Settlement.status == agreed).along(Claim, ClaimCase,
-   Settlement)` reads the settlement of the claim's own case, as
-   `forbidden(Claim, Settlement, ...).along(Claim, ClaimCase, Settlement)` does.
-8. If a per-entity rule fails unexpectedly, inspect lifecycle inputs before weakening it:
-   missing `sets`, missing transitions, or missing create/default paths are common.
-9. Add `invariant(Entity).when(...).none/has(Related.col == v)` for to-many quantifiers; a top-level `when(...)` no longer loads.
-   For "no related row at all" (or "some row"), name the entity alone: `.none(Related)`, not a
-   list of every value of a column. When two keys join the two entities, name the one the rule
-   follows after the call: `.none(Permit).role(Application)` (the role, or the parent id of a key
-   without `.role`).
-   For a number of related rows, count them: `invariant(Member).at_most(3, Loan.status ==
-   open)`, `.at_least(2, Estimate)`, `.exactly(1, ..)`. They take the same rows, `.along`,
-   and `.role` as `.has`, and a `holds` body takes them too, counting the rows before the use
-   case runs. `.at_least(1, ..)` is `.has`, and `.at_most(0, ..)` and `.exactly(0, ..)` are
-   `.none`: write the short form. A count of `n` fails only with `n + 1` rows, so verify it
-   with `--instances Loan=4` (skill `rdra-ish-verify`).
-10. Add `after(...).assert(...)` for a postcondition (`check` evaluates it after the
-    last step of the use case, on the run's rows) and `property` for a temporal rule (only `verify` evaluates
-    it; see skill `rdra-ish-verify`).
-11. End every rule with `.label("...")`: one quoted sentence that says the rule as the
-    business would, not as the formula. A comment above the rule is lost to
-    `rdra-ish list --kind rule`, the table a PRD takes its acceptance criteria from, and a
-    violation names the label. Keep a comment only for a citation (`file:line`).
-    `lint` `rule-unlabeled` lists the rules still without one.
-12. Keep implementation policy notes outside the DSL unless they can be expressed as
-    state, effect, forbidden, invariant, required, exclusive, quantifier, property,
-    or cross-entity predicates.
-
-## Minimal Pattern
-
-The entities below exist only to make the rules readable; in a real model the
-lifecycle of Step 6 moves them.
+1. 7A: `forbidden(Entity, ...)` for an invalid combination; `exclusive(Entity, ...)` for
+   facts that never hold together.
+2. 7B: `invariant(Entity).when(...).then(...)` for facts that hold together;
+   `required(Entity, ...)` only for a fact true in every reachable state. A rule may name a
+   `condition` with a `holds` body as its guard, `invariant(E).when(Cond).then(...)`, so the
+   guard and the rule stay one statement.
+3. 7C: compare values (`stock < selling`, `Payment.amount > Order.total`). On an Enum,
+   variation, or Bool column a bare right-hand side is a value (`status == paid`); compare
+   two columns with a qualified one (`status != Order.previous`). Write
+   `status in (paid, shipped)` or `not in (...)`, not a chain of `!=`. A null operand
+   satisfies no comparison but `!=`, and two nulls are not equal; admit null with
+   `col == null or ...`.
+4. 7C: a rule over several entities qualifies every column as `Entity.column`. Scope it with
+   `.along(A, B, ..)` (each adjacent pair joined by a `relate`, else `UnbindableScope`) when
+   it means linked rows, or `.global()` when it means every combination; with neither,
+   `lint` `multi-rule-unscoped` warns.
+5. Count related rows with `invariant(E).when(...).none(Related)`, `.has(...)`,
+   `.at_most(n, ..)`, `.at_least(n, ..)`, or `.exactly(n, ..)`. Write `.none(Related)` for
+   "no related row", not a list of values. A count of `n` breaks only with `n + 1` rows:
+   verify it with `--instances Loan=4` (skill `rdra-ish-verify`).
+6. Write `after(UseCase).assert(...)` for a postcondition (read after the use case's last
+   step) and `property` for a temporal rule (only `verify` checks it).
+7. End every rule with `.label("...")`: the rule as the business says it. `list --kind rule`
+   and each violation print the label; `lint` `rule-unlabeled` lists the rules without one.
+8. When a rule fails, read the counterexample before weakening the rule: a missing `sets`,
+   arm, or create path upstream is the usual cause.
 
 ```rdra
 entity Order "Order" {
@@ -118,45 +69,22 @@ entity Payment "Payment" {
   amount: Money
 }
 
-entity Stock "Stock" {
-  id: Int @pk
-  stock: Int
-  selling: Int
-  reorder: Bool @default(false)
-}
-
 relate(Payment, Order, N:1)
-usecase SellOut "Sell Out"
 
-// 1. Local guardrails
-forbidden(Order, status == cancelled, paid_at == present)
-forbidden(Order, status not in (paid, cancelled), paid_at == present)
-exclusive(Order, cancelled_at == present, paid_at == present)
+// 7A
+forbidden(Order, status not in (paid, cancelled), paid_at == present).label("Only a paid or cancelled order has a payment date")
+exclusive(Order, cancelled_at == present, paid_at == present).label("An order is not both paid and cancelled")
 
-// 2. Local obligations
+// 7B
 invariant(Order).when(status == submitted).then(submitted_at == present).label("A submitted order records when it was submitted")
-required(Order, total >= 0)
+required(Order, total >= 0).label("No order total is negative")
 
-// 3. Comparisons, cross-entity rules, quantifiers, postconditions, properties
-drives(SellOut, Stock.stock < selling, true)
-sets(SellOut, Stock.reorder == true)
-condition BelowFloor "The stock is below its selling floor"
-holds(BelowFloor, Stock.stock < Stock.selling)
-invariant(Stock).when(BelowFloor).then(reorder == true).label("Stock below its floor is flagged for reorder")
-
-forbidden(Order, Payment, Order.status == cancelled, Payment.amount > Order.total)
-
-invariant(Order, Payment).along(Order, Payment).when(Order.status == paid).then(Payment.status == captured)
-
-invariant(Order).when(status == cancelled).none(Payment.status == captured)
-
-after(SellOut).assert(Stock.reorder == true)
-
-property PaidLeadsToCaptured
-  leads_to(Order.status == paid, Payment.status == captured)
+// 7C
+invariant(Order, Payment).along(Order, Payment).when(Order.status == paid).then(Payment.status == captured).label("A paid order's payment is captured")
+invariant(Order).when(status == cancelled).none(Payment.status == captured).label("A cancelled order has no captured payment")
 ```
 
-## Validation
+## Validate
 
 <!-- stage-spec: review local-guardrails -->
 ```sh
@@ -165,23 +93,13 @@ rdra-ish states src/ --entity Order
 ```
 <!-- /stage-spec -->
 
-Also run:
+Also `rdra-ish list src/ --kind rule --format markdown` (the rule table a PRD takes its
+acceptance criteria from) and `rdra-ish verify src/` for rules that need two instances and
+for properties.
 
-```sh
-rdra-ish check src/ --entity Order   # only Order's view and the rules that read it
-rdra-ish list src/ --kind rule --format markdown   # the business-rule table
-rdra-ish lint src/ --format table
-rdra-ish states src/ --format json --entity Order
-# two instances per entity and temporal properties (no JVM; --with-tlc adds TLC)
-rdra-ish verify src/
-```
-
-A broken rule prints once, under its name, with a shortest counterexample in model
-terms: one line per use case step with the instances it binds and its `path:line:col`,
-and under each step the values it changed and the `transitions` arm or `sets` that
-wrote them. Read the trace before touching the rule: the fix is often a missing effect
-upstream. In this sample of skill `rdra-ish-verify`, DeliverOrder lacks
-`sets(DeliverOrder, Order.delivered_at == present)`, and the warning above the error
+A broken rule prints once, under its name, with the shortest counterexample: each use case
+step with the rows it binds, and the values it changed. In this sample of skill
+`rdra-ish-verify`, DeliverOrder never sets `delivered_at`, and the warning above the error
 says so:
 
 ```text
@@ -197,36 +115,14 @@ error[Inv_Order_0]: invariant Inv_Order_0 is violated: invariant violated: when 
          Order#1.status: pending -> delivered            ../rdra-ish-verify/samples/fail/order.rdra:18:1
 ```
 
-## Achievement Conditions
+## Done when
 
-- Rules are expressed as model predicates, not prose-only comments.
-- `check` reports no `error[...]` for a rule, or each one is listed as an open design
-  item.
-- Cross-entity rules use `Entity.column`; an `UnbindableScope` error means a `.along(...)`
-  path that no `relate` binds, and `AmbiguousOwnerLink` means two keys join the pair, on a
-  `.along`, a `.has/.none`, a `holds` body, or a copy. Name one with `.role(role)` after that
-  call; the error prints the statement with the `.role` to add.
-- Temporal `property` rules, and rules that need two instances, are checked with
-  `verify` (skill `rdra-ish-verify`); `check` runs one instance per entity and does not
-  evaluate properties.
-- Required lifecycle effects have corresponding `sets` or transitions.
-- `lint` reports no `multi-rule-unscoped`: each multi-entity rule has its `.along(...)` or
-  `.global()`.
-- `export --kind sql` turns each entity-local rule into a `CHECK` constraint under the
-  same name; a multi-entity rule, a `.has` / `.none`, a minimum cardinality, a rule guarded
-  by `.when(Condition)`, and a rule that reads `now` close the script as obligations of the
-  application.
-- `NoWitness`, `Deadlock`, `NeverRuns`, `UnwrittenConstrainedVar`, and `NoCreationPath`
-  findings are reviewed instead of ignored.
-- A comparison reads the Int values of its columns. Move them with `sets(UC, E.col == N)`,
-  or drive the comparison with `drives(UC, E.col op rhs, true/false)`. A use case that
-  drives it one way while its own Int `sets` make it the other is
-  `ContradictoryDrivenComparison`, an error.
-- The final model can explain BUC scope, actor authority, API/system boundaries,
-  entity structure, lifecycle, and rules as a single refinement chain.
+- Rules are predicates, each with a label, not comments.
+- `check` reports no rule error, or each one is an open design item.
+- `lint` reports no `multi-rule-unscoped`.
+- Properties and two-instance rules are checked with `verify`.
+- `export --kind sql` writes each entity-local rule as a `CHECK`; it lists multi-entity,
+  quantifier, minimum-card, condition-guarded, and `now` rules as application obligations.
 
-## Completion
-
-When this step passes review, summarize remaining warnings from `check`,
-`actor-permission-audit`, `states`, and (when used) `verify`, with the `bounds:` line
-they hold under, rather than claiming the model is universally complete.
+Report the warnings `check`, `actor-permission-audit`, `states`, and `verify` leave, with
+the `bounds:` line they hold under. Do not call the model complete.

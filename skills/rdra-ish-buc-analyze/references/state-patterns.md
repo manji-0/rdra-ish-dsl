@@ -1,28 +1,15 @@
-# State Pattern Analysis
+# State Patterns and Lifecycle Findings
 
-Use this reference when reviewing lifecycle completeness, reachable state patterns,
-states the model cannot reach or leave, use cases that never run, entity constraints,
-cross-entity rules, or a capped exploration.
+<!-- derived-from ../../../docs/state-derivation.md -->
 
-## Concept
-
-`check` and `states` explore one transition system by breadth-first search, the same
-system `verify` explores (and hands to TLC under `--with-tlc`). Each use case is one
-atomic action per transaction group it writes, and an entity that no use case creates
-starts present. State axes come from inline Enum, Bool, and nullable columns, and from
-Int columns that a `sets` or a rule names. A column typed by a `variation` is an attribute the actor chooses: an axis only
-when something names it, and its unreached values draw no warning.
-
-The output is executable feedback about what the modeled use cases can actually reach.
-`check` evaluates every `forbidden`, `invariant`, `required`, `exclusive`, multi-entity,
-quantifier, key (`Unique_*`, `MinCard_*`, `DanglingKey_*`), and `@check` rule and every
-`after(...).assert` against the reachable states, and checks every state of each state
-model (each value a `transitions` names or a creating use case sets) for a witness and a
-way out. Every result holds within the `bounds:` line it starts with: one instance per
-entity and Int `0..5`.
-
-Use state analysis after entity structure is stable enough to know which fields can
-change. Do not invent lifecycle detail during early BUC skeleton work.
+`check` and `states` explore the model's transition system by breadth-first search, the
+system `verify` explores at two instances. Each use case is one atomic action per
+transaction group it writes; an entity no use case creates starts present. The state axes
+are inline Enum, Bool, and `@null` columns, and Int and variation columns something names.
+`check` tests every rule and `after(...).assert` against the reachable states, and checks
+each state of each state model for a witness and a way out. Every result holds within the
+`bounds:` line it starts with: one instance per entity, Int `0..5`. Analyze states once the
+entity structure says which fields change.
 
 ## Commands
 
@@ -30,25 +17,20 @@ change. Do not invent lifecycle detail during early BUC skeleton work.
 rdra-ish check src/
 rdra-ish check src/ --entity <EntityId>
 rdra-ish check src/ --actor <ActorId>
-rdra-ish states src/
 rdra-ish states src/ --entity <EntityId>
-rdra-ish states src/ --format csv
 rdra-ish states src/ --format json --entity <EntityId>
 rdra-ish diagram src/ --kind state --format mermaid --buc <BucId>
-rdra-ish diagram src/ --kind event --format mermaid
 ```
 
-`--entity` derives only the named entity's view and the rules that read it, each on
-its exact cone, so its findings are decided. `--buc` drops the use cases outside the
-BUC; whatever they could reach or unblock is then listed under `not checked:` instead
-of reported. `--actor <ActorId>`, `--without-buc <BucId>`, and `--without-usecase <UcId>`
-assume the use cases they leave out never run and still decide witnesses, deadlocks, and
-use cases that never run: `--actor Staff` finds a state a staff member cannot leave by
-their own use cases.
+- `--entity` derives the entity's view and the rules that read it, each on its exact cone;
+  its findings are decided.
+- `--buc` drops the use cases outside the BUC; what they could reach or unblock is listed
+  under `not checked:`.
+- `--actor`, `--without-buc`, and `--without-usecase` assume the left-out use cases never
+  run and still decide every finding: `--actor Staff` finds a state staff cannot leave by
+  their own use cases.
 
-## Reading Table Output
-
-From the bundled sample of skill `rdra-ish-verify`:
+## Reading `states`
 
 ```text
 $ rdra-ish states ../rdra-ish-verify/samples/order.rdra
@@ -67,19 +49,14 @@ Entity: Order (注文)
   reachable: 5 / bound: 10
 ```
 
-- `INITIAL`: a creating use case produces the pattern, or it is the start of a
-  pre-existing entity.
-- `TERMINAL`: a use case deletes the instance in that pattern, or no enabled use case
-  moves it.
-- `VIA`: the `BUC/use case` pairs on some path to the pattern.
-- Missing combinations may be good or bad. Treat them as design questions, not
-  automatic defects. `states --format json` adds a `witness` per pattern: a shortest
-  path of use cases to it.
+`INITIAL`: a creating use case makes the pattern, or it starts a pre-existing entity.
+`TERMINAL`: a use case deletes the row there, or nothing moves it. `VIA`: the
+`BUC/use case` pairs on some path to it. A missing combination is a design question, not a
+defect. `--format json` adds a shortest witness path per pattern.
 
-## Reading Findings
+## Reading findings
 
-Every lifecycle finding prints its stable name after the severity, then the source
-sites of the model elements involved:
+Each finding prints its name after the severity, then the sites involved:
 
 ```text
 $ rdra-ish check ../rdra-ish-verify/samples/unwitnessed_state.rdra
@@ -95,70 +72,34 @@ warning[Runs_Refund]: use case Refund can never run: each of its guards holds in
 ```
 
 A broken rule prints as `error[<rule name>]` (`Forbidden_Order_0`, `Inv_Order_0`,
-`MultiForbidden_Order_0`, `Quantifier_Cert_0`, `Unique_*`, `MinCard_*`, `DanglingKey_*`, `Check_*`,
-`AfterAssert_<UC>_<n>`) with the rule's site and a shortest counterexample: one line
-per use case step with its bound instances (`Place [Order#1, Payment#1]`) and site, and
-under it the values that step changed.
+`MultiForbidden_Order_0`, `Quantifier_Cert_0`, `Unique_*`, `MinCard_*`, `DanglingKey_*`,
+`Check_*`, `AfterAssert_<UC>_<n>`) with the rule's site and the shortest counterexample:
+one line per use case step with the rows it binds, and the values it changed.
 
-## Common Findings
-
-| Signal | Interpretation | Next action |
+| Finding | Meaning | Action |
 |---|---|---|
-| `error[Witness_<E>_<col>_<v>]` | No sequence of use cases reaches that state | Add the `creates`, `transitions` arm, or condition that enters it, or drop the state |
-| `error[Deadlock_<E>_<col>_<v>]` | An instance reaches a state that has a way out, and nothing ever moves it off | Read `leaves` and the `guard:` lines: fix the guard, or add the missing use case. If staying there is correct (a stock row waiting to be used), declare it with `@end(<v>)` on the column |
-| `warning[Deadlock_...]: deadlock at the bound` | The way out needs a free slot of an entity it creates | The instance bound, not the model; check with `verify` at two instances |
-| `warning[Runs_<UC>]` | The use case never runs; `needs:` or `guard:` lines say why | Fix the guard or the missing instance, or remove the use case |
-| `warning[Vacuous_<rule>]` | The rule, `after` assertion, or property holds and says nothing: no reachable state meets the premise the message names (an `after` whose use case never runs to its last step) | Fix the value (a typo, a state no use case enters), or add the use case that reaches it |
-| `error[<rule name>]` with a counterexample | A reachable state breaks the rule | Follow the steps: add the missing `sets` or transition, or fix the rule |
-| Enum/Bool/nullable column never appears in axes | No modeled lifecycle effect | Add `sets`, `transitions`, or accept that it is not stateful |
-| Enum variants reported unreachable that an actor simply chooses (payment method, channel) | The column is an attribute, not a lifecycle | Type it by a `variation`; `lint` `enum-attribute` finds these |
-| Unexpected terminal pattern | Missing exit use case | Add a transition or effect, or mark the end state as intentional with `@end(<v>)` on the column |
-| Too many combinations | Effects are too broad | Make `sets` more precise or add rules |
-| `PatternCapReached` / `MemoryCapReached` error, or `StateCapReached` under `--max-states` | The exploration stopped at a cap or the memory limit, so no rule verdict on that cone is sound. `check` and `states` have no state cap by default; the memory limit (`--memory`, else `memory` under `[check]` in `rdra.toml`, else 4GiB) stops a cone | Narrow with `--entity` or `--buc`, or raise `--max-patterns`, `--memory` (a `MemoryCapReached` message names a size when it can estimate one), or the `--max-states` you passed. The `StateCapReached` and `MemoryCapReached` messages name the columns the cone varies in and the use cases that reached the most states; a column of another entity there came in through a guard |
-| `not checked:` block | A scope or a cap left targets or findings undecided | Report them as not checked, never as passed |
-| `UnbindableScope` | `.along(...)` names entities that no `relate` binds | Error. Declare the `relate`, or drop `.along` for a rule over every pair |
-| `AmbiguousOwnerLink` | Two keys join a pair that a `.along`, a `.has/.none`, a `holds` body, or a copy joins | Error. Name one with `.role(role)` after that call |
-| `warning[UnjoinedWrite_<UC>_<A>_<B>]` | The use case writes two entities a key path relates only through entities it does not write, so one run may write rows of different parents | Write the entity between, or mark a write meant as a row of its own with `.apart()`; `verify` at two instances shows the difference |
-| `lint` `multi-rule-unscoped` | A multi-entity rule with neither `.along` nor `.global()` | Add the `.along(...)` the finding names, or `.global()` for a rule over every combination |
-| `lint` `end-redundant` | An `@end` value no `transitions` arm leaves | Delete it from `@end`: it is an end state already |
-| `UnbindableCondition` | A condition body is applied to a use case that writes nothing | Error. Apply it to a use case that writes, or drop the body |
-| `UnboundCopySource` | A `sets(UC, E.col == F.src)` copies from an `F` the step binds to no one row | Error. Relate `E` to `F` as its parent, or copy in the use case that writes `F` |
-| `ContradictoryDrivenComparison` | A use case drives a comparison one way while its own Int `sets` make it the other | Error. Fix the `sets` or drop the `drives` |
-| `DoubleModeledEnum` | A use case that does not create the entity `sets` a column that `transitions` drive | Error. Use a `transitions` arm instead |
-| `UnwrittenConstrainedVar` | A rule reads a column that no use case writes | Warning. The rule checks only the start value; add the `sets` or drop the rule |
-| `NoCreationPath` | No use case creates the entity | Info. It starts present; add `creates` if that is wrong |
-| `MinCardNeedsCreate` | A use case creates the parent of a `1..*` key and no child in the same transaction group | Info. `MinCard_*` fails after it; create a child in the same use case, or relax the card |
-| `MinCardOfPreExistingParent` | The parent of a `1..*` key starts present but every child starts absent | Warning. `MinCard_*` fails at the start; add a `creates` for the parent, or relax the card |
-| `PreExistingChildOfCreatedParent` | No use case creates the entity, but some use case creates the parent of its mandatory `relate` | Warning. It starts owned by a parent that does not exist yet; add a `creates` for the child, or make the `relate` `.optional()` |
+| `error[Witness_<E>_<col>_<v>]` | No sequence of use cases reaches the state | Add the `creates`, arm, or condition that enters it, or drop the state |
+| `error[Deadlock_<E>_<col>_<v>]` | An instance reaches a state with a way out and never leaves | Read `leaves` and `guard:`; fix the guard or add the use case. If staying is right, `@end(<v>)` on the column |
+| `warning[Deadlock_...]: deadlock at the bound` | The way out needs a free slot of an entity it creates | Check at two instances with `verify` |
+| `warning[Runs_<UC>]` | The use case never runs; `needs:` or `guard:` says why | Fix the guard or the missing row, or remove the use case |
+| `warning[Vacuous_<rule>]` | The rule, `after`, or property holds and says nothing: no reachable state meets its premise | Fix a typo or a state no use case enters |
+| `error[<rule>]` with a counterexample | A reachable state breaks the rule | Follow the steps: add the missing `sets` or arm, or fix the rule |
+| `warning[UnreachableEnumVariant_...]` | A declared variant no state model holds and nothing reaches | Remove it, or add the arm |
+| An Enum an actor merely picks reported unreachable | An attribute, not a lifecycle | Type it by a `variation` (`lint` `enum-attribute`) |
+| `warning[UnjoinedWrite_<UC>_<A>_<B>]` | The use case writes two entities joined only through ones it does not write | Write the entity between, or mark a write `.apart()` |
+| `UnbindableScope` | An `.along(...)` path no `relate` binds | Declare the `relate`, or drop `.along` |
+| `AmbiguousOwnerLink` | Two keys join a pair that a rule, guard, or copy joins | Name one with `.role(role)` after that call |
+| `UnbindableCondition` | A condition body applies to a use case that writes nothing | Apply it to a use case that writes |
+| `UnboundCopySource` | A copy reads an entity the step binds to no row | Relate the target to the source, or copy where the source is written |
+| `ContradictoryDrivenComparison` | A `drives` disagrees with the use case's Int `sets` | Fix the `sets` or drop the `drives` |
+| `DoubleModeledEnum` | A use case that does not create the entity `sets` a column `transitions` drive | Use an arm |
+| `UnwrittenConstrainedVar` (warning) | A rule reads a column no use case writes | Add the `sets`, or drop the rule |
+| `NoCreationPath` (info) | No use case creates the entity, so it starts present | Add `creates` if that is wrong |
+| `MinCardNeedsCreate` (info), `MinCardOfPreExistingParent` | A `1..*` parent is created, or starts, without a child | Create the child in the same transaction, or relax the card |
+| `PreExistingChildOfCreatedParent` | A pre-existing child under a parent a use case creates | Add `creates` for the child, or `.optional()` |
+| `lint` `multi-rule-unscoped`, `end-redundant` | A multi-entity rule with neither `.along` nor `.global()`; an `@end` value no arm leaves | Add the scope; drop the `@end` value |
+| `PatternCapReached`, `MemoryCapReached`, or `StateCapReached` | The run stopped at a cap; no verdict on that cone is sound | Narrow with `--entity` or `--buc`, or raise `--max-patterns` or `--memory` (`memory` under `[check]` in `rdra.toml`, default `4GiB`). The message names the growing columns and use cases |
+| `not checked:` | A scope or cap left findings undecided | Report them as not checked |
 
-## Formal verification
-
-For the dedicated workflow, load skill **`rdra-ish-verify`**. Use `verify` when the
-model has:
-
-- `property` (`always`, `eventually`, `leads_to`, `stable`, `unchanged`, `precedes`,
-  `can_reach`), which `check` and `states` do not evaluate (`check` prints
-  `note: <n> temporal properties were not model-checked by check; use verify`)
-- rules that need two instances: quantifiers over several rows, `.along` between
-  entities with more than one linked row, and 1:1 keys and `@unique` sets (`Unique_*`)
-
-```sh
-rdra-ish verify src/              # native, no JVM
-rdra-ish verify src/ --with-tlc   # a second opinion: requires tlc on PATH, or --tlc-jar <tla2tools.jar>
-```
-
-## How To Fix
-
-- Use `transitions(UseCase, Entity.col, from -> to)` when a real lifecycle state
-  machine exists; name the use case that drives each edge.
-- Use `sets(UseCase, Entity.column == value)` for Enum values without a
-  state machine, Bool flags, nullable and Int columns, and derived lifecycle effects.
-- Use `triggers(Event, Buc)` for downstream BUC handoff, then refine to
-  `triggers(Event, UseCase)` when the entry use case is known.
-
-## Reporting Tips
-
-Report state findings by their name and with the path that shows them: the entity, the
-state, whether the pattern is initial or terminal, and the use cases on the
-counterexample or witness. Name the `bounds:` line, and list anything under
-`not checked:` as not checked.
+`check` evaluates no `property` and holds every rule at one instance: for both, use skill
+`rdra-ish-verify` (`../../rdra-ish-verify/references/when-to-use.md`).

@@ -1,54 +1,44 @@
-# The Whole RDRA Graph
+# The whole RDRA graph
 
-Use this reference when no narrower kind carries the relation in question (permissions,
-media, DTOs, the API path of a use case), when an early model is too small to need
-separate views, or to check that another kind's node or edge is a declared one.
-
-## Commands
+Use `rdra` when no narrower kind carries the relation (permissions, media, DTOs, the API
+path of a use case), or to confirm that another kind's edge is declared. Every other kind
+is a view of it.
 
 ```sh
-# RDRA graph — whole model
-rdra-ish diagram src/ --kind rdra --format mermaid
-
-# Scoped to one BUC, or the union of several
-rdra-ish diagram src/ --kind rdra --buc <BucId> --format mermaid
-rdra-ish diagram src/ --kind rdra --buc <BucA> --buc <BucB> --format mermaid
-
-# Narrow a dense graph to some node and relation kinds
-rdra-ish diagram src/ --kind rdra --format mermaid --node-kind actor --node-kind buc --node-kind usecase
+rdra-ish diagram src/ --kind rdra --buc BucOrder --format mermaid
 rdra-ish diagram src/ --kind rdra --format mermaid --node-kind usecase --node-kind api --edge-kind invokes
 rdra-ish diagram src/ --kind rdra --format mermaid --node-kind api --node-kind dto --edge-kind request
 ```
 
-## Reading the RDRA Graph
+## Reading it
 
-- `rdra` is the base graph: every element in its RDRA layer and every relation between
-  them. Every other kind is a view of it, and a node or declared edge it draws is the
-  one drawn here.
-- The four subgraphs are the RDRA layers: `layer_value["システム価値"]` (actors, external
-  systems, requirements, NFRs), `layer_environment["システム外部環境"]` (qualities,
-  constraints, businesses, BUCs, flows, steps, timers, media, permissions),
-  `layer_boundary["システム境界"]` (use cases, screens, fields, events), and
-  `layer_system["システム"]` (systems, APIs, DTOs, entities, states, variations,
-  conditions). ADRs are not drawn.
-- An edge between two kinds that only one predicate joins is unlabelled (`actor -.-> usecase`
-  is `performs`, `buc --> usecase` is `contains`); a label stays where the kinds allow
-  several (the CRUD verb, `request` / `response`, a step order, a cardinality).
-- A transition runs from the use case to the state it enters, labelled
-  `transitions <Entity>.<column> <from>-><to>`. A `--buc` scope also holds the states its
-  use cases move between.
-- A condition's `combines` link read from its `holds` body is followed by
-  `%% derived ... from holds`; it points at the entity, where `condition` points at the
-  state model.
-- A condition to a use case is labelled: `-.->|applies_to|` as declared, or `-.->|when|`
-  when its `.when(Cond)` guards a `transitions` arm or a `chooses` value of the use case,
-  followed by `%% derived ... via transitions <Entity>.<column> <from>-><to>` (or `via
-  chooses <Entity>.<column> <value>`).
-- `omitted:` names the node and relation kinds `--node-kind` / `--edge-kind` hid.
+- Four layer subgraphs:
+  - `layer_value["システム価値"]`: actors, external systems, requirements, NFRs.
+  - `layer_environment["システム外部環境"]`: qualities, constraints, businesses, BUCs,
+    flows, steps, timers, media, permissions.
+  - `layer_boundary["システム境界"]`: use cases, screens, fields, events.
+  - `layer_system["システム"]`: systems, APIs, DTOs, entities, states, variations,
+    conditions.
+- ADRs are not drawn.
+- An edge between two kinds that one predicate joins is unlabelled; a label stays where
+  the kinds allow several (CRUD, `request` / `response`, step order, cardinality).
+- A transition runs from the use case to the state it enters. `--buc` keeps the states
+  its use cases move between.
+- A condition's `combines` link read from its `holds` body points at the entity here (at
+  the state model in `condition`), with `%% derived ... from holds`.
+- `--node-kind` and `--edge-kind` hide nodes and their edges without changing the model;
+  `omitted:` names what they hid. Narrow before reading a whole-model graph.
 
-## When To Use
+## API and access questions
 
-- Prefer the narrower kind the routing guide names; reach for `rdra` when the question
-  crosses them.
-- Narrow with `--node-kind` and `--edge-kind` before reading a whole-model graph.
-- Add `rdra-ish lint src/ --format table` when the graph shows orphan or unused nodes.
+A diagram does not expand the screen × use case × API constraint matrix. Read the tables:
+
+```sh
+rdra-ish csv src/ --kind api-matrix
+rdra-ish csv src/ --kind business-inputs
+rdra-ish csv src/ --kind actor-permission-audit
+```
+
+`check` prints the transaction and API-boundary warnings. Read the access CSVs with
+`../../rdra-ish-buc-analyze/references/access-permissions.md`, and API ownership and
+coordination with `../../rdra-ish-buc-analyze/references/api-system-boundaries.md`.

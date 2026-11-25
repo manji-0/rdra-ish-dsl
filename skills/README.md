@@ -1,9 +1,8 @@
 # RDRA-ish Agent Skills
 
-Installable Agent Skills for modeling, reviewing, diagramming, and formally
-verifying RDRA-ish DSL. Layout follows the
-[Agent Skills](https://agentskills.io/specification) convention discovered by
-both **`npx skills`** and **`gh skill`**:
+Installable Agent Skills for modeling, reviewing, diagramming, verifying, and implementing
+RDRA-ish DSL. The layout follows the [Agent Skills](https://agentskills.io/specification)
+convention that both **`npx skills`** and **`gh skill`** discover:
 
 ```text
 skills/
@@ -50,13 +49,19 @@ gh skill install OWNER/REPO rdra-ish-verify --agent cursor --scope user
 
 | Skill | Role |
 |---|---|
-| `rdra-ish-write` | Author DSL by refinement stage (step files 0 to 7) |
+| `rdra-ish-write` | Author DSL stage by stage; owns the stage table, the file layout, and the syntax |
 | `rdra-ish-buc-create` | Create a BUC from requirements |
-| `rdra-ish-buc-update` | Extend an existing BUC |
-| `rdra-ish-buc-analyze` | Analyze coverage, access, API boundaries, and lifecycle findings |
-| `rdra-ish-diagram` | Choose diagram / CSV / export views |
-| `rdra-ish-review` | `check` / `lint`-oriented model review checklist |
+| `rdra-ish-buc-update` | Change an existing BUC |
+| `rdra-ish-buc-analyze` | Answer one question: stage readiness, coverage, access, API boundaries, lifecycle findings |
+| `rdra-ish-review` | Give a verdict on a model or change: a checklist and the findings format |
+| `rdra-ish-diagram` | Choose and read diagram, CSV, and export views |
 | `rdra-ish-verify` | Formal verification with `verify`, a native checker; TLC only as a second opinion under `--with-tlc` (+ bundled samples) |
+| `rdra-ish-implement` | Implement a service from the model: `codegen`, the contracts, and `check --code` |
+
+The skills link each other's files by relative path, and each fact
+lives in one skill. Install them together: `rdra-ish-buc-create` and `rdra-ish-buc-update`
+need `rdra-ish-write`, and the others link `rdra-ish-buc-analyze`, `rdra-ish-review`, or
+`rdra-ish-verify`.
 
 ## Keeping the skills current
 
@@ -67,7 +72,6 @@ exists. CI runs it in the `check` job. Its header describes the markers it reads
 
 ## Formal-verification samples
 
-Canonical `.rdra` examples ship inside `rdra-ish-verify/samples/` so they remain
-available after skill install. In this monorepo,
-`samples/formal-verification/` (and `samples/formal-verification-fail/`) are
-symlinks to those files for CLI tests and docs.
+Canonical `.rdra` examples ship inside `rdra-ish-verify/samples/` so they stay available
+after a skill install. In this monorepo, `samples/formal-verification/` (and
+`samples/formal-verification-fail/`) are symlinks to those files for CLI tests and docs.

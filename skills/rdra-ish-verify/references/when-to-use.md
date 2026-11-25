@@ -1,33 +1,28 @@
-# When To Use `verify` vs `check` and `states`
+# When to use `verify` instead of `check` and `states`
 
 <!-- derived-from ../../../docs/formal-verification.md -->
 <!-- derived-from ../../../docs/state-derivation.md -->
 
-## Decision Table
+`check`, `states`, and `verify` explore one transition system by BFS. Only the bounds
+differ, so a verdict that differs between them comes from the bounds.
+
+| Command | Instances per entity | Decides |
+|---|---|---|
+| `states`, `check` | 1 | Every rule, `after.assert`, and state-model finding; no `property` |
+| `verify`, `export --kind tla` | 2 | The same at two instances, plus every `property` |
 
 | Concern | Prefer | Why |
 |---|---|---|
-| Enum / Bool / Nullable reachable patterns | `rdra-ish states` | Fast BFS at one instance per entity |
-| A state no use case reaches, an instance stuck at a state, a use case that never runs | `check` | `Witness_*` and `Deadlock_*` errors, `Runs_*` warnings; `verify` repeats them at two instances |
-| Int comparison (`stock < selling`), Int / Money / Decimal arithmetic | `check` or `verify` | Both read Int values over `0..5` |
-| `col < now` / DateTime vs `now` | `check` or `verify` | Global `now` + `Tick`; the invariant finds violations |
-| `property` `always` / `eventually` / `leads_to` | `verify` | Path properties; `check` and `states` do not evaluate them |
-| `property` `stable` / `unchanged` / `precedes` | `verify` | Safety properties BFS decides on their cone, but only `verify` runs it: `check` and `states` evaluate no `property` |
-| `property` `can_reach` (each instance can still finish) | `verify` | BFS decides it on its cone; TLC cannot check it, and `check` and `states` evaluate no `property` |
-| `after(UC).assert(...)` | `check` or `verify` | Checked after the last step of each run of the use case |
-| `invariant(...).when(...).none/has(...)` | `check`, or `verify` for two related rows | Quantifiers over present instances |
-| Multi-entity `forbidden` / `invariant` + `.along` | `check` for one instance, `verify` for two | Both join instances through the `relate` owners |
-| 1:1 key, `@unique` column set, N:M junction key pair (`Unique_*`) | `verify` (or `check --instance-count 2`) | Two rows that share the key or the values need two instances; at one it holds vacuously |
-| A use case that writes two entities joined only through a third (`UnjoinedWrite_*` warning) | `verify` | One instance has one row between, so only two show rows of different parents |
-| Child-side minimum (`MinCard_*`), `@check` (`Check_*`) | `check` or `verify` | One instance already shows a parent without a child, or a bad value |
+| Reachable Enum / Bool / nullable patterns | `states` | One view per entity |
+| A state no use case reaches, an instance stuck, a use case that never runs | `check` | `Witness_*`, `Deadlock_*`, `Runs_*`; `verify` repeats them at two instances |
+| Int / Money / Decimal comparison and arithmetic, `col < now` | `check` or `verify` | Both read the values over `0..--int-range-max` and tick `now` |
+| `after(UC).assert(...)` | `check` or `verify` | Read after the last step of each run of the use case |
+| `MinCard_*`, `Check_*` | `check` or `verify` | One instance already shows a parent without a child, or a bad value |
+| `.none/.has` over several rows, multi-entity rules with `.along` | `check` for one row, `verify` for two | Both join rows through the `relate` keys |
+| 1:1 key, `@unique` set, N:M junction pair (`Unique_*`) | `verify`, or `check --instance-count 2` | Two rows must share the key; at one instance it holds vacuously |
+| `UnjoinedWrite_*` warning | `verify` | Only two instances show rows of different parents |
+| `.at_most(n, ..)`, a `0..n:1` card | `verify --instances E=<n+1>` | The rule breaks only with `n + 1` rows of `E` |
+| `property` of any form | `verify` | `check` and `states` evaluate no `property`; `check` prints a `note:` |
+| A rule for any number of rows | `verify --prove` | See `prove.md` |
 
-## Same System, Different Bounds
-
-| Command | Instances per entity | Reaches |
-|---|---|---|
-| `states`, `check` | 1 | Per-entity views, every constraint verdict, state-model findings, no temporal properties |
-| `export --kind tla`, `verify` | 2 by default | The same verdicts at two instances, plus `property` formulas |
-
-Both read one transition system, so a verdict that differs between them comes from the
-bounds, not from a second reading of the model. Choose `verify` when a rule needs two
-instances or a temporal `property`, and state the `bounds:` line with every result.
+State the `bounds:` line with every result.
