@@ -315,6 +315,11 @@ impl TransitionSystem {
 
 /// Numeric when either side is an integer or an Int-typed slot; `null` is equal only to
 /// `null` and is never ordered. Otherwise values compare as domain indices.
+///
+/// This is term equality, which `col == null`, a copy between columns, and a unique set read.
+/// A rule's `==` / `!=` between two columns is not one `Cmp`: the builder adds a present
+/// guard on each nullable operand (`columns_cmp` in `build/preds`), so two null columns are
+/// not equal there, as the language reference (§ Null) and SQL read them (#355).
 fn compare(lhs: &Operand, op: CmpOp, rhs: &Operand) -> bool {
     // An owner against a slot index: an unlinked optional owner names no slot.
     if let (Operand::Slot(i), Operand::Value(v, Some(d)))
@@ -447,7 +452,8 @@ mod proofs {
     }
 
     /// Two numbers compare as `i64` orders them; `null` equals only `null`, differs from every
-    /// number, and is never ordered.
+    /// number, and is never ordered. This is term equality: `col == null` holds on a null
+    /// column. Two null columns in a rule are not equal, by the guard the builder adds (#355).
     #[kani::proof]
     fn numbers_compare_as_i64_and_null_is_never_ordered() {
         let (a, b): (Option<i64>, Option<i64>) = (kani::any(), kani::any());

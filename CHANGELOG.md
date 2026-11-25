@@ -13,6 +13,20 @@
 
 ### Breaking
 
+- Two `@null` columns that both hold null are no longer equal (#355). `col == other` between
+  two columns holds only when both are present and equal, and `col != other` holds whenever
+  either is null, as the language reference ([Null](docs/language-reference.md#null)) and the
+  SQL CHECKs of `export --kind sql` read it. `check`, `states`, `verify` (native, TLC, and the
+  TLA+ export), and `verify --prove` used to read null == null as true, so `verify --prove`
+  could prove a rule that the SQL CHECK rejects on the first row. Verdicts change for models
+  that compare two nullable columns with `==` or `!=`, in any rule form, a condition, a
+  `property`, or a cross-entity comparison: `forbidden(Item, qty != lim)` now fails on a row
+  where both are null, and `forbidden(Item, qty == lim)` no longer does. A logical
+  `@derived` comparison of two nullable `String` (or other presence-only) columns is now
+  neither true nor false while one is null, as it already was for nullable Int columns.
+  A rule that admits two nulls says so: `@check(qty == lim or (qty == null and lim ==
+  null))`. No sample changes verdict: no sample compares two nullable columns.
+
 - A `deletes(UC, Parent)` waits until no present child names the row when the key's
   `.on_delete` is `restrict`, `no_action`, or unset (#199). Unset is the SQL default, which
   the export leaves in place, so the database rejects such a delete; the lifecycle used to

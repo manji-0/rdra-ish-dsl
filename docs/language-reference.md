@@ -3070,7 +3070,9 @@ type `Date` or `DateTime`.
 
 A comparison is true or false, never unknown. A `@null` column that holds `null`
 satisfies no comparison with a value, a column, or `now` (`qty >= 1`, `qty == 3`, `qty <
-Order.limit` are all false), and satisfies every `!=` (`qty != 3` is true). `col == null`
+Order.limit` are all false), and satisfies every `!=` (`qty != 3` is true). Two columns
+that both hold null are not equal either: `qty == lim` is false and `qty != lim` is true
+there, as in SQL. `col == null`
 and `col == present` ask about null itself, and `col in (...)` is the `or` of its
 equalities. Every rule form reads a comparison this way: `forbidden`, `required`,
 `exclusive`, `invariant` with `.when`, `.then`, `.has`, and `.none`, `holds`,
