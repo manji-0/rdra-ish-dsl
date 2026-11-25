@@ -1,4 +1,4 @@
-# CLI Reference
+# CLI reference
 
 `rdra-ish` loads `.rdra` sources, checks them, and writes diagrams, tables, exports, state
 derivations, verification results, and code. This page says what each command does. The

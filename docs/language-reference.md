@@ -1178,12 +1178,12 @@ unit test loads to prove the row fires.
 | `rdra-state-target-undefined` | 状態 | 遷移先状態 | Resolver `InvalidEnumVariant` | use a declared Enum variant |
 | `rdra-cond-variation-undefined` | 条件 | バリエーション | Resolver `UndefinedSymbol` | declare the variation |
 | `rdra-cond-statemodel-undefined` | 条件 | 状態モデル | Resolver `ConditionCombinesAttribute` | combine a lifecycle column |
-| `rdra-actor-no-buc` | BUC | アクター 未接続 | `BucReach` actor | `performs(Actor, UseCase | Buc)`, or delete the actor |
+| `rdra-actor-no-buc` | BUC | アクター 未接続 | `BucReach` actor | `performs(Actor, UseCase \| Buc)`, or delete the actor |
 | `rdra-extsystem-no-buc` | BUC | 外部システム 未接続 | `BucReach` extsystem | `raises` or `triggers` through an event a BUC uses, or delete it |
 | `rdra-entity-no-buc` | BUC | 情報 未接続 | `BucReach` entity | reach it from a use case through an API, or delete it |
 | `rdra-condition-no-buc` | BUC | 条件 未接続 | `BucReach` condition | `applies_to(Condition, UseCase)`, or delete it |
 | `rdra-variation-no-buc` | rdra-ish | (none) | `BucReach` variation | type a column of a reached entity with it, or delete it |
-| `rdra-timer-no-buc` | rdra-ish | (none) | `BucReach` timer | `triggers(Timer, UseCase | Buc)`, or delete it |
+| `rdra-timer-no-buc` | rdra-ish | (none) | `BucReach` timer | `triggers(Timer, UseCase \| Buc)`, or delete it |
 | `rdra-transition-uc-no-buc` | rdra-ish | 遷移UC は BUC シートで定義 | `TransitionUseCaseInBuc` | `contains(Buc, UseCase)` for the transitioning use case |
 
 ### `relate` and FK generation

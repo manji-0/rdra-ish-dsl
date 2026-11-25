@@ -84,7 +84,7 @@ const REMOVED_DIAGRAM_KINDS: &[(&str, &str)] = &[
 ];
 
 /// What replaced the TypeScript state unions of `export` and `states`.
-const TS_STATE_TYPES: &str = "use `rdra-ish codegen <INPUTS> --lang ts -o <FILE>.ts`: its state types give one interface per value of the lifecycle column, narrowed by the model's rules";
+const TS_STATE_TYPES: &str = "use `rdra-ish codegen <INPUTS> --lang ts -o <FILE>.ts`: its state types give one `type` per value of the lifecycle column, narrowed by the model's rules";
 
 const REMOVED_EXPORT_KINDS: &[(&str, &str)] = &[
     ("plantuml-er", "use `--kind mermaid-er` (writes `er.mmd`)"),
@@ -168,7 +168,7 @@ pub(crate) struct Cli {
 
 #[derive(Subcommand)]
 pub(crate) enum Commands {
-    /// Parse and type-check only (no output)
+    /// Type-check the model, run the consistency checks, and explore the lifecycle (writes no file)
     Check {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
@@ -216,7 +216,7 @@ pub(crate) enum Commands {
         /// CSV kind: actor, entity, matrix, api, api-matrix, screen-constraints, permission-callables, actor-permission-audit, or business-inputs
         #[arg(long, default_value = "entity")]
         kind: CsvKind,
-        /// Output format: csv, or markdown for a table to paste into a document (writes <out>.md)
+        /// Output format: csv, or markdown for a table to paste into a document (writes <out>.<kind>.md)
         #[arg(long, default_value = "csv")]
         format: CsvFormat,
         #[arg(short, long, default_value = "out")]
@@ -229,7 +229,7 @@ pub(crate) enum Commands {
         /// Element kind to list: actor, entity, requirement, adr, adr-impact, goal, nfr, quality, constraint, buc, flow, step, usecase, field, system, api, dto, variation, screen, event, timer, condition, rule, permission-callables, actor-permission-audit, business-inputs, buc-roles, transition, or surface
         #[arg(long, default_value = "actor")]
         kind: ListKind,
-        /// Output format: table, json, csv
+        /// Output format: table, json, csv, or markdown
         #[arg(long, default_value = "table")]
         format: ListFormat,
     },
@@ -237,7 +237,7 @@ pub(crate) enum Commands {
     Lint {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Output format: table, json, csv
+        /// Output format: table, json, csv, or markdown
         #[arg(long, default_value = "table")]
         format: ListFormat,
     },
@@ -304,8 +304,8 @@ pub(crate) enum Commands {
         /// functions, and obligations with their model locations)
         #[arg(long, default_value = "code")]
         format: CodegenFormat,
-        /// Write every file `[code.<lang>]` in rdra.toml names (the domain code and its
-        /// traces), with paths and sites relative to rdra.toml's directory
+        /// Write every file `[code.<lang>]` in rdra.toml names (the domain code, its
+        /// traces, and the probe), with paths and sites relative to rdra.toml's directory
         #[arg(long, conflicts_with_all = ["lang", "out", "check", "conformance", "format", "package", "allow_failing"])]
         code: bool,
         /// Write only the probe of each `[code.<lang>]` table that names one: the file that
@@ -322,7 +322,7 @@ pub(crate) enum Commands {
         /// and each error is listed as an obligation the model does not meet
         #[arg(long)]
         allow_failing: bool,
-        /// Also print the conformance port and harness (--lang rust or go), and write to
+        /// Also print the conformance port and harness, and write to
         /// this file the traces the harness drives a finished service along
         #[arg(long, value_name = "FILE")]
         conformance: Option<PathBuf>,
@@ -609,11 +609,11 @@ pub(crate) enum DiagramKind {
     /// システムコンテキスト: the system with the actors who use it and the external
     /// systems it exchanges events with
     Context,
-    /// 要求モデル: the requirements with the BUCs they motivate, and the NFRs and
-    /// constraints with what they apply to or constrain and their qualities
+    /// 要求モデル: the goals, the requirements that achieve them, and the BUCs they
+    /// motivate; out-of-scope requirements apart
     Requirement,
-    /// ビジネスコンテキスト / BUC: each business with its BUCs, and the actors and external
-    /// systems each BUC involves
+    /// 業務の流れ図: each business with its BUCs, and a BUC-to-BUC hand-off edge labelled
+    /// with the event that passes it
     Business,
     /// UC複合図: each use case with its actors, screens, information, events, external
     /// systems, timers, conditions, and state transitions
