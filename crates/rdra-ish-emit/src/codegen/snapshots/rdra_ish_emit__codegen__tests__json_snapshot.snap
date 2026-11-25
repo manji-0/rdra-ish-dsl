@@ -159,6 +159,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
       "row": "OrderRow",
       "site": null,
       "tag": {
+        "domain_name": "status",
         "ident": "Status",
         "name": "status",
         "nullable": false,
@@ -174,6 +175,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
           ],
           "fields": [
             {
+              "domain_name": "id",
               "ident": "Id",
               "name": "id",
               "nullable": false,
@@ -183,6 +185,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
               }
             },
             {
+              "domain_name": "total",
               "ident": "Total",
               "name": "total",
               "nullable": false,
@@ -192,6 +195,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
               }
             },
             {
+              "domain_name": "method",
               "ident": "Method",
               "name": "method",
               "nullable": false,
@@ -201,6 +205,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
               }
             },
             {
+              "domain_name": "delivered_at",
               "ident": "DeliveredAt",
               "name": "delivered_at",
               "nullable": true,
@@ -210,6 +215,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
               }
             },
             {
+              "domain_name": "type",
               "ident": "Type",
               "name": "type",
               "nullable": true,
@@ -219,6 +225,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
               }
             },
             {
+              "domain_name": "customer_id",
               "ident": "CustomerId",
               "name": "customer_id",
               "nullable": false,
@@ -235,6 +242,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
           "always_null": [],
           "fields": [
             {
+              "domain_name": "id",
               "ident": "Id",
               "name": "id",
               "nullable": false,
@@ -244,6 +252,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
               }
             },
             {
+              "domain_name": "total",
               "ident": "Total",
               "name": "total",
               "nullable": false,
@@ -253,6 +262,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
               }
             },
             {
+              "domain_name": "paid_at",
               "ident": "PaidAt",
               "name": "paid_at",
               "nullable": false,
@@ -262,6 +272,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
               }
             },
             {
+              "domain_name": "method",
               "ident": "Method",
               "name": "method",
               "nullable": false,
@@ -271,6 +282,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
               }
             },
             {
+              "domain_name": "delivered_at",
               "ident": "DeliveredAt",
               "name": "delivered_at",
               "nullable": true,
@@ -280,6 +292,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
               }
             },
             {
+              "domain_name": "type",
               "ident": "Type",
               "name": "type",
               "nullable": true,
@@ -289,6 +302,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
               }
             },
             {
+              "domain_name": "customer_id",
               "ident": "CustomerId",
               "name": "customer_id",
               "nullable": false,
@@ -305,6 +319,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
           "always_null": [],
           "fields": [
             {
+              "domain_name": "id",
               "ident": "Id",
               "name": "id",
               "nullable": false,
@@ -314,6 +329,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
               }
             },
             {
+              "domain_name": "total",
               "ident": "Total",
               "name": "total",
               "nullable": false,
@@ -323,6 +339,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
               }
             },
             {
+              "domain_name": "paid_at",
               "ident": "PaidAt",
               "name": "paid_at",
               "nullable": true,
@@ -332,6 +349,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
               }
             },
             {
+              "domain_name": "method",
               "ident": "Method",
               "name": "method",
               "nullable": false,
@@ -341,6 +359,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
               }
             },
             {
+              "domain_name": "delivered_at",
               "ident": "DeliveredAt",
               "name": "delivered_at",
               "nullable": true,
@@ -350,6 +369,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
               }
             },
             {
+              "domain_name": "type",
               "ident": "Type",
               "name": "type",
               "nullable": true,
@@ -359,6 +379,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
               }
             },
             {
+              "domain_name": "customer_id",
               "ident": "CustomerId",
               "name": "customer_id",
               "nullable": false,
@@ -437,6 +458,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
     {
       "fields": [
         {
+          "domain_name": "id",
           "ident": "Id",
           "name": "id",
           "nullable": false,
@@ -446,6 +468,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
           }
         },
         {
+          "domain_name": "email",
           "ident": "Email",
           "name": "email",
           "nullable": false,
@@ -463,6 +486,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
     {
       "fields": [
         {
+          "domain_name": "id",
           "ident": "Id",
           "name": "id",
           "nullable": false,
@@ -472,6 +496,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
           }
         },
         {
+          "domain_name": "qty",
           "ident": "Qty",
           "name": "qty",
           "nullable": false,
@@ -481,6 +506,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
           }
         },
         {
+          "domain_name": "order_id",
           "ident": "OrderId",
           "name": "order_id",
           "nullable": false,
@@ -498,6 +524,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
     {
       "fields": [
         {
+          "domain_name": "customer_id",
           "ident": "CustomerId",
           "name": "customer_id",
           "nullable": false,
@@ -507,6 +534,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
           }
         },
         {
+          "domain_name": "note",
           "ident": "Note",
           "name": "note",
           "nullable": true,

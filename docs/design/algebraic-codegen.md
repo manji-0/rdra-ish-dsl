@@ -358,7 +358,15 @@ one lands, that language's output differs from it as [Status of each language](#
   (`Pending`, `Paid`). It is a type of its own, `<Entity>Kind`, not the tag column's value set,
   so renaming a column or moving the tag does not change the domain type. In TypeScript it is
   the `kind` property of each state type; in Rust the variant of the state enum, read by
-  `kind()`; in Go the `Kind()` method of the state interface.
+  `kind()`; in Go the `Kind()` method of the state interface. The IR names it
+  (`SumDecl.kind`): `<Entity>Kind`, or `<Entity>StateKind` when a column's value set or a
+  state already has that name.
+- **A column named `kind`** of a state type would clash with the discriminant, so in the
+  states' domain shape it takes the reserved-word escape, a trailing `_`: `kind_` (Rust field
+  and accessor `kind_()`, Go `Kind_()`, TypeScript `kind_`). `<Entity>Row` keeps the wire name
+  `kind`, and `fromRow` / `toRow` map between the two. A record (no states) keeps `kind`. The
+  IR holds both spellings: `Field.wire` is the row's, `Field.name` (and
+  `Field::domain_pascal()`) the domain's, so every printer spells it alike.
 - **Ids and scalars are opaque.** An id type and each prelude scalar (`Money`, `Decimal`,
   `Date`, `DateTime`) wrap their representation privately and are made only through a parser
   that checks it and fails with a typed error: Rust `TryFrom<repr>` and `FromStr`, TypeScript
@@ -366,6 +374,12 @@ one lands, that language's output differs from it as [Status of each language](#
   (<Type>, error)`. A value set parses its wire spelling the same way. Money and Decimal hold
   decimal text (`-?[0-9]+(\.[0-9]+)?`), Date `YYYY-MM-DD`, DateTime ISO 8601 with a time and an
   offset or `Z`; the check is the shape, not the calendar.
+- **The row is a boundary too.** `fromRow` / `from_row` / `<Entity>FromRow` and
+  `parse<Entity>Row` check the shape of every Money, Decimal, Date and DateTime column with the
+  same parser `TryFrom` / `parse` / `Parse<Type>` use, and refuse a bad one with `InvalidRow`
+  naming the column. In Rust the row's fields already have those types, so the check happens
+  where the row is built (`Money::try_from`); in TypeScript and Go, whose rows hold the text,
+  in `fromRow`.
 - **Errors are values, typed per use case.** A transition function returns its result or a
   `<UseCase>Error` (Rust enum, TypeScript union on `kind`, Go error type usable with
   `errors.As`). Its cases are the ones the use case can fail with: `NotEnabled` (the rows are in
@@ -386,9 +400,10 @@ one lands, that language's output differs from it as [Status of each language](#
 
 Following `kamae-rs`:
 
-- Ids: `pub struct OrderId(i64)` with a private field, `impl TryFrom<i64>` (an `Int` id takes
-  any value) / `TryFrom<String>` and `FromStr`, `get()` returning the representation, and
-  `Display`. Prelude scalars likewise over `String`, with `as_str()`.
+- Ids: `pub struct OrderId(i64)` with a private field, `impl From<i64>` (every `i64` is an id,
+  so `TryFrom` comes with it) and `FromStr`, `get()` returning the representation, and
+  `Display`. Prelude scalars over a private `String` with `TryFrom<String>`, `FromStr`,
+  `as_str()` and `Display`; the shape checks are the module's own small functions.
 - Value sets: `pub enum PaymentMethod`, with `as_str()`, `ALL`, `FromStr<Err = InvalidValue>`
   and `Display`.
 - State types: `pub enum Order { Pending(OrderPending), ... }`, each variant's struct sealed

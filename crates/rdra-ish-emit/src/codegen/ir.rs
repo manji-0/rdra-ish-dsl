@@ -87,13 +87,28 @@ pub struct IdDecl {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Field {
-    /// The column name, as the model and the wire spell it.
+    /// The column name, as the model and the wire spell it: the name in `<Entity>Row`.
     pub wire: String,
+    /// The field's name in the domain types, snake_case: `wire`, except a column `kind` of a
+    /// state type, which is `kind_` there, since `kind` is the discriminant
+    /// (docs/design/algebraic-codegen.md, "Generated code style").
+    pub name: String,
     /// The column name as an exported identifier: PascalCase.
     pub pascal: String,
     pub ty: FieldType,
     pub nullable: bool,
     pub doc: Vec<String>,
+}
+
+impl Field {
+    /// The domain name in PascalCase: `pascal`, with the `_` of an escaped name (`Kind_`).
+    pub fn domain_pascal(&self) -> String {
+        if self.name == self.wire {
+            self.pascal.clone()
+        } else {
+            format!("{}_", self.pascal)
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

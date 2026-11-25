@@ -133,6 +133,33 @@ fn keys_and_obligations() {
     assert!(names.contains(&"MinCard_OrderLine_Order"), "{names:?}");
 }
 
+/// A column `kind` of a state type is `kind_` in its states, since `kind` is the
+/// discriminant, and keeps its name in the row; a record keeps `kind` as it is.
+#[test]
+fn a_kind_column_of_a_state_type_is_escaped_in_the_domain_only() {
+    let model = model_from(&format!(
+        "{KEYWORDS_SRC}\nentity Note \"N\" {{\n  id: Int @pk\n  kind: Kind\n}}\n"
+    ));
+    let domain = build(&model, Some(CAPS), &|_| None).unwrap();
+    let matched = domain.sums.iter().find(|s| s.entity == "Match").unwrap();
+    assert_eq!(matched.kind, "MatchKind");
+    for v in &matched.variants {
+        let kind = v.fields.iter().find(|f| f.wire == "kind").unwrap();
+        assert_eq!(
+            (kind.name.as_str(), kind.domain_pascal().as_str()),
+            ("kind_", "Kind_")
+        );
+    }
+    let row = matched
+        .row_fields
+        .iter()
+        .find(|f| f.wire == "kind")
+        .unwrap();
+    assert_eq!(row.name, "kind");
+    let note = domain.records.iter().find(|r| r.id == "Note").unwrap();
+    assert!(note.fields.iter().any(|f| f.name == "kind"));
+}
+
 /// The JSON contract of `--format json`: types, states, use cases, functions, obligations.
 #[test]
 fn json_snapshot() {

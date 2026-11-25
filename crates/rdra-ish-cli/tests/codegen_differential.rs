@@ -150,7 +150,7 @@ fn sentinel(domain: &DomainModel, ty: &FieldType, tag: &str) -> Json {
     match ty {
         FieldType::Scalar(Scalar::Int) => json!(1_000 + (h % 1_000_000) as i64),
         FieldType::Scalar(Scalar::Bool) => json!(h % 2 == 0),
-        FieldType::Scalar(_) => json!(format!("~{tag}")),
+        FieldType::Scalar(s) => json!(scalar_sentinel(*s, tag, h)),
         FieldType::Enum(name) => {
             let decl = domain.enums.iter().find(|e| e.name == *name).expect("enum");
             json!(decl.values[(h as usize) % decl.values.len()].wire)
@@ -158,10 +158,70 @@ fn sentinel(domain: &DomainModel, ty: &FieldType, tag: &str) -> Json {
         FieldType::Id(name) => match id_repr(domain, name) {
             Scalar::Int => json!(1_000 + (h % 1_000_000) as i64),
             Scalar::Bool => json!(true),
-            _ => json!(format!("~{tag}")),
+            s => json!(scalar_sentinel(s, tag, h)),
         },
         FieldType::Rows(_) => panic!("a list is not a column"),
     }
+}
+
+/// A text value of `s` for `tag`, of the shape the generated parsers take (the row is the
+/// boundary: `from_row` checks Money, Decimal, Date and DateTime), and with as many values as
+/// a hash gives, so two tags of one case do not share one.
+fn scalar_sentinel(s: Scalar, tag: &str, h: u64) -> String {
+    let date = |h: u64| {
+        format!(
+            "{:04}-{:02}-{:02}",
+            2000 + h % 1000,
+            1 + (h / 1000) % 12,
+            1 + (h / 12_000) % 28
+        )
+    };
+    match s {
+        Scalar::Money | Scalar::Decimal => {
+            format!("{}.{:03}", h % 1_000_000, (h / 1_000_000) % 1000)
+        }
+        Scalar::Date => date(h),
+        Scalar::DateTime => {
+            let t = (h / 336_000) % 86_400;
+            format!(
+                "{}T{:02}:{:02}:{:02}Z",
+                date(h),
+                t / 3600,
+                (t / 60) % 60,
+                t % 60
+            )
+        }
+        Scalar::String | Scalar::Int | Scalar::Bool => format!("~{tag}"),
+    }
+}
+
+#[test]
+fn scalar_sentinels_have_the_shapes_the_parsers_take() {
+    for tag in ["a", "Order.paid_at#0", "x.y#3"] {
+        let h = tag.bytes().fold(2_166_136_261u64, |h, b| {
+            (h ^ u64::from(b)).wrapping_mul(16_777_619)
+        });
+        let money = scalar_sentinel(Scalar::Money, tag, h);
+        let (whole, part) = money.split_once('.').expect("a decimal part");
+        assert!(
+            whole
+                .bytes()
+                .chain(part.bytes())
+                .all(|b| b.is_ascii_digit()),
+            "{money}"
+        );
+        let date = scalar_sentinel(Scalar::Date, tag, h);
+        assert_eq!(date.len(), 10, "{date}");
+        let at = scalar_sentinel(Scalar::DateTime, tag, h);
+        assert!(
+            at.starts_with(&date) && at.ends_with('Z') && at.len() == 20,
+            "{at}"
+        );
+    }
+    assert_ne!(
+        scalar_sentinel(Scalar::Date, "a", 1),
+        scalar_sentinel(Scalar::Date, "b", 2)
+    );
 }
 
 /// How a column's value is known.

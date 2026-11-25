@@ -610,6 +610,10 @@ fn sum_decl(
         for field in &rest {
             let refinement = refinements.get(&(value.wire.clone(), field.wire.clone()));
             let mut field = field.clone();
+            if field.wire == "kind" {
+                // `kind` is the discriminant of a state type; the column keeps its name in the row.
+                field.name = "kind_".to_string();
+            }
             let at = refinement
                 .and_then(|r| r.site.as_ref())
                 .and_then(site)
@@ -790,6 +794,7 @@ fn field(column: &ModelColumn, ty: FieldType) -> Field {
     }
     Field {
         wire: column.name.clone(),
+        name: column.name.clone(),
         pascal: type_ident(&column.name),
         ty,
         nullable: column.is_nullable,

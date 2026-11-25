@@ -132,6 +132,7 @@ fn variant(v: &VariantDecl) -> Value {
 fn field(f: &Field) -> Value {
     json!({
         "name": f.wire,
+        "domain_name": f.name,
         "ident": f.pascal,
         "type": ty(&f.ty),
         "nullable": f.nullable,
