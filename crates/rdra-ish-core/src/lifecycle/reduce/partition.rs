@@ -305,7 +305,7 @@ impl Classes {
     /// "Composition with #74"), after its plain run stopped at the memory limit after
     /// `stopped_at` states under `--symmetry always`, or at once when a test forces
     /// it. `H` leaves
-    /// `ext.fixed` where they are, so every element keeps `obs` and the inputs: the run's
+    /// `ext.fixed()` where they are, so every element keeps `obs` and the inputs: the run's
     /// orbits are a label-preserving bisimulation, finer than the stuttering partition, which
     /// therefore comes out of the stored graph class for class. The classes are the same sets
     /// of S states as a plain run's; their numbering and representatives are others. After a
@@ -321,7 +321,7 @@ impl Classes {
         let orbits = {
             let _label = crate::perf::label("S up to H");
             sub.clone()
-                .run_orbits_fixing(caps, Checks::none(), &ext.fixed)
+                .run_orbits_fixing(caps, Checks::none(), &ext.fixed())
         };
         // `H` keeps every var the quotient reads where it is: the entity that holds it, and
         // for a key the entity it names, stay put.

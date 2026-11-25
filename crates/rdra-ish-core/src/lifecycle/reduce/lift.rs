@@ -33,7 +33,7 @@ impl TransitionSystem {
             sub.clone().run_orbits_fixing(
                 Caps::new(usize::MAX, usize::MAX),
                 crate::lifecycle::explore::Checks::none(),
-                &ext.fixed,
+                &ext.fixed(),
             )
         });
         let plain;

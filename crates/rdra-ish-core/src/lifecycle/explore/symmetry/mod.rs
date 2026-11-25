@@ -20,6 +20,8 @@ mod canon;
 #[cfg(any(test, feature = "shadow"))]
 pub(super) mod reference;
 #[cfg(test)]
+mod snapshot;
+#[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod witnesses;
@@ -268,9 +270,8 @@ impl Group {
         let fixed: Vec<(EntId, Rule)> = match ts.reduction() {
             Some(r) => r
                 .fixed_why(ts)
-                .into_iter()
-                .filter(|(_, why)| why.iter().any(|w| !dropped(&format!("Reduced:{w}"))))
-                .map(|(e, _)| (e, Rule::Reduced))
+                .into_keys()
+                .map(|e| (e, Rule::Reduced))
                 .collect(),
             None => Vec::new(),
         };

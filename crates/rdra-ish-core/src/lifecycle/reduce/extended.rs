@@ -1,5 +1,5 @@
 //! The extended sub-lifecycle of a cone: S with its inputs, and the rises.
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use super::fold::{Fold, FoldKey};
 use super::split::Split;
@@ -31,10 +31,12 @@ pub(super) struct Extended {
     pub(super) variants: HashMap<ActId, Vec<ActId>>,
     /// Per cone action, its param index to `system`'s, when the restriction dropped one.
     pub(super) params: Vec<Option<Vec<Option<u8>>>>,
-    /// The entities of `system` that `H` leaves where they are (`Group::fixing`, #212 phase
-    /// 2): one that holds an `obs` var, an input, or a bit, or whose rows such a key names; a
-    /// stub of a T parent; and one whose rows a key of the cone's T can name.
-    pub(super) fixed: Vec<EntId>,
+    /// The entities of `system` that `H` leaves where they are (#212 phase 2), each with
+    /// every reason found for it: one that holds an `obs` var ("obs"), an input or a bit
+    /// ("input"), or whose rows such a key names ("named by obs", "named by an input"); a
+    /// stub of a T parent ("stub"); and one whose rows a key of the cone's T can name ("named
+    /// by T"). `fixed` gives the set `Group::fixing` leaves out.
+    pub(super) fixed_why: BTreeMap<EntId, Vec<&'static str>>,
 }
 
 impl Extended {
@@ -128,36 +130,43 @@ impl Extended {
         let mut inputs_local: VarSet = inputs.iter().map(local).collect();
         inputs_local.extend(groups.vars);
         let obs_local: VarSet = obs.iter().map(local).collect();
-        // Each reason is one a `shadow` build can drop (`dropped`, `Observed:<reason>`).
-        let keep = |why: &str| !dropped(&format!("Observed:{why}"));
-        let mut fixed: BTreeSet<EntId> = BTreeSet::new();
+        // Each reason is one a `shadow` build or a test can drop (`dropped`,
+        // `Observed:<reason>`): a dropped reason is not added.
+        let mut fixed_why: BTreeMap<EntId, Vec<&'static str>> = BTreeMap::new();
+        let mut add = |e: EntId, why: &'static str| {
+            if dropped(&format!("Observed:{why}")) {
+                return;
+            }
+            let reasons = fixed_why.entry(e).or_default();
+            if !reasons.contains(&why) {
+                reasons.push(why);
+            }
+        };
         for (vars, held, named) in [
             (&obs_local, "obs", "named by obs"),
             (&inputs_local, "input", "named by an input"),
         ] {
             for v in vars {
                 let d = &system.vars[v.index()];
-                if keep(held) {
-                    fixed.extend(d.kind.entity());
+                if let Some(e) = d.kind.entity() {
+                    add(e, held);
                 }
-                if let (Domain::Instance { parent, .. }, true) = (&d.domain, keep(named)) {
-                    fixed.insert(*parent);
+                if let Domain::Instance { parent, .. } = d.domain {
+                    add(parent, named);
                 }
             }
         }
         // The stubs come after the entities whose existence is in S or the inputs.
-        if keep("stub") {
-            fixed.extend(
-                (0..system.entities.len())
-                    .map(EntId::at)
-                    .filter(|e| system.entities[e.index()].exists.index() >= all.len()),
-            );
+        for e in (0..system.entities.len()).map(EntId::at) {
+            if system.entities[e.index()].exists.index() >= all.len() {
+                add(e, "stub");
+            }
         }
         for v in &t {
-            if let (Domain::Instance { parent, .. }, true) =
-                (&cone.vars[v.index()].domain, keep("named by T"))
-            {
-                fixed.extend(map.ent_of(*parent));
+            if let Domain::Instance { parent, .. } = cone.vars[v.index()].domain {
+                if let Some(e) = map.ent_of(parent) {
+                    add(e, "named by T");
+                }
             }
         }
         Extended {
@@ -169,8 +178,13 @@ impl Extended {
             bits: groups.bits,
             variants: groups.variants,
             params: map.params,
-            fixed: fixed.into_iter().collect(),
+            fixed_why,
         }
+    }
+
+    /// The entities of `system` that `H` leaves where they are: those of `fixed_why`.
+    pub(super) fn fixed(&self) -> Vec<EntId> {
+        self.fixed_why.keys().copied().collect()
     }
 
     /// A step's params in the cone's numbering: each param of cone action `act` takes the

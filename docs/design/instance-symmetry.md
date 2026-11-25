@@ -873,6 +873,9 @@ Decided on 2026-11-25. Every rule that leaves a class out of the group, and ever
   assertion or a test, or the two reasons merged.
 - (d) `JointTooLarge` is exempt, as a cost cap. A test shows that past `BRANCH_CAP` a state
   is stored without its canonical form and the verdict stands.
+- (e) For a rule the owner keeps with none of these, the snapshot of the group rules. Per
+  cone of the samples and the corpus, it records which entities `G_T` keeps in place and
+  why, which entities `H` keeps in place and why, and which scan rules fire.
 
 An always-on assertion that panics when the rule is dropped also counts as a witness, since
 that failure is loud. A reason with no witness, even hand-built, stays in the code and goes
@@ -886,18 +889,53 @@ build, and a per-thread hook in unit tests (`dropped`). It names a scan rule by 
 | Rule or reason | Witness |
 |---|---|
 | `OrderedId`, `IdAgainstLiteral`, `MixedIds`, `OwnerLiteral`, `OwnerChoice`, `UnlinkedCreate` | (b): `explore/symmetry/witnesses.rs`, one test each |
-| `PinnedStart` | none: see below |
+| `PinnedStart` | (e), but it fires in no cone: see below |
 | `JointTooLarge` | (d): `joint_too_large_is_a_cost_cap`, `past_the_branch_cap_the_verdict_stands` |
 | `G_T` "S" | (c): implied by "S var", asserted in `Reduction::fixed_why` |
 | `H` "obs", "input" | the assertion in `up_to_h` (`reduce/partition.rs`) that `H` moves nothing the quotient reads; `each_h_reason_a_case_shows_has_a_witness` in engine_corpus |
-| `G_T` "S var", "input", "named by S", "named by an input", "bit key", "S action param" | none: see below |
-| `H` "named by obs", "named by an input", "stub", "named by T" | none: see below |
+| `G_T` "S var", "input", "named by S", "named by an input", "bit key", "S action param" | (e): see below |
+| `H` "named by obs", "named by an input", "stub", "named by T" | (e): see below |
 
 No model the builder emits today needs a scan rule. A run of every corpus case and sample
 forced up to symmetry shows none of them, as breaks.rs says, so the witnesses of (b) are
 built models with one hand-made change each.
 
-**Possibly over-conservative, for the owner.** No witness was found for these, so they stay:
+**Kept without a witness of their own.** No witness of kinds (a) to (d) was found for the
+eleven rules and reasons below. The owner decided on 2026-11-25 that they keep their place.
+The snapshot (e) is their witness for this gate: `the_group_rules_of_every_cone_are_the_snapshot`
+in `explore/symmetry/snapshot.rs`.
+
+- **What it records.** It reduces every cone that an unscoped `verify` runs, as `verify`
+  reduces it, and runs none of them. The cones are the safety cones, the entity cones, and
+  the cones of the properties that `verify` does not decide on an explored graph. Each model runs at the
+  bounds of its `// expect verify` headers, or at its corpus `// flags:` line. A corpus case
+  whose header names BFS verdicts per bound also runs at `--instance-count 3`. Per cone and
+  entity, a line records the slots, whether the group moves the entity, the scan rules, and
+  the `G_T` reasons. On a reduced cone, the line also records the same for `H` on the
+  sub-lifecycle that S would run up to `H`. That is the innermost nested one, which
+  `Classes::of` explores unreduced. `Extended::fixed_why` gives `H`'s reasons, and
+  `Extended::fixed` is that map's set.
+- **How it bites.** A dropped reason drops out of its lines, even where another reason
+  keeps the entity in place. So a changed or dropped rule changes the snapshot, which an
+  unchanged verdict would not show. The test drops every rule and reason in turn. It fails
+  if the snapshot stays the same for a rule that some line names. It also fails if the
+  snapshot changes for a rule that no line names. The snapshot's header counts the lines
+  that name each rule and reason.
+- **`PinnedStart` fires in no cone** of the samples or the corpus, so the snapshot cannot see
+  it dropped. The header says so. That leaves `PinnedStart` with no witness at all, which
+  goes back to the owner.
+- **The runs of S.** No run of S in the test has a memory limit. A plain run of S stops at
+  2,000,000 states, or at `--max-states`. Past that cap, S runs up to `H`, as `--symmetry
+  always` does at the memory limit, and the cone line says so. Two sub-lifecycles pass the
+  cap; a run with no cap passed 40 GB before it was stopped. clinic-ops' Charge reduces up
+  to `H`. One oidc-auth safety cone passes the cap up to `H` too, so it stays unreduced. That cone may be outside
+  what the oidc-auth headers run, since the test builds every model with `Scope::ALL`, a
+  superset of the cones of a header line scoped by `--entity`.
+- **Where it runs.** The test takes about 3 s in release and about a minute in debug. So
+  `scripts/diff-test.sh` skips it, and the formal-verify job runs it in release, in the
+  step "Each group rule has a witness".
+
+Why no witness was found:
 
 - `PinnedStart`. Only the start depends on it, and the transitions do not. Dropping it on
   `sym_identity_pair` with every Balance starting under the first Account leaves the quotient a
