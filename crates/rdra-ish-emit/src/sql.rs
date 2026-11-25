@@ -857,6 +857,24 @@ impl<'m> Script<'m> {
                     CmpRhs::Now => return None,
                     CmpRhs::Column(c) => format!("{col} {} {}", sql_op(p.op), ident(c)),
                     CmpRhs::IntLit(n) => format!("{col} {} {n}", sql_op(p.op)),
+                    // `in` is the `or` of its equalities, and `null` / `present` ask `IS NULL`
+                    // / `IS NOT NULL`, which `IN (.., NULL)` would read as `= NULL` (#374).
+                    CmpRhs::Values(vs) if vs.iter().any(EffectValue::is_nullable_axis) => {
+                        let any = vs
+                            .iter()
+                            .map(|v| match v {
+                                EffectValue::Null => format!("{col} IS NULL"),
+                                EffectValue::Present => format!("{col} IS NOT NULL"),
+                                v => format!("{col} = {}", literal(v)),
+                            })
+                            .collect::<Vec<_>>()
+                            .join(" OR ");
+                        if p.op == CmpOpModel::NotIn {
+                            format!("NOT ({any})")
+                        } else {
+                            format!("({any})")
+                        }
+                    }
                     CmpRhs::Values(vs) => format!(
                         "{col} {} ({})",
                         if p.op == CmpOpModel::NotIn {

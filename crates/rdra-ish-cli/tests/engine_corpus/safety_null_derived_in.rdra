@@ -1,0 +1,78 @@
+// trap: `in` and `not in` inside a logical `@derived` read a null operand as the other
+// comparisons do (#374). `in` is the `or` of its equalities: a value meets no null, so the
+// derived value is neither true nor false; `null` in the list holds there, so the list does;
+// `present` fails there. Make creates an Item with qty and k null, Fill sets qty to 1, Clear
+// sets it back to null, and Paint sets k to blue, which dp's `present` admits. An engine that
+// read `qty in (1, 2)` as false while qty is null would make dq false and dn true after Make,
+// so Forbidden_Item_0 and _1 would fail and Forbidden_Item_2 would hold; the same holds for
+// dp over the Enum k with `present` in its list (Forbidden_Item_3). dz lists null, so it is
+// true whether qty is null or 1 (Required_Item_0).
+// Rules and guards read `in` two-valued, as SQL's CHECK does: a null qty is in no list of
+// values and outside every one. So Forbidden_Item_4 holds and Forbidden_Item_5 fails after
+// Make. On Box, Pack runs only where qty is in (1, 2) and Seal only where it is not in
+// (1, 2): Seal runs on the null qty Box starts with (Forbidden_Box_7), Pack never does
+// (Forbidden_Box_6), since nothing sets a Box's qty back to null.
+// expect Forbidden_Item_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+// expect Forbidden_Item_1: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+// expect Forbidden_Item_2: native=counterexample tlc=counterexample z3=unproved
+// expect Forbidden_Item_3: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+// expect Forbidden_Item_4: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+// expect Forbidden_Item_5: native=counterexample tlc=counterexample z3=unproved
+// expect Required_Item_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+// expect Forbidden_Box_6: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+// expect Forbidden_Box_7: native=counterexample tlc=counterexample z3=unproved
+entity Item "品目" {
+  id: Int @pk
+  qty: Int @null
+  k: Enum(red, blue) @null
+  dq: Bool @null @derived(qty in (1, 2))
+  dn: Bool @null @derived(qty not in (1, 2))
+  dz: Bool @null @derived(qty in (1, null))
+  dp: Bool @null @derived(k in (red, present))
+}
+
+usecase Make "作成"
+usecase Fill "記入"
+usecase Clear "消去"
+usecase Paint "塗装"
+
+creates(Make, Item)
+sets(Fill, Item.qty == 1)
+sets(Clear, Item.qty == null)
+sets(Paint, Item.k == blue)
+
+forbidden(Item, dq == false)
+forbidden(Item, dn == true)
+forbidden(Item, dq == null)
+forbidden(Item, dp == false)
+forbidden(Item, qty == null, qty in (1, 2))
+forbidden(Item, qty == null, qty not in (1, 2))
+required(Item, dz == true)
+
+entity Box "箱" {
+  id: Int @pk
+  qty: Int @null
+  packed: Bool @null
+  sealed: Bool @null
+}
+
+usecase Open "開梱"
+usecase Load "積載"
+usecase Pack "梱包"
+usecase Seal "封緘"
+
+creates(Open, Box)
+sets(Load, Box.qty == 1)
+sets(Pack, Box.packed == true)
+sets(Seal, Box.sealed == true)
+
+condition Listed "一覧内"
+holds(Listed, Box.qty in (1, 2))
+applies_to(Listed, Pack)
+
+condition Unlisted "一覧外"
+holds(Unlisted, Box.qty not in (1, 2))
+applies_to(Unlisted, Seal)
+
+forbidden(Box, packed == true, qty == null)
+forbidden(Box, sealed == true)
