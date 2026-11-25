@@ -840,8 +840,9 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
     // Rule 8: up to instance symmetry, the native checker gives the verdict it gives without,
     // for every check both runs decide, at every bound the case runs, and prints no fault and
     // no panic: a lifted counterexample that does not replay panics. Each run takes the
-    // flags of the plain run it is compared with, less `--with-tlc`, and runs unreduced, so
-    // that every cone goes through the orbit run (phase 1 leaves a reduced cone plain).
+    // flags of the plain run it is compared with, less `--with-tlc`, once unreduced, so that
+    // every cone goes through the orbit run of phase 1, and once reduced as `verify` reduces,
+    // so that a reduced safety cone goes through the run up to `G_T` (phase 3).
     let counts: Vec<u8> = std::iter::once(2).chain(bounded.keys().copied()).collect();
     for n in counts {
         let count = n.to_string();
@@ -851,27 +852,32 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
             2 => {}
             _ => args.extend(["--instance-count", count.as_str()]),
         }
-        let sym = verify_with(case, &args, &[("RDRA_ISH_NO_REDUCE", "1")]);
         let plain = match n {
             2 => &main,
             n => &bounded[&n],
         };
-        for line in sym.panics.iter().chain(&sym.faults) {
-            fail(
-                &mut report,
-                format!("rule 8, --symmetry always at {n} instances: {line}"),
-            );
-        }
-        for check in case.expects.keys() {
-            let a = plain.verdict(false, check, can_reach(check));
-            let b = sym.verdict(false, check, can_reach(check));
-            if a.decided() && b.decided() && a != b {
+        for (how, env) in [
+            ("unreduced", &[("RDRA_ISH_NO_REDUCE", "1")][..]),
+            ("reduced", &[][..]),
+        ] {
+            let sym = verify_with(case, &args, env);
+            for line in sym.panics.iter().chain(&sym.faults) {
                 fail(
                     &mut report,
-                    format!(
-                        "rule 8: {check} at {n} instances: {a}, and {b} up to instance symmetry"
-                    ),
+                    format!("rule 8, --symmetry always at {n} instances, {how}: {line}"),
                 );
+            }
+            for check in case.expects.keys() {
+                let a = plain.verdict(false, check, can_reach(check));
+                let b = sym.verdict(false, check, can_reach(check));
+                if a.decided() && b.decided() && a != b {
+                    fail(
+                        &mut report,
+                        format!(
+                            "rule 8: {check} at {n} instances: {a}, and {b} up to instance symmetry ({how})"
+                        ),
+                    );
+                }
             }
         }
     }

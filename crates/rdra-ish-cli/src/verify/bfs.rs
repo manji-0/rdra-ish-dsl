@@ -639,8 +639,8 @@ fn safety_cone(jobs: &[Job], at: usize) -> Option<&ConeSystem> {
 /// property's plain answer, which goes into `shared`; when that run stops at a cap the cone
 /// runs again as it would alone.
 ///
-/// Under `--symmetry always` a cone the sub-lifecycle reduction leaves whole runs up to
-/// instance symmetry, alone (`Shared::up_to_symmetry`): `shared` holds no verdict for it, and
+/// Under `--symmetry always` a cone runs up to instance symmetry, a reduced one up to `G_T`
+/// (#212 phase 3), alone (`Shared::up_to_symmetry`): `shared` holds no verdict for it, and
 /// its run gives no property its plain answer. Under `--symmetry retry` such a cone runs so
 /// only when its lone run also stopped at the memory limit; the plain run and its charge are
 /// gone by then.

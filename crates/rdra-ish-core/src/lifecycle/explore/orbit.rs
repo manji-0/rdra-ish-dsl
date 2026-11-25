@@ -55,7 +55,8 @@ pub struct LabelledEdge<'a> {
 
 impl TransitionSystem {
     /// Explores this system up to instance symmetry under `caps`, evaluating every invariant
-    /// and after-assert. The system must not be #74-reduced (phase 1 of the design). The run
+    /// and after-assert. On a #74-reduced cone the group is `G_T` (#212 phase 3): it moves
+    /// T rows alone and leaves the class representative where it is. The run
     /// gathers no entity view, whatever `caps` asks: an `OrbitRun` has no view to read, and a
     /// view gathered from representatives would miss the patterns of the other states of their
     /// classes. So the pattern cap does not stop it (#251).
@@ -73,10 +74,6 @@ impl TransitionSystem {
     }
 
     fn run_orbits_in(self, caps: Caps, checks: Checks, group: Group) -> OrbitRun {
-        assert!(
-            self.reduction().is_none(),
-            "a run up to symmetry takes a cone #74 left unreduced"
-        );
         let (mut run, violations, parts) =
             self.bfs_on(caps.without_views(), checks, Threads::Shared, Some(&group));
         crate::shadow_assert!(
@@ -103,6 +100,9 @@ impl TransitionSystem {
             };
             let ts = &run.system;
             replays(ts, &start, &steps);
+            // On a reduced cone the lifted path still holds class representatives on the S
+            // side: #74's lift comes after the symmetry's, which was applied last.
+            let (start, steps) = ts.lifted(&start, &steps);
             let last = steps.last().map_or(&start, |s| &s.2);
             // The diagnostic names the binding the concrete last state violates.
             let rebuilt = match reach {
@@ -186,7 +186,9 @@ fn lift_path(
     (start, steps, tau)
 }
 
-/// The step of `act` under `params` into `t`, read through `tau`.
+/// The step of `act` under `params` into `t`, read through `tau`. A class move of a reduced
+/// cone keeps its params: they may bind the extended sub-lifecycle's action rather than the
+/// cone's, and every row they name is one `G_T` leaves where it is (`Reduction::fixed`).
 fn concrete(
     ts: &TransitionSystem,
     g: &Group,
@@ -196,12 +198,15 @@ fn concrete(
     t: &StateSlice,
 ) -> Step {
     let action = &ts.actions()[act.index()];
-    let params: Box<[u8]> = action
-        .params
-        .iter()
-        .zip(params)
-        .map(|(p, &slot)| g.map_slot(tau, p.entity, slot))
-        .collect();
+    let params: Box<[u8]> = match ts.reduction().is_some_and(|r| r.skips(act)) {
+        true => params.into(),
+        false => action
+            .params
+            .iter()
+            .zip(params)
+            .map(|(p, &slot)| g.map_slot(tau, p.entity, slot))
+            .collect(),
+    };
     let mut next = vec![0u8; t.0.len()];
     g.apply(tau, &t.0, &mut next);
     (act, params, State(next.into_boxed_slice()))

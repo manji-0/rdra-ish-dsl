@@ -16,6 +16,7 @@
 //! | the reduced step's class moves (`moves_of_into`, #252) | `reduce/reference.rs`: `moves_from` |
 //! | `Canon::canonical`, the canonical form under instance symmetry (`explore/symmetry/canon.rs`, #212) | `explore/symmetry/reference.rs`: the least layout over every element of `G_s`, when it has at most 6^4 |
 //! | `OrbitRun`, a run up to instance symmetry (`explore/orbit.rs`, #212) | `explore/orbit/reference.rs`: the plain run of the same cone, up to `SHADOW_CAP` states |
+//! | `OrbitRun` on a #74-reduced cone, up to `G_T` (#212 phase 3) | the same twin, counted as `reduced_orbit_run` |
 //! | a fold's input bit without allocations (`Fold::holds`, `reduce/fold.rs`, #296) | `reduce/fold/reference.rs`: the bit with its `Vec`s |
 //! | edges without their source, binding ids in 1 to 4 bytes, parents (`explore/edges.rs`, #296 2.1) | `explore/edges/reference.rs`: the 12-byte `Edge` list and the parent edges, as a run kept them before |
 //! | an after-assert step's ends recorded on a run without an edge list (`StepEnds`, #296 2.1) | `ComponentRun::step_ends`'s scan of that 12-byte list |
@@ -44,6 +45,7 @@ pub(crate) enum Twin {
     ClassMoves,
     Canonical,
     OrbitRun,
+    ReducedOrbitRun,
     FoldHolds,
     SharedRun,
     SUpToH,
@@ -51,7 +53,7 @@ pub(crate) enum Twin {
     StepEnds,
 }
 
-const TWINS: [(Twin, &str); 14] = [
+const TWINS: [(Twin, &str); 15] = [
     (Twin::EachEnabled, "each_enabled"),
     (Twin::Seen, "seen"),
     (Twin::Source, "source"),
@@ -61,6 +63,7 @@ const TWINS: [(Twin, &str); 14] = [
     (Twin::ClassMoves, "class_moves"),
     (Twin::Canonical, "canonical"),
     (Twin::OrbitRun, "orbit_run"),
+    (Twin::ReducedOrbitRun, "reduced_orbit_run"),
     (Twin::FoldHolds, "fold_holds"),
     (Twin::SharedRun, "shared_run"),
     (Twin::SUpToH, "s_up_to_h"),

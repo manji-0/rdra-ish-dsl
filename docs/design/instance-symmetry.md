@@ -31,7 +31,7 @@ reports the same verdicts, and prints counterexamples that replay on the model.
 | A | insurance-claim-ops `Forbidden_ClaimCase_3` | not reached; over 45M | 682,640, complete (measured) |
 | B: #74 reduced at n=2, lost at n=3 | clinic-ops `Forbidden_ClinicalOrder_1` | stopped at 27.9M | #284: S has 61,849,224 states and 20 classes; the reduced cone has 5,050 states (measured with `--memory 32GiB`) |
 | B | insurance-claim-ops `Forbidden_Claim_4` | not reached | over 41.1M orbits of the unreduced cone (measured) |
-| reduced at n=3 | patent-ops `Forbidden_OfficeAction_3` and 3 more | stopped at 33–41M | 15–22× on its complete reduced cones (measured), counted with the S side permuted too; with S fixed, not known |
+| reduced at n=3 | patent-ops `Forbidden_OfficeAction_3` and 3 more | stopped at 33–41M | 15–22× on its complete reduced cones (measured), counted with the S side permuted too; with S fixed, 3.0–5.5× (phase 3, measured) |
 
 Three facts shape the design.
 
@@ -363,6 +363,20 @@ its last paragraph, and leaves the class representative alone. #212's 15–22× 
 was counted with the S side permuted too, so the gain here is not known until phase 3
 measures it.
 
+As built (phase 3), `Reduction::fixed` leaves out every S entity, every entity that holds an
+S var or an input and every parent such a key names, the entity each bit is kept per row of,
+and every entity a param of an S action binds: a class move's params are stored with its
+class, so they cannot follow a permutation of T rows. Everything else in T moves. The run
+is an `OrbitRun` on the reduced system; its successors are the reduced step relation's (the
+T actions, the rises, and the class moves), canonicalized after the step, so a canonical
+form keeps its S part and with it its class. A counterexample is lifted through the
+symmetry first, replayed on the reduced system, then lifted through #74 by `lift`, and the
+diagnostic is rebuilt on that last concrete state. The factor, measured at n=3 against the
+plain counts of #212's complete cones: 5.5× on `Forbidden_PatentApplication_1` (29,680,875
+states, 5,413,500 orbits), 5.2× on `Unique_Patent_PatentApplication` (5,237,935 and
+1,009,760), and 3.0× on `Forbidden_DraftingOrder_0` (48,315 and 15,940), against #212's
+22.5×, 21.3× and 12.4× with S permuted.
+
 **Order.** Build S's quotient up to `H`, reduce the cone, then explore the reduced cone up to
 `G_T`. Lift in the reverse order.
 
@@ -540,6 +554,25 @@ lifted counterexample on a seeded violation of that cone replays.
 **Phase 3: T up to `G_T` on reduced cones.** First unit: the factor on patent-ops' four
 undecided cones with the S side fixed. Exit: those cones decided at n=3, or the measured
 factor recorded as why not.
+
+As built, a reduced safety cone runs up to `G_T` under `--symmetry always`, and under
+`retry` once its lone plain run stopped at the memory limit, as a whole cone does; an
+`always` property on a reduced cone still runs plain. The `shadow` build counts the
+`OrbitRun` twin on a reduced cone apart, as `reduced_orbit_run`. At n=3 under 8 GiB
+(`verify --instance-count 3 --memory 8GiB --symmetry always --entity <E>`, `RDRA_JOBS=4`):
+
+| Line | Plain | Up to `G_T` | Result |
+|---|---|---|---|
+| `Forbidden_Patent_4` | stopped at 40.8M | 31,926,220 orbits, about 260M states; `G_T` moves `DraftingOrder`, `Patent`, `PatentApplication` | `ok`, 98 s |
+| `Inv_Patent_0` | stopped at 38.1M | checked in `Cone_Forbidden_Patent_4` | `ok` |
+| `Forbidden_OfficeAction_3` | stopped at 33.6M | stopped at 67,108,864 orbits, about 360M states | not decided |
+| `GrantEnds` | stopped at 40.0M | its reduced cone completes at 7,346,935 orbits, about 87M states (measured outside `verify`) | not run up to `G_T`: a `leads_to` with `.fair` |
+
+`Forbidden_OfficeAction_3` is out of phase 3's reach: its S is `DraftingOrder`, `Employee`,
+`InventionDisclosure`, `PatentApplication` and `PatentFirm`, so `G_T` moves `OfficeAction`
+alone and the factor is at most 3! = 6; the run stored 67M orbits, about 5.4× (estimated)
+fewer than the states they stand for, and still stopped. `GrantEnds` reads fair components
+per binding, which no run up to symmetry may read before phase 4.
 
 **Phase 4: the annotated quotient.** Edge permutations, the slot-wise and per-binding
 readers of [Soundness per check](#soundness-per-check), lasso unrolling, and entity cones.
