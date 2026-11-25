@@ -782,9 +782,17 @@ the big runs always did.
 **Hypothesis, not verified:** this machine has 6 performance cores and 12 efficiency
 cores. When several big cones overlap, as in clinic-ops and insurance-claim-ops, the
 probes' extra CPU may push cone readers onto efficiency cores. In food-permit-ops one cone
-runs alone at the end. Part 3 tests this before it designs around it: for example,
-clinic-ops with the probes on at 6 jobs against 8, and whether the slowdown appears only
-when cones overlap.
+runs alone at the end. A test would compare clinic-ops with the probes on at 6 jobs against
+8, and see whether the slowdown appears only when cones overlap. Part 3 kept the probes off
+and did not run it, so the guess is still untested.
+
+**Second hypothesis, not tested:** the second opinion offered another explanation. When
+cones overlap, the run is CPU-bound across all of them. The probes add about 22% CPU
+(clinic-ops user time 7.0 s to 8.5 s), so they slow the other cones' readers whatever cores
+those readers run on. A test would compare `ri_pcycles / ri_cycles` from `proc_pid_rusage`
+(`RUSAGE_INFO_V6`, the share of cycles on performance cores), probes on against off. If
+that share holds steady while the wall time grows, the cause is contention and not
+efficiency cores. Both guesses matter only if the probes are turned on again.
 
 **Profile, probes on** (food-permit-ops, 8 jobs, `sample` at 1 ms): the reader spends
 80% to 87% of its samples in `take`. Inside `take`, `admit` takes 22% of the reader thread,
