@@ -8,18 +8,85 @@ You write the model as code in a small DSL. The CLI type-checks it, finds gaps b
 layers, and projects the same model into diagrams, review CSVs, state tables, and
 exports such as OpenAPI, DBML, SQL DDL, and TLA+.
 
-## What is RDRA?
+## Where the Method Comes From
 
-**RDRA** (Relationship-Driven Requirements Analysis) is a requirements modeling approach
-that treats a system as a graph of typed elements (actors, businesses, BUCs, use cases,
-screens, entities, and so on) linked by explicit predicates such as `performs`, `contains`,
-and `creates`. The idea is to move from business-facing intent toward design review in one
-model: each layer on the left explains why the layer on the right exists.
+rdra-ish joins three sources in one model. Each source covers a different part of the
+model, and that part keeps the names its source uses.
+
+| Part of the model | Source | Elements |
+|---|---|---|
+| Requirements and business, above the system | RDRA | `requirement`, `goal`, `business`, `buc`, `flow`, `step`, `variation`, `condition`, `event`, `actor`, `extsystem` |
+| From use case to design, below the system boundary | ICONIX robustness analysis | `usecase`, `screen`, `api`, `entity`, `field` |
+| Lifecycle and verification | rdra-ish's own | lifecycles, state rules, temporal properties |
+
+### Requirements and Business: RDRA
+
+**RDRA** (Relationship-Driven Requirements Analysis, by Zenji Kanzaki) is a requirements
+modeling approach. It treats a system as a graph of typed elements (actors, businesses,
+BUCs, use cases, screens, entities, and so on) linked by explicit predicates such as
+`performs`, `contains`, and `creates`. The idea is to move from business-facing intent
+toward design review in one model: each layer on the left explains why the layer on the
+right exists.
+
+From RDRA, rdra-ish takes the layers above the system: the requirements and goals, the
+businesses and their BUCs, each BUC's business flow with its steps, variations, and
+conditions, and the actors, external systems, and events around the system. ICONIX has
+none of these; it starts from a domain model and use cases.
+
+rdra-ish also takes RDRA's central idea: one graph of typed elements, where each layer
+gives the reason for the next. `check` and `next` read this graph to find the gaps between
+layers. This idea shapes the whole model, including the parts below.
+
+### From Use Case to Design: ICONIX
+
+Below the system boundary, rdra-ish follows ICONIX, Doug Rosenberg's use-case-driven
+process, more closely than RDRA. RDRA's UC複合図 connects a use case to its screens,
+events, conditions, and information. ICONIX goes one step further with robustness
+analysis, which comes from Ivar Jacobson's OOSE: it reads each use case as boundary,
+control, and entity objects, then puts their messages in order in a sequence diagram, and
+refines the domain model as it goes. rdra-ish keeps the three roles as elements of the
+language:
+
+| ICONIX role | rdra-ish element |
+|---|---|
+| Boundary | `screen`, `extsystem`, `timer` |
+| Control | `api`, or the use case itself when it has no API |
+| Entity | `entity`, with its `field`s |
+
+So the outputs for engineers are the ones ICONIX produces:
+
+- the robustness diagram (`diagram --kind robustness`);
+- the sequence diagram of a use case or a BUC (`diagram --kind sequence`);
+- the data model (`diagram --kind er`, and the DBML and SQL DDL exports).
+
+Most of a model is written in this part. In the samples, about 1,000 declarations are use
+cases, APIs, entities, and screens, against about 460 for BUCs, business flow steps,
+businesses, requirements, and goals.
+
+rdra-ish stops where ICONIX moves on to object-oriented design. It does not assign
+operations to classes or draw class diagrams. It ends at the APIs (OpenAPI, AsyncAPI), the
+data, and the states.
+
+### Lifecycle and Verification: rdra-ish's Own
+
+RDRA draws state models, but neither RDRA nor ICONIX checks behavior over time. rdra-ish
+adds entity lifecycles, state rules, and temporal properties, and checks them:
+
+- `states` derives the reachable states of each entity and reports the state rules they
+  break.
+- `verify` explores the states of the whole model and checks the properties; `--with-tlc`
+  runs TLC beside it on the TLA+ export.
+- `verify --prove` (experimental) proves state rules for any number of rows with z3.
+
+[Formal Verification](./docs/formal-verification.md) describes this part.
+
+### The Name
 
 This tool implements **RDRA-ISH** (RDRA-inspired Implementation and System Heuristics).
-It follows RDRA’s relationship-first style but is not a strict copy of the original method.
-It adds vocabulary for system boundaries, APIs, access constraints, and entity lifecycle
-so the same model can support `check`, diagrams, CSV reviews, and state derivation.
+The name comes from the first part, because RDRA's relationship-first graph shapes the
+whole model. The method is not a strict copy of RDRA: the part below the system boundary
+comes from ICONIX, and the lifecycle part and the access constraints (`permission`) are
+rdra-ish's own.
 
 For how RDRA-ISH reads BUC, business flow, and use case, see
 [RDRA-ish Interpretation](./docs/rdra-ish-interpretation.md).
