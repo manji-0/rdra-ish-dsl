@@ -223,18 +223,13 @@ impl Reduction {
     }
 
     /// The entities of `ts`, this reduced cone, that a run up to instance symmetry leaves
-    /// where they are (#212 phase 3, `G_T`): the state holds a class representative for S,
-    /// which a permutation of S rows does not map to a representative, and the class tables
-    /// key on the inputs and the bits slot by slot. So every S entity stays; so does every
-    /// entity that holds an S var or an input, and every parent such a key names; every
-    /// entity a bit is kept per row of; and every entity a param of an S action binds, since
-    /// a class move's params are stored with its class and do not follow the T rows.
-    pub(crate) fn fixed(&self, ts: &TransitionSystem) -> Vec<EntId> {
-        self.fixed_why(ts).into_keys().collect()
-    }
-
-    /// `fixed`, each entity with every reason found for it, for the stats line of
-    /// `RDRA_ISH_G_T_STATS`.
+    /// where they are (#212 phase 3, `G_T`), each with every reason found for it: the state
+    /// holds a class representative for S, which a permutation of S rows does not map to a
+    /// representative, and the class tables key on the inputs and the bits slot by slot. So
+    /// every S entity stays; so does every entity that holds an S var or an input, and every
+    /// parent such a key names; every entity a bit is kept per row of; and every entity a
+    /// param of an S action binds, since a class move's params are stored with its class and
+    /// do not follow the T rows. The reasons go to the stats line of `RDRA_ISH_G_T_STATS`.
     pub(crate) fn fixed_why(&self, ts: &TransitionSystem) -> BTreeMap<EntId, Vec<&'static str>> {
         let mut fixed: BTreeMap<EntId, Vec<&'static str>> = BTreeMap::new();
         let mut add = |e: EntId, why: &'static str| {
@@ -275,6 +270,17 @@ impl Reduction {
             for p in &ts.actions[a.index()].params {
                 add(p.entity, "S action param");
             }
+        }
+        // "S" is implied by "S var": an S entity's existence mark is an S var. So no S
+        // entity moves when one of the two reasons is dropped alone, and this keeps the
+        // implication true (docs/design/instance-symmetry.md, "Always by default", the
+        // per-rule gate, (c)).
+        for (e, why) in &fixed {
+            assert!(
+                !why.contains(&"S") || why.contains(&"S var"),
+                "symmetry: the S entity {} holds no S var",
+                ts.entity(*e).id
+            );
         }
         fixed
     }

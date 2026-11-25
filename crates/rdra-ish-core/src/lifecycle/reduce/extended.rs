@@ -5,6 +5,7 @@ use super::fold::{Fold, FoldKey};
 use super::split::Split;
 use super::*;
 use crate::lifecycle::cone::VarSet;
+use crate::lifecycle::explore::symmetry::dropped;
 use crate::lifecycle::restrict::{renumber_by, renumber_pred, Remap};
 use crate::lifecycle::types::{
     ActId, Action, ActionOrigin, At, CmpOp, Domain, Effect, EntId, Guard, GuardWhy, ModelRef,
@@ -127,23 +128,36 @@ impl Extended {
         let mut inputs_local: VarSet = inputs.iter().map(local).collect();
         inputs_local.extend(groups.vars);
         let obs_local: VarSet = obs.iter().map(local).collect();
+        // Each reason is one a `shadow` build can drop (`dropped`, `Observed:<reason>`).
+        let keep = |why: &str| !dropped(&format!("Observed:{why}"));
         let mut fixed: BTreeSet<EntId> = BTreeSet::new();
-        for v in obs_local.iter().chain(&inputs_local) {
-            let d = &system.vars[v.index()];
-            fixed.extend(d.kind.entity());
-            if let Domain::Instance { parent, .. } = d.domain {
-                fixed.insert(parent);
+        for (vars, held, named) in [
+            (&obs_local, "obs", "named by obs"),
+            (&inputs_local, "input", "named by an input"),
+        ] {
+            for v in vars {
+                let d = &system.vars[v.index()];
+                if keep(held) {
+                    fixed.extend(d.kind.entity());
+                }
+                if let (Domain::Instance { parent, .. }, true) = (&d.domain, keep(named)) {
+                    fixed.insert(*parent);
+                }
             }
         }
         // The stubs come after the entities whose existence is in S or the inputs.
-        fixed.extend(
-            (0..system.entities.len())
-                .map(EntId::at)
-                .filter(|e| system.entities[e.index()].exists.index() >= all.len()),
-        );
+        if keep("stub") {
+            fixed.extend(
+                (0..system.entities.len())
+                    .map(EntId::at)
+                    .filter(|e| system.entities[e.index()].exists.index() >= all.len()),
+            );
+        }
         for v in &t {
-            if let Domain::Instance { parent, .. } = cone.vars[v.index()].domain {
-                fixed.extend(map.ent_of(parent));
+            if let (Domain::Instance { parent, .. }, true) =
+                (&cone.vars[v.index()].domain, keep("named by T"))
+            {
+                fixed.extend(map.ent_of(*parent));
             }
         }
         Extended {
