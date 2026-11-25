@@ -1165,17 +1165,15 @@ fn go_driver(d: &DomainModel) -> String {
             call.push(go_dec(d, &i.ty, i.nullable, &format!("a[{at}]")));
             at += 1;
         }
+        // Only `Rejected` is a refusal; any other error (`InvalidArgument`) is reported as
+        // itself, so the judge fails it.
         let mut body = String::new();
-        if f.conditions.is_empty() {
-            let _ = writeln!(body, "\tr := {}({})", f.name, call.join(", "));
-        } else {
-            let _ = writeln!(
-                body,
-                "\tr, err := {}({})\n\tif err != nil {{\n\t\treturn map[string]any{{\"rejected\": err.(*Rejected).Condition}}\n\t}}",
-                f.name,
-                call.join(", ")
-            );
-        }
+        let _ = writeln!(
+            body,
+            "\tr, err := {}({})\n\tif err != nil {{\n\t\treturn drvErr(err)\n\t}}",
+            f.name,
+            call.join(", ")
+        );
         let mut pairs = Vec::new();
         for o in &f.outputs {
             let field = type_ident(&o.name);

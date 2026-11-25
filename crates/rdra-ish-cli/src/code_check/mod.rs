@@ -6,6 +6,7 @@
 //! and maps its errors back to model locations; `run` runs the conformance test the probe
 //! holds. A language plugs in through [`Backend`]; the rest is shared.
 
+mod go;
 mod ledger;
 pub(crate) mod map;
 mod rust;
@@ -346,6 +347,7 @@ fn backend(name: &str) -> Box<dyn Backend> {
     match name {
         "rust" => Box::new(rust::Rust),
         "ts" => Box::new(ts::TypeScript),
+        "go" => Box::new(go::GoBackend::default()),
         _ => Box::new(FreshOnly),
     }
 }

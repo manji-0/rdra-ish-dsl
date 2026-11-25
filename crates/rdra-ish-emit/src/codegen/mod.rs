@@ -12,6 +12,8 @@ mod actions;
 pub mod conformance;
 mod go;
 mod go_port;
+/// The test the Go probe holds when bound to traces: `check --code=run` runs it.
+pub use go_port::CONFORMANCE_TEST as GO_CONFORMANCE_TEST;
 pub mod ir;
 pub mod json;
 pub mod probe;
@@ -158,7 +160,7 @@ pub fn probe_for(lang: Lang, domain: &DomainModel, binding: &ProbeBinding) -> Op
     match lang {
         Lang::Rust => rust_port::probe(domain, binding),
         Lang::TypeScript => ts_port::probe(domain, binding),
-        Lang::Go => None,
+        Lang::Go => go_port::probe(domain, binding),
     }
 }
 
@@ -394,7 +396,9 @@ pub fn reserved_names(lang: Lang) -> &'static [&'static str] {
     match lang {
         // `Symbol`: the sealed state types need the global one (`--seal`).
         Lang::TypeScript => &["Result", "assertNever", "Symbol"],
-        Lang::Rust | Lang::Go => &[],
+        // The sentinels errors.Is matches each case of a `<UseCase>Error` with.
+        Lang::Go => &["ErrNotEnabled", "ErrRejected", "ErrInvalidArgument"],
+        Lang::Rust => &[],
     }
 }
 
@@ -419,7 +423,7 @@ pub fn derived_names(lang: Lang, domain: &DomainModel) -> Vec<DerivedName> {
         // Every name the Rust output declares in the module scope is a field of the IR:
         // the Rust printer derives none.
         Lang::Rust => Vec::new(),
-        Lang::Go => Vec::new(),
+        Lang::Go => go::derived_names(domain),
         // The boundary parser of each row type, `parse<Row>`, claimed in PascalCase as the
         // functions are (the printer writes it in camelCase).
         Lang::TypeScript => {

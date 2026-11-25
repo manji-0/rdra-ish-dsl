@@ -111,6 +111,50 @@ fn keywords_go_snapshot() {
     insta::assert_snapshot!(generated_from(KEYWORDS_SRC, "keywords.rdra", Lang::Go));
 }
 
+/// A name the Go printer derives from a model name steps aside, with a trailing `_`, for a
+/// model type that has it already; the model's type keeps its name.
+#[test]
+fn go_derived_names_step_aside_for_model_types() {
+    let src = r#"
+entity Order "O" {
+  id: Int @pk
+  status: Enum(pending, paid) @default(pending)
+  qty: Int @default("1")
+}
+usecase Place "P"
+usecase Pay "Pay"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+condition Big "big"
+holds(Big, Order.qty >= 1)
+applies_to(Big, Pay)
+variation OrderVisitor "V" { a b }
+variation MatchOrder "M" { a b }
+variation OrderKindPaid "K" { a b }
+variation PayErrorKind "E" { a b }
+variation PayErrorRejected "R" { a b }
+"#;
+    let go = generated_from(src, "names.rdra", Lang::Go);
+    for line in [
+        "type OrderVisitor string",
+        "type OrderVisitor_[R any] interface {",
+        "type MatchOrder string",
+        "func MatchOrder_[R any](state Order, v OrderVisitor_[R]) (R, error) {",
+        "type OrderKindPaid string",
+        "\treturn OrderKindPaid_\n",
+        "type PayErrorKind string",
+        "type PayErrorKind_ string",
+        "type PayErrorRejected string",
+        "\tPayErrorRejected_ PayErrorKind_ = \"Rejected\"",
+        "\tPayErrorNotEnabled PayErrorKind_ = \"NotEnabled\"",
+    ] {
+        assert!(go.contains(line), "no {line:?} in:\n{go}");
+    }
+    // The other languages derive none of these names.
+    let rust = generated_from(src, "names.rdra", Lang::Rust);
+    assert!(!rust.contains("OrderVisitor_"), "{rust}");
+}
+
 /// A key column takes its parent's id type, and the obligations name the invariants the
 /// verification checks.
 #[test]

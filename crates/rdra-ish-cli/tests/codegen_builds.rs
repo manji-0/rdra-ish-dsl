@@ -2,9 +2,10 @@
 //! `tests/fixtures/codegen/keywords.rdra`, whose names are keywords of the targets, the
 //! TypeScript output passes `tsc --strict`, the Rust output compiles as a library with no
 //! clippy warning and no undocumented public item (`clippy-driver -D warnings -D missing_docs`),
-//! and the Go output passes `go vet`, each with the conformance harness of `--conformance`. A
-//! compiler missing from PATH skips its language, except under `RDRA_REQUIRE_CODEGEN_TOOLS=1`,
-//! which CI sets in the dev shell that provides them all.
+//! and the Go output passes `go vet` and `gofmt -l` and calls no `panic`, each with the
+//! conformance harness of `--conformance`. A compiler missing from PATH skips its language,
+//! except under `RDRA_REQUIRE_CODEGEN_TOOLS=1`, which CI sets in the dev shell that provides
+//! them all.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -408,14 +409,20 @@ fn typescript_probes_name_every_contract() {
     assert!(checked > 100, "only {checked} probe lines checked");
 }
 
+/// The Go output passes `go vet`, is what `gofmt` prints (`gofmt -l` names no file), and
+/// calls no `panic`: a failure a caller can cause is an error value
+/// (docs/design/algebraic-codegen.md, "Generated code style").
 #[test]
 fn go_builds() {
     if !available("go") {
         return;
     }
-    for sample in models() {
+    let mut models = models();
+    // Model types named like the names the Go printer derives: each of those takes a `_`.
+    models.push("crates/rdra-ish-cli/tests/fixtures/codegen/go_names.rdra".to_string());
+    for sample in models {
         let dir = scratch("go", &sample);
-        generate(&sample, "go", &dir, "domain.go");
+        let path = generate(&sample, "go", &dir, "domain.go");
         std::fs::write(dir.join("go.mod"), "module example.com/domain\n\ngo 1.21\n").unwrap();
         run(
             Command::new("go")
@@ -423,6 +430,21 @@ fn go_builds() {
                 .current_dir(&dir)
                 .env("GOFLAGS", "-mod=mod"),
             &format!("go vet on the codegen of {sample}"),
+        );
+        let gofmt = Command::new("gofmt")
+            .arg("-l")
+            .arg(&path)
+            .output()
+            .expect("runs gofmt");
+        assert!(
+            gofmt.status.success() && gofmt.stdout.is_empty(),
+            "gofmt -l names the codegen of {sample}: run `gofmt -d` on it\n{}",
+            String::from_utf8_lossy(&gofmt.stderr)
+        );
+        let code = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            !code.contains("panic("),
+            "the codegen of {sample} calls panic"
         );
     }
 }

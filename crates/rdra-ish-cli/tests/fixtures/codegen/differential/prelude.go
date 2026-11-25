@@ -6,11 +6,21 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 )
 
 func drvGet(j any, k string) any { return j.(map[string]any)[k] }
+
+// drvErr is what a function's error says: the condition of a refusal, or the error itself.
+func drvErr(err error) map[string]any {
+	var rejected *Rejected
+	if errors.As(err, &rejected) {
+		return map[string]any{"rejected": rejected.Condition}
+	}
+	return map[string]any{"error": err.Error()}
+}
 
 func drvInt(j any) int64 {
 	n, err := j.(json.Number).Int64()

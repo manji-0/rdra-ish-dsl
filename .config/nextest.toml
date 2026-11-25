@@ -24,8 +24,9 @@ not (
         test(=printed_code_agrees_on_the_domain_samples)
       | test(=printed_code_agrees_on_the_small_samples)))
   | (binary_id(rdra-ish-cli::codegen_builds) & (test(=go_builds) | test(=rust_builds) | test(=typescript_builds) | test(=rust_probes_name_every_contract) | test(=typescript_probes_name_every_contract)))
-  | (binary_id(rdra-ish-cli::codegen_behaviour) & (test(=go_behaves) | test(=go_states_are_not_built_outside) | test(=rust_a_use_case_takes_the_capability_of_an_actor_that_performs_it) | test(=typescript_a_use_case_takes_the_capability_of_an_actor_that_performs_it)))
+  | (binary_id(rdra-ish-cli::codegen_behaviour) & (test(=go_behaves) | test(=go_states_are_not_built_outside) | test(=rust_a_use_case_takes_the_capability_of_an_actor_that_performs_it) | test(=typescript_a_use_case_takes_the_capability_of_an_actor_that_performs_it) | test(=go_visitor_fails_to_compile_on_a_new_state) | test(=go_a_use_case_takes_the_capability_of_an_actor_that_performs_it)))
   | (binary_id(rdra-ish-cli::codegen_conformance) & test(=go_harness_tells_faults_apart))
+  | (binary_id(rdra-ish-cli::codegen_code_check_go) & test(=the_probe_of_every_sample_compiles))
   | (binary_id(rdra-ish-cli::memory_cli) & (
         test(=shared_quotients_stop_no_cone_elsewhere_on_any_number_of_threads)
       | test(=the_generators_finish_a_cone_check_finishes)
