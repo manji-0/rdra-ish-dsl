@@ -619,3 +619,19 @@ mirrors them instead of inventing its own:
   - `codegen_builds.rs` `typescript_probes_name_every_contract` checks every sample's probe
     against a service type with no member. It expects TS2739 / TS2740 / TS2741 on exactly the
     line map's lines.
+
+**P6, TypeScript (the S plan).**
+
+- The same IR (`DomainModel.capabilities`, `ContractDecl.caller`). Each capability is
+  `Readonly<{ kind: "<Actor>"; [$capability]: true }>`, where `$capability` is a `unique
+  symbol` the module does not export, and its companion `<Actor>Capability.issue()` is the only
+  way to make one without a type assertion. `<UseCase>Caller` is the union of its actors'
+  capabilities, and every `prepare*` and `run*` member takes `by: <UseCase>Caller` first. The
+  harness calls as the first actor.
+- `codegen_behaviour.rs` tests it on oidc-auth. `DenyDevice` builds with
+  `EndUserCapability.issue()`. Without a caller it fails with TS2554, with a RelyingParty
+  capability with TS2345, and with an object literal with TS2741. `as unknown as` passes.
+- A service whose `prepare*` ignores `by` still implements the contract, because TypeScript
+  accepts a function with fewer parameters. A service that takes another caller type fails
+  the probe with TS2322 (`CodeSignature_*`).
+- The R plan is not done, as in Rust and Go (#337 stays open).

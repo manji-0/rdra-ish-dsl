@@ -298,3 +298,68 @@ fn rust_a_use_case_takes_the_capability_of_an_actor_that_performs_it() {
         }
     }
 }
+
+/// Code that calls a use case of oidc-auth in TypeScript, and what tsc says (#337): `DenyDevice`
+/// is performed by EndUser only, so its prepare takes a `DenyDeviceCaller`, which only
+/// `EndUserCapability.issue()` makes. An object literal cannot stand in for the capability; a
+/// type assertion can, as with the state brand.
+const TS_CAPABILITY_CALLS: [(&str, Option<&str>); 5] = [
+    (
+        "void s.prepareDenyDevice(d.EndUserCapability.issue(), id);",
+        None,
+    ),
+    ("void s.prepareDenyDevice(id);", Some("TS2554")),
+    (
+        "void s.prepareDenyDevice(d.RelyingPartyCapability.issue(), id);",
+        Some("TS2345"),
+    ),
+    (
+        "void s.prepareDenyDevice({ kind: \"EndUser\" }, id);",
+        Some("TS2741"),
+    ),
+    (
+        "void s.prepareDenyDevice({ kind: \"EndUser\" } as unknown as d.EndUserCapability, id);",
+        None,
+    ),
+];
+
+#[test]
+fn typescript_a_use_case_takes_the_capability_of_an_actor_that_performs_it() {
+    if !available("tsc", "--version") {
+        return;
+    }
+    let dir = scratch("ts-capability");
+    let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .current_dir(fixture().join("../../../../.."))
+        .args(["codegen", "samples/oidc-auth", "--lang", "ts", "-o"])
+        .arg(dir.join("domain.ts"))
+        .output()
+        .expect("runs rdra-ish");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    for (call, code) in TS_CAPABILITY_CALLS {
+        std::fs::write(
+            dir.join("call.ts"),
+            format!("import * as d from \"./domain\";\nexport function f(s: d.DenyDeviceUseCase, id: d.DeviceAuthorizationId): void {{\n  {call}\n}}\n"),
+        )
+        .unwrap();
+        let output = Command::new("tsc")
+            .args([
+                "--strict", "--noEmit", "--pretty", "false", "--target", "es2022",
+            ])
+            .arg(dir.join("call.ts"))
+            .output()
+            .expect("runs tsc");
+        let said = String::from_utf8_lossy(&output.stdout);
+        match code {
+            None => assert!(output.status.success(), "{call}: {said}"),
+            Some(code) => {
+                assert!(!output.status.success(), "tsc builds {call}");
+                assert!(said.contains(code), "{call}: {said}");
+            }
+        }
+    }
+}

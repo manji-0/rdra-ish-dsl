@@ -2239,7 +2239,12 @@ with no printed function), printed with or without `--conformance`. A use case t
 perform takes a **caller** first: `by: <UseCase>Caller`, an enum over the capabilities of those
 actors (`EndUserCapability`, made only by `EndUserCapability::issue()`). Code without a
 capability of an actor that performs the use case does not compile; whether the code that
-calls `issue` authenticated the actor is not checked.
+calls `issue` authenticated the actor is not checked. TypeScript has the same contracts as
+types (`<UseCase>UseCase`, `readonly` function members that return a `Promise`), and the same
+callers: `by: DenyDeviceCaller`, a union of capability types. A capability carries a
+`unique symbol` the module does not export, so an object literal is refused (TS2741) and
+`EndUserCapability.issue()` is the only way to make one without a type assertion; `as
+unknown as EndUserCapability` still forges one.
 
 With `--conformance <FILE>`, the output ends with a **conformance harness**
 for the service that finishes it, and `FILE` gets the traces it runs. The service

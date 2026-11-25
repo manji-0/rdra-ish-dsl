@@ -210,7 +210,10 @@
   performs a use case with a contract gets a capability type (`<Actor>Capability`, made by
   `issue()`), and the use case a caller type (`<UseCase>Caller`) that its `prepare_*` and
   `run_*` take first. A call without the capability of an actor that performs the use case
-  does not compile. The conformance harness calls as the first such actor.
+  does not compile. The conformance harness calls as the first such actor. TypeScript has them
+  too: `<Actor>Capability` is branded with a module-private `unique symbol` and made by its
+  companion's `issue()`, `<UseCase>Caller` is the union of the allowed capabilities, and a
+  type assertion still forges one.
 
 - **The obligation ledger** (`check --code`, #363, P5): each obligation the generated code
   lists needs an owner, declared by a `rdra: obligation <name> [file]` marker line in the

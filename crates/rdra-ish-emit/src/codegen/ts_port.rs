@@ -5,7 +5,7 @@
 //! service reads its store asynchronously; the Rust and Go ones are sync.
 
 use super::conformance::TRACES_FORMAT;
-use super::ir::{DomainModel, Field, FieldType, PortMethod, Scalar, Track};
+use super::ir::{DomainModel, Field, FieldType, PortDecl, PortMethod, Scalar, Track};
 use super::probe::{Probe, ProbeWriter};
 use super::string_literal;
 use super::ts::{column_type, doc, doc1, local, property};
@@ -38,6 +38,7 @@ pub(super) fn print_contracts(domain: &DomainModel, out: &mut String) {
     if port.contracts.is_empty() {
         return;
     }
+    print_capabilities(domain, port, out);
     out.push_str("// ── Contracts: one per use case, which the service implements ──\n\n");
     for c in &port.contracts {
         let mut lines = vec![format!(
@@ -61,10 +62,13 @@ pub(super) fn print_contracts(domain: &DomainModel, out: &mut String) {
                 "Runs {} (the action {}).",
                 m.usecase, m.action
             )));
-            let ps: Vec<String> = params(m)
+            let mut ps: Vec<String> = params(m)
                 .iter()
                 .map(|(n, ty)| format!("{n}: {ty}"))
                 .collect();
+            if let Some(caller) = &c.caller {
+                ps.insert(0, format!("by: {}", caller.name));
+            }
             out.push_str(&format!(
                 "  readonly prepare{}: ({}) => Promise<Result<{}, {}>>;\n",
                 m.name,
@@ -82,11 +86,14 @@ pub(super) fn print_contracts(domain: &DomainModel, out: &mut String) {
                 "Runs the action {} of {} whole, by the ids of its rows: the generator printed no function for it (#335), so the service writes it and keeps the obligations.",
                 e.action, c.usecase
             )));
-            let ps: Vec<String> = e
+            let mut ps: Vec<String> = e
                 .rows
                 .iter()
                 .map(|(n, ty)| format!("{}: {ty}", local(n)))
                 .collect();
+            if let Some(caller) = &c.caller {
+                ps.insert(0, format!("by: {}", caller.name));
+            }
             out.push_str(&format!(
                 "  readonly {}: ({}) => Promise<Result<void, {}>>;\n",
                 entry_name(&e.name),
@@ -95,6 +102,70 @@ pub(super) fn print_contracts(domain: &DomainModel, out: &mut String) {
             ));
         }
         out.push_str("};\n\n");
+    }
+}
+
+/// The capability of each actor and the caller type of each use case (#337): a prepare or an
+/// entry point takes the caller first, so code with no capability of an actor that performs
+/// the use case cannot run it. A capability carries a module-private `unique symbol`, so an
+/// object literal cannot stand in for one; its companion's `issue` is the only way to make one
+/// without a type assertion.
+fn print_capabilities(domain: &DomainModel, port: &PortDecl, out: &mut String) {
+    if domain.capabilities.is_empty() {
+        return;
+    }
+    out.push_str("// ── Capabilities: who may run each use case ──\n\n");
+    out.push_str(&doc1(
+        "The brand of the capabilities: the module does not export it, so code outside cannot write one.",
+    ));
+    out.push_str("const $capability: unique symbol = Symbol(\"rdra-ish capability\");\n\n");
+    for cap in &domain.capabilities {
+        out.push_str(&doc(
+            &[
+                format!(
+                    "The capability of the actor {} ({}): the use cases it performs take it.",
+                    cap.actor, cap.label
+                ),
+                format!(
+                    "Made only by `{}.issue()`, which the code calls once it has authenticated a {}; rdra-ish",
+                    cap.name, cap.actor
+                ),
+                "does not check who calls it, and a type assertion (`as`) still forges one.".to_string(),
+            ],
+            "",
+        ));
+        let kind = string_literal(&super::type_ident(&cap.actor));
+        out.push_str(&format!(
+            "export type {} = Readonly<{{ kind: {kind}; [$capability]: true }}>;\n\n",
+            cap.name
+        ));
+        out.push_str(&doc1(&format!(
+            "Makes the capability of {}, for code that has authenticated one.",
+            cap.actor
+        )));
+        out.push_str(&format!(
+            "export const {0} = {{\n  issue: (): {0} => ({{ kind: {kind}, [$capability]: true }}),\n}} as const;\n\n",
+            cap.name
+        ));
+    }
+    for c in &port.contracts {
+        let Some(caller) = &c.caller else {
+            continue;
+        };
+        out.push_str(&doc1(&format!(
+            "Who may run {}: an actor that performs it, by its capability.",
+            c.usecase
+        )));
+        let caps: Vec<&str> = caller
+            .actors
+            .iter()
+            .map(|&i| domain.capabilities[i].name.as_str())
+            .collect();
+        out.push_str(&format!(
+            "export type {} = {};\n\n",
+            caller.name,
+            caps.join(" | ")
+        ));
     }
 }
 
@@ -493,9 +564,21 @@ function $confArg<T>(values: readonly string[], i: number, read: (text: string) 
     // The calls.
     p.push_str("async function $confPrepare(port: ConformancePort, call: readonly string[]): Promise<Result<Result<$ConfWrite, unknown>, string>> {\n");
     p.push_str("  const [action, ...values] = call;\n  switch (action) {\n");
-    for m in &port.methods {
+    for (k, m) in port.methods.iter().enumerate() {
         p.push_str(&format!("    case {}: {{\n", string_literal(&m.action)));
         let mut args = Vec::new();
+        // The harness runs each call as the first actor that performs the use case.
+        if let Some(caller) = port
+            .contracts
+            .iter()
+            .find(|c| c.methods.contains(&k))
+            .and_then(|c| c.caller.as_ref())
+        {
+            args.push(format!(
+                "{}.issue()",
+                domain.capabilities[caller.actors[0]].name
+            ));
+        }
         let mut i = 0usize;
         let mut arg = |p: &mut String, reader: String| -> String {
             let name = format!("$a{i}");
