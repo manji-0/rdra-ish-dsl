@@ -6,8 +6,8 @@ derivations, verification results, and code. This page says what each command do
 
 ```
 rdra-ish <COMMAND> <INPUTS...> [OPTIONS]
-rdra-ish --version        # rdra-ish 2.3.0
-rdra-ish <COMMAND> --help
+rdra-ish --version        # or -V; prints "rdra-ish <version>"
+rdra-ish <COMMAND> --help # or -h; every command takes it
 ```
 
 | Command | What it does |
@@ -35,7 +35,7 @@ directory is searched recursively for `.rdra` files. Every loading command colle
 the same way: each file as given, then each directory walked with the entries of every
 directory sorted by name, so the load order is the same on every platform. All reachable
 files merge into one model. Imports resolve against include paths derived from the input
-layout (see [Modules and Imports](./language-reference.md#modules-and-imports)). Each
+layout (see [Modules and imports](./language-reference.md#modules-and-imports)). Each
 loading command reads the [project manifest](#project-manifest).
 
 **Diagnostics** go to stderr. A load or consistency diagnostic is `error: ...` or
@@ -89,6 +89,8 @@ counts it in its note.
 ---
 
 ## `check`
+
+<!-- derived-from ./state-derivation.md#diagnostics -->
 
 Type-check the model, run the consistency checks, and explore the lifecycle. Writes no file.
 
@@ -407,7 +409,7 @@ present, else `0`; warnings do not fail.
 | `condition-no-rdra-anchor` | warning | A [condition](./language-reference.md#conditions) whose body names neither a variation-typed nor a lifecycle column and that guards no use case (by `applies_to` or `.when`). |
 | `consistency-warning` | warning | A whole-model consistency diagnostic of `check`, such as a missing relation. |
 | `constraint-unscoped` | warning | A `constraint` that `constrains` nothing. |
-| `coverage-score` | info | A 0–100 readiness signal. An empty model scores `0`. Finding penalties scale by model size (×25/elements); each empty layer (`scope`, `business-flow`, `data`, `interaction`, `system-boundary`, `rules`) subtracts 8. |
+| `coverage-score` | info | A readiness signal from 0 to 100. An empty model scores `0`. The score is 100, minus the findings' penalty times 25 divided by the number of model elements, minus 8 for each empty layer (`scope`, `business-flow`, `data`, `interaction`, `system-boundary`, `rules`), and never below 0. |
 | `deprecated-syntax` | warning | A [deprecated form](./language-reference.md#deprecated-and-removed-forms). The message names the rewrite and the version that removes it; `fmt --write` rewrites it. |
 | `dto-unused` | warning | A DTO no API names in `request`, `response`, or `error_response`. |
 | `end-redundant` | warning | An `@end` value that no `transitions` arm leaves: an end state already. |
@@ -518,8 +520,8 @@ blocked: the elements exist, but check rejects them`.
 `stage_name`, `slug`, `passed`, `verdict` (`met`, `open`, `blocked`), `evidence`, the counts
 `gaps` and `notes`, and `findings`. `next.kind` is `required` while a required stage is not
 met, with that stage's `stage`, `stage_name`, `slug`, `verdict`, `question`, `doc`, `asks`,
-`validate`, `gaps` and `notes` (each with `kind` — `buc`, `usecase`, `screen`, `api`, or
-`entity` — `id`, and `message`), and `findings` (`name`, `severity`). Once every required
+`validate`, `gaps` and `notes` (each with `kind`, one of `buc`, `usecase`, `screen`, `api`, or
+`entity`; `id`; and `message`), and `findings` (`name`, `severity`). Once every required
 stage is met it is `optional`, with the same fields per rule stage under `stages`. Skills
 key on `slug` and read `next.asks` and `next.gaps`.
 
@@ -747,8 +749,8 @@ number, `0`, and a fraction are refused.
   sharing off.
 - **Not counted:** the transition system, the per-entity views, the states a worker holds
   while it expands them, and reading a cone's findings. On `insurance-claim-ops` at two
-  instances the process peaked at 1.2–1.4 times the limit at `RDRA_JOBS=1` and up to twice it
-  with eight. A cone can take 1.35–1.6 times what it is counted while it grows.
+  instances the process peaked at 1.2 to 1.4 times the limit at `RDRA_JOBS=1` and up to twice it
+  with eight. A cone can take 1.35 to 1.6 times what it is counted while it grows.
 - **TLC** (`verify --with-tlc`). The TLC cone runs get half the limit (at least `64MiB`) and
   BFS the rest; the whole-model property runs start after BFS and may take all of it. Each
   run counts its `-Xmx` plus `256MiB`. A run's heap is 512 MiB per MiB of module text in whole
@@ -772,10 +774,10 @@ cone's BFS layers say:
 
 - **Past the peak** (two whole depths past the largest): the fall is taken to mirror the rise,
   and the message estimates the states and the memory for a quarter more. On 73 sample cones
-  stopped at a tenth to nine tenths of their states, the 61 estimates came out at 0.51–1.37 of
+  stopped at a tenth to nine tenths of their states, the 61 estimates came out at 0.51 to 1.37 times
   the true count.
 - **Still rising:** no estimate; the message says how fast the frontier grows. Sample cones
-  peaked after 36%–100% of their states, so an early stop usually gets none.
+  peaked after 36% to 100% of their states, so an early stop usually gets none.
 - **Just past the peak, or a long fall:** no estimate, and the message says which.
 - **No estimate from the layers:** the product of the variables' domains bounds the states,
   and when finishing at that many takes at most `1TiB` the message names it as a lower bound
@@ -1178,7 +1180,7 @@ stateDiagram-v2
 
 ---
 
-## Sample Artifact Snapshots
+## Sample artifact snapshots
 
 `scripts/sample-artifacts.tsv` lists every committed `out/` file of the samples (`ec-site`,
 `clinic-ops`, `patent-ops`, `food-permit-ops`, `insurance-claim-ops`, `oidc-auth`,
@@ -1358,7 +1360,7 @@ rdra-ish verify <INPUTS...> [--with-tlc [--tlc-jar <PATH>]] [-o <DIR>]
 | Flag | Default | Meaning |
 |---|---|---|
 | `--with-tlc` | off | Also run TLC on every cone and property run, on each `stable`, `unchanged`, and `precedes` cone, and on the state models of each entity cone BFS finished, up to 100,000 states. Fails (exit 1) when the engines decide a check differently. `can_reach` has no TLC run. Needs TLC ([Getting TLC](#getting-tlc)). |
-| `--backend tlc` | — | Deprecated spelling of `--with-tlc`; prints `warning: --backend tlc is deprecated: ...`. The next major release removes it. |
+| `--backend tlc` | none | Deprecated spelling of `--with-tlc`; prints `warning: --backend tlc is deprecated: ...`. The next major release removes it. |
 | `-o`, `--out <DIR>` | none; a temp dir under `--with-tlc` | Write the specs for a TLC run by hand; see [Specs](#with-tlc). The native checker reads none of them. |
 | `--instance-count <N>` | `2` | Slots per entity, `1..=255`; `1` warns. |
 | `--instances <ENTITY=N>` | `instances` under `[verify]` | One entity's slots; repeatable. See [Per-entity instance counts](#per-entity-instance-counts). |
@@ -1579,7 +1581,7 @@ only, Markdown the header and separator, JSON `[]`. **Exit codes:** `0`; `1` on 
 | `goal` | `id,label,metric,baseline,target,window,description,requirements` (achieving requirements, `\|`-joined) |
 | `requirement` | Requirement metadata, ending `rationale,goals,bucs,description` (`\|`-joined) |
 | `adr` | Decision metadata and the targets of `decides` |
-| `adr-impact` | One row per ADR–target pair |
+| `adr-impact` | One row per pair of an ADR and a target |
 | `nfr`, `constraint` | Non-functional metadata |
 | `quality`, `flow`, `step`, `system`, `variation`, `screen`, `event`, `timer` | Id and label |
 | `field` | Field metadata and `Entity.column` mappings |
@@ -1699,7 +1701,7 @@ going, and [Generated code style](./design/algebraic-codegen.md#generated-code-s
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--lang` | — | `ts` (alias `typescript`), `rust`, or `go`. Required, except with `--format json`, `--code`, or `--probe`. |
+| `--lang` | none | `ts` (alias `typescript`), `rust`, or `go`. Required, except with `--format json`, `--code`, or `--probe`. |
 | `--format` | `code` | `json` prints the contract as data; see [The JSON contract](#the-json-contract). Not with `--conformance` or `--check`. |
 | `--code` | off | Write every file the [`[code.<lang>]` tables](#the-code-tables) name (domain code, traces, probe), paths and sites relative to `rdra.toml`. Not with other flags. |
 | `--probe` | off | Write only the probe of each table that names one. Not with other flags. |
@@ -1816,7 +1818,7 @@ as a `CancelOutcome` case, or `NotEnabled`.
 
 **Contracts and callers.** Each use case with a function or entry point gets a contract:
 `<UseCase>UseCase` with `prepare_*` / `commit_*` (and `run_<action>` for an action with no
-function) — a Rust trait, a TypeScript type of `readonly` members returning `Promise`, a Go
+function). It is a Rust trait, a TypeScript type of `readonly` members returning `Promise`, a Go
 interface (`Prepare*`, `Commit*`, `Run<Action>`). A use case actors perform takes a caller
 first, `by: <UseCase>Caller`, over the capabilities of those actors: a Rust enum of
 `EndUserCapability`-style types made only by `issue()`; a TypeScript union of capability types
@@ -1942,7 +1944,7 @@ rename, completion, hover, signature help, document and workspace symbols, forma
 
 ---
 
-## See Also
+## See also
 
 - [language-reference.md](./language-reference.md): what the DSL means.
 - [incremental-modeling.md](./incremental-modeling.md): the staged modeling flow `next` follows.
