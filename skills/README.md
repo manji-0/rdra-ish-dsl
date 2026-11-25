@@ -58,7 +58,7 @@ gh skill install OWNER/REPO rdra-ish-verify --agent cursor --scope user
 | `rdra-ish-verify` | Formal verification with `verify`, a native checker; TLC only as a second opinion under `--with-tlc` (+ bundled samples) |
 | `rdra-ish-implement` | Implement a service from the model: `codegen`, the contracts, and `check --code` |
 
-The skills link each other's files by relative path (`../rdra-ish-write/...`), and each fact
+The skills link each other's files by relative path, and each fact
 lives in one skill. Install them together: `rdra-ish-buc-create` and `rdra-ish-buc-update`
 need `rdra-ish-write`, and the others link `rdra-ish-buc-analyze`, `rdra-ish-review`, or
 `rdra-ish-verify`.
