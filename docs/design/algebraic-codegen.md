@@ -528,6 +528,16 @@ sample. For this generator:
 - **The keys agree.** `key_facts` (`crates/rdra-ish-cli/tests/key_facts.rs`) gains the
   generated key fields as one more consumer of the `ForeignKey` fact set.
 
+Note (2026-11-25): what was built differs. `codegen_equivalence.rs` checks the IR, not a
+printed language, against every BFS edge at 1 instance. Snapshots do not catch a Rust or Go
+printer bug that still compiles, so `codegen_differential.rs` (#334) runs the printed Rust
+and Go on the same edges. A driver generated from the IR builds each function's rows from
+the BFS pre-state through `from_row`, calls the function, and returns its result as JSON.
+Each column BFS tracks must hold the successor's value, and each column BFS does not track
+must hold what the IR writes. In the converse scope of `codegen_equivalence.rs`, a row in
+the function's source state with no BFS move must get `Rejected`. The dispatchers and
+`NotEnabled` are not run yet, and neither is TypeScript.
+
 ## Phases
 
 0. **Fix `typescript-states`.** Landed; the export was removed later. An Int axis prints the column's type, not a literal, and
