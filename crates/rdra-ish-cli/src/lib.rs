@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 mod cli;
+mod code_check;
 mod codegen_cmd;
 mod csv_cmd;
 mod diagram;
@@ -62,6 +63,7 @@ pub fn run() -> Result<()> {
             max_states,
             memory,
             guards,
+            code,
             bounds,
             scope,
         } => {
@@ -74,6 +76,18 @@ pub fn run() -> Result<()> {
             } = load_project(&inputs, None)?;
             if deny {
                 deny_deprecated(&mut diags);
+            }
+            match (code, &manifest) {
+                (Some(_), m) => {
+                    codegen_cmd::code_manifest(m.as_ref())?;
+                }
+                (None, Some(m)) if m.code.as_ref().is_some_and(|c| !c.targets().is_empty()) => {
+                    eprintln!(
+                        "note: {} has [code]; `check --code` also checks the service code against the model",
+                        codegen_cmd::shown(&m.path)
+                    );
+                }
+                _ => {}
             }
 
             let mut tally = FindingTally::default();
@@ -144,11 +158,20 @@ pub fn run() -> Result<()> {
             }
 
             if tally.errors > 0 {
+                if code.is_some() {
+                    eprintln!("note: --code checked nothing: the model fails `check`, so no code is generated from it");
+                }
                 println!("{}", lifecycle.bounds.fail(tally.errors, tally.warnings));
                 std::process::exit(1);
             }
 
             println!("{}", lifecycle.bounds.ok());
+            if let Some(level) = code {
+                let manifest = manifest.as_ref().expect("checked above");
+                if !code_check::run(&inputs, manifest, level)? {
+                    std::process::exit(1);
+                }
+            }
         }
 
         Commands::Diagram(args) => run_diagram(args)?,
@@ -201,23 +224,27 @@ pub fn run() -> Result<()> {
         Commands::Codegen {
             inputs,
             lang,
+            format,
+            code,
             out,
             package,
             allow_failing,
             conformance,
             conformance_states,
             check,
-        } => codegen_cmd::run_codegen(
-            &inputs,
+        } => codegen_cmd::run_codegen(codegen_cmd::CodegenArgs {
+            inputs: &inputs,
             lang,
-            out.as_deref(),
-            &package,
+            json: format == cli::CodegenFormat::Json,
+            out: out.as_deref(),
+            package: &package,
             allow_failing,
-            conformance
+            conformance: conformance
                 .as_deref()
                 .map(|path| (path, conformance_states)),
-            check.as_deref(),
-        )?,
+            check_file: check.as_deref(),
+            code,
+        })?,
 
         Commands::Files { inputs } => {
             let files = collect_rdra_files(&inputs, None)?;

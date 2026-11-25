@@ -13,6 +13,18 @@
 
 ### Breaking
 
+- A `[code]` table in `rdra.toml` is read now (#363), and an unknown key under it makes every
+  loading command exit 1 with the line, as under `[check]`. It used to be ignored.
+- `codegen` (experimental): the obligations are no longer numbered `O1`, `O2`, ... (#363). Each
+  has a name built from the model's identifiers, which does not move when the model gains an
+  unrelated declaration: the invariant's name where `check` and `verify` check it (marked
+  `[checked]`), else `Ref_<Entity>_<columns>`, `Unique_<Entity>_<columns>`, `OnDelete_*`,
+  `OnUpdate_*`, `Derived_*`, `OneTransaction`, `RunMarks_<UseCase>`, `CompleteRows_<Type>`,
+  `RuleChecks`, or `NotMet_<error>`. The traces file of `--conformance` is format 3, with a
+  fingerprint line after the format line; generate the code and the traces again. The
+  fingerprint's model hash no longer depends on the order the files load in, so a file
+  generated before reads as "model changed" in `codegen --check` once.
+
 - Two `@null` columns that both hold null are no longer equal (#355). `col == other` between
   two columns holds only when both are present and equal, and `col != other` holds whenever
   either is null, as the language reference ([Null](docs/language-reference.md#null)) and the
@@ -145,6 +157,20 @@
   `@null` column; drop it (#187).
 
 ### Added
+
+- `check --code[=fresh|build|run]` (#363, experimental; [design](docs/design/code-check.md)):
+  does the service code have what the model requires? `[code.rust]`, `[code.go]` and
+  `[code.ts]` in `rdra.toml` name the generated files, `codegen <INPUTS> --code` writes them
+  (with paths and sites relative to `rdra.toml`), and `check --code` generates them again and
+  compares, the traces by hash only. `--code` without a `[code]` table exits 1. `check`
+  without `--code` on a model with one prints a one-line note and otherwise does what it did.
+  The LSP shows an information diagnostic on `rdra.toml` when a configured file's fingerprint
+  names another model text. See [`check --code`](docs/cli-reference.md#check---code).
+- `codegen --format json` (#363, experimental): the contract as data, without `--lang`: the
+  types, states, use cases (with whether each has functions, has an action not printed yet,
+  or only reads), functions and named obligations, with their model locations. See
+  [The JSON contract](docs/cli-reference.md#the-json-contract).
+- `codegen --check <FILE> --conformance <TRACES>` compares the traces too, by hash.
 
 - `verify --symmetry` also covers `eventually` and `leads_to` properties, `.fair` included,
   on reduced and unreduced cones (#212, phase 4). Under `always` such a cone runs up to

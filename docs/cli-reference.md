@@ -68,7 +68,7 @@ other finding itself.
 Parse, type-check, and run whole-model consistency checks; produce no artifact output.
 
 ```
-rdra-ish check <INPUTS...> [--strict] [--deny-deprecated] [--max-patterns <N>] [--max-states <N>] [--memory <SIZE>] [--guards] [--instance-count <N>] [--instances <ENTITY=N>]... [--int-range-max <N>] [--buc <ID>]... [--entity <ID>]... [--without-usecase <ID>]... [--without-buc <ID>]... [--actor <ID>]...
+rdra-ish check <INPUTS...> [--strict] [--deny-deprecated] [--max-patterns <N>] [--max-states <N>] [--memory <SIZE>] [--guards] [--code[=fresh|build|run]] [--instance-count <N>] [--instances <ENTITY=N>]... [--int-range-max <N>] [--buc <ID>]... [--entity <ID>]... [--without-usecase <ID>]... [--without-buc <ID>]... [--actor <ID>]...
 ```
 
 Prints each diagnostic to stderr. If any error (non-warning) is present, exits with
@@ -165,6 +165,7 @@ E can get stuck at col = v is not decided: ...`. See [Deadlocks](./state-derivat
 | `--max-states <n>` | Cap on the joint states of one target cone, printed in the `bounds:` line. Default: none; `--memory` stops a run that outgrows the machine, and the `bounds:` line says `no state cap per cone, memory 4GiB`. Past a cap you give, the run records a `StateCapReached` **error** that names what the cone's states vary in. A larger `--int-range-max` or `--instance-count` makes more states per cone, so it reaches the cap sooner. Same as [`states`](#states). |
 | `--memory <size>` | What the run may hold in memory: the states of the cones it explores at once. Default: `memory` under `[check]` in [`rdra.toml`](#project-manifest), else `4GiB`. A cone whose states pass it stops: the run records a `MemoryCapReached` **error** that names the limit, says how many states it held and what each took, and estimates what finishing needs; the findings the cone leaves are listed under `not checked:`. See [Memory limit](#memory-limit). Same as [`states`](#states). |
 | `--guards` | After a clean run, print on stdout which rules each guard protects. See [Guard dependencies](#guard-dependencies). It adds no finding and does not change the exit status. |
+| `--code[=<level>]` | After a clean run, check the service code the [`[code]` tables](#the-code-tables) of `rdra.toml` name: `fresh` (the default), `build` or `run`. Write the level with `=`. See [`check --code`](#check---code). |
 | `--instance-count <n>` | Instances (slots) per entity, `1..=255` (default `1`). A violation that needs two rows of an entity (a uniqueness or a quantifier across rows) shows only from `2`. The `bounds:` line and the final `OK:` line print the value used. Same name and validation as [`verify`](#verify); the default differs (`verify` runs `2`). A larger value also raises the default `--max-patterns`. |
 | `--instances <entity>=<n>` | One entity's slots in place of `--instance-count`, `1..=255`, as `Loan=4`; repeatable. Default: `instances` under `[check]` in [`rdra.toml`](#project-manifest). See [Per-entity instance counts](#per-entity-instance-counts). |
 | `--int-range-max <n>` | The Int domain is `0..=n`, `1..=255` (default `5`). Printed in the `bounds:` line. Same as [`verify`](#verify). |
@@ -173,6 +174,43 @@ E can get stuck at col = v is not decided: ...`. See [Deadlocks](./state-derivat
 | `--without-usecase <id>` | Assume the use case never runs and leave it out; repeatable. See [Partial runs](#partial-runs). |
 | `--without-buc <id>` | Assume the use cases the BUC reaches, and no other BUC does, never run; repeatable. See [Partial runs](#partial-runs). |
 | `--actor <id>` | Keep only the use cases the actor performs and those no actor performs; repeatable. See [Partial runs](#partial-runs). |
+
+### `check --code`
+<!-- derived-from ./design/code-check.md -->
+
+`check --code` asks whether the service code has what the model requires. Experimental, as
+`codegen` is. rdra-ish parses none of the service code: it generates every file the
+[`[code]` tables](#the-code-tables) name again and compares, and at `build` and `run` it
+reads what the language's compiler reports. It runs after the model check; on a model that
+fails `check` it checks nothing (a note says so) and the exit status is the model check's.
+
+| Level | What it checks |
+|---|---|
+| `fresh` | Each file `codegen --code` writes is what the model generates now: the domain code by its text, as [`codegen --check`](#codegen) compares it, and the traces by hash. A missing file is an error. No compiler runs. |
+| `build` | `fresh`, then the language's build command on the probe, with the errors mapped back to the model's use cases. |
+| `run` | `build`, then the conformance test. |
+
+`--code` with no level is `fresh`. Only `build` and `run` start a command, the language's
+default or the `build` / `run` of its table; the LSP never does.
+
+Each finding is one block on stderr, under the cause lines of `codegen --check`:
+
+```
+error: ../svc/src/domain.rs is not what `codegen` generates from the model
+  model changed: its source text is not the text ../svc/src/domain.rs was generated from
+  1 line(s) only in ../svc/src/domain.rs, 1 only in the generated code
+  ...
+  generate them again: rdra-ish codegen model --code
+```
+
+The last line on stdout, after the model check's `OK:` line, is
+`OK: code: what the model requires, at --code=<level>`, or
+`FAIL: code: <n> error(s) at --code=<level>` with exit status `1`.
+
+`--code` on a model without a `[code.rust]`, `[code.go]` or `[code.ts]` table exits `1`, so a
+check that would check nothing never passes. `check` without `--code` on a model that has one
+prints one line, `note: rdra.toml has [code]; `check --code` also checks the service code
+against the model`, on stderr, and otherwise does what it did before.
 
 ### Partial runs
 
@@ -606,6 +644,41 @@ A loading command finds the manifest like this:
 4. With several inputs, every input's manifest is read, so a malformed one fails the command
    whatever the input order. When all are valid, the first input's manifest is the project's.
    A later change will tighten how inputs from different models combine.
+
+### The code tables
+
+`[code.rust]`, `[code.go]` and `[code.ts]` name the files `codegen --code` writes for a
+service in that language, and that [`check --code`](#check---code) holds against the
+model. Every path is relative to the directory of `rdra.toml`; rdra-ish does not decide
+where they go. Only `domain` is required.
+
+```toml
+[code.rust]
+domain = "../service/src/domain.rs"        # the codegen output
+traces = "../service/tests/traces.txt"     # with it, domain holds the conformance harness
+conformance_states = 65536                 # --conformance-states of the traces
+
+[code.obligations]
+Unique_Payment_Order = "../service/migrations/003_payment.sql"
+```
+
+| Key | Description |
+|---|---|
+| `domain` | The domain code `codegen` prints for the language. |
+| `traces` | Rust and Go: the conformance traces. With it, `domain` also holds the conformance port and harness (`--conformance`). |
+| `conformance_states` | The states the BFS behind the traces explores at most. Default `65536`. |
+| `package` | Go: the package name of `domain` (`--package`). Default `domain`. |
+| `probe`, `service`, `module`, `new` | The probe that binds the service to the contracts (P2 of [the design](./design/code-check.md)). |
+| `root` | The directory the build command runs in. Default: the nearest directory above `domain` that holds `Cargo.toml`, `go.mod`, `package.json` or `tsconfig.json`. |
+| `build`, `run` | The command `check --code=build` / `--code=run` runs in place of the language's default, as a list of arguments. It runs only when that level is given on the command line, never from the LSP. |
+
+An unknown key under `[code]` or one of its tables makes every loading command exit `1`, as
+under `[check]`.
+
+The LSP does not run `codegen` or a build. When the model's source text is not the text a
+file under `[code]` was generated from (its fingerprint's model hash), or the file is missing
+or has no fingerprint, it shows an information diagnostic on the table's line of
+`rdra.toml`. A comment-only edit of the model shows it too; `check --code` decides.
 
 The LSP loads a workspace the same way. It lists every `.rdra` file under the workspace roots,
 adds the open buffers, and derives the include paths from those files exactly as the CLI does.
@@ -1952,23 +2025,34 @@ describes where `codegen` is going.
 ```
 rdra-ish codegen <INPUTS...> --lang <LANG> [-o <FILE> | --check <FILE>] [--package <NAME>] [--allow-failing]
                  [--conformance <FILE> [--conformance-states <N>]]
+rdra-ish codegen <INPUTS...> --format json [-o <FILE>] [--allow-failing]
+rdra-ish codegen <INPUTS...> --code
 ```
 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--lang` | `ts` \| `rust` \| `go` | — (required) | Language. `typescript` is an alias of `ts`. |
+| `--lang` | `ts` \| `rust` \| `go` | — (required but with `--format json` or `--code`) | Language. `typescript` is an alias of `ts`. |
+| `--format` | `code` \| `json` | `code` | `json` prints the contract as data instead of code: see [The JSON contract](#the-json-contract). Not with `--conformance` or `--check`. |
+| `--code` | flag | off | Write every file `[code.<lang>]` in [`rdra.toml`](#the-code-tables) names, with paths and sites relative to the directory of `rdra.toml`. Not with the other options. |
 | `-o`, `--out` | path | — (stdout) | Write to this file instead of stdout. |
 | `--package` | string | `domain` | The Go package name (`--lang go` only). Put the file in a directory of its own, as this package, and write the code that finishes it in another package: the fields of a state type are unexported, so only code outside the package is kept from building a state. |
 | `--allow-failing` | flag | off | Generate even when `check` reports errors. The state types then narrow no column, and each error is listed as an obligation the model does not meet. |
 | `--conformance` | path | — (no harness) | `--lang rust` and `go` only, on a model `check` passes: also print the conformance port and harness, and write to this file the traces the harness drives a finished service along. |
 | `--conformance-states` | integer | `65536` | The states the BFS behind the traces explores at most. |
-| `--check` | path | — | Generate again and compare the result with this file instead of printing it. Exit 1 when they differ. Not with `-o` or `--conformance`. |
+| `--check` | path | — | Generate again and compare the result with this file instead of printing it. Exit 1 when they differ. Not with `-o`. With `--conformance <TRACES>`, the traces in `TRACES` are compared too, by hash. |
 
 The output is one compilation unit: a TypeScript module, a Rust module file, or a Go file.
-It opens with a header and the numbered **obligations**: what `check` and `verify` assume of
-the data and no type enforces, each with the invariant that checks it (`Unique_*`,
-`MinCard_*`, `Check_*`) and its source site. Then come the scalars a project may replace
+It opens with a header and the **obligations**: what `check` and `verify` assume of
+the data and no type enforces, each under a name and with its source site. The name is the
+invariant that checks it where `check` and `verify` check one (`Unique_*`, `MinCard_*`,
+`MaxCard_*`, `Check_*`, marked `[checked]`), and otherwise one built the same way from the
+model's identifiers: `Ref_<Entity>_<columns>` (a key names a present parent),
+`Unique_<Entity>_<columns>` (an `@unique` column or set `check` does not hold),
+`OnDelete_*` / `OnUpdate_*`, `Derived_<Entity>_<column>`, `OneTransaction`,
+`RunMarks_<UseCase>`, `CompleteRows_<Type>`, `RuleChecks`, and `NotMet_<error>` under
+`--allow-failing`. A name does not move when the model gains an unrelated declaration, so
+the [obligation ledger](#check---code) can name one. Then come the scalars a project may replace
 (`Money`, `Decimal`, `Date`, `DateTime`), an id type per entity with a one-column primary
 key, each variation and inline `Enum` as a value set, and each entity and DTO as a record. A
 key column takes its parent's id type, and a `@null` column is `T | null`, `Option<T>`, or
@@ -2124,6 +2208,31 @@ stderr it prints the cause, how many lines differ, and the first difference. The
 
 `file edited` and `model changed` can both appear. Restore or regenerate the file. Do not
 edit it by hand: code that finishes the output belongs in other files.
+
+A traces file carries a fingerprint too, as its second line,
+`# rdra-ish codegen fingerprint: model=<hash> code=<hash>`, after the format line
+`# rdra-ish conformance traces 3`. Its code hash covers the file's lines. `--check` with
+`--conformance` compares the traces by that hash only, reading the file once without holding
+it: a traces file can be hundreds of megabytes.
+
+### The JSON contract
+
+`codegen <INPUTS...> --format json` prints what the code is generated from, as one JSON
+object, for an agent or a tool that generates in another language or checks code against the
+model. It is experimental, as the rest of `codegen` is. `--lang` does not change it.
+
+| Key | What it holds |
+|---|---|
+| `format` | `"rdra-ish codegen json 1"`; a reader refuses another. |
+| `generator`, `model`, `check` | The rdra-ish version, the inputs, and whether `check` passed (`passed`, and `bounds` or `errors`). |
+| `types` | The value sets (`kind: "enum"`, with `variation` and `site` for a variation), the id types (`"id"`, with `entity` and `repr`), and the records (`"entity"` or `"dto"`, with `id`, `site` and `fields`). A field has `name` (the column), `ident` (PascalCase), `type` (`{"kind": "scalar" \| "enum" \| "id" \| "rows", "name"}`) and `nullable`. |
+| `states` | Each state type: `name`, `entity`, `site`, `row` (the `<Entity>Row` type), `tag`, and `variants` with their `fields` and `always_null` columns. |
+| `usecases` | Every use case in model order: `id`, `label`, `site`, `kind` (`functions`, `unprinted` when an action has no function yet, or `read-only` when it writes nothing), and `actions`, each with its `functions`, its `dispatcher`, and why it is `unprinted`. |
+| `functions` | Each transition function: `name`, `usecase`, `action`, `step`, `rows`, `marks`, `event`, `inputs`, `conditions`, `result`, `writes` and `raises`. |
+| `obligations` | Each obligation: `name`, `checked`, `text` and `site`. |
+
+Sites are `path:line:col`, relative to the working directory (to the directory of
+`rdra.toml` under `--code`).
 
 ---
 

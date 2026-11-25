@@ -27,7 +27,7 @@ use super::{type_ident, CodegenError, Names};
 use eval::{column_var, enum_name, matching, Rows};
 
 /// The format line every traces file starts with; the harness refuses another.
-pub const TRACES_FORMAT: &str = "# rdra-ish conformance traces 2";
+pub const TRACES_FORMAT: &str = "# rdra-ish conformance traces 3";
 
 /// The states the traces explore at most by default.
 pub const DEFAULT_STATES: usize = 1 << 16;

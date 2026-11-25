@@ -8,6 +8,7 @@ pub mod diagnostics;
 pub mod entity_lifecycle;
 pub mod event_flow;
 mod fasthash;
+pub mod fingerprint;
 pub mod import_scope;
 pub mod lifecycle;
 pub mod lint;
