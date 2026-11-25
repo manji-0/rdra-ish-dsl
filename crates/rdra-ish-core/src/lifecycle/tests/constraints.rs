@@ -917,8 +917,9 @@ sets(SetB, Item.b == blue)
 
 /// `in` and `not in` in a logical `@derived` are the `or` of their equalities (#374): a list
 /// of values is neither true nor false on a null `qty` or `k`, one that lists `null` holds
-/// there, and `present` adds nothing there. A rule reads `in` two-valued, so a null `qty` is
-/// in no list and outside every one.
+/// there, and `present` adds nothing there. `qty == present and ..` and `qty == null or ..`
+/// keep the old reading. A rule reads `in` two-valued, so a null `qty` is in no list and
+/// outside every one.
 #[test]
 fn a_derived_in_over_a_null_column_is_null() {
     let src = |rule: &str| {
@@ -932,6 +933,8 @@ entity Item "品目" {{
   dn: Bool @null @derived(qty not in (1, 2))
   dz: Bool @null @derived(qty in (1, null))
   dp: Bool @null @derived(k in (red, present))
+  rq: Bool @null @derived(qty == present and qty in (1, 2))
+  rn: Bool @null @derived(qty == null or qty not in (1, 2))
 }}
 usecase Make "作成"
 creates(Make, Item)
@@ -947,6 +950,11 @@ creates(Make, Item)
         ("forbidden(Item, dz == true)", InvKind::Forbidden, true),
         ("forbidden(Item, dp == false)", InvKind::Forbidden, false),
         ("forbidden(Item, dp == null)", InvKind::Forbidden, true),
+        // The forms that keep the old reading: false for `in`, true for `not in`.
+        ("forbidden(Item, rq == false)", InvKind::Forbidden, true),
+        ("forbidden(Item, rq == null)", InvKind::Forbidden, false),
+        ("forbidden(Item, rn == true)", InvKind::Forbidden, true),
+        ("forbidden(Item, rn == null)", InvKind::Forbidden, false),
         ("forbidden(Item, qty in (1, 2))", InvKind::Forbidden, false),
         (
             "forbidden(Item, qty not in (1, 2))",
