@@ -1057,6 +1057,10 @@
 
 ### Fixed
 
+- The Go probe of `check --code` imports the domain package under `[code.go] package` when
+  that is set, and the service's package under it when the domain shares the service's package,
+  instead of always using the last element of the import path (#363).
+
 - `codegen` output compiles for an entity whose state column is marked `@null` (#363). The
   Rust `TryFrom<Row>`, the TypeScript `fromRow` and the Go `<Entity>FromRow` compared the
   nullable column with the bare values; a row whose state column is null is now an

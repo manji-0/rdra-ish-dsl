@@ -33,6 +33,7 @@ impl Backend for Rust {
             service: t.target.service.clone()?,
             module: t.target.module.clone()?,
             conformance: t.target.new.clone().zip(traces),
+            package: None,
         };
         Some((path, probe_for(Lang::Rust, domain, &binding)?))
     }

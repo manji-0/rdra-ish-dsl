@@ -140,6 +140,7 @@ impl Backend for TypeScript {
             service: format!("{}#{ty}", specifier(&probe_dir, &service_file)),
             module: specifier(&probe_dir, &normal(&t.path(&t.target.domain))),
             conformance: traces.map(|traces| (new, traces)),
+            package: None,
         };
         Some((path, probe_for(Lang::TypeScript, domain, &binding)?))
     }

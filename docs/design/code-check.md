@@ -68,7 +68,7 @@ checked. "now" holds on the output before this work, "plan" after it.
 | 1 | Entity and column types (records, `<Entity>Row`) | S now | S now | S now | As long as the code uses the generated types; own structs need the binding of [Binding](#binding-the-code-to-the-model) |
 | 2 | `@null` or not | S now `Option<T>` | S now `*T` | S now `T \| null` | Go cannot stop a nil dereference by type |
 | 3 | The value sets of enums and states | S now | S now | S now | |
-| 4 | Every value handled | S now `match` | N now, S plan (generated visitor) | S now, only with a `never` check | Go lets a `switch` miss a case |
+| 4 | Every value handled | S now `match` | S now through the generated visitor (`<Entity>Visitor`, `Match<Entity>`, P7); N for a plain `switch` | S now, only with a `never` check | Go lets a `switch` miss a case; a state added to the model fails every visitor implementation to compile |
 | 5 | The columns a state narrows (state types) | S now, sealed | S now, but a zero value can be built | S now, unsealed; S plan with a private-symbol brand | |
 | 6 | Id and key types | S now | S now | S now (brand) | |
 | 7 | A referenced row exists | D / R (partly) | D / R (partly) | D | The harness keeps one row per entity, so it never tries an orphan |
@@ -355,7 +355,7 @@ Each phase ships and is verified on its own.
 | **P4** `check --code=run`, TypeScript harness | The conformance test generated into the probe file, run by `run`; the TypeScript port and harness | The 4 existing faults fail through it, in TypeScript too | #336 (multi-row rule validators, which need two-row traces) |
 | **P5** obligation ledger | `// rdra: obligation <name>` markers or `[code.obligations]`; obligations with no owner diagnosed | Adding `@unique` to the model adds one diagnostic | #338 (timer and fairness assumptions as named obligations), #336 |
 | **P6** permissions | A capability type per actor in the contract trait arguments; a refused trace for a call by another actor | On clinic-ops or oidc-auth, a call without the capability does not compile; the refusal trace | #337 |
-| **P7** Go's gap | A generated state visitor (`MatchOrder`) so a missed value fails to compile | A model with one more value fails the visitor's implementation | — |
+| **P7** Go's gap (done in the Go pull request of #363) | A generated state visitor (`MatchOrder`) so a missed value fails to compile | A model with one more value fails the visitor's implementation (`go_visitor_fails_to_compile_on_a_new_state`) | — |
 
 #359 is a prerequisite, not a phase: whether `Enum @null` has null as a value changes the
 generated types, so it is decided before P2 fixes the contracts as an interface. It was decided

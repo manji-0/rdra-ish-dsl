@@ -359,3 +359,34 @@ fn the_probe_of_every_sample_compiles() {
     // Most samples pass `check`; a refused one has no Go to probe.
     assert!(checked.len() * 2 > samples().len(), "{checked:?}");
 }
+
+/// A domain package whose `package` clause is not the last element of its import path:
+/// `domain.go` in `store/` with `package = "domain"`. The probe names it by `[code.go]
+/// package`, and the reference service, which imports it as `domain`, builds and conforms.
+#[test]
+fn the_probe_names_the_domain_package_by_its_package_clause() {
+    if !go_available() {
+        return;
+    }
+    let service = std::fs::read_to_string(fixtures().join("go_service/service.go")).unwrap();
+    let manifest = MANIFEST
+        .replace("../domain/domain.go", "../store/domain.go")
+        .replace("[code.go]\n", "[code.go]\npackage = \"domain\"\n");
+    let dir = project(
+        "package-clause",
+        &conformance(),
+        &manifest,
+        &service.replacen(
+            "\t\"example.com/shop/domain\"",
+            "\t\"example.com/shop/store\"",
+            1,
+        ),
+    );
+    let (code, stdout, stderr) = text(&rdra(&dir, &["check", "model", "--code=run"], None));
+    assert_eq!(code, Some(0), "{stdout}{stderr}");
+    let probe = std::fs::read_to_string(dir.join("svc/rdra_contract_test.go")).unwrap();
+    assert!(
+        probe.contains("\tdomain \"example.com/shop/store\"\n"),
+        "{probe}"
+    );
+}

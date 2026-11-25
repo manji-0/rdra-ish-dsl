@@ -251,6 +251,7 @@ fn rust_probes_name_every_contract() {
             service: "svc::Nothing".to_string(),
             module: "svc::domain".to_string(),
             conformance: None,
+            package: None,
         };
         let Some(probe) = rdra_ish_emit::codegen::probe_for(
             rdra_ish_emit::codegen::Lang::Rust,
@@ -352,6 +353,7 @@ fn typescript_probes_name_every_contract() {
             service: "./nothing.ts#Nothing".to_string(),
             module: "./domain.ts".to_string(),
             conformance: None,
+            package: None,
         };
         let Some(probe) = rdra_ish_emit::codegen::probe_for(
             rdra_ish_emit::codegen::Lang::TypeScript,

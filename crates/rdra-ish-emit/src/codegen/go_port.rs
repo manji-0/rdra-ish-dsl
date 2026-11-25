@@ -198,12 +198,17 @@ pub(super) fn probe(
             .map(|c| if c.is_alphanumeric() { c } else { '_' })
             .collect::<String>()
     };
-    let svc = qualifier(svc_import);
+    // The domain package by its `package` clause when the binding names it: an import path
+    // need not end in the package's name.
+    let dom = binding
+        .package
+        .clone()
+        .unwrap_or_else(|| qualifier(&binding.module));
     let same = binding.module == svc_import;
-    let dom = if same {
-        svc.clone()
+    let svc = if same {
+        dom.clone()
     } else {
-        qualifier(&binding.module)
+        qualifier(svc_import)
     };
     let conformance = binding.conformance.as_ref().filter(|_| domain.harness);
     let mut w =

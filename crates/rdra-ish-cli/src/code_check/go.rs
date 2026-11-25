@@ -149,18 +149,25 @@ impl Backend for GoBackend {
         let path = target.target.probe.clone()?;
         let svc = service(target)?;
         let probe_dir = target.path(&path).parent()?.to_path_buf();
+        let module = domain_import(target, &svc, &path);
+        // The service's package by its `package` clause when the domain shares it.
+        let svc_package = match &target.target.package {
+            Some(package) if module == svc.import => package.clone(),
+            _ => svc.package.clone(),
+        };
         let conformance = target.target.traces.as_ref().map(|traces| {
             let new = target
                 .target
                 .new
                 .clone()
-                .unwrap_or_else(|| format!("new({}.{})", svc.package, svc.ty));
+                .unwrap_or_else(|| format!("new({svc_package}.{})", svc.ty));
             (new, relative(&probe_dir, &target.path(traces)))
         });
         let binding = ProbeBinding {
             service: target.target.service.clone()?,
-            module: domain_import(target, &svc, &path),
+            module,
             conformance,
+            package: target.target.package.clone(),
         };
         let domain = target.generated.domain.as_ref()?;
         // Each contract's methods, for `classify` to tell a use case with none from one with

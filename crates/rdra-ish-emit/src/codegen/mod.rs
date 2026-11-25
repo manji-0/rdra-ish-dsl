@@ -151,6 +151,9 @@ pub struct ProbeBinding {
     pub service: String,
     pub module: String,
     pub conformance: Option<(String, String)>,
+    /// Go: the name in the domain package's `package` clause (`[code.go] package`), which the
+    /// probe names it by; `None` names it by the last element of `module`.
+    pub package: Option<String>,
 }
 
 /// The probe of `domain` in `lang`: one line per contract stating the service implements it,

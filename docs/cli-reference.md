@@ -742,7 +742,7 @@ Unique_Payment_Order = "../service/migrations/003_payment.sql"
 | `domain` | The domain code `codegen` prints for the language. |
 | `traces` | The conformance traces. With it, `domain` also holds the conformance port and harness (`--conformance`). |
 | `conformance_states` | The states the BFS behind the traces explores at most. Default `65536`. |
-| `package` | Go: the package name of `domain` (`--package`). Default `domain`. |
+| `package` | Go: the package name of `domain` (`--package`). Default `domain`. When set, the probe imports the domain package under this name, so an import path whose last element is another name (`example.com/shop/store` holding `package domain`) builds; unset, it uses the last element. |
 | `probe` | The probe `codegen --code` (or `--probe`) writes, one line per use case stating that `service` implements that use case's contract (`<UseCase>UseCase`): in Rust a file under the service crate's `tests/`; in TypeScript a `.ts` file anywhere in the project; in Go a `_test.go` file in the service's package directory (`package <svc>_test`), which also names each method of a contract on a line of its own. `build` needs it. In TypeScript `codegen --code` also writes `tsconfig.rdra.json` in `root`. |
 | `service` | The service type, as the probe names it. Rust: its path, `svc::service::Service`. TypeScript: its file, relative to `rdra.toml`, and the exported type or class after `#`, `../web/src/order_service.ts#OrderService`. Go: `<import path>.<Type>`, `example.com/shop/svc.Service`. |
 | `module` | Rust: the path of the generated module in the service's crate, `svc::domain`. Go: the import path of `domain`'s package; by default the service's import path moved as `domain`'s directory is from the probe's. |
