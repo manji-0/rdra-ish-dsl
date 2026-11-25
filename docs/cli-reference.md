@@ -820,7 +820,7 @@ the sample cones that number rises to a peak and falls about as it rose, so:
   stops early usually gets no estimate: of the 73 cones, 1 got one when stopped at half its
   states, 10 at three quarters, and 49 at nine tenths. A cone that outgrows a machine is
   often still rising; the `Complaint` cone of `insurance-claim-ops` at two instances stops
-  at the default `4GiB` with 13.5 million states, still growing 1.6 times per depth.
+  at the default `4GiB` with 1.7 million states, still growing 1.7 times per depth.
 - **Just past the peak, or a long fall.** One depth past the peak, or a fall that already
   holds more states than the mirror gives, gets no estimate either, and the message says
   which.
@@ -848,12 +848,12 @@ error[MemoryCapReached_Order]: state derivation for entity 'Order': memory limit
 
 The `Task` cone (`crates/rdra-ish-cli/tests/fixtures/memory/flags.rdra`) holds 257 states.
 
-`verify` lists what the cones leave undecided. `verify samples/patent-ops --memory 128MiB`
+`verify` lists what the cones leave undecided. `verify samples/patent-ops --memory 64MiB`
 prints (trimmed):
 
 ```text
 not checked: 10 findings not decided
-  whether some OfficeAction can get stuck at status = open is not decided: the OfficeAction cone stopped at the memory limit (128MiB; raise it with --memory or `memory` under [verify] in rdra.toml)
+  whether some OfficeAction can get stuck at status = open is not decided: the OfficeAction cone stopped at the memory limit (64MiB; raise it with --memory or `memory` under [verify] in rdra.toml)
 ...
 result: not decided
 warning: 10 findings a cone stopped at the state cap or the memory limit left undecided; the OK line holds only for what was decided (--deny-undecided fails the run)

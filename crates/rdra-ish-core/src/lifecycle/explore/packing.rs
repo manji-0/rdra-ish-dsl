@@ -1,6 +1,6 @@
 //! States packed into bits at the store boundary (#296 item 2.3, #207 step 3). A state is one
 //! byte per cell, each cell holding a value under its domain's size; the store keeps each cell
-//! in the fewest bits its domain needs, `ceil(log2(size))`, end to end, so a state of 40 to 66
+//! in the fewest bits its domain needs, `ceil(log2(size))`, end to end, so a state of 30 to 60
 //! bytes is kept in 6 to 12. Everything outside the store reads the bytes, as before: `Bfs`
 //! packs a state as it admits it, after #212's canonical form is computed on the bytes, and a
 //! reader unpacks the states it reads, or reads one cell (`Packing::cell`).
