@@ -23,7 +23,7 @@ use crate::refs::{find_symbol_references, reference_at_offset, resolve_decl_site
 use crate::rename::{prepare_rename_range, workspace_rename, RenameError};
 use crate::semantic_tokens::{semantic_tokens, TOKEN_MODIFIERS, TOKEN_TYPES};
 use crate::symbols::{document_symbols, workspace_symbols};
-use crate::uri::{path_to_uri, watched_path_is_rdra};
+use crate::uri::{watched_path_is_rdra, ClientUris};
 
 #[derive(Default)]
 struct ServerState {
@@ -32,6 +32,8 @@ struct ServerState {
     analysis: Option<WorkspaceAnalysis>,
     published: HashSet<Url>,
     manifest_error: Option<String>,
+    /// The URIs the client names the files by, which results are sent under.
+    uris: ClientUris,
 }
 
 /// An analyzed document a request names: the analysis, its path and its source entry.
@@ -118,7 +120,18 @@ impl Backend {
         }
         let analysis = match analyzed {
             Ok(analysis) => analysis,
-            Err(ProjectError::NoRdraFiles) => return,
+            Err(ProjectError::NoRdraFiles) => {
+                // The last .rdra file left the workspace: nothing to analyze, and nothing
+                // published before may stay.
+                let mut state = self.state.write().await;
+                state.analysis = None;
+                let stale = std::mem::take(&mut state.published);
+                drop(state);
+                for uri in stale {
+                    self.client.publish_diagnostics(uri, vec![], None).await;
+                }
+                return;
+            }
             Err(err) => {
                 self.report_load_error(&err, &overlays).await;
                 return;
@@ -136,6 +149,7 @@ impl Backend {
         self.client.log_message(MessageType::ERROR, &message).await;
 
         let mut state = self.state.write().await;
+        let uris = state.uris.clone();
         state.analysis = None;
         let stale = std::mem::take(&mut state.published);
         let announce = state.manifest_error.as_deref() != Some(message.as_str());
@@ -155,7 +169,7 @@ impl Backend {
             .keys()
             .filter(|path| has_rdra_extension(path))
             .min()
-            .and_then(|path| path_to_uri(path).ok());
+            .and_then(|path| uris.uri(path).ok());
         if let Some(uri) = first_open {
             let diagnostic = tower_lsp::lsp_types::Diagnostic {
                 range: Range::default(),
@@ -172,6 +186,7 @@ impl Backend {
     }
 
     async fn publish_diagnostics(&self, analysis: &WorkspaceAnalysis) {
+        let uris = self.state.read().await.uris.clone();
         let mut by_source: HashMap<usize, Vec<&Diagnostic>> = HashMap::new();
         for diag in &analysis.diagnostics {
             if let Some(loc) = &diag.location {
@@ -181,7 +196,7 @@ impl Backend {
 
         let mut published = HashSet::new();
         for (source_id, (path, text, _)) in analysis.program.sources.iter().enumerate() {
-            let uri = match path_to_uri(path) {
+            let uri = match uris.uri(path) {
                 Ok(uri) => uri,
                 Err(_) => continue,
             };
@@ -195,7 +210,14 @@ impl Backend {
                 .await;
             published.insert(uri);
         }
-        self.state.write().await.published = published;
+        // A file published before that is no source now (deleted, renamed, or no longer
+        // under a root) keeps its diagnostics in the editor until they are withdrawn.
+        let stale = std::mem::replace(&mut self.state.write().await.published, published.clone());
+        for uri in stale.difference(&published) {
+            self.client
+                .publish_diagnostics(uri.clone(), vec![], None)
+                .await;
+        }
     }
 }
 
@@ -204,6 +226,9 @@ impl LanguageServer for Backend {
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
         let roots = workspace_roots(&params);
         let mut state = self.state.write().await;
+        for root in &roots {
+            state.uris.add_root(root);
+        }
         state.workspace_roots = roots;
 
         Ok(InitializeResult {
@@ -296,6 +321,7 @@ impl LanguageServer for Backend {
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         if let Ok(path) = uri_to_path(&params.text_document.uri) {
             let mut state = self.state.write().await;
+            state.uris.open(&params.text_document.uri);
             state.documents.insert(path, params.text_document.text);
         }
         self.refresh_analysis().await;
@@ -360,7 +386,7 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
         let (target_path, target_text, _) = &analysis.program.sources[decl.source_id];
-        let Ok(uri) = path_to_uri(target_path) else {
+        let Ok(uri) = state.uris.uri(target_path) else {
             return Ok(None);
         };
         let range = span_to_range(target_text, decl.span);
@@ -390,7 +416,7 @@ impl LanguageServer for Backend {
             if spans.is_empty() {
                 continue;
             }
-            let Ok(uri) = path_to_uri(ref_path) else {
+            let Ok(uri) = state.uris.uri(ref_path) else {
                 continue;
             };
             locations.extend(spans.into_iter().map(|span| Location {
@@ -465,7 +491,7 @@ impl LanguageServer for Backend {
         let Some(analysis) = state.analysis.as_ref() else {
             return Ok(None);
         };
-        let symbols = workspace_symbols(analysis, &params.query);
+        let symbols = workspace_symbols(analysis, &state.uris, &params.query);
         Ok(Some(symbols))
     }
 
@@ -506,7 +532,13 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        match workspace_rename(found.analysis, &found.path, offset, &params.new_name) {
+        match workspace_rename(
+            found.analysis,
+            &state.uris,
+            &found.path,
+            offset,
+            &params.new_name,
+        ) {
             Ok(edit) => Ok(Some(edit)),
             Err(RenameError::InvalidIdentifier) => Err(tower_lsp::jsonrpc::Error::invalid_params(
                 "new name must be a valid identifier",
@@ -557,6 +589,7 @@ impl LanguageServer for Backend {
         };
         Ok(Some(code_lenses(
             found.analysis,
+            &state.uris,
             found.doc.ast,
             found.doc.text,
             &found.path,

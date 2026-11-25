@@ -29,7 +29,9 @@ Every Markdown file under the skills dir is read, and five things are checked:
   holds a flag is checked the same way. Every `references/*.md`, `samples/*.rdra`, or
   `../` path in a code span must exist, relative to the skill (`../` to the file).
 
-Prints each failure, then one summary line; exits 1 when anything failed.
+Prints each failure, then one summary line; exits 1 when anything failed, or when the skills
+dir holds no Markdown file, no rdra block, or no transcript: a wrong path or a fence the
+parser no longer finds must not pass as a clean run.
 """
 
 import glob
@@ -114,8 +116,15 @@ class Checker:
         self.failures.append(f"{where}: {message}")
 
     def run(self):
-        for path in sorted(glob.glob(os.path.join(self.root, "**", "*.md"), recursive=True)):
+        paths = sorted(glob.glob(os.path.join(self.root, "**", "*.md"), recursive=True))
+        for path in paths:
             self.check_file(path)
+        if not paths:
+            self.fail(self.root, "no Markdown file found")
+        else:
+            for kind, what in (("rdra", "rdra block"), ("transcripts", "transcript")):
+                if not self.counts[kind]:
+                    self.fail(self.root, f"no {what} found in {len(paths)} Markdown files")
         for failure in self.failures:
             print(failure)
         c = self.counts

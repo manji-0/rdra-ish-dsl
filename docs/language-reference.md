@@ -526,7 +526,8 @@ triggers(IntakeExpiryCheck, ExpireIntakeForms)
 ```
 
 A timer triggers only use cases and BUCs, never an external system. A use case that a
-timer triggers and that belongs to no BUC is reported like an event-triggered one. A timer
+timer triggers and that belongs to no BUC, neither through `contains` nor through a step of
+a BUC's flow that `covers` it, is reported like an event-triggered one. A timer
 is a free trigger: its use case runs whenever `now` and its guards allow, with no record
 of the timer having fired, and a use case that a timer starts beside an event is free too
 ([Triggers](./state-derivation.md#triggers)). A

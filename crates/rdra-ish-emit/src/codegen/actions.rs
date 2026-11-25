@@ -21,10 +21,11 @@ use rdra_ish_core::SemanticModel;
 use super::ir::{
     Adapt, ArgCheck, Assigned, CmpOp, CondGuard, DispatchCase, DispatchDecl, DomainModel,
     EnumValue, EventDecl, Expr, Field, FieldType, FnDecl, FnInput, Lit, OutKind, RecordDecl,
-    RowOut, RowParam, Skipped, SumDecl, VariantDecl,
+    RowOut, RowParam, Scalar, Skipped, SumDecl, VariantDecl,
 };
 use super::{type_ident, CodegenError, Names};
 
+mod derived;
 mod dispatch;
 mod guards;
 mod lower;

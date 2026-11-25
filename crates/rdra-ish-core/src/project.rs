@@ -11,7 +11,10 @@ use crate::{build_merged_model, resolve_overlaid, Diagnostic, ResolvedProgram, S
 
 pub const MANIFEST_FILE: &str = "rdra.toml";
 
+/// `rdra.toml`. An unknown table or key is an error, so a misspelled `[verfiy]` cannot leave a
+/// command at its defaults; only `[dependencies]` stays free-form.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Manifest {
     #[serde(skip)]
     pub path: PathBuf,
@@ -27,6 +30,7 @@ pub struct Manifest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ModelSection {
     pub name: String,
 }
@@ -414,6 +418,51 @@ mod tests {
             assert!(err.contains(&format!("rdra.toml:{line}:")), "{body}: {err}");
             assert!(err.contains(what), "{body}: {err}");
         }
+    }
+
+    #[test]
+    fn a_misspelled_table_or_model_key_names_the_file_line_and_key() {
+        for (body, line, what) in [
+            (
+                "[model]\nname = \"shop\"\n[verfiy]\nmemory = \"1KiB\"\n",
+                3,
+                "verfiy",
+            ),
+            (
+                "[model]\nname = \"shop\"\n\n[chek]\nmemory = \"1KiB\"\n",
+                4,
+                "chek",
+            ),
+            ("[model]\nname = \"shop\"\nnmae = \"typo\"\n", 3, "nmae"),
+            (
+                "depenencies = 1\n[model]\nname = \"shop\"\n",
+                1,
+                "depenencies",
+            ),
+        ] {
+            let dir = repo();
+            write(&dir.path().join("rdra.toml"), body);
+            let src = layout(dir.path());
+
+            let err = discover(&[src]).unwrap_err().to_string();
+
+            assert!(err.contains(&format!("rdra.toml:{line}:")), "{body}: {err}");
+            assert!(err.contains(what), "{body}: {err}");
+        }
+    }
+
+    #[test]
+    fn dependencies_stay_free_form() {
+        let dir = repo();
+        write(
+            &dir.path().join("rdra.toml"),
+            "[model]\nname = \"shop\"\n\n[dependencies]\nauth = { path = \"../auth\", anything = 1 }\nother = \"1.0\"\n",
+        );
+        let src = layout(dir.path());
+
+        let manifest = discover(&[src]).unwrap().unwrap();
+
+        assert_eq!(manifest.dependencies.len(), 2);
     }
 
     #[test]

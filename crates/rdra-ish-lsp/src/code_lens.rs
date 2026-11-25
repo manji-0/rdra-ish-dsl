@@ -9,21 +9,22 @@ use tower_lsp::lsp_types::{CodeLens, Command, Location, Url};
 
 use crate::convert::{byte_offset_to_position, span_to_range};
 use crate::refs::{ast_references, instance_id_span};
-use crate::uri::path_to_uri;
+use crate::uri::ClientUris;
 
 pub fn code_lenses(
     analysis: &WorkspaceAnalysis,
+    uris: &ClientUris,
     ast: &Ast,
     text: &str,
     file_path: &Path,
 ) -> Vec<CodeLens> {
     let mut lenses = Vec::new();
-    let file_uri = match path_to_uri(file_path) {
+    let file_uri = match uris.uri(file_path) {
         Ok(uri) => uri,
         Err(_) => return lenses,
     };
 
-    let index = reference_index(analysis);
+    let index = reference_index(analysis, uris);
     for item in &ast.items {
         let Item::Instance(inst) = item else {
             continue;
@@ -84,7 +85,7 @@ fn add_location<'a>(
 /// The declaration and reference locations of every `(kind, id)` declared in the workspace,
 /// in source order with a source's declarations before its references. One walk of the
 /// workspace answers every lens, instead of one walk per declaration.
-fn reference_index(analysis: &WorkspaceAnalysis) -> ReferenceIndex<'_> {
+fn reference_index<'a>(analysis: &'a WorkspaceAnalysis, uris: &ClientUris) -> ReferenceIndex<'a> {
     let mut kinds_by_id: HashMap<&str, Vec<&str>> = HashMap::new();
     for (_, _, ast) in &analysis.program.sources {
         for item in &ast.items {
@@ -99,7 +100,7 @@ fn reference_index(analysis: &WorkspaceAnalysis) -> ReferenceIndex<'_> {
 
     let mut index = ReferenceIndex::new();
     for (path, text, ast) in &analysis.program.sources {
-        let Ok(uri) = path_to_uri(path) else {
+        let Ok(uri) = uris.uri(path) else {
             continue;
         };
         let mut push = |kind, id, span| add_location(&mut index, kind, id, (&uri, text), span);
@@ -165,7 +166,7 @@ api BookingApi "API"
             &Default::default(),
         );
         let (_, _, ast) = &analysis.program.sources[0];
-        let lenses = code_lenses(&analysis, ast, src, &file);
+        let lenses = code_lenses(&analysis, &ClientUris::default(), ast, src, &file);
         let book = lenses
             .iter()
             .find(|lens| {

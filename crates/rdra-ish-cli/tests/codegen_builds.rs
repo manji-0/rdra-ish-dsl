@@ -1,5 +1,6 @@
-//! `rdra-ish codegen` output builds as printed: on every `samples.txt` root, and on
-//! `tests/fixtures/codegen/keywords.rdra`, whose names are keywords of the targets, the
+//! `rdra-ish codegen` output builds as printed: on every `samples.txt` root, on
+//! `tests/fixtures/codegen/keywords.rdra`, whose names are keywords of the targets, and on
+//! `tests/fixtures/codegen/derived.rdra`, whose functions compute `@derived` columns, the
 //! TypeScript output passes `tsc --strict`, the Rust output compiles as a library, and the
 //! Go output passes `go vet`, the Rust and Go output with the conformance harness of
 //! `--conformance`. A compiler missing from PATH skips its language, except under
@@ -22,10 +23,12 @@ fn samples() -> Vec<String> {
         .collect()
 }
 
-/// The models every language builds: the samples, and a model whose names are keywords.
+/// The models every language builds: the samples, a model whose names are keywords, and one
+/// whose functions compute derived columns.
 fn models() -> Vec<String> {
     let mut models = samples();
     models.push("crates/rdra-ish-cli/tests/fixtures/codegen/keywords.rdra".to_string());
+    models.push("crates/rdra-ish-cli/tests/fixtures/codegen/derived.rdra".to_string());
     models
 }
 

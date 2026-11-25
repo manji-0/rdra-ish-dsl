@@ -682,7 +682,7 @@ assignment of the entity's state columns.
 | Pattern | Values of the entity's columns, in a present slot. |
 | `INITIAL` | A create action produces the pattern, or it is the start of a pre-existing entity. |
 | `TERMINAL` | Some enabled action deletes a slot in the pattern, or no enabled action moves a slot off it. |
-| `VIA` | The `(BUC, use case)` pairs of the actions on some path to the pattern: the least set closed under the moves between patterns, so it does not depend on the order BFS finds them. |
+| `VIA` | The `(BUC, use case)` pairs of the actions on some path to the pattern: the least set closed under the moves between patterns, so it does not depend on the order BFS finds them. The BUC is one that holds the use case, through `contains` or through a step of one of its flows that `covers` it; of several, the first by id. |
 | `reachable` / `bound` | The count of patterns, and the product of the column domain sizes. |
 
 An entity with no state column has one trivial pattern that is both initial and terminal.

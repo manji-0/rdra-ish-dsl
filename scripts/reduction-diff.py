@@ -18,6 +18,7 @@ is recorded. Such a seed is listed under `disagreed`, its model copied to
 `<work>/disagreed/seed<N>.rdra`, whatever the reduced and unreduced runs compare to.
 
   python3 -I scripts/reduction-diff.py run BIN --seeds 0:40 [--jobs N] [--fail-on-timeout] [--with-tlc] [--counted]
+      [--min-compared N] [--min-reduced N]
   (--seeds @FILE reads the seeds and ranges from FILE, as scripts/reduction-diff-pr-seeds.txt)
   (--timeout S and --work DIR go before the subcommand)
   python3 -I scripts/reduction-diff.py gen SEED [--counted]
@@ -33,8 +34,11 @@ TLC. It writes each seed's model and outputs under `--work` (default target/redu
 copies a diverging model to `<work>/diverged/seed<N>.rdra`, and ends with one JSON summary
 line. A seed whose run passes `--timeout` is listed under `timed_out` with the side that
 timed out first (the unreduced run is skipped after the reduced one times out), never
-dropped silently. The exit code is 1 when any seed diverges or disagrees, or times out under
-`--fail-on-timeout`.
+dropped silently. The exit code is 1 when any seed diverges or disagrees, times out under
+`--fail-on-timeout`, or fails to load (the generator wrote a model `check` rejects, as after
+a syntax change), and when fewer seeds than `--min-compared` (default 1) were compared or
+fewer than `--min-reduced` (default 0) reduced a cone: a run that compared nothing, or
+reduced nothing, is not a pass.
 
 `minimize` shrinks a diverging or disagreeing model by deleting lines (ddmin) while it
 still does. `selfcheck` runs the comparison on the saved output pairs under
@@ -530,7 +534,17 @@ def cmd_run(args):
         disagreed=[x["seed"] for x in by("disagreed")],
     )
     print(json.dumps(summary))
-    failed = summary["diverged"] or summary["disagreed"]
+    for seed in summary["load_errors"][:5]:
+        detail = next(x["detail"] for x in results if x["seed"] == seed)
+        print(f"seed {seed} does not load: {detail.strip()}")
+    short = [
+        f"{what} {summary[what]} < {floor}"
+        for what, floor in (("compared", args.min_compared), ("reduced", args.min_reduced))
+        if summary[what] < floor
+    ]
+    if short:
+        print("too little was checked: " + ", ".join(short))
+    failed = summary["diverged"] or summary["disagreed"] or summary["load_errors"] or short
     return 1 if failed or (args.fail_on_timeout and summary["timed_out"]) else 0
 
 
@@ -613,6 +627,8 @@ def main():
     p.add_argument("bin")
     p.add_argument("--seeds", required=True, help="A:B (B excluded), or seeds and ranges joined by commas; @FILE reads them from FILE")
     p.add_argument("--fail-on-timeout", action="store_true", help="exit 1 when a seed times out")
+    p.add_argument("--min-compared", type=int, default=1, help="exit 1 when fewer seeds were compared")
+    p.add_argument("--min-reduced", type=int, default=0, help="exit 1 when fewer compared seeds reduced a cone")
     p.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) // 2))
     p.add_argument("--with-tlc", action="store_true", help="run TLC beside the native checker and record where they differ")
     p.add_argument("--counted", action="store_true", help="count the raises of every triggers line (#220)")

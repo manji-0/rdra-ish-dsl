@@ -1,7 +1,8 @@
 //! `rdra-ish export --kind sql` runs as printed: the SQLite script of every `samples.txt`
 //! root loads into SQLite, and the `CHECK` constraints reject the rows the model's rules
 //! forbid, null operands included. SQLite runs through Python's `sqlite3` module; without
-//! `python3` on PATH each test is skipped with a printed reason.
+//! `python3` on PATH each test is skipped with a printed reason. `RDRA_REQUIRE_SQLITE=1`
+//! turns the skip into a failure.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -27,7 +28,12 @@ fn have_python() -> bool {
         .output()
         .is_ok_and(|o| o.status.success());
     if !found {
-        println!("skipped: python3 with sqlite3 is not on PATH");
+        let reason = "python3 with sqlite3 is not on PATH";
+        assert!(
+            std::env::var("RDRA_REQUIRE_SQLITE").as_deref() != Ok("1"),
+            "RDRA_REQUIRE_SQLITE=1 but {reason}"
+        );
+        println!("skipped: {reason}");
     }
     found
 }

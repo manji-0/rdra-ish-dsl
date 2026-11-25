@@ -8,7 +8,7 @@ use crate::refs::{
     id_span_in_qref, instance_id_span, reference_at_offset, references_to, symbol_target,
     SymbolTarget, ROLE_KIND,
 };
-use crate::uri::{path_to_uri, paths_equal};
+use crate::uri::{paths_equal, ClientUris};
 use rdra_ish_core::WorkspaceAnalysis;
 use rdra_ish_syntax::ast::{Ast, Item};
 use tower_lsp::lsp_types::{Range, TextEdit, Url, WorkspaceEdit};
@@ -47,6 +47,7 @@ pub fn prepare_rename_range(
 
 pub fn workspace_rename(
     analysis: &WorkspaceAnalysis,
+    uris: &ClientUris,
     path: &Path,
     offset: usize,
     new_name: &str,
@@ -90,7 +91,7 @@ pub fn workspace_rename(
         if edits.is_empty() {
             continue;
         }
-        let uri = path_to_uri(source_path).map_err(|_| RenameError::NoSymbol)?;
+        let uri = uris.uri(source_path).map_err(|_| RenameError::NoSymbol)?;
         changes.insert(uri, edits);
     }
 
@@ -180,11 +181,12 @@ performs(Staff, Book)
             &Default::default(),
         );
         let offset = src.find("Book").unwrap();
-        let edit = workspace_rename(&analysis, &file, offset, "Reserve").unwrap();
+        let edit =
+            workspace_rename(&analysis, &ClientUris::default(), &file, offset, "Reserve").unwrap();
         let changes = edit.changes.expect("changes");
         assert_eq!(changes.len(), 1);
 
-        let uri = path_to_uri(&file).unwrap();
+        let uri = crate::uri::path_to_uri(&file).unwrap();
         let edits = changes.get(&uri).expect("file edits");
         assert_eq!(edits.len(), 2);
 
@@ -206,8 +208,9 @@ performs(Staff, Book)
             &Default::default(),
         );
         let offset = src.rfind("Src.kind").unwrap();
-        let edit = workspace_rename(&analysis, &file, offset, "Origin").unwrap();
-        let uri = path_to_uri(&file).unwrap();
+        let edit =
+            workspace_rename(&analysis, &ClientUris::default(), &file, offset, "Origin").unwrap();
+        let uri = crate::uri::path_to_uri(&file).unwrap();
         let edits = edit
             .changes
             .expect("changes")
@@ -233,11 +236,18 @@ performs(Staff, Book)
             std::slice::from_ref(&root),
             &Default::default(),
         );
-        let uri = path_to_uri(&file).unwrap();
+        let uri = crate::uri::path_to_uri(&file).unwrap();
         let pick_at = src.find("valid).role(renews)").unwrap() + "valid).role(".len();
         let role_at = src.find(".optional().role(renews)").unwrap() + ".optional().role(".len();
         for offset in [pick_at, role_at] {
-            let edit = workspace_rename(&analysis, &file, offset, "continues").unwrap();
+            let edit = workspace_rename(
+                &analysis,
+                &ClientUris::default(),
+                &file,
+                offset,
+                "continues",
+            )
+            .unwrap();
             let edits = edit
                 .changes
                 .expect("changes")
@@ -247,7 +257,7 @@ performs(Staff, Book)
             assert_eq!(edits.len(), 3, "{edits:?}");
         }
         assert_eq!(
-            workspace_rename(&analysis, &file, pick_at, "renews"),
+            workspace_rename(&analysis, &ClientUris::default(), &file, pick_at, "renews"),
             Err(RenameError::Conflict)
         );
         let (_, _, ast) = &analysis.program.sources[0];
@@ -268,7 +278,13 @@ performs(Staff, Book)
         );
         let src = std::fs::read_to_string(&entry).unwrap();
         let offset = src.find("performs").unwrap();
-        let result = workspace_rename(&analysis, &entry, offset, "not valid");
+        let result = workspace_rename(
+            &analysis,
+            &ClientUris::default(),
+            &entry,
+            offset,
+            "not valid",
+        );
         assert_eq!(result, Err(RenameError::InvalidIdentifier));
     }
 
@@ -408,13 +424,14 @@ performs(Staff, Book)
             std::slice::from_ref(&root),
             &Default::default(),
         );
-        let uri = path_to_uri(&file).unwrap();
+        let uri = crate::uri::path_to_uri(&file).unwrap();
         let ref_range = span_to_range(&src, ref_at..ref_at + 3);
         let decl_range = span_to_range(&src, decl_at..decl_at + 3);
 
         for (from, offset) in [("declaration", decl_at), ("chain argument", ref_at)] {
-            let edit = workspace_rename(&analysis, &file, offset, "Renamed")
-                .unwrap_or_else(|e| panic!("{label}.{method} from {from}: {e:?}\n{src}"));
+            let edit =
+                workspace_rename(&analysis, &ClientUris::default(), &file, offset, "Renamed")
+                    .unwrap_or_else(|e| panic!("{label}.{method} from {from}: {e:?}\n{src}"));
             let edits = edit
                 .changes
                 .expect("changes")
