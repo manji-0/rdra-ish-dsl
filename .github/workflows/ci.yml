@@ -32,8 +32,9 @@ jobs:
     # says whether the change can break the nix package while cargo still builds: the flake
     # takes the whole repository as its source, so only its own files, the manifests, the
     # lock file and this workflow can. `codegen` says whether the change touches the codegen
-    # printers, the subcommand or their tests: `check` then runs the slow tests of the
-    # codegen_* binaries too.
+    # printers, the subcommand, their tests, or the models the domain-sample differential
+    # test reads (the five domain samples' .rdra files and samples.txt): `check` then runs
+    # the slow tests of the codegen_* binaries too.
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -94,7 +95,10 @@ jobs:
             else
               nix=false
             fi
-            if grep -qE '^crates/rdra-ish-emit/src/codegen/|^crates/rdra-ish-cli/src/codegen_cmd\.rs$|^crates/rdra-ish-cli/tests/(codegen_|fixtures/codegen/)' changed.txt; then
+            # The models of the five domain samples and samples.txt too: the slow
+            # printed_code_agrees_on_the_domain_samples reads them, and a change there would
+            # otherwise first fail on main.
+            if grep -qE '^crates/rdra-ish-emit/src/codegen/|^crates/rdra-ish-cli/src/codegen_cmd\.rs$|^crates/rdra-ish-cli/tests/(codegen_|fixtures/codegen/)|^samples/(clinic-ops|patent-ops|food-permit-ops|insurance-claim-ops|oidc-auth)/.*\.rdra$|^samples\.txt$' changed.txt; then
               codegen=true
             else
               codegen=false
@@ -136,8 +140,8 @@ jobs:
         # diagram_contract binary runs here, on every event, through `cargo test` in one
         # process (about 35 s), not under nextest (diff-test.sh).
         # The one exception by path: a pull request that touches the codegen printers, the
-        # codegen subcommand or the codegen tests (`codegen` above) also runs the slow tests of
-        # the codegen_* binaries, where a printer bug shows.
+        # codegen subcommand, the codegen tests or the domain samples' models (`codegen`
+        # above) also runs the slow tests of the codegen_* binaries, where a printer bug shows.
         # RDRA_REQUIRE_CODEGEN_TOOLS: the devShell has tsc and go, so the codegen build tests
         # may not skip a language here; portability.yml runs without them and skips. For the
         # same reason RDRA_REQUIRE_TLC, RDRA_REQUIRE_Z3 and RDRA_REQUIRE_SQLITE turn the skips
