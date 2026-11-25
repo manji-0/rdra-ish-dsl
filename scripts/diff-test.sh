@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Run the tests of the crates the given files belong to under cargo-nextest, with the tests
-# CI's `test` step leaves to its release jobs skipped. The pre-commit hook passes the staged
-# files.
+# Run the tests of the crates the given files belong to, with the tests CI's `test` step
+# leaves to its release jobs skipped. The pre-commit hook passes the staged files.
 #
 #   scripts/diff-test.sh FILE...   the crates that own FILE...; nothing when none does
 #   scripts/diff-test.sh --all     every crate (CI's `test` step)
@@ -10,10 +9,16 @@
 #                    tests it lists, as CI's test step does on a pull request
 #   --filter EXPR    the tests the nextest filterset EXPR matches in place of the profile's
 #                    default filter, which EXPR can name as `default()`
+#   --nextest-only   only the cargo-nextest run: not the diagram_contract binary nor the
+#                    doctests, which the run without this flag has run (CI's `slow tests`)
+#
+# The tests run under cargo-nextest, but for two that run through `cargo test` after it:
+# the doctests, which nextest does not run, and rdra-ish-cli's diagram_contract binary, whose
+# tests share one load and exploration of the samples in a process and take about 35 s
+# together; nextest's process per test made nine of them take over 10 s each.
 #
 # A change to the root Cargo.toml or Cargo.lock runs every crate. A crate's dependents are
-# not run: CI's test step runs the whole workspace. The doctests run after, through
-# `cargo test --doc`, which nextest does not run.
+# not run: CI's test step runs the whole workspace.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
@@ -31,12 +36,13 @@ release_only=(
   a_proof_is_the_same_on_any_number_of_solvers
 )
 filter=$(printf ' | test(%s)' "${release_only[@]}")
-filter="not (${filter# | })"
+filter="not (${filter# | }) and not binary_id(rdra-ish-cli::diagram_contract)"
 
 packages=()
 nextest=()
 profile=pr
 all=false
+nextest_only=false
 while (($#)); do
   case "$1" in
     --profile)
@@ -49,6 +55,7 @@ while (($#)); do
       filter="$filter and ($2)"
       shift
       ;;
+    --nextest-only) nextest_only=true ;;
     --all | Cargo.toml | Cargo.lock) all=true ;;
     crates/*/*)
       crate=${1#crates/}
@@ -67,4 +74,9 @@ elif ! ((${#packages[@]})); then
 fi
 # --no-tests=pass: a crate whose tests the filters all skip.
 cargo nextest run "${packages[@]}" --profile "$profile" ${nextest[@]+"${nextest[@]}"} --no-tests=pass -E "$filter"
+$nextest_only && exit 0
+if $all || [[ " ${packages[*]} " == *" -p rdra-ish-cli "* ]]; then
+  # With the packages nextest built, so cargo resolves the same features and builds nothing.
+  cargo test "${packages[@]}" --test diagram_contract
+fi
 cargo test --doc "${packages[@]}"

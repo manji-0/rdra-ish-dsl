@@ -11,9 +11,12 @@ slow-timeout = "10s"
 #
 # Listed: a test that took over 8 s on the runner in a run of this profile, 2 s short of the
 # 10 s the check fails at, so that a test near the line does not turn main red at random.
-# A test is listed by its binary and its exact name. The diagram_contract tests are slow
-# under nextest alone: each runs in a process of its own and loads and explores its samples
-# again, where `cargo test` shares one load across the binary.
+# A test is listed by its binary and its exact name.
+#
+# rdra-ish-cli's diagram_contract binary is in no profile's run: scripts/diff-test.sh leaves
+# it out of every nextest run and runs it whole through `cargo test`, on a pull request and
+# on main, where its tests share one load of the samples (about 35 s together). Under
+# nextest each would load them again, and nine took over 10 s.
 default-filter = """
 not (
     (binary_id(rdra-ish-cli::codegen_equivalence) & test(=functions_agree_with_the_transition_system))
@@ -37,19 +40,6 @@ not (
       | test(=verify_reports_every_rule_that_fails_in_the_same_state)
       | test(=a_native_verify_decides_the_safety_checks_without_tlc)
       | test(=a_rerun_cfg_named_like_a_property_module_leaves_that_cfg)))
-  | (binary_id(rdra-ish-cli::diagram_contract) & (
-        test(=a_state_and_its_use_cases_have_the_ids_the_rdra_diagram_gives_them)
-      | test(=a_state_axis_set_by_sets_is_not_omitted)
-      | test(=a_condition_diagram_node_has_the_id_the_rdra_and_state_diagrams_give_it)
-      | test(=every_state_diagram_of_every_sample_keeps_the_contract)
-      | test(=the_unscoped_state_diagram_is_an_index_and_each_entity_draws_its_models)
-      | test(=an_information_diagram_node_has_the_id_the_rdra_and_state_diagrams_give_it)
-      | test(=the_cli_writes_what_the_library_draws)
-      | test(=lint_reports_each_screen_the_screen_diagram_leaves_unconnected)
-      | test(=every_drawn_kind_has_a_shape_and_every_unlabelled_edge_one_relation)
-      | test(=a_when_guard_is_a_labelled_derived_edge_wherever_applies_to_is_drawn)
-      | test(=a_sequence_diagram_of_a_buc_plays_its_use_cases_in_one_diagram)
-      | test(=a_context_diagram_node_has_the_id_the_rdra_diagram_gives_it)))
   | (binary_id(rdra-ish-cli::engine_corpus) & test(=a_capped_graph_decides_nothing_the_full_graph_contradicts))
   | (binary_id(rdra-ish-cli::engine_equivalence) & (
         test(=a_job_past_the_time_limit_runs_as_a_process_and_is_no_fault)
@@ -81,7 +71,7 @@ path = "junit.xml"
 
 [profile.slow]
 # The tests the list above names, on main: `diff-test.sh --profile slow --filter 'not
-# default()'`, `default()` being the `pr` filter this profile inherits. A profile of its own
+# default()' --nextest-only`, `default()` being the `pr` filter this profile inherits. A profile of its own
 # so that its times go to target/nextest/slow/junit.xml beside the `pr` run's.
 inherits = "pr"
 
