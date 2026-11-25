@@ -878,6 +878,50 @@ the same instructions; at 8 jobs 1.72 s against 1.72 s (median of five), below t
 microbenchmark of synthetic rows had put the rebuild at about 70 cycles a state against about
 125 (the owner's second opinion); the rebuilds are a small share of a run.
 
+### Follow-up (b): the reader's look-ups prefetched (not taken)
+
+<!-- constrained-by #part-2-the-shared-table -->
+
+hashbrown gives no address for a hash, so a prefetch needs the shared table of part 2 as the
+reader's table in a release build. The workers already hash each move, so the reader knows
+the hash of a look-up several moves ahead (`Probe::Miss`). Four builds were tried, all with
+the probes off, against (a) on hashbrown (`a1`):
+
+- `b0`: the shared table, no prefetch.
+- `b1`: `b0`, prefetching the home group's control word and indexes 8 moves ahead
+  (`prfm pldl1keep`).
+- `b2`: `b1` with the shared table's find and insert inline, an explicit probe loop, and the
+  group prefetch moved to 16 moves ahead.
+- `b3`: `b2`, also prefetching the first candidate row 8 moves ahead.
+
+**Measured** (interleaved, median of five at 8 jobs and at the default, of three at 1 job;
+round 1 at 1-minute load 3 to 6, round 2 at 4 to 9):
+
+| | food-permit-ops, 1 / 8 / default | clinic-ops, 1 / 8 / default | insurance-claim-ops, 8 / default |
+|---|---|---|---|
+| `a1`, round 1 | 5.56 / 1.73 / 1.71 s | 5.66 / 1.57 / 1.59 s | 3.67 / 3.99 s |
+| `b0`, round 1 | 5.80 / 1.93 / 1.91 s | – / 2.08 / 1.71 s | 3.78 / 4.11 s |
+| `b1`, round 1 | 5.44 / 1.64 / 1.63 s | – / 1.66 / 1.77 s | 3.85 / 4.09 s |
+| `a1`, round 2 | 5.49 / 1.72 / 1.82 s | 5.64 / 1.52 / 1.80 s | 3.69 / 4.10 s |
+| `b1`, round 2 | 5.33 / 1.73 / 1.64 s | – / 1.64 / 1.92 s | 3.67 / 4.06 s |
+| `b2`, round 2 | 5.34 / 1.81 / 1.62 s | – / 1.68 / 1.97 s | 3.74 / 3.97 s |
+| `b3`, round 2 | 5.45 / 1.85 / 1.70 s | 5.98 / 1.66 / 1.69 s | 3.76 / 4.14 s |
+
+- **The prefetch works.** `b1` against `b0` is 15% off food-permit-ops at 8 jobs, and 6% at
+  1 job.
+- **The shared table still loses.** Against hashbrown, food-permit-ops gains (1 job: 23.26 G
+  cycles against 24.00 G), but clinic-ops loses at 1 job (`b3` 27.50 G cycles against
+  26.45 G, +4%) and at 8 jobs in both rounds. Instructions rise 2% to 3% on clinic-ops and
+  about 1% on the other two. insurance-claim-ops is within the noise.
+- **The fixes did not help.** Inlining the find, the explicit loop, and the row prefetch
+  (`b2`, `b3`) did not improve on `b1`; each adds instructions.
+
+So the release build keeps hashbrown, and (a) stays. Why clinic-ops loses is not known. The
+shared table's find costs more instructions than hashbrown's, 95 against 59 in the second
+opinion's microbenchmark, and the prefetch hides only the latency. That would matter most
+where the table fits in cache; it is a guess, not measured. A further try would start from a
+prefetch hashbrown itself can take, which hashbrown 0.17's public API does not offer.
+
 ## Beyond 3.1: in-flight dedup
 
 <!-- constrained-by #hits-loops-and-stale-misses -->
