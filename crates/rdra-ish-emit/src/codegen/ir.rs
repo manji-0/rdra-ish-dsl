@@ -248,8 +248,9 @@ pub struct FnDecl {
     /// The rows a quantifier binds, numbered after `rows`: row `rows.len() + k` of an
     /// `Expr` is `elems[k]`.
     pub elems: Vec<RowParam>,
-    /// The arms chosen among several from one state: `(row, tag enum, target)`.
-    pub chosen: Vec<(usize, String, EnumValue)>,
+    /// The arms chosen among several from one value: of the state tag, or of a second
+    /// lifecycle column.
+    pub chosen: Vec<Chosen>,
     /// The result record's type name.
     pub result: String,
     /// For a step of a use case split into transactions: `(step, steps)`.
@@ -260,7 +261,28 @@ pub struct FnDecl {
     pub marks_out: Vec<MarkOut>,
 }
 
+/// The target a function takes among several arms from one value.
+#[derive(Clone, Debug)]
+pub struct Chosen {
+    /// The function row the arms move.
+    pub row: usize,
+    /// The second lifecycle column the arms move; `None` for the state tag.
+    pub column: Option<String>,
+    /// The enum type of the tag or the column.
+    pub enum_ty: String,
+    pub value: EnumValue,
+}
+
 impl FnDecl {
+    /// The dispatcher's argument that takes the choice `c`: `<row>_to` for the state tag,
+    /// `<row>_<column>_to` for a second lifecycle column.
+    pub fn choice_name(&self, c: &Chosen) -> String {
+        match &c.column {
+            None => format!("{}_to", self.rows[c.row].name),
+            Some(column) => format!("{}_{column}_to", self.rows[c.row].name),
+        }
+    }
+
     /// Row `r` of an `Expr`: an argument row, or a quantifier's element after them.
     pub fn row(&self, r: usize) -> &RowParam {
         self.rows
@@ -387,6 +409,14 @@ pub enum ArgCheck {
         event_field: String,
         message: String,
     },
+    /// The row is the one the run mark argument `mark` names: a later step of a split use
+    /// case that reads an earlier step's row takes it beside its mark.
+    MarkRow {
+        row: usize,
+        field: Field,
+        mark: usize,
+        message: String,
+    },
     /// The verified model keeps this column null here; a value means the rows broke a rule.
     MustBeNull {
         row: usize,
@@ -434,6 +464,23 @@ pub enum Expr {
         field: Field,
         op: CmpOp,
         value: i64,
+    },
+    /// A nullable input is null: a condition on a value the caller chooses.
+    InputIsNull {
+        input: usize,
+    },
+    /// An enum input holds a value; a null input holds none (#359).
+    InputEnumEq {
+        input: usize,
+        nullable: bool,
+        enum_ty: String,
+        value: EnumValue,
+    },
+    /// A Bool input holds a value; a null input holds none (#359).
+    InputBoolEq {
+        input: usize,
+        nullable: bool,
+        value: bool,
     },
     /// The child row's key names the parent row.
     KeyEq {

@@ -1,0 +1,122 @@
+// The use case vocabulary #335 prints, in the generated functions (codegen_builds.rs,
+// codegen_differential.rs): Open leaves the optional owner key null, Claim links a case to an
+// owner, Move relinks it and Release unlinks it, Draft's `.when` reads the scope the caller
+// chooses, Tag chooses a nullable label present or null under a `.when`, Annotate copies the
+// case's flag into a note and its condition reads the case the note is created under.
+variation Scope "Scope" {
+  free
+  limited
+}
+
+entity Owner "Owner" {
+  id: Int @pk
+  status: Enum(active, closed) @default(active)
+}
+
+entity Case "Case" {
+  id: Int @pk
+  status: Enum(open, drafted) @default(open)
+  first: Bool @default(true)
+  scope: Scope @default(limited)
+  label: String @null
+}
+
+entity Note "Note" {
+  id: Int @pk
+  flag: Bool @default(false)
+}
+
+relate(Case, Owner, N:1).optional()
+relate(Note, Case, N:1)
+
+usecase AddOwner "Add owner"
+usecase CloseOwner "Close owner"
+usecase Open "Open"
+usecase Draft "Draft"
+usecase Tag "Tag"
+usecase Claim "Claim"
+usecase Move "Move"
+usecase Release "Release"
+usecase Annotate "Annotate"
+
+creates(AddOwner, Owner)
+transitions(CloseOwner, Owner.status, active -> closed)
+creates(Open, Case)
+transitions(Draft, Case.status, open -> drafted)
+
+condition FirstOnly "first notice"
+holds(FirstOnly, Case.first == true)
+chooses(Draft, Case.scope, free).when(FirstOnly)
+chooses(Draft, Case.scope, limited)
+
+condition Drafted "drafted"
+holds(Drafted, Case.status == drafted)
+condition NotDrafted "not drafted"
+holds(NotDrafted, Case.status == open)
+sets(Tag, Case.label == present).when(Drafted)
+sets(Tag, Case.label == null).when(NotDrafted)
+
+updates(Claim, Case)
+links(Claim, Case, Owner)
+updates(Move, Case)
+relinks(Move, Case, Owner)
+updates(Release, Case)
+unlinks(Release, Case, Owner)
+
+creates(Annotate, Note)
+sets(Annotate, Note.flag == Case.first)
+condition OpenCase "open case"
+holds(OpenCase, Case.status == open).along(Note, Case)
+applies_to(OpenCase, Annotate)
+
+// Visit runs as two transactions, one per API: step 1 moves a ticket and its desk, step 2
+// updates a counter of the desk and creates a stamp under it. Step 2 takes the ticket and the
+// desk again as they are now, so that it checks the ticket still belongs to the desk and the
+// counter is the desk's. Judge chooses among two
+// arms of the ticket's second lifecycle column, one function per target.
+entity Desk "Desk" {
+  id: Int @pk
+  status: Enum(idle, busy) @default(idle)
+}
+
+entity Counter "Counter" {
+  id: Int @pk
+}
+
+entity Ticket "Ticket" {
+  id: Int @pk
+  status: Enum(waiting, called, done) @default(waiting)
+  verdict: Enum(pending, granted, refused) @default(pending)
+}
+
+entity Stamp "Stamp" {
+  id: Int @pk
+}
+
+relate(Ticket, Desk, N:1)
+relate(Counter, Desk, N:1)
+relate(Stamp, Counter, N:1)
+
+usecase AddDesk "Add desk"
+usecase AddCounter "Add counter"
+usecase AddTicket "Add ticket"
+usecase Visit "Visit"
+usecase Finish "Finish"
+usecase Judge "Judge"
+api VisitApi "Visit API"
+api StampApi "Stamp API"
+
+creates(AddDesk, Desk)
+creates(AddCounter, Counter)
+creates(AddTicket, Ticket)
+invokes(Visit, VisitApi)
+invokes(Visit, StampApi)
+updates(VisitApi, Ticket)
+updates(VisitApi, Desk)
+creates(StampApi, Stamp)
+updates(StampApi, Counter)
+transitions(Visit, Ticket.status, waiting -> called)
+transitions(Visit, Desk.status, idle -> busy)
+transitions(Finish, Ticket.status, called -> done)
+transitions(Judge, Ticket.verdict, pending -> granted)
+transitions(Judge, Ticket.verdict, pending -> refused)

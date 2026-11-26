@@ -1818,14 +1818,23 @@ matches no row rolling back as `NotEnabled`.
 - **Choices.** Arms from one state to several are one function per target
   (`decideFilingToDecidedFile`), guarded by the arm's `.when`; the dispatcher takes the chosen
   state. A second lifecycle column is a branch on its value; a row in no `from` state is
-  `Rejected` by `TransitionFrom`. A `.has(..)` / `.none(..)` condition takes a list of related
+  `Rejected` by `TransitionFrom`. A choice among its arms is one function per target too
+  (`determineFaultFromInvestigatingToAtFault`), and the dispatcher takes the target
+  (`claimCaseLiabilityTo`). A `.has(..)` / `.none(..)` condition takes a list of related
   rows (`terminalCertAssignmentRows`), every present row of that entity; the function keeps
   those the key links.
-- **Not printed yet:** a use case that reads `now`, copies a value from another row, `links` /
-  `relinks` / `unlinks`, makes a choice among arms of a second lifecycle column, guards on a
-  comparison proposition or on a nullable Enum or Bool column, joins by a key over several
-  columns, or raises or handles a counted event. It gets no function; the header lists it with
-  the reason, and the code that finishes the output writes it.
+- **Links and copies.** `links` / `relinks` / `unlinks` is the condition
+  `Links_<Child>_<role>` (`Relinks_..`, `Unlinks_..`) on the child's key, which the function
+  then sets to the parent's id or to null; a created row's optional key nobody links is null.
+  `sets(UC, E.column == F.source)` copies the source row's value. A condition or `.when` on
+  what the step writes reads the value it writes: the parent a created row's key names, a
+  literal, or the input a chosen value becomes (`caseScope === "free"`). A nullable Enum or
+  Bool column compared with a value takes a present value (`== Some(..)`, `!= nil && *x ==
+  ..`), so null satisfies no `==` and every `!=`.
+- **Not printed yet:** a use case that reads `now`, guards on a comparison proposition, joins
+  by a key over several columns, or raises or handles a counted event. It gets
+  no function; the header lists it with the reason, and the code that finishes the output
+  writes it.
 
 **Rule checks.** Each record and state type gets `orderPaidRuleViolations(row)` /
 `rule_violations(&self)` / `RuleViolations()`: the names `check` reports (`Forbidden_Order_0`,

@@ -917,3 +917,311 @@ transitions(ParseOrderRow, Order.status, open -> done)
         "{ts}"
     );
 }
+
+/// The use case vocabulary #335 prints: a created row's optional key left null, a `.when`
+/// on a chosen value read from the input, a `links` as the condition `Links_<Child>_<role>`,
+/// a copy from the parent row, and a condition on the key of the created row, which folds
+/// to the parent the step links it to.
+const VOCAB_SRC: &str = r#"
+variation Scope "Scope" {
+  free
+  limited
+}
+entity Owner "Owner" {
+  id: Int @pk
+  status: Enum(active, closed) @default(active)
+}
+entity Case "Case" {
+  id: Int @pk
+  status: Enum(open, drafted) @default(open)
+  first: Bool @default(true)
+  scope: Scope @default(limited)
+}
+entity Note "Note" {
+  id: Int @pk
+  flag: Bool @default(false)
+}
+relate(Case, Owner, N:1).optional()
+relate(Note, Case, N:1)
+usecase AddOwner "Add owner"
+usecase Open "Open"
+usecase Draft "Draft"
+usecase Claim "Claim"
+usecase Annotate "Annotate"
+creates(AddOwner, Owner)
+creates(Open, Case)
+transitions(Draft, Case.status, open -> drafted)
+condition FirstOnly "first notice"
+holds(FirstOnly, Case.first == true)
+chooses(Draft, Case.scope, free).when(FirstOnly)
+chooses(Draft, Case.scope, limited)
+updates(Claim, Case)
+links(Claim, Case, Owner)
+creates(Annotate, Note)
+sets(Annotate, Note.flag == Case.first)
+condition OpenCase "open case"
+holds(OpenCase, Case.status == open).along(Note, Case)
+applies_to(OpenCase, Annotate)
+"#;
+
+#[test]
+fn the_rest_of_the_use_case_vocabulary_is_printed() {
+    let domain = functions_of(VOCAB_SRC);
+    assert!(domain.skipped.is_empty(), "{:?}", domain.skipped);
+    let f = |name: &str| {
+        domain
+            .fns
+            .iter()
+            .find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("{name}: {:?}", domain.fns.iter().map(|f| &f.name)))
+    };
+    let field = |f: &ir::FnDecl, wire: &str| {
+        let ir::OutKind::Row { fields, .. } = &f.outputs[0].kind else {
+            panic!("{} writes a row", f.name);
+        };
+        fields
+            .iter()
+            .find(|(t, _)| t.wire == wire)
+            .unwrap()
+            .1
+            .clone()
+    };
+    // Open leaves the optional key null.
+    assert!(matches!(field(f("Open"), "owner_id"), ir::Assigned::Null));
+    // Draft reads the chosen scope from its input.
+    let draft = f("Draft");
+    assert_eq!(draft.conditions[0].id, "FirstOnly");
+    let text = format!("{:?}", draft.conditions[0].expr);
+    assert!(text.contains("InputEnumEq"), "{text}");
+    // Claim links the case: the key must be null, and becomes the owner's.
+    let claim = f("ClaimFromOpen");
+    assert_eq!(claim.conditions[0].id, "Links_Case_Owner");
+    assert!(
+        matches!(&claim.conditions[0].expr, ir::Expr::IsNull { .. }),
+        "{:?}",
+        claim.conditions[0].expr
+    );
+    assert!(matches!(
+        field(claim, "owner_id"),
+        ir::Assigned::ParentId { .. }
+    ));
+    // Annotate copies the parent's flag, and runs only under an open case: the condition on
+    // the created note's case folds to the parent row's state.
+    let names: Vec<&str> = domain
+        .fns
+        .iter()
+        .filter(|f| f.action == "Annotate")
+        .map(|f| f.name.as_str())
+        .collect();
+    assert_eq!(names, ["AnnotateFromOpen"]);
+    let annotate = f("AnnotateFromOpen");
+    assert!(annotate.conditions.is_empty(), "{:?}", annotate.conditions);
+    assert!(
+        matches!(field(annotate, "flag"), ir::Assigned::From { ref field, .. } if field.wire == "first"),
+        "{:?}",
+        field(annotate, "flag")
+    );
+
+    let ts = generated_from(VOCAB_SRC, "vocab.rdra", Lang::TypeScript);
+    for line in [
+        r#"if (!(((caseScope === "free") && (case_.first === true)) || (caseScope === "limited"))) {"#,
+        "if (!(case_.owner_id === null)) {",
+        "owner_id: parentOwner.id,",
+        "flag: parentCase.first,",
+        "owner_id: null,",
+    ] {
+        assert!(ts.contains(line), "{line}\n{ts}");
+    }
+    let rust = generated_from(VOCAB_SRC, "vocab.rdra", Lang::Rust);
+    for line in [
+        "if !(((case_scope == Scope::Free) && (case.first)) || (case_scope == Scope::Limited)) {",
+        "if !(case.owner_id.is_none()) {",
+        "flag: parent_case.first,",
+    ] {
+        assert!(rust.contains(line), "{line}\n{rust}");
+    }
+    let go = generated_from(VOCAB_SRC, "vocab.rdra", Lang::Go);
+    for line in [
+        "if !(((caseScope == ScopeFree) && (case_.First() == true)) || (caseScope == ScopeLimited)) {",
+        "if !(case_.OwnerId() == nil) {",
+        "ownerId: ptrTo(parentOwner.Id)",
+    ] {
+        assert!(go.contains(line), "{line}\n{go}");
+    }
+}
+
+/// The two use cases #335 left to a choice: a later step of a split use case takes the rows
+/// an earlier step wrote as they are now, beside their marks, and checks the key between them
+/// (Visit); a choice among arms of a second lifecycle column is one function per target, and
+/// the dispatcher takes the target (Judge).
+const EARLIER_ROWS_SRC: &str = r#"
+entity Desk "Desk" {
+  id: Int @pk
+  status: Enum(idle, busy) @default(idle)
+}
+entity Counter "Counter" {
+  id: Int @pk
+}
+entity Ticket "Ticket" {
+  id: Int @pk
+  status: Enum(waiting, called) @default(waiting)
+  verdict: Enum(pending, granted, refused) @default(pending)
+}
+entity Stamp "Stamp" {
+  id: Int @pk
+}
+relate(Ticket, Desk, N:1)
+relate(Counter, Desk, N:1)
+relate(Stamp, Counter, N:1)
+usecase AddDesk "Add desk"
+usecase AddCounter "Add counter"
+usecase AddTicket "Add ticket"
+usecase Visit "Visit"
+usecase Judge "Judge"
+api VisitApi "Visit API"
+api StampApi "Stamp API"
+creates(AddDesk, Desk)
+creates(AddCounter, Counter)
+creates(AddTicket, Ticket)
+invokes(Visit, VisitApi)
+invokes(Visit, StampApi)
+updates(VisitApi, Ticket)
+updates(VisitApi, Desk)
+creates(StampApi, Stamp)
+reads(StampApi, Counter)
+transitions(Visit, Ticket.status, waiting -> called)
+transitions(Visit, Desk.status, idle -> busy)
+transitions(Judge, Ticket.verdict, pending -> granted)
+transitions(Judge, Ticket.verdict, pending -> refused)
+"#;
+
+#[test]
+fn earlier_rows_and_a_second_column_choice_are_printed() {
+    let domain = functions_of(EARLIER_ROWS_SRC);
+    assert!(domain.skipped.is_empty(), "{:?}", domain.skipped);
+    let f = |name: &str| {
+        domain
+            .fns
+            .iter()
+            .find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("{name}: {:?}", domain.fns.iter().map(|f| &f.name)))
+    };
+    // Visit_2 takes the desk and the ticket beside their marks, checks each is the row its
+    // mark names, and rejects a ticket no longer on the desk.
+    let visit = f("Visit2");
+    let rows: Vec<&str> = visit.rows.iter().map(|r| r.name.as_str()).collect();
+    assert_eq!(rows, ["desk", "ticket", "parent_counter"]);
+    assert_eq!(visit.marks_in.len(), 2);
+    let marked = visit
+        .checks
+        .iter()
+        .filter(|c| matches!(c, ir::ArgCheck::MarkRow { .. }))
+        .count();
+    assert_eq!(marked, 2, "{:?}", visit.checks);
+    let ids: Vec<&str> = visit.conditions.iter().map(|c| c.id.as_str()).collect();
+    assert_eq!(ids, ["Key_Ticket_Desk"]);
+    // Judge: one function per source state and target of `verdict`.
+    let names: Vec<&str> = domain
+        .fns
+        .iter()
+        .filter(|f| f.action == "Judge")
+        .map(|f| f.name.as_str())
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "JudgeFromWaitingToGranted",
+            "JudgeFromWaitingToRefused",
+            "JudgeFromCalledToGranted",
+            "JudgeFromCalledToRefused"
+        ]
+    );
+    let judge = f("JudgeFromCalledToRefused");
+    assert_eq!(judge.chosen.len(), 1);
+    assert_eq!(judge.chosen[0].column.as_deref(), Some("verdict"));
+    assert_eq!(judge.chosen[0].value.wire, "refused");
+    let run = domain
+        .dispatchers
+        .iter()
+        .find(|d| d.name == "RunJudge")
+        .unwrap();
+    assert_eq!(
+        run.choices,
+        [("ticket_verdict_to".to_string(), "TicketVerdict".to_string())]
+    );
+
+    let ts = generated_from(EARLIER_ROWS_SRC, "desk.rdra", Lang::TypeScript);
+    for line in [
+        "export function visit2(desk: DeskRow, ticket: TicketRow, parentCounter: Counter, deskMark: VisitDeskMark1, ticketMark: VisitTicketMark1, stampId: StampId)",
+        "if (ticket.id !== ticketMark.id) {",
+        "if (!(ticket.desk_id === desk.id)) {",
+        r#"verdict: ("refused"),"#,
+        r#"if (ticket.kind === "Called" && ticketVerdictTo === "refused") {"#,
+    ] {
+        assert!(ts.contains(line), "{line}\n{ts}");
+    }
+    let rust = generated_from(EARLIER_ROWS_SRC, "desk.rdra", Lang::Rust);
+    for line in [
+        "if ticket.id != ticket_mark.id {",
+        "if !(ticket.desk_id == desk.id) {",
+        "(Ticket::Called(ticket),) if ticket_verdict_to == TicketVerdict::Refused => judge_from_called_to_refused(ticket)",
+    ] {
+        assert!(rust.contains(line), "{line}\n{rust}");
+    }
+    let go = generated_from(EARLIER_ROWS_SRC, "desk.rdra", Lang::Go);
+    for line in [
+        "if ticket.Id != ticketMark.Id {",
+        "if !(ticket.DeskId == desk.Id) {",
+        "if ticketVerdictTo == TicketVerdictRefused {",
+    ] {
+        assert!(go.contains(line), "{line}\n{go}");
+    }
+}
+
+/// A nullable Enum or Bool column compared with a value (#359): null satisfies no
+/// comparison, so `==` takes a present value and `!=` admits null.
+#[test]
+fn a_comparison_on_a_nullable_enum_or_bool_column_is_printed() {
+    let src = r#"
+entity Item "Item" {
+  id: Int @pk
+  k: Enum(red, blue) @null
+  f: Bool @null
+}
+usecase Make "Make"
+usecase Paint "Paint"
+usecase Clear "Clear"
+creates(Make, Item)
+sets(Paint, Item.k == red)
+sets(Clear, Item.k == null)
+condition IsRed "red"
+holds(IsRed, Item.k == red)
+applies_to(IsRed, Clear)
+condition NotOff "not off"
+holds(NotOff, Item.f != false)
+applies_to(NotOff, Clear)
+"#;
+    let domain = functions_of(src);
+    assert!(domain.skipped.is_empty(), "{:?}", domain.skipped);
+    let ts = generated_from(src, "item.rdra", Lang::TypeScript);
+    assert!(ts.contains(r#"if (!(item.k === "red")) {"#), "{ts}");
+    assert!(ts.contains("if (!(!(item.f === false))) {"), "{ts}");
+    let rust = generated_from(src, "item.rdra", Lang::Rust);
+    assert!(
+        rust.contains("if !(item.k == ::core::option::Option::Some(ItemK::Red)) {"),
+        "{rust}"
+    );
+    assert!(
+        rust.contains("if item.f == ::core::option::Option::Some(false) {"),
+        "{rust}"
+    );
+    let go = generated_from(src, "item.rdra", Lang::Go);
+    assert!(
+        go.contains("if !(item.K != nil && *item.K == ItemKRed) {"),
+        "{go}"
+    );
+    assert!(
+        go.contains("if !(!(item.F != nil && *item.F == false)) {"),
+        "{go}"
+    );
+}

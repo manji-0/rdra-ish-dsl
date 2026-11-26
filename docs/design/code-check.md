@@ -85,7 +85,7 @@ checked. "now" holds on the output before this work, "plan" after it.
 | 10 | The entry point's input and result types | S now (port implemented) | same | S plan | TypeScript needs property-style interfaces |
 | 11 | Effects (rows written, target states, columns set) | R now; S as long as the generated functions are called | same | N now, R plan (TS harness) | Sealing means a state comes only from a generated function or `from_row`, but code that writes rows directly is not stopped by types |
 | 12 | Guards and conditions (`Rejected` / `NotEnabled`) | R now | R now | N now, R plan | The `X` lines of the traces try the calls that must be refused |
-| 13 | Use cases with no printed function (#335) | S plan (entry point only), R plan (pre/post) | same | same | Today only a header line names them |
+| 13 | Use cases with no printed function (#335) | S plan (entry point only), R plan (pre/post) | same | same | Today only a header line names them; none is left on the samples (see [algebraic-codegen](./algebraic-codegen.md#use-cases-without-a-function)) |
 | 14 | One-row rules (`forbidden`, `invariant`, `@check`) | S (what the state type ensures), R (the rest) | same | same (R is plan) | `rule_violations` is generated, not enforced |
 | 15 | Multi-row rules (#336) | D now, R plan | same | D | Needs a generated validator and two-row traces |
 | 16 | Permissions (#337) | S plan (a capability argument per actor), R plan (refusal for another actor) | same | same | Whether the code that makes a capability authenticates is **N** |
@@ -93,7 +93,7 @@ checked. "now" holds on the output before this work, "plan" after it.
 | 18 | Run marks of split use cases | S (type), R (stored) | same | S, N now | |
 | 19 | Events raised and the use cases they trigger | S (the result holds the event), R (what the snapshot holds) | same | S, N now | "Raised after the last step commits" is D |
 | 20 | Timers and fairness (#338) | S plan (an entry point per timer), rest D | same | same | "Eventually runs" cannot be shown by finite traces; a scheduler's existence is **N** |
-| 21 | `@derived` columns | D now, S plan (only the generated function sets it), R (tracked columns) | same | same | |
+| 21 | `@derived` columns | D now, S plan (only the generated function sets it), R (tracked columns) | same | same | Since #362 a generated function computes a logical derived column from what it writes (a literal folds; a copied operand is read from the argument row); any other derived column stays an input, and the function's doc says why |
 | 22 | `Enum @null` / `Bool @null` (#359) | the type is `Option`, the model has no null | same | same | Decided before P2: null is a value |
 | 23 | The generated code is the model's latest | S now (`codegen --check`) | same | same | Language-neutral, by fingerprint |
 | 24 | The whole service goes through the contract (no handler bypass) | **N** | **N** | **N** | See [What it cannot detect](#what-it-cannot-detect) |
@@ -550,8 +550,9 @@ mirrors them instead of inventing its own:
 - Entry points (#335): an action with no printed function adds an `EntryDecl { action, name,
   rows }` to its use case's contract. The rows are the ids of the action's params. Rust prints
   `fn run_<action>(&mut self, <rows>) -> Result<(), <UseCase>Error>`, and the use case gets
-  an error type with only `NotEnabled`. On clinic-ops these are `CheckInPatient_2`,
-  `ApplySelectedTreatmentFee`, `CreateCharge` and `RegisterPerformedProcedure`.
+  an error type with only `NotEnabled`. On clinic-ops these were `CheckInPatient_2`,
+  `ApplySelectedTreatmentFee`, `CreateCharge` and `RegisterPerformedProcedure`, until #335
+  printed them; no sample has an entry point now.
 - Tests:
   - `codegen_code_build.rs` plants three omissions in the conformance service crate (a use
     case not implemented, a method missing, an argument of another type). Each gives its named

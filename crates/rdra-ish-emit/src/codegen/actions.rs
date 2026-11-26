@@ -33,8 +33,8 @@ mod pred;
 mod values;
 
 use dispatch::dispatchers;
-use guards::{arm_conditions, fold_next, reads_only_created};
-use lower::{function, ActionCx};
+use guards::{arm_conditions, fold_next, reads_only_created, NextRead};
+use lower::{function, ActionCx, ColumnArms, TagArms};
 pub(super) use pred::{expr, simplify};
 use pred::{remap_lists, Quant};
 use values::{declared_id, enum_lit, input_index, literal, start_literal, start_value, Write};
@@ -315,19 +315,16 @@ fn functions(
 
     for guard in &action.guards {
         match guard.why {
-            GuardWhy::TransitionFrom | GuardWhy::Owner => {}
-            GuardWhy::Condition { later: None, .. } if !guard.reads_successor() => {}
+            GuardWhy::TransitionFrom | GuardWhy::Owner | GuardWhy::Link => {}
+            // A read of what the step writes folds to the value it writes (`next_read`).
+            GuardWhy::Condition { later: None, .. } => {}
             GuardWhy::Raised { .. } => {}
             GuardWhy::Clock => return Err("reads `now` (phase 5)".into()),
-            GuardWhy::Link => return Err("links, relinks, or unlinks a row (phase 5)".into()),
-            GuardWhy::Copy => return Err("copies a value from another row (phase 5)".into()),
+            GuardWhy::Copy => {}
             GuardWhy::ArmCondition { .. } => {}
             GuardWhy::Run { .. } | GuardWhy::Restrict { .. } => {}
-            GuardWhy::Condition { .. } => {
-                return Err(
-                    "a condition on what the use case creates or a later step writes (phase 5)"
-                        .into(),
-                )
+            GuardWhy::Condition { later: Some(_), .. } => {
+                return Err("a condition on what a later step of the use case writes".into())
             }
         }
     }
@@ -345,7 +342,10 @@ fn functions(
     };
 
     // The arms each param's tag takes: (from, to) by value names.
-    let mut arms: BTreeMap<usize, Vec<(String, String)>> = BTreeMap::new();
+    let mut arms: TagArms = BTreeMap::new();
+    // The second lifecycle columns whose arms share a `from`: a choice, one function per
+    // target, as for the tag. By `(param, var)`.
+    let mut column_choices: ColumnArms = BTreeMap::new();
     for effect in &action.effects {
         if let Effect::Transition {
             var,
@@ -373,7 +373,7 @@ fn functions(
                 froms.sort();
                 froms.dedup();
                 if froms.len() != named.len() {
-                    return Err("a choice among arms of a second lifecycle column".into());
+                    column_choices.insert((p, *var), named);
                 }
                 continue;
             }
@@ -386,13 +386,15 @@ fn functions(
     for (p, param) in action.params.iter().enumerate() {
         let declared = type_of(param.entity)?;
         let list = match (param.role, declared) {
-            // A row of an earlier step: the step reads it through its run mark only.
-            (ParamRole::Earlier { .. }, _) => vec![Source {
-                ty: String::new(),
-                fields: Vec::new(),
+            // A row of an earlier step: the step takes its run mark, and its flat row as it is
+            // now where a guard reads the row (`row_params`).
+            (ParamRole::Earlier { .. }, Declared::Sum(sum)) => vec![Source {
+                ty: sum.row.clone(),
+                fields: sum.row_fields.clone(),
                 always_null: Vec::new(),
                 variant: None,
             }],
+            (ParamRole::Earlier { .. }, Declared::Record(r)) => vec![record_source(r)],
             // The row an event was raised on: read only, in any state, as its flat row.
             (ParamRole::Triggered, Declared::Sum(sum)) => vec![Source {
                 ty: sum.row.clone(),
@@ -469,7 +471,7 @@ fn functions(
             };
             options.push((*p, open));
         }
-        let mut choices: Vec<BTreeMap<usize, Vec<(String, String)>>> = vec![BTreeMap::new()];
+        let mut choices: Vec<TagArms> = vec![BTreeMap::new()];
         for (p, open) in &options {
             let mut next = Vec::new();
             for chosen in &choices {
@@ -487,23 +489,51 @@ fn functions(
             }
             choices = next;
         }
+        // A second lifecycle column's choice: one function per target, with the arms to it.
+        let mut choices: Vec<(TagArms, ColumnArms)> =
+            choices.into_iter().map(|c| (c, BTreeMap::new())).collect();
+        for (&(p, var), a) in &column_choices {
+            let mut targets: Vec<&String> = Vec::new();
+            for (_, to) in a {
+                if !targets.contains(&to) {
+                    targets.push(to);
+                }
+            }
+            let mut next = Vec::new();
+            for (tag, columns) in &choices {
+                for target in &targets {
+                    let mut c = columns.clone();
+                    c.insert(
+                        (p, var),
+                        a.iter().filter(|(_, to)| to == *target).cloned().collect(),
+                    );
+                    next.push((tag.clone(), c));
+                }
+            }
+            choices = next;
+        }
         if choices.len() > MAX_COMBINATIONS {
             return Err(format!(
                 "{} choices among arms (more than {MAX_COMBINATIONS})",
                 choices.len()
             ));
         }
-        for chosen in choices {
+        for (chosen, columns) in choices {
             let mut name = base.clone();
-            let to: Vec<String> = options
+            let mut to: Vec<String> = options
                 .iter()
                 .filter(|(p, open)| open.len() > 1 && picked[*p].variant.is_some())
                 .filter_map(|(p, _)| chosen[p].first().map(|(_, t)| type_ident(t)))
                 .collect();
+            to.extend(
+                columns
+                    .values()
+                    .filter_map(|a| a.first().map(|(_, t)| type_ident(t))),
+            );
             if !to.is_empty() {
                 name = format!("{name}To{}", to.join("And"));
             }
-            match function(&cx, &picked, &chosen, &name, marks) {
+            match function(&cx, &picked, &chosen, &columns, &name, marks) {
                 Ok(mut f) => {
                     f.doc
                         .insert(0, format!("{} ({}).", usecase.label, usecase.id));
@@ -522,8 +552,42 @@ fn functions(
                         };
                         let target = &chosen[p][0].1;
                         if let Some(v) = sum.variants.iter().find(|v| v.value.wire == *target) {
-                            f.chosen.push((r, tag_enum.clone(), v.value.clone()));
+                            f.chosen.push(super::ir::Chosen {
+                                row: r,
+                                column: None,
+                                enum_ty: tag_enum.clone(),
+                                value: v.value.clone(),
+                            });
                         }
+                    }
+                    for ((p, var), a) in &columns {
+                        let VarKind::Column { column, .. } = &ts.var(*var).kind else {
+                            continue;
+                        };
+                        let Some(r) = f.rows.iter().position(|row| row.param == Some(*p)) else {
+                            continue;
+                        };
+                        let Some(FieldType::Enum(enum_ty)) = f.rows[r]
+                            .fields
+                            .iter()
+                            .find(|x| x.wire == *column)
+                            .map(|x| x.ty.clone())
+                        else {
+                            continue;
+                        };
+                        let Some((_, target)) = a.first() else {
+                            continue;
+                        };
+                        f.chosen.push(super::ir::Chosen {
+                            row: r,
+                            column: Some(column.clone()),
+                            enum_ty,
+                            value: EnumValue {
+                                ident: type_ident(target),
+                                wire: target.clone(),
+                                label: None,
+                            },
+                        });
                     }
                     out.push(f);
                 }

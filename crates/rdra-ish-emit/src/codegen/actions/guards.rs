@@ -3,23 +3,22 @@
 
 use super::*;
 
-/// `pred` with each read of a param's successor tag replaced by whether the function's target
-/// is that value; `None` when it reads some other var of a successor.
-pub(super) fn fold_next(pred: &Pred, targets: &BTreeMap<usize, (VarId, Value)>) -> Option<Pred> {
-    let rec = |p: &Pred| fold_next(p, targets);
-    // The target a read of a successor's tag stands for; `None` for any other read of a
-    // successor, which this phase does not fold.
-    let next_tag = |t: &Term| -> Option<Value> {
-        let Term::Slot {
-            var,
-            at: At::Next(p),
-        } = t
-        else {
-            return None;
-        };
-        let (tag, to) = targets.get(&usize::from(*p))?;
-        (var == tag).then_some(*to)
-    };
+/// What a read of a written row's successor stands for in one function.
+pub(super) enum NextRead {
+    /// A value the function fixes: a literal it writes, its one choice, or its target state.
+    Value(Value),
+    /// A term of the arguments: a column the function leaves as it is, or the row a key it
+    /// sets names.
+    Term(Term),
+    /// A value the caller passes: the read stays, and the condition reads the input.
+    Input,
+}
+
+/// `pred` with each read of a param's successor replaced by what `next` says it stands for:
+/// the function's target state, a value it writes, a term of its arguments, or an input.
+/// Comparisons between two fixed values fold. `None` when some read has no such meaning.
+pub(super) fn fold_next(pred: &Pred, next: &dyn Fn(&Term) -> Option<NextRead>) -> Option<Pred> {
+    let rec = |p: &Pred| fold_next(p, next);
     let reads_next = |t: &Term| {
         matches!(
             t,
@@ -29,15 +28,37 @@ pub(super) fn fold_next(pred: &Pred, targets: &BTreeMap<usize, (VarId, Value)>) 
             } | Term::Index(At::Next(_))
         )
     };
+    // The term a read becomes: a literal for a fixed value, the input read kept as it is.
+    let subst = |t: &Term| -> Option<Term> {
+        if !reads_next(t) {
+            return Some(t.clone());
+        }
+        Some(match next(t)? {
+            NextRead::Value(v) => Term::Lit(v),
+            NextRead::Term(t) => t,
+            NextRead::Input => t.clone(),
+        })
+    };
     let truth = |b: bool| if b { Pred::True } else { Pred::False };
     Some(match pred {
         Pred::Cmp(a, op, b) if reads_next(a) || reads_next(b) => {
-            let (Some(to), Term::Lit(v), TsCmp::Eq) = (next_tag(a), b, op) else {
-                return None;
-            };
-            truth(to == *v)
+            let (a, b) = (subst(a)?, subst(b)?);
+            match (&a, op, &b) {
+                (Term::Lit(x), TsCmp::Eq, Term::Lit(y)) => truth(x == y),
+                (Term::Lit(x), TsCmp::Ne, Term::Lit(y)) => truth(x != y),
+                (Term::Lit(_), _, Term::Lit(_)) => return None,
+                (Term::Index(x), TsCmp::Eq, Term::Index(y)) if x == y => Pred::True,
+                // The slot first, as the atoms read it.
+                (Term::Lit(_), TsCmp::Eq | TsCmp::Ne, Term::Slot { .. }) => {
+                    Pred::Cmp(b.clone(), *op, a.clone())
+                }
+                _ => Pred::Cmp(a, *op, b),
+            }
         }
-        Pred::In(a, vs) if reads_next(a) => truth(vs.contains(&Term::Lit(next_tag(a)?))),
+        Pred::In(a, vs) if reads_next(a) => match subst(a)? {
+            lit @ Term::Lit(_) => truth(vs.contains(&lit)),
+            a => Pred::In(a, vs.clone()),
+        },
         Pred::Not(p) => Pred::Not(Box::new(rec(p)?)),
         Pred::And(ps) => Pred::And(ps.iter().map(rec).collect::<Option<_>>()?),
         Pred::Or(ps) => Pred::Or(ps.iter().map(rec).collect::<Option<_>>()?),
@@ -70,13 +91,26 @@ pub(super) fn arm_conditions(
     ts: &TransitionSystem,
     action: &Action,
     chosen: &BTreeMap<usize, Vec<(String, String)>>,
+    columns: &super::lower::ColumnArms,
 ) -> (String, String) {
     let mut ids: Vec<String> = Vec::new();
     for effect in &action.effects {
+        // A chosen value is the caller's: any value's `.when` may be the one it takes.
+        if let Effect::Choose { values, .. } = effect {
+            for (_, id) in values.iter().flat_map(|c| &c.conds) {
+                if !ids.contains(id) {
+                    ids.push(id.clone());
+                }
+            }
+            continue;
+        }
         let Effect::Transition { var, param, arms } = effect else {
             continue;
         };
-        let Some(taken) = chosen.get(&usize::from(*param)) else {
+        let Some(taken) = columns
+            .get(&(usize::from(*param), *var))
+            .or_else(|| chosen.get(&usize::from(*param)))
+        else {
             continue;
         };
         let domain = &ts.var(*var).domain;

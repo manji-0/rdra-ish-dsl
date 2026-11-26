@@ -1176,6 +1176,19 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                         message,
                     )
                 }
+                ArgCheck::MarkRow {
+                    row: r,
+                    field,
+                    mark,
+                    message,
+                } => (
+                    format!(
+                        "{} != {}.Id",
+                        acc(*r, field),
+                        local(&f.marks_in[*mark].name)
+                    ),
+                    message,
+                ),
                 ArgCheck::MustBeNull {
                     row: r,
                     field,
@@ -1417,7 +1430,25 @@ fn expr(
             field,
             enum_ty,
             value,
+        } if field.nullable => {
+            let a = acc(*r, field);
+            format!("{a} != nil && *{a} == {enum_ty}{}", value.ident)
+        }
+        Expr::EnumEq {
+            row: r,
+            field,
+            enum_ty,
+            value,
         } => format!("{} == {enum_ty}{}", acc(*r, field), value.ident),
+        // Null satisfies no comparison (#359): a nil field equals no value.
+        Expr::BoolEq {
+            row: r,
+            field,
+            value,
+        } if field.nullable => {
+            let a = acc(*r, field);
+            format!("{a} != nil && *{a} == {value}")
+        }
         Expr::BoolEq {
             row: r,
             field,
@@ -1429,6 +1460,32 @@ fn expr(
             op,
             value,
         } => format!("{} {} {value}", acc(*r, field), op.symbol()),
+        Expr::InputIsNull { input: i } => format!("{} == nil", input(*i)),
+        Expr::InputEnumEq {
+            input: i,
+            nullable,
+            enum_ty,
+            value,
+        } => {
+            let x = input(*i);
+            if *nullable {
+                format!("{x} != nil && *{x} == {enum_ty}{}", value.ident)
+            } else {
+                format!("{x} == {enum_ty}{}", value.ident)
+            }
+        }
+        Expr::InputBoolEq {
+            input: i,
+            nullable,
+            value,
+        } => {
+            let x = input(*i);
+            if *nullable {
+                format!("{x} != nil && *{x} == {value}")
+            } else {
+                format!("{x} == {value}")
+            }
+        }
         Expr::KeyEq {
             child,
             child_field,

@@ -1018,6 +1018,19 @@ fn print_functions(cx: &Cx<'_>, out: &mut String) {
                         invalid_argument("    ", message)
                     ));
                 }
+                ArgCheck::MarkRow {
+                    row: r,
+                    field,
+                    mark,
+                    message,
+                } => {
+                    out.push_str(&format!(
+                        "  if ({} !== {}.id) {{\n{}  }}\n",
+                        read(*r, field),
+                        local(&f.marks_in[*mark].name),
+                        invalid_argument("    ", message)
+                    ));
+                }
                 ArgCheck::MustBeNull {
                     row: r,
                     field,
@@ -1309,6 +1322,13 @@ fn expr(
             op,
             value,
         } => format!("{} {} {value}", read(*r, field), cmp(op)),
+        Expr::InputIsNull { input: i } => format!("{} === null", input(*i)),
+        Expr::InputEnumEq {
+            input: i, value, ..
+        } => format!("{} === {}", input(*i), string_literal(&value.wire)),
+        Expr::InputBoolEq {
+            input: i, value, ..
+        } => format!("{} === {value}", input(*i)),
         Expr::KeyEq {
             child,
             child_field,

@@ -57,16 +57,16 @@ pub(super) fn dispatchers(fns: &[FnDecl], domain: &DomainModel) -> Vec<DispatchD
                 })
                 .collect();
             let mut choice = Vec::new();
-            for (r, tag_enum, target) in &f.chosen {
-                let name = format!("{}_to", f.rows[*r].name);
+            for c in &f.chosen {
+                let name = f.choice_name(c);
                 let i = match choices.iter().position(|(n, _)| *n == name) {
                     Some(i) => i,
                     None => {
-                        choices.push((name, tag_enum.clone()));
+                        choices.push((name, c.enum_ty.clone()));
                         choices.len() - 1
                     }
                 };
-                choice.push((i, target.clone()));
+                choice.push((i, c.value.clone()));
             }
             let case = f.name.strip_prefix(&pascal).unwrap_or(&f.name);
             cases.push(DispatchCase {

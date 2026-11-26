@@ -5,7 +5,7 @@
 
 use std::cell::RefCell;
 
-use rdra_ish_core::lifecycle::{StateSlice, TransitionSystem, Value, VarId, VarKind};
+use rdra_ish_core::lifecycle::{Domain, StateSlice, TransitionSystem, Value, VarId, VarKind};
 use rdra_ish_core::SemanticModel;
 
 use crate::codegen::ir::{ArgCheck, CmpOp, Expr, FnDecl};
@@ -116,12 +116,21 @@ impl<'a> Rows<'a> {
                 }
                 any
             }
+            // A value the caller passes: the pre-state does not hold it.
+            Expr::InputIsNull { .. } | Expr::InputEnumEq { .. } | Expr::InputBoolEq { .. } => {
+                return None
+            }
             Expr::IsNull { row, field } => self.get(*row, &field.wire)?.1 == Value::NULL,
             Expr::EnumEq {
                 row, field, value, ..
             } => {
                 let (var, v) = self.get(*row, &field.wire)?;
-                enum_name(self.ts, var, v)? == value.wire
+                // Null satisfies no comparison (#359); a plain Enum holds no null, and its first
+                // value shares the encoding.
+                match self.ts.var(var).domain {
+                    Domain::NullableEnum(_) if v == Value::NULL => false,
+                    _ => enum_name(self.ts, var, v)? == value.wire,
+                }
             }
             Expr::BoolEq { row, field, value } => {
                 let (var, v) = self.get(*row, &field.wire)?;
@@ -185,7 +194,7 @@ impl<'a> Rows<'a> {
                 .get(*row, &field.wire)
                 .is_none_or(|(_, v)| v == Value::NULL),
             // A link is the binding BFS chose; the owner var is not a column.
-            ArgCheck::Link { .. } | ArgCheck::EventRow { .. } => true,
+            ArgCheck::Link { .. } | ArgCheck::EventRow { .. } | ArgCheck::MarkRow { .. } => true,
         })
     }
 
