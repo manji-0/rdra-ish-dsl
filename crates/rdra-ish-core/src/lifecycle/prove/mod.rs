@@ -11,6 +11,7 @@
 
 mod encode;
 mod mine;
+mod smt;
 mod solver;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -21,6 +22,7 @@ use crate::lifecycle::cone::VarSet;
 use crate::lifecycle::types::{ActId, CmpOp, Domain, EntId, Pred, Term, VarId, VarKind};
 use crate::lifecycle::TransitionSystem;
 use encode::{Enc, Formula, Frame, Unsupported};
+use smt::{Command, Opt, Script};
 use solver::Sexp;
 
 /// What the prover says about each rule it was asked about.
@@ -135,8 +137,8 @@ struct Candidate {
     origin: Origin,
     formula: Formula,
     reads: VarSet,
-    /// The formula over the pre-state.
-    pre: String,
+    /// The formula over the pre-state, asserted.
+    pre: Script,
     /// z3 resource units a check of it may spend.
     rlimit: u32,
 }
@@ -275,7 +277,8 @@ pub fn prove<S: Solver + Send>(
     let mut fine = BTreeSet::new();
     for (origin, formula, is_fine) in formulas {
         match enc.holds(&formula, Frame::Pre) {
-            Ok(pre) => {
+            Ok(holds) => {
+                let pre = Script::from([Command::Assert(holds)]);
                 if is_fine {
                     fine.insert(cands.len());
                 }
@@ -315,9 +318,14 @@ pub fn prove<S: Solver + Send>(
     // to find the step that breaks each rule. On every sample on one solver (#421): 150 s to
     // 68 s of proof, and the same `Proof` (rules proved, CTIs, lemmas kept) on each.
     let declarations = enc.declarations();
-    let houdini = format!("(reset)\n(set-option :smt.mbqi false)\n{declarations}");
+    let restart = |mbqi: bool| {
+        let mut s = Script::from([Command::Reset, Command::SetOption(Opt::Mbqi(mbqi))]);
+        s.append(&declarations);
+        s
+    };
+    let houdini = restart(false);
     for solver in solvers.iter_mut() {
-        solver.exec(&houdini)?;
+        solver.exec(houdini.text())?;
     }
 
     let mut set = Set {
@@ -386,7 +394,8 @@ pub fn prove<S: Solver + Send>(
                 }
                 // The set is asserted once for the step, so a candidate that falls here
                 // still stands for the step's other checks, on one solver or on several.
-                let scope = format!("{}{}", step.commands, assume(&cands, &set));
+                let mut scope = step.commands.clone();
+                scope.append(&assume(&cands, &set));
                 let answers = violated_each(solvers, &enc, &cands, &hit, &scope, Frame::Post)?;
                 for (k, sat) in hit.into_iter().zip(answers) {
                     let fall = match sat {
@@ -421,9 +430,7 @@ pub fn prove<S: Solver + Send>(
     // solvers shared the checks, so the CTIs come from a solver that starts over, with MBQI
     // on. A rule z3 gave up on in the initial states is asked about them again.
     let solver = &mut solvers[0];
-    solver.exec(&format!(
-        "(reset)\n(set-option :smt.mbqi true)\n{declarations}"
-    ))?;
+    solver.exec(restart(true).text())?;
     for (k, c) in cands.iter().enumerate() {
         let Origin::Rule(i) = c.origin else { continue };
         let verdict = match &set.fell[k] {
@@ -434,9 +441,12 @@ pub fn prove<S: Solver + Send>(
             }),
             Some(Fall::GaveUp(None)) => {
                 let init = initial.as_ref().expect("an initial check ran");
-                solver.exec(&format!("(push)\n{init}{}", violation(&enc, c, Frame::Pre)))?;
+                let mut s = Script::from([Command::Push]);
+                s.append(init);
+                s.append(&violation(&enc, c, Frame::Pre));
+                solver.exec(s.text())?;
                 let sat = solver.check_sat(c.rlimit)?;
-                solver.exec("(pop)")?;
+                solver.exec(&Command::Pop.to_string())?;
                 match sat {
                     Sat::Sat => Verdict::Unproved(Unproved::Initial),
                     Sat::Unsat | Sat::Unknown => Verdict::Unproved(Unproved::Unknown {
@@ -449,17 +459,17 @@ pub fn prove<S: Solver + Send>(
                 let order = std::iter::once(first.index())
                     .chain((0..steps.len()).filter(|a| *a != first.index()));
                 for a in order.filter(|a| breaks(*a, c)) {
-                    solver.exec(&format!(
-                        "(push)\n{}{}(assert {})\n(push)\n{}",
-                        steps[a].commands,
-                        assume(&cands, &set),
-                        c.pre,
-                        violation(&enc, c, Frame::Post)
-                    ))?;
+                    let mut s = Script::from([Command::Push]);
+                    s.append(&steps[a].commands);
+                    s.append(&assume(&cands, &set));
+                    s.append(&c.pre);
+                    s.push(Command::Push);
+                    s.append(&violation(&enc, c, Frame::Post));
+                    solver.exec(s.text())?;
                     if solver.check_sat(c.rlimit)? == Sat::Sat {
                         cti = Some(read_cti(solver, ts, ActId::at_index(a), &c.formula)?);
                     }
-                    solver.exec("(pop)\n(pop)")?;
+                    solver.exec(Script::from([Command::Pop, Command::Pop]).line())?;
                     if cti.is_some() {
                         break;
                     }
@@ -498,17 +508,16 @@ pub fn prove<S: Solver + Send>(
 }
 
 /// Asserts every candidate still in the set over the pre-state.
-fn assume(cands: &[Candidate], set: &Set) -> String {
-    cands
-        .iter()
-        .enumerate()
-        .filter(|(k, _)| set.contains(*k))
-        .map(|(_, c)| format!("(assert {})\n", c.pre))
-        .collect()
+fn assume(cands: &[Candidate], set: &Set) -> Script {
+    let mut s = Script::default();
+    for (_, c) in cands.iter().enumerate().filter(|(k, _)| set.contains(*k)) {
+        s.append(&c.pre);
+    }
+    s
 }
 
 /// The commands that assert some rows violate `c` in `frame`.
-fn violation(enc: &Enc, c: &Candidate, frame: Frame) -> String {
+fn violation(enc: &Enc, c: &Candidate, frame: Frame) -> Script {
     enc.violation(&c.formula, frame)
         .expect("a candidate that encodes has a violation that encodes")
 }
@@ -522,17 +531,20 @@ fn violated_each<S: Solver + Send>(
     enc: &Enc,
     cands: &[Candidate],
     ks: &[usize],
-    scope: &str,
+    scope: &Script,
     frame: Frame,
 ) -> Result<Vec<Sat>, SolverError> {
     let hands = solvers.len().min(ks.len()).max(1);
+    let mut open = Script::from([Command::Push]);
+    open.append(scope);
+    let (open, pop) = (open.text(), Command::Pop.to_string());
     let deal = |solver: &mut S, hand: usize| -> Result<Vec<(usize, Sat)>, SolverError> {
-        solver.exec(&format!("(push)\n{scope}"))?;
+        solver.exec(open)?;
         let mut answers = Vec::new();
         for (at, k) in ks.iter().enumerate().skip(hand).step_by(hands) {
             answers.push((at, violated(solver, enc, &cands[*k], frame)?));
         }
-        solver.exec("(pop)")?;
+        solver.exec(&pop)?;
         Ok(answers)
     };
     let dealt: Vec<_> = if hands == 1 {
@@ -570,9 +582,11 @@ fn violated(
     c: &Candidate,
     frame: Frame,
 ) -> Result<Sat, SolverError> {
-    solver.exec(&format!("(push)\n{}", violation(enc, c, frame)))?;
+    let mut s = Script::from([Command::Push]);
+    s.append(&violation(enc, c, frame));
+    solver.exec(s.text())?;
     let sat = solver.check_sat(c.rlimit)?;
-    solver.exec("(pop)")?;
+    solver.exec(&Command::Pop.to_string())?;
     Ok(sat)
 }
 
@@ -674,18 +688,18 @@ fn read_cti(
     formula: &Formula,
 ) -> Result<Cti, SolverError> {
     let action = &ts.actions()[act.index()];
-    let mut rows: Vec<(String, EntId)> = action
+    let mut rows: Vec<(smt::Expr, EntId)> = action
         .params
         .iter()
         .enumerate()
-        .map(|(i, p)| (encode::param(i), p.entity))
+        .map(|(i, p)| (encode::param(i, p.entity), p.entity))
         .collect();
     rows.extend(
         formula
             .binders
             .iter()
             .enumerate()
-            .map(|(i, e)| (encode::bound(i), *e)),
+            .map(|(i, e)| (encode::bound(i, *e), *e)),
     );
     let enc = Enc { ts };
     let mut marks_read = VarSet::new();
@@ -694,7 +708,7 @@ fn read_cti(
     }
     ts.pred_reads(&formula.body, &mut marks_read);
     // Per row: its id, then each var before and after.
-    let mut terms: Vec<String> = Vec::new();
+    let mut terms: Vec<smt::Expr> = Vec::new();
     for (row, e) in &rows {
         terms.push(row.clone());
         for v in ts.var_ids().filter(|v| enc.owner(*v) == Some(*e)) {
@@ -706,7 +720,7 @@ fn read_cti(
         terms.push(encode::nil(e));
     }
     let out = solver
-        .exec(&format!("(get-value ({}))", terms.join(" ")))?
+        .exec(&Command::GetValue(terms).to_string())?
         .join(" ");
     let parsed =
         Sexp::parse(&out).ok_or_else(|| SolverError(format!("cannot read the model: {out}")))?;
