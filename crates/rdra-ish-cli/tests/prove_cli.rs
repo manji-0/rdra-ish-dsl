@@ -11,19 +11,9 @@ use std::process::{Command, Output};
 mod root;
 use root::repo;
 
-fn have(tool: &str, require: &str) -> bool {
-    let found = std::env::var_os("PATH")
-        .is_some_and(|paths| std::env::split_paths(&paths).any(|d| d.join(tool).is_file()));
-    if !found {
-        let reason = format!("{tool} not on PATH (run inside `nix develop`)");
-        assert!(
-            std::env::var(require).as_deref() != Ok("1"),
-            "{require}=1 but {reason}"
-        );
-        println!("skipped: {reason}");
-    }
-    found
-}
+#[path = "common/tools.rs"]
+mod tools;
+use tools::tool;
 
 fn verify(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
@@ -41,7 +31,7 @@ fn sample(name: &str) -> String {
 
 #[test]
 fn a_rule_that_holds_for_any_number_of_rows_is_proved() {
-    if !have("z3", "RDRA_REQUIRE_Z3") {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
         return;
     }
     let out = verify(&["--prove", &sample("check_met")]);
@@ -62,7 +52,7 @@ fn a_rule_that_holds_for_any_number_of_rows_is_proved() {
 
 #[test]
 fn a_rule_that_breaks_at_two_rows_is_unproved_with_its_step() {
-    if !have("z3", "RDRA_REQUIRE_Z3") {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
         return;
     }
     // `check` passes at one instance; Ship and Reship link two Shipments to one Order.
@@ -81,7 +71,7 @@ fn a_rule_that_breaks_at_two_rows_is_unproved_with_its_step() {
 
 #[test]
 fn an_unreachable_cti_is_ruled_out_by_a_mined_lemma() {
-    if !have("z3", "RDRA_REQUIRE_Z3") {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
         return;
     }
     // Forbidden_Order_0 alone is not inductive: CancelOrder breaks it from a pending Order
@@ -121,7 +111,7 @@ fn deny_unproved_needs_prove() {
 
 #[test]
 fn the_ok_line_says_how_many_rules_were_proved() {
-    if !have("z3", "RDRA_REQUIRE_Z3") || !have("tlc", "RDRA_REQUIRE_TLC") {
+    if !tool("z3", "RDRA_REQUIRE_Z3") || !tool("tlc", "RDRA_REQUIRE_TLC") {
         return;
     }
     let out = verify(&["--prove", "--deny-unproved", &sample("check_met")]);
@@ -135,7 +125,7 @@ fn the_ok_line_says_how_many_rules_were_proved() {
 
 #[test]
 fn deny_unproved_fails_a_run_that_tlc_passes() {
-    if !have("z3", "RDRA_REQUIRE_Z3") || !have("tlc", "RDRA_REQUIRE_TLC") {
+    if !tool("z3", "RDRA_REQUIRE_Z3") || !tool("tlc", "RDRA_REQUIRE_TLC") {
         return;
     }
     // `check` and TLC pass at one instance; at two TLC fails, and the proof leaves the rule
@@ -159,7 +149,7 @@ fn deny_unproved_fails_a_run_that_tlc_passes() {
 
 #[test]
 fn a_lemma_the_model_marks_is_reported_apart_from_the_rules() {
-    if !have("z3", "RDRA_REQUIRE_Z3") {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
         return;
     }
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("prove_cli_lemma");
@@ -212,7 +202,7 @@ invariant(Order).when(status == placed).none(Shipment).label("no shipment yet").
 
 #[test]
 fn a_rule_that_holds_only_under_the_int_bound_is_unproved() {
-    if !have("z3", "RDRA_REQUIRE_Z3") {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
         return;
     }
     // At Int 0..5 no qty passes 5, so `check` passes; Adjust may write any number.
@@ -257,7 +247,7 @@ forbidden(Item, qty > 5)
 
 #[test]
 fn a_rule_the_sql_schema_leaves_to_the_application_says_so() {
-    if !have("z3", "RDRA_REQUIRE_Z3") {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
         return;
     }
     // A forbidden over two entities has no CHECK; a 1:1 key is a UNIQUE constraint.
@@ -285,7 +275,7 @@ fn a_rule_the_sql_schema_leaves_to_the_application_says_so() {
 
 #[test]
 fn a_cti_shows_the_run_mark_its_step_reads() {
-    if !have("z3", "RDRA_REQUIRE_Z3") {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
         return;
     }
     // Pay runs in two steps; step 1 reads and sets the Payment's run mark, which no view
@@ -302,7 +292,7 @@ fn a_cti_shows_the_run_mark_its_step_reads() {
 
 #[test]
 fn verify_runs_no_tlc_cone_for_a_lemma() {
-    if !have("tlc", "RDRA_REQUIRE_TLC") {
+    if !tool("tlc", "RDRA_REQUIRE_TLC") {
         return;
     }
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("prove_cli_lemma_cone");
@@ -363,7 +353,7 @@ fn not_decided(line: &str) -> bool {
 
 #[test]
 fn a_proof_decides_a_cone_that_stopped_at_the_memory_limit() {
-    if !have("z3", "RDRA_REQUIRE_Z3") {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
         return;
     }
     // At four instances the cone has tens of states, and 1KiB stops BFS after a few. z3
@@ -392,7 +382,7 @@ fn a_proof_decides_a_cone_that_stopped_at_the_memory_limit() {
 
 #[test]
 fn a_cone_at_the_memory_limit_is_decided_only_when_every_rule_in_it_is_proved() {
-    if !have("z3", "RDRA_REQUIRE_Z3") {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
         return;
     }
     // One true rule. Alone it is not inductive and stays unproved, so its cone, stopped at
@@ -421,7 +411,7 @@ fn a_cone_at_the_memory_limit_is_decided_only_when_every_rule_in_it_is_proved() 
 
 #[test]
 fn a_proof_leaves_an_after_assert_and_a_state_cap_undecided() {
-    if !have("z3", "RDRA_REQUIRE_Z3") {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
         return;
     }
     // z3 proves both rules of the cone, but the cone also checks an after-assert, which the

@@ -19,6 +19,10 @@ use rdra_ish_core::load_project;
 mod samples;
 use samples::repo;
 
+#[path = "common/tools.rs"]
+mod tools;
+use tools::{found_or_skip, on_path};
+
 const STATE_CAP: usize = 300_000;
 
 fn samples() -> Vec<String> {
@@ -28,20 +32,10 @@ fn samples() -> Vec<String> {
 }
 
 fn find_z3() -> Option<PathBuf> {
-    let named = std::env::var_os("RDRA_Z3").map(PathBuf::from);
-    let found = named.or_else(|| {
-        std::env::split_paths(&std::env::var_os("PATH")?)
-            .map(|d| d.join("z3"))
-            .find(|p| p.is_file())
-    });
-    if found.is_none() {
-        let reason = "z3 not on PATH (run inside `nix develop`)";
-        assert!(
-            std::env::var("RDRA_REQUIRE_Z3").as_deref() != Ok("1"),
-            "RDRA_REQUIRE_Z3=1 but {reason}"
-        );
-        println!("skipped: {reason}");
-    }
+    let found = std::env::var_os("RDRA_Z3")
+        .map(PathBuf::from)
+        .or_else(|| on_path("z3"));
+    found_or_skip(found.is_some(), "z3 is not on PATH", "RDRA_REQUIRE_Z3");
     found
 }
 
