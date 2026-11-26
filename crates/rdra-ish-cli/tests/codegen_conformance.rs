@@ -16,20 +16,16 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+#[path = "common/output.rs"]
+mod output;
+use output::text;
+
+#[path = "common/tools.rs"]
+mod tools;
+use tools::{tool, tools, CODEGEN};
+
 fn fixture() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/codegen")
-}
-
-fn available(tool: &str, arg: &str) -> bool {
-    let found = Command::new(tool).arg(arg).output().is_ok();
-    if !found {
-        assert!(
-            std::env::var("RDRA_REQUIRE_CODEGEN_TOOLS").as_deref() != Ok("1"),
-            "{tool} is not on PATH, and RDRA_REQUIRE_CODEGEN_TOOLS=1 requires it; the dev shell provides it"
-        );
-        eprintln!("skipping: {tool} is not on PATH");
-    }
-    found
 }
 
 fn scratch(lang: &str) -> PathBuf {
@@ -58,14 +54,6 @@ fn generate(lang: &str, dir: &Path, file: &str) {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-}
-
-fn text(output: &Output) -> String {
-    format!(
-        "{}{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    )
 }
 
 /// Each fault, and what the harness reports for it.
@@ -137,7 +125,7 @@ fn rust_harness_tells_faults_apart() {
 
 #[test]
 fn go_harness_tells_faults_apart() {
-    if !available("go", "version") {
+    if !tool("go", CODEGEN) {
         return;
     }
     let dir = scratch("go");
@@ -161,7 +149,7 @@ fn go_harness_tells_faults_apart() {
 
 #[test]
 fn typescript_harness_tells_faults_apart() {
-    if !available("tsc", "--version") || !available("node", "--version") {
+    if !tools(&["tsc", "node"], CODEGEN) {
         return;
     }
     let dir = scratch("ts");

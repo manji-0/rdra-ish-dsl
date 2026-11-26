@@ -22,7 +22,7 @@ pub fn code_notes(manifest: &Manifest, program: &ResolvedProgram) -> Vec<CodeNot
         return Vec::new();
     };
     let text = std::fs::read_to_string(&manifest.path).unwrap_or_default();
-    let model = fingerprint::model_hash(program.sources.iter().map(|(_, t, _)| t.as_str()));
+    let model = fingerprint::program_hash(program);
     let mut out = Vec::new();
     for (name, target) in code.targets() {
         let line = table_line(&text, name);
@@ -89,8 +89,7 @@ mod tests {
         .unwrap();
         let project = rdra_ish_core::load_project(&[root.join("m.rdra")], None).unwrap();
         let manifest = project.manifest.clone().unwrap();
-        let model =
-            fingerprint::model_hash(project.program.sources.iter().map(|(_, t, _)| t.as_str()));
+        let model = fingerprint::program_hash(&project.program);
         std::fs::write(
             root.join("d.rs"),
             format!("// head\n// rdra-ish codegen fingerprint: model={model} code=0\n"),
