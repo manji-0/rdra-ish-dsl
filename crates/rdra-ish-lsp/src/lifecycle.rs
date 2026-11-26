@@ -172,7 +172,7 @@ pub fn check(analysis: &WorkspaceAnalysis, settings: &Settings) -> Findings {
     let mut placed: Vec<(PathBuf, Diagnostic)> = Vec::new();
     for (i, (diag, entity)) in seen.iter().enumerate() {
         let same = |(earlier, at): &(&StateDiag, Option<&str>)| {
-            earlier == diag && (!of_its_entity(diag) || at == entity)
+            earlier == diag && (!diag.of_its_entity() || at == entity)
         };
         if seen[..i].iter().any(same) {
             continue;
@@ -180,7 +180,9 @@ pub fn check(analysis: &WorkspaceAnalysis, settings: &Settings) -> Findings {
         let Some((path, range)) = place.diag(diag, *entity) else {
             continue;
         };
-        let severity = match (is_stop(diag), diag.severity()) {
+        // A run stopped at a cap, the memory limit, or the time budget: what it found holds,
+        // and what it did not reach is undecided, so the stop itself is information.
+        let severity = match (diag.stopped_why().is_some(), diag.severity()) {
             (true, _) | (_, rdra_ish_core::lifecycle::Severity::Info) => {
                 DiagnosticSeverity::INFORMATION
             }
@@ -270,30 +272,9 @@ fn worst(a: CheckOutcome, b: CheckOutcome) -> CheckOutcome {
     }
 }
 
-/// A run stopped at a cap, the memory limit, or the time budget: what it found holds, and what
-/// it did not reach is undecided, so the stop itself is information.
-fn is_stop(diag: &StateDiag) -> bool {
-    matches!(
-        diag,
-        StateDiag::PatternCapReached { .. }
-            | StateDiag::StateCapReached { .. }
-            | StateDiag::MemoryCapReached { .. }
-            | StateDiag::TimeBudgetReached { .. }
-    )
-}
-
-/// A finding that names no entity of its own: it is about the entity whose view reports it,
-/// and goes on that entity's declaration, once per entity.
-fn of_its_entity(diag: &StateDiag) -> bool {
-    matches!(
-        diag,
-        StateDiag::NoCreationPath | StateDiag::UnreachableEnumVariant { .. }
-    ) || is_stop(diag)
-}
-
 /// The finding's message names no entity or says "this entity", so the diagnostic names it.
 fn names_no_entity(diag: &StateDiag) -> bool {
-    of_its_entity(diag)
+    diag.of_its_entity()
         || matches!(
             diag,
             StateDiag::PreExistingChildOfCreatedParent { .. }
@@ -352,59 +333,13 @@ impl Placer<'_> {
             .or_else(|| self.declaration("usecase", name))
     }
 
-    /// Where a finding goes: the rule, the use case, or the line it is about, else the
-    /// declaration of the entity it is reported on. Every kind is named, so a new kind does
-    /// not compile until it says where it goes.
+    /// Where a finding goes: the rule, the use case, or the line it is about
+    /// (`StateDiag::sites`), the entity of the state model it is about
+    /// (`StateDiag::state_entity`), else the declaration of the entity it is reported on.
     fn diag(&self, diag: &StateDiag, entity: Option<&str>) -> Option<(PathBuf, Range)> {
-        let first = |sites: &[Site]| sites.iter().find_map(|s| self.site(s));
-        let at = match diag {
-            StateDiag::ConstraintViolated { site, .. }
-            | StateDiag::AfterAssertViolated { site, .. }
-            | StateDiag::VacuousRule { site, .. }
-            | StateDiag::PropertyViolated { site, .. }
-            | StateDiag::GoalUnreachable { site, .. }
-            | StateDiag::NeverRuns { site, .. }
-            | StateDiag::ArmNeverTaken { site, .. }
-            | StateDiag::ValueNeverChosen { site, .. }
-            | StateDiag::TriggerNeverRuns { site, .. }
-            | StateDiag::DoubleModeledEnum { site, .. }
-            | StateDiag::PreExistingChildOfCreatedParent { site, .. }
-            | StateDiag::IdentityStartSlots { site, .. }
-            | StateDiag::CountAboveBound { site, .. }
-            | StateDiag::MinCardOfPreExistingParent { site, .. }
-            | StateDiag::MinCardNeedsCreate { site, .. }
-            | StateDiag::AssertOnInertUseCase { site, .. }
-            | StateDiag::FairOnInertUseCase { site, .. }
-            | StateDiag::IntLiteralOutOfBounds { site, .. }
-            | StateDiag::UnbindableScope { site, .. }
-            | StateDiag::AmbiguousOwnerLink { site, .. }
-            | StateDiag::UnboundCopySource { site, .. }
-            | StateDiag::UnbindableCondition { site, .. }
-            | StateDiag::UnwrittenConstrainedVar { site, .. }
-            | StateDiag::UnsupportedComparison { site, .. }
-            | StateDiag::DerivedColumnRead { site, .. }
-            | StateDiag::UnjoinedGuardRead { site, .. }
-            | StateDiag::UnjoinedWrite { site, .. }
-            | StateDiag::UnboundAfterRead { site, .. }
-            | StateDiag::UnanchoredTrigger { site, .. }
-            | StateDiag::UnjoinedTrigger { site, .. }
-            | StateDiag::UncountedTrigger { site, .. }
-            | StateDiag::DeleteLeavesChildren { site, .. }
-            | StateDiag::GuardReadsLaterStep { site, .. }
-            | StateDiag::DefaultOnVariationIgnored { site, .. } => self.site(site),
-            StateDiag::ConflictingEffects { sites, .. }
-            | StateDiag::ContradictoryDrivenComparison { sites, .. }
-            | StateDiag::DrivenComparisonColumnWritten { sites, .. } => first(sites),
-            // A state of a state model: its entity's declaration, where the state model is.
-            StateDiag::Deadlock { entity, .. } | StateDiag::NoWitness { entity, .. } => {
-                self.entity(entity)
-            }
-            StateDiag::UnreachableEnumVariant { .. }
-            | StateDiag::NoCreationPath
-            | StateDiag::PatternCapReached { .. }
-            | StateDiag::StateCapReached { .. }
-            | StateDiag::MemoryCapReached { .. }
-            | StateDiag::TimeBudgetReached { .. } => None,
+        let at = match diag.state_entity() {
+            Some(state_of) => self.entity(state_of),
+            None => diag.sites().iter().find_map(|s| self.site(s)),
         };
         at.or_else(|| self.entity(entity?))
             .or_else(|| self.first_line())

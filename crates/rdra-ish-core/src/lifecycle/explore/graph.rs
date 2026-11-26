@@ -127,6 +127,43 @@ impl Adjacency {
         self.preds.of(at)
     }
 
+    /// `at` and every state a path from it through states `within` holds reaches, in the
+    /// order a breadth-first search finds them, `at` first.
+    pub(crate) fn forward_from(&self, at: u32, within: impl Fn(u32) -> bool) -> Vec<u32> {
+        let mut seen = vec![false; self.succs.start.len() - 1];
+        let mut order = vec![at];
+        seen[at as usize] = true;
+        let mut next = 0;
+        while let Some(&s) = order.get(next) {
+            next += 1;
+            for &to in self.succs(s) {
+                if within(to) && !seen[to as usize] {
+                    seen[to as usize] = true;
+                    order.push(to);
+                }
+            }
+        }
+        order
+    }
+
+    /// Marks every state from which a path through states `within` holds reaches a marked
+    /// state. `starts` are the states `marked` holds on entry.
+    pub(crate) fn mark_backward(
+        &self,
+        marked: &mut [bool],
+        mut starts: Vec<u32>,
+        within: impl Fn(u32) -> bool,
+    ) {
+        while let Some(at) = starts.pop() {
+            for &p in self.preds(at) {
+                if !marked[p as usize] && within(p) {
+                    marked[p as usize] = true;
+                    starts.push(p);
+                }
+            }
+        }
+    }
+
     /// The strongly connected components of the forward graph by iterative Tarjan: each
     /// state's component, numbered in the order the components close (a component comes
     /// before every component that reaches it), and the number of components.
