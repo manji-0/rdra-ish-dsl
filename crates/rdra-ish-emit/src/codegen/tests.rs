@@ -917,3 +917,183 @@ transitions(ParseOrderRow, Order.status, open -> done)
         "{ts}"
     );
 }
+
+/// The use case vocabulary #335 prints: a created row's optional key left null, a `.when`
+/// on a chosen value read from the input, a `links` as the condition `Links_<Child>_<role>`,
+/// a copy from the parent row, and a condition on the key of the created row, which folds
+/// to the parent the step links it to.
+const VOCAB_SRC: &str = r#"
+variation Scope "Scope" {
+  free
+  limited
+}
+entity Owner "Owner" {
+  id: Int @pk
+  status: Enum(active, closed) @default(active)
+}
+entity Case "Case" {
+  id: Int @pk
+  status: Enum(open, drafted) @default(open)
+  first: Bool @default(true)
+  scope: Scope @default(limited)
+}
+entity Note "Note" {
+  id: Int @pk
+  flag: Bool @default(false)
+}
+relate(Case, Owner, N:1).optional()
+relate(Note, Case, N:1)
+usecase AddOwner "Add owner"
+usecase Open "Open"
+usecase Draft "Draft"
+usecase Claim "Claim"
+usecase Annotate "Annotate"
+creates(AddOwner, Owner)
+creates(Open, Case)
+transitions(Draft, Case.status, open -> drafted)
+condition FirstOnly "first notice"
+holds(FirstOnly, Case.first == true)
+chooses(Draft, Case.scope, free).when(FirstOnly)
+chooses(Draft, Case.scope, limited)
+updates(Claim, Case)
+links(Claim, Case, Owner)
+creates(Annotate, Note)
+sets(Annotate, Note.flag == Case.first)
+condition OpenCase "open case"
+holds(OpenCase, Case.status == open).along(Note, Case)
+applies_to(OpenCase, Annotate)
+"#;
+
+#[test]
+fn the_rest_of_the_use_case_vocabulary_is_printed() {
+    let domain = functions_of(VOCAB_SRC);
+    assert!(domain.skipped.is_empty(), "{:?}", domain.skipped);
+    let f = |name: &str| {
+        domain
+            .fns
+            .iter()
+            .find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("{name}: {:?}", domain.fns.iter().map(|f| &f.name)))
+    };
+    let field = |f: &ir::FnDecl, wire: &str| {
+        let ir::OutKind::Row { fields, .. } = &f.outputs[0].kind else {
+            panic!("{} writes a row", f.name);
+        };
+        fields
+            .iter()
+            .find(|(t, _)| t.wire == wire)
+            .unwrap()
+            .1
+            .clone()
+    };
+    // Open leaves the optional key null.
+    assert!(matches!(field(f("Open"), "owner_id"), ir::Assigned::Null));
+    // Draft reads the chosen scope from its input.
+    let draft = f("Draft");
+    assert_eq!(draft.conditions[0].id, "FirstOnly");
+    let text = format!("{:?}", draft.conditions[0].expr);
+    assert!(text.contains("InputEnumEq"), "{text}");
+    // Claim links the case: the key must be null, and becomes the owner's.
+    let claim = f("ClaimFromOpen");
+    assert_eq!(claim.conditions[0].id, "Links_Case_Owner");
+    assert!(
+        matches!(&claim.conditions[0].expr, ir::Expr::IsNull { .. }),
+        "{:?}",
+        claim.conditions[0].expr
+    );
+    assert!(matches!(
+        field(claim, "owner_id"),
+        ir::Assigned::ParentId { .. }
+    ));
+    // Annotate copies the parent's flag, and runs only under an open case: the condition on
+    // the created note's case folds to the parent row's state.
+    let names: Vec<&str> = domain
+        .fns
+        .iter()
+        .filter(|f| f.action == "Annotate")
+        .map(|f| f.name.as_str())
+        .collect();
+    assert_eq!(names, ["AnnotateFromOpen"]);
+    let annotate = f("AnnotateFromOpen");
+    assert!(annotate.conditions.is_empty(), "{:?}", annotate.conditions);
+    assert!(
+        matches!(field(annotate, "flag"), ir::Assigned::From { ref field, .. } if field.wire == "first"),
+        "{:?}",
+        field(annotate, "flag")
+    );
+
+    let ts = generated_from(VOCAB_SRC, "vocab.rdra", Lang::TypeScript);
+    for line in [
+        r#"if (!(((caseScope === "free") && (case_.first === true)) || (caseScope === "limited"))) {"#,
+        "if (!(case_.owner_id === null)) {",
+        "owner_id: parentOwner.id,",
+        "flag: parentCase.first,",
+        "owner_id: null,",
+    ] {
+        assert!(ts.contains(line), "{line}\n{ts}");
+    }
+    let rust = generated_from(VOCAB_SRC, "vocab.rdra", Lang::Rust);
+    for line in [
+        "if !(((case_scope == Scope::Free) && (case.first)) || (case_scope == Scope::Limited)) {",
+        "if !(case.owner_id.is_none()) {",
+        "flag: parent_case.first,",
+    ] {
+        assert!(rust.contains(line), "{line}\n{rust}");
+    }
+    let go = generated_from(VOCAB_SRC, "vocab.rdra", Lang::Go);
+    for line in [
+        "if !(((caseScope == ScopeFree) && (case_.First() == true)) || (caseScope == ScopeLimited)) {",
+        "if !(case_.OwnerId() == nil) {",
+        "ownerId: ptrTo(parentOwner.Id)",
+    ] {
+        assert!(go.contains(line), "{line}\n{go}");
+    }
+}
+
+/// A nullable Enum or Bool column compared with a value (#359): null satisfies no
+/// comparison, so `==` takes a present value and `!=` admits null.
+#[test]
+fn a_comparison_on_a_nullable_enum_or_bool_column_is_printed() {
+    let src = r#"
+entity Item "Item" {
+  id: Int @pk
+  k: Enum(red, blue) @null
+  f: Bool @null
+}
+usecase Make "Make"
+usecase Paint "Paint"
+usecase Clear "Clear"
+creates(Make, Item)
+sets(Paint, Item.k == red)
+sets(Clear, Item.k == null)
+condition IsRed "red"
+holds(IsRed, Item.k == red)
+applies_to(IsRed, Clear)
+condition NotOff "not off"
+holds(NotOff, Item.f != false)
+applies_to(NotOff, Clear)
+"#;
+    let domain = functions_of(src);
+    assert!(domain.skipped.is_empty(), "{:?}", domain.skipped);
+    let ts = generated_from(src, "item.rdra", Lang::TypeScript);
+    assert!(ts.contains(r#"if (!(item.k === "red")) {"#), "{ts}");
+    assert!(ts.contains("if (!(!(item.f === false))) {"), "{ts}");
+    let rust = generated_from(src, "item.rdra", Lang::Rust);
+    assert!(
+        rust.contains("if !(item.k == ::core::option::Option::Some(ItemK::Red)) {"),
+        "{rust}"
+    );
+    assert!(
+        rust.contains("if item.f == ::core::option::Option::Some(false) {"),
+        "{rust}"
+    );
+    let go = generated_from(src, "item.rdra", Lang::Go);
+    assert!(
+        go.contains("if !(item.K != nil && *item.K == ItemKRed) {"),
+        "{go}"
+    );
+    assert!(
+        go.contains("if !(!(item.F != nil && *item.F == false)) {"),
+        "{go}"
+    );
+}

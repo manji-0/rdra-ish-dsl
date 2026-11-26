@@ -435,6 +435,23 @@ pub enum Expr {
         op: CmpOp,
         value: i64,
     },
+    /// A nullable input is null: a condition on a value the caller chooses.
+    InputIsNull {
+        input: usize,
+    },
+    /// An enum input holds a value; a null input holds none (#359).
+    InputEnumEq {
+        input: usize,
+        nullable: bool,
+        enum_ty: String,
+        value: EnumValue,
+    },
+    /// A Bool input holds a value; a null input holds none (#359).
+    InputBoolEq {
+        input: usize,
+        nullable: bool,
+        value: bool,
+    },
     /// The child row's key names the parent row.
     KeyEq {
         child: usize,

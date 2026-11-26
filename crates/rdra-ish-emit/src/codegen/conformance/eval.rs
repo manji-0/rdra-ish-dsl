@@ -116,12 +116,17 @@ impl<'a> Rows<'a> {
                 }
                 any
             }
+            // A value the caller passes: the pre-state does not hold it.
+            Expr::InputIsNull { .. } | Expr::InputEnumEq { .. } | Expr::InputBoolEq { .. } => {
+                return None
+            }
             Expr::IsNull { row, field } => self.get(*row, &field.wire)?.1 == Value::NULL,
             Expr::EnumEq {
                 row, field, value, ..
             } => {
                 let (var, v) = self.get(*row, &field.wire)?;
-                enum_name(self.ts, var, v)? == value.wire
+                // Null satisfies no comparison (#359).
+                v != Value::NULL && enum_name(self.ts, var, v)? == value.wire
             }
             Expr::BoolEq { row, field, value } => {
                 let (var, v) = self.get(*row, &field.wire)?;

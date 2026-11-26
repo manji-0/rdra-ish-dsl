@@ -1309,6 +1309,13 @@ fn expr(
             op,
             value,
         } => format!("{} {} {value}", read(*r, field), cmp(op)),
+        Expr::InputIsNull { input: i } => format!("{} === null", input(*i)),
+        Expr::InputEnumEq {
+            input: i, value, ..
+        } => format!("{} === {}", input(*i), string_literal(&value.wire)),
+        Expr::InputBoolEq {
+            input: i, value, ..
+        } => format!("{} === {value}", input(*i)),
         Expr::KeyEq {
             child,
             child_field,

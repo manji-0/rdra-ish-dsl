@@ -1,0 +1,70 @@
+// The use case vocabulary #335 prints, in the generated functions (codegen_builds.rs,
+// codegen_differential.rs): Open leaves the optional owner key null, Claim links a case to an
+// owner, Move relinks it and Release unlinks it, Draft's `.when` reads the scope the caller
+// chooses, Tag chooses a nullable label present or null under a `.when`, Annotate copies the
+// case's flag into a note and its condition reads the case the note is created under.
+variation Scope "Scope" {
+  free
+  limited
+}
+
+entity Owner "Owner" {
+  id: Int @pk
+  status: Enum(active, closed) @default(active)
+}
+
+entity Case "Case" {
+  id: Int @pk
+  status: Enum(open, drafted) @default(open)
+  first: Bool @default(true)
+  scope: Scope @default(limited)
+  label: String @null
+}
+
+entity Note "Note" {
+  id: Int @pk
+  flag: Bool @default(false)
+}
+
+relate(Case, Owner, N:1).optional()
+relate(Note, Case, N:1)
+
+usecase AddOwner "Add owner"
+usecase CloseOwner "Close owner"
+usecase Open "Open"
+usecase Draft "Draft"
+usecase Tag "Tag"
+usecase Claim "Claim"
+usecase Move "Move"
+usecase Release "Release"
+usecase Annotate "Annotate"
+
+creates(AddOwner, Owner)
+transitions(CloseOwner, Owner.status, active -> closed)
+creates(Open, Case)
+transitions(Draft, Case.status, open -> drafted)
+
+condition FirstOnly "first notice"
+holds(FirstOnly, Case.first == true)
+chooses(Draft, Case.scope, free).when(FirstOnly)
+chooses(Draft, Case.scope, limited)
+
+condition Drafted "drafted"
+holds(Drafted, Case.status == drafted)
+condition NotDrafted "not drafted"
+holds(NotDrafted, Case.status == open)
+sets(Tag, Case.label == present).when(Drafted)
+sets(Tag, Case.label == null).when(NotDrafted)
+
+updates(Claim, Case)
+links(Claim, Case, Owner)
+updates(Move, Case)
+relinks(Move, Case, Owner)
+updates(Release, Case)
+unlinks(Release, Case, Owner)
+
+creates(Annotate, Note)
+sets(Annotate, Note.flag == Case.first)
+condition OpenCase "open case"
+holds(OpenCase, Case.status == open).along(Note, Case)
+applies_to(OpenCase, Annotate)

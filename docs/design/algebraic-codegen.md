@@ -13,9 +13,9 @@ Status (2026-11-26): accepted in scope on 2026-11-07 as an experimental extra
   #330, #331, #332). `codegen --check` (#343). The printed Rust and Go run on every BFS edge
   of the samples (#342). The Kamae shapes in all three languages, `--format json`, `--code`,
   `--probe` and `--seal` (#366, #368, #369, for #363).
-- **Open.** 19 use cases on the samples get no function yet (#335): the 11 of phase 5 on
-  clinic-ops, patent-ops, food-permit-ops and insurance-claim-ops, and 8 on oidc-auth.
-  Validators for rules over several rows (#336), timer and fairness obligations (#338),
+- **Open.** 2 use cases on the samples get no function yet (#335): clinic-ops
+  `CheckInPatient_2` and insurance-claim-ops `DetermineFault`, each waiting on a decision
+  ([Use cases without a function](#use-cases-without-a-function)). Validators for rules over several rows (#336), timer and fairness obligations (#338),
   intent in doc comments (#339), and the refused trace of P6 (#337). `--refine reachable`,
   `--part`, `--buc` and `--scalars` have not landed.
 - **Superseded.** `export --kind typescript-states` and `states --format typescript`, removed
@@ -967,10 +967,79 @@ the function's source state with no BFS move must get `Rejected`. The dispatcher
    condition. A `.has` / `.none` ranges over a list of the related
    entity's rows, an input the caller fills with every present row, and the function keeps
    those the key links; an obligation in the header says the list must be complete.
-   That leaves 11 use cases on the samples: a `.when` on a chosen value (2), a choice on a
-   second lifecycle column (1), copies (2), a condition on what a use case creates (2),
-   comparison propositions and other assignments (3), and a link between two rows of an
-   earlier step (1). [19 today: oidc-auth adds 8; see the status above.]
+   That left 19 use cases on the samples (11 on the four domain samples, 8 on oidc-auth);
+   #335 prints 17 of them ([Use cases without a function](#use-cases-without-a-function)).
+
+### Use cases without a function
+
+Status (2026-11-26): 17 of the 19 printed; 2 wait on the choices below.
+
+A use case gets no function when one of its actions uses a part of the vocabulary the
+generator does not print. The header lists it with the reason, and the agent that finishes the
+output writes it freehand, out of reach of `check --code`. The reason the header gives is the
+first construct the generator met, so the table groups the 19 use cases of 3.0.0 by every
+construct that kept them out, as `TransitionSystem` builds their actions. A use case with two
+constructs is listed under the first and named again under the second.
+
+| What kept it out | Use cases | Printed as |
+|---|---|---|
+| A created row's optional key that no step links: the action assigns it null | clinic-ops `RegisterPerformedProcedure`; food-permit-ops `SubmitCounterApplication`, `ReceiveOnlineApplication` (also in `CreateCharge`, `ApplySelectedTreatmentFee`, `StartDeviceAuthorization`, `RequestAuthentication`) | The key column is null in the created row |
+| A condition that reads the key of the row the step creates, which the step sets to a parent it binds (`.along(Created, Parent)`) | clinic-ops `CreateCharge`; oidc-auth `StartBackchannelAuthentication`, `StartDeviceAuthorization`, `RedeemCode` | The read folds to the parent row: the condition is the parent's state. `RedeemCode` binds one Grant per key, so the condition asks that the three parents be the code's grant |
+| A condition or a `.when` on a value the caller chooses for the row the step writes | clinic-ops `ApplySelectedTreatmentFee`; patent-ops `DraftResponse`; food-permit-ops `ProposeDisposition`; oidc-auth `RequestAuthentication` | The condition reads the input the choice already was (`caseScope === "free"`). A nullable column chosen present or null (`RequestAuthentication`'s `nonce`) is a nullable input |
+| `links(UC, Child, Parent)` on an existing row | oidc-auth `ApproveDevice`, `AuthenticateEndUser`, `ReuseSession`, `SelectAccount` | The condition `Links_<Child>_<role>`: the child's key is null (`relinks`: set; `unlinks`: set, to the bound parent when the step writes one). The function sets the key to the parent's id (`unlinks`: null) |
+| A copy, `sets(UC, E.column == F.source)` | food-permit-ops `RegisterPermit`; insurance-claim-ops `PayClaim` | The column takes the source row's value. A copy between two types, or from a nullable column into one that is not, stays unprinted |
+| A key between two rows an earlier step wrote | clinic-ops `CheckInPatient_2` | Not printed: [choice 1](#choice-1-a-key-between-two-rows-of-an-earlier-step) |
+| A choice among arms of a second lifecycle column | insurance-claim-ops `DetermineFault` | Not printed: [choice 2](#choice-2-a-choice-among-arms-of-a-second-lifecycle-column) |
+
+One more construct had no use case on the samples behind it: a guard that compares a nullable
+Enum or Bool column with a value (`tests/fixtures/codegen/nullable_enum_bool.rdra`). Under
+#359 null satisfies no comparison and every `!=`, so it prints as `x == Some(v)` (Rust),
+`x != nil && *x == v` (Go) and `x === v` (TypeScript), and its negation admits null. A column
+the source state keeps null satisfies no comparison either, so the comparison folds to false.
+
+The printed functions keep the guarantees of the others: `codegen_differential.rs` runs every
+BFS move of the samples through the Rust and Go functions, and `codegen_equivalence.rs` checks
+that a move picks one function. A condition on an input is not read on a BFS state
+(`conformance::eval` leaves it undecided); the differential run passes the input the
+successor holds, so the condition is checked there.
+
+#### Choice 1: a key between two rows of an earlier step
+
+<!-- constrained-by ../state-derivation.md#runs -->
+
+`CheckInPatient` step 1 checks the Appointment in and updates its PatientAccount; step 2
+creates the EligibilityCheck. Step 2 holds the two rows only by their run marks, which carry
+ids, and `verify` guards it with "the Appointment still belongs to the PatientAccount" (an
+`Owner` guard between two `Earlier` params). The function has no key to compare. The options:
+
+- **A. The Appointment's mark carries its key** (`CheckInPatientAppointmentMark1 { id,
+  patientaccount_id }`), and step 2 compares it with the PatientAccount mark. The mark is the
+  key as step 1 read it, and a `relinks` between the steps would not show. No use case on the
+  samples relinks an Appointment, but the model does not rule one out.
+- **B. Step 2 takes the Appointment and the PatientAccount rows as well**, as they are now,
+  and checks the key between them. This is what `verify` reads (rule 2 of
+  [What verify assumed](#what-verify-assumed): the rows as they are now), at the cost of two
+  more arguments and a read the store must hold in the step's transaction.
+- **C. An obligation** ("the marks of one run name rows that are still linked") and no check.
+
+Recommendation: B. It is the only option that checks what `verify` checked, and the
+`OneTransaction` obligation already covers holding the read rows.
+
+#### Choice 2: a choice among arms of a second lifecycle column
+
+`DetermineFault` moves `ClaimCase.liability` (not the state tag) from `undetermined` to
+`at_fault` or `no_fault`. A choice among arms of the tag is one function per target, since
+the target fixes the result's state type; a second column fixes no type. The options:
+
+- **A. One function per target** (`DetermineFaultToAtFault`, `DetermineFaultToNoFault`), as
+  for the tag, and the dispatcher takes the target. Consistent with the tag; the number of
+  functions grows with the arms.
+- **B. One function with the target as an input** of the column's enum type, and
+  `InvalidArgument` for a value no arm from the row's value reaches. One function, but an
+  input type wider than the choice, which Rust and TypeScript then check at run time.
+
+Recommendation: A. It keeps the rule that a function's argument types admit only what the
+model allows, and the dispatcher's choice argument already exists.
 
 ## Decisions
 

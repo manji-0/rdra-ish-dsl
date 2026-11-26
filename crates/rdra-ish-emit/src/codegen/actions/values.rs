@@ -14,8 +14,12 @@ pub(super) enum Write {
     Switch(Vec<(String, String)>),
     /// A value the model leaves open: the caller passes it.
     Input,
+    /// A value the model leaves open, null among them: the caller passes it, or null.
+    InputOrNull,
     /// The key of the parent param, by its key column.
     Parent(usize, String),
+    /// The value of another param's column (`sets(UC, E.column == F.source)`).
+    Copy(usize, String),
 }
 
 /// The write of a literal value of `domain`.
@@ -60,7 +64,11 @@ pub(super) fn start_literal(
         Write::Enum(value) => Some(Some(enum_lit(value, target)?)),
         Write::Lit(lit) => Some(Some(lit)),
         Write::Null => Some(None),
-        Write::Input | Write::Parent(..) | Write::Switch(_) => None,
+        Write::Input
+        | Write::InputOrNull
+        | Write::Parent(..)
+        | Write::Copy(..)
+        | Write::Switch(_) => None,
     }
 }
 

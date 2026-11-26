@@ -335,6 +335,14 @@ impl ActionCx<'_> {
                                 Write::Parent(usize::from(*q), parent_col.clone()),
                             );
                         }
+                        // An optional key the step leaves or makes unlinked: its column is null.
+                        (VarKind::Owner { fk, .. }, Rhs::Lit(v)) if *v == Value::NULL => {
+                            let fk = self.model.foreign_key(*fk);
+                            let [(child_col, _)] = fk.columns.as_slice() else {
+                                return Err(unsupported("a key over several columns"));
+                            };
+                            writes.insert((p, child_col.clone()), Write::Null);
+                        }
                         (VarKind::Run { .. }, Rhs::Lit(v)) => runs.push((p, v.0)),
                         (VarKind::Raised { event, .. }, Rhs::Lit(v)) if *v == Value::TRUE => {
                             raised_at.push((event.clone(), p));
@@ -358,13 +366,12 @@ impl ActionCx<'_> {
                         Domain::Nullable if matches!(&values[..], [c] if c.value == Value::PRESENT) => {
                             Write::Input
                         }
-                        Domain::Enum(_)
-                        | Domain::NullableEnum(_)
-                        | Domain::Bool
-                        | Domain::NullableBool
+                        Domain::Enum(_) | Domain::Bool if all => Write::Input,
+                        // Every value, null among them: the caller may pass null.
+                        Domain::Nullable | Domain::NullableEnum(_) | Domain::NullableBool
                             if all =>
                         {
-                            Write::Input
+                            Write::InputOrNull
                         }
                         _ => return Err(unsupported("a choice among some values (phase 5)")),
                     };
@@ -372,6 +379,38 @@ impl ActionCx<'_> {
                 }
                 Effect::Tick => return Err(unsupported("reads `now` (phase 5)")),
             }
+        }
+        // `sets(UC, E.column == F.source)`: the column takes the source row's value, in place
+        // of the choice the effect forks.
+        for guard in &self.action.guards {
+            if guard.why != GuardWhy::Copy {
+                continue;
+            }
+            let Pred::Cmp(
+                Term::Slot {
+                    var: target,
+                    at: At::Next(c),
+                },
+                TsCmp::Eq,
+                Term::Slot {
+                    var: source,
+                    at: At::Param(s),
+                },
+            ) = &guard.pred
+            else {
+                return Err(unsupported(
+                    "a copy between a column that holds null and one that does not",
+                ));
+            };
+            let (VarKind::Column { column: to, .. }, VarKind::Column { column: from, .. }) =
+                (&ts.var(*target).kind, &ts.var(*source).kind)
+            else {
+                return Err(unsupported("a copy of a var that is not a column"));
+            };
+            writes.insert(
+                (usize::from(*c), to.clone()),
+                Write::Copy(usize::from(*s), from.clone()),
+            );
         }
         Ok(Effects {
             writes,
@@ -476,12 +515,96 @@ impl Frame<'_> {
         }
     }
 
+    /// What a read of param `p`'s successor stands for in this function (`fold_next`): the
+    /// target state, a value the effects write, the row a key is set to, the column as the
+    /// argument holds it when the effects leave it, its start value on a created row, or the
+    /// input a choice became. `None` for a second lifecycle column and a created row's own key.
+    fn next_read(&self, t: &Term, targets: &BTreeMap<usize, (VarId, Value)>) -> Option<NextRead> {
+        let action = self.cx.action;
+        let created = |p: u8| action.params[usize::from(p)].role == ParamRole::New;
+        let (var, p) = match t {
+            Term::Index(At::Next(p)) if !created(*p) => {
+                return Some(NextRead::Term(Term::Index(At::Param(*p))))
+            }
+            Term::Slot {
+                var,
+                at: At::Next(p),
+            } => (*var, *p),
+            _ => return None,
+        };
+        if let Some((tag, to)) = targets.get(&usize::from(p)) {
+            if *tag == var {
+                return Some(NextRead::Value(*to));
+            }
+        }
+        // A copied column holds the source row's value.
+        for guard in action.guards.iter().filter(|g| g.why == GuardWhy::Copy) {
+            if let Pred::Cmp(
+                Term::Slot {
+                    var: target,
+                    at: At::Next(c),
+                },
+                TsCmp::Eq,
+                source @ Term::Slot {
+                    at: At::Param(_), ..
+                },
+            ) = &guard.pred
+            {
+                if *target == var && *c == p {
+                    return Some(NextRead::Term(source.clone()));
+                }
+            }
+        }
+        for effect in &action.effects {
+            match effect {
+                Effect::Assign {
+                    var: v, param, rhs, ..
+                } if *v == var && *param == p => {
+                    return Some(match rhs {
+                        Rhs::Lit(x) => NextRead::Value(*x),
+                        Rhs::Param(q) => NextRead::Term(Term::Index(At::Param(*q))),
+                    })
+                }
+                Effect::Choose {
+                    var: v,
+                    param,
+                    values,
+                } if *v == var && *param == p => {
+                    return Some(match values.as_slice() {
+                        [one] => NextRead::Value(one.value),
+                        _ => NextRead::Input,
+                    })
+                }
+                Effect::Transition { var: v, param, .. } if *v == var && *param == p => {
+                    return None
+                }
+                _ => {}
+            }
+        }
+        Some(if created(p) {
+            NextRead::Value(self.cx.ts.var(var).base)
+        } else {
+            NextRead::Term(Term::Slot {
+                var,
+                at: At::Param(p),
+            })
+        })
+    }
+
     /// A guard as a condition of the function: `None` when it always holds, a skipped
-    /// combination when it never does.
-    fn lower_guard(&self, pred: &Pred, quant: &mut Quant<'_>) -> Result<Option<Expr>, Skip> {
+    /// combination when it never does. A read of a successor folds first (`next_read`).
+    fn lower_guard(
+        &self,
+        pred: &Pred,
+        targets: &BTreeMap<usize, (VarId, Value)>,
+        quant: &mut Quant<'_>,
+    ) -> Result<Option<Expr>, Skip> {
+        let pred = fold_next(pred, &|t| self.next_read(t, targets)).ok_or_else(|| {
+            unsupported("a condition on a second lifecycle column or a created row's own key after the use case")
+        })?;
         let bind = |at: At| self.bind(at);
         let e = simplify(
-            expr(self.cx.ts, pred, &self.rows, &bind, &mut Some(quant)).map_err(Skip::Action)?,
+            expr(self.cx.ts, &pred, &self.rows, &bind, &mut Some(quant)).map_err(Skip::Action)?,
         );
         match e {
             Expr::True => Ok(None),
@@ -749,16 +872,46 @@ impl Frame<'_> {
             }
             Some(Write::Null) if target.nullable => Assigned::Null,
             Some(Write::Null) => return Err(Skip::Combination),
-            Some(Write::Input) => {
+            Some(write @ (Write::Input | Write::InputOrNull)) => {
+                // Null is the caller's to pass only where the target state lets the column be
+                // null; a state that keeps it present takes a present value.
+                let or_null = matches!(write, Write::InputOrNull) && target.nullable;
                 inputs.push(FnInput {
                     name: format!("{}_{}", snake(entity), target.wire),
                     ty: target.ty.clone(),
-                    nullable: false,
+                    nullable: or_null,
                     doc: format!("The value the use case writes to {entity}.{}.", target.wire),
                 });
                 Assigned::Input {
                     input: inputs.len() - 1,
-                    wrap: target.nullable,
+                    wrap: target.nullable && !or_null,
+                }
+            }
+            Some(Write::Copy(s, from)) => {
+                let r = *self
+                    .row_of
+                    .get(s)
+                    .ok_or_else(|| unsupported("a copy from a row that is not an argument"))?;
+                let source = self
+                    .field(r, from)
+                    .cloned()
+                    .ok_or_else(|| unsupported("a copy from a column with no field"))?;
+                if source.ty != target.ty {
+                    return Err(unsupported("a copy between columns of different types"));
+                }
+                let adapt = match (source.nullable, target.nullable) {
+                    (a, b) if a == b => Adapt::Same,
+                    (false, true) => Adapt::Wrap,
+                    _ => {
+                        return Err(unsupported(
+                            "a copy from a column that may be null to one that may not",
+                        ))
+                    }
+                };
+                Assigned::From {
+                    row: r,
+                    field: source,
+                    adapt,
                 }
             }
             Some(Write::Parent(q, _))
@@ -912,9 +1065,20 @@ impl Frame<'_> {
                 Declared::Sum(s) => Some((s.row.clone(), s.row_fields.clone())),
             }
         };
+        // The input a choice of a written row's column became, by the column's var.
+        let chosen: Vec<FnInput> = inputs.clone();
+        let next_input = |var: VarId| -> Option<(usize, FnInput)> {
+            let VarKind::Column { entity, column, .. } = &cx.ts.var(var).kind else {
+                return None;
+            };
+            let name = format!("{}_{column}", snake(&cx.ts.entity(*entity).id));
+            let i = chosen.iter().position(|x| x.name == name)?;
+            Some((i, chosen[i].clone()))
+        };
         let mut quant = Quant {
             model: cx.model,
             row_type: &row_type,
+            next_input: &next_input,
             base: 0,
             n_rows: self.rows.len(),
             elems: Vec::new(),
@@ -928,12 +1092,14 @@ impl Frame<'_> {
                 // of the step before as an argument.
                 // The event: the handler takes it as an argument (`event_in`).
                 GuardWhy::Run { .. } | GuardWhy::Raised { .. } => {}
+                // A copy is a write (`effects`), not a condition.
+                GuardWhy::Copy => {}
                 // The from-states: the source state type holds the tag's; a second lifecycle
                 // column's are a condition.
                 // On a created row the arm from its start state was taken when its target was.
                 GuardWhy::TransitionFrom if reads_only_created(&guard.pred, cx.action) => {}
                 GuardWhy::TransitionFrom => {
-                    if let Some(e) = self.lower_guard(&guard.pred, &mut quant)? {
+                    if let Some(e) = self.lower_guard(&guard.pred, targets, &mut quant)? {
                         conditions.push(self.condition(
                             guard,
                             "TransitionFrom".to_string(),
@@ -943,26 +1109,73 @@ impl Frame<'_> {
                     }
                 }
                 // `.when` on an arm: the successor's tag is the function's target, so the guard
-                // folds to the conditions of the arm taken.
+                // folds to the conditions of the arm taken. On a chosen value it reads the input.
                 GuardWhy::ArmCondition { .. } => {
-                    let pred = fold_next(&guard.pred, targets).ok_or_else(|| {
-                        unsupported("a `.when` on a chosen value or a second lifecycle column")
-                    })?;
-                    if let Some(e) = self.lower_guard(&pred, &mut quant)? {
+                    if let Some(e) = self.lower_guard(&guard.pred, targets, &mut quant)? {
                         let (id, label) = arm_conditions(cx.model, cx.ts, cx.action, self.arms);
                         conditions.push(self.condition(guard, id, label, e));
                     }
                 }
                 GuardWhy::Owner => checks.push(self.link_check(guard)?),
+                // `links` / `relinks` / `unlinks`: whether the child's key is set, a condition
+                // `<Kind>_<Child>_<role>` of the step that writes the child.
+                GuardWhy::Link => {
+                    if let Some(e) = self.lower_guard(&guard.pred, targets, &mut quant)? {
+                        let rdra_ish_core::lifecycle::ModelRef::Link(i) = guard.site.fact else {
+                            return Err(unsupported("a link guard with no `links` line"));
+                        };
+                        let link = &cx.model.links[i];
+                        let (child, parent) = (
+                            &cx.model.entities[link.child].id,
+                            &cx.model.entities[link.parent].id,
+                        );
+                        let role = link
+                            .key
+                            .map(|fk| cx.model.foreign_key(fk).role_or(parent).to_string())
+                            .unwrap_or_else(|| parent.clone());
+                        use rdra_ish_core::model::LinkKind;
+                        let (kind, label) = match link.kind {
+                            LinkKind::Links => {
+                                ("Links", format!("the {child} is linked to no {parent} yet"))
+                            }
+                            LinkKind::Relinks => {
+                                ("Relinks", format!("the {child} is linked to some {parent}"))
+                            }
+                            // Under the parent the step writes, when it writes one.
+                            LinkKind::Unlinks
+                                if matches!(
+                                    guard.pred,
+                                    Pred::Cmp(_, _, Term::Index(At::Param(_)))
+                                ) =>
+                            {
+                                (
+                                    "Unlinks",
+                                    format!(
+                                        "the {child} is linked to the {parent} the step writes"
+                                    ),
+                                )
+                            }
+                            LinkKind::Unlinks => {
+                                ("Unlinks", format!("the {child} is linked to some {parent}"))
+                            }
+                        };
+                        conditions.push(self.condition(
+                            guard,
+                            format!("{kind}_{child}_{role}"),
+                            label,
+                            e,
+                        ));
+                    }
+                }
                 GuardWhy::Condition { cond, .. } => {
-                    if let Some(e) = self.lower_guard(&guard.pred, &mut quant)? {
+                    if let Some(e) = self.lower_guard(&guard.pred, targets, &mut quant)? {
                         let c = &cx.model.conditions[cond];
                         conditions.push(self.condition(guard, c.id.clone(), c.label.clone(), e));
                     }
                 }
                 // A delete the key's children reject: no listed child row names the row.
                 GuardWhy::Restrict { fk } => {
-                    if let Some(e) = self.lower_guard(&guard.pred, &mut quant)? {
+                    if let Some(e) = self.lower_guard(&guard.pred, targets, &mut quant)? {
                         let fk = cx.model.foreign_key(fk);
                         let (child, parent) = (
                             &cx.model.entities[fk.child].id,
@@ -1037,6 +1250,13 @@ impl Frame<'_> {
                     ),
                 });
             }
+        }
+        if self.mark_of.contains_key(&c) || self.mark_of.contains_key(&q) {
+            // A later step holds an earlier step's rows by their marks, which carry ids:
+            // the key between two of them is not among its arguments (#335).
+            return Err(unsupported(
+                "a key between rows an earlier step wrote, whose marks carry ids, not keys",
+            ));
         }
         let (Some(&cr), Some(&qr)) = (self.row_of.get(&c), self.row_of.get(&q)) else {
             return Err(unsupported("a link guard on a created row"));

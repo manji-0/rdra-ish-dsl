@@ -33,7 +33,7 @@ mod pred;
 mod values;
 
 use dispatch::dispatchers;
-use guards::{arm_conditions, fold_next, reads_only_created};
+use guards::{arm_conditions, fold_next, reads_only_created, NextRead};
 use lower::{function, ActionCx};
 pub(super) use pred::{expr, simplify};
 use pred::{remap_lists, Quant};
@@ -315,19 +315,16 @@ fn functions(
 
     for guard in &action.guards {
         match guard.why {
-            GuardWhy::TransitionFrom | GuardWhy::Owner => {}
-            GuardWhy::Condition { later: None, .. } if !guard.reads_successor() => {}
+            GuardWhy::TransitionFrom | GuardWhy::Owner | GuardWhy::Link => {}
+            // A read of what the step writes folds to the value it writes (`next_read`).
+            GuardWhy::Condition { later: None, .. } => {}
             GuardWhy::Raised { .. } => {}
             GuardWhy::Clock => return Err("reads `now` (phase 5)".into()),
-            GuardWhy::Link => return Err("links, relinks, or unlinks a row (phase 5)".into()),
-            GuardWhy::Copy => return Err("copies a value from another row (phase 5)".into()),
+            GuardWhy::Copy => {}
             GuardWhy::ArmCondition { .. } => {}
             GuardWhy::Run { .. } | GuardWhy::Restrict { .. } => {}
-            GuardWhy::Condition { .. } => {
-                return Err(
-                    "a condition on what the use case creates or a later step writes (phase 5)"
-                        .into(),
-                )
+            GuardWhy::Condition { later: Some(_), .. } => {
+                return Err("a condition on what a later step of the use case writes".into())
             }
         }
     }

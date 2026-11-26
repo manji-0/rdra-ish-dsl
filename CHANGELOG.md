@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Added
+
+- `codegen` prints 17 of the 19 sample use cases that had no function (#335): `links` /
+  `relinks` / `unlinks` (the condition `Links_<Child>_<role>`), copies from another row, a
+  created row's optional key left null, and a condition or `.when` on what the step writes
+  (the parent a created row's key names, or the input a chosen value becomes). A guard that
+  compares a nullable Enum or Bool column with a value prints too, with null satisfying no
+  comparison and every `!=` (#359). The two left wait on a decision, in
+  `docs/design/algebraic-codegen.md`.
+
 ## v3.0.0 - 2026-11-26
 
 This is a major release. `verify` decides every check with its own checker and needs no JVM;

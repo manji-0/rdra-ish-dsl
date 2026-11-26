@@ -1349,11 +1349,27 @@ fn expr(
             field,
             enum_ty,
             value,
+        } if field.nullable => format!(
+            "{} == {OPTION}::Some({enum_ty}::{})",
+            place(r, field),
+            variant_ident(&value.ident)
+        ),
+        Expr::EnumEq {
+            row: r,
+            field,
+            enum_ty,
+            value,
         } => format!(
             "{} == {enum_ty}::{}",
             place(r, field),
             variant_ident(&value.ident)
         ),
+        // Null satisfies no comparison (#359): a nullable field equals only a present value.
+        Expr::BoolEq {
+            row: r,
+            field,
+            value,
+        } if field.nullable => format!("{} == {OPTION}::Some({value})", place(r, field)),
         Expr::BoolEq {
             row: r,
             field,
@@ -1371,6 +1387,34 @@ fn expr(
             op,
             value,
         } => format!("{} {} {value}", place(r, field), op.symbol()),
+        Expr::InputIsNull { input: i } => format!("{}.is_none()", input(*i)),
+        Expr::InputEnumEq {
+            input: i,
+            nullable,
+            enum_ty,
+            value,
+        } => {
+            let v = format!("{enum_ty}::{}", variant_ident(&value.ident));
+            if *nullable {
+                format!("{} == {OPTION}::Some({v})", input(*i))
+            } else {
+                format!("{} == {v}", input(*i))
+            }
+        }
+        Expr::InputBoolEq {
+            input: i,
+            nullable: true,
+            value,
+        } => format!("{} == {OPTION}::Some({value})", input(*i)),
+        Expr::InputBoolEq {
+            input: i, value, ..
+        } => {
+            if *value {
+                input(*i)
+            } else {
+                format!("!{}", input(*i))
+            }
+        }
         Expr::KeyEq {
             child,
             child_field,

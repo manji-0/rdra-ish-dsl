@@ -275,7 +275,7 @@ impl RowValues<'_> {
                 truth(self.spelled(column, b).as_deref() == Some(*a))
             }
             (Operand::Field(row, field), EffectValue::Bool(b))
-                if field.ty == FieldType::Scalar(Scalar::Bool) && !field.nullable =>
+                if field.ty == FieldType::Scalar(Scalar::Bool) =>
             {
                 Expr::BoolEq {
                     row: *row,
@@ -283,7 +283,9 @@ impl RowValues<'_> {
                     value: *b,
                 }
             }
-            (Operand::Field(row, field), EffectValue::EnumVariant(b)) if !field.nullable => {
+            // On a nullable field null satisfies no `==` (#359); the printers compare with a
+            // present value.
+            (Operand::Field(row, field), EffectValue::EnumVariant(b)) => {
                 let FieldType::Enum(enum_ty) = &field.ty else {
                     return Err(format!(
                         "it compares {} with a value of another type",

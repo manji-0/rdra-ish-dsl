@@ -14,6 +14,9 @@ pub(in crate::codegen) struct Quant<'a> {
     pub model: &'a SemanticModel,
     /// The flat row type and fields of an entity.
     pub row_type: RowTypeOf<'a>,
+    /// The input a written row's column was chosen into, by the column's var: a read of the
+    /// successor `fold_next` leaves reads it.
+    pub next_input: &'a dyn Fn(VarId) -> Option<(usize, FnInput)>,
     /// The `Bound` index of the first quantifier's row.
     pub base: usize,
     /// The function's rows: a quantifier's row is numbered after them.
@@ -197,9 +200,43 @@ pub(super) fn atom(
     let Term::Slot { var, at } = lhs else {
         return Err(unsupported());
     };
+    // A key the step links or unlinks: `owner == null` / `owner != null`.
+    if let (VarKind::Owner { fk, .. }, Term::Lit(v)) = (&ts.var(*var).kind, rhs) {
+        if *v != Value::NULL {
+            return Err(unsupported());
+        }
+        let q = quant.as_deref().ok_or_else(unsupported)?;
+        let fk = q.model.foreign_key(*fk);
+        let [(child_col, _)] = fk.columns.as_slice() else {
+            return Err("a key over several columns".into());
+        };
+        let quant_ref: &Option<&mut Quant<'_>> = quant;
+        let (r, _, row) = resolve(*at, rows, bind, quant_ref).ok_or_else(unsupported)?;
+        let is_null = match row.fields.iter().find(|f| f.wire == *child_col) {
+            Some(f) if f.nullable => Expr::IsNull {
+                row: r,
+                field: f.clone(),
+            },
+            Some(_) => Expr::False,
+            None => return Err("a key on a column with no field".into()),
+        };
+        return match op {
+            TsCmp::Eq => Ok(is_null),
+            TsCmp::Ne => Ok(Expr::Not(Box::new(is_null))),
+            _ => Err(unsupported()),
+        };
+    }
     let VarKind::Column { column, .. } = &ts.var(*var).kind else {
         return Err("a condition on a comparison proposition (phase 5)".into());
     };
+    // A value the caller chooses for a written row: the condition reads the input.
+    if let At::Next(_) = at {
+        let (input, decl) = quant
+            .as_deref()
+            .and_then(|q| (q.next_input)(*var))
+            .ok_or_else(unsupported)?;
+        return input_atom(&ts.var(*var).domain, op, rhs, input, &decl);
+    }
     let quant_ref: &Option<&mut Quant<'_>> = quant;
     let (r, state, row) = resolve(*at, rows, bind, quant_ref).ok_or_else(unsupported)?;
     let domain = &ts.var(*var).domain;
@@ -211,6 +248,10 @@ pub(super) fn atom(
     match (domain, rhs) {
         (Domain::Enum(_) | Domain::NullableEnum(_), Term::Lit(v)) if domain.name(*v).is_some() => {
             let wire = &domain.name(*v).ok_or_else(unsupported)?.to_string();
+            // A column the source state keeps null satisfies no comparison (#359).
+            if row.always_null.contains(column) {
+                return negate(Expr::False);
+            }
             // The tag of a state type is fixed by the source state.
             if let Some(variant) = state {
                 if !row.fields.iter().any(|f| f.wire == *column) {
@@ -226,9 +267,8 @@ pub(super) fn atom(
             let FieldType::Enum(enum_ty) = &field.ty else {
                 return Err(unsupported());
             };
-            if field.nullable {
-                return Err("a comparison on a nullable enum column".into());
-            }
+            // On a nullable field the printers compare with a present value: null satisfies
+            // no `==`, and so every `!=` (#359).
             negate(Expr::EnumEq {
                 row: r,
                 field: field.clone(),
@@ -241,14 +281,14 @@ pub(super) fn atom(
             })
         }
         (Domain::Bool | Domain::NullableBool, Term::Lit(v)) if domain.truth(*v).is_some() => {
+            if row.always_null.contains(column) {
+                return negate(Expr::False);
+            }
             let field = row
                 .fields
                 .iter()
                 .find(|f| f.wire == *column)
                 .ok_or_else(unsupported)?;
-            if field.nullable {
-                return Err("a comparison on a nullable Bool column".into());
-            }
             negate(Expr::BoolEq {
                 row: r,
                 field: field.clone(),
@@ -295,6 +335,61 @@ pub(super) fn atom(
                 value,
             })
         }
+        _ => Err(unsupported()),
+    }
+}
+
+/// `input op rhs` on an input the caller chooses a column's value into. A null input
+/// satisfies no comparison with a value, and so every `!=` (#359).
+fn input_atom(
+    domain: &Domain,
+    op: TsCmp,
+    rhs: &Term,
+    input: usize,
+    decl: &FnInput,
+) -> Result<Expr, String> {
+    let unsupported = || "a condition on a chosen value this phase does not print".to_string();
+    let e = match (domain, rhs) {
+        (Domain::Enum(_) | Domain::NullableEnum(_), Term::Lit(v)) if domain.name(*v).is_some() => {
+            let wire = domain.name(*v).ok_or_else(unsupported)?.to_string();
+            let FieldType::Enum(enum_ty) = &decl.ty else {
+                return Err(unsupported());
+            };
+            Expr::InputEnumEq {
+                input,
+                nullable: decl.nullable,
+                enum_ty: enum_ty.clone(),
+                value: EnumValue {
+                    ident: type_ident(&wire),
+                    wire,
+                    label: None,
+                },
+            }
+        }
+        (Domain::Bool | Domain::NullableBool, Term::Lit(v)) if domain.truth(*v).is_some() => {
+            Expr::InputBoolEq {
+                input,
+                nullable: decl.nullable,
+                value: domain.truth(*v) == Some(true),
+            }
+        }
+        (Domain::Nullable | Domain::NullableEnum(_) | Domain::NullableBool, Term::Lit(v)) => {
+            let is_null = if decl.nullable {
+                Expr::InputIsNull { input }
+            } else {
+                Expr::False
+            };
+            if *v == Value::NULL {
+                is_null
+            } else {
+                Expr::Not(Box::new(is_null))
+            }
+        }
+        _ => return Err(unsupported()),
+    };
+    match op {
+        TsCmp::Eq => Ok(e),
+        TsCmp::Ne => Ok(Expr::Not(Box::new(e))),
         _ => Err(unsupported()),
     }
 }

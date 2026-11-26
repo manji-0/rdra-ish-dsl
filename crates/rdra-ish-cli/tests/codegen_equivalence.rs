@@ -32,6 +32,32 @@ use rdra_ish_core::lifecycle::{
 };
 use rdra_ish_emit::codegen::ir::{Adapt, Assigned, Lit, OutKind};
 
+/// Whether two vars hold the same value, read through their domains: a copy writes a column
+/// of another var, which may hold null where the source does not.
+fn same_value(
+    ts: &rdra_ish_core::lifecycle::TransitionSystem,
+    a: rdra_ish_core::lifecycle::VarId,
+    x: Value,
+    b: rdra_ish_core::lifecycle::VarId,
+    y: Value,
+) -> bool {
+    let (da, db) = (&ts.var(a).domain, &ts.var(b).domain);
+    if da == db {
+        return x == y;
+    }
+    match (da.name(x), db.name(y)) {
+        (Some(m), Some(n)) => return m == n,
+        (None, None) => {}
+        _ => return false,
+    }
+    match (da.truth(x), db.truth(y)) {
+        (Some(m), Some(n)) => return m == n,
+        (None, None) => {}
+        _ => return false,
+    }
+    da.number(x) == db.number(y)
+}
+
 #[test]
 fn functions_agree_with_the_transition_system() {
     let mut checked_moves = 0usize;
@@ -65,12 +91,13 @@ fn functions_agree_with_the_transition_system() {
                 }
             };
             checked_moves += 1;
+            let slots = row_slots(ts, action, params, f);
             // The function's own rows, with the rows its quantifiers bind.
             let before = Rows::new(
                 ts,
                 &model,
                 pre,
-                row_slots(ts, action, params, f),
+                slots.clone(),
                 f.elems.iter().map(|e| e.entity.clone()).collect(),
             );
             for c in &f.conditions {
@@ -158,24 +185,23 @@ fn functions_agree_with_the_transition_system() {
                             }
                         }
                         for (target, assigned) in fields {
-                            let owner_is = |q: usize| {
-                                let key = ts.var_ids().find(|v| match &ts.var(*v).kind {
+                            let owner_var = |column: &str| {
+                                ts.var_ids().find(|v| match &ts.var(*v).kind {
                                     VarKind::Owner { child, fk, .. } => {
                                         *child == e
                                             && model
                                                 .foreign_key(*fk)
                                                 .columns
                                                 .iter()
-                                                .any(|(c, _)| *c == target.wire)
+                                                .any(|(c, _)| c == column)
                                     }
                                     _ => false,
-                                });
-                                match key {
-                                    None => true,
-                                    Some(v) => {
-                                        ts.var(v).domain.slot(post.get(ts, v, slot))
-                                            == Some(params[q])
-                                    }
+                                })
+                            };
+                            let owner_is = |q: usize| match owner_var(target.wire.as_str()) {
+                                None => true,
+                                Some(v) => {
+                                    ts.var(v).domain.slot(post.get(ts, v, slot)) == Some(params[q])
                                 }
                             };
                             let key_parent = match assigned {
@@ -193,6 +219,19 @@ fn functions_agree_with_the_transition_system() {
                                     ));
                                 }
                                 continue;
+                            }
+                            // A key the function leaves or makes null: the owner var is unlinked.
+                            if matches!(assigned, Assigned::Null) {
+                                if let Some(key) = owner_var(target.wire.as_str()) {
+                                    checked_keys += 1;
+                                    if post.get(ts, key, slot) != Value::NULL {
+                                        failures.push(format!(
+                                            "{sample}: {} leaves {entity}.{} null, BFS links it",
+                                            f.name, target.wire
+                                        ));
+                                    }
+                                    continue;
+                                }
                             }
                             let Some((var, got)) = at(&target.wire, post) else {
                                 continue;
@@ -216,12 +255,31 @@ fn functions_agree_with_the_transition_system() {
                                         .map(|(_, t)| t.wire.clone());
                                     to.is_some() && to == enum_name(ts, var, got)
                                 }
-                                Assigned::From { adapt, .. } => match adapt {
+                                Assigned::From {
+                                    row: r,
+                                    field,
+                                    adapt,
+                                } => match adapt {
                                     Adapt::AbsentNull => got == Value::NULL,
-                                    _ => at(&target.wire, pre).map(|(_, x)| x) == Some(got),
+                                    // The source row's column as the pre-state holds it: the
+                                    // row's own, or another row's for a copy.
+                                    _ => {
+                                        let (source, source_slot) = &slots[*r];
+                                        column_var(ts, source, &field.wire).is_some_and(|v| {
+                                            same_value(
+                                                ts,
+                                                v,
+                                                pre.get(ts, v, *source_slot),
+                                                var,
+                                                got,
+                                            )
+                                        })
+                                    }
                                 },
-                                Assigned::Input { .. } => match ts.var(var).domain {
-                                    Domain::Nullable => got == Value::PRESENT,
+                                Assigned::Input { input, .. } => match ts.var(var).domain {
+                                    Domain::Nullable if !f.inputs[*input].nullable => {
+                                        got == Value::PRESENT
+                                    }
                                     _ => true,
                                 },
                                 Assigned::ParentId { .. }
