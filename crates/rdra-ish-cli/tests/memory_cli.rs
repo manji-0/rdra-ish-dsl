@@ -253,7 +253,7 @@ fn shared_quotients_stop_no_cone_elsewhere_on_any_number_of_threads() {
         command
             .current_dir(repo())
             .env("RDRA_JOBS", jobs)
-            .env("RDRA_ISH_QUOTIENT_STATS", "1")
+            .env("RDRA_ISH_TEST_QUOTIENT_HITS", "1")
             .args(["verify", "--memory", memory, "samples/patent-ops", "-o"])
             .arg(&spec);
         if !sharing {
@@ -263,13 +263,12 @@ fn shared_quotients_stop_no_cone_elsewhere_on_any_number_of_threads() {
         let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
         let hits = stderr
             .lines()
-            .find_map(|l| l.strip_prefix("quotient-cache: "))
-            .and_then(|l| l.split(' ').find_map(|kv| kv.strip_prefix("hits=")))
+            .find_map(|l| l.strip_prefix("quotient-hits: "))
             .map_or(0, |h| h.parse::<usize>().unwrap());
         let text = String::from_utf8_lossy(&out.stdout).into_owned()
             + &stderr
                 .lines()
-                .filter(|l| !l.starts_with("quotient-cache: "))
+                .filter(|l| !l.starts_with("quotient-hits: "))
                 .collect::<Vec<_>>()
                 .join("\n");
         (text, hits)

@@ -278,13 +278,14 @@ impl Group {
         Self::leaving_out(ts, &fixed)
     }
 
-    /// Under `RDRA_ISH_G_T_STATS`, one line on stderr for a run of `ts`, a reduced cone, up
-    /// to this group: per entity, whether it moves, and why `Reduction::fixed_why` leaves it out.
+    /// Under `RDRA_ISH_G_T_STATS` in a `perf` build (`crate::perf::stats`), one line on stderr
+    /// for a run of `ts`, a reduced cone, up to this group: per entity, whether it moves, and
+    /// why `Reduction::fixed_why` leaves it out.
     pub(crate) fn g_t_stats(&self, ts: &TransitionSystem) {
         let Some(r) = ts.reduction() else {
             return;
         };
-        if std::env::var_os("RDRA_ISH_G_T_STATS").is_none() {
+        if !crate::perf::stats("RDRA_ISH_G_T_STATS") {
             return;
         }
         let why = r.fixed_why(ts);

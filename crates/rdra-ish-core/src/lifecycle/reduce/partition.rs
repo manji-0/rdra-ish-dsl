@@ -104,9 +104,9 @@ pub(super) struct Classes {
 }
 
 /// What the divergence marks of one reduction say, for measurement: how many classes can
-/// loop inside themselves, how many hold states that can and states that cannot, and, when
-/// `RDRA_ISH_DIVERGENCE_STATS` is set, the classes a partition that tells the two apart
-/// would have.
+/// loop inside themselves and, when a `perf` build has `RDRA_ISH_DIVERGENCE_STATS` set
+/// (`crate::perf::stats`), how many hold states that can and states that cannot, and the
+/// classes a partition that tells the two apart would have.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Divergence {
     pub classes: usize,
@@ -339,7 +339,7 @@ impl Classes {
                 );
             }
         }
-        let stats = std::env::var_os("RDRA_ISH_S_UP_TO_H_STATS").is_some();
+        let stats = crate::perf::stats("RDRA_ISH_S_UP_TO_H_STATS");
         if stats {
             let plain = stopped_at.map_or(String::from("no plain run"), |n| {
                 format!("plain stopped at {n} states")
@@ -496,7 +496,7 @@ impl Classes {
                 // Nothing loops, so a partition that tells divergence apart is this one.
                 let d = Divergence {
                     classes,
-                    sensitive: std::env::var_os("RDRA_ISH_DIVERGENCE_STATS").map(|_| classes),
+                    sensitive: crate::perf::stats("RDRA_ISH_DIVERGENCE_STATS").then_some(classes),
                     ..Divergence::default()
                 };
                 (vec![false; classes], d)
@@ -541,9 +541,10 @@ fn s_cycles(ext: &Extended) -> bool {
 /// Which classes can loop inside themselves (docs/formal-verification.md, "WF_vars(Next) on
 /// a reduced cone"): a class holds a cycle of silent edges between its states, or a state
 /// whose inner class can loop. One depth-first pass over the silent edges, which keeps a
-/// colour per state and the edges by source. Under `RDRA_ISH_DIVERGENCE_STATS` it also counts
-/// the classes that hold both states that can reach such a loop inside the class and states
-/// that cannot, and estimates the classes of a partition that tells them apart.
+/// colour per state and the edges by source. Under `RDRA_ISH_DIVERGENCE_STATS` in a `perf`
+/// build it also counts the classes that hold both states that can reach such a loop inside
+/// the class and states that cannot, and estimates the classes of a partition that tells
+/// them apart.
 fn divergence(
     run: &crate::lifecycle::explore::ComponentRun,
     sub: &TransitionSystem,
@@ -613,7 +614,7 @@ fn divergence(
         looping,
         ..Divergence::default()
     };
-    if std::env::var_os("RDRA_ISH_DIVERGENCE_STATS").is_some() {
+    if crate::perf::stats("RDRA_ISH_DIVERGENCE_STATS") {
         divergence.mixed = mixed_classes(n, silent, class, &inner_loops);
         divergence.sensitive = Some(sensitive_classes(n, silent, rises, initial, &inner_loops));
     }
