@@ -227,6 +227,27 @@ export function parseOrderRow(value: unknown): Result<OrderRow, InvalidRow> {
   };
 }
 
+// ── Use cases ──
+
+/** The rows are in states the use case does not run from. Only a dispatcher returns it. */
+export type NotEnabled = Readonly<{ kind: "NotEnabled"; usecase: string }>;
+
+/** A condition of the use case did not hold: the use case does not run. */
+export type Rejected = Readonly<{ kind: "Rejected"; condition: string; label: string; site: string | null }>;
+
+/**
+ * The arguments break what the verified model keeps: a child row that does not name the
+ * parent passed with it, a row that is not the event's, a column the target state keeps null
+ * that holds a value. The model never reaches such rows; a caller that passes them has a bug.
+ */
+export type InvalidArgument = Readonly<{ kind: "InvalidArgument"; message: string }>;
+
+/** What Ship can fail with: NotEnabled from a dispatcher. */
+export type ShipError = NotEnabled;
+
+/** What Place can fail with: NotEnabled from a dispatcher. */
+export type PlaceError = NotEnabled;
+
 // ── Rule checks ──
 
 /** The rules a OrderOpen row breaks, by the names `check` reports: empty when it keeps them all. */

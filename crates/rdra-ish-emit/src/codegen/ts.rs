@@ -821,10 +821,36 @@ fn print_functions(cx: &Cx<'_>, out: &mut String) {
     let domain = cx.domain;
     print_events(domain, out);
     if domain.fns.is_empty() {
+        // The use cases with no printed function still have their errors (#335, G15).
+        if !domain.errors.is_empty() {
+            out.push_str("// ── Use cases ──\n\n");
+            print_error_cases(out);
+            print_errors(domain, out);
+        }
         return;
     }
     print_marks(domain, out);
     out.push_str("// ── Use cases ──\n\n");
+    print_error_cases(out);
+    out.push_str(&doc(
+        &[
+            "What a row a result writes must still be when the write commits, so the store can write it".to_string(),
+            "conditionally and take a write that matches no row as NotEnabled (see the obligations).".to_string(),
+        ],
+        "",
+    ));
+    out.push_str("export type ExpectedSource =\n  | Readonly<{ kind: \"absent\" }>\n  | Readonly<{ kind: \"present\" }>\n  | Readonly<{ kind: \"in\"; column: string; value: string }>;\n\n");
+
+    print_errors(domain, out);
+
+    for f in &domain.fns {
+        print_result(f, out);
+        print_function(cx, f, out);
+    }
+}
+
+/// The cases every use-case error is a union of: `NotEnabled`, `Rejected`, `InvalidArgument`.
+fn print_error_cases(out: &mut String) {
     out.push_str(&doc1(
         "The rows are in states the use case does not run from. Only a dispatcher returns it.",
     ));
@@ -846,21 +872,6 @@ fn print_functions(cx: &Cx<'_>, out: &mut String) {
     out.push_str(
         "export type InvalidArgument = Readonly<{ kind: \"InvalidArgument\"; message: string }>;\n\n",
     );
-    out.push_str(&doc(
-        &[
-            "What a row a result writes must still be when the write commits, so the store can write it".to_string(),
-            "conditionally and take a write that matches no row as NotEnabled (see the obligations).".to_string(),
-        ],
-        "",
-    ));
-    out.push_str("export type ExpectedSource =\n  | Readonly<{ kind: \"absent\" }>\n  | Readonly<{ kind: \"present\" }>\n  | Readonly<{ kind: \"in\"; column: string; value: string }>;\n\n");
-
-    print_errors(domain, out);
-
-    for f in &domain.fns {
-        print_result(f, out);
-        print_function(cx, f, out);
-    }
 }
 
 /// The event types: one per event a use case raises or a triggered use case takes.

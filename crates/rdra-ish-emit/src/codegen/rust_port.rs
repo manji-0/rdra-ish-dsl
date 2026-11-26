@@ -249,6 +249,16 @@ where
 
 /// The calls: `conf_prepare` reads a call's values and prepares it; `conf_commit` commits it.
 fn print_calls(domain: &DomainModel, port: &PortDecl, out: &mut String) {
+    // A model whose every action is an entry point has no call: the harness names none.
+    if port.methods.is_empty() {
+        out.push_str(&format!(
+            "fn conf_prepare<P: ConformancePort>(_conf_port: &mut P, call: &[&str]) -> {RESULT}<{RESULT}<ConfWrite, {STRING}>, {STRING}> {{\n    let action = call.first().copied().unwrap_or_default();\n    {RESULT}::Err(format!(\"no use case {{action}} in this port\"))\n}}\n\n"
+        ));
+        out.push_str(&format!(
+            "fn conf_commit<P: ConformancePort>(_conf_port: &mut P, write: ConfWrite) -> {RESULT}<(), {STRING}> {{\n    match write {{}}\n}}\n\n"
+        ));
+        return;
+    }
     // The calls.
     out.push_str(&format!(
         "#[allow(unused_mut, unused_variables)] // a model whose calls take no values reads none\nfn conf_prepare<P: ConformancePort>(conf_port: &mut P, call: &[&str]) -> {RESULT}<{RESULT}<ConfWrite, {STRING}>, {STRING}> {{\n"
