@@ -252,6 +252,9 @@ skips TLC, since `verify` refuses `--with-tlc` under `64MiB`.
 | `z3_inductive` | An invariant z3 proves by induction, beside a real violation |  | `Forbidden_Order_0` ok, z3 proved, BFS ok/ok/ok; `Forbidden_Order_1` cex, z3 unproved, BFS cex/cex/cex |
 | `z3_int_and_now_boundary` | Int columns and `now` at the top of the range |  | `Forbidden_Item_0`, `Forbidden_Coupon_3` ok, z3 proved, BFS ok/ok/ok; `Forbidden_Item_1` cex, z3 unproved, BFS cex/cex/cex; `Forbidden_Coupon_2` ok, z3 unproved, BFS ok/ok/ok |
 | `z3_int_default_out_of_range` | An Int default outside the range, which every engine would read the same wrong way |  | `IntLiteralOutOfBounds_Item_7` cex, TLC none; `Forbidden_Item_0` none |
+| `z3_int_listing_guard` | A guard that lists every Int value up to the top holds of no row at 0..5, but z3 has no top (#425) |  | `Forbidden_Item_0` ok, z3 unproved, BFS ok/ok/ok; `Deadlock_Item_status_open` cex, TLC none; `Witness_Item_status_flagged` cex |
+| `z3_int_listing_past_the_top` | The rule of `z3_int_listing_whole_range` with two more values of range | `--int-range-max 7` | `Forbidden_Item_0` cex, z3 refuted, BFS cex/cex/cex |
+| `z3_int_listing_whole_range` | A rule that lists every Int value up to the top holds at 0..5, but z3 has no top (#425) |  | `Forbidden_Item_0` ok, z3 unproved, BFS ok/ok/ok |
 | `z3_lemma` | A `.lemma()` rule supplies the fact a CTI needs, and the rule is proved |  | `MultiForbidden_Light_0`, `MultiForbidden_Light_1` ok, z3 proved, BFS ok/ok/ok; `Deadlock_Door_state_closed`, `Deadlock_Light_state_on` cex |
 | `z3_now_past_the_top` | The `now` rule of `z3_int_and_now_boundary` with one more value of range | `--int-range-max 6` | `Forbidden_Coupon_0` cex, z3 unproved, BFS cex/cex/cex |
 | `z3_two_ok_three_fails` | An invariant true at 2 instances and false at 3 |  | `Forbidden_Order_0` ok, z3 unproved, BFS ok/ok/cex; `Deadlock_Order_status_c`, `Witness_Order_status_d` cex |

@@ -1,0 +1,15 @@
+// trap: the rule of z3_int_listing_whole_range with two more values of range.
+// At 0..7 BumpItem writes 6, which the listing leaves out: every engine finds the violation,
+// and the proof leaves the refuted rule out. The default run must not prove it (#425).
+// flags: --int-range-max 7
+// expect Forbidden_Item_0: native=counterexample tlc=counterexample z3=refuted bfs=counterexample,counterexample,counterexample
+entity Item "Item" {
+  id: Int @pk
+  n: Int @null
+}
+usecase AddItem "add"
+usecase BumpItem "bump"
+creates(AddItem, Item)
+updates(BumpItem, Item)
+sets(BumpItem, Item.n == present)
+forbidden(Item, n not in (null, 0, 1, 2, 3, 4, 5))

@@ -1,0 +1,26 @@
+// trap: a guard that lists every Int value up to the top of the range.
+// `Big` (`n not in (null, 0..5)`) holds of no row at 0..5, so FlagItem never runs in BFS or
+// TLC and no row reaches `flagged`. z3 has no top: BumpItem may write 6, Big holds, and
+// FlagItem flags the row, so z3 must not prove the rule. The builder once folded the guard
+// to `false`, dropped FlagItem, and z3 proved the rule (#425).
+// expect Forbidden_Item_0: native=ok tlc=ok z3=unproved bfs=ok,ok,ok
+// The same bound leaves `open` with no move out and `flagged` with no witness at 0..5. TLC's
+// deadlock asks for no step at all, and BumpItem can always rewrite `n`, so it reports none.
+// expect Deadlock_Item_status_open: native=counterexample tlc=none
+// expect Witness_Item_status_flagged: native=counterexample tlc=counterexample
+entity Item "Item" {
+  id: Int @pk
+  n: Int @null
+  status: Enum(open, flagged) @default(open)
+}
+usecase AddItem "add"
+usecase BumpItem "bump"
+usecase FlagItem "flag"
+creates(AddItem, Item)
+updates(BumpItem, Item)
+updates(FlagItem, Item)
+sets(BumpItem, Item.n == present)
+condition Big "n is past 5"
+holds(Big, Item.n not in (null, 0, 1, 2, 3, 4, 5))
+transitions(FlagItem, Item.status, open -> flagged).when(Big)
+forbidden(Item, status == flagged)

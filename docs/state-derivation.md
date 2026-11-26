@@ -380,7 +380,9 @@ assertion) is explored on its cone of influence:
   in the set drops out, and an action keeps only its effects on the set. A copy's guard is read
   only when the cone holds the column it writes. A set that lists every value of its column is
   true when the system is built, so `.none(Child.status in (<every value>))` and `.none(Child)`
-  read the link alone (#71, #73).
+  read the link alone (#71, #73). Only an Enum, Bool, null-or-present, or existence column
+  counts: an Int column's values end at `int_max` and `verify --prove` has no top, so a set
+  that lists `0..int_max` stays a set (#425).
 - **Exact.** The reachable states of the cone are those of the whole system projected onto it,
   with one exception: an action of the cone that creates an entity the cone does not read drops
   that creation and never runs out of its slots, so the cone reaches a superset. The test
