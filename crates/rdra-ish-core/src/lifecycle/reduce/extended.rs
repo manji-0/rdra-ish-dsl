@@ -113,10 +113,7 @@ impl Extended {
                 system.vars[var.index()].base = Value::TRUE;
             }
         }
-        for (k, &var) in groups.vars.iter().enumerate() {
-            let VarKind::Run { entity, .. } = system.vars[var.index()].kind else {
-                unreachable!("a bit is a run mark")
-            };
+        for (k, (&var, &entity)) in groups.vars.iter().zip(&groups.entities).enumerate() {
             system
                 .actions
                 .extend(flips(k, var, entity, cone.actions.len() + 2 * k));
@@ -216,32 +213,54 @@ impl Extended {
     }
 }
 
+/// What two folds share to share a bit group. The two kinds never equal each other.
+#[derive(PartialEq, Eq, Hash)]
+enum Signature {
+    /// A fold keyed by a param: the folded action's params, guards and effects (their sites
+    /// included, so variants written on different lines never merge), and the key.
+    Param {
+        params: Vec<Param>,
+        guards: Vec<Pred>,
+        effects: Vec<Effect>,
+        key: u8,
+    },
+    /// A linked fold: the T entity, the link var, and the folded node's body.
+    Linked {
+        entity: EntId,
+        link_var: VarId,
+        body: Pred,
+    },
+}
+
 /// The bit groups of an extended sub-lifecycle as its folds open and join them, in order.
 #[derive(Default)]
 struct BitGroups {
     /// A group's signature to its index.
-    index: HashMap<String, usize>,
+    index: HashMap<Signature, usize>,
     /// Per group, its folds, the first one first.
     bits: Vec<Vec<Fold>>,
     /// Per group, its bit var.
     vars: Vec<VarId>,
+    /// Per group, the entity its bit var is over.
+    entities: Vec<EntId>,
     /// Per group's first action, the actions merged into it.
     variants: HashMap<ActId, Vec<ActId>>,
 }
 
 impl BitGroups {
     /// Adds `fold` to the group of `signature` and returns its index, if there is one.
-    fn join(&mut self, signature: &str, fold: &Fold) -> Option<usize> {
+    fn join(&mut self, signature: &Signature, fold: &Fold) -> Option<usize> {
         let g = *self.index.get(signature)?;
         self.bits[g].push(fold.clone());
         Some(g)
     }
 
-    /// A new group of `signature` with `fold` only, and its bit `var`.
-    fn open(&mut self, signature: String, fold: &Fold, var: VarId) {
+    /// A new group of `signature` with `fold` only, and its bit `var` over `entity`.
+    fn open(&mut self, signature: Signature, fold: &Fold, var: VarId, entity: EntId) {
         self.index.insert(signature, self.bits.len());
         self.bits.push(vec![fold.clone()]);
         self.vars.push(var);
+        self.entities.push(entity);
     }
 
     /// Folds an S action keyed by one of its params: the action reads its bit at the key in
@@ -263,15 +282,12 @@ impl BitGroups {
         }
         let entity = a.params[usize::from(local_key)].entity;
         let name = a.name.clone();
-        let signature = format!(
-            "{:?}",
-            (
-                &a.params,
-                a.guards.iter().map(|g| &g.pred).collect::<Vec<_>>(),
-                &a.effects,
-                local_key
-            )
-        );
+        let signature = Signature::Param {
+            params: a.params.clone(),
+            guards: a.guards.iter().map(|g| g.pred.clone()).collect(),
+            effects: a.effects.clone(),
+            key: local_key,
+        };
         if let Some(g) = self.join(&signature, fold) {
             let first = self.bits[g][0].act;
             self.variants
@@ -284,7 +300,7 @@ impl BitGroups {
         system.actions[ext_id.index()]
             .guards
             .push(bit_is(var, local_key, Value::TRUE));
-        self.open(signature, fold, var);
+        self.open(signature, fold, var, entity);
         self.variants.insert(fold.act, vec![fold.act]);
         false
     }
@@ -311,13 +327,17 @@ impl BitGroups {
             unreachable!("a linked fold")
         };
         let ext_id = map.act[fold.act.index()].expect("an S action is kept");
-        let signature = format!("{:?}", (entity, link_var, body));
+        let signature = Signature::Linked {
+            entity: *entity,
+            link_var: *link_var,
+            body: body.clone(),
+        };
         let var = match self.join(&signature, fold) {
             Some(g) => self.vars[g],
             None => {
                 let name = format!("{}_{guard}", system.actions[ext_id.index()].name);
                 let var = new_bit(system, map.e(*entity), &name);
-                self.open(signature, fold, var);
+                self.open(signature, fold, var, map.e(*entity));
                 var
             }
         };
@@ -368,7 +388,11 @@ fn renumber(map: &Remap, fold: &Fold, p: u8) -> u8 {
     }
 }
 
-/// A new bit var over `entity`, false at first.
+/// A new bit var over `entity`, false at first. A bit is no run mark, but it is encoded as
+/// one: its var is a `VarKind::Run` of a use case named `in_<name>`, a guard reads it as a
+/// `GuardWhy::Run` at step 0, a fold binds its row as `ParamRole::Earlier { step: 0 }`, and
+/// its flips are `ActionOrigin::Clock` actions. Those give a bit the binding and the printing
+/// it needs; a reader of any of the three may meet a bit.
 fn new_bit(system: &mut TransitionSystem, entity: EntId, name: &str) -> VarId {
     let var = VarId::at(system.vars.len());
     system.vars.push(VarDecl {

@@ -396,7 +396,7 @@ impl Value {
 }
 
 /// Which model fact an item of the system came from.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ModelRef {
     /// Index into `SemanticModel::state_transitions`.
     Transition(usize),
@@ -430,7 +430,7 @@ pub enum ModelRef {
 }
 
 /// Provenance of a system item: the model fact and, when the source has one, its span.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Site {
     pub fact: ModelRef,
     pub span: Option<LocatedSpan>,
@@ -487,7 +487,7 @@ pub enum ActionOrigin {
     Clock,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Param {
     pub entity: EntId,
     pub role: ParamRole,
@@ -496,7 +496,7 @@ pub struct Param {
     pub via_api: Option<ApiKey>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ParamRole {
     /// The lowest-index absent slot.
     New,
@@ -676,7 +676,7 @@ pub enum GuardWhy {
     Restrict { fk: FkId },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Effect {
     /// exists := present; the slot's columns are already at base.
     Create { param: u8 },
@@ -708,7 +708,7 @@ pub enum Effect {
 }
 
 /// One `transitions` arm of an `Effect::Transition`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Arm {
     pub from: Value,
     pub to: Value,
@@ -719,7 +719,7 @@ pub struct Arm {
 }
 
 /// One value of an `Effect::Choose`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Choice {
     pub value: Value,
     /// The `sets(.., col == present)`, copy or `chooses` line that asks for the value. A
@@ -730,7 +730,7 @@ pub struct Choice {
     pub conds: Vec<(ConditionKey, String)>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Rhs {
     Lit(Value),
     /// The slot index of that param (owner assignment).
@@ -738,7 +738,7 @@ pub enum Rhs {
 }
 
 /// Where a slot reference points.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum At {
     /// An action parameter.
     Param(u8),
@@ -749,7 +749,7 @@ pub enum At {
     Next(u8),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Term {
     Slot {
         var: VarId,
@@ -764,7 +764,7 @@ pub enum Term {
     Now,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CmpOp {
     Eq,
     Ne,
@@ -774,7 +774,7 @@ pub enum CmpOp {
     Ge,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Pred {
     True,
     False,

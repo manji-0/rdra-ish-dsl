@@ -99,32 +99,59 @@ struct RunSlot {
 /// is not in it, and the pattern cap is not either, as for `Key`.
 struct RunKey {
     system: TransitionSystem,
-    states: usize,
-    stop_when_all_violated: bool,
-    charged: bool,
+    stops: Stops,
 }
 
 impl RunKey {
     fn of(system: &TransitionSystem, caps: Caps) -> Self {
         RunKey {
             system: system.clone(),
-            states: caps.states,
-            stop_when_all_violated: caps.stop_when_all_violated,
-            charged: caps.memory.is_some(),
+            stops: Stops::of(caps),
         }
     }
 
     fn is(&self, system: &TransitionSystem, caps: Caps) -> bool {
         let RunKey {
             system: held,
-            states,
-            stop_when_all_violated,
-            charged,
+            stops,
         } = self;
-        *states == caps.states
-            && *stop_when_all_violated == caps.stop_when_all_violated
-            && *charged == caps.memory.is_some()
-            && same_runs(held, system)
+        *stops == Stops::of(caps) && same_runs(held, system)
+    }
+}
+
+/// The caps that can stop a run of S, in both keys: the state cap, stopping once every check
+/// failed, and whether a pool is charged.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Stops {
+    states: usize,
+    stop_when_all_violated: bool,
+    charged: bool,
+}
+
+impl Stops {
+    fn of(caps: Caps) -> Self {
+        Stops {
+            states: caps.states,
+            stop_when_all_violated: caps.stop_when_all_violated,
+            charged: caps.memory.is_some(),
+        }
+    }
+}
+
+/// The slot of `slots` whose key `is` says it is, or a new one `new` makes, added last.
+fn slot_of<S>(
+    slots: &Mutex<Vec<Arc<S>>>,
+    is: impl Fn(&S) -> bool,
+    new: impl FnOnce() -> S,
+) -> Arc<S> {
+    let mut slots = slots.lock().unwrap_or_else(PoisonError::into_inner);
+    match slots.iter().find(|s| is(s)) {
+        Some(slot) => Arc::clone(slot),
+        None => {
+            let slot = Arc::new(new());
+            slots.push(Arc::clone(&slot));
+            slot
+        }
     }
 }
 
@@ -202,9 +229,7 @@ struct Key {
     obs: VarSet,
     inputs: VarSet,
     rise: Vec<bool>,
-    states: usize,
-    stop_when_all_violated: bool,
-    charged: bool,
+    stops: Stops,
     /// The group is part of the key: a quotient from a plain run of S is never served to a
     /// call that may run S up to `H`, or the reverse.
     s_up_to_h: bool,
@@ -218,9 +243,7 @@ impl Key {
             obs: ext.obs_local.clone(),
             inputs: ext.inputs_local.clone(),
             rise: ext.rise.clone(),
-            states: caps.states,
-            stop_when_all_violated: caps.stop_when_all_violated,
-            charged: caps.memory.is_some(),
+            stops: Stops::of(caps),
             s_up_to_h: caps.s_up_to_h,
             force_s_up_to_h: caps.force_s_up_to_h,
         }
@@ -232,17 +255,13 @@ impl Key {
             obs,
             inputs,
             rise,
-            states,
-            stop_when_all_violated,
-            charged,
+            stops,
             s_up_to_h,
             force_s_up_to_h,
         } = self;
-        *states == caps.states
+        *stops == Stops::of(caps)
             && *s_up_to_h == caps.s_up_to_h
             && *force_s_up_to_h == caps.force_s_up_to_h
-            && *stop_when_all_violated == caps.stop_when_all_violated
-            && *charged == caps.memory.is_some()
             && *rise == ext.rise
             && *obs == ext.obs_local
             && *inputs == ext.inputs_local
@@ -255,11 +274,19 @@ struct Entry {
     classes: Classified,
     /// The most bytes a run of the computation asked its pool to cover.
     need: u64,
-    /// For a declined computation, the room of the pool it charged, which the request it was
-    /// refused passed; `None` for a clean one.
-    declined_in: Option<u64>,
+    stored: Stored,
     /// `classes`, charged to the command's pool while the cache holds it.
     _charge: Option<Charge>,
+}
+
+/// How the computation an entry stands for ended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Stored {
+    Clean,
+    /// Declined in a pool of `room`, which the request it was refused passed.
+    Declined {
+        room: u64,
+    },
 }
 
 impl Default for QuotientCache {
@@ -294,20 +321,14 @@ impl QuotientCache {
             let (run, seen) = watch(run);
             return (Arc::new(run), seen);
         }
-        let slot = {
-            let mut slots = self.runs.lock().unwrap_or_else(PoisonError::into_inner);
-            match slots.iter().find(|s| s.key.is(sub, caps)) {
-                Some(slot) => Arc::clone(slot),
-                None => {
-                    let slot = Arc::new(RunSlot {
-                        key: RunKey::of(sub, caps),
-                        run: Mutex::new(None),
-                    });
-                    slots.push(Arc::clone(&slot));
-                    slot
-                }
-            }
-        };
+        let slot = slot_of(
+            &self.runs,
+            |s| s.key.is(sub, caps),
+            || RunSlot {
+                key: RunKey::of(sub, caps),
+                run: Mutex::new(None),
+            },
+        );
         // Held while running, so a key that asks meanwhile waits for the run. A run of S
         // runs no reduction, so no other lock of the cache is taken under it.
         let mut held = slot.run.lock().unwrap_or_else(PoisonError::into_inner);
@@ -376,20 +397,14 @@ impl QuotientCache {
         if self.off || caps.deadline.is_some() {
             return compute(self);
         }
-        let slot = {
-            let mut slots = self.slots.lock().unwrap_or_else(PoisonError::into_inner);
-            match slots.iter().find(|s| s.key.is(ext, caps)) {
-                Some(slot) => Arc::clone(slot),
-                None => {
-                    let slot = Arc::new(Slot {
-                        key: Key::of(ext, caps),
-                        entry: Mutex::new(None),
-                    });
-                    slots.push(Arc::clone(&slot));
-                    slot
-                }
-            }
-        };
+        let slot = slot_of(
+            &self.slots,
+            |s| s.key.is(ext, caps),
+            || Slot {
+                key: Key::of(ext, caps),
+                entry: Mutex::new(None),
+            },
+        );
         // Held while computing, so a cone that asks meanwhile waits for the entry. A nested
         // key is a smaller system, so the locks are taken in one order.
         let mut entry = slot.entry.lock().unwrap_or_else(PoisonError::into_inner);
@@ -403,9 +418,9 @@ impl QuotientCache {
                     crate::memory::watch(|| compute(&QuotientCache::off()));
                 // A recomputation that a limit stopped says nothing of a clean entry, and one
                 // that met a pool others crowded says nothing of a declined one.
-                let telling = match e.declined_in {
-                    None => ended.is_clean(),
-                    Some(_) => !seen.crowded,
+                let telling = match e.stored {
+                    Stored::Clean => ended.is_clean(),
+                    Stored::Declined { .. } => !seen.crowded,
                 };
                 if !telling {
                     crate::shadow::skipped(crate::shadow::Twin::CacheHit);
@@ -429,7 +444,7 @@ impl QuotientCache {
         self.note(|s| s.computed += 1);
         // A clean result replaces a declined one, which a larger room computed past.
         let store = match ended {
-            Ended::Clean => entry.as_ref().is_none_or(|e| e.declined_in.is_some()),
+            Ended::Clean => entry.as_ref().is_none_or(|e| e.stored != Stored::Clean),
             Ended::Declined => entry.is_none(),
             Ended::Stopped => false,
         };
@@ -448,9 +463,10 @@ impl QuotientCache {
                 *entry = Some(Entry {
                     classes: classes.clone(),
                     need: seen.peak,
-                    declined_in: match ended {
-                        Ended::Declined => caps.memory.map(|pool| pool.room()),
-                        Ended::Clean | Ended::Stopped => None,
+                    // A decline is a pool's refusal: with no pool it is stored as clean.
+                    stored: match (ended, caps.memory) {
+                        (Ended::Declined, Some(pool)) => Stored::Declined { room: pool.room() },
+                        _ => Stored::Clean,
                     },
                     _charge: charge.flatten(),
                 });
@@ -502,15 +518,18 @@ impl Entry {
     /// pool of no more room than it was declined in, and either only when its runs fit the
     /// pool now (`fits`, asked last, as it is what a computation's runs would ask).
     fn answers(&self, caps: Caps) -> bool {
-        let room = |room: u64| caps.memory.is_some_and(|pool| pool.room() <= room);
-        self.declined_in.is_none_or(room) && fits(self.need, caps)
+        let room = match self.stored {
+            Stored::Clean => true,
+            Stored::Declined { room } => caps.memory.is_some_and(|pool| pool.room() <= room),
+        };
+        room && fits(self.need, caps)
     }
 
     /// How the computation the entry stands for ended.
     fn ended(&self) -> Ended {
-        match self.declined_in {
-            None => Ended::Clean,
-            Some(_) => Ended::Declined,
+        match self.stored {
+            Stored::Clean => Ended::Clean,
+            Stored::Declined { .. } => Ended::Declined,
         }
     }
 }
@@ -967,7 +986,7 @@ mod tests {
             let slots = cache.slots.lock().unwrap();
             let entry = slots[0].entry.lock().unwrap();
             let entry = entry.as_ref().expect("a declined computation is stored");
-            assert_eq!(entry.declined_in, Some(room));
+            assert_eq!(entry.stored, Stored::Declined { room });
             entry.need
         };
         assert!(0 < need && need <= room);
