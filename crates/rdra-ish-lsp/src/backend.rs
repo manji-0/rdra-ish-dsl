@@ -699,7 +699,10 @@ impl LanguageServer for Backend {
             found.doc.text,
             &found.path,
         );
-        let checked = (state.lifecycle.as_ref()).and_then(|f| f.lenses.get(&found.path));
+        // The findings are by the path the analysis loaded the file under, which may not be
+        // the path of the URI (a symlinked root).
+        let source = &found.analysis.program.sources[found.doc.source_id].0;
+        let checked = (state.lifecycle.as_ref()).and_then(|f| f.lenses.get(source));
         lenses.extend(checked.into_iter().flatten().map(|l| l.to_code_lens()));
         Ok(Some(lenses))
     }

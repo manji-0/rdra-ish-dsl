@@ -100,6 +100,12 @@ fn lens_at(client: &mut Client, path: &Path, line: u64) -> String {
     titles[0].to_string()
 }
 
+/// `text` with `from` replaced by `to`, which it must hold.
+fn edit(text: &str, from: &str, to: &str) -> String {
+    assert!(text.contains(from), "the text holds no {from:?}");
+    text.replace(from, to)
+}
+
 fn change(client: &mut Client, path: &Path, version: i64, text: &str) {
     client.notify(
         "textDocument/didChange",
@@ -117,16 +123,28 @@ fn a_broken_guard_shows_the_rule_it_breaks_with_its_lens() {
     let text = std::fs::read_to_string(&orders).unwrap();
     let mut client = client(&root);
     client.open(&orders, &text);
-    wait_for_findings(&client, &entities, "the first check", |d| {
+    let first = wait_for_findings(&client, &entities, "the first check", |d| {
         finding(d, A).is_none()
     });
+    // A finding that names no entity of its own is shown once per entity, under the name
+    // `check` prints.
+    for entity in [
+        "AccountBalance",
+        "AuditEvent",
+        "InsurancePolicy",
+        "Provider",
+    ] {
+        let code = format!("NoCreationPath_{entity}");
+        let found = finding(&first, &code).unwrap_or_else(|| panic!("no {code}: {first:?}"));
+        assert_eq!(found["severity"], 3, "{found}");
+    }
     assert_eq!(
         lens_at(&mut client, &entities, rule_a),
         "check: ok (1 instance)"
     );
 
     let started = Instant::now();
-    change(&mut client, &orders, 2, &text.replace(GUARD, BROKEN_GUARD));
+    change(&mut client, &orders, 2, &edit(&text, GUARD, BROKEN_GUARD));
     let found = wait_for_findings(&client, &entities, "the broken rule", |d| {
         finding(d, A).is_some()
     });
@@ -160,7 +178,7 @@ fn a_burst_of_edits_ends_on_the_findings_of_the_last_text() {
 
     // Twenty edits with the guard broken, each with a comment of multi-byte text appended, and
     // a last one that mends the guard and drops the result time instead.
-    let broken = text.replace(GUARD, BROKEN_GUARD);
+    let broken = edit(&text, GUARD, BROKEN_GUARD);
     for version in 2..22 {
         change(
             &mut client,
@@ -173,7 +191,7 @@ fn a_burst_of_edits_ends_on_the_findings_of_the_last_text() {
         &mut client,
         &orders,
         22,
-        &format!("{}// 最後の編集 𠮷\n", text.replace(RESULT_TIME, "")),
+        &format!("{}// 最後の編集 𠮷\n", edit(&text, RESULT_TIME, "")),
     );
 
     let mut last = wait_for_findings(&client, &entities, "the findings of the last text", |d| {
@@ -203,6 +221,36 @@ fn a_burst_of_edits_ends_on_the_findings_of_the_last_text() {
     assert_eq!(
         lens_at(&mut client, &entities, rule_b),
         "check: violated (1 instance)"
+    );
+    let _ = std::fs::remove_dir_all(root);
+}
+
+/// A check whose budget is spent decides nothing: every cone stops at once, which is
+/// information, and each rule's lens says it is not decided.
+#[test]
+fn a_spent_budget_leaves_the_rules_not_decided_and_reports_no_error() {
+    let root = clinic_ops();
+    let (orders, entities) = (root.join(ORDERS), root.join(ENTITIES));
+    let rules = std::fs::read_to_string(&entities).unwrap();
+    let rule_a = line_of(&rules, "医師事務作業補助者が入力したオーダは");
+    let text = std::fs::read_to_string(&orders).unwrap();
+    let mut client = Client::initialized_with(
+        &root,
+        json!({"lifecycleCheck": {"enabled": true, "timeBudgetMs": 0, "quietMs": 50}}),
+    );
+    client.open(&orders, &edit(&text, GUARD, BROKEN_GUARD));
+    let found = wait_for_findings(&client, &entities, "the stopped check", |d| {
+        d.iter().any(|d| d["code"] == "TimeBudgetReached_Provider")
+    });
+    let checked: Vec<&Value> = found.iter().filter(|d| d["source"] == SOURCE).collect();
+    assert!(finding(&found, A).is_none(), "{checked:?}");
+    assert!(
+        checked.iter().all(|d| d["severity"] != 1),
+        "an error from a stopped check: {checked:?}"
+    );
+    assert_eq!(
+        lens_at(&mut client, &entities, rule_a),
+        "check: not decided (1 instance)"
     );
     let _ = std::fs::remove_dir_all(root);
 }

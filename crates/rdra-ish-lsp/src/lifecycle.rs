@@ -154,7 +154,8 @@ pub fn check(analysis: &WorkspaceAnalysis, settings: &Settings) -> Findings {
     let mut findings = Findings::default();
 
     // Each finding once: the report holds those of the build and the verdicts, each view those
-    // that name its entity, and a finding on two entities is on two views.
+    // that name its entity, and a finding on two entities is on two views. A finding that
+    // carries no entity of its own (`NoCreationPath`, a stop) is one per entity.
     let mut seen: Vec<(&StateDiag, Option<&str>)> = Vec::new();
     for d in &checked.report.diags {
         let entity = d
@@ -170,7 +171,10 @@ pub fn check(analysis: &WorkspaceAnalysis, settings: &Settings) -> Findings {
     }
     let mut placed: Vec<(PathBuf, Diagnostic)> = Vec::new();
     for (i, (diag, entity)) in seen.iter().enumerate() {
-        if seen[..i].iter().any(|(earlier, _)| earlier == diag) {
+        let same = |(earlier, at): &(&StateDiag, Option<&str>)| {
+            earlier == diag && (!of_its_entity(diag) || at == entity)
+        };
+        if seen[..i].iter().any(same) {
             continue;
         }
         let Some((path, range)) = place.diag(diag, *entity) else {
@@ -184,15 +188,18 @@ pub fn check(analysis: &WorkspaceAnalysis, settings: &Settings) -> Findings {
             (_, rdra_ish_core::lifecycle::Severity::Error) => DiagnosticSeverity::ERROR,
         };
         let message = match entity {
-            Some(id) if mentions_this_entity(diag) => format!("entity {id}: {diag}"),
+            Some(id) if names_no_entity(diag) => format!("entity {id}: {diag}"),
             _ => diag.to_string(),
         };
+        // The name `check` prints: on an entity's view, with the entity's id where the kind
+        // takes it.
+        let name = diag.name(entity.as_slice());
         placed.push((
             path,
             Diagnostic {
                 range,
                 severity: Some(severity),
-                code: Some(NumberOrString::String(diag.name(&[]))),
+                code: Some(NumberOrString::String(name)),
                 source: Some(SOURCE.to_string()),
                 message,
                 ..Default::default()
@@ -275,16 +282,25 @@ fn is_stop(diag: &StateDiag) -> bool {
     )
 }
 
-/// The finding's message says "this entity" or names no entity, so the diagnostic names it.
-fn mentions_this_entity(diag: &StateDiag) -> bool {
+/// A finding that names no entity of its own: it is about the entity whose view reports it,
+/// and goes on that entity's declaration, once per entity.
+fn of_its_entity(diag: &StateDiag) -> bool {
     matches!(
         diag,
-        StateDiag::NoCreationPath
-            | StateDiag::PreExistingChildOfCreatedParent { .. }
-            | StateDiag::IdentityStartSlots { .. }
-            | StateDiag::MinCardOfPreExistingParent { .. }
-            | StateDiag::MinCardNeedsCreate { .. }
+        StateDiag::NoCreationPath | StateDiag::UnreachableEnumVariant { .. }
     ) || is_stop(diag)
+}
+
+/// The finding's message names no entity or says "this entity", so the diagnostic names it.
+fn names_no_entity(diag: &StateDiag) -> bool {
+    of_its_entity(diag)
+        || matches!(
+            diag,
+            StateDiag::PreExistingChildOfCreatedParent { .. }
+                | StateDiag::IdentityStartSlots { .. }
+                | StateDiag::MinCardOfPreExistingParent { .. }
+                | StateDiag::MinCardNeedsCreate { .. }
+        )
 }
 
 /// Turns the sites of a run's findings into ranges of the source files they are in.
@@ -383,11 +399,8 @@ impl Placer<'_> {
             StateDiag::Deadlock { entity, .. } | StateDiag::NoWitness { entity, .. } => {
                 self.entity(entity)
             }
-            // `<entity>.<column>`.
-            StateDiag::UnreachableEnumVariant { column, .. } => column
-                .split_once('.')
-                .and_then(|(entity, _)| self.entity(entity)),
-            StateDiag::NoCreationPath
+            StateDiag::UnreachableEnumVariant { .. }
+            | StateDiag::NoCreationPath
             | StateDiag::PatternCapReached { .. }
             | StateDiag::StateCapReached { .. }
             | StateDiag::MemoryCapReached { .. }

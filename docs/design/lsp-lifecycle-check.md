@@ -1,7 +1,5 @@
 # Lifecycle findings in the editor
 
-<!-- constrained-by ../cli-reference.md#editor-support -->
-
 Status (2026-11-26): built for #214, in the `Unreleased` part of the changelog. The default
 (on), the time budget, and the memory limit are provisional and wait for the owner
 ([Open questions](#open-questions)).
@@ -77,10 +75,14 @@ it goes.
 A finding whose site has no span, and no entity to fall back on, goes on the first line of
 the first source file, so that none is dropped.
 
+A finding is shown once even when two entity views report it. The kinds that carry no
+entity of their own (`NoCreationPath`, `UnreachableEnumVariant`, and the stops) are shown
+once per entity, and their message starts with `entity <id>:`.
+
 The severity is `check`'s, with two changes: a cone that stopped (a cap, the memory limit,
 or the budget) is information, and so is each undecided finding. The diagnostic's `source`
-is `rdra-ish check (1 instance)` and its `code` is the finding's name, such as
-`Forbidden_ClinicalOrder_1`.
+is `rdra-ish check (1 instance)` and its `code` is the name `check` prints, such as
+`Forbidden_ClinicalOrder_1` or `NoCreationPath_Provider`.
 
 ## Code lenses
 
