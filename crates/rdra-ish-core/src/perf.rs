@@ -24,6 +24,7 @@
 //! |---|---|
 //! | `RDRA_ISH_G_T_STATS` | `g-t:` per reduced cone run up to its group `G_T`: per entity, whether it moves, and why it stays fixed |
 //! | `RDRA_ISH_S_UP_TO_H_STATS` | `s-up-to-h:` per sub-lifecycle run up to `H`: where the plain run stopped, the orbits, the entities left out and those that move, then the classes |
+//! | `RDRA_ISH_QUOTIENT_STATS` | `quotient-cache:` when a command's quotient cache drops: its keys, computations, hits, entries stored and their bytes, and the runs of S held, taken and their bytes |
 //! | `RDRA_ISH_DIVERGENCE_STATS` | no line of its own: the `mixed` and `sensitive` counts of a reduction's divergence marks, which the `RDRA_ISH_WF_REDUCED_STATS` line prints |
 
 /// Whether the developer switch `var` is set. Only a `perf` build reads it.

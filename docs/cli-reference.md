@@ -1941,7 +1941,8 @@ For developers. These change only diagnostics or turn an optimisation off; the v
 | Variable | Effect |
 |---|---|
 | `RDRA_ISH_SYMMETRY_STATS` | Per run up to symmetry, a stderr line of orbits, estimate, branch-cap cuts, and entities left out; see [Instance symmetry](#instance-symmetry). |
-| `RDRA_ISH_QUOTIENT_STATS`, `RDRA_ISH_WF_REDUCED_STATS` | What the quotient cache did, and each `WF_vars(Next)` run on a reduced cone. |
+| `RDRA_ISH_WF_REDUCED_STATS` | A stderr line per `WF_vars(Next)` run on a reduced cone. |
+| `RDRA_ISH_TEST_QUOTIENT_HITS` | Test only: a `quotient-hits:` stderr line of how many cones took a shared quotient. |
 | `RDRA_ISH_NO_QUOTIENT_CACHE` | Do not share quotients between cones. |
 | `RDRA_ISH_NO_REDUCE` | Do not reduce cones to their quotient. |
 | `RDRA_ISH_NO_WF_REDUCED` | Do not run `WF_vars(Next)` on a reduced cone first. |

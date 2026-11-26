@@ -76,7 +76,8 @@ pub struct QuotientCache {
     stats: Mutex<Stats>,
 }
 
-/// What a cache did, for `RDRA_ISH_QUOTIENT_STATS`.
+/// What a cache did, for `RDRA_ISH_QUOTIENT_STATS` in a `perf` build (`crate::perf::stats`),
+/// and its hits for the test-only `RDRA_ISH_TEST_QUOTIENT_HITS`.
 #[derive(Default)]
 struct Stats {
     hits: usize,
@@ -493,7 +494,13 @@ impl QuotientCache {
 
 impl Drop for QuotientCache {
     fn drop(&mut self) {
-        if std::env::var_os("RDRA_ISH_QUOTIENT_STATS").is_some() {
+        // Test only: the lookups an entry answered, so a test of the CLI sees that cones
+        // shared quotients in any build.
+        if std::env::var_os("RDRA_ISH_TEST_QUOTIENT_HITS").is_some() {
+            let s = self.stats.get_mut().unwrap_or_else(PoisonError::into_inner);
+            eprintln!("quotient-hits: {}", s.hits);
+        }
+        if crate::perf::stats("RDRA_ISH_QUOTIENT_STATS") {
             let s = self.stats.get_mut().unwrap_or_else(PoisonError::into_inner);
             eprintln!(
                 "quotient-cache: keys={} computed={} hits={} stored={} bytes={} runs_held={} run_hits={} run_bytes={}",
