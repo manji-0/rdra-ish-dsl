@@ -283,6 +283,8 @@ minor release.
 - **The `tlc:` lines of `verify --with-tlc`.** Their form, and the cost a cone, property, or
   whole-model run ends with (wall time, `-Xmx`, workers), may change in any release. Read
   TLC's verdict from `tlc_result:`.
+- **`RDRA_TLC_HEAP=states`.** Experimental: how it sizes a TLC run's heap from the states
+  BFS counted may change or go away in any release.
 - **Diagram layout.** Where a renderer places the nodes, as above.
 - **The rest of `codegen`, and `check --code`.** All of `codegen` except
   [its TypeScript types](#the-typescript-types-of-codegen) is experimental: its other flags,
