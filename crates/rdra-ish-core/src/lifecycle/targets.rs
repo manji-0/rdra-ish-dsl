@@ -100,6 +100,9 @@ pub enum UndecidedWhy {
     PatternCap(usize),
     /// The entity's cone reached the memory limit; the str says how to raise it.
     MemoryCap(MemorySize, &'static str),
+    /// The entity's cone passed its deadline (`Caps::until`), as the language server's
+    /// background check sets one.
+    TimeBudget,
     /// `--buc` leaves use cases out, so what they would reach or enable is not ruled out.
     Scope,
     /// `--entity` explores no cone that keeps the action.
@@ -155,14 +158,17 @@ impl fmt::Display for Undecided {
                 f,
                 "the {cone} cone stopped at the memory limit ({limit}; raise it with {raise})"
             ),
+            UndecidedWhy::TimeBudget => {
+                write!(f, "the {cone} cone stopped at its time budget")
+            }
             UndecidedWhy::Scope => write!(f, "--buc leaves use cases out of the run"),
             UndecidedWhy::Unselected => write!(f, "no cone of a selected entity keeps it"),
         }
     }
 }
 
-/// The cap or the limit a run stopped at, read off its diagnostics; `None` for a run that did
-/// not stop.
+/// The cap, the limit, or the deadline a run stopped at, read off its diagnostics; `None` for
+/// a run that did not stop.
 fn stopped_at(run: &ComponentRun) -> Option<UndecidedWhy> {
     run.diags.iter().find_map(|d| match d.diag {
         StateDiag::StateCapReached { cap, .. } => Some(UndecidedWhy::StateCap(cap)),
@@ -170,6 +176,7 @@ fn stopped_at(run: &ComponentRun) -> Option<UndecidedWhy> {
         StateDiag::MemoryCapReached { limit, raise, .. } => {
             Some(UndecidedWhy::MemoryCap(limit, raise))
         }
+        StateDiag::TimeBudgetReached { .. } => Some(UndecidedWhy::TimeBudget),
         _ => None,
     })
 }

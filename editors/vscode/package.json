@@ -44,6 +44,22 @@
           "default": "",
           "description": "Path to the rdra-ish-lsp binary. When empty, the extension looks for rdra-ish-lsp on PATH."
         },
+        "rdra-ish.lifecycleCheck.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "After each analysis, run the lifecycle exploration of `rdra-ish check` (one instance per entity) in the background and show its findings and a code lens on each rule."
+        },
+        "rdra-ish.lifecycleCheck.timeBudgetMs": {
+          "type": "integer",
+          "default": 2000,
+          "minimum": 1,
+          "description": "Milliseconds a background check may run. A cone it does not finish in time is shown as not decided."
+        },
+        "rdra-ish.lifecycleCheck.memory": {
+          "type": "string",
+          "default": "512MiB",
+          "description": "Memory the background check's state stores may hold, such as 512MiB or 1GiB. A cone that reaches it is shown as not decided."
+        },
         "rdra-ish.trace.server": {
           "type": "string",
           "enum": [

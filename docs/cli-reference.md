@@ -1941,6 +1941,23 @@ rename, completion, hover, signature help, document and workspace symbols, forma
   fingerprint, or was generated from other source text, it shows an information diagnostic on
   the table's line of `rdra.toml` (a comment-only edit shows it too; `check --code` decides).
 - A key's role is a symbol: see [Which key a join follows](./language-reference.md#which-key-a-join-follows).
+- After each analysis of a model that loads, it runs the lifecycle exploration of `check` in
+  the background, at one instance per entity, one cone at a time on one thread, within a
+  time budget and a memory limit. Each finding is a diagnostic at the declaration it is
+  about: a violated rule or a `Vacuous_` warning at the rule, a use case that never runs at
+  the use case, and a deadlock or an unreachable state at the entity. Its source is
+  `rdra-ish check (1 instance)` and its code is the name `check` prints. A cone that stopped
+  at the budget or the limit, and each finding it left undecided, is information. Each
+  invariant, `forbidden`, and `after(..).assert` gets a code lens: `check: ok (1 instance)`,
+  `check: violated (1 instance)`, or `check: not decided (1 instance)`. `verify` explores two
+  instances, so it may decide otherwise. A new edit drops a check that has not finished
+  publishing, and the next analysis withdraws the last check's findings until its own check
+  publishes.
+- `lifecycleCheck` in the initialization options, or under the `rdra-ish` section of the
+  settings, sets the check: `enabled` (default `true`), `timeBudgetMs` (`2000`), `memory`
+  (`"512MiB"`), and `quietMs` (`200`, how long after an analysis it starts). The VS Code
+  extension passes its `rdra-ish.lifecycleCheck.*` settings. The design and its open
+  questions are in [lsp-lifecycle-check.md](./design/lsp-lifecycle-check.md).
 
 ---
 

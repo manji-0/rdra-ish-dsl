@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- The language server shows lifecycle findings (#214). After each analysis of a model that
+  loads, it runs `check`'s exploration in the background at one instance per entity, one cone
+  at a time on one thread, within 2 s and 512 MiB. A violated rule, a `Vacuous_` warning, a
+  use case that never runs, or a deadlock is a diagnostic at its declaration, with source
+  `rdra-ish check (1 instance)`. Each rule gets a code lens: `ok`, `violated`, or
+  `not decided`, at 1 instance. A cone stopped by the budget or the limit is information. A
+  new edit drops the result of an older check. `lifecycleCheck` in the initialization options
+  or the `rdra-ish` settings turns it off (`enabled`) and sets `timeBudgetMs`, `memory`, and
+  `quietMs`; the VS Code extension has `rdra-ish.lifecycleCheck.*`. In a release build the
+  check adds 30 to 60 ms of one core after each analysis of clinic-ops, food-permit-ops and
+  insurance-claim-ops.
+  ([design](docs/design/lsp-lifecycle-check.md))
+- A time budget (`Caps::until`) on the entity cones `check` explores leaves their findings
+  undecided (`UndecidedWhy::TimeBudget`) instead of panicking.
+
 ## v3.0.0 - 2026-11-26
 
 This is a major release. `verify` decides every check with its own checker and needs no JVM;

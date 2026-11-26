@@ -42,10 +42,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     debug: { command: serverPath, transport: TransportKind.stdio },
   };
 
+  const lifecycleCheck = vscode.workspace
+    .getConfiguration("rdra-ish")
+    .get("lifecycleCheck");
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ scheme: "file", language: "rdra" }],
+    initializationOptions: { lifecycleCheck },
     synchronize: {
       fileEvents: vscode.workspace.createFileSystemWatcher("**/*.rdra"),
+      // Sends `rdra-ish` settings on change, `lifecycleCheck` among them.
+      configurationSection: "rdra-ish",
     },
   };
 

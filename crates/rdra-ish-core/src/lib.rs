@@ -16,7 +16,7 @@ pub mod location;
 pub mod memory;
 pub mod model;
 mod parallel;
-pub use parallel::{in_parallel, jobs};
+pub use parallel::{in_parallel, jobs, one_at_a_time};
 pub mod perf;
 pub mod predicate;
 pub mod project;

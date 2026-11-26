@@ -106,6 +106,11 @@ const CHECK_READERS: &[(&str, &str)] = &[
         "rdra-ish-core/src/lifecycle/guards.rs",
         "guard_dependencies",
     ),
+    // Reads the verdicts of each check target, which its own cone evaluated.
+    (
+        "rdra-ish-core/src/lifecycle/states.rs",
+        "derive_states_checked",
+    ),
     ("rdra-ish-core/src/lifecycle/targets.rs", "unmet_of_assert"),
     ("rdra-ish-core/src/lifecycle/targets.rs", "unmet_of_rule"),
     ("rdra-ish-core/src/lifecycle/targets.rs", "verdict"),
