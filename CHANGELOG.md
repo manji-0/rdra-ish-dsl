@@ -311,6 +311,9 @@ No sample changes verdict.
   (#265).
 - Output compiles for an entity whose state column is `@null`; the Go probe imports the
   domain package under `[code.go] package` (#363).
+- On Windows, each `site` is relative to the project and uses `/`, as on Linux and macOS,
+  and `check --code=build` reads `go vet`'s `vet.exe:` lines, so it names a missing method
+  instead of a failed build (#393).
 
 **verify**
 
