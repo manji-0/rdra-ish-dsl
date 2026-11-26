@@ -72,8 +72,23 @@ pub fn current_user_heap() -> Option<u64> {
     )
 }
 
+/// Whether `RDRA_TLC_HEAP=states` asks `verify` to raise a cone run's heap by the states BFS
+/// counted in it (`TlcHeap::with_states`, #384). An `-Xmx` in `JAVA_TOOL_OPTIONS` wins.
+pub fn heap_from_states() -> bool {
+    states_heap(
+        std::env::var("RDRA_TLC_HEAP").ok().as_deref(),
+        std::env::var("JAVA_TOOL_OPTIONS").ok().as_deref(),
+    )
+}
+
+fn states_heap(tlc_heap: Option<&str>, java_tool_options: Option<&str>) -> bool {
+    tlc_heap.is_some_and(|h| h.trim().eq_ignore_ascii_case("states"))
+        && user_heap(None, java_tool_options).is_none()
+}
+
 /// The heap the user names for TLC: the last `-Xmx` of `JAVA_TOOL_OPTIONS`, which the JVM
-/// takes over the one `verify` passes, else `RDRA_TLC_HEAP` (such as `4g`).
+/// takes over the one `verify` passes, else `RDRA_TLC_HEAP` (such as `4g`; `states` names
+/// none, see `heap_from_states`).
 pub fn user_heap(tlc_heap: Option<&str>, java_tool_options: Option<&str>) -> Option<u64> {
     let from_options = java_tool_options.and_then(|opts| {
         opts.split_whitespace()
@@ -175,6 +190,11 @@ mod tests {
         assert_eq!(user_heap(Some("4g"), Some("-Dfoo=1")), Some(4 * GIB));
         assert_eq!(user_heap(Some("lots"), None), None);
         assert_eq!(jvm_size("65536k"), Some(64 * MIB));
+        assert_eq!(user_heap(Some("states"), None), None);
+        assert!(states_heap(Some(" States "), Some("-Dx=1")));
+        assert!(!states_heap(Some("states"), Some("-Xmx2g")));
+        assert!(!states_heap(Some("4g"), None));
+        assert!(!states_heap(None, None));
         assert_eq!(jvm_size("1073741824"), Some(GIB));
     }
 }
