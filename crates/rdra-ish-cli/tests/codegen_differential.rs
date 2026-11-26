@@ -1575,8 +1575,9 @@ fn printed_code_writes_null_to_nullable_enum_and_bool_columns() {
 
 /// The use case vocabulary #335 prints: a created row's optional key left null, `links`,
 /// `relinks` and `unlinks`, a `.when` on a chosen value and on a value chosen present or
-/// null, a copy from the parent row, and a condition on the key of the created row
-/// (tests/fixtures/codegen/use_case_vocabulary.rdra).
+/// null, a copy from the parent row, a condition on the key of the created row, a later step
+/// that takes the rows of an earlier step and checks the key between them, and a choice among
+/// arms of a second lifecycle column (tests/fixtures/codegen/use_case_vocabulary.rdra).
 #[test]
 fn printed_code_agrees_on_the_use_case_vocabulary() {
     agree_on(vec![

@@ -68,3 +68,54 @@ sets(Annotate, Note.flag == Case.first)
 condition OpenCase "open case"
 holds(OpenCase, Case.status == open).along(Note, Case)
 applies_to(OpenCase, Annotate)
+
+// Visit runs as two transactions, one per API: step 1 moves a ticket and its desk, step 2
+// creates a stamp under the desk's counter and takes the ticket and the desk again as they
+// are now, so that it checks the ticket still belongs to the desk. Judge chooses among two
+// arms of the ticket's second lifecycle column, one function per target.
+entity Desk "Desk" {
+  id: Int @pk
+  status: Enum(idle, busy) @default(idle)
+}
+
+entity Counter "Counter" {
+  id: Int @pk
+}
+
+entity Ticket "Ticket" {
+  id: Int @pk
+  status: Enum(waiting, called, done) @default(waiting)
+  verdict: Enum(pending, granted, refused) @default(pending)
+}
+
+entity Stamp "Stamp" {
+  id: Int @pk
+}
+
+relate(Ticket, Desk, N:1)
+relate(Counter, Desk, N:1)
+relate(Stamp, Counter, N:1)
+
+usecase AddDesk "Add desk"
+usecase AddCounter "Add counter"
+usecase AddTicket "Add ticket"
+usecase Visit "Visit"
+usecase Finish "Finish"
+usecase Judge "Judge"
+api VisitApi "Visit API"
+api StampApi "Stamp API"
+
+creates(AddDesk, Desk)
+creates(AddCounter, Counter)
+creates(AddTicket, Ticket)
+invokes(Visit, VisitApi)
+invokes(Visit, StampApi)
+updates(VisitApi, Ticket)
+updates(VisitApi, Desk)
+creates(StampApi, Stamp)
+reads(StampApi, Counter)
+transitions(Visit, Ticket.status, waiting -> called)
+transitions(Visit, Desk.status, idle -> busy)
+transitions(Finish, Ticket.status, called -> done)
+transitions(Judge, Ticket.verdict, pending -> granted)
+transitions(Judge, Ticket.verdict, pending -> refused)

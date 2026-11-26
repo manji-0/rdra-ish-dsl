@@ -217,10 +217,10 @@ pub(super) fn port(
                     inputs.push(input.clone());
                 }
             }
-            for (r, tag_enum, _) in &f.chosen {
-                let name = format!("{}_to", f.rows[*r].name);
+            for c in &f.chosen {
+                let name = f.choice_name(c);
                 if !choices.iter().any(|(n, _)| *n == name) {
-                    choices.push((name, tag_enum.clone()));
+                    choices.push((name, c.enum_ty.clone()));
                 }
             }
         }
@@ -851,8 +851,8 @@ impl Cx<'_> {
             let chosen = f
                 .chosen
                 .iter()
-                .find(|(r, _, _)| format!("{}_to", f.rows[*r].name) == *name)
-                .map(|(_, _, v)| v.wire.clone());
+                .find(|c| f.choice_name(c) == *name)
+                .map(|c| c.value.wire.clone());
             args.push(chosen.unwrap_or_else(|| first_value(self.domain, tag_enum)));
         }
         args

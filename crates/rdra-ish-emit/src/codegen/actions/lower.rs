@@ -19,12 +19,21 @@ pub(super) struct ActionCx<'a> {
     pub(super) steps: Option<(u8, u8)>,
 }
 
-/// Lowers one combination of source states (`picked`) and chosen arms to the function `name`.
+/// The arms a function takes of each param's state tag: `(from, to)` by value names.
+pub(super) type TagArms = BTreeMap<usize, Vec<(String, String)>>;
+
+/// The arms a function takes of each second lifecycle column it chose a target of, by
+/// `(param, var)`.
+pub(super) type ColumnArms = BTreeMap<(usize, VarId), Vec<(String, String)>>;
+
+/// Lowers one combination of source states (`picked`) and chosen arms to the function `name`:
+/// `arms` of each param's tag, `columns` of each second lifecycle column with a choice.
 /// Declares the run marks it takes and leaves in `marks`.
 pub(super) fn function(
     cx: &ActionCx<'_>,
     picked: &[&Source<'_>],
     arms: &BTreeMap<usize, Vec<(String, String)>>,
+    columns: &ColumnArms,
     name: &str,
     marks: &mut Vec<MarkDecl>,
 ) -> Result<FnDecl, Skip> {
@@ -37,15 +46,25 @@ pub(super) fn function(
         cx,
         picked,
         arms,
+        columns,
         rows,
         row_of,
         mark_of,
         raised_on,
     };
-    let effects = cx.effects()?;
+    let mut effects = cx.effects()?;
+    // A second lifecycle column with a choice moves only by the arms to the chosen target.
+    for ((p, var), a) in columns {
+        if let VarKind::Column { column, .. } = &cx.ts.var(*var).kind {
+            effects
+                .writes
+                .insert((*p, column.clone()), Write::Switch(a.clone()));
+        }
+    }
 
     let mut inputs: Vec<FnInput> = Vec::new();
     let mut checks: Vec<ArgCheck> = Vec::new();
+    f.mark_row_checks(&mut checks)?;
     let mut doc = cx.doc();
     let outputs = f.outputs(&effects, &mut inputs, &mut checks, &mut doc)?;
     let targets = cx.targets(&outputs);
@@ -238,7 +257,9 @@ impl ActionCx<'_> {
         let mut row_of: BTreeMap<usize, usize> = BTreeMap::new();
         let mut rows: Vec<RowParam> = Vec::new();
         for (p, param) in self.action.params.iter().enumerate() {
-            if matches!(param.role, ParamRole::New | ParamRole::Earlier { .. }) {
+            if param.role == ParamRole::New
+                || matches!(param.role, ParamRole::Earlier { .. }) && !self.guard_reads(p)
+            {
                 continue;
             }
             let base = match param.role {
@@ -264,6 +285,21 @@ impl ActionCx<'_> {
             });
         }
         (rows, row_of)
+    }
+
+    /// Whether a guard other than the run mark reads param `p`: an earlier step's row it
+    /// reads is an argument beside its mark, as it is now (the run's rows are read as they
+    /// are when the step runs).
+    fn guard_reads(&self, p: usize) -> bool {
+        let at_p = |t: &Term| {
+            matches!(t, Term::Slot { at: At::Param(q), .. } | Term::Index(At::Param(q))
+                if usize::from(*q) == p)
+        };
+        self.action
+            .guards
+            .iter()
+            .filter(|g| !matches!(g.why, GuardWhy::Run { .. }))
+            .any(|g| g.pred.terms().any(at_p))
     }
 
     fn effects(&self) -> Result<Effects, Skip> {
@@ -483,6 +519,7 @@ struct Frame<'a> {
     cx: &'a ActionCx<'a>,
     picked: &'a [&'a Source<'a>],
     arms: &'a BTreeMap<usize, Vec<(String, String)>>,
+    columns: &'a ColumnArms,
     rows: Vec<RowParam>,
     /// The row of each param that is a row argument.
     row_of: BTreeMap<usize, usize>,
@@ -581,8 +618,16 @@ impl Frame<'_> {
                         _ => NextRead::Input,
                     })
                 }
+                // A second lifecycle column: its chosen target, when the function has one.
                 Effect::Transition { var: v, param, .. } if *v == var && *param == p => {
-                    return None
+                    let a = self.columns.get(&(usize::from(p), var))?;
+                    let (_, to) = a.first()?;
+                    if a.iter().any(|(_, t)| t != to) {
+                        return None;
+                    }
+                    let domain = &self.cx.ts.var(var).domain;
+                    let i = domain.names()?.iter().position(|n| n == to)?;
+                    return Some(NextRead::Value(domain.of_variant(i)));
                 }
                 _ => {}
             }
@@ -595,6 +640,39 @@ impl Frame<'_> {
                 at: At::Param(p),
             })
         })
+    }
+
+    /// A `TransitionFrom` guard of a second lifecycle column the function chose a target of,
+    /// kept to the `from` values of the arms to that target.
+    fn chosen_froms(&self, pred: &Pred) -> Pred {
+        let Pred::Or(items) = pred else {
+            return pred.clone();
+        };
+        let kept = items
+            .iter()
+            .filter(|item| {
+                let Pred::Cmp(
+                    Term::Slot {
+                        var,
+                        at: At::Param(p),
+                    },
+                    TsCmp::Eq,
+                    Term::Lit(v),
+                ) = item
+                else {
+                    return true;
+                };
+                let Some(a) = self.columns.get(&(usize::from(*p), *var)) else {
+                    return true;
+                };
+                let domain = &self.cx.ts.var(*var).domain;
+                domain
+                    .name(*v)
+                    .is_some_and(|from| a.iter().any(|(f, _)| f == from))
+            })
+            .cloned()
+            .collect();
+        Pred::Or(kept)
     }
 
     /// A guard as a condition of the function: `None` when it always holds, a skipped
@@ -1105,7 +1183,8 @@ impl Frame<'_> {
                 // On a created row the arm from its start state was taken when its target was.
                 GuardWhy::TransitionFrom if reads_only_created(&guard.pred, cx.action) => {}
                 GuardWhy::TransitionFrom => {
-                    if let Some(e) = self.lower_guard(&guard.pred, targets, &mut quant)? {
+                    let pred = self.chosen_froms(&guard.pred);
+                    if let Some(e) = self.lower_guard(&pred, targets, &mut quant)? {
                         conditions.push(self.condition(
                             guard,
                             "TransitionFrom".to_string(),
@@ -1118,8 +1197,35 @@ impl Frame<'_> {
                 // folds to the conditions of the arm taken. On a chosen value it reads the input.
                 GuardWhy::ArmCondition { .. } => {
                     if let Some(e) = self.lower_guard(&guard.pred, targets, &mut quant)? {
-                        let (id, label) = arm_conditions(cx.model, cx.ts, cx.action, self.arms);
+                        let (id, label) =
+                            arm_conditions(cx.model, cx.ts, cx.action, self.arms, self.columns);
                         conditions.push(self.condition(guard, id, label, e));
+                    }
+                }
+                // A key between rows an earlier step wrote, read as they are now: the step
+                // waits (`Rejected`, a retry) until it holds, as `verify` explored it.
+                GuardWhy::Owner if self.between_earlier_rows(guard) => {
+                    if let Some(e) = self.lower_guard(&guard.pred, targets, &mut quant)? {
+                        let Some(VarKind::Owner { fk, .. }) =
+                            guard.pred.terms().find_map(|t| match t {
+                                Term::Slot { var, .. } => Some(&cx.ts.var(*var).kind),
+                                _ => None,
+                            })
+                        else {
+                            return Err(unsupported("a link guard on a var that is not a key"));
+                        };
+                        let fk = cx.model.foreign_key(*fk);
+                        let (child, parent) = (
+                            &cx.model.entities[fk.child].id,
+                            &cx.model.entities[fk.parent].id,
+                        );
+                        let role = fk.role_or(parent);
+                        conditions.push(self.condition(
+                            guard,
+                            format!("Key_{child}_{role}"),
+                            format!("the {child} still belongs to the {parent} of the run"),
+                            e,
+                        ));
                     }
                 }
                 GuardWhy::Owner => checks.push(self.link_check(guard)?),
@@ -1281,6 +1387,45 @@ impl Frame<'_> {
                 self.rows[cr].entity, self.rows[qr].entity
             ),
         })
+    }
+
+    /// Whether an `Owner` guard joins two rows an earlier step wrote, each an argument.
+    fn between_earlier_rows(&self, guard: &Guard) -> bool {
+        let earlier = |t: &Term| match t {
+            Term::Slot {
+                at: At::Param(p), ..
+            }
+            | Term::Index(At::Param(p)) => {
+                let p = usize::from(*p);
+                self.mark_of.contains_key(&p) && self.row_of.contains_key(&p)
+            }
+            _ => false,
+        };
+        let terms: Vec<&Term> = guard.pred.terms().collect();
+        !terms.is_empty() && terms.iter().all(|t| earlier(t))
+    }
+
+    /// An earlier step's row taken beside its mark is the row the mark names.
+    fn mark_row_checks(&self, checks: &mut Vec<ArgCheck>) -> Result<(), Skip> {
+        for (p, m) in &self.mark_of {
+            let Some(&r) = self.row_of.get(p) else {
+                continue;
+            };
+            let (_, id_field) = self
+                .cx
+                .id_of(&self.rows[r].entity)
+                .ok_or_else(|| unsupported("a run mark on an entity with no one-column key"))?;
+            checks.push(ArgCheck::MarkRow {
+                row: r,
+                field: id_field,
+                mark: *m,
+                message: format!(
+                    "rdra-ish: the {} row is not the row its run mark names",
+                    self.rows[r].entity
+                ),
+            });
+        }
+        Ok(())
     }
 
     /// A row the event was raised on is the event's row.

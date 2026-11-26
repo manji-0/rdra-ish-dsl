@@ -97,6 +97,16 @@ pub fn pick<'f>(
                         .is_some_and(|n| n == value.wire)
                 }
                 _ => true,
+            }) && f.chosen.iter().all(|c| {
+                // A second lifecycle column's choice: the target BFS took.
+                let (Some(column), Some(p)) = (&c.column, f.rows[c.row].param) else {
+                    return true;
+                };
+                let e = action.params[p].entity;
+                let slot = usize::from(params[p]);
+                column_var(ts, &ts.entity(e).id, column)
+                    .and_then(|v| enum_name(ts, v, post.get(ts, v, slot)))
+                    .is_some_and(|n| n == c.value.wire)
             })
         });
     }

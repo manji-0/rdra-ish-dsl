@@ -194,7 +194,7 @@ impl<'a> Rows<'a> {
                 .get(*row, &field.wire)
                 .is_none_or(|(_, v)| v == Value::NULL),
             // A link is the binding BFS chose; the owner var is not a column.
-            ArgCheck::Link { .. } | ArgCheck::EventRow { .. } => true,
+            ArgCheck::Link { .. } | ArgCheck::EventRow { .. } | ArgCheck::MarkRow { .. } => true,
         })
     }
 

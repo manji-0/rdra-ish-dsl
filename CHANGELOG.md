@@ -4,13 +4,17 @@
 
 ### Added
 
-- `codegen` prints 17 of the 19 sample use cases that had no function (#335): `links` /
+- `codegen` prints the 19 sample use cases that had no function (#335): `links` /
   `relinks` / `unlinks` (the condition `Links_<Child>_<role>`), copies from another row, a
   created row's optional key left null, and a condition or `.when` on what the step writes
   (the parent a created row's key names, or the input a chosen value becomes). A guard that
   compares a nullable Enum or Bool column with a value prints too, with null satisfying no
-  comparison and every `!=` (#359). The two left wait on a decision, in
-  `docs/design/algebraic-codegen.md`.
+  comparison and every `!=` (#359).
+- `codegen`: a later step of a split use case whose guard reads a row an earlier step wrote
+  takes that row as it is now, beside its mark, and checks the mark names it; a key between
+  two such rows is the condition `Key_<Child>_<role>` (clinic-ops `CheckInPatient_2`). A
+  choice among arms of a second lifecycle column is one function per target, and the
+  dispatcher takes the target (insurance-claim-ops `DetermineFault`, six functions) (#335).
 
 ## v3.0.0 - 2026-11-26
 

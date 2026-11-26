@@ -91,6 +91,7 @@ pub(super) fn arm_conditions(
     ts: &TransitionSystem,
     action: &Action,
     chosen: &BTreeMap<usize, Vec<(String, String)>>,
+    columns: &super::lower::ColumnArms,
 ) -> (String, String) {
     let mut ids: Vec<String> = Vec::new();
     for effect in &action.effects {
@@ -106,7 +107,10 @@ pub(super) fn arm_conditions(
         let Effect::Transition { var, param, arms } = effect else {
             continue;
         };
-        let Some(taken) = chosen.get(&usize::from(*param)) else {
+        let Some(taken) = columns
+            .get(&(usize::from(*param), *var))
+            .or_else(|| chosen.get(&usize::from(*param)))
+        else {
             continue;
         };
         let domain = &ts.var(*var).domain;
