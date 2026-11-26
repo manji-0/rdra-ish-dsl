@@ -566,7 +566,9 @@ forbidden(Claim, ClaimCase, Claim.completed_on == present, ClaimCase.status in (
 
 **Budgets.** Each z3 check has a budget of resource units (`rlimit`), a count of solver steps,
 not of time: 20,000,000 for a rule and 2,000,000 for a lemma. So the proof is the same on a
-busy machine and an idle one. A rule z3 gives up on is `unproved` with
+busy machine and an idle one. The rounds that find the inductive set run z3 without model-based quantifier
+instantiation (MBQI), which settles the checks that keep a rule several times faster; the
+counterexamples to induction are then found with it on. A rule z3 gives up on is `unproved` with
 `z3 gave up on <action>`. The checks are shared out over several z3 processes (`RDRA_JOBS`); the result does
 not depend on how many. The proof starts once BFS has decided the safety cones and runs beside the property
 and whole-model passes; its lines print where they would after them. Each z3 process takes

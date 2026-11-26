@@ -4,6 +4,12 @@
 
 ### Changed
 
+- `verify --prove` (experimental) runs the Houdini rounds without z3's model-based
+  quantifier instantiation (MBQI) and turns it back on to find each counterexample to
+  induction; a rule z3 gave up on without it is asked again with it (#421). The proof is
+  the same on every sample, its rules, CTIs and kept lemmas alike, and takes 68 s instead
+  of 150 s over all of them on one solver (clinic-ops 66 s to 16 s, food-permit-ops 33 s to
+  12 s, oidc-auth 29 s to 22 s).
 - `verify --prove` (experimental) starts the proof once the safety cones are decided, on its
   own thread beside the property and whole-model passes, and prints its lines where it did
   (#421). Under `--with-tlc` the cone runs get BFS's half of `--memory` before the proof,
