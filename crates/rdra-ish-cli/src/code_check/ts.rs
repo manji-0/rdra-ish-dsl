@@ -255,11 +255,11 @@ impl Backend for TypeScript {
     }
 
     fn method_names(&self, m: &PortMethod) -> Vec<String> {
-        vec![format!("prepare{}", m.name), format!("commit{}", m.name)]
+        rdra_ish_emit::codegen::method_names(Lang::TypeScript, m).to_vec()
     }
 
     fn entry_names(&self, name: &str) -> Vec<String> {
-        vec![format!("run{name}")]
+        vec![rdra_ish_emit::codegen::entry_name(Lang::TypeScript, name)]
     }
 
     fn implement_hint(&self, contract: &ContractDecl, service: &str, methods: &[&str]) -> String {

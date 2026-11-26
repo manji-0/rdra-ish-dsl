@@ -280,14 +280,11 @@ impl Backend for GoBackend {
     }
 
     fn method_names(&self, method: &PortMethod) -> Vec<String> {
-        vec![
-            format!("Prepare{}", method.name),
-            format!("Commit{}", method.name),
-        ]
+        rdra_ish_emit::codegen::method_names(Lang::Go, method).to_vec()
     }
 
     fn entry_names(&self, name: &str) -> Vec<String> {
-        vec![format!("Run{name}")]
+        vec![rdra_ish_emit::codegen::entry_name(Lang::Go, name)]
     }
 
     /// `go test` fails the conformance test with `rdra-ish conformance: <report>`: the
