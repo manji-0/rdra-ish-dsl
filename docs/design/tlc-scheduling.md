@@ -272,8 +272,7 @@ and the comparison, and only the launching moves out.
 <!-- derived-from #per-run-cost-on-tlc-lines -->
 <!-- derived-from #a-caller-that-runs-tlc-itself -->
 
-The owner took every recommendation of this note (2026-11-26, on
-[#386](https://github.com/manji-0/rdra-ish-dsl/pull/386)):
+The owner took every recommendation of this note (2026-11-26):
 
 1. **Spare cores when memory bounds the runs.** When memory, not the queue, caps the runs at
    once, the cores they would leave idle go to the runs that fit: `cores / fit`, at most 32
