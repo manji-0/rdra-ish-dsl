@@ -148,7 +148,7 @@ fn a_run_up_to_symmetry_is_the_same_on_any_number_of_threads() {
     assert!(one.states.len() >= 1_000, "{} states", one.states.len());
     assert!(!one_parts.orbit_self.is_empty());
     for threads in THREADS {
-        let (many, _, parts) = run(Threads::Fixed(threads));
+        let (many, _, parts) = probing(probes_at(threads), || run(Threads::Fixed(threads)));
         assert_eq!(many.states, one.states, "{threads} threads");
         assert_eq!(many.edges(), one.edges(), "{threads} threads");
         assert_eq!(many.bindings, one.bindings, "{threads} threads");
@@ -158,6 +158,21 @@ fn a_run_up_to_symmetry_is_the_same_on_any_number_of_threads() {
         assert_eq!(parts.orbit_self, one_parts.orbit_self, "{threads} threads");
         assert_eq!(parts.orbits, one_parts.orbits, "{threads} threads");
     }
+}
+
+/// Runs `f` with its runs' workers probing the run's table (`bfs::Probing::On`), which a
+/// release build leaves off, when `on`.
+fn probing<R>(on: bool, f: impl FnOnce() -> R) -> R {
+    let was = super::bfs::PROBING_IN_TEST.replace(on);
+    let out = f();
+    super::bfs::PROBING_IN_TEST.set(was);
+    out
+}
+
+/// Whether a run on `threads` workers in the tests below probes: at 4 and 17, which probe,
+/// and not at 7, so the build's own path runs with many workers too.
+fn probes_at(threads: usize) -> bool {
+    threads == 4 || threads == 17
 }
 
 /// A run with worker threads is the run on one thread: the same states, edges, and bindings in the
@@ -173,9 +188,10 @@ fn a_run_is_the_same_on_any_number_of_threads() {
         // Enough states that the workers take most of them.
         assert!(one.states.len() >= 5_000, "{} states", one.states.len());
         for threads in THREADS {
-            let many = ts
-                .clone()
-                .run_on(caps, Checks::All, Threads::Fixed(threads));
+            let many = probing(probes_at(threads), || {
+                ts.clone()
+                    .run_on(caps, Checks::All, Threads::Fixed(threads))
+            });
             assert_eq!(many.states, one.states, "{threads} threads");
             assert_eq!(many.edges(), one.edges(), "{threads} threads");
             assert_eq!(many.bindings, one.bindings, "{threads} threads");
@@ -226,9 +242,10 @@ fn a_run_stops_at_the_memory_limit_at_the_same_state_on_any_number_of_threads() 
             if l == limit && states == one.states.len()
     )));
     for threads in [1, 3, 17] {
-        let many = ts
-            .clone()
-            .run_on(charged(), Checks::All, Threads::Fixed(threads));
+        let many = probing(probes_at(threads), || {
+            ts.clone()
+                .run_on(charged(), Checks::All, Threads::Fixed(threads))
+        });
         assert_eq!(many.states, one.states, "{threads} threads");
         assert_eq!(many.diags, one.diags, "{threads} threads");
         assert_eq!(many.peak, one.peak, "{threads} threads");

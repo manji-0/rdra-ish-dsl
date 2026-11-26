@@ -17,8 +17,11 @@ use crate::lifecycle::TransitionSystem;
 use crate::memory::Charge;
 use crate::parallel::Helpers;
 
+use hashbrown::HashTable;
+
+use super::arena::{Seen, Segment};
 use super::edges::{StepEnds, Steps};
-use super::probe::{Dedup, Numbering, Probe, Probes};
+use super::probe::{Dedup, Numbering, Probe, Probes, Shared};
 use super::store::binding_bytes;
 use super::symmetry::{Canon, Canonical, Group};
 use super::{
@@ -34,6 +37,50 @@ const CHUNK: usize = 128;
 /// Chunks handed out ahead of the one being read, per worker: what the workers hold in
 /// memory at once.
 const AHEAD: usize = 4;
+/// The fewest workers that probe the run's table for each move where probing is on
+/// (`Probing::On`).
+const PROBING: usize = 4;
+
+/// Whether the workers of a run probe the run's table for each move (`Probe::Hit`), which
+/// takes the look-up off the reader. A probe or its absence changes no state, number or edge
+/// of the run. Off in a release build, whose run keeps hashbrown's table: on food-permit-ops
+/// at 8 jobs the probes took 12% off the run, but they cost clinic-ops and insurance-claim-ops
+/// 4% to 5%, and the table they need finds a state more slowly than hashbrown's, so they wait
+/// for #296 item 3.1 part 3 (docs/design/native-bfs-parallel.md, "Part 2: the shared table").
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum Probing {
+    Off,
+    /// With `PROBING` workers or more: a unit test that asks for it (`tests::probing`). With
+    /// up to three workers the expansion, not the reader, is what the run waits on, and a
+    /// probe there only adds to it. (food-permit-ops at 4 jobs: 2.26 s with 3 workers
+    /// probing, 2.19 s without, main 2.17 s.)
+    #[cfg_attr(not(test), allow(dead_code))]
+    On,
+    /// With any worker: a `shadow` build under the test-only `RDRA_ISH_FORCE_PROBES`, so that
+    /// the CI's shadow job holds every hit and every look-up of `Recent` to its twin on its
+    /// 4-core runner.
+    Forced,
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Whether a run that a unit test starts on this thread probes (`Probing::On`).
+    pub(super) static PROBING_IN_TEST: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+impl Probing {
+    pub(super) fn of_build() -> Self {
+        #[cfg(test)]
+        if PROBING_IN_TEST.get() {
+            return Probing::On;
+        }
+        if cfg!(feature = "shadow") && std::env::var_os("RDRA_ISH_FORCE_PROBES").is_some() {
+            Probing::Forced
+        } else {
+            Probing::Off
+        }
+    }
+}
 
 /// The moves from a run of states, in state order, where each state's moves end, and what
 /// the expanding thread read off each move (`Probes`).
@@ -71,6 +118,7 @@ fn expand(
     states: &States,
     range: Range<usize>,
     scratch: &mut Scratch,
+    shared: Option<Shared>,
 ) -> Expanded {
     let mut moves = Moves::default();
     let mut probes = Probes::new(states.packed_width(), group.is_some());
@@ -81,7 +129,7 @@ fn expand(
             probes,
         };
     };
-    scratch.dedup.clear();
+    scratch.dedup.start(shared);
     // The state being expanded, unpacked from the store.
     let mut at = next.clone();
     let mut ends = Vec::with_capacity(range.len());
@@ -115,6 +163,7 @@ struct Workers<'scope, 'env> {
     threads: Option<usize>,
     /// The helpers a `Threads::Shared` run holds, given back when the run ends.
     held: Option<Helpers>,
+    probing: Probing,
     /// The chunks handed out and not yet claimed; `None` until the first one is.
     queue: Option<Arc<Queue>>,
     /// Per chunk handed out and not yet read, in order: its result once it is expanded.
@@ -125,18 +174,22 @@ struct Workers<'scope, 'env> {
     done_tx: Sender<(usize, std::thread::Result<Expanded>)>,
 }
 
+/// A chunk handed out: its number in hand-out order, its states, and what its successors are
+/// probed against when the run probes (`Workers::probes`).
+type Chunk = (usize, States, Option<Shared>);
+
 /// Chunks handed out and not yet claimed, each with its number in hand-out order, and
 /// whether the run has ended, which tells the workers to stop.
 #[derive(Default)]
 struct Queue {
-    chunks: Mutex<(VecDeque<(usize, States)>, bool)>,
+    chunks: Mutex<(VecDeque<Chunk>, bool)>,
     ready: Condvar,
 }
 
 impl Queue {
     /// The oldest chunk no thread has claimed, waiting for one when `wait`; `None` once the
     /// run has ended, or when none is there and not `wait`.
-    fn claim(&self, wait: bool) -> Option<(usize, States)> {
+    fn claim(&self, wait: bool) -> Option<Chunk> {
         let mut chunks = self.chunks.lock().expect("the chunk queue");
         loop {
             if chunks.1 {
@@ -152,12 +205,12 @@ impl Queue {
         }
     }
 
-    fn push(&self, number: usize, states: States) {
+    fn push(&self, chunk: Chunk) {
         self.chunks
             .lock()
             .expect("the chunk queue")
             .0
-            .push_back((number, states));
+            .push_back(chunk);
         self.ready.notify_one();
     }
 
@@ -179,7 +232,12 @@ impl Drop for Workers<'_, '_> {
 }
 
 impl<'scope, 'env> Workers<'scope, 'env> {
-    fn new(scope: &'scope Scope<'scope, 'env>, expander: Expander<'env>, threads: Threads) -> Self {
+    fn new(
+        scope: &'scope Scope<'scope, 'env>,
+        expander: Expander<'env>,
+        threads: Threads,
+        probing: Probing,
+    ) -> Self {
         let (done_tx, done) = mpsc::channel();
         Workers {
             scope,
@@ -189,6 +247,7 @@ impl<'scope, 'env> Workers<'scope, 'env> {
                 Threads::Shared => None,
             },
             held: None,
+            probing,
             queue: None,
             waiting: VecDeque::new(),
             read: 0,
@@ -215,7 +274,20 @@ impl<'scope, 'env> Workers<'scope, 'env> {
         threads > 0 && self.waiting.len() < threads * AHEAD
     }
 
-    fn hand_out(&mut self, states: States) {
+    /// Whether a worker probes the run's table for each move (`Probing`); when not, the reader
+    /// looks each move up itself.
+    fn probes(&self) -> bool {
+        let fewest = match self.probing {
+            Probing::Off => return false,
+            Probing::On => PROBING,
+            Probing::Forced => 1,
+        };
+        self.threads.is_some_and(|n| n >= fewest)
+    }
+
+    /// Hands out the chunk `states`, whose successors are probed against `shared` when there
+    /// is one (`probes`).
+    fn hand_out(&mut self, states: States, shared: Option<Shared>) {
         let queue = self.queue.get_or_insert_with(|| {
             let queue = Arc::new(Queue::default());
             for _ in 0..self
@@ -226,9 +298,10 @@ impl<'scope, 'env> Workers<'scope, 'env> {
                 let expander = self.expander;
                 self.scope.spawn(move || {
                     let mut scratch = Scratch::default();
-                    while let Some((number, states)) = queue.claim(true) {
+                    while let Some((number, states, shared)) = queue.claim(true) {
                         let expanded = catch_unwind(AssertUnwindSafe(|| {
-                            expand(expander, &states, 0..states.len(), &mut scratch)
+                            let all = 0..states.len();
+                            expand(expander, &states, all, &mut scratch, shared)
                         }));
                         if done.send((number, expanded)).is_err() {
                             break;
@@ -238,7 +311,7 @@ impl<'scope, 'env> Workers<'scope, 'env> {
             }
             queue
         });
-        queue.push(self.read + self.waiting.len(), states);
+        queue.push((self.read + self.waiting.len(), states, shared));
         self.waiting.push_back(None);
     }
 
@@ -249,8 +322,9 @@ impl<'scope, 'env> Workers<'scope, 'env> {
             let (number, expanded) = match self.done.try_recv() {
                 Ok(done) => done,
                 Err(_) => match self.queue.as_ref().and_then(|q| q.claim(false)) {
-                    Some((number, states)) => {
-                        let expanded = expand(self.expander, &states, 0..states.len(), scratch);
+                    Some((number, states, shared)) => {
+                        let all = 0..states.len();
+                        let expanded = expand(self.expander, &states, all, scratch, shared);
                         (number, Ok(expanded))
                     }
                     None => self.done.recv().expect("a worker sends its chunk"),
@@ -354,6 +428,74 @@ struct Reading {
     resolved: Vec<u32>,
     /// Per binding number (`Numbering`): the binding's id, `u32::MAX` until it is first seen.
     ids: Vec<u32>,
+    recent: Recent,
+    /// Whether a chunk may be probed by its expanding thread (`Workers::probes`), so that
+    /// `recent` must note each state admitted; once true, true for the rest of the run.
+    record: bool,
+}
+
+/// The states admitted since the chunk being read was handed out, by the hash of their packed
+/// bytes. The thread that expanded the chunk probed the run's table as it was at hand-out,
+/// which holds every state below the chunk's `Probes::published`, and a `Miss` says the
+/// successor is none of them; so the reader looks a `Miss` up among the states from there on
+/// alone, a small table that stays in cache, rather than in the run's table. A `shadow` build
+/// holds every such look-up to the run's table.
+struct Recent {
+    table: HashTable<(u32, u64)>,
+    /// The states the table holds, in admission order, with their hashes.
+    order: VecDeque<(u32, u64)>,
+    /// The table holds every state from this one on.
+    floor: u32,
+}
+
+impl Recent {
+    /// Holding nothing, the states below `floor` being in the run's table.
+    fn new(floor: usize) -> Self {
+        Recent {
+            table: HashTable::new(),
+            order: VecDeque::new(),
+            floor: u32::try_from(floor).expect("states fit in u32"),
+        }
+    }
+
+    /// Holds nothing again, the states below `floor` being in the run's table, when no chunk
+    /// handed out before now is still to be read.
+    fn reset(&mut self, floor: usize) {
+        *self = Recent::new(floor);
+    }
+
+    /// Notes state `at`, just admitted, whose packed bytes hash to `hash`.
+    fn admit(&mut self, at: u32, hash: u64) {
+        self.table.insert_unique(hash, (at, hash), |&(_, h)| h);
+        self.order.push_back((at, hash));
+    }
+
+    /// Passes over state `at`, just admitted, while no chunk is probed: the table, empty, holds
+    /// every state from the next one on.
+    fn skip(&mut self, at: u32) {
+        debug_assert!(
+            self.order.is_empty(),
+            "the states are noted from the first probe on"
+        );
+        self.floor = at + 1;
+    }
+
+    /// Lets go of the states below `published`: a chunk handed out after them was probed
+    /// against a table that held them. Returns whether the table still holds every state from
+    /// `published` on.
+    fn from(&mut self, published: usize) -> bool {
+        while let Some(&(at, hash)) = self.order.front() {
+            if at as usize >= published {
+                break;
+            }
+            self.order.pop_front();
+            if let Ok(entry) = self.table.find_entry(hash, |&(i, _)| i == at) {
+                entry.remove();
+            }
+            self.floor = at + 1;
+        }
+        self.floor as usize <= published
+    }
 }
 
 impl<'t> Bfs<'t> {
@@ -363,6 +505,7 @@ impl<'t> Bfs<'t> {
         checks: &Checks,
         group: Option<&'t Group>,
     ) -> Self {
+        let probing = Probing::of_build();
         let invariants = (0..ts.invariants.len())
             .filter(|&i| checks.reads(&ts.invariants[i].name))
             .collect();
@@ -375,7 +518,8 @@ impl<'t> Bfs<'t> {
             invariants,
             after,
             states: States::packed(std::sync::Arc::new(super::packing::Packing::of(ts))),
-            seen: Default::default(),
+            seen: Seen::new(probing != Probing::Off),
+            probing,
             packed: Vec::new(),
             keys: Default::default(),
             sources: vec![(usize::MAX, 0); ts.entities.len() * ts.most_slots()],
@@ -398,6 +542,51 @@ impl<'t> Bfs<'t> {
             orbit_self: Vec::new(),
             orbits: Default::default(),
             perms: None,
+        }
+    }
+
+    /// The state `key` is, which the thread that expanded its move did not find: packed
+    /// `packed`, which hashes to `hash`. With `recent`, which holds every state the expanding
+    /// thread could not see, only those are looked at.
+    #[inline]
+    fn find_missed(
+        &self,
+        packed: &[u8],
+        hash: u64,
+        key: &StateSlice,
+        recent: Option<&Recent>,
+    ) -> Option<u32> {
+        let Some(recent) = recent else {
+            return self.seen.find_hashed(&self.states, packed, hash, key);
+        };
+        let found = recent
+            .table
+            .find(hash, |&(i, _)| self.states.packed_row(i as usize) == packed)
+            .map(|&(i, _)| i);
+        #[cfg(feature = "shadow")]
+        {
+            let want = self.seen.find_hashed(&self.states, packed, hash, key);
+            assert!(
+                found == want,
+                "shadow: Recent::find({:?}): {found:?}, the run's table {want:?}",
+                &key.0
+            );
+            crate::shadow::compared(crate::shadow::Twin::Recent);
+        }
+        #[cfg(not(feature = "shadow"))]
+        let _ = key;
+        found
+    }
+
+    /// What a chunk handed out now probes its successors against: the run's table and the
+    /// states admitted so far. `segments` caches the store's segment addresses.
+    fn shared(&self, segments: &mut Option<Arc<[Segment]>>) -> Shared {
+        Shared {
+            table: self
+                .seen
+                .current()
+                .expect("a run that probes shares its table"),
+            rows: self.states.publish(segments),
         }
     }
 
@@ -443,7 +632,10 @@ impl<'t> Bfs<'t> {
             group: self.group,
             numbering: &numbering,
         };
-        std::thread::scope(|scope| self.explore(Workers::new(scope, expander, threads)));
+        let probing = self.probing;
+        std::thread::scope(|scope| {
+            self.explore(Workers::new(scope, expander, threads, probing));
+        });
     }
 
     /// Expands the states in discovery order and reads their moves in that order, until none
@@ -456,20 +648,27 @@ impl<'t> Bfs<'t> {
         let mut reading = Reading {
             resolved: Vec::new(),
             ids: vec![u32::MAX; workers.expander.numbering.len()],
+            recent: Recent::new(self.states.len()),
+            record: false,
         };
         let mut scratch = Scratch::default();
+        // The addresses of the store's segments, kept while no segment is added.
+        let mut segments = None;
         // States before `next` are read; states before `sent` are read or handed out.
         let (mut next, mut sent) = (0, 0);
         loop {
             while self.states.len() - sent >= 2 * CHUNK && workers.has_room() {
-                workers.hand_out(self.states.slice(sent..sent + CHUNK));
+                let shared = workers.probes().then(|| self.shared(&mut segments));
+                workers.hand_out(self.states.slice(sent..sent + CHUNK), shared);
                 sent += CHUNK;
             }
             let expanded = if next < sent {
                 workers.next(&mut scratch)
             } else if sent < self.states.len() {
                 let end = self.states.len().min(sent + CHUNK);
-                let expanded = expand(workers.expander, &self.states, sent..end, &mut scratch);
+                // The reader probes the moves it expands as it reads them, not twice.
+                let range = sent..end;
+                let expanded = expand(workers.expander, &self.states, range, &mut scratch, None);
                 sent = end;
                 expanded
             } else {
@@ -477,9 +676,18 @@ impl<'t> Bfs<'t> {
             };
             reading.resolved.clear();
             reading.resolved.resize(expanded.moves.len(), u32::MAX);
+            reading.record = workers.probes();
+            let recent = match expanded.probes.published() {
+                // No thread probed the chunk; no chunk handed out before it is still unread.
+                0 => {
+                    reading.recent.reset(self.states.len());
+                    false
+                }
+                published => reading.recent.from(published),
+            };
             let mut from = 0;
             for &end in &expanded.ends {
-                if !self.take(next, &expanded, from..end, &mut cur, &mut reading) {
+                if !self.take(next, &expanded, from..end, &mut cur, &mut reading, recent) {
                     return;
                 }
                 from = end;
@@ -490,7 +698,8 @@ impl<'t> Bfs<'t> {
 
     /// Reads `moves[range]` of `chunk`, the moves from `states[at]`; false when a cap stops
     /// the run, or the last open check fails under `Caps::stop_when_all_violated`. `s` is a
-    /// state of the system, overwritten with `states[at]` when the run gathers views.
+    /// state of the system, overwritten with `states[at]` when the run gathers views. With
+    /// `recent`, `reading.recent` holds every state the chunk's expanding thread could not see.
     fn take(
         &mut self,
         at: usize,
@@ -498,6 +707,7 @@ impl<'t> Bfs<'t> {
         range: Range<usize>,
         s: &mut State,
         reading: &mut Reading,
+        recent: bool,
     ) -> bool {
         let (moves, probes) = (&chunk.moves, &chunk.probes);
         self.layers.read(at);
@@ -558,6 +768,18 @@ impl<'t> Bfs<'t> {
             // plain run's patched from the source's packed row, a canonical form packed whole.
             let (packed, hash) = probes.packed(i);
             let to = match probe {
+                Probe::Hit(to) => {
+                    #[cfg(feature = "shadow")]
+                    {
+                        let want = self.seen.twin_find(key);
+                        assert!(
+                            want == Some(to),
+                            "shadow: Probe::Hit({to}) at move {i} of state {at}: reference {want:?}"
+                        );
+                        crate::shadow::compared(crate::shadow::Twin::Hit);
+                    }
+                    to
+                }
                 Probe::SameAs(k) => {
                     let to = reading.resolved[k as usize];
                     #[cfg(feature = "shadow")]
@@ -572,12 +794,16 @@ impl<'t> Bfs<'t> {
                     }
                     to
                 }
-                _ => match self.seen.find_hashed(&self.states, packed, hash, key) {
+                _ => match self.find_missed(packed, hash, key, recent.then_some(&reading.recent)) {
                     Some(to) => to,
                     None => {
                         let to = self.states.len() as u32;
                         if !self.admit_packed(key, packed, hash, Some((from, binding)), found) {
                             return false;
+                        }
+                        match reading.record {
+                            true => reading.recent.admit(to, hash),
+                            false => reading.recent.skip(to),
                         }
                         to
                     }

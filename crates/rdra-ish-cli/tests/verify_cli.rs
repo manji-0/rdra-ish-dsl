@@ -85,6 +85,38 @@ fn verify_with_tlc(cwd: &Path, tmpdir: &Path, args: &[&str]) -> Output {
         .expect("rdra-ish runs")
 }
 
+/// The `tlc:` lines of `stdout`, each without what its TLC runs cost (`<secs> s, -Xmx<h>,
+/// <n> workers` at the end of its parentheses, #384), so it reads as the native line does.
+/// Every run line of a job TLC launched ends with the cost.
+fn tlc_lines_without_cost(stdout: &str) -> Vec<String> {
+    let cost = |notes: &[&str]| {
+        let [secs, heap, workers] = notes else {
+            return false;
+        };
+        secs.strip_suffix(" s")
+            .is_some_and(|s| s.parse::<f64>().is_ok())
+            && heap.starts_with("-Xmx")
+            && (workers.ends_with(" worker") || workers.ends_with(" workers"))
+    };
+    stdout
+        .lines()
+        .filter(|l| l.starts_with("tlc: "))
+        .map(|line| {
+            let Some((head, inside)) = line.strip_suffix(')').and_then(|l| l.rsplit_once(" ("))
+            else {
+                return line.to_string();
+            };
+            let notes: Vec<&str> = inside.split(", ").collect();
+            let keep = notes.len().saturating_sub(3);
+            match cost(&notes[keep..]) {
+                true if keep == 0 => head.to_string(),
+                true => format!("{head} ({})", notes[..keep].join(", ")),
+                false => line.to_string(),
+            }
+        })
+        .collect()
+}
+
 /// `order_stability.rdra`: BFS decides `stable`, `unchanged`, and `precedes` on each one's
 /// cone, with no TLC run, and prints the shortest trace to the step or state that breaks each
 /// failing one. `check` evaluates none of them (#166).
@@ -1700,9 +1732,10 @@ fn liveness_is_decided_without_tlc_and_tlc_agrees() {
         let tlc_stderr = String::from_utf8_lossy(&tlc.stderr);
         assert_eq!(tlc.status.code(), Some(code), "{tlc_stdout}{tlc_stderr}");
         assert!(!tlc_stderr.contains("EngineDisagreement"), "{tlc_stderr}");
+        let tlc_lines = tlc_lines_without_cost(&tlc_stdout);
         for line in lines {
             assert!(
-                tlc_stdout.lines().any(|l| l == format!("tlc: {line}")),
+                tlc_lines.contains(&format!("tlc: {line}")),
                 "tlc: {line}\n{tlc_stdout}"
             );
         }
@@ -1905,7 +1938,9 @@ fn backend_tlc_warns_and_runs_tlc_beside_the_native_checker() {
         "{stderr}"
     );
     assert!(
-        stdout.contains("\ntlc: Cone_Forbidden_CartLine_0 [Forbidden_CartLine_0, Check_CartLine_qty_0]: ok (7 states)\n"),
+        tlc_lines_without_cost(&stdout).contains(
+            &"tlc: Cone_Forbidden_CartLine_0 [Forbidden_CartLine_0, Check_CartLine_qty_0]: ok (7 states)".to_string()
+        ),
         "{stdout}"
     );
     assert!(
@@ -2011,8 +2046,9 @@ fn a_safety_cone_stops_once_every_check_on_it_has_failed() {
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
-            stdout.contains(
-                "\ntlc: Cone_Forbidden_Task_0 [Forbidden_Task_0]: counterexample (65793 states)\n"
+            tlc_lines_without_cost(&stdout).contains(
+                &"tlc: Cone_Forbidden_Task_0 [Forbidden_Task_0]: counterexample (65793 states)"
+                    .to_string()
             ),
             "{stdout}"
         );
@@ -2194,4 +2230,71 @@ fn symmetry_lifts_a_counterexample_to_the_rows_it_names() {
         ],
         "{text}"
     );
+}
+
+/// `--with-tlc --plan` writes the TLC launches as JSON and starts no TLC, so it needs none on
+/// PATH; without `-o` it is refused (#384).
+#[test]
+fn a_plan_lists_the_tlc_launches_and_starts_no_tlc() {
+    let tmp = scratch("verify_cli_plan");
+    let sample = repo().join("samples/formal-verification/cross_order_payment_split.rdra");
+    let plan = tmp.join("plan.json");
+    let specs = tmp.join("specs");
+    let output = verify(
+        &repo(),
+        &tmp,
+        &[
+            sample.to_str().unwrap(),
+            "--with-tlc",
+            "--tlc-workers",
+            "2",
+            "--plan",
+            plan.to_str().unwrap(),
+            "-o",
+            specs.to_str().unwrap(),
+        ],
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
+    assert!(stdout.contains("TLC launches; no TLC ran)"), "{stdout}");
+    assert!(!stdout.contains("\ntlc: Cone_"), "{stdout}");
+    assert!(!stderr.contains("tlc_result:"), "{stderr}");
+    assert!(stderr.contains("\nresult: counterexample\n"), "{stderr}");
+    let plan: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&plan).expect("a plan")).unwrap();
+    assert_eq!(plan["version"], 1);
+    let launches = plan["launches"].as_array().unwrap();
+    let cone = launches
+        .iter()
+        .find(|l| l["module"] == "Cone_MultiForbidden_Order_0")
+        .unwrap_or_else(|| panic!("{plan:#}"));
+    assert_eq!(cone["kind"], "cone");
+    assert_eq!(cone["bfs"]["verdict"], "counterexample");
+    assert_eq!(cone["workers"], 2);
+    assert_eq!(
+        cone["args"],
+        serde_json::json!([
+            "-workers",
+            "2",
+            "-continue",
+            "-config",
+            "Cone_MultiForbidden_Order_0.cfg",
+            "Cone_MultiForbidden_Order_0.tla"
+        ])
+    );
+    assert!(specs.join("Cone_MultiForbidden_Order_0.tla").is_file());
+
+    let refused = verify(
+        &repo(),
+        &tmp,
+        &[sample.to_str().unwrap(), "--with-tlc", "--plan", "p.json"],
+    );
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert_eq!(refused.status.code(), Some(1), "{stderr}");
+    assert!(
+        stderr.contains("--plan needs --with-tlc and -o <DIR>"),
+        "{stderr}"
+    );
+    let _ = std::fs::remove_dir_all(&tmp);
 }
