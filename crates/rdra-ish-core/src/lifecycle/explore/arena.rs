@@ -463,9 +463,9 @@ pub(super) struct Seen {
     table: Index,
     #[cfg(feature = "shadow")]
     twin: reference::Seen,
-    /// Under the `shadow` feature, beside a shared table: the hashbrown table a run keeps
-    /// otherwise, which every insert holds the shared table's growth to, so `bytes_with`
-    /// charges the same either way.
+    /// Under the `shadow` feature: a hashbrown table filed as `insert_unique` grows it, which
+    /// every insert holds the table's growth to (a shared table's, or one grown in store
+    /// order), so `bytes_with` charges what hashbrown's growth gives.
     #[cfg(feature = "shadow")]
     hashbrown: HashTable<u32>,
 }
@@ -476,6 +476,23 @@ pub(super) struct Seen {
 #[inline(never)]
 fn find_shared(table: &Writer, states: &States, packed: &[u8], hash: u64) -> Option<u32> {
     table.find(hash, |i| states.packed_row(i as usize) == packed)
+}
+
+/// A hashbrown table that holds indices `0..len`, filed in that order under `hash_of`, with
+/// room for one more: what `insert_unique` grows a full table of `len` to, with the capacity
+/// hashbrown's own growth gives (`with_capacity(len + 1)`; the `seen_growth` twin holds the
+/// two equal). hashbrown's growth walks the old buckets and hashes each index again, which
+/// reads the store's rows in no order; filing them in store order reads them as they lie,
+/// which took a rebuild of synthetic rows from about 125 to about 70 cycles a state in a
+/// microbenchmark, at the same instructions (#296 item 3.1, follow-up (a)).
+#[cold]
+#[inline(never)]
+fn grown_in_store_order(len: usize, hash_of: impl Fn(u32) -> u64) -> HashTable<u32> {
+    let mut table = HashTable::with_capacity(len + 1);
+    for i in 0..u32::try_from(len).expect("states fit in u32") {
+        table.insert_unique(hash_of(i), i, |&k| hash_of(k));
+    }
+    table
 }
 
 /// `Seen::insert_hashed` in a shared table, out of line as `find_shared` is.
@@ -564,6 +581,9 @@ impl Seen {
         let hash_of = |i: u32| hash(states.packed_row(i as usize));
         match &mut self.table {
             Index::Local(table) => {
+                if table.len() == table.capacity() {
+                    *table = grown_in_store_order(table.len(), hash_of);
+                }
                 table.insert_unique(hash_of_at, at, |&i| hash_of(i));
             }
             Index::Shared(table) => insert_shared(table, states, at, hash_of_at),
@@ -575,17 +595,15 @@ impl Seen {
                 "shadow: Seen::insert({at}): the reference holds {:?} already",
                 &states.at(at as usize).0
             );
-            if let Index::Shared(table) = &self.table {
-                self.hashbrown
-                    .insert_unique(hash_of_at, at, |&i| hash_of(i));
-                assert!(
-                    table.capacity() == self.hashbrown.capacity(),
-                    "shadow: Seen::insert({at}): capacity {}, hashbrown's {}",
-                    table.capacity(),
-                    self.hashbrown.capacity()
-                );
-                crate::shadow::compared(crate::shadow::Twin::SeenGrowth);
-            }
+            self.hashbrown
+                .insert_unique(hash_of_at, at, |&i| hash_of(i));
+            let (_, capacity) = self.len_and_capacity();
+            assert!(
+                capacity == self.hashbrown.capacity(),
+                "shadow: Seen::insert({at}): capacity {capacity}, hashbrown's {}",
+                self.hashbrown.capacity()
+            );
+            crate::shadow::compared(crate::shadow::Twin::SeenGrowth);
         }
     }
 

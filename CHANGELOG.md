@@ -15,6 +15,10 @@
   and check each column and slot side by side, on the threads the BFS gave back. At 8 jobs:
   food-permit-ops 2.10 s to 1.81 s, clinic-ops 1.74 s to 1.58 s, insurance-claim-ops 4.23 s
   to 3.52 s. One job takes the time it took, and the output does not change.
+- When a BFS run's table of reached states grows, it files the states again in the order the
+  run stored them, so it reads them in order (#296 item 3.1, follow-up (a)). food-permit-ops
+  at 1 job takes 1% fewer cycles. Output, `--memory` stop points and what a run charges do not
+  change.
 - `verify --with-tlc`: each `tlc:` run line of a cone, property or whole-model job ends with
   what its TLC launches cost: their wall time added up, the `-Xmx` of the last and the
   workers of the first, as `(31 states, 0.3 s, -Xmx1g, 8 workers)` (#384).

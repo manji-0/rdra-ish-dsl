@@ -4,17 +4,23 @@
 <!-- constrained-by ./instance-symmetry.md#memory -->
 <!-- constrained-by ../cli-reference.md#memory-limit -->
 
-Status (2026-11-26): 3.1 is being built in parts.
+Status (2026-11-26): 3.1 is done; 3.2 and 3.3 are open.
 
-- **Landed.** Part 1 of 3.1: workers pack, hash and deduplicate (#372,
+- **Landed.** 3.1, in four parts. Part 1: workers pack, hash and deduplicate (#372,
   [3.1 as built](#31-as-built)). One BFS run takes `max(4, cores / 3)` threads, at most 12
-  and never more than the cores (#371). Part 2 of 3.1: the shared table and the workers'
-  probe, which a release build leaves off
-  ([Part 2: the shared table](#part-2-the-shared-table)).
-- **Open on #296.** Part 3 of 3.1, the serial findings tail of the largest cone
-  ([Part 3: the findings tail](#part-3-the-findings-tail)), and whether the probes go on. 3.1's exit is not met: food-permit-ops at 8 jobs took 35% of
-  its one-job time, against 30%. 3.2's shared helper pool and its sweep (`Helpers::take`
-  still gives one run every free helper). 3.3.
+  and never more than the cores (#371). Part 2: the shared table and the workers' probe,
+  which a release build leaves off ([Part 2: the shared table](#part-2-the-shared-table)).
+  Part 3: the findings tail of the largest cone runs on the threads BFS gave back
+  ([Part 3: the findings tail](#part-3-the-findings-tail)). Follow-up (a): a growing table
+  files its states again in store order. Follow-up (b), an own table with prefetch, missed
+  its bar and was dropped.
+- **3.1's exit (owner, 2026-11-26).** food-permit-ops at 8 jobs takes 31% of its one-job
+  time, against 30%; clinic-ops takes 28% and insurance-claim-ops 25% to 28%. The owner
+  accepted 3.1 as done at that
+  ([comment](https://github.com/manji-0/rdra-ish-dsl/issues/296#issuecomment-7172845572)). The missing point is not
+  carried as a target of its own; 3.3's exit (a quarter) stands.
+- **Open on #296.** 3.2's shared helper pool and its sweep (`Helpers::take` still gives one
+  run every free helper). 3.3.
 - **Superseded.** The helper default `available_parallelism() - 1` of
   [Helpers by need and the jobs cap](#helpers-by-need-and-the-jobs-cap), by the owner's
   `max(4, cores / 3)` of 2026-11-26
@@ -782,9 +788,17 @@ the big runs always did.
 **Hypothesis, not verified:** this machine has 6 performance cores and 12 efficiency
 cores. When several big cones overlap, as in clinic-ops and insurance-claim-ops, the
 probes' extra CPU may push cone readers onto efficiency cores. In food-permit-ops one cone
-runs alone at the end. Part 3 tests this before it designs around it: for example,
-clinic-ops with the probes on at 6 jobs against 8, and whether the slowdown appears only
-when cones overlap.
+runs alone at the end. A test would compare clinic-ops with the probes on at 6 jobs against
+8, and see whether the slowdown appears only when cones overlap. Part 3 kept the probes off
+and did not run it, so the guess is still untested.
+
+**Second hypothesis, not tested:** the second opinion offered another explanation. When
+cones overlap, the run is CPU-bound across all of them. The probes add about 22% CPU
+(clinic-ops user time 7.0 s to 8.5 s), so they slow the other cones' readers whatever cores
+those readers run on. A test would compare `ri_pcycles / ri_cycles` from `proc_pid_rusage`
+(`RUSAGE_INFO_V6`, the share of cycles on performance cores), probes on against off. If
+that share holds steady while the wall time grows, the cause is contention and not
+efficiency cores. Both guesses matter only if the probes are turned on again.
 
 **Profile, probes on** (food-permit-ops, 8 jobs, `sample` at 1 ms): the reader spends
 80% to 87% of its samples in `take`. Inside `take`, `admit` takes 22% of the reader thread,
@@ -859,6 +873,68 @@ With the probes of part 2 turned on as well, in a build made for this measuremen
 | Part 3, probes on | 1.71 s | 1.83 s | 3.92 s |
 
 The probes still cost insurance-claim-ops 5%, so they stay off.
+
+### Follow-up (a): the table grown in store order
+
+<!-- constrained-by #part-2-the-shared-table -->
+
+hashbrown 0.17's growth walks the old buckets and hashes each state again, which reads the
+store's rows at random. When a run's own table (`Index::Local`) is full, `Seen` now builds
+the next one as `with_capacity(len + 1)` and files the states `0..len` in store order
+(`grown_in_store_order`), reading the rows as they lie. hashbrown's growth gives the same
+capacity, and the `seen_growth` twin, now on every insert of every run, holds the two equal,
+so `bytes_with` and the `--memory` stop points do not change. A planted capacity of
+`2 * len + 1` was caught: `shadow: Seen::insert(7): capacity 28, hashbrown's 14`.
+
+**Measured** (against part 3, food-permit-ops, RDRA_JOBS set, interleaved, 1-minute load
+3.5 to 4.8): at 1 job 5.64 s against 5.69 s and 24.31 G cycles against 24.55 G (-1%), at
+the same instructions; at 8 jobs 1.72 s against 1.72 s (median of five), below the noise. A
+microbenchmark of synthetic rows had put the rebuild at about 70 cycles a state against about
+125 (the owner's second opinion); the rebuilds are a small share of a run.
+
+### Follow-up (b): the reader's look-ups prefetched (not taken)
+
+<!-- constrained-by #part-2-the-shared-table -->
+
+hashbrown gives no address for a hash, so a prefetch needs the shared table of part 2 as the
+reader's table in a release build. The workers already hash each move, so the reader knows
+the hash of a look-up several moves ahead (`Probe::Miss`). Four builds were tried, all with
+the probes off, against (a) on hashbrown (`a1`):
+
+- `b0`: the shared table, no prefetch.
+- `b1`: `b0`, prefetching the home group's control word and indexes 8 moves ahead
+  (`prfm pldl1keep`).
+- `b2`: `b1` with the shared table's find and insert inline, an explicit probe loop, and the
+  group prefetch moved to 16 moves ahead.
+- `b3`: `b2`, also prefetching the first candidate row 8 moves ahead.
+
+**Measured** (interleaved, median of five at 8 jobs and at the default, of three at 1 job;
+round 1 at 1-minute load 3 to 6, round 2 at 4 to 9):
+
+| | food-permit-ops, 1 / 8 / default | clinic-ops, 1 / 8 / default | insurance-claim-ops, 8 / default |
+|---|---|---|---|
+| `a1`, round 1 | 5.56 / 1.73 / 1.71 s | 5.66 / 1.57 / 1.59 s | 3.67 / 3.99 s |
+| `b0`, round 1 | 5.80 / 1.93 / 1.91 s | – / 2.08 / 1.71 s | 3.78 / 4.11 s |
+| `b1`, round 1 | 5.44 / 1.64 / 1.63 s | – / 1.66 / 1.77 s | 3.85 / 4.09 s |
+| `a1`, round 2 | 5.49 / 1.72 / 1.82 s | 5.64 / 1.52 / 1.80 s | 3.69 / 4.10 s |
+| `b1`, round 2 | 5.33 / 1.73 / 1.64 s | – / 1.64 / 1.92 s | 3.67 / 4.06 s |
+| `b2`, round 2 | 5.34 / 1.81 / 1.62 s | – / 1.68 / 1.97 s | 3.74 / 3.97 s |
+| `b3`, round 2 | 5.45 / 1.85 / 1.70 s | 5.98 / 1.66 / 1.69 s | 3.76 / 4.14 s |
+
+- **The prefetch works.** `b1` against `b0` is 15% off food-permit-ops at 8 jobs, and 6% at
+  1 job.
+- **The shared table still loses.** Against hashbrown, food-permit-ops gains (1 job: 23.26 G
+  cycles against 24.00 G), but clinic-ops loses at 1 job (`b3` 27.50 G cycles against
+  26.45 G, +4%) and at 8 jobs in both rounds. Instructions rise 2% to 3% on clinic-ops and
+  about 1% on the other two. insurance-claim-ops is within the noise.
+- **The fixes did not help.** Inlining the find, the explicit loop, and the row prefetch
+  (`b2`, `b3`) did not improve on `b1`; each adds instructions.
+
+So the release build keeps hashbrown, and (a) stays. Why clinic-ops loses is not known. The
+shared table's find costs more instructions than hashbrown's, 95 against 59 in the second
+opinion's microbenchmark, and the prefetch hides only the latency. That would matter most
+where the table fits in cache; it is a guess, not measured. A further try would start from a
+prefetch hashbrown itself can take, which hashbrown 0.17's public API does not offer.
 
 ## Beyond 3.1: in-flight dedup
 
