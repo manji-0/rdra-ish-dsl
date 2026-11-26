@@ -2,11 +2,19 @@
 //! twin and panics, naming the call, when the two differ. A run of a `shadow` build over the
 //! samples and the corpus holds every fast path to its reference on every call it makes.
 //!
-//! The twins live in files of their own, so a diff shows whether a change touched one:
+//! The twins live in files of their own, so a diff shows whether a change touched one. Each
+//! twin's module compiles under one of three gates:
+//!
+//! - `feature = "shadow"` alone, for most twins.
+//! - `any(debug_assertions, feature = "shadow")`: a debug build checks every call too.
+//!   `explore/moves/reference.rs` and `reduce/fold/reference.rs`.
+//! - `any(test, feature = "shadow")`: a test build checks or calls the twin as well.
+//!   `reduce/partition/reference.rs`, `reduce/partition/up_to_h.rs` and
+//!   `explore/symmetry/reference.rs`.
 //!
 //! | Fast path | Twin |
 //! |---|---|
-//! | `each_planned` (`explore/moves.rs`, #253) | `explore/moves/reference.rs`: `bindings` filtered by `pre_guards_hold` |
+//! | `each_planned` (`explore/moves.rs`, #253) | `explore/moves/reference.rs`: `bindings` filtered by `pre_guards_hold`, both in `explore/moves.rs` |
 //! | `Seen` (`explore/arena.rs`, #240) | `explore/arena/reference.rs`: an ordered map of the state bytes |
 //! | `observe`'s source pattern, looked up once per state (`explore/bfs.rs`, #251) | `explore/bfs/reference.rs`: the lookup on every edge |
 //! | `observe`'s skip of a row whose columns are unchanged (#251) | `explore/bfs/reference.rs`: what the edge would intern |

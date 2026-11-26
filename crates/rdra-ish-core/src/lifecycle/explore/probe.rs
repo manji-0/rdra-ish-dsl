@@ -44,7 +44,7 @@ pub(super) struct Probes {
     probe: Vec<Probe>,
     hash: Vec<u64>,
     packed: Vec<u8>,
-    /// Per move: its binding's number, `u32::MAX` for none.
+    /// Per move: its binding's number, `Numbering::NONE` for none.
     number: Vec<u32>,
     width: usize,
     /// The run is up to symmetry: a move's key is its successor's canonical form.
@@ -93,7 +93,7 @@ impl Probes {
         self.probe[i]
     }
 
-    /// Move `i`'s binding's number (`Numbering`), `u32::MAX` for none.
+    /// Move `i`'s binding's number (`Numbering`), `Numbering::NONE` for none.
     pub(super) fn number(&self, i: usize) -> u32 {
         self.number[i]
     }
@@ -204,6 +204,10 @@ impl Numbering {
     /// The most bindings numbered: the reader keeps a 4-byte id per number.
     const MOST: usize = 1 << 16;
 
+    /// The number of a binding that has none. It is past `MOST`, so an array of one entry per
+    /// number (`Bindings::id_numbered`) has no entry for it.
+    pub(super) const NONE: u32 = u32::MAX;
+
     pub(super) fn of(ts: &TransitionSystem) -> Self {
         let mut total = 0usize;
         let mut actions = Vec::with_capacity(ts.actions.len());
@@ -240,20 +244,20 @@ impl Numbering {
         self.total
     }
 
-    /// The number of `(act, params)`, `u32::MAX` for none: when the system has too many
-    /// bindings, or a param is past its radix, which no move of the system makes.
+    /// The number of `(act, params)`, `NONE` when the system has too many bindings, or a
+    /// param is past its radix, which no move of the system makes.
     #[inline]
     pub(super) fn number(&self, act: ActId, params: &[u8]) -> u32 {
         let Some((first, radix)) = self.actions.get(act.index()) else {
-            return u32::MAX;
+            return Self::NONE;
         };
         if radix.len() != params.len() {
-            return u32::MAX;
+            return Self::NONE;
         }
         let mut at = 0u32;
         for (&p, &r) in params.iter().zip(radix.iter()) {
             if p >= r {
-                return u32::MAX;
+                return Self::NONE;
             }
             at = at * u32::from(r) + u32::from(p);
         }

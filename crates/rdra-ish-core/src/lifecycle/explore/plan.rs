@@ -168,24 +168,16 @@ pub(super) fn conjuncts(pred: &Pred) -> Vec<&Pred> {
 /// Anything else, a quantifier or count, a bound or successor slot, a slot index, `now`, or no slot at
 /// all, is `None`, and `eval` decides it.
 pub(super) fn one_row(pred: &Pred) -> Option<(u8, VarId)> {
+    // A quantifier, or a count, reads every row of its entity.
+    let quantifier = |p: &Pred| {
+        matches!(
+            p,
+            Pred::Forall { .. } | Pred::Exists { .. } | Pred::Count { .. }
+        )
+    };
     let mut read = None;
-    if reads_one_row(pred, &mut read) {
-        read
-    } else {
-        None
-    }
-}
-
-fn reads_one_row(pred: &Pred, read: &mut Option<(u8, VarId)>) -> bool {
-    match pred {
-        Pred::True | Pred::False => true,
-        Pred::Cmp(a, _, b) => term_on_row(a, read) && term_on_row(b, read),
-        Pred::In(a, values) => term_on_row(a, read) && values.iter().all(|v| term_on_row(v, read)),
-        Pred::Not(body) => reads_one_row(body, read),
-        Pred::And(parts) | Pred::Or(parts) => parts.iter().all(|p| reads_one_row(p, read)),
-        // A quantifier, or a count, reads every row of its entity.
-        Pred::Forall { .. } | Pred::Exists { .. } | Pred::Count { .. } => false,
-    }
+    let one = !pred.nodes().any(quantifier) && pred.terms().all(|t| term_on_row(t, &mut read));
+    read.filter(|_| one)
 }
 
 fn term_on_row(term: &Term, read: &mut Option<(u8, VarId)>) -> bool {

@@ -3,7 +3,7 @@
 //! the state they leave. An edge does not store its source: BFS reads the states in order, so
 //! the moves of each state are one run of the list, found from the index of its first edge.
 //! A binding id takes one byte while the run has at most 256 bindings, two up to 65,536, and
-//! four beyond, so an edge is 5, 6 or 8 bytes where it was 12.
+//! four beyond, so an edge is 5, 6 or 8 bytes.
 //!
 //! A run that stops once every check fails (`Caps::stop_when_all_violated`) decides its
 //! checks and nothing else, so it keeps no edge list: each state's parent holds the source

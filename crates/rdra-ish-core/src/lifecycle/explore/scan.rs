@@ -35,16 +35,10 @@ impl TransitionSystem {
             let s: &StateSlice = s.borrow();
             for (p, param) in action.params.iter().enumerate() {
                 let exists = self.entity(param.entity).exists;
-                let want = match param.role {
-                    ParamRole::New => Value::ABSENT,
-                    ParamRole::Existing | ParamRole::Parent { .. } | ParamRole::Triggered => {
-                        Value::PRESENT
-                    }
-                    // Any slot binds it; its run guard says whether a run reached it.
-                    ParamRole::Earlier { .. } => {
-                        bound[p] = true;
-                        continue;
-                    }
+                // Any slot binds an `Earlier` param; its run guard says whether a run reached it.
+                let Some(want) = param.role.binds_exists() else {
+                    bound[p] = true;
+                    continue;
                 };
                 let mut slots = match pin {
                     Some((q, k)) if q == p => usize::from(k)..usize::from(k) + 1,
@@ -130,14 +124,7 @@ impl TransitionSystem {
             .bindings_for(action, s, true)
             .into_iter()
             .filter(pinned)
-            .any(|params| {
-                let mut env = Env::new(&params);
-                action
-                    .guards
-                    .iter()
-                    .filter(|g| !g.reads_successor())
-                    .all(|g| self.eval(&g.pred, s, &mut env))
-            });
+            .any(|params| self.pre_guards_hold(action, s, &params));
         if holds {
             missing
         } else {
