@@ -17,6 +17,19 @@
 //!
 //! Without the feature every function here is an empty one the compiler drops, so a release
 //! build prints and counts nothing.
+//!
+//! A `perf` build also reads these switches (`stats`), each a stderr line for a developer:
+//!
+//! | Variable | Line |
+//! |---|---|
+//! | `RDRA_ISH_G_T_STATS` | `g-t:` per reduced cone run up to its group `G_T`: per entity, whether it moves, and why it stays fixed |
+//! | `RDRA_ISH_S_UP_TO_H_STATS` | `s-up-to-h:` per sub-lifecycle run up to `H`: where the plain run stopped, the orbits, the entities left out and those that move, then the classes |
+//! | `RDRA_ISH_DIVERGENCE_STATS` | no line of its own: the `mixed` and `sensitive` counts of a reduction's divergence marks, which the `RDRA_ISH_WF_REDUCED_STATS` line prints |
+
+/// Whether the developer switch `var` is set. Only a `perf` build reads it.
+pub(crate) fn stats(var: &str) -> bool {
+    cfg!(feature = "perf") && std::env::var_os(var).is_some()
+}
 
 #[cfg(feature = "perf")]
 mod on;

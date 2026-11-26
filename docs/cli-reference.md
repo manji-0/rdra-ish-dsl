@@ -1941,8 +1941,7 @@ For developers. These change only diagnostics or turn an optimisation off; the v
 | Variable | Effect |
 |---|---|
 | `RDRA_ISH_SYMMETRY_STATS` | Per run up to symmetry, a stderr line of orbits, estimate, branch-cap cuts, and entities left out; see [Instance symmetry](#instance-symmetry). |
-| `RDRA_ISH_G_T_STATS`, `RDRA_ISH_S_UP_TO_H_STATS` | A stderr line per reduced cone run up to its group (`G_T`) or sub-lifecycle run up to `H`. |
-| `RDRA_ISH_QUOTIENT_STATS`, `RDRA_ISH_DIVERGENCE_STATS`, `RDRA_ISH_WF_REDUCED_STATS` | What the quotient cache did, the divergence marks of a reduction, and each `WF_vars(Next)` run on a reduced cone. |
+| `RDRA_ISH_QUOTIENT_STATS`, `RDRA_ISH_WF_REDUCED_STATS` | What the quotient cache did, and each `WF_vars(Next)` run on a reduced cone. |
 | `RDRA_ISH_NO_QUOTIENT_CACHE` | Do not share quotients between cones. |
 | `RDRA_ISH_NO_REDUCE` | Do not reduce cones to their quotient. |
 | `RDRA_ISH_NO_WF_REDUCED` | Do not run `WF_vars(Next)` on a reduced cone first. |
@@ -1950,7 +1949,8 @@ For developers. These change only diagnostics or turn an optimisation off; the v
 
 A `shadow` build also reads `RDRA_ISH_SHADOW_STATS`, `RDRA_ISH_DROP_RULE`, and
 `RDRA_ISH_FORCE_S_UP_TO_H`, and a `perf` build `RDRA_PERF` (`1` the pass and run lines, `2` the
-costly columns too) and `RDRA_PERF_EVAL_TWICE`. The test suites read `RDRA_REQUIRE_*` and other
+costly columns too), `RDRA_PERF_EVAL_TWICE`, and the measurement switches the `perf` module
+lists (`crates/rdra-ish-core/src/perf.rs`). The test suites read `RDRA_REQUIRE_*` and other
 variables of their own.
 
 ---

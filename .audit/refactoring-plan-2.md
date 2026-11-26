@@ -240,6 +240,10 @@ when it shows up in the profile. This pass runs benchmarks, so it needs the owne
   issue, or delete it and keep the design doc as the record.
 - X13: move the four `RDRA_ISH_*_STATS` switches under the `perf` feature. That changes
   release behavior when they are set, and `docs/cli-reference.md` documents them.
+  Decided (owner, #399): do it. Done for `G_T`, `S_UP_TO_H` and `DIVERGENCE`.
+  `RDRA_ISH_QUOTIENT_STATS` stays open: `memory_cli`'s
+  `shared_quotients_stop_no_cone_elsewhere_on_any_number_of_threads` counts cache hits from
+  its line in a build without `perf`.
 - V11: drop `OnDeadlock::Refuse`, `Reads::States` and `reject_state_errors`, or keep the case.
 - G15: should all three languages declare every use-case error? Add an entry-only snapshot
   first; the TS case may be a real bug (guess).

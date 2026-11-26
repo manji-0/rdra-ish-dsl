@@ -29,6 +29,11 @@
   a run starts. `--tlc-jobs` / `RDRA_TLC_JOBS` and `--tlc-workers` / `RDRA_TLC_WORKERS` set
   the runs at once and every run's workers ([design](./docs/design/tlc-scheduling.md),
   #384).
+- Release builds no longer read `RDRA_ISH_G_T_STATS`, `RDRA_ISH_S_UP_TO_H_STATS` and
+  `RDRA_ISH_DIVERGENCE_STATS`: these measurement switches now work only in a `perf` build, and
+  `crates/rdra-ish-core/src/perf.rs` documents them instead of the CLI reference. Verdicts and
+  stdout do not change; in a release build the `RDRA_ISH_WF_REDUCED_STATS` line no longer
+  fills its divergence columns.
 
 ### Added
 
