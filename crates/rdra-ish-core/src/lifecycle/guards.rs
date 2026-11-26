@@ -179,6 +179,7 @@ fn cap_of(diags: &[super::diag::Diag]) -> UndecidedWhy {
             StateDiag::MemoryCapReached { limit, raise, .. } => {
                 Some(UndecidedWhy::MemoryCap(limit, raise))
             }
+            StateDiag::TimeBudgetReached { .. } => Some(UndecidedWhy::TimeBudget),
             _ => None,
         })
         .expect("an incomplete run stopped at a cap")

@@ -166,6 +166,9 @@ fn undecided_text(why: rdra_ish_core::lifecycle::UndecidedWhy) -> String {
         UndecidedWhy::MemoryCap(limit, raise) => format!(
             "without the guard its cone stopped at the memory limit ({limit}; raise it with {raise})"
         ),
+        UndecidedWhy::TimeBudget => {
+            "without the guard its cone stopped at its time budget".to_string()
+        }
         UndecidedWhy::Scope | UndecidedWhy::Unselected => {
             unreachable!("a rule's own cone is explored")
         }

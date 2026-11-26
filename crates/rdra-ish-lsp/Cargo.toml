@@ -17,6 +17,6 @@ rdra-ish-syntax = { path = "../rdra-ish-syntax" }
 serde_json      = { workspace = true }
 tower-lsp       = { workspace = true }
 tower-service   = { workspace = true }
-tokio           = { workspace = true }
+tokio           = { workspace = true, features = ["time"] }
 url             = { workspace = true }
 dunce           = { workspace = true }

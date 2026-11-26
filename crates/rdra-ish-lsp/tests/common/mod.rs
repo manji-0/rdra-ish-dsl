@@ -56,11 +56,18 @@ impl Client {
         }
     }
 
-    /// Starts a server on `root` and waits until it has answered `initialize`.
+    /// Starts a server on `root` and waits until it has answered `initialize`. The background
+    /// lifecycle check is off, so that every diagnostics message is of an analysis.
     pub fn initialized(root: &Path) -> Self {
+        Self::initialized_with(root, json!({"lifecycleCheck": {"enabled": false}}))
+    }
+
+    /// `initialized` with these initialization options.
+    pub fn initialized_with(root: &Path, options: Value) -> Self {
         let mut client = Self::start();
         client.send(json!({"jsonrpc": "2.0", "id": 1, "method": "initialize",
-            "params": {"processId": null, "rootUri": uri(root), "capabilities": {}}}));
+            "params": {"processId": null, "rootUri": uri(root), "capabilities": {},
+                "initializationOptions": options}}));
         client.wait_for("initialize", |m| m["id"] == 1);
         client.notify("initialized", json!({}));
         client

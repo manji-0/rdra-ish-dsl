@@ -11,6 +11,7 @@ pub mod document;
 pub mod folding;
 pub mod hover;
 pub mod inlay_hints;
+pub mod lifecycle;
 pub mod linked_editing;
 pub mod predicates;
 pub mod refs;

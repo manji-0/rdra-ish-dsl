@@ -54,7 +54,7 @@ rdra-ish codegen samples/ec-site --lang ts -o domain.ts
 | `verify --symmetry always` | Explores a cone up to instance symmetry, so larger instance counts fit in memory (experimental) | [Instance symmetry](./docs/cli-reference.md#instance-symmetry) |
 | `codegen` | Domain code in the Kamae style for TypeScript, Rust and Go: states, rows, transition functions, contracts and a conformance harness. The TypeScript types are covered by the compatibility contract; the rest is experimental | [`codegen`](./docs/cli-reference.md#codegen), [design](./docs/design/algebraic-codegen.md#generated-code-style) |
 | `check --code` | Checks that the service code is what the model generates, compiles against the contracts, and passes the conformance test (experimental) | [`check --code`](./docs/cli-reference.md#check---code) |
-| `rdra-ish-lsp` | Language server: diagnostics, completion, hover, definitions, references, rename, formatting, code lenses and semantic colors | [VS Code extension](./editors/vscode/) |
+| `rdra-ish-lsp` | Language server: diagnostics, completion, hover, definitions, references, rename, formatting, code lenses and semantic colors, and `check`'s lifecycle findings from a background run | [VS Code extension](./editors/vscode/) |
 | Agent skills | Skills for writing, reviewing, diagramming and verifying a model, and for implementing a service against its generated contracts | [`skills/README.md`](./skills/README.md) |
 
 The VS Code extension in [`editors/vscode`](./editors/vscode/) runs `rdra-ish-lsp` from

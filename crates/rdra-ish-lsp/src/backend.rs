@@ -19,6 +19,7 @@ use crate::document::{open_document, OpenDocument};
 use crate::folding::folding_ranges;
 use crate::hover::{hover_content, signature_help};
 use crate::inlay_hints::inlay_hints;
+use crate::lifecycle::{self, Findings, Settings};
 use crate::linked_editing::linked_editing_ranges;
 use crate::refs::{find_symbol_references, reference_at_offset, resolve_decl_site, symbol_target};
 use crate::rename::{prepare_rename_range, workspace_rename, RenameError};
@@ -30,8 +31,17 @@ use crate::uri::{watched_path_is_rdra, ClientUris};
 struct ServerState {
     documents: HashMap<PathBuf, String>,
     workspace_roots: Vec<PathBuf>,
-    analysis: Option<WorkspaceAnalysis>,
+    analysis: Option<Arc<WorkspaceAnalysis>>,
     published: HashSet<Url>,
+    /// The diagnostics of the analysis last published, per file: a background check's
+    /// findings are published together with them.
+    analysis_published: HashMap<Url, Vec<tower_lsp::lsp_types::Diagnostic>>,
+    /// The findings of the background check of `analysis`, once it has published them.
+    lifecycle: Option<Findings>,
+    /// `lifecycleCheck` of the initialization options and the settings.
+    settings: Settings,
+    /// The client takes `workspace/codeLens/refresh`.
+    lens_refresh: bool,
     manifest_error: Option<String>,
     /// The URIs the client names the files by, which results are sent under.
     uris: ClientUris,
@@ -70,10 +80,13 @@ pub struct Backend {
     client: Client,
     state: Arc<RwLock<ServerState>>,
     /// Counts refreshes. A refresh publishes only while it is still the latest one, so a
-    /// slower refresh of older text cannot overwrite the result of a newer one.
-    generation: AtomicU64,
+    /// slower refresh of older text cannot overwrite the result of a newer one. The
+    /// background check of a refresh follows the same rule.
+    generation: Arc<AtomicU64>,
     /// Held from the generation check to the end of publishing.
-    publishing: Mutex<()>,
+    publishing: Arc<Mutex<()>>,
+    /// Held by the background check that runs, so that checks run one at a time.
+    checking: Arc<Mutex<()>>,
 }
 
 impl Backend {
@@ -81,8 +94,19 @@ impl Backend {
         Self {
             client,
             state: Arc::new(RwLock::new(ServerState::default())),
-            generation: AtomicU64::new(0),
-            publishing: Mutex::new(()),
+            generation: Arc::new(AtomicU64::new(0)),
+            publishing: Arc::new(Mutex::new(())),
+            checking: Arc::new(Mutex::new(())),
+        }
+    }
+
+    fn checker(&self) -> Checker {
+        Checker {
+            client: self.client.clone(),
+            state: self.state.clone(),
+            generation: self.generation.clone(),
+            publishing: self.publishing.clone(),
+            checking: self.checking.clone(),
         }
     }
 
@@ -117,7 +141,10 @@ impl Backend {
                         .manifest
                         .as_ref()
                         .map(|m| (m.path.clone(), code_notes(m, &project.program)));
-                    (analyze_project(project), notes)
+                    // `check` explores nothing when the model did not load; neither does the
+                    // background check. The analysis adds its own findings after this.
+                    let loaded = !project.diags.iter().any(|d| !d.is_warning);
+                    (analyze_project(project), notes, loaded)
                 })
             }
         })
@@ -128,13 +155,14 @@ impl Backend {
         if self.generation.load(Ordering::SeqCst) != generation {
             return;
         }
-        let (analysis, notes) = match analyzed {
+        let (analysis, notes, loaded) = match analyzed {
             Ok(analysis) => analysis,
             Err(ProjectError::NoRdraFiles) => {
                 // The last .rdra file left the workspace: nothing to analyze, and nothing
                 // published before may stay.
                 let mut state = self.state.write().await;
                 state.analysis = None;
+                state.lifecycle = None;
                 let stale = std::mem::take(&mut state.published);
                 drop(state);
                 for uri in stale {
@@ -152,9 +180,20 @@ impl Backend {
             self.publish_code_notes(&path, notes).await;
         }
 
+        let analysis = Arc::new(analysis);
         let mut state = self.state.write().await;
-        state.analysis = Some(analysis);
+        state.analysis = Some(analysis.clone());
         state.manifest_error = None;
+        // The diagnostics just published hold no finding of an older check; its lenses go too.
+        let had_lenses = state.lifecycle.take().is_some_and(|f| !f.lenses.is_empty());
+        let (settings, lens_refresh) = (state.settings, state.lens_refresh);
+        drop(state);
+        if had_lenses && lens_refresh {
+            refresh_lenses(&self.client);
+        }
+        if settings.enabled && loaded {
+            tokio::spawn(self.checker().run(generation, analysis, settings));
+        }
     }
 
     async fn report_load_error(&self, err: &ProjectError, overlays: &HashMap<PathBuf, String>) {
@@ -164,6 +203,8 @@ impl Backend {
         let mut state = self.state.write().await;
         let uris = state.uris.clone();
         state.analysis = None;
+        state.lifecycle = None;
+        state.analysis_published.clear();
         let stale = std::mem::take(&mut state.published);
         let announce = state.manifest_error.as_deref() != Some(message.as_str());
         state.manifest_error = Some(message.clone());
@@ -230,6 +271,7 @@ impl Backend {
         }
 
         let mut published = HashSet::new();
+        let mut kept = HashMap::new();
         for (source_id, (path, text, _)) in analysis.program.sources.iter().enumerate() {
             let uri = match uris.uri(path) {
                 Ok(uri) => uri,
@@ -241,13 +283,17 @@ impl Backend {
                 .map(|diag| to_lsp_diagnostic(diag, text))
                 .collect();
             self.client
-                .publish_diagnostics(uri.clone(), diags, None)
+                .publish_diagnostics(uri.clone(), diags.clone(), None)
                 .await;
+            kept.insert(uri.clone(), diags);
             published.insert(uri);
         }
         // A file published before that is no source now (deleted, renamed, or no longer
         // under a root) keeps its diagnostics in the editor until they are withdrawn.
-        let stale = std::mem::replace(&mut self.state.write().await.published, published.clone());
+        let mut state = self.state.write().await;
+        state.analysis_published = kept;
+        let stale = std::mem::replace(&mut state.published, published.clone());
+        drop(state);
         for uri in stale.difference(&published) {
             self.client
                 .publish_diagnostics(uri.clone(), vec![], None)
@@ -265,6 +311,14 @@ impl LanguageServer for Backend {
             state.uris.add_root(root);
         }
         state.workspace_roots = roots;
+        if let Some(section) = (params.initialization_options.as_ref()).and_then(Settings::section)
+        {
+            state.settings = state.settings.with(section);
+        }
+        state.lens_refresh = (params.capabilities.workspace.as_ref())
+            .and_then(|w| w.code_lens.as_ref())
+            .and_then(|c| c.refresh_support)
+            .unwrap_or(false);
 
         Ok(InitializeResult {
             server_info: Some(ServerInfo {
@@ -391,6 +445,22 @@ impl LanguageServer for Backend {
                 .publish_diagnostics(params.text_document.uri, vec![], None)
                 .await;
         }
+        self.refresh_analysis().await;
+    }
+
+    async fn did_change_configuration(&self, params: DidChangeConfigurationParams) {
+        let Some(section) = Settings::section(&params.settings) else {
+            return;
+        };
+        let mut state = self.state.write().await;
+        let settings = state.settings.with(section);
+        if settings == state.settings {
+            return;
+        }
+        state.settings = settings;
+        drop(state);
+        // Analyze again: the check runs on the new analysis when it is on, and the findings
+        // and lenses of the last one go either way.
         self.refresh_analysis().await;
     }
 
@@ -622,13 +692,19 @@ impl LanguageServer for Backend {
         let Some(found) = state.document(&params.text_document.uri) else {
             return Ok(None);
         };
-        Ok(Some(code_lenses(
+        let mut lenses = code_lenses(
             found.analysis,
             &state.uris,
             found.doc.ast,
             found.doc.text,
             &found.path,
-        )))
+        );
+        // The findings are by the path the analysis loaded the file under, which may not be
+        // the path of the URI (a symlinked root).
+        let source = &found.analysis.program.sources[found.doc.source_id].0;
+        let checked = (state.lifecycle.as_ref()).and_then(|f| f.lenses.get(source));
+        lenses.extend(checked.into_iter().flatten().map(|l| l.to_code_lens()));
+        Ok(Some(lenses))
     }
 
     async fn folding_range(&self, params: FoldingRangeParams) -> Result<Option<Vec<FoldingRange>>> {
@@ -668,6 +744,88 @@ impl LanguageServer for Backend {
             offset,
         ))
     }
+}
+
+/// What a background check needs of the server, owned so that it can run on its own task.
+struct Checker {
+    client: Client,
+    state: Arc<RwLock<ServerState>>,
+    generation: Arc<AtomicU64>,
+    publishing: Arc<Mutex<()>>,
+    checking: Arc<Mutex<()>>,
+}
+
+impl Checker {
+    fn current(&self, generation: u64) -> bool {
+        self.generation.load(Ordering::SeqCst) == generation
+    }
+
+    /// Runs `check` on the analysis of refresh `generation` once the text has been quiet for a
+    /// moment, and publishes the findings beside the analysis diagnostics while that refresh
+    /// is still the latest. A newer refresh drops the run before it starts or its result after
+    /// it ends; one that started runs until it ends or its time budget stops it.
+    async fn run(self, generation: u64, analysis: Arc<WorkspaceAnalysis>, settings: Settings) {
+        tokio::time::sleep(settings.quiet).await;
+        if !self.current(generation) {
+            return;
+        }
+        let _checking = self.checking.lock().await;
+        if !self.current(generation) {
+            return;
+        }
+        let checked = tokio::task::spawn_blocking(move || {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                lifecycle::check(&analysis, &settings)
+            }))
+        })
+        .await;
+        let Ok(Ok(findings)) = checked else {
+            self.client
+                .log_message(MessageType::ERROR, "the background lifecycle check failed")
+                .await;
+            return;
+        };
+
+        let _publishing = self.publishing.lock().await;
+        if !self.current(generation) {
+            return;
+        }
+        let mut state = self.state.write().await;
+        let mut out = Vec::new();
+        for (path, found) in &findings.diagnostics {
+            let Ok(uri) = state.uris.uri(path) else {
+                continue;
+            };
+            let mut all = (state.analysis_published.get(&uri).cloned()).unwrap_or_default();
+            all.extend(found.iter().cloned());
+            out.push((uri, all));
+        }
+        let lenses = !findings.lenses.is_empty();
+        state.lifecycle = Some(findings);
+        state
+            .published
+            .extend(out.iter().map(|(uri, _)| uri.clone()));
+        let lens_refresh = state.lens_refresh;
+        drop(state);
+        for (uri, diagnostics) in out {
+            self.client
+                .publish_diagnostics(uri, diagnostics, None)
+                .await;
+        }
+        if lenses && lens_refresh {
+            refresh_lenses(&self.client);
+        }
+    }
+}
+
+/// Asks the client to request the code lenses again, without waiting for its answer.
+fn refresh_lenses(client: &Client) {
+    let client = client.clone();
+    tokio::spawn(async move {
+        let _ = client
+            .send_request::<tower_lsp::lsp_types::request::CodeLensRefresh>(())
+            .await;
+    });
 }
 
 fn to_lsp_diagnostic(diag: &Diagnostic, source: &str) -> tower_lsp::lsp_types::Diagnostic {

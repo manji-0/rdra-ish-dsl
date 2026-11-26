@@ -3,10 +3,12 @@
 
 use std::fmt;
 
+use super::cone::Target;
 use super::diag::{Diag, Severity, StateDiag};
 use super::explore::Caps;
 use super::select::{NotChecked, Scope, Selection};
 use super::targets::Undecided;
+use super::types::Site;
 use super::view::EntityStateResult;
 use super::{Bounds, TransitionSystem};
 use crate::model::{EntityKey, SemanticModel};
@@ -263,6 +265,47 @@ pub fn derive_states_built(
     bounds: Bounds,
     caps: Caps,
 ) -> (StatesReport, TransitionSystem) {
+    let checked = derive_states_checked(model, scope, bounds, caps);
+    (checked.report, checked.ts)
+}
+
+/// What a run decided about one invariant or `after(..).assert`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CheckOutcome {
+    /// Its cone ran to the end and no reached state breaks it.
+    Holds,
+    /// The report holds its counterexample.
+    Violated,
+    /// Its cone stopped at a cap, the memory limit, or the deadline before it found a
+    /// counterexample.
+    Undecided,
+}
+
+/// The outcome of one invariant or assert, at the site the rule was declared.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckVerdict {
+    /// The name a violation is reported under.
+    pub name: String,
+    pub site: Site,
+    pub outcome: CheckOutcome,
+}
+
+/// [`derive_states_built`], with the outcome of each invariant and assert the scope selects,
+/// in the order the selection lists them.
+pub struct Checked {
+    pub report: StatesReport,
+    pub ts: TransitionSystem,
+    pub checks: Vec<CheckVerdict>,
+}
+
+/// [`derive_states_built`] and the outcome of each check it explored: what the language
+/// server shows on each rule (#214).
+pub fn derive_states_checked(
+    model: &SemanticModel,
+    scope: &Scope,
+    bounds: Bounds,
+    caps: Caps,
+) -> Checked {
     let built = TransitionSystem::build(model, bounds.clone(), scope);
     let mut run = built.ts.explore_targets(&built.selection.targets, caps);
     if !scope.bucs.is_empty() {
@@ -280,6 +323,35 @@ pub fn derive_states_built(
     if scope.is_whole() {
         diags.extend(built.ts.vacuous_properties(caps));
     }
+    let checks = run
+        .targets
+        .iter()
+        .filter_map(|&(target, at)| {
+            let (name, site) = match target {
+                Target::Invariant(i) => {
+                    let inv = &built.ts.invariants()[i];
+                    (&inv.name, &inv.site)
+                }
+                Target::AfterAssert(i) => {
+                    let a = &built.ts.after_asserts()[i];
+                    (&a.name, &a.site)
+                }
+                Target::Entity(_) | Target::Reach(_) => return None,
+            };
+            let outcome = if diags.iter().any(|d| built.ts.reports(target, &d.diag)) {
+                CheckOutcome::Violated
+            } else if run.cones[at].run.complete {
+                CheckOutcome::Holds
+            } else {
+                CheckOutcome::Undecided
+            };
+            Some(CheckVerdict {
+                name: name.clone(),
+                site: site.clone(),
+                outcome,
+            })
+        })
+        .collect();
     let report = StatesReport {
         bounds,
         caps,
@@ -289,5 +361,9 @@ pub fn derive_states_built(
         diags,
         undecided: run.undecided().to_vec(),
     };
-    (report, built.ts)
+    Checked {
+        report,
+        ts: built.ts,
+        checks,
+    }
 }

@@ -10,8 +10,13 @@ pub fn span_to_range(source: &str, span: Span) -> Range {
     }
 }
 
+/// The position of byte `offset`; an offset inside a character counts as the character's
+/// start, and one past the end as the end.
 pub fn byte_offset_to_position(source: &str, offset: usize) -> Position {
-    let offset = offset.min(source.len());
+    let mut offset = offset.min(source.len());
+    while !source.is_char_boundary(offset) {
+        offset -= 1;
+    }
     let prefix = &source[..offset];
     let line = prefix.bytes().filter(|&b| b == b'\n').count() as u32;
     let line_start = prefix.rfind('\n').map(|i| i + 1).unwrap_or(0);
@@ -93,6 +98,12 @@ mod tests {
                 line: 1,
                 character: 14
             }
+        );
+        // A byte inside 受 is the position of 受.
+        let in_char = src.find('受').unwrap() + 1;
+        assert_eq!(
+            byte_offset_to_position(src, in_char),
+            byte_offset_to_position(src, in_char - 1)
         );
         // The second unit of 𠮷 is not a character boundary.
         let inside = Position {
