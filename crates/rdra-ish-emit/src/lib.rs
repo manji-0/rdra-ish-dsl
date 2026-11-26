@@ -213,20 +213,10 @@ impl Explored {
     }
 }
 
-/// What a state-reading output does with a deadlock the lifecycle found.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OnDeadlock {
-    /// A deadlock is an error: the output is refused.
-    Refuse,
-    /// The output draws the deadlock, so a deadlock does not refuse it.
-    Draw,
-}
-
 /// An emitter that reads the explored states. It takes [`Explored`] besides the model and
-/// the view, and says what a deadlock does to it, so the lifecycle gate follows from the
-/// trait an emitter implements.
+/// the view, so the lifecycle gate follows from the trait an emitter implements. It draws a
+/// deadlock the lifecycle found, so a deadlock does not refuse it.
 pub trait StatesEmitter {
-    fn on_deadlock(&self) -> OnDeadlock;
     fn emit(
         &self,
         model: &SemanticModel,

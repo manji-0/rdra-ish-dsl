@@ -5,8 +5,15 @@
 //! say the same.
 
 use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Output};
+
+#[path = "common/samples.rs"]
+mod samples;
+#[path = "common/scratch.rs"]
+mod scratch;
+use samples::repo;
+use scratch::scratch;
 
 /// A sample whose invariant is violated: `check` reports a lifecycle error, not a deadlock.
 const FAILING: &str = "samples/formal-verification-fail/order.rdra";
@@ -108,23 +115,12 @@ const EXPECTED: &[(&str, &[(&str, Gate)])] = &[
     ),
 ];
 
-fn repo() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
 fn run(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
         .current_dir(repo())
         .args(args)
         .output()
         .expect("rdra-ish runs")
-}
-
-fn scratch(test: &str) -> PathBuf {
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(test);
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
 }
 
 fn note_count(output: &Output) -> usize {

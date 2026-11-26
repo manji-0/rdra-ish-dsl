@@ -6,26 +6,22 @@
 //! (`rdra_ish_emit::implied_relation`), and lists in `kinds:` exactly the kinds its body draws.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 use std::sync::{Mutex, OnceLock};
 
 use rdra_ish_cli::Session;
 
+#[path = "common/samples.rs"]
+mod samples;
+#[path = "common/scratch.rs"]
+mod scratch;
+use samples::repo;
+use scratch::scratch;
+
 /// The diagram a `%% rdra-ish diagram=` line names.
 fn diagram_kind(name: &str) -> rdra_ish_emit::Diagram {
     rdra_ish_emit::Diagram::from_name(name).unwrap_or_else(|| panic!("`{name}` is not a diagram"))
-}
-
-fn repo() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-fn scratch(test: &str) -> PathBuf {
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(test);
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
 }
 
 /// Every samples.txt root.

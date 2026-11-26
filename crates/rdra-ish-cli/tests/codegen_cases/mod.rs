@@ -4,7 +4,6 @@
 
 #![allow(dead_code)]
 
-use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use rdra_ish_core::lifecycle::{
@@ -13,6 +12,10 @@ use rdra_ish_core::lifecycle::{
 use rdra_ish_core::{load_project, SemanticModel};
 use rdra_ish_emit::codegen::build;
 use rdra_ish_emit::codegen::ir::{DomainModel, FnDecl, OutKind};
+
+#[path = "../common/samples.rs"]
+mod samples;
+pub use samples::{repo, samples};
 
 /// The caps the IR is built at, and the printed code generated at.
 pub fn caps() -> Caps {
@@ -119,20 +122,6 @@ pub fn pick<'f>(
             fns.len()
         )),
     }
-}
-
-pub fn repo() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-pub fn samples() -> Vec<String> {
-    std::fs::read_to_string(repo().join("samples.txt"))
-        .expect("samples.txt")
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
-        .map(str::to_string)
-        .collect()
 }
 
 pub fn check_passes(sample: &str) -> bool {
