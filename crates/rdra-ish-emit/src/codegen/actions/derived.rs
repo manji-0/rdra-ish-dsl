@@ -276,7 +276,7 @@ impl RowValues<'_> {
                 }
             }
             (Operand::Field(row, field), EffectValue::EnumVariant(b)) if !field.nullable => {
-                let FieldType::Enum(enum_ty) = &field.ty else {
+                let FieldType::Enum(_) = &field.ty else {
                     return Err(format!(
                         "it compares {} with a value of another type",
                         field.wire
@@ -288,7 +288,6 @@ impl RowValues<'_> {
                 Expr::EnumEq {
                     row: *row,
                     field: (*field).clone(),
-                    enum_ty: enum_ty.clone(),
                     value: EnumValue {
                         ident: type_ident(&wire),
                         wire,

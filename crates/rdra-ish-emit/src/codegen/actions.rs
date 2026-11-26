@@ -20,8 +20,8 @@ use rdra_ish_core::SemanticModel;
 
 use super::ir::{
     Adapt, ArgCheck, Assigned, CmpOp, CondGuard, DispatchCase, DispatchDecl, DomainModel,
-    EnumValue, EventDecl, Expr, Field, FieldType, FnDecl, FnInput, Lit, OutKind, RecordDecl,
-    RowOut, RowParam, Scalar, Skipped, SumDecl, VariantDecl,
+    EnumValue, EventDecl, Expr, Field, FieldType, FnDecl, FnInput, InputType, Lit, OutKind,
+    RecordDecl, RowOut, RowParam, Scalar, Skipped, SumDecl, VariantDecl,
 };
 use super::{snake, type_ident, CodegenError, Names};
 
@@ -203,7 +203,7 @@ pub(super) fn add_functions(
         .iter()
         .flat_map(|f| f.inputs.iter())
         .filter_map(|i| match &i.ty {
-            FieldType::Rows(ty) => Some(ty.clone()),
+            InputType::Rows(ty) => Some(ty.clone()),
             _ => None,
         })
         .collect();

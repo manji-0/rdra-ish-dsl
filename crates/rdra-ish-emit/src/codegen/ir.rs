@@ -56,8 +56,13 @@ pub enum FieldType {
     Enum(String),
     /// A generated id type, by its type name.
     Id(String),
-    /// A list of rows of a record or row type: the rows a `.has` / `.none` ranges over.
-    /// Only a function input has it.
+}
+
+/// The type of a function input: a value, or the rows a `.has` / `.none` ranges over.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum InputType {
+    Value(FieldType),
+    /// A list of rows of a record or row type, by its type name.
     Rows(String),
 }
 
@@ -101,6 +106,14 @@ pub struct Field {
 }
 
 impl Field {
+    /// The enum type of a field an [`Expr::EnumEq`] reads, which is always of an enum type.
+    pub fn enum_ty(&self) -> &str {
+        match &self.ty {
+            FieldType::Enum(name) => name,
+            other => unreachable!("an enum comparison reads a field of type {other:?}"),
+        }
+    }
+
     /// The domain name in PascalCase: `pascal`, with the `_` of an escaped name (`Kind_`).
     pub fn domain_pascal(&self) -> String {
         if self.name == self.wire {
@@ -205,10 +218,6 @@ pub struct DomainModel {
     pub derived: std::collections::BTreeMap<String, String>,
     /// One per actor that performs a use case with a contract, in id order (#337).
     pub capabilities: Vec<CapabilityDecl>,
-    /// Whether the conformance harness is printed (`--conformance`): the snapshot,
-    /// `ConformancePort`, and `conform`. The contracts of [`PortDecl`] are printed whenever
-    /// `port` is set.
-    pub harness: bool,
     pub marks: Vec<MarkDecl>,
     /// Rules the reachable states agree with and the model does not state.
     pub candidates: Vec<String>,
@@ -216,7 +225,8 @@ pub struct DomainModel {
     /// Every use case of the model, in model order, with the actions the transition system
     /// runs it as: empty for a model `check` rejects.
     pub usecases: Vec<UseCaseDecl>,
-    /// The conformance port and harness, when asked for.
+    /// The conformance port: its contracts are printed whenever it is set, and the harness
+    /// when [`PortDecl::harness`] says so.
     pub port: Option<PortDecl>,
 }
 
@@ -387,7 +397,7 @@ pub struct RowParam {
 pub struct FnInput {
     /// snake_case.
     pub name: String,
-    pub ty: FieldType,
+    pub ty: InputType,
     pub nullable: bool,
     pub doc: String,
 }
@@ -448,10 +458,10 @@ pub enum Expr {
         row: usize,
         field: Field,
     },
+    /// A field of an enum type holds `value`.
     EnumEq {
         row: usize,
         field: Field,
-        enum_ty: String,
         value: EnumValue,
     },
     BoolEq {
@@ -825,6 +835,11 @@ impl DomainModel {
             .map_or(Scalar::Int, |i| i.repr)
     }
 
+    /// The port, when the conformance harness is printed.
+    pub fn harness(&self) -> Option<&PortDecl> {
+        self.port.as_ref().filter(|p| p.harness)
+    }
+
     /// The port, when it has a contract to probe.
     pub fn port_with_contracts(&self) -> Option<&PortDecl> {
         self.port.as_ref().filter(|p| !p.contracts.is_empty())
@@ -946,6 +961,9 @@ pub struct PortDecl {
     pub contracts: Vec<ContractDecl>,
     /// What the store holds that the harness does not compare, for the header.
     pub unchecked: Vec<String>,
+    /// Whether the conformance harness is printed (`--conformance`): the snapshot,
+    /// `ConformancePort`, and `conform`.
+    pub harness: bool,
 }
 
 /// The contract of one use case (docs/design/code-check.md, decision 6): a trait / interface
@@ -1059,20 +1077,72 @@ pub struct PortMethod {
     /// PascalCase: `run_<snake>` in Rust, `Run<Pascal>` in Go.
     pub name: String,
     pub usecase: String,
-    /// `(name, id type)` per row the functions take.
-    pub rows: Vec<(String, String)>,
-    /// `(name, id type)` per run mark the functions take: the id of the row it marks.
-    pub marks: Vec<(String, String)>,
-    /// `(name, event type)` of the event a triggered use case takes.
-    pub event: Option<(String, String)>,
+    /// Per row the functions take: its id type.
+    pub rows: Vec<Arg>,
+    /// Per run mark the functions take: the id type of the row it marks.
+    pub marks: Vec<Arg>,
+    /// The event a triggered use case takes: its event type.
+    pub event: Option<Arg>,
     /// Every input any of the functions takes but the lists of related rows, which the
     /// service loads.
-    pub inputs: Vec<FnInput>,
-    /// `(name, tag enum)` per choice among arms.
-    pub choices: Vec<(String, String)>,
+    pub inputs: Vec<PortInput>,
+    /// Per choice among arms: its tag enum.
+    pub choices: Vec<Arg>,
     /// What the read returns and the write takes: the dispatcher's outcome, or the one
     /// function's result.
     pub write: String,
+}
+
+/// A value input of a port method: the lists of related rows are the service's to load.
+#[derive(Clone, Debug)]
+pub struct PortInput {
+    /// snake_case, as the functions name it.
+    pub name: String,
+    pub ty: FieldType,
+    pub nullable: bool,
+}
+
+/// A port method's argument whose type the IR names.
+#[derive(Clone, Debug)]
+pub struct Arg {
+    pub name: String,
+    pub ty: String,
+}
+
+/// One argument of a port method.
+#[derive(Clone, Copy, Debug)]
+pub enum PortArg<'a> {
+    /// A row's or a run mark's id; `ty` is the id type.
+    Id(&'a Arg),
+    /// The event a triggered use case takes; `ty` is the event type.
+    Event(&'a Arg),
+    Input(&'a PortInput),
+    /// A choice among arms; `ty` is the tag enum.
+    Choice(&'a Arg),
+}
+
+impl PortArg<'_> {
+    /// The argument's name, as the IR spells it.
+    pub fn name(&self) -> &str {
+        match self {
+            PortArg::Id(a) | PortArg::Event(a) | PortArg::Choice(a) => &a.name,
+            PortArg::Input(i) => &i.name,
+        }
+    }
+}
+
+impl PortMethod {
+    /// The arguments in the order every language passes them: rows, run marks, the event,
+    /// inputs, choices.
+    pub fn args(&self) -> impl Iterator<Item = PortArg<'_>> {
+        self.rows
+            .iter()
+            .chain(&self.marks)
+            .map(PortArg::Id)
+            .chain(self.event.iter().map(PortArg::Event))
+            .chain(self.inputs.iter().map(PortArg::Input))
+            .chain(self.choices.iter().map(PortArg::Choice))
+    }
 }
 
 #[derive(Clone, Debug)]

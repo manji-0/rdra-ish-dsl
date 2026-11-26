@@ -334,7 +334,7 @@ fn a_derived_name_falls_back_to_an_underscore() {
 fn contracts_are_built_and_printed_without_the_harness() {
     let model = model_from(SRC);
     let domain = build_with(&model, Some(CAPS), false, &|_| None).unwrap();
-    assert!(!domain.harness);
+    assert!(domain.harness().is_none());
     let port = domain.port.as_ref().expect("a port");
     let contracts: Vec<(&str, &str, &str)> = port
         .contracts
@@ -842,7 +842,7 @@ applies_to(NoActive, Revoke)
     let list = revoke
         .inputs
         .iter()
-        .position(|i| i.ty == ir::FieldType::Rows("AssignmentRow".to_string()))
+        .position(|i| i.ty == ir::InputType::Rows("AssignmentRow".to_string()))
         .expect("the related rows are an input");
     assert_eq!(revoke.elems.len(), 1);
     let ir::Expr::Forall { input, body, .. } = &revoke.conditions[0].expr else {

@@ -3,7 +3,7 @@
 //! discriminated by `kind`, companion objects, branded scalars and ids made only by `parse`,
 //! a self-contained `Result`, errors as values, and no `as` but `as const`.
 
-use super::ir::{DomainModel, Field, FieldType, RecordKind, Scalar, SumDecl};
+use super::ir::{DomainModel, Field, FieldType, InputType, RecordKind, Scalar, SumDecl};
 use super::{header_lines, obligation_lines, one_line, string_literal, Options};
 
 /// What the printers below read of the model.
@@ -76,7 +76,6 @@ pub(super) fn print(
     print_functions(&cx, &mut body);
     print_validators(&cx, &mut body);
     print_dispatchers(&cx, &mut body);
-    super::ts_port::print_contracts(domain, &mut body);
     super::ts_port::print_port(domain, &mut body);
     out.push_str(&helpers(&body));
     out.push_str(&body);
@@ -90,13 +89,26 @@ pub(super) fn field_type(ty: &FieldType) -> String {
     match ty {
         FieldType::Scalar(s) => scalar(*s).to_string(),
         FieldType::Enum(name) | FieldType::Id(name) => name.clone(),
-        FieldType::Rows(name) => format!("readonly {name}[]"),
     }
 }
 
 /// The type of a column, with `| null` when it is nullable.
 pub(super) fn column_type(ty: &FieldType, nullable: bool) -> String {
-    let ty = field_type(ty);
+    or_null(field_type(ty), nullable)
+}
+
+/// The type of a function input (a value's, or a list of rows), with `| null` when it is
+/// nullable.
+fn input_type(ty: &InputType, nullable: bool) -> String {
+    let ty = match ty {
+        InputType::Value(ty) => field_type(ty),
+        InputType::Rows(name) => format!("readonly {name}[]"),
+    };
+    or_null(ty, nullable)
+}
+
+/// `ty`, or `ty | null` when it is nullable.
+fn or_null(ty: String, nullable: bool) -> String {
     if nullable {
         format!("{ty} | null")
     } else {
@@ -497,7 +509,6 @@ fn reader(ty: &FieldType, nullable: bool) -> String {
         FieldType::Scalar(Scalar::Bool) => "$boolean".to_string(),
         FieldType::Scalar(s) => format!("{}.parse", s.name()),
         FieldType::Enum(name) | FieldType::Id(name) => format!("{name}.parse"),
-        FieldType::Rows(name) => format!("{name}.parse"),
     };
     if nullable {
         format!("$nullable({read})")
@@ -968,7 +979,7 @@ fn print_functions(cx: &Cx<'_>, out: &mut String) {
             params.push((local(&ev.name), ev.ty.clone()));
         }
         for input in &f.inputs {
-            params.push((local(&input.name), column_type(&input.ty, input.nullable)));
+            params.push((local(&input.name), input_type(&input.ty, input.nullable)));
         }
         // The body comes first, so a parameter it does not read can be marked unused (`_`).
         let body_at = out.len();
@@ -1300,7 +1311,6 @@ fn expr(
             row: r,
             field,
             value,
-            ..
         } => format!("{} === {}", read(*r, field), string_literal(&value.wire)),
         Expr::BoolEq {
             row: r,
@@ -1461,7 +1471,7 @@ fn print_dispatchers(cx: &Cx<'_>, out: &mut String) {
             params.push(format!(
                 "{}: {}",
                 local(&i.name),
-                column_type(&i.ty, i.nullable)
+                input_type(&i.ty, i.nullable)
             ));
         }
         for (n, ty) in &d.choices {

@@ -2,7 +2,7 @@
 //! which drives a port along the traces `conformance::traces` writes.
 
 use super::conformance::TRACES_FORMAT;
-use super::ir::{DomainModel, Field, FieldType, Scalar, Track};
+use super::ir::{DomainModel, Field, FieldType, PortArg, Scalar, Track};
 use super::rust::{doc, field_type, ident, OPTION, STRING};
 use super::snake;
 use super::string_literal;
@@ -15,7 +15,7 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
         return;
     };
     print_contracts(domain, port, out);
-    if !domain.harness {
+    if !port.harness {
         return;
     }
     out.push_str(
@@ -249,54 +249,35 @@ where
             let cap = &domain.capabilities[caller.actors[0]];
             args.push(format!("{}::from({}::issue())", caller.name, cap.name));
         }
-        for (name, ty) in m.rows.iter().chain(&m.marks) {
-            out.push_str(&format!(
-                "            let {} = {};\n",
-                ident(&format!("conf_{name}")),
-                parse(&FieldType::Id(ty.clone()), false)
-            ));
-            args.push(ident(&format!("conf_{name}")));
-        }
-        if let Some((name, ty)) = &m.event {
-            let event = domain.events.iter().find(|e| e.name == *ty);
-            let fields: Vec<String> = event
-                .map(|e| e.fields.clone())
-                .unwrap_or_default()
-                .iter()
-                .map(|f| {
-                    format!(
-                        "{}: {}",
-                        ident(&f.name),
-                        parse(&FieldType::Id(f.id_ty.clone()), false)
-                    )
-                })
-                .collect();
-            let value = if fields.is_empty() {
-                ty.clone()
-            } else {
-                format!("{ty} {{ {} }}", fields.join(", "))
+        for a in m.args() {
+            let value = match a {
+                PortArg::Id(a) => parse(&FieldType::Id(a.ty.clone()), false),
+                PortArg::Event(a) => {
+                    let event = domain.events.iter().find(|e| e.name == a.ty);
+                    let fields: Vec<String> = event
+                        .map(|e| e.fields.clone())
+                        .unwrap_or_default()
+                        .iter()
+                        .map(|f| {
+                            format!(
+                                "{}: {}",
+                                ident(&f.name),
+                                parse(&FieldType::Id(f.id_ty.clone()), false)
+                            )
+                        })
+                        .collect();
+                    if fields.is_empty() {
+                        a.ty.clone()
+                    } else {
+                        format!("{} {{ {} }}", a.ty, fields.join(", "))
+                    }
+                }
+                PortArg::Input(i) => parse(&i.ty, i.nullable),
+                PortArg::Choice(a) => parse(&FieldType::Enum(a.ty.clone()), false),
             };
-            out.push_str(&format!(
-                "            let {} = {value};\n",
-                ident(&format!("conf_{name}"))
-            ));
-            args.push(ident(&format!("conf_{name}")));
-        }
-        for i in &m.inputs {
-            out.push_str(&format!(
-                "            let {} = {};\n",
-                ident(&format!("conf_{}", i.name)),
-                parse(&i.ty, i.nullable)
-            ));
-            args.push(ident(&format!("conf_{}", i.name)));
-        }
-        for (name, ty) in &m.choices {
-            out.push_str(&format!(
-                "            let {} = {};\n",
-                ident(&format!("conf_{name}")),
-                parse(&FieldType::Enum(ty.clone()), false)
-            ));
-            args.push(ident(&format!("conf_{name}")));
+            let v = ident(&format!("conf_{}", a.name()));
+            out.push_str(&format!("            let {v} = {value};\n"));
+            args.push(v);
         }
         out.push_str(&format!(
             "            {RESULT}::Ok(conf_port.prepare_{}({}).map(ConfWrite::{}).map_err(|e| e.to_string()))\n        }}\n",
@@ -421,7 +402,7 @@ pub(super) fn probe(
             c,
         );
     }
-    if let (Some((new, traces)), true) = (&binding.conformance, domain.harness) {
+    if let (Some((new, traces)), true) = (&binding.conformance, domain.harness().is_some()) {
         w.line("");
         w.line("/// The service against the model's traces, by the generated harness.");
         w.line("#[test]");
@@ -580,28 +561,22 @@ fn print_contracts(domain: &DomainModel, port: &super::ir::PortDecl, out: &mut S
 }
 
 fn params(m: &super::ir::PortMethod) -> Vec<String> {
-    let mut out: Vec<String> = m
-        .rows
-        .iter()
-        .chain(&m.marks)
-        .map(|(n, ty)| format!("{}: {ty}", ident(n)))
-        .collect();
-    if let Some((n, ty)) = &m.event {
-        out.push(format!("{}: {ty}", ident(n)));
-    }
-    for i in &m.inputs {
-        let ty = field_type(&i.ty);
-        let ty = if i.nullable {
-            format!("{OPTION}<{ty}>")
-        } else {
-            ty
-        };
-        out.push(format!("{}: {ty}", ident(&i.name)));
-    }
-    for (n, ty) in &m.choices {
-        out.push(format!("{}: {ty}", ident(n)));
-    }
-    out
+    m.args()
+        .map(|a| match a {
+            PortArg::Id(a) | PortArg::Event(a) | PortArg::Choice(a) => {
+                format!("{}: {}", ident(&a.name), a.ty)
+            }
+            PortArg::Input(i) => {
+                let ty = field_type(&i.ty);
+                let ty = if i.nullable {
+                    format!("{OPTION}<{ty}>")
+                } else {
+                    ty
+                };
+                format!("{}: {ty}", ident(&i.name))
+            }
+        })
+        .collect()
 }
 
 /// An expression that reads the next value of `conf_args` as `ty`, through the parser of the
@@ -610,7 +585,6 @@ fn parse(ty: &FieldType, nullable: bool) -> String {
     let value = |t: &str| -> String {
         match ty {
             FieldType::Scalar(Scalar::String) => format!("{t}.to_string()"),
-            FieldType::Rows(_) => unreachable!("a list of rows is no port argument"),
             other => format!("conf_parse::<{}>({t})?", field_type(other)),
         }
     };

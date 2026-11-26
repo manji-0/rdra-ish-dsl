@@ -5,7 +5,9 @@
 //! panics. Standard types are written by path, so a model type named `String`, `Option` or
 //! `Error` shadows nothing.
 
-use super::ir::{DomainModel, Field, FieldType, FnDecl, RecordKind, Scalar, UseCaseErrorDecl};
+use super::ir::{
+    DomainModel, Field, FieldType, FnDecl, InputType, RecordKind, Scalar, UseCaseErrorDecl,
+};
 use super::{header_lines, obligation_lines, one_line, string_literal, Options};
 
 pub(super) const OPTION: &str = "::core::option::Option";
@@ -539,7 +541,14 @@ pub(super) fn field_type(ty: &FieldType) -> String {
     match ty {
         FieldType::Scalar(s) => scalar(*s).to_string(),
         FieldType::Enum(name) | FieldType::Id(name) => name.clone(),
-        FieldType::Rows(name) => format!("&[{name}]"),
+    }
+}
+
+/// The type of a function input: a value's, or a slice of rows.
+fn input_type(ty: &InputType) -> String {
+    match ty {
+        InputType::Value(ty) => field_type(ty),
+        InputType::Rows(name) => format!("&[{name}]"),
     }
 }
 
@@ -760,7 +769,6 @@ fn is_copy(domain: &DomainModel, ty: &FieldType) -> bool {
             .iter()
             .find(|i| i.name == *name)
             .is_some_and(|i| matches!(i.repr, Scalar::Int | Scalar::Bool)),
-        FieldType::Rows(_) => false,
     }
 }
 
@@ -1018,7 +1026,11 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                 )
             }
             super::ir::MarkSource::Input(i) => {
-                format!("{}{}", input(*i), clone_of(domain, &f.inputs[*i].ty))
+                let clone = match &f.inputs[*i].ty {
+                    InputType::Value(ty) => clone_of(domain, ty),
+                    InputType::Rows(_) => ".clone()",
+                };
+                format!("{}{clone}", input(*i))
             }
             super::ir::MarkSource::Mark(k) => {
                 let m = &f.marks_in[*k];
@@ -1239,7 +1251,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             ));
         }
         for i in &f.inputs {
-            let ty = field_type(&i.ty);
+            let ty = input_type(&i.ty);
             let ty = if i.nullable {
                 format!("{OPTION}<{ty}>")
             } else {
@@ -1355,21 +1367,21 @@ fn expr(
         Expr::EnumEq {
             row: r,
             field,
-            enum_ty,
             value,
         } if field.nullable => format!(
-            "{} == {OPTION}::Some({enum_ty}::{})",
+            "{} == {OPTION}::Some({}::{})",
             place(r, field),
+            field.enum_ty(),
             variant_ident(&value.ident)
         ),
         Expr::EnumEq {
             row: r,
             field,
-            enum_ty,
             value,
         } => format!(
-            "{} == {enum_ty}::{}",
+            "{} == {}::{}",
             place(r, field),
+            field.enum_ty(),
             variant_ident(&value.ident)
         ),
         // Null satisfies no comparison (#359): a nullable field equals only a present value.
@@ -1716,7 +1728,7 @@ pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
             params.push(format!("{}: {ty}", ident(n)));
         }
         for i in &d.inputs {
-            let ty = field_type(&i.ty);
+            let ty = input_type(&i.ty);
             let ty = if i.nullable {
                 format!("{OPTION}<{ty}>")
             } else {

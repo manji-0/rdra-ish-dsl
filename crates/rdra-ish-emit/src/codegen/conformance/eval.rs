@@ -121,9 +121,7 @@ impl<'a> Rows<'a> {
                 return None
             }
             Expr::IsNull { row, field } => self.get(*row, &field.wire)?.1 == Value::NULL,
-            Expr::EnumEq {
-                row, field, value, ..
-            } => {
+            Expr::EnumEq { row, field, value } => {
                 let (var, v) = self.get(*row, &field.wire)?;
                 // Null satisfies no comparison (#359); a plain Enum holds no null, and its first
                 // value shares the encoding.

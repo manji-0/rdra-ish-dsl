@@ -264,7 +264,7 @@ pub(super) fn atom(
                 .iter()
                 .find(|f| f.wire == *column)
                 .ok_or_else(unsupported)?;
-            let FieldType::Enum(enum_ty) = &field.ty else {
+            let FieldType::Enum(_) = &field.ty else {
                 return Err(unsupported());
             };
             // On a nullable field the printers compare with a present value: null satisfies
@@ -272,7 +272,6 @@ pub(super) fn atom(
             negate(Expr::EnumEq {
                 row: r,
                 field: field.clone(),
-                enum_ty: enum_ty.clone(),
                 value: EnumValue {
                     ident: type_ident(wire),
                     wire: wire.clone(),
@@ -352,7 +351,7 @@ fn input_atom(
     let e = match (domain, rhs) {
         (Domain::Enum(_) | Domain::NullableEnum(_), Term::Lit(v)) if domain.name(*v).is_some() => {
             let wire = domain.name(*v).ok_or_else(unsupported)?.to_string();
-            let FieldType::Enum(enum_ty) = &decl.ty else {
+            let InputType::Value(FieldType::Enum(enum_ty)) = &decl.ty else {
                 return Err(unsupported());
             };
             Expr::InputEnumEq {

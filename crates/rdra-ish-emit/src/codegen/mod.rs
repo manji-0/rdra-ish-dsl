@@ -327,7 +327,7 @@ fn conformance_lines(
     conform: &str,
     port: &str,
 ) -> Vec<String> {
-    let (Some(decl), Some(t), true) = (&domain.port, traces, domain.harness) else {
+    let (Some(decl), Some(t)) = (domain.harness(), traces) else {
         return Vec::new();
     };
     let mut lines = vec![
@@ -547,6 +547,8 @@ pub fn build_for(
         });
     }
 
+    // Each state type waits for its discriminant's name: (type name, entity, the rest).
+    let mut sums = Vec::new();
     for (key, entity) in &model.entities {
         let name = names.claim(type_ident(&entity.id), format!("entity {}", entity.id))?;
         let mut fields = Vec::new();
@@ -564,7 +566,7 @@ pub fn build_for(
                     states::Refinements::new()
                 };
                 let sum = sum_decl(
-                    name,
+                    name.clone(),
                     entity,
                     doc,
                     fields,
@@ -573,7 +575,7 @@ pub fn build_for(
                     &mut names,
                     site,
                 )?;
-                domain.sums.push(sum);
+                sums.push((name, &entity.id, sum));
             }
             None => domain.records.push(RecordDecl {
                 name,
@@ -608,15 +610,13 @@ pub fn build_for(
 
     // The discriminant types, once every type of the data layer has its name: the one name
     // a column's enum or a state may already have is `<Entity>Kind`.
-    for sum in &mut domain.sums {
-        sum.kind = claim_first(
+    for (name, entity, sum) in sums {
+        let kind = claim_first(
             &mut names,
-            [
-                format!("{}Kind", sum.name),
-                format!("{}StateKind", sum.name),
-            ],
-            format!("the kind of {}", sum.entity),
+            [format!("{name}Kind"), format!("{name}StateKind")],
+            format!("the kind of {entity}"),
         )?;
+        domain.sums.push(sum(kind));
     }
 
     domain.obligations = obligations(model, site);
@@ -638,10 +638,10 @@ pub fn build_for(
         // when the harness is asked for.
         let mut trial = names.clone();
         match conformance::port(model, &built.ts, &domain, &mut trial) {
-            Ok(decl) => {
+            Ok(mut decl) => {
                 names = trial;
+                decl.harness = port;
                 domain.port = Some(decl);
-                domain.harness = port;
                 conformance::add_entries(&built.ts, &mut domain, &mut names)?;
                 conformance::add_callers(model, &mut domain, &mut names)?;
             }
@@ -708,7 +708,8 @@ fn claim_derived(
 }
 
 /// The sum of an entity with a lifecycle column: one variant per value of its tag, each
-/// with the columns the refinements narrow.
+/// with the columns the refinements narrow. It is complete once its discriminant type has
+/// a name, which is claimed after every type of the data layer.
 #[allow(clippy::too_many_arguments)]
 fn sum_decl(
     name: String,
@@ -719,7 +720,7 @@ fn sum_decl(
     refinements: &states::Refinements,
     names: &mut Names,
     site: &dyn Fn(&LocatedSpan) -> Option<String>,
-) -> Result<SumDecl, CodegenError> {
+) -> Result<impl FnOnce(String) -> SumDecl, CodegenError> {
     let row_fields = fields.clone();
     let row = names.claim(
         format!("{name}Row"),
@@ -778,15 +779,16 @@ fn sum_decl(
             always_null,
         });
     }
-    Ok(SumDecl {
+    let entity = entity.id.clone();
+    Ok(move |kind| SumDecl {
         name,
-        entity: entity.id.clone(),
+        entity,
         doc,
         tag: tag_field,
         variants,
         row,
         row_fields,
-        kind: String::new(),
+        kind,
     })
 }
 
