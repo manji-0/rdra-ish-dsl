@@ -101,13 +101,13 @@ fn unsupported(why: &str) -> Skip {
     Skip::Action(why.to_string())
 }
 
-/// `base`, or `base_2`, `base_3`, ... for the first not yet taken; marks it taken.
 /// The name of the input that passes `entity`'s `column`: `{entity}_{column}`, the entity in
 /// snake_case. A choice of a written row's column is found again by this name.
 fn input_name(entity: &str, column: &str) -> String {
     format!("{}_{column}", snake(entity))
 }
 
+/// `base`, or `base_2`, `base_3`, ... for the first not yet taken; marks it taken.
 fn fresh(base: String, taken: &mut Vec<String>) -> String {
     let mut n = base.clone();
     let mut i = 2;
