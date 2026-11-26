@@ -20,7 +20,31 @@ pub fn bfs_threads_for(cores: usize) -> usize {
     (cores / 3).clamp(4, 12).min(cores.max(1))
 }
 
+thread_local! {
+    /// Set inside [`one_at_a_time`] on its thread.
+    static ONE_AT_A_TIME: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// `f()`, with each parallel step it takes on this thread run on this thread alone, whatever
+/// `RDRA_JOBS` says: [`jobs`] and [`bfs_threads`] are 1 there, so [`in_parallel`] runs its
+/// items in turn on the caller's thread and a BFS run takes no helper. The language server's
+/// background check runs `check` this way, one cone at a time on one core (#214).
+pub fn one_at_a_time<R>(f: impl FnOnce() -> R) -> R {
+    /// Puts the flag back as it was, on a panic too.
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            ONE_AT_A_TIME.set(self.0);
+        }
+    }
+    let _restore = Restore(ONE_AT_A_TIME.replace(true));
+    f()
+}
+
 fn env_jobs() -> Option<usize> {
+    if ONE_AT_A_TIME.get() {
+        return Some(1);
+    }
     std::env::var("RDRA_JOBS")
         .ok()
         .and_then(|v| v.trim().parse::<usize>().ok())
@@ -119,7 +143,26 @@ mod tests {
         assert_eq!(got, [1, 2, 4, 4, 4, 6, 8, 12, 12, 12, 12]);
     }
 
-    use super::{bfs_threads_for, in_parallel};
+    use super::{bfs_threads, bfs_threads_for, in_parallel, jobs, one_at_a_time};
+
+    /// Inside `one_at_a_time` every parallel step runs on the caller's thread, and outside it
+    /// nothing changes, on a panic too.
+    #[test]
+    fn one_at_a_time_keeps_each_step_on_the_callers_thread() {
+        let before = (jobs(), bfs_threads());
+        let caller = std::thread::current().id();
+        let threads = one_at_a_time(|| {
+            assert_eq!((jobs(), bfs_threads()), (1, 1));
+            in_parallel((0..16).collect(), jobs(), |_: u32| {
+                std::thread::current().id()
+            })
+        });
+        assert!(threads.iter().all(|t| *t == caller));
+        assert_eq!((jobs(), bfs_threads()), before);
+        let panicked = std::panic::catch_unwind(|| one_at_a_time(|| panic!("inside")));
+        assert!(panicked.is_err());
+        assert_eq!((jobs(), bfs_threads()), before);
+    }
 
     /// The results come back in item order whatever the thread count, and each item runs
     /// once.

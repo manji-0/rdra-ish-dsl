@@ -51,7 +51,10 @@ pub use guards::{GuardDeps, GuardKind, GuardSubject};
 pub use lasso::{Fairness, LassoReplay, Loop, Unfair};
 pub use reduce::{ClassMove, Divergence, Fold, FoldKey, QuotientCache, Reduction, Step};
 pub use select::{NotChecked, Scope, Selection, UnknownId, Without};
-pub use states::{derive_states, derive_states_built, BoundsLine, FindingTally, StatesReport};
+pub use states::{
+    derive_states, derive_states_built, derive_states_checked, BoundsLine, CheckOutcome,
+    CheckVerdict, Checked, FindingTally, StatesReport,
+};
 pub use targets::{ConeRun, Subject, Tally, TargetExploration, Undecided, UndecidedWhy};
 pub use trace::{Change, Inst, Replay, ReplayError, Trace, TraceStep};
 pub use types::{

@@ -61,6 +61,7 @@ not (
       | test(=a_tlc_the_batch_driver_cannot_call_runs_as_a_process)))
   | (binary_id(rdra-ish-cli::key_facts) & test(=key_facts_hold_on_every_sample))
   | (binary_id(rdra-ish-lsp::manifest_error) & test(=a_burst_of_edits_ends_on_the_diagnostics_of_the_last_text))
+  | (binary_id(rdra-ish-lsp::lifecycle_check) & test(=a_burst_of_edits_ends_on_the_findings_of_the_last_text))
   | (binary_id(rdra-ish-syntax::fmt_samples) & test(=fmt_keeps_every_sample_the_same_model_and_is_idempotent))
   | (binary_id(rdra-ish-core) & (
         test(=lifecycle::explore::tests::a_run_is_the_same_on_any_number_of_threads)
