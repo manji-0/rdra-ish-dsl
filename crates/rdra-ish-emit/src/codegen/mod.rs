@@ -163,6 +163,26 @@ pub fn snake(id: &str) -> String {
     out
 }
 
+/// The names of a port method's two calls in `lang`, `[prepare, commit]`: Rust
+/// `prepare_pay`, Go `PreparePay`, TypeScript `preparePay`.
+pub fn method_names(lang: Lang, method: &ir::PortMethod) -> [String; 2] {
+    match lang {
+        Lang::Rust => rust_port::method_names(method),
+        Lang::Go => go_port::method_names(method),
+        Lang::TypeScript => ts_port::method_names(method),
+    }
+}
+
+/// The name of an entry point's method in `lang` (#335), by the entry's PascalCase name:
+/// Rust `run_create_charge`, Go `RunCreateCharge`, TypeScript `runCreateCharge`.
+pub fn entry_name(lang: Lang, name: &str) -> String {
+    match lang {
+        Lang::Rust => rust_port::entry_name(name),
+        Lang::Go => go_port::entry_name(name),
+        Lang::TypeScript => ts_port::entry_name(name),
+    }
+}
+
 /// What the probe binds (`[code.<lang>]` in rdra.toml): the service type, the path of the
 /// generated module, and for the conformance test, the expression that makes a fresh service
 /// and the traces' path from the build directory.

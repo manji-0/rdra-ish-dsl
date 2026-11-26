@@ -3,7 +3,7 @@
 
 use super::conformance::TRACES_FORMAT;
 use super::go::{doc, field_type, local, struct_decl, Line};
-use super::ir::{DomainModel, Field, FieldType, PortArg, Scalar, Track};
+use super::ir::{DomainModel, Field, FieldType, PortArg, PortMethod, Scalar, Track};
 use super::{string_literal, type_ident};
 
 /// The packages the harness imports.
@@ -118,23 +118,23 @@ fn print_contracts(domain: &DomainModel, port: &super::ir::PortDecl, out: &mut S
             .collect();
         for &i in &c.methods {
             let m = &port.methods[i];
+            let [prepare, commit] = method_names(m);
             out.push_str(&format!(
-                "\t// Prepare{0} loads the rows of {1} (the action {2}) and runs it, writing nothing.\n\tPrepare{0}({3}) ({4}, error)\n",
-                m.name,
+                "\t// {prepare} loads the rows of {} (the action {}) and runs it, writing nothing.\n\t{prepare}({}) ({}, error)\n",
                 m.usecase,
                 m.action,
                 by.iter().cloned().chain(params(m)).collect::<Vec<_>>().join(", "),
                 m.write
             ));
             out.push_str(&format!(
-                "\t// Commit{0} stores what Prepare{0} returned in one transaction.\n\tCommit{0}(write {1}) error\n",
-                m.name, m.write
+                "\t// {commit} stores what {prepare} returned in one transaction.\n\t{commit}(write {}) error\n",
+                m.write
             ));
         }
         for e in &c.entries {
             out.push_str(&format!(
                 "\t// {} runs the action {} of {} whole, by the ids of its rows: the generator printed no\n\t// function for it (#335), so the service writes it and keeps the obligations.\n\t{0}({}) error\n",
-                entry_method(e),
+                entry_name(&e.name),
                 e.action,
                 c.usecase,
                 by.iter().cloned().chain(entry_params(e)).collect::<Vec<_>>().join(", ")
@@ -145,8 +145,13 @@ fn print_contracts(domain: &DomainModel, port: &super::ir::PortDecl, out: &mut S
 }
 
 /// The method of an entry point (#335): `Run<Action>`.
-pub(super) fn entry_method(e: &super::ir::EntryDecl) -> String {
-    format!("Run{}", e.name)
+pub(super) fn entry_name(name: &str) -> String {
+    format!("Run{name}")
+}
+
+/// A port method's two calls: `Prepare<Action>` and `Commit<Action>`.
+pub(super) fn method_names(m: &PortMethod) -> [String; 2] {
+    [format!("Prepare{}", m.name), format!("Commit{}", m.name)]
 }
 
 fn entry_params(e: &super::ir::EntryDecl) -> Vec<String> {
@@ -158,14 +163,12 @@ fn entry_params(e: &super::ir::EntryDecl) -> Vec<String> {
 
 /// The Go names of a contract's methods: `Prepare*` and `Commit*` per action with functions,
 /// and `Run*` per entry point.
-pub(super) fn method_names(port: &super::ir::PortDecl, c: &super::ir::ContractDecl) -> Vec<String> {
+fn contract_methods(port: &super::ir::PortDecl, c: &super::ir::ContractDecl) -> Vec<String> {
     let mut out = Vec::new();
     for &i in &c.methods {
-        let m = &port.methods[i];
-        out.push(format!("Prepare{}", m.name));
-        out.push(format!("Commit{}", m.name));
+        out.extend(method_names(&port.methods[i]));
     }
-    out.extend(c.entries.iter().map(entry_method));
+    out.extend(c.entries.iter().map(|e| entry_name(&e.name)));
     out
 }
 
@@ -238,7 +241,7 @@ pub(super) fn probe(
             string_literal(&super::one_line(&c.label))
         ));
         w.usecase(&format!("var _ {dom}.{} = {receiver}(nil)", c.name), c);
-        for name in method_names(port, c) {
+        for name in contract_methods(port, c) {
             w.line(&format!("var _ = {receiver}.{name}"));
         }
         w.line("");
@@ -620,9 +623,9 @@ func confSet[T any](p *T) string {{
             args.push(v);
         }
         out.push_str("\t\tif confA.err != nil {\n\t\t\treturn nil, nil, confA.err\n\t\t}\n");
+        let [prepare, commit] = method_names(m);
         out.push_str(&format!(
-            "\t\tw, refused := confP.Prepare{0}({1})\n\t\treturn func() error {{ return confP.Commit{0}(w) }}, refused, nil\n",
-            m.name,
+            "\t\tw, refused := confP.{prepare}({})\n\t\treturn func() error {{ return confP.{commit}(w) }}, refused, nil\n",
             args.join(", ")
         ));
     }

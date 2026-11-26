@@ -58,16 +58,16 @@ fn print_contracts(domain: &DomainModel, port: &PortDecl, out: &mut String) {
             if let Some(caller) = &c.caller {
                 ps.insert(0, format!("by: {}", caller.name));
             }
+            let [prepare, commit] = method_names(m);
             out.push_str(&format!(
-                "  readonly prepare{}: ({}) => Promise<Result<{}, {}>>;\n",
-                m.name,
+                "  readonly {prepare}: ({}) => Promise<Result<{}, {}>>;\n",
                 ps.join(", "),
                 m.write,
                 c.error
             ));
             out.push_str(&format!(
-                "  readonly commit{}: (write: {}) => Promise<Result<void, {}>>;\n",
-                m.name, m.write, c.error
+                "  readonly {commit}: (write: {}) => Promise<Result<void, {}>>;\n",
+                m.write, c.error
             ));
         }
         for e in &c.entries {
@@ -161,6 +161,11 @@ fn print_capabilities(domain: &DomainModel, port: &PortDecl, out: &mut String) {
 /// The member of an entry point (#335): `run<Action>`.
 pub(super) fn entry_name(name: &str) -> String {
     format!("run{name}")
+}
+
+/// A port method's two members: `prepare<Action>` and `commit<Action>`.
+pub(super) fn method_names(m: &PortMethod) -> [String; 2] {
+    [format!("prepare{}", m.name), format!("commit{}", m.name)]
 }
 
 /// The probe of `check --code` (docs/design/code-check.md): one line per contract, a function
@@ -605,8 +610,8 @@ function $confArg<T>(values: readonly string[], i: number, read: (text: string) 
             args.push(value);
         }
         p.push_str(&format!(
-            "      const r = await port.prepare{}({});\n      return {{ ok: true, value: r.ok ? {{ ok: true, value: {{ action: {}, write: r.value }} }} : r }};\n    }}\n",
-            m.name,
+            "      const r = await port.{}({});\n      return {{ ok: true, value: r.ok ? {{ ok: true, value: {{ action: {}, write: r.value }} }} : r }};\n    }}\n",
+            method_names(m)[0],
             args.join(", "),
             string_literal(&m.action)
         ));
@@ -616,9 +621,9 @@ function $confArg<T>(values: readonly string[], i: number, read: (text: string) 
     p.push_str("function $confCommit(port: ConformancePort, w: $ConfWrite): Promise<Result<void, unknown>> {\n  const action = w.action;\n  switch (action) {\n");
     for m in &port.methods {
         p.push_str(&format!(
-            "    case {}:\n      return port.commit{}(w.write);\n",
+            "    case {}:\n      return port.{}(w.write);\n",
             string_literal(&m.action),
-            m.name
+            method_names(m)[1]
         ));
     }
     p.push_str("    default:\n      return assertNever(action);\n  }\n}\n\n");

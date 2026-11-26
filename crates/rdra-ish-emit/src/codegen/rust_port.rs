@@ -2,7 +2,7 @@
 //! which drives a port along the traces `conformance::traces` writes.
 
 use super::conformance::TRACES_FORMAT;
-use super::ir::{DomainModel, Field, FieldType, PortArg, Scalar, Track};
+use super::ir::{DomainModel, Field, FieldType, PortArg, PortMethod, Scalar, Track};
 use super::rust::{doc, field_type, ident, OPTION, STRING};
 use super::snake;
 use super::string_literal;
@@ -280,8 +280,8 @@ where
             args.push(v);
         }
         out.push_str(&format!(
-            "            {RESULT}::Ok(conf_port.prepare_{}({}).map(ConfWrite::{}).map_err(|e| e.to_string()))\n        }}\n",
-            snake(&m.name),
+            "            {RESULT}::Ok(conf_port.{}({}).map(ConfWrite::{}).map_err(|e| e.to_string()))\n        }}\n",
+            method_names(m)[0],
             args.join(", "),
             m.name
         ));
@@ -294,9 +294,9 @@ where
     ));
     for m in &port.methods {
         out.push_str(&format!(
-            "        ConfWrite::{}(w) => conf_port.commit_{}(w).map_err(|e| e.to_string()),\n",
+            "        ConfWrite::{}(w) => conf_port.{}(w).map_err(|e| e.to_string()),\n",
             m.name,
-            snake(&m.name)
+            method_names(m)[1]
         ));
     }
     out.push_str("    }\n}\n\n");
@@ -478,6 +478,17 @@ fn print_capabilities(domain: &DomainModel, port: &super::ir::PortDecl, out: &mu
 
 /// One trait per use case (docs/design/code-check.md, decision 6): the prepare and commit
 /// methods of its actions. A service implements each; the probe names each.
+/// A port method's two calls: `prepare_<action>` and `commit_<action>`.
+pub(super) fn method_names(m: &PortMethod) -> [String; 2] {
+    let snake = snake(&m.name);
+    [format!("prepare_{snake}"), format!("commit_{snake}")]
+}
+
+/// The method of an entry point (#335): `run_<action>`.
+pub(super) fn entry_name(name: &str) -> String {
+    format!("run_{}", snake(name))
+}
+
 fn print_contracts(domain: &DomainModel, port: &super::ir::PortDecl, out: &mut String) {
     if port.contracts.is_empty() {
         return;
@@ -513,22 +524,20 @@ fn print_contracts(domain: &DomainModel, port: &super::ir::PortDecl, out: &mut S
                 params.insert(0, format!("by: {}", caller.name));
             }
             out.push_str(&super::rust::allow_arguments(params.len() + 1, "    "));
+            let [prepare, commit] = method_names(m);
             out.push_str(&format!(
-                "    fn prepare_{}(&mut self{}) -> {RESULT}<{}, {error}>;\n",
-                snake(&m.name),
+                "    fn {prepare}(&mut self{}) -> {RESULT}<{}, {error}>;\n",
                 params.iter().map(|p| format!(", {p}")).collect::<String>(),
                 m.write
             ));
             out.push_str(&doc(
                 &[format!(
-                    "Stores what `prepare_{}` returned in one transaction.",
-                    snake(&m.name)
+                    "Stores what `{prepare}` returned in one transaction."
                 )],
                 "    ",
             ));
             out.push_str(&format!(
-                "    fn commit_{}(&mut self, write: {}) -> {RESULT}<(), {error}>;\n",
-                snake(&m.name),
+                "    fn {commit}(&mut self, write: {}) -> {RESULT}<(), {error}>;\n",
                 m.write
             ));
         }
@@ -550,8 +559,8 @@ fn print_contracts(domain: &DomainModel, port: &super::ir::PortDecl, out: &mut S
             }
             out.push_str(&super::rust::allow_arguments(params.len() + 1, "    "));
             out.push_str(&format!(
-                "    fn run_{}(&mut self{}) -> {RESULT}<(), {}>;\n",
-                snake(&e.name),
+                "    fn {}(&mut self{}) -> {RESULT}<(), {}>;\n",
+                entry_name(&e.name),
                 params.concat(),
                 c.error
             ));
