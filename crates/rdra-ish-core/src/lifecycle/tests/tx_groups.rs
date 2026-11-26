@@ -33,7 +33,7 @@ transitions(Pay, Payment.status, pending -> captured)
 }
 
 fn built(src: &str) -> TransitionSystem {
-    TransitionSystem::build(&model_from(src), Bounds::STATES, &Scope::ALL).ts
+    system_from(src, Bounds::STATES)
 }
 
 fn action_names(ts: &TransitionSystem) -> Vec<String> {
@@ -251,7 +251,7 @@ after(Pay).assert(Order.status == paid, Payment.status == captured)
 #[test]
 fn an_after_atom_on_an_entity_the_run_never_binds_warns() {
     let unbound = |extra: &str| -> Vec<(String, String)> {
-        TransitionSystem::build(&model_from(&split_pay(extra)), Bounds::STATES, &Scope::ALL)
+        built_from(&split_pay(extra), Bounds::STATES)
             .diags
             .iter()
             .filter_map(|d| match &d.diag {
