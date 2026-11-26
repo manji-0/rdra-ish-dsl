@@ -10,7 +10,7 @@ use crate::refs::{
 };
 use crate::uri::{paths_equal, ClientUris};
 use rdra_ish_core::WorkspaceAnalysis;
-use rdra_ish_syntax::ast::{Ast, Item};
+use rdra_ish_syntax::ast::{Ast, Item, Kind};
 use tower_lsp::lsp_types::{Range, TextEdit, Url, WorkspaceEdit};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,10 +71,8 @@ pub fn workspace_rename(
             .foreign_keys()
             .any(|(_, fk)| fk.role.as_deref() == Some(new_name))
     } else {
-        analysis
-            .model
-            .decl_sites
-            .get(&target.kind, new_name)
+        Kind::from_name(&target.kind)
+            .and_then(|kind| analysis.model.decl_sites.get(kind, new_name))
             .is_some()
     };
     if taken {

@@ -387,7 +387,7 @@ pub(crate) fn register_instance(
         .symbols
         .insert_in_module(inst.id.clone(), node, module);
     model.decl_sites.insert(
-        inst.kind.name(),
+        inst.kind,
         &inst.id,
         DeclSite {
             source_id: ctx.source_id,

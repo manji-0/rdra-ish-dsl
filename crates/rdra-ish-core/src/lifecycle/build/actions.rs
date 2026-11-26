@@ -1,5 +1,6 @@
 //! The actions of a system: one per use case transaction step, named apart, with their run marks.
 
+use rdra_ish_syntax::ast::Kind;
 use std::collections::HashSet;
 
 use super::{first_buc, ActionDraft, Builder};
@@ -175,7 +176,7 @@ impl<'m> Builder<'m> {
         let id = &model.use_cases[uc].id;
         let site = Site::new(
             ModelRef::UseCase(uc),
-            &model.decl_sites.located("usecase", id),
+            &model.decl_sites.located(Kind::UseCase, id),
         );
         for &ek in earlier.iter().flatten() {
             let e = self.ent_of[&ek];
@@ -287,7 +288,9 @@ impl<'m> Builder<'m> {
             },
             site: Site::new(
                 ModelRef::UseCase(uc),
-                &model.decl_sites.located("usecase", &model.use_cases[uc].id),
+                &model
+                    .decl_sites
+                    .located(Kind::UseCase, &model.use_cases[uc].id),
             ),
             params: a.params,
             guards: a.guards,
