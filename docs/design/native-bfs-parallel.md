@@ -4,17 +4,23 @@
 <!-- constrained-by ./instance-symmetry.md#memory -->
 <!-- constrained-by ../cli-reference.md#memory-limit -->
 
-Status (2026-11-26): 3.1 is being built in parts.
+Status (2026-11-26): 3.1 is done; 3.2 and 3.3 are open.
 
-- **Landed.** Part 1 of 3.1: workers pack, hash and deduplicate (#372,
+- **Landed.** 3.1, in four parts. Part 1: workers pack, hash and deduplicate (#372,
   [3.1 as built](#31-as-built)). One BFS run takes `max(4, cores / 3)` threads, at most 12
-  and never more than the cores (#371). Part 2 of 3.1: the shared table and the workers'
-  probe, which a release build leaves off
-  ([Part 2: the shared table](#part-2-the-shared-table)).
-- **Open on #296.** Part 3 of 3.1, the serial findings tail of the largest cone
-  ([Part 3: the findings tail](#part-3-the-findings-tail)), and whether the probes go on. 3.1's exit is not met: food-permit-ops at 8 jobs took 35% of
-  its one-job time, against 30%. 3.2's shared helper pool and its sweep (`Helpers::take`
-  still gives one run every free helper). 3.3.
+  and never more than the cores (#371). Part 2: the shared table and the workers' probe,
+  which a release build leaves off ([Part 2: the shared table](#part-2-the-shared-table)).
+  Part 3: the findings tail of the largest cone runs on the threads BFS gave back
+  ([Part 3: the findings tail](#part-3-the-findings-tail)). Follow-up (a): a growing table
+  files its states again in store order. Follow-up (b), an own table with prefetch, missed
+  its bar and was dropped.
+- **3.1's exit (owner, 2026-11-26).** food-permit-ops at 8 jobs takes 31% of its one-job
+  time, against 30%; clinic-ops takes 28% and insurance-claim-ops 25% to 28%. The owner
+  accepted 3.1 as done at that
+  ([comment](https://github.com/manji-0/rdra-ish-dsl/issues/296#issuecomment-7172845572)). The missing point is not
+  carried as a target of its own; 3.3's exit (a quarter) stands.
+- **Open on #296.** 3.2's shared helper pool and its sweep (`Helpers::take` still gives one
+  run every free helper). 3.3.
 - **Superseded.** The helper default `available_parallelism() - 1` of
   [Helpers by need and the jobs cap](#helpers-by-need-and-the-jobs-cap), by the owner's
   `max(4, cores / 3)` of 2026-11-26
