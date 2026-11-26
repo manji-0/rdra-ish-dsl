@@ -202,6 +202,11 @@ Strands that can run in parallel: codegen (6a → 6b → 6d → 6e, with 6c befo
 explore (6f → 6k; 6g alone), lifecycle and LSP (6h → 6l; 6m alone), tests (6i, 6n),
 verify (6j).
 
+### Wave 1 status
+
+- 6f: done (X5, X9 without the `perf` off stub, X10, X11, X12). The `#[cfg(feature = "perf")]`
+  pairs in `moves.rs` stay until the off stub (7f).
+
 ### Profile pass (before any perf row)
 
 One measured pass on a release build with callgrind, as step 3 did. Targets: `check`,
