@@ -2,14 +2,13 @@
 
 mod common;
 
-use std::path::PathBuf;
 use std::sync::mpsc::RecvTimeoutError;
 use std::time::Duration;
 
-use common::{uri, Client};
+use common::{uri, Client, Workspace};
 use serde_json::{json, Value};
 
-fn workspace() -> PathBuf {
+fn workspace() -> Workspace {
     let root = common::workspace("rdra_lsp_manifest");
     std::fs::write(root.join("open.rdra"), "actor Customer \"Customer\"\n").unwrap();
     std::fs::write(
@@ -25,11 +24,8 @@ fn a_malformed_manifest_clears_diagnostics_and_reports_the_error() {
     let root = workspace();
     let open = root.join("open.rdra");
     let other = root.join("other.rdra");
-    let mut client = Client::start();
-    client.send(json!({"jsonrpc": "2.0", "id": 1, "method": "initialize",
-        "params": {"processId": null, "rootUri": uri(&root), "capabilities": {}}}));
-    client.wait_for("initialize", |m| m["id"] == 1);
-    client.notify("initialized", json!({}));
+    // No initialization options: the background check is on, as by default.
+    let mut client = Client::initialized_with(&root, Value::Null);
     client.notify(
         "textDocument/didOpen",
         json!({"textDocument": {"uri": uri(&open), "languageId": "rdra", "version": 1,
@@ -44,11 +40,7 @@ fn a_malformed_manifest_clears_diagnostics_and_reports_the_error() {
         "[model]\nname = \"shop\"\nbroken = = 1\n",
     )
     .unwrap();
-    client.notify(
-        "textDocument/didChange",
-        json!({"textDocument": {"uri": uri(&open), "version": 2},
-            "contentChanges": [{"text": "actor Customer \"Customer\"\n"}]}),
-    );
+    client.change_now(&open, 2, "actor Customer \"Customer\"\n");
 
     let (mut shown, mut cleared, mut flagged) = (None, false, false);
     client.wait_for("the error shown and the stale diagnostics cleared", |m| {
@@ -93,18 +85,14 @@ fn a_malformed_manifest_clears_diagnostics_and_reports_the_error() {
         }
         back && withdrawn
     });
-    let _ = std::fs::remove_dir_all(root);
 }
 
 #[test]
 fn a_burst_of_edits_ends_on_the_diagnostics_of_the_last_text() {
     let root = workspace();
     let open = root.join("other.rdra");
-    let mut client = Client::start();
-    client.send(json!({"jsonrpc": "2.0", "id": 1, "method": "initialize",
-        "params": {"processId": null, "rootUri": uri(&root), "capabilities": {}}}));
-    client.wait_for("initialize", |m| m["id"] == 1);
-    client.notify("initialized", json!({}));
+    // No initialization options: the background check is on, as by default.
+    let mut client = Client::initialized_with(&root, Value::Null);
     client.notify(
         "textDocument/didOpen",
         json!({"textDocument": {"uri": uri(&open), "languageId": "rdra", "version": 1,
@@ -126,11 +114,7 @@ fn a_burst_of_edits_ends_on_the_diagnostics_of_the_last_text() {
             }
             text
         };
-        client.notify(
-            "textDocument/didChange",
-            json!({"textDocument": {"uri": uri(&open), "version": version},
-                "contentChanges": [{"text": text}]}),
-        );
+        client.change_now(&open, version, &text);
     }
 
     // Analyses of intermediate texts can take seconds on a slow runner, so a quiet window
@@ -166,5 +150,4 @@ fn a_burst_of_edits_ends_on_the_diagnostics_of_the_last_text() {
         is_last_text(&last),
         "the last diagnostics are of an older text: {last}"
     );
-    let _ = std::fs::remove_dir_all(root);
 }

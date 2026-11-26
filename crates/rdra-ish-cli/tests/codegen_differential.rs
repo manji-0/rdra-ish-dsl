@@ -39,10 +39,15 @@ use rdra_ish_core::lifecycle::{
 use rdra_ish_core::model::{CheckExpr, CmpOpModel, CmpRhs, DerivedExpr, EffectValue, ModelColumn};
 use rdra_ish_core::SemanticModel;
 use rdra_ish_emit::codegen::ir::{
-    Adapt, Assigned, DomainModel, Field, FieldType, FnDecl, Lit, MarkSource, OutKind, Scalar,
+    Adapt, Assigned, DomainModel, Field, FieldType, FnDecl, InputType, Lit, MarkSource, OutKind,
+    Scalar,
 };
 use rdra_ish_emit::codegen::{generate, CheckStatus, Lang, Options};
 use serde_json::{json, Map, Value as Json};
+
+#[path = "common/tools.rs"]
+mod tools;
+use tools::{tool, CODEGEN};
 
 // ── Names, as the printers spell them ────────────────────────────────────────
 
@@ -163,7 +168,6 @@ fn sentinel(domain: &DomainModel, ty: &FieldType, tag: &str) -> Json {
             Scalar::Bool => json!(true),
             s => json!(scalar_sentinel(s, tag, h)),
         },
-        FieldType::Rows(_) => panic!("a list is not a column"),
     }
 }
 
@@ -437,11 +441,10 @@ fn arguments(
         args.push(Json::Object(obj));
     }
     for (i, input) in f.inputs.iter().enumerate() {
-        let value = if let FieldType::Rows(ty) = &input.ty {
-            c.rows(pre, &list_entity(c.domain, ty))
-        } else {
-            input_value(c, f, action, params, post, i)
-                .unwrap_or_else(|| sentinel(c.domain, &input.ty, &format!("input {}", input.name)))
+        let value = match &input.ty {
+            InputType::Rows(ty) => c.rows(pre, &list_entity(c.domain, ty)),
+            InputType::Value(ty) => input_value(c, f, action, params, post, i)
+                .unwrap_or_else(|| sentinel(c.domain, ty, &format!("input {}", input.name))),
         };
         args.push(value);
     }
@@ -881,7 +884,14 @@ fn rs_dec(d: &DomainModel, ty: &FieldType, nullable: bool, j: &str) -> String {
             }
             _ => format!("{j}.str().parse::<{name}>().expect(\"driver: a {name}\")"),
         },
-        FieldType::Rows(name) => format!("{j}.arr().iter().map(dec_{name}).collect::<Vec<_>>()"),
+    }
+}
+
+/// An expression decoding the input `j` (a `&DrvJ`) as a value of `ty`.
+fn rs_input_dec(d: &DomainModel, ty: &InputType, nullable: bool, j: &str) -> String {
+    match ty {
+        InputType::Value(ty) => rs_dec(d, ty, nullable, j),
+        InputType::Rows(name) => format!("{j}.arr().iter().map(dec_{name}).collect::<Vec<_>>()"),
     }
 }
 
@@ -898,7 +908,6 @@ fn rs_enc(d: &DomainModel, ty: &FieldType, nullable: bool, r: &str) -> String {
             Scalar::Bool => format!("DrvJ::Bool({r}.get())"),
             _ => format!("DrvJ::Str({r}.to_string())"),
         },
-        FieldType::Rows(_) => panic!("a list is not returned"),
     }
 }
 
@@ -1023,9 +1032,9 @@ fn rust_driver(d: &DomainModel) -> String {
             let _ = writeln!(
                 body,
                 "    let a{at} = {};",
-                rs_dec(d, &i.ty, i.nullable, &format!("(&a[{at}])"))
+                rs_input_dec(d, &i.ty, i.nullable, &format!("(&a[{at}])"))
             );
-            call.push(if matches!(i.ty, FieldType::Rows(_)) {
+            call.push(if matches!(i.ty, InputType::Rows(_)) {
                 format!("&a{at}")
             } else {
                 format!("a{at}")
@@ -1134,7 +1143,6 @@ fn go_type(ty: &FieldType) -> String {
     match ty {
         FieldType::Scalar(s) => go_scalar(*s).to_string(),
         FieldType::Enum(n) | FieldType::Id(n) => n.clone(),
-        FieldType::Rows(n) => format!("[]{n}"),
     }
 }
 
@@ -1167,7 +1175,14 @@ fn go_dec(d: &DomainModel, ty: &FieldType, nullable: bool, j: &str) -> String {
         FieldType::Scalar(s) => go_scalar_dec(*s, j),
         FieldType::Enum(name) => format!("{name}(drvStr({j}))"),
         FieldType::Id(name) => format!("{name}({})", go_scalar_dec(id_repr(d, name), j)),
-        FieldType::Rows(name) => format!("drvList({j}, drvDec{name})"),
+    }
+}
+
+/// An expression decoding the input `j` as a value of `ty`.
+fn go_input_dec(d: &DomainModel, ty: &InputType, nullable: bool, j: &str) -> String {
+    match ty {
+        InputType::Value(ty) => go_dec(d, ty, nullable, j),
+        InputType::Rows(name) => format!("drvList({j}, drvDec{name})"),
     }
 }
 
@@ -1183,7 +1198,6 @@ fn go_enc(d: &DomainModel, ty: &FieldType, nullable: bool, v: &str) -> String {
         FieldType::Scalar(s) => go_scalar_enc(*s, v),
         FieldType::Enum(_) => format!("string({v})"),
         FieldType::Id(name) => go_scalar_enc(id_repr(d, name), v),
-        FieldType::Rows(_) => panic!("a list is not returned"),
     }
 }
 
@@ -1291,7 +1305,7 @@ fn go_driver(d: &DomainModel) -> String {
             at += 1;
         }
         for i in &f.inputs {
-            call.push(go_dec(d, &i.ty, i.nullable, &format!("a[{at}]")));
+            call.push(go_input_dec(d, &i.ty, i.nullable, &format!("a[{at}]")));
             at += 1;
         }
         // Only `Rejected` is a refusal; any other error (`InvalidArgument`) is reported as
@@ -1369,18 +1383,6 @@ fn go_driver(d: &DomainModel) -> String {
 }
 
 // ── Running ──────────────────────────────────────────────────────────────────
-
-fn go_available() -> bool {
-    let found = Command::new("go").arg("version").output().is_ok();
-    if !found {
-        assert!(
-            std::env::var("RDRA_REQUIRE_CODEGEN_TOOLS").as_deref() != Ok("1"),
-            "go is not on PATH, and RDRA_REQUIRE_CODEGEN_TOOLS=1 requires it; the dev shell provides it"
-        );
-        eprintln!("skipping Go: go is not on PATH");
-    }
-    found
-}
 
 fn scratch(lang: &str, sample: &str) -> PathBuf {
     let name: String = sample
@@ -1602,7 +1604,7 @@ fn agree(pick_sample: impl Fn(&str) -> bool) {
 
 fn agree_on(samples: Vec<String>) {
     let only = std::env::var("RDRA_CODEGEN_SAMPLE").ok();
-    let go = go_available();
+    let go = tool("go", CODEGEN);
     let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
     let mut failures: Vec<String> = Vec::new();
     let mut rust = Tally::default();

@@ -5,44 +5,31 @@
 //! turns the skip into a failure.
 
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Stdio};
 
-fn repo() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
+#[path = "common/samples.rs"]
+mod samples;
+#[path = "common/scratch.rs"]
+mod scratch;
+use samples::{repo, samples};
+use scratch::scratch;
 
-fn samples() -> Vec<String> {
-    std::fs::read_to_string(repo().join("samples.txt"))
-        .expect("samples.txt")
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
-        .map(str::to_string)
-        .collect()
-}
+#[path = "common/tools.rs"]
+mod tools;
+use tools::found_or_skip;
 
 fn have_python() -> bool {
+    // sqlite3 is a module python3 may lack, so the probe imports it.
     let found = Command::new("python3")
         .args(["-c", "import sqlite3"])
         .output()
         .is_ok_and(|o| o.status.success());
-    if !found {
-        let reason = "python3 with sqlite3 is not on PATH";
-        assert!(
-            std::env::var("RDRA_REQUIRE_SQLITE").as_deref() != Ok("1"),
-            "RDRA_REQUIRE_SQLITE=1 but {reason}"
-        );
-        println!("skipped: {reason}");
-    }
-    found
-}
-
-fn scratch(test: &str) -> PathBuf {
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(test);
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
+    found_or_skip(
+        found,
+        "python3 with sqlite3 is not on PATH",
+        "RDRA_REQUIRE_SQLITE",
+    )
 }
 
 fn export_sqlite(input: &Path, out: &Path) {

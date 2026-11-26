@@ -157,7 +157,7 @@ impl ContractIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::codegen::ir::FnInput;
+    use crate::codegen::ir::PortInput;
 
     fn method(action: &str, usecase: &str) -> PortMethod {
         PortMethod {
@@ -167,7 +167,7 @@ mod tests {
             rows: Vec::new(),
             marks: Vec::new(),
             event: None,
-            inputs: Vec::<FnInput>::new(),
+            inputs: Vec::<PortInput>::new(),
             choices: Vec::new(),
             write: String::new(),
         }

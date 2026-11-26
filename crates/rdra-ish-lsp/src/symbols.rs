@@ -36,9 +36,7 @@ pub fn workspace_symbols(
     let mut symbols = Vec::new();
 
     for (kind, id, site) in analysis.model.decl_sites.iter() {
-        if !query.is_empty()
-            && !id.to_lowercase().contains(&query)
-            && !kind.to_lowercase().contains(&query)
+        if !query.is_empty() && !id.to_lowercase().contains(&query) && !kind.name().contains(&query)
         {
             continue;
         }
@@ -56,7 +54,7 @@ pub fn workspace_symbols(
                 uri,
                 range: span_to_range(text, site.span.clone()),
             },
-            container_name: Some(kind.to_string()),
+            container_name: Some(kind.name().to_string()),
             #[allow(deprecated)]
             deprecated: None,
         });

@@ -111,6 +111,34 @@ fn keywords_go_snapshot() {
     insta::assert_snapshot!(generated_from(KEYWORDS_SRC, "keywords.rdra", Lang::Go));
 }
 
+/// A model whose every action is an entry point (G15): no function, a use-case error per
+/// entry. The CLI's `codegen_builds.rs` compiles this output.
+const ENTRY_ONLY_SRC: &str =
+    include_str!("../../../rdra-ish-cli/tests/fixtures/codegen/entry_only.rdra");
+
+#[test]
+fn entry_only_typescript_snapshot() {
+    insta::assert_snapshot!(generated_from(
+        ENTRY_ONLY_SRC,
+        "entry_only.rdra",
+        Lang::TypeScript
+    ));
+}
+
+#[test]
+fn entry_only_rust_snapshot() {
+    insta::assert_snapshot!(generated_from(
+        ENTRY_ONLY_SRC,
+        "entry_only.rdra",
+        Lang::Rust
+    ));
+}
+
+#[test]
+fn entry_only_go_snapshot() {
+    insta::assert_snapshot!(generated_from(ENTRY_ONLY_SRC, "entry_only.rdra", Lang::Go));
+}
+
 /// A name the Go printer derives from a model name steps aside, with a trailing `_`, for a
 /// model type that has it already; the model's type keeps its name.
 #[test]
@@ -334,7 +362,7 @@ fn a_derived_name_falls_back_to_an_underscore() {
 fn contracts_are_built_and_printed_without_the_harness() {
     let model = model_from(SRC);
     let domain = build_with(&model, Some(CAPS), false, &|_| None).unwrap();
-    assert!(!domain.harness);
+    assert!(domain.harness().is_none());
     let port = domain.port.as_ref().expect("a port");
     let contracts: Vec<(&str, &str, &str)> = port
         .contracts
@@ -842,7 +870,7 @@ applies_to(NoActive, Revoke)
     let list = revoke
         .inputs
         .iter()
-        .position(|i| i.ty == ir::FieldType::Rows("AssignmentRow".to_string()))
+        .position(|i| i.ty == ir::InputType::Rows("AssignmentRow".to_string()))
         .expect("the related rows are an input");
     assert_eq!(revoke.elems.len(), 1);
     let ir::Expr::Forall { input, body, .. } = &revoke.conditions[0].expr else {
@@ -1224,4 +1252,81 @@ applies_to(NotOff, Clear)
         go.contains("if !(!(item.F != nil && *item.F == false)) {"),
         "{go}"
     );
+}
+
+/// G5 (round-2 audit): every target a function is named for (`To<Target>`) is in its
+/// `chosen`, and no two cases of a dispatcher take the same states and choices, over every
+/// `samples.txt` root and codegen fixture. A target whose lookup failed would be dropped from
+/// `chosen` silently, and the dispatcher could not tell the function from its sibling.
+#[test]
+fn every_choice_a_function_is_named_for_is_chosen() {
+    use std::path::{Path, PathBuf};
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut roots: Vec<PathBuf> = std::fs::read_to_string(repo.join("samples.txt"))
+        .expect("samples.txt")
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(|l| repo.join(l))
+        .collect();
+    let mut dirs = vec![repo.join("crates/rdra-ish-cli/tests/fixtures/codegen")];
+    while let Some(dir) = dirs.pop() {
+        for entry in std::fs::read_dir(&dir).expect("fixture dir").flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                dirs.push(path);
+            } else if path.extension().is_some_and(|e| e == "rdra") {
+                roots.push(path);
+            }
+        }
+    }
+    let (mut named, mut cases) = (0, 0);
+    for root in &roots {
+        let Ok(project) = rdra_ish_core::load_project(std::slice::from_ref(root), None) else {
+            continue;
+        };
+        let Ok(domain) = build(&project.model, Some(CAPS), &|_| None) else {
+            continue;
+        };
+        for f in domain.fns.iter().filter(|f| !f.chosen.is_empty()) {
+            named += 1;
+            let targets: Vec<String> = f.chosen.iter().map(|c| type_ident(&c.value.wire)).collect();
+            let suffix = format!("To{}", targets.join("And"));
+            assert!(
+                f.name.ends_with(&suffix),
+                "{}: {} is named for a target its chosen {targets:?} lacks",
+                root.display(),
+                f.name
+            );
+        }
+        let key = |c: &ir::DispatchCase| {
+            (
+                c.states
+                    .iter()
+                    .map(|s| s.as_ref().map(|(_, _, v)| v.wire.clone()))
+                    .collect::<Vec<_>>(),
+                c.choice
+                    .iter()
+                    .map(|(i, v)| (*i, v.wire.clone()))
+                    .collect::<Vec<_>>(),
+            )
+        };
+        for d in &domain.dispatchers {
+            for (i, a) in d.cases.iter().enumerate() {
+                cases += 1;
+                for b in &d.cases[i + 1..] {
+                    assert_ne!(
+                        key(a),
+                        key(b),
+                        "{}: {} cannot tell {} from {}",
+                        root.display(),
+                        d.name,
+                        a.function,
+                        b.function
+                    );
+                }
+            }
+        }
+    }
+    assert!(named > 0 && cases > 0, "no function chose a target");
 }

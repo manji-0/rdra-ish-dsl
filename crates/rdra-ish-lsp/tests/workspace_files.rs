@@ -31,7 +31,6 @@ fn a_deleted_file_has_its_diagnostics_withdrawn() {
     client.wait_for_diagnostics(&uri(&bad), "bad.rdra's diagnostics withdrawn", |d| {
         d.is_empty()
     });
-    let _ = std::fs::remove_dir_all(root);
 }
 
 #[test]
@@ -47,5 +46,4 @@ fn deleting_the_last_file_withdraws_its_diagnostics() {
     client.wait_for_diagnostics(&uri(&bad), "bad.rdra's diagnostics withdrawn", |d| {
         d.is_empty()
     });
-    let _ = std::fs::remove_dir_all(root);
 }

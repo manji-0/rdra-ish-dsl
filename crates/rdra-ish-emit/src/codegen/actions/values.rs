@@ -106,7 +106,7 @@ pub(super) fn enum_lit(value: EnumValue, target: &Field) -> Option<Lit> {
 pub(super) fn input_index(
     inputs: &mut Vec<FnInput>,
     name: String,
-    ty: FieldType,
+    ty: InputType,
     doc: String,
 ) -> usize {
     if let Some(i) = inputs.iter().position(|x| x.name == name) {

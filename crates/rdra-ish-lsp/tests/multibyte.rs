@@ -5,27 +5,22 @@ mod common;
 
 use std::path::{Path, PathBuf};
 
-use common::{position, uri, Client};
+use common::{position, uri, Client, Workspace};
 use serde_json::{json, Value};
 
 const LABELS: &str = "actor A \"受付(窓口)\"\nusecase U \"顧客(法人)\"\nperforms(A, U) // 受付(\n";
 
 /// The open file. Dropping it removes its workspace.
-struct OpenFile(PathBuf);
+struct OpenFile {
+    path: PathBuf,
+    _root: Workspace,
+}
 
 impl std::ops::Deref for OpenFile {
     type Target = Path;
 
     fn deref(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl Drop for OpenFile {
-    fn drop(&mut self) {
-        if let Some(root) = self.0.parent() {
-            let _ = std::fs::remove_dir_all(root);
-        }
+        &self.path
     }
 }
 
@@ -36,7 +31,7 @@ fn session(text: &str) -> (Client, OpenFile) {
     std::fs::write(&path, text).unwrap();
     let mut client = Client::initialized(&root);
     client.open(&path, text);
-    (client, OpenFile(path))
+    (client, OpenFile { path, _root: root })
 }
 
 /// Sends `method` at the byte offset just after the last `needle` in `text`, and returns the

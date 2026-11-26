@@ -92,40 +92,9 @@ fn symbol_hover(model: &SemanticModel, ast: &Ast, offset: usize) -> Option<Marku
 }
 
 fn instance_label(model: &SemanticModel, kind: &str, id: &str) -> Option<String> {
-    let kind = kind_from_name(kind)?;
+    let kind = Kind::from_name(kind)?;
     let node = model.symbols.lookup_qualified(&kind, id)?;
     Some(model.node_label(node).unwrap_or_default().to_string())
-}
-
-fn kind_from_name(name: &str) -> Option<Kind> {
-    Some(match name {
-        "actor" => Kind::Actor,
-        "extsystem" => Kind::ExtSystem,
-        "system" => Kind::System,
-        "requirement" => Kind::Requirement,
-        "adr" => Kind::Adr,
-        "goal" => Kind::Goal,
-        "nfr" => Kind::Nfr,
-        "quality" => Kind::Quality,
-        "constraint" => Kind::Constraint,
-        "business" => Kind::Business,
-        "buc" => Kind::Buc,
-        "flow" => Kind::Flow,
-        "step" => Kind::Step,
-        "usecase" => Kind::UseCase,
-        "screen" => Kind::Screen,
-        "field" => Kind::Field,
-        "event" => Kind::Event,
-        "entity" => Kind::Entity,
-        "api" => Kind::Api,
-        "dto" => Kind::Dto,
-        "timer" => Kind::Timer,
-        "medium" => Kind::Medium,
-        "permission" => Kind::Permission,
-        "variation" => Kind::Variation,
-        "condition" => Kind::Condition,
-        _ => return None,
-    })
 }
 
 #[cfg(test)]

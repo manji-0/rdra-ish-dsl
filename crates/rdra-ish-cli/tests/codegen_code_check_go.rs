@@ -8,24 +8,19 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-fn repo() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
+#[path = "common/output.rs"]
+mod output;
+#[path = "common/samples.rs"]
+mod samples;
+use output::outcome;
+use samples::{repo, samples};
+
+#[path = "common/tools.rs"]
+mod tools;
+use tools::{tool, CODEGEN};
 
 fn fixtures() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/codegen")
-}
-
-fn go_available() -> bool {
-    let found = Command::new("go").arg("version").output().is_ok();
-    if !found {
-        assert!(
-            std::env::var("RDRA_REQUIRE_CODEGEN_TOOLS").as_deref() != Ok("1"),
-            "go is not on PATH, and RDRA_REQUIRE_CODEGEN_TOOLS=1 requires it"
-        );
-        eprintln!("skipping: go is not on PATH");
-    }
-    found
 }
 
 const MANIFEST: &str = r#"[model]
@@ -59,7 +54,7 @@ fn project(name: &str, model: &str, manifest: &str, service: &str) -> PathBuf {
     std::fs::write(dir.join("model/rdra.toml"), manifest).unwrap();
     std::fs::write(dir.join("go.mod"), "module example.com/shop\n\ngo 1.21\n").unwrap();
     std::fs::write(dir.join("svc/service.go"), service).unwrap();
-    let (code, _, stderr) = text(&rdra(&dir, &["codegen", "model", "--code"], None));
+    let (code, _, stderr) = outcome(&rdra(&dir, &["codegen", "model", "--code"], None));
     assert_eq!(code, Some(0), "{name}: {stderr}");
     dir
 }
@@ -83,16 +78,6 @@ fn rdra(dir: &Path, args: &[&str], fault: Option<&str>) -> Output {
     cmd.output().expect("runs rdra-ish")
 }
 
-/// The exit code, stdout, and stderr with the platform's path separator written as `/`,
-/// so the diagnostics' paths match on Windows too.
-fn text(out: &Output) -> (Option<i32>, String, String) {
-    (
-        out.status.code(),
-        String::from_utf8_lossy(&out.stdout).into_owned(),
-        String::from_utf8_lossy(&out.stderr).replace('\\', "/"),
-    )
-}
-
 /// The names of the `error[Name]` lines of `stderr`.
 fn errors(stderr: &str) -> Vec<&str> {
     stderr
@@ -104,11 +89,11 @@ fn errors(stderr: &str) -> Vec<&str> {
 
 #[test]
 fn the_reference_service_builds_and_conforms() {
-    if !go_available() {
+    if !tool("go", CODEGEN) {
         return;
     }
     let dir = shop("complete", &[]);
-    let (code, stdout, stderr) = text(&rdra(&dir, &["check", "model", "--code=run"], None));
+    let (code, stdout, stderr) = outcome(&rdra(&dir, &["check", "model", "--code=run"], None));
     assert_eq!(code, Some(0), "{stderr}");
     assert!(
         stdout.ends_with("OK: code: what the model requires, at --code=run\n"),
@@ -126,7 +111,7 @@ fn the_reference_service_builds_and_conforms() {
 /// One omission at a time, each with the diagnostic that names it.
 #[test]
 fn each_planted_omission_is_named() {
-    if !go_available() {
+    if !tool("go", CODEGEN) {
         return;
     }
     // (name, edits to the service, the diagnostic, a detail of it)
@@ -165,7 +150,8 @@ fn each_planted_omission_is_named() {
     ];
     for (name, edits, diagnostic, detail) in cases {
         let dir = shop(name, edits);
-        let (code, stdout, stderr) = text(&rdra(&dir, &["check", "model", "--code=build"], None));
+        let (code, stdout, stderr) =
+            outcome(&rdra(&dir, &["check", "model", "--code=build"], None));
         assert_eq!(code, Some(1), "{name}: {stderr}");
         assert_eq!(errors(&stderr), [*diagnostic], "{name}: {stderr}");
         assert!(stderr.contains(detail), "{name}: {detail:?} in\n{stderr}");
@@ -179,7 +165,7 @@ fn each_planted_omission_is_named() {
 /// `build` in rdra.toml replaces the default command.
 #[test]
 fn a_build_command_in_rdra_toml_replaces_the_default() {
-    if !go_available() {
+    if !tool("go", CODEGEN) {
         return;
     }
     let service = std::fs::read_to_string(fixtures().join("go_service/service.go")).unwrap();
@@ -194,7 +180,7 @@ fn a_build_command_in_rdra_toml_replaces_the_default() {
             1,
         ),
     );
-    let (code, _, stderr) = text(&rdra(&dir, &["check", "model", "--code=build"], None));
+    let (code, _, stderr) = outcome(&rdra(&dir, &["check", "model", "--code=build"], None));
     assert_eq!(code, Some(1), "{stderr}");
     assert_eq!(errors(&stderr), ["CodeIncomplete_Ship"], "{stderr}");
 }
@@ -204,7 +190,7 @@ fn a_build_command_in_rdra_toml_replaces_the_default() {
 /// `CodeSignature_Pay`.
 #[test]
 fn a_prepare_takes_the_caller_of_its_use_case() {
-    if !go_available() {
+    if !tool("go", CODEGEN) {
         return;
     }
     let model = format!(
@@ -229,7 +215,7 @@ fn a_prepare_takes_the_caller_of_its_use_case() {
             .replacen(pay, &pay.replacen('(', &format!("({by}"), 1), 1)
             .replacen(ship, ship_by, 1);
         let dir = project(name, &model, MANIFEST, &service);
-        let (code, _, stderr) = text(&rdra(&dir, &["check", "model", "--code=build"], None));
+        let (code, _, stderr) = outcome(&rdra(&dir, &["check", "model", "--code=build"], None));
         match says {
             None => assert_eq!(code, Some(0), "{name}: {stderr}"),
             Some(says) => {
@@ -244,7 +230,7 @@ fn a_prepare_takes_the_caller_of_its_use_case() {
 /// Each fault of the reference service fails the conformance test the probe holds.
 #[test]
 fn each_fault_fails_the_conformance_run() {
-    if !go_available() {
+    if !tool("go", CODEGEN) {
         return;
     }
     let dir = shop("faults", &[]);
@@ -267,7 +253,7 @@ fn each_fault_fails_the_conformance_run() {
         ),
     ] {
         let (code, stdout, stderr) =
-            text(&rdra(&dir, &["check", "model", "--code=run"], Some(fault)));
+            outcome(&rdra(&dir, &["check", "model", "--code=run"], Some(fault)));
         assert_eq!(code, Some(1), "{fault}: {stderr}");
         assert_eq!(errors(&stderr), ["CodeConformance"], "{fault}: {stderr}");
         // The diagnostic quotes the harness's report of the first difference.
@@ -281,16 +267,6 @@ fn each_fault_fails_the_conformance_run() {
             "{fault}: {stdout}"
         );
     }
-}
-
-fn samples() -> Vec<String> {
-    std::fs::read_to_string(repo().join("samples.txt"))
-        .expect("samples.txt")
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
-        .map(str::to_string)
-        .collect()
 }
 
 /// The `.rdra` files of `from` (a file, or a directory searched in full) under `to`.
@@ -315,7 +291,7 @@ fn copy_model(from: &Path, to: &Path) {
 /// complaints are the use cases the service lacks, each one `CodeMissingUseCase`.
 #[test]
 fn the_probe_of_every_sample_compiles() {
-    if !go_available() {
+    if !tool("go", CODEGEN) {
         return;
     }
     let manifest = "[model]\nname = \"sample\"\n\n[code.go]\ndomain = \"../domain/domain.go\"\nprobe = \"../svc/rdra_contract_test.go\"\nservice = \"example.com/shop/svc.Service\"\n";
@@ -338,7 +314,7 @@ fn the_probe_of_every_sample_compiles() {
         std::fs::write(dir.join("model/rdra.toml"), manifest).unwrap();
         std::fs::write(dir.join("go.mod"), "module example.com/shop\n\ngo 1.21\n").unwrap();
         std::fs::write(dir.join("svc/service.go"), empty).unwrap();
-        let (code, _, stderr) = text(&rdra(&dir, &["codegen", "model", "--code"], None));
+        let (code, _, stderr) = outcome(&rdra(&dir, &["codegen", "model", "--code"], None));
         if code != Some(0) && stderr.contains("refusing to generate code") {
             continue;
         }
@@ -348,7 +324,7 @@ fn the_probe_of_every_sample_compiles() {
             .lines()
             .filter(|l| l.starts_with("var _ domain."))
             .count();
-        let (_, _, stderr) = text(&rdra(&dir, &["check", "model", "--code=build"], None));
+        let (_, _, stderr) = outcome(&rdra(&dir, &["check", "model", "--code=build"], None));
         let found = errors(&stderr);
         assert!(
             found.iter().all(|e| e.starts_with("CodeMissingUseCase_")),
@@ -367,7 +343,7 @@ fn the_probe_of_every_sample_compiles() {
 /// package`, and the reference service, which imports it as `domain`, builds and conforms.
 #[test]
 fn the_probe_names_the_domain_package_by_its_package_clause() {
-    if !go_available() {
+    if !tool("go", CODEGEN) {
         return;
     }
     let service = std::fs::read_to_string(fixtures().join("go_service/service.go")).unwrap();
@@ -384,7 +360,7 @@ fn the_probe_names_the_domain_package_by_its_package_clause() {
             1,
         ),
     );
-    let (code, stdout, stderr) = text(&rdra(&dir, &["check", "model", "--code=run"], None));
+    let (code, stdout, stderr) = outcome(&rdra(&dir, &["check", "model", "--code=run"], None));
     assert_eq!(code, Some(0), "{stdout}{stderr}");
     let probe = std::fs::read_to_string(dir.join("svc/rdra_contract_test.go")).unwrap();
     assert!(

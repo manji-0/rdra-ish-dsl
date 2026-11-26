@@ -14,7 +14,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
-use rdra_ish_core::fingerprint::{self, Fingerprint};
+use rdra_ish_core::fingerprint;
 use rdra_ish_core::lifecycle::{Bounds, Scope, Severity};
 use rdra_ish_core::project::{CodeTarget, Manifest};
 use rdra_ish_core::{format_location, ResolvedProgram, SemanticModel};
@@ -23,8 +23,10 @@ use rdra_ish_emit::codegen::ir::DomainModel;
 use rdra_ish_emit::codegen::{generate_all, generate_json, CheckStatus, Lang, Options};
 
 use crate::cli::CodegenLang;
+use crate::generated_file::{check_code, check_traces, stamp, stamp_traces};
 use crate::load::load_clean;
 use crate::memory::generator_caps;
+use crate::paths::{label, shown};
 use crate::state_findings::state_findings;
 
 /// What to generate, once the flags or `[code.<lang>]` are read.
@@ -72,7 +74,7 @@ impl Loaded {
     }
 
     pub fn model_hash(&self) -> String {
-        fingerprint::model_hash(self.program.sources.iter().map(|(_, t, _)| t.as_str()))
+        fingerprint::program_hash(&self.program)
     }
 }
 
@@ -167,7 +169,7 @@ pub(crate) fn generate(loaded: &Loaded, request: &Request) -> Result<Generated> 
         .findings
         .iter()
         .filter(|f| f.severity == Severity::Error)
-        .map(|f| format!("{}: {}", f.name, one_line(&f.message)))
+        .map(|f| format!("{}: {}", f.name, first_line(&f.message)))
         .collect();
     let check = if errors.is_empty() {
         let line = found.bounds.to_string();
@@ -204,7 +206,7 @@ pub(crate) fn generate(loaded: &Loaded, request: &Request) -> Result<Generated> 
         seal: request.seal,
     };
     let bases = bases(request.base.as_deref());
-    let site = |loc: &_| Some(relative(format_location(program, loc)?, &bases));
+    let site = |loc: &_| Some(without_base(format_location(program, loc)?, &bases));
     if request.json {
         return Ok(Generated {
             code: generate_json(model, &options, &site)?,
@@ -241,7 +243,7 @@ fn bases(dir: Option<&Path>) -> Vec<String> {
     out
 }
 
-fn relative(text: String, bases: &[String]) -> String {
+fn without_base(text: String, bases: &[String]) -> String {
     let rest = bases
         .iter()
         .find_map(|b| text.strip_prefix(b.as_str()))
@@ -252,54 +254,6 @@ fn relative(text: String, bases: &[String]) -> String {
         rest
     } else {
         rest.replace(std::path::MAIN_SEPARATOR, "/")
-    }
-}
-
-/// `path` relative to `base` when it is under it, for a header or a message.
-pub(crate) fn label(path: &Path, base: &Path) -> String {
-    let absolute = |p: &Path| dunce::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
-    let (p, b) = (absolute(path), absolute(base));
-    match p.strip_prefix(&b) {
-        Ok(rest) if rest.as_os_str().is_empty() => ".".to_string(),
-        Ok(rest) => rest.display().to_string(),
-        Err(_) => path.display().to_string(),
-    }
-}
-
-/// `path` as the user can find it from the working directory: relative, with `..` where it
-/// is not under it.
-pub(crate) fn shown(path: &Path) -> String {
-    let Ok(cwd) = std::env::current_dir() else {
-        return path.display().to_string();
-    };
-    let resolve = |p: &Path| -> PathBuf {
-        if let Ok(c) = dunce::canonicalize(p) {
-            return c;
-        }
-        match (p.parent(), p.file_name()) {
-            (Some(parent), Some(name)) if !parent.as_os_str().is_empty() => {
-                dunce::canonicalize(parent).map_or(p.to_path_buf(), |c| c.join(name))
-            }
-            _ => p.to_path_buf(),
-        }
-    };
-    let (to, from) = (resolve(&cwd.join(path)), resolve(&cwd));
-    let (a, b): (Vec<_>, Vec<_>) = (to.components().collect(), from.components().collect());
-    let common = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
-    if common == 0 {
-        return to.display().to_string();
-    }
-    let mut out = PathBuf::new();
-    for _ in common..b.len() {
-        out.push("..");
-    }
-    for c in &a[common..] {
-        out.push(c.as_os_str());
-    }
-    if out.as_os_str().is_empty() {
-        ".".to_string()
-    } else {
-        out.display().to_string()
     }
 }
 
@@ -421,161 +375,8 @@ fn write_traces(path: &Path, text: &str, traces: &Traces) -> Result<()> {
     Ok(())
 }
 
-/// The fingerprint line's prefix in code, after the comment marker every language shares.
-const CODE_FINGERPRINT: &str = "// rdra-ish codegen fingerprint:";
-
-/// `text` without its fingerprint line, with `\n` line ends and no trailing newline.
-fn body(text: &str) -> String {
-    text.replace("\r\n", "\n")
-        .lines()
-        .filter(|l| !l.starts_with(CODE_FINGERPRINT))
-        .collect::<Vec<_>>()
-        .join("\n")
-        .trim_end()
-        .to_string()
-}
-
-/// `code` with the fingerprint as its second line, in the header comment.
-pub(crate) fn stamp(code: &str, model_hash: &str) -> String {
-    let line = format!(
-        "{CODE_FINGERPRINT} model={model_hash} code={}",
-        fingerprint::hash(body(code).as_bytes())
-    );
-    insert_second(code, &line)
-}
-
-/// Traces with the fingerprint after the format line, as a `#` comment the harness skips.
-/// Its `code=` hashes the lines, so a check can stream a file of any size.
-fn stamp_traces(text: &str, model_hash: &str) -> String {
-    let line = format!(
-        "# {} model={model_hash} code={}",
-        fingerprint::FINGERPRINT,
-        fingerprint::line_hash(text)
-    );
-    insert_second(text, &line)
-}
-
-fn insert_second(text: &str, line: &str) -> String {
-    match text.split_once('\n') {
-        Some((first, rest)) => format!("{first}\n{line}\n{rest}"),
-        None => format!("{text}\n{line}"),
-    }
-}
-
-/// Why a generated file is not what the model generates now.
-pub(crate) fn cause_lines(
-    name: &str,
-    recorded: Option<&Fingerprint>,
-    file_hash: &str,
-    model_hash: &str,
-) -> Vec<String> {
-    match recorded {
-        None => vec![format!(
-            "  it has no fingerprint line (`{CODE_FINGERPRINT} ...` or `# {} ...`): it was not generated by this command, or the line was removed",
-            fingerprint::FINGERPRINT
-        )],
-        Some(f) => {
-            let mut out = Vec::new();
-            let edited = f.code != file_hash;
-            let model_changed = f.model != model_hash;
-            if edited {
-                out.push("  file edited: it no longer matches its fingerprint, so it was changed after it was generated".to_string());
-            }
-            if model_changed {
-                out.push(format!("  model changed: its source text is not the text {name} was generated from"));
-            }
-            if !edited && !model_changed {
-                out.push("  generator changed: neither the file nor the model did, so the output of `codegen` did (another rdra-ish version, or other --lang, --package, --allow-failing, --conformance-states, or input paths)".to_string());
-            }
-            out
-        }
-    }
-}
-
-/// Whether the file at `path` is `code` (the fingerprint line aside); prints `ok:` or a summary
-/// of the difference on stderr.
-pub(crate) fn check_code(path: &Path, code: &str, model_hash: &str) -> Result<bool> {
-    let name = shown(path);
-    let text = fs::read_to_string(path).with_context(|| format!("failed to read {name}"))?;
-    let (file, generated) = (body(&text), body(code));
-    let recorded = fingerprint::find(&text);
-    if file == generated {
-        if recorded.as_ref().is_some_and(|f| f.model != model_hash) {
-            eprintln!("note: the model's text changed since {name} was generated; the code it generates did not");
-        }
-        eprintln!("ok: {name} is what the model generates");
-        return Ok(true);
-    }
-    eprintln!("error: {name} is not what `codegen` generates from the model");
-    for line in cause_lines(
-        &name,
-        recorded.as_ref(),
-        &fingerprint::hash(file.as_bytes()),
-        model_hash,
-    ) {
-        eprintln!("{line}");
-    }
-    let (ours, theirs): (Vec<&str>, Vec<&str>) =
-        (file.lines().collect(), generated.lines().collect());
-    let only = |a: &[&str], b: &[&str]| {
-        let mut left: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
-        for l in b {
-            *left.entry(l).or_default() += 1;
-        }
-        a.iter()
-            .filter(|l| match left.get_mut(**l) {
-                Some(n) if *n > 0 => {
-                    *n -= 1;
-                    false
-                }
-                _ => true,
-            })
-            .count()
-    };
-    eprintln!(
-        "  {} line(s) only in {name}, {} only in the generated code",
-        only(&ours, &theirs),
-        only(&theirs, &ours)
-    );
-    if let Some(at) = (0..ours.len().max(theirs.len())).find(|i| ours.get(*i) != theirs.get(*i)) {
-        eprintln!(
-            "  first difference at line {} of the code without the fingerprint:",
-            at + 1
-        );
-        eprintln!(
-            "    {name}: {}",
-            ours.get(at).copied().unwrap_or("(end of file)")
-        );
-        eprintln!(
-            "    generated: {}",
-            theirs.get(at).copied().unwrap_or("(end of file)")
-        );
-    }
-    Ok(false)
-}
-
-/// Whether the traces file at `path` is `traces`, compared by the hash of its lines only: the
-/// file is streamed, never held or diffed.
-pub(crate) fn check_traces(path: &Path, traces: &str, model_hash: &str) -> Result<bool> {
-    let name = shown(path);
-    let (recorded, file_hash) =
-        fingerprint::scan_file(path).with_context(|| format!("failed to read {name}"))?;
-    if file_hash == fingerprint::line_hash(traces) {
-        if recorded.as_ref().is_some_and(|f| f.model != model_hash) {
-            eprintln!("note: the model's text changed since {name} was generated; the traces it generates did not");
-        }
-        eprintln!("ok: {name} holds the traces the model generates");
-        return Ok(true);
-    }
-    eprintln!("error: {name} is not the traces `codegen` generates from the model");
-    for line in cause_lines(&name, recorded.as_ref(), &file_hash, model_hash) {
-        eprintln!("{line}");
-    }
-    Ok(false)
-}
-
 /// The first line of a finding's message: a counterexample follows it.
-fn one_line(message: &str) -> String {
+fn first_line(message: &str) -> String {
     message
         .lines()
         .next()

@@ -23,11 +23,7 @@ fn an_unfinished_last_line_keeps_the_outline_and_the_importers() {
 
     // The user starts a declaration on the last line of lib.rdra: its syntax error is
     // published, then the diagnostics of main.rdra from the same analysis.
-    client.notify(
-        "textDocument/didChange",
-        json!({"textDocument": {"uri": uri(&lib), "version": 2},
-            "contentChanges": [{"text": format!("{lib_text}actor ")}]}),
-    );
+    client.change_now(&lib, 2, &format!("{lib_text}actor "));
     client.wait_for_diagnostics(&uri(&lib), "lib.rdra's syntax error", |d| !d.is_empty());
 
     // main.rdra still resolves `import lib` and Alice: no unknown module, no undefined symbol.
@@ -60,6 +56,4 @@ fn an_unfinished_last_line_keeps_the_outline_and_the_importers() {
         .filter_map(|s| s["name"].as_str())
         .collect();
     assert!(names.iter().any(|n| n.contains("Alice")), "{outline}");
-
-    let _ = std::fs::remove_dir_all(root);
 }
