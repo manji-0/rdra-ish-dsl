@@ -10,6 +10,11 @@
   food-permit-ops at 8 jobs but cost clinic-ops and insurance-claim-ops 4% to 5%, and part 3
   decides. Unit tests and one run of the CI's shadow job turn it on. Output, `--memory` stop points
   and what a run charges do not change.
+- `verify` finishes the largest cone sooner on several threads (#296 item 3.1, part 3). Once
+  a cone's BFS ends, its deadlock findings now build the graph's two directions side by side
+  and check each column and slot side by side, on the threads the BFS gave back. At 8 jobs:
+  food-permit-ops 2.10 s to 1.81 s, clinic-ops 1.74 s to 1.58 s, insurance-claim-ops 4.23 s
+  to 3.52 s. One job takes the time it took, and the output does not change.
 - `verify --with-tlc`: each `tlc:` run line of a cone, property or whole-model job ends with
   what its TLC launches cost: their wall time added up, the `-Xmx` of the last and the
   workers of the first, as `(31 states, 0.3 s, -Xmx1g, 8 workers)` (#384).
@@ -291,35 +296,6 @@ No sample changes verdict.
   run of `verify` (#251).
 
 **check, states and the generators**
-- A BFS run can keep its reached states in a table that its worker threads read while the run
-  adds states, so that each worker looks up the moves it expands (#296 item 3.1, part 2). A
-  release build leaves this off and runs as before: the look-ups took 12% off
-  food-permit-ops at 8 jobs but cost clinic-ops and insurance-claim-ops 4% to 5%, and part 3
-  decides. Unit tests and one run of the CI's shadow job turn it on. Output, `--memory` stop points
-  and what a run charges do not change.
-
-- `verify` finishes the largest cone sooner on several threads (#296 item 3.1, part 3). Once
-  a cone's BFS ends, its deadlock findings now build the graph's two directions side by side
-  and check each column and slot side by side, on the threads the BFS gave back. At 8 jobs:
-  food-permit-ops 2.10 s to 1.81 s, clinic-ops 1.74 s to 1.58 s, insurance-claim-ops 4.23 s
-  to 3.52 s. One job takes the time it took, and the output does not change.
-
-- `verify` gives back what an entity cone held once the cone stops at the memory limit
-  (#284). The entity pass runs its cones one at a time in cone order, each in the room the
-  results before it leave. A stopped cone used to keep everything it stored until the pass
-  ended, though only its own findings read it, so every cone after it ran in what was left:
-  on `clinic-ops` at three instances under `--memory 8GiB`, `AccountBalance` stopped at
-  83,486,263 states holding 7.9 GB, and the 17 cones after it had no room at all. `verify`
-  now reads a stopped entity cone's findings when it stops and then frees its states and
-  edges, so the next cone has the room the stopped one had. **A `never` verdict can change
-  from not decided to decided**, and nothing else changes: the 43 sample pairs print what
-  they printed. Under a tight limit `verify` decides more (`samples/patent-ops --memory
-  1MiB`: 43 findings not decided before, 13 now; `samples/clinic-ops --memory 4MiB`: 158 to
-  19). On `clinic-ops` at three instances under `--memory 8GiB`, 117 findings were not
-  decided and 17 are now. The cones that had no room now explore, so that run takes
-  5,578 s where it took 1,707 s, and its peak RSS is 35.6 GB where it was 29.2 GB: the
-  limit bounds what the stores hold, not the process (#237, #296). `check` and `states`
-  keep every run, since they read a stopped cone's views.
 
 - `check` and `states` have no state cap by default; `--memory` stops a cone. The default
   `--max-patterns` follows `--instance-count`: 1,024 at one instance, 2^18 at two.
