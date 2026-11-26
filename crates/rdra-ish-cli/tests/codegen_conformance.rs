@@ -16,6 +16,10 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+#[path = "common/output.rs"]
+mod output;
+use output::text;
+
 fn fixture() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/codegen")
 }
@@ -58,14 +62,6 @@ fn generate(lang: &str, dir: &Path, file: &str) {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-}
-
-fn text(output: &Output) -> String {
-    format!(
-        "{}{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    )
 }
 
 /// Each fault, and what the harness reports for it.

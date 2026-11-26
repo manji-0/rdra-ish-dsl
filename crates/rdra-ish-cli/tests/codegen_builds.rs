@@ -15,20 +15,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 mod codegen_cases;
-
-fn repo() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-fn samples() -> Vec<String> {
-    std::fs::read_to_string(repo().join("samples.txt"))
-        .expect("samples.txt")
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
-        .map(str::to_string)
-        .collect()
-}
+use codegen_cases::{repo, samples};
 
 /// The models every language builds: the samples, a model whose names are keywords, one
 /// whose functions compute derived columns, one whose Enum and Bool columns hold null, and one

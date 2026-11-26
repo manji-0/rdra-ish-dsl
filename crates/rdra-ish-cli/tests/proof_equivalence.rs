@@ -9,26 +9,20 @@
 
 use std::collections::BTreeMap;
 use std::num::NonZeroU8;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use rdra_ish_core::lifecycle::prove::{self, ProveOptions, Unproved, Verdict, Z3};
 use rdra_ish_core::lifecycle::{Bounds, Caps, Scope, StateDiag, Target, TransitionSystem};
 use rdra_ish_core::load_project;
 
+#[path = "common/samples.rs"]
+mod samples;
+use samples::repo;
+
 const STATE_CAP: usize = 300_000;
 
-fn repo() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
 fn samples() -> Vec<String> {
-    let mut out: Vec<String> = std::fs::read_to_string(repo().join("samples.txt"))
-        .expect("samples.txt")
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
-        .map(str::to_string)
-        .collect();
+    let mut out = samples::samples();
     out.push("samples/formal-verification-fail/order.rdra".to_string());
     out
 }

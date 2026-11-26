@@ -4,12 +4,12 @@
 //! Without `z3` on PATH each test that needs it is skipped with a printed reason;
 //! `RDRA_REQUIRE_Z3=1` turns the skip into a failure.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Output};
 
-fn repo() -> PathBuf {
-    dunce::canonicalize(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).expect("repo root")
-}
+#[path = "common/root.rs"]
+mod root;
+use root::repo;
 
 fn have(tool: &str, require: &str) -> bool {
     let found = std::env::var_os("PATH")

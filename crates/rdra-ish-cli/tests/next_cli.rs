@@ -1,11 +1,11 @@
 //! `next` places each step of the incremental-order sample on its stage, and reads small models as the modeling guide says.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Output};
 
-fn repo() -> PathBuf {
-    dunce::canonicalize(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).expect("repo root")
-}
+#[path = "common/root.rs"]
+mod root;
+use root::repo;
 
 fn next(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
