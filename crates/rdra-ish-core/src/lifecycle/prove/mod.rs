@@ -111,9 +111,11 @@ pub struct ProveOptions {
 
 /// The limits are set from `examples/prove_rlimit.rs` on every sample and engine-corpus case
 /// under z3 5.1.0, on 1, 2, 3, and 8 solvers: no check that keeps a candidate spent more
-/// than 42,000 units for a rule or 102,000 for a lemma, so the limits leave about 480 and 20
-/// times that. Only such a check must fit: a lemma check past its limit drops the lemma, as
-/// a step that breaks it does.
+/// than 42,000 units for a rule or 102,000 for a lemma, so the limits left about 480 and 20
+/// times that. With the Houdini rounds run without MBQI (#421), on every sample on 1 and 4
+/// solvers, no such check spent more than 169,000 and 146,000 units: about 120 and 14 times
+/// below the limits. Only such a check must fit: a lemma check past its limit drops the
+/// lemma, as a step that breaks it does.
 impl Default for ProveOptions {
     fn default() -> Self {
         ProveOptions {
@@ -144,7 +146,11 @@ struct Candidate {
 enum Fall {
     Initial,
     Step(ActId),
+    /// z3 could not answer, and the reason is final: the initial states do not encode.
     Unknown(String),
+    /// z3 gave up on a check of the Houdini rounds, which run without MBQI: in the initial
+    /// states (`None`) or on a step. The CTI stage asks again with MBQI on.
+    GaveUp(Option<ActId>),
 }
 
 /// The candidate set: what each candidate fell for, and whether the fine mined lemmas are in.
@@ -303,9 +309,15 @@ pub fn prove<S: Solver + Send>(
     let mut loose: Vec<String> = steps.iter().flat_map(|s| s.loose.clone()).collect();
     loose.dedup();
 
-    let declarations = format!("(reset)\n{}", enc.declarations());
+    // The Houdini rounds run without model-based quantifier instantiation (MBQI). Without
+    // it z3 proves an `unsat` check as before, far faster, but answers `unknown` where it
+    // would find a model: the candidate falls either way. The CTI stage turns MBQI back on
+    // to find the step that breaks each rule. On every sample on one solver (#421): 150 s to
+    // 68 s of proof, and the same `Proof` (rules proved, CTIs, lemmas kept) on each.
+    let declarations = enc.declarations();
+    let houdini = format!("(reset)\n(set-option :smt.mbqi false)\n{declarations}");
     for solver in solvers.iter_mut() {
-        solver.exec(&declarations)?;
+        solver.exec(&houdini)?;
     }
 
     let mut set = Set {
@@ -313,16 +325,37 @@ pub fn prove<S: Solver + Send>(
         fine: &fine,
         fine_joined: false,
     };
+    // Houdini's special cases, each kept for a reason:
+    // - Initiation is checked once, before any round: no round adds a candidate the initial
+    //   states have not been checked against.
+    // - The fine mined lemmas wait outside the set, and join (`Set::fine_joined`) only when a
+    //   rule fell after initiation: most models prove every rule without them, and they are
+    //   many, so most proofs never check them.
+    // - When they join, the rules that fell after initiation come back: the set that broke
+    //   them lacked the fine lemmas, so its counterexamples may no longer stand.
+    // - A step is checked only against the candidates that read what it writes (`breaks`):
+    //   a step that writes none of a candidate's vars cannot break it.
+    // - The set is asserted once per step, and every candidate the step may break is checked
+    //   under it; one that falls still stands for that step's other checks, so the answers
+    //   do not depend on the order of the checks or on how many solvers share them.
+    // - `unknown` counts as a fall: the kept set stays inductive, and a rule z3 gave up on is
+    //   never proved. Without MBQI every `sat` is `unknown` (see above).
+    // - The CTIs come from a solver that starts over, with MBQI on: the model z3 gives
+    //   depends on what the solver checked before.
+    // - Rules and lemmas have their own rlimits (`ProveOptions`): a lemma that gives up only
+    //   costs proofs, so its limit is lower.
+    //
     // Initiation: every candidate holds in every initial state.
-    match enc.initial() {
+    let initial = enc.initial();
+    match &initial {
         Ok(init) => {
             let all: Vec<usize> = (0..cands.len()).collect();
-            let answers = violated_each(solvers, &enc, &cands, &all, &init, Frame::Pre)?;
+            let answers = violated_each(solvers, &enc, &cands, &all, init, Frame::Pre)?;
             for (k, sat) in all.into_iter().zip(answers) {
                 let fall = match sat {
                     Sat::Unsat => continue,
                     Sat::Sat => Fall::Initial,
-                    Sat::Unknown => Fall::Unknown("the initial states".to_string()),
+                    Sat::Unknown => Fall::GaveUp(None),
                 };
                 set.fell[k] = Some(fall);
             }
@@ -359,7 +392,7 @@ pub fn prove<S: Solver + Send>(
                     let fall = match sat {
                         Sat::Unsat => continue,
                         Sat::Sat => Fall::Step(ActId::at_index(a)),
-                        Sat::Unknown => Fall::Unknown(ts.actions()[a].name.clone()),
+                        Sat::Unknown => Fall::GaveUp(Some(ActId::at_index(a))),
                     };
                     set.fell[k] = Some(fall);
                 }
@@ -385,9 +418,12 @@ pub fn prove<S: Solver + Send>(
 
     // Each rule that fell: its step again from the kept set plus the rule, for the CTI. The
     // model z3 gives depends on what the solver has checked before, which depends on how many
-    // solvers shared the checks, so the CTIs come from a solver that starts over.
+    // solvers shared the checks, so the CTIs come from a solver that starts over, with MBQI
+    // on. A rule z3 gave up on in the initial states is asked about them again.
     let solver = &mut solvers[0];
-    solver.exec(&declarations)?;
+    solver.exec(&format!(
+        "(reset)\n(set-option :smt.mbqi true)\n{declarations}"
+    ))?;
     for (k, c) in cands.iter().enumerate() {
         let Origin::Rule(i) = c.origin else { continue };
         let verdict = match &set.fell[k] {
@@ -396,7 +432,19 @@ pub fn prove<S: Solver + Send>(
             Some(Fall::Unknown(action)) => Verdict::Unproved(Unproved::Unknown {
                 action: action.clone(),
             }),
-            Some(Fall::Step(first)) => {
+            Some(Fall::GaveUp(None)) => {
+                let init = initial.as_ref().expect("an initial check ran");
+                solver.exec(&format!("(push)\n{init}{}", violation(&enc, c, Frame::Pre)))?;
+                let sat = solver.check_sat(c.rlimit)?;
+                solver.exec("(pop)")?;
+                match sat {
+                    Sat::Sat => Verdict::Unproved(Unproved::Initial),
+                    Sat::Unsat | Sat::Unknown => Verdict::Unproved(Unproved::Unknown {
+                        action: "the initial states".to_string(),
+                    }),
+                }
+            }
+            Some(Fall::Step(first) | Fall::GaveUp(Some(first))) => {
                 let mut cti = None;
                 let order = std::iter::once(first.index())
                     .chain((0..steps.len()).filter(|a| *a != first.index()));

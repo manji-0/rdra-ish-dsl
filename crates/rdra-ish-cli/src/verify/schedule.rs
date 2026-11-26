@@ -300,6 +300,13 @@ pub(super) struct Started {
     pub(super) states: Option<u64>,
 }
 
+/// Cores held for work beside the TLC runs, as `--prove`'s z3 processes: the runs that start
+/// while it is held count them as taken (#421).
+pub(super) struct Cores<'a> {
+    pool: &'a Pool,
+    cores: usize,
+}
+
 /// What one run holds of its `Pool`.
 pub(super) struct Slot<'a> {
     pool: &'a Pool,
@@ -347,6 +354,15 @@ impl Pool {
         running.share = running.share.max(share);
         drop(running);
         self.changed.notify_all();
+    }
+
+    /// Holds `cores` of the machine's cores, at most all of them, until the `Cores` drops, so
+    /// that the TLC runs that start meanwhile leave them free. It does not wait: a run going
+    /// keeps its cores, and the next waits for what is left.
+    pub(super) fn hold_cores(&self, cores: usize) -> Cores<'_> {
+        let cores = cores.min(self.machine.cores.max(1));
+        self.running.lock().expect("lock").cores += cores;
+        Cores { pool: self, cores }
     }
 
     /// Runs the jobs `jobs` names, one `pick` at a time, on as many threads as runs can go at
@@ -454,6 +470,13 @@ impl Slot<'_> {
         running.bytes += bytes;
         running.holding += 1;
         self.bytes = bytes;
+    }
+}
+
+impl Drop for Cores<'_> {
+    fn drop(&mut self) {
+        self.pool.running.lock().expect("lock").cores -= self.cores;
+        self.pool.changed.notify_all();
     }
 }
 
@@ -935,5 +958,38 @@ mod pick_tests {
             ),
             (0, 0, 0, 0)
         );
+    }
+
+    /// Cores `--prove`'s z3 processes hold are taken for the runs that start meanwhile: on 6
+    /// cores with 4 held, two one-worker runs go at once, not six; the cores come back when the
+    /// hold drops (#421).
+    #[test]
+    fn cores_held_beside_the_pool_are_left_free() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::time::Duration;
+        let pool = Pool::new(machine(6), 8 * GIB, 6, false);
+        pool.learn((0..6).map(|k| (k, 100)));
+        let held = AtomicUsize::new(0);
+        let most = AtomicUsize::new(0);
+        let jobs: Vec<usize> = (0..6).collect();
+        let z3 = pool.hold_cores(4);
+        pool.run(
+            &jobs,
+            |_, _, _| (GIB, (GIB, (false, 0))),
+            |started, _| {
+                let now = held.fetch_add(started.workers, Ordering::SeqCst) + started.workers;
+                most.fetch_max(now, Ordering::SeqCst);
+                std::thread::sleep(Duration::from_millis(5));
+                held.fetch_sub(started.workers, Ordering::SeqCst);
+            },
+        );
+        assert!(most.load(Ordering::SeqCst) <= 2, "{most:?}");
+        drop(z3);
+        assert_eq!(pool.running.lock().unwrap().cores, 0);
+        // More than the machine has holds all of it, and gives back as much.
+        let all = pool.hold_cores(100);
+        assert_eq!(pool.running.lock().unwrap().cores, 6);
+        drop(all);
+        assert_eq!(pool.running.lock().unwrap().cores, 0);
     }
 }

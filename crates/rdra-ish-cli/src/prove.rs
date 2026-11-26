@@ -9,6 +9,14 @@ use rdra_ish_core::lifecycle::{label_prefix, Selection, Target, TransitionSystem
 use rdra_ish_core::SemanticModel;
 use rdra_ish_emit::sql::{unenforced_rules, Dialect};
 
+/// `println!` onto the `String` `$text`.
+macro_rules! out {
+    ($text:expr, $($arg:tt)*) => {{
+        $text.push_str(&format!($($arg)*));
+        $text.push('\n');
+    }};
+}
+
 /// The env variable that names the z3 binary when `--z3` is not given.
 pub(crate) const Z3_ENV: &str = "RDRA_Z3";
 
@@ -83,11 +91,12 @@ impl Marks {
     }
 }
 
-/// Proves the selected state rules of `ts` and prints one line per rule. Lemmas are mined
+/// Proves the selected state rules of `ts` and writes one line per rule. Lemmas are mined
 /// from `twin` too (`prove::mining_twin`). A rule in `refuted`, which BFS violated at the
 /// instances it maps to, is not tried: it reads `refuted:`, and is an error of BFS's, not an
-/// unproved rule. Returns the tally and the rules proved, lemmas included, by index into
-/// `ts.invariants()`.
+/// unproved rule. Returns the tally, the rules proved, lemmas included, by index into
+/// `ts.invariants()`, and the lines to print, which the caller prints where the proof's
+/// place in the report is, whenever the proof ran.
 pub(crate) fn run_proof(
     ts: &TransitionSystem,
     twin: Option<&TransitionSystem>,
@@ -96,8 +105,9 @@ pub(crate) fn run_proof(
     refuted: &BTreeMap<usize, usize>,
     binary: &Path,
     deny_unproved: bool,
-) -> Result<(ProofTally, BTreeSet<usize>)> {
+) -> Result<(ProofTally, BTreeSet<usize>, String)> {
     let lemmas = &marks.lemmas;
+    let mut text = String::new();
     let version = Z3::version(binary).unwrap_or_default();
     let rules: Vec<usize> = selection
         .targets
@@ -150,22 +160,26 @@ pub(crate) fn run_proof(
         0 => String::new(),
         n => format!(" and {n} of your lemmas"),
     };
-    println!(
+    out!(
+        text,
         "proof{solver}: {} state rules{with_lemmas}, for any number of rows and any Int value",
         rules.len()
     );
     for r in yours.iter().chain(&rules) {
-        print_verdict(ts, r, marks, refuted);
+        print_verdict(&mut text, ts, r, marks, refuted);
     }
     for lemma in &proof.lemmas {
-        println!("lemma: {lemma}");
+        out!(text, "lemma: {lemma}");
     }
     for loose in &proof.loose {
-        println!("note: not encoded, so the proof allows any value or step there: {loose}");
+        out!(
+            text,
+            "note: not encoded, so the proof allows any value or step there: {loose}"
+        );
     }
-    println!("proof: {}", counts(&rules));
+    out!(text, "proof: {}", counts(&rules));
     if !yours.is_empty() {
-        println!("proof: your lemmas: {}", counts(&yours));
+        out!(text, "proof: your lemmas: {}", counts(&yours));
     }
     let app: Vec<&RuleProof> = rules
         .iter()
@@ -173,7 +187,8 @@ pub(crate) fn run_proof(
         .filter(|r| marks.unenforced.contains_key(&r.inv))
         .collect();
     if !app.is_empty() {
-        println!(
+        out!(
+            text,
             "proof: the SQL schema leaves {} rules to the application: {}",
             app.len(),
             counts(&app)
@@ -191,12 +206,13 @@ pub(crate) fn run_proof(
         .filter(|r| matches!(r.verdict, Verdict::Proved))
         .map(|r| r.inv)
         .collect();
-    Ok((tally, proved))
+    Ok((tally, proved, text))
 }
 
-/// One rule's line, and the CTI under an unproved one. A lemma the model marks reads
+/// One rule's line, and the CTI under an unproved one, onto `text`. A lemma the model marks reads
 /// `lemma <name>`; a rule the SQL schema does not enforce ends its name with why.
 fn print_verdict(
+    text: &mut String,
     ts: &TransitionSystem,
     r: &RuleProof,
     marks: &Marks,
@@ -218,26 +234,30 @@ fn print_verdict(
         inv.name
     );
     match &r.verdict {
-        Verdict::Proved => println!("proved: {name}"),
-        Verdict::OutOfScope(why) => println!("out of scope: {name}: {why}"),
+        Verdict::Proved => out!(text, "proved: {name}"),
+        Verdict::OutOfScope(why) => out!(text, "out of scope: {name}: {why}"),
         Verdict::Refuted => {
             let n = refuted[&r.inv];
             let s = if n == 1 { "" } else { "s" };
-            println!("refuted: {name} (BFS counterexample at {n} instance{s})")
+            out!(
+                text,
+                "refuted: {name} (BFS counterexample at {n} instance{s})"
+            )
         }
         Verdict::Unproved(Unproved::Initial) => {
-            println!("unproved: {name}: an initial state violates it")
+            out!(text, "unproved: {name}: an initial state violates it")
         }
         Verdict::Unproved(Unproved::Unknown { action }) => {
-            println!("unproved: {name}: z3 gave up on {action}")
+            out!(text, "unproved: {name}: z3 gave up on {action}")
         }
         Verdict::Unproved(Unproved::NotInductive(cti)) => {
-            println!(
+            out!(
+            text,
                 "unproved: {name}: not inductive; {} breaks it from a state where it and every proved rule hold (not necessarily reachable)",
                 cti.step
             );
             for row in &cti.rows {
-                println!("  {row}");
+                out!(text, "  {row}");
             }
         }
     }
