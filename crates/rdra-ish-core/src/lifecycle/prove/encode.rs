@@ -16,6 +16,7 @@
 
 use std::collections::BTreeMap;
 
+use super::smt::{self, and, eq, not, or, Command, Expr, Fun, Rel, Script, Sort};
 use crate::lifecycle::types::{
     Action, At, Birth, Choice, CmpOp, Domain, Effect, EntId, GuardWhy, ParamRole, Pred, Rhs, Start,
     Term, Value, VarId, VarKind,
@@ -52,7 +53,7 @@ pub(super) struct Formula {
 /// successor, and constrain both. `loose` names the guards and effects it could not express;
 /// a dropped guard and a havocked write only add steps, so a proof stays sound.
 pub(super) struct Step {
-    pub commands: String,
+    pub commands: Script,
     pub loose: Vec<String>,
 }
 
@@ -62,12 +63,12 @@ pub(super) struct Enc<'a> {
 
 enum Op {
     /// A var read: its SMT term and domain.
-    Var(String, Domain),
+    Var(Expr, Domain),
     Lit(Value),
     /// An integer term (a literal or `now`).
-    Num(String),
+    Num(Expr),
     /// A row of an entity (`Term::Index`).
-    Row(String, EntId),
+    Row(Expr, EntId),
 }
 
 /// What a predicate's slot references resolve to.
@@ -80,48 +81,44 @@ struct Scope<'s> {
     bound: Vec<EntId>,
 }
 
-pub(super) fn sort(e: EntId) -> String {
-    format!("E{}", e.index())
+pub(super) fn nil(e: EntId) -> Expr {
+    Expr::sym(format!("nil{}", e.index()), Sort::Ent(e))
 }
 
-pub(super) fn nil(e: EntId) -> String {
-    format!("nil{}", e.index())
+fn zero(e: EntId) -> Expr {
+    Expr::sym(format!("zero{}", e.index()), Sort::Ent(e))
 }
 
-fn zero(e: EntId) -> String {
-    format!("zero{}", e.index())
-}
-
-pub(super) fn func(var: VarId, frame: Frame) -> String {
-    match frame {
-        Frame::Pre => format!("v{}", var.index()),
-        Frame::Post => format!("v{}_n", var.index()),
-    }
-}
-
-pub(super) fn now(frame: Frame) -> &'static str {
-    match frame {
+fn now(frame: Frame) -> Expr {
+    let name = match frame {
         Frame::Pre => "now",
         Frame::Post => "now_n",
-    }
+    };
+    Expr::sym(name, Sort::Int)
 }
 
-pub(super) fn param(p: usize) -> String {
-    format!("p{p}")
+/// The row of entity `e` that a step's param `p` names.
+pub(super) fn param(p: usize, e: EntId) -> Expr {
+    Expr::sym(format!("p{p}"), Sort::Ent(e))
 }
 
-pub(super) fn bound(b: usize) -> String {
-    format!("b{b}")
+/// The row of entity `e` that a formula's binder `b` names.
+pub(super) fn bound(b: usize, e: EntId) -> Expr {
+    Expr::sym(format!("b{b}"), Sort::Ent(e))
 }
 
 impl Enc<'_> {
     /// `term` lies in `var`'s domain: `0..size` for a finite domain, any non-negative number
     /// for an Int domain.
-    fn in_domain(&self, var: VarId, term: &str) -> String {
+    fn in_domain(&self, var: VarId, term: &Expr) -> Expr {
         let domain = &self.ts.var(var).domain;
+        let from_zero = smt::rel(Rel::Le, Expr::int(0), term.clone());
         match domain.is_numeric() {
-            true => format!("(<= 0 {term})"),
-            false => format!("(and (<= 0 {term}) (< {term} {}))", domain.size(self.ts)),
+            true => from_zero,
+            false => {
+                let size = Expr::int(domain.size(self.ts) as i64);
+                and(vec![from_zero, smt::rel(Rel::Lt, term.clone(), size)])
+            }
         }
     }
 
@@ -133,10 +130,10 @@ impl Enc<'_> {
         }
     }
 
-    fn var_sort(&self, var: VarId) -> String {
+    fn var_sort(&self, var: VarId) -> Sort {
         match self.key(var) {
-            Some((parent, _)) => sort(parent),
-            None => "Int".to_string(),
+            Some((parent, _)) => Sort::Ent(parent),
+            None => Sort::Int,
         }
     }
 
@@ -145,26 +142,46 @@ impl Enc<'_> {
         self.ts.var_entity(var)
     }
 
-    /// `var` of `row` in `frame`.
-    pub(super) fn read(&self, var: VarId, frame: Frame, row: &str) -> String {
-        match self.ts.var(var).kind {
-            VarKind::Now => now(frame).to_string(),
-            _ => format!("({} {row})", func(var, frame)),
+    /// The function that holds a row var in `frame`.
+    fn func(&self, var: VarId, frame: Frame) -> Fun {
+        let e = self.owner(var).expect("a row var has an entity");
+        let name = match frame {
+            Frame::Pre => format!("v{}", var.index()),
+            Frame::Post => format!("v{}_n", var.index()),
+        };
+        Fun {
+            name,
+            args: vec![Sort::Ent(e)],
+            ret: self.var_sort(var),
         }
     }
 
-    fn exists(&self, e: EntId, frame: Frame, row: &str) -> String {
+    /// The row `x` of `var`'s entity that a fact or a successor function ranges over.
+    fn x(&self, var: VarId) -> Expr {
+        let e = self.owner(var).expect("a row var has an entity");
+        Expr::sym("x", Sort::Ent(e))
+    }
+
+    /// `var` of `row` in `frame`.
+    pub(super) fn read(&self, var: VarId, frame: Frame, row: &Expr) -> Expr {
+        match self.ts.var(var).kind {
+            VarKind::Now => now(frame),
+            _ => self.func(var, frame).apply(vec![row.clone()]),
+        }
+    }
+
+    fn exists(&self, e: EntId, frame: Frame, row: &Expr) -> Expr {
         self.read(self.ts.entity(e).exists, frame, row)
     }
 
-    fn present(&self, e: EntId, frame: Frame, row: &str) -> String {
-        format!("(= {} 1)", self.exists(e, frame, row))
+    fn present(&self, e: EntId, frame: Frame, row: &Expr) -> Expr {
+        eq(self.exists(e, frame, row), Expr::int(1))
     }
 
     /// A value of `var`'s domain as a term of its sort.
-    fn value(&self, var: VarId, v: Value) -> R<String> {
+    fn value(&self, var: VarId, v: Value) -> R<Expr> {
         match self.key(var) {
-            None => Ok(v.0.to_string()),
+            None => Ok(Expr::int(i64::from(v.0))),
             Some((parent, true)) if v == Value::NULL => Ok(nil(parent)),
             Some((parent, false)) if v.0 == 0 => Ok(zero(parent)),
             Some(_) => Err(Unsupported(format!(
@@ -176,100 +193,98 @@ impl Enc<'_> {
 
     /// The sorts, the pre-state functions, and the facts every state of the system has: each
     /// var stays in its domain, `nil` is never a row, and a non-optional key is never `nil`.
-    pub(super) fn declarations(&self) -> String {
+    pub(super) fn declarations(&self) -> Script {
         let ts = self.ts;
-        let mut out = String::new();
+        let mut out = Script::default();
         for e in ts.entity_ids() {
-            let s = sort(e);
-            out += &format!(
-                "(declare-sort {s} 0)\n(declare-const {n} {s})\n(declare-const {z} {s})\n(assert (distinct {n} {z}))\n",
-                n = nil(e),
-                z = zero(e)
-            );
+            out.push(Command::DeclareSort(e));
+            out.push(Command::DeclareConst(nil(e)));
+            out.push(Command::DeclareConst(zero(e)));
+            out.push(Command::Assert(smt::distinct(vec![nil(e), zero(e)])));
         }
         for v in ts.var_ids() {
             let decl = ts.var(v);
             if let VarKind::Now = decl.kind {
-                out += "(declare-const now Int)\n(assert (<= 0 now))\n";
+                let now = now(Frame::Pre);
+                out.push(Command::DeclareConst(now.clone()));
+                out.push(Command::Assert(smt::rel(Rel::Le, Expr::int(0), now)));
                 continue;
             }
-            let e = self.owner(v).expect("a row var has an entity");
-            let (s, f) = (sort(e), func(v, Frame::Pre));
-            out += &format!("(declare-fun {f} ({s}) {})\n", self.var_sort(v));
+            let (f, x) = (self.func(v, Frame::Pre), self.x(v));
+            let fx = f.apply(vec![x.clone()]);
+            out.push(Command::DeclareFun(f));
             match self.key(v) {
                 None => {
-                    out += &format!(
-                        "(assert (forall ((x {s})) {}))\n",
-                        self.in_domain(v, &format!("({f} x)"))
-                    );
+                    let fact = smt::forall(vec![x], self.in_domain(v, &fx));
+                    out.push(Command::Assert(fact));
                 }
                 Some((parent, false)) => {
-                    out += &format!(
-                        "(assert (forall ((x {s})) (not (= ({f} x) {}))))\n",
-                        nil(parent)
-                    );
+                    let fact = smt::forall(vec![x], not(eq(fx, nil(parent))));
+                    out.push(Command::Assert(fact));
                 }
                 Some((_, true)) => {}
             }
         }
         for e in ts.entity_ids() {
-            out += &format!("(assert (= {} 0))\n", self.exists(e, Frame::Pre, &nil(e)));
+            let absent = eq(self.exists(e, Frame::Pre, &nil(e)), Expr::int(0));
+            out.push(Command::Assert(absent));
         }
         out
     }
 
     /// The initial states: every var at base, except that each slot of a pre-existing entity
     /// is present and its columns and keys start as `Start` says.
-    pub(super) fn initial(&self) -> R<String> {
+    pub(super) fn initial(&self) -> R<Script> {
         let ts = self.ts;
-        let mut out = String::new();
+        let mut out = Script::default();
         for v in ts.var_ids() {
             let decl = ts.var(v);
             let base = self.value(v, decl.base)?;
             let Some(e) = self.owner(v) else {
-                out += &format!("(assert (= now {base}))\n");
+                out.push(Command::Assert(eq(now(Frame::Pre), base)));
                 continue;
             };
             let ent = ts.entity(e);
-            let s = sort(e);
-            let at_base = format!("(= ({} x) {base})", func(v, Frame::Pre));
+            let (f, x) = (self.func(v, Frame::Pre), self.x(v));
+            let fx = f.apply(vec![x.clone()]);
+            let at_base = eq(fx.clone(), base);
             let start = match (ent.birth, &decl.kind) {
                 (Birth::Created, _) => None,
-                (Birth::PreExisting, VarKind::Exists(_)) => {
-                    Some(format!("(= ({} x) 1)", func(v, Frame::Pre)))
-                }
+                (Birth::PreExisting, VarKind::Exists(_)) => Some(eq(fx, Expr::int(1))),
                 (Birth::PreExisting, _) if ent.columns.contains(&v) || ent.owners.contains(&v) => {
                     match decl.start {
                         Start::Base => None,
-                        Start::Any => Some("true".to_string()),
+                        Start::Any => Some(Expr::bool(true)),
                         Start::Identity => {
                             let (parent, _) = self.key(v).ok_or_else(|| {
                                 Unsupported("an identity start of a non-key".to_string())
                             })?;
-                            let f = func(v, Frame::Pre);
-                            out += &format!(
-                                "(assert (forall ((x {s}) (y {s})) (=> (and (not (= x {n})) (not (= y {n})) (= ({f} x) ({f} y))) (= x y))))\n",
-                                n = nil(e)
-                            );
-                            Some(format!("(not (= ({f} x) {}))", nil(parent)))
+                            let y = Expr::sym("y", Sort::Ent(e));
+                            let fy = f.apply(vec![y.clone()]);
+                            let same = and(vec![
+                                not(eq(x.clone(), nil(e))),
+                                not(eq(y.clone(), nil(e))),
+                                eq(fx.clone(), fy),
+                            ]);
+                            let injective = smt::implies(same, eq(x.clone(), y.clone()));
+                            out.push(Command::Assert(smt::forall(vec![x.clone(), y], injective)));
+                            Some(not(eq(fx, nil(parent))))
                         }
                     }
                 }
                 (Birth::PreExisting, _) => None,
             };
-            out += &match start {
-                None => format!("(assert (forall ((x {s})) {at_base}))\n"),
-                Some(start) => format!(
-                    "(assert (forall ((x {s})) (ite (= x {}) {at_base} {start})))\n",
-                    nil(e)
-                ),
+            let fact = match start {
+                None => at_base,
+                Some(start) => smt::ite(eq(x.clone(), nil(e)), at_base, start),
             };
+            out.push(Command::Assert(smt::forall(vec![x], fact)));
         }
         Ok(out)
     }
 
     /// The formula in `frame`, closed over its binders.
-    pub(super) fn holds(&self, f: &Formula, frame: Frame) -> R<String> {
+    pub(super) fn holds(&self, f: &Formula, frame: Frame) -> R<Expr> {
         let scope = Scope {
             frame,
             params: &[],
@@ -277,44 +292,37 @@ impl Enc<'_> {
         };
         let mut body = self.pred(&f.body, &scope)?;
         for (i, e) in f.binders.iter().enumerate().rev() {
-            let b = bound(i);
-            body = match f.all_rows {
-                true => format!(
-                    "(forall (({b} {})) (=> (not (= {b} {})) {body}))",
-                    sort(*e),
-                    nil(*e)
-                ),
-                false => format!(
-                    "(forall (({b} {})) (=> {} {body}))",
-                    sort(*e),
-                    self.present(*e, frame, &b)
-                ),
+            let b = bound(i, *e);
+            let row = match f.all_rows {
+                true => not(eq(b.clone(), nil(*e))),
+                false => self.present(*e, frame, &b),
             };
+            body = smt::forall(vec![b], smt::implies(row, body));
         }
         Ok(body)
     }
 
     /// Commands that declare one row per binder (`b0`, ..) and assert that they violate the
     /// formula in `frame`.
-    pub(super) fn violation(&self, f: &Formula, frame: Frame) -> R<String> {
+    pub(super) fn violation(&self, f: &Formula, frame: Frame) -> R<Script> {
         let scope = Scope {
             frame,
             params: &[],
             bound: f.binders.clone(),
         };
         let body = self.pred(&f.body, &scope)?;
-        let mut out = String::new();
+        let mut out = Script::default();
         let mut parts = Vec::new();
         for (i, e) in f.binders.iter().enumerate() {
-            let b = bound(i);
-            out += &format!("(declare-const {b} {})\n", sort(*e));
-            parts.push(format!("(not (= {b} {}))", nil(*e)));
+            let b = bound(i, *e);
+            out.push(Command::DeclareConst(b.clone()));
+            parts.push(not(eq(b.clone(), nil(*e))));
             if !f.all_rows {
                 parts.push(self.present(*e, frame, &b));
             }
         }
-        parts.push(format!("(not {body})"));
-        out += &format!("(assert (and {}))\n", parts.join(" "));
+        parts.push(not(body));
+        out.push(Command::Assert(and(parts)));
         Ok(out)
     }
 
@@ -322,58 +330,57 @@ impl Enc<'_> {
     /// by role, guards on both states, effects in order, deletes, then the choices.
     pub(super) fn step(&self, action: &Action) -> Step {
         let ts = self.ts;
-        let mut cmds = String::new();
+        let mut cmds = Script::default();
         let mut loose = Vec::new();
         let entities: Vec<EntId> = action.params.iter().map(|p| p.entity).collect();
+        let row = |p: u8| param(usize::from(p), entities[usize::from(p)]);
         for (i, p) in action.params.iter().enumerate() {
-            let (name, e) = (param(i), p.entity);
-            cmds += &format!(
-                "(declare-const {name} {})\n(assert (not (= {name} {})))\n",
-                sort(e),
-                nil(e)
-            );
+            let (name, e) = (param(i, p.entity), p.entity);
+            cmds.push(Command::DeclareConst(name.clone()));
+            cmds.push(Command::Assert(not(eq(name.clone(), nil(e)))));
             let exists = self.exists(e, Frame::Pre, &name);
             match p.role {
-                ParamRole::New => cmds += &format!("(assert (= {exists} 0))\n"),
+                ParamRole::New => cmds.push(Command::Assert(eq(exists, Expr::int(0)))),
                 ParamRole::Existing | ParamRole::Parent { .. } | ParamRole::Triggered => {
-                    cmds += &format!("(assert (= {exists} 1))\n")
+                    cmds.push(Command::Assert(eq(exists, Expr::int(1))))
                 }
                 ParamRole::Earlier { .. } => {}
             }
         }
 
         // The successor of each var, as a term over the row `x`, built in effect order.
-        let mut next: BTreeMap<VarId, String> = BTreeMap::new();
+        let mut next: BTreeMap<VarId, Expr> = BTreeMap::new();
         let mut extra = 0usize;
-        let mut fresh = |cmds: &mut String, sort: String| {
-            let name = format!("c{extra}");
+        let mut fresh = |cmds: &mut Script, sort: Sort| {
+            let c = Expr::sym(format!("c{extra}"), sort);
             extra += 1;
-            *cmds += &format!("(declare-const {name} {sort})\n");
-            name
+            cmds.push(Command::DeclareConst(c.clone()));
+            c
         };
-        let cur = |next: &BTreeMap<VarId, String>, v: VarId| {
+        let cur = |next: &BTreeMap<VarId, Expr>, v: VarId| {
             next.get(&v)
                 .cloned()
-                .unwrap_or_else(|| format!("({} x)", func(v, Frame::Pre)))
+                .unwrap_or_else(|| self.func(v, Frame::Pre).apply(vec![self.x(v)]))
         };
-        let set = |next: &mut BTreeMap<VarId, String>, v: VarId, p: u8, cond: &str, val: &str| {
-            let old = cur(next, v);
-            let at = format!("(= x {})", param(usize::from(p)));
-            let when = match cond {
-                "" => at,
-                c => format!("(and {at} {c})"),
+        let set =
+            |next: &mut BTreeMap<VarId, Expr>, v: VarId, p: u8, cond: Option<Expr>, val: Expr| {
+                let old = cur(next, v);
+                let at = eq(self.x(v), row(p));
+                let when = match cond {
+                    None => at,
+                    Some(c) => and(vec![at, c]),
+                };
+                next.insert(v, smt::ite(when, val, old));
             };
-            next.insert(v, format!("(ite {when} {val} {old})"));
-        };
-        let mut now_next = now(Frame::Pre).to_string();
+        let mut now_next = now(Frame::Pre);
         let mut deleted: Vec<u8> = Vec::new();
         // Choices fork after the other effects: (var, param, condition, choice).
-        let mut forks: Vec<(VarId, u8, String, String)> = Vec::new();
+        let mut forks: Vec<(VarId, u8, Option<Expr>, Expr)> = Vec::new();
         for eff in &action.effects {
             match eff {
                 Effect::Create { param: p } => {
                     let e = entities[usize::from(*p)];
-                    set(&mut next, ts.entity(e).exists, *p, "", "1");
+                    set(&mut next, ts.entity(e).exists, *p, None, Expr::int(1));
                 }
                 Effect::Delete { param: p } => deleted.push(*p),
                 Effect::Assign {
@@ -382,16 +389,16 @@ impl Enc<'_> {
                     let val = match rhs {
                         Rhs::Lit(v) => self.value(*var, *v),
                         Rhs::Param(q) => match self.key(*var) {
-                            Some(_) => Ok(param(usize::from(*q))),
+                            Some(_) => Ok(row(*q)),
                             None => Err(Unsupported("a slot index into a non-key".to_string())),
                         },
                     };
                     match val {
-                        Ok(val) => set(&mut next, *var, *p, "", &val),
+                        Ok(val) => set(&mut next, *var, *p, None, val),
                         Err(Unsupported(why)) => {
                             loose.push(format!("{} of {}: {why}", ts.var_name(*var), action.name));
                             let h = self.havoc(&mut cmds, &mut fresh, *var);
-                            set(&mut next, *var, *p, "", &h);
+                            set(&mut next, *var, *p, None, h);
                         }
                     }
                 }
@@ -401,7 +408,7 @@ impl Enc<'_> {
                     arms,
                     ..
                 } => {
-                    let from = self.read(*var, Frame::Pre, &param(usize::from(*p)));
+                    let from = self.read(*var, Frame::Pre, &row(*p));
                     let mut tos: BTreeMap<Value, Vec<Value>> = BTreeMap::new();
                     for arm in arms {
                         tos.entry(arm.from).or_default().push(arm.to);
@@ -416,36 +423,27 @@ impl Enc<'_> {
                         ) else {
                             loose.push(format!("{} of {}", ts.var_name(*var), action.name));
                             let h = self.havoc(&mut cmds, &mut fresh, *var);
-                            set(&mut next, *var, *p, "", &h);
+                            set(&mut next, *var, *p, None, h);
                             continue;
                         };
-                        let cond = format!("(= {from} {fv})");
+                        let cond = eq(from.clone(), fv);
                         match &tvs[..] {
-                            [to] => set(&mut next, *var, *p, &cond, to),
+                            [to] => set(&mut next, *var, *p, Some(cond), to.clone()),
                             _ => multi.push((cond, tvs)),
                         }
                     }
                     if !multi.is_empty() {
                         let c = fresh(&mut cmds, self.var_sort(*var));
-                        let when = format!(
-                            "(or {})",
-                            multi
-                                .iter()
-                                .map(|(c, _)| c.as_str())
-                                .collect::<Vec<_>>()
-                                .join(" ")
-                        );
+                        let when = or(multi.iter().map(|(cond, _)| cond.clone()).collect());
                         let pick = multi
-                            .iter()
+                            .into_iter()
                             .map(|(cond, tvs)| {
-                                let any: Vec<String> =
-                                    tvs.iter().map(|t| format!("(= {c} {t})")).collect();
-                                format!("(and {cond} (or {}))", any.join(" "))
+                                let any = tvs.into_iter().map(|t| eq(c.clone(), t)).collect();
+                                and(vec![cond, or(any)])
                             })
-                            .collect::<Vec<_>>()
-                            .join(" ");
-                        cmds += &format!("(assert (=> {when} (or {pick})))\n");
-                        forks.push((*var, *p, when, c));
+                            .collect();
+                        cmds.push(Command::Assert(smt::implies(when.clone(), or(pick))));
+                        forks.push((*var, *p, Some(when), c));
                     }
                 }
                 Effect::Choose {
@@ -459,16 +457,16 @@ impl Enc<'_> {
                 {
                     Ok(vals) => {
                         let c = fresh(&mut cmds, self.var_sort(*var));
-                        cmds += &format!("(assert {})\n", self.one_of(*var, values, &vals, &c));
-                        forks.push((*var, *p, String::new(), c));
+                        cmds.push(Command::Assert(self.one_of(*var, values, vals, &c)));
+                        forks.push((*var, *p, None, c));
                     }
                     Err(Unsupported(why)) => {
                         loose.push(format!("{} of {}: {why}", ts.var_name(*var), action.name));
                         let h = self.havoc(&mut cmds, &mut fresh, *var);
-                        forks.push((*var, *p, String::new(), h));
+                        forks.push((*var, *p, None, h));
                     }
                 },
-                Effect::Tick => now_next = format!("(+ {} 1)", now(Frame::Pre)),
+                Effect::Tick => now_next = smt::add(now(Frame::Pre), Expr::int(1)),
             }
         }
         for &p in &deleted {
@@ -476,30 +474,33 @@ impl Enc<'_> {
             // A deleted row keeps its keys, as in the native step.
             for &v in &decl.columns {
                 match self.value(v, ts.var(v).base) {
-                    Ok(base) => set(&mut next, v, p, "", &base),
+                    Ok(base) => set(&mut next, v, p, None, base),
                     Err(_) => unreachable!("a base value is always expressible"),
                 }
             }
-            set(&mut next, decl.exists, p, "", "2");
+            set(&mut next, decl.exists, p, None, Expr::int(2));
         }
         for (v, p, cond, c) in forks {
             if !deleted.contains(&p) {
-                set(&mut next, v, p, &cond, &c);
+                set(&mut next, v, p, cond, c);
             }
         }
 
         for v in ts.var_ids() {
-            let Some(e) = self.owner(v) else {
-                cmds += &format!("(define-fun now_n () Int {now_next})\n");
+            if self.owner(v).is_none() {
+                let f = Fun {
+                    name: "now_n".to_string(),
+                    args: Vec::new(),
+                    ret: Sort::Int,
+                };
+                cmds.push(Command::DefineFun(f, Vec::new(), now_next.clone()));
                 continue;
-            };
-            cmds += &format!(
-                "(define-fun {} ((x {})) {} {})\n",
-                func(v, Frame::Post),
-                sort(e),
-                self.var_sort(v),
-                cur(&next, v)
-            );
+            }
+            cmds.push(Command::DefineFun(
+                self.func(v, Frame::Post),
+                vec![self.x(v)],
+                cur(&next, v),
+            ));
         }
 
         let scope = Scope {
@@ -510,7 +511,7 @@ impl Enc<'_> {
         // The clock's guard is the bound's top; without a top, `Tick` always runs.
         for g in action.guards.iter().filter(|g| g.why != GuardWhy::Clock) {
             match self.pred(&g.pred, &scope) {
-                Ok(p) => cmds += &format!("(assert {p})\n"),
+                Ok(p) => cmds.push(Command::Assert(p)),
                 Err(Unsupported(why)) => loose.push(format!("a guard of {}: {why}", action.name)),
             }
         }
@@ -523,7 +524,7 @@ impl Enc<'_> {
     /// `c` is one of `values` (whose terms are `terms`). A list of every index from 1 of an Int
     /// domain at the bounds stands for every index from 1 (every number, or every non-null
     /// one), and with index 0 for every index.
-    fn one_of(&self, var: VarId, values: &[Choice], terms: &[String], c: &str) -> String {
+    fn one_of(&self, var: VarId, values: &[Choice], terms: Vec<Expr>, c: &Expr) -> Expr {
         let domain = &self.ts.var(var).domain;
         let size = domain.size(self.ts);
         let has = |v: Value| values.iter().any(|c| c.value == v);
@@ -535,31 +536,31 @@ impl Enc<'_> {
                 true => 0,
                 false => 1,
             };
-            return format!("(<= {from} {c})");
+            return smt::rel(Rel::Le, Expr::int(from), c.clone());
         }
-        or(terms.iter().map(|t| format!("(= {c} {t})")).collect())
+        any(terms.into_iter().map(|t| eq(c.clone(), t)).collect())
     }
 
     /// A fresh constant of `var`'s domain.
     fn havoc(
         &self,
-        cmds: &mut String,
-        fresh: &mut impl FnMut(&mut String, String) -> String,
+        cmds: &mut Script,
+        fresh: &mut impl FnMut(&mut Script, Sort) -> Expr,
         var: VarId,
-    ) -> String {
+    ) -> Expr {
         let h = fresh(cmds, self.var_sort(var));
         match self.key(var) {
-            None => *cmds += &format!("(assert {})\n", self.in_domain(var, &h)),
-            Some((parent, false)) => *cmds += &format!("(assert (not (= {h} {})))\n", nil(parent)),
+            None => cmds.push(Command::Assert(self.in_domain(var, &h))),
+            Some((parent, false)) => cmds.push(Command::Assert(not(eq(h.clone(), nil(parent))))),
             Some((_, true)) => {}
         }
         h
     }
 
-    fn pred(&self, pred: &Pred, scope: &Scope) -> R<String> {
+    fn pred(&self, pred: &Pred, scope: &Scope) -> R<Expr> {
         Ok(match pred {
-            Pred::True => "true".to_string(),
-            Pred::False => "false".to_string(),
+            Pred::True => Expr::bool(true),
+            Pred::False => Expr::bool(false),
             Pred::Cmp(a, op, b) => {
                 let (a, b) = (self.term(a, scope)?, self.term(b, scope)?);
                 self.compare(&a, *op, &b)?
@@ -570,13 +571,13 @@ impl Enc<'_> {
                     .iter()
                     .map(|v| self.compare(&a, CmpOp::Eq, &self.term(v, scope)?))
                     .collect::<R<Vec<_>>>()?;
-                or(parts)
+                any(parts)
             }
-            Pred::Not(p) => format!("(not {})", self.pred(p, scope)?),
-            Pred::And(ps) => and(ps.iter().map(|p| self.pred(p, scope)).collect::<R<_>>()?),
-            Pred::Or(ps) => or(ps.iter().map(|p| self.pred(p, scope)).collect::<R<_>>()?),
+            Pred::Not(p) => not(self.pred(p, scope)?),
+            Pred::And(ps) => all(ps.iter().map(|p| self.pred(p, scope)).collect::<R<_>>()?),
+            Pred::Or(ps) => any(ps.iter().map(|p| self.pred(p, scope)).collect::<R<_>>()?),
             Pred::Forall { entity, body } | Pred::Exists { entity, body } => {
-                let b = bound(scope.bound.len());
+                let b = bound(scope.bound.len(), *entity);
                 let mut inner = Scope {
                     frame: scope.frame,
                     params: scope.params,
@@ -585,10 +586,9 @@ impl Enc<'_> {
                 inner.bound.push(*entity);
                 let body = self.pred(body, &inner)?;
                 let present = self.present(*entity, scope.frame, &b);
-                let s = sort(*entity);
                 match pred {
-                    Pred::Forall { .. } => format!("(forall (({b} {s})) (=> {present} {body}))"),
-                    _ => format!("(exists (({b} {s})) (and {present} {body}))"),
+                    Pred::Forall { .. } => smt::forall(vec![b], smt::implies(present, body)),
+                    _ => smt::exists(vec![b], and(vec![present, body])),
                 }
             }
             Pred::Count {
@@ -602,10 +602,10 @@ impl Enc<'_> {
                 match op {
                     CmpOp::Ge => at_least(n)?,
                     CmpOp::Gt => at_least(n + 1)?,
-                    CmpOp::Le => format!("(not {})", at_least(n + 1)?),
-                    CmpOp::Lt => format!("(not {})", at_least(n)?),
-                    CmpOp::Eq => format!("(and {} (not {}))", at_least(n)?, at_least(n + 1)?),
-                    CmpOp::Ne => format!("(not (and {} (not {})))", at_least(n)?, at_least(n + 1)?),
+                    CmpOp::Le => not(at_least(n + 1)?),
+                    CmpOp::Lt => not(at_least(n)?),
+                    CmpOp::Eq => and(vec![at_least(n)?, not(at_least(n + 1)?)]),
+                    CmpOp::Ne => not(and(vec![at_least(n)?, not(at_least(n + 1)?)])),
                 }
             }
         })
@@ -615,16 +615,17 @@ impl Enc<'_> {
     /// present and satisfying it. The body reads its row as `b<depth>`; each witness binds that
     /// name with `let`. That is the count, not an approximation of it, in either polarity.
     /// Past `COUNT_WITNESSES` witnesses the formula is out of scope.
-    fn at_least(&self, entity: EntId, body: &Pred, k: u16, scope: &Scope) -> R<String> {
+    fn at_least(&self, entity: EntId, body: &Pred, k: u16, scope: &Scope) -> R<Expr> {
         if k == 0 {
-            return Ok("true".to_string());
+            return Ok(Expr::bool(true));
         }
         if k > COUNT_WITNESSES {
             return Err(Unsupported(format!(
                 "a count of {k} or more rows (at most {COUNT_WITNESSES} unroll)"
             )));
         }
-        let b = bound(scope.bound.len());
+        let depth = scope.bound.len();
+        let b = bound(depth, entity);
         let mut inner = Scope {
             frame: scope.frame,
             params: scope.params,
@@ -633,39 +634,32 @@ impl Enc<'_> {
         inner.bound.push(entity);
         let body = self.pred(body, &inner)?;
         let present = self.present(entity, scope.frame, &b);
-        let s = sort(entity);
-        let witnesses: Vec<String> = (0..k).map(|i| format!("{b}_{i}")).collect();
-        let decls: Vec<String> = witnesses.iter().map(|w| format!("({w} {s})")).collect();
-        let mut parts: Vec<String> = Vec::new();
+        let witnesses: Vec<Expr> = (0..k)
+            .map(|i| Expr::sym(format!("b{depth}_{i}"), Sort::Ent(entity)))
+            .collect();
+        let mut parts: Vec<Expr> = Vec::new();
         if k > 1 {
-            parts.push(format!("(distinct {})", witnesses.join(" ")));
+            parts.push(smt::distinct(witnesses.clone()));
         }
+        let witnessed = and(vec![present, body]);
         parts.extend(
             witnesses
                 .iter()
-                .map(|w| format!("(let (({b} {w})) (and {present} {body}))")),
+                .map(|w| smt::let_in(vec![(b.clone(), w.clone())], witnessed.clone())),
         );
-        Ok(format!("(exists ({}) {})", decls.join(" "), and(parts)))
+        Ok(smt::exists(witnesses, all(parts)))
     }
 
-    fn row(&self, at: At, scope: &Scope) -> (String, EntId, Frame) {
-        match at {
-            At::Param(p) => (
-                param(usize::from(p)),
-                scope.params[usize::from(p)],
-                Frame::Pre,
-            ),
-            At::Next(p) => (
-                param(usize::from(p)),
-                scope.params[usize::from(p)],
-                Frame::Post,
-            ),
-            At::Bound(b) => (
-                bound(usize::from(b)),
-                scope.bound[usize::from(b)],
-                scope.frame,
-            ),
-        }
+    fn row(&self, at: At, scope: &Scope) -> (Expr, EntId, Frame) {
+        let (name, e, frame) = match at {
+            At::Param(p) => (usize::from(p), scope.params[usize::from(p)], Frame::Pre),
+            At::Next(p) => (usize::from(p), scope.params[usize::from(p)], Frame::Post),
+            At::Bound(b) => {
+                let e = scope.bound[usize::from(b)];
+                return (bound(usize::from(b), e), e, scope.frame);
+            }
+        };
+        (param(name, e), e, frame)
     }
 
     fn term(&self, term: &Term, scope: &Scope) -> R<Op> {
@@ -678,30 +672,29 @@ impl Enc<'_> {
                 )
             }
             Term::Lit(v) => Op::Lit(*v),
-            Term::Int(n) if *n >= 0 => Op::Num(n.to_string()),
-            Term::Int(n) => Op::Num(format!("(- {})", n.unsigned_abs())),
+            Term::Int(n) => Op::Num(Expr::int(*n)),
             Term::Index(at) => {
                 let (row, e, _) = self.row(*at, scope);
                 Op::Row(row, e)
             }
-            Term::Now => Op::Num(now(scope.frame).to_string()),
+            Term::Now => Op::Num(now(scope.frame)),
         })
     }
 
     /// `expr::compare` over terms: a key against a row, then numbers (where `null` equals only
     /// `null` and is never ordered), then domain indices.
-    fn compare(&self, lhs: &Op, op: CmpOp, rhs: &Op) -> R<String> {
+    fn compare(&self, lhs: &Op, op: CmpOp, rhs: &Op) -> R<Expr> {
         fn unsupported<T>(what: &str) -> R<T> {
             Err(Unsupported(what.to_string()))
         }
         if let (Op::Row(row, e), Op::Var(v, d)) | (Op::Var(v, d), Op::Row(row, e)) = (lhs, rhs) {
             return match d {
                 Domain::Instance { parent, .. } if parent == e => {
-                    let eq = format!("(= {v} {row})");
+                    let same = eq(v.clone(), row.clone());
                     Ok(match op {
-                        CmpOp::Eq => eq,
-                        CmpOp::Ne => format!("(not {eq})"),
-                        _ => "false".to_string(),
+                        CmpOp::Eq => same,
+                        CmpOp::Ne => not(same),
+                        _ => Expr::bool(false),
                     })
                 }
                 _ => unsupported("a row compared with a value that is not its key"),
@@ -715,31 +708,42 @@ impl Enc<'_> {
         let is_num = |o: &Op| matches!(o, Op::Num(_));
         if domain.is_some() || is_num(lhs) || is_num(rhs) {
             // (is null, number)
-            let num = |o: &Op| -> R<(String, String)> {
+            let num = |o: &Op| -> R<(Expr, Expr)> {
+                let no = Expr::bool(false);
                 Ok(match o {
-                    Op::Num(n) => ("false".to_string(), n.clone()),
+                    Op::Num(n) => (no, n.clone()),
                     Op::Row(..) => return unsupported("a row compared as a number"),
                     // A var reads through its own numeric domain, else the other side's.
                     Op::Var(_, Domain::Instance { .. }) => {
                         return unsupported("a key compared as a number")
                     }
                     Op::Var(v, _) => match numeric(o).or(domain.clone()) {
-                        Some(Domain::NullableInt) => (format!("(= {v} 0)"), format!("(- {v} 1)")),
-                        _ => ("false".to_string(), v.clone()),
+                        Some(Domain::NullableInt) => (
+                            eq(v.clone(), Expr::int(0)),
+                            smt::sub(v.clone(), Expr::int(1)),
+                        ),
+                        _ => (no, v.clone()),
                     },
                     Op::Lit(v) => match &domain {
-                        Some(Domain::NullableInt) if v.0 == 0 => ("true".to_string(), "0".into()),
-                        Some(Domain::NullableInt) => ("false".to_string(), (v.0 - 1).to_string()),
-                        _ => ("false".to_string(), v.0.to_string()),
+                        Some(Domain::NullableInt) if v.0 == 0 => (Expr::bool(true), Expr::int(0)),
+                        Some(Domain::NullableInt) => (no, Expr::int(i64::from(v.0) - 1)),
+                        _ => (no, Expr::int(i64::from(v.0))),
                     },
                 })
             };
             let ((ln, l), (rn, r)) = (num(lhs)?, num(rhs)?);
-            let both = format!("(and (not {ln}) (not {rn}))");
+            let both = and(vec![not(ln.clone()), not(rn.clone())]);
+            let equal = || {
+                let nulls = and(vec![ln.clone(), rn.clone()]);
+                or(vec![
+                    nulls,
+                    and(vec![both.clone(), eq(l.clone(), r.clone())]),
+                ])
+            };
             return Ok(match op {
-                CmpOp::Eq => format!("(or (and {ln} {rn}) (and {both} (= {l} {r})))"),
-                CmpOp::Ne => format!("(not (or (and {ln} {rn}) (and {both} (= {l} {r}))))"),
-                _ => format!("(and {both} ({} {l} {r}))", ordered(op)),
+                CmpOp::Eq => equal(),
+                CmpOp::Ne => not(equal()),
+                _ => and(vec![both.clone(), ordered(op, l.clone(), r.clone())]),
             });
         }
         // Domain indices; a key's values are rows of its parent.
@@ -747,7 +751,7 @@ impl Enc<'_> {
             Op::Var(_, Domain::Instance { parent, optional }) => Some((*parent, *optional)),
             _ => None,
         };
-        let id = |o: &Op, other: Option<(EntId, bool)>| -> R<Option<(String, EntId, bool)>> {
+        let id = |o: &Op, other: Option<(EntId, bool)>| -> R<Option<(Expr, EntId, bool)>> {
             Ok(match (o, other) {
                 (Op::Var(v, Domain::Instance { parent, optional }), _) => {
                     Some((v.clone(), *parent, *optional))
@@ -769,23 +773,23 @@ impl Enc<'_> {
                 if le != re || lo != ro {
                     return unsupported("keys of different shapes compared");
                 }
-                let eq = format!("(= {l} {r})");
+                let same = eq(l, r);
                 match op {
-                    CmpOp::Eq => Ok(eq),
-                    CmpOp::Ne => Ok(format!("(not {eq})")),
+                    CmpOp::Eq => Ok(same),
+                    CmpOp::Ne => Ok(not(same)),
                     _ => unsupported("rows compared by order"),
                 }
             }
             (None, None) => {
                 let index = |o: &Op| match o {
                     Op::Var(v, _) => v.clone(),
-                    Op::Lit(v) => v.0.to_string(),
+                    Op::Lit(v) => Expr::int(i64::from(v.0)),
                     Op::Num(n) => n.clone(),
                     Op::Row(r, _) => r.clone(),
                 };
                 Ok(match op {
-                    CmpOp::Ne => format!("(not (= {} {}))", index(lhs), index(rhs)),
-                    _ => format!("({} {} {})", ordered(op), index(lhs), index(rhs)),
+                    CmpOp::Ne => not(eq(index(lhs), index(rhs))),
+                    _ => ordered(op, index(lhs), index(rhs)),
                 })
             }
             _ => unsupported("a key compared with a plain value"),
@@ -793,30 +797,32 @@ impl Enc<'_> {
     }
 }
 
-fn ordered(op: CmpOp) -> &'static str {
+fn ordered(op: CmpOp, a: Expr, b: Expr) -> Expr {
     match op {
-        CmpOp::Eq => "=",
-        CmpOp::Ne => "distinct",
-        CmpOp::Lt => "<",
-        CmpOp::Le => "<=",
-        CmpOp::Gt => ">",
-        CmpOp::Ge => ">=",
+        CmpOp::Eq => eq(a, b),
+        CmpOp::Ne => smt::distinct(vec![a, b]),
+        CmpOp::Lt => smt::rel(Rel::Lt, a, b),
+        CmpOp::Le => smt::rel(Rel::Le, a, b),
+        CmpOp::Gt => smt::rel(Rel::Gt, a, b),
+        CmpOp::Ge => smt::rel(Rel::Ge, a, b),
     }
 }
 
-fn and(parts: Vec<String>) -> String {
+/// The conjunction of `parts`: `true` for none, the part itself for one.
+fn all(parts: Vec<Expr>) -> Expr {
     match parts.len() {
-        0 => "true".to_string(),
+        0 => Expr::bool(true),
         1 => parts.into_iter().next().unwrap(),
-        _ => format!("(and {})", parts.join(" ")),
+        _ => and(parts),
     }
 }
 
-fn or(parts: Vec<String>) -> String {
+/// The disjunction of `parts`: `false` for none, the part itself for one.
+fn any(parts: Vec<Expr>) -> Expr {
     match parts.len() {
-        0 => "false".to_string(),
+        0 => Expr::bool(false),
         1 => parts.into_iter().next().unwrap(),
-        _ => format!("(or {})", parts.join(" ")),
+        _ => or(parts),
     }
 }
 
@@ -829,21 +835,77 @@ mod tests {
     fn a_key_against_a_nullable_number_is_unsupported() {
         let ts = TransitionSystem::empty(Bounds::VERIFY);
         let enc = Enc { ts: &ts };
+        let parent = EntId::at(0);
         let key = Op::Var(
-            "(v0 p0)".to_string(),
+            Expr::sym("k", Sort::Ent(parent)),
             Domain::Instance {
-                parent: EntId::at(0),
+                parent,
                 optional: true,
             },
         );
-        let n = Op::Var("(v1 p1)".to_string(), Domain::NullableInt);
+        let n = Op::Var(Expr::sym("n", Sort::Int), Domain::NullableInt);
         for (l, r) in [(&key, &n), (&n, &key)] {
             assert!(enc.compare(l, CmpOp::Eq, r).is_err());
         }
     }
 
+    /// Every count operator, and an Int literal below zero, which no sample reaches: the text
+    /// the `format!` encoder wrote for them (#426).
+    #[test]
+    fn counts_and_negative_numbers_print_as_before() {
+        let ts = crate::lifecycle::tests::system_from(
+            "entity Member \"m\" {\n  id: Int @pk\n}\n\
+             entity Loan \"l\" {\n  id: Int @pk\n  status: Enum(open, closed) @default(open)\n}\n\
+             usecase Join \"j\"\nusecase Borrow \"b\"\n\
+             creates(Join, Member)\ncreates(Borrow, Loan)\nupdates(Borrow, Member)\n\
+             relate(Loan, Member, 0..3:1)\n\
+             invariant(Member).at_most(3, Loan.status == open)\n",
+            Bounds::VERIFY,
+        );
+        let inv = ts
+            .invariants()
+            .iter()
+            .find(|i| matches!(i.body, Pred::Count { .. }))
+            .expect("a count rule");
+        let Pred::Count { entity, body, .. } = &inv.body else {
+            unreachable!()
+        };
+        let enc = Enc { ts: &ts };
+        let scope = Scope {
+            frame: Frame::Pre,
+            params: &[],
+            bound: inv.binders.clone(),
+        };
+        let al = |k| enc.at_least(*entity, body, k, &scope).unwrap().to_string();
+        let count = |op| {
+            let p = Pred::Count {
+                entity: *entity,
+                body: body.clone(),
+                op,
+                n: 2,
+            };
+            enc.pred(&p, &scope).unwrap().to_string()
+        };
+        assert_eq!(count(CmpOp::Ge), al(2));
+        assert_eq!(count(CmpOp::Gt), al(3));
+        assert_eq!(count(CmpOp::Le), format!("(not {})", al(3)));
+        assert_eq!(count(CmpOp::Lt), format!("(not {})", al(2)));
+        assert_eq!(count(CmpOp::Eq), format!("(and {} (not {}))", al(2), al(3)));
+        assert_eq!(
+            count(CmpOp::Ne),
+            format!("(not (and {} (not {})))", al(2), al(3))
+        );
+        assert!(al(2).starts_with("(exists ((b1_0 E"), "{}", al(2));
+        assert_eq!(al(0), "true");
+        assert!(enc.at_least(*entity, body, 9, &scope).is_err());
+        let Op::Num(n) = enc.term(&Term::Int(-5), &scope).unwrap() else {
+            panic!()
+        };
+        assert_eq!(n.to_string(), "(- 5)");
+    }
+
     #[test]
     fn an_empty_disjunction_is_false() {
-        assert_eq!(or(Vec::new()), "false");
+        assert_eq!(any(Vec::new()).to_string(), "false");
     }
 }
