@@ -9,45 +9,33 @@
 
 use std::collections::BTreeMap;
 use std::num::NonZeroU8;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use rdra_ish_core::lifecycle::prove::{self, ProveOptions, Unproved, Verdict, Z3};
 use rdra_ish_core::lifecycle::{Bounds, Caps, Scope, StateDiag, Target, TransitionSystem};
 use rdra_ish_core::load_project;
 
+#[path = "common/samples.rs"]
+mod samples;
+use samples::repo;
+
+#[path = "common/tools.rs"]
+mod tools;
+use tools::{found_or_skip, on_path};
+
 const STATE_CAP: usize = 300_000;
 
-fn repo() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
 fn samples() -> Vec<String> {
-    let mut out: Vec<String> = std::fs::read_to_string(repo().join("samples.txt"))
-        .expect("samples.txt")
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
-        .map(str::to_string)
-        .collect();
+    let mut out = samples::samples();
     out.push("samples/formal-verification-fail/order.rdra".to_string());
     out
 }
 
 fn find_z3() -> Option<PathBuf> {
-    let named = std::env::var_os("RDRA_Z3").map(PathBuf::from);
-    let found = named.or_else(|| {
-        std::env::split_paths(&std::env::var_os("PATH")?)
-            .map(|d| d.join("z3"))
-            .find(|p| p.is_file())
-    });
-    if found.is_none() {
-        let reason = "z3 not on PATH (run inside `nix develop`)";
-        assert!(
-            std::env::var("RDRA_REQUIRE_Z3").as_deref() != Ok("1"),
-            "RDRA_REQUIRE_Z3=1 but {reason}"
-        );
-        println!("skipped: {reason}");
-    }
+    let found = std::env::var_os("RDRA_Z3")
+        .map(PathBuf::from)
+        .or_else(|| on_path("z3"));
+    found_or_skip(found.is_some(), "z3 is not on PATH", "RDRA_REQUIRE_Z3");
     found
 }
 
