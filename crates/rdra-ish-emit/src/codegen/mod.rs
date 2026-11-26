@@ -139,9 +139,29 @@ pub fn generate_all(
     })
 }
 
-/// snake_case of a model identifier, as the printers spell function and method names.
+/// snake_case of a model identifier, as the printers spell function and method names:
+/// `CustomerAccount` is `customer_account`.
 pub fn snake(id: &str) -> String {
-    actions::snake(id)
+    let mut out = String::new();
+    let mut prev_lower = false;
+    for ch in id.chars() {
+        if ch == '-' || ch == ' ' {
+            out.push('_');
+            prev_lower = false;
+            continue;
+        }
+        if ch.is_uppercase() {
+            if prev_lower {
+                out.push('_');
+            }
+            out.extend(ch.to_lowercase());
+            prev_lower = false;
+        } else {
+            out.push(ch);
+            prev_lower = ch.is_lowercase() || ch.is_ascii_digit();
+        }
+    }
+    out
 }
 
 /// What the probe binds (`[code.<lang>]` in rdra.toml): the service type, the path of the

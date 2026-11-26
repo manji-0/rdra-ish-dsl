@@ -796,15 +796,6 @@ fn print_rows(cx: &Cx<'_>, out: &mut String) {
 
 // ── Use cases ────────────────────────────────────────────────────────────────
 
-/// `<UseCase>Error`, as the IR names it.
-fn error_type(domain: &DomainModel, usecase: &str) -> String {
-    domain
-        .error_of(usecase)
-        .expect("a use case with functions has an error type")
-        .name
-        .clone()
-}
-
 fn invalid_argument(indent: &str, message: &str) -> String {
     fail(
         indent,
@@ -936,7 +927,7 @@ fn print_functions(cx: &Cx<'_>, out: &mut String) {
         for o in &f.outputs {
             out.push_str(&format!(
                 "  {}: ExpectedSource;\n",
-                property(&format!("{}_expected", o.name))
+                property(&o.expected_name())
             ));
         }
         for m in &f.marks_out {
@@ -945,7 +936,7 @@ fn print_functions(cx: &Cx<'_>, out: &mut String) {
         for event in &f.raises {
             out.push_str(&format!(
                 "  {}: {};\n",
-                property(&super::actions::snake(&event.ty)),
+                property(&super::snake(&event.ty)),
                 event.ty
             ));
         }
@@ -1208,7 +1199,7 @@ fn print_functions(cx: &Cx<'_>, out: &mut String) {
             };
             out.push_str(&format!(
                 "      {}: {expected},\n",
-                property(&format!("{}_expected", o.name))
+                property(&o.expected_name())
             ));
         }
         let source = |s: &super::ir::MarkSource| match s {
@@ -1232,7 +1223,7 @@ fn print_functions(cx: &Cx<'_>, out: &mut String) {
             }
             out.push_str(&format!(
                 "      {}: {{ {} }},\n",
-                property(&super::actions::snake(&event.ty)),
+                property(&super::snake(&event.ty)),
                 parts.join(", ")
             ));
         }
@@ -1250,7 +1241,7 @@ fn print_functions(cx: &Cx<'_>, out: &mut String) {
             fn_name(&f.name),
             params.join(", "),
             f.result,
-            error_type(domain, &f.usecase)
+            domain.error_name(&f.usecase)
         ));
         out.push_str(&body);
     }
@@ -1404,7 +1395,7 @@ fn print_validators(cx: &Cx<'_>, out: &mut String) {
         for rule in &v.rules {
             out.push_str(&format!(
                 "  if ({}) {{\n    out.push({}); // {}\n  }}\n",
-                expr(&fails(&rule.expr), &row, &|_| String::new()),
+                expr(&rule.expr.fails(), &row, &|_| String::new()),
                 string_literal(&rule.name),
                 one_line(&rule.text)
             ));
@@ -1430,11 +1421,6 @@ fn print_validators(cx: &Cx<'_>, out: &mut String) {
         }
         out.push_str("    default:\n      return assertNever(kind);\n  }\n}\n\n");
     }
-}
-
-/// The condition under which `e` fails, folded so that a negated comparison reads plainly.
-fn fails(e: &super::ir::Expr) -> super::ir::Expr {
-    super::actions::simplify(super::ir::Expr::Not(Box::new(e.clone())))
 }
 
 // ── Dispatch ─────────────────────────────────────────────────────────────────
@@ -1486,7 +1472,7 @@ fn print_dispatchers(cx: &Cx<'_>, out: &mut String) {
             super::camel(&d.name),
             params.join(", "),
             d.outcome,
-            error_type(domain, &d.usecase)
+            domain.error_name(&d.usecase)
         ));
         for c in &d.cases {
             let tests: Vec<String> = c

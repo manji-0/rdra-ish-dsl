@@ -574,7 +574,7 @@ pub(super) fn ident(name: &str) -> String {
 
 /// A function name: snake_case of the PascalCase name, escaped as [`ident`] escapes a field.
 pub(super) fn fn_ident(pascal: &str) -> String {
-    ident(&super::actions::snake(pascal))
+    ident(&super::snake(pascal))
 }
 
 fn comment(line: &str) -> String {
@@ -740,9 +740,7 @@ fn print_error(e: &UseCaseErrorDecl, out: &mut String) {
 
 /// The `Err` that returns `InvalidArgument` of `f`'s use case, as an expression.
 fn invalid_argument(domain: &DomainModel, f: &FnDecl, reason: &str) -> String {
-    let error = domain
-        .error_of(&f.usecase)
-        .map_or("InvalidArgument", |e| e.name.as_str());
+    let error = domain.error_name(&f.usecase);
     format!(
         "{error}::InvalidArgument(InvalidArgument {{ usecase: {}, reason: {} }})",
         string_literal(&f.usecase),
@@ -829,8 +827,8 @@ fn param_name(name: &str, body: &str) -> String {
 }
 
 pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
-    use super::actions::snake;
     use super::ir::{Adapt, ArgCheck, Assigned, OutKind};
+    use super::snake;
     if !domain.events.is_empty() {
         out.push_str("// ── Events ──\n\n");
     }
@@ -885,9 +883,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
     out.push_str("#[derive(Debug, Clone, Copy, PartialEq, Eq)]\n");
     out.push_str("pub enum ExpectedSource {\n    /// The row is created: no row has its id.\n    Absent,\n    /// The row exists.\n    Present,\n    /// The row exists, and its `column` holds `value`.\n    In {\n        /// The column, as the row spells it.\n        column: &'static str,\n        /// The value, as the model spells it.\n        value: &'static str,\n    },\n}\n\n");
     for f in &domain.fns {
-        let error = domain
-            .error_of(&f.usecase)
-            .map_or_else(|| "InvalidArgument".to_string(), |e| e.name.clone());
+        let error = domain.error_name(&f.usecase);
         out.push_str(&format!("/// What `{}` returns.\n", fn_ident(&f.name)));
         out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
         out.push_str(&format!("pub struct {} {{\n", f.result));
@@ -912,7 +908,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             out.push_str(&format!(
                 "    /// What `{}` must still be when it is written.\n    pub {}: ExpectedSource,\n",
                 o.name,
-                ident(&format!("{}_expected", o.name))
+                ident(&o.expected_name())
             ));
         }
         for m in &f.marks_out {
@@ -1006,7 +1002,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
         for c in &f.conditions {
             body.push_str(&format!(
                 "    if {} {{\n        return {RESULT}::Err({error}::Rejected(Rejected {{\n            condition: {},\n            label: {},\n            site: {},\n        }}));\n    }}\n",
-                expr(&fails(&c.expr), &row, &input),
+                expr(&c.expr.fails(), &row, &input),
                 string_literal(&c.id),
                 string_literal(&c.label),
                 c.site.as_ref().map_or(format!("{OPTION}::None"), |s| format!("{OPTION}::Some({})", string_literal(s)))
@@ -1211,7 +1207,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             };
             result.push_str(&format!(
                 "        {}: {expected},\n",
-                ident(&format!("{}_expected", o.name))
+                ident(&o.expected_name())
             ));
         }
         for m in &f.marks_out {
@@ -1345,8 +1341,6 @@ fn expr(
         Expr::Not(inner) => format!("!({})", go(inner)),
         Expr::And(items) if items.is_empty() => "true".to_string(),
         Expr::Or(items) if items.is_empty() => "false".to_string(),
-        Expr::And(items) if items.len() == 1 => go(&items[0]),
-        Expr::Or(items) if items.len() == 1 => go(&items[0]),
         Expr::And(items) => items
             .iter()
             .map(|i| format!("({})", go(i)))
@@ -1492,7 +1486,7 @@ pub(super) fn print_validators(domain: &DomainModel, out: &mut String) {
             out.push_str(&format!(
                 "        // {}\n        if {} {{\n            out.push({});\n        }}\n",
                 one_line(&rule.text),
-                expr(&fails(&rule.expr), &row, &|_| String::new()),
+                expr(&rule.expr.fails(), &row, &|_| String::new()),
                 string_literal(&rule.name)
             ));
         }
@@ -1512,11 +1506,6 @@ pub(super) fn print_validators(domain: &DomainModel, out: &mut String) {
         }
         out.push_str("        }\n    }\n}\n\n");
     }
-}
-
-/// The condition under which `e` fails, folded so that a negated comparison reads plainly.
-fn fails(e: &super::ir::Expr) -> super::ir::Expr {
-    super::actions::simplify(super::ir::Expr::Not(Box::new(e.clone())))
 }
 
 // ── Rows and dispatch ────────────────────────────────────────────────────────
@@ -1692,15 +1681,13 @@ impl ::std::error::Error for InvalidRow {{}}
 }
 
 pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
-    use super::actions::snake;
+    use super::snake;
     if domain.dispatchers.is_empty() {
         return;
     }
     out.push_str("// ── Dispatch: run a use case from whatever states its rows are in ──\n\n");
     for d in &domain.dispatchers {
-        let error = domain
-            .error_of(&d.usecase)
-            .map_or_else(|| "InvalidArgument".to_string(), |e| e.name.clone());
+        let error = domain.error_name(&d.usecase);
         out.push_str(&format!(
             "/// What `{}` returns when the use case runs.\n",
             snake(&d.name)

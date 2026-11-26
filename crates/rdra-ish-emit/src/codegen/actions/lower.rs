@@ -101,6 +101,12 @@ fn unsupported(why: &str) -> Skip {
     Skip::Action(why.to_string())
 }
 
+/// The name of the input that passes `entity`'s `column`: `{entity}_{column}`, the entity in
+/// snake_case. A choice of a written row's column is found again by this name.
+fn input_name(entity: &str, column: &str) -> String {
+    format!("{}_{column}", snake(entity))
+}
+
 /// `base`, or `base_2`, `base_3`, ... for the first not yet taken; marks it taken.
 fn fresh(base: String, taken: &mut Vec<String>) -> String {
     let mut n = base.clone();
@@ -687,9 +693,9 @@ impl Frame<'_> {
             unsupported("a condition on a second lifecycle column or a created row's own key after the use case")
         })?;
         let bind = |at: At| self.bind(at);
-        let e = simplify(
-            expr(self.cx.ts, &pred, &self.rows, &bind, &mut Some(quant)).map_err(Skip::Action)?,
-        );
+        let e = expr(self.cx.ts, &pred, &self.rows, &bind, &mut Some(quant))
+            .map_err(Skip::Action)?
+            .simplify();
         match e {
             Expr::True => Ok(None),
             Expr::False => Err(Skip::Combination),
@@ -725,7 +731,7 @@ impl Frame<'_> {
             });
         }
         // Neither a mark nor a row: a created row.
-        let name = format!("{}_{}", snake(&self.cx.entity_id(p)), id_field.wire);
+        let name = input_name(&self.cx.entity_id(p), &id_field.wire);
         let i = inputs
             .iter()
             .position(|x| x.name == name)
@@ -798,7 +804,7 @@ impl Frame<'_> {
                 fields[i].1 = match derived::derived_value(&values, column) {
                     Ok(assigned) => assigned,
                     Err(why) => {
-                        let name = format!("{}_{}", snake(&entity), field.wire);
+                        let name = input_name(&entity, &field.wire);
                         let k = input_index(
                             inputs,
                             name.clone(),
@@ -961,7 +967,7 @@ impl Frame<'_> {
                 // null; a state that keeps it present takes a present value.
                 let or_null = matches!(write, Write::InputOrNull) && target.nullable;
                 inputs.push(FnInput {
-                    name: format!("{}_{}", snake(entity), target.wire),
+                    name: input_name(entity, &target.wire),
                     ty: target.ty.clone(),
                     nullable: or_null,
                     doc: format!("The value the use case writes to {entity}.{}.", target.wire),
@@ -1017,7 +1023,7 @@ impl Frame<'_> {
                 let parent = cx.entity_id(*q);
                 let i = input_index(
                     inputs,
-                    format!("{}_{parent_col}", snake(&parent)),
+                    input_name(&parent, parent_col),
                     target.ty.clone(),
                     format!("{parent}.{parent_col} of the created row."),
                 );
@@ -1049,7 +1055,7 @@ impl Frame<'_> {
                     None => {
                         let i = input_index(
                             inputs,
-                            format!("{}_{}", snake(entity), target.wire),
+                            input_name(entity, &target.wire),
                             target.ty.clone(),
                             format!("{entity}.{} of the created row.", target.wire),
                         );
@@ -1155,7 +1161,7 @@ impl Frame<'_> {
             let VarKind::Column { entity, column, .. } = &cx.ts.var(var).kind else {
                 return None;
             };
-            let name = format!("{}_{column}", snake(&cx.ts.entity(*entity).id));
+            let name = input_name(&cx.ts.entity(*entity).id, column);
             let i = chosen.iter().position(|x| x.name == name)?;
             Some((i, chosen[i].clone()))
         };

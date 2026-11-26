@@ -181,10 +181,7 @@ pub(super) fn entry_name(name: &str) -> String {
 /// `<import specifier>#<exported type>` and `binding.module` the domain file's specifier, both
 /// relative to the probe; the `new` expression sees the service module as `service`.
 pub(super) fn probe(domain: &DomainModel, binding: &super::ProbeBinding) -> Option<Probe> {
-    let port = domain.port.as_ref()?;
-    if port.contracts.is_empty() {
-        return None;
-    }
+    let port = domain.port_with_contracts()?;
     let (specifier, ty) = binding.service.rsplit_once('#')?;
     let test = binding.conformance.as_ref().filter(|_| domain.harness);
     // Type-only imports unless the test runs: the probe alone loads nothing.
@@ -771,11 +768,7 @@ fn reader(domain: &DomainModel, ty: &FieldType, nullable: bool) -> String {
         FieldType::Scalar(s) => format!("$confText({}.parse)", s.name()),
         FieldType::Enum(name) => format!("$confText({name}.parse)"),
         FieldType::Id(name) => {
-            let repr = domain
-                .ids
-                .iter()
-                .find(|i| i.name == *name)
-                .map_or(Scalar::Int, |i| i.repr);
+            let repr = domain.id_repr(name);
             if repr == Scalar::Int {
                 format!("$confNum({name}.parse)")
             } else {

@@ -265,3 +265,9 @@ when it shows up in the profile. This pass runs benchmarks, so it needs the owne
 - Do not unify `local` (TS, Go) with `ident` (Rust). They are different rules.
 - Do not move TS row printing to match Go and Rust. It changes output.
 - No perf change without a profile that shows it.
+
+## Status
+
+| Unit | State | Notes |
+|---|---|---|
+| 6a | Done (lane A PR) | G1 part: `Expr::simplify` and `Expr::fails` in `ir.rs`, three `fails` copies and the two one-item Rust arms gone. G2: `snake` lives in `mod.rs`. G6: `input_name` for all six `{entity}_{column}` input names in `lower.rs`. G12: `DomainModel::id_repr` (Go and TS ports; Rust's `is_some_and` differs and stays), `CmpOp::holds` (replaces `eval::compare` and the copy in `derived.rs`), `DomainModel::port_with_contracts` (three probe prologues), `RowOut::expected_name` (six `format!`). G14: `DomainModel::error_name` expects the error type; the Go and Rust fallbacks are gone. |

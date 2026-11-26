@@ -6,7 +6,7 @@
 use rdra_ish_core::lifecycle::{At, InvKind, InvText, TransitionSystem};
 use rdra_ish_core::location::LocatedSpan;
 
-use super::actions::{expr, simplify};
+use super::actions::expr;
 use super::ir::{DomainModel, Expr, Obligation, RowParam, RuleCheck, ValidatorDecl};
 use super::{CodegenError, Names};
 
@@ -94,7 +94,7 @@ pub(super) fn add_validators(
                 _ => None,
             };
             match expr(ts, &inv.body, std::slice::from_ref(row), &bind, &mut None) {
-                Ok(e) => per_type.push((i, simplify(e))),
+                Ok(e) => per_type.push((i, e.simplify())),
                 Err(_) => {
                     failed = true;
                     break;

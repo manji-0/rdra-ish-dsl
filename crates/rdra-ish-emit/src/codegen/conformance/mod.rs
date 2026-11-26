@@ -18,11 +18,11 @@ use rdra_ish_core::lifecycle::{
 };
 use rdra_ish_core::SemanticModel;
 
-use super::actions::snake;
 use super::ir::{
     CallerDecl, CapabilityDecl, ContractDecl, DomainModel, EntryDecl, Field, FieldType, FnDecl,
     FnInput, OutKind, PortDecl, PortEntity, PortEvent, PortMethod, PortRun, Scalar, Track,
 };
+use super::snake;
 use super::{type_ident, CodegenError, Names};
 use eval::{column_var, enum_name, matching, Rows};
 
