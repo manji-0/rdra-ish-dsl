@@ -103,11 +103,13 @@ fn rdra(dir: &Path, args: &[&str], fault: &str) -> Output {
         .expect("runs rdra-ish")
 }
 
+/// stdout, then stderr with the platform's path separator written as `/`, so the
+/// diagnostics' paths match on Windows too.
 fn text(out: &Output) -> String {
     format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
+        String::from_utf8_lossy(&out.stderr).replace('\\', "/")
     )
 }
 

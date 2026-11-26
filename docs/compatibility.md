@@ -18,7 +18,9 @@ page describes `main`, so it changes in the same change as the behavior it descr
   release, after the [deprecation period](#deprecation).
 - **Meaning.** For a given model, `check` and `verify` report the same verdict within the
   same bounds: the same exit status and the same set of error names. The bounds are the
-  values the [`bounds:` line](#bounds) prints.
+  values the [`bounds:` line](#bounds) prints. A check that ends `not decided` has no
+  verdict yet: a minor release may decide it, as `ok` or as a counterexample. A run under
+  `--deny-undecided` already exits 1 on it.
 - **Diagnostic names.** The names in `error[<Name>]`, `warning[<Name>]`, and
   `info[<Name>]` (see [Diagnostics](./state-derivation.md#diagnostics)) and the lint rule
   ids (such as `api-contract-missing`) keep their meaning. A finding keeps its severity
@@ -37,7 +39,10 @@ page describes `main`, so it changes in the same change as the behavior it descr
   such as each `--kind` and `--format`. Of `codegen`, only `--lang ts` and `-o` are
   covered, as [The TypeScript types of `codegen`](#the-typescript-types-of-codegen) states.
   `export --kind typescript-states` and `states --format typescript` are removed: each is a
-  usage error that names `codegen <INPUTS> --lang ts -o <FILE>.ts`.
+  usage error that names `codegen <INPUTS> --lang ts -o <FILE>.ts`. `verify`'s
+  `--tlc-jobs` and `--tlc-workers` are covered, and so are `RDRA_TLC_JOBS` and
+  `RDRA_TLC_WORKERS`, which stand in for them: each sets how the TLC runs are scheduled
+  and changes no verdict.
 - **The default of `verify`.** `verify` decides every check with its native checker and
   starts no JVM. `--with-tlc` runs TLC beside it and fails the run when the two decide a
   check differently. `--backend tlc` is a deprecated spelling of `--with-tlc` that prints a
@@ -275,6 +280,11 @@ minor release.
   one release to the next.
 - **Performance and state counts.** Run time, memory, and the number of states a run
   explores or prints.
+- **The `tlc:` lines of `verify --with-tlc`.** Their form, and the cost a cone, property, or
+  whole-model run ends with (wall time, `-Xmx`, workers), may change in any release. Read
+  TLC's verdict from `tlc_result:`.
+- **`RDRA_TLC_HEAP=states`.** Experimental: how it sizes a TLC run's heap from the states
+  BFS counted may change or go away in any release.
 - **Diagram layout.** Where a renderer places the nodes, as above.
 - **The rest of `codegen`, and `check --code`.** All of `codegen` except
   [its TypeScript types](#the-typescript-types-of-codegen) is experimental: its other flags,
@@ -287,6 +297,8 @@ minor release.
   `.lemma()` marker: `check` checks a lemma like any rule, but `verify` runs no cone of its
   own for one, so a lemma that only fails at two instances can pass `verify`. Do not mark a
   rule the model must keep as a lemma.
+- **`verify --plan`.** Experimental: the flag, the JSON it writes, and which launches it
+  lists may change or go away in any release.
 - **`verify --symmetry`.** Experimental. Which cones run up to symmetry, and the
   `(about <m> states)` they print, may change. The verdicts follow [Bounds](#bounds) as any
   other run's do.

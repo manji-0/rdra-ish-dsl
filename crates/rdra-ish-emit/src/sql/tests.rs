@@ -100,6 +100,33 @@ fn a_derived_column_is_generated_and_the_foreign_key_is_indexed() {
     assert!(sqlite.contains("GENERATED ALWAYS AS (\"total\" - \"discount\") VIRTUAL"));
 }
 
+/// A logical `@derived` `in` is SQL's `IN`, null on a null operand, unless it lists `null` or
+/// `present`: then it is the `or` of its equalities, which test `IS NULL` / `IS NOT NULL`
+/// rather than `= NULL` (#374).
+#[test]
+fn a_derived_in_list_with_null_or_present_tests_null_itself() {
+    let out = sql(
+        r#"
+entity Item "Item" {
+  id: Int @pk
+  qty: Int @null
+  k: Enum(red, blue) @null
+  dq: Bool @null @derived(qty in (1, 2))
+  dz: Bool @null @derived(qty in (1, null))
+  dp: Bool @null @derived(k not in (red, present))
+}
+"#,
+        Dialect::Postgres,
+    );
+    for line in [
+        "\"dq\" BOOLEAN GENERATED ALWAYS AS (\"qty\" IN (1, 2)) STORED",
+        "\"dz\" BOOLEAN GENERATED ALWAYS AS ((\"qty\" = 1 OR \"qty\" IS NULL)) STORED",
+        "\"dp\" BOOLEAN GENERATED ALWAYS AS (NOT (\"k\" = 'red' OR \"k\" IS NOT NULL)) STORED",
+    ] {
+        assert!(out.contains(line), "missing {line}\n{out}");
+    }
+}
+
 /// A key that the primary key, a unique set, or an `@index` already leads needs no index of
 /// its own.
 #[test]

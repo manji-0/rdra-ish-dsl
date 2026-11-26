@@ -1573,6 +1573,17 @@ fn printed_code_writes_null_to_nullable_enum_and_bool_columns() {
     ]);
 }
 
+/// `in` and `not in` in a logical `@derived` over a nullable Int, read in conditions, are
+/// null while the Int is (#374): the functions take the derived columns as inputs and print
+/// no function whose condition compares the nullable Int
+/// (tests/fixtures/codegen/derived_null_in.rdra).
+#[test]
+fn printed_code_agrees_on_a_derived_in_over_a_null_int() {
+    agree_on(vec![
+        "crates/rdra-ish-cli/tests/fixtures/codegen/derived_null_in.rdra".to_string(),
+    ]);
+}
+
 fn agree(pick_sample: impl Fn(&str) -> bool) {
     agree_on(samples().into_iter().filter(|s| pick_sample(s)).collect());
 }

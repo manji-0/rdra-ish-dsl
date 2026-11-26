@@ -1533,6 +1533,32 @@ Entity lines that name each rule or reason:
 == engine_corpus/safety_null_columns_ne.rdra
   [entity Item, Forbidden_Item_0, Required_Item_0] unreduced
     Item[2] moves
+== engine_corpus/safety_null_derived_in.rdra
+  [entity Box] unreduced
+    Box[2] moves
+  [entity Item] unreduced
+    Item[2] moves
+  [Forbidden_Item_0, Forbidden_Item_1, Forbidden_Item_2, Forbidden_Item_4, Forbidden_Item_5, Required_Item_0] unreduced
+    Item[2] moves
+  [Forbidden_Item_3] unreduced
+    Item[2] moves
+  [Forbidden_Box_6] unreduced
+    Box[2] moves
+  [Forbidden_Box_7] unreduced
+    Box[2] moves
+== engine_corpus/safety_null_derived_in.rdra --instance-count 3
+  [entity Box] unreduced
+    Box[3] moves
+  [entity Item] unreduced
+    Item[3] moves
+  [Forbidden_Item_0, Forbidden_Item_1, Forbidden_Item_2, Forbidden_Item_4, Forbidden_Item_5, Required_Item_0] unreduced
+    Item[3] moves
+  [Forbidden_Item_3] unreduced
+    Item[3] moves
+  [Forbidden_Box_6] unreduced
+    Box[3] moves
+  [Forbidden_Box_7] unreduced
+    Box[3] moves
 == engine_corpus/safety_null_enum_bool_columns.rdra
   [entity Item] unreduced
     Item[2] moves

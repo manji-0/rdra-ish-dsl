@@ -1,0 +1,38 @@
+// `in` and `not in` in a logical `@derived` over a nullable Int, read in conditions
+// (codegen_builds.rs, codegen_differential.rs): dq and dn are neither true nor false while qty
+// is null (#374), so neither condition admits a null qty. Make creates an Item with qty null,
+// Grow sets it to 3 while the Item is open, Fill to 1, and Clear back to null; Fill needs
+// dn == true and Clear needs dq == false, so each runs from qty 3 only. The functions take dq and dn as
+// inputs, and print no Fill or Clear, whose conditions compare the nullable qty; a generator
+// that starts printing either meets BFS's null rule here.
+entity Item "品目" {
+  id: Int @pk
+  qty: Int @null
+  open: Bool @default(true)
+  dq: Bool @null @derived(qty in (1, 2))
+  dn: Bool @null @derived(qty not in (1, 2))
+}
+
+usecase Make "作成"
+usecase Grow "増量"
+usecase Fill "記入"
+usecase Clear "消去"
+usecase Shut "締切"
+
+creates(Make, Item)
+sets(Grow, Item.qty == 3)
+sets(Fill, Item.qty == 1)
+sets(Clear, Item.qty == null)
+sets(Shut, Item.open == false)
+
+condition Opened "受付中"
+holds(Opened, Item.open == true)
+applies_to(Opened, Grow)
+
+condition Unlisted "対象外"
+holds(Unlisted, Item.dn == true)
+applies_to(Unlisted, Fill)
+
+condition NotListed "非対象"
+holds(NotListed, Item.dq == false)
+applies_to(NotListed, Clear)

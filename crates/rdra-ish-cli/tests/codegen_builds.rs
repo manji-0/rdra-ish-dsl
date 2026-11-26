@@ -1,7 +1,8 @@
 //! `rdra-ish codegen` output builds as printed: on every `samples.txt` root, on
 //! `tests/fixtures/codegen/keywords.rdra`, whose names are keywords of the targets, on
 //! `tests/fixtures/codegen/derived.rdra`, whose functions compute `@derived` columns, and on
-//! `tests/fixtures/codegen/nullable_enum_bool.rdra`, whose Enum and Bool columns hold null, the
+//! `tests/fixtures/codegen/nullable_enum_bool.rdra`, whose Enum and Bool columns hold null, and
+//! on `tests/fixtures/codegen/derived_null_in.rdra`, whose `@derived` `in` reads a null Int, the
 //! TypeScript output passes `tsc --strict`, the Rust output compiles as a library with no
 //! clippy warning and no undocumented public item (`clippy-driver -D warnings -D missing_docs`),
 //! and the Go output passes `go vet` and `gofmt -l` and calls no `panic`, each with the
@@ -29,12 +30,14 @@ fn samples() -> Vec<String> {
 }
 
 /// The models every language builds: the samples, a model whose names are keywords, one
-/// whose functions compute derived columns, and one whose Enum and Bool columns hold null.
+/// whose functions compute derived columns, one whose Enum and Bool columns hold null, and one
+/// whose derived `in` reads a null Int.
 fn models() -> Vec<String> {
     let mut models = samples();
     models.push("crates/rdra-ish-cli/tests/fixtures/codegen/keywords.rdra".to_string());
     models.push("crates/rdra-ish-cli/tests/fixtures/codegen/derived.rdra".to_string());
     models.push("crates/rdra-ish-cli/tests/fixtures/codegen/nullable_enum_bool.rdra".to_string());
+    models.push("crates/rdra-ish-cli/tests/fixtures/codegen/derived_null_in.rdra".to_string());
     models
 }
 
