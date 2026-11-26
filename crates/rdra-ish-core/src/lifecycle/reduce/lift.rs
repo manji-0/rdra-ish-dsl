@@ -2,9 +2,8 @@
 use std::collections::{HashMap, VecDeque};
 
 use super::extended::Extended;
-use super::partition::{quotient_blocks, split_edges, Succ};
+use super::partition::{partition, Succ};
 use super::*;
-use crate::lifecycle::cone::VarSet;
 use crate::lifecycle::explore::{Adjacency, Caps, Spurious};
 use crate::lifecycle::expr::State;
 use crate::lifecycle::lasso::Loop;
@@ -45,19 +44,7 @@ impl TransitionSystem {
             }
         };
         let n = run.states.len();
-        let key_vars: VarSet = ext.obs_local.union(&ext.inputs_local).copied().collect();
-        let mut index: HashMap<State, u32> = HashMap::new();
-        let initial: Vec<u32> = run
-            .states
-            .iter()
-            .map(|st| {
-                let key = run.system.project(&st, &key_vars);
-                let len = index.len() as u32;
-                *index.entry(key).or_insert(len)
-            })
-            .collect();
-        let (silent, rise_edges) = split_edges(run, &ext.rise);
-        let blocks = quotient_blocks(n, &silent, &rise_edges, &initial);
+        let blocks = partition(&ext, &run.system, run).blocks;
         let block_of_class: HashMap<u32, u32> = run
             .states
             .iter()

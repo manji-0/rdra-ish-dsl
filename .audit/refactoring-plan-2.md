@@ -206,6 +206,9 @@ verify (6j).
 
 - 6f: done (X5, X9 without the `perf` off stub, X10, X11, X12). The `#[cfg(feature = "perf")]`
   pairs in `moves.rs` stay until the off stub (7f).
+- 6g: done (X1 dedupe, X7, L17, L23 minimal). X8 skipped: `explore/store.rs` is private
+  behind `explore/mod.rs` (in flight), and a shared home would move code the Kani store
+  harnesses prove out of `store.rs`. Do it with 7f.
 
 ### Profile pass (before any perf row)
 

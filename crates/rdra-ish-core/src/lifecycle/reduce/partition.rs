@@ -391,19 +391,12 @@ impl Classes {
     ) -> (Classified, Ended, Vec<u32>) {
         let raw = &ext.system;
         let n = run.states.len();
-        let key_vars: VarSet = ext.obs_local.union(&ext.inputs_local).copied().collect();
-        let mut index: HashMap<State, u32> = HashMap::new();
-        let initial: Vec<u32> = run
-            .states
-            .iter()
-            .map(|st| {
-                let key = sub.project(&st, &key_vars);
-                let len = index.len() as u32;
-                *index.entry(key).or_insert(len)
-            })
-            .collect();
-        let (silent, rise_edges) = split_edges(run, &ext.rise);
-        let blocks = quotient_blocks(n, &silent, &rise_edges, &initial);
+        let Partition {
+            silent,
+            rises: rise_edges,
+            initial,
+            blocks,
+        } = partition(ext, sub, run);
         #[cfg(any(test, feature = "shadow"))]
         reference::check(n, &silent, &rise_edges, &initial, &blocks);
         // The identity on an S no inner reduction shrank reduces nothing (#101). Up to `H` a
@@ -915,6 +908,45 @@ pub(super) fn split_edges(
         }
     }
     (silent, rises)
+}
+
+/// What `quotient_blocks` reads off a run of the extended sub-lifecycle, and the blocks.
+pub(super) struct Partition {
+    pub(super) silent: Edges,
+    pub(super) rises: Edges,
+    /// Each state's block before refinement: its `obs` and inputs, numbered as they first
+    /// show in discovery order.
+    pub(super) initial: Vec<u32>,
+    /// Each state's block.
+    pub(super) blocks: Vec<u32>,
+}
+
+/// The partition of `run`, a run of `ext`'s extended sub-lifecycle, whose states `system`
+/// projects onto their `obs` and inputs.
+pub(super) fn partition(
+    ext: &Extended,
+    system: &TransitionSystem,
+    run: &ComponentRun,
+) -> Partition {
+    let key_vars: VarSet = ext.obs_local.union(&ext.inputs_local).copied().collect();
+    let mut index: HashMap<State, u32> = HashMap::new();
+    let initial: Vec<u32> = run
+        .states
+        .iter()
+        .map(|st| {
+            let key = system.project(&st, &key_vars);
+            let len = index.len() as u32;
+            *index.entry(key).or_insert(len)
+        })
+        .collect();
+    let (silent, rises) = split_edges(run, &ext.rise);
+    let blocks = quotient_blocks(run.states.len(), &silent, &rises, &initial);
+    Partition {
+        silent,
+        rises,
+        initial,
+        blocks,
+    }
 }
 
 /// Compressed adjacency.

@@ -13,7 +13,7 @@ pub type SourceId = usize;
 pub type ByteSpan = Span;
 
 /// A span tied to a file in a [`ResolvedProgram`].
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct LocatedSpan {
     pub source_id: SourceId,
     pub span: ByteSpan,
