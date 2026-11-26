@@ -96,6 +96,14 @@
 
 ### Fixed
 
+- `verify --prove` no longer proves a rule that lists every Int value up to the range's top
+  (#425). The build read `n not in (null, 0, 1, 2, 3, 4, 5)` on an Int column as `false` at
+  the default range 0..5, which is exact for BFS and TLC but not for the proof, whose Int has
+  no top: a rule or guard built so was proved although `--int-range-max 7` finds `n=6`. The
+  build now reads a set as its column's whole domain only for Enum, Bool, null-or-present,
+  and existence columns. BFS and TLC verdicts do not change; a cone that reads such a set now
+  holds the Int column, so it may count more states. `proof_equivalence` also checks every
+  proved rule against BFS at Int 0..7, and on the engine corpus.
 - `codegen` output builds for a model with no function, only entry points (G15): TypeScript
   declares every use-case error its contracts name (`ShipError` was undeclared), and the
   TypeScript and Rust conformance harnesses of a port with no call pass `tsc --strict` and

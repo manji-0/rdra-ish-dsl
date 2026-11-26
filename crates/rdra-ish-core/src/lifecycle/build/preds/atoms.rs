@@ -248,11 +248,23 @@ impl<'m> Builder<'m> {
     /// `t in (v, ..)` names every value of the slot's domain. A slot always holds one of them,
     /// present, created, or deleted at base, so the set holds wherever it is read and no
     /// cone needs the column for it (`.none(Child.status in (<every value>))` says "no child").
+    /// Only a domain the model fixes counts: an Int's values and an owner's slots are as many
+    /// as the bounds say, and the proof (`verify --prove`) has no bound, so listing every Int
+    /// up to `int_max` is no tautology there (#425).
     fn lists_whole_domain(&self, set: &Pred) -> bool {
         let Pred::In(Term::Slot { var, .. }, values) = set else {
             return false;
         };
         let domain = &self.ts.vars[var.index()].domain;
+        match domain {
+            Domain::Existence
+            | Domain::Enum(_)
+            | Domain::NullableEnum(_)
+            | Domain::Bool
+            | Domain::NullableBool
+            | Domain::Nullable => {}
+            Domain::Int | Domain::NullableInt | Domain::Instance { .. } => return false,
+        }
         let listed: BTreeSet<Value> = values
             .iter()
             .filter_map(|v| match v {

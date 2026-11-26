@@ -1,5 +1,6 @@
 //! The prover and BFS agree on every sample: no rule `verify --prove` proves for any number
-//! of rows has a reachable violation at one, two, or three instances per entity. A proof
+//! of rows and any Int value has a reachable violation at one, two, or three instances per
+//! entity, or at two with a wider Int range than `verify`'s default. A proof
 //! claims more than the bounded engines check, so this keeps the third semantics honest
 //! against the explorer. A cone the BFS does not finish under `STATE_CAP` decides nothing and
 //! is skipped.
@@ -85,6 +86,44 @@ fn instances(n: u8) -> Bounds {
     Bounds::uniform(NonZeroU8::new(n).unwrap(), Bounds::VERIFY.int_max)
 }
 
+/// `verify`'s default instance count with two more Int values than its default range. A
+/// proof covers every Int value, so a rule it proves has no violation here either; a build
+/// that reads the range into a rule (an `in` listing every value up to the top, #425) does.
+fn wider_int() -> Bounds {
+    Bounds::uniform(Bounds::VERIFY.instances, Bounds::VERIFY.int_max + 2)
+}
+
+/// The engine-corpus cases, by path.
+fn corpus_cases() -> Vec<String> {
+    let corpus = repo().join("crates/rdra-ish-cli/tests/engine_corpus");
+    let mut cases: Vec<String> = std::fs::read_dir(&corpus)
+        .expect("the engine corpus")
+        .map(|e| e.expect("a corpus entry").path())
+        .filter(|p| p.extension().is_some_and(|x| x == "rdra"))
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    cases.sort();
+    cases
+}
+
+/// No rule `verdicts` proves has a violation BFS reaches at `bounds`.
+fn assert_no_proved_rule_violated(
+    sample: &str,
+    verdicts: &BTreeMap<String, &Verdict>,
+    bounds: Bounds,
+) {
+    let (instances, int_max) = (bounds.instances, bounds.int_max);
+    let Some(bounded) = system(sample, bounds) else {
+        return;
+    };
+    for name in &bounded_verdicts(&bounded).0 {
+        assert!(
+            !matches!(verdicts.get(name), Some(Verdict::Proved)),
+            "{sample}: {name} is proved for any number of rows and any Int value, but BFS at {instances} instances and Int 0..{int_max} reaches a violation"
+        );
+    }
+}
+
 /// Also: every rule of a domain sample is proved at `verify`'s default two instances, as at
 /// one. oidc-auth's browser flow passes the mining cap at two, and two of its rules were
 /// proved only at one until the prover mined at one instance too (#231).
@@ -144,6 +183,7 @@ fn no_proved_rule_has_a_bounded_counterexample() {
                 }
             }
         }
+        assert_no_proved_rule_violated(&sample, &verdicts, wider_int());
     }
     assert!(proved_total > 0, "no sample rule was proved");
     assert_eq!(
@@ -151,6 +191,41 @@ fn no_proved_rule_has_a_bounded_counterexample() {
         Vec::<String>::new(),
         "domain sample rules left unproved"
     );
+}
+
+/// The engine-corpus cases, proved at `verify`'s bounds without their flags, against BFS at
+/// one, two, and three instances and at a wider Int range. The corpus holds the models built
+/// to split the engines: `z3_int_listing_whole_range` passes BFS at 0..5 and fails at 0..7.
+#[test]
+fn no_proved_rule_has_a_bounded_counterexample_in_the_corpus() {
+    let Some(z3) = find_z3() else { return };
+    let mut proved_total = 0;
+    for case in corpus_cases() {
+        let Some((ts, twin)) = proving(&case) else {
+            continue;
+        };
+        let rules: Vec<usize> = (0..ts.invariants().len()).collect();
+        let mut solvers = [(); 2].map(|()| Z3::start(&z3).expect("z3 starts"));
+        let proof = prove::prove(
+            &ts,
+            twin.as_ref(),
+            &rules,
+            &BTreeSet::new(),
+            &mut solvers,
+            ProveOptions::default(),
+        )
+        .unwrap_or_else(|e| panic!("{case}: {e}"));
+        let verdicts: BTreeMap<String, &Verdict> = proof
+            .rules
+            .iter()
+            .map(|r| (ts.invariants()[r.inv].name.clone(), &r.verdict))
+            .collect();
+        proved_total += proof.proved();
+        for bounds in [instances(1), instances(2), instances(3), wider_int()] {
+            assert_no_proved_rule_violated(&case, &verdicts, bounds);
+        }
+    }
+    assert!(proved_total > 0, "no corpus rule was proved");
 }
 
 /// The proof does not depend on how many solvers share its checks: the same verdicts, the
@@ -213,14 +288,7 @@ fn a_refuted_rule_left_out_changes_no_other_verdict() {
         Verdict::OutOfScope(_) => "out of scope",
         Verdict::Refuted => "refuted",
     };
-    let corpus = repo().join("crates/rdra-ish-cli/tests/engine_corpus");
-    let mut cases: Vec<String> = std::fs::read_dir(&corpus)
-        .expect("the engine corpus")
-        .map(|e| e.expect("a corpus entry").path())
-        .filter(|p| p.extension().is_some_and(|x| x == "rdra"))
-        .map(|p| p.to_string_lossy().into_owned())
-        .collect();
-    cases.sort();
+    let cases = corpus_cases();
     let samples = samples()
         .into_iter()
         .filter(|s| s.contains("formal-verification"));

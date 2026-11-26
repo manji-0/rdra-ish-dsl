@@ -1,0 +1,17 @@
+// trap: an `in` listing every Int value up to the top of the range.
+// `n not in (null, 0, 1, 2, 3, 4, 5)` names every value the column takes at 0..5, so BFS and
+// TLC find no row that breaks the rule at any instance count. z3 has no top: BumpItem may
+// write 6, so the rule is false for an unbounded Int and z3 must not prove it. The builder
+// once folded the listing to `false`, and z3 proved the rule (#425).
+// z3_int_listing_past_the_top shows the violation with a wider range.
+// expect Forbidden_Item_0: native=ok tlc=ok z3=unproved bfs=ok,ok,ok
+entity Item "Item" {
+  id: Int @pk
+  n: Int @null
+}
+usecase AddItem "add"
+usecase BumpItem "bump"
+creates(AddItem, Item)
+updates(BumpItem, Item)
+sets(BumpItem, Item.n == present)
+forbidden(Item, n not in (null, 0, 1, 2, 3, 4, 5))
