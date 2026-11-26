@@ -34,6 +34,14 @@ impl RunResult {
     }
 }
 
+/// A count that fails the run, and what it counts.
+struct Failure {
+    count: usize,
+    /// A tool error, not a finding of the model.
+    tool: bool,
+    what: &'static str,
+}
+
 /// How a run ends.
 pub(super) struct End {
     pub(super) bfs: Bfs,
@@ -54,12 +62,13 @@ impl End {
     /// `can_reach` error of BFS), then anything a cap, the budget, or `--deny-unproved` left
     /// undecided.
     pub(super) fn result(&self, undecided: usize) -> RunResult {
-        let tool = self.temporal.faults + self.tlc.disagreements + self.tlc.tool_errors;
-        let failed = self.bfs.errors
-            + self.bfs.reach_errors
-            + self.safety.violated
-            + self.explored.violated
-            + self.temporal.violated;
+        let count = |tool: bool| -> usize {
+            (self.failures().iter())
+                .filter(|f| f.tool == tool)
+                .map(|f| f.count)
+                .sum()
+        };
+        let (tool, failed) = (count(true), count(false));
         let open = self.capped() + undecided + self.unproved_denied();
         match (tool, failed, open) {
             (0, 0, 0) => RunResult::Ok,
@@ -67,6 +76,48 @@ impl End {
             (0, _, _) => RunResult::Counterexample,
             _ => RunResult::ToolError,
         }
+    }
+
+    /// Each count that fails the run, in the order the failure message lists them.
+    fn failures(&self) -> [Failure; 7] {
+        let failure = |count, tool, what| Failure { count, tool, what };
+        [
+            failure(
+                self.bfs.errors,
+                false,
+                "state-model error(s) from BFS on the entity cones",
+            ),
+            failure(
+                self.bfs.reach_errors,
+                false,
+                "can_reach error(s) from BFS on their cones",
+            ),
+            failure(
+                self.safety.violated,
+                false,
+                "invariant or after-assert violation(s)",
+            ),
+            failure(
+                self.explored.violated + self.temporal.violated,
+                false,
+                "property violation(s)",
+            ),
+            failure(
+                self.temporal.faults,
+                true,
+                "counterexample(s) that fail their own check (a tool bug)",
+            ),
+            failure(
+                self.tlc.disagreements,
+                true,
+                "check(s) the native checker and TLC decide differently (a tool bug)",
+            ),
+            failure(
+                self.tlc.tool_errors,
+                true,
+                "TLC run(s) that failed without a model violation",
+            ),
+        ]
     }
 
     /// Findings a cone stopped at the state cap or the memory limit left.
@@ -97,40 +148,10 @@ impl End {
                 println!("{u}");
             }
         }
-        let failed: Vec<String> = [
-            (
-                self.bfs.errors,
-                "state-model error(s) from BFS on the entity cones",
-            ),
-            (
-                self.bfs.reach_errors,
-                "can_reach error(s) from BFS on their cones",
-            ),
-            (
-                self.safety.violated,
-                "invariant or after-assert violation(s)",
-            ),
-            (
-                self.explored.violated + self.temporal.violated,
-                "property violation(s)",
-            ),
-            (
-                self.temporal.faults,
-                "counterexample(s) that fail their own check (a tool bug)",
-            ),
-            (
-                self.tlc.disagreements,
-                "check(s) the native checker and TLC decide differently (a tool bug)",
-            ),
-            (
-                self.tlc.tool_errors,
-                "TLC run(s) that failed without a model violation",
-            ),
-        ]
-        .iter()
-        .filter(|(n, _)| *n > 0)
-        .map(|(n, what)| format!("{n} {what}"))
-        .collect();
+        let failed: Vec<String> = (self.failures().iter())
+            .filter(|f| f.count > 0)
+            .map(|f| format!("{} {}", f.count, f.what))
+            .collect();
         if !failed.is_empty() {
             bail!("verification failed: {}", failed.join(" and "));
         }

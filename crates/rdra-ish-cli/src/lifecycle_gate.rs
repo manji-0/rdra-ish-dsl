@@ -18,12 +18,11 @@ use std::sync::OnceLock;
 
 use rdra_ish_core::lifecycle::{derive_states_built, Bounds, Caps, Scope};
 use rdra_ish_core::{ResolvedProgram, SemanticModel};
-use rdra_ish_emit::{EmitError, Emitter, Explored, OnDeadlock, StatesEmitter, View};
+use rdra_ish_emit::{EmitError, Emitter, Explored, StatesEmitter, View};
 
 use crate::cli::{CsvKind, ListKind};
 use crate::state_findings::{
-    findings_of, note_state_errors, reject_state_errors, reject_state_errors_except_deadlock,
-    Finding, TLA_STATE_MODELS,
+    findings_of, note_state_errors, reject_state_errors_except_deadlock, Finding, TLA_STATE_MODELS,
 };
 
 /// One exploration of the lifecycle: what it found, and the states it reached.
@@ -96,9 +95,8 @@ pub(crate) enum Reads {
     /// where it is built (`checked_system`); the explorer's findings are not in it.
     System,
     /// The explored states, such as each state model's start states and reachable states.
+    /// The output draws each deadlock instead of refusing on it.
     States,
-    /// The explored states, drawing each deadlock instead of refusing on it.
-    StatesDrawingDeadlocks,
 }
 
 impl ListKind {
@@ -159,10 +157,7 @@ pub(crate) fn gate(lifecycle: &Lifecycle, reads: Reads) -> anyhow::Result<()> {
     match reads {
         Reads::Declared => {}
         Reads::System => note_state_errors(&lifecycle.explored().0, TLA_STATE_MODELS),
-        Reads::States => reject_state_errors(&lifecycle.explored().0)?,
-        Reads::StatesDrawingDeadlocks => {
-            reject_state_errors_except_deadlock(&lifecycle.explored().0)?
-        }
+        Reads::States => reject_state_errors_except_deadlock(&lifecycle.explored().0)?,
     }
     Ok(())
 }
@@ -192,10 +187,7 @@ impl Output {
     pub(crate) fn reads(&self) -> Reads {
         match self {
             Output::Declared(_) => Reads::Declared,
-            Output::States(emitter) => match emitter.on_deadlock() {
-                OnDeadlock::Refuse => Reads::States,
-                OnDeadlock::Draw => Reads::StatesDrawingDeadlocks,
-            },
+            Output::States(_) => Reads::States,
         }
     }
 
@@ -220,33 +212,13 @@ impl Gated<'_> {
 
 #[cfg(test)]
 mod tests {
-    use rdra_ish_core::SemanticModel;
     use rdra_ish_emit::mermaid::{ErMermaidEmitter, StateMermaidEmitter};
-    use rdra_ish_emit::{EmitError, Explored, OnDeadlock, StatesEmitter, View};
 
     use super::{Output, Reads};
-
-    /// A states emitter that refuses on a deadlock. No shipped output does since the
-    /// TypeScript state unions were removed; the gate keeps the case.
-    struct Refusing;
-
-    impl StatesEmitter for Refusing {
-        fn on_deadlock(&self) -> OnDeadlock {
-            OnDeadlock::Refuse
-        }
-
-        fn emit(&self, _: &SemanticModel, _: &View, _: &Explored) -> Result<String, EmitError> {
-            Ok(String::new())
-        }
-    }
 
     #[test]
     fn what_an_output_reads_follows_the_trait_its_emitter_implements() {
         assert_eq!(Output::declared(ErMermaidEmitter).reads(), Reads::Declared);
-        assert_eq!(Output::states(Refusing).reads(), Reads::States);
-        assert_eq!(
-            Output::states(StateMermaidEmitter).reads(),
-            Reads::StatesDrawingDeadlocks
-        );
+        assert_eq!(Output::states(StateMermaidEmitter).reads(), Reads::States);
     }
 }

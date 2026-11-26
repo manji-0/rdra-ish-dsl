@@ -15,7 +15,7 @@ fn decide(src: &str, name: &str, fairness: Fairness) -> Lasso {
 
 /// `decide` under `caps`; `Err(())` when the property is not decided.
 fn decide_under(src: &str, name: &str, fairness: Fairness, caps: Caps) -> Result<Lasso, ()> {
-    let ts = TransitionSystem::build(&model_from(src), Bounds::VERIFY, &Scope::ALL).ts;
+    let ts = system_from(src, Bounds::VERIFY);
     let i = ts
         .properties()
         .iter()
@@ -36,10 +36,6 @@ fn decide_under(src: &str, name: &str, fairness: Fairness, caps: Caps) -> Result
             other => panic!("{name}: {other:?}"),
         },
     }
-}
-
-fn names(xs: &[&str]) -> Vec<String> {
-    xs.iter().map(|x| x.to_string()).collect()
 }
 
 const SHIP: &str = r#"
@@ -257,7 +253,7 @@ fn lasso_of(ts: &TransitionSystem, steps: &[&str], tail: Loop) -> LassoReplay {
 /// where any step can run.
 #[test]
 fn the_fairness_check_rejects_an_unfair_lasso() {
-    let ts = TransitionSystem::build(&model_from(SHIP), Bounds::VERIFY, &Scope::ALL).ts;
+    let ts = system_from(SHIP, Bounds::VERIFY);
     let (plain, fair) = (0, 1);
     let paid = lasso_of(&ts, &["Place", "Pay"], Loop::Stutter);
     assert!(matches!(
@@ -270,7 +266,7 @@ fn the_fairness_check_rejects_an_unfair_lasso() {
         Some(Unfair::Stops)
     );
 
-    let ts = TransitionSystem::build(&model_from(HOLD), Bounds::VERIFY, &Scope::ALL).ts;
+    let ts = system_from(HOLD, Bounds::VERIFY);
     let (both, paid_only) = (0, 1);
     let held = lasso_of(
         &ts,

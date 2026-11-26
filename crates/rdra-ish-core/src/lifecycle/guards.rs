@@ -6,9 +6,8 @@
 //! deletion as the one mutation.
 
 use super::cone::{Cone, Target};
-use super::diag::StateDiag;
 use super::explore::Caps;
-use super::targets::UndecidedWhy;
+use super::targets::{stopped_at, UndecidedWhy};
 use super::types::{ActId, ActionOrigin, Guard, GuardWhy, ModelRef, Site};
 use super::TransitionSystem;
 use crate::model::{ConditionKey, UseCaseKey};
@@ -103,7 +102,8 @@ impl TransitionSystem {
                     if cone.diags.iter().any(|d| self.reports(target, &d.diag)) {
                         deps.protects.push(target);
                     } else if !cone.complete {
-                        deps.undecided.push((target, cap_of(&cone.diags)));
+                        let why = stopped_at(cone).expect("an incomplete run stopped at a cap");
+                        deps.undecided.push((target, why));
                     }
                 }
             }
@@ -167,20 +167,4 @@ impl TransitionSystem {
         }
         mutant
     }
-}
-
-/// The cap an incomplete run stopped at.
-fn cap_of(diags: &[super::diag::Diag]) -> UndecidedWhy {
-    diags
-        .iter()
-        .find_map(|d| match d.diag {
-            StateDiag::StateCapReached { cap, .. } => Some(UndecidedWhy::StateCap(cap)),
-            StateDiag::PatternCapReached { cap, .. } => Some(UndecidedWhy::PatternCap(cap)),
-            StateDiag::MemoryCapReached { limit, raise, .. } => {
-                Some(UndecidedWhy::MemoryCap(limit, raise))
-            }
-            StateDiag::TimeBudgetReached { .. } => Some(UndecidedWhy::TimeBudget),
-            _ => None,
-        })
-        .expect("an incomplete run stopped at a cap")
 }

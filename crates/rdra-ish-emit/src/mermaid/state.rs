@@ -1,7 +1,7 @@
 //! The state transition diagram (`--kind state`).
 
 use crate::diagram_common::{contract_id, lifecycle_start_states, quote, Diagram, Header};
-use crate::{EmitError, Explored, OnDeadlock, Scope, StatesEmitter, View};
+use crate::{EmitError, Explored, Scope, StatesEmitter, View};
 use rdra_ish_core::analysis::transition_guard_labels;
 use rdra_ish_core::model::{ColumnType, NodeRef, SemanticModel};
 use rdra_ish_core::{state_id, state_key, state_models, StateModel};
@@ -24,10 +24,6 @@ fn state_models_in_scope<'a>(
 }
 
 impl StatesEmitter for StateMermaidEmitter {
-    fn on_deadlock(&self) -> OnDeadlock {
-        OnDeadlock::Draw
-    }
-
     fn emit(
         &self,
         model: &SemanticModel,

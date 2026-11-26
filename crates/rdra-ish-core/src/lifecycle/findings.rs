@@ -363,7 +363,7 @@ impl TransitionSystem {
             let progress = match first {
                 None => Progress::Leaves,
                 Some((at, k)) => {
-                    let held = Self::forward(&adjacency, at as u32);
+                    let held = adjacency.forward_from(at as u32, |_| true);
                     let held: Vec<(Unpacked, u8)> = (held.iter())
                         .map(|&i| (g.states.at(i as usize), k as u8))
                         .collect();
@@ -456,31 +456,8 @@ impl TransitionSystem {
                 stack.push(from);
             }
         });
-        while let Some(at) = stack.pop() {
-            for &p in adjacency.preds(at) {
-                if !leave[p as usize] && present(p) {
-                    leave[p as usize] = true;
-                    stack.push(p);
-                }
-            }
-        }
+        adjacency.mark_backward(&mut leave, stack, present);
         leave
-    }
-
-    /// `at` and every state a path from it reaches.
-    pub(crate) fn forward(adjacency: &Adjacency, at: u32) -> Vec<u32> {
-        let mut seen = std::collections::HashSet::from([at]);
-        let mut out = vec![at];
-        let mut next = 0;
-        while next < out.len() {
-            for &to in adjacency.succs(out[next]) {
-                if seen.insert(to) {
-                    out.push(to);
-                }
-            }
-            next += 1;
-        }
-        out
     }
 
     /// The `Deadlock` of slot `k` at `value`, each exit with what blocks it over `held`, the

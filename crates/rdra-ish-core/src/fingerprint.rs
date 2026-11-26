@@ -47,6 +47,11 @@ pub fn model_hash<'a>(texts: impl IntoIterator<Item = &'a str>) -> String {
     hash(texts.join("\u{0}").as_bytes())
 }
 
+/// The [`model_hash`] of a loaded program's source texts.
+pub fn program_hash(program: &crate::ResolvedProgram) -> String {
+    model_hash(program.sources.iter().map(|(_, text, _)| text.as_str()))
+}
+
 /// What a fingerprint line records.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Fingerprint {

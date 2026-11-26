@@ -4,6 +4,7 @@ use std::fmt;
 
 use super::explore::Held;
 use super::lasso::Loop;
+use super::targets::UndecidedWhy;
 use super::trace::{Inst, Trace};
 use super::types::{ActionOrigin, GuardWhy, InvText, LtlKind, ModelRef, ParamRole, Site};
 use crate::memory::MemorySize;
@@ -525,6 +526,16 @@ pub enum StateDiag {
 }
 
 /// `「label」: ` for a labelled rule, so a violation names the rule in the author's words.
+/// Where the source of a diagnostic is (`StateDiag::place`).
+enum Place<'a> {
+    /// The first of these sites that has a span.
+    Sites(&'a [Site]),
+    /// The declaration of the entity whose state model holds the state.
+    StateOf(&'a str),
+    /// None of its own: the entity whose view reports it.
+    ItsEntity,
+}
+
 pub fn label_prefix(label: &Option<String>) -> String {
     label
         .as_ref()
@@ -708,6 +719,100 @@ impl StateDiag {
             | StateDiag::Deadlock { trace, .. } => Some(trace),
             _ => None,
         }
+    }
+
+    /// The cap, the limit, or the deadline a run stopped at, when this is the diagnostic of
+    /// that stop; `None` for every other kind.
+    pub fn stopped_why(&self) -> Option<UndecidedWhy> {
+        match *self {
+            StateDiag::StateCapReached { cap, .. } => Some(UndecidedWhy::StateCap(cap)),
+            StateDiag::PatternCapReached { cap, .. } => Some(UndecidedWhy::PatternCap(cap)),
+            StateDiag::MemoryCapReached { limit, raise, .. } => {
+                Some(UndecidedWhy::MemoryCap(limit, raise))
+            }
+            StateDiag::TimeBudgetReached { .. } => Some(UndecidedWhy::TimeBudget),
+            _ => None,
+        }
+    }
+
+    /// Where the source of the diagnostic is. Every kind is named, so a new kind does not
+    /// compile until it says where it goes.
+    fn place(&self) -> Place<'_> {
+        match self {
+            StateDiag::ConstraintViolated { site, .. }
+            | StateDiag::AfterAssertViolated { site, .. }
+            | StateDiag::VacuousRule { site, .. }
+            | StateDiag::PropertyViolated { site, .. }
+            | StateDiag::GoalUnreachable { site, .. }
+            | StateDiag::NeverRuns { site, .. }
+            | StateDiag::ArmNeverTaken { site, .. }
+            | StateDiag::ValueNeverChosen { site, .. }
+            | StateDiag::TriggerNeverRuns { site, .. }
+            | StateDiag::DoubleModeledEnum { site, .. }
+            | StateDiag::PreExistingChildOfCreatedParent { site, .. }
+            | StateDiag::IdentityStartSlots { site, .. }
+            | StateDiag::CountAboveBound { site, .. }
+            | StateDiag::MinCardOfPreExistingParent { site, .. }
+            | StateDiag::MinCardNeedsCreate { site, .. }
+            | StateDiag::AssertOnInertUseCase { site, .. }
+            | StateDiag::FairOnInertUseCase { site, .. }
+            | StateDiag::IntLiteralOutOfBounds { site, .. }
+            | StateDiag::UnbindableScope { site, .. }
+            | StateDiag::AmbiguousOwnerLink { site, .. }
+            | StateDiag::UnboundCopySource { site, .. }
+            | StateDiag::UnbindableCondition { site, .. }
+            | StateDiag::UnwrittenConstrainedVar { site, .. }
+            | StateDiag::UnsupportedComparison { site, .. }
+            | StateDiag::DerivedColumnRead { site, .. }
+            | StateDiag::UnjoinedGuardRead { site, .. }
+            | StateDiag::UnjoinedWrite { site, .. }
+            | StateDiag::UnboundAfterRead { site, .. }
+            | StateDiag::UnanchoredTrigger { site, .. }
+            | StateDiag::UnjoinedTrigger { site, .. }
+            | StateDiag::UncountedTrigger { site, .. }
+            | StateDiag::DeleteLeavesChildren { site, .. }
+            | StateDiag::GuardReadsLaterStep { site, .. }
+            | StateDiag::DefaultOnVariationIgnored { site, .. } => {
+                Place::Sites(std::slice::from_ref(site))
+            }
+            StateDiag::ConflictingEffects { sites, .. }
+            | StateDiag::ContradictoryDrivenComparison { sites, .. }
+            | StateDiag::DrivenComparisonColumnWritten { sites, .. } => Place::Sites(sites),
+            StateDiag::Deadlock { entity, .. } | StateDiag::NoWitness { entity, .. } => {
+                Place::StateOf(entity)
+            }
+            StateDiag::UnreachableEnumVariant { .. }
+            | StateDiag::NoCreationPath
+            | StateDiag::PatternCapReached { .. }
+            | StateDiag::StateCapReached { .. }
+            | StateDiag::MemoryCapReached { .. }
+            | StateDiag::TimeBudgetReached { .. } => Place::ItsEntity,
+        }
+    }
+
+    /// The sites the diagnostic is about, the rule, the use case, or the line: a tool points
+    /// at the first of them that has a span. Empty for a kind with no site of its own
+    /// (`state_entity`, `of_its_entity`).
+    pub fn sites(&self) -> &[Site] {
+        match self.place() {
+            Place::Sites(sites) => sites,
+            Place::StateOf(_) | Place::ItsEntity => &[],
+        }
+    }
+
+    /// The entity whose state model holds the state a `Deadlock` or a `NoWitness` is about:
+    /// the diagnostic goes on its declaration, where the state model is.
+    pub fn state_entity(&self) -> Option<&str> {
+        match self.place() {
+            Place::StateOf(entity) => Some(entity),
+            Place::Sites(_) | Place::ItsEntity => None,
+        }
+    }
+
+    /// A finding that names no entity of its own (`NoCreationPath`, an unreachable variant, a
+    /// stop): it is about the entity whose view reports it.
+    pub fn of_its_entity(&self) -> bool {
+        matches!(self.place(), Place::ItsEntity)
     }
 
     /// A deadlock is an error, unless some way out is blocked only by the instance bound: it

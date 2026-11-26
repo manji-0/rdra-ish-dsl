@@ -6,9 +6,9 @@ mod common;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-fn repo() -> PathBuf {
-    dunce::canonicalize(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).expect("repo root")
-}
+#[path = "common/root.rs"]
+mod root;
+use root::repo;
 
 #[test]
 fn check_prints_one_verdict_with_its_counterexample() {

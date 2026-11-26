@@ -380,7 +380,7 @@ pub fn rdra_findings(model: &SemanticModel) -> Vec<LintIssue> {
                     push_element_lint(
                         model,
                         &mut findings,
-                        subject_kind,
+                        node.kind(),
                         subject_kind,
                         id,
                         rule.id,
@@ -402,7 +402,7 @@ pub fn rdra_findings(model: &SemanticModel) -> Vec<LintIssue> {
                     push_element_lint(
                         model,
                         &mut findings,
-                        node.kind_tag(),
+                        node.kind(),
                         "usecase",
                         id,
                         rule.id,

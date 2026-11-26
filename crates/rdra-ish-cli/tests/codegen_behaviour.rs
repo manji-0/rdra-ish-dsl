@@ -10,20 +10,12 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+#[path = "common/tools.rs"]
+mod tools;
+use tools::{tool, tools, CODEGEN};
+
 fn fixture() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/codegen")
-}
-
-fn available(tool: &str, arg: &str) -> bool {
-    let found = Command::new(tool).arg(arg).output().is_ok();
-    if !found {
-        assert!(
-            std::env::var("RDRA_REQUIRE_CODEGEN_TOOLS").as_deref() != Ok("1"),
-            "{tool} is not on PATH, and RDRA_REQUIRE_CODEGEN_TOOLS=1 requires it; the dev shell provides it"
-        );
-        eprintln!("skipping: {tool} is not on PATH");
-    }
-    found
 }
 
 fn scratch(lang: &str) -> PathBuf {
@@ -85,7 +77,7 @@ fn rust_behaves() {
 
 #[test]
 fn typescript_behaves() {
-    if !available("tsc", "--version") || !available("node", "--version") {
+    if !tools(&["tsc", "node"], CODEGEN) {
         return;
     }
     // The driver runs the same on sealed state types (`--seal`).
@@ -118,7 +110,7 @@ const TS_CAST: &str = "const o = { kind: \"Paid\" } as unknown as d.OrderPaid;";
 
 #[test]
 fn typescript_sealed_states_are_not_built_outside() {
-    if !available("tsc", "--version") {
+    if !tool("tsc", CODEGEN) {
         return;
     }
     let forge = |extra: &[&str], body: &str| {
@@ -158,7 +150,7 @@ fn typescript_sealed_states_are_not_built_outside() {
 
 #[test]
 fn go_behaves() {
-    if !available("go", "version") {
+    if !tool("go", CODEGEN) {
         return;
     }
     let dir = scratch("go");
@@ -266,7 +258,7 @@ func TestVisitor(t *testing.T) {
 /// method it lacks.
 #[test]
 fn go_visitor_fails_to_compile_on_a_new_state() {
-    if !available("go", "version") {
+    if !tool("go", CODEGEN) {
         return;
     }
     let dir = scratch("go-visitor");
@@ -314,7 +306,7 @@ fn go_visitor_fails_to_compile_on_a_new_state() {
 
 #[test]
 fn go_states_are_not_built_outside() {
-    if !available("go", "version") {
+    if !tool("go", CODEGEN) {
         return;
     }
     let dir = scratch("go-forge");
@@ -419,7 +411,7 @@ const TS_CAPABILITY_CALLS: [(&str, Option<&str>); 5] = [
 
 #[test]
 fn typescript_a_use_case_takes_the_capability_of_an_actor_that_performs_it() {
-    if !available("tsc", "--version") {
+    if !tool("tsc", CODEGEN) {
         return;
     }
     let dir = scratch("ts-capability");
@@ -482,7 +474,7 @@ const GO_CAPABILITY_VALID: &str = "\tif !domain.CallerValid(domain.IssueEndUserC
 
 #[test]
 fn go_a_use_case_takes_the_capability_of_an_actor_that_performs_it() {
-    if !available("go", "version") {
+    if !tool("go", CODEGEN) {
         return;
     }
     let dir = scratch("go-capability");
