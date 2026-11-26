@@ -5,7 +5,7 @@
 
 use std::cell::RefCell;
 
-use rdra_ish_core::lifecycle::{StateSlice, TransitionSystem, Value, VarId, VarKind};
+use rdra_ish_core::lifecycle::{Domain, StateSlice, TransitionSystem, Value, VarId, VarKind};
 use rdra_ish_core::SemanticModel;
 
 use crate::codegen::ir::{ArgCheck, CmpOp, Expr, FnDecl};
@@ -125,8 +125,12 @@ impl<'a> Rows<'a> {
                 row, field, value, ..
             } => {
                 let (var, v) = self.get(*row, &field.wire)?;
-                // Null satisfies no comparison (#359).
-                v != Value::NULL && enum_name(self.ts, var, v)? == value.wire
+                // Null satisfies no comparison (#359); a plain Enum holds no null, and its first
+                // value shares the encoding.
+                match self.ts.var(var).domain {
+                    Domain::NullableEnum(_) if v == Value::NULL => false,
+                    _ => enum_name(self.ts, var, v)? == value.wire,
+                }
             }
             Expr::BoolEq { row, field, value } => {
                 let (var, v) = self.get(*row, &field.wire)?;

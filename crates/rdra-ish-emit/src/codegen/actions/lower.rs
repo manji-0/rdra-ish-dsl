@@ -1,7 +1,8 @@
 //! Lowering one action combination to a function: its inputs, rows, assignments, guards, and
 //! the event payload it raises.
 
-use rdra_ish_core::lifecycle::{Guard, Param};
+use rdra_ish_core::lifecycle::{Guard, ModelRef, Param};
+use rdra_ish_core::model::LinkKind;
 
 use super::*;
 use crate::codegen::ir::{EventIn, MarkDecl, MarkIn, MarkOut, MarkSource, RaisedEvent};
@@ -546,12 +547,17 @@ impl Frame<'_> {
                 },
                 TsCmp::Eq,
                 source @ Term::Slot {
-                    at: At::Param(_), ..
+                    var: from,
+                    at: At::Param(_),
                 },
             ) = &guard.pred
             {
+                // A literal compared with the read is of the target's domain: only a source
+                // of the same domain reads it the same way.
                 if *target == var && *c == p {
-                    return Some(NextRead::Term(source.clone()));
+                    let ts = self.cx.ts;
+                    return (ts.var(*from).domain == ts.var(var).domain)
+                        .then(|| NextRead::Term(source.clone()));
                 }
             }
         }
@@ -1121,7 +1127,7 @@ impl Frame<'_> {
                 // `<Kind>_<Child>_<role>` of the step that writes the child.
                 GuardWhy::Link => {
                     if let Some(e) = self.lower_guard(&guard.pred, targets, &mut quant)? {
-                        let rdra_ish_core::lifecycle::ModelRef::Link(i) = guard.site.fact else {
+                        let ModelRef::Link(i) = guard.site.fact else {
                             return Err(unsupported("a link guard with no `links` line"));
                         };
                         let link = &cx.model.links[i];
@@ -1133,7 +1139,6 @@ impl Frame<'_> {
                             .key
                             .map(|fk| cx.model.foreign_key(fk).role_or(parent).to_string())
                             .unwrap_or_else(|| parent.clone());
-                        use rdra_ish_core::model::LinkKind;
                         let (kind, label) = match link.kind {
                             LinkKind::Links => {
                                 ("Links", format!("the {child} is linked to no {parent} yet"))
