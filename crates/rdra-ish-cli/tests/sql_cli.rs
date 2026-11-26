@@ -5,22 +5,15 @@
 //! turns the skip into a failure.
 
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Stdio};
 
-fn repo() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-fn samples() -> Vec<String> {
-    std::fs::read_to_string(repo().join("samples.txt"))
-        .expect("samples.txt")
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
-        .map(str::to_string)
-        .collect()
-}
+#[path = "common/samples.rs"]
+mod samples;
+#[path = "common/scratch.rs"]
+mod scratch;
+use samples::{repo, samples};
+use scratch::scratch;
 
 fn have_python() -> bool {
     let found = Command::new("python3")
@@ -36,13 +29,6 @@ fn have_python() -> bool {
         println!("skipped: {reason}");
     }
     found
-}
-
-fn scratch(test: &str) -> PathBuf {
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(test);
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
 }
 
 fn export_sqlite(input: &Path, out: &Path) {
