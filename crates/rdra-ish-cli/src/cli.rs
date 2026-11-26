@@ -429,6 +429,20 @@ pub(crate) enum Commands {
         /// of a `tlc` / `tlc2` launcher on PATH; `RDRA_TLC_JAR` sets it when the flag is absent
         #[arg(long, value_name = "PATH")]
         tlc_jar: Option<PathBuf>,
+        /// With --with-tlc, run at most N TLC runs at once (the memory they share still bounds
+        /// them); `RDRA_TLC_JOBS` sets it when the flag is absent. Default: as many as the
+        /// cores and the memory allow
+        #[arg(long, value_name = "N", value_parser = clap::value_parser!(u32).range(1..))]
+        tlc_jobs: Option<u32>,
+        /// With --with-tlc, give every TLC run N workers; `RDRA_TLC_WORKERS` sets it when the
+        /// flag is absent. Default: by the states BFS counted, at most 8 unless memory bounds
+        /// the runs
+        #[arg(long, value_name = "N", value_parser = clap::value_parser!(u32).range(1..))]
+        tlc_workers: Option<u32>,
+        /// [experimental] With --with-tlc and -o, write the TLC launches verify would start to
+        /// FILE as JSON and start no TLC: the native checker runs and prints as usual
+        #[arg(long, value_name = "FILE")]
+        plan: Option<PathBuf>,
         /// What the run may hold in memory, such as 16GiB (G and GB also mean GiB); under
         /// --with-tlc BFS takes half, and the TLC runs at once take no more `-Xmx` than the
         /// rest. Default: `memory` under [verify] in rdra.toml, else 16GiB

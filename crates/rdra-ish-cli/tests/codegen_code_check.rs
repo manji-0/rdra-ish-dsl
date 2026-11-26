@@ -41,11 +41,13 @@ fn rdra(dir: &Path, args: &[&str]) -> Output {
         .expect("runs rdra-ish")
 }
 
+/// The exit code, stdout, and stderr with the platform's path separator written as `/`,
+/// so the diagnostics' paths match on Windows too.
 fn text(out: &Output) -> (Option<i32>, String, String) {
     (
         out.status.code(),
         String::from_utf8_lossy(&out.stdout).into_owned(),
-        String::from_utf8_lossy(&out.stderr).into_owned(),
+        String::from_utf8_lossy(&out.stderr).replace('\\', "/"),
     )
 }
 

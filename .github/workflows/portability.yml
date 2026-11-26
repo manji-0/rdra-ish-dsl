@@ -28,4 +28,5 @@ jobs:
           key: portability-${{ matrix.os }}
 
       - name: Test
-        run: cargo test --workspace --locked
+        # --no-fail-fast: one failing test binary must not hide the next one's failures.
+        run: cargo test --workspace --locked --no-fail-fast

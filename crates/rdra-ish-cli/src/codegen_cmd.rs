@@ -233,18 +233,26 @@ fn bases(dir: Option<&Path>) -> Vec<String> {
     let Some(dir) = dir else {
         return Vec::new();
     };
-    let mut out = vec![format!("{}/", dir.display())];
+    let sep = std::path::MAIN_SEPARATOR;
+    let mut out = vec![format!("{}{sep}", dir.display())];
     if let Ok(canon) = dunce::canonicalize(&dir) {
-        out.push(format!("{}/", canon.display()));
+        out.push(format!("{}{sep}", canon.display()));
     }
     out
 }
 
 fn relative(text: String, bases: &[String]) -> String {
-    bases
+    let rest = bases
         .iter()
         .find_map(|b| text.strip_prefix(b.as_str()))
-        .map_or(text.clone(), str::to_string)
+        .map_or(text.clone(), str::to_string);
+    // A site is data in the generated code and the JSON contract, so it reads the same on
+    // every OS: Windows' separator is written as `/`.
+    if std::path::MAIN_SEPARATOR == '/' {
+        rest
+    } else {
+        rest.replace(std::path::MAIN_SEPARATOR, "/")
+    }
 }
 
 /// `path` relative to `base` when it is under it, for a header or a message.

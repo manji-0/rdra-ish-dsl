@@ -13,7 +13,7 @@ entity Customer "Customer" {
   email: String @unique
 }
 
-// The state type: tag `status`, one interface per value. `on_hold` is reached by no
+// The state type: tag `status`, one variant per value. `on_hold` is reached by no
 // transition and still gets one; `onHold` gives the same name and takes the suffix `2`;
 // `_2day` gives a name that starts with a digit and takes the prefix `V`.
 entity Order "Order" {
