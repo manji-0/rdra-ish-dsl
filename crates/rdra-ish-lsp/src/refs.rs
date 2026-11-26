@@ -6,7 +6,8 @@ use rdra_ish_core::{DeclSite, LookupResult, SemanticModel};
 /// by the `.role(x)` that picks the key of a join.
 pub const ROLE_KIND: &str = "role";
 use rdra_ish_syntax::ast::{
-    Ast, AstTemporalFormula, ChainCall, Expr, InstanceDecl, Item, Operand, PredicateArg, QRef, Span,
+    Ast, AstTemporalFormula, ChainCall, Expr, InstanceDecl, Item, Kind, Operand, PredicateArg,
+    QRef, Span,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,17 +52,20 @@ pub fn reference_at_offset(ast: &Ast, offset: usize) -> Option<ReferenceAt<'_>> 
 
 pub fn resolve_decl_site(model: &SemanticModel, reference: ReferenceAt<'_>) -> Option<DeclSite> {
     match reference {
-        ReferenceAt::Declaration { kind, id } => model.decl_sites.get(kind, id).cloned(),
+        ReferenceAt::Declaration { kind, id } => {
+            model.decl_sites.get(Kind::from_name(kind)?, id).cloned()
+        }
         ReferenceAt::Symbol(qref) => {
             let id = qref.parts.last()?;
-            let kind = if let Some(kind) = &qref.kind_qualifier {
-                kind.name()
+            let kind = if let Some(kind) = qref.kind_qualifier {
+                kind
             } else {
                 let node = match model.symbols.lookup(id) {
                     LookupResult::Found(node) => node,
                     _ => return role_site(model, qref),
                 };
-                node.kind_tag()
+                // A state has no declaration of its own.
+                node.kind()?
             };
             model.decl_sites.get(kind, id).cloned()
         }

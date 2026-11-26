@@ -226,16 +226,6 @@ fn first_states(run: &ComponentRun, e: EntId) -> Vec<Option<u32>> {
     first
 }
 
-fn is_cap(d: &StateDiag) -> bool {
-    matches!(
-        d,
-        StateDiag::PatternCapReached { .. }
-            | StateDiag::StateCapReached { .. }
-            | StateDiag::MemoryCapReached { .. }
-            | StateDiag::TimeBudgetReached { .. }
-    )
-}
-
 /// The view of `e` in `run`, the entity's cone: a cap anywhere in it makes the view
 /// incomplete, and the constraint verdicts (`verdicts`) come from their own cones.
 pub(crate) fn entity_view(
@@ -303,7 +293,7 @@ pub(crate) fn entity_view(
             witness: first[id].map(|at| run.trace_to(at)),
         })
         .collect();
-    let caps = run.diags.iter().filter(|d| is_cap(&d.diag));
+    let caps = run.diags.iter().filter(|d| d.diag.stopped_why().is_some());
     for d in caps {
         if !diagnostics.contains(&d.diag) {
             diagnostics.push(d.diag.clone());

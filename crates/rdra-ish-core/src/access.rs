@@ -4,6 +4,7 @@ use crate::model::{
     ActorKey, ApiKey, BucKey, CallerKind, EntityKey, MediumKey, NodeRef, PermissionKey, RelKind,
     ScreenKey, SemanticModel, UseCaseKey,
 };
+use rdra_ish_syntax::ast::Kind;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -389,7 +390,7 @@ pub fn permission_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
                 push_model_decl_diagnostic(
                     model,
                     &mut diags,
-                    "usecase",
+                    Kind::UseCase,
                     &uc_id,
                     RdraError::UseCasePermissionNoActor {
                         usecase: uc_id.clone(),
@@ -416,7 +417,7 @@ pub fn permission_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
                     push_model_decl_diagnostic(
                         model,
                         &mut diags,
-                        "api",
+                        Kind::Api,
                         &api_id,
                         RdraError::ApiPermissionNoActor {
                             api: api_id.clone(),
@@ -453,7 +454,7 @@ pub fn permission_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
                 push_model_decl_diagnostic(
                     model,
                     &mut diags,
-                    "actor",
+                    Kind::Actor,
                     &actor,
                     RdraError::ActorPermissionMissing {
                         actor: actor.clone(),
@@ -468,7 +469,7 @@ pub fn permission_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
                 push_model_decl_diagnostic(
                     model,
                     &mut diags,
-                    "actor",
+                    Kind::Actor,
                     &model.actors[entry.actor].id,
                     RdraError::ActorPermissionExcess {
                         actor: model.actors[entry.actor].id.clone(),

@@ -427,7 +427,7 @@ fn a_written_parent_takes_only_the_key_its_by_names() {
 #[test]
 fn a_written_parent_without_by_is_ambiguous() {
     let src = written_parent("");
-    let built = TransitionSystem::build(&model_from(&src), Bounds::VERIFY, &Scope::ALL);
+    let built = built_from(&src, Bounds::VERIFY);
     assert!(owner_guards(&built.ts).is_empty());
     let ambiguous: Vec<(String, String)> = built
         .diags
@@ -450,7 +450,7 @@ fn a_written_parent_without_by_is_ambiguous() {
         .replace("holds(BillsEast, Address.region == east)\n", "")
         .replace("applies_to(BillsEast, ShipBilled)\n", "")
         .replace("condition BillsEast \"請求先が東\"\n", "");
-    let built = TransitionSystem::build(&model_from(&unread), Bounds::VERIFY, &Scope::ALL);
+    let built = built_from(&unread, Bounds::VERIFY);
     let rewrites: Vec<String> = built
         .diags
         .iter()
@@ -475,7 +475,7 @@ fn a_created_parent_takes_the_named_key_of_a_created_child() {
         "creates(Place, Order)",
         "creates(Place, Order)\ncreates(Place, Address)\nsets(Place, Address.region == east)\ncondition NewShipTo \"新しい配送先\"\nholds(NewShipTo, Address.region == east).role(ship_to)\napplies_to(NewShipTo, Place)",
     );
-    let ts = TransitionSystem::build(&model_from(&src), Bounds::VERIFY, &Scope::ALL).ts;
+    let ts = system_from(&src, Bounds::VERIFY);
     let place = ts
         .actions()
         .iter()

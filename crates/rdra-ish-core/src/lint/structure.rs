@@ -1,6 +1,7 @@
 //! Flow-cycle and structural-coverage lint rules.
 
 use crate::model::{NodeRef, RelKind, SemanticModel, StepKey};
+use rdra_ish_syntax::ast::Kind;
 
 use super::{push_element_lint, LintIssue};
 
@@ -51,7 +52,7 @@ pub(super) fn lint_flow_cycles(model: &SemanticModel, issues: &mut Vec<LintIssue
                             push_element_lint(
                                 model,
                                 issues,
-                                "step",
+                                Kind::Step,
                                 "step",
                                 &model.steps[step].id,
                                 "flow-cycle",
@@ -98,7 +99,7 @@ pub(super) fn lint_structural_coverage(model: &SemanticModel, issues: &mut Vec<L
             push_element_lint(
                 model,
                 issues,
-                "buc",
+                Kind::Buc,
                 "buc",
                 &buc.id,
                 "buc-empty",
@@ -118,7 +119,7 @@ pub(super) fn lint_structural_coverage(model: &SemanticModel, issues: &mut Vec<L
             push_element_lint(
                 model,
                 issues,
-                "flow",
+                Kind::Flow,
                 "flow",
                 &flow.id,
                 "flow-empty",
@@ -141,7 +142,7 @@ pub(super) fn lint_structural_coverage(model: &SemanticModel, issues: &mut Vec<L
             push_element_lint(
                 model,
                 issues,
-                "step",
+                Kind::Step,
                 "step",
                 &step.id,
                 "step-no-cover",
@@ -160,7 +161,7 @@ pub(super) fn lint_structural_coverage(model: &SemanticModel, issues: &mut Vec<L
             push_element_lint(
                 model,
                 issues,
-                "api",
+                Kind::Api,
                 "api",
                 &api.id,
                 "api-unused",
@@ -173,7 +174,7 @@ pub(super) fn lint_structural_coverage(model: &SemanticModel, issues: &mut Vec<L
             push_element_lint(
                 model,
                 issues,
-                "api",
+                Kind::Api,
                 "api",
                 &api.id,
                 "api-contract-incomplete",
@@ -184,7 +185,7 @@ pub(super) fn lint_structural_coverage(model: &SemanticModel, issues: &mut Vec<L
             push_element_lint(
                 model,
                 issues,
-                "api",
+                Kind::Api,
                 "api",
                 &api.id,
                 "api-contract-missing",
@@ -205,7 +206,7 @@ pub(super) fn lint_structural_coverage(model: &SemanticModel, issues: &mut Vec<L
             push_element_lint(
                 model,
                 issues,
-                "dto",
+                Kind::Dto,
                 "dto",
                 &dto.id,
                 "dto-unused",
@@ -225,7 +226,7 @@ pub(super) fn lint_structural_coverage(model: &SemanticModel, issues: &mut Vec<L
             push_element_lint(
                 model,
                 issues,
-                "field",
+                Kind::Field,
                 "field",
                 &field.id,
                 "field-unplaced",
@@ -242,7 +243,7 @@ pub(super) fn lint_structural_coverage(model: &SemanticModel, issues: &mut Vec<L
             push_element_lint(
                 model,
                 issues,
-                "field",
+                Kind::Field,
                 "field",
                 &field.id,
                 "field-unmapped",
@@ -262,7 +263,7 @@ pub(super) fn lint_structural_coverage(model: &SemanticModel, issues: &mut Vec<L
             push_element_lint(
                 model,
                 issues,
-                "screen",
+                Kind::Screen,
                 "screen",
                 &screen.id,
                 "screen-no-fields",
@@ -280,7 +281,7 @@ pub(super) fn lint_structural_coverage(model: &SemanticModel, issues: &mut Vec<L
             push_element_lint(
                 model,
                 issues,
-                "requirement",
+                Kind::Requirement,
                 "requirement",
                 &requirement.id,
                 "requirement-untraced",
@@ -299,7 +300,7 @@ pub(super) fn lint_structural_coverage(model: &SemanticModel, issues: &mut Vec<L
             push_element_lint(
                 model,
                 issues,
-                "nfr",
+                Kind::Nfr,
                 "nfr",
                 &nfr.id,
                 "nfr-unscoped",
@@ -317,7 +318,7 @@ pub(super) fn lint_structural_coverage(model: &SemanticModel, issues: &mut Vec<L
             push_element_lint(
                 model,
                 issues,
-                "constraint",
+                Kind::Constraint,
                 "constraint",
                 &constraint.id,
                 "constraint-unscoped",

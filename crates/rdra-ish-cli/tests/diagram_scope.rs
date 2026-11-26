@@ -4,16 +4,12 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-fn repo() -> PathBuf {
-    dunce::canonicalize(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).expect("repo root")
-}
-
-fn scratch(test: &str) -> PathBuf {
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(test);
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
-}
+#[path = "common/root.rs"]
+mod root;
+#[path = "common/scratch.rs"]
+mod scratch;
+use root::repo;
+use scratch::scratch;
 
 const SHOP: &str = r#"
 actor Clerk "Clerk"

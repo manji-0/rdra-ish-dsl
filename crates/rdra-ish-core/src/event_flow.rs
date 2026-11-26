@@ -9,6 +9,7 @@ use crate::model::{
     BucKey, EventKey, ExtSystemKey, NodeRef, Raiser, RelKind, SemanticModel, StateTransition,
     TimerKey, UseCaseKey,
 };
+use rdra_ish_syntax::ast::Kind;
 use std::collections::HashMap;
 
 /// イベントを中心とした因果連鎖ファクト。
@@ -179,7 +180,7 @@ pub fn event_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
             push_model_decl_diagnostic(
                 model,
                 &mut diags,
-                "event",
+                Kind::Event,
                 &event_id,
                 RdraError::EventNeverRaised {
                     event: event_id.clone(),
@@ -198,7 +199,7 @@ pub fn event_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
             push_model_decl_diagnostic(
                 model,
                 &mut diags,
-                "event",
+                Kind::Event,
                 &event_id,
                 RdraError::EventNeverConsumed {
                     event: event_id.clone(),
@@ -215,7 +216,7 @@ pub fn event_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
                 push_model_decl_diagnostic(
                     model,
                     &mut diags,
-                    "usecase",
+                    Kind::UseCase,
                     &uc_id,
                     RdraError::TriggeredUseCaseUnreachable {
                         event: event_id.clone(),
@@ -252,7 +253,7 @@ pub fn event_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
         push_model_decl_diagnostic(
             model,
             &mut diags,
-            "usecase",
+            Kind::UseCase,
             &uc_id,
             RdraError::TimerTriggeredUseCaseUnreachable {
                 timer: timer_id,
@@ -278,7 +279,7 @@ pub fn api_route_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
             push_model_decl_diagnostic(
                 model,
                 &mut diags,
-                "api",
+                Kind::Api,
                 &api.id,
                 RdraError::DuplicateApiRoute {
                     api: api.id.clone(),
@@ -310,7 +311,7 @@ pub fn api_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
             push_model_decl_diagnostic(
                 model,
                 &mut diags,
-                "api",
+                Kind::Api,
                 &api.id,
                 RdraError::ApiNeverInvoked {
                     api: api.id.clone(),
@@ -332,7 +333,7 @@ pub fn api_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
             push_model_decl_diagnostic(
                 model,
                 &mut diags,
-                "api",
+                Kind::Api,
                 &api.id,
                 RdraError::ApiInvokedButNoEntity {
                     api: api.id.clone(),

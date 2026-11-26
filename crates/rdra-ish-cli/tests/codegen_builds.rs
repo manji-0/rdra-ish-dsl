@@ -16,20 +16,11 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 mod codegen_cases;
+use codegen_cases::{repo, samples};
 
-fn repo() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-fn samples() -> Vec<String> {
-    std::fs::read_to_string(repo().join("samples.txt"))
-        .expect("samples.txt")
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
-        .map(str::to_string)
-        .collect()
-}
+#[path = "common/tools.rs"]
+mod tools;
+use tools::{tool, CODEGEN};
 
 /// The models every language builds: the samples, a model whose names are keywords, one
 /// whose functions compute derived columns, one whose Enum and Bool columns hold null, and one
@@ -44,19 +35,6 @@ fn models() -> Vec<String> {
     models.push("crates/rdra-ish-cli/tests/fixtures/codegen/use_case_vocabulary.rdra".to_string());
     models.push("crates/rdra-ish-cli/tests/fixtures/codegen/entry_only.rdra".to_string());
     models
-}
-
-fn available(tool: &str) -> bool {
-    let found = Command::new(tool).arg("--version").output().is_ok()
-        || Command::new(tool).arg("version").output().is_ok();
-    if !found {
-        assert!(
-            std::env::var("RDRA_REQUIRE_CODEGEN_TOOLS").as_deref() != Ok("1"),
-            "{tool} is not on PATH, and RDRA_REQUIRE_CODEGEN_TOOLS=1 requires it; the dev shell provides it"
-        );
-        eprintln!("skipping: {tool} is not on PATH");
-    }
-    found
 }
 
 fn codegen(sample: &str, lang: &str, path: &Path, extra: &[&str]) -> std::process::Output {
@@ -120,7 +98,7 @@ fn run(cmd: &mut Command, what: &str) {
 
 #[test]
 fn typescript_builds() {
-    if !available("tsc") {
+    if !tool("tsc", CODEGEN) {
         return;
     }
     for sample in models() {
@@ -207,7 +185,7 @@ fn without_strings(line: &str) -> String {
 /// public item has rustdoc (docs/design/algebraic-codegen.md, "Generated code style").
 #[test]
 fn rust_builds() {
-    if !available("clippy-driver") {
+    if !tool("clippy-driver", CODEGEN) {
         return;
     }
     for sample in models() {
@@ -238,7 +216,7 @@ fn rust_builds() {
 /// every use case line of the line map, and nothing else.
 #[test]
 fn rust_probes_name_every_contract() {
-    if !available("rustc") {
+    if !tool("rustc", CODEGEN) {
         return;
     }
     let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
@@ -341,7 +319,7 @@ fn rust_probes_name_every_contract() {
 /// the line map, and nothing else.
 #[test]
 fn typescript_probes_name_every_contract() {
-    if !available("tsc") {
+    if !tool("tsc", CODEGEN) {
         return;
     }
     let mut checked = 0;
@@ -429,7 +407,7 @@ fn typescript_probes_name_every_contract() {
 /// (docs/design/algebraic-codegen.md, "Generated code style").
 #[test]
 fn go_builds() {
-    if !available("go") {
+    if !tool("go", CODEGEN) {
         return;
     }
     let mut models = models();

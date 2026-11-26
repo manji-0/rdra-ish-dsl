@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
-fn repo() -> PathBuf {
-    dunce::canonicalize(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).expect("repo root")
-}
+#[path = "common/root.rs"]
+mod root;
+use root::repo;
 
 /// Written once per process beside the directory and moved into it: the tests run in
 /// parallel, under cargo-nextest each in a process of its own, and a plain write would

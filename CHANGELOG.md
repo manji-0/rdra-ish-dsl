@@ -4,6 +4,10 @@
 
 ### Changed
 
+- `check --code=build` for Rust and TypeScript counts a use case's missing members across
+  the compiler's messages, as it does for Go: when the messages together miss every member
+  of the contract, the finding is `CodeMissingUseCase_*`, not `CodeIncomplete_*`. One
+  message that misses them all was `CodeMissingUseCase_*` already.
 - A BFS run can keep its reached states in a table that its worker threads read while the run
   adds states, so that each worker looks up the moves it expands (#296 item 3.1, part 2). A
   release build leaves this off and runs as before: the look-ups took 12% off
