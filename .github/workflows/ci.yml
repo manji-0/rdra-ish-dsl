@@ -305,7 +305,7 @@ jobs:
         # `cargo build` resolves other features and compiled every crate a second time.
         run: cargo test --release -p rdra-ish-cli --features shadow --test engine_corpus --no-run
       - name: Every twin compares calls
-        # How many calls each twin compared and skipped on nine runs. `verify` of patent-ops
+        # How many calls each twin compared and skipped on ten runs. `verify` of patent-ops
         # reaches every twin but `Fold::holds`, which quantifier_guard reaches, a shared run
         # of S, which `verify` of clinic-ops reaches, the two that read entity views, which no
         # run of `verify` gathers (#251): `check` does, and the ends of an after-assert step on
@@ -320,7 +320,7 @@ jobs:
         # properties that fail: an orbit self-edge loop, the `FirstAbsent` asymmetry, and a
         # key that moves. The variables change nothing without `--symmetry`. The step fails
         # when a line is missing (a build without the feature) or a twin compared none in all
-        # nine.
+        # ten. The tenth runs clinic-ops with the BFS workers probing (#296 item 3.1 part 2).
         run: |
           for run in "verify samples/patent-ops --symmetry always" \
                      "verify samples/clinic-ops --symmetry always" \
@@ -335,8 +335,13 @@ jobs:
               target/release/rdra-ish $run 2>&1 >/dev/null \
               | grep '^shadow: compared/skipped ' >> shadow-stats.txt || true
           done
+          # The workers of a BFS run probe its shared table (#296 item 3.1 part 2) only under
+          # the test-only `RDRA_ISH_FORCE_PROBES`, which a release build never sets: this run
+          # holds the probes (`hit`, `recent`) and the shared table's growth to their twins.
+          RDRA_ISH_SHADOW_STATS=1 RDRA_ISH_FORCE_PROBES=1 target/release/rdra-ish verify samples/clinic-ops 2>&1 >/dev/null \
+            | grep '^shadow: compared/skipped ' >> shadow-stats.txt || true
           cat shadow-stats.txt
-          test "$(wc -l < shadow-stats.txt)" -eq 9
+          test "$(wc -l < shadow-stats.txt)" -eq 10
           python3 - <<'EOF'
           import collections, re
           compared = collections.Counter()

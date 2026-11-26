@@ -8,8 +8,8 @@ use crate::lifecycle::expr::StateSlice;
 use crate::lifecycle::tests::model_from;
 use crate::lifecycle::{Bounds, Caps, Scope, TransitionSystem};
 
-use super::super::arena::hash;
-use super::super::probe::{Numbering, Probe};
+use super::super::arena::{hash, Seen};
+use super::super::probe::{Numbering, Probe, Shared};
 use super::super::symmetry::Group;
 use super::super::tests::DESKS;
 use super::{expand, Expander, Scratch, CHUNK};
@@ -18,7 +18,8 @@ use super::{expand, Expander, Scratch, CHUNK};
 /// when its successor is its source, an `OrbitSelf` exactly when the canonical form is; any
 /// other move carries its key packed as the store packs it and that packing's hash, and is a
 /// `SameAs(k)` exactly when `k` is the first earlier move of the chunk with the same key, else
-/// a `Miss`. Distinct bindings get distinct numbers. Each kind occurs.
+/// a `Miss`. Probed against a table of every state of the run, each such move is a `Hit` of
+/// its key's number instead. Distinct bindings get distinct numbers. Each kind occurs.
 #[test]
 fn a_chunks_probes_are_what_a_scan_of_its_moves_finds() {
     let bounds = Bounds::uniform(NonZeroU8::new(3).expect("3 instances"), 5);
@@ -28,7 +29,20 @@ fn a_chunks_probes_are_what_a_scan_of_its_moves_finds() {
     let numbering = Numbering::of(&ts);
     assert!(numbering.len() > 0);
     let group = Group::of(&ts);
-    for group in [None, Some(&group)] {
+    let mut seen = Seen::new(true);
+    let mut number = HashMap::new();
+    for i in 0..states.len() {
+        let mut packed = Vec::new();
+        states.pack(&states.at(i), &mut packed);
+        seen.insert_hashed(states, i as u32, hash(&packed));
+        number.insert(packed, i as u32);
+    }
+    let shared = Shared {
+        table: seen.current().expect("a shared table"),
+        rows: states.publish(&mut None),
+    };
+    let cases = [(None, false), (Some(&group), false), (None, true)];
+    for (group, probed) in cases {
         let expander = Expander {
             ts: &ts,
             group,
@@ -39,7 +53,8 @@ fn a_chunks_probes_are_what_a_scan_of_its_moves_finds() {
         let mut numbers: HashMap<u32, (_, Box<[u8]>)> = HashMap::new();
         for start in (0..states.len()).step_by(CHUNK) {
             let range = start..(start + CHUNK).min(states.len());
-            let chunk = expand(expander, states, range.clone(), &mut scratch);
+            let shared = probed.then(|| shared.clone());
+            let chunk = expand(expander, states, range.clone(), &mut scratch, shared);
             let (moves, probes) = (&chunk.moves, &chunk.probes);
             // Per key of the chunk so far: the first move that reached it.
             let mut first: HashMap<Vec<u8>, u32> = HashMap::new();
@@ -73,6 +88,10 @@ fn a_chunks_probes_are_what_a_scan_of_its_moves_finds() {
                     assert_eq!(packed, &want[..], "move {i}");
                     assert_eq!(h, hash(packed), "move {i}");
                     let i = u32::try_from(i).expect("moves fit in u32");
+                    if probed {
+                        assert_eq!(probe, Probe::Hit(number[&want]), "move {i}");
+                        continue;
+                    }
                     match *first.entry(want).or_insert(i) {
                         k if k == i => assert_eq!(probe, Probe::Miss, "move {i}"),
                         k => assert_eq!(probe, Probe::SameAs(k), "move {i}"),
@@ -81,7 +100,8 @@ fn a_chunks_probes_are_what_a_scan_of_its_moves_finds() {
                 from = end;
             }
         }
-        let want_kinds = if group.is_some() { 4 } else { 3 };
+        // Loops and misses or hits, and same-as moves; orbit self-edges under symmetry.
+        let want_kinds = [3, 4, 2][usize::from(group.is_some()) + 2 * usize::from(probed)];
         assert_eq!(kinds.len(), want_kinds, "{kinds:?}");
     }
 }

@@ -4,6 +4,12 @@
 
 ### Changed
 
+- A BFS run can keep its reached states in a table that its worker threads read while the run
+  adds states, so that each worker looks up the moves it expands (#296 item 3.1, part 2). A
+  release build leaves this off and runs as before: the look-ups took 12% off
+  food-permit-ops at 8 jobs but cost clinic-ops and insurance-claim-ops 4% to 5%, and part 3
+  decides. Unit tests and one run of the CI's shadow job turn it on. Output, `--memory` stop points
+  and what a run charges do not change.
 - `verify --with-tlc`: each `tlc:` run line of a cone, property or whole-model job ends with
   what its TLC launches cost: their wall time added up, the `-Xmx` of the last and the
   workers of the first, as `(31 states, 0.3 s, -Xmx1g, 8 workers)` (#384).

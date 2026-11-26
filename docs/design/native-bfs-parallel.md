@@ -8,10 +8,13 @@ Status (2026-11-26): 3.1 is being built in parts.
 
 - **Landed.** Part 1 of 3.1: workers pack, hash and deduplicate (#372,
   [3.1 as built](#31-as-built)). One BFS run takes `max(4, cores / 3)` threads, at most 12
-  and never more than the cores (#371).
-- **Open on #296.** Part 2 of 3.1, workers probe the shared table. 3.1's exit is not met:
-  food-permit-ops at 8 jobs took 35% of its one-job time, against 30%. 3.2's shared helper
-  pool and its sweep (`Helpers::take` still gives one run every free helper). 3.3.
+  and never more than the cores (#371). Part 2 of 3.1: the shared table and the workers'
+  probe, which a release build leaves off
+  ([Part 2: the shared table](#part-2-the-shared-table)).
+- **Open on #296.** Part 3 of 3.1: the serial findings tail of the largest cone, and
+  whether the probes go on. 3.1's exit is not met: food-permit-ops at 8 jobs took 35% of
+  its one-job time, against 30%. 3.2's shared helper pool and its sweep (`Helpers::take`
+  still gives one run every free helper). 3.3.
 - **Superseded.** The helper default `available_parallelism() - 1` of
   [Helpers by need and the jobs cap](#helpers-by-need-and-the-jobs-cap), by the owner's
   `max(4, cores / 3)` of 2026-11-26
@@ -660,6 +663,135 @@ With 12% of the run outside BFS, that bounds 8 jobs at about 1 / (0.23 + 0.12) =
 (computed), as measured. The exit needs about 1 / 0.30 - 0.12 = 0.21 or less on the
 reader, and part 2 (workers probe the table) is the lever: the reader then probes only what
 the workers could not see.
+
+### Part 2: the shared table
+
+<!-- constrained-by #the-shared-table -->
+<!-- constrained-by #why-the-run-is-the-one-thread-run -->
+
+Part 2 builds what the workers need to probe the run's table, and it measures the probes.
+A release build leaves the probes off: on two of the three samples they cost more than they
+saved (see the measurements below). With the probes off, a run keeps hashbrown's table and
+takes part 1's path. Part 3 decides whether to turn the probes on.
+
+A run whose workers probe keeps, as `Seen`, the table of [The shared table](#the-shared-table)
+(`explore/table.rs`). One thread writes it, and any thread probes it, without a lock and
+without `unsafe`:
+
+- **Layout.** Eight 7-bit tags share an `AtomicU64` control word. Each tag has an
+  `AtomicU32` index beside it. Probing is triangular over groups.
+- **Insert.** The writer stores the index (`Relaxed`), then the control word (`Release`).
+- **Growth.** The writer builds the next generation privately and makes it current. A
+  chunk holds the generation that was current when it was handed out.
+- **Capacity.** The table grows where hashbrown grows. A unit test pins it to hashbrown,
+  insert by insert, and a `shadow` twin (`seen_growth`) checks it on every insert of a run.
+  So `Seen::bytes_with`, `store_bytes` and the `--memory` stop points do not change.
+- **Proofs.** Two Kani harnesses cover the table. `lanes_are_exactly_the_equal_bytes`
+  proves the tag match for every word and tag. `growth_keeps_room_for_one_more` proves the
+  growth rule.
+- **Speed.** The table finds a state more slowly than hashbrown. In a microbenchmark of 4.6
+  million states, with half of the look-ups missing, it took 87 ms against hashbrown's 59 ms
+  (**measured**, 1.5 times as long). Two variants did not close the gap: `Relaxed` loads on
+  the writer's own thread, and each group's indexes beside its control word (93 ms). With
+  the probes off, a release build that kept this table was 5% slower than main on
+  food-permit-ops at 8 jobs (2.11 s against 2.01 s, median of five, 1-minute load 6) and
+  3.5% slower on clinic-ops (1.76 s against 1.70 s). So a run that does not probe keeps
+  hashbrown's table.
+
+A chunk is handed out with a `Shared`, which holds the table and a `Published`
+(`explore/arena.rs`). A `Published` holds the addresses of the store's segments and the
+number of rows at hand-out. A segment never moves (A1), and a pushed row is never written
+again. The chunk queue's lock orders the rows' bytes before the worker reads them.
+`Bfs::go` runs the workers in a `std::thread::scope` that ends after `explore` returns, so
+the store outlives every reader of it. Reading a row is the one `unsafe` read
+(`Published::row`). A unit test reads published rows on another thread while the store
+grows. Miri has not run on it: the toolchain has no Miri component.
+
+The workers' probe works as follows:
+
+- **The probe.** The expanding thread probes each `Miss` of part 1 against the table. It
+  takes `Hit(i)` only when `i` is a published row and that row's bytes equal the key. So
+  a hit is right whatever the memory ordering gave the probe: this is step 3 of
+  [Why the run is the one-thread run](#why-the-run-is-the-one-thread-run). A `shadow` twin
+  (`hit`) holds every hit to the reader's own look-up.
+- **A miss.** A move that is still a `Miss` tells the reader that the successor is none
+  of the states below the chunk's published count `P`. The reader looks it up only among
+  the states admitted since `P`, in a small table (`Recent`) that stays in cache. When
+  `Recent` does not hold every state from `P` on, the reader uses the run's table. This is
+  step 4 with a smaller table. A `shadow` twin (`recent`) holds each look-up to the run's
+  table.
+- **The switch.** `Probing` turns the probes on: at 4 workers or more in the unit tests,
+  and at any worker count in a `shadow` build under the test-only `RDRA_ISH_FORCE_PROBES`.
+  One run of the CI's shadow job (clinic-ops) sets that variable. Two planted bugs were caught under it on
+  clinic-ops at 4 jobs: a hit without the row compare (`shadow: Probe::Hit(157) at move
+  118 of state 157: reference None`), and `Recent` letting go of 64 states it still had to
+  hold (`shadow: Recent::find(..): None, the run's table Some(558)`).
+
+**Measured, probes on** (a build of the branch with the probes on and the shared table, against
+main 3b4860cf, which holds part 1; RDRA_JOBS set; median of three, interleaved). That build
+also moved work off the reader: a worker copied its chunk's states out of the store itself,
+dropped the chunks the reader had read, and spun briefly before it slept. With hashbrown's
+table and the probes off, those three together measured within noise of main, so part 2
+does not keep them. food-permit-ops at a
+1-minute load of 3.5 to 4.2:
+
+| Jobs | 1 | 2 | 4 | 6 | 8 | 12 | 17 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Main | 5.81 s | 3.28 s | 2.11 s | 2.05 s | 2.11 s | 2.19 s | 2.17 s |
+| Probes on | 5.90 s | 3.30 s | 2.19 s | **1.81 s** | **1.86 s** | 1.87 s | 1.89 s |
+
+At 8 jobs, the probes take 12% off the run: it is 32% of main's 1-job time, short of the
+≤30% exit. The 4-job run had 3 workers probing. Probing from 4 workers on (`PROBING`) gives
+2.19 s at 4 jobs, against main's 2.17 s. 12 and 17 jobs gain nothing over 6 to 8 on either
+branch.
+
+At 8 jobs on all three samples, at a load of 5 to 7:
+
+| | food-permit-ops | clinic-ops | insurance-claim-ops |
+|---|---:|---:|---:|
+| Main | 2.00 s | 1.74 s | 4.20 s |
+| Probes on | **1.81 s, -9.5%** | 1.81 s, +4% | 4.39 s, +4.5% |
+
+**Measured, as built** (the probes off, hashbrown's table; against main cfe781d4; 8 jobs,
+median of seven, interleaved, at a 1-minute load of 5 to 9):
+
+| | food-permit-ops | clinic-ops | insurance-claim-ops |
+|---|---:|---:|---:|
+| Main | 1.96 s | 2.02 s | 4.08 s |
+| Part 2 | 1.93 s | 2.02 s | 4.17 s |
+
+The runs of each sample overlap: food-permit-ops 1.95 to 2.09 s against 1.91 to 2.31 s,
+clinic-ops 1.71 to 2.32 s against 1.65 to 2.22 s (both bimodal), insurance-claim-ops 3.93 to
+4.43 s against 3.99 to 4.53 s. food-permit-ops at 1 job: 5.54 s against 5.48 s. Instructions
+rise 0.1% to 0.3%. The shared table's look-up and insert sit out of line (`find_shared`,
+`insert_shared`): inlined beside hashbrown's, a build that did not probe was 2.5% slower on
+food-permit-ops at 8 jobs (2.09 s against 2.04 s, median of seven).
+
+These costs were measured with the slower table, so part 3 should not read them as the cost
+of the probes alone. The probes cost the CPU. On clinic-ops at 8 jobs, user time rose from
+7.0 s (main) to 7.6 s with that build's probes off, and to 8.5 s with them on, while
+instructions rose 5.7%. So the
+probes stall: they miss the cache in a table of about 40 MB and in the store's rows. The
+reader keeps up in none of these runs: of the chunks the biggest run of each sample reads,
+95% to 100% were probed, and the reader almost never waited on a worker.
+
+Two gates did not help. One probed only while the workers kept up with the reader, and the
+reader seldom waited. The other probed only when a run held the whole helper budget, and
+the big runs always did.
+
+**Hypothesis, not verified:** this machine has 6 performance cores and 12 efficiency
+cores. When several big cones overlap, as in clinic-ops and insurance-claim-ops, the
+probes' extra CPU may push cone readers onto efficiency cores. In food-permit-ops one cone
+runs alone at the end. Part 3 tests this before it designs around it: for example,
+clinic-ops with the probes on at 6 jobs against 8, and whether the slowdown appears only
+when cones overlap.
+
+**Profile, probes on** (food-permit-ops, 8 jobs, `sample` at 1 ms): the reader spends
+80% to 87% of its samples in `take`. Inside `take`, `admit` takes 22% of the reader thread,
+of which the table insert is 10% to 16%. The edge push takes 14% to 19%, `Moves::get` 5%,
+and `check_after` 2% to 4.5%. A second thread then runs `state_model_findings` for the big
+cone for 0.5 to 0.6 s after its BFS ends (`read_entity` in `targets.rs`), on one thread.
+That tail is a third of the 1.86 s 8-job run. Part 3 takes it off the critical path.
 
 ## Beyond 3.1: in-flight dedup
 

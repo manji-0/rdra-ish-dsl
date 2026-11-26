@@ -24,6 +24,9 @@
 //! | states packed into their cells' bits (`States`, `explore/arena.rs`, #296 2.3) | the states unpacked, beside the packed rows, compared on every read; `Seen`'s twin keys the unpacked bytes |
 //! | a move the expanding thread found to repeat an earlier move of its chunk (`Probe::SameAs`, `explore/probe.rs`, #296 3.1) | `Seen`'s twin: the state it names is the one the earlier move reached |
 //! | a binding's id looked up by its number (`Bindings::id_numbered`, `explore/bfs.rs`, #296 3.1) | the map from params to ids `Bindings::id` keeps |
+//! | a worker's probe of the run's shared table (`Probe::Hit`, `explore/probe.rs`, #296 3.1) | `Seen`'s twin: the state the hit names is the one the key is |
+//! | the shared table's growth (`table::Writer`, `explore/table.rs`, #296 3.1) | a hashbrown table filed alike: the two capacities are equal after every insert |
+//! | the reader's look-up of a `Miss` among the states admitted since its chunk was handed out (`Recent`, `explore/bfs.rs`, #296 3.1) | `Seen::find_hashed` on the run's whole table |
 //!
 //! A `shadow` build also runs the checks `shadow_assert!` makes, as a debug build does: each
 //! reader of a run's check results reads only checks the run evaluated (#251), and a steady
@@ -59,9 +62,12 @@ pub(crate) enum Twin {
     OrbitStateModels,
     SameAs,
     DenseBinding,
+    Hit,
+    SeenGrowth,
+    Recent,
 }
 
-const TWINS: [(Twin, &str); 20] = [
+const TWINS: [(Twin, &str); 23] = [
     (Twin::EachEnabled, "each_enabled"),
     (Twin::Seen, "seen"),
     (Twin::Source, "source"),
@@ -82,6 +88,9 @@ const TWINS: [(Twin, &str); 20] = [
     (Twin::OrbitStateModels, "orbit_state_models"),
     (Twin::SameAs, "same_as"),
     (Twin::DenseBinding, "dense_binding"),
+    (Twin::Hit, "hit"),
+    (Twin::SeenGrowth, "seen_growth"),
+    (Twin::Recent, "recent"),
 ];
 
 static COMPARED: [AtomicU64; TWINS.len()] = [const { AtomicU64::new(0) }; TWINS.len()];
