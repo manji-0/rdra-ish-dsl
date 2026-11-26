@@ -3,7 +3,7 @@
 
 use super::conformance::TRACES_FORMAT;
 use super::go::{doc, field_type, local, struct_decl, Line};
-use super::ir::{DomainModel, Field, FieldType, PortArg, Scalar, Track};
+use super::ir::{DomainModel, Field, FieldType, PortArg, PortDecl, PortMethod, Scalar, Track};
 use super::{string_literal, type_ident};
 
 /// The packages the harness imports.
@@ -118,23 +118,23 @@ fn print_contracts(domain: &DomainModel, port: &super::ir::PortDecl, out: &mut S
             .collect();
         for &i in &c.methods {
             let m = &port.methods[i];
+            let [prepare, commit] = method_names(m);
             out.push_str(&format!(
-                "\t// Prepare{0} loads the rows of {1} (the action {2}) and runs it, writing nothing.\n\tPrepare{0}({3}) ({4}, error)\n",
-                m.name,
+                "\t// {prepare} loads the rows of {} (the action {}) and runs it, writing nothing.\n\t{prepare}({}) ({}, error)\n",
                 m.usecase,
                 m.action,
                 by.iter().cloned().chain(params(m)).collect::<Vec<_>>().join(", "),
                 m.write
             ));
             out.push_str(&format!(
-                "\t// Commit{0} stores what Prepare{0} returned in one transaction.\n\tCommit{0}(write {1}) error\n",
-                m.name, m.write
+                "\t// {commit} stores what {prepare} returned in one transaction.\n\t{commit}(write {}) error\n",
+                m.write
             ));
         }
         for e in &c.entries {
             out.push_str(&format!(
                 "\t// {} runs the action {} of {} whole, by the ids of its rows: the generator printed no\n\t// function for it (#335), so the service writes it and keeps the obligations.\n\t{0}({}) error\n",
-                entry_method(e),
+                entry_name(&e.name),
                 e.action,
                 c.usecase,
                 by.iter().cloned().chain(entry_params(e)).collect::<Vec<_>>().join(", ")
@@ -145,8 +145,13 @@ fn print_contracts(domain: &DomainModel, port: &super::ir::PortDecl, out: &mut S
 }
 
 /// The method of an entry point (#335): `Run<Action>`.
-pub(super) fn entry_method(e: &super::ir::EntryDecl) -> String {
-    format!("Run{}", e.name)
+pub(super) fn entry_name(name: &str) -> String {
+    format!("Run{name}")
+}
+
+/// A port method's two calls: `Prepare<Action>` and `Commit<Action>`.
+pub(super) fn method_names(m: &PortMethod) -> [String; 2] {
+    [format!("Prepare{}", m.name), format!("Commit{}", m.name)]
 }
 
 fn entry_params(e: &super::ir::EntryDecl) -> Vec<String> {
@@ -158,14 +163,12 @@ fn entry_params(e: &super::ir::EntryDecl) -> Vec<String> {
 
 /// The Go names of a contract's methods: `Prepare*` and `Commit*` per action with functions,
 /// and `Run*` per entry point.
-pub(super) fn method_names(port: &super::ir::PortDecl, c: &super::ir::ContractDecl) -> Vec<String> {
+fn contract_methods(port: &super::ir::PortDecl, c: &super::ir::ContractDecl) -> Vec<String> {
     let mut out = Vec::new();
     for &i in &c.methods {
-        let m = &port.methods[i];
-        out.push(format!("Prepare{}", m.name));
-        out.push(format!("Commit{}", m.name));
+        out.extend(method_names(&port.methods[i]));
     }
-    out.extend(c.entries.iter().map(entry_method));
+    out.extend(c.entries.iter().map(|e| entry_name(&e.name)));
     out
 }
 
@@ -238,7 +241,7 @@ pub(super) fn probe(
             string_literal(&super::one_line(&c.label))
         ));
         w.usecase(&format!("var _ {dom}.{} = {receiver}(nil)", c.name), c);
-        for name in method_names(port, c) {
+        for name in contract_methods(port, c) {
             w.line(&format!("var _ = {receiver}.{name}"));
         }
         w.line("");
@@ -265,6 +268,16 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
     if !port.harness {
         return;
     }
+    print_snapshot(port, out);
+    print_port_trait(port, out);
+    print_conform(out);
+    print_calls(domain, port, out);
+    print_seed_rows(domain, port, out);
+    print_abstraction(domain, port, out);
+}
+
+/// The run marks and `StoreSnapshot`: everything a store holds, as the harness reads it.
+fn print_snapshot(port: &PortDecl, out: &mut String) {
     out.push_str(
         "// ── Conformance: the port a finished service implements, and the harness that drives it ──\n\n",
     );
@@ -300,7 +313,10 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
         lines.push(Line::Cells(vec![ev.ty.clone(), format!("[]{}", ev.ty)]));
     }
     out.push_str(&struct_decl("StoreSnapshot", &lines));
+}
 
+/// `ConformancePort`, what a finished service offers the harness, and `ConformanceReport`.
+fn print_port_trait(port: &PortDecl, out: &mut String) {
     out.push_str("// ConformancePort is what a finished service offers the conformance harness: every use case's\n// contract, and a store the harness can seed and read back.\n");
     out.push_str("type ConformancePort interface {\n");
     for c in &port.contracts {
@@ -315,7 +331,10 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
     out.push_str("}\n\n");
 
     out.push_str("// ConformanceReport is what Conform checked.\ntype ConformanceReport struct {\n\tTraces        int\n\tCalls         int\n\tRefusals      int\n\tInterleavings int\n}\n\n");
+}
 
+/// `Conform`, which drives a fresh port per trace, and the helpers it shares with every model.
+fn print_conform(out: &mut String) {
     out.push_str(&format!(
         r##"// Conform drives a fresh port per trace along traces (the file `codegen --conformance` writes):
 // it seeds each trace's initial state, makes each call, and after each compares what the store
@@ -566,7 +585,10 @@ func confSet[T any](p *T) string {{
 "##,
         format = string_literal(TRACES_FORMAT),
     ));
+}
 
+/// The calls: `confPrepare` reads a call's values, prepares it, and returns its commit.
+fn print_calls(domain: &DomainModel, port: &PortDecl, out: &mut String) {
     // The calls: the commit, the refusal, or an error in the trace.
     out.push_str(
         "func confPrepare(confP ConformancePort, call []string) (func() error, error, error) {\n",
@@ -620,16 +642,19 @@ func confSet[T any](p *T) string {{
             args.push(v);
         }
         out.push_str("\t\tif confA.err != nil {\n\t\t\treturn nil, nil, confA.err\n\t\t}\n");
+        let [prepare, commit] = method_names(m);
         out.push_str(&format!(
-            "\t\tw, refused := confP.Prepare{0}({1})\n\t\treturn func() error {{ return confP.Commit{0}(w) }}, refused, nil\n",
-            m.name,
+            "\t\tw, refused := confP.{prepare}({})\n\t\treturn func() error {{ return confP.{commit}(w) }}, refused, nil\n",
             args.join(", ")
         ));
     }
     out.push_str(
         "\t}\n\treturn nil, nil, fmt.Errorf(\"no use case %s in this port\", call[0])\n}\n\n",
     );
+}
 
+/// `confSeedRow`: the rows of an initial state.
+fn print_seed_rows(domain: &DomainModel, port: &PortDecl, out: &mut String) {
     // The rows of an initial state.
     out.push_str("func confSeedRow(seed *StoreSnapshot, toks []string) error {\n");
     out.push_str("\tif len(toks) == 0 {\n\t\treturn errors.New(\"a row names no entity\")\n\t}\n");
@@ -650,7 +675,10 @@ func confSet[T any](p *T) string {{
         ));
     }
     out.push_str("\t}\n\treturn fmt.Errorf(\"no entity %s in this port\", toks[0])\n}\n\n");
+}
 
+/// `confAbstract`: the store as the traces spell a state.
+fn print_abstraction(domain: &DomainModel, port: &PortDecl, out: &mut String) {
     // The abstraction.
     out.push_str("// confAbstract spells the store as the traces spell a state: one line per row with the columns\n// the model tracks, per pending run mark, and per raise a triggered use case reads; sorted.\n");
     out.push_str("func confAbstract(s StoreSnapshot) []string {\n\tout := []string{}\n");

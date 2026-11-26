@@ -971,7 +971,20 @@ fn print_errors(domain: &DomainModel, out: &mut String) {
 }
 
 pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
-    use super::ir::{Adapt, ArgCheck, Assigned, OutKind};
+    print_events(domain, out);
+    if domain.fns.is_empty() {
+        return;
+    }
+    print_marks(domain, out);
+    print_errors(domain, out);
+    for f in &domain.fns {
+        print_result(f, out);
+        print_function(domain, f, out);
+    }
+}
+
+/// The event types: one per event a use case raises or a triggered use case takes.
+fn print_events(domain: &DomainModel, out: &mut String) {
     if !domain.events.is_empty() {
         out.push_str("// ── Events ──\n\n");
     }
@@ -992,9 +1005,10 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
         }
         out.push_str(&struct_decl(&event.name, &lines));
     }
-    if domain.fns.is_empty() {
-        return;
-    }
+}
+
+/// The run marks of the use cases split into transactions.
+fn print_marks(domain: &DomainModel, out: &mut String) {
     if !domain.marks.is_empty() {
         out.push_str("// ── Run marks of use cases split into transactions ──\n\n");
     }
@@ -1008,375 +1022,381 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             &[Line::Cells(vec!["Id".into(), m.id_ty.clone()])],
         ));
     }
-    print_errors(domain, out);
-    for f in &domain.fns {
-        let err = domain.error_name(&f.usecase);
-        let fail = |case: &str, detail: String, ind: &str| {
-            format!(
-                "{ind}\treturn {}{{}}, {}\n",
-                f.result,
-                use_case_error(domain, &f.usecase, case, &detail)
-            )
-        };
-        let invalid = |reason: &str, ind: &str| {
-            fail(
-                "InvalidArgument",
-                format!("&InvalidArgument{{Reason: {}}}", string_literal(reason)),
-                ind,
-            )
-        };
+}
 
-        out.push_str(&format!("// {} is what {} returns.\n", f.result, f.name));
-        let mut lines = Vec::new();
-        for o in &f.outputs {
-            match &o.kind {
-                OutKind::Row { ty, .. } => {
-                    lines.push(Line::Cells(vec![super::type_ident(&o.name), ty.clone()]))
-                }
-                OutKind::Deleted {
-                    id: Some((ty, _)), ..
-                } => lines.push(Line::Cells(vec![super::type_ident(&o.name), ty.clone()])),
-                OutKind::Deleted { id: None, .. } => {}
+/// The result type of `f`.
+fn print_result(f: &FnDecl, out: &mut String) {
+    use super::ir::OutKind;
+    out.push_str(&format!("// {} is what {} returns.\n", f.result, f.name));
+    let mut lines = Vec::new();
+    for o in &f.outputs {
+        match &o.kind {
+            OutKind::Row { ty, .. } => {
+                lines.push(Line::Cells(vec![super::type_ident(&o.name), ty.clone()]))
             }
+            OutKind::Deleted {
+                id: Some((ty, _)), ..
+            } => lines.push(Line::Cells(vec![super::type_ident(&o.name), ty.clone()])),
+            OutKind::Deleted { id: None, .. } => {}
         }
-        for o in &f.outputs {
-            lines.push(Line::Cells(vec![
-                super::type_ident(&o.expected_name()),
-                "ExpectedSource".into(),
-            ]));
-        }
-        for m in &f.marks_out {
-            lines.push(Line::Cells(vec![super::type_ident(&m.name), m.ty.clone()]));
-        }
-        for event in &f.raises {
-            lines.push(Line::Cells(vec![event.ty.clone(), event.ty.clone()]));
-        }
-        out.push_str(&struct_decl(&f.result, &lines));
+    }
+    for o in &f.outputs {
+        lines.push(Line::Cells(vec![
+            super::type_ident(&o.expected_name()),
+            "ExpectedSource".into(),
+        ]));
+    }
+    for m in &f.marks_out {
+        lines.push(Line::Cells(vec![super::type_ident(&m.name), m.ty.clone()]));
+    }
+    for event in &f.raises {
+        lines.push(Line::Cells(vec![event.ty.clone(), event.ty.clone()]));
+    }
+    out.push_str(&struct_decl(&f.result, &lines));
+}
 
-        let (rejects, _) = error_cases(domain, &f.usecase);
-        let mut doc_lines = vec![format!("runs {}", one_line(&f.doc.join(" ")))];
-        for c in &f.conditions {
-            doc_lines.push(format!(
-                "Requires the condition {} ({}){}.",
-                c.id,
-                one_line(&c.label),
-                c.site
-                    .as_ref()
-                    .map(|s| format!(" at {s}"))
-                    .unwrap_or_default()
-            ));
-        }
-        let mut errs = Vec::new();
-        if go_invalid(domain, f) || domain.invalid_argument_possible(f) {
-            errs.push("InvalidArgument when its arguments break what the verified model keeps");
-        }
-        if rejects && !f.conditions.is_empty() {
-            errs.push("Rejected when a condition does not hold");
-        }
-        if errs.is_empty() {
-            doc_lines.push(
-                "It returns new values and changes none of its arguments; its error is always nil."
-                    .to_string(),
-            );
-        } else {
-            doc_lines.push(format!(
-                "It returns new values and changes none of its arguments; its error is a *{err}: {}.",
-                errs.join(", ")
-            ));
-        }
-        out.push_str(&doc(&f.name, &doc_lines, ""));
+/// The function `f`: its checks, conditions, and the result it builds.
+fn print_function(domain: &DomainModel, f: &FnDecl, out: &mut String) {
+    use super::ir::{Adapt, ArgCheck, Assigned, OutKind};
+    let err = domain.error_name(&f.usecase);
+    let fail = |case: &str, detail: String, ind: &str| {
+        format!(
+            "{ind}\treturn {}{{}}, {}\n",
+            f.result,
+            use_case_error(domain, &f.usecase, case, &detail)
+        )
+    };
+    let invalid = |reason: &str, ind: &str| {
+        fail(
+            "InvalidArgument",
+            format!("&InvalidArgument{{Reason: {}}}", string_literal(reason)),
+            ind,
+        )
+    };
 
-        let row = |r: usize| local(&f.row(r).name);
-        let acc =
-            |r: usize, field: &Field| format!("{}.{}", row(r), member(domain, &f.row(r).ty, field));
-        let row_ty = |r: usize| f.row(r).ty.clone();
-        let input = |i: usize| local(&f.inputs[i].name);
-        let mut params: Vec<String> = f
-            .rows
-            .iter()
-            .map(|r| format!("{} {}", local(&r.name), r.ty))
-            .collect();
-        for m in &f.marks_in {
-            params.push(format!("{} {}", local(&m.name), m.ty));
-        }
-        if let Some(ev) = &f.event_in {
-            params.push(format!("{} {}", local(&ev.name), ev.ty));
-        }
-        for i in &f.inputs {
-            params.push(format!(
-                "{} {}",
-                local(&i.name),
-                pointer_if(input_type(&i.ty), i.nullable)
-            ));
-        }
-        out.push_str(&format!(
-            "func {}({}) ({}, error) {{\n",
-            f.name,
-            params.join(", "),
-            f.result
+    let (rejects, _) = error_cases(domain, &f.usecase);
+    let mut doc_lines = vec![format!("runs {}", one_line(&f.doc.join(" ")))];
+    for c in &f.conditions {
+        doc_lines.push(format!(
+            "Requires the condition {} ({}){}.",
+            c.id,
+            one_line(&c.label),
+            c.site
+                .as_ref()
+                .map(|s| format!(" at {s}"))
+                .unwrap_or_default()
         ));
-        for r in &f.rows {
-            if is_variant(domain, &r.ty) {
-                out.push_str(&format!(
-                    "\tif _, ok := {}.({}); !ok {{\n{}\t}}\n",
-                    local(&r.name),
-                    concrete(domain, &r.ty),
-                    invalid(
-                        &format!("{} is no {} this package made", r.name, r.ty),
-                        "\t"
-                    )
-                ));
-            }
-        }
-        for i in &f.inputs {
-            if checked_input(&i.ty) {
-                let check = if i.nullable {
-                    format!("{0} != nil && !{0}.Valid()", local(&i.name))
-                } else {
-                    format!("!{}.Valid()", local(&i.name))
-                };
-                out.push_str(&format!(
-                    "\tif {check} {{\n{}\t}}\n",
-                    invalid(
-                        &format!("{} is not a value of {}", i.name, input_type(&i.ty)),
-                        "\t"
-                    )
-                ));
-            }
-        }
-        for check in &f.checks {
-            let (cond, message) = match check {
-                ArgCheck::Link {
-                    child,
-                    child_field,
-                    parent,
-                    parent_field,
-                    message,
-                } => {
-                    let (c, p) = (acc(*child, child_field), acc(*parent, parent_field));
-                    let differs = if child_field.nullable {
-                        format!("{c} == nil || *{c} != {p}")
-                    } else {
-                        format!("{c} != {p}")
-                    };
-                    (differs, message)
-                }
-                ArgCheck::EventRow {
-                    row: r,
-                    field,
-                    event_field,
-                    message,
-                } => {
-                    let ev = f
-                        .event_in
-                        .as_ref()
-                        .map(|e| local(&e.name))
-                        .unwrap_or_default();
-                    (
-                        format!(
-                            "{} != {ev}.{}",
-                            acc(*r, field),
-                            super::type_ident(event_field)
-                        ),
-                        message,
-                    )
-                }
-                ArgCheck::MarkRow {
-                    row: r,
-                    field,
-                    mark,
-                    message,
-                } => (
-                    format!(
-                        "{} != {}.Id",
-                        acc(*r, field),
-                        local(&f.marks_in[*mark].name)
-                    ),
-                    message,
-                ),
-                ArgCheck::MustBeNull {
-                    row: r,
-                    field,
-                    message,
-                } => (format!("{} != nil", acc(*r, field)), message),
-            };
-            out.push_str(&format!("\tif {cond} {{\n{}\t}}\n", invalid(message, "\t")));
-        }
-        for c in &f.conditions {
+    }
+    let mut errs = Vec::new();
+    if go_invalid(domain, f) || domain.invalid_argument_possible(f) {
+        errs.push("InvalidArgument when its arguments break what the verified model keeps");
+    }
+    if rejects && !f.conditions.is_empty() {
+        errs.push("Rejected when a condition does not hold");
+    }
+    if errs.is_empty() {
+        doc_lines.push(
+            "It returns new values and changes none of its arguments; its error is always nil."
+                .to_string(),
+        );
+    } else {
+        doc_lines.push(format!(
+            "It returns new values and changes none of its arguments; its error is a *{err}: {}.",
+            errs.join(", ")
+        ));
+    }
+    out.push_str(&doc(&f.name, &doc_lines, ""));
+
+    let row = |r: usize| local(&f.row(r).name);
+    let acc =
+        |r: usize, field: &Field| format!("{}.{}", row(r), member(domain, &f.row(r).ty, field));
+    let row_ty = |r: usize| f.row(r).ty.clone();
+    let input = |i: usize| local(&f.inputs[i].name);
+    let mut params: Vec<String> = f
+        .rows
+        .iter()
+        .map(|r| format!("{} {}", local(&r.name), r.ty))
+        .collect();
+    for m in &f.marks_in {
+        params.push(format!("{} {}", local(&m.name), m.ty));
+    }
+    if let Some(ev) = &f.event_in {
+        params.push(format!("{} {}", local(&ev.name), ev.ty));
+    }
+    for i in &f.inputs {
+        params.push(format!(
+            "{} {}",
+            local(&i.name),
+            pointer_if(input_type(&i.ty), i.nullable)
+        ));
+    }
+    out.push_str(&format!(
+        "func {}({}) ({}, error) {{\n",
+        f.name,
+        params.join(", "),
+        f.result
+    ));
+    for r in &f.rows {
+        if is_variant(domain, &r.ty) {
             out.push_str(&format!(
-                "\tif !({}) {{\n{}\t}}\n",
-                expr(&c.expr, &row, &row_ty, &acc, &input, 1),
-                fail(
-                    "Rejected",
-                    format!(
-                        "&Rejected{{Condition: {}, Label: {}, Site: {}}}",
-                        string_literal(&c.id),
-                        string_literal(&c.label),
-                        string_literal(c.site.as_deref().unwrap_or(""))
-                    ),
+                "\tif _, ok := {}.({}); !ok {{\n{}\t}}\n",
+                local(&r.name),
+                concrete(domain, &r.ty),
+                invalid(
+                    &format!("{} is no {} this package made", r.name, r.ty),
                     "\t"
                 )
             ));
         }
-        // Values read before the result: a nullable column the model keeps present, and a
-        // second lifecycle column's next value.
-        let mut temps = 0usize;
-        let mut parts = Vec::new();
-        for o in &f.outputs {
-            match &o.kind {
-                OutKind::Row { ty, fields, .. } => {
-                    let mut inits = Vec::new();
-                    for (target, assigned) in fields {
-                        let wrap = |v: String, w: bool| if w { format!("ptrTo({v})") } else { v };
-                        let v = match assigned {
-                            Assigned::From {
-                                row: r,
-                                field,
-                                adapt,
-                            } => {
-                                let read = acc(*r, field);
-                                match adapt {
-                                    Adapt::Same => read,
-                                    Adapt::Wrap => format!("ptrTo({read})"),
-                                    Adapt::Unwrap(message) => {
-                                        let t = format!("v_{temps}");
-                                        temps += 1;
-                                        out.push_str(&format!(
-                                            "\t{t} := {read}\n\tif {t} == nil {{\n{}\t}}\n",
-                                            invalid(message, "\t")
-                                        ));
-                                        format!("*{t}")
-                                    }
-                                    Adapt::AbsentNull => "nil".to_string(),
-                                }
-                            }
-                            Assigned::Lit { lit, wrap: w } => wrap(lit_go(lit, &target.ty), *w),
-                            Assigned::Input { input: i, wrap: w } => wrap(input(*i), *w),
-                            Assigned::ParentId {
-                                row: r,
-                                field,
-                                wrap: w,
-                            } => wrap(acc(*r, field), *w),
-                            Assigned::MarkId { mark, wrap: w } => {
-                                wrap(format!("{}.Id", local(&f.marks_in[*mark].name)), *w)
-                            }
-                            Assigned::Switch {
-                                row: r,
-                                field,
-                                enum_ty,
-                                arms,
-                            } => {
-                                let t = format!("v_{temps}");
-                                temps += 1;
-                                out.push_str(&format!(
-                                    "\tvar {t} {enum_ty}\n\tswitch {} {{\n",
-                                    acc(*r, field)
-                                ));
-                                for (from, to) in arms {
-                                    out.push_str(&format!(
-                                        "\tcase {enum_ty}{}:\n\t\t{t} = {enum_ty}{}\n",
-                                        from.ident, to.ident
-                                    ));
-                                }
-                                out.push_str(&format!(
-                                    "\tdefault:\n{}\t}}\n",
-                                    invalid(
-                                        &format!(
-                                            "{} is in no state {} moves it from",
-                                            field.wire, f.usecase
-                                        ),
-                                        "\t"
-                                    )
-                                ));
-                                t
-                            }
-                            Assigned::EventId { field, wrap: w, .. } => wrap(
-                                format!(
-                                    "{}.{}",
-                                    f.event_in
-                                        .as_ref()
-                                        .map(|e| local(&e.name))
-                                        .unwrap_or_default(),
-                                    super::type_ident(field)
-                                ),
-                                *w,
-                            ),
-                            Assigned::Null => "nil".to_string(),
-                            Assigned::Derived { expr: e, wrap: w } => {
-                                wrap(expr(e, &row, &row_ty, &acc, &input, 3), *w)
-                            }
-                        };
-                        let key = if is_variant(domain, ty) {
-                            state_field(target)
-                        } else {
-                            target.pascal.clone()
-                        };
-                        inits.push(format!("{key}: {v}"));
-                    }
-                    let built = if is_variant(domain, ty) {
-                        concrete(domain, ty)
-                    } else {
-                        ty.clone()
-                    };
-                    parts.push(format!(
-                        "{}: {built}{{{}}}",
-                        super::type_ident(&o.name),
-                        inits.join(", ")
-                    ));
-                }
-                OutKind::Deleted {
-                    row: r,
-                    id: Some((_, field)),
-                } => parts.push(format!(
-                    "{}: {}",
-                    super::type_ident(&o.name),
-                    acc(*r, field)
-                )),
-                OutKind::Deleted { id: None, .. } => {}
-            }
-        }
-        for o in &f.outputs {
-            let expected = match f.expected(o) {
-                super::ir::Expected::Absent => "ExpectedSource{Absent: true}".to_string(),
-                super::ir::Expected::Present => "ExpectedSource{}".to_string(),
-                super::ir::Expected::In { column, value } => format!(
-                    "ExpectedSource{{Column: {}, Value: {}}}",
-                    string_literal(&column),
-                    string_literal(&value)
-                ),
+    }
+    for i in &f.inputs {
+        if checked_input(&i.ty) {
+            let check = if i.nullable {
+                format!("{0} != nil && !{0}.Valid()", local(&i.name))
+            } else {
+                format!("!{}.Valid()", local(&i.name))
             };
-            parts.push(format!(
-                "{}: {expected}",
-                super::type_ident(&o.expected_name())
+            out.push_str(&format!(
+                "\tif {check} {{\n{}\t}}\n",
+                invalid(
+                    &format!("{} is not a value of {}", i.name, input_type(&i.ty)),
+                    "\t"
+                )
             ));
         }
-        let source = |s: &super::ir::MarkSource| match s {
-            super::ir::MarkSource::Row { row: r, field } => acc(*r, field),
-            super::ir::MarkSource::Input(i) => input(*i),
-            super::ir::MarkSource::Mark(k) => format!("{}.Id", local(&f.marks_in[*k].name)),
+    }
+    for check in &f.checks {
+        let (cond, message) = match check {
+            ArgCheck::Link {
+                child,
+                child_field,
+                parent,
+                parent_field,
+                message,
+            } => {
+                let (c, p) = (acc(*child, child_field), acc(*parent, parent_field));
+                let differs = if child_field.nullable {
+                    format!("{c} == nil || *{c} != {p}")
+                } else {
+                    format!("{c} != {p}")
+                };
+                (differs, message)
+            }
+            ArgCheck::EventRow {
+                row: r,
+                field,
+                event_field,
+                message,
+            } => {
+                let ev = f
+                    .event_in
+                    .as_ref()
+                    .map(|e| local(&e.name))
+                    .unwrap_or_default();
+                (
+                    format!(
+                        "{} != {ev}.{}",
+                        acc(*r, field),
+                        super::type_ident(event_field)
+                    ),
+                    message,
+                )
+            }
+            ArgCheck::MarkRow {
+                row: r,
+                field,
+                mark,
+                message,
+            } => (
+                format!(
+                    "{} != {}.Id",
+                    acc(*r, field),
+                    local(&f.marks_in[*mark].name)
+                ),
+                message,
+            ),
+            ArgCheck::MustBeNull {
+                row: r,
+                field,
+                message,
+            } => (format!("{} != nil", acc(*r, field)), message),
         };
-        for m in &f.marks_out {
-            parts.push(format!(
-                "{}: {}{{Id: {}}}",
-                super::type_ident(&m.name),
-                m.ty,
-                source(&m.source)
-            ));
-        }
-        for event in &f.raises {
-            let ids: Vec<String> = event
-                .ids
-                .iter()
-                .map(|(field, s)| format!("{}: {}", super::type_ident(&field.name), source(s)))
-                .collect();
-            parts.push(format!("{0}: {0}{{{1}}}", event.ty, ids.join(", ")));
-        }
+        out.push_str(&format!("\tif {cond} {{\n{}\t}}\n", invalid(message, "\t")));
+    }
+    for c in &f.conditions {
         out.push_str(&format!(
-            "\treturn {}{{{}}}, nil\n}}\n\n",
-            f.result,
-            parts.join(", ")
+            "\tif !({}) {{\n{}\t}}\n",
+            expr(&c.expr, &row, &row_ty, &acc, &input, 1),
+            fail(
+                "Rejected",
+                format!(
+                    "&Rejected{{Condition: {}, Label: {}, Site: {}}}",
+                    string_literal(&c.id),
+                    string_literal(&c.label),
+                    string_literal(c.site.as_deref().unwrap_or(""))
+                ),
+                "\t"
+            )
         ));
     }
+    // Values read before the result: a nullable column the model keeps present, and a
+    // second lifecycle column's next value.
+    let mut temps = 0usize;
+    let mut parts = Vec::new();
+    for o in &f.outputs {
+        match &o.kind {
+            OutKind::Row { ty, fields, .. } => {
+                let mut inits = Vec::new();
+                for (target, assigned) in fields {
+                    let wrap = |v: String, w: bool| if w { format!("ptrTo({v})") } else { v };
+                    let v = match assigned {
+                        Assigned::From {
+                            row: r,
+                            field,
+                            adapt,
+                        } => {
+                            let read = acc(*r, field);
+                            match adapt {
+                                Adapt::Same => read,
+                                Adapt::Wrap => format!("ptrTo({read})"),
+                                Adapt::Unwrap(message) => {
+                                    let t = format!("v_{temps}");
+                                    temps += 1;
+                                    out.push_str(&format!(
+                                        "\t{t} := {read}\n\tif {t} == nil {{\n{}\t}}\n",
+                                        invalid(message, "\t")
+                                    ));
+                                    format!("*{t}")
+                                }
+                                Adapt::AbsentNull => "nil".to_string(),
+                            }
+                        }
+                        Assigned::Lit { lit, wrap: w } => wrap(lit_go(lit, &target.ty), *w),
+                        Assigned::Input { input: i, wrap: w } => wrap(input(*i), *w),
+                        Assigned::ParentId {
+                            row: r,
+                            field,
+                            wrap: w,
+                        } => wrap(acc(*r, field), *w),
+                        Assigned::MarkId { mark, wrap: w } => {
+                            wrap(format!("{}.Id", local(&f.marks_in[*mark].name)), *w)
+                        }
+                        Assigned::Switch {
+                            row: r,
+                            field,
+                            enum_ty,
+                            arms,
+                        } => {
+                            let t = format!("v_{temps}");
+                            temps += 1;
+                            out.push_str(&format!(
+                                "\tvar {t} {enum_ty}\n\tswitch {} {{\n",
+                                acc(*r, field)
+                            ));
+                            for (from, to) in arms {
+                                out.push_str(&format!(
+                                    "\tcase {enum_ty}{}:\n\t\t{t} = {enum_ty}{}\n",
+                                    from.ident, to.ident
+                                ));
+                            }
+                            out.push_str(&format!(
+                                "\tdefault:\n{}\t}}\n",
+                                invalid(
+                                    &format!(
+                                        "{} is in no state {} moves it from",
+                                        field.wire, f.usecase
+                                    ),
+                                    "\t"
+                                )
+                            ));
+                            t
+                        }
+                        Assigned::EventId { field, wrap: w, .. } => wrap(
+                            format!(
+                                "{}.{}",
+                                f.event_in
+                                    .as_ref()
+                                    .map(|e| local(&e.name))
+                                    .unwrap_or_default(),
+                                super::type_ident(field)
+                            ),
+                            *w,
+                        ),
+                        Assigned::Null => "nil".to_string(),
+                        Assigned::Derived { expr: e, wrap: w } => {
+                            wrap(expr(e, &row, &row_ty, &acc, &input, 3), *w)
+                        }
+                    };
+                    let key = if is_variant(domain, ty) {
+                        state_field(target)
+                    } else {
+                        target.pascal.clone()
+                    };
+                    inits.push(format!("{key}: {v}"));
+                }
+                let built = if is_variant(domain, ty) {
+                    concrete(domain, ty)
+                } else {
+                    ty.clone()
+                };
+                parts.push(format!(
+                    "{}: {built}{{{}}}",
+                    super::type_ident(&o.name),
+                    inits.join(", ")
+                ));
+            }
+            OutKind::Deleted {
+                row: r,
+                id: Some((_, field)),
+            } => parts.push(format!(
+                "{}: {}",
+                super::type_ident(&o.name),
+                acc(*r, field)
+            )),
+            OutKind::Deleted { id: None, .. } => {}
+        }
+    }
+    for o in &f.outputs {
+        let expected = match f.expected(o) {
+            super::ir::Expected::Absent => "ExpectedSource{Absent: true}".to_string(),
+            super::ir::Expected::Present => "ExpectedSource{}".to_string(),
+            super::ir::Expected::In { column, value } => format!(
+                "ExpectedSource{{Column: {}, Value: {}}}",
+                string_literal(&column),
+                string_literal(&value)
+            ),
+        };
+        parts.push(format!(
+            "{}: {expected}",
+            super::type_ident(&o.expected_name())
+        ));
+    }
+    let source = |s: &super::ir::MarkSource| match s {
+        super::ir::MarkSource::Row { row: r, field } => acc(*r, field),
+        super::ir::MarkSource::Input(i) => input(*i),
+        super::ir::MarkSource::Mark(k) => format!("{}.Id", local(&f.marks_in[*k].name)),
+    };
+    for m in &f.marks_out {
+        parts.push(format!(
+            "{}: {}{{Id: {}}}",
+            super::type_ident(&m.name),
+            m.ty,
+            source(&m.source)
+        ));
+    }
+    for event in &f.raises {
+        let ids: Vec<String> = event
+            .ids
+            .iter()
+            .map(|(field, s)| format!("{}: {}", super::type_ident(&field.name), source(s)))
+            .collect();
+        parts.push(format!("{0}: {0}{{{1}}}", event.ty, ids.join(", ")));
+    }
+    out.push_str(&format!(
+        "\treturn {}{{{}}}, nil\n}}\n\n",
+        f.result,
+        parts.join(", ")
+    ));
 }
 
 fn lit_go(lit: &super::ir::Lit, ty: &FieldType) -> String {
