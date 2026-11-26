@@ -38,7 +38,7 @@ pub struct ImportDecl {
 
 // ── RDRA element kinds ───────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Kind {
     Actor,
     ExtSystem,
@@ -96,6 +96,38 @@ impl Kind {
             Kind::Variation => "variation",
             Kind::Condition => "condition",
         }
+    }
+
+    /// The kind whose `name` is `name`, if any.
+    pub fn from_name(name: &str) -> Option<Kind> {
+        Some(match name {
+            "actor" => Kind::Actor,
+            "extsystem" => Kind::ExtSystem,
+            "system" => Kind::System,
+            "requirement" => Kind::Requirement,
+            "adr" => Kind::Adr,
+            "goal" => Kind::Goal,
+            "nfr" => Kind::Nfr,
+            "quality" => Kind::Quality,
+            "constraint" => Kind::Constraint,
+            "business" => Kind::Business,
+            "buc" => Kind::Buc,
+            "flow" => Kind::Flow,
+            "step" => Kind::Step,
+            "usecase" => Kind::UseCase,
+            "screen" => Kind::Screen,
+            "field" => Kind::Field,
+            "event" => Kind::Event,
+            "entity" => Kind::Entity,
+            "api" => Kind::Api,
+            "dto" => Kind::Dto,
+            "timer" => Kind::Timer,
+            "medium" => Kind::Medium,
+            "permission" => Kind::Permission,
+            "variation" => Kind::Variation,
+            "condition" => Kind::Condition,
+            _ => return None,
+        })
     }
 }
 

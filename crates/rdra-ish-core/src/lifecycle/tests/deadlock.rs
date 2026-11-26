@@ -257,11 +257,7 @@ fn an_end_value_is_no_deadlock() {
     assert!(deadlocks(&d.diags).is_empty(), "{:?}", deadlocks(&d.diags));
 
     let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
-    let order = built
-        .ts
-        .entity_ids()
-        .find(|&e| built.ts.entity(e).id == "Order")
-        .expect("Order");
+    let order = ent(&built.ts, "Order");
     let checks: Vec<(String, Option<String>)> = built
         .ts
         .state_model_states(order)

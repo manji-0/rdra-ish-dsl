@@ -264,7 +264,7 @@ pub(super) fn atom(
                 .iter()
                 .find(|f| f.wire == *column)
                 .ok_or_else(unsupported)?;
-            let FieldType::Enum(enum_ty) = &field.ty else {
+            let FieldType::Enum(_) = &field.ty else {
                 return Err(unsupported());
             };
             // On a nullable field the printers compare with a present value: null satisfies
@@ -272,7 +272,6 @@ pub(super) fn atom(
             negate(Expr::EnumEq {
                 row: r,
                 field: field.clone(),
-                enum_ty: enum_ty.clone(),
                 value: EnumValue {
                     ident: type_ident(wire),
                     wire: wire.clone(),
@@ -352,7 +351,7 @@ fn input_atom(
     let e = match (domain, rhs) {
         (Domain::Enum(_) | Domain::NullableEnum(_), Term::Lit(v)) if domain.name(*v).is_some() => {
             let wire = domain.name(*v).ok_or_else(unsupported)?.to_string();
-            let FieldType::Enum(enum_ty) = &decl.ty else {
+            let InputType::Value(FieldType::Enum(enum_ty)) = &decl.ty else {
                 return Err(unsupported());
             };
             Expr::InputEnumEq {
@@ -391,78 +390,6 @@ fn input_atom(
         TsCmp::Eq => Ok(e),
         TsCmp::Ne => Ok(Expr::Not(Box::new(e))),
         _ => Err(unsupported()),
-    }
-}
-
-/// Folds the constant parts of an expression.
-pub(in crate::codegen) fn simplify(e: Expr) -> Expr {
-    match e {
-        Expr::Exists { input, elem, body } => match simplify(*body) {
-            Expr::False => Expr::False,
-            body => Expr::Exists {
-                input,
-                elem,
-                body: Box::new(body),
-            },
-        },
-        Expr::Forall { input, elem, body } => match simplify(*body) {
-            Expr::True => Expr::True,
-            body => Expr::Forall {
-                input,
-                elem,
-                body: Box::new(body),
-            },
-        },
-        Expr::Count {
-            input,
-            elem,
-            body,
-            op,
-            n,
-        } => Expr::Count {
-            input,
-            elem,
-            body: Box::new(simplify(*body)),
-            op,
-            n,
-        },
-        Expr::Not(inner) => match simplify(*inner) {
-            Expr::True => Expr::False,
-            Expr::False => Expr::True,
-            Expr::Not(x) => *x,
-            other => Expr::Not(Box::new(other)),
-        },
-        Expr::And(items) => {
-            let mut kept = Vec::new();
-            for item in items.into_iter().map(simplify) {
-                match item {
-                    Expr::True => {}
-                    Expr::False => return Expr::False,
-                    other => kept.push(other),
-                }
-            }
-            match kept.len() {
-                0 => Expr::True,
-                1 => kept.pop().expect("one item"),
-                _ => Expr::And(kept),
-            }
-        }
-        Expr::Or(items) => {
-            let mut kept = Vec::new();
-            for item in items.into_iter().map(simplify) {
-                match item {
-                    Expr::False => {}
-                    Expr::True => return Expr::True,
-                    other => kept.push(other),
-                }
-            }
-            match kept.len() {
-                0 => Expr::False,
-                1 => kept.pop().expect("one item"),
-                _ => Expr::Or(kept),
-            }
-        }
-        other => other,
     }
 }
 

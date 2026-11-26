@@ -3,7 +3,7 @@
 //! discriminated by `kind`, companion objects, branded scalars and ids made only by `parse`,
 //! a self-contained `Result`, errors as values, and no `as` but `as const`.
 
-use super::ir::{DomainModel, Field, FieldType, RecordKind, Scalar, SumDecl};
+use super::ir::{DomainModel, Field, FieldType, FnDecl, InputType, RecordKind, Scalar, SumDecl};
 use super::{header_lines, obligation_lines, one_line, string_literal, Options};
 
 /// What the printers below read of the model.
@@ -76,7 +76,6 @@ pub(super) fn print(
     print_functions(&cx, &mut body);
     print_validators(&cx, &mut body);
     print_dispatchers(&cx, &mut body);
-    super::ts_port::print_contracts(domain, &mut body);
     super::ts_port::print_port(domain, &mut body);
     out.push_str(&helpers(&body));
     out.push_str(&body);
@@ -90,13 +89,26 @@ pub(super) fn field_type(ty: &FieldType) -> String {
     match ty {
         FieldType::Scalar(s) => scalar(*s).to_string(),
         FieldType::Enum(name) | FieldType::Id(name) => name.clone(),
-        FieldType::Rows(name) => format!("readonly {name}[]"),
     }
 }
 
 /// The type of a column, with `| null` when it is nullable.
 pub(super) fn column_type(ty: &FieldType, nullable: bool) -> String {
-    let ty = field_type(ty);
+    or_null(field_type(ty), nullable)
+}
+
+/// The type of a function input (a value's, or a list of rows), with `| null` when it is
+/// nullable.
+fn input_type(ty: &InputType, nullable: bool) -> String {
+    let ty = match ty {
+        InputType::Value(ty) => field_type(ty),
+        InputType::Rows(name) => format!("readonly {name}[]"),
+    };
+    or_null(ty, nullable)
+}
+
+/// `ty`, or `ty | null` when it is nullable.
+fn or_null(ty: String, nullable: bool) -> String {
     if nullable {
         format!("{ty} | null")
     } else {
@@ -497,7 +509,6 @@ fn reader(ty: &FieldType, nullable: bool) -> String {
         FieldType::Scalar(Scalar::Bool) => "$boolean".to_string(),
         FieldType::Scalar(s) => format!("{}.parse", s.name()),
         FieldType::Enum(name) | FieldType::Id(name) => format!("{name}.parse"),
-        FieldType::Rows(name) => format!("{name}.parse"),
     };
     if nullable {
         format!("$nullable({read})")
@@ -796,15 +807,6 @@ fn print_rows(cx: &Cx<'_>, out: &mut String) {
 
 // ── Use cases ────────────────────────────────────────────────────────────────
 
-/// `<UseCase>Error`, as the IR names it.
-fn error_type(domain: &DomainModel, usecase: &str) -> String {
-    domain
-        .error_of(usecase)
-        .expect("a use case with functions has an error type")
-        .name
-        .clone()
-}
-
 fn invalid_argument(indent: &str, message: &str) -> String {
     fail(
         indent,
@@ -816,47 +818,39 @@ fn invalid_argument(indent: &str, message: &str) -> String {
 }
 
 fn print_functions(cx: &Cx<'_>, out: &mut String) {
-    use super::ir::{Adapt, ArgCheck, Assigned, OutKind};
     let domain = cx.domain;
-    if !domain.events.is_empty() {
-        out.push_str("// ── Events ──\n\n");
-    }
-    for event in &domain.events {
-        out.push_str(&doc(&event.doc, ""));
-        out.push_str(&format!(
-            "export type {0} = Readonly<{{\n  kind: \"{0}\";\n",
-            event.name
-        ));
-        for field in &event.fields {
-            out.push_str(&format!(
-                "  /** The {} row the event was raised on. */\n  {}: {};\n",
-                field.entity,
-                property(&field.name),
-                field.id_ty
-            ));
-        }
-        out.push_str("}>;\n\n");
-    }
+    print_events(domain, out);
     if domain.fns.is_empty() {
+        // The use cases with no printed function still have their errors (#335, G15).
+        if !domain.errors.is_empty() {
+            out.push_str("// ── Use cases ──\n\n");
+            print_error_cases(out);
+            print_errors(domain, out);
+        }
         return;
     }
-    if !domain.marks.is_empty() {
-        out.push_str("// ── Run marks of use cases split into transactions ──\n\n");
-    }
-    for m in &domain.marks {
-        out.push_str(&doc1(&format!(
-            "The mark step {} of {} leaves on a {} row: the next step takes it. Store it with the row.",
-            m.step, m.usecase, m.entity
-        )));
-        out.push_str(&format!(
-            "export type {} = Readonly<{{\n  usecase: {};\n  step: {};\n  id: {};\n}}>;\n\n",
-            m.name,
-            string_literal(&m.usecase),
-            m.step,
-            m.id_ty
-        ));
-    }
+    print_marks(domain, out);
     out.push_str("// ── Use cases ──\n\n");
+    print_error_cases(out);
+    out.push_str(&doc(
+        &[
+            "What a row a result writes must still be when the write commits, so the store can write it".to_string(),
+            "conditionally and take a write that matches no row as NotEnabled (see the obligations).".to_string(),
+        ],
+        "",
+    ));
+    out.push_str("export type ExpectedSource =\n  | Readonly<{ kind: \"absent\" }>\n  | Readonly<{ kind: \"present\" }>\n  | Readonly<{ kind: \"in\"; column: string; value: string }>;\n\n");
+
+    print_errors(domain, out);
+
+    for f in &domain.fns {
+        print_result(f, out);
+        print_function(cx, f, out);
+    }
+}
+
+/// The cases every use-case error is a union of: `NotEnabled`, `Rejected`, `InvalidArgument`.
+fn print_error_cases(out: &mut String) {
     out.push_str(&doc1(
         "The rows are in states the use case does not run from. Only a dispatcher returns it.",
     ));
@@ -878,15 +872,53 @@ fn print_functions(cx: &Cx<'_>, out: &mut String) {
     out.push_str(
         "export type InvalidArgument = Readonly<{ kind: \"InvalidArgument\"; message: string }>;\n\n",
     );
-    out.push_str(&doc(
-        &[
-            "What a row a result writes must still be when the write commits, so the store can write it".to_string(),
-            "conditionally and take a write that matches no row as NotEnabled (see the obligations).".to_string(),
-        ],
-        "",
-    ));
-    out.push_str("export type ExpectedSource =\n  | Readonly<{ kind: \"absent\" }>\n  | Readonly<{ kind: \"present\" }>\n  | Readonly<{ kind: \"in\"; column: string; value: string }>;\n\n");
+}
 
+/// The event types: one per event a use case raises or a triggered use case takes.
+fn print_events(domain: &DomainModel, out: &mut String) {
+    if !domain.events.is_empty() {
+        out.push_str("// ── Events ──\n\n");
+    }
+    for event in &domain.events {
+        out.push_str(&doc(&event.doc, ""));
+        out.push_str(&format!(
+            "export type {0} = Readonly<{{\n  kind: \"{0}\";\n",
+            event.name
+        ));
+        for field in &event.fields {
+            out.push_str(&format!(
+                "  /** The {} row the event was raised on. */\n  {}: {};\n",
+                field.entity,
+                property(&field.name),
+                field.id_ty
+            ));
+        }
+        out.push_str("}>;\n\n");
+    }
+}
+
+/// The run marks of the use cases split into transactions.
+fn print_marks(domain: &DomainModel, out: &mut String) {
+    if !domain.marks.is_empty() {
+        out.push_str("// ── Run marks of use cases split into transactions ──\n\n");
+    }
+    for m in &domain.marks {
+        out.push_str(&doc1(&format!(
+            "The mark step {} of {} leaves on a {} row: the next step takes it. Store it with the row.",
+            m.step, m.usecase, m.entity
+        )));
+        out.push_str(&format!(
+            "export type {} = Readonly<{{\n  usecase: {};\n  step: {};\n  id: {};\n}}>;\n\n",
+            m.name,
+            string_literal(&m.usecase),
+            m.step,
+            m.id_ty
+        ));
+    }
+}
+
+/// The error type of each use case: the union of the ways it fails.
+fn print_errors(domain: &DomainModel, out: &mut String) {
     for e in &domain.errors {
         let mut cases = vec!["NotEnabled"];
         if e.rejects {
@@ -915,345 +947,350 @@ fn print_functions(cx: &Cx<'_>, out: &mut String) {
             cases.join(" | ")
         ));
     }
+}
 
-    for f in &domain.fns {
-        // The result type.
-        out.push_str(&doc1(&format!("What {} returns.", fn_name(&f.name))));
-        out.push_str(&format!("export type {} = Readonly<{{\n", f.result));
-        for o in &f.outputs {
-            match &o.kind {
-                OutKind::Row { ty, .. } => {
-                    out.push_str(&format!("  {}: {ty};\n", property(&o.name)));
-                }
-                OutKind::Deleted {
-                    id: Some((ty, _)), ..
-                } => {
-                    out.push_str(&format!("  {}: {ty};\n", property(&o.name)));
-                }
-                OutKind::Deleted { id: None, .. } => {}
+/// The result type of `f`.
+fn print_result(f: &FnDecl, out: &mut String) {
+    use super::ir::OutKind;
+    out.push_str(&doc1(&format!("What {} returns.", fn_name(&f.name))));
+    out.push_str(&format!("export type {} = Readonly<{{\n", f.result));
+    for o in &f.outputs {
+        match &o.kind {
+            OutKind::Row { ty, .. } => {
+                out.push_str(&format!("  {}: {ty};\n", property(&o.name)));
             }
-        }
-        for o in &f.outputs {
-            out.push_str(&format!(
-                "  {}: ExpectedSource;\n",
-                property(&format!("{}_expected", o.name))
-            ));
-        }
-        for m in &f.marks_out {
-            out.push_str(&format!("  {}: {};\n", property(&m.name), m.ty));
-        }
-        for event in &f.raises {
-            out.push_str(&format!(
-                "  {}: {};\n",
-                property(&super::actions::snake(&event.ty)),
-                event.ty
-            ));
-        }
-        out.push_str("}>;\n\n");
-
-        // The function.
-        let mut lines = f.doc.clone();
-        for c in &f.conditions {
-            lines.push(format!(
-                "Requires the condition {} ({}){}; Rejected when it does not hold.",
-                c.id,
-                one_line(&c.label),
-                c.site
-                    .as_ref()
-                    .map(|s| format!(" at {s}"))
-                    .unwrap_or_default()
-            ));
-        }
-        out.push_str(&doc(&lines, ""));
-        let mut params: Vec<(String, String)> = f
-            .rows
-            .iter()
-            .map(|r| (local(&r.name), r.ty.clone()))
-            .collect();
-        for m in &f.marks_in {
-            params.push((local(&m.name), m.ty.clone()));
-        }
-        if let Some(ev) = &f.event_in {
-            params.push((local(&ev.name), ev.ty.clone()));
-        }
-        for input in &f.inputs {
-            params.push((local(&input.name), column_type(&input.ty, input.nullable)));
-        }
-        // The body comes first, so a parameter it does not read can be marked unused (`_`).
-        let body_at = out.len();
-        let row = |r: usize| local(&f.row(r).name);
-        let read = |r: usize, field: &Field| format!("{}.{}", row(r), dprop(field));
-        let input = |i: usize| local(&f.inputs[i].name);
-        for check in &f.checks {
-            match check {
-                ArgCheck::Link {
-                    child,
-                    child_field,
-                    parent,
-                    parent_field,
-                    message,
-                } => {
-                    out.push_str(&format!(
-                        "  if ({} !== {}) {{\n{}  }}\n",
-                        read(*child, child_field),
-                        read(*parent, parent_field),
-                        invalid_argument("    ", message)
-                    ));
-                }
-                ArgCheck::EventRow {
-                    row: r,
-                    field,
-                    event_field,
-                    message,
-                } => {
-                    let ev = f
-                        .event_in
-                        .as_ref()
-                        .expect("an event row check has an event");
-                    out.push_str(&format!(
-                        "  if ({} !== {}.{}) {{\n{}  }}\n",
-                        read(*r, field),
-                        local(&ev.name),
-                        property(event_field),
-                        invalid_argument("    ", message)
-                    ));
-                }
-                ArgCheck::MarkRow {
-                    row: r,
-                    field,
-                    mark,
-                    message,
-                } => {
-                    out.push_str(&format!(
-                        "  if ({} !== {}.id) {{\n{}  }}\n",
-                        read(*r, field),
-                        local(&f.marks_in[*mark].name),
-                        invalid_argument("    ", message)
-                    ));
-                }
-                ArgCheck::MustBeNull {
-                    row: r,
-                    field,
-                    message,
-                } => {
-                    out.push_str(&format!(
-                        "  if ({} !== null) {{\n{}  }}\n",
-                        read(*r, field),
-                        invalid_argument("    ", message)
-                    ));
-                }
+            OutKind::Deleted {
+                id: Some((ty, _)), ..
+            } => {
+                out.push_str(&format!("  {}: {ty};\n", property(&o.name)));
             }
+            OutKind::Deleted { id: None, .. } => {}
         }
-        for c in &f.conditions {
-            out.push_str(&format!(
-                "  if (!({})) {{\n{}  }}\n",
-                expr(&c.expr, &row, &input),
-                fail(
-                    "    ",
-                    &format!(
-                        "{{ kind: \"Rejected\", condition: {}, label: {}, site: {} }}",
-                        string_literal(&c.id),
-                        string_literal(&c.label),
-                        c.site
-                            .as_ref()
-                            .map_or("null".to_string(), |s| string_literal(s))
-                    )
-                )
-            ));
-        }
-        // What the verified model keeps of a written column, checked before the result is
-        // built from it: a nullable source it keeps present, a second lifecycle column in a
-        // state some arm moves it from.
-        for o in &f.outputs {
-            let OutKind::Row { fields, .. } = &o.kind else {
-                continue;
-            };
-            for (_, assigned) in fields {
-                match assigned {
-                    Assigned::From {
-                        row: r,
-                        field,
-                        adapt: Adapt::Unwrap(message),
-                    } => out.push_str(&format!(
-                        "  if ({} === null) {{\n{}  }}\n",
-                        read(*r, field),
-                        invalid_argument("    ", message)
-                    )),
-                    Assigned::Switch {
-                        row: r,
-                        field,
-                        arms,
-                        enum_ty,
-                    } if arms.len()
-                        < domain
-                            .enums
-                            .iter()
-                            .find(|e| e.name == *enum_ty)
-                            .map_or(0, |e| e.values.len()) =>
-                    {
-                        let value = read(*r, field);
-                        let from: Vec<String> = arms
-                            .iter()
-                            .map(|(from, _)| format!("{value} === {}", string_literal(&from.wire)))
-                            .collect();
-                        out.push_str(&format!(
-                            "  if (!({})) {{\n{}  }}\n",
-                            from.join(" || "),
-                            invalid_argument(
-                                "    ",
-                                &format!(
-                                    "rdra-ish: {} is in no state {} moves it from",
-                                    field.wire, f.usecase
-                                )
-                            )
-                        ));
-                    }
-                    _ => {}
-                }
-            }
-        }
-        out.push_str("  return {\n    ok: true,\n    value: {\n");
-        for o in &f.outputs {
-            match &o.kind {
-                OutKind::Row {
-                    ty,
-                    tag,
-                    fields,
-                    always_null,
-                } => {
-                    out.push_str(&format!("      {}: {{\n", property(&o.name)));
-                    if let Some((_, value)) = tag {
-                        out.push_str(&format!(
-                            "        kind: {},\n",
-                            string_literal(&value.ident)
-                        ));
-                        if cx.seal {
-                            out.push_str(&format!("        {SEAL},\n"));
-                        }
-                    }
-                    for (target, assigned) in fields {
-                        let v = match assigned {
-                            Assigned::From {
-                                row: r,
-                                field,
-                                adapt,
-                            } => match adapt {
-                                Adapt::Same | Adapt::Wrap | Adapt::Unwrap(_) => read(*r, field),
-                                Adapt::AbsentNull => "null".to_string(),
-                            },
-                            Assigned::Lit { lit, .. } => lit_ts(lit),
-                            Assigned::Input { input: i, .. } => input(*i),
-                            Assigned::ParentId { row: r, field, .. } => read(*r, field),
-                            Assigned::Switch {
-                                row: r,
-                                field,
-                                arms,
-                                ..
-                            } => {
-                                // The check above leaves only the arms' sources: the last
-                                // arm needs no test.
-                                let value = read(*r, field);
-                                let mut arms = arms.iter().rev();
-                                let (_, last) = arms.next().expect("a switch has an arm");
-                                let mut v = string_literal(&last.wire);
-                                for (from, to) in arms {
-                                    v = format!(
-                                        "{value} === {} ? {} : {v}",
-                                        string_literal(&from.wire),
-                                        string_literal(&to.wire)
-                                    );
-                                }
-                                format!("({v})")
-                            }
-                            Assigned::EventId { field, .. } => format!(
-                                "{}.{}",
-                                local(&f.event_in.as_ref().expect("an event id has an event").name),
-                                property(field)
-                            ),
-                            Assigned::MarkId { mark, .. } => {
-                                format!("{}.id", local(&f.marks_in[*mark].name))
-                            }
-                            Assigned::Null => "null".to_string(),
-                            Assigned::Derived { expr: e, .. } => expr(e, &row, &input),
-                        };
-                        out.push_str(&format!("        {}: {v},\n", dprop(target)));
-                    }
-                    for wire in always_null {
-                        out.push_str(&format!("        {}: null,\n", cx.prop_of(ty, wire)));
-                    }
-                    out.push_str("      },\n");
-                }
-                OutKind::Deleted {
-                    row: r,
-                    id: Some((_, field)),
-                } => {
-                    out.push_str(&format!(
-                        "      {}: {},\n",
-                        property(&o.name),
-                        read(*r, field)
-                    ));
-                }
-                OutKind::Deleted { id: None, .. } => {}
-            }
-        }
-        for o in &f.outputs {
-            let expected = match f.expected(o) {
-                super::ir::Expected::Absent => "{ kind: \"absent\" }".to_string(),
-                super::ir::Expected::Present => "{ kind: \"present\" }".to_string(),
-                super::ir::Expected::In { column, value } => format!(
-                    "{{ kind: \"in\", column: {}, value: {} }}",
-                    string_literal(&column),
-                    string_literal(&value)
-                ),
-            };
-            out.push_str(&format!(
-                "      {}: {expected},\n",
-                property(&format!("{}_expected", o.name))
-            ));
-        }
-        let source = |s: &super::ir::MarkSource| match s {
-            super::ir::MarkSource::Row { row: r, field } => read(*r, field),
-            super::ir::MarkSource::Input(i) => input(*i),
-            super::ir::MarkSource::Mark(k) => format!("{}.id", local(&f.marks_in[*k].name)),
-        };
-        for m in &f.marks_out {
-            out.push_str(&format!(
-                "      {}: {{ usecase: {}, step: {}, id: {} }},\n",
-                property(&m.name),
-                string_literal(&f.usecase),
-                m.step,
-                source(&m.source)
-            ));
-        }
-        for event in &f.raises {
-            let mut parts = vec![format!("kind: \"{}\"", event.ty)];
-            for (field, s) in &event.ids {
-                parts.push(format!("{}: {}", property(&field.name), source(s)));
-            }
-            out.push_str(&format!(
-                "      {}: {{ {} }},\n",
-                property(&super::actions::snake(&event.ty)),
-                parts.join(", ")
-            ));
-        }
-        out.push_str("    },\n  };\n}\n\n");
-        let body = out.split_off(body_at);
-        let params: Vec<String> = params
-            .iter()
-            .map(|(name, ty)| {
-                let used = if mentions(&body, name) { "" } else { "_" };
-                format!("{used}{name}: {ty}")
-            })
-            .collect();
-        out.push_str(&format!(
-            "export function {}({}): Result<{}, {}> {{\n",
-            fn_name(&f.name),
-            params.join(", "),
-            f.result,
-            error_type(domain, &f.usecase)
-        ));
-        out.push_str(&body);
     }
+    for o in &f.outputs {
+        out.push_str(&format!(
+            "  {}: ExpectedSource;\n",
+            property(&o.expected_name())
+        ));
+    }
+    for m in &f.marks_out {
+        out.push_str(&format!("  {}: {};\n", property(&m.name), m.ty));
+    }
+    for event in &f.raises {
+        out.push_str(&format!(
+            "  {}: {};\n",
+            property(&super::snake(&event.ty)),
+            event.ty
+        ));
+    }
+    out.push_str("}>;\n\n");
+}
+
+/// The function `f`: its checks, conditions, and the result it builds.
+fn print_function(cx: &Cx<'_>, f: &FnDecl, out: &mut String) {
+    use super::ir::{Adapt, ArgCheck, Assigned, OutKind};
+    let domain = cx.domain;
+    let mut lines = f.doc.clone();
+    for c in &f.conditions {
+        lines.push(format!(
+            "Requires the condition {} ({}){}; Rejected when it does not hold.",
+            c.id,
+            one_line(&c.label),
+            c.site
+                .as_ref()
+                .map(|s| format!(" at {s}"))
+                .unwrap_or_default()
+        ));
+    }
+    out.push_str(&doc(&lines, ""));
+    let mut params: Vec<(String, String)> = f
+        .rows
+        .iter()
+        .map(|r| (local(&r.name), r.ty.clone()))
+        .collect();
+    for m in &f.marks_in {
+        params.push((local(&m.name), m.ty.clone()));
+    }
+    if let Some(ev) = &f.event_in {
+        params.push((local(&ev.name), ev.ty.clone()));
+    }
+    for input in &f.inputs {
+        params.push((local(&input.name), input_type(&input.ty, input.nullable)));
+    }
+    // The body comes first, so a parameter it does not read can be marked unused (`_`).
+    let body_at = out.len();
+    let row = |r: usize| local(&f.row(r).name);
+    let read = |r: usize, field: &Field| format!("{}.{}", row(r), dprop(field));
+    let input = |i: usize| local(&f.inputs[i].name);
+    for check in &f.checks {
+        match check {
+            ArgCheck::Link {
+                child,
+                child_field,
+                parent,
+                parent_field,
+                message,
+            } => {
+                out.push_str(&format!(
+                    "  if ({} !== {}) {{\n{}  }}\n",
+                    read(*child, child_field),
+                    read(*parent, parent_field),
+                    invalid_argument("    ", message)
+                ));
+            }
+            ArgCheck::EventRow {
+                row: r,
+                field,
+                event_field,
+                message,
+            } => {
+                let ev = f
+                    .event_in
+                    .as_ref()
+                    .expect("an event row check has an event");
+                out.push_str(&format!(
+                    "  if ({} !== {}.{}) {{\n{}  }}\n",
+                    read(*r, field),
+                    local(&ev.name),
+                    property(event_field),
+                    invalid_argument("    ", message)
+                ));
+            }
+            ArgCheck::MarkRow {
+                row: r,
+                field,
+                mark,
+                message,
+            } => {
+                out.push_str(&format!(
+                    "  if ({} !== {}.id) {{\n{}  }}\n",
+                    read(*r, field),
+                    local(&f.marks_in[*mark].name),
+                    invalid_argument("    ", message)
+                ));
+            }
+            ArgCheck::MustBeNull {
+                row: r,
+                field,
+                message,
+            } => {
+                out.push_str(&format!(
+                    "  if ({} !== null) {{\n{}  }}\n",
+                    read(*r, field),
+                    invalid_argument("    ", message)
+                ));
+            }
+        }
+    }
+    for c in &f.conditions {
+        out.push_str(&format!(
+            "  if (!({})) {{\n{}  }}\n",
+            expr(&c.expr, &row, &input),
+            fail(
+                "    ",
+                &format!(
+                    "{{ kind: \"Rejected\", condition: {}, label: {}, site: {} }}",
+                    string_literal(&c.id),
+                    string_literal(&c.label),
+                    c.site
+                        .as_ref()
+                        .map_or("null".to_string(), |s| string_literal(s))
+                )
+            )
+        ));
+    }
+    // What the verified model keeps of a written column, checked before the result is
+    // built from it: a nullable source it keeps present, a second lifecycle column in a
+    // state some arm moves it from.
+    for o in &f.outputs {
+        let OutKind::Row { fields, .. } = &o.kind else {
+            continue;
+        };
+        for (_, assigned) in fields {
+            match assigned {
+                Assigned::From {
+                    row: r,
+                    field,
+                    adapt: Adapt::Unwrap(message),
+                } => out.push_str(&format!(
+                    "  if ({} === null) {{\n{}  }}\n",
+                    read(*r, field),
+                    invalid_argument("    ", message)
+                )),
+                Assigned::Switch {
+                    row: r,
+                    field,
+                    arms,
+                    enum_ty,
+                } if arms.len()
+                    < domain
+                        .enums
+                        .iter()
+                        .find(|e| e.name == *enum_ty)
+                        .map_or(0, |e| e.values.len()) =>
+                {
+                    let value = read(*r, field);
+                    let from: Vec<String> = arms
+                        .iter()
+                        .map(|(from, _)| format!("{value} === {}", string_literal(&from.wire)))
+                        .collect();
+                    out.push_str(&format!(
+                        "  if (!({})) {{\n{}  }}\n",
+                        from.join(" || "),
+                        invalid_argument(
+                            "    ",
+                            &format!(
+                                "rdra-ish: {} is in no state {} moves it from",
+                                field.wire, f.usecase
+                            )
+                        )
+                    ));
+                }
+                _ => {}
+            }
+        }
+    }
+    out.push_str("  return {\n    ok: true,\n    value: {\n");
+    for o in &f.outputs {
+        match &o.kind {
+            OutKind::Row {
+                ty,
+                tag,
+                fields,
+                always_null,
+            } => {
+                out.push_str(&format!("      {}: {{\n", property(&o.name)));
+                if let Some((_, value)) = tag {
+                    out.push_str(&format!(
+                        "        kind: {},\n",
+                        string_literal(&value.ident)
+                    ));
+                    if cx.seal {
+                        out.push_str(&format!("        {SEAL},\n"));
+                    }
+                }
+                for (target, assigned) in fields {
+                    let v = match assigned {
+                        Assigned::From {
+                            row: r,
+                            field,
+                            adapt,
+                        } => match adapt {
+                            Adapt::Same | Adapt::Wrap | Adapt::Unwrap(_) => read(*r, field),
+                            Adapt::AbsentNull => "null".to_string(),
+                        },
+                        Assigned::Lit { lit, .. } => lit_ts(lit),
+                        Assigned::Input { input: i, .. } => input(*i),
+                        Assigned::ParentId { row: r, field, .. } => read(*r, field),
+                        Assigned::Switch {
+                            row: r,
+                            field,
+                            arms,
+                            ..
+                        } => {
+                            // The check above leaves only the arms' sources: the last
+                            // arm needs no test.
+                            let value = read(*r, field);
+                            let mut arms = arms.iter().rev();
+                            let (_, last) = arms.next().expect("a switch has an arm");
+                            let mut v = string_literal(&last.wire);
+                            for (from, to) in arms {
+                                v = format!(
+                                    "{value} === {} ? {} : {v}",
+                                    string_literal(&from.wire),
+                                    string_literal(&to.wire)
+                                );
+                            }
+                            format!("({v})")
+                        }
+                        Assigned::EventId { field, .. } => format!(
+                            "{}.{}",
+                            local(&f.event_in.as_ref().expect("an event id has an event").name),
+                            property(field)
+                        ),
+                        Assigned::MarkId { mark, .. } => {
+                            format!("{}.id", local(&f.marks_in[*mark].name))
+                        }
+                        Assigned::Null => "null".to_string(),
+                        Assigned::Derived { expr: e, .. } => expr(e, &row, &input),
+                    };
+                    out.push_str(&format!("        {}: {v},\n", dprop(target)));
+                }
+                for wire in always_null {
+                    out.push_str(&format!("        {}: null,\n", cx.prop_of(ty, wire)));
+                }
+                out.push_str("      },\n");
+            }
+            OutKind::Deleted {
+                row: r,
+                id: Some((_, field)),
+            } => {
+                out.push_str(&format!(
+                    "      {}: {},\n",
+                    property(&o.name),
+                    read(*r, field)
+                ));
+            }
+            OutKind::Deleted { id: None, .. } => {}
+        }
+    }
+    for o in &f.outputs {
+        let expected = match f.expected(o) {
+            super::ir::Expected::Absent => "{ kind: \"absent\" }".to_string(),
+            super::ir::Expected::Present => "{ kind: \"present\" }".to_string(),
+            super::ir::Expected::In { column, value } => format!(
+                "{{ kind: \"in\", column: {}, value: {} }}",
+                string_literal(&column),
+                string_literal(&value)
+            ),
+        };
+        out.push_str(&format!(
+            "      {}: {expected},\n",
+            property(&o.expected_name())
+        ));
+    }
+    let source = |s: &super::ir::MarkSource| match s {
+        super::ir::MarkSource::Row { row: r, field } => read(*r, field),
+        super::ir::MarkSource::Input(i) => input(*i),
+        super::ir::MarkSource::Mark(k) => format!("{}.id", local(&f.marks_in[*k].name)),
+    };
+    for m in &f.marks_out {
+        out.push_str(&format!(
+            "      {}: {{ usecase: {}, step: {}, id: {} }},\n",
+            property(&m.name),
+            string_literal(&f.usecase),
+            m.step,
+            source(&m.source)
+        ));
+    }
+    for event in &f.raises {
+        let mut parts = vec![format!("kind: \"{}\"", event.ty)];
+        for (field, s) in &event.ids {
+            parts.push(format!("{}: {}", property(&field.name), source(s)));
+        }
+        out.push_str(&format!(
+            "      {}: {{ {} }},\n",
+            property(&super::snake(&event.ty)),
+            parts.join(", ")
+        ));
+    }
+    out.push_str("    },\n  };\n}\n\n");
+    let body = out.split_off(body_at);
+    let params: Vec<String> = params
+        .iter()
+        .map(|(name, ty)| {
+            let used = if mentions(&body, name) { "" } else { "_" };
+            format!("{used}{name}: {ty}")
+        })
+        .collect();
+    out.push_str(&format!(
+        "export function {}({}): Result<{}, {}> {{\n",
+        fn_name(&f.name),
+        params.join(", "),
+        f.result,
+        domain.error_name(&f.usecase)
+    ));
+    out.push_str(&body);
 }
 
 /// Whether `code` reads the identifier `name`: an occurrence not inside a longer identifier
@@ -1309,7 +1346,6 @@ fn expr(
             row: r,
             field,
             value,
-            ..
         } => format!("{} === {}", read(*r, field), string_literal(&value.wire)),
         Expr::BoolEq {
             row: r,
@@ -1404,7 +1440,7 @@ fn print_validators(cx: &Cx<'_>, out: &mut String) {
         for rule in &v.rules {
             out.push_str(&format!(
                 "  if ({}) {{\n    out.push({}); // {}\n  }}\n",
-                expr(&fails(&rule.expr), &row, &|_| String::new()),
+                expr(&rule.expr.fails(), &row, &|_| String::new()),
                 string_literal(&rule.name),
                 one_line(&rule.text)
             ));
@@ -1430,11 +1466,6 @@ fn print_validators(cx: &Cx<'_>, out: &mut String) {
         }
         out.push_str("    default:\n      return assertNever(kind);\n  }\n}\n\n");
     }
-}
-
-/// The condition under which `e` fails, folded so that a negated comparison reads plainly.
-fn fails(e: &super::ir::Expr) -> super::ir::Expr {
-    super::actions::simplify(super::ir::Expr::Not(Box::new(e.clone())))
 }
 
 // ── Dispatch ─────────────────────────────────────────────────────────────────
@@ -1475,7 +1506,7 @@ fn print_dispatchers(cx: &Cx<'_>, out: &mut String) {
             params.push(format!(
                 "{}: {}",
                 local(&i.name),
-                column_type(&i.ty, i.nullable)
+                input_type(&i.ty, i.nullable)
             ));
         }
         for (n, ty) in &d.choices {
@@ -1486,7 +1517,7 @@ fn print_dispatchers(cx: &Cx<'_>, out: &mut String) {
             super::camel(&d.name),
             params.join(", "),
             d.outcome,
-            error_type(domain, &d.usecase)
+            domain.error_name(&d.usecase)
         ));
         for c in &d.cases {
             let tests: Vec<String> = c

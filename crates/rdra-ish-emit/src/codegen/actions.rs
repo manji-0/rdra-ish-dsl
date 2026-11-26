@@ -20,10 +20,10 @@ use rdra_ish_core::SemanticModel;
 
 use super::ir::{
     Adapt, ArgCheck, Assigned, CmpOp, CondGuard, DispatchCase, DispatchDecl, DomainModel,
-    EnumValue, EventDecl, Expr, Field, FieldType, FnDecl, FnInput, Lit, OutKind, RecordDecl,
-    RowOut, RowParam, Scalar, Skipped, SumDecl, VariantDecl,
+    EnumValue, EventDecl, Expr, Field, FieldType, FnDecl, FnInput, InputType, Lit, OutKind,
+    RecordDecl, RowOut, RowParam, Scalar, Skipped, SumDecl, VariantDecl,
 };
-use super::{type_ident, CodegenError, Names};
+use super::{snake, type_ident, CodegenError, Names};
 
 mod derived;
 mod dispatch;
@@ -35,7 +35,7 @@ mod values;
 use dispatch::dispatchers;
 use guards::{arm_conditions, fold_next, reads_only_created, NextRead};
 use lower::{function, ActionCx, ColumnArms, TagArms};
-pub(super) use pred::{expr, simplify};
+pub(super) use pred::expr;
 use pred::{remap_lists, Quant};
 use values::{declared_id, enum_lit, input_index, literal, start_literal, start_value, Write};
 
@@ -112,31 +112,14 @@ pub(super) fn add_functions(
                 }),
                 Ok(list) => {
                     for event in &raises {
-                        let fields = event_fields(ts, &declared, event);
-                        events.entry(event.clone()).or_insert_with(|| EventDecl {
-                            name: type_ident(event),
-                            doc: model
-                                .events
-                                .values()
-                                .find(|e| &e.id == event)
-                                .map(|e| vec![e.label.clone()])
-                                .unwrap_or_default(),
-                            fields,
+                        events.entry(event.clone()).or_insert_with(|| {
+                            event_decl(model, ts, &declared, event, type_ident(event))
                         });
                     }
                     for f in &list {
                         if let Some(ev) = &f.event_in {
-                            let id = ev.event.clone();
-                            let fields = event_fields(ts, &declared, &id);
-                            events.entry(id.clone()).or_insert_with(|| EventDecl {
-                                name: ev.ty.clone(),
-                                doc: model
-                                    .events
-                                    .values()
-                                    .find(|e| e.id == id)
-                                    .map(|e| vec![e.label.clone()])
-                                    .unwrap_or_default(),
-                                fields,
+                            events.entry(ev.event.clone()).or_insert_with(|| {
+                                event_decl(model, ts, &declared, &ev.event, ev.ty.clone())
                             });
                         }
                     }
@@ -203,7 +186,7 @@ pub(super) fn add_functions(
         .iter()
         .flat_map(|f| f.inputs.iter())
         .filter_map(|i| match &i.ty {
-            FieldType::Rows(ty) => Some(ty.clone()),
+            InputType::Rows(ty) => Some(ty.clone()),
             _ => None,
         })
         .collect();
@@ -305,14 +288,87 @@ fn functions(
     marks: &mut Vec<super::ir::MarkDecl>,
     site: &dyn Fn(&LocatedSpan) -> Option<String>,
 ) -> Result<Vec<FnDecl>, String> {
-    let entity_key = |e: EntId| ts.entity(e).key;
-    let type_of = |e: EntId| -> Result<&Declared<'_>, String> {
-        let id = &model.entities[entity_key(e)].id;
-        declared
-            .get(id)
-            .ok_or_else(|| format!("entity {id} has no generated type"))
+    printable_guards(action)?;
+    // The tag var of each param's entity, when it is a state type.
+    let tag_var = |p: usize| -> Option<VarId> {
+        let e = action.params[p].entity;
+        let Declared::Sum(sum) = type_of(model, ts, declared, e).ok()? else {
+            return None;
+        };
+        ts.var_ids().find(|v| {
+            matches!(&ts.var(*v).kind, VarKind::Column { entity, column, .. }
+                if *entity == e && *column == sum.tag.wire)
+        })
+    };
+    let (arms, column_choices) = transition_arms(ts, action, &tag_var)?;
+    let sources = param_sources(model, ts, action, declared, &arms)?;
+
+    let combos = combinations(&sources);
+    if combos.len() > MAX_COMBINATIONS {
+        return Err(format!(
+            "{} combinations of source states (more than {MAX_COMBINATIONS})",
+            combos.len()
+        ));
+    }
+    let varies: Vec<bool> = sources.iter().map(|s| s.len() > 1).collect();
+    let usecase = &model.use_cases[uc];
+    let cx = ActionCx {
+        model,
+        ts,
+        action,
+        declared,
+        raises,
+        site,
+        usecase: &usecase.id,
+        steps,
     };
 
+    let mut out = Vec::new();
+    for combo in combos {
+        let picked: Vec<&Source<'_>> = combo
+            .iter()
+            .enumerate()
+            .map(|(p, i)| &sources[p][*i])
+            .collect();
+        let base = combination_name(action, &picked, &varies);
+        let options = arm_options(&arms, &picked);
+        // The params whose tag this combination chooses a target of.
+        let tag_choices: Vec<usize> = options
+            .iter()
+            .filter(|(p, open)| open.len() > 1 && picked[*p].variant.is_some())
+            .map(|(p, _)| *p)
+            .collect();
+        for (chosen, columns) in arm_choices(&arms, &options, &picked, &column_choices)? {
+            let name = choice_name(&base, &tag_choices, &chosen, &columns);
+            match function(&cx, &picked, &chosen, &columns, &tag_choices, &name, marks) {
+                Ok(mut f) => {
+                    f.doc
+                        .insert(0, format!("{} ({}).", usecase.label, usecase.id));
+                    out.push(f);
+                }
+                Err(Skip::Combination) => {}
+                Err(Skip::Action(reason)) => return Err(reason),
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// The generated type of entity `e`.
+fn type_of<'a, 'd>(
+    model: &SemanticModel,
+    ts: &TransitionSystem,
+    declared: &'a BTreeMap<String, Declared<'d>>,
+    e: EntId,
+) -> Result<&'a Declared<'d>, String> {
+    let id = &model.entities[ts.entity(e).key].id;
+    declared
+        .get(id)
+        .ok_or_else(|| format!("entity {id} has no generated type"))
+}
+
+/// Why the action's guards cannot be printed yet, if they cannot.
+fn printable_guards(action: &Action) -> Result<(), String> {
     for guard in &action.guards {
         match guard.why {
             GuardWhy::TransitionFrom | GuardWhy::Owner | GuardWhy::Link => {}
@@ -328,23 +384,18 @@ fn functions(
             }
         }
     }
+    Ok(())
+}
 
-    // The tag var of each param's entity, when it is a state type.
-    let tag_var = |p: usize| -> Option<VarId> {
-        let e = action.params[p].entity;
-        let Declared::Sum(sum) = type_of(e).ok()? else {
-            return None;
-        };
-        ts.var_ids().find(|v| {
-            matches!(&ts.var(*v).kind, VarKind::Column { entity, column, .. }
-                if *entity == e && *column == sum.tag.wire)
-        })
-    };
-
-    // The arms each param's tag takes: (from, to) by value names.
+/// The arms each param's tag takes, `(from, to)` by value names; and the second lifecycle
+/// columns whose arms share a `from`, by `(param, var)`: a choice, one function per target,
+/// as for the tag.
+fn transition_arms(
+    ts: &TransitionSystem,
+    action: &Action,
+    tag_var: &dyn Fn(usize) -> Option<VarId>,
+) -> Result<(TagArms, ColumnArms), String> {
     let mut arms: TagArms = BTreeMap::new();
-    // The second lifecycle columns whose arms share a `from`: a choice, one function per
-    // target, as for the tag. By `(param, var)`.
     let mut column_choices: ColumnArms = BTreeMap::new();
     for effect in &action.effects {
         if let Effect::Transition {
@@ -380,37 +431,45 @@ fn functions(
             arms.insert(p, named);
         }
     }
+    Ok((arms, column_choices))
+}
 
-    // The source states of each param.
-    let mut sources: Vec<Vec<Source<'_>>> = Vec::new();
+/// The source states of each param.
+fn param_sources<'d>(
+    model: &SemanticModel,
+    ts: &TransitionSystem,
+    action: &Action,
+    declared: &BTreeMap<String, Declared<'d>>,
+    arms: &TagArms,
+) -> Result<Vec<Vec<Source<'d>>>, String> {
+    let mut sources: Vec<Vec<Source<'d>>> = Vec::new();
     for (p, param) in action.params.iter().enumerate() {
-        let declared = type_of(param.entity)?;
-        let list = match (param.role, declared) {
+        let list = match (param.role, type_of(model, ts, declared, param.entity)?) {
             // A row of an earlier step: the step takes its run mark, and its flat row as it is
             // now where a guard reads the row (`row_params`).
-            (ParamRole::Earlier { .. }, Declared::Sum(sum)) => vec![Source {
+            (ParamRole::Earlier { .. }, &Declared::Sum(sum)) => vec![Source {
                 ty: sum.row.clone(),
                 fields: sum.row_fields.clone(),
                 always_null: Vec::new(),
                 variant: None,
             }],
-            (ParamRole::Earlier { .. }, Declared::Record(r)) => vec![record_source(r)],
+            (ParamRole::Earlier { .. }, &Declared::Record(r)) => vec![record_source(r)],
             // The row an event was raised on: read only, in any state, as its flat row.
-            (ParamRole::Triggered, Declared::Sum(sum)) => vec![Source {
+            (ParamRole::Triggered, &Declared::Sum(sum)) => vec![Source {
                 ty: sum.row.clone(),
                 fields: sum.row_fields.clone(),
                 always_null: Vec::new(),
                 variant: None,
             }],
-            (ParamRole::New, Declared::Record(r)) => vec![record_source(r)],
-            (ParamRole::New, Declared::Sum(_)) => vec![Source {
+            (ParamRole::New, &Declared::Record(r)) => vec![record_source(r)],
+            (ParamRole::New, &Declared::Sum(_)) => vec![Source {
                 ty: String::new(),
                 fields: Vec::new(),
                 always_null: Vec::new(),
                 variant: None,
             }],
-            (_, Declared::Record(r)) => vec![record_source(r)],
-            (_, Declared::Sum(sum)) => sum
+            (_, &Declared::Record(r)) => vec![record_source(r)],
+            (_, &Declared::Sum(sum)) => sum
                 .variants
                 .iter()
                 .filter(|v| match arms.get(&p) {
@@ -422,181 +481,120 @@ fn functions(
         };
         sources.push(list);
     }
+    Ok(sources)
+}
 
-    let combos = combinations(&sources);
-    if combos.len() > MAX_COMBINATIONS {
-        return Err(format!(
-            "{} combinations of source states (more than {MAX_COMBINATIONS})",
-            combos.len()
-        ));
+/// The name of the functions of one combination of source states: the action, and
+/// `From<State>And..` for each param with more than one source.
+fn combination_name(action: &Action, picked: &[&Source<'_>], varies: &[bool]) -> String {
+    let base = type_ident(&action.name);
+    let suffix: Vec<String> = picked
+        .iter()
+        .zip(varies)
+        .filter(|(_, v)| **v)
+        .filter_map(|(s, _)| s.variant.map(|v| v.value.ident.clone()))
+        .collect();
+    if suffix.is_empty() {
+        base
+    } else {
+        format!("{base}From{}", suffix.join("And"))
     }
-    let varies: Vec<bool> = sources.iter().map(|s| s.len() > 1).collect();
-    let usecase = &model.use_cases[uc];
-    let cx = ActionCx {
-        model,
-        ts,
-        action,
-        declared,
-        raises,
-        site,
-        usecase: &usecase.id,
-        steps,
-    };
+}
 
-    let mut out = Vec::new();
-    for combo in combos {
-        let picked: Vec<&Source<'_>> = combo
-            .iter()
-            .enumerate()
-            .map(|(p, i)| &sources[p][*i])
-            .collect();
-        let mut base = type_ident(&action.name);
-        let suffix: Vec<String> = picked
-            .iter()
-            .zip(&varies)
-            .filter(|(_, v)| **v)
-            .filter_map(|(s, _)| s.variant.map(|v| v.value.ident.clone()))
-            .collect();
-        if !suffix.is_empty() {
-            base = format!("{base}From{}", suffix.join("And"));
-        }
-        // The arms each param can take from its source: several from one state are a
-        // choice, and each choice is a function of its own.
-        let mut options: Vec<(usize, Vec<(String, String)>)> = Vec::new();
-        for (p, a) in &arms {
-            let from = picked[*p].variant.map(|v| v.value.wire.clone());
-            let open: Vec<(String, String)> = match &from {
-                Some(from) => a.iter().filter(|(f, _)| f == from).cloned().collect(),
-                None => a.clone(),
-            };
-            options.push((*p, open));
-        }
-        let mut choices: Vec<TagArms> = vec![BTreeMap::new()];
-        for (p, open) in &options {
-            let mut next = Vec::new();
-            for chosen in &choices {
-                if open.len() > 1 && picked[*p].variant.is_some() {
-                    for arm in open {
-                        let mut c = chosen.clone();
-                        c.insert(*p, vec![arm.clone()]);
-                        next.push(c);
-                    }
-                } else {
+/// The arms each param can take from its source: several from one state are a choice.
+fn arm_options(arms: &TagArms, picked: &[&Source<'_>]) -> Vec<(usize, Vec<(String, String)>)> {
+    let mut options: Vec<(usize, Vec<(String, String)>)> = Vec::new();
+    for (p, a) in arms {
+        let from = picked[*p].variant.map(|v| v.value.wire.clone());
+        let open: Vec<(String, String)> = match &from {
+            Some(from) => a.iter().filter(|(f, _)| f == from).cloned().collect(),
+            None => a.clone(),
+        };
+        options.push((*p, open));
+    }
+    options
+}
+
+/// Each choice among arms of one combination, a function of its own: the arms of each tag,
+/// and of each second lifecycle column with a choice, the arms to one target.
+fn arm_choices(
+    arms: &TagArms,
+    options: &[(usize, Vec<(String, String)>)],
+    picked: &[&Source<'_>],
+    column_choices: &ColumnArms,
+) -> Result<Vec<(TagArms, ColumnArms)>, String> {
+    let mut choices: Vec<TagArms> = vec![BTreeMap::new()];
+    for (p, open) in options {
+        let mut next = Vec::new();
+        for chosen in &choices {
+            if open.len() > 1 && picked[*p].variant.is_some() {
+                for arm in open {
                     let mut c = chosen.clone();
-                    c.insert(*p, arms[p].clone());
+                    c.insert(*p, vec![arm.clone()]);
                     next.push(c);
                 }
-            }
-            choices = next;
-        }
-        // A second lifecycle column's choice: one function per target, with the arms to it.
-        let mut choices: Vec<(TagArms, ColumnArms)> =
-            choices.into_iter().map(|c| (c, BTreeMap::new())).collect();
-        for (&(p, var), a) in &column_choices {
-            let mut targets: Vec<&String> = Vec::new();
-            for (_, to) in a {
-                if !targets.contains(&to) {
-                    targets.push(to);
-                }
-            }
-            let mut next = Vec::new();
-            for (tag, columns) in &choices {
-                for target in &targets {
-                    let mut c = columns.clone();
-                    c.insert(
-                        (p, var),
-                        a.iter().filter(|(_, to)| to == *target).cloned().collect(),
-                    );
-                    next.push((tag.clone(), c));
-                }
-            }
-            choices = next;
-        }
-        if choices.len() > MAX_COMBINATIONS {
-            return Err(format!(
-                "{} choices among arms (more than {MAX_COMBINATIONS})",
-                choices.len()
-            ));
-        }
-        for (chosen, columns) in choices {
-            let mut name = base.clone();
-            let mut to: Vec<String> = options
-                .iter()
-                .filter(|(p, open)| open.len() > 1 && picked[*p].variant.is_some())
-                .filter_map(|(p, _)| chosen[p].first().map(|(_, t)| type_ident(t)))
-                .collect();
-            to.extend(
-                columns
-                    .values()
-                    .filter_map(|a| a.first().map(|(_, t)| type_ident(t))),
-            );
-            if !to.is_empty() {
-                name = format!("{name}To{}", to.join("And"));
-            }
-            match function(&cx, &picked, &chosen, &columns, &name, marks) {
-                Ok(mut f) => {
-                    f.doc
-                        .insert(0, format!("{} ({}).", usecase.label, usecase.id));
-                    for (p, open) in &options {
-                        if open.len() < 2 || picked[*p].variant.is_none() {
-                            continue;
-                        }
-                        let Some(r) = f.rows.iter().position(|row| row.param == Some(*p)) else {
-                            continue;
-                        };
-                        let Some(Declared::Sum(sum)) = declared.get(&f.rows[r].entity) else {
-                            continue;
-                        };
-                        let FieldType::Enum(tag_enum) = &sum.tag.ty else {
-                            continue;
-                        };
-                        let target = &chosen[p][0].1;
-                        if let Some(v) = sum.variants.iter().find(|v| v.value.wire == *target) {
-                            f.chosen.push(super::ir::Chosen {
-                                row: r,
-                                column: None,
-                                enum_ty: tag_enum.clone(),
-                                value: v.value.clone(),
-                            });
-                        }
-                    }
-                    for ((p, var), a) in &columns {
-                        let VarKind::Column { column, .. } = &ts.var(*var).kind else {
-                            continue;
-                        };
-                        let Some(r) = f.rows.iter().position(|row| row.param == Some(*p)) else {
-                            continue;
-                        };
-                        let Some(FieldType::Enum(enum_ty)) = f.rows[r]
-                            .fields
-                            .iter()
-                            .find(|x| x.wire == *column)
-                            .map(|x| x.ty.clone())
-                        else {
-                            continue;
-                        };
-                        let Some((_, target)) = a.first() else {
-                            continue;
-                        };
-                        f.chosen.push(super::ir::Chosen {
-                            row: r,
-                            column: Some(column.clone()),
-                            enum_ty,
-                            value: EnumValue {
-                                ident: type_ident(target),
-                                wire: target.clone(),
-                                label: None,
-                            },
-                        });
-                    }
-                    out.push(f);
-                }
-                Err(Skip::Combination) => {}
-                Err(Skip::Action(reason)) => return Err(reason),
+            } else {
+                let mut c = chosen.clone();
+                c.insert(*p, arms[p].clone());
+                next.push(c);
             }
         }
+        choices = next;
     }
-    Ok(out)
+    // A second lifecycle column's choice: one function per target, with the arms to it.
+    let mut choices: Vec<(TagArms, ColumnArms)> =
+        choices.into_iter().map(|c| (c, BTreeMap::new())).collect();
+    for (&(p, var), a) in column_choices {
+        let mut targets: Vec<&String> = Vec::new();
+        for (_, to) in a {
+            if !targets.contains(&to) {
+                targets.push(to);
+            }
+        }
+        let mut next = Vec::new();
+        for (tag, columns) in &choices {
+            for target in &targets {
+                let mut c = columns.clone();
+                c.insert(
+                    (p, var),
+                    a.iter().filter(|(_, to)| to == *target).cloned().collect(),
+                );
+                next.push((tag.clone(), c));
+            }
+        }
+        choices = next;
+    }
+    if choices.len() > MAX_COMBINATIONS {
+        return Err(format!(
+            "{} choices among arms (more than {MAX_COMBINATIONS})",
+            choices.len()
+        ));
+    }
+    Ok(choices)
+}
+
+/// The name of the function of one choice: `base`, and `To<Target>And..` for each chosen
+/// tag target, then each chosen column target.
+fn choice_name(
+    base: &str,
+    tag_choices: &[usize],
+    chosen: &TagArms,
+    columns: &ColumnArms,
+) -> String {
+    let mut to: Vec<String> = tag_choices
+        .iter()
+        .filter_map(|p| chosen[p].first().map(|(_, t)| type_ident(t)))
+        .collect();
+    to.extend(
+        columns
+            .values()
+            .filter_map(|a| a.first().map(|(_, t)| type_ident(t))),
+    );
+    if to.is_empty() {
+        base.to_string()
+    } else {
+        format!("{base}To{}", to.join("And"))
+    }
 }
 
 fn record_source(record: &RecordDecl) -> Source<'_> {
@@ -634,28 +632,24 @@ fn combinations(sources: &[Vec<Source<'_>>]) -> Vec<Vec<usize>> {
     out
 }
 
-/// snake_case of an id: `CustomerAccount` is `customer_account`.
-pub(super) fn snake(id: &str) -> String {
-    let mut out = String::new();
-    let mut prev_lower = false;
-    for ch in id.chars() {
-        if ch == '-' || ch == ' ' {
-            out.push('_');
-            prev_lower = false;
-            continue;
-        }
-        if ch.is_uppercase() {
-            if prev_lower {
-                out.push('_');
-            }
-            out.extend(ch.to_lowercase());
-            prev_lower = false;
-        } else {
-            out.push(ch);
-            prev_lower = ch.is_lowercase() || ch.is_ascii_digit();
-        }
+/// The declaration of the event `id`, named `name`.
+fn event_decl(
+    model: &SemanticModel,
+    ts: &TransitionSystem,
+    declared: &BTreeMap<String, Declared<'_>>,
+    id: &str,
+    name: String,
+) -> EventDecl {
+    EventDecl {
+        name,
+        doc: model
+            .events
+            .values()
+            .find(|e| e.id == id)
+            .map(|e| vec![e.label.clone()])
+            .unwrap_or_default(),
+        fields: event_fields(ts, declared, id),
     }
-    out
 }
 
 /// The payload of an event: the id of each row its raise marks, by the system's `Raised`

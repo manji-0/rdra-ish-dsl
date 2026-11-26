@@ -93,12 +93,11 @@ impl Backend for Rust {
     }
 
     fn method_names(&self, m: &PortMethod) -> Vec<String> {
-        let snake = rdra_ish_emit::codegen::snake(&m.name);
-        vec![format!("prepare_{snake}"), format!("commit_{snake}")]
+        rdra_ish_emit::codegen::method_names(Lang::Rust, m).to_vec()
     }
 
     fn entry_names(&self, name: &str) -> Vec<String> {
-        vec![format!("run_{}", rdra_ish_emit::codegen::snake(name))]
+        vec![rdra_ish_emit::codegen::entry_name(Lang::Rust, name)]
     }
 
     fn implement_hint(&self, contract: &ContractDecl, service: &str, methods: &[&str]) -> String {

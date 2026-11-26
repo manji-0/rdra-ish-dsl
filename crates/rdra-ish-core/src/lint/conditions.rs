@@ -5,6 +5,7 @@ use crate::model::{
     CmpOpModel, CmpRhs, ColumnType, CrossCmpRhs, CrossEntityCondition, EntityCondition, EntityKey,
     NodeRef, RelKind, SemanticModel,
 };
+use rdra_ish_syntax::ast::Kind;
 
 use super::elements::push_element_info;
 use super::{push_element_lint, LintIssue, LintSeverity};
@@ -36,7 +37,7 @@ pub(super) fn lint_condition_anchors(model: &SemanticModel, issues: &mut Vec<Lin
         push_element_lint(
             model,
             issues,
-            "condition",
+            Kind::Condition,
             "condition",
             &condition.id,
             "condition-no-rdra-anchor",
@@ -74,7 +75,7 @@ pub(super) fn lint_bodiless_guards(model: &SemanticModel, issues: &mut Vec<LintI
         push_element_info(
             model,
             issues,
-            "condition",
+            Kind::Condition,
             &condition.id,
             "condition-applied-without-body",
             &format!(
@@ -282,7 +283,7 @@ pub(super) fn lint_unguarded_triggered(model: &SemanticModel, issues: &mut Vec<L
         push_element_info(
             model,
             issues,
-            "usecase",
+            Kind::UseCase,
             id,
             "triggered-usecase-unguarded",
             &format!(

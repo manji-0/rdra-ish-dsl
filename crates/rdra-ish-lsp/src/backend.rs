@@ -32,10 +32,6 @@ struct ServerState {
     documents: HashMap<PathBuf, String>,
     workspace_roots: Vec<PathBuf>,
     analysis: Option<Arc<WorkspaceAnalysis>>,
-    published: HashSet<Url>,
-    /// The diagnostics of the analysis last published, per file: a background check's
-    /// findings are published together with them.
-    analysis_published: HashMap<Url, Vec<tower_lsp::lsp_types::Diagnostic>>,
     /// The findings of the background check of `analysis`, once it has published them.
     lifecycle: Option<Findings>,
     /// `lifecycleCheck` of the initialization options and the settings.
@@ -74,6 +70,31 @@ impl ServerState {
         let offset = position_to_byte_offset(found.doc.text, position)?;
         Some((found, offset))
     }
+
+    /// Drops the analysis and the findings of its background check.
+    fn drop_analysis(&mut self) {
+        self.analysis = None;
+        self.lifecycle = None;
+    }
+}
+
+/// What the server has published, which only the holder of `Backend::publishing` reads or
+/// writes: from the generation check to the end of publishing.
+#[derive(Default)]
+struct Published {
+    /// Every URI published since the diagnostics were last withdrawn.
+    uris: HashSet<Url>,
+    /// The diagnostics of the analysis last published, per file: a background check's
+    /// findings are published together with them.
+    analysis: HashMap<Url, Vec<tower_lsp::lsp_types::Diagnostic>>,
+}
+
+impl Published {
+    /// Forgets the analysis's diagnostics and returns every URI published, to withdraw.
+    fn take_all(&mut self) -> HashSet<Url> {
+        self.analysis.clear();
+        std::mem::take(&mut self.uris)
+    }
 }
 
 pub struct Backend {
@@ -83,8 +104,9 @@ pub struct Backend {
     /// slower refresh of older text cannot overwrite the result of a newer one. The
     /// background check of a refresh follows the same rule.
     generation: Arc<AtomicU64>,
-    /// Held from the generation check to the end of publishing.
-    publishing: Arc<Mutex<()>>,
+    /// Held from the generation check to the end of publishing. Taken before `state`, never
+    /// while holding it.
+    publishing: Arc<Mutex<Published>>,
     /// Held by the background check that runs, so that checks run one at a time.
     checking: Arc<Mutex<()>>,
 }
@@ -95,7 +117,7 @@ impl Backend {
             client,
             state: Arc::new(RwLock::new(ServerState::default())),
             generation: Arc::new(AtomicU64::new(0)),
-            publishing: Arc::new(Mutex::new(())),
+            publishing: Arc::new(Mutex::new(Published::default())),
             checking: Arc::new(Mutex::new(())),
         }
     }
@@ -151,7 +173,7 @@ impl Backend {
         .await
         .unwrap_or_else(|err| std::panic::resume_unwind(err.into_panic()));
 
-        let _publishing = self.publishing.lock().await;
+        let mut published = self.publishing.lock().await;
         if self.generation.load(Ordering::SeqCst) != generation {
             return;
         }
@@ -160,24 +182,21 @@ impl Backend {
             Err(ProjectError::NoRdraFiles) => {
                 // The last .rdra file left the workspace: nothing to analyze, and nothing
                 // published before may stay.
-                let mut state = self.state.write().await;
-                state.analysis = None;
-                state.lifecycle = None;
-                let stale = std::mem::take(&mut state.published);
-                drop(state);
-                for uri in stale {
+                self.state.write().await.drop_analysis();
+                for uri in published.take_all() {
                     self.client.publish_diagnostics(uri, vec![], None).await;
                 }
                 return;
             }
             Err(err) => {
-                self.report_load_error(&err, &overlays).await;
+                self.report_load_error(&mut published, &err, &overlays)
+                    .await;
                 return;
             }
         };
-        self.publish_diagnostics(&analysis).await;
+        self.publish_diagnostics(&mut published, &analysis).await;
         if let Some((path, notes)) = notes {
-            self.publish_code_notes(&path, notes).await;
+            self.publish_code_notes(&mut published, &path, notes).await;
         }
 
         let analysis = Arc::new(analysis);
@@ -196,16 +215,19 @@ impl Backend {
         }
     }
 
-    async fn report_load_error(&self, err: &ProjectError, overlays: &HashMap<PathBuf, String>) {
+    async fn report_load_error(
+        &self,
+        published: &mut Published,
+        err: &ProjectError,
+        overlays: &HashMap<PathBuf, String>,
+    ) {
         let message = err.to_string();
         self.client.log_message(MessageType::ERROR, &message).await;
 
         let mut state = self.state.write().await;
         let uris = state.uris.clone();
-        state.analysis = None;
-        state.lifecycle = None;
-        state.analysis_published.clear();
-        let stale = std::mem::take(&mut state.published);
+        state.drop_analysis();
+        let stale = published.take_all();
         let announce = state.manifest_error.as_deref() != Some(message.as_str());
         state.manifest_error = Some(message.clone());
         drop(state);
@@ -235,12 +257,17 @@ impl Backend {
             self.client
                 .publish_diagnostics(uri.clone(), vec![diagnostic], None)
                 .await;
-            self.state.write().await.published.insert(uri);
+            published.uris.insert(uri);
         }
     }
 
     /// The fingerprint notes of `[code]` as information on rdra.toml; none clears them.
-    async fn publish_code_notes(&self, manifest: &std::path::Path, notes: Vec<CodeNote>) {
+    async fn publish_code_notes(
+        &self,
+        published: &mut Published,
+        manifest: &std::path::Path,
+        notes: Vec<CodeNote>,
+    ) {
         let uris = self.state.read().await.uris.clone();
         let Ok(uri) = uris.uri(manifest) else {
             return;
@@ -258,10 +285,10 @@ impl Backend {
         self.client
             .publish_diagnostics(uri.clone(), diagnostics, None)
             .await;
-        self.state.write().await.published.insert(uri);
+        published.uris.insert(uri);
     }
 
-    async fn publish_diagnostics(&self, analysis: &WorkspaceAnalysis) {
+    async fn publish_diagnostics(&self, published: &mut Published, analysis: &WorkspaceAnalysis) {
         let uris = self.state.read().await.uris.clone();
         let mut by_source: HashMap<usize, Vec<&Diagnostic>> = HashMap::new();
         for diag in &analysis.diagnostics {
@@ -270,7 +297,7 @@ impl Backend {
             }
         }
 
-        let mut published = HashSet::new();
+        let mut now = HashSet::new();
         let mut kept = HashMap::new();
         for (source_id, (path, text, _)) in analysis.program.sources.iter().enumerate() {
             let uri = match uris.uri(path) {
@@ -286,15 +313,13 @@ impl Backend {
                 .publish_diagnostics(uri.clone(), diags.clone(), None)
                 .await;
             kept.insert(uri.clone(), diags);
-            published.insert(uri);
+            now.insert(uri);
         }
         // A file published before that is no source now (deleted, renamed, or no longer
         // under a root) keeps its diagnostics in the editor until they are withdrawn.
-        let mut state = self.state.write().await;
-        state.analysis_published = kept;
-        let stale = std::mem::replace(&mut state.published, published.clone());
-        drop(state);
-        for uri in stale.difference(&published) {
+        published.analysis = kept;
+        let stale = std::mem::replace(&mut published.uris, now.clone());
+        for uri in stale.difference(&now) {
             self.client
                 .publish_diagnostics(uri.clone(), vec![], None)
                 .await;
@@ -751,7 +776,7 @@ struct Checker {
     client: Client,
     state: Arc<RwLock<ServerState>>,
     generation: Arc<AtomicU64>,
-    publishing: Arc<Mutex<()>>,
+    publishing: Arc<Mutex<Published>>,
     checking: Arc<Mutex<()>>,
 }
 
@@ -773,20 +798,17 @@ impl Checker {
         if !self.current(generation) {
             return;
         }
-        let checked = tokio::task::spawn_blocking(move || {
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                lifecycle::check(&analysis, &settings)
-            }))
-        })
-        .await;
-        let Ok(Ok(findings)) = checked else {
+        // A panic in the check comes back as the task's `JoinError`.
+        let checked =
+            tokio::task::spawn_blocking(move || lifecycle::check(&analysis, &settings)).await;
+        let Ok(findings) = checked else {
             self.client
                 .log_message(MessageType::ERROR, "the background lifecycle check failed")
                 .await;
             return;
         };
 
-        let _publishing = self.publishing.lock().await;
+        let mut published = self.publishing.lock().await;
         if !self.current(generation) {
             return;
         }
@@ -796,14 +818,14 @@ impl Checker {
             let Ok(uri) = state.uris.uri(path) else {
                 continue;
             };
-            let mut all = (state.analysis_published.get(&uri).cloned()).unwrap_or_default();
+            let mut all = (published.analysis.get(&uri).cloned()).unwrap_or_default();
             all.extend(found.iter().cloned());
             out.push((uri, all));
         }
         let lenses = !findings.lenses.is_empty();
         state.lifecycle = Some(findings);
-        state
-            .published
+        published
+            .uris
             .extend(out.iter().map(|(uri, _)| uri.clone()));
         let lens_refresh = state.lens_refresh;
         drop(state);

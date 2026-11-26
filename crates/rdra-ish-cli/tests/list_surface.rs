@@ -1,10 +1,9 @@
 //! `list --kind surface`: the canonical text, and the rejection of any `--format`.
-use std::path::{Path, PathBuf};
 use std::process::Command;
 
-fn repo() -> PathBuf {
-    dunce::canonicalize(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).expect("repo root")
-}
+#[path = "common/root.rs"]
+mod root;
+use root::repo;
 
 fn list_surface(extra: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_rdra-ish"))

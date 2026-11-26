@@ -2,19 +2,20 @@
 
 use crate::model::{NodeRef, RelKind, SemanticModel};
 use crate::rules::business_rules;
+use rdra_ish_syntax::ast::Kind;
 
 use super::{LintIssue, LintSeverity};
 
 pub(super) fn push_element_info(
     model: &SemanticModel,
     issues: &mut Vec<LintIssue>,
-    kind: &str,
+    kind: Kind,
     id: &str,
     rule: &'static str,
     message: &str,
     hint: &str,
 ) {
-    let mut issue = LintIssue::new(LintSeverity::Info, rule, kind, id, message, hint);
+    let mut issue = LintIssue::new(LintSeverity::Info, rule, kind.name(), id, message, hint);
     if let Some(loc) = model.decl_sites.located(kind, id) {
         issue = issue.with_location(loc);
     }
@@ -36,7 +37,7 @@ pub(super) fn lint_goals(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
         push_element_info(
             model,
             issues,
-            "requirement",
+            Kind::Requirement,
             &requirement.id,
             "requirement-no-goal",
             "requirement achieves no goal",
@@ -50,7 +51,7 @@ pub(super) fn lint_goals(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
         push_element_info(
             model,
             issues,
-            "goal",
+            Kind::Goal,
             &goal.id,
             "goal-unmeasured",
             "goal has no metric or no target, so its success cannot be measured",
@@ -76,7 +77,7 @@ pub(super) fn lint_screen_transitions(model: &SemanticModel, issues: &mut Vec<Li
         push_element_info(
             model,
             issues,
-            "screen",
+            Kind::Screen,
             &screen.id,
             "screen-no-transition",
             "no navigates enters or leaves the screen, and no business flow reaches it in order",
