@@ -100,7 +100,7 @@ fn costly(run: &ComponentRun) -> String {
             with_parent += 1;
         }
     }
-    let fx = |h: u64, w: u64| (h.rotate_left(5) ^ w).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
+    let fx = crate::fasthash::fx_step;
     let shash =
         (run.states.iter()).fold(0u64, |h, s| s.0.iter().fold(h, |h, b| fx(h, u64::from(*b))));
     // A run without an edge list has no graph to hash.
@@ -170,59 +170,41 @@ static EVALS: [AtomicU64; KINDS.len()] = [const { AtomicU64::new(0) }; KINDS.len
 impl Kind {
     /// The kind of a pre-state guard conjunct `one_row` does not take.
     pub(crate) fn of(pred: &Pred) -> Kind {
-        let mut reads = BTreeSet::new();
-        let (mut quantifier, mut other) = (false, false);
-        walk(pred, &mut reads, &mut quantifier, &mut other);
-        let params: BTreeSet<u8> = reads.iter().map(|(p, _)| *p).collect();
-        match (quantifier, other, params.len(), reads.len()) {
-            (true, _, _, _) => Kind::Quantifier,
-            (false, true, _, _) | (false, false, 0, _) => Kind::Other,
-            (false, false, 1, 2) => Kind::TwoVars,
-            (false, false, 1, _) => Kind::MoreVars,
-            (false, false, 2, 2) => Kind::TwoParams,
-            (false, false, _, _) => Kind::MoreParams,
+        if (pred.nodes()).any(|p| {
+            matches!(
+                p,
+                Pred::Forall { .. } | Pred::Exists { .. } | Pred::Count { .. }
+            )
+        }) {
+            return Kind::Quantifier;
         }
-    }
-}
-
-/// The `(param, var)` slots `pred` reads (`None` for a param's slot index), and whether it
-/// holds a quantifier or count, or reads anything else than params' rows and literals.
-fn walk(
-    pred: &Pred,
-    reads: &mut BTreeSet<(u8, Option<VarId>)>,
-    quantifier: &mut bool,
-    other: &mut bool,
-) {
-    let mut term = |t: &Term| match *t {
-        Term::Slot {
-            var,
-            at: At::Param(p),
-        } => {
-            reads.insert((p, Some(var)));
-        }
-        Term::Index(At::Param(p)) => {
-            reads.insert((p, None));
-        }
-        Term::Slot { .. } | Term::Index(_) | Term::Now => *other = true,
-        Term::Lit(_) | Term::Int(_) => {}
-    };
-    match pred {
-        Pred::True | Pred::False => {}
-        Pred::Cmp(a, _, b) => {
-            term(a);
-            term(b);
-        }
-        Pred::In(a, values) => {
-            term(a);
-            values.iter().for_each(term);
-        }
-        Pred::Not(body) => walk(body, reads, quantifier, other),
-        Pred::And(parts) | Pred::Or(parts) => {
-            for p in parts {
-                walk(p, reads, quantifier, other);
+        // The `(param, var)` slots `pred` reads (`None` for a param's slot index), and whether
+        // it reads anything else than params' rows and literals.
+        let mut reads: BTreeSet<(u8, Option<VarId>)> = BTreeSet::new();
+        let mut other = false;
+        for t in pred.terms() {
+            match *t {
+                Term::Slot {
+                    var,
+                    at: At::Param(p),
+                } => {
+                    reads.insert((p, Some(var)));
+                }
+                Term::Index(At::Param(p)) => {
+                    reads.insert((p, None));
+                }
+                Term::Slot { .. } | Term::Index(_) | Term::Now => other = true,
+                Term::Lit(_) | Term::Int(_) => {}
             }
         }
-        Pred::Forall { .. } | Pred::Exists { .. } | Pred::Count { .. } => *quantifier = true,
+        let params: BTreeSet<u8> = reads.iter().map(|(p, _)| *p).collect();
+        match (other, params.len(), reads.len()) {
+            (true, _, _) | (false, 0, _) => Kind::Other,
+            (false, 1, 2) => Kind::TwoVars,
+            (false, 1, _) => Kind::MoreVars,
+            (false, 2, 2) => Kind::TwoParams,
+            (false, _, _) => Kind::MoreParams,
+        }
     }
 }
 

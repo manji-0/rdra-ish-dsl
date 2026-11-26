@@ -534,6 +534,19 @@ impl ParamRole {
     pub fn keys_fair_instance(self) -> bool {
         self != ParamRole::New
     }
+
+    /// What a slot's `exists` var must hold for a param of this role to bind it: absent for
+    /// `New`, which takes the lowest such slot, present for a row that exists, and anything
+    /// for `Earlier`, which its run mark matches whether or not the slot is present.
+    pub fn binds_exists(self) -> Option<Value> {
+        match self {
+            ParamRole::New => Some(Value::ABSENT),
+            ParamRole::Existing | ParamRole::Parent { .. } | ParamRole::Triggered => {
+                Some(Value::PRESENT)
+            }
+            ParamRole::Earlier { .. } => None,
+        }
+    }
 }
 
 /// A guard holds on the pre-state, or, when it reads `At::Next`, on the pre-state and the
@@ -598,9 +611,9 @@ impl Pred {
         })
     }
 
-    /// Whether some slot reference points into the successor.
-    /// The explorer asks this of every guard in every state, so it walks the tree in place:
-    /// `terms` keeps a stack on the heap.
+    /// Whether some slot reference points into the successor. The guard scan and the paths
+    /// without a plan (`pre_guards_hold`) ask this per guard and binding, so it walks the tree
+    /// in place: `terms` keeps a stack on the heap.
     pub fn reads_next(&self) -> bool {
         let next = |t: &Term| {
             matches!(

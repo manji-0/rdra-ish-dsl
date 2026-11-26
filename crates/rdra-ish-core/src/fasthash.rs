@@ -14,9 +14,15 @@ pub(crate) struct FastHasher(u64);
 
 const SEED: u64 = 0x51_7c_c1_b7_27_22_0a_95;
 
+/// One step of the scheme: `h` with `word` mixed in, before `finish`'s rotation.
+#[inline]
+pub(crate) fn fx_step(h: u64, word: u64) -> u64 {
+    (h.rotate_left(5) ^ word).wrapping_mul(SEED)
+}
+
 impl FastHasher {
     fn add(&mut self, word: u64) {
-        self.0 = (self.0.rotate_left(5) ^ word).wrapping_mul(SEED);
+        self.0 = fx_step(self.0, word);
     }
 }
 

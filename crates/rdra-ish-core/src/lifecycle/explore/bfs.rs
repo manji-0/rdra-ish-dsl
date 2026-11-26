@@ -395,15 +395,15 @@ impl Bindings {
     }
 
     /// `id`, looked up by the binding's `number` (`Numbering`) where it has one: an array read
-    /// in place of hashing the params. The first sight of a binding goes through `id`, so the
-    /// ids and the bytes counted are the same. A `shadow` build holds every lookup to `id`'s
-    /// map.
+    /// in place of hashing the params. `Numbering::NONE` is past the array, so such a binding
+    /// goes through `id`, as does the first sight of a binding, so the ids and the bytes
+    /// counted are the same. A `shadow` build holds every lookup to `id`'s map.
     #[inline]
     fn id_numbered(&mut self, ids: &mut [u32], number: u32, act: ActId, params: &[u8]) -> u32 {
         let Some(slot) = ids.get_mut(number as usize) else {
             return self.id(act, params);
         };
-        if *slot == u32::MAX {
+        if *slot == UNSEEN {
             *slot = self.id(act, params);
             return *slot;
         }
@@ -421,12 +421,15 @@ impl Bindings {
     }
 }
 
+/// The id `Reading::ids` holds for a binding number not yet seen.
+const UNSEEN: u32 = u32::MAX;
+
 /// What the reader keeps while it reads a run's chunks.
 struct Reading {
     /// Per move of the chunk being read: the state it reached, `u32::MAX` while unread or for
     /// a loop. A `Probe::SameAs(k)` reads it at `k`.
     resolved: Vec<u32>,
-    /// Per binding number (`Numbering`): the binding's id, `u32::MAX` until it is first seen.
+    /// Per binding number (`Numbering`): the binding's id, `UNSEEN` until it is first seen.
     ids: Vec<u32>,
     recent: Recent,
     /// Whether a chunk may be probed by its expanding thread (`Workers::probes`), so that
@@ -647,7 +650,7 @@ impl<'t> Bfs<'t> {
         };
         let mut reading = Reading {
             resolved: Vec::new(),
-            ids: vec![u32::MAX; workers.expander.numbering.len()],
+            ids: vec![UNSEEN; workers.expander.numbering.len()],
             recent: Recent::new(self.states.len()),
             record: false,
         };

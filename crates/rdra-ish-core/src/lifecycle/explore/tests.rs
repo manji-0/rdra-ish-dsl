@@ -48,37 +48,6 @@ transitions(Close, Customer.status, active -> closed)
 deletes(Drop, Line)
 "#;
 
-/// `enabled_bindings` lists the `bindings` whose pre-guards hold, in `bindings` order, in
-/// every reachable state: where no instance exists, where one slot is free, where none is,
-/// and after a delete.
-#[test]
-fn enabled_bindings_are_the_bindings_whose_pre_guards_hold() {
-    for bounds in [Bounds::STATES, Bounds::VERIFY] {
-        let ts = TransitionSystem::build(&model_from(SHOP), bounds, &Scope::ALL).ts;
-        let run = ts.run(Caps::VERIFY);
-        let mut checked = 0;
-        let mut kept = 0;
-        {
-            let system = &run.system;
-            for state in &run.states {
-                for action in system.actions() {
-                    let want: Vec<Box<[u8]>> = system
-                        .bindings(action, &state)
-                        .into_iter()
-                        .filter(|params| system.pre_guards_hold(action, &state, params))
-                        .map(Vec::into_boxed_slice)
-                        .collect();
-                    let got = system.enabled_bindings(action, &state);
-                    assert_eq!(got, want, "{} in {state:?}", action.name);
-                    checked += 1;
-                    kept += got.len();
-                }
-            }
-        }
-        assert!(checked > 100 && kept > 30, "{checked} checks, {kept} kept");
-    }
-}
-
 /// The pattern cap stops only a run that gathers views (#251, #296): at a cap of one pattern
 /// the run with views stops at `PatternCapReached`, and the run without views explores the
 /// same graph as an uncapped run, gathers no pattern, and says so (`gathered_views`).

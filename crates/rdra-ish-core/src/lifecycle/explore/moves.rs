@@ -3,12 +3,15 @@
 use std::collections::HashSet;
 
 use crate::lifecycle::expr::{Env, State, StateSlice};
-use crate::lifecycle::types::{ActId, Action, Effect, EntId, ParamRole, Rhs, Start, Value, VarId};
+use crate::lifecycle::types::{
+    ActId, Action, Effect, EntId, Param, ParamRole, Rhs, Start, Value, VarId,
+};
 use crate::lifecycle::TransitionSystem;
 
 use super::plan::Plan;
 use super::{Move, Moves};
 
+#[cfg(any(debug_assertions, feature = "shadow"))]
 mod reference;
 
 impl TransitionSystem {
@@ -85,19 +88,78 @@ impl TransitionSystem {
         out
     }
 
-    /// The `bindings` of `action` in `state` whose pre-guards hold, in `bindings` order.
-    #[cfg(test)]
-    pub(super) fn enabled_bindings(&self, action: &Action, state: &StateSlice) -> Vec<Box<[u8]>> {
-        let ai = self
-            .actions
-            .iter()
-            .position(|a| std::ptr::eq(a, action))
-            .expect("an action of this system");
-        let mut out = Vec::new();
-        self.each_enabled(action, &self.plans()[ai], state, |params| {
-            out.push(params.into())
-        });
+    /// The slots param `p` may bind in `state` before any guard reads it, lowest first: those
+    /// whose `exists` var holds what the param's role binds (`ParamRole::binds_exists`), and
+    /// of those only the lowest for a `New` param.
+    fn candidate_slots<'a>(
+        &'a self,
+        p: &Param,
+        state: &'a StateSlice,
+    ) -> impl Iterator<Item = u8> + 'a {
+        let exists = self.entity(p.entity).exists;
+        let n = self.slots(p.entity);
+        let wanted = p.role.binds_exists();
+        let most = match p.role {
+            ParamRole::New => 1,
+            _ => n,
+        };
+        (0..n)
+            .filter(move |&s| wanted.is_none_or(|w| state.get(self, exists, s) == w))
+            .take(most)
+            .map(|s| s as u8)
+    }
+
+    /// The bindings of `action` in `state` before any guard reads them: each param on one of
+    /// its `candidate_slots`, the last param varying fastest. `each_planned` falls back to it
+    /// past 16 slots or params, and the guard scan reads it.
+    pub(super) fn bindings(&self, action: &Action, state: &StateSlice) -> Vec<Vec<u8>> {
+        self.bindings_for(action, state, false)
+    }
+
+    /// `bindings`, except that with `crowd` a `New` param with no free slot takes every slot,
+    /// as if the bound left one free.
+    pub(super) fn bindings_for(
+        &self,
+        action: &Action,
+        state: &StateSlice,
+        crowd: bool,
+    ) -> Vec<Vec<u8>> {
+        let mut out: Vec<Vec<u8>> = vec![Vec::new()];
+        for p in &action.params {
+            let mut slots: Vec<u8> = self.candidate_slots(p, state).collect();
+            if slots.is_empty() && crowd && p.role == ParamRole::New {
+                slots = (0..self.slots(p.entity) as u8).collect();
+            }
+            out = out
+                .into_iter()
+                .flat_map(|prefix| {
+                    slots.iter().map(move |s| {
+                        let mut b = prefix.clone();
+                        b.push(*s);
+                        b
+                    })
+                })
+                .collect();
+            if out.is_empty() {
+                break;
+            }
+        }
         out
+    }
+
+    /// Whether every pre-state guard of `action` holds under `params`, each read by `eval`.
+    pub(super) fn pre_guards_hold(
+        &self,
+        action: &Action,
+        state: &StateSlice,
+        params: &[u8],
+    ) -> bool {
+        let mut env = Env::new(params);
+        action
+            .guards
+            .iter()
+            .filter(|g| !g.reads_successor())
+            .all(|g| self.eval(&g.pred, state, &mut env))
     }
 
     /// Calls `found` with each of the `bindings` of `action` in `state` whose pre-guards hold,
@@ -156,35 +218,10 @@ impl TransitionSystem {
         // Per param: how many candidate slots it has, and the slots, lowest first.
         let mut choices = [(0usize, [0u8; MAX]); MAX];
         for (i, (p, (n, list))) in action.params.iter().zip(&mut choices).enumerate() {
-            let exists = self.entity(p.entity).exists;
-            let slots = self.slots(p.entity);
-            let row = |s: usize| plan.row_holds(i, state, s);
-            match p.role {
-                ParamRole::New => {
-                    if let Some(s) =
-                        (0..slots).find(|&s| state.get(self, exists, s) == Value::ABSENT)
-                    {
-                        if row(s) {
-                            list[0] = s as u8;
-                            *n = 1;
-                        }
-                    }
-                }
-                ParamRole::Existing | ParamRole::Parent { .. } | ParamRole::Triggered => {
-                    for s in 0..slots {
-                        if state.get(self, exists, s) == Value::PRESENT && row(s) {
-                            list[*n] = s as u8;
-                            *n += 1;
-                        }
-                    }
-                }
-                ParamRole::Earlier { .. } => {
-                    for s in 0..slots {
-                        if row(s) {
-                            list[*n] = s as u8;
-                            *n += 1;
-                        }
-                    }
+            for s in self.candidate_slots(p, state) {
+                if plan.row_holds(i, state, usize::from(s)) {
+                    list[*n] = s;
+                    *n += 1;
                 }
             }
             if *n == 0 {
