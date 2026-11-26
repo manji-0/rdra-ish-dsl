@@ -5,6 +5,7 @@
 
 use rdra_ish_core::location::LocatedSpan;
 use rdra_ish_core::SemanticModel;
+use rdra_ish_syntax::ast::Kind;
 use serde_json::{json, Value};
 
 use super::ir::{
@@ -23,7 +24,7 @@ pub fn print(
     options: &Options,
     site: &dyn Fn(&LocatedSpan) -> Option<String>,
 ) -> String {
-    let at = |kind: &str, id: &str| model.decl_sites.located(kind, id).as_ref().and_then(site);
+    let at = |kind: Kind, id: &str| model.decl_sites.located(kind, id).as_ref().and_then(site);
     let value = json!({
         "format": JSON_FORMAT,
         "generator": format!("rdra-ish {}", options.version),
@@ -36,7 +37,7 @@ pub fn print(
         "states": domain.sums.iter().map(|s| json!({
             "name": s.name,
             "entity": s.entity,
-            "site": at("entity", &s.entity),
+            "site": at(Kind::Entity, &s.entity),
             "row": s.row,
             "kind": s.kind,
             "tag": field(&s.tag),
@@ -76,7 +77,7 @@ pub fn print(
 fn types(
     model: &SemanticModel,
     domain: &DomainModel,
-    at: &dyn Fn(&str, &str) -> Option<String>,
+    at: &dyn Fn(Kind, &str) -> Option<String>,
 ) -> Value {
     let mut out: Vec<Value> = Vec::new();
     for e in &domain.enums {
@@ -86,7 +87,7 @@ fn types(
             .find(|v| super::type_ident(&v.id) == e.name);
         let mut decl = enum_decl(e);
         decl["variation"] = json!(variation.map(|v| v.id.clone()));
-        decl["site"] = json!(variation.and_then(|v| at("variation", &v.id)));
+        decl["site"] = json!(variation.and_then(|v| at(Kind::Variation, &v.id)));
         out.push(decl);
     }
     for id in &domain.ids {
@@ -102,7 +103,7 @@ fn types(
             "kind": match r.kind { RecordKind::Entity => "entity", RecordKind::Dto => "dto" },
             "name": r.name,
             "id": r.id,
-            "site": at(match r.kind { RecordKind::Entity => "entity", RecordKind::Dto => "dto" }, &r.id),
+            "site": at(match r.kind { RecordKind::Entity => Kind::Entity, RecordKind::Dto => Kind::Dto }, &r.id),
             "fields": r.fields.iter().map(field).collect::<Vec<_>>(),
         }));
     }

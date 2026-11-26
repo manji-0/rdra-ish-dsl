@@ -45,6 +45,10 @@ use rdra_ish_emit::codegen::ir::{
 use rdra_ish_emit::codegen::{generate, CheckStatus, Lang, Options};
 use serde_json::{json, Map, Value as Json};
 
+#[path = "common/tools.rs"]
+mod tools;
+use tools::{tool, CODEGEN};
+
 // ── Names, as the printers spell them ────────────────────────────────────────
 
 /// PascalCase of an id, as codegen's `type_ident`.
@@ -1380,18 +1384,6 @@ fn go_driver(d: &DomainModel) -> String {
 
 // ── Running ──────────────────────────────────────────────────────────────────
 
-fn go_available() -> bool {
-    let found = Command::new("go").arg("version").output().is_ok();
-    if !found {
-        assert!(
-            std::env::var("RDRA_REQUIRE_CODEGEN_TOOLS").as_deref() != Ok("1"),
-            "go is not on PATH, and RDRA_REQUIRE_CODEGEN_TOOLS=1 requires it; the dev shell provides it"
-        );
-        eprintln!("skipping Go: go is not on PATH");
-    }
-    found
-}
-
 fn scratch(lang: &str, sample: &str) -> PathBuf {
     let name: String = sample
         .chars()
@@ -1612,7 +1604,7 @@ fn agree(pick_sample: impl Fn(&str) -> bool) {
 
 fn agree_on(samples: Vec<String>) {
     let only = std::env::var("RDRA_CODEGEN_SAMPLE").ok();
-    let go = go_available();
+    let go = tool("go", CODEGEN);
     let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
     let mut failures: Vec<String> = Vec::new();
     let mut rust = Tally::default();

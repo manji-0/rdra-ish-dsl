@@ -39,7 +39,9 @@ mod unjoined_writes;
 mod vacuous;
 mod witness;
 
-use super::{Bounds, Caps, Diag, EntityStateResult, Scope, StateDiag, TransitionSystem};
+use super::{
+    Bounds, Built, Caps, Diag, EntId, EntityStateResult, Scope, StateDiag, TransitionSystem,
+};
 use crate::analysis::build_model;
 use crate::model::SemanticModel;
 use rdra_ish_syntax::parse;
@@ -51,6 +53,27 @@ pub(super) fn model_from(src: &str) -> SemanticModel {
     let errs: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
     assert!(errs.is_empty(), "model errors: {errs:?}");
     model
+}
+
+/// What `TransitionSystem::build` makes of `src` at `bounds`, every use case in scope.
+pub(super) fn built_from(src: &str, bounds: Bounds) -> Built {
+    TransitionSystem::build(&model_from(src), bounds, &Scope::ALL)
+}
+
+/// The system `src` builds at `bounds` (`built_from`).
+pub(super) fn system_from(src: &str, bounds: Bounds) -> TransitionSystem {
+    built_from(src, bounds).ts
+}
+
+/// The entity of `ts` declared as `id`.
+pub(super) fn ent(ts: &TransitionSystem, id: &str) -> EntId {
+    ts.entity_ids()
+        .find(|e| ts.entity(*e).id == id)
+        .unwrap_or_else(|| panic!("no entity {id}"))
+}
+
+pub(super) fn names(xs: &[&str]) -> Vec<String> {
+    xs.iter().map(|x| x.to_string()).collect()
 }
 
 pub(super) struct Derived {

@@ -202,11 +202,6 @@ impl Builder<'_> {
             .filter(|(_, fk)| fk.on_delete == Some(RefAction::Cascade))
         {
             let (parent, child) = (self.ent_of[&fk.parent], self.ent_of[&fk.child]);
-            let deletes = |a: &Action, e: EntId| {
-                a.effects.iter().any(|eff| {
-                    matches!(eff, Effect::Delete { param } if a.params[usize::from(*param)].entity == e)
-                })
-            };
             let deleting: Vec<UseCaseKey> = self
                 .ts
                 .actions
@@ -331,11 +326,7 @@ impl Builder<'_> {
             else {
                 continue;
             };
-            let deleted = self.ts.actions.iter().any(|a| {
-                a.effects.iter().any(|eff| {
-                    matches!(eff, Effect::Delete { param } if a.params[usize::from(*param)].entity == p)
-                })
-            });
+            let deleted = self.ts.actions.iter().any(|a| deletes(a, p));
             // A pre-existing child of a created parent starts naming a parent that does not
             // exist yet (`PreExistingChildOfCreatedParent` says so), which no delete causes.
             let birth = |e: EntId| self.ts.entities[e.index()].birth;
@@ -673,4 +664,11 @@ impl Builder<'_> {
         }
         Some(vars)
     }
+}
+
+/// Whether a step of `a` deletes a row of `e`.
+fn deletes(a: &Action, e: EntId) -> bool {
+    a.effects.iter().any(
+        |eff| matches!(eff, Effect::Delete { param } if a.params[usize::from(*param)].entity == e),
+    )
 }

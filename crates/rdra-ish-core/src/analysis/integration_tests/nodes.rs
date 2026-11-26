@@ -35,7 +35,7 @@ fn kind_tag_labels_each_node_ref_kind() {
     for (kind, id, _) in &cases {
         register_instance(
             &mut model,
-            &instance(kind.clone(), id),
+            &instance(*kind, id),
             DiagCtxt::new(0),
             &mut diags,
         );

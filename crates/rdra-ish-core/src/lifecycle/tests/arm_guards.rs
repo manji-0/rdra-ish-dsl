@@ -245,7 +245,7 @@ fn a_capped_cone_leaves_an_untaken_arm_undecided() {
 #[test]
 fn a_scope_that_drops_use_cases_leaves_an_untaken_arm_undecided() {
     use crate::lifecycle::{Bounds, Subject, UndecidedWhy};
-    let built = TransitionSystem::build(&model_from(DOC), Bounds::STATES, &Scope::ALL);
+    let built = built_from(DOC, Bounds::STATES);
     let mut report = built
         .ts
         .explore_targets(&built.ts.targets(), Caps::for_instances(1));

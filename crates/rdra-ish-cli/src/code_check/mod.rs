@@ -22,10 +22,9 @@ use rdra_ish_emit::codegen::ir::{ContractDecl, PortMethod};
 use rdra_ish_emit::codegen::probe::{ContractIndex, Probe};
 
 use crate::cli::CodeLevel;
-use crate::codegen_cmd::{
-    check_code, check_traces, configured_request, generate, shown, stamp, Generated, Loaded,
-    Request,
-};
+use crate::codegen_cmd::{configured_request, generate, Generated, Loaded, Request};
+use crate::generated_file::{check_code, check_traces, stamp};
+use crate::paths::shown;
 use map::{map_messages, CompilerMessage, Finding, Mapping};
 
 /// One finding of the code check, printed as `error[Name]: message` with the model location,
@@ -390,24 +389,11 @@ pub(crate) fn run(inputs: &[PathBuf], manifest: &Manifest, level: CodeLevel) -> 
         if !roots.contains(&root) {
             roots.push(root);
         }
+        let extra = backend.extra_files(&t);
         generated_files.push(t.path(&target.domain));
         generated_files.extend(target.traces.as_ref().map(|p| t.path(p)));
-        generated_files.extend(backend.extra_files(&t).into_iter().map(|(p, _)| t.path(&p)));
-        let mut fresh = true;
-        fresh &= compare(&t.path(&target.domain), |p| {
-            check_code(p, &t.generated.code, &t.generated.model_hash)
-        })?;
-        if let (Some(path), Some((text, _))) = (&target.traces, &t.generated.traces) {
-            fresh &= compare(&t.path(path), |p| {
-                check_traces(p, text, &t.generated.model_hash)
-            })?;
-        }
-        for (path, text) in backend.extra_files(&t) {
-            fresh &= compare(&t.path(&path), |p| {
-                check_code(p, &text, &t.generated.model_hash)
-            })?;
-        }
-        if !fresh {
+        generated_files.extend(extra.iter().map(|(p, _)| t.path(p)));
+        if !fresh(&t, &extra)? {
             failed += 1;
             eprintln!(
                 "  generate them again: rdra-ish codegen {} --code",
@@ -495,6 +481,22 @@ pub(crate) fn run(inputs: &[PathBuf], manifest: &Manifest, level: CodeLevel) -> 
     }
     println!("OK: code: what the model requires, at --code={level_name}");
     Ok(true)
+}
+
+/// `fresh`: whether the domain code, the traces and the `extra` files of `t` are what the
+/// model generates; prints each difference on stderr.
+fn fresh(t: &Target<'_>, extra: &[(PathBuf, String)]) -> Result<bool> {
+    let hash = &t.generated.model_hash;
+    let mut fresh = compare(&t.path(&t.target.domain), |p| {
+        check_code(p, &t.generated.code, hash)
+    })?;
+    if let (Some(path), Some((text, _))) = (&t.target.traces, &t.generated.traces) {
+        fresh &= compare(&t.path(path), |p| check_traces(p, text, hash))?;
+    }
+    for (path, text) in extra {
+        fresh &= compare(&t.path(path), |p| check_code(p, text, hash))?;
+    }
+    Ok(fresh)
 }
 
 /// Runs `check` on `path`, or reports that the file is missing.

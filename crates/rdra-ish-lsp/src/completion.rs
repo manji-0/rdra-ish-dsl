@@ -63,7 +63,7 @@ pub fn completion_items(model: &SemanticModel, source: &str, offset: usize) -> V
 
         for (kind, id, _) in model.decl_sites.iter() {
             if let Some(kinds) = &allowed_kinds {
-                if !kinds.contains(&kind) {
+                if !kinds.contains(&kind.name()) {
                     continue;
                 }
             }
@@ -71,7 +71,7 @@ pub fn completion_items(model: &SemanticModel, source: &str, offset: usize) -> V
                 items.push(CompletionItem {
                     label: id.to_string(),
                     kind: Some(CompletionItemKind::REFERENCE),
-                    detail: Some(kind.to_string()),
+                    detail: Some(kind.name().to_string()),
                     ..Default::default()
                 });
             }
