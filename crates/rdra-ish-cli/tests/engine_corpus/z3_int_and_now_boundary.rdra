@@ -12,7 +12,7 @@
 //   engines start it at 0, the base value, and `now` starts at 0 too. z3 proves it and BFS
 //   finds nothing: the two encodings read the same Init.
 // expect Forbidden_Item_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
-// expect Forbidden_Item_1: native=counterexample tlc=counterexample z3=unproved bfs=counterexample,counterexample,counterexample
+// expect Forbidden_Item_1: native=counterexample tlc=counterexample z3=refuted bfs=counterexample,counterexample,counterexample
 // expect Forbidden_Coupon_2: native=ok tlc=ok z3=unproved bfs=ok,ok,ok
 // expect Forbidden_Coupon_3: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 entity Item "商品" { id: Int @pk  stock: Int @default("1") }

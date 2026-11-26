@@ -4,6 +4,14 @@
 
 ### Changed
 
+- `verify --prove` (experimental) leaves out of the proof each state rule BFS violated in
+  the same run (#421). The rule prints `refuted: <rule> (BFS counterexample at <n>
+  instances)` with no counterexample to induction, the `proof:` lines end with `, <n>
+  refuted` when there are any, and `--deny-unproved` does not count it, since BFS already
+  fails the run. The other rules get the verdicts they got before; the CTI rows and the
+  `lemma:` lines may differ, since a refuted rule no longer starts the pass with the fine
+  lemmas. On insurance-claim-ops with one rule broken, `--prove` adds about 9 s instead
+  of 24 s (`RDRA_JOBS=4`). The engine corpus records such a rule as `z3=refuted`.
 - `check --code=build` for Rust and TypeScript counts a use case's missing members across
   the compiler's messages, as it does for Go: when the messages together miss every member
   of the contract, the finding is `CodeMissingUseCase_*`, not `CodeIncomplete_*`. One

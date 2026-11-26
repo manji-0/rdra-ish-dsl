@@ -7,9 +7,9 @@
 // sized every entity by one count would find no Loan pair, or a Member pair, or give the
 // booking's owner one value.
 // flags: --instance-count 1 --instances Loan=3 --instances Room=3
-// expect Unique_Loan_tag: native=counterexample tlc=counterexample z3=unproved
+// expect Unique_Loan_tag: native=counterexample tlc=counterexample z3=refuted
 // expect Unique_Member_tag: native=ok tlc=ok z3=unproved
-// expect Unique_Room_tag: native=counterexample tlc=counterexample z3=unproved
+// expect Unique_Room_tag: native=counterexample tlc=counterexample z3=refuted
 // expect Unique_Booking_tag: native=ok tlc=ok z3=unproved
 entity Member "会員" {
   id: Int @pk

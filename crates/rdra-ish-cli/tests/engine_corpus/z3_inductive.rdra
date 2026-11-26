@@ -3,7 +3,7 @@
 // reachable state, for any number of rows. The second rule is a real violation (Ship does
 // not need an approval), so z3 must not prove it and BFS finds it at every bound.
 // expect Forbidden_Order_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
-// expect Forbidden_Order_1: native=counterexample tlc=counterexample z3=unproved bfs=counterexample,counterexample,counterexample
+// expect Forbidden_Order_1: native=counterexample tlc=counterexample z3=refuted bfs=counterexample,counterexample,counterexample
 entity Order "注文" {
   id: Int @pk
   status: Enum(pending, packed, shipped) @default(pending)

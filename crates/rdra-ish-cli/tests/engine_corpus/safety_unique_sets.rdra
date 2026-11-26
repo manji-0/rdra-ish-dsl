@@ -6,8 +6,8 @@
 // `seat` is a nullable Int nothing sets: two passes without a seat agree on null, which SQL
 // counts as distinct, so an engine that compared nulls as values would find a violation. At
 // one instance per entity no rule has two rows to compare, so BFS passes all of them there.
-// expect Unique_Badge_color: native=counterexample tlc=counterexample z3=unproved bfs=ok,counterexample,counterexample
-// expect Unique_Enrollment_course_id_student_id: native=counterexample tlc=counterexample z3=unproved bfs=ok,counterexample,counterexample
+// expect Unique_Badge_color: native=counterexample tlc=counterexample z3=refuted bfs=ok,counterexample,counterexample
+// expect Unique_Enrollment_course_id_student_id: native=counterexample tlc=counterexample z3=refuted bfs=ok,counterexample,counterexample
 // expect Unique_Booking_room_id_slot: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 // expect Unique_Pass_seat: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 // expect Forbidden_Pass_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok

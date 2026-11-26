@@ -14,13 +14,13 @@
 // (Forbidden_Box_6), since nothing sets a Box's qty back to null.
 // expect Forbidden_Item_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 // expect Forbidden_Item_1: native=ok tlc=ok z3=proved bfs=ok,ok,ok
-// expect Forbidden_Item_2: native=counterexample tlc=counterexample z3=unproved
+// expect Forbidden_Item_2: native=counterexample tlc=counterexample z3=refuted
 // expect Forbidden_Item_3: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 // expect Forbidden_Item_4: native=ok tlc=ok z3=proved bfs=ok,ok,ok
-// expect Forbidden_Item_5: native=counterexample tlc=counterexample z3=unproved
+// expect Forbidden_Item_5: native=counterexample tlc=counterexample z3=refuted
 // expect Required_Item_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 // expect Forbidden_Box_6: native=ok tlc=ok z3=proved bfs=ok,ok,ok
-// expect Forbidden_Box_7: native=counterexample tlc=counterexample z3=unproved
+// expect Forbidden_Box_7: native=counterexample tlc=counterexample z3=refuted
 entity Item "品目" {
   id: Int @pk
   qty: Int @null

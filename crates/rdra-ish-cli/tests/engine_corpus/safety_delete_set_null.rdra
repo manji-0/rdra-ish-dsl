@@ -6,9 +6,9 @@
 // orphaned after Open, AddLine, Attach, CancelDraft, and Forbidden_OrderLine_0 fails. The
 // key gets no DanglingKey_* rule: the engine does not run the set_null. An engine that put
 // the restrict guard on a set_null key would never run CancelDraft while the line names the
-// Order and would answer ok. z3 meets the same step from a state where the rule holds, so
-// the rule is unproved.
-// expect Forbidden_OrderLine_0: native=counterexample tlc=counterexample z3=unproved
+// Order and would answer ok. BFS refutes the rule, so the proof does not try it;
+// proof_equivalence checks that z3 would not prove it.
+// expect Forbidden_OrderLine_0: native=counterexample tlc=counterexample z3=refuted
 entity Order "注文" { id: Int @pk }
 entity OrderLine "明細" { id: Int @pk  orphaned: Bool @default(false) }
 relate(OrderLine, Order, N:1).optional().on_delete(set_null)

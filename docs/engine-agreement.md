@@ -45,7 +45,9 @@ case, whatever the case's header says.
 **Native against z3**, on `verify --prove` and BFS at 1, 2, and 3 instances:
 
 4. If z3 proves a state rule, BFS finds no violation of it at any tested bound.
-5. If BFS finds a violation, z3 does not prove the rule.
+5. If BFS finds a violation, z3 does not prove the rule. A rule BFS violates at the run's
+   bounds is not tried: the run prints `refuted:` for it, and the case records `z3=refuted`
+   with `native=counterexample`, and only with it.
 6. A z3 counterexample to induction (CTI) is no disagreement by itself: the induction may be
    too weak, and the CTI's state need not be reachable. The case records `z3=unproved`.
 
@@ -115,7 +117,7 @@ free text that explains the trap.
   verdict for the check: for `tlc`, a form TLC does not check or a deadlock TLC does not
   report; for `native`, a check that should not exist, such as a rule a build error stops, or a
   deadlock BFS reports only as a warning.
-- `<Z>` is `proved`, `unproved`, or `out_of_scope`. Every state rule `--prove` reports needs a
+- `<Z>` is `proved`, `unproved`, `out_of_scope`, or `refuted`. Every state rule `--prove` reports needs a
   `z3=`, and `z3=proved` also needs `bfs=`.
 - `bfs=` lists the native verdicts at 1, 2, and 3 instances per entity, and at 4 with a fourth
   entry. The second entry equals `native=`. The harness runs 1 and 3 instances only for a case

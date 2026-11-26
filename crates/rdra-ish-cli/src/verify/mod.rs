@@ -30,6 +30,7 @@ mod end;
 mod jobs;
 mod native;
 mod plan;
+mod refuted;
 mod report;
 mod schedule;
 mod shared;
@@ -328,7 +329,9 @@ pub fn run(
             (Some(Prove { deny_unproved, .. }), Some(z3)) => z3.and_then(|z3| {
                 let marks = Marks::of(model, &ts);
                 let twin = rdra_ish_core::lifecycle::prove::mining_twin(model, scope, &ts);
-                run_proof(&ts, twin.as_ref(), &selection, &marks, &z3, *deny_unproved).map(Some)
+                let refuted = refuted::refuted(&ts, &jobs, &safety);
+                let (twin, deny) = (twin.as_ref(), *deny_unproved);
+                run_proof(&ts, twin, &selection, &marks, &refuted, &z3, deny).map(Some)
             }),
             _ => Ok(None),
         };

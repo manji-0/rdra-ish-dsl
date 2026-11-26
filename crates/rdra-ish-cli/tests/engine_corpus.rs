@@ -70,6 +70,8 @@ enum Z3 {
     Proved,
     Unproved,
     OutOfScope,
+    /// BFS violated the rule at the run's bounds, so the proof did not try it.
+    Refuted,
 }
 
 impl Z3 {
@@ -78,6 +80,7 @@ impl Z3 {
             "proved" => Z3::Proved,
             "unproved" => Z3::Unproved,
             "out_of_scope" => Z3::OutOfScope,
+            "refuted" => Z3::Refuted,
             _ => return None,
         })
     }
@@ -89,6 +92,7 @@ impl fmt::Display for Z3 {
             Z3::Proved => "proved",
             Z3::Unproved => "unproved",
             Z3::OutOfScope => "out_of_scope",
+            Z3::Refuted => "refuted",
         })
     }
 }
@@ -272,6 +276,14 @@ fn parse_case(path: &Path) -> Result<Case, String> {
         }
         if e.bfs.as_ref().is_some_and(|b| b[1] != e.native) {
             return Err(format!("{check}: bfs at 2 instances differs from native"));
+        }
+        // The proof leaves out each rule BFS refutes at the run's bounds, and only those.
+        if e.z3
+            .is_some_and(|z| (z == Z3::Refuted) != (e.native == V::Counterexample))
+        {
+            return Err(format!(
+                "{check}: z3=refuted goes with native=counterexample, and only with it"
+            ));
         }
         if e.z3 == Some(Z3::Proved) && e.bfs.is_none() {
             return Err(format!(
@@ -490,6 +502,8 @@ impl Observed {
                 out.z3.insert(rule_name(rest), Z3::Unproved);
             } else if let Some(rest) = line.strip_prefix("out of scope: ") {
                 out.z3.insert(rule_name(rest), Z3::OutOfScope);
+            } else if let Some(rest) = line.strip_prefix("refuted: ") {
+                out.z3.insert(rule_name(rest), Z3::Refuted);
             }
         }
         out.panics = stderr

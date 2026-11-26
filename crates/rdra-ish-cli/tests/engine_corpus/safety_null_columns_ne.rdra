@@ -4,9 +4,10 @@
 // no comparison with a column and satisfies every `!=`, as the SQL CHECKs read it: qty !=
 // lim holds and qty == lim fails on the new row, so Make breaks both rules in its first
 // step. An engine that read null == null as true would answer ok for both and z3 would
-// prove them. z3 meets the same Make step, so both are unproved.
-// expect Forbidden_Item_0: native=counterexample tlc=counterexample z3=unproved
-// expect Required_Item_0: native=counterexample tlc=counterexample z3=unproved
+// prove them. BFS refutes both, so the proof does not try them; proof_equivalence checks
+// that z3 would not prove them.
+// expect Forbidden_Item_0: native=counterexample tlc=counterexample z3=refuted
+// expect Required_Item_0: native=counterexample tlc=counterexample z3=refuted
 entity Item "品目" {
   id: Int @pk
   qty: Int @null

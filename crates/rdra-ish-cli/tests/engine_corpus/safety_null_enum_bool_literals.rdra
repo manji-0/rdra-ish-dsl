@@ -10,16 +10,16 @@
 // fails after Make, and dk == false never holds because k is never blue. A broken shift of
 // the declared values past the null would break the defaults (Required_Item_1/2) or the set
 // that names null (Required_Item_0).
-// expect Forbidden_Item_0: native=counterexample tlc=counterexample z3=unproved
+// expect Forbidden_Item_0: native=counterexample tlc=counterexample z3=refuted
 // expect Forbidden_Item_1: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 // expect Forbidden_Item_2: native=ok tlc=ok z3=proved bfs=ok,ok,ok
-// expect Forbidden_Item_3: native=counterexample tlc=counterexample z3=unproved
+// expect Forbidden_Item_3: native=counterexample tlc=counterexample z3=refuted
 // expect Forbidden_Item_4: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 // expect Forbidden_Item_5: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 // expect Required_Item_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 // expect Required_Item_1: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 // expect Required_Item_2: native=ok tlc=ok z3=proved bfs=ok,ok,ok
-// expect Required_Item_3: native=counterexample tlc=counterexample z3=unproved
+// expect Required_Item_3: native=counterexample tlc=counterexample z3=refuted
 // expect Unique_Tag_color: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 entity Item "品目" {
   id: Int @pk

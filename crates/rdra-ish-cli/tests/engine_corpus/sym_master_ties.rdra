@@ -6,7 +6,7 @@
 // instance symmetry the tied doctors that a visit names are the ones the canonical form must
 // try in each order, since the visits read their places; the ones no visit names give the
 // same form in any order and must not multiply the branches.
-// expect MultiForbidden_Visit_0: native=counterexample tlc=counterexample z3=unproved
+// expect MultiForbidden_Visit_0: native=counterexample tlc=counterexample z3=refuted
 // expect Deadlock_Visit_status_booked: native=counterexample tlc=counterexample
 entity Doctor "医師" {
   id: Int @pk

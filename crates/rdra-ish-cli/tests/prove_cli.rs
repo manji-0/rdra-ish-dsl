@@ -55,8 +55,14 @@ fn a_rule_that_breaks_at_two_rows_is_unproved_with_its_step() {
     if !tool("z3", "RDRA_REQUIRE_Z3") {
         return;
     }
-    // `check` passes at one instance; Ship and Reship link two Shipments to one Order.
-    let out = verify(&["--prove", &sample("one_to_one_shared")]);
+    // `check` passes at one instance; Ship and Reship link two Shipments to one Order. At
+    // one instance BFS finds no violation, so the proof tries the rule.
+    let out = verify(&[
+        "--prove",
+        "--instance-count",
+        "1",
+        &sample("one_to_one_shared"),
+    ]);
     let stdout = String::from_utf8_lossy(&out.stdout);
     let line = stdout
         .lines()
@@ -67,6 +73,42 @@ fn a_rule_that_breaks_at_two_rows_is_unproved_with_its_step() {
         stdout.lines().any(|l| l.starts_with("  Shipment#")),
         "the CTI names its rows\n{stdout}"
     );
+}
+
+#[test]
+fn a_rule_bfs_refutes_is_not_tried_and_the_others_are() {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    // At two instances BFS violates the rule, so the proof prints no CTI for it.
+    let out = verify(&["--prove", &sample("one_to_one_shared")]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("\nrefuted: Unique_Shipment_Order (BFS counterexample at 2 instances)\n"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("\nproof: 0 proved, 0 unproved, 0 out of scope, 1 refuted\n"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("not inductive"), "{stdout}");
+    // Forbidden_Order_1 is a real violation and Forbidden_Order_0 is inductive: the one is
+    // refuted, the other still proved, and --deny-unproved counts neither.
+    let out = verify(&["--prove", "--deny-unproved", &corpus("z3_inductive")]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(1), "{stderr}");
+    assert!(stdout.contains("\nproved: Forbidden_Order_0\n"), "{stdout}");
+    assert!(
+        stdout.contains("\nrefuted: Forbidden_Order_1 (BFS counterexample at 2 instances)\n"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("\nproof: 1 proved, 0 unproved, 0 out of scope, 1 refuted\n"),
+        "{stdout}"
+    );
+    assert!(stderr.contains("error[Forbidden_Order_1]"), "{stderr}");
+    assert!(!stderr.contains("unproved"), "{stderr}");
 }
 
 #[test]
@@ -279,8 +321,14 @@ fn a_cti_shows_the_run_mark_its_step_reads() {
         return;
     }
     // Pay runs in two steps; step 1 reads and sets the Payment's run mark, which no view
-    // column shows. The CTI prints it before the step as well as after.
-    let out = verify(&["--prove", &sample("cross_order_payment_split")]);
+    // column shows. The CTI prints it before the step as well as after. BFS reaches the
+    // violation within 31 states, which would leave the rule untried, so a cap stops it first.
+    let out = verify(&[
+        "--prove",
+        "--max-states",
+        "3",
+        &sample("cross_order_payment_split"),
+    ]);
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
         stdout

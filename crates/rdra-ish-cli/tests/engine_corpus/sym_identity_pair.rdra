@@ -5,7 +5,7 @@
 // of one class; a group that sorted the accounts and the balances apart would store an
 // initial state whose balances name other slots, which is no initial state, and the lifted
 // counterexample would not start where the model starts.
-// expect MultiForbidden_Account_0: native=counterexample tlc=counterexample z3=unproved
+// expect MultiForbidden_Account_0: native=counterexample tlc=counterexample z3=refuted
 // expect Unique_Balance_Account: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 variation Tier "等級" {
   basic "一般"
