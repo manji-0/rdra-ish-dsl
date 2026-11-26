@@ -2,7 +2,7 @@
 //! which drives a port along the traces `conformance::traces` writes.
 
 use super::conformance::TRACES_FORMAT;
-use super::ir::{DomainModel, Field, FieldType, PortArg, PortMethod, Scalar, Track};
+use super::ir::{DomainModel, Field, FieldType, PortArg, PortDecl, PortMethod, Scalar, Track};
 use super::rust::{doc, field_type, ident, OPTION, STRING};
 use super::snake;
 use super::string_literal;
@@ -18,6 +18,16 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
     if !port.harness {
         return;
     }
+    print_snapshot(port, out);
+    print_port_trait(port, out);
+    print_conform(port, out);
+    print_calls(domain, port, out);
+    print_seed_rows(port, out);
+    print_abstraction(port, out);
+}
+
+/// The run marks and `StoreSnapshot`: everything a store holds, as the harness reads it.
+fn print_snapshot(port: &PortDecl, out: &mut String) {
     out.push_str(
         "// ── Conformance: the port a finished service implements, and the harness that drives it ──\n\n",
     );
@@ -61,7 +71,10 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
         ));
     }
     out.push_str("}\n\n");
+}
 
+/// `ConformancePort`, what a finished service offers the harness, and `ConformanceReport`.
+fn print_port_trait(port: &PortDecl, out: &mut String) {
     out.push_str("/// What a finished service offers the conformance harness: every use case's contract, and\n/// a store the harness can seed and read back.\n");
     let supers: Vec<&str> = port.contracts.iter().map(|c| c.name.as_str()).collect();
     let bound = if supers.is_empty() {
@@ -81,6 +94,10 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
     out.push_str("/// What `conform` checked.\n");
     out.push_str("#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]\n");
     out.push_str("pub struct ConformanceReport {\n    /// The traces run.\n    pub traces: usize,\n    /// The calls the model runs, made.\n    pub calls: usize,\n    /// The calls the model refuses, made and refused.\n    pub refusals: usize,\n    /// The commits after another call changed a row they write, refused.\n    pub interleavings: usize,\n}\n\n");
+}
+
+/// `conform`, which drives a fresh port per trace, and the helpers it shares with every model.
+fn print_conform(port: &PortDecl, out: &mut String) {
     out.push_str("/// A prepared write of any use case.\nenum ConfWrite {\n");
     for m in &port.methods {
         out.push_str(&format!("    {}({}),\n", m.name, m.write));
@@ -228,7 +245,10 @@ where
         format = string_literal(TRACES_FORMAT),
         FMT = "::core::fmt",
     ));
+}
 
+/// The calls: `conf_prepare` reads a call's values and prepares it; `conf_commit` commits it.
+fn print_calls(domain: &DomainModel, port: &PortDecl, out: &mut String) {
     // The calls.
     out.push_str(&format!(
         "#[allow(unused_mut, unused_variables)] // a model whose calls take no values reads none\nfn conf_prepare<P: ConformancePort>(conf_port: &mut P, call: &[&str]) -> {RESULT}<{RESULT}<ConfWrite, {STRING}>, {STRING}> {{\n"
@@ -300,7 +320,10 @@ where
         ));
     }
     out.push_str("    }\n}\n\n");
+}
 
+/// `conf_seed_row`: the rows of an initial state.
+fn print_seed_rows(port: &PortDecl, out: &mut String) {
     // The rows of an initial state.
     out.push_str(&format!(
         "#[allow(unused_mut)] // an entity of one column takes it without advancing\nfn conf_seed_row(seed: &mut StoreSnapshot, toks: &[&str]) -> {RESULT}<(), {STRING}> {{\n"
@@ -325,7 +348,10 @@ where
     out.push_str(&format!(
         "        other => return {RESULT}::Err(format!(\"no entity {{other}} in this port\")),\n    }}\n    {RESULT}::Ok(())\n}}\n\n"
     ));
+}
 
+/// `conf_abstract`: the store as the traces spell a state.
+fn print_abstraction(port: &PortDecl, out: &mut String) {
     // The abstraction.
     out.push_str(&format!(
         "/// The store as the traces spell a state: one line per row with the columns the model\n/// tracks, per pending run mark, and per raise a triggered use case reads; sorted.\n#[allow(unused_mut)]\nfn conf_abstract(s: &StoreSnapshot) -> {VEC}<{STRING}> {{\n    let mut out: {VEC}<{STRING}> = {VEC}::new();\n"

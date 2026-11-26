@@ -264,6 +264,25 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
         return;
     }
     let mut p = String::new();
+    let fields = print_snapshot(port, &mut p);
+    print_port_trait(port, &mut p);
+    print_conform(port, &fields, &mut p);
+    print_calls(domain, port, &mut p);
+    print_seed_rows(domain, port, &mut p);
+    print_abstraction(port, &mut p);
+
+    // Only the readers a call or a row uses, for `noUnusedLocals`.
+    for (name, text) in CONF_READERS {
+        if p.contains(name) {
+            p.push_str(text);
+        }
+    }
+    out.push_str(&p);
+}
+
+/// The run marks and `StoreSnapshot`: everything a store holds, as the harness reads it.
+/// Returns the snapshot's fields, `(property, row type)`.
+fn print_snapshot(port: &PortDecl, p: &mut String) -> Vec<(String, String)> {
     p.push_str(
         "// ── Conformance: the port a finished service implements, and the harness that drives it ──\n\n",
     );
@@ -299,7 +318,11 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
         p.push_str(&format!("  {f}: readonly {ty}[];\n"));
     }
     p.push_str("}>;\n\n");
+    fields
+}
 
+/// `ConformancePort`, what a finished service offers the harness, and `ConformanceReport`.
+fn print_port_trait(port: &PortDecl, p: &mut String) {
     p.push_str(&doc(
         &[
             "What a finished service offers the conformance harness: `seed` empties the store and stores".to_string(),
@@ -316,7 +339,11 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
 
     p.push_str(&doc1("What `conform` checked."));
     p.push_str("export type ConformanceReport = Readonly<{ traces: number; calls: number; refusals: number; interleavings: number }>;\n\n");
+}
 
+/// `conform`, which drives a fresh port per trace, and the helpers it shares with every model.
+/// `fields` are the snapshot's, as `print_snapshot` returns them.
+fn print_conform(port: &PortDecl, fields: &[(String, String)], p: &mut String) {
     // A prepared write of any use case.
     p.push_str("type $ConfWrite =\n");
     if port.methods.is_empty() {
@@ -335,7 +362,7 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
         p.push('\n');
     }
     p.push_str("type $ConfStore = {\n");
-    for (f, ty) in &fields {
+    for (f, ty) in fields {
         p.push_str(&format!("  {f}: {ty}[];\n"));
     }
     p.push_str("};\n\n");
@@ -558,7 +585,10 @@ function $confArg<T>(values: readonly string[], i: number, read: (text: string) 
             .collect::<Vec<_>>()
             .join(", "),
     ));
+}
 
+/// The calls: `$confPrepare` reads a call's values and prepares it; `$confCommit` commits it.
+fn print_calls(domain: &DomainModel, port: &PortDecl, p: &mut String) {
     // The calls.
     p.push_str("async function $confPrepare(port: ConformancePort, call: readonly string[]): Promise<Result<Result<$ConfWrite, unknown>, string>> {\n");
     p.push_str("  const [action, ...values] = call;\n  switch (action) {\n");
@@ -588,22 +618,22 @@ function $confArg<T>(values: readonly string[], i: number, read: (text: string) 
         };
         for a in m.args() {
             let value = match a {
-                PortArg::Id(a) => arg(&mut p, reader(domain, &FieldType::Id(a.ty.clone()), false)),
+                PortArg::Id(a) => arg(&mut *p, reader(domain, &FieldType::Id(a.ty.clone()), false)),
                 PortArg::Event(a) => {
                     let event = domain.events.iter().find(|e| e.name == a.ty);
                     let mut parts = vec![format!("kind: {}", string_literal(&a.ty))];
                     for f in event.map(|e| e.fields.clone()).unwrap_or_default() {
                         let v = arg(
-                            &mut p,
+                            &mut *p,
                             reader(domain, &FieldType::Id(f.id_ty.clone()), false),
                         );
                         parts.push(format!("{}: {v}", property(&f.name)));
                     }
                     format!("{{ {} }}", parts.join(", "))
                 }
-                PortArg::Input(i) => arg(&mut p, reader(domain, &i.ty, i.nullable)),
+                PortArg::Input(i) => arg(&mut *p, reader(domain, &i.ty, i.nullable)),
                 PortArg::Choice(a) => arg(
-                    &mut p,
+                    &mut *p,
                     reader(domain, &FieldType::Enum(a.ty.clone()), false),
                 ),
             };
@@ -627,7 +657,10 @@ function $confArg<T>(values: readonly string[], i: number, read: (text: string) 
         ));
     }
     p.push_str("    default:\n      return assertNever(action);\n  }\n}\n\n");
+}
 
+/// `$confSeedRow`: the rows of an initial state.
+fn print_seed_rows(domain: &DomainModel, port: &PortDecl, p: &mut String) {
     // The rows of an initial state.
     p.push_str("function $confSeedRow(seed: $ConfStore, toks: readonly string[]): Result<void, string> {\n");
     p.push_str("  const [entity, ...values] = toks;\n  switch (entity) {\n");
@@ -648,7 +681,10 @@ function $confArg<T>(values: readonly string[], i: number, read: (text: string) 
         ));
     }
     p.push_str("    default:\n      return { ok: false, error: `no entity ${entity ?? \"\"} in this port` };\n  }\n}\n\n");
+}
 
+/// `$confAbstract`: the store as the traces spell a state.
+fn print_abstraction(port: &PortDecl, p: &mut String) {
     // The abstraction.
     p.push_str(&doc(
         &[
@@ -698,14 +734,6 @@ function $confArg<T>(values: readonly string[], i: number, read: (text: string) 
         p.push_str("  }\n");
     }
     p.push_str("  return out;\n}\n\n");
-
-    // Only the readers a call or a row uses, for `noUnusedLocals`.
-    for (name, text) in CONF_READERS {
-        if p.contains(name) {
-            p.push_str(text);
-        }
-    }
-    out.push_str(&p);
 }
 
 /// The readers of the traces' text that only some ports use.
