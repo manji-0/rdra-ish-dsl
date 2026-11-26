@@ -16,13 +16,94 @@ mod tools;
 use tools::tool;
 
 fn verify(args: &[&str]) -> Output {
+    let cache = Path::new(env!("CARGO_TARGET_TMPDIR")).join("prove_cli_cache");
+    verify_cached(args, &cache)
+}
+
+/// `verify`, with the proof's certificates kept under `cache` (`XDG_CACHE_HOME`).
+fn verify_cached(args: &[&str], cache: &Path) -> Output {
     Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
         .current_dir(repo())
         .env_remove("RDRA_Z3")
+        .env_remove("RDRA_ISH_NO_PROOF_CACHE")
+        .env("XDG_CACHE_HOME", cache)
         .arg("verify")
         .args(args)
         .output()
         .expect("rdra-ish runs")
+}
+
+/// What a run printed, and how it exited.
+fn printed(out: Output) -> (Option<i32>, Vec<u8>, Vec<u8>) {
+    (out.status.code(), out.stdout, out.stderr)
+}
+
+/// The proof keeps its certificate under the user's cache directory and offers it to the next
+/// run, which re-checks it: the run prints the same, byte for byte, with no cache, a fresh
+/// one, its own certificate, a damaged file, and another model's certificate.
+/// `RDRA_ISH_NO_PROOF_CACHE` writes none.
+#[test]
+fn a_cached_certificate_changes_nothing_a_run_prints() {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("prove_cli_certificate");
+    let proofs = dir.join("rdra-ish").join("proofs");
+    let files = || -> Vec<std::path::PathBuf> {
+        match std::fs::read_dir(&proofs) {
+            Ok(entries) => entries.map(|e| e.unwrap().path()).collect(),
+            Err(_) => Vec::new(),
+        }
+    };
+    let mut certificates = Vec::new();
+    for name in ["check_met", "check_unmet"] {
+        let _ = std::fs::remove_dir_all(&dir);
+        let args = ["--prove", &sample(name)];
+        let off = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+            .current_dir(repo())
+            .env_remove("RDRA_Z3")
+            .env("RDRA_ISH_NO_PROOF_CACHE", "1")
+            .env("XDG_CACHE_HOME", &dir)
+            .arg("verify")
+            .args(args)
+            .output()
+            .expect("rdra-ish runs");
+        assert!(files().is_empty(), "{name}: {:?}", files());
+        let expected = printed(off);
+        assert_eq!(
+            printed(verify_cached(&args, &dir)),
+            expected,
+            "{name}: fresh"
+        );
+        let written = files();
+        assert_eq!(written.len(), 1, "{name}: {written:?}");
+        let file = &written[0];
+        let text = std::fs::read_to_string(file).unwrap();
+        assert!(text.starts_with("rdra-ish proof certificate 1\n"), "{text}");
+        assert_eq!(
+            printed(verify_cached(&args, &dir)),
+            expected,
+            "{name}: reused"
+        );
+        assert_eq!(std::fs::read_to_string(file).unwrap(), text, "{name}");
+        // Damaged: a kept index past the candidates, a check line that does not match, or
+        // not a certificate at all. Each is refused and written over.
+        let damaged = [
+            text.replacen("kept", "kept 999999", 1),
+            text.replacen("check ", "check 0", 1),
+            "\u{0}garbage".to_string(),
+        ];
+        for damaged in damaged.into_iter().chain(certificates.pop()) {
+            std::fs::write(file, &damaged).unwrap();
+            assert_eq!(
+                printed(verify_cached(&args, &dir)),
+                expected,
+                "{name}: {damaged}"
+            );
+            assert_eq!(std::fs::read_to_string(file).unwrap(), text, "{name}");
+        }
+        certificates.push(text);
+    }
 }
 
 fn sample(name: &str) -> String {

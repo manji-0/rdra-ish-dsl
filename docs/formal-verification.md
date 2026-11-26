@@ -570,7 +570,12 @@ busy machine and an idle one. The rounds that find the inductive set run z3 with
 instantiation (MBQI), which settles the checks that keep a rule several times faster; the
 counterexamples to induction are then found with it on. A rule z3 gives up on is `unproved` with
 `z3 gave up on <action>`. The checks are shared out over several z3 processes (`RDRA_JOBS`); the result does
-not depend on how many. The proof starts once BFS has decided the safety cones and runs beside the property
+not depend on how many. The set a proof keeps is stored under the user's cache directory as a certificate. When
+the next run encodes the same rounds (the same z3 and rdra-ish versions, rules, lemmas, and steps), it offers
+the certificate first and checks it again in one round: every candidate in it holds initially and no step
+breaks one from a state where all of them hold. A certificate that passes and holds every rule is the proof;
+any other costs that round, and the proof runs from the start. A cached verdict is never trusted, and the
+output is the same either way. The proof starts once BFS has decided the safety cones and runs beside the property
 and whole-model passes; its lines print where they would after them. Each z3 process takes
 about 0.3 to 0.5 GiB that `--memory` does not count
 ([Memory, state caps, and threads](#memory-state-caps-and-threads)).

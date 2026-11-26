@@ -122,15 +122,24 @@ pub(crate) fn run_proof(
         .map(|_| Z3::start(binary))
         .collect::<Result<Vec<_>, _>>()?;
     let skip: BTreeSet<usize> = refuted.keys().copied().collect();
-    let proof = prove::prove(
+    let cache = certificate::file(ts, &rules);
+    let offer = cache
+        .as_deref()
+        .and_then(|file| certificate::read(file, &version));
+    let certified = prove::prove_offered(
         ts,
         twin,
         &rules,
         &skip,
         &mut solvers,
         ProveOptions::default(),
+        offer.as_ref(),
     )
     .map_err(|e| anyhow::anyhow!("z3 failed: {e}"))?;
+    if let (Some(file), false) = (&cache, offer.as_ref() == Some(&certified.certificate)) {
+        certificate::write(file, &version, &certified.certificate);
+    }
+    let proof = certified.proof;
     let (yours, rules): (Vec<&RuleProof>, Vec<&RuleProof>) =
         proof.rules.iter().partition(|r| lemmas.contains(&r.inv));
     let count =
@@ -259,6 +268,87 @@ fn print_verdict(
             for row in &cti.rows {
                 out!(text, "  {row}");
             }
+        }
+    }
+}
+
+/// Where the proof keeps its certificate between runs (`prove::Certificate`, #421): one file
+/// per model and rule selection, under the user's cache directory, never in the project. A
+/// missing, damaged, or stale file only costs the round that re-checks it; the proof's lines
+/// are the same with it or without. `RDRA_ISH_NO_PROOF_CACHE` set turns it off.
+mod certificate {
+    use std::path::{Path, PathBuf};
+
+    use rdra_ish_core::fingerprint;
+    use rdra_ish_core::lifecycle::prove::Certificate;
+    use rdra_ish_core::lifecycle::TransitionSystem;
+
+    const HEADER: &str = "rdra-ish proof certificate 1";
+
+    /// `$XDG_CACHE_HOME/rdra-ish/proofs`, else the platform's cache directory, with a file
+    /// named by the hash of the model's rule names and the rules asked. Two models with the
+    /// same names share it; the digest inside tells them apart.
+    pub(super) fn file(ts: &TransitionSystem, rules: &[usize]) -> Option<PathBuf> {
+        if std::env::var_os("RDRA_ISH_NO_PROOF_CACHE").is_some() {
+            return None;
+        }
+        let xdg = std::env::var_os("XDG_CACHE_HOME")
+            .map(PathBuf::from)
+            .filter(|p| p.is_absolute());
+        let home = || std::env::var_os("HOME").map(PathBuf::from);
+        let root = match xdg {
+            Some(dir) => dir,
+            None if cfg!(target_os = "macos") => home()?.join("Library/Caches"),
+            None => home()?.join(".cache"),
+        };
+        let mut key = String::new();
+        for inv in ts.invariants() {
+            key.push_str(&inv.name);
+            key.push('\n');
+        }
+        for i in rules {
+            key.push_str(&format!("{i} "));
+        }
+        let name = format!("{}.txt", fingerprint::hash(key.as_bytes()));
+        Some(root.join("rdra-ish").join("proofs").join(name))
+    }
+
+    /// The certificate in `file`, when it is whole and from this z3.
+    pub(super) fn read(file: &Path, z3: &str) -> Option<Certificate> {
+        let text = std::fs::read_to_string(file).ok()?;
+        let (body, check) = text.rsplit_once("check ")?;
+        if fingerprint::hash(body.as_bytes()) != check.trim_end() {
+            return None;
+        }
+        let mut lines = body.lines();
+        (lines.next()? == HEADER).then_some(())?;
+        (lines.next()?.strip_prefix("z3 ")? == z3).then_some(())?;
+        let digest = lines.next()?.strip_prefix("digest ")?.to_string();
+        let kept = lines.next()?.strip_prefix("kept")?;
+        let kept = kept
+            .split_whitespace()
+            .map(str::parse)
+            .collect::<Result<Vec<usize>, _>>()
+            .ok()?;
+        lines
+            .next()
+            .is_none()
+            .then_some(Certificate { digest, kept })
+    }
+
+    /// Writes `cert` to `file` whole or not at all: a run beside this one reads the old file
+    /// or the new. A failure is ignored; the next run only proves without it.
+    pub(super) fn write(file: &Path, z3: &str, cert: &Certificate) {
+        let kept: String = cert.kept.iter().map(|k| format!(" {k}")).collect();
+        let body = format!("{HEADER}\nz3 {z3}\ndigest {}\nkept{kept}\n", cert.digest);
+        let text = format!("{body}check {}\n", fingerprint::hash(body.as_bytes()));
+        let Some(dir) = file.parent() else { return };
+        let tmp = file.with_extension(format!("{}.tmp", std::process::id()));
+        let written = std::fs::create_dir_all(dir)
+            .and_then(|()| std::fs::write(&tmp, text))
+            .and_then(|()| std::fs::rename(&tmp, file));
+        if written.is_err() {
+            let _ = std::fs::remove_file(&tmp);
         }
     }
 }
