@@ -84,10 +84,7 @@ fn project(name: &str) -> PathBuf {
     let out = rdra(&dir, &["codegen", "model", "--code"], "");
     assert!(out.status.success(), "{}", text(&out));
     assert!(
-        // The paths print with the platform's separator.
-        text(&out)
-            .replace('\\', "/")
-            .contains("wrote svc/tests/rdra_contract.rs"),
+        text(&out).contains("wrote svc/tests/rdra_contract.rs"),
         "{}",
         text(&out)
     );
@@ -106,11 +103,13 @@ fn rdra(dir: &Path, args: &[&str], fault: &str) -> Output {
         .expect("runs rdra-ish")
 }
 
+/// stdout, then stderr with the platform's path separator written as `/`, so the
+/// diagnostics' paths match on Windows too.
 fn text(out: &Output) -> String {
     format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
+        String::from_utf8_lossy(&out.stderr).replace('\\', "/")
     )
 }
 

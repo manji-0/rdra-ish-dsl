@@ -22,7 +22,10 @@ not (
     (binary_id(rdra-ish-cli::codegen_equivalence) & test(=functions_agree_with_the_transition_system))
   | (binary_id(rdra-ish-cli::codegen_differential) & (
         test(=printed_code_agrees_on_the_domain_samples)
-      | test(=printed_code_agrees_on_the_small_samples)))
+      | test(=printed_code_agrees_on_the_small_samples)
+      | test(=printed_code_agrees_on_a_derived_in_over_a_null_int)
+      | test(=printed_code_computes_the_derived_columns)
+      | test(=printed_code_writes_null_to_nullable_enum_and_bool_columns)))
   | (binary_id(rdra-ish-cli::codegen_builds) & (test(=go_builds) | test(=rust_builds) | test(=typescript_builds) | test(=rust_probes_name_every_contract) | test(=typescript_probes_name_every_contract)))
   | (binary_id(rdra-ish-cli::codegen_behaviour) & (test(=go_behaves) | test(=go_states_are_not_built_outside) | test(=rust_a_use_case_takes_the_capability_of_an_actor_that_performs_it) | test(=typescript_a_use_case_takes_the_capability_of_an_actor_that_performs_it) | test(=go_visitor_fails_to_compile_on_a_new_state) | test(=go_a_use_case_takes_the_capability_of_an_actor_that_performs_it)))
   | (binary_id(rdra-ish-cli::codegen_conformance) & test(=go_harness_tells_faults_apart))

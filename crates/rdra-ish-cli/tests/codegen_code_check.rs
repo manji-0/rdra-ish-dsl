@@ -41,11 +41,13 @@ fn rdra(dir: &Path, args: &[&str]) -> Output {
         .expect("runs rdra-ish")
 }
 
+/// The exit code, stdout, and stderr with the platform's path separator written as `/`,
+/// so the diagnostics' paths match on Windows too.
 fn text(out: &Output) -> (Option<i32>, String, String) {
     (
         out.status.code(),
         String::from_utf8_lossy(&out.stdout).into_owned(),
-        String::from_utf8_lossy(&out.stderr).into_owned(),
+        String::from_utf8_lossy(&out.stderr).replace('\\', "/"),
     )
 }
 
@@ -53,10 +55,8 @@ fn generated(name: &str) -> PathBuf {
     let dir = project(name, MANIFEST);
     let (code, _, stderr) = text(&rdra(&dir, &["codegen", "model", "--code"]));
     assert_eq!(code, Some(0), "{stderr}");
-    // The paths print with the platform's separator.
-    let wrote = stderr.replace('\\', "/");
-    assert!(wrote.contains("wrote svc/src/domain.rs"), "{stderr}");
-    assert!(wrote.contains("wrote svc/tests/traces.txt"), "{stderr}");
+    assert!(stderr.contains("wrote svc/src/domain.rs"), "{stderr}");
+    assert!(stderr.contains("wrote svc/tests/traces.txt"), "{stderr}");
     dir
 }
 
