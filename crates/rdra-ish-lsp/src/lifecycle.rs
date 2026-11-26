@@ -18,6 +18,7 @@ use rdra_ish_core::lifecycle::{
 use rdra_ish_core::location::LocatedSpan;
 use rdra_ish_core::memory::{MemoryPool, MemorySize};
 use rdra_ish_core::{one_at_a_time, WorkspaceAnalysis};
+use rdra_ish_syntax::ast::Kind;
 use serde_json::Value;
 use tower_lsp::lsp_types::{
     CodeLens, Command, Diagnostic, DiagnosticSeverity, NumberOrString, Range,
@@ -317,12 +318,12 @@ impl Placer<'_> {
         Some((path, range))
     }
 
-    fn declaration(&self, kind: &str, id: &str) -> Option<(PathBuf, Range)> {
+    fn declaration(&self, kind: Kind, id: &str) -> Option<(PathBuf, Range)> {
         self.span(&self.analysis.model.decl_sites.located(kind, id)?)
     }
 
     fn entity(&self, id: &str) -> Option<(PathBuf, Range)> {
-        self.declaration("entity", id)
+        self.declaration(Kind::Entity, id)
     }
 
     /// The declaration of the use case an action of the system comes from.
@@ -330,7 +331,7 @@ impl Placer<'_> {
         let action = self.ts.actions().iter().find(|a| a.name == name);
         action
             .and_then(|a| self.site(&a.site))
-            .or_else(|| self.declaration("usecase", name))
+            .or_else(|| self.declaration(Kind::UseCase, name))
     }
 
     /// Where a finding goes: the rule, the use case, or the line it is about
