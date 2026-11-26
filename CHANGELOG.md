@@ -2,11 +2,55 @@
 
 ## Unreleased
 
+### Changed
+
+- A BFS run can keep its reached states in a table that its worker threads read while the run
+  adds states, so that each worker looks up the moves it expands (#296 item 3.1, part 2). A
+  release build leaves this off and runs as before: the look-ups took 12% off
+  food-permit-ops at 8 jobs but cost clinic-ops and insurance-claim-ops 4% to 5%, and part 3
+  decides. Unit tests and one run of the CI's shadow job turn it on. Output, `--memory` stop points
+  and what a run charges do not change.
+- `verify --with-tlc`: each `tlc:` run line of a cone, property or whole-model job ends with
+  what its TLC launches cost: their wall time added up, the `-Xmx` of the last and the
+  workers of the first, as `(31 states, 0.3 s, -Xmx1g, 8 workers)` (#384).
+- `verify --with-tlc` schedules its TLC runs by cores as well as memory: a run gets one
+  worker per 50,000 states BFS counted in its module, from 1 to 8 (more when memory, not the
+  queue, bounds the runs), the largest runs start first, and the cone runs may hold all of
+  `--memory` once BFS ends; a heap is still sized by the half, so no verdict depends on when
+  a run starts. `--tlc-jobs` / `RDRA_TLC_JOBS` and `--tlc-workers` / `RDRA_TLC_WORKERS` set
+  the runs at once and every run's workers ([design](./docs/design/tlc-scheduling.md),
+  #384).
+
+### Added
+
+- `verify --with-tlc`: `RDRA_TLC_HEAP=states` raises a cone run's heap to 640 bytes per
+  state BFS counted in its module, in whole GiB within TLC's share, when that is more than
+  the module's rule gives (experimental; #384).
+- `verify --with-tlc --plan <FILE> -o <DIR>` (experimental) writes as JSON the TLC launches
+  `verify` would start, with BFS's verdict and states and the heap, workers and arguments of
+  each, and starts no TLC (#384).
+
+## v3.0.0 - 2026-11-26
+
 This is a major release. `verify` decides every check with its own checker and needs no JVM;
 TLC (`--with-tlc`) and z3 (`--prove`) check it from outside. `codegen` prints domain code in
 the Kamae style for TypeScript, Rust and Go, and `check --code` holds service code to the
 model. Some verdicts change where the lifecycle used to disagree with SQL. The upgrade guide
 lists what to change.
+
+**Release gate** ([plan](docs/design/native-temporal-verification.md#decisions)). Phases 4
+and 5 are moved out of this release, and items 3 and 7 are waived. The other items held:
+
+- 2 and 5: the `formal-verify` job of the `main` CI at this commit checks every sample
+  header natively and the TLC roots with `--with-tlc`, with no disagreement and no
+  tool-bug line.
+- 4: no open issue reports a wrong native verdict; #374 is fixed here.
+- 6: no sample check went from decided under TLC to `not decided`, and each sample's native
+  `verify` beats its TLC run (wall time / peak RSS, release build, default bounds):
+  patent-ops 1.0 s / 187 MB against 33.3 s / 795 MB, food-permit-ops 2.7 s / 681 MB against
+  24.0 s / 1.61 GB, insurance-claim-ops 5.9 s / 867 MB against 127.0 s / 2.10 GB, and the
+  five small samples under 0.01 s / 10 MB against 3.7-7.1 s / 122-152 MB.
+- 8: the docs, compatibility page and skills were rewritten for this release (#375-#379).
 
 ### Upgrading from v2.3.0
 
@@ -99,6 +143,7 @@ No sample changes verdict.
 |---|---|---|
 | An `Enum` or `Bool` column marked `@null` holds null (#359) | A created row without a default starts null, not at the first value; `col == null` and `col == present` now ask about null | Add `@default(<value>)` to keep the old start |
 | Two null columns are not equal (#355) | `col == other` holds only when both are present and equal; `col != other` holds when either is null | Write `qty == lim or (qty == null and lim == null)` where two nulls should match |
+| A derived `in` over a null column is null (#374) | `@derived(qty in (1, 2))` is neither true nor false while `qty` is null, where it was false (`not in`: true) | Write `qty == present and qty in (1, 2)` or `qty == null or qty not in (1, 2)` to keep the old value |
 | A delete waits for the children (#199) | `deletes(UC, Parent)` is disabled while a child names the row and the key's `.on_delete` is `restrict`, `no_action` or unset | Delete or unlink the children first |
 | Unique column sets are checked (#222) | `@unique`, `@unique(a, b)` and N:M junction keys become `Unique_<Entity>_<columns>` | Add a guard that keeps the set free, such as `.none(Booking.slot == am)` |
 | A deleted row keeps its keys (#212) | A later step of a split use case that reads the deleted row's key reads its old parent | None |
@@ -121,6 +166,8 @@ No sample changes verdict.
 - Verdicts change for nullable `Enum` and `Bool` columns (#359), comparisons of two nullable
   columns (#355), restrict-family deletes (#199), unique column sets (#222), the keys of a
   deleted row (#212), and a `can_reach` whose cone stops at a cap (#246).
+- `in` and `not in` in a logical `@derived` are null while the column is, as `==` is; a list
+  with `null` holds there (#374). Rules and guards still read a null as in no list.
 - `verify --prove` (experimental) budgets z3 by resource units, and decides a cone stopped
   at the memory limit when z3 proves every rule it checks (#232).
 - Invalid `Enum` and `Bool` defaults (#187) and out-of-range Int defaults (#180) fail to
@@ -321,6 +368,9 @@ No sample changes verdict.
   (#265).
 - Output compiles for an entity whose state column is `@null`; the Go probe imports the
   domain package under `[code.go] package` (#363).
+- On Windows, each `site` is relative to the project and uses `/`, as on Linux and macOS,
+  and `check --code=build` reads `go vet`'s `vet.exe:` lines, so it names a missing method
+  instead of a failed build (#393).
 
 **verify**
 
@@ -328,6 +378,11 @@ No sample changes verdict.
   instance (#231).
 - `verify --with-tlc` names the cause when TLC 1.7.x fails reading a trace back on JDK 21
   or later (#314).
+
+**export**
+
+- `export --kind sql`: a `@derived` `in` list with `null` or `present` tests `IS NULL` /
+  `IS NOT NULL`, not `= NULL` (#374).
 
 **Model, diagrams and lint**
 
@@ -344,6 +399,11 @@ No sample changes verdict.
 
 ### Known issues
 
+- Phases 4 and 5 of the native temporal plan are not in this release (#168). A temporal
+  property whose cone leaves it open, such as patent-ops' `GrantEnds`, still ends as
+  `not decided` where the whole model is too large, and a counterexample on a reduced cone
+  is repeated on the unreduced one. A minor release may decide such a property, as
+  [compatibility](docs/compatibility.md) allows.
 - `--memory` bounds what the state stores hold, not the whole process (#237, #242, #243).
   A run that stops at the limit has been measured at up to 1.85 times it. Set `--memory` to about half
   the memory you can spare. See [Memory limit](docs/cli-reference.md#memory-limit).

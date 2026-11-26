@@ -9,7 +9,7 @@ use crate::tlc_output::Outcome;
 use rdra_ish_core::in_parallel;
 use rdra_ish_core::lifecycle::{
     Caps, ComponentRun, Diag, Fairness, LassoFault, OrbitRun, PropertyVerdict, ReducedVerdict,
-    StateDiag, TransitionSystem,
+    RunEnd, StateDiag, TransitionSystem,
 };
 use rdra_ish_emit::tla::TlaNames;
 
@@ -32,6 +32,9 @@ pub(super) struct Native {
     pub(super) cone_capped: bool,
     /// A run met the memory limit, maybe only because the runs beside it held the rest.
     pub(super) crowded: bool,
+    /// The states of the reduced cone, when its plain run explored all of them: the size of
+    /// the TLC job's plain module, for the TLC scheduler (#384).
+    pub(super) counted: Option<u64>,
 }
 
 impl Native {
@@ -119,6 +122,8 @@ pub(super) struct Plain {
     /// The run with `WF_vars(Next)` on the reduced graph, when the plain one asks for it.
     reduced_wf: Option<ReducedVerdict>,
     crowded: bool,
+    /// The run explored every state of the reduced cone.
+    complete: bool,
 }
 
 impl Plain {
@@ -155,7 +160,13 @@ impl Plain {
             answer,
             reduced_wf,
             crowded: crowded(run),
+            complete: run.end() == RunEnd::Complete,
         }
+    }
+
+    /// The states of the reduced cone, when the run explored all of them.
+    pub(super) fn counted(&self) -> Option<u64> {
+        self.complete.then_some(self.states)
     }
 }
 
@@ -195,6 +206,7 @@ fn native_property_after(p: &PropertyJob, caps: Caps, plain: Plain) -> (Native, 
         fault: None,
         cone_capped: false,
         crowded: false,
+        counted: plain.counted(),
     };
     let mut crowded_run = plain.crowded;
     let vacuous = plain.vacuous;
@@ -292,6 +304,7 @@ fn always_up_to_symmetry(
         fault: None,
         cone_capped: false,
         crowded: false,
+        counted: None,
     };
     let run = cone.reduced.clone().run_orbits(caps);
     out.crowded = run
@@ -345,6 +358,7 @@ fn liveness_up_to_symmetry(
         fault: None,
         cone_capped: false,
         crowded: false,
+        counted: None,
     };
     let run = cone.reduced.clone().run_annotated_orbits(caps);
     out.crowded = run
@@ -566,6 +580,7 @@ pub(super) fn native_wholes(
                 fault: None,
                 cone_capped: false,
                 crowded: false,
+                counted: None,
             };
             match Answer::of(&run, i, Fairness::WfNext) {
                 Answer::Verdict(outcome, found) => {
