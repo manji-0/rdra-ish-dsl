@@ -23,7 +23,7 @@ pub mod tlc_env;
 pub mod tlc_output;
 pub mod tlc_replay;
 mod verify;
-use cli::{BoundsArgs, Cli, Commands, ListFormat, ListKind};
+use cli::{Cli, Commands, ListFormat, ListKind};
 use csv_cmd::run_csv;
 use diagram::run_diagram;
 use export::run_export;
@@ -59,9 +59,7 @@ pub fn run() -> Result<()> {
             inputs,
             strict,
             deny_deprecated: deny,
-            max_patterns,
-            max_states,
-            memory,
+            caps,
             guards,
             code,
             bounds,
@@ -110,8 +108,8 @@ pub fn run() -> Result<()> {
             // Same severity as `states` (fail-closed on caps and violated constraints).
             let bounds = bounds.bounds(&model, manifest.as_ref())?;
             let caps = charged(
-                BoundsArgs::caps(&bounds, max_patterns, max_states),
-                memory,
+                caps.caps(&bounds),
+                caps.memory,
                 manifest.as_ref(),
                 Budgeted::Check,
             );
@@ -296,18 +294,10 @@ pub fn run() -> Result<()> {
         Commands::States {
             inputs,
             format,
-            max_patterns,
-            max_states,
-            memory,
+            caps,
             bounds,
             scope,
-        } => run_states(
-            &inputs,
-            format,
-            &bounds,
-            (max_patterns, max_states, memory),
-            &scope,
-        )?,
+        } => run_states(&inputs, format, &bounds, &caps, &scope)?,
 
         Commands::Verify {
             inputs,
