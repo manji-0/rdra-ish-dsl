@@ -70,8 +70,9 @@ holds(OpenCase, Case.status == open).along(Note, Case)
 applies_to(OpenCase, Annotate)
 
 // Visit runs as two transactions, one per API: step 1 moves a ticket and its desk, step 2
-// creates a stamp under the desk's counter and takes the ticket and the desk again as they
-// are now, so that it checks the ticket still belongs to the desk. Judge chooses among two
+// updates a counter of the desk and creates a stamp under it. Step 2 takes the ticket and the
+// desk again as they are now, so that it checks the ticket still belongs to the desk and the
+// counter is the desk's. Judge chooses among two
 // arms of the ticket's second lifecycle column, one function per target.
 entity Desk "Desk" {
   id: Int @pk
@@ -113,7 +114,7 @@ invokes(Visit, StampApi)
 updates(VisitApi, Ticket)
 updates(VisitApi, Desk)
 creates(StampApi, Stamp)
-reads(StampApi, Counter)
+updates(StampApi, Counter)
 transitions(Visit, Ticket.status, waiting -> called)
 transitions(Visit, Desk.status, idle -> busy)
 transitions(Finish, Ticket.status, called -> done)

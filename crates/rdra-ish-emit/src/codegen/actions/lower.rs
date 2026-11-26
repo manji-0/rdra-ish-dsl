@@ -1362,9 +1362,10 @@ impl Frame<'_> {
                 });
             }
         }
-        if self.mark_of.contains_key(&c) || self.mark_of.contains_key(&q) {
-            // A later step holds an earlier step's rows by their marks, which carry ids:
-            // the key between two of them is not among its arguments (#335).
+        // An earlier step's row a guard reads is an argument beside its mark (`guard_reads`),
+        // so a key between it and a row of this step is checked on the row as it is now.
+        let mark_only = |p: usize| self.mark_of.contains_key(&p) && !self.row_of.contains_key(&p);
+        if mark_only(c) || mark_only(q) {
             return Err(unsupported(
                 "a key between rows an earlier step wrote, whose marks carry ids, not keys",
             ));

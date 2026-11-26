@@ -12,7 +12,8 @@
   comparison and every `!=` (#359).
 - `codegen`: a later step of a split use case whose guard reads a row an earlier step wrote
   takes that row as it is now, beside its mark, and checks the mark names it; a key between
-  two such rows is the condition `Key_<Child>_<role>` (clinic-ops `CheckInPatient_2`). A
+  two such rows is the condition `Key_<Child>_<role>` (clinic-ops `CheckInPatient_2`), and a
+  key between such a row and a row the step binds is an argument check. A
   choice among arms of a second lifecycle column is one function per target, and the
   dispatcher takes the target (insurance-claim-ops `DetermineFault`, six functions) (#335).
 

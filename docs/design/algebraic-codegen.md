@@ -8,7 +8,7 @@
 Status (2026-11-26): accepted in scope on 2026-11-07 as an experimental extra
 ([vision.md](../vision.md#decisions)); every question is [decided](#decisions).
 
-- **Landed.** [Phases](#phases) 0 to 4, and phase 5 but for the use cases below. The
+- **Landed.** [Phases](#phases) 0 to 5; every use case on the samples gets a function. The
   conformance harness, private state fields and one transaction per function (#348, for
   #330, #331, #332). `codegen --check` (#343). The printed Rust and Go run on every BFS edge
   of the samples (#342). The Kamae shapes in all three languages, `--format json`, `--code`,
@@ -946,13 +946,16 @@ the function's source state with no BFS move must get `Rejected`. The dispatcher
    the samples a later step reads an earlier row mostly for its key, which the mark carries,
    and a row deleted between the steps then needs no `Deleted` type. A later step whose
    guard reads an earlier row takes that row too, as it is now, and checks that its mark
-   names it ([choice 1](#choice-1-a-key-between-two-rows-of-an-earlier-step)). A step
+   names it ([choice 1](#choice-1-a-key-between-two-rows-of-an-earlier-step)): a key
+   between two earlier rows is a condition, a key between an earlier row and a row the step
+   binds itself is checked as any other argument row's key. A step
    that does not run returns `NotEnabled` or `Rejected`, which for a later step means
    "retry", not a new `Blocked` type, and `resume<UC>` is left to the code that reads the
    stored marks. `codegen_equivalence.rs` checks every step BFS runs, the mark each step
    leaves in the run var, and every key a function sets against the owner var; the
-   interleavings are BFS's own, since it explores every action between two steps. A
-   condition of a later step that reads an earlier row's columns is not printed yet.
+   interleavings are BFS's own, since it explores every action between two steps. No
+   sample or fixture has a condition of a later step on an earlier row's columns, so that
+   shape is untested.
 5. **The rest of the action vocabulary.** Triggered use cases have landed: an event
    carries the id of each row its raise marks (the `Raised` vars of the event order), and a
    triggered use case takes the event as an argument and checks its row against it, so it
