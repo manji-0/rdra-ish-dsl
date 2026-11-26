@@ -10,6 +10,11 @@
   food-permit-ops at 8 jobs but cost clinic-ops and insurance-claim-ops 4% to 5%, and part 3
   decides. Unit tests and one run of the CI's shadow job turn it on. Output, `--memory` stop points
   and what a run charges do not change.
+- `verify` finishes the largest cone sooner on several threads (#296 item 3.1, part 3). Once
+  a cone's BFS ends, its deadlock findings now build the graph's two directions side by side
+  and check each column and slot side by side, on the threads the BFS gave back. At 8 jobs:
+  food-permit-ops 2.10 s to 1.81 s, clinic-ops 1.74 s to 1.58 s, insurance-claim-ops 4.23 s
+  to 3.52 s. One job takes the time it took, and the output does not change.
 - `verify --with-tlc`: each `tlc:` run line of a cone, property or whole-model job ends with
   what its TLC launches cost: their wall time added up, the `-Xmx` of the last and the
   workers of the first, as `(31 states, 0.3 s, -Xmx1g, 8 workers)` (#384).
