@@ -297,6 +297,24 @@ pub fn run(
         let (safety, mut vacuous) = bfs_cones(&ts, &jobs, caps, &covers, &mut shared);
         let safety_ran: Vec<Option<&BfsCone>> = safety.iter().map(Option::as_ref).collect();
         pool.learn(counted(&safety_ran, &shared, &[]));
+        // The proof needs only the rules the safety pass refuted, so it starts here, beside
+        // the property and whole-model passes, its z3 processes on cores the TLC runs leave
+        // (#421). Its lines print where they always have.
+        let proof = match (&prove, z3) {
+            (Some(Prove { deny_unproved, .. }), Some(z3)) => {
+                let refuted = refuted::refuted(&ts, &jobs, &safety);
+                let (ts, selection, pool, deny) = (&ts, &selection, &pool, *deny_unproved);
+                Some(threads.spawn(move || {
+                    let _cores = pool.hold_cores(rdra_ish_core::jobs());
+                    z3.and_then(|z3| {
+                        let marks = Marks::of(model, ts);
+                        let twin = rdra_ish_core::lifecycle::prove::mining_twin(model, scope, ts);
+                        run_proof(ts, twin.as_ref(), selection, &marks, &refuted, &z3, deny)
+                    })
+                }))
+            }
+            _ => None,
+        };
         rdra_ish_core::perf::pass("property_pass");
         let (properties, property_vacuous) = native_properties(&ts, &jobs, caps, &mut shared);
         pool.learn(counted(&[], &shared, &properties));
@@ -324,19 +342,17 @@ pub fn run(
             .collect();
         rdra_ish_core::perf::pass("wholes");
         let wholes = native_wholes(&ts, &open, caps, budget);
-        rdra_ish_core::perf::pass("proof");
-        let proof = match (&prove, z3) {
-            (Some(Prove { deny_unproved, .. }), Some(z3)) => z3.and_then(|z3| {
-                let marks = Marks::of(model, &ts);
-                let twin = rdra_ish_core::lifecycle::prove::mining_twin(model, scope, &ts);
-                let refuted = refuted::refuted(&ts, &jobs, &safety);
-                let (twin, deny) = (twin.as_ref(), *deny_unproved);
-                run_proof(&ts, twin, &selection, &marks, &refuted, &z3, deny).map(Some)
-            }),
-            _ => Ok(None),
-        };
         // BFS has let go of its half: the cone runs that start from here take all of it.
         pool.bfs_ended(memory.limit.bytes());
+        rdra_ish_core::perf::pass("proof");
+        let proof = match proof.map(|p| p.join()) {
+            Some(Ok(ran)) => ran.map(|(tally, proved, text)| {
+                print!("{text}");
+                Some((tally, proved))
+            }),
+            Some(Err(panic)) => std::panic::resume_unwind(panic),
+            None => Ok(None),
+        };
         let cones_ran = cones.map(|cones| match cones.join() {
             Ok(ran) => ran,
             Err(panic) => std::panic::resume_unwind(panic),

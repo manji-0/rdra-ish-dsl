@@ -445,7 +445,9 @@ names. Which cones run, what breaks the symmetry, and `RDRA_ISH_SYMMETRY_STATS` 
 - **What the limit counts.** It counts the BFS state stores and, under `--with-tlc`, the TLC
   heaps, not the whole process (#237). The passes over a finished cone (liveness, `can_reach`,
   deadlocks, the reduction's partition), a growing run's spare buffers, and z3 are outside it,
-  and a run has been measured well past the limit. When cones stop at the limit, set `--memory` to
+  and a run has been measured well past the limit. Under `--prove` each z3 process (one per
+  `RDRA_JOBS`) takes about 0.3 to 0.5 GiB more, beside BFS's passes and TLC, and holds one
+  of the cores the TLC runs are scheduled on. When cones stop at the limit, set `--memory` to
   about half the memory you can spare ([Memory limit](./cli-reference.md#memory-limit)).
 - **A stopped entity cone gives back its room.** `verify` reads the findings of an entity
   cone that stopped at the limit at once, then frees what it held, so the cones after it can
@@ -566,7 +568,10 @@ forbidden(Claim, ClaimCase, Claim.completed_on == present, ClaimCase.status in (
 not of time: 20,000,000 for a rule and 2,000,000 for a lemma. So the proof is the same on a
 busy machine and an idle one. A rule z3 gives up on is `unproved` with
 `z3 gave up on <action>`. The checks are shared out over several z3 processes (`RDRA_JOBS`); the result does
-not depend on how many.
+not depend on how many. The proof starts once BFS has decided the safety cones and runs beside the property
+and whole-model passes; its lines print where they would after them. Each z3 process takes
+about 0.3 to 0.5 GiB that `--memory` does not count
+([Memory, state caps, and threads](#memory-state-caps-and-threads)).
 
 **What a proof changes.** `--prove` reads the state rules only, not `after` assertions or
 temporal properties. An invariant cone that BFS stopped at the memory limit before a violation

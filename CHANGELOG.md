@@ -4,6 +4,13 @@
 
 ### Changed
 
+- `verify --prove` (experimental) starts the proof once the safety cones are decided, on its
+  own thread beside the property and whole-model passes, and prints its lines where it did
+  (#421). Under `--with-tlc` the cone runs get BFS's half of `--memory` before the proof,
+  not after it, and each z3 process holds one of the cores the TLC runs are scheduled on.
+  z3's memory, about 0.3 to 0.5 GiB per process, is still outside `--memory`; the docs now
+  say so. The output does not change. The wall time barely moves on the samples, where z3
+  takes far longer than the passes it now overlaps (clinic-ops at `RDRA_JOBS=4`: 26.4 s before, 25.8 s after, medians of 3).
 - `verify --prove` (experimental) leaves out of the proof each state rule BFS violated in
   the same run (#421). The rule prints `refuted: <rule> (BFS counterexample at <n>
   instances)` with no counterexample to induction, the `proof:` lines end with `, <n>
