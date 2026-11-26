@@ -272,7 +272,7 @@ and the comparison, and only the launching moves out.
 <!-- derived-from #per-run-cost-on-tlc-lines -->
 <!-- derived-from #a-caller-that-runs-tlc-itself -->
 
-The owner took every recommendation of this note (2026-11-26):
+The owner decided these on 2026-11-26, each as this note recommended:
 
 1. **Spare cores when memory bounds the runs.** When memory, not the queue, caps the runs at
    once, the cores they would leave idle go to the runs that fit: `cores / fit`, at most 32
@@ -290,16 +290,20 @@ The owner took every recommendation of this note (2026-11-26):
    They only fix what the scheduler would otherwise pick, so they keep their names and
    meaning as the CLI reference states them.
 
-Two more recommendations concern the code as it stands. The owner's acceptance covered them
-too, and they hold until the many-core runs or #323 give a reason to revisit them:
+## Implementation choices (not yet confirmed by the owner)
 
-7. **Uncounted jobs take the cap only from 16 cores.** Below `MANY_CORES` (16) a job BFS has
-   not counted shares the cores as before #384. On a 4-core CI runner ranking them as large
-   made the `--with-tlc` samples step 17% slower on one run (6 min 7 s against 5 min 13 s); on
-   18 cores patent-ops took the same time (7.6 s before, 7.3 s after) and its 1.34M-state cone
-   got 8 workers where it got 3. The threshold is a guess, kept until the many-core runs.
-8. **`Pool` stays beside `Budget`** until #323 lands, so `Budget`'s API, which #323 uses, does
-   not change; the two are merged after it.
+<!-- derived-from #the-rule -->
+
+These two were not put to the owner, so they are not decisions:
+
+- **Uncounted jobs take the cap of 8 only from 16 cores.** Below `MANY_CORES` (16) a job BFS
+  has not counted shares the cores as before #384. On a 4-core CI runner ranking them as
+  large made the `--with-tlc` samples step 17% slower on one run (6 min 7 s against 5 min
+  13 s); on 18 cores patent-ops took the same time (7.6 s before, 7.3 s after) and its
+  1.34M-state cone got 8 workers where it got 3. The threshold of 16 is a guess, to be
+  checked by the many-core runs below.
+- **`Pool` sits beside `Budget` until #323 lands**, so `Budget`'s API, which #323 uses, does
+  not change. The two can be merged after it.
 
 ## What to measure on a many-core machine
 
