@@ -2,7 +2,8 @@
 
 <!-- constrained-by ../cli-reference.md#memory-limit -->
 
-Status (2026-11-26): a proposal for #384. Nothing here is on `main` yet. It builds on the
+Status (2026-11-26): the design of #384, with the owner's decisions of 2026-11-26
+([Decisions](#decisions)). It lands after the v3.0.0 tag (#386 to #391). It builds on the
 byte budget of #309 decision 3 (`verify/schedule.rs`, `Budget`) and leaves the state-model
 runs, which #323 changes, as they are.
 
@@ -107,8 +108,8 @@ The **target** of a job:
 `W` is 8, the cap of #309. When memory, not the queue, bounds the runs at once, the cores
 those runs leave idle go to them: a job whose target is `W` gets
 `clamp(cores / fit, W, 4W)` instead, where `fit` is how many runs of its charge fit the
-share. This gives back 361ccec's 2 × 32 under `RDRA_TLC_HEAP=16g` on 64 cores, and it is an
-owner decision (below).
+share. This gives back 361ccec's 2 × 32 under `RDRA_TLC_HEAP=16g` on 64 cores
+([decision 1](#decisions)).
 
 A run holds its workers of a **core budget** of `cores` while it runs, beside the bytes it
 holds of the memory budget. `--tlc-jobs N` (or `RDRA_TLC_JOBS`) also bounds the number of
@@ -153,8 +154,8 @@ heap, and its rerun at twice the heap, are still sized by the half, whenever the
 Otherwise whether a module is `not run` over the share, or gets its rerun, would depend on
 when BFS ended, and a verdict would depend on the schedule. On #384's model BFS takes about 13 minutes and TLC 30 to 60, so for most of the run
 TLC would have 96 GiB rather than 48. BFS does not give everything back: it keeps the state
-models and findings, and the process overshoots the limit (#237). How much to hand over is
-an owner decision.
+models and findings, and the process overshoots the limit (#237). The owner chose to hand
+over all of it ([decision 3](#decisions)).
 
 ### Heap from states
 
@@ -204,8 +205,8 @@ compare up to the cost.
 
 ## A caller that runs TLC itself
 
-Experimental, as `--prove` is. Neither the flags nor the JSON are covered by the
-compatibility contract until the owner says so.
+Experimental, as `--prove` is: neither the flags nor the JSON are covered by the
+compatibility contract (decision 5).
 
 - **`verify --with-tlc --plan <FILE> -o <DIR>`** runs the native checker and prints what it
   prints. It writes the specs to `<DIR>` and the TLC launches it would make to `<FILE>`, and
@@ -214,8 +215,8 @@ compatibility contract until the owner says so.
   state count, and the `heap`, `workers` and `args` the schedule would give it, with its
   `follow_ups`. The file starts with `"version": 1`. The `StateModel_` runs are not listed
   yet.
-- **`verify --with-tlc --tlc-results <DIR>`** (designed, not built: see the owner's decision
-  5 and #323 below) runs the native checker, then the same
+- **`verify --with-tlc --tlc-results <DIR>`** (designed, not built: it comes after #323, see
+  decision 5) runs the native checker, then the same
   `run_job` ladder as `--with-tlc`, but reads each launch from
   `<DIR>/<cfg stem>.out` (stdout and stderr) and `<DIR>/<cfg stem>.status` (the exit code,
   which `TlcRun::outcome` needs) instead of starting TLC. It compares and prints the verdict
@@ -264,33 +265,42 @@ and the comparison, and only the launching moves out.
 | Heap per state | 640 B | Fitted to #384's 8g floor at about 12.8M states. A guess |
 | Memory after BFS | all of `--memory` | A guess. See #237 |
 
-## For the owner to decide
+## Decisions
 
-1. **The worker cap when memory bounds the runs.** Give the idle cores to the runs that fit
-   (`cores / fit`, at most 32), or keep 8. Recommended: give them, since 2 × 8 was the
-   slowest row of #384.
-2. **Heap from states:** opt-in (`RDRA_TLC_HEAP=states`) in this release, or the default.
-   Recommended: opt-in, then the default once a many-core run with per-run cost shows the
-   floor.
-3. **Memory after BFS:** grow the cone share to all of `--memory`, or to a fraction.
-   Recommended: all of it, as the whole-model runs already have.
-4. **Per-run cost on `tlc:` lines.** Recommended: add it and leave the lines uncovered, as
-   [compatibility.md](../compatibility.md#what-is-not-covered) leaves run time.
-5. **`--plan` and `--tlc-results`.** Recommended: experimental, the JSON at `"version": 1`
-   with no promise. `--tlc-results` needs an exit status for "waiting for logs", and exit
-   statuses are covered by compatibility.md. Recommended: exit 3, after #323.
-6. **Unknown jobs ranked as large, from 16 cores.** While BFS has counted nothing (the
-   whole entity pass), uncounted jobs go `cores / 8` at once. On a 4-core CI runner that
-   made the `--with-tlc` samples step 17% slower (6 min 7 s against 5 min 13 s, one run
-   each), so below 16 cores an uncounted job now shares the cores as before. On patent-ops on
-   18 cores the wall time was the same (7.6 s before, 7.3 s after) and the 1.34M-state cone
-   got 8 workers where it got 3. The threshold of 16 is a guess. Recommended: keep it until
-   the many-core runs below.
-7. **`--tlc-jobs` and `--tlc-workers`** are in the CLI reference unmarked, so compatibility.md
-   would cover them. Recommended: cover them, since they only fix what the scheduler would
-   pick.
-8. **`Pool` beside `Budget`, not inside it.** Putting it inside would change `Budget`'s API,
-   which #323 uses. Recommended: keep them apart until #323 lands, then merge them.
+<!-- derived-from #the-rule -->
+<!-- derived-from #knobs -->
+<!-- derived-from #per-run-cost-on-tlc-lines -->
+<!-- derived-from #a-caller-that-runs-tlc-itself -->
+
+The owner took every recommendation of this note (2026-11-26, on
+[#386](https://github.com/manji-0/rdra-ish-dsl/pull/386)):
+
+1. **Spare cores when memory bounds the runs.** When memory, not the queue, caps the runs at
+   once, the cores they would leave idle go to the runs that fit: `cores / fit`, at most 32
+   (`UNCAPPED` times `W`).
+2. **Heap from states stays opt-in.** `RDRA_TLC_HEAP=states` asks for it; the module-text
+   rule stays the default until a many-core run with per-run cost measures the floor.
+3. **TLC's share after BFS.** Once BFS ends the cone runs may hold all of `--memory`. A heap
+   and its rerun stay sized by the half.
+4. **`tlc:` lines are not covered.** A `tlc:` line, its per-run cost included, may change in
+   any release; `bounds:`, `result:` and `tlc_result:` stay the covered lines.
+5. **`--plan` and `--tlc-results` are experimental.** No promise on the flags or the JSON
+   (`"version": 1`). `--tlc-results` exits 3 when it waits for logs, and is built after
+   #323.
+6. **`--tlc-jobs`, `--tlc-workers`, `RDRA_TLC_JOBS` and `RDRA_TLC_WORKERS` are covered.**
+   They only fix what the scheduler would otherwise pick, so they keep their names and
+   meaning as the CLI reference states them.
+
+Two more recommendations concern the code as it stands. The owner's acceptance covered them
+too, and they hold until the many-core runs or #323 give a reason to revisit them:
+
+7. **Uncounted jobs take the cap only from 16 cores.** Below `MANY_CORES` (16) a job BFS has
+   not counted shares the cores as before #384. On a 4-core CI runner ranking them as large
+   made the `--with-tlc` samples step 17% slower on one run (6 min 7 s against 5 min 13 s); on
+   18 cores patent-ops took the same time (7.6 s before, 7.3 s after) and its 1.34M-state cone
+   got 8 workers where it got 3. The threshold is a guess, kept until the many-core runs.
+8. **`Pool` stays beside `Budget`** until #323 lands, so `Budget`'s API, which #323 uses, does
+   not change; the two are merged after it.
 
 ## What to measure on a many-core machine
 

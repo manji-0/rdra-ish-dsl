@@ -39,7 +39,10 @@ page describes `main`, so it changes in the same change as the behavior it descr
   such as each `--kind` and `--format`. Of `codegen`, only `--lang ts` and `-o` are
   covered, as [The TypeScript types of `codegen`](#the-typescript-types-of-codegen) states.
   `export --kind typescript-states` and `states --format typescript` are removed: each is a
-  usage error that names `codegen <INPUTS> --lang ts -o <FILE>.ts`.
+  usage error that names `codegen <INPUTS> --lang ts -o <FILE>.ts`. `verify`'s
+  `--tlc-jobs` and `--tlc-workers` are covered, and so are `RDRA_TLC_JOBS` and
+  `RDRA_TLC_WORKERS`, which stand in for them: each sets how the TLC runs are scheduled
+  and changes no verdict.
 - **The default of `verify`.** `verify` decides every check with its native checker and
   starts no JVM. `--with-tlc` runs TLC beside it and fails the run when the two decide a
   check differently. `--backend tlc` is a deprecated spelling of `--with-tlc` that prints a
@@ -277,6 +280,9 @@ minor release.
   one release to the next.
 - **Performance and state counts.** Run time, memory, and the number of states a run
   explores or prints.
+- **The `tlc:` lines of `verify --with-tlc`.** Their form, and the cost a cone, property, or
+  whole-model run ends with (wall time, `-Xmx`, workers), may change in any release. Read
+  TLC's verdict from `tlc_result:`.
 - **Diagram layout.** Where a renderer places the nodes, as above.
 - **The rest of `codegen`, and `check --code`.** All of `codegen` except
   [its TypeScript types](#the-typescript-types-of-codegen) is experimental: its other flags,
