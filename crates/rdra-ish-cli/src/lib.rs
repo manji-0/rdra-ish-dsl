@@ -7,12 +7,14 @@ mod csv_cmd;
 mod diagram;
 mod export;
 mod fmt_cmd;
+mod generated_file;
 mod guard_report;
 mod lifecycle_gate;
 mod list_output;
 mod load;
 mod memory;
 mod next;
+mod paths;
 pub mod property_cone;
 mod prove;
 mod session;
@@ -82,7 +84,7 @@ pub fn run() -> Result<()> {
                 (None, Some(m)) if m.code.as_ref().is_some_and(|c| !c.targets().is_empty()) => {
                     eprintln!(
                         "note: {} has [code]; `check --code` also checks the service code against the model",
-                        codegen_cmd::shown(&m.path)
+                        paths::shown(&m.path)
                     );
                 }
                 _ => {}
