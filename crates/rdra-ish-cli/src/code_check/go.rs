@@ -210,7 +210,8 @@ impl Backend for GoBackend {
         )
     }
 
-    /// `file:line:col: text` lines (`go vet` prefixes `vet: `), with the tab-indented lines
+    /// `file:line:col: text` lines (`go vet` prefixes `vet: `, or `vet.exe: ` on Windows),
+    /// with the tab-indented lines
     /// under one (`have` / `want`) joined to its text.
     fn parse_messages(&self, stdout: &str, stderr: &str) -> Vec<CompilerMessage> {
         let mut out: Vec<CompilerMessage> = Vec::new();
@@ -222,7 +223,10 @@ impl Backend for GoBackend {
                 }
                 continue;
             }
-            let line = line.strip_prefix("vet: ").unwrap_or(line);
+            let line = line
+                .strip_prefix("vet: ")
+                .or_else(|| line.strip_prefix("vet.exe: "))
+                .unwrap_or(line);
             let mut parts = line.splitn(4, ':');
             let (Some(file), Some(l), Some(c), Some(text)) =
                 (parts.next(), parts.next(), parts.next(), parts.next())
@@ -306,6 +310,15 @@ impl Backend for GoBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn go_vet_on_windows_prefixes_vet_exe() {
+        let stderr = "vet.exe: svc/rdra_contract_test.go:25:28: cannot use (*svc.Service)(nil) as domain.ShipUseCase value\n";
+        let found = GoBackend::default().parse_messages("", stderr);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].file, "svc/rdra_contract_test.go");
+        assert_eq!((found[0].line, found[0].column), (25, 28));
+    }
 
     #[test]
     fn compiler_lines_are_read_with_their_have_and_want() {
