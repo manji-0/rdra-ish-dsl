@@ -12,7 +12,7 @@
 // while they are null, so `alike == null` holds (Required_Item_1).
 // expect Forbidden_Item_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 // expect Required_Item_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
-// expect Forbidden_Item_1: native=counterexample tlc=counterexample z3=unproved
+// expect Forbidden_Item_1: native=counterexample tlc=counterexample z3=refuted
 // expect LimNeverMet: native=ok tlc=ok
 // expect ABNeverMet: native=counterexample tlc=counterexample
 // expect Forbidden_Item_2: native=ok tlc=ok z3=proved bfs=ok,ok,ok

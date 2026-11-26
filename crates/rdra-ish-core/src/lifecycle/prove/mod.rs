@@ -72,6 +72,9 @@ pub enum Verdict {
     Unproved(Unproved),
     /// The encoding cannot state the rule; the reason names the construct.
     OutOfScope(String),
+    /// The caller's bounded engine reached a state that violates the rule, so no inductive
+    /// set holds it: the prover did not try it.
+    Refuted,
 }
 
 #[derive(Clone, Debug)]
@@ -224,10 +227,17 @@ pub fn mining_twin(
 /// from `ts` and from `twin` (`mining_twin`), when given. The checks of one scope are shared
 /// out over `solvers`, at least one; the proof does not depend on how many there are
 /// (`violated_each`).
+///
+/// A rule in `refuted` has a reachable violation, found by a bounded engine: no inductive set
+/// that holds in the initial states holds it, so it is no candidate and its verdict is
+/// `Refuted`. Leaving it out proves the same rules, since the set Houdini keeps never had it,
+/// and spares its checks and the pass with the fine lemmas its fall would start; fewer of
+/// those lemmas may then be kept. Its cone is still mined, so the candidates do not change.
 pub fn prove<S: Solver + Send>(
     ts: &TransitionSystem,
     twin: Option<&TransitionSystem>,
     rules: &[usize],
+    refuted: &BTreeSet<usize>,
     solvers: &mut [S],
     options: ProveOptions,
 ) -> Result<Proof, SolverError> {
@@ -235,8 +245,12 @@ pub fn prove<S: Solver + Send>(
     let enc = Enc { ts };
     let mut verdicts: BTreeMap<usize, Verdict> = BTreeMap::new();
     let mut cands = Vec::new();
+    for &i in rules.iter().filter(|i| refuted.contains(i)) {
+        verdicts.insert(i, Verdict::Refuted);
+    }
     let formulas = rules
         .iter()
+        .filter(|i| !refuted.contains(i))
         .map(|&i| {
             let inv = &ts.invariants()[i];
             let f = Formula {

@@ -6,8 +6,8 @@
 // three shelves. An engine that sized the count by one shared slot count would miss the
 // fourth loan or count a copy slot that does not exist.
 // flags: --instances Loan=4 --instances Shelf=3
-// expect Quantifier_Member_0: native=counterexample tlc=counterexample z3=unproved
-// expect Quantifier_Shelf_1: native=counterexample tlc=counterexample z3=unproved
+// expect Quantifier_Member_0: native=counterexample tlc=counterexample z3=refuted
+// expect Quantifier_Shelf_1: native=counterexample tlc=counterexample z3=refuted
 entity Member "会員" {
   id: Int @pk
 }

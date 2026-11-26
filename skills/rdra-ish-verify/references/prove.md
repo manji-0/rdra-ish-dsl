@@ -20,6 +20,8 @@ Each rule prints one line after the `proof (...)` header:
 - `unproved: <rule>: z3 gave up on <action>`: the check ran out of z3 resource units. The
   budget counts solver work, so the answer is the same on every machine.
 - `out of scope: <rule>: <why>`: the encoding cannot state the rule.
+- `refuted: <rule> (BFS counterexample at <n> instances)`: BFS violated the rule in the same
+  run, with the trace it prints, so the proof did not try it. Fix the model, not the proof.
 - `[not enforced by the SQL schema: <why>]` after a name: `export --kind sql` writes no
   `CHECK` for it, so the application keeps it.
 - `lemma: <text>`: a helper fact the proof kept.
@@ -30,7 +32,7 @@ at the memory limit is decided when z3 proves every rule in it: its line reads `
 decided by proof: ...)`.
 
 ```text
-$ rdra-ish verify --prove samples/one_to_one_shared.rdra
+$ rdra-ish verify --prove --instance-count 1 samples/one_to_one_shared.rdra
 ...
 unproved: Unique_Shipment_Order: not inductive; Ship(Order#1, Shipment#1) breaks it from a state where it and every proved rule hold (not necessarily reachable)
   Order#1 (present) status=placed -> status=shipped

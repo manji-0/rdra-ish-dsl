@@ -7,8 +7,8 @@
 // and present and the third rule fails. An engine that read null == null as true would
 // swap the verdicts of the first two.
 // expect MultiForbidden_Line_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
-// expect MultiForbidden_Line_1: native=counterexample tlc=counterexample z3=unproved
-// expect MultiForbidden_Line_2: native=counterexample tlc=counterexample z3=unproved
+// expect MultiForbidden_Line_1: native=counterexample tlc=counterexample z3=refuted
+// expect MultiForbidden_Line_2: native=counterexample tlc=counterexample z3=refuted
 entity Order "注文" {
   id: Int @pk
   limit: Int @null

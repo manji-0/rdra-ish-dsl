@@ -6,7 +6,7 @@
 // never pass. A checker that blocked the raise at k instead (a raiser that waits) would
 // find no overflow and a spurious ok; one that wrapped or saturated the counter at k would
 // lose the violation too.
-// expect EventOverflow_Inbox_EvNoted_Read: native=counterexample tlc=counterexample z3=unproved
+// expect EventOverflow_Inbox_EvNoted_Read: native=counterexample tlc=counterexample z3=refuted
 // expect EventOverflow_Outbox_EvQueued_Send: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 entity Inbox "受信箱" {
   id: Int @pk

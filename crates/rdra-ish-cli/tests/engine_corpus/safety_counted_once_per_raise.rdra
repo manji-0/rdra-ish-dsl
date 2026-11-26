@@ -9,7 +9,7 @@
 // pass k = 2, so the overflow rule holds. z3 proves both Box rules with the reached-pattern
 // lemmas over (sent, got, pending); the latch's rule is not inductive.
 // expect Forbidden_Box_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
-// expect Forbidden_Crate_1: native=counterexample tlc=counterexample z3=unproved
+// expect Forbidden_Crate_1: native=counterexample tlc=counterexample z3=refuted
 // expect EventOverflow_Box_EvShipped_Receive: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 // expect BoxBothIn: native=ok tlc=ok
 entity Box "箱" {

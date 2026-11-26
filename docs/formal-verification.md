@@ -527,7 +527,7 @@ binds, and the rule's rows before and after, with any run mark or event mark the
 state before holds the rule and every kept lemma but need not be reachable:
 
 ```
-$ rdra-ish verify samples/formal-verification/one_to_one_shared.rdra --prove
+$ rdra-ish verify samples/formal-verification/one_to_one_shared.rdra --prove --instance-count 1
 ...
 unproved: Unique_Shipment_Order: not inductive; Ship(Order#1, Shipment#1) breaks it from a state where it and every proved rule hold (not necessarily reachable)
   Order#1 (present) status=placed -> status=shipped
@@ -535,8 +535,19 @@ unproved: Unique_Shipment_Order: not inductive; Ship(Order#1, Shipment#1) breaks
   Shipment#2 (present) Order=Order#1
 ```
 
-Here the CTI is also a real run: `verify` at two instances reports the violation with a
-trace.
+Here the CTI is also a real run: at two instances BFS reaches the violation and reports it
+with a trace. A rule BFS violates in the same run is not tried, since no induction can hold a
+rule that a reachable state breaks. It prints with the instances per entity its cone ran at,
+counts as `refuted` on the `proof:` line, and is BFS's error, not an unproved rule, so
+`--deny-unproved` does not count it:
+
+```
+$ rdra-ish verify samples/formal-verification/one_to_one_shared.rdra --prove
+...
+refuted: Unique_Shipment_Order (BFS counterexample at 2 instances)
+proof: 0 proved, 0 unproved, 0 out of scope, 1 refuted
+...
+```
 
 **Adding a lemma.** When no mined lemma rules a CTI's state out, write the missing fact as a
 rule with `.lemma()`. `check` checks it like any rule, so a wrong lemma fails there with a

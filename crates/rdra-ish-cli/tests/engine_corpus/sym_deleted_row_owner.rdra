@@ -7,7 +7,7 @@
 // flag whichever shop took that slot, store forms no run reaches, and lift a trace whose
 // second step does not flag the shop it names.
 // flags: --instances Mall=1
-// expect Quantifier_Mall_0: native=counterexample tlc=counterexample z3=unproved
+// expect Quantifier_Mall_0: native=counterexample tlc=counterexample z3=refuted
 // expect DanglingKey_Item_Shop: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 entity Mall "館" {
   id: Int @pk

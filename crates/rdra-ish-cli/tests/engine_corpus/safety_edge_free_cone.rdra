@@ -9,7 +9,7 @@
 // Order's entity cone.
 // expect AfterAssert_Deliver_0: native=ok tlc=ok
 // expect AfterAssert_Refund_1: native=ok tlc=ok
-// expect Forbidden_Ticket_0: native=counterexample tlc=counterexample z3=unproved
+// expect Forbidden_Ticket_0: native=counterexample tlc=counterexample z3=refuted
 // expect Witness_Order_status_refunded: native=counterexample tlc=counterexample
 entity Order "注文" {
   id: Int @pk

@@ -6,7 +6,7 @@
 // A lift that undid only the last sort would advance a job past its state, and the trace
 // would not replay.
 // flags: --instances Queue=1
-// expect Quantifier_Queue_0: native=counterexample tlc=counterexample z3=unproved bfs=ok,counterexample,counterexample
+// expect Quantifier_Queue_0: native=counterexample tlc=counterexample z3=refuted bfs=ok,counterexample,counterexample
 entity Queue "列" {
   id: Int @pk
 }

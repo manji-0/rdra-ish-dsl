@@ -7,7 +7,7 @@
 //! Without `z3` on PATH (or `RDRA_Z3`) the test is skipped with a printed reason;
 //! `RDRA_REQUIRE_Z3=1` turns the skip into a failure.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU8;
 use std::path::PathBuf;
 
@@ -103,6 +103,7 @@ fn no_proved_rule_has_a_bounded_counterexample() {
             &ts,
             twin.as_ref(),
             &rules,
+            &BTreeSet::new(),
             &mut solvers,
             ProveOptions::default(),
         )
@@ -180,6 +181,7 @@ fn a_proof_is_the_same_on_any_number_of_solvers() {
                 &ts,
                 twin.as_ref(),
                 &rules,
+                &BTreeSet::new(),
                 &mut solvers,
                 ProveOptions::default(),
             )
@@ -191,4 +193,91 @@ fn a_proof_is_the_same_on_any_number_of_solvers() {
         assert_eq!(proof(3), one, "{sample}");
     }
     assert!(with_cti >= 3, "{with_cti} samples with a CTI");
+}
+
+/// A rule BFS refutes is not tried (`verify --prove` passes the rules its safety pass
+/// violated), and every other rule keeps its verdict: no inductive set holds a refuted rule,
+/// so leaving it out proves the same rules. Tried anyway, the refuted rule is not proved.
+/// The CTI rows and the fine lemmas kept may differ, so only the kind of each verdict is
+/// compared. The cases: the formal-verification samples, with the rules BFS violates at
+/// `verify`'s bounds, and the engine-corpus cases, with the rules their header says BFS
+/// refutes (`z3=refuted`), some of them only under the case's flags.
+#[test]
+fn a_refuted_rule_left_out_changes_no_other_verdict() {
+    let Some(z3) = find_z3() else { return };
+    let kind = |v: &Verdict| match v {
+        Verdict::Proved => "proved",
+        Verdict::Unproved(Unproved::Initial) => "initial",
+        Verdict::Unproved(Unproved::NotInductive(_)) => "not inductive",
+        Verdict::Unproved(Unproved::Unknown { .. }) => "unknown",
+        Verdict::OutOfScope(_) => "out of scope",
+        Verdict::Refuted => "refuted",
+    };
+    let corpus = repo().join("crates/rdra-ish-cli/tests/engine_corpus");
+    let mut cases: Vec<String> = std::fs::read_dir(&corpus)
+        .expect("the engine corpus")
+        .map(|e| e.expect("a corpus entry").path())
+        .filter(|p| p.extension().is_some_and(|x| x == "rdra"))
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    cases.sort();
+    let samples = samples()
+        .into_iter()
+        .filter(|s| s.contains("formal-verification"));
+    let (mut refuted_total, mut beside) = (0, 0);
+    for sample in samples.chain(cases) {
+        let Some((ts, twin)) = proving(&sample) else {
+            continue;
+        };
+        let names: Vec<String> = match sample.ends_with(".rdra") && sample.contains("engine_corpus")
+        {
+            true => std::fs::read_to_string(&sample)
+                .expect("a corpus case")
+                .lines()
+                .filter_map(|l| l.strip_prefix("// expect "))
+                .filter(|l| l.contains(" z3=refuted"))
+                .filter_map(|l| l.split_once(':').map(|(c, _)| c.to_string()))
+                .collect(),
+            false => bounded_verdicts(&ts).0,
+        };
+        let refuted: BTreeSet<usize> = (0..ts.invariants().len())
+            .filter(|i| names.contains(&ts.invariants()[*i].name))
+            .collect();
+        if refuted.is_empty() {
+            continue;
+        }
+        let rules: Vec<usize> = (0..ts.invariants().len()).collect();
+        let proof = |refuted: &BTreeSet<usize>| {
+            let mut solvers = [(); 2].map(|()| Z3::start(&z3).expect("z3 starts"));
+            prove::prove(
+                &ts,
+                twin.as_ref(),
+                &rules,
+                refuted,
+                &mut solvers,
+                ProveOptions::default(),
+            )
+            .unwrap_or_else(|e| panic!("{sample}: {e}"))
+        };
+        let (all, left_out) = (proof(&BTreeSet::new()), proof(&refuted));
+        for (a, b) in all.rules.iter().zip(&left_out.rules) {
+            let name = &ts.invariants()[a.inv].name;
+            match refuted.contains(&a.inv) {
+                true => {
+                    refuted_total += 1;
+                    assert!(
+                        !matches!(a.verdict, Verdict::Proved),
+                        "{sample}: {name} is refuted but proved"
+                    );
+                    assert!(matches!(b.verdict, Verdict::Refuted), "{sample}: {name}");
+                }
+                false => {
+                    beside += 1;
+                    assert_eq!(kind(&a.verdict), kind(&b.verdict), "{sample}: {name}");
+                }
+            }
+        }
+    }
+    assert!(refuted_total > 0, "no case has a refuted rule");
+    assert!(beside > 0, "no case has a rule beside a refuted one");
 }

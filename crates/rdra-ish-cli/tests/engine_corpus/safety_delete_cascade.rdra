@@ -7,8 +7,9 @@
 // counterexample there would describe the engine, not the model. The info
 // DeleteLeavesChildren names the use case. An engine that put the restrict guard on a
 // cascade key would never run CancelDraft while the line names the Order and would answer
-// ok. z3 meets the same step from a state where the rule holds, so the rule is unproved.
-// expect Forbidden_OrderLine_0: native=counterexample tlc=counterexample z3=unproved
+// ok. BFS refutes the rule, so the proof does not try it; proof_equivalence checks that z3
+// would not prove it.
+// expect Forbidden_OrderLine_0: native=counterexample tlc=counterexample z3=refuted
 entity Order "注文" { id: Int @pk }
 entity OrderLine "明細" { id: Int @pk  orphaned: Bool @default(false) }
 relate(OrderLine, Order, N:1).on_delete(cascade)

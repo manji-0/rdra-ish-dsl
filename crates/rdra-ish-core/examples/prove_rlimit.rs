@@ -169,8 +169,15 @@ fn main() {
             })
             .collect();
         let start = Instant::now();
-        let proof = prove::prove(&ts, twin.as_ref(), &rules, &mut meters, options)
-            .unwrap_or_else(|e| panic!("{root}: {e}"));
+        let proof = prove::prove(
+            &ts,
+            twin.as_ref(),
+            &rules,
+            &Default::default(),
+            &mut meters,
+            options,
+        )
+        .unwrap_or_else(|e| panic!("{root}: {e}"));
         let secs = start.elapsed().as_secs_f64();
         let mut h = DefaultHasher::new();
         format!("{proof:?}").hash(&mut h);
@@ -190,6 +197,7 @@ fn main() {
                 Verdict::Proved => "proved",
                 Verdict::Unproved(_) => "unproved",
                 Verdict::OutOfScope(_) => "out_of_scope",
+                Verdict::Refuted => "refuted",
             };
             println!("  {v}: {}", ts.invariants()[r.inv].name);
         }
