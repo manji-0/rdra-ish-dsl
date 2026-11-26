@@ -41,7 +41,7 @@ const PAID_LEADS_TO_PENDING: usize = 3;
 const NEVER_PENDING: usize = 4;
 
 fn system(bounds: Bounds) -> TransitionSystem {
-    TransitionSystem::build(&model_from(ORDER), bounds, &Scope::ALL).ts
+    system_from(ORDER, bounds)
 }
 
 /// The states and actions of the path that takes each `(use case, slot)` step from the
@@ -101,10 +101,6 @@ fn verdict(d: Option<StateDiag>) -> Option<Verdict> {
         )),
         other => panic!("not a property violation: {other:?}"),
     }
-}
-
-fn names(xs: &[&str]) -> Vec<String> {
-    xs.iter().map(|x| x.to_string()).collect()
 }
 
 #[test]
@@ -323,10 +319,7 @@ fn both_under_first_order(
     ts: &TransitionSystem,
     steps: &[(&str, u8)],
 ) -> crate::lifecycle::LassoReplay {
-    let payment = ts
-        .entity_ids()
-        .find(|e| ts.entity(*e).id == "Payment")
-        .unwrap();
+    let payment = ent(ts, "Payment");
     let owner = ts.entity(payment).owners[0];
     let domain = ts.var(owner).domain.clone();
     let mut states = vec![ts
@@ -349,7 +342,7 @@ fn both_under_first_order(
 
 #[test]
 fn along_reads_only_the_linked_rows() {
-    let ts = TransitionSystem::build(&model_from(PAYMENT), Bounds::VERIFY, &Scope::ALL).ts;
+    let ts = system_from(PAYMENT, Bounds::VERIFY);
     // Payment#1 is captured under Order#1, which is paid; Order#2 stays a draft.
     let l = both_under_first_order(&ts, &[("Pay", 0), ("Capture", 0)]);
     assert_eq!(ts.explain_property(CAPTURED_PAID, &l), None);
@@ -363,7 +356,7 @@ fn along_reads_only_the_linked_rows() {
 
 #[test]
 fn along_still_fails_on_a_linked_pair() {
-    let ts = TransitionSystem::build(&model_from(PAYMENT), Bounds::VERIFY, &Scope::ALL).ts;
+    let ts = system_from(PAYMENT, Bounds::VERIFY);
     // Payment#1 is captured and its order, Order#1, never pays.
     let l = both_under_first_order(&ts, &[("Pay", 1), ("Capture", 0)]);
     let (kind, instance, witness, _, _) = verdict(ts.explain_property(CAPTURED_PAID, &l)).unwrap();

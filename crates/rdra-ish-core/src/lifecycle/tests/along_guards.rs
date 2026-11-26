@@ -174,7 +174,7 @@ fn a_path_through_an_optional_key_links_the_created_child() {
                 "relate(Claim, Case, N:1).optional()",
             )
             .replace("applies_to(Signed, Complete)", "applies_to(Signed, Submit)");
-        let ts = TransitionSystem::build(&model_from(&src), Bounds::VERIFY, &Scope::ALL).ts;
+        let ts = system_from(&src, Bounds::VERIFY);
         let submit = ts
             .actions()
             .iter()
@@ -330,7 +330,7 @@ relate(Fine, Loan, N:1)
 usecase Charge "請求"
 creates(Charge, Fine)"#,
             );
-        TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL)
+        built_from(&src, Bounds::STATES)
             .diags
             .into_iter()
             .filter_map(|d| match d.diag {

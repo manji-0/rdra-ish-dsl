@@ -5,7 +5,7 @@
 //! no guard and no such rule, as before #199.
 
 use super::*;
-use crate::lifecycle::types::{EntId, GuardWhy, Value};
+use crate::lifecycle::types::{GuardWhy, Value};
 use crate::lifecycle::ComponentRun;
 
 /// The issue's model: an Order with lines, and a use case that cancels the draft Order.
@@ -32,19 +32,13 @@ transitions(Place, Order.status, draft -> placed)
 const REJECTING: [&str; 3] = ["", ".on_delete(restrict)", ".on_delete(no_action)"];
 
 fn system(src: &str, bounds: Bounds) -> TransitionSystem {
-    TransitionSystem::build(&model_from(src), bounds, &Scope::ALL).ts
+    system_from(src, bounds)
 }
 
 fn explore(src: &str, bounds: Bounds) -> ComponentRun {
     let run = system(src, bounds).run(Caps::new(usize::MAX, 1 << 20));
     assert!(run.complete);
     run
-}
-
-fn ent(ts: &TransitionSystem, id: &str) -> EntId {
-    ts.entity_ids()
-        .find(|e| ts.entity(*e).id == id)
-        .unwrap_or_else(|| panic!("no entity {id}"))
 }
 
 /// Whether some reached state holds every slot of `Order` at `order` and every slot of

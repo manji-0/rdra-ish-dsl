@@ -327,11 +327,11 @@ pub(super) fn check_state_models(
                         a.var, a.value
                     ))
                 );
-                let held: Vec<_> =
-                    (crate::lifecycle::TransitionSystem::forward(&adjacency, p as u32))
-                        .into_iter()
-                        .map(|i| (plain.states.at(i as usize), named as u8))
-                        .collect();
+                let held: Vec<_> = adjacency
+                    .forward_from(p as u32, |_| true)
+                    .into_iter()
+                    .map(|i| (plain.states.at(i as usize), named as u8))
+                    .collect();
                 let exits = ts.exits(e, a.var, a.value);
                 let want = ts.deadlock(e, a.var, a.value, named, &exits, &held);
                 assert_eq!(

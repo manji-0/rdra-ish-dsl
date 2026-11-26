@@ -98,15 +98,32 @@ pub(crate) fn map_messages(
     // and the same finding elsewhere (an impl that needs the contract) adds nothing.
     let mut ordered: Vec<&CompilerMessage> = messages.iter().collect();
     ordered.sort_by_key(|msg| on_probe(msg).is_none());
-    for msg in ordered {
-        let contract = on_probe(msg)
-            .or_else(|| m.index.find(&msg.text).map(|(_, c, _)| c))
-            .or_else(|| m.contracts.iter().position(|c| names(&msg.text, &c.name)));
+    let routed: Vec<(&CompilerMessage, Option<usize>)> = ordered
+        .into_iter()
+        .map(|msg| {
+            let contract = on_probe(msg)
+                .or_else(|| m.index.find(&msg.text).map(|(_, c, _)| c))
+                .or_else(|| m.contracts.iter().position(|c| names(&msg.text, &c.name)));
+            (msg, contract)
+        })
+        .collect();
+    // Each contract's members that some message says are missing, across all its messages.
+    let mut missing: Vec<Vec<String>> = vec![Vec::new(); m.contracts.len()];
+    for (msg, contract) in &routed {
+        if let (Some(c), Some((names, _))) = (contract, backend.missing_members(msg)) {
+            for name in names {
+                if !missing[*c].contains(&name) {
+                    missing[*c].push(name);
+                }
+            }
+        }
+    }
+    for (msg, contract) in routed {
         let Some(c) = contract else {
             unmapped.push(msg);
             continue;
         };
-        let finding = whole_contract(backend.classify(msg), msg, c, m, backend);
+        let finding = whole_contract(backend.classify(msg), msg, c, m, backend, &missing[c]);
         let d = diagnostic(&m.contracts[c], c, msg, finding, m, backend);
         if !out.iter().any(|x| x.name == d.name) {
             out.push(d);
@@ -129,14 +146,17 @@ pub(crate) fn map_messages(
 }
 
 /// `Incomplete` is `NotImplemented` when the members the message says are missing are every
-/// member of contract `c`: a compiler that has no code for "not implemented" (tsc) or an
-/// empty impl block (E0046 listing them all).
+/// member of contract `c`, or when `missing`, what all the contract's messages say is
+/// missing, holds every member: a compiler that has no code for "not implemented" (tsc), an
+/// empty impl block (E0046 listing them all), or members missing across several messages, as
+/// Go's backend counts them.
 fn whole_contract(
     finding: Finding,
     msg: &CompilerMessage,
     c: usize,
     m: &Mapping<'_>,
     backend: &dyn Backend,
+    missing: &[String],
 ) -> Finding {
     if finding != Finding::Incomplete {
         return finding;
@@ -145,9 +165,10 @@ fn whole_contract(
         return finding;
     };
     let members = m.index.methods_of(c);
-    let all =
+    let this_message =
         names.iter().all(|n| members.contains(&n.as_str())) && names.len() + more == members.len();
-    if all {
+    let across = !members.is_empty() && members.iter().all(|x| missing.iter().any(|n| n == x));
+    if this_message || across {
         Finding::NotImplemented
     } else {
         finding
@@ -301,6 +322,118 @@ mod tests {
         assert_eq!(name("M: prep_Ship (+1)"), "CodeMissingUseCase_Ship");
         assert_eq!(name("M: commit_Ship"), "CodeIncomplete_Ship");
         assert_eq!(name("M: prep_Ship, other"), "CodeIncomplete_Ship");
+    }
+
+    /// Ship's contract with the method names `spell` gives, mapped for `map_messages`.
+    fn ship(spell: fn(&PortMethod) -> Vec<String>) -> (PortDecl, ContractIndex) {
+        let port = PortDecl {
+            methods: vec![method("Ship")],
+            contracts: vec![contract("Ship", 0)],
+            ..PortDecl::default()
+        };
+        let index = ContractIndex::new(&port, spell);
+        (port, index)
+    }
+
+    fn names_of(found: &[CodeDiagnostic]) -> Vec<&str> {
+        found.iter().map(|d| d.name.as_str()).collect()
+    }
+
+    #[test]
+    fn members_missing_across_messages_are_the_contract_not_implemented() {
+        let (port, index) =
+            ship(|m| vec![format!("prep_{}", m.action), format!("commit_{}", m.action)]);
+        let probe = Probe::default();
+        let m = Mapping {
+            probe_file: Path::new("tests/probe.x"),
+            probe: &probe,
+            index: &index,
+            contracts: &port.contracts,
+            service: "Svc",
+        };
+        let both = [
+            msg("src/svc.x", 3, "X3", "M: prep_Ship"),
+            msg("src/svc.x", 9, "X3", "M: commit_Ship"),
+        ];
+        assert_eq!(
+            names_of(&map_messages(&both, &m, &Lister)),
+            ["CodeMissingUseCase_Ship"]
+        );
+        let one = [msg("src/svc.x", 9, "X3", "M: commit_Ship")];
+        assert_eq!(
+            names_of(&map_messages(&one, &m, &Lister)),
+            ["CodeIncomplete_Ship"]
+        );
+    }
+
+    #[test]
+    fn rust_unions_the_members_its_e0046_messages_miss() {
+        let (port, index) = ship(|m| {
+            let snake = m.action.to_lowercase();
+            vec![format!("prepare_{snake}"), format!("commit_{snake}")]
+        });
+        let probe = Probe::default();
+        let m = Mapping {
+            probe_file: Path::new("tests/rdra_contract.rs"),
+            probe: &probe,
+            index: &index,
+            contracts: &port.contracts,
+            service: "Svc",
+        };
+        let e0046 = |line, member: &str| {
+            msg(
+                "src/lib.rs",
+                line,
+                "E0046",
+                &format!("not all trait items implemented, missing: `{member}`"),
+            )
+        };
+        let rust = super::super::rust::Rust;
+        let both = [e0046(3, "prepare_ship"), e0046(9, "commit_ship")];
+        assert_eq!(
+            names_of(&map_messages(&both, &m, &rust)),
+            ["CodeMissingUseCase_Ship"]
+        );
+        assert_eq!(
+            names_of(&map_messages(&both[1..], &m, &rust)),
+            ["CodeIncomplete_Ship"]
+        );
+    }
+
+    #[test]
+    fn typescript_unions_the_members_its_messages_miss() {
+        let (port, index) = ship(|m| {
+            vec![
+                format!("prepare{}", m.action),
+                format!("commit{}", m.action),
+            ]
+        });
+        let probe = Probe::default();
+        let m = Mapping {
+            probe_file: Path::new("rdra_contract.ts"),
+            probe: &probe,
+            index: &index,
+            contracts: &port.contracts,
+            service: "Svc",
+        };
+        let ts2741 = |line, member: &str| {
+            msg(
+                "src/svc.ts",
+                line,
+                "TS2741",
+                &format!("Property '{member}' is missing in type 'Svc' but required in type 'ShipUseCase'."),
+            )
+        };
+        let ts = super::super::ts::TypeScript;
+        let both = [ts2741(3, "prepareShip"), ts2741(9, "commitShip")];
+        assert_eq!(
+            names_of(&map_messages(&both, &m, &ts)),
+            ["CodeMissingUseCase_Ship"]
+        );
+        assert_eq!(
+            names_of(&map_messages(&both[1..], &m, &ts)),
+            ["CodeIncomplete_Ship"]
+        );
     }
 
     #[test]

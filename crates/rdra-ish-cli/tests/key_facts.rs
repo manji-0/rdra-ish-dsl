@@ -4,26 +4,16 @@
 //! the next consumer that re-derives keys on its own.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 use rdra_ish_core::lifecycle::{Bounds, InvKind, Scope, TransitionSystem, VarKind};
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
 use rdra_ish_core::{load_project, tx};
 
-fn repo() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-fn samples() -> Vec<String> {
-    std::fs::read_to_string(repo().join("samples.txt"))
-        .expect("samples.txt")
-        .lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
-        .map(str::to_string)
-        .collect()
-}
+#[path = "common/samples.rs"]
+mod samples;
+use samples::{repo, samples};
 
 fn load(sample: &str) -> SemanticModel {
     let project =

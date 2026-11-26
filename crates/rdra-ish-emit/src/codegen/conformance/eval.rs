@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use rdra_ish_core::lifecycle::{Domain, StateSlice, TransitionSystem, Value, VarId, VarKind};
 use rdra_ish_core::SemanticModel;
 
-use crate::codegen::ir::{ArgCheck, CmpOp, Expr, FnDecl};
+use crate::codegen::ir::{ArgCheck, Expr, FnDecl};
 
 /// The var of `entity.column` in `ts`.
 pub fn column_var(ts: &TransitionSystem, entity: &str, column: &str) -> Option<VarId> {
@@ -121,9 +121,7 @@ impl<'a> Rows<'a> {
                 return None
             }
             Expr::IsNull { row, field } => self.get(*row, &field.wire)?.1 == Value::NULL,
-            Expr::EnumEq {
-                row, field, value, ..
-            } => {
+            Expr::EnumEq { row, field, value } => {
                 let (var, v) = self.get(*row, &field.wire)?;
                 // Null satisfies no comparison (#359); a plain Enum holds no null, and its first
                 // value shares the encoding.
@@ -172,7 +170,7 @@ impl<'a> Rows<'a> {
                 elem, body, op, n, ..
             } => {
                 let count = self.over(*elem, body)?.iter().filter(|v| **v).count();
-                compare(i64::try_from(count).ok()?, *op, i64::from(*n))
+                op.holds(i64::try_from(count).ok()?, i64::from(*n))
             }
             Expr::IntCmp {
                 row,
@@ -182,7 +180,7 @@ impl<'a> Rows<'a> {
             } => {
                 let (var, v) = self.get(*row, &field.wire)?;
                 let n = self.ts.var(var).domain.number(v)?;
-                compare(n, *op, *value)
+                op.holds(n, *value)
             }
         })
     }
@@ -221,15 +219,4 @@ pub fn matching<'f>(fns: &'f [FnDecl], action: &str, rows: &Rows<'_>) -> Vec<&'f
             })
         })
         .collect()
-}
-
-pub fn compare(a: i64, op: CmpOp, b: i64) -> bool {
-    match op {
-        CmpOp::Eq => a == b,
-        CmpOp::Ne => a != b,
-        CmpOp::Lt => a < b,
-        CmpOp::Le => a <= b,
-        CmpOp::Gt => a > b,
-        CmpOp::Ge => a >= b,
-    }
 }

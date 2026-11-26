@@ -7,12 +7,14 @@ mod csv_cmd;
 mod diagram;
 mod export;
 mod fmt_cmd;
+mod generated_file;
 mod guard_report;
 mod lifecycle_gate;
 mod list_output;
 mod load;
 mod memory;
 mod next;
+mod paths;
 pub mod property_cone;
 mod prove;
 mod session;
@@ -23,7 +25,7 @@ pub mod tlc_env;
 pub mod tlc_output;
 pub mod tlc_replay;
 mod verify;
-use cli::{BoundsArgs, Cli, Commands, ListFormat, ListKind};
+use cli::{Cli, Commands, ListFormat, ListKind};
 use csv_cmd::run_csv;
 use diagram::run_diagram;
 use export::run_export;
@@ -59,9 +61,7 @@ pub fn run() -> Result<()> {
             inputs,
             strict,
             deny_deprecated: deny,
-            max_patterns,
-            max_states,
-            memory,
+            caps,
             guards,
             code,
             bounds,
@@ -84,7 +84,7 @@ pub fn run() -> Result<()> {
                 (None, Some(m)) if m.code.as_ref().is_some_and(|c| !c.targets().is_empty()) => {
                     eprintln!(
                         "note: {} has [code]; `check --code` also checks the service code against the model",
-                        codegen_cmd::shown(&m.path)
+                        paths::shown(&m.path)
                     );
                 }
                 _ => {}
@@ -110,8 +110,8 @@ pub fn run() -> Result<()> {
             // Same severity as `states` (fail-closed on caps and violated constraints).
             let bounds = bounds.bounds(&model, manifest.as_ref())?;
             let caps = charged(
-                BoundsArgs::caps(&bounds, max_patterns, max_states),
-                memory,
+                caps.caps(&bounds),
+                caps.memory,
                 manifest.as_ref(),
                 Budgeted::Check,
             );
@@ -296,18 +296,10 @@ pub fn run() -> Result<()> {
         Commands::States {
             inputs,
             format,
-            max_patterns,
-            max_states,
-            memory,
+            caps,
             bounds,
             scope,
-        } => run_states(
-            &inputs,
-            format,
-            &bounds,
-            (max_patterns, max_states, memory),
-            &scope,
-        )?,
+        } => run_states(&inputs, format, &bounds, &caps, &scope)?,
 
         Commands::Verify {
             inputs,

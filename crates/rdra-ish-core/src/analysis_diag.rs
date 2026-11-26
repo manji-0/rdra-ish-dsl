@@ -3,6 +3,7 @@
 use crate::diagnostics::{Diagnostic, RdraError};
 use crate::location::DiagCtxt;
 use crate::model::SemanticModel;
+use rdra_ish_syntax::ast::Kind;
 use rdra_ish_syntax::ast::{Comparison, Expr, PredicateArg, QRef, Span};
 
 pub(crate) fn push_error(ctx: DiagCtxt, diags: &mut Vec<Diagnostic>, span: Span, err: RdraError) {
@@ -96,7 +97,7 @@ pub(crate) fn push_entity_error(
     entity_id: &str,
     err: RdraError,
 ) {
-    if let Some(loc) = model.decl_sites.located("entity", entity_id) {
+    if let Some(loc) = model.decl_sites.located(Kind::Entity, entity_id) {
         diags.push(Diagnostic::error_at(err, loc));
     } else {
         diags.push(Diagnostic::error(err));

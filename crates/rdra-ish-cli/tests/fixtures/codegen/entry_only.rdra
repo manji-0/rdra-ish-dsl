@@ -1,0 +1,14 @@
+// A model whose every action is an entry point (codegen_builds.rs): both events are counted
+// (#220), so Place and Ship get no function, only `run<Action>` on the port and a use-case
+// error each. The output still declares every error type it names (G15).
+entity Order "O" {
+  id: Int @pk
+  status: Enum(open, shipped) @default(open)
+}
+usecase Place "Place"
+usecase Ship "Ship"
+event EvPlaced "placed"
+creates(Place, Order)
+raises(Place, EvPlaced)
+triggers(EvPlaced, Ship).counted(2)
+transitions(Ship, Order.status, open -> shipped)
