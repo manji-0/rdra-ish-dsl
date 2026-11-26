@@ -5,10 +5,12 @@
 
 use rdra_ish_core::location::LocatedSpan;
 use rdra_ish_core::SemanticModel;
+use rdra_ish_syntax::ast::Kind;
 use serde_json::{json, Value};
 
 use super::ir::{
-    DomainModel, EnumDecl, Field, FieldType, FnDecl, RecordKind, UseCaseKind, VariantDecl,
+    DomainModel, EnumDecl, Field, FieldType, FnDecl, InputType, RecordKind, UseCaseKind,
+    VariantDecl,
 };
 use super::{CheckStatus, Options};
 
@@ -22,7 +24,7 @@ pub fn print(
     options: &Options,
     site: &dyn Fn(&LocatedSpan) -> Option<String>,
 ) -> String {
-    let at = |kind: &str, id: &str| model.decl_sites.located(kind, id).as_ref().and_then(site);
+    let at = |kind: Kind, id: &str| model.decl_sites.located(kind, id).as_ref().and_then(site);
     let value = json!({
         "format": JSON_FORMAT,
         "generator": format!("rdra-ish {}", options.version),
@@ -35,7 +37,7 @@ pub fn print(
         "states": domain.sums.iter().map(|s| json!({
             "name": s.name,
             "entity": s.entity,
-            "site": at("entity", &s.entity),
+            "site": at(Kind::Entity, &s.entity),
             "row": s.row,
             "kind": s.kind,
             "tag": field(&s.tag),
@@ -75,7 +77,7 @@ pub fn print(
 fn types(
     model: &SemanticModel,
     domain: &DomainModel,
-    at: &dyn Fn(&str, &str) -> Option<String>,
+    at: &dyn Fn(Kind, &str) -> Option<String>,
 ) -> Value {
     let mut out: Vec<Value> = Vec::new();
     for e in &domain.enums {
@@ -85,7 +87,7 @@ fn types(
             .find(|v| super::type_ident(&v.id) == e.name);
         let mut decl = enum_decl(e);
         decl["variation"] = json!(variation.map(|v| v.id.clone()));
-        decl["site"] = json!(variation.and_then(|v| at("variation", &v.id)));
+        decl["site"] = json!(variation.and_then(|v| at(Kind::Variation, &v.id)));
         out.push(decl);
     }
     for id in &domain.ids {
@@ -101,7 +103,7 @@ fn types(
             "kind": match r.kind { RecordKind::Entity => "entity", RecordKind::Dto => "dto" },
             "name": r.name,
             "id": r.id,
-            "site": at(match r.kind { RecordKind::Entity => "entity", RecordKind::Dto => "dto" }, &r.id),
+            "site": at(match r.kind { RecordKind::Entity => Kind::Entity, RecordKind::Dto => Kind::Dto }, &r.id),
             "fields": r.fields.iter().map(field).collect::<Vec<_>>(),
         }));
     }
@@ -144,7 +146,13 @@ fn ty(t: &FieldType) -> Value {
         FieldType::Scalar(s) => json!({ "kind": "scalar", "name": s.name() }),
         FieldType::Enum(n) => json!({ "kind": "enum", "name": n }),
         FieldType::Id(n) => json!({ "kind": "id", "name": n }),
-        FieldType::Rows(n) => json!({ "kind": "rows", "name": n }),
+    }
+}
+
+fn input_ty(t: &InputType) -> Value {
+    match t {
+        InputType::Value(t) => ty(t),
+        InputType::Rows(n) => json!({ "kind": "rows", "name": n }),
     }
 }
 
@@ -164,7 +172,7 @@ fn function(f: &FnDecl) -> Value {
         "event": f.event_in.as_ref().map(|e| json!({ "name": e.name, "type": e.ty, "event": e.event })),
         "inputs": f.inputs.iter().map(|i| json!({
             "name": i.name,
-            "type": ty(&i.ty),
+            "type": input_ty(&i.ty),
             "nullable": i.nullable,
         })).collect::<Vec<_>>(),
         "conditions": f.conditions.iter().map(|c| json!({ "id": c.id, "site": c.site })).collect::<Vec<_>>(),

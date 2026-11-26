@@ -12,7 +12,8 @@ use rdra_ish_emit::codegen::{probe_for, Lang, ProbeBinding};
 
 use super::map::{CompilerMessage, Finding};
 use super::{Backend, Target};
-use crate::codegen_cmd::stamp;
+use crate::generated_file::stamp;
+use crate::paths::relative;
 
 pub(crate) struct TypeScript;
 
@@ -22,20 +23,6 @@ const NODE: &str = "22.18";
 
 /// The file tsc builds: in the root, beside the project's `tsconfig.json`.
 const TSCONFIG: &str = "tsconfig.rdra.json";
-
-/// `to` as a path relative to the directory `from`, with `/` separators.
-fn relative(from: &Path, to: &Path) -> String {
-    let from: Vec<Component> = from.components().collect();
-    let to: Vec<Component> = to.components().collect();
-    let common = from.iter().zip(&to).take_while(|(a, b)| a == b).count();
-    let mut parts: Vec<String> = vec!["..".to_string(); from.len() - common];
-    parts.extend(
-        to[common..]
-            .iter()
-            .map(|c| c.as_os_str().to_string_lossy().into_owned()),
-    );
-    parts.join("/")
-}
 
 /// An import specifier of `to` from a file in `from`: `./x.ts`, `../x.ts`.
 fn specifier(from: &Path, to: &Path) -> String {
@@ -255,11 +242,11 @@ impl Backend for TypeScript {
     }
 
     fn method_names(&self, m: &PortMethod) -> Vec<String> {
-        vec![format!("prepare{}", m.name), format!("commit{}", m.name)]
+        rdra_ish_emit::codegen::method_names(Lang::TypeScript, m).to_vec()
     }
 
     fn entry_names(&self, name: &str) -> Vec<String> {
-        vec![format!("run{name}")]
+        vec![rdra_ish_emit::codegen::entry_name(Lang::TypeScript, name)]
     }
 
     fn implement_hint(&self, contract: &ContractDecl, service: &str, methods: &[&str]) -> String {

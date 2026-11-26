@@ -57,7 +57,6 @@ fn formats_to_what_fmt_prints_and_then_stays(input: &str) {
         json!([]),
         "formatting the result again must change nothing"
     );
-    let _ = std::fs::remove_dir_all(root);
 }
 
 #[test]

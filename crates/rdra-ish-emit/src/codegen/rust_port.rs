@@ -1,10 +1,10 @@
 //! The Rust conformance port and harness: `StoreSnapshot`, `ConformancePort`, and `conform`,
 //! which drives a port along the traces `conformance::traces` writes.
 
-use super::actions::snake;
 use super::conformance::TRACES_FORMAT;
-use super::ir::{DomainModel, Field, FieldType, Scalar, Track};
+use super::ir::{DomainModel, Field, FieldType, PortArg, PortDecl, PortMethod, Scalar, Track};
 use super::rust::{doc, field_type, ident, OPTION, STRING};
+use super::snake;
 use super::string_literal;
 
 const VEC: &str = "::std::vec::Vec";
@@ -15,9 +15,19 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
         return;
     };
     print_contracts(domain, port, out);
-    if !domain.harness {
+    if !port.harness {
         return;
     }
+    print_snapshot(port, out);
+    print_port_trait(port, out);
+    print_conform(port, out);
+    print_calls(domain, port, out);
+    print_seed_rows(port, out);
+    print_abstraction(port, out);
+}
+
+/// The run marks and `StoreSnapshot`: everything a store holds, as the harness reads it.
+fn print_snapshot(port: &PortDecl, out: &mut String) {
     out.push_str(
         "// ── Conformance: the port a finished service implements, and the harness that drives it ──\n\n",
     );
@@ -61,7 +71,10 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
         ));
     }
     out.push_str("}\n\n");
+}
 
+/// `ConformancePort`, what a finished service offers the harness, and `ConformanceReport`.
+fn print_port_trait(port: &PortDecl, out: &mut String) {
     out.push_str("/// What a finished service offers the conformance harness: every use case's contract, and\n/// a store the harness can seed and read back.\n");
     let supers: Vec<&str> = port.contracts.iter().map(|c| c.name.as_str()).collect();
     let bound = if supers.is_empty() {
@@ -81,6 +94,10 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
     out.push_str("/// What `conform` checked.\n");
     out.push_str("#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]\n");
     out.push_str("pub struct ConformanceReport {\n    /// The traces run.\n    pub traces: usize,\n    /// The calls the model runs, made.\n    pub calls: usize,\n    /// The calls the model refuses, made and refused.\n    pub refusals: usize,\n    /// The commits after another call changed a row they write, refused.\n    pub interleavings: usize,\n}\n\n");
+}
+
+/// `conform`, which drives a fresh port per trace, and the helpers it shares with every model.
+fn print_conform(port: &PortDecl, out: &mut String) {
     out.push_str("/// A prepared write of any use case.\nenum ConfWrite {\n");
     for m in &port.methods {
         out.push_str(&format!("    {}({}),\n", m.name, m.write));
@@ -228,7 +245,20 @@ where
         format = string_literal(TRACES_FORMAT),
         FMT = "::core::fmt",
     ));
+}
 
+/// The calls: `conf_prepare` reads a call's values and prepares it; `conf_commit` commits it.
+fn print_calls(domain: &DomainModel, port: &PortDecl, out: &mut String) {
+    // A model whose every action is an entry point has no call: the harness names none.
+    if port.methods.is_empty() {
+        out.push_str(&format!(
+            "fn conf_prepare<P: ConformancePort>(_conf_port: &mut P, call: &[&str]) -> {RESULT}<{RESULT}<ConfWrite, {STRING}>, {STRING}> {{\n    let action = call.first().copied().unwrap_or_default();\n    {RESULT}::Err(format!(\"no use case {{action}} in this port\"))\n}}\n\n"
+        ));
+        out.push_str(&format!(
+            "fn conf_commit<P: ConformancePort>(_conf_port: &mut P, write: ConfWrite) -> {RESULT}<(), {STRING}> {{\n    match write {{}}\n}}\n\n"
+        ));
+        return;
+    }
     // The calls.
     out.push_str(&format!(
         "#[allow(unused_mut, unused_variables)] // a model whose calls take no values reads none\nfn conf_prepare<P: ConformancePort>(conf_port: &mut P, call: &[&str]) -> {RESULT}<{RESULT}<ConfWrite, {STRING}>, {STRING}> {{\n"
@@ -249,58 +279,39 @@ where
             let cap = &domain.capabilities[caller.actors[0]];
             args.push(format!("{}::from({}::issue())", caller.name, cap.name));
         }
-        for (name, ty) in m.rows.iter().chain(&m.marks) {
-            out.push_str(&format!(
-                "            let {} = {};\n",
-                ident(&format!("conf_{name}")),
-                parse(&FieldType::Id(ty.clone()), false)
-            ));
-            args.push(ident(&format!("conf_{name}")));
-        }
-        if let Some((name, ty)) = &m.event {
-            let event = domain.events.iter().find(|e| e.name == *ty);
-            let fields: Vec<String> = event
-                .map(|e| e.fields.clone())
-                .unwrap_or_default()
-                .iter()
-                .map(|f| {
-                    format!(
-                        "{}: {}",
-                        ident(&f.name),
-                        parse(&FieldType::Id(f.id_ty.clone()), false)
-                    )
-                })
-                .collect();
-            let value = if fields.is_empty() {
-                ty.clone()
-            } else {
-                format!("{ty} {{ {} }}", fields.join(", "))
+        for a in m.args() {
+            let value = match a {
+                PortArg::Id(a) => parse(&FieldType::Id(a.ty.clone()), false),
+                PortArg::Event(a) => {
+                    let event = domain.events.iter().find(|e| e.name == a.ty);
+                    let fields: Vec<String> = event
+                        .map(|e| e.fields.clone())
+                        .unwrap_or_default()
+                        .iter()
+                        .map(|f| {
+                            format!(
+                                "{}: {}",
+                                ident(&f.name),
+                                parse(&FieldType::Id(f.id_ty.clone()), false)
+                            )
+                        })
+                        .collect();
+                    if fields.is_empty() {
+                        a.ty.clone()
+                    } else {
+                        format!("{} {{ {} }}", a.ty, fields.join(", "))
+                    }
+                }
+                PortArg::Input(i) => parse(&i.ty, i.nullable),
+                PortArg::Choice(a) => parse(&FieldType::Enum(a.ty.clone()), false),
             };
-            out.push_str(&format!(
-                "            let {} = {value};\n",
-                ident(&format!("conf_{name}"))
-            ));
-            args.push(ident(&format!("conf_{name}")));
-        }
-        for i in &m.inputs {
-            out.push_str(&format!(
-                "            let {} = {};\n",
-                ident(&format!("conf_{}", i.name)),
-                parse(&i.ty, i.nullable)
-            ));
-            args.push(ident(&format!("conf_{}", i.name)));
-        }
-        for (name, ty) in &m.choices {
-            out.push_str(&format!(
-                "            let {} = {};\n",
-                ident(&format!("conf_{name}")),
-                parse(&FieldType::Enum(ty.clone()), false)
-            ));
-            args.push(ident(&format!("conf_{name}")));
+            let v = ident(&format!("conf_{}", a.name()));
+            out.push_str(&format!("            let {v} = {value};\n"));
+            args.push(v);
         }
         out.push_str(&format!(
-            "            {RESULT}::Ok(conf_port.prepare_{}({}).map(ConfWrite::{}).map_err(|e| e.to_string()))\n        }}\n",
-            snake(&m.name),
+            "            {RESULT}::Ok(conf_port.{}({}).map(ConfWrite::{}).map_err(|e| e.to_string()))\n        }}\n",
+            method_names(m)[0],
             args.join(", "),
             m.name
         ));
@@ -313,13 +324,16 @@ where
     ));
     for m in &port.methods {
         out.push_str(&format!(
-            "        ConfWrite::{}(w) => conf_port.commit_{}(w).map_err(|e| e.to_string()),\n",
+            "        ConfWrite::{}(w) => conf_port.{}(w).map_err(|e| e.to_string()),\n",
             m.name,
-            snake(&m.name)
+            method_names(m)[1]
         ));
     }
     out.push_str("    }\n}\n\n");
+}
 
+/// `conf_seed_row`: the rows of an initial state.
+fn print_seed_rows(port: &PortDecl, out: &mut String) {
     // The rows of an initial state.
     out.push_str(&format!(
         "#[allow(unused_mut)] // an entity of one column takes it without advancing\nfn conf_seed_row(seed: &mut StoreSnapshot, toks: &[&str]) -> {RESULT}<(), {STRING}> {{\n"
@@ -344,7 +358,10 @@ where
     out.push_str(&format!(
         "        other => return {RESULT}::Err(format!(\"no entity {{other}} in this port\")),\n    }}\n    {RESULT}::Ok(())\n}}\n\n"
     ));
+}
 
+/// `conf_abstract`: the store as the traces spell a state.
+fn print_abstraction(port: &PortDecl, out: &mut String) {
     // The abstraction.
     out.push_str(&format!(
         "/// The store as the traces spell a state: one line per row with the columns the model\n/// tracks, per pending run mark, and per raise a triggered use case reads; sorted.\n#[allow(unused_mut)]\nfn conf_abstract(s: &StoreSnapshot) -> {VEC}<{STRING}> {{\n    let mut out: {VEC}<{STRING}> = {VEC}::new();\n"
@@ -397,10 +414,7 @@ pub(super) fn probe(
     domain: &DomainModel,
     binding: &super::ProbeBinding,
 ) -> Option<super::probe::Probe> {
-    let port = domain.port.as_ref()?;
-    if port.contracts.is_empty() {
-        return None;
-    }
+    let port = domain.port_with_contracts()?;
     let mut w = super::probe::ProbeWriter::new(
         "// Generated by rdra-ish codegen (experimental): the contract probe of `check --code`.",
     );
@@ -424,7 +438,7 @@ pub(super) fn probe(
             c,
         );
     }
-    if let (Some((new, traces)), true) = (&binding.conformance, domain.harness) {
+    if let (Some((new, traces)), true) = (&binding.conformance, domain.harness().is_some()) {
         w.line("");
         w.line("/// The service against the model's traces, by the generated harness.");
         w.line("#[test]");
@@ -500,6 +514,17 @@ fn print_capabilities(domain: &DomainModel, port: &super::ir::PortDecl, out: &mu
 
 /// One trait per use case (docs/design/code-check.md, decision 6): the prepare and commit
 /// methods of its actions. A service implements each; the probe names each.
+/// A port method's two calls: `prepare_<action>` and `commit_<action>`.
+pub(super) fn method_names(m: &PortMethod) -> [String; 2] {
+    let snake = snake(&m.name);
+    [format!("prepare_{snake}"), format!("commit_{snake}")]
+}
+
+/// The method of an entry point (#335): `run_<action>`.
+pub(super) fn entry_name(name: &str) -> String {
+    format!("run_{}", snake(name))
+}
+
 fn print_contracts(domain: &DomainModel, port: &super::ir::PortDecl, out: &mut String) {
     if port.contracts.is_empty() {
         return;
@@ -535,22 +560,20 @@ fn print_contracts(domain: &DomainModel, port: &super::ir::PortDecl, out: &mut S
                 params.insert(0, format!("by: {}", caller.name));
             }
             out.push_str(&super::rust::allow_arguments(params.len() + 1, "    "));
+            let [prepare, commit] = method_names(m);
             out.push_str(&format!(
-                "    fn prepare_{}(&mut self{}) -> {RESULT}<{}, {error}>;\n",
-                snake(&m.name),
+                "    fn {prepare}(&mut self{}) -> {RESULT}<{}, {error}>;\n",
                 params.iter().map(|p| format!(", {p}")).collect::<String>(),
                 m.write
             ));
             out.push_str(&doc(
                 &[format!(
-                    "Stores what `prepare_{}` returned in one transaction.",
-                    snake(&m.name)
+                    "Stores what `{prepare}` returned in one transaction."
                 )],
                 "    ",
             ));
             out.push_str(&format!(
-                "    fn commit_{}(&mut self, write: {}) -> {RESULT}<(), {error}>;\n",
-                snake(&m.name),
+                "    fn {commit}(&mut self, write: {}) -> {RESULT}<(), {error}>;\n",
                 m.write
             ));
         }
@@ -572,8 +595,8 @@ fn print_contracts(domain: &DomainModel, port: &super::ir::PortDecl, out: &mut S
             }
             out.push_str(&super::rust::allow_arguments(params.len() + 1, "    "));
             out.push_str(&format!(
-                "    fn run_{}(&mut self{}) -> {RESULT}<(), {}>;\n",
-                snake(&e.name),
+                "    fn {}(&mut self{}) -> {RESULT}<(), {}>;\n",
+                entry_name(&e.name),
                 params.concat(),
                 c.error
             ));
@@ -583,28 +606,22 @@ fn print_contracts(domain: &DomainModel, port: &super::ir::PortDecl, out: &mut S
 }
 
 fn params(m: &super::ir::PortMethod) -> Vec<String> {
-    let mut out: Vec<String> = m
-        .rows
-        .iter()
-        .chain(&m.marks)
-        .map(|(n, ty)| format!("{}: {ty}", ident(n)))
-        .collect();
-    if let Some((n, ty)) = &m.event {
-        out.push(format!("{}: {ty}", ident(n)));
-    }
-    for i in &m.inputs {
-        let ty = field_type(&i.ty);
-        let ty = if i.nullable {
-            format!("{OPTION}<{ty}>")
-        } else {
-            ty
-        };
-        out.push(format!("{}: {ty}", ident(&i.name)));
-    }
-    for (n, ty) in &m.choices {
-        out.push(format!("{}: {ty}", ident(n)));
-    }
-    out
+    m.args()
+        .map(|a| match a {
+            PortArg::Id(a) | PortArg::Event(a) | PortArg::Choice(a) => {
+                format!("{}: {}", ident(&a.name), a.ty)
+            }
+            PortArg::Input(i) => {
+                let ty = field_type(&i.ty);
+                let ty = if i.nullable {
+                    format!("{OPTION}<{ty}>")
+                } else {
+                    ty
+                };
+                format!("{}: {ty}", ident(&i.name))
+            }
+        })
+        .collect()
 }
 
 /// An expression that reads the next value of `conf_args` as `ty`, through the parser of the
@@ -613,7 +630,6 @@ fn parse(ty: &FieldType, nullable: bool) -> String {
     let value = |t: &str| -> String {
         match ty {
             FieldType::Scalar(Scalar::String) => format!("{t}.to_string()"),
-            FieldType::Rows(_) => unreachable!("a list of rows is no port argument"),
             other => format!("conf_parse::<{}>({t})?", field_type(other)),
         }
     };

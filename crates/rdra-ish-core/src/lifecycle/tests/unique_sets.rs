@@ -123,7 +123,7 @@ fn a_null_column_exempts_the_row() {
 fn a_set_with_a_column_the_lifecycle_does_not_hold_is_not_checked() {
     let src = "entity Member \"会員\" { id: Int @pk  email: String @null @unique @default(uuid())  rank: Enum(a, b) @default(a)  @unique(email, rank) }\n\
                usecase Join \"入会\"\ncreates(Join, Member)\n";
-    let ts = TransitionSystem::build(&model_from(src), Bounds::VERIFY, &Scope::ALL).ts;
+    let ts = system_from(src, Bounds::VERIFY);
     let names: Vec<&str> = ts.invariants().iter().map(|i| i.name.as_str()).collect();
     assert!(!names.iter().any(|n| n.starts_with("Unique_")), "{names:?}");
 }
@@ -134,7 +134,7 @@ fn a_set_with_a_column_the_lifecycle_does_not_hold_is_not_checked() {
 fn a_set_on_a_soft_deleted_entity_is_not_checked() {
     let src = "entity Booking \"予約\" { id: Int @pk  slot: Enum(am, pm) @unique  deleted_at: DateTime @null @soft_delete }\n\
                usecase Book \"予約\"\ncreates(Book, Booking)\n";
-    let ts = TransitionSystem::build(&model_from(src), Bounds::VERIFY, &Scope::ALL).ts;
+    let ts = system_from(src, Bounds::VERIFY);
     let names: Vec<&str> = ts.invariants().iter().map(|i| i.name.as_str()).collect();
     assert!(!names.iter().any(|n| n.starts_with("Unique_")), "{names:?}");
 }

@@ -24,6 +24,7 @@ mod ts;
 mod ts_port;
 mod validators;
 
+use rdra_ish_syntax::ast::Kind;
 use std::collections::BTreeMap;
 
 use rdra_ish_core::lifecycle::{ActionOrigin, Caps};
@@ -138,9 +139,49 @@ pub fn generate_all(
     })
 }
 
-/// snake_case of a model identifier, as the printers spell function and method names.
+/// snake_case of a model identifier, as the printers spell function and method names:
+/// `CustomerAccount` is `customer_account`.
 pub fn snake(id: &str) -> String {
-    actions::snake(id)
+    let mut out = String::new();
+    let mut prev_lower = false;
+    for ch in id.chars() {
+        if ch == '-' || ch == ' ' {
+            out.push('_');
+            prev_lower = false;
+            continue;
+        }
+        if ch.is_uppercase() {
+            if prev_lower {
+                out.push('_');
+            }
+            out.extend(ch.to_lowercase());
+            prev_lower = false;
+        } else {
+            out.push(ch);
+            prev_lower = ch.is_lowercase() || ch.is_ascii_digit();
+        }
+    }
+    out
+}
+
+/// The names of a port method's two calls in `lang`, `[prepare, commit]`: Rust
+/// `prepare_pay`, Go `PreparePay`, TypeScript `preparePay`.
+pub fn method_names(lang: Lang, method: &ir::PortMethod) -> [String; 2] {
+    match lang {
+        Lang::Rust => rust_port::method_names(method),
+        Lang::Go => go_port::method_names(method),
+        Lang::TypeScript => ts_port::method_names(method),
+    }
+}
+
+/// The name of an entry point's method in `lang` (#335), by the entry's PascalCase name:
+/// Rust `run_create_charge`, Go `RunCreateCharge`, TypeScript `runCreateCharge`.
+pub fn entry_name(lang: Lang, name: &str) -> String {
+    match lang {
+        Lang::Rust => rust_port::entry_name(name),
+        Lang::Go => go_port::entry_name(name),
+        Lang::TypeScript => ts_port::entry_name(name),
+    }
 }
 
 /// What the probe binds (`[code.<lang>]` in rdra.toml): the service type, the path of the
@@ -307,7 +348,7 @@ fn conformance_lines(
     conform: &str,
     port: &str,
 ) -> Vec<String> {
-    let (Some(decl), Some(t), true) = (&domain.port, traces, domain.harness) else {
+    let (Some(decl), Some(t)) = (domain.harness(), traces) else {
         return Vec::new();
     };
     let mut lines = vec![
@@ -527,6 +568,8 @@ pub fn build_for(
         });
     }
 
+    // Each state type waits for its discriminant's name: (type name, entity, the rest).
+    let mut sums = Vec::new();
     for (key, entity) in &model.entities {
         let name = names.claim(type_ident(&entity.id), format!("entity {}", entity.id))?;
         let mut fields = Vec::new();
@@ -544,7 +587,7 @@ pub fn build_for(
                     states::Refinements::new()
                 };
                 let sum = sum_decl(
-                    name,
+                    name.clone(),
                     entity,
                     doc,
                     fields,
@@ -553,7 +596,7 @@ pub fn build_for(
                     &mut names,
                     site,
                 )?;
-                domain.sums.push(sum);
+                sums.push((name, &entity.id, sum));
             }
             None => domain.records.push(RecordDecl {
                 name,
@@ -588,15 +631,13 @@ pub fn build_for(
 
     // The discriminant types, once every type of the data layer has its name: the one name
     // a column's enum or a state may already have is `<Entity>Kind`.
-    for sum in &mut domain.sums {
-        sum.kind = claim_first(
+    for (name, entity, sum) in sums {
+        let kind = claim_first(
             &mut names,
-            [
-                format!("{}Kind", sum.name),
-                format!("{}StateKind", sum.name),
-            ],
-            format!("the kind of {}", sum.entity),
+            [format!("{name}Kind"), format!("{name}StateKind")],
+            format!("the kind of {entity}"),
         )?;
+        domain.sums.push(sum(kind));
     }
 
     domain.obligations = obligations(model, site);
@@ -618,10 +659,10 @@ pub fn build_for(
         // when the harness is asked for.
         let mut trial = names.clone();
         match conformance::port(model, &built.ts, &domain, &mut trial) {
-            Ok(decl) => {
+            Ok(mut decl) => {
                 names = trial;
+                decl.harness = port;
                 domain.port = Some(decl);
-                domain.harness = port;
                 conformance::add_entries(&built.ts, &mut domain, &mut names)?;
                 conformance::add_callers(model, &mut domain, &mut names)?;
             }
@@ -688,7 +729,8 @@ fn claim_derived(
 }
 
 /// The sum of an entity with a lifecycle column: one variant per value of its tag, each
-/// with the columns the refinements narrow.
+/// with the columns the refinements narrow. It is complete once its discriminant type has
+/// a name, which is claimed after every type of the data layer.
 #[allow(clippy::too_many_arguments)]
 fn sum_decl(
     name: String,
@@ -699,7 +741,7 @@ fn sum_decl(
     refinements: &states::Refinements,
     names: &mut Names,
     site: &dyn Fn(&LocatedSpan) -> Option<String>,
-) -> Result<SumDecl, CodegenError> {
+) -> Result<impl FnOnce(String) -> SumDecl, CodegenError> {
     let row_fields = fields.clone();
     let row = names.claim(
         format!("{name}Row"),
@@ -758,15 +800,16 @@ fn sum_decl(
             always_null,
         });
     }
-    Ok(SumDecl {
+    let entity = entity.id.clone();
+    Ok(move |kind| SumDecl {
         name,
-        entity: entity.id.clone(),
+        entity,
         doc,
         tag: tag_field,
         variants,
         row,
         row_fields,
-        kind: String::new(),
+        kind,
     })
 }
 
@@ -941,7 +984,7 @@ fn obligations(
     };
     for (key, entity) in &model.entities {
         // An obligation with no declaration of its own is at its entity's.
-        let entity_at = model.decl_sites.located("entity", &entity.id);
+        let entity_at = model.decl_sites.located(Kind::Entity, &entity.id);
         for (_, fk) in model.foreign_keys().filter(|(_, fk)| fk.child == key) {
             if fk.columns.is_empty() {
                 continue;
@@ -1096,7 +1139,7 @@ fn usecases(
             label: uc.label.clone(),
             site: model
                 .decl_sites
-                .located("usecase", &uc.id)
+                .located(Kind::UseCase, &uc.id)
                 .as_ref()
                 .and_then(site),
             actions: Vec::new(),

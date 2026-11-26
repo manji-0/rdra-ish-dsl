@@ -692,23 +692,12 @@ fn change_row(program: &ResolvedProgram, change: &Change) -> (String, Option<Str
     }
 }
 
-/// Fail closed when `findings` has an error (generators).
-pub(crate) fn reject_state_errors(findings: &[Finding]) -> anyhow::Result<()> {
-    reject_errors_where(findings, |_| true)
-}
-
-/// `reject_state_errors`, but a deadlock does not count: the state diagram colours it.
+/// Fail closed when `findings` has an error other than a deadlock: the state diagram colours
+/// a deadlock.
 pub(crate) fn reject_state_errors_except_deadlock(findings: &[Finding]) -> anyhow::Result<()> {
-    reject_errors_where(findings, |finding| !finding.is_deadlock)
-}
-
-fn reject_errors_where(
-    findings: &[Finding],
-    counts: impl Fn(&Finding) -> bool,
-) -> anyhow::Result<()> {
     let mut has_error = false;
     for finding in findings {
-        if finding.severity == Severity::Error && counts(finding) {
+        if finding.severity == Severity::Error && !finding.is_deadlock {
             eprintln!("{finding}");
             has_error = true;
         }

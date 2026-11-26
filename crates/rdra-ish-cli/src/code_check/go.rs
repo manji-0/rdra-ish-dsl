@@ -65,22 +65,12 @@ fn normalize(path: &Path) -> PathBuf {
     out
 }
 
-/// `to` relative to the directory `from`, with `/` between the parts.
+/// `to` relative to the directory `from`, with `/` between the parts: `.` when they are the
+/// same.
 fn relative(from: &Path, to: &Path) -> String {
-    let (from, to) = (normalize(from), normalize(to));
-    let a: Vec<_> = from.components().collect();
-    let b: Vec<_> = to.components().collect();
-    let common = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
-    let mut parts: Vec<String> = vec!["..".to_string(); a.len() - common];
-    parts.extend(
-        b[common..]
-            .iter()
-            .map(|c| c.as_os_str().to_string_lossy().into_owned()),
-    );
-    if parts.is_empty() {
-        ".".to_string()
-    } else {
-        parts.join("/")
+    match crate::paths::relative(&normalize(from), &normalize(to)) {
+        rel if rel.is_empty() => ".".to_string(),
+        rel => rel,
     }
 }
 
@@ -280,14 +270,11 @@ impl Backend for GoBackend {
     }
 
     fn method_names(&self, method: &PortMethod) -> Vec<String> {
-        vec![
-            format!("Prepare{}", method.name),
-            format!("Commit{}", method.name),
-        ]
+        rdra_ish_emit::codegen::method_names(Lang::Go, method).to_vec()
     }
 
     fn entry_names(&self, name: &str) -> Vec<String> {
-        vec![format!("Run{name}")]
+        vec![rdra_ish_emit::codegen::entry_name(Lang::Go, name)]
     }
 
     /// `go test` fails the conformance test with `rdra-ish conformance: <report>`: the

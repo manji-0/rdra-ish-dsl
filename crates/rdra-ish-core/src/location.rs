@@ -1,6 +1,7 @@
 //! Source locations for diagnostics and future LSP support.
 
-use rdra_ish_syntax::ast::Span;
+use rdra_ish_syntax::ast::{Kind, Span};
+use std::collections::HashMap;
 use std::path::Path;
 
 use crate::resolver::ResolvedProgram;
@@ -127,42 +128,39 @@ pub fn format_diagnostic_message(
     format!("{level}: {message}")
 }
 
-/// Lookup table: `kind:id` → declaration site.
+/// Lookup table: `(kind, id)` → declaration site.
 #[derive(Debug, Default, Clone)]
 pub struct DeclIndex {
-    sites: std::collections::HashMap<String, DeclSite>,
+    sites: HashMap<Kind, HashMap<String, DeclSite>>,
 }
 
 impl DeclIndex {
-    pub fn insert(&mut self, kind: &str, id: &str, site: DeclSite) {
-        self.sites.insert(decl_key(kind, id), site);
+    pub fn insert(&mut self, kind: Kind, id: &str, site: DeclSite) {
+        self.sites
+            .entry(kind)
+            .or_default()
+            .insert(id.to_string(), site);
     }
 
-    pub fn get(&self, kind: &str, id: &str) -> Option<&DeclSite> {
-        self.sites.get(&decl_key(kind, id))
+    pub fn get(&self, kind: Kind, id: &str) -> Option<&DeclSite> {
+        self.sites.get(&kind)?.get(id)
     }
 
-    pub fn located(&self, kind: &str, id: &str) -> Option<LocatedSpan> {
+    pub fn located(&self, kind: Kind, id: &str) -> Option<LocatedSpan> {
         self.get(kind, id).map(DeclSite::located)
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (&str, &str, &DeclSite)> + '_ {
-        self.sites.iter().filter_map(|(key, site)| {
-            let (kind, id) = key.split_once(':')?;
-            Some((kind, id, site))
-        })
+    pub fn iter(&self) -> impl Iterator<Item = (Kind, &str, &DeclSite)> + '_ {
+        (self.sites.iter())
+            .flat_map(|(kind, ids)| ids.iter().map(|(id, site)| (*kind, id.as_str(), site)))
     }
-}
-
-pub fn decl_key(kind: &str, id: &str) -> String {
-    format!("{kind}:{id}")
 }
 
 /// Push a diagnostic at a declaration site when known, otherwise without location.
 pub fn push_decl_diagnostic(
     decl_sites: &DeclIndex,
     diags: &mut Vec<crate::diagnostics::Diagnostic>,
-    kind: &str,
+    kind: Kind,
     id: &str,
     err: crate::diagnostics::RdraError,
     is_warning: bool,
@@ -180,7 +178,7 @@ pub fn push_decl_diagnostic(
 pub fn push_model_decl_diagnostic(
     model: &crate::model::SemanticModel,
     diags: &mut Vec<crate::diagnostics::Diagnostic>,
-    kind: &str,
+    kind: Kind,
     id: &str,
     err: crate::diagnostics::RdraError,
     is_warning: bool,
@@ -205,14 +203,14 @@ mod tests {
     fn decl_index_stores_and_retrieves_sites() {
         let mut index = DeclIndex::default();
         index.insert(
-            "actor",
+            Kind::Actor,
             "Customer",
             DeclSite {
                 source_id: 0,
                 span: 0..7,
             },
         );
-        assert!(index.get("actor", "Customer").is_some());
-        assert!(index.get("actor", "Staff").is_none());
+        assert!(index.get(Kind::Actor, "Customer").is_some());
+        assert!(index.get(Kind::Actor, "Staff").is_none());
     }
 }

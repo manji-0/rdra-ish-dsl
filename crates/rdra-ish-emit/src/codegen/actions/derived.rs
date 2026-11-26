@@ -54,7 +54,7 @@ pub(super) fn derived_value(
     if target.ty != FieldType::Scalar(Scalar::Bool) {
         return Err("the column is not a Bool".to_string());
     }
-    Ok(match simplify(values.check(expr)?) {
+    Ok(match values.check(expr)?.simplify() {
         Expr::True => Assigned::Lit {
             lit: Lit::Bool(true),
             wrap: target.nullable,
@@ -207,15 +207,7 @@ impl RowValues<'_> {
         };
         Ok(match operand {
             Operand::Int(m) => {
-                let holds = match ir_op {
-                    CmpOp::Eq => *m == n,
-                    CmpOp::Ne => *m != n,
-                    CmpOp::Lt => *m < n,
-                    CmpOp::Le => *m <= n,
-                    CmpOp::Gt => *m > n,
-                    CmpOp::Ge => *m >= n,
-                };
-                if holds {
+                if ir_op.holds(*m, n) {
                     Expr::True
                 } else {
                     Expr::False
@@ -284,7 +276,7 @@ impl RowValues<'_> {
                 }
             }
             (Operand::Field(row, field), EffectValue::EnumVariant(b)) if !field.nullable => {
-                let FieldType::Enum(enum_ty) = &field.ty else {
+                let FieldType::Enum(_) = &field.ty else {
                     return Err(format!(
                         "it compares {} with a value of another type",
                         field.wire
@@ -296,7 +288,6 @@ impl RowValues<'_> {
                 Expr::EnumEq {
                     row: *row,
                     field: (*field).clone(),
-                    enum_ty: enum_ty.clone(),
                     value: EnumValue {
                         ident: type_ident(&wire),
                         wire,

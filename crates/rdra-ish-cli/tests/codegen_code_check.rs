@@ -7,6 +7,13 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+#[path = "common/edit.rs"]
+mod edit;
+#[path = "common/output.rs"]
+mod output;
+use edit::edit;
+use output::outcome;
+
 fn fixture() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/codegen/conformance.rdra")
 }
@@ -41,29 +48,13 @@ fn rdra(dir: &Path, args: &[&str]) -> Output {
         .expect("runs rdra-ish")
 }
 
-/// The exit code, stdout, and stderr with the platform's path separator written as `/`,
-/// so the diagnostics' paths match on Windows too.
-fn text(out: &Output) -> (Option<i32>, String, String) {
-    (
-        out.status.code(),
-        String::from_utf8_lossy(&out.stdout).into_owned(),
-        String::from_utf8_lossy(&out.stderr).replace('\\', "/"),
-    )
-}
-
 fn generated(name: &str) -> PathBuf {
     let dir = project(name, MANIFEST);
-    let (code, _, stderr) = text(&rdra(&dir, &["codegen", "model", "--code"]));
+    let (code, _, stderr) = outcome(&rdra(&dir, &["codegen", "model", "--code"]));
     assert_eq!(code, Some(0), "{stderr}");
     assert!(stderr.contains("wrote svc/src/domain.rs"), "{stderr}");
     assert!(stderr.contains("wrote svc/tests/traces.txt"), "{stderr}");
     dir
-}
-
-fn edit(path: &Path, from: &str, to: &str) {
-    let text = std::fs::read_to_string(path).unwrap();
-    assert!(text.contains(from), "{} holds {from:?}", path.display());
-    std::fs::write(path, text.replacen(from, to, 1)).unwrap();
 }
 
 #[test]
@@ -79,7 +70,7 @@ fn the_files_codegen_writes_are_fresh_wherever_check_runs() {
         "{traces}"
     );
     for (cwd, input) in [(dir.clone(), "model"), (dir.join("model"), ".")] {
-        let (code, stdout, stderr) = text(&rdra(&cwd, &["check", input, "--code"]));
+        let (code, stdout, stderr) = outcome(&rdra(&cwd, &["check", input, "--code"]));
         assert_eq!(code, Some(0), "{stderr}");
         assert!(
             stdout.ends_with("OK: code: what the model requires, at --code=fresh\n"),
@@ -104,7 +95,7 @@ fn an_edited_domain_file_fails_as_edited() {
         "pub struct Rejected",
         "pub struct Refusal",
     );
-    let (code, stdout, stderr) = text(&rdra(&dir, &["check", "model", "--code=fresh"]));
+    let (code, stdout, stderr) = outcome(&rdra(&dir, &["check", "model", "--code=fresh"]));
     assert_eq!(code, Some(1), "{stderr}");
     assert!(stderr.contains("file edited"), "{stderr}");
     assert!(!stderr.contains("model changed"), "{stderr}");
@@ -121,7 +112,7 @@ fn edited_traces_fail_as_edited_by_their_hash() {
     let path = dir.join("svc/tests/traces.txt");
     let text_before = std::fs::read_to_string(&path).unwrap();
     std::fs::write(&path, format!("{text_before}T 0\n")).unwrap();
-    let (code, _, stderr) = text(&rdra(&dir, &["check", "model", "--code"]));
+    let (code, _, stderr) = outcome(&rdra(&dir, &["check", "model", "--code"]));
     assert_eq!(code, Some(1), "{stderr}");
     assert!(
         stderr.contains("traces.txt is not the traces `codegen` generates"),
@@ -138,7 +129,7 @@ fn edited_traces_fail_as_edited_by_their_hash() {
 fn a_changed_model_fails_as_changed() {
     let dir = generated("model");
     edit(&dir.join("model/order.rdra"), "qty > 4", "qty > 3");
-    let (code, _, stderr) = text(&rdra(&dir, &["check", "model", "--code"]));
+    let (code, _, stderr) = outcome(&rdra(&dir, &["check", "model", "--code"]));
     assert_eq!(code, Some(1), "{stderr}");
     assert!(stderr.contains("model changed"), "{stderr}");
     assert!(!stderr.contains("file edited"), "{stderr}");
@@ -152,7 +143,7 @@ fn other_options_in_rdra_toml_fail_as_a_generator_change() {
         MANIFEST.replace("conformance_states = 4096", "conformance_states = 3"),
     )
     .unwrap();
-    let (code, _, stderr) = text(&rdra(&dir, &["check", "model", "--code"]));
+    let (code, _, stderr) = outcome(&rdra(&dir, &["check", "model", "--code"]));
     assert_eq!(code, Some(1), "{stderr}");
     assert!(stderr.contains("generator changed"), "{stderr}");
 }
@@ -160,7 +151,7 @@ fn other_options_in_rdra_toml_fail_as_a_generator_change() {
 #[test]
 fn a_missing_file_fails_and_says_what_writes_it() {
     let dir = project("missing", MANIFEST);
-    let (code, _, stderr) = text(&rdra(&dir, &["check", "model", "--code"]));
+    let (code, _, stderr) = outcome(&rdra(&dir, &["check", "model", "--code"]));
     assert_eq!(code, Some(1), "{stderr}");
     assert!(
         stderr.contains("svc/src/domain.rs does not exist: `codegen --code` writes it"),
@@ -171,14 +162,14 @@ fn a_missing_file_fails_and_says_what_writes_it() {
 #[test]
 fn code_without_a_code_table_is_an_error() {
     let dir = project("no-table", "[model]\nname = \"shop\"\n");
-    let (code, stdout, stderr) = text(&rdra(&dir, &["check", "model", "--code"]));
+    let (code, stdout, stderr) = outcome(&rdra(&dir, &["check", "model", "--code"]));
     assert_eq!(code, Some(1), "{stderr}");
     assert!(
         stderr.contains("--code needs a [code.rust], [code.go] or [code.ts] table"),
         "{stderr}"
     );
     assert!(!stdout.contains("OK"), "{stdout}");
-    let (code, _, stderr) = text(&rdra(&dir, &["codegen", "model", "--code"]));
+    let (code, _, stderr) = outcome(&rdra(&dir, &["codegen", "model", "--code"]));
     assert_eq!(code, Some(1), "{stderr}");
 }
 
@@ -186,8 +177,9 @@ fn code_without_a_code_table_is_an_error() {
 fn check_without_code_prints_a_note_and_nothing_else_changes() {
     let with = project("note", MANIFEST);
     let without = project("plain", "[model]\nname = \"shop\"\n");
-    let (code_with, stdout_with, stderr_with) = text(&rdra(&with, &["check", "model"]));
-    let (code_without, stdout_without, stderr_without) = text(&rdra(&without, &["check", "model"]));
+    let (code_with, stdout_with, stderr_with) = outcome(&rdra(&with, &["check", "model"]));
+    let (code_without, stdout_without, stderr_without) =
+        outcome(&rdra(&without, &["check", "model"]));
     assert_eq!(code_with, code_without);
     assert_eq!(stdout_with, stdout_without);
     let note: Vec<&str> = stderr_with
@@ -207,7 +199,7 @@ fn an_unknown_key_under_code_is_an_error() {
         "unknown",
         &format!("{MANIFEST}servise = \"shop::Service\"\n"),
     );
-    let (code, _, stderr) = text(&rdra(&dir, &["check", "model"]));
+    let (code, _, stderr) = outcome(&rdra(&dir, &["check", "model"]));
     assert_eq!(code, Some(1), "{stderr}");
     assert!(stderr.contains("rdra.toml"), "{stderr}");
     assert!(stderr.contains("servise"), "{stderr}");
@@ -217,7 +209,7 @@ fn an_unknown_key_under_code_is_an_error() {
 #[test]
 fn a_bare_code_flag_takes_no_level_from_the_next_argument() {
     let dir = generated("bare");
-    let (code, stdout, stderr) = text(&rdra(&dir, &["check", "--code", "model"]));
+    let (code, stdout, stderr) = outcome(&rdra(&dir, &["check", "--code", "model"]));
     assert_eq!(code, Some(0), "{stderr}");
     assert!(stdout.contains("at --code=fresh"), "{stdout}");
 }
@@ -226,7 +218,7 @@ fn a_bare_code_flag_takes_no_level_from_the_next_argument() {
 #[test]
 fn the_json_contract_names_obligations_and_sites() {
     let dir = project("json", MANIFEST);
-    let (code, stdout, stderr) = text(&rdra(&dir, &["codegen", "model", "--format", "json"]));
+    let (code, stdout, stderr) = outcome(&rdra(&dir, &["codegen", "model", "--format", "json"]));
     assert_eq!(code, Some(0), "{stderr}");
     for want in [
         "\"format\": \"rdra-ish codegen json 1\"",
@@ -237,7 +229,7 @@ fn the_json_contract_names_obligations_and_sites() {
     ] {
         assert!(stdout.contains(want), "{want}:\n{stdout}");
     }
-    let (code, _, stderr) = text(&rdra(
+    let (code, _, stderr) = outcome(&rdra(
         &dir,
         &["codegen", "model", "--format", "json", "--check", "x.json"],
     ));
@@ -250,7 +242,7 @@ fn the_json_contract_names_obligations_and_sites() {
 #[test]
 fn the_ledger_wants_an_owner_per_obligation() {
     let dir = generated("ledger");
-    let json = text(&rdra(&dir, &["codegen", "model", "--format", "json"])).1;
+    let json = outcome(&rdra(&dir, &["codegen", "model", "--format", "json"])).1;
     let contract: serde_json::Value = serde_json::from_str(&json).expect("the JSON contract");
     let names: Vec<String> = contract["obligations"]
         .as_array()
@@ -271,15 +263,15 @@ fn the_ledger_wants_an_owner_per_obligation() {
         .map(|n| format!("// rdra: obligation {n}\n"))
         .collect();
     std::fs::write(dir.join("svc/src/owners.rs"), &markers).unwrap();
-    let (code, stdout, stderr) = text(&rdra(&dir, &["check", "model", "--code"]));
+    let (code, stdout, stderr) = outcome(&rdra(&dir, &["check", "model", "--code"]));
     assert_eq!(code, Some(0), "{stdout}{stderr}");
     assert!(!stderr.contains("CodeObligation"), "{stderr}");
 
     let model = dir.join("model/order.rdra");
     edit(&model, "  note: String\n", "  note: String @unique\n");
-    let (code, _, stderr) = text(&rdra(&dir, &["codegen", "model", "--code"]));
+    let (code, _, stderr) = outcome(&rdra(&dir, &["codegen", "model", "--code"]));
     assert_eq!(code, Some(0), "{stderr}");
-    let (code, stdout, stderr) = text(&rdra(&dir, &["check", "model", "--code"]));
+    let (code, stdout, stderr) = outcome(&rdra(&dir, &["check", "model", "--code"]));
     assert_eq!(code, Some(1), "{stdout}{stderr}");
     let unowned: Vec<&str> = stderr
         .lines()
@@ -297,7 +289,7 @@ fn the_ledger_wants_an_owner_per_obligation() {
         format!("{markers}// rdra: obligation Unique_Order_note migrations/none.sql\n"),
     )
     .unwrap();
-    let (code, _, stderr) = text(&rdra(&dir, &["check", "model", "--code"]));
+    let (code, _, stderr) = outcome(&rdra(&dir, &["check", "model", "--code"]));
     assert_eq!(code, Some(1), "{stderr}");
     assert!(
         stderr.contains(
@@ -312,14 +304,14 @@ fn the_ledger_wants_an_owner_per_obligation() {
 #[test]
 fn seal_is_for_typescript_only() {
     let dir = project("seal", MANIFEST);
-    let (code, _, stderr) = text(&rdra(
+    let (code, _, stderr) = outcome(&rdra(
         &dir,
         &["codegen", "model/order.rdra", "--lang", "rust", "--seal"],
     ));
     assert_eq!(code, Some(2), "{stderr}");
     assert!(stderr.contains("--seal is for --lang ts only"), "{stderr}");
     let dir = project("seal-key", &format!("{MANIFEST}seal = true\n"));
-    let (code, _, stderr) = text(&rdra(&dir, &["codegen", "model", "--code"]));
+    let (code, _, stderr) = outcome(&rdra(&dir, &["codegen", "model", "--code"]));
     assert_eq!(code, Some(1), "{stderr}");
     assert!(
         stderr.contains(
