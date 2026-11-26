@@ -6,6 +6,10 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+#[path = "common/edit.rs"]
+mod edit;
+use edit::edit;
+
 fn fixture() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/codegen/order.rdra")
 }
@@ -46,12 +50,6 @@ fn check(dir: &Path, args: &[&str]) -> (Option<i32>, String) {
         out.status.code(),
         String::from_utf8_lossy(&out.stderr).into_owned(),
     )
-}
-
-fn edit(path: &Path, from: &str, to: &str) {
-    let text = std::fs::read_to_string(path).unwrap();
-    assert!(text.contains(from), "{} holds {from:?}", path.display());
-    std::fs::write(path, text.replacen(from, to, 1)).unwrap();
 }
 
 #[test]

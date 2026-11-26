@@ -8,6 +8,17 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+#[path = "common/edit.rs"]
+mod edit;
+#[path = "common/output.rs"]
+mod output;
+use edit::{cut, edit};
+use output::text_slashed;
+
+#[path = "common/tools.rs"]
+mod tools;
+use tools::{tool, CODEGEN};
+
 fn fixtures() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/codegen")
 }
@@ -24,18 +35,6 @@ service = "svc::service::Service"
 module = "svc::domain"
 new = "svc::service::Service::new()"
 "#;
-
-fn available() -> bool {
-    let found = Command::new("cargo").arg("--version").output().is_ok();
-    if !found {
-        assert!(
-            std::env::var("RDRA_REQUIRE_CODEGEN_TOOLS").as_deref() != Ok("1"),
-            "cargo is not on PATH, and RDRA_REQUIRE_CODEGEN_TOOLS=1 requires it"
-        );
-        eprintln!("skipping: cargo is not on PATH");
-    }
-    found
-}
 
 /// The reference service of codegen_conformance.rs as a module of a library crate: its
 /// `main` dropped, and `Service::new()` reading the fault from `FAULT`.
@@ -82,11 +81,11 @@ fn project(name: &str) -> PathBuf {
     .unwrap();
     std::fs::write(dir.join("svc/src/service.rs"), service_module()).unwrap();
     let out = rdra(&dir, &["codegen", "model", "--code"], "");
-    assert!(out.status.success(), "{}", text(&out));
+    assert!(out.status.success(), "{}", text_slashed(&out));
     assert!(
-        text(&out).contains("wrote svc/tests/rdra_contract.rs"),
+        text_slashed(&out).contains("wrote svc/tests/rdra_contract.rs"),
         "{}",
-        text(&out)
+        text_slashed(&out)
     );
     dir
 }
@@ -103,35 +102,11 @@ fn rdra(dir: &Path, args: &[&str], fault: &str) -> Output {
         .expect("runs rdra-ish")
 }
 
-/// stdout, then stderr with the platform's path separator written as `/`, so the
-/// diagnostics' paths match on Windows too.
-fn text(out: &Output) -> String {
-    format!(
-        "{}{}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr).replace('\\', "/")
-    )
-}
-
-fn edit(path: &Path, from: &str, to: &str) {
-    let text = std::fs::read_to_string(path).unwrap();
-    assert!(text.contains(from), "{} holds {from:?}", path.display());
-    std::fs::write(path, text.replacen(from, to, 1)).unwrap();
-}
-
-/// Cuts the text from `from` to the first `to` after it, `to` included.
-fn cut(path: &Path, from: &str, to: &str) {
-    let text = std::fs::read_to_string(path).unwrap();
-    let start = text.find(from).unwrap_or_else(|| panic!("{from:?}"));
-    let end = start + text[start..].find(to).unwrap_or_else(|| panic!("{to:?}")) + to.len();
-    std::fs::write(path, format!("{}{}", &text[..start], &text[end..])).unwrap();
-}
-
 /// What `check --code=build` says of each planted omission: the diagnostic, and a line of
 /// its `model:` or `code:`.
 #[test]
 fn each_omission_is_a_named_diagnostic() {
-    if !available() {
+    if !tool("cargo", CODEGEN) {
         return;
     }
     let dir = project("omissions");
@@ -139,9 +114,9 @@ fn each_omission_is_a_named_diagnostic() {
     assert!(
         out.status.success(),
         "the reference service: {}",
-        text(&out)
+        text_slashed(&out)
     );
-    assert!(text(&out).contains("OK: code: what the model requires, at --code=build"));
+    assert!(text_slashed(&out).contains("OK: code: what the model requires, at --code=build"));
 
     let service = dir.join("svc/src/service.rs");
     let original = std::fs::read_to_string(&service).unwrap();
@@ -196,7 +171,7 @@ fn each_omission_is_a_named_diagnostic() {
         std::fs::write(&service, &original).unwrap();
         plant(&service);
         let out = rdra(&dir, &["check", "model", "--code=build"], "");
-        let all = text(&out);
+        let all = text_slashed(&out);
         assert_eq!(out.status.code(), Some(1), "{what}: {all}");
         for line in says {
             assert!(all.contains(line), "{what}: no {line:?} in\n{all}");
@@ -208,7 +183,7 @@ fn each_omission_is_a_named_diagnostic() {
 /// The four faults of codegen_conformance.rs, each through `--code=run`.
 #[test]
 fn each_fault_fails_the_run() {
-    if !available() {
+    if !tool("cargo", CODEGEN) {
         return;
     }
     let dir = project("faults");
@@ -216,7 +191,7 @@ fn each_fault_fails_the_run() {
     assert!(
         out.status.success(),
         "the reference service: {}",
-        text(&out)
+        text_slashed(&out)
     );
     for (fault, says) in [
         (
@@ -237,7 +212,7 @@ fn each_fault_fails_the_run() {
         ),
     ] {
         let out = rdra(&dir, &["check", "model", "--code=run"], fault);
-        let all = text(&out);
+        let all = text_slashed(&out);
         assert_eq!(out.status.code(), Some(1), "{fault}: {all}");
         assert!(all.contains("error[CodeConformance]"), "{fault}: {all}");
         assert!(all.contains(says), "{fault}: {all}");

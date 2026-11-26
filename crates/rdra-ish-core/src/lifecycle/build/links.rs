@@ -9,6 +9,7 @@ use crate::lifecycle::types::{
     Value, VarId, VarKind,
 };
 use crate::model::{CrossConstraintScope, EntityKey, FkId, Join, LinkKind, SetValue, UseCaseKey};
+use rdra_ish_syntax::ast::Kind;
 
 impl<'m> Builder<'m> {
     /// R-bind: a created child belongs to its parent, a present one unless the relate is
@@ -303,7 +304,7 @@ impl<'m> Builder<'m> {
                     ),
                     site: Site::new(
                         ModelRef::UseCase(uc),
-                        &model.decl_sites.located("usecase", uc_id),
+                        &model.decl_sites.located(Kind::UseCase, uc_id),
                     ),
                 }
             }

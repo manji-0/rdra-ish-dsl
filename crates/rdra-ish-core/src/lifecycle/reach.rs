@@ -4,11 +4,9 @@
 //! state the pass does not mark is one the instance cannot finish from. Each pass is linear
 //! in the graph's states and edges.
 
-use std::collections::VecDeque;
-
 use super::cone::VarSet;
 use super::diag::StateDiag;
-use super::explore::{Adjacency, Graph};
+use super::explore::Graph;
 use super::expr::{Env, StateSlice};
 use super::trace::Trace;
 use super::types::{EntId, Pred, VarKind};
@@ -39,21 +37,14 @@ impl TransitionSystem {
                 .map(|(s, p)| *p && self.holds_for(&r.link, &binding, &s))
                 .collect();
             let mut can = vec![false; n];
-            let mut queue: VecDeque<u32> = VecDeque::new();
+            let mut goals = Vec::new();
             for (at, s) in graph.states.iter().enumerate() {
                 if present[at] && self.holds_for(&r.goal, &binding, &s) {
                     can[at] = true;
-                    queue.push_back(at as u32);
+                    goals.push(at as u32);
                 }
             }
-            while let Some(at) = queue.pop_front() {
-                for &from in adjacency.preds(at) {
-                    if present[from as usize] && !can[from as usize] {
-                        can[from as usize] = true;
-                        queue.push_back(from);
-                    }
-                }
-            }
+            adjacency.mark_backward(&mut can, goals, |from| present[from as usize]);
             let Some(stuck) = (0..n).find(|&at| trigger[at] && !can[at]) else {
                 continue;
             };
@@ -62,7 +53,8 @@ impl TransitionSystem {
             }
         }
         let (at, binding, present) = worst?;
-        let confined = confined_from(at, &adjacency, &present);
+        // The states reachable from `at` through states where the instance is present.
+        let confined = adjacency.forward_from(at, |to| present[to as usize]);
         let diag = StateDiag::GoalUnreachable {
             name: r.name.clone(),
             instance: r
@@ -71,7 +63,11 @@ impl TransitionSystem {
                 .zip(&binding)
                 .map(|(e, slot)| self.inst(*e, usize::from(*slot)))
                 .collect(),
-            confined: self.goal_readings(r, &binding, confined.iter().map(|&s| graph.states.at(s))),
+            confined: self.goal_readings(
+                r,
+                &binding,
+                confined.iter().map(|&s| graph.states.at(s as usize)),
+            ),
             states: confined.len(),
             site: r.site.clone(),
             trace: Trace::default(),
@@ -140,24 +136,4 @@ impl TransitionSystem {
         }
         lines
     }
-}
-
-/// The states reachable from `at` through states where the instance is present, `at` first,
-/// in the order a forward search finds them.
-fn confined_from(at: u32, adjacency: &Adjacency, present: &[bool]) -> Vec<usize> {
-    let mut seen = vec![false; present.len()];
-    let mut order = vec![at as usize];
-    seen[at as usize] = true;
-    let mut next = 0;
-    while let Some(&s) = order.get(next) {
-        next += 1;
-        for &to in adjacency.succs(s as u32) {
-            let to = to as usize;
-            if present[to] && !seen[to] {
-                seen[to] = true;
-                order.push(to);
-            }
-        }
-    }
-    order
 }

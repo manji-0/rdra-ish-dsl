@@ -55,5 +55,4 @@ fn results_go_to_the_uris_the_client_opened() {
     );
 
     let _ = std::fs::remove_file(&link);
-    let _ = std::fs::remove_dir_all(real);
 }

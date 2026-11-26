@@ -12,6 +12,7 @@ use crate::location::LocatedSpan;
 use crate::model::{NodeRef, SemanticModel};
 use crate::rdra_rules::{owned_by_registry, rdra_findings};
 use crate::refinement::{assess, Assessment, Depth, StageId};
+use rdra_ish_syntax::ast::Kind;
 
 use self::columns::{
     lint_column_names, lint_enum_attributes, lint_query_indexes, lint_redundant_end_values,
@@ -236,7 +237,7 @@ fn collect_findings(model: &SemanticModel) -> Vec<LintIssue> {
             push_element_lint(
                 model,
                 &mut findings,
-                kind,
+                node.kind(),
                 kind,
                 id,
                 "orphan-node",
@@ -250,7 +251,7 @@ fn collect_findings(model: &SemanticModel) -> Vec<LintIssue> {
             push_element_lint(
                 model,
                 &mut findings,
-                kind,
+                node.kind(),
                 kind,
                 id,
                 "naming-id",
@@ -284,7 +285,7 @@ fn collect_findings(model: &SemanticModel) -> Vec<LintIssue> {
 pub(crate) fn push_element_lint(
     model: &SemanticModel,
     issues: &mut Vec<LintIssue>,
-    decl_kind: &str,
+    decl_kind: impl Into<Option<Kind>>,
     subject_kind: &str,
     id: &str,
     rule: &'static str,
@@ -292,7 +293,9 @@ pub(crate) fn push_element_lint(
     hint: impl Into<String>,
 ) {
     let mut issue = LintIssue::new(LintSeverity::Warning, rule, subject_kind, id, message, hint);
-    if let Some(loc) = model.decl_sites.located(decl_kind, id) {
+    // A state has no declaration of its own (`NodeRef::kind` is `None`).
+    let decl_kind: Option<Kind> = decl_kind.into();
+    if let Some(loc) = decl_kind.and_then(|kind| model.decl_sites.located(kind, id)) {
         issue = issue.with_location(loc);
     }
     issues.push(issue);
