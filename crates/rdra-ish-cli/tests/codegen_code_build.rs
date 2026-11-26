@@ -15,6 +15,10 @@ mod output;
 use edit::{cut, edit};
 use output::text_slashed;
 
+#[path = "common/tools.rs"]
+mod tools;
+use tools::{tool, CODEGEN};
+
 fn fixtures() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/codegen")
 }
@@ -31,18 +35,6 @@ service = "svc::service::Service"
 module = "svc::domain"
 new = "svc::service::Service::new()"
 "#;
-
-fn available() -> bool {
-    let found = Command::new("cargo").arg("--version").output().is_ok();
-    if !found {
-        assert!(
-            std::env::var("RDRA_REQUIRE_CODEGEN_TOOLS").as_deref() != Ok("1"),
-            "cargo is not on PATH, and RDRA_REQUIRE_CODEGEN_TOOLS=1 requires it"
-        );
-        eprintln!("skipping: cargo is not on PATH");
-    }
-    found
-}
 
 /// The reference service of codegen_conformance.rs as a module of a library crate: its
 /// `main` dropped, and `Service::new()` reading the fault from `FAULT`.
@@ -114,7 +106,7 @@ fn rdra(dir: &Path, args: &[&str], fault: &str) -> Output {
 /// its `model:` or `code:`.
 #[test]
 fn each_omission_is_a_named_diagnostic() {
-    if !available() {
+    if !tool("cargo", CODEGEN) {
         return;
     }
     let dir = project("omissions");
@@ -191,7 +183,7 @@ fn each_omission_is_a_named_diagnostic() {
 /// The four faults of codegen_conformance.rs, each through `--code=run`.
 #[test]
 fn each_fault_fails_the_run() {
-    if !available() {
+    if !tool("cargo", CODEGEN) {
         return;
     }
     let dir = project("faults");

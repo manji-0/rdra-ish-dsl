@@ -15,20 +15,21 @@ mod scratch;
 use samples::{repo, samples};
 use scratch::scratch;
 
+#[path = "common/tools.rs"]
+mod tools;
+use tools::found_or_skip;
+
 fn have_python() -> bool {
+    // sqlite3 is a module python3 may lack, so the probe imports it.
     let found = Command::new("python3")
         .args(["-c", "import sqlite3"])
         .output()
         .is_ok_and(|o| o.status.success());
-    if !found {
-        let reason = "python3 with sqlite3 is not on PATH";
-        assert!(
-            std::env::var("RDRA_REQUIRE_SQLITE").as_deref() != Ok("1"),
-            "RDRA_REQUIRE_SQLITE=1 but {reason}"
-        );
-        println!("skipped: {reason}");
-    }
-    found
+    found_or_skip(
+        found,
+        "python3 with sqlite3 is not on PATH",
+        "RDRA_REQUIRE_SQLITE",
+    )
 }
 
 fn export_sqlite(input: &Path, out: &Path) {

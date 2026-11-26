@@ -15,20 +15,12 @@ mod samples;
 use output::outcome;
 use samples::{repo, samples};
 
+#[path = "common/tools.rs"]
+mod tools;
+use tools::{tool, CODEGEN};
+
 fn fixtures() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/codegen")
-}
-
-fn go_available() -> bool {
-    let found = Command::new("go").arg("version").output().is_ok();
-    if !found {
-        assert!(
-            std::env::var("RDRA_REQUIRE_CODEGEN_TOOLS").as_deref() != Ok("1"),
-            "go is not on PATH, and RDRA_REQUIRE_CODEGEN_TOOLS=1 requires it"
-        );
-        eprintln!("skipping: go is not on PATH");
-    }
-    found
 }
 
 const MANIFEST: &str = r#"[model]
@@ -97,7 +89,7 @@ fn errors(stderr: &str) -> Vec<&str> {
 
 #[test]
 fn the_reference_service_builds_and_conforms() {
-    if !go_available() {
+    if !tool("go", CODEGEN) {
         return;
     }
     let dir = shop("complete", &[]);
@@ -119,7 +111,7 @@ fn the_reference_service_builds_and_conforms() {
 /// One omission at a time, each with the diagnostic that names it.
 #[test]
 fn each_planted_omission_is_named() {
-    if !go_available() {
+    if !tool("go", CODEGEN) {
         return;
     }
     // (name, edits to the service, the diagnostic, a detail of it)
@@ -173,7 +165,7 @@ fn each_planted_omission_is_named() {
 /// `build` in rdra.toml replaces the default command.
 #[test]
 fn a_build_command_in_rdra_toml_replaces_the_default() {
-    if !go_available() {
+    if !tool("go", CODEGEN) {
         return;
     }
     let service = std::fs::read_to_string(fixtures().join("go_service/service.go")).unwrap();
@@ -198,7 +190,7 @@ fn a_build_command_in_rdra_toml_replaces_the_default() {
 /// `CodeSignature_Pay`.
 #[test]
 fn a_prepare_takes_the_caller_of_its_use_case() {
-    if !go_available() {
+    if !tool("go", CODEGEN) {
         return;
     }
     let model = format!(
@@ -238,7 +230,7 @@ fn a_prepare_takes_the_caller_of_its_use_case() {
 /// Each fault of the reference service fails the conformance test the probe holds.
 #[test]
 fn each_fault_fails_the_conformance_run() {
-    if !go_available() {
+    if !tool("go", CODEGEN) {
         return;
     }
     let dir = shop("faults", &[]);
@@ -299,7 +291,7 @@ fn copy_model(from: &Path, to: &Path) {
 /// complaints are the use cases the service lacks, each one `CodeMissingUseCase`.
 #[test]
 fn the_probe_of_every_sample_compiles() {
-    if !go_available() {
+    if !tool("go", CODEGEN) {
         return;
     }
     let manifest = "[model]\nname = \"sample\"\n\n[code.go]\ndomain = \"../domain/domain.go\"\nprobe = \"../svc/rdra_contract_test.go\"\nservice = \"example.com/shop/svc.Service\"\n";
@@ -351,7 +343,7 @@ fn the_probe_of_every_sample_compiles() {
 /// package`, and the reference service, which imports it as `domain`, builds and conforms.
 #[test]
 fn the_probe_names_the_domain_package_by_its_package_clause() {
-    if !go_available() {
+    if !tool("go", CODEGEN) {
         return;
     }
     let service = std::fs::read_to_string(fixtures().join("go_service/service.go")).unwrap();
