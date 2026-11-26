@@ -12,7 +12,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU8;
 use std::path::PathBuf;
 
-use rdra_ish_core::lifecycle::prove::{self, ProveOptions, Unproved, Verdict, Z3};
+use rdra_ish_core::lifecycle::prove::{
+    self, ProveOptions, Sat, Solver, SolverError, Unproved, Verdict, Z3,
+};
 use rdra_ish_core::lifecycle::{Bounds, Caps, Scope, StateDiag, Target, TransitionSystem};
 use rdra_ish_core::load_project;
 
@@ -420,4 +422,56 @@ fn a_certificate_is_reused_only_when_it_rechecks_and_changes_no_proof() {
         reused >= 3 && refused >= 3,
         "{reused} reused, {refused} refused"
     );
+}
+
+/// A z3 that answers `unknown` to its first `check-sat`.
+struct GivesUpOnce {
+    z3: Z3,
+    gave_up: bool,
+}
+
+impl Solver for GivesUpOnce {
+    fn exec(&mut self, commands: &str) -> Result<Vec<String>, SolverError> {
+        self.z3.exec(commands)
+    }
+
+    fn check_sat(&mut self, rlimit: u32) -> Result<Sat, SolverError> {
+        let sat = self.z3.check_sat(rlimit)?;
+        match std::mem::replace(&mut self.gave_up, true) {
+            false => Ok(Sat::Unknown),
+            true => Ok(sat),
+        }
+    }
+}
+
+/// A certificate whose round fails is refused, and the proof that follows on the same solvers
+/// is the one Houdini gives without it: the round's first check gives up, so the certificate
+/// falls after z3 has run part of the round.
+#[test]
+fn a_certificate_whose_round_fails_changes_no_proof() {
+    let Some(z3) = find_z3() else { return };
+    let sample = "samples/formal-verification/check_met.rdra";
+    let (ts, twin) = proving(sample).expect("check_met builds");
+    let rules: Vec<usize> = (0..ts.invariants().len()).collect();
+    let run = |offer: Option<&prove::Certificate>, gave_up: bool| {
+        let z3 = Z3::start(&z3).expect("z3 starts");
+        let mut solvers = [GivesUpOnce { z3, gave_up }];
+        prove::prove_offered(
+            &ts,
+            twin.as_ref(),
+            &rules,
+            &BTreeSet::new(),
+            &mut solvers,
+            ProveOptions::default(),
+            offer,
+        )
+        .expect("the proof runs")
+    };
+    let fresh = run(None, true);
+    assert!(fresh.proof.proved() > 0, "{:?}", fresh.proof);
+    assert!(run(Some(&fresh.certificate), true).reused);
+    let refused = run(Some(&fresh.certificate), false);
+    assert!(!refused.reused);
+    assert_eq!(format!("{:?}", refused.proof), format!("{:?}", fresh.proof));
+    assert_eq!(refused.certificate, fresh.certificate);
 }

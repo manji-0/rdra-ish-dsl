@@ -15,9 +15,16 @@ use root::repo;
 mod tools;
 use tools::tool;
 
+/// `verify` with no certificate cache: every proof runs its Houdini rounds.
 fn verify(args: &[&str]) -> Output {
-    let cache = Path::new(env!("CARGO_TARGET_TMPDIR")).join("prove_cli_cache");
-    verify_cached(args, &cache)
+    Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .current_dir(repo())
+        .env_remove("RDRA_Z3")
+        .env("RDRA_ISH_NO_PROOF_CACHE", "1")
+        .arg("verify")
+        .args(args)
+        .output()
+        .expect("rdra-ish runs")
 }
 
 /// `verify`, with the proof's certificates kept under `cache` (`XDG_CACHE_HOME`).

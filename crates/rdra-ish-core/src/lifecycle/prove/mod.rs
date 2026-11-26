@@ -581,6 +581,9 @@ fn digest(
         h.add(text.as_bytes());
         h.add(&[0]);
     };
+    // Bump the tag with any change to which set the rounds keep that the text hashed here
+    // does not show (the order of the checks, how a fall is decided): a certificate of the
+    // older rounds then misses instead of standing for a set they no longer keep.
     add("rdra-ish proof certificate 1");
     add(env!("CARGO_PKG_VERSION"));
     add(&format!("{options:?}"));

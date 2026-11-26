@@ -10,9 +10,11 @@
   run on the same encoding re-checks it in one round and, when every rule is in it and the
   round passes, skips the Houdini rounds; a stale or damaged certificate costs only that
   round. The output is the same with or without one; `RDRA_ISH_NO_PROOF_CACHE=1` turns it
-  off. The proof takes 37 to 73% less on a rerun of the domain samples (`RDRA_JOBS=4`:
-  clinic-ops 8.1 s to 3.8 s, food-permit-ops 5.2 s to 1.4 s); a model whose encoding
-  changed, or with an unproved rule, gains nothing.
+  off. A rerun of `verify --prove` on a domain sample takes 25 to 54% less wall time
+  (`RDRA_JOBS=4`, medians of 3: clinic-ops 10.0 s to 5.7 s, food-permit-ops 7.2 s to 3.3 s,
+  insurance-claim-ops 11.8 s to 8.0 s, patent-ops 1.9 s to 1.5 s); the first run costs the
+  same as without the cache. A model whose encoding changed, or with an unproved rule, gains
+  nothing.
 - `verify --prove` (experimental) runs the Houdini rounds without z3's model-based
   quantifier instantiation (MBQI) and turns it back on to find each counterexample to
   induction; a rule z3 gave up on without it is asked again with it (#421). The proof is

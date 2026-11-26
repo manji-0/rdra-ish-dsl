@@ -634,10 +634,9 @@ fn verify(case: &Case, extra: &[&str]) -> Observed {
 }
 
 fn verify_with(case: &Case, extra: &[&str], env: &[(&str, &str)]) -> Observed {
-    // `--prove` keeps its certificates here, not in the user's cache.
-    let cache = Path::new(env!("CARGO_TARGET_TMPDIR")).join("engine_corpus_cache");
+    // Every proof runs its Houdini rounds: no certificate from an earlier run, or build.
     let out = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
-        .env("XDG_CACHE_HOME", cache)
+        .env("RDRA_ISH_NO_PROOF_CACHE", "1")
         .envs(env.iter().copied())
         .arg("verify")
         .arg(&case.path)
