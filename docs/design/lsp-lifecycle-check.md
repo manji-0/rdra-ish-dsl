@@ -1,8 +1,8 @@
 # Lifecycle findings in the editor
 
 Status (2026-11-26): built for #214, in the `Unreleased` part of the changelog. The default
-(on), the time budget, and the memory limit are provisional and wait for the owner
-([Open questions](#open-questions)).
+(on), the time budget (2 s), and the memory limit (512 MiB) are owner decisions of
+2026-11-26 ([Decisions](#decisions)).
 
 `rdra-ish-lsp` used to run the analysis alone: `consistency_diagnostics` and
 `lint_review_diagnostics`. A rule violation, a deadlock, or a `Vacuous_` warning showed only
@@ -153,11 +153,16 @@ function of the model, the bounds and the caps, and it reads its cones through
 change here. Its key must leave out the deadline and the pool, which do not change a
 complete cone's verdict.
 
+## Decisions
+
+The owner decided these on 2026-11-26, recorded on #214:
+
+- **On by default.** The check runs after each analysis unless `enabled` is `false`.
+- **A time budget of 2 s and a memory limit of 512 MiB.** The samples need under 0.1 s and
+  under 30 MB at one instance ([Measurements](#measurements)).
+
 ## Open questions
 
-- **On or off by default.** The provisional default is on.
-- **The budget and the limit.** 2 s and 512 MiB are provisional. The samples need under
-  0.1 s and under 30 MB at one instance.
 - **Keep old findings until new ones arrive.** That would not blink, but it would show
   findings at lines the edit moved.
 - **Mid-BFS cancel.** As described under Cancellation, after #382, #385 and #388.
