@@ -3,7 +3,8 @@
 //! `tests/fixtures/codegen/derived.rdra`, whose functions compute `@derived` columns, on
 //! `tests/fixtures/codegen/nullable_enum_bool.rdra`, whose Enum and Bool columns hold null,
 //! on `tests/fixtures/codegen/derived_null_in.rdra`, whose `@derived` `in` reads a null Int, and
-//! on `tests/fixtures/codegen/use_case_vocabulary.rdra`, whose use cases link, copy and choose, the
+//! on `tests/fixtures/codegen/use_case_vocabulary.rdra`, whose use cases link, copy and choose,
+//! and on `tests/fixtures/codegen/entry_only.rdra`, whose every action is an entry point, the
 //! TypeScript output passes `tsc --strict`, the Rust output compiles as a library with no
 //! clippy warning and no undocumented public item (`clippy-driver -D warnings -D missing_docs`),
 //! and the Go output passes `go vet` and `gofmt -l` and calls no `panic`, each with the
@@ -23,7 +24,8 @@ use tools::{tool, CODEGEN};
 
 /// The models every language builds: the samples, a model whose names are keywords, one
 /// whose functions compute derived columns, one whose Enum and Bool columns hold null, and one
-/// whose derived `in` reads a null Int, and one whose use cases link, copy and choose (#335).
+/// whose derived `in` reads a null Int, one whose use cases link, copy and choose (#335), and
+/// one whose every action is an entry point: it has no function, only use-case errors.
 fn models() -> Vec<String> {
     let mut models = samples();
     models.push("crates/rdra-ish-cli/tests/fixtures/codegen/keywords.rdra".to_string());
@@ -31,6 +33,7 @@ fn models() -> Vec<String> {
     models.push("crates/rdra-ish-cli/tests/fixtures/codegen/nullable_enum_bool.rdra".to_string());
     models.push("crates/rdra-ish-cli/tests/fixtures/codegen/derived_null_in.rdra".to_string());
     models.push("crates/rdra-ish-cli/tests/fixtures/codegen/use_case_vocabulary.rdra".to_string());
+    models.push("crates/rdra-ish-cli/tests/fixtures/codegen/entry_only.rdra".to_string());
     models
 }
 

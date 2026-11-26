@@ -69,6 +69,10 @@
 
 ### Fixed
 
+- `codegen` output builds for a model with no function, only entry points (G15): TypeScript
+  declares every use-case error its contracts name (`ShipError` was undeclared), and the
+  TypeScript and Rust conformance harnesses of a port with no call pass `tsc --strict` and
+  clippy.
 - A time budget (`Caps::until`) on the entity cones `check` explores leaves their findings
   undecided (`UndecidedWhy::TimeBudget`) instead of panicking.
 

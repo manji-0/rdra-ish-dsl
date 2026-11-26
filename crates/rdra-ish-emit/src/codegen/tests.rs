@@ -111,6 +111,34 @@ fn keywords_go_snapshot() {
     insta::assert_snapshot!(generated_from(KEYWORDS_SRC, "keywords.rdra", Lang::Go));
 }
 
+/// A model whose every action is an entry point (G15): no function, a use-case error per
+/// entry. The CLI's `codegen_builds.rs` compiles this output.
+const ENTRY_ONLY_SRC: &str =
+    include_str!("../../../rdra-ish-cli/tests/fixtures/codegen/entry_only.rdra");
+
+#[test]
+fn entry_only_typescript_snapshot() {
+    insta::assert_snapshot!(generated_from(
+        ENTRY_ONLY_SRC,
+        "entry_only.rdra",
+        Lang::TypeScript
+    ));
+}
+
+#[test]
+fn entry_only_rust_snapshot() {
+    insta::assert_snapshot!(generated_from(
+        ENTRY_ONLY_SRC,
+        "entry_only.rdra",
+        Lang::Rust
+    ));
+}
+
+#[test]
+fn entry_only_go_snapshot() {
+    insta::assert_snapshot!(generated_from(ENTRY_ONLY_SRC, "entry_only.rdra", Lang::Go));
+}
+
 /// A name the Go printer derives from a model name steps aside, with a trailing `_`, for a
 /// model type that has it already; the model's type keeps its name.
 #[test]

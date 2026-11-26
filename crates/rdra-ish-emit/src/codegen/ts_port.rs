@@ -589,6 +589,12 @@ function $confArg<T>(values: readonly string[], i: number, read: (text: string) 
 
 /// The calls: `$confPrepare` reads a call's values and prepares it; `$confCommit` commits it.
 fn print_calls(domain: &DomainModel, port: &PortDecl, p: &mut String) {
+    // A model whose every action is an entry point has no call: the harness names none.
+    if port.methods.is_empty() {
+        p.push_str("async function $confPrepare(_port: ConformancePort, call: readonly string[]): Promise<Result<Result<$ConfWrite, unknown>, string>> {\n  const [action] = call;\n  return { ok: false, error: `no use case ${action ?? \"\"} in this port` };\n}\n\n");
+        p.push_str("function $confCommit(_port: ConformancePort, w: $ConfWrite): Promise<Result<void, unknown>> {\n  return assertNever(w);\n}\n\n");
+        return;
+    }
     // The calls.
     p.push_str("async function $confPrepare(port: ConformancePort, call: readonly string[]): Promise<Result<Result<$ConfWrite, unknown>, string>> {\n");
     p.push_str("  const [action, ...values] = call;\n  switch (action) {\n");
