@@ -4,11 +4,11 @@
 
 mod common;
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::mpsc::RecvTimeoutError;
 use std::time::{Duration, Instant};
 
-use common::{uri, Client};
+use common::{uri, Client, Workspace};
 use serde_json::{json, Value};
 
 const SOURCE: &str = "rdra-ish check (1 instance)";
@@ -25,7 +25,7 @@ const A: &str = "Forbidden_ClinicalOrder_1";
 const B: &str = "Inv_ClinicalOrder_3";
 
 /// A workspace holding the clinic-ops sample's model files.
-fn clinic_ops() -> PathBuf {
+fn clinic_ops() -> Workspace {
     let root = common::workspace("rdra_lsp_lifecycle");
     let sample = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../samples/clinic-ops");
     for dir in ["buc", "shared"] {
@@ -70,17 +70,9 @@ fn wait_for_findings(
     what: &str,
     mut ok: impl FnMut(&[Value]) -> bool,
 ) -> Vec<Value> {
-    client.wait_for(what, |m| {
-        m["method"] == "textDocument/publishDiagnostics"
-            && m["params"]["uri"] == uri(path).as_str()
-            && {
-                let d = m["params"]["diagnostics"].as_array().unwrap();
-                d.iter().any(|d| d["source"] == SOURCE) && ok(d)
-            }
-    })["params"]["diagnostics"]
-        .as_array()
-        .unwrap()
-        .clone()
+    client.wait_for_diagnostics(&uri(path), what, |d| {
+        d.iter().any(|d| d["source"] == SOURCE) && ok(d)
+    })
 }
 
 /// The title of the check's code lens on line `line` of `path`.
@@ -104,14 +96,6 @@ fn lens_at(client: &mut Client, path: &Path, line: u64) -> String {
 fn edit(text: &str, from: &str, to: &str) -> String {
     assert!(text.contains(from), "the text holds no {from:?}");
     text.replace(from, to)
-}
-
-fn change(client: &mut Client, path: &Path, version: i64, text: &str) {
-    client.notify(
-        "textDocument/didChange",
-        json!({"textDocument": {"uri": uri(path), "version": version},
-            "contentChanges": [{"text": text}]}),
-    );
 }
 
 #[test]
@@ -144,7 +128,7 @@ fn a_broken_guard_shows_the_rule_it_breaks_with_its_lens() {
     );
 
     let started = Instant::now();
-    change(&mut client, &orders, 2, &edit(&text, GUARD, BROKEN_GUARD));
+    client.change_now(&orders, 2, &edit(&text, GUARD, BROKEN_GUARD));
     let found = wait_for_findings(&client, &entities, "the broken rule", |d| {
         finding(d, A).is_some()
     });
@@ -159,7 +143,6 @@ fn a_broken_guard_shows_the_rule_it_breaks_with_its_lens() {
         lens_at(&mut client, &entities, rule_a),
         "check: violated (1 instance)"
     );
-    let _ = std::fs::remove_dir_all(root);
 }
 
 #[test]
@@ -180,15 +163,9 @@ fn a_burst_of_edits_ends_on_the_findings_of_the_last_text() {
     // a last one that mends the guard and drops the result time instead.
     let broken = edit(&text, GUARD, BROKEN_GUARD);
     for version in 2..22 {
-        change(
-            &mut client,
-            &orders,
-            version,
-            &format!("{broken}// 編集 {version} 𠮷\n"),
-        );
+        client.change_now(&orders, version, &format!("{broken}// 編集 {version} 𠮷\n"));
     }
-    change(
-        &mut client,
+    client.change_now(
         &orders,
         22,
         &format!("{}// 最後の編集 𠮷\n", edit(&text, RESULT_TIME, "")),
@@ -222,7 +199,6 @@ fn a_burst_of_edits_ends_on_the_findings_of_the_last_text() {
         lens_at(&mut client, &entities, rule_b),
         "check: violated (1 instance)"
     );
-    let _ = std::fs::remove_dir_all(root);
 }
 
 /// A check whose budget is spent decides nothing: every cone stops at once, which is
@@ -252,5 +228,4 @@ fn a_spent_budget_leaves_the_rules_not_decided_and_reports_no_error() {
         lens_at(&mut client, &entities, rule_a),
         "check: not decided (1 instance)"
     );
-    let _ = std::fs::remove_dir_all(root);
 }

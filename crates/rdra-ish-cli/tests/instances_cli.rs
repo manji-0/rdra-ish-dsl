@@ -4,9 +4,12 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-fn repo() -> PathBuf {
-    dunce::canonicalize(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).expect("repo root")
-}
+#[path = "common/output.rs"]
+mod output;
+#[path = "common/root.rs"]
+mod root;
+use output::text;
+use root::repo;
 
 /// A repository root of its own with `rdra.toml` and the order sample.
 fn project(test: &str, manifest: &str) -> PathBuf {
@@ -28,14 +31,6 @@ fn run(cwd: &Path, args: &[&str]) -> Output {
         .args(args)
         .output()
         .expect("rdra-ish runs")
-}
-
-fn text(out: &Output) -> String {
-    format!(
-        "{}{}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    )
 }
 
 #[test]

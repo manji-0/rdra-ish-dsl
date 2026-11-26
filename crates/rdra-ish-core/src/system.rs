@@ -1,5 +1,6 @@
 //! System boundary derivation from API membership and API CRUD.
 
+use rdra_ish_syntax::ast::Kind;
 use std::collections::{HashMap, HashSet};
 
 use crate::diagnostics::{Diagnostic, RdraError};
@@ -125,7 +126,7 @@ impl SystemIndex {
     }
 }
 
-fn warn(model: &SemanticModel, diags: &mut Vec<Diagnostic>, kind: &str, id: &str, err: RdraError) {
+fn warn(model: &SemanticModel, diags: &mut Vec<Diagnostic>, kind: Kind, id: &str, err: RdraError) {
     push_model_decl_diagnostic(model, diags, kind, id, err, true);
 }
 
@@ -148,7 +149,7 @@ fn membership_conflicts(model: &SemanticModel, index: &SystemIndex, diags: &mut 
                 api: api_id.clone(),
                 systems: system_ids(model, systems),
             };
-            warn(model, diags, "api", &api_id, err);
+            warn(model, diags, Kind::Api, &api_id, err);
         }
     }
     for (entity, systems) in by_id(&index.api_systems_by_entity, |e| entity_id(model, e)) {
@@ -158,7 +159,7 @@ fn membership_conflicts(model: &SemanticModel, index: &SystemIndex, diags: &mut 
                 entity: entity_id.clone(),
                 systems: system_ids(model, systems),
             };
-            warn(model, diags, "entity", &entity_id, err);
+            warn(model, diags, Kind::Entity, &entity_id, err);
         }
     }
 }
@@ -171,7 +172,7 @@ fn ownership_conflicts(model: &SemanticModel, index: &SystemIndex, diags: &mut V
                 entity: entity_id.clone(),
                 systems: system_ids(model, owners),
             };
-            warn(model, diags, "entity", &entity_id, err);
+            warn(model, diags, Kind::Entity, &entity_id, err);
         }
         for owner in owners {
             let operated_by_owner = index
@@ -183,7 +184,7 @@ fn ownership_conflicts(model: &SemanticModel, index: &SystemIndex, diags: &mut V
                     system: system_id(model, *owner),
                     entity: entity_id.clone(),
                 };
-                warn(model, diags, "entity", &entity_id, err);
+                warn(model, diags, Kind::Entity, &entity_id, err);
             }
         }
     }
@@ -216,7 +217,7 @@ fn operations_outside_owner(
                     entity: entity_id(model, *entity),
                     owner_systems: system_ids(model, owner_systems),
                 };
-                warn(model, diags, "api", &api_id, err);
+                warn(model, diags, Kind::Api, &api_id, err);
             }
         }
     }
@@ -243,7 +244,7 @@ fn cross_system_relations(model: &SemanticModel, index: &SystemIndex, diags: &mu
                 to: entity_id(model, *to),
                 to_system: system_id(model, to_system),
             };
-            warn(model, diags, "entity", &from_id, err);
+            warn(model, diags, Kind::Entity, &from_id, err);
         }
     }
 }
@@ -257,7 +258,7 @@ fn coordination_conflicts(model: &SemanticModel, index: &SystemIndex, diags: &mu
             warn(
                 model,
                 diags,
-                "usecase",
+                Kind::UseCase,
                 &uc_id,
                 not_cross_system(model, &uc_id, left, right),
             );
@@ -267,7 +268,7 @@ fn coordination_conflicts(model: &SemanticModel, index: &SystemIndex, diags: &mu
             warn(
                 model,
                 diags,
-                "usecase",
+                Kind::UseCase,
                 &uc_id,
                 not_cross_system(model, &uc_id, left, right),
             );
@@ -285,7 +286,7 @@ fn coordination_conflicts(model: &SemanticModel, index: &SystemIndex, diags: &mu
                     entity: entity_id(model, entity),
                     system: system_id(model, system),
                 };
-                warn(model, diags, "usecase", &uc_id, err);
+                warn(model, diags, Kind::UseCase, &uc_id, err);
             }
         }
     }

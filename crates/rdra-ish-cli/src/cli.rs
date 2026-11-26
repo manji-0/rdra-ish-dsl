@@ -178,20 +178,8 @@ pub(crate) enum Commands {
         /// Treat a deprecated form (a `DeprecatedSyntax` warning) as an error (exit 1)
         #[arg(long)]
         deny_deprecated: bool,
-        /// Cap on each entity's distinct patterns within one target cone; past it is a
-        /// `PatternCapReached` error. Default: 2^(10 + 8 * (n - 1)) for n = --instance-count
-        /// (1024 at one instance, 262144 at two)
-        #[arg(long)]
-        max_patterns: Option<usize>,
-        /// Cap on the joint states of each target cone; a cone past it is a
-        /// `StateCapReached` error. Default: none; --memory stops a run that outgrows it
-        #[arg(long)]
-        max_states: Option<usize>,
-        /// What the run may hold in memory, such as 4GiB or 512MiB (G and GB also mean GiB);
-        /// a cone whose states pass it stops, and the message estimates what finishing it
-        /// needs. Default: `memory` under [check] in rdra.toml, else 4GiB
-        #[arg(long, value_name = "SIZE")]
-        memory: Option<MemorySize>,
+        #[command(flatten)]
+        caps: CapArgs,
         /// After a clean check, drop each guard (a condition applied to a use case, or the
         /// `.when` conditions of one column's arms) in turn, explore again the rules whose cone
         /// keeps the use case, and print on stdout which rules each guard protects
@@ -347,20 +335,8 @@ pub(crate) enum Commands {
         /// Output format: table, csv, or json
         #[arg(long, default_value = "table", value_parser = WithRemoved::<StatesFormat>::new(REMOVED_STATES_FORMATS))]
         format: StatesFormat,
-        /// Cap on each entity's distinct patterns within one target cone; past it is a
-        /// `PatternCapReached` error. Default: 2^(10 + 8 * (n - 1)) for n = --instance-count
-        /// (1024 at one instance, 262144 at two)
-        #[arg(long)]
-        max_patterns: Option<usize>,
-        /// Cap on the joint states of each target cone; a cone past it is a
-        /// `StateCapReached` error. Default: none; --memory stops a run that outgrows it
-        #[arg(long)]
-        max_states: Option<usize>,
-        /// What the run may hold in memory, such as 4GiB or 512MiB (G and GB also mean GiB);
-        /// a cone whose states pass it stops, and the message estimates what finishing it
-        /// needs. Default: `memory` under [check] in rdra.toml, else 4GiB
-        #[arg(long, value_name = "SIZE")]
-        memory: Option<MemorySize>,
+        #[command(flatten)]
+        caps: CapArgs,
         #[command(flatten)]
         bounds: BoundsArgs,
         #[command(flatten)]
@@ -537,21 +513,38 @@ pub(crate) struct BoundsArgs {
     pub(crate) int_range_max: u32,
 }
 
-impl BoundsArgs {
+/// The caps and the memory limit of `check` and `states`.
+#[derive(Args, Clone, Debug)]
+pub(crate) struct CapArgs {
+    /// Cap on each entity's distinct patterns within one target cone; past it is a
+    /// `PatternCapReached` error. Default: 2^(10 + 8 * (n - 1)) for n = --instance-count
+    /// (1024 at one instance, 262144 at two)
+    #[arg(long)]
+    pub(crate) max_patterns: Option<usize>,
+    /// Cap on the joint states of each target cone; a cone past it is a
+    /// `StateCapReached` error. Default: none; --memory stops a run that outgrows it
+    #[arg(long)]
+    pub(crate) max_states: Option<usize>,
+    /// What the run may hold in memory, such as 4GiB or 512MiB (G and GB also mean GiB);
+    /// a cone whose states pass it stops, and the message estimates what finishing it
+    /// needs. Default: `memory` under [check] in rdra.toml, else 4GiB
+    #[arg(long, value_name = "SIZE")]
+    pub(crate) memory: Option<MemorySize>,
+}
+
+impl CapArgs {
     /// The BFS caps: the defaults for the largest slot count of `bounds`, each replaced by
     /// the flag given.
-    pub(crate) fn caps(
-        bounds: &rdra_ish_core::lifecycle::Bounds,
-        max_patterns: Option<usize>,
-        max_states: Option<usize>,
-    ) -> Caps {
+    pub(crate) fn caps(&self, bounds: &rdra_ish_core::lifecycle::Bounds) -> Caps {
         let default = Caps::for_instances(bounds.most().get().into());
         Caps::new(
-            max_patterns.unwrap_or(default.patterns),
-            max_states.unwrap_or(default.states),
+            self.max_patterns.unwrap_or(default.patterns),
+            self.max_states.unwrap_or(default.states),
         )
     }
+}
 
+impl BoundsArgs {
     /// The bounds the flags give, with `instances` under [check] in the manifest beneath
     /// them, checked against `model`.
     pub(crate) fn bounds(
@@ -759,29 +752,19 @@ mod tests {
         fn caps(args: &[&str]) -> (usize, usize) {
             let mut argv = vec!["rdra-ish", args[0], "m.rdra"];
             argv.extend_from_slice(&args[1..]);
-            let (bounds, max_patterns, max_states) =
-                match Cli::try_parse_from(argv).unwrap().command {
-                    Commands::Check {
-                        bounds,
-                        max_patterns,
-                        max_states,
-                        ..
-                    }
-                    | Commands::States {
-                        bounds,
-                        max_patterns,
-                        max_states,
-                        ..
-                    } => (bounds, max_patterns, max_states),
-                    _ => panic!("expected check or states"),
-                };
+            let (bounds, caps) = match Cli::try_parse_from(argv).unwrap().command {
+                Commands::Check { bounds, caps, .. } | Commands::States { bounds, caps, .. } => {
+                    (bounds, caps)
+                }
+                _ => panic!("expected check or states"),
+            };
             let bounds = crate::export::checked_bounds(
                 bounds.instance_count,
                 bounds.int_range_max,
                 &bounds.instances,
             )
             .unwrap();
-            let caps = BoundsArgs::caps(&bounds, max_patterns, max_states);
+            let caps = caps.caps(&bounds);
             (caps.patterns, caps.states)
         }
         for command in ["check", "states"] {

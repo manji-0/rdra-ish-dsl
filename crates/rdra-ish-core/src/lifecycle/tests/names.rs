@@ -1,6 +1,6 @@
 //! Every finding has a name that `error[<name>]:` can carry and the sample headers can match.
 
-use super::model_from;
+use super::{model_from, system_from};
 use crate::lifecycle::trace::{Inst, Trace};
 use crate::lifecycle::types::{ActionOrigin, InvText, LtlKind, ModelRef, Site};
 use crate::lifecycle::{
@@ -361,7 +361,7 @@ fn one_finding_on_two_entity_views_keeps_two_names() {
 }
 
 fn check_names(src: &str) -> Vec<String> {
-    let ts = TransitionSystem::build(&model_from(src), Bounds::STATES, &Scope::ALL).ts;
+    let ts = system_from(src, Bounds::STATES);
     ts.invariants()
         .iter()
         .map(|i| i.name.clone())
@@ -423,7 +423,7 @@ property Forbidden_Job_0 "作業は待つ"
   always(Job.status == waiting)
 "#;
     assert_eq!(check_names(src), ["Forbidden_Job_0_2", "Forbidden_Job_1"]);
-    let ts = TransitionSystem::build(&model_from(src), Bounds::STATES, &Scope::ALL).ts;
+    let ts = system_from(src, Bounds::STATES);
     assert_eq!(ts.properties()[0].name, "Forbidden_Job_0");
     assert!(ts.actions().iter().any(|a| a.name == "Forbidden_Job_1"));
 }

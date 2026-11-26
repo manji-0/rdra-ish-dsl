@@ -9,6 +9,17 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+#[path = "common/edit.rs"]
+mod edit;
+#[path = "common/output.rs"]
+mod output;
+use edit::{cut, edit};
+use output::text_slashed;
+
+#[path = "common/tools.rs"]
+mod tools;
+use tools::{tools, CODEGEN};
+
 fn fixtures() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/codegen")
 }
@@ -37,20 +48,6 @@ const TSCONFIG: &str = r#"{
   }
 }
 "#;
-
-fn available() -> bool {
-    let found = ["tsc", "node"]
-        .iter()
-        .all(|tool| Command::new(tool).arg("--version").output().is_ok());
-    if !found {
-        assert!(
-            std::env::var("RDRA_REQUIRE_CODEGEN_TOOLS").as_deref() != Ok("1"),
-            "tsc or node is not on PATH, and RDRA_REQUIRE_CODEGEN_TOOLS=1 requires them"
-        );
-        eprintln!("skipping: tsc or node is not on PATH");
-    }
-    found
-}
 
 /// A project: `model/` with the fixture and rdra.toml, `svc/` a TypeScript project, its
 /// generated files written by `codegen --code`.
@@ -81,12 +78,12 @@ fn project_of(name: &str, manifest: &str, model: &str, service: &str) -> PathBuf
     )
     .unwrap();
     let out = rdra(&dir, &["codegen", "model", "--code"], "");
-    assert!(out.status.success(), "{}", text(&out));
+    assert!(out.status.success(), "{}", text_slashed(&out));
     for file in ["svc/src/rdra_contract.ts", "svc/tsconfig.rdra.json"] {
         assert!(
-            text(&out).contains(&format!("wrote {file}")),
+            text_slashed(&out).contains(&format!("wrote {file}")),
             "{}",
-            text(&out)
+            text_slashed(&out)
         );
     }
     dir
@@ -101,34 +98,10 @@ fn rdra(dir: &Path, args: &[&str], fault: &str) -> Output {
         .expect("runs rdra-ish")
 }
 
-/// stdout, then stderr with the platform's path separator written as `/`, so the
-/// diagnostics' paths match on Windows too.
-fn text(out: &Output) -> String {
-    format!(
-        "{}{}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr).replace('\\', "/")
-    )
-}
-
-fn edit(path: &Path, from: &str, to: &str) {
-    let text = std::fs::read_to_string(path).unwrap();
-    assert!(text.contains(from), "{} holds {from:?}", path.display());
-    std::fs::write(path, text.replacen(from, to, 1)).unwrap();
-}
-
-/// Cuts the text from `from` to the first `to` after it, `to` included.
-fn cut(path: &Path, from: &str, to: &str) {
-    let text = std::fs::read_to_string(path).unwrap();
-    let start = text.find(from).unwrap_or_else(|| panic!("{from:?}"));
-    let end = start + text[start..].find(to).unwrap_or_else(|| panic!("{to:?}")) + to.len();
-    std::fs::write(path, format!("{}{}", &text[..start], &text[end..])).unwrap();
-}
-
 /// The probe and tsconfig.rdra.json `codegen --code` writes.
 #[test]
 fn the_probe_names_each_use_case_and_tsconfig_holds_only_it() {
-    if !available() {
+    if !tools(&["tsc", "node"], CODEGEN) {
         return;
     }
     let dir = project("files", MANIFEST);
@@ -152,7 +125,7 @@ fn the_probe_names_each_use_case_and_tsconfig_holds_only_it() {
         assert!(config.contains(line), "no {line:?} in\n{config}");
     }
     let fresh = rdra(&dir, &["check", "model", "--code"], "");
-    assert!(fresh.status.success(), "{}", text(&fresh));
+    assert!(fresh.status.success(), "{}", text_slashed(&fresh));
     // A probe without the harness: type-only imports, no test.
     let bare = MANIFEST.replace(
         "traces = \"../svc/src/traces.txt\"\nconformance_states = 4096\n",
@@ -171,7 +144,7 @@ fn the_probe_names_each_use_case_and_tsconfig_holds_only_it() {
 /// its `model:` or `code:`.
 #[test]
 fn each_omission_is_a_named_diagnostic() {
-    if !available() {
+    if !tools(&["tsc", "node"], CODEGEN) {
         return;
     }
     let dir = project("omissions", MANIFEST);
@@ -179,9 +152,9 @@ fn each_omission_is_a_named_diagnostic() {
     assert!(
         out.status.success(),
         "the reference service: {}",
-        text(&out)
+        text_slashed(&out)
     );
-    assert!(text(&out).contains("OK: code: what the model requires, at --code=build"));
+    assert!(text_slashed(&out).contains("OK: code: what the model requires, at --code=build"));
 
     let service = dir.join("svc/src/order_service.ts");
     let original = std::fs::read_to_string(&service).unwrap();
@@ -236,7 +209,7 @@ fn each_omission_is_a_named_diagnostic() {
         std::fs::write(&service, &original).unwrap();
         plant(&service);
         let out = rdra(&dir, &["check", "model", "--code=build"], "");
-        let all = text(&out);
+        let all = text_slashed(&out);
         assert_eq!(out.status.code(), Some(1), "{what}: {all}");
         for line in says {
             assert!(all.contains(line), "{what}: no {line:?} in\n{all}");
@@ -249,7 +222,7 @@ fn each_omission_is_a_named_diagnostic() {
 /// lists every missing member (TS2739, two members) or four and "2 more" (TS2740, Notify's six).
 #[test]
 fn a_contract_missing_whole_is_not_implemented_at_any_size() {
-    if !available() {
+    if !tools(&["tsc", "node"], CODEGEN) {
         return;
     }
     let manifest = MANIFEST
@@ -265,7 +238,7 @@ fn a_contract_missing_whole_is_not_implemented_at_any_size() {
         "ts_service/nothing.ts",
     );
     let out = rdra(&dir, &["check", "model", "--code=build"], "");
-    let all = text(&out);
+    let all = text_slashed(&out);
     assert_eq!(out.status.code(), Some(1), "{all}");
     for uc in ["Place", "Pay", "Ship", "Finish", "Notify"] {
         assert!(
@@ -284,7 +257,7 @@ fn a_contract_missing_whole_is_not_implemented_at_any_size() {
 /// The four faults of codegen_conformance.rs, each through `--code=run`.
 #[test]
 fn each_fault_fails_the_run() {
-    if !available() {
+    if !tools(&["tsc", "node"], CODEGEN) {
         return;
     }
     let dir = project("faults", MANIFEST);
@@ -292,14 +265,14 @@ fn each_fault_fails_the_run() {
     assert!(
         out.status.success(),
         "the reference service: {}",
-        text(&out)
+        text_slashed(&out)
     );
     assert!(
-        text(&out)
+        text_slashed(&out)
             .contains("rdra-ish conformance: ok 9 traces, 19 calls, 9 refusals, 7 interleavings")
-            || text(&out).contains("OK: code: what the model requires, at --code=run"),
+            || text_slashed(&out).contains("OK: code: what the model requires, at --code=run"),
         "{}",
-        text(&out)
+        text_slashed(&out)
     );
     for (fault, says) in [
         (
@@ -320,7 +293,7 @@ fn each_fault_fails_the_run() {
         ),
     ] {
         let out = rdra(&dir, &["check", "model", "--code=run"], fault);
-        let all = text(&out);
+        let all = text_slashed(&out);
         assert_eq!(out.status.code(), Some(1), "{fault}: {all}");
         assert!(all.contains("error[CodeConformance]"), "{fault}: {all}");
         assert!(all.contains(says), "{fault}: {all}");

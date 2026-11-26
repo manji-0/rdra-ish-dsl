@@ -2,17 +2,16 @@
 
 use std::collections::BTreeMap;
 
-use super::model_from;
+use super::system_from;
 use std::num::NonZeroU8;
 
 use crate::lifecycle::{
-    Bounds, Caps, Diag, RunEnd, Scope, StateDiag, Target, TargetExploration, TransitionSystem,
-    UnmetPremise,
+    Bounds, Caps, Diag, RunEnd, StateDiag, Target, TargetExploration, UnmetPremise,
 };
 
 /// The premises no reachable state meets, per rule that holds vacuously.
 fn vacuous(src: &str, bounds: Bounds, caps: Caps) -> BTreeMap<String, Vec<String>> {
-    let ts = TransitionSystem::build(&model_from(src), bounds, &Scope::ALL).ts;
+    let ts = system_from(src, bounds);
     texts(ts.explore_targets(&ts.targets(), caps).verdicts())
 }
 
@@ -189,7 +188,7 @@ relate(Payment, Order, N:1)
 forbidden(Order, Payment, Order.status == void, Payment.status == captured).along(Order, Payment)
 "#;
     for (bounds, note) in [(Bounds::STATES, true), (Bounds::VERIFY, false)] {
-        let ts = TransitionSystem::build(&model_from(src), bounds, &Scope::ALL).ts;
+        let ts = system_from(src, bounds);
         let run = ts.explore_targets(&ts.targets(), Caps::VERIFY);
         let message = run
             .verdicts()
@@ -213,7 +212,7 @@ forbidden(Order, Payment, Order.status == void, Payment.status == captured).alon
 #[test]
 fn a_run_whose_scope_drops_use_cases_reports_no_vacuity() {
     let src = format!("{ORDERS}forbidden(Order, status == void, flagged == true)\n");
-    let ts = TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL).ts;
+    let ts = system_from(&src, Bounds::STATES);
     let mut run = ts.explore_targets(&ts.targets(), Caps::for_instances(1));
     assert_eq!(texts(run.verdicts()).len(), 1);
     run.defer_progress();
@@ -273,7 +272,7 @@ fn a_leads_to_whose_trigger_never_holds_holds_vacuously() {
          property OpenPays \"未払は支払\"\n  leads_to(Order.status == open, Order.status == paid)\n\
          property DeskStays \"窓口は残る\"\n  always(Desk.id == 1)\n"
     );
-    let ts = TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL).ts;
+    let ts = system_from(&src, Bounds::STATES);
     let found = texts(&ts.vacuous_properties(Caps::for_instances(1)));
     assert_eq!(
         found,
@@ -311,7 +310,7 @@ applies_to(Paid, Open)
 property TwoLead "両方"
   leads_to(Order.status == open, Desk.busy == true)
 "#;
-    let ts = TransitionSystem::build(&model_from(src), Bounds::STATES, &Scope::ALL).ts;
+    let ts = system_from(src, Bounds::STATES);
     let found = texts(&ts.vacuous_properties(Caps::for_instances(1)));
     assert_eq!(
         found.get("TwoLead"),
@@ -333,7 +332,7 @@ fn a_stable_or_precedes_over_a_state_no_row_reaches_holds_vacuously() {
          property PaidStays \"支払は支払\"\n  stable(Order.status == paid)\n\
          property OpenFirst \"未払が先\"\n  precedes(Order.status == open, Order.status == paid)\n"
     );
-    let ts = TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL).ts;
+    let ts = system_from(&src, Bounds::STATES);
     let found = texts(&ts.vacuous_properties(Caps::for_instances(1)));
     assert_eq!(
         found,
@@ -359,7 +358,7 @@ fn a_violated_rule_does_not_hide_the_vacuity_of_a_rule_on_its_cone() {
         "{ORDERS}forbidden(Order, status == paid, flagged == true)\n\
          invariant(Order).when(status == void).then(flagged == true)\n"
     );
-    let ts = TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL).ts;
+    let ts = system_from(&src, Bounds::STATES);
     let targets = ts.targets();
     let run = ts.explore_targets(&targets, Caps::for_instances(1));
     let checks: Vec<Target> = targets
@@ -390,7 +389,7 @@ after(Make).assert(Tag.mark == b)
 #[test]
 fn a_cone_that_also_answers_an_entity_target_runs_to_the_end() {
     let bounds = Bounds::uniform(NonZeroU8::new(3).expect("3 instances"), 3);
-    let ts = TransitionSystem::build(&model_from(TAGS), bounds, &Scope::ALL).ts;
+    let ts = system_from(TAGS, bounds);
     let targets = ts.targets();
     let assert = *targets
         .iter()
@@ -427,7 +426,7 @@ fn a_property_cone_with_a_violated_rule_still_reports_vacuity() {
         "{SHIPPING}forbidden(Order, status == paid)\n\
          property VoidShips \"無効は出荷\"\n  leads_to(Order.status == void, Order.status == shipped)\n"
     );
-    let ts = TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL).ts;
+    let ts = system_from(&src, Bounds::STATES);
     assert_eq!(
         texts(&ts.vacuous_properties(Caps::for_instances(1))),
         BTreeMap::from([(
