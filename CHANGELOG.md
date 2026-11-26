@@ -2,15 +2,6 @@
 
 ## Unreleased
 
-### Added
-
-- `codegen` prints 17 of the 19 sample use cases that had no function (#335): `links` /
-  `relinks` / `unlinks` (the condition `Links_<Child>_<role>`), copies from another row, a
-  created row's optional key left null, and a condition or `.when` on what the step writes
-  (the parent a created row's key names, or the input a chosen value becomes). A guard that
-  compares a nullable Enum or Bool column with a value prints too, with null satisfying no
-  comparison and every `!=` (#359). The two left wait on a decision, in
-  `docs/design/algebraic-codegen.md`.
 ### Changed
 
 - A BFS run can keep its reached states in a table that its worker threads read while the run
@@ -41,6 +32,13 @@
 
 ### Added
 
+- `codegen` prints 17 of the 19 sample use cases that had no function (#335): `links` /
+  `relinks` / `unlinks` (the condition `Links_<Child>_<role>`), copies from another row, a
+  created row's optional key left null, and a condition or `.when` on what the step writes
+  (the parent a created row's key names, or the input a chosen value becomes). A guard that
+  compares a nullable Enum or Bool column with a value prints too, with null satisfying no
+  comparison and every `!=` (#359). The two left wait on a decision, in
+  `docs/design/algebraic-codegen.md`.
 - `verify --with-tlc`: `RDRA_TLC_HEAP=states` raises a cone run's heap to 640 bytes per
   state BFS counted in its module, in whole GiB within TLC's share, when that is more than
   the module's rule gives (experimental; #384).
