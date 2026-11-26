@@ -133,6 +133,11 @@ pub(crate) const JVM_OVERHEAD: u64 = 256 * MIB;
 /// of the 7.6 MB cone of #299, which checks at 4 GiB and not at 2.
 const HEAP_PER_MODULE_BYTE: u64 = 512;
 
+/// Heap per state BFS counted, under `RDRA_TLC_HEAP=states` (#384): 12.8M states then get
+/// 8 GiB, where #384 measured 8g and 16g the same and 5g 15% slower. A guess past that one
+/// point: a safety cone of 1.34M states ran in 64 MiB at full speed (#309).
+const HEAP_PER_STATE: u64 = 640;
+
 /// The heap of one TLC run.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TlcHeap {
@@ -208,6 +213,22 @@ impl TlcHeap {
             size(share),
         );
         (note, report)
+    }
+
+    /// This heap raised for a run whose module BFS counted `states` states in (#384,
+    /// `RDRA_TLC_HEAP=states`): 640 B per state in whole GiB, when that is more than the
+    /// module's rule gave, and at most the share. It never lowers a heap, nor makes a run
+    /// that runs `not run`, and a heap the user names or one over the share stays as it is.
+    /// The bytes per state are fitted to #384's 8g floor at about 12.8M states, a guess.
+    pub(crate) fn with_states(self, states: u64, share: u64) -> TlcHeap {
+        match self {
+            TlcHeap::Sized(bytes) => {
+                let need = states.saturating_mul(HEAP_PER_STATE);
+                let whole_gib = need.div_ceil(GIB).saturating_mul(GIB);
+                TlcHeap::Sized(bytes.max(whole_gib.min(share)))
+            }
+            other => other,
+        }
     }
 
     /// The heap of the one rerun of a run that ran out of memory: twice this one, when the
@@ -381,6 +402,41 @@ mod tests {
         assert_eq!(TlcHeap::OverShare { need: 9 * GIB }.doubled(share), None);
         assert_eq!(TlcHeap::Sized(GIB).charge(), GIB + 256 * MIB);
         assert_eq!(TlcHeap::OverShare { need: GIB }.charge(), 0);
+    }
+
+    /// Under `RDRA_TLC_HEAP=states` a counted run's heap only rises, to whole GiB, within the
+    /// share; a heap the user names and a run over the share stay as they are.
+    #[test]
+    fn a_counted_heap_only_rises_within_the_share() {
+        let share = 48 * GIB;
+        let sized = TlcHeap::Sized(GIB);
+        assert_eq!(sized.with_states(300, share), TlcHeap::Sized(GIB));
+        assert_eq!(sized.with_states(2_000_000, share), TlcHeap::Sized(2 * GIB));
+        assert_eq!(sized.with_states(6_700_000, share), TlcHeap::Sized(4 * GIB));
+        assert_eq!(
+            sized.with_states(12_800_000, share),
+            TlcHeap::Sized(8 * GIB)
+        );
+        assert_eq!(
+            sized.with_states(12_800_000, 4 * GIB),
+            TlcHeap::Sized(4 * GIB)
+        );
+        assert_eq!(
+            TlcHeap::Sized(7 * GIB).with_states(10, share),
+            TlcHeap::Sized(7 * GIB)
+        );
+        assert_eq!(
+            TlcHeap::Sized(GIB).with_states(10, GIB / 2),
+            TlcHeap::Sized(GIB)
+        );
+        assert_eq!(
+            TlcHeap::User(GIB).with_states(12_800_000, share),
+            TlcHeap::User(GIB)
+        );
+        assert_eq!(
+            TlcHeap::OverShare { need: 9 * GIB }.with_states(10, share),
+            TlcHeap::OverShare { need: 9 * GIB }
+        );
     }
 
     #[test]

@@ -1,14 +1,14 @@
 use super::jobs::{whole_job, ConeSystem, Job, JobKind};
 use super::report::run_line;
-use super::schedule::{run_budgeted, Budget, Hold};
+use super::schedule::{Machine, Pool, Rank, Slot};
 use super::specs::write_whole_specs;
 use super::tlc_tool::Tlc;
 use super::{WholeRun, WHOLE_MODEL_STATE_CAP};
 use crate::export::Modules;
-use crate::memory::{tlc_workers, TlcHeap};
+use crate::memory::TlcHeap;
 use crate::property_cone::{AfterPlain, ConeRun, Verdict, Why};
 use crate::state_findings::{render_violation, Finding, TraceSource};
-use crate::tlc_env::{current_user_heap, tlc_env_sized, xmx, Heap, Jit};
+use crate::tlc_env::{current_user_heap, heap_from_states, tlc_env_sized, xmx, Heap, Jit};
 use crate::tlc_output::{out_of_memory, progress, summarize, Banner, Outcome, TlcRun};
 use crate::tlc_replay::{explain_property, explain_violation};
 use anyhow::{Context, Result};
@@ -79,12 +79,69 @@ pub(super) struct Ran {
     pub(super) runs: Vec<(ConeRun, Outcome)>,
     /// Why the job did not run, with the hint, printed in place of TLC's output.
     unrun: Option<String>,
+    /// What the job's TLC launches cost, printed at the end of its line.
+    pub(super) cost: Cost,
+}
+
+/// What the TLC launches of one job cost (#384): their wall time added up, the heap of the
+/// last, and the workers of the first. A job with no launch costs nothing and prints nothing.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(super) struct Cost {
+    pub(super) secs: f64,
+    pub(super) heap: u64,
+    pub(super) workers: usize,
+    pub(super) launches: usize,
+}
+
+impl Cost {
+    /// One launch of `secs` seconds at `heap` bytes and `workers`.
+    pub(super) fn launch(secs: f64, heap: u64, workers: &str) -> Cost {
+        Cost {
+            secs,
+            heap,
+            workers: workers.parse().unwrap_or(1),
+            launches: 1,
+        }
+    }
+
+    /// This cost, then `later`'s launches.
+    pub(super) fn then(self, later: Cost) -> Cost {
+        match (self.launches, later.launches) {
+            (0, _) => later,
+            (_, 0) => self,
+            _ => Cost {
+                secs: self.secs + later.secs,
+                heap: later.heap,
+                workers: self.workers,
+                launches: self.launches + later.launches,
+            },
+        }
+    }
+
+    /// The notes a run line ends with: `<secs> s`, `-Xmx<heap>`, `<n> workers`.
+    pub(super) fn notes(&self) -> Vec<String> {
+        if self.launches == 0 {
+            return Vec::new();
+        }
+        let workers = match self.workers {
+            1 => "1 worker".to_string(),
+            n => format!("{n} workers"),
+        };
+        vec![
+            format!("{:.1} s", self.secs),
+            format!("-Xmx{}", xmx(self.heap)),
+            workers,
+        ]
+    }
 }
 
 impl Ran {
     pub(super) fn line(&self, module: &str, checks: &[String]) -> String {
         let states = self.run.distinct_states;
-        run_line(module, checks, self.decision.as_str(), states, &self.notes)
+        let notes: Vec<String> = (self.notes.iter().cloned())
+            .chain(self.cost.notes())
+            .collect();
+        run_line(module, checks, self.decision.as_str(), states, &notes)
     }
 
     /// A job whose module needs more heap than the share holds: a tool error with no run.
@@ -97,6 +154,7 @@ impl Ran {
             notes: vec![note],
             runs: Vec::new(),
             unrun: Some(report),
+            cost: Cost::default(),
         }
     }
 }
@@ -107,7 +165,7 @@ impl Ran {
 fn run_sized(
     job: &Job,
     heap: TlcHeap,
-    (share, hold): (u64, &mut Hold),
+    (share, slot): (u64, &mut Slot),
     run: impl Fn(u64) -> Result<Ran>,
 ) -> Result<Ran> {
     let bytes = match heap {
@@ -118,9 +176,10 @@ fn run_sized(
     let (true, Some(more)) = (out_of_memory(&ran.log), heap.doubled(share)) else {
         return Ok(ran);
     };
-    hold.regrow(more.charge());
+    slot.regrow(more.charge());
     let doubled = more.bytes().expect("a doubled heap is sized");
     let mut again = run(doubled)?;
+    again.cost = ran.cost.then(again.cost);
     again.notes.push(format!(
         "rerun at -Xmx{} after -Xmx{} ran out of memory",
         xmx(doubled),
@@ -150,17 +209,18 @@ fn run_job(
     // only that run is reported. A property's lasso differs from run to run on one worker too.
     // A run that ran out of memory is not run again on one worker: `run_sized` reruns the job
     // at twice the heap, or reports it.
-    let workers = match (safety, workers) {
+    let (workers, first) = match (safety, workers) {
         (true, many) if many != "1" => {
             let ran = run_cfg(tlc, dir, &job.module, heap, &cfg, many, safety)?;
             if ran.decision.outcome() == Outcome::Ok || out_of_memory(&ran.log) {
                 return Ok(ran);
             }
-            "1"
+            ("1", ran.cost)
         }
-        _ => workers,
+        _ => (workers, Cost::default()),
     };
     let mut ran = run_cfg(tlc, dir, &job.module, heap, &cfg, workers, safety)?;
+    ran.cost = first.then(ran.cost);
     match &job.kind {
         JobKind::Cone(cs) => {
             let mut reruns = 0;
@@ -176,6 +236,7 @@ fn run_job(
                 fs::write(&path, cfg)
                     .with_context(|| format!("failed to write {}", path.display()))?;
                 let more = run_cfg(tlc, dir, &job.module, heap, &cfg_name, workers, true)?;
+                ran.cost = ran.cost.then(more.cost);
                 ran.log.push_str(&more.log);
                 ran.run.violations.extend(more.run.violations);
                 if ran.run.violated_names().len() == found.len() {
@@ -192,6 +253,7 @@ fn run_job(
             if let (Outcome::Counterexample, Some(full)) = (plain, &p.full) {
                 let cfg = format!("{}.cfg", full.module);
                 let more = run_cfg(tlc, dir, &full.module, heap, &cfg, workers, false)?;
+                ran.cost = ran.cost.then(more.cost);
                 ran.notes.push(format!(
                     "{}: {}",
                     full.module,
@@ -219,6 +281,7 @@ fn run_job(
                         .expect("an eventually or leads_to has a WF module");
                     let cfg = format!("{}.cfg", wf.module);
                     let more = run_cfg(tlc, dir, &wf.module, heap, &cfg, workers, false)?;
+                    ran.cost = ran.cost.then(more.cost);
                     let wf_outcome = more.decision.outcome();
                     ran.runs.push((ConeRun::WfNext, wf_outcome));
                     ran.notes
@@ -301,10 +364,12 @@ fn run_cfg(
     if safety {
         command.arg("-continue");
     }
+    let start = Instant::now();
     let output = command
         .args(["-config", cfg, &tla])
         .output()
         .with_context(|| format!("failed to execute {}", tlc.display()))?;
+    let cost = Cost::launch(start.elapsed().as_secs_f64(), heap, workers);
     clean_up(dir, module);
     let log = format!(
         "{}{}",
@@ -320,6 +385,7 @@ fn run_cfg(
         notes: Vec::new(),
         runs: Vec::new(),
         unrun: None,
+        cost,
     })
 }
 
@@ -418,6 +484,7 @@ fn run_whole(
             std::thread::sleep(Duration::from_millis(200));
         }
     }
+    let cost = Cost::launch(start.elapsed().as_secs_f64(), heap, workers);
     for reader in readers {
         let _ = reader.join();
     }
@@ -451,11 +518,13 @@ fn run_whole(
         notes,
         runs: Vec::new(),
         unrun: None,
+        cost,
     })
 }
 
-/// Runs the cone jobs, as many at once as the cores allow and their heaps fit `share`
-/// (`run_some`), each with the heap its module needs (`TlcHeap::of`).
+/// Runs the cone jobs one `pool` pick at a time (`run_some`), each with the heap its module
+/// needs (`TlcHeap::of`) of the share the cone runs have while BFS runs. Once BFS ends more of
+/// them may go at once, but each keeps that heap, so no verdict depends on when a run starts.
 ///
 /// A cone another cone covers (`covering`) waits for that one: when it passes, the covered
 /// cone is `ok` without a run, and when it does not, the covered cone runs as it would have.
@@ -464,22 +533,15 @@ pub(super) fn run_cones(
     dir: &Path,
     modules: &Modules,
     jobs: &[Job],
-    share: u64,
+    pool: &Pool,
 ) -> Result<Vec<Ran>> {
-    let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
     let set = current_user_heap();
-    let heaps: Vec<TlcHeap> = jobs
-        .iter()
-        .map(|job| TlcHeap::of(job.module_bytes(), Heap::Cone, share, set))
-        .collect();
-    let budget = Budget::new(share);
+    let heap =
+        |job: usize, share: u64| TlcHeap::of(jobs[job].module_bytes(), Heap::Cone, share, set);
     let run = |only: &[usize]| {
-        run_some(
-            (jobs, only),
-            (cores, cores),
-            (&heaps, &budget),
-            |job, jvm| run_job(tlc, dir, modules, job, jvm),
-        )
+        run_some((jobs, only), pool, &heap, |job, jvm| {
+            run_job(tlc, dir, modules, job, jvm)
+        })
     };
     let covers = covering(jobs);
     let first: Vec<usize> = (0..jobs.len()).filter(|i| covers[*i].is_none()).collect();
@@ -513,6 +575,7 @@ pub(super) fn run_cones(
                 )],
                 runs: Vec::new(),
                 unrun: None,
+                cost: Cost::default(),
             })
         })
         .collect())
@@ -589,66 +652,63 @@ impl<'a> Covered<'a> {
     }
 }
 
-/// Runs the whole-model property jobs, up to 2 at once and as their heaps fit `share`
-/// (`run_some`), each with at least the temporal heap (`TlcHeap::of`).
+/// Runs the whole-model property jobs, up to 2 at once unless `--tlc-jobs` says otherwise,
+/// as their heaps fit `share` (`run_some`), each with at least the temporal heap
+/// (`TlcHeap::of`). BFS has ended, so no count is coming.
 fn run_wholes(
     tlc: &Tlc,
     dir: &Path,
     jobs: &[Job],
-    budget: WholeRun,
-    share: u64,
+    (budget, share): (WholeRun, u64),
+    machine: Machine,
 ) -> Result<Vec<Ran>> {
-    let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
     let set = current_user_heap();
-    let heaps: Vec<TlcHeap> = jobs
-        .iter()
-        .map(|job| TlcHeap::of(job.module_bytes(), Heap::Temporal, share, set))
-        .collect();
+    let heap =
+        |job: usize, share: u64| TlcHeap::of(jobs[job].module_bytes(), Heap::Temporal, share, set);
+    let machine = Machine {
+        jobs: Some(machine.jobs.unwrap_or(2)),
+        ..machine
+    };
+    let pool = Pool::new(machine, share, jobs.len(), true);
     let all: Vec<usize> = (0..jobs.len()).collect();
-    run_some(
-        (jobs, &all),
-        (2, cores),
-        (&heaps, &Budget::new(share)),
-        |job, jvm| run_whole(tlc, dir, job, jvm, budget),
-    )
+    run_some((jobs, &all), &pool, &heap, |job, jvm| {
+        run_whole(tlc, dir, job, jvm, budget)
+    })
 }
 
-/// Runs the jobs `only` names on up to `threads` threads, the largest heap first, then the
-/// heaviest (`Job::weight`). A run starts once its heap and those of the runs going fit the
-/// budget (`Budget`), or alone; it reruns once at twice the heap when it runs out of memory
-/// (`run_sized`). Its TLC workers divide the cores among the runs that can go at once, at
-/// most 8 (`tlc_workers`). The results come back in the order of `only`.
+/// Runs the jobs `only` names, one `pool` pick at a time (`schedule::pick`): the job at the
+/// head of the order once its workers' cores are free and its heap fits beside the runs
+/// going, or alone. Its heap is `heap` at the pool's sizing share, raised by the states BFS
+/// counted under `RDRA_TLC_HEAP=states` (`TlcHeap::with_states`); it reruns once at twice the
+/// heap when it runs out of memory (`run_sized`). The results come back in the order of
+/// `only`.
 fn run_some(
     (jobs, only): (&[Job], &[usize]),
-    (threads, cores): (usize, usize),
-    (heaps, budget): (&[TlcHeap], &Budget),
+    pool: &Pool,
+    heap: &(dyn Fn(usize, u64) -> TlcHeap + Sync),
     run: impl Fn(&Job, (&str, u64)) -> Result<Ran> + Sync,
 ) -> Result<Vec<Ran>> {
-    // Positions in `only`, the largest heap first, then the heaviest job.
-    let mut order: Vec<usize> = (0..only.len()).collect();
-    order.sort_by_key(|at| {
-        let job = only[*at];
-        std::cmp::Reverse((heaps[job].charge(), jobs[job].weight()))
+    let by_states = heap_from_states();
+    let sized = |job: usize, share: u64, states: Option<u64>| match (by_states, states) {
+        (true, Some(states)) => heap(job, share).with_states(states, share),
+        _ => heap(job, share),
+    };
+    let want = |job: usize, share: u64, states: Option<u64>| -> (u64, Rank) {
+        let rank = heap(job, share).charge();
+        (
+            sized(job, share, states).charge(),
+            (rank, jobs[job].weight()),
+        )
+    };
+    let done = pool.run(only, want, |started, slot| {
+        let (job, share) = (&jobs[started.job], started.share);
+        let heap = sized(started.job, share, started.states);
+        let workers = started.workers.to_string();
+        run_sized(job, heap, (share, slot), |bytes| {
+            run(job, (&workers, bytes))
+        })
     });
-    let share = budget.bytes();
-    let done = run_budgeted(
-        &order,
-        threads,
-        budget,
-        |at| heaps[only[at]].charge(),
-        |at, hold, in_flight| {
-            let (job, heap) = (&jobs[only[at]], heaps[only[at]]);
-            // The runs that can go at once: those going and queued, but no more than the
-            // threads, nor than fit the share, so cores the budget leaves idle go to workers.
-            let fit = usize::try_from(share / heap.charge().max(1)).unwrap_or(usize::MAX);
-            let sharing = in_flight.min(threads).min(fit.max(1));
-            let workers = tlc_workers(cores, sharing).to_string();
-            run_sized(job, heap, (share, hold), |bytes| {
-                run(job, (&workers, bytes))
-            })
-        },
-    );
-    done.into_iter().map(|(_, r)| r).collect()
+    done.into_iter().collect()
 }
 
 /// Each violated check of a cone run once, in model terms, from its first TLC trace. A trace
@@ -711,7 +771,7 @@ pub(super) fn run_tlc_wholes(
     (tlc, dir): (&Tlc, &Path),
     (ts, names): (&TransitionSystem, &TlaNames),
     whole_modules: &[String],
-    (budget, share): (WholeRun, u64),
+    (budget, share, machine): (WholeRun, u64, Machine),
     (jobs, ran): (&[Job], &[Ran]),
     index: (&mut String, &Path),
 ) -> Result<(Vec<Job>, Vec<Ran>)> {
@@ -734,7 +794,7 @@ pub(super) fn run_tlc_wholes(
         .iter()
         .map(|&i| whole_job(ts, names, &whole_modules[i], i))
         .collect();
-    let more = run_wholes(tlc, dir, &wholes, budget, share)?;
+    let more = run_wholes(tlc, dir, &wholes, (budget, share), machine)?;
     for (job, r) in wholes.iter().zip(&more) {
         println!("tlc: {}", r.line(&job.module, &job.checks));
     }
@@ -798,5 +858,37 @@ mod hint_tests {
         let hint = undecided_hint(Stop::Memory);
         assert!(hint.starts_with("raise --memory"), "{hint}");
         assert!(hint.contains(".fair(UseCase, ...)"), "{hint}");
+    }
+}
+
+#[cfg(test)]
+mod cost_tests {
+    use super::super::report::run_line;
+    use super::Cost;
+
+    const GIB: u64 = 1 << 30;
+
+    /// A job's launches add up their seconds, keep the first launch's workers and the last
+    /// one's heap, and print last on the line; a job with no launch prints nothing more.
+    #[test]
+    fn a_jobs_launches_add_up_on_its_line() {
+        let many = Cost::launch(2.25, GIB, "8");
+        let one = Cost::launch(1.0, GIB, "1");
+        let doubled = Cost::launch(3.0, 2 * GIB, "1");
+        let cost = many.then(one).then(doubled);
+        assert_eq!(cost.launches, 3);
+        assert_eq!(cost.notes(), ["6.2 s", "-Xmx2g", "8 workers"]);
+        assert_eq!(Cost::default().then(one), one);
+        assert_eq!(one.then(Cost::default()), one);
+        assert_eq!(one.notes(), ["1.0 s", "-Xmx1g", "1 worker"]);
+        assert!(Cost::default().notes().is_empty());
+        let notes: Vec<String> = ["Cone_P_WF: ok".to_string()]
+            .into_iter()
+            .chain(many.notes())
+            .collect();
+        assert_eq!(
+            run_line("Cone_P", &["P".to_string()], "ok", Some(12), &notes),
+            "Cone_P [P]: ok (12 states, Cone_P_WF: ok, 2.2 s, -Xmx1g, 8 workers)"
+        );
     }
 }

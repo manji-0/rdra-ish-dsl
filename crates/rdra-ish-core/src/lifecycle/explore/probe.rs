@@ -6,6 +6,8 @@
 //! the reader, which reads the moves in order, only looks it up. The reader still decides every
 //! number a state gets: a `Miss` here is a hint it checks against its own table.
 
+use std::sync::Arc;
+
 use hashbrown::HashTable;
 
 use crate::lifecycle::expr::StateSlice;
@@ -13,7 +15,8 @@ use crate::lifecycle::expr::StateSlice;
 use crate::lifecycle::types::ActId;
 use crate::lifecycle::TransitionSystem;
 
-use super::arena::{hash, States};
+use super::arena::{hash, Published, States};
+use super::table::Table;
 use super::Moves;
 
 /// What the reader does with one move, as the expanding thread found it.
@@ -23,6 +26,9 @@ pub(super) enum Probe {
     Loop,
     /// Under symmetry: the successor's canonical form is the source, an orbit self-edge.
     OrbitSelf,
+    /// The successor is state `i`, admitted before the chunk was handed out: found in the
+    /// run's table (`Shared`), its row compared.
+    Hit(u32),
     /// The successor is the one move `k` of the same chunk reached, an earlier move: the
     /// reader takes the state it found for `k`.
     SameAs(u32),
@@ -43,12 +49,29 @@ pub(super) struct Probes {
     width: usize,
     /// The run is up to symmetry: a move's key is its successor's canonical form.
     canonical: bool,
+    /// The states the moves were probed against: those below this number (`Shared`), none
+    /// when it is 0. A `Miss` is none of them.
+    published: usize,
 }
 
 /// The moves of one chunk that a later move may repeat, by the hash of their packed
-/// successor: scratch for the thread that expands it, emptied per chunk.
+/// successor: scratch for the thread that expands it, emptied per chunk. With the run's table
+/// as it was when the chunk was handed out (`shared`).
 #[derive(Default)]
-pub(super) struct Dedup(HashTable<u32>);
+pub(super) struct Dedup {
+    moves: HashTable<u32>,
+    shared: Option<Shared>,
+}
+
+/// What a worker probes a successor against: the run's table and the rows it names, as the
+/// reader published them with the chunk. A probe accepts an index only below the published
+/// length and only when the row there is the successor, so a `Hit` is a state the run holds
+/// with that number, whatever the table's buckets said while the reader wrote them.
+#[derive(Clone)]
+pub(super) struct Shared {
+    pub(super) table: Arc<Table>,
+    pub(super) rows: Published,
+}
 
 impl Probes {
     /// No moves yet, of successors packed into `width` bytes; under symmetry (`canonical`)
@@ -59,6 +82,11 @@ impl Probes {
             canonical,
             ..Probes::default()
         }
+    }
+
+    /// The states the moves were probed against: those below this.
+    pub(super) fn published(&self) -> usize {
+        self.published
     }
 
     pub(super) fn probe(&self, i: usize) -> Probe {
@@ -98,6 +126,7 @@ impl Probes {
         from: usize,
         dedup: &mut Dedup,
     ) {
+        self.published = dedup.shared.as_ref().map_or(0, |s| s.rows.len());
         let w = self.width;
         for i in from..moves.len() {
             debug_assert_eq!(self.probe.len(), i);
@@ -128,12 +157,24 @@ impl Probes {
             let packed = &self.packed;
             let row = |k: u32| &packed[k as usize * w..(k as usize + 1) * w];
             let mine = &packed[start..];
-            let probe = match dedup.0.find(h, |&k| row(k) == mine) {
+            let hit = dedup.shared.as_ref().and_then(|shared| {
+                shared.table.find(h, |k| {
+                    // SAFETY: `Bfs::explore` published these rows from its run's store, which
+                    // outlives every chunk it hands out (`Published::row`).
+                    let row = unsafe { shared.rows.row(k as usize) };
+                    row == Some(mine)
+                })
+            });
+            if let Some(k) = hit {
+                self.probe.push(Probe::Hit(k));
+                continue;
+            }
+            let probe = match dedup.moves.find(h, |&k| row(k) == mine) {
                 Some(&k) => Probe::SameAs(k),
                 None => {
                     let hashes = &self.hash;
                     let at = u32::try_from(i).expect("a chunk's moves fit in u32");
-                    dedup.0.insert_unique(h, at, |&k| hashes[k as usize]);
+                    dedup.moves.insert_unique(h, at, |&k| hashes[k as usize]);
                     Probe::Miss
                 }
             };
@@ -143,8 +184,10 @@ impl Probes {
 }
 
 impl Dedup {
-    pub(super) fn clear(&mut self) {
-        self.0.clear();
+    /// Empty, for a new chunk, which probes `shared` when there is one.
+    pub(super) fn start(&mut self, shared: Option<Shared>) {
+        self.moves.clear();
+        self.shared = shared;
     }
 }
 

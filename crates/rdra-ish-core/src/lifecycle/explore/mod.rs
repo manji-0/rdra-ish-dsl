@@ -23,6 +23,7 @@ mod scan;
 mod segments;
 mod store;
 pub(crate) mod symmetry;
+mod table;
 mod views;
 mod violations;
 
@@ -644,6 +645,8 @@ struct Bfs<'t> {
     states: States,
     /// The index of each state in `states`.
     seen: arena::Seen,
+    /// Whether the run's workers probe `seen` (#296 item 3.1 part 2).
+    probing: bfs::Probing,
     /// The state being looked up, packed as `states` keeps it, so a new one packs once.
     packed: Vec<u8>,
     /// Scratch for the pattern keys `observe` reads, so an edge allocates none.

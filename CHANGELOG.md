@@ -16,6 +16,42 @@
   ([design](docs/design/lsp-lifecycle-check.md))
 - A time budget (`Caps::until`) on the entity cones `check` explores leaves their findings
   undecided (`UndecidedWhy::TimeBudget`) instead of panicking.
+### Changed
+
+- A BFS run can keep its reached states in a table that its worker threads read while the run
+  adds states, so that each worker looks up the moves it expands (#296 item 3.1, part 2). A
+  release build leaves this off and runs as before: the look-ups took 12% off
+  food-permit-ops at 8 jobs but cost clinic-ops and insurance-claim-ops 4% to 5%, and part 3
+  decides. Unit tests and one run of the CI's shadow job turn it on. Output, `--memory` stop points
+  and what a run charges do not change.
+- `verify` finishes the largest cone sooner on several threads (#296 item 3.1, part 3). Once
+  a cone's BFS ends, its deadlock findings now build the graph's two directions side by side
+  and check each column and slot side by side, on the threads the BFS gave back. At 8 jobs:
+  food-permit-ops 2.10 s to 1.81 s, clinic-ops 1.74 s to 1.58 s, insurance-claim-ops 4.23 s
+  to 3.52 s. One job takes the time it took, and the output does not change.
+- When a BFS run's table of reached states grows, it files the states again in the order the
+  run stored them, so it reads them in order (#296 item 3.1, follow-up (a)). food-permit-ops
+  at 1 job takes 1% fewer cycles. Output, `--memory` stop points and what a run charges do not
+  change.
+- `verify --with-tlc`: each `tlc:` run line of a cone, property or whole-model job ends with
+  what its TLC launches cost: their wall time added up, the `-Xmx` of the last and the
+  workers of the first, as `(31 states, 0.3 s, -Xmx1g, 8 workers)` (#384).
+- `verify --with-tlc` schedules its TLC runs by cores as well as memory: a run gets one
+  worker per 50,000 states BFS counted in its module, from 1 to 8 (more when memory, not the
+  queue, bounds the runs), the largest runs start first, and the cone runs may hold all of
+  `--memory` once BFS ends; a heap is still sized by the half, so no verdict depends on when
+  a run starts. `--tlc-jobs` / `RDRA_TLC_JOBS` and `--tlc-workers` / `RDRA_TLC_WORKERS` set
+  the runs at once and every run's workers ([design](./docs/design/tlc-scheduling.md),
+  #384).
+
+### Added
+
+- `verify --with-tlc`: `RDRA_TLC_HEAP=states` raises a cone run's heap to 640 bytes per
+  state BFS counted in its module, in whole GiB within TLC's share, when that is more than
+  the module's rule gives (experimental; #384).
+- `verify --with-tlc --plan <FILE> -o <DIR>` (experimental) writes as JSON the TLC launches
+  `verify` would start, with BFS's verdict and states and the heap, workers and arguments of
+  each, and starts no TLC (#384).
 
 ## v3.0.0 - 2026-11-26
 

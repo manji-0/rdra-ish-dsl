@@ -13,7 +13,8 @@ use crate::fasthash::FastHasher;
 use crate::lifecycle::expr::{State, StateSlice};
 
 use super::packing::Packing;
-use super::segments::Rows;
+use super::segments::{locate, Rows};
+use super::table::{Table, Writer};
 
 #[cfg(feature = "shadow")]
 mod reference;
@@ -260,7 +261,7 @@ impl States {
     }
 
     /// State `i`'s packed bytes.
-    fn packed_row(&self, i: usize) -> &[u8] {
+    pub(super) fn packed_row(&self, i: usize) -> &[u8] {
         self.rows.row(i)
     }
 
@@ -313,6 +314,20 @@ impl States {
         self.twin.push(&s.0);
         #[cfg(not(feature = "shadow"))]
         let _ = s;
+    }
+
+    /// The states pushed so far, for threads that read them while this one pushes more
+    /// (`Published`). `segments` caches the segments' addresses from one call to the next.
+    pub(super) fn publish(&self, segments: &mut Option<Arc<[Segment]>>) -> Published {
+        let count = self.rows.segments_used();
+        if segments.as_ref().is_none_or(|s| s.len() != count) {
+            *segments = Some(self.rows.segment_ptrs().into_iter().map(Segment).collect());
+        }
+        Published {
+            segments: segments.clone().expect("just set"),
+            len: self.len(),
+            packing: self.packing.clone(),
+        }
     }
 
     /// The states the buffer holds room for.
@@ -382,6 +397,57 @@ impl FromIterator<State> for States {
     }
 }
 
+/// The address of a segment of a `States`' rows.
+#[derive(Clone, Copy)]
+pub(super) struct Segment(*const u8);
+
+// SAFETY: a `Segment` is an address that `Published::row` reads through, under the contract
+// stated there; sending or sharing the address itself reads nothing.
+unsafe impl Send for Segment {}
+unsafe impl Sync for Segment {}
+
+/// The packed rows of a `States` below `len`, which a worker reads while the reader pushes more
+/// (#296 item 3.1): the addresses of the store's segments, taken when the rows were published.
+/// A segment is allocated whole and never moves or grows (`segments::Rows`), and a row, once
+/// pushed, is never written again, so the rows below `len` are settled memory. The reader
+/// hands a `Published` to a worker with a chunk, through the chunk queue's lock, after it
+/// pushed those rows: that hand-off orders the rows' bytes before the worker's reads.
+#[derive(Clone)]
+pub(super) struct Published {
+    segments: Arc<[Segment]>,
+    len: usize,
+    packing: Arc<Packing>,
+}
+
+impl Published {
+    /// How many states were published: rows `0..len()`.
+    pub(super) fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Packed row `i`, if it was pushed before this was published.
+    ///
+    /// # Safety
+    ///
+    /// The `States` this was published from must be alive, and must not have been dropped or
+    /// replaced since: only then are its segments where `segments` says. `Bfs::explore`
+    /// publishes its run's store and keeps the run alive, its store in place, until every
+    /// worker of the run has stopped (`std::thread::scope`).
+    #[inline]
+    pub(super) unsafe fn row(&self, i: usize) -> Option<&[u8]> {
+        if i >= self.len {
+            return None;
+        }
+        let (k, at) = locate(i);
+        let base = self.segments[k].0;
+        let width = self.packing.bytes();
+        // SAFETY: row `i < len` lies in segment `k`, which was allocated with room for its rows
+        // of `width` bytes and holds row `i` at `at`; the caller keeps the segment alive, and
+        // the row's bytes were written before this was published and are never written again.
+        Some(unsafe { std::slice::from_raw_parts(base.add(at * width), width) })
+    }
+}
+
 /// The hash `Seen` files a packed state under.
 #[inline]
 pub(super) fn hash(packed: &[u8]) -> u64 {
@@ -393,14 +459,74 @@ pub(super) fn hash(packed: &[u8]) -> u64 {
 /// The index of each state in a `States`, found by its packed bytes: the table holds the index
 /// alone. Under the `shadow` feature it keeps its reference twin, keyed on the unpacked bytes,
 /// beside the table, so a packing that makes two states alike shows.
-#[derive(Default)]
 pub(super) struct Seen {
-    table: HashTable<u32>,
+    table: Index,
     #[cfg(feature = "shadow")]
     twin: reference::Seen,
+    /// Under the `shadow` feature: a hashbrown table filed as `insert_unique` grows it, which
+    /// every insert holds the table's growth to (a shared table's, or one grown in store
+    /// order), so `bytes_with` charges what hashbrown's growth gives.
+    #[cfg(feature = "shadow")]
+    hashbrown: HashTable<u32>,
+}
+
+/// `Seen::find_hashed` in a shared table, kept out of line so that the look-up of a run that
+/// does not probe, a release build's, stays as it was.
+#[cold]
+#[inline(never)]
+fn find_shared(table: &Writer, states: &States, packed: &[u8], hash: u64) -> Option<u32> {
+    table.find(hash, |i| states.packed_row(i as usize) == packed)
+}
+
+/// A hashbrown table that holds indices `0..len`, filed in that order under `hash_of`, with
+/// room for one more: what `insert_unique` grows a full table of `len` to, with the capacity
+/// hashbrown's own growth gives (`with_capacity(len + 1)`; the `seen_growth` twin holds the
+/// two equal). hashbrown's growth walks the old buckets and hashes each index again, which
+/// reads the store's rows in no order; filing them in store order reads them as they lie,
+/// which took a rebuild of synthetic rows from about 125 to about 70 cycles a state in a
+/// microbenchmark, at the same instructions (#296 item 3.1, follow-up (a)).
+#[cold]
+#[inline(never)]
+fn grown_in_store_order(len: usize, hash_of: impl Fn(u32) -> u64) -> HashTable<u32> {
+    let mut table = HashTable::with_capacity(len + 1);
+    for i in 0..u32::try_from(len).expect("states fit in u32") {
+        table.insert_unique(hash_of(i), i, |&k| hash_of(k));
+    }
+    table
+}
+
+/// `Seen::insert_hashed` in a shared table, out of line as `find_shared` is.
+#[cold]
+#[inline(never)]
+fn insert_shared(table: &mut Writer, states: &States, at: u32, hash_of_at: u64) {
+    table.insert(hash_of_at, at, |i| hash(states.packed_row(i as usize)));
+}
+
+/// The table itself. A run whose workers probe it (#296 item 3.1) keeps the table they can
+/// read while the reader inserts (`table::Writer`); any other run keeps hashbrown's, whose
+/// look-up is faster: in a microbenchmark of 4.6 million states the shared table took 1.5
+/// times as long to find a state (`docs/design/native-bfs-parallel.md`, "Part 2: the shared
+/// table").
+enum Index {
+    Local(HashTable<u32>),
+    Shared(Writer),
 }
 
 impl Seen {
+    /// An empty table, which workers can probe when `shared`.
+    pub fn new(shared: bool) -> Self {
+        Seen {
+            table: match shared {
+                true => Index::Shared(Writer::default()),
+                false => Index::Local(HashTable::new()),
+            },
+            #[cfg(feature = "shadow")]
+            twin: Default::default(),
+            #[cfg(feature = "shadow")]
+            hashbrown: HashTable::new(),
+        }
+    }
+
     /// The index of `s` in `states`, if it is there, given `packed`, what `States::pack` made
     /// of `s`, and its `hash`.
     #[inline]
@@ -411,10 +537,12 @@ impl Seen {
         hash: u64,
         s: &StateSlice,
     ) -> Option<u32> {
-        let found = self
-            .table
-            .find(hash, |&i| states.packed_row(i as usize) == packed)
-            .copied();
+        let found = match &self.table {
+            Index::Local(table) => table
+                .find(hash, |&i| states.packed_row(i as usize) == packed)
+                .copied(),
+            Index::Shared(table) => find_shared(table, states, packed, hash),
+        };
         #[cfg(not(feature = "shadow"))]
         let _ = s;
         #[cfg(feature = "shadow")]
@@ -430,36 +558,75 @@ impl Seen {
         found
     }
 
-    /// The index the reference twin holds for `s`: what a `Probe::SameAs` must name.
+    /// The index the reference twin holds for `s`: what a `Probe::SameAs` or a `Probe::Hit`
+    /// must name.
     #[cfg(feature = "shadow")]
     pub fn twin_find(&self, s: &StateSlice) -> Option<u32> {
         self.twin.find(s)
+    }
+
+    /// The table as it is now, for a worker to probe while the reader goes on (`Published`),
+    /// when the run keeps a shared one.
+    pub fn current(&self) -> Option<Arc<Table>> {
+        match &self.table {
+            Index::Local(_) => None,
+            Index::Shared(table) => Some(table.current()),
+        }
     }
 
     /// Notes that state `at` of `states` is not yet in the table and now is, given the hash of
     /// its packed bytes.
     pub fn insert_hashed(&mut self, states: &States, at: u32, hash_of_at: u64) {
         debug_assert_eq!(hash_of_at, hash(states.packed_row(at as usize)));
-        self.table
-            .insert_unique(hash_of_at, at, |&i| hash(states.packed_row(i as usize)));
+        let hash_of = |i: u32| hash(states.packed_row(i as usize));
+        match &mut self.table {
+            Index::Local(table) => {
+                if table.len() == table.capacity() {
+                    *table = grown_in_store_order(table.len(), hash_of);
+                }
+                table.insert_unique(hash_of_at, at, |&i| hash_of(i));
+            }
+            Index::Shared(table) => insert_shared(table, states, at, hash_of_at),
+        }
         #[cfg(feature = "shadow")]
-        assert!(
-            self.twin.insert(&states.at(at as usize), at),
-            "shadow: Seen::insert({at}): the reference holds {:?} already",
-            &states.at(at as usize).0
-        );
+        {
+            assert!(
+                self.twin.insert(&states.at(at as usize), at),
+                "shadow: Seen::insert({at}): the reference holds {:?} already",
+                &states.at(at as usize).0
+            );
+            self.hashbrown
+                .insert_unique(hash_of_at, at, |&i| hash_of(i));
+            let (_, capacity) = self.len_and_capacity();
+            assert!(
+                capacity == self.hashbrown.capacity(),
+                "shadow: Seen::insert({at}): capacity {capacity}, hashbrown's {}",
+                self.hashbrown.capacity()
+            );
+            crate::shadow::compared(crate::shadow::Twin::SeenGrowth);
+        }
+    }
+
+    /// How many indices the table holds, and how many it holds room for.
+    fn len_and_capacity(&self) -> (usize, usize) {
+        match &self.table {
+            Index::Local(table) => (table.len(), table.capacity()),
+            Index::Shared(table) => (table.len(), table.capacity()),
+        }
     }
 
     /// The bytes the table takes once `more` indices are inserted: one control byte and one
-    /// index per bucket, at 7/8 load, doubling when full.
+    /// index per bucket, at 7/8 load, doubling when full, as hashbrown's table grows and the
+    /// shared table grows with it.
     pub fn bytes_with(&self, more: usize) -> u64 {
         let buckets = |cap: usize| match cap {
             0 => 0,
             c if c < 8 => (c + 1).next_power_of_two(),
             c => (c * 8 / 7).next_power_of_two(),
         };
-        let mut n = buckets(self.table.capacity());
-        if self.table.len() + more > self.table.capacity() {
+        let (len, capacity) = self.len_and_capacity();
+        let mut n = buckets(capacity);
+        if len + more > capacity {
             n = (n * 2).max(4);
         }
         (n * (size_of::<u32>() + 1)) as u64
@@ -503,5 +670,43 @@ mod proofs {
         assert_eq!(states.at(probe).0, [probed.0]);
         assert_eq!(states.packed_row(probe).as_ptr(), probed.1);
         assert!(states.get(pushes).is_none());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A worker reads the rows a `Published` names while the store goes on pushing, past the
+    /// segments it was published with: each row reads back as pushed. Under Miri this checks
+    /// the hand-off of #296 item 3.1 (`Published::row`): no read races a write.
+    #[test]
+    fn published_rows_read_back_while_the_store_grows() {
+        let pushes: usize = if cfg!(miri) { 600 } else { 50_000 };
+        let row = |i: usize| [(i % 251) as u8, (i / 251 % 256) as u8];
+        let mut states = States::new(2);
+        let mut segments = None;
+        let (tx, rx) = std::sync::mpsc::channel::<Published>();
+        std::thread::scope(|s| {
+            s.spawn(move || {
+                for published in rx {
+                    let len = published.len();
+                    for i in (0..len).rev().step_by(7).chain([0]) {
+                        // SAFETY: the store outlives the scope, and it is only pushed to.
+                        let got = unsafe { published.row(i) };
+                        assert_eq!(got, Some(&row(i)[..]), "row {i} of {len}");
+                    }
+                    // SAFETY: as above.
+                    assert!(unsafe { published.row(len) }.is_none());
+                }
+            });
+            for i in 0..pushes {
+                states.push(StateSlice::new(&row(i)));
+                if i % 37 == 0 {
+                    tx.send(states.publish(&mut segments)).expect("the reader");
+                }
+            }
+            drop(tx);
+        });
     }
 }
