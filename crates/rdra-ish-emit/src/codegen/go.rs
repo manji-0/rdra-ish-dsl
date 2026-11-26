@@ -310,7 +310,7 @@ pub(super) fn derived_names(domain: &DomainModel) -> Vec<super::DerivedName> {
             continue;
         }
         seen.push(&f.usecase);
-        let name = error_name(domain, &f.usecase);
+        let name = domain.error_name(&f.usecase);
         push(
             format!("go:errorkind:{}", f.usecase),
             format!("{name}Kind"),
@@ -366,14 +366,14 @@ fn error_case_names(domain: &DomainModel, usecase: &str) -> Vec<&'static str> {
 /// The type of a use case error's `Kind`.
 fn error_kind(domain: &DomainModel, usecase: &str) -> String {
     derived(domain, &format!("go:errorkind:{usecase}"), || {
-        format!("{}Kind", error_name(domain, usecase))
+        format!("{}Kind", domain.error_name(usecase))
     })
 }
 
 /// The constant of a use case error's case.
 fn error_case(domain: &DomainModel, usecase: &str, case: &str) -> String {
     derived(domain, &format!("go:errorcase:{usecase}:{case}"), || {
-        format!("{}{case}", error_name(domain, usecase))
+        format!("{}{case}", domain.error_name(usecase))
     })
 }
 
@@ -818,19 +818,11 @@ fn checked_input(ty: &FieldType) -> bool {
         || matches!(ty, FieldType::Scalar(s) if Scalar::PRELUDE.contains(s))
 }
 
-/// The error type of `usecase`.
-fn error_name(domain: &DomainModel, usecase: &str) -> String {
-    domain
-        .error_of(usecase)
-        .map(|e| e.name.clone())
-        .unwrap_or_else(|| format!("{}Error", super::type_ident(usecase)))
-}
-
 /// `&<UseCase>Error{Kind: .., Err: detail}`.
 fn use_case_error(domain: &DomainModel, usecase: &str, case: &str, detail: &str) -> String {
     format!(
         "&{}{{Kind: {}, Err: {detail}}}",
-        error_name(domain, usecase),
+        domain.error_name(usecase),
         error_case(domain, usecase, case)
     )
 }
@@ -908,7 +900,7 @@ fn print_errors(domain: &DomainModel, out: &mut String) {
             continue;
         }
         seen.push(&f.usecase);
-        let name = error_name(domain, &f.usecase);
+        let name = domain.error_name(&f.usecase);
         let kind = error_kind(domain, &f.usecase);
         let cases: Vec<(&str, String)> = error_case_names(domain, &f.usecase)
             .into_iter()
@@ -949,7 +941,7 @@ fn print_errors(domain: &DomainModel, out: &mut String) {
             cases.iter().map(|(c, _)| *c).collect::<Vec<_>>().join(", Err"),
         ));
         out.push_str(&struct_decl(
-            &name,
+            name,
             &[
                 Line::Cells(vec!["Kind".into(), kind.clone()]),
                 Line::Cells(vec!["Err".into(), "error".into()]),
@@ -1005,7 +997,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
     }
     print_errors(domain, out);
     for f in &domain.fns {
-        let err = error_name(domain, &f.usecase);
+        let err = domain.error_name(&f.usecase);
         let fail = |case: &str, detail: String, ind: &str| {
             format!(
                 "{ind}\treturn {}{{}}, {}\n",
@@ -1036,7 +1028,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
         }
         for o in &f.outputs {
             lines.push(Line::Cells(vec![
-                super::type_ident(&format!("{}_expected", o.name)),
+                super::type_ident(&o.expected_name()),
                 "ExpectedSource".into(),
             ]));
         }
@@ -1342,7 +1334,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             };
             parts.push(format!(
                 "{}: {expected}",
-                super::type_ident(&format!("{}_expected", o.name))
+                super::type_ident(&o.expected_name())
             ));
         }
         let source = |s: &super::ir::MarkSource| match s {
@@ -1557,7 +1549,7 @@ pub(super) fn print_validators(domain: &DomainModel, out: &mut String) {
                 "\t// {}\n\tif {} {{\n\t\tout = append(out, {})\n\t}}\n",
                 one_line(&rule.text),
                 expr(
-                    &fails(&rule.expr),
+                    &rule.expr.fails(),
                     &row,
                     &|_| v.ty.clone(),
                     &acc,
@@ -1569,11 +1561,6 @@ pub(super) fn print_validators(domain: &DomainModel, out: &mut String) {
         }
         out.push_str("\treturn out\n}\n\n");
     }
-}
-
-/// The condition under which `e` fails, folded so that a negated comparison reads plainly.
-fn fails(e: &super::ir::Expr) -> super::ir::Expr {
-    super::actions::simplify(super::ir::Expr::Not(Box::new(e.clone())))
 }
 
 // ── Rows and dispatch ────────────────────────────────────────────────────────
@@ -1760,7 +1747,7 @@ pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
     }
     out.push_str("// ── Dispatch: run a use case from whatever states its rows are in ──\n\n");
     for d in &domain.dispatchers {
-        let err = error_name(domain, &d.usecase);
+        let err = domain.error_name(&d.usecase);
         out.push_str(&format!(
             "// {} is what {} returns when the use case runs: one case is set.\n",
             d.outcome, d.name

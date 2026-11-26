@@ -512,6 +512,86 @@ pub enum Expr {
     },
 }
 
+impl Expr {
+    /// Folds the constant parts of an expression.
+    pub(in crate::codegen) fn simplify(self) -> Expr {
+        match self {
+            Expr::Exists { input, elem, body } => match body.simplify() {
+                Expr::False => Expr::False,
+                body => Expr::Exists {
+                    input,
+                    elem,
+                    body: Box::new(body),
+                },
+            },
+            Expr::Forall { input, elem, body } => match body.simplify() {
+                Expr::True => Expr::True,
+                body => Expr::Forall {
+                    input,
+                    elem,
+                    body: Box::new(body),
+                },
+            },
+            Expr::Count {
+                input,
+                elem,
+                body,
+                op,
+                n,
+            } => Expr::Count {
+                input,
+                elem,
+                body: Box::new(body.simplify()),
+                op,
+                n,
+            },
+            Expr::Not(inner) => match inner.simplify() {
+                Expr::True => Expr::False,
+                Expr::False => Expr::True,
+                Expr::Not(x) => *x,
+                other => Expr::Not(Box::new(other)),
+            },
+            Expr::And(items) => {
+                let mut kept = Vec::new();
+                for item in items.into_iter().map(Expr::simplify) {
+                    match item {
+                        Expr::True => {}
+                        Expr::False => return Expr::False,
+                        other => kept.push(other),
+                    }
+                }
+                match kept.len() {
+                    0 => Expr::True,
+                    1 => kept.pop().expect("one item"),
+                    _ => Expr::And(kept),
+                }
+            }
+            Expr::Or(items) => {
+                let mut kept = Vec::new();
+                for item in items.into_iter().map(Expr::simplify) {
+                    match item {
+                        Expr::False => {}
+                        Expr::True => return Expr::True,
+                        other => kept.push(other),
+                    }
+                }
+                match kept.len() {
+                    0 => Expr::False,
+                    1 => kept.pop().expect("one item"),
+                    _ => Expr::Or(kept),
+                }
+            }
+            other => other,
+        }
+    }
+
+    /// The condition under which `self` fails, folded so that a negated comparison reads
+    /// plainly.
+    pub(in crate::codegen) fn fails(&self) -> Expr {
+        Expr::Not(Box::new(self.clone())).simplify()
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CmpOp {
     Eq,
@@ -533,6 +613,18 @@ impl CmpOp {
             CmpOp::Ge => ">=",
         }
     }
+
+    /// Whether `a op b` holds.
+    pub fn holds(self, a: i64, b: i64) -> bool {
+        match self {
+            CmpOp::Eq => a == b,
+            CmpOp::Ne => a != b,
+            CmpOp::Lt => a < b,
+            CmpOp::Le => a <= b,
+            CmpOp::Gt => a > b,
+            CmpOp::Ge => a >= b,
+        }
+    }
 }
 
 /// A row the function returns.
@@ -543,6 +635,13 @@ pub struct RowOut {
     /// The action param this row is.
     pub param: usize,
     pub kind: OutKind,
+}
+
+impl RowOut {
+    /// The result field that names what the row must still be when the write commits.
+    pub fn expected_name(&self) -> String {
+        format!("{}_expected", self.name)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -716,6 +815,28 @@ impl DomainModel {
     /// The error type of the use case `usecase`.
     pub fn error_of(&self, usecase: &str) -> Option<&UseCaseErrorDecl> {
         self.errors.iter().find(|e| e.usecase == usecase)
+    }
+
+    /// The representation of the id type `id`; `Int` when the model declares no such id.
+    pub fn id_repr(&self, id: &str) -> Scalar {
+        self.ids
+            .iter()
+            .find(|i| i.name == id)
+            .map_or(Scalar::Int, |i| i.repr)
+    }
+
+    /// The port, when it has a contract to probe.
+    pub fn port_with_contracts(&self) -> Option<&PortDecl> {
+        self.port.as_ref().filter(|p| !p.contracts.is_empty())
+    }
+
+    /// The name of the error type of `usecase`, which has a function or an entry point: every
+    /// such use case has one.
+    pub fn error_name(&self, usecase: &str) -> &str {
+        &self
+            .error_of(usecase)
+            .expect("a use case with a function or an entry point has an error type")
+            .name
     }
 
     /// Whether the arguments of `f` can break what the verified model keeps: an argument

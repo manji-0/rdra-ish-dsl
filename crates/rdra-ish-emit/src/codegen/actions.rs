@@ -23,7 +23,7 @@ use super::ir::{
     EnumValue, EventDecl, Expr, Field, FieldType, FnDecl, FnInput, Lit, OutKind, RecordDecl,
     RowOut, RowParam, Scalar, Skipped, SumDecl, VariantDecl,
 };
-use super::{type_ident, CodegenError, Names};
+use super::{snake, type_ident, CodegenError, Names};
 
 mod derived;
 mod dispatch;
@@ -35,7 +35,7 @@ mod values;
 use dispatch::dispatchers;
 use guards::{arm_conditions, fold_next, reads_only_created, NextRead};
 use lower::{function, ActionCx, ColumnArms, TagArms};
-pub(super) use pred::{expr, simplify};
+pub(super) use pred::expr;
 use pred::{remap_lists, Quant};
 use values::{declared_id, enum_lit, input_index, literal, start_literal, start_value, Write};
 
@@ -630,30 +630,6 @@ fn combinations(sources: &[Vec<Source<'_>>]) -> Vec<Vec<usize>> {
             }
         }
         out = next;
-    }
-    out
-}
-
-/// snake_case of an id: `CustomerAccount` is `customer_account`.
-pub(super) fn snake(id: &str) -> String {
-    let mut out = String::new();
-    let mut prev_lower = false;
-    for ch in id.chars() {
-        if ch == '-' || ch == ' ' {
-            out.push('_');
-            prev_lower = false;
-            continue;
-        }
-        if ch.is_uppercase() {
-            if prev_lower {
-                out.push('_');
-            }
-            out.extend(ch.to_lowercase());
-            prev_lower = false;
-        } else {
-            out.push(ch);
-            prev_lower = ch.is_lowercase() || ch.is_ascii_digit();
-        }
     }
     out
 }

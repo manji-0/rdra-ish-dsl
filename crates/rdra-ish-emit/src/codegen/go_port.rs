@@ -182,10 +182,7 @@ pub(super) fn probe(
     domain: &DomainModel,
     binding: &super::ProbeBinding,
 ) -> Option<super::probe::Probe> {
-    let port = domain.port.as_ref()?;
-    if port.contracts.is_empty() {
-        return None;
-    }
+    let port = domain.port_with_contracts()?;
     let (svc_import, ty) = binding
         .service
         .rsplit_once('.')
@@ -741,21 +738,13 @@ fn params(m: &super::ir::PortMethod) -> Vec<String> {
     out
 }
 
-fn id_repr(domain: &DomainModel, id: &str) -> Scalar {
-    domain
-        .ids
-        .iter()
-        .find(|i| i.name == id)
-        .map_or(Scalar::Int, |i| i.repr)
-}
-
 /// An expression that reads the next value of `confA` as `ty`.
 fn parse(domain: &DomainModel, ty: &FieldType, nullable: bool) -> String {
     let value = |t: &str| -> String {
         match ty {
             FieldType::Scalar(s) => scalar_parse(*s, t),
             FieldType::Enum(name) => format!("confEnum(confA, {name}({t}))"),
-            FieldType::Id(name) => match id_repr(domain, name) {
+            FieldType::Id(name) => match domain.id_repr(name) {
                 Scalar::Int => format!("{name}(confA.int({t}))"),
                 _ => format!("{name}({t})"),
             },
@@ -788,7 +777,7 @@ fn text(domain: &DomainModel, e: &str, ty: &FieldType) -> String {
         FieldType::Scalar(Scalar::Int) => format!("strconv.FormatInt({e}, 10)"),
         FieldType::Scalar(Scalar::Bool) => format!("strconv.FormatBool({e})"),
         FieldType::Scalar(_) | FieldType::Enum(_) => format!("string({e})"),
-        FieldType::Id(name) => match id_repr(domain, name) {
+        FieldType::Id(name) => match domain.id_repr(name) {
             Scalar::Int => format!("strconv.FormatInt(int64({e}), 10)"),
             Scalar::Bool => format!("strconv.FormatBool(bool({e}))"),
             _ => format!("string({e})"),
