@@ -8,6 +8,7 @@ use crate::model::{
     values_display, CmpRhs, ComparisonProp, CrossConstraintScope, CrossEntityCondition,
     EffectValue, EntityCondition, EntityKey, NodeRef, QuantifierKind, RelKind, SemanticModel,
 };
+use rdra_ish_syntax::ast::Kind;
 
 /// One row of the business-rule table.
 #[derive(Debug, Clone)]
@@ -210,7 +211,7 @@ pub fn business_rules(model: &SemanticModel) -> Vec<BusinessRule> {
             .body
             .as_ref()
             .and_then(|body| body.site.clone())
-            .or_else(|| model.decl_sites.located("condition", &condition.id));
+            .or_else(|| model.decl_sites.located(Kind::Condition, &condition.id));
         push(
             "condition",
             &Some(condition.label.clone()),

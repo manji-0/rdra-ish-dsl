@@ -1,5 +1,6 @@
 //! TX境界推論: FK連結成分からユースケースの書き込み順序とトランザクション境界を導出する。
 
+use rdra_ish_syntax::ast::Kind;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::diagnostics::{Diagnostic, RdraError};
@@ -312,7 +313,7 @@ pub fn tx_diagnostics(model: &SemanticModel, txs: &[UsecaseTx]) -> Vec<Diagnosti
             push_model_decl_diagnostic(
                 model,
                 &mut diags,
-                "usecase",
+                Kind::UseCase,
                 &uc_id,
                 RdraError::SeparateTxInferred {
                     usecase: uc_id.clone(),

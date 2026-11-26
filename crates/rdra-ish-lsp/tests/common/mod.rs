@@ -104,12 +104,18 @@ impl Client {
 
     /// Replaces the text of `path` and waits for its diagnostics.
     pub fn change(&mut self, path: &Path, version: i64, text: &str) {
+        self.change_now(path, version, text);
+        self.wait_for_diagnostics(&uri(path), "diagnostics of the changed text", |_| true);
+    }
+
+    /// Replaces the text of `path` without waiting for anything, as an editor does while the
+    /// user types.
+    pub fn change_now(&mut self, path: &Path, version: i64, text: &str) {
         self.notify(
             "textDocument/didChange",
             json!({"textDocument": {"uri": uri(path), "version": version},
                 "contentChanges": [{"text": text}]}),
         );
-        self.wait_for_diagnostics(&uri(path), "diagnostics of the changed text", |_| true);
     }
 
     pub fn wait_for(&self, what: &str, mut matches: impl FnMut(&Value) -> bool) -> Value {
@@ -125,17 +131,21 @@ impl Client {
         }
     }
 
+    /// Waits for diagnostics of `uri` that pass `ok`, and returns them.
     pub fn wait_for_diagnostics(
         &self,
         uri: &str,
         what: &str,
         mut ok: impl FnMut(&[Value]) -> bool,
-    ) {
+    ) -> Vec<Value> {
         self.wait_for(what, |m| {
             m["method"] == "textDocument/publishDiagnostics"
                 && m["params"]["uri"] == uri
                 && ok(m["params"]["diagnostics"].as_array().unwrap())
-        });
+        })["params"]["diagnostics"]
+            .as_array()
+            .unwrap()
+            .clone()
     }
 }
 
@@ -149,8 +159,32 @@ pub fn uri(path: &Path) -> String {
     url::Url::from_file_path(path).unwrap().to_string()
 }
 
+/// A workspace root under the temp directory. Dropping it removes the directory, also when a
+/// test fails.
+pub struct Workspace(PathBuf);
+
+impl std::ops::Deref for Workspace {
+    type Target = Path;
+
+    fn deref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl AsRef<Path> for Workspace {
+    fn as_ref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for Workspace {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 /// A fresh workspace root under the temp directory, with an `rdra.toml` and a `.git`.
-pub fn workspace(prefix: &str) -> PathBuf {
+pub fn workspace(prefix: &str) -> Workspace {
     let root = std::env::temp_dir().join(format!(
         "{prefix}_{}_{}",
         std::process::id(),
@@ -161,7 +195,7 @@ pub fn workspace(prefix: &str) -> PathBuf {
     ));
     std::fs::create_dir_all(root.join(".git")).unwrap();
     std::fs::write(root.join("rdra.toml"), "[model]\nname = \"shop\"\n").unwrap();
-    dunce::canonicalize(root).unwrap()
+    Workspace(dunce::canonicalize(root).unwrap())
 }
 
 /// The LSP position of byte `offset` in `text`: a line index and a UTF-16 column.

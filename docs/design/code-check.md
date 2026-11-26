@@ -615,7 +615,9 @@ mirrors them instead of inventing its own:
   the version.
 - tsc has no code for "not implemented". TS2741 (one member), TS2739 (the list) and TS2740
   (four and "N more") are `Incomplete`. `missing_members` reads the list, so the shared rule
-  turns a message that misses every member into `NotImplemented`. TS2322 is `Signature`.
+  turns a message that misses every member into `NotImplemented`, and so do messages that
+  together miss every member of one contract (Rust's E0046 too, as Go's backend counts
+  them). TS2322 is `Signature`.
 - `--seal` / `[code.ts] seal` adds `[$sealed]: true` to each state type, keyed by a `unique
   symbol` the module does not export. A literal outside the module fails with TS2741, and
   `as unknown as` still passes (`codegen_behaviour.rs`). `Symbol` is reserved for it.

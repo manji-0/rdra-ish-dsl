@@ -24,6 +24,7 @@ mod ts;
 mod ts_port;
 mod validators;
 
+use rdra_ish_syntax::ast::Kind;
 use std::collections::BTreeMap;
 
 use rdra_ish_core::lifecycle::{ActionOrigin, Caps};
@@ -963,7 +964,7 @@ fn obligations(
     };
     for (key, entity) in &model.entities {
         // An obligation with no declaration of its own is at its entity's.
-        let entity_at = model.decl_sites.located("entity", &entity.id);
+        let entity_at = model.decl_sites.located(Kind::Entity, &entity.id);
         for (_, fk) in model.foreign_keys().filter(|(_, fk)| fk.child == key) {
             if fk.columns.is_empty() {
                 continue;
@@ -1118,7 +1119,7 @@ fn usecases(
             label: uc.label.clone(),
             site: model
                 .decl_sites
-                .located("usecase", &uc.id)
+                .located(Kind::UseCase, &uc.id)
                 .as_ref()
                 .and_then(site),
             actions: Vec::new(),

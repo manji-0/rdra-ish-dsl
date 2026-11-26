@@ -74,7 +74,7 @@ fn register_instance_populates_each_node_store_and_symbol_table() {
     for (kind, id) in &cases {
         register_instance(
             &mut model,
-            &instance(kind.clone(), id),
+            &instance(*kind, id),
             DiagCtxt::new(0),
             &mut diags,
         );

@@ -14,7 +14,7 @@ use super::types::{
 };
 use super::view::{entity_view, AbstractValue, EntityStateResult};
 use super::{QuotientCache, TransitionSystem};
-use crate::memory::{watch, MemorySize};
+use crate::memory::{watch, MemoryPool, MemorySize};
 use crate::model::{EntityKey, SemanticModel};
 use crate::parallel::{in_parallel, jobs};
 
@@ -169,16 +169,8 @@ impl fmt::Display for Undecided {
 
 /// The cap, the limit, or the deadline a run stopped at, read off its diagnostics; `None` for
 /// a run that did not stop.
-fn stopped_at(run: &ComponentRun) -> Option<UndecidedWhy> {
-    run.diags.iter().find_map(|d| match d.diag {
-        StateDiag::StateCapReached { cap, .. } => Some(UndecidedWhy::StateCap(cap)),
-        StateDiag::PatternCapReached { cap, .. } => Some(UndecidedWhy::PatternCap(cap)),
-        StateDiag::MemoryCapReached { limit, raise, .. } => {
-            Some(UndecidedWhy::MemoryCap(limit, raise))
-        }
-        StateDiag::TimeBudgetReached { .. } => Some(UndecidedWhy::TimeBudget),
-        _ => None,
-    })
+pub(super) fn stopped_at(run: &ComponentRun) -> Option<UndecidedWhy> {
+    run.diags.iter().find_map(|d| d.diag.stopped_why())
 }
 
 /// Whether a `shadow` build runs every entity cone up to symmetry as well, so that the
@@ -196,6 +188,12 @@ struct EntityRead {
     findings: StateModelFindings,
     why: Option<UndecidedWhy>,
 }
+
+/// The distinct cones of a set of targets, each with the targets it answers.
+type Groups = Vec<(Cone, Vec<Target>)>;
+
+/// By cone: the findings of a released cone on each of its entities, read before its release.
+type Reads = HashMap<usize, Vec<(EntId, EntityRead)>>;
 
 /// What the entity cones that keep one action say about it.
 #[derive(Default)]
@@ -263,7 +261,29 @@ impl TransitionSystem {
         every_check: &[&TransitionSystem],
         release: bool,
     ) -> TargetExploration {
-        let mut groups: Vec<(Cone, Vec<Target>)> = Vec::new();
+        let (groups, answered) = self.group_by_cone(targets);
+        let explore = |cone: &Cone, shared: &[Target], caps: Caps| {
+            self.explore_cone(cone, shared, caps, reduce, every_check)
+        };
+        let (cones, reads) = self.run_cones(groups, caps, release, &explore);
+        let mut out = TargetExploration {
+            cones: Vec::new(),
+            targets: Vec::new(),
+            verdicts: Vec::new(),
+            undecided: Vec::new(),
+            tally: Tally::default(),
+        };
+        let runs = self.answer_targets(&answered, &cones, &reads, &mut out);
+        out.cones = cones;
+        self.judge_actions(runs, &mut out);
+        out.targets = answered;
+        out
+    }
+
+    /// The distinct cones of `targets` in the order first met, each with the targets it
+    /// answers, and each target with the index of its cone.
+    fn group_by_cone(&self, targets: &[Target]) -> (Groups, Vec<(Target, usize)>) {
+        let mut groups: Groups = Vec::new();
         let mut index: HashMap<Cone, usize> = HashMap::new();
         let mut answered = Vec::new();
         for &target in targets {
@@ -275,37 +295,58 @@ impl TransitionSystem {
             groups[at].1.push(target);
             answered.push((target, at));
         }
+        (groups, answered)
+    }
+
+    /// The run of one cone and the targets it answers (`shared`), on a system of its own.
+    fn explore_cone(
+        &self,
+        cone: &Cone,
+        shared: &[Target],
+        caps: Caps,
+        reduce: Option<&QuotientCache>,
+        every_check: &[&TransitionSystem],
+    ) -> ComponentRun {
+        // Only an entity target's view reads the patterns (`entity_views`), so a cone of
+        // other targets gathers none and the pattern cap does not stop it (#251).
+        let caps = match shared.iter().any(|t| matches!(t, Target::Entity(_))) {
+            true => caps,
+            false => caps.without_views(),
+        };
+        // A reduction keeps what LTL reads, not `AG EF`: a `can_reach` cone stays whole.
+        let reach = shared.iter().any(|t| matches!(t, Target::Reach(_)));
+        let system = match reduce.filter(|_| !reach) {
+            Some(cache) => {
+                let seeds = shared.iter().map(|t| self.target_seed(*t));
+                self.reduced_cone_in(cone, seeds, caps, cache)
+            }
+            None => self.restrict_to(&cone.vars, &cone.keep),
+        };
+        // A cone of checks alone is decided once each has failed, which reads every check
+        // its system holds; an entity target or a `can_reach` reads the whole graph, and
+        // nothing reads the checks of such a cone but its own check targets, and the
+        // caller's later pass when the system is one of `every_check`.
+        let checks = shared
+            .iter()
+            .all(|t| matches!(t, Target::Invariant(_) | Target::AfterAssert(_)));
+        match (checks, every_check.contains(&&system)) {
+            (true, _) => system.run_checking(caps.until_all_violated(), Checks::All),
+            (false, true) => system.run_checking(caps, Checks::All),
+            (false, false) => system.run_checking(caps, self.checks_of(shared)),
+        }
+    }
+
+    /// Each cone's run, in cone order, and by cone the findings of a cone released under
+    /// `release`, read before its release.
+    fn run_cones(
+        &self,
+        groups: Groups,
+        caps: Caps,
+        release: bool,
+        explore: &(impl Fn(&Cone, &[Target], Caps) -> ComponentRun + Sync),
+    ) -> (Vec<ConeRun>, Reads) {
         // Each cone is explored on its own system, so the cones run side by side; the runs
         // come back in cone order, and each is what it is alone.
-        let explore = |cone: &Cone, shared: &[Target], caps: Caps| {
-            // Only an entity target's view reads the patterns (`entity_views`), so a cone of
-            // other targets gathers none and the pattern cap does not stop it (#251).
-            let caps = match shared.iter().any(|t| matches!(t, Target::Entity(_))) {
-                true => caps,
-                false => caps.without_views(),
-            };
-            // A reduction keeps what LTL reads, not `AG EF`: a `can_reach` cone stays whole.
-            let reach = shared.iter().any(|t| matches!(t, Target::Reach(_)));
-            let system = match reduce.filter(|_| !reach) {
-                Some(cache) => {
-                    let seeds = shared.iter().map(|t| self.target_seed(*t));
-                    self.reduced_cone_in(cone, seeds, caps, cache)
-                }
-                None => self.restrict_to(&cone.vars, &cone.keep),
-            };
-            // A cone of checks alone is decided once each has failed, which reads every check
-            // its system holds; an entity target or a `can_reach` reads the whole graph, and
-            // nothing reads the checks of such a cone but its own check targets, and the
-            // caller's later pass when the system is one of `every_check`.
-            let checks = shared
-                .iter()
-                .all(|t| matches!(t, Target::Invariant(_) | Target::AfterAssert(_)));
-            match (checks, every_check.contains(&&system)) {
-                (true, _) => system.run_checking(caps.until_all_violated(), Checks::All),
-                (false, true) => system.run_checking(caps, Checks::All),
-                (false, false) => system.run_checking(caps, self.checks_of(shared)),
-            }
-        };
         let ran = in_parallel(groups, jobs(), |(cone, shared)| {
             let (run, seen) = watch(|| explore(&cone, &shared, caps));
             (cone, shared, run, seen)
@@ -327,7 +368,7 @@ impl TransitionSystem {
         let mut held = 0u64;
         let mut cones = Vec::with_capacity(ran.len());
         // By cone: the findings of a released cone, read before its release.
-        let mut reads: HashMap<usize, Vec<(EntId, EntityRead)>> = HashMap::new();
+        let mut reads: Reads = HashMap::new();
         for (cone, shared, run, peak) in ran {
             let run = match (caps.memory, run) {
                 (None, Some(run)) => run,
@@ -349,49 +390,7 @@ impl TransitionSystem {
                 .collect();
             match (entities, caps.memory) {
                 (Some(entities), Some(pool)) if release && !cone.run.complete => {
-                    let memory = matches!(stopped_at(&cone.run), Some(UndecidedWhy::MemoryCap(..)));
-                    let mut read: Vec<(EntId, EntityRead)> = (entities.iter())
-                        .map(|&e| (e, self.read_entity(e, &cone)))
-                        .collect();
-                    let plain = cone.run.states.len();
-                    cone.run.release();
-                    // Under `--symmetry always` the cone runs again up to symmetry in the
-                    // room its plain run held, and a run that completes decides its findings.
-                    // A cone whose plain run left nothing open keeps that run's findings.
-                    let open = read.iter().any(|(_, r)| !r.findings.decided());
-                    let mut up = None;
-                    if caps.entity_orbits
-                        && memory
-                        && open
-                        && cone.run.system.has_instance_symmetry()
-                    {
-                        let room = pool.room().saturating_sub(held);
-                        let orbits = (cone.run.system.clone())
-                            .run_annotated_orbits(caps.charged_to(pool.with_room(room)));
-                        up = Some((orbits.orbits(), orbits.estimate(), orbits.complete()));
-                        if orbits.complete() {
-                            read = (entities.iter())
-                                .map(|&e| (e, self.read_orbits(e, &cone.cone, &orbits)))
-                                .collect();
-                        }
-                    }
-                    if caps.entity_orbits && std::env::var_os("RDRA_ISH_SYMMETRY_STATS").is_some() {
-                        let names: Vec<&str> = entities
-                            .iter()
-                            .map(|&e| self.entity(e).id.as_str())
-                            .collect();
-                        eprintln!(
-                            "symmetry: entity {}: the plain run stopped at {plain} states; {}",
-                            names.join(", "),
-                            match up {
-                                Some((n, about, done)) => format!(
-                                    "up to symmetry, {n} orbits, about {about} states, {}",
-                                    if done { "complete" } else { "stopped" }
-                                ),
-                                None => "not run again up to symmetry".to_string(),
-                            }
-                        );
-                    }
+                    let read = self.read_and_release(&mut cone, &entities, caps, pool, held);
                     reads.insert(cones.len(), read);
                 }
                 (Some(entities), _) if forced_entity_orbits(caps) && cone.run.complete => {
@@ -409,16 +408,75 @@ impl TransitionSystem {
             }
             cones.push(cone);
         }
-        let mut out = TargetExploration {
-            cones: Vec::new(),
-            targets: Vec::new(),
-            verdicts: Vec::new(),
-            undecided: Vec::new(),
-            tally: Tally::default(),
-        };
+        (cones, reads)
+    }
+
+    /// The findings of each of `entities` on `cone`, a stopped cone of entity targets alone
+    /// charged to `pool`, read before its run is released. `held` is what the results before
+    /// it hold of the pool.
+    fn read_and_release(
+        &self,
+        cone: &mut ConeRun,
+        entities: &[EntId],
+        caps: Caps,
+        pool: &'static MemoryPool,
+        held: u64,
+    ) -> Vec<(EntId, EntityRead)> {
+        let memory = matches!(stopped_at(&cone.run), Some(UndecidedWhy::MemoryCap(..)));
+        let mut read: Vec<(EntId, EntityRead)> = (entities.iter())
+            .map(|&e| (e, self.read_entity(e, cone)))
+            .collect();
+        let plain = cone.run.states.len();
+        cone.run.release();
+        // Under `--symmetry always` the cone runs again up to symmetry in the
+        // room its plain run held, and a run that completes decides its findings.
+        // A cone whose plain run left nothing open keeps that run's findings.
+        let open = read.iter().any(|(_, r)| !r.findings.decided());
+        let mut up = None;
+        if caps.entity_orbits && memory && open && cone.run.system.has_instance_symmetry() {
+            let room = pool.room().saturating_sub(held);
+            let orbits = (cone.run.system.clone())
+                .run_annotated_orbits(caps.charged_to(pool.with_room(room)));
+            up = Some((orbits.orbits(), orbits.estimate(), orbits.complete()));
+            if orbits.complete() {
+                read = (entities.iter())
+                    .map(|&e| (e, self.read_orbits(e, &cone.cone, &orbits)))
+                    .collect();
+            }
+        }
+        if caps.entity_orbits && std::env::var_os("RDRA_ISH_SYMMETRY_STATS").is_some() {
+            let names: Vec<&str> = entities
+                .iter()
+                .map(|&e| self.entity(e).id.as_str())
+                .collect();
+            eprintln!(
+                "symmetry: entity {}: the plain run stopped at {plain} states; {}",
+                names.join(", "),
+                match up {
+                    Some((n, about, done)) => format!(
+                        "up to symmetry, {n} orbits, about {about} states, {}",
+                        if done { "complete" } else { "stopped" }
+                    ),
+                    None => "not run again up to symmetry".to_string(),
+                }
+            );
+        }
+        read
+    }
+
+    /// Answers each target on its cone into `out`: an entity target's findings, a `can_reach`
+    /// its cap left open, or a check's verdict. Returns what the entity cones say about each
+    /// action, and counts them in `out.tally`.
+    fn answer_targets(
+        &self,
+        answered: &[(Target, usize)],
+        cones: &[ConeRun],
+        reads: &Reads,
+        out: &mut TargetExploration,
+    ) -> Vec<RunsSoFar> {
         let mut runs: Vec<RunsSoFar> = self.actions.iter().map(|_| RunsSoFar::default()).collect();
         let mut entity_cones = Vec::new();
-        for &(target, at) in &answered {
+        for &(target, at) in answered {
             match target {
                 Target::Entity(e) => {
                     if !entity_cones.contains(&at) {
@@ -432,7 +490,7 @@ impl TransitionSystem {
                         None => self.read_entity(e, &cones[at]),
                     };
                     let system = &cones[at].run.system;
-                    self.entity_findings(e, read, system, &mut out, &mut runs);
+                    self.entity_findings(e, read, system, out, &mut runs);
                 }
                 // A state the cap left unexpanded has no edges, so it would look stuck: only a
                 // complete graph decides a `can_reach`.
@@ -448,11 +506,15 @@ impl TransitionSystem {
                 _ => out.verdicts.extend(self.verdict(target, &cones[at])),
             }
         }
-        out.cones = cones;
         out.tally.entity_cones = entity_cones.len();
-        // Whether an action runs is judged on entity cones only: a run of other targets alone
-        // (verify's `can_reach` cones) judges none.
-        let judged = match entity_cones.is_empty() {
+        runs
+    }
+
+    /// Whether each action runs, and takes each `.when` arm, from what the entity cones say
+    /// (`runs`), into `out`. Judged on entity cones only: a run of other targets alone
+    /// (verify's `can_reach` cones) judges none.
+    fn judge_actions(&self, runs: Vec<RunsSoFar>, out: &mut TargetExploration) {
+        let judged = match out.tally.entity_cones == 0 {
             true => Vec::new(),
             false => self.merge_variants(runs, &mut out.verdicts, &mut out.undecided),
         };
@@ -494,8 +556,6 @@ impl TransitionSystem {
                 });
             }
         }
-        out.targets = answered;
-        out
     }
 
     /// The invariants and after-asserts among `targets`, by name: what a run of their cone
@@ -915,15 +975,7 @@ impl TransitionSystem {
                 d
             })
             .collect();
-        for d in run.diags.iter().filter(|d| {
-            matches!(
-                d.diag,
-                StateDiag::PatternCapReached { .. }
-                    | StateDiag::StateCapReached { .. }
-                    | StateDiag::MemoryCapReached { .. }
-                    | StateDiag::TimeBudgetReached { .. }
-            )
-        }) {
+        for d in run.diags.iter().filter(|d| d.diag.stopped_why().is_some()) {
             out.push(Diag {
                 entities: entities.clone(),
                 diag: d.diag.clone(),

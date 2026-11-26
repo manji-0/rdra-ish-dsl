@@ -254,7 +254,7 @@ usecase Open "Open"
 
 /// Profile's owner in each initial state at two slots, as parent slots (`None`: unlinked).
 fn initial_owners(src: &str) -> (Vec<Vec<Option<u8>>>, Vec<Diag>) {
-    let built = TransitionSystem::build(&model_from(src), Bounds::VERIFY, &Scope::ALL);
+    let built = built_from(src, Bounds::VERIFY);
     let mut idle = built.ts;
     // Without actions the reachable states are the initial states.
     idle.actions.clear();
@@ -458,7 +458,7 @@ sets(GenerateClaim, Claim.origin == generated)
 
 /// Every reachable `(claims present, charges present)` pair at two slots.
 fn populations(src: &str) -> Vec<(usize, usize)> {
-    let ts = TransitionSystem::build(&model_from(src), Bounds::VERIFY, &Scope::ALL).ts;
+    let ts = system_from(src, Bounds::VERIFY);
     let run = ts.run(Caps::new(Caps::for_instances(1).patterns, 100_000));
     let ts = &run.system;
     let exists = |id: &str| {
@@ -564,7 +564,7 @@ fn a_links_binds_a_present_parent_and_links_the_child_once() {
         d.diags
     );
     assert_eq!(never_runs(&d), vec!["Reassign"]);
-    let ts = TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL).ts;
+    let ts = system_from(&src, Bounds::STATES);
     let reassign = ts.actions().iter().find(|a| a.name == "Reassign").unwrap();
     assert!(reassign.guards.iter().any(|g| g.why == GuardWhy::Link));
     assert!(reassign
@@ -640,7 +640,7 @@ fn a_links_in_a_later_step_links_to_the_runs_parent() {
          sets(Assign, Handler.busy == true)\n\
          invariant(Case).when(status == assigned).has(Handler.busy == true)",
     );
-    let ts = TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL).ts;
+    let ts = system_from(&src, Bounds::STATES);
     let step_2 = ts.actions().iter().find(|a| a.name == "Assign_2").unwrap();
     let earlier = step_2
         .params
@@ -738,7 +738,7 @@ fn a_relinks_moves_a_linked_child_and_an_unlinks_frees_it() {
         d.diags
     );
     assert!(never_runs(&d).is_empty(), "{:?}", d.diags);
-    let ts = TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL).ts;
+    let ts = system_from(&src, Bounds::STATES);
     let reassign = action(&ts, "Reassign");
     assert!(reassign.guards.iter().any(|g| g.why == GuardWhy::Link));
     assert!(reassign
@@ -770,7 +770,7 @@ fn a_relinks_and_an_unlinks_to_a_written_parent_use_the_row_the_step_writes() {
          applies_to(Free, Assign)\napplies_to(Free, Reassign)\n\
          invariant(Case).when(status == assigned).has(Handler.busy == true)",
     );
-    let ts = TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL).ts;
+    let ts = system_from(&src, Bounds::STATES);
     let release = action(&ts, "Release");
     assert!(guards_on(release, handler_param(&ts, release)));
     let reassign = action(&ts, "Reassign");
@@ -799,7 +799,7 @@ fn a_relinks_and_an_unlinks_in_a_later_step_use_the_runs_parent() {
          updates(HandlerApi, Handler)\nupdates(CaseApi, Case)\n\
          sets(Reassign, Handler.busy == true)\nsets(Release, Handler.busy == false)",
     );
-    let ts = TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL).ts;
+    let ts = system_from(&src, Bounds::STATES);
     let reassign = action(&ts, "Reassign_2");
     assert!(assigns(reassign, handler_param(&ts, reassign)));
     let release = action(&ts, "Release_2");
@@ -821,7 +821,7 @@ creates(OpenWard, Ward)
 creates(AddBed, Bed)
 relinks(MoveBed, Bed, Ward)
 "#;
-    let ts = TransitionSystem::build(&model_from(src), Bounds::VERIFY, &Scope::ALL).ts;
+    let ts = system_from(src, Bounds::VERIFY);
     let moved = action(&ts, "MoveBed");
     assert!(moved.guards.iter().all(|g| g.why != GuardWhy::Link));
     assert!(moved

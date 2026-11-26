@@ -97,7 +97,7 @@ fn a_set_of_every_value_reads_no_column() {
     let model = sample_model("samples/formal-verification/none_any_child.rdra");
     let built = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL);
     let ts = &built.ts;
-    let invoice = ts.entities().iter().find(|e| e.id == "Invoice").unwrap();
+    let invoice = ts.entity(ent(ts, "Invoice"));
     let unique = ts
         .invariants()
         .iter()

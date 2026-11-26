@@ -9,6 +9,7 @@
 //! runs the jobs one `pick` at a time. The state-model runs keep `run_budgeted`.
 
 use std::cmp::Reverse;
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Condvar, Mutex};
 
@@ -375,7 +376,12 @@ impl Pool {
             }
         });
         let mut done = done.into_inner().expect("lock");
-        done.sort_by_key(|(job, _)| jobs.iter().position(|j| j == job));
+        // Each job's first place in `jobs`, as `position` finds it.
+        let mut place: HashMap<usize, usize> = HashMap::with_capacity(jobs.len());
+        for (i, &job) in jobs.iter().enumerate() {
+            place.entry(job).or_insert(i);
+        }
+        done.sort_by_key(|(job, _)| place.get(job).copied());
         done.into_iter().map(|(_, r)| r).collect()
     }
 

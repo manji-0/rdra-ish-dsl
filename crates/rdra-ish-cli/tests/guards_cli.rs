@@ -3,12 +3,12 @@
 mod common;
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
-fn repo() -> PathBuf {
-    dunce::canonicalize(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).expect("repo root")
-}
+#[path = "common/root.rs"]
+mod root;
+use root::repo;
 
 /// The exit code and stdout of `rdra-ish <args>` run at the repository root, with sites
 /// relative to it.
