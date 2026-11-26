@@ -5,36 +5,25 @@
 //! service reads its store asynchronously; the Rust and Go ones are sync.
 
 use super::conformance::TRACES_FORMAT;
-use super::ir::{DomainModel, Field, FieldType, PortDecl, PortMethod, Scalar, Track};
+use super::ir::{DomainModel, Field, FieldType, PortArg, PortDecl, PortMethod, Scalar, Track};
 use super::probe::{Probe, ProbeWriter};
 use super::string_literal;
 use super::ts::{column_type, doc, doc1, local, property};
 
 /// `name: type` per argument of a method's `prepare`.
 fn params(m: &PortMethod) -> Vec<(String, String)> {
-    let mut out: Vec<(String, String)> = m
-        .rows
-        .iter()
-        .chain(&m.marks)
-        .map(|(n, ty)| (local(n), ty.clone()))
-        .collect();
-    if let Some((n, ty)) = &m.event {
-        out.push((local(n), ty.clone()));
-    }
-    for i in &m.inputs {
-        out.push((local(&i.name), column_type(&i.ty, i.nullable)));
-    }
-    for (n, ty) in &m.choices {
-        out.push((local(n), ty.clone()));
-    }
-    out
+    m.args()
+        .map(|a| match a {
+            PortArg::Id(a) | PortArg::Event(a) | PortArg::Choice(a) => {
+                (local(&a.name), a.ty.clone())
+            }
+            PortArg::Input(i) => (local(&i.name), column_type(&i.ty, i.nullable)),
+        })
+        .collect()
 }
 
 /// The contract types, one per use case with printed functions.
-pub(super) fn print_contracts(domain: &DomainModel, out: &mut String) {
-    let Some(port) = &domain.port else {
-        return;
-    };
+fn print_contracts(domain: &DomainModel, port: &PortDecl, out: &mut String) {
     if port.contracts.is_empty() {
         return;
     }
@@ -183,7 +172,10 @@ pub(super) fn entry_name(name: &str) -> String {
 pub(super) fn probe(domain: &DomainModel, binding: &super::ProbeBinding) -> Option<Probe> {
     let port = domain.port_with_contracts()?;
     let (specifier, ty) = binding.service.rsplit_once('#')?;
-    let test = binding.conformance.as_ref().filter(|_| domain.harness);
+    let test = binding
+        .conformance
+        .as_ref()
+        .filter(|_| domain.harness().is_some());
     // Type-only imports unless the test runs: the probe alone loads nothing.
     let import = if test.is_some() {
         "import"
@@ -257,11 +249,15 @@ fn doc1_indent(line: &str) -> String {
     doc(&[line.to_string()], "  ")
 }
 
-/// The port and the harness, with `--conformance` only.
+/// The contracts, and with `--conformance` the port and the harness.
 pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
-    let (Some(port), true) = (&domain.port, domain.harness) else {
+    let Some(port) = &domain.port else {
         return;
     };
+    print_contracts(domain, port, out);
+    if !port.harness {
+        return;
+    }
     let mut p = String::new();
     p.push_str(
         "// ── Conformance: the port a finished service implements, and the harness that drives it ──\n\n",
@@ -585,32 +581,28 @@ function $confArg<T>(values: readonly string[], i: number, read: (text: string) 
             i += 1;
             format!("{name}.value")
         };
-        for (_, ty) in m.rows.iter().chain(&m.marks) {
-            args.push(arg(
-                &mut p,
-                reader(domain, &FieldType::Id(ty.clone()), false),
-            ));
-        }
-        if let Some((_, ty)) = &m.event {
-            let event = domain.events.iter().find(|e| e.name == *ty);
-            let mut parts = vec![format!("kind: {}", string_literal(ty))];
-            for f in event.map(|e| e.fields.clone()).unwrap_or_default() {
-                let v = arg(
+        for a in m.args() {
+            let value = match a {
+                PortArg::Id(a) => arg(&mut p, reader(domain, &FieldType::Id(a.ty.clone()), false)),
+                PortArg::Event(a) => {
+                    let event = domain.events.iter().find(|e| e.name == a.ty);
+                    let mut parts = vec![format!("kind: {}", string_literal(&a.ty))];
+                    for f in event.map(|e| e.fields.clone()).unwrap_or_default() {
+                        let v = arg(
+                            &mut p,
+                            reader(domain, &FieldType::Id(f.id_ty.clone()), false),
+                        );
+                        parts.push(format!("{}: {v}", property(&f.name)));
+                    }
+                    format!("{{ {} }}", parts.join(", "))
+                }
+                PortArg::Input(i) => arg(&mut p, reader(domain, &i.ty, i.nullable)),
+                PortArg::Choice(a) => arg(
                     &mut p,
-                    reader(domain, &FieldType::Id(f.id_ty.clone()), false),
-                );
-                parts.push(format!("{}: {v}", property(&f.name)));
-            }
-            args.push(format!("{{ {} }}", parts.join(", ")));
-        }
-        for input in &m.inputs {
-            args.push(arg(&mut p, reader(domain, &input.ty, input.nullable)));
-        }
-        for (_, ty) in &m.choices {
-            args.push(arg(
-                &mut p,
-                reader(domain, &FieldType::Enum(ty.clone()), false),
-            ));
+                    reader(domain, &FieldType::Enum(a.ty.clone()), false),
+                ),
+            };
+            args.push(value);
         }
         p.push_str(&format!(
             "      const r = await port.prepare{}({});\n      return {{ ok: true, value: r.ok ? {{ ok: true, value: {{ action: {}, write: r.value }} }} : r }};\n    }}\n",
@@ -775,7 +767,6 @@ fn reader(domain: &DomainModel, ty: &FieldType, nullable: bool) -> String {
                 format!("$confText({name}.parse)")
             }
         }
-        FieldType::Rows(_) => unreachable!("a list of rows is no port argument"),
     };
     if nullable {
         format!("$confNullable({read})")

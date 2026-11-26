@@ -808,7 +808,7 @@ impl Frame<'_> {
                         let k = input_index(
                             inputs,
                             name.clone(),
-                            field.ty.clone(),
+                            InputType::Value(field.ty.clone()),
                             format!("{entity}.{} of the written row.", field.wire),
                         );
                         inputs[k].nullable = field.nullable;
@@ -968,7 +968,7 @@ impl Frame<'_> {
                 let or_null = matches!(write, Write::InputOrNull) && target.nullable;
                 inputs.push(FnInput {
                     name: input_name(entity, &target.wire),
-                    ty: target.ty.clone(),
+                    ty: InputType::Value(target.ty.clone()),
                     nullable: or_null,
                     doc: format!("The value the use case writes to {entity}.{}.", target.wire),
                 });
@@ -1024,7 +1024,7 @@ impl Frame<'_> {
                 let i = input_index(
                     inputs,
                     input_name(&parent, parent_col),
-                    target.ty.clone(),
+                    InputType::Value(target.ty.clone()),
                     format!("{parent}.{parent_col} of the created row."),
                 );
                 Assigned::Input {
@@ -1056,7 +1056,7 @@ impl Frame<'_> {
                         let i = input_index(
                             inputs,
                             input_name(entity, &target.wire),
-                            target.ty.clone(),
+                            InputType::Value(target.ty.clone()),
                             format!("{entity}.{} of the created row.", target.wire),
                         );
                         inputs[i].nullable = target.nullable;
@@ -1319,7 +1319,7 @@ impl Frame<'_> {
             list_input.push(input_index(
                 inputs,
                 name.clone(),
-                FieldType::Rows(ty.clone()),
+                InputType::Rows(ty.clone()),
                 format!("Every present {entity} row: the function keeps those its keys link."),
             ));
         }

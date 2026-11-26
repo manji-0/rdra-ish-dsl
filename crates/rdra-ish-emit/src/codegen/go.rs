@@ -7,7 +7,9 @@
 
 use std::collections::BTreeSet;
 
-use super::ir::{DomainModel, Field, FieldType, FnDecl, RecordKind, Scalar, SumDecl, VariantDecl};
+use super::ir::{
+    DomainModel, Field, FieldType, FnDecl, InputType, RecordKind, Scalar, SumDecl, VariantDecl,
+};
 use super::{header_lines, obligation_lines, one_line, string_literal, Options};
 
 pub(super) fn print(
@@ -41,7 +43,7 @@ pub(super) fn print(
     if !domain.fns.is_empty() || !domain.sums.is_empty() {
         imports.insert("errors");
     }
-    if domain.harness {
+    if domain.harness().is_some() {
         imports.extend(super::go_port::IMPORTS);
     }
     if !imports.is_empty() {
@@ -174,13 +176,24 @@ pub(super) fn field_type(ty: &FieldType) -> String {
     match ty {
         FieldType::Scalar(s) => scalar(*s).to_string(),
         FieldType::Enum(name) | FieldType::Id(name) => name.clone(),
-        FieldType::Rows(name) => format!("[]{name}"),
     }
 }
 
-/// The type of a column or an input: a pointer when it is nullable.
+/// The type of a function input: a value's, or a slice of rows.
+fn input_type(ty: &InputType) -> String {
+    match ty {
+        InputType::Value(ty) => field_type(ty),
+        InputType::Rows(name) => format!("[]{name}"),
+    }
+}
+
+/// The type of a column: a pointer when it is nullable.
 fn value_type(ty: &FieldType, nullable: bool) -> String {
-    let ty = field_type(ty);
+    pointer_if(field_type(ty), nullable)
+}
+
+/// `ty`, or a pointer to it when it is nullable.
+fn pointer_if(ty: String, nullable: bool) -> String {
     if nullable {
         format!("*{ty}")
     } else {
@@ -813,9 +826,9 @@ fn go_invalid(domain: &DomainModel, f: &FnDecl) -> bool {
 }
 
 /// Whether an input of type `ty` is checked: a value set's or a prelude scalar's text.
-fn checked_input(ty: &FieldType) -> bool {
-    matches!(ty, FieldType::Enum(_))
-        || matches!(ty, FieldType::Scalar(s) if Scalar::PRELUDE.contains(s))
+fn checked_input(ty: &InputType) -> bool {
+    matches!(ty, InputType::Value(FieldType::Enum(_)))
+        || matches!(ty, InputType::Value(FieldType::Scalar(s)) if Scalar::PRELUDE.contains(s))
 }
 
 /// `&<UseCase>Error{Kind: .., Err: detail}`.
@@ -1093,7 +1106,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             params.push(format!(
                 "{} {}",
                 local(&i.name),
-                value_type(&i.ty, i.nullable)
+                pointer_if(input_type(&i.ty), i.nullable)
             ));
         }
         out.push_str(&format!(
@@ -1125,7 +1138,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                 out.push_str(&format!(
                     "\tif {check} {{\n{}\t}}\n",
                     invalid(
-                        &format!("{} is not a value of {}", i.name, field_type(&i.ty)),
+                        &format!("{} is not a value of {}", i.name, input_type(&i.ty)),
                         "\t"
                     )
                 ));
@@ -1420,18 +1433,16 @@ fn expr(
         Expr::EnumEq {
             row: r,
             field,
-            enum_ty,
             value,
         } if field.nullable => {
             let a = acc(*r, field);
-            format!("{a} != nil && *{a} == {enum_ty}{}", value.ident)
+            format!("{a} != nil && *{a} == {}{}", field.enum_ty(), value.ident)
         }
         Expr::EnumEq {
             row: r,
             field,
-            enum_ty,
             value,
-        } => format!("{} == {enum_ty}{}", acc(*r, field), value.ident),
+        } => format!("{} == {}{}", acc(*r, field), field.enum_ty(), value.ident),
         // Null satisfies no comparison (#359): a nil field equals no value.
         Expr::BoolEq {
             row: r,
@@ -1770,7 +1781,7 @@ pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
             params.push(format!(
                 "{} {}",
                 local(&i.name),
-                value_type(&i.ty, i.nullable)
+                pointer_if(input_type(&i.ty), i.nullable)
             ));
         }
         for (n, ty) in &d.choices {

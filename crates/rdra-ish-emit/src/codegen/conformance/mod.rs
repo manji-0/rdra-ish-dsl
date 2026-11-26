@@ -19,8 +19,9 @@ use rdra_ish_core::lifecycle::{
 use rdra_ish_core::SemanticModel;
 
 use super::ir::{
-    CallerDecl, CapabilityDecl, ContractDecl, DomainModel, EntryDecl, Field, FieldType, FnDecl,
-    FnInput, OutKind, PortDecl, PortEntity, PortEvent, PortMethod, PortRun, Scalar, Track,
+    Arg, CallerDecl, CapabilityDecl, ContractDecl, DomainModel, EntryDecl, Field, FieldType,
+    FnDecl, InputType, OutKind, PortDecl, PortEntity, PortEvent, PortInput, PortMethod, PortRun,
+    Scalar, Track,
 };
 use super::snake;
 use super::{type_ident, CodegenError, Names};
@@ -192,7 +193,10 @@ pub(super) fn port(
         };
         let mut rows = Vec::new();
         for r in &first.rows {
-            rows.push((r.name.clone(), id_of(&r.entity)?));
+            rows.push(Arg {
+                name: r.name.clone(),
+                ty: id_of(&r.entity)?,
+            });
         }
         let marks = first
             .marks_in
@@ -203,24 +207,34 @@ pub(super) fn port(
                     .iter()
                     .find(|d| d.name == m.ty)
                     .expect("a mark argument has a mark type");
-                (m.name.clone(), decl.id_ty.clone())
+                Arg {
+                    name: m.name.clone(),
+                    ty: decl.id_ty.clone(),
+                }
             })
             .collect();
-        let mut inputs: Vec<FnInput> = Vec::new();
-        let mut choices: Vec<(String, String)> = Vec::new();
+        let mut inputs: Vec<PortInput> = Vec::new();
+        let mut choices: Vec<Arg> = Vec::new();
         for f in &group {
             for input in &f.inputs {
-                if matches!(input.ty, FieldType::Rows(_)) {
+                let InputType::Value(ty) = &input.ty else {
                     continue;
-                }
+                };
                 if !inputs.iter().any(|x| x.name == input.name) {
-                    inputs.push(input.clone());
+                    inputs.push(PortInput {
+                        name: input.name.clone(),
+                        ty: ty.clone(),
+                        nullable: input.nullable,
+                    });
                 }
             }
             for c in &f.chosen {
                 let name = f.choice_name(c);
-                if !choices.iter().any(|(n, _)| *n == name) {
-                    choices.push((name, c.enum_ty.clone()));
+                if !choices.iter().any(|a| a.name == name) {
+                    choices.push(Arg {
+                        name,
+                        ty: c.enum_ty.clone(),
+                    });
                 }
             }
         }
@@ -237,10 +251,10 @@ pub(super) fn port(
             usecase: first.usecase.clone(),
             rows,
             marks,
-            event: first
-                .event_in
-                .as_ref()
-                .map(|e| (e.name.clone(), e.ty.clone())),
+            event: first.event_in.as_ref().map(|e| Arg {
+                name: e.name.clone(),
+                ty: e.ty.clone(),
+            }),
             inputs,
             choices,
         });
@@ -847,13 +861,13 @@ impl Cx<'_> {
                 .and_then(|i| self.input_value(f, i, act, params, post));
             args.push(value.unwrap_or_else(|| default_input(self.domain, input)));
         }
-        for (name, tag_enum) in &m.choices {
+        for choice in &m.choices {
             let chosen = f
                 .chosen
                 .iter()
-                .find(|c| f.choice_name(c) == *name)
+                .find(|c| f.choice_name(c) == choice.name)
                 .map(|c| c.value.wire.clone());
-            args.push(chosen.unwrap_or_else(|| first_value(self.domain, tag_enum)));
+            args.push(chosen.unwrap_or_else(|| first_value(self.domain, &choice.ty)));
         }
         args
     }
@@ -1180,8 +1194,8 @@ impl Cx<'_> {
                     continue;
                 }
                 let mut args = vec![id_text(slot)];
-                if let Some((_, ty)) = &m.event {
-                    let event = self.domain.events.iter().find(|x| x.name == *ty);
+                if let Some(ev) = &m.event {
+                    let event = self.domain.events.iter().find(|x| x.name == ev.ty);
                     for _ in event.map_or(&[][..], |x| &x.fields[..]) {
                         args.push(id_text(slot));
                     }
@@ -1189,8 +1203,8 @@ impl Cx<'_> {
                 for input in &m.inputs {
                     args.push(default_input(self.domain, input));
                 }
-                for (_, tag_enum) in &m.choices {
-                    args.push(first_value(self.domain, tag_enum));
+                for choice in &m.choices {
+                    args.push(first_value(self.domain, &choice.ty));
                 }
                 out.push((m.action.clone(), args));
             }
@@ -1199,7 +1213,7 @@ impl Cx<'_> {
     }
 }
 
-fn default_input(domain: &DomainModel, input: &FnInput) -> String {
+fn default_input(domain: &DomainModel, input: &PortInput) -> String {
     if input.nullable {
         "~".to_string()
     } else {
@@ -1218,7 +1232,6 @@ fn default_value(domain: &DomainModel, ty: &FieldType) -> String {
         FieldType::Scalar(Scalar::DateTime) => "2026-01-01T00:00:00Z".to_string(),
         FieldType::Enum(name) => first_value(domain, name),
         FieldType::Id(_) => id_text(0),
-        FieldType::Rows(_) => unreachable!("a list of rows is no port argument"),
     }
 }
 

@@ -9,7 +9,8 @@ use rdra_ish_syntax::ast::Kind;
 use serde_json::{json, Value};
 
 use super::ir::{
-    DomainModel, EnumDecl, Field, FieldType, FnDecl, RecordKind, UseCaseKind, VariantDecl,
+    DomainModel, EnumDecl, Field, FieldType, FnDecl, InputType, RecordKind, UseCaseKind,
+    VariantDecl,
 };
 use super::{CheckStatus, Options};
 
@@ -145,7 +146,13 @@ fn ty(t: &FieldType) -> Value {
         FieldType::Scalar(s) => json!({ "kind": "scalar", "name": s.name() }),
         FieldType::Enum(n) => json!({ "kind": "enum", "name": n }),
         FieldType::Id(n) => json!({ "kind": "id", "name": n }),
-        FieldType::Rows(n) => json!({ "kind": "rows", "name": n }),
+    }
+}
+
+fn input_ty(t: &InputType) -> Value {
+    match t {
+        InputType::Value(t) => ty(t),
+        InputType::Rows(n) => json!({ "kind": "rows", "name": n }),
     }
 }
 
@@ -165,7 +172,7 @@ fn function(f: &FnDecl) -> Value {
         "event": f.event_in.as_ref().map(|e| json!({ "name": e.name, "type": e.ty, "event": e.event })),
         "inputs": f.inputs.iter().map(|i| json!({
             "name": i.name,
-            "type": ty(&i.ty),
+            "type": input_ty(&i.ty),
             "nullable": i.nullable,
         })).collect::<Vec<_>>(),
         "conditions": f.conditions.iter().map(|c| json!({ "id": c.id, "site": c.site })).collect::<Vec<_>>(),
