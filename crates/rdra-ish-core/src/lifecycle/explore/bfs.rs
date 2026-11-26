@@ -758,70 +758,101 @@ impl<'t> Bfs<'t> {
             let key = StateSlice::new(key);
             if probe == Probe::OrbitSelf {
                 let edge = u32::try_from(self.steps.moves()).expect("edges fit in u32");
-                // The key is the source: the stored target of the loop.
-                self.push(from, from, act, binding, key);
                 self.orbit_self.push(edge);
-                // The step's after-asserts were read on its concrete successor above.
-                if self.stop_if_all_failed() {
+                // The key is the source: the stored target of the loop. The step's
+                // after-asserts were read on its concrete successor above.
+                if !self.step(from, from, act, binding, key) {
                     return false;
                 }
                 continue;
             }
-            // The successor packed as the store keeps it, by the thread that expanded it: a
-            // plain run's patched from the source's packed row, a canonical form packed whole.
-            let (packed, hash) = probes.packed(i);
-            let to = match probe {
-                Probe::Hit(to) => {
-                    #[cfg(feature = "shadow")]
-                    {
-                        let want = self.seen.twin_find(key);
-                        assert!(
-                            want == Some(to),
-                            "shadow: Probe::Hit({to}) at move {i} of state {at}: reference {want:?}"
-                        );
-                        crate::shadow::compared(crate::shadow::Twin::Hit);
-                    }
-                    to
-                }
-                Probe::SameAs(k) => {
-                    let to = reading.resolved[k as usize];
-                    #[cfg(feature = "shadow")]
-                    {
-                        let want = self.seen.twin_find(key);
-                        assert!(
-                            want == Some(to),
-                            "shadow: Probe::SameAs({k}) at move {i} of state {at}: the earlier \
-                             move reached {to}, reference {want:?}"
-                        );
-                        crate::shadow::compared(crate::shadow::Twin::SameAs);
-                    }
-                    to
-                }
-                _ => match self.find_missed(packed, hash, key, recent.then_some(&reading.recent)) {
-                    Some(to) => to,
-                    None => {
-                        let to = self.states.len() as u32;
-                        if !self.admit_packed(key, packed, hash, Some((from, binding)), found) {
-                            return false;
-                        }
-                        match reading.record {
-                            true => reading.recent.admit(to, hash),
-                            false => reading.recent.skip(to),
-                        }
-                        to
-                    }
-                },
+            let Some(to) = self.resolve(chunk, i, at, key, found, binding, reading, recent) else {
+                return false;
             };
             reading.resolved[i] = to;
             // The stored target: under symmetry the canonical form, which an after-assert
             // step's rows read as they read the concrete one.
-            self.push(from, to, act, binding, key);
-            // After the edge, so the trace of a violation at `to` reaches it.
-            if self.stop_if_all_failed() {
+            if !self.step(from, to, act, binding, key) {
                 return false;
             }
         }
         true
+    }
+
+    /// The state that move `i` of `chunk`, from `states[at]` under `binding`, reaches, stored
+    /// as `key`: the one the expanding thread's probe named, else the one the reader finds,
+    /// else `key` admitted as a new state. `None` when a cap stops the run at the admission.
+    #[allow(clippy::too_many_arguments)]
+    fn resolve(
+        &mut self,
+        chunk: &Expanded,
+        i: usize,
+        at: usize,
+        key: &StateSlice,
+        found: Canonical,
+        binding: u32,
+        reading: &mut Reading,
+        recent: bool,
+    ) -> Option<u32> {
+        // The successor packed as the store keeps it, by the thread that expanded it: a
+        // plain run's patched from the source's packed row, a canonical form packed whole.
+        let (packed, hash) = chunk.probes.packed(i);
+        match chunk.probes.probe(i) {
+            Probe::Hit(to) => {
+                #[cfg(feature = "shadow")]
+                self.check_named(key, to, crate::shadow::Twin::Hit, || {
+                    format!("Probe::Hit({to}) at move {i} of state {at}")
+                });
+                Some(to)
+            }
+            Probe::SameAs(k) => {
+                let to = reading.resolved[k as usize];
+                #[cfg(feature = "shadow")]
+                self.check_named(key, to, crate::shadow::Twin::SameAs, || {
+                    format!(
+                        "Probe::SameAs({k}) at move {i} of state {at}: the earlier move reached {to}"
+                    )
+                });
+                Some(to)
+            }
+            _ => match self.find_missed(packed, hash, key, recent.then_some(&reading.recent)) {
+                Some(to) => Some(to),
+                None => {
+                    let to = self.states.len() as u32;
+                    let parent = Some((at as u32, binding));
+                    if !self.admit_packed(key, packed, hash, parent, found) {
+                        return None;
+                    }
+                    match reading.record {
+                        true => reading.recent.admit(to, hash),
+                        false => reading.recent.skip(to),
+                    }
+                    Some(to)
+                }
+            },
+        }
+    }
+
+    /// A `shadow` build holds the state a probe named for `key`, `to`, to `Seen`'s twin.
+    #[cfg(feature = "shadow")]
+    fn check_named(
+        &self,
+        key: &StateSlice,
+        to: u32,
+        twin: crate::shadow::Twin,
+        what: impl FnOnce() -> String,
+    ) {
+        let want = self.seen.twin_find(key);
+        assert!(want == Some(to), "shadow: {}: reference {want:?}", what());
+        crate::shadow::compared(twin);
+    }
+
+    /// `push`, then whether the run goes on: not once the last open check failed under
+    /// `Caps::stop_when_all_violated`. The check comes after the edge, so the trace of a
+    /// violation at `to` reaches it.
+    fn step(&mut self, from: u32, to: u32, act: ActId, binding: u32, stored: &StateSlice) -> bool {
+        self.push(from, to, act, binding, stored);
+        !self.stop_if_all_failed()
     }
 
     /// Records the move from `states[from]` to `states[to]`, which is `stored`, under `act`

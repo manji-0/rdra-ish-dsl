@@ -209,6 +209,7 @@ verify (6j).
 - 6g: done (X1 dedupe, X7, L17, L23 minimal). X8 skipped: `explore/store.rs` is private
   behind `explore/mod.rs` (in flight), and a shared home would move code the Kani store
   harnesses prove out of `store.rs`. Do it with 7f.
+- 6k: done (X3 as a `Kept` enum in `edges.rs`, X4 `resolve`/`step` out of `take`).
 
 ### Profile pass (before any perf row)
 

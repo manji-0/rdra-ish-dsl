@@ -205,17 +205,17 @@ impl EdgeList {
     }
 }
 
-/// The parent of each state: the move that first reached it.
+/// The moves a run keeps, and the parent of each state: the move that first reached it.
 // One per run: the doubling segments' headers sit inline in each buffer (`segments::Rows`).
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug)]
-enum Parents {
-    /// On a run that keeps its edge list: the index of that edge, `INITIAL` for an initial
-    /// state.
-    Edge(Buf<u32>),
-    /// On a run that keeps none: the state the move left, `INITIAL` for an initial state, and
-    /// its binding.
-    Step { from: Buf<u32>, binding: Ids },
+enum Kept {
+    /// A run that keeps its edge list, and per state the index of the edge that first
+    /// reached it, `INITIAL` for an initial state.
+    Graph { edges: EdgeList, parents: Buf<u32> },
+    /// A run that keeps none: per state the state the move that first reached it left,
+    /// `INITIAL` for an initial state, and its binding.
+    Parents { from: Buf<u32>, binding: Ids },
 }
 
 /// The parent of an initial state.
@@ -225,9 +225,7 @@ const INITIAL: u32 = u32::MAX;
 /// and the parent edges as they were before #296 beside it, and holds every read to them.
 #[derive(Clone, Debug)]
 pub(crate) struct Steps {
-    /// `None` on a run that keeps no edge list.
-    edges: Option<EdgeList>,
-    parents: Parents,
+    kept: Kept,
     /// Moves read, self-loops and repeats included: the edges a run with a list holds.
     moves: u64,
     #[cfg(feature = "shadow")]
@@ -238,10 +236,12 @@ impl Steps {
     /// The moves of a run that keeps its edge list when `graph`, else its parents alone.
     pub(crate) fn new(graph: bool) -> Self {
         Steps {
-            edges: graph.then(EdgeList::default),
-            parents: match graph {
-                true => Parents::Edge(Buf::default()),
-                false => Parents::Step {
+            kept: match graph {
+                true => Kept::Graph {
+                    edges: EdgeList::default(),
+                    parents: Buf::default(),
+                },
+                false => Kept::Parents {
                     from: Buf::default(),
                     binding: Ids::default(),
                 },
@@ -254,7 +254,7 @@ impl Steps {
 
     /// Whether the run keeps its edge list.
     pub(crate) fn has_edges(&self) -> bool {
-        self.edges.is_some()
+        matches!(self.kept, Kept::Graph { .. })
     }
 
     /// Moves read, self-loops and repeats included.
@@ -264,7 +264,7 @@ impl Steps {
 
     /// Notes that the moves of `states[at]`, the next state in order, are read next.
     pub(crate) fn read(&mut self, at: usize) {
-        if let Some(edges) = &mut self.edges {
+        if let Kept::Graph { edges, .. } = &mut self.kept {
             debug_assert_eq!(edges.first.len(), at, "states are read in order");
             edges.first.push(self.moves as u32);
         }
@@ -272,7 +272,7 @@ impl Steps {
 
     /// Records a move of the state being read, to `states[to]` under `binding`.
     pub(crate) fn push(&mut self, from: u32, to: u32, binding: u32) {
-        if let Some(edges) = &mut self.edges {
+        if let Kept::Graph { edges, .. } = &mut self.kept {
             debug_assert_eq!(edges.source_of(edges.len()), from, "the state being read");
             edges.to.push(to);
             edges.binding.push(binding);
@@ -288,9 +288,9 @@ impl Steps {
     /// source and binding of the move about to be pushed, which reaches it.
     pub(crate) fn admit(&mut self, parent: Option<(u32, u32)>) {
         let edge = u32::try_from(self.moves).expect("edges fit in u32");
-        match &mut self.parents {
-            Parents::Edge(parents) => parents.push(parent.map_or(INITIAL, |_| edge)),
-            Parents::Step { from, binding } => {
+        match &mut self.kept {
+            Kept::Graph { parents, .. } => parents.push(parent.map_or(INITIAL, |_| edge)),
+            Kept::Parents { from, binding } => {
                 let (f, b) = parent.unwrap_or((INITIAL, 0));
                 from.push(f);
                 binding.push(b);
@@ -303,12 +303,12 @@ impl Steps {
     /// The move that first reached `states[at]`; `None` for an initial state.
     pub(crate) fn parent(&self, at: u32) -> Option<Edge> {
         let i = at as usize;
-        let found = match &self.parents {
-            Parents::Edge(parents) => match parents.get(i) {
+        let found = match &self.kept {
+            Kept::Graph { edges, parents } => match parents.get(i) {
                 INITIAL => None,
-                k => self.edges.as_ref().map(|edges| edges.get(k as usize)),
+                k => Some(edges.get(k as usize)),
             },
-            Parents::Step { from, binding } => match from.get(i) {
+            Kept::Parents { from, binding } => match from.get(i) {
                 INITIAL => None,
                 f => Some(Edge {
                     from: f,
@@ -325,9 +325,11 @@ impl Steps {
     /// The edge list; panics on a run that keeps none, since nothing that reads one may read
     /// such a run.
     pub(crate) fn edges(&self) -> Edges<'_> {
-        let list = self.edges.as_ref().expect(
-            "a run that stops once every check fails keeps no edge list: nothing may read its graph",
-        );
+        let Kept::Graph { edges: list, .. } = &self.kept else {
+            panic!(
+                "a run that stops once every check fails keeps no edge list: nothing may read its graph"
+            );
+        };
         Edges {
             list,
             #[cfg(feature = "shadow")]
@@ -337,10 +339,9 @@ impl Steps {
 
     /// Bytes in one binding id.
     pub(crate) fn binding_width(&self) -> usize {
-        match (&self.edges, &self.parents) {
-            (Some(edges), _) => edges.binding.width(),
-            (None, Parents::Step { binding, .. }) => binding.width(),
-            (None, Parents::Edge(_)) => unreachable!("a run without edges keeps its steps"),
+        match &self.kept {
+            Kept::Graph { edges, .. } => edges.binding.width(),
+            Kept::Parents { binding, .. } => binding.width(),
         }
     }
 
@@ -357,11 +358,10 @@ impl Steps {
 
     /// `bytes_with`, with the lists of segments when `list`.
     fn bytes(&self, more: usize, list: bool) -> u64 {
-        let parents = match &self.parents {
-            Parents::Edge(parents) => parents.bytes(more, list),
-            Parents::Step { from, binding } => from.bytes(more, list) + binding.bytes(more, list),
-        };
-        parents + self.edges.as_ref().map_or(0, |e| e.bytes(list))
+        match &self.kept {
+            Kept::Graph { edges, parents } => parents.bytes(more, list) + edges.bytes(list),
+            Kept::Parents { from, binding } => from.bytes(more, list) + binding.bytes(more, list),
+        }
     }
 
     /// The 12-byte edge list the shadow build keeps beside the run's own, on any run.
