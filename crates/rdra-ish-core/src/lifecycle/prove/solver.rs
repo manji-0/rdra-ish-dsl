@@ -6,6 +6,8 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
+use super::smt::{Command as Smt, Opt, Script};
+
 /// A solver failure: the process died or answered with an error. Not a verdict.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SolverError(pub String);
@@ -36,9 +38,12 @@ pub trait Solver {
     /// limit holds for this check only: z3 5.1.0 also holds a `push` to a limit left set, and
     /// a `push` that runs out is an error.
     fn check_sat(&mut self, rlimit: u32) -> Result<Sat, SolverError> {
-        let out = self.exec(&format!(
-            "(set-option :rlimit {rlimit})\n(check-sat)\n(set-option :rlimit 0)"
-        ))?;
+        let check = Script::from([
+            Smt::SetOption(Opt::Rlimit(rlimit)),
+            Smt::CheckSat,
+            Smt::SetOption(Opt::Rlimit(0)),
+        ]);
+        let out = self.exec(check.line())?;
         match out.first().map(|l| l.trim()) {
             Some("sat") => Ok(Sat::Sat),
             Some("unsat") => Ok(Sat::Unsat),
