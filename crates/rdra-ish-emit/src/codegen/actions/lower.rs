@@ -5,7 +5,7 @@ use rdra_ish_core::lifecycle::{Guard, ModelRef, Param};
 use rdra_ish_core::model::LinkKind;
 
 use super::*;
-use crate::codegen::ir::{EventIn, MarkDecl, MarkIn, MarkOut, MarkSource, RaisedEvent};
+use crate::codegen::ir::{Chosen, EventIn, MarkDecl, MarkIn, MarkOut, MarkSource, RaisedEvent};
 
 /// What every combination of one action shares.
 pub(super) struct ActionCx<'a> {
@@ -27,13 +27,15 @@ pub(super) type TagArms = BTreeMap<usize, Vec<(String, String)>>;
 pub(super) type ColumnArms = BTreeMap<(usize, VarId), Vec<(String, String)>>;
 
 /// Lowers one combination of source states (`picked`) and chosen arms to the function `name`:
-/// `arms` of each param's tag, `columns` of each second lifecycle column with a choice.
+/// `arms` of each param's tag, `columns` of each second lifecycle column with a choice, and
+/// `tag_choices` the params whose tag target is a choice among arms from one state.
 /// Declares the run marks it takes and leaves in `marks`.
 pub(super) fn function(
     cx: &ActionCx<'_>,
     picked: &[&Source<'_>],
     arms: &BTreeMap<usize, Vec<(String, String)>>,
     columns: &ColumnArms,
+    tag_choices: &[usize],
     name: &str,
     marks: &mut Vec<MarkDecl>,
 ) -> Result<FnDecl, Skip> {
@@ -47,6 +49,7 @@ pub(super) fn function(
         picked,
         arms,
         columns,
+        tag_choices,
         rows,
         row_of,
         mark_of,
@@ -72,12 +75,13 @@ pub(super) fn function(
     f.raised_on_checks(&mut checks)?;
     let raised = f.raised(&effects.raised_at, &inputs)?;
     let marks_out = f.marks_out(&effects.runs, &inputs, marks)?;
+    let chosen = f.chosen();
     Ok(FnDecl {
         name: name.to_string(),
         usecase: cx.usecase.to_string(),
         action: cx.action.name.clone(),
         step: cx.steps,
-        chosen: Vec::new(),
+        chosen,
         elems,
         marks_in,
         marks_out,
@@ -526,6 +530,8 @@ struct Frame<'a> {
     picked: &'a [&'a Source<'a>],
     arms: &'a BTreeMap<usize, Vec<(String, String)>>,
     columns: &'a ColumnArms,
+    /// The params whose tag target is a choice among arms from one state.
+    tag_choices: &'a [usize],
     rows: Vec<RowParam>,
     /// The row of each param that is a row argument.
     row_of: BTreeMap<usize, usize>,
@@ -535,6 +541,64 @@ struct Frame<'a> {
 }
 
 impl Frame<'_> {
+    /// The targets the function chose among arms from one value, for its dispatcher: the tag
+    /// of each param in `tag_choices`, then each second lifecycle column with a choice. A
+    /// target whose row, type, or value is not found is left out.
+    fn chosen(&self) -> Vec<Chosen> {
+        let row = |p: usize| self.rows.iter().position(|row| row.param == Some(p));
+        let mut out = Vec::new();
+        for p in self.tag_choices {
+            let Some(r) = row(*p) else {
+                continue;
+            };
+            let Some(Declared::Sum(sum)) = self.cx.declared.get(&self.rows[r].entity) else {
+                continue;
+            };
+            let FieldType::Enum(tag_enum) = &sum.tag.ty else {
+                continue;
+            };
+            let target = &self.arms[p][0].1;
+            if let Some(v) = sum.variants.iter().find(|v| v.value.wire == *target) {
+                out.push(Chosen {
+                    row: r,
+                    column: None,
+                    enum_ty: tag_enum.clone(),
+                    value: v.value.clone(),
+                });
+            }
+        }
+        for ((p, var), a) in self.columns {
+            let VarKind::Column { column, .. } = &self.cx.ts.var(*var).kind else {
+                continue;
+            };
+            let Some(r) = row(*p) else {
+                continue;
+            };
+            let Some(FieldType::Enum(enum_ty)) = self.rows[r]
+                .fields
+                .iter()
+                .find(|x| x.wire == *column)
+                .map(|x| x.ty.clone())
+            else {
+                continue;
+            };
+            let Some((_, target)) = a.first() else {
+                continue;
+            };
+            out.push(Chosen {
+                row: r,
+                column: Some(column.clone()),
+                enum_ty,
+                value: EnumValue {
+                    ident: type_ident(target),
+                    wire: target.clone(),
+                    label: None,
+                },
+            });
+        }
+        out
+    }
+
     /// The event field holding the id of the row `p` an event was raised on.
     fn event_field_of(&self, p: usize) -> Option<String> {
         self.raised_on
