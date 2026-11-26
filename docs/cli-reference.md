@@ -771,8 +771,13 @@ number, `0`, and a fraction are refused.
   when none runs, and a smaller run does not pass it. Whole-model runs go 2 at once.
   `--tlc-workers` and `--tlc-jobs` set the workers and the most runs at once; see
   [docs/design/tlc-scheduling.md](./design/tlc-scheduling.md).
-- **z3** (`verify --prove`) is not counted and runs unbounded: z3 at its own
-  `memory_max_size` exits, which would end the proof.
+- **z3** (`verify --prove`). The proof starts once the safety cones are decided and runs
+  beside the property and whole-model passes, on one z3 process per `RDRA_JOBS` (default:
+  the cores, at most 8). Each process holds one core in the TLC runs' count while the proof
+  runs, so under `--with-tlc` the runs that start meanwhile leave those cores free. Their
+  memory is not counted and is not bounded by `--memory`: about 0.3 to 0.5 GiB per process
+  (clinic-ops: about 1.3 GiB over four). Allow for it beside the limit, or lower `RDRA_JOBS`.
+  z3 at its own `memory_max_size` exits, which would end the proof.
 
 **A cone that reaches the limit** stops as one at `--max-states` does. `check` reports the
 error `MemoryCapReached_<E>` and exits 1; `states` marks the views it cut; `verify` lists the
