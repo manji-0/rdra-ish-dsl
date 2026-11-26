@@ -85,7 +85,7 @@ checked. "now" holds on the output before this work, "plan" after it.
 | 10 | The entry point's input and result types | S now (port implemented) | same | S plan | TypeScript needs property-style interfaces |
 | 11 | Effects (rows written, target states, columns set) | R now; S as long as the generated functions are called | same | N now, R plan (TS harness) | Sealing means a state comes only from a generated function or `from_row`, but code that writes rows directly is not stopped by types |
 | 12 | Guards and conditions (`Rejected` / `NotEnabled`) | R now | R now | N now, R plan | The `X` lines of the traces try the calls that must be refused |
-| 13 | Use cases with no printed function (#335) | S plan (entry point only), R plan (pre/post) | same | same | Today only a header line names them; 2 are left on the samples (see [algebraic-codegen](./algebraic-codegen.md#use-cases-without-a-function)) |
+| 13 | Use cases with no printed function (#335) | S plan (entry point only), R plan (pre/post) | same | same | Today only a header line names them; none is left on the samples (see [algebraic-codegen](./algebraic-codegen.md#use-cases-without-a-function)) |
 | 14 | One-row rules (`forbidden`, `invariant`, `@check`) | S (what the state type ensures), R (the rest) | same | same (R is plan) | `rule_violations` is generated, not enforced |
 | 15 | Multi-row rules (#336) | D now, R plan | same | D | Needs a generated validator and two-row traces |
 | 16 | Permissions (#337) | S plan (a capability argument per actor), R plan (refusal for another actor) | same | same | Whether the code that makes a capability authenticates is **N** |
@@ -550,8 +550,9 @@ mirrors them instead of inventing its own:
 - Entry points (#335): an action with no printed function adds an `EntryDecl { action, name,
   rows }` to its use case's contract. The rows are the ids of the action's params. Rust prints
   `fn run_<action>(&mut self, <rows>) -> Result<(), <UseCase>Error>`, and the use case gets
-  an error type with only `NotEnabled`. On clinic-ops these are `CheckInPatient_2`,
-  `ApplySelectedTreatmentFee`, `CreateCharge` and `RegisterPerformedProcedure`.
+  an error type with only `NotEnabled`. On clinic-ops these were `CheckInPatient_2`,
+  `ApplySelectedTreatmentFee`, `CreateCharge` and `RegisterPerformedProcedure`, until #335
+  printed them; no sample has an entry point now.
 - Tests:
   - `codegen_code_build.rs` plants three omissions in the conformance service crate (a use
     case not implemented, a method missing, an argument of another type). Each gives its named

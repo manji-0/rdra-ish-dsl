@@ -1018,6 +1018,19 @@ fn print_functions(cx: &Cx<'_>, out: &mut String) {
                         invalid_argument("    ", message)
                     ));
                 }
+                ArgCheck::MarkRow {
+                    row: r,
+                    field,
+                    mark,
+                    message,
+                } => {
+                    out.push_str(&format!(
+                        "  if ({} !== {}.id) {{\n{}  }}\n",
+                        read(*r, field),
+                        local(&f.marks_in[*mark].name),
+                        invalid_argument("    ", message)
+                    ));
+                }
                 ArgCheck::MustBeNull {
                     row: r,
                     field,

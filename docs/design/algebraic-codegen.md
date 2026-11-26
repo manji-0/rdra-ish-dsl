@@ -8,15 +8,13 @@
 Status (2026-11-26): accepted in scope on 2026-11-07 as an experimental extra
 ([vision.md](../vision.md#decisions)); every question is [decided](#decisions).
 
-- **Landed.** [Phases](#phases) 0 to 4, and phase 5 but for the use cases below. The
+- **Landed.** [Phases](#phases) 0 to 5; every use case on the samples gets a function. The
   conformance harness, private state fields and one transaction per function (#348, for
   #330, #331, #332). `codegen --check` (#343). The printed Rust and Go run on every BFS edge
   of the samples (#342). The Kamae shapes in all three languages, `--format json`, `--code`,
   `--probe` and `--seal` (#366, #368, #369, for #363).
-- **Open.** 2 use cases on the samples get no function yet (#335): clinic-ops
-  `CheckInPatient_2` and insurance-claim-ops `DetermineFault`, each waiting on a decision
-  ([Use cases without a function](#use-cases-without-a-function)). Validators for rules over several rows (#336), timer and fairness obligations (#338),
-  intent in doc comments (#339), and the refused trace of P6 (#337). `--refine reachable`,
+- **Open.** Validators for rules over several rows (#336), timer and fairness obligations
+  (#338), intent in doc comments (#339), and the refused trace of P6 (#337). `--refine reachable`,
   `--part`, `--buc` and `--scalars` have not landed.
 - **Superseded.** `export --kind typescript-states` and `states --format typescript`, removed
   on 2026-11-24 for `codegen --lang ts` (#238; see
@@ -944,35 +942,41 @@ the function's source state with no BFS move must get `Rejected`. The dispatcher
 4. **Use cases split into transactions.** Landed, as [decided](#split), with three
    deviations. Step 1 takes no `null` per mark: whether a row holds a mark is in the store,
    not in a value the caller can pass, so it is an obligation, beside "one mark per row"
-   and "never abandon a run". A later step does not take the earlier rows themselves, only
-   their marks: in the samples a later step reads an earlier row only for its key, which the
-   mark carries, and a row deleted between the steps then needs no `Deleted` type. A step
+   and "never abandon a run". A later step takes the earlier rows only as their marks: in
+   the samples a later step reads an earlier row mostly for its key, which the mark carries,
+   and a row deleted between the steps then needs no `Deleted` type. A later step whose
+   guard reads an earlier row takes that row too, as it is now, and checks that its mark
+   names it ([choice 1](#choice-1-a-key-between-two-rows-of-an-earlier-step)): a key
+   between two earlier rows is a condition, a key between an earlier row and a row the step
+   binds itself is checked as any other argument row's key. A step
    that does not run returns `NotEnabled` or `Rejected`, which for a later step means
    "retry", not a new `Blocked` type, and `resume<UC>` is left to the code that reads the
    stored marks. `codegen_equivalence.rs` checks every step BFS runs, the mark each step
    leaves in the run var, and every key a function sets against the owner var; the
-   interleavings are BFS's own, since it explores every action between two steps. A
-   condition of a later step that reads an earlier row's columns is not printed yet.
+   interleavings are BFS's own, since it explores every action between two steps. No
+   sample or fixture has a condition of a later step on an earlier row's columns, so that
+   shape is untested.
 5. **The rest of the action vocabulary.** Triggered use cases have landed: an event
    carries the id of each row its raise marks (the `Raised` vars of the event order), and a
    triggered use case takes the event as an argument and checks its row against it, so it
    cannot run without the event, as the 2.0 event order requires. A row the use case reads
-   only through the event is an argument in its flat row type. A link between two rows of
-   an earlier step is not printed (the marks carry ids, not keys). A choice among arms is
+   only through the event is an argument in its flat row type. A key between two rows of
+   an earlier step is a condition on those rows, which the step takes as they are now. A
+   choice among arms is
    one function per target state, not a choice argument as planned: the target fixes the
    result's state type, so a function per target keeps every type concrete, and the
    dispatcher takes the choice. A `.when` on an arm folds into a condition of that function:
    its guard reads the successor's tag, which the function's target fixes. A second
    lifecycle column is a branch on its value, its `from` states a `TransitionFrom`
-   condition. A `.has` / `.none` ranges over a list of the related
+   condition; a choice among its arms is one function per target too. A `.has` / `.none` ranges over a list of the related
    entity's rows, an input the caller fills with every present row, and the function keeps
    those the key links; an obligation in the header says the list must be complete.
    That left 19 use cases on the samples (11 on the four domain samples, 8 on oidc-auth);
-   #335 prints 17 of them ([Use cases without a function](#use-cases-without-a-function)).
+   #335 prints all of them ([Use cases without a function](#use-cases-without-a-function)).
 
 ### Use cases without a function
 
-Status (2026-11-26): 17 of the 19 printed; 2 wait on the choices below.
+Status (2026-11-26): all 19 printed. The owner decided the two choices below on #335.
 
 A use case gets no function when one of its actions uses a part of the vocabulary the
 generator does not print. The header lists it with the reason, and the agent that finishes the
@@ -988,8 +992,8 @@ constructs is listed under the first and named again under the second.
 | A condition or a `.when` on a value the caller chooses for the row the step writes | clinic-ops `ApplySelectedTreatmentFee`; patent-ops `DraftResponse`; food-permit-ops `ProposeDisposition`; oidc-auth `RequestAuthentication` | The condition reads the input the choice already was (`caseScope === "free"`). A nullable column chosen present or null (`RequestAuthentication`'s `nonce`) is a nullable input |
 | `links(UC, Child, Parent)` on an existing row | oidc-auth `ApproveDevice`, `AuthenticateEndUser`, `ReuseSession`, `SelectAccount` | The condition `Links_<Child>_<role>`: the child's key is null (`relinks`: set; `unlinks`: set, to the bound parent when the step writes one). The function sets the key to the parent's id (`unlinks`: null) |
 | A copy, `sets(UC, E.column == F.source)` | food-permit-ops `RegisterPermit`; insurance-claim-ops `PayClaim` | The column takes the source row's value. A copy between two types, or from a nullable column into one that is not, stays unprinted |
-| A key between two rows an earlier step wrote | clinic-ops `CheckInPatient_2` | Not printed: [choice 1](#choice-1-a-key-between-two-rows-of-an-earlier-step) |
-| A choice among arms of a second lifecycle column | insurance-claim-ops `DetermineFault` | Not printed: [choice 2](#choice-2-a-choice-among-arms-of-a-second-lifecycle-column) |
+| A key between two rows an earlier step wrote | clinic-ops `CheckInPatient_2` | The step takes both rows as they are now, beside their marks, checks each is the row its mark names (`InvalidArgument`), and the key between them is the condition `Key_<Child>_<role>` ([choice 1](#choice-1-a-key-between-two-rows-of-an-earlier-step), option B) |
+| A choice among arms of a second lifecycle column | insurance-claim-ops `DetermineFault` | One function per target (`DetermineFaultFromInvestigatingToAtFault`); the dispatcher takes the target as `<row>_<column>_to` ([choice 2](#choice-2-a-choice-among-arms-of-a-second-lifecycle-column), option A) |
 
 One more construct had no use case on the samples behind it: a guard that compares a nullable
 Enum or Bool column with a value (`tests/fixtures/codegen/nullable_enum_bool.rdra`). Under
@@ -1025,6 +1029,12 @@ ids, and `verify` guards it with "the Appointment still belongs to the PatientAc
 Recommendation: B. It is the only option that checks what `verify` checked, and the
 `OneTransaction` obligation already covers holding the read rows.
 
+Decision (owner, on #335): B. `checkInPatient2` takes `appointment: AppointmentRow` and
+`patientAccount: PatientAccountRow` before the marks. A row that is not the one its mark names
+is `InvalidArgument`; an Appointment no longer on the PatientAccount is `Rejected` by
+`Key_Appointment_PatientAccount`, which for a later step means "retry". A later step takes an
+earlier row only where a guard other than the run mark reads it.
+
 #### Choice 2: a choice among arms of a second lifecycle column
 
 `DetermineFault` moves `ClaimCase.liability` (not the state tag) from `undetermined` to
@@ -1040,6 +1050,11 @@ the target fixes the result's state type; a second column fixes no type. The opt
 
 Recommendation: A. It keeps the rule that a function's argument types admit only what the
 model allows, and the dispatcher's choice argument already exists.
+
+Decision (owner, on #335): A. `DetermineFault` is six functions, one per source state and
+target (`DetermineFaultFromInvestigatingToAtFault` .. `DetermineFaultFromAssessedToNoFault`),
+and `runDetermineFault` takes `claimCaseLiabilityTo`. The `TransitionFrom` condition keeps the
+`from` values of the arms to the function's target.
 
 ## Decisions
 

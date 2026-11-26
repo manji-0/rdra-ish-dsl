@@ -975,6 +975,20 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                         message,
                     )
                 }
+                ArgCheck::MarkRow {
+                    row: r,
+                    field,
+                    mark,
+                    message,
+                } => (
+                    format!(
+                        "{}.{} != {}.id",
+                        row(*r),
+                        ident(&field.name),
+                        ident(&f.marks_in[*mark].name)
+                    ),
+                    message,
+                ),
                 ArgCheck::MustBeNull {
                     row: r,
                     field,

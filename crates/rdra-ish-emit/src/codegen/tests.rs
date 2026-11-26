@@ -1050,6 +1050,134 @@ fn the_rest_of_the_use_case_vocabulary_is_printed() {
     }
 }
 
+/// The two use cases #335 left to a choice: a later step of a split use case takes the rows
+/// an earlier step wrote as they are now, beside their marks, and checks the key between them
+/// (Visit); a choice among arms of a second lifecycle column is one function per target, and
+/// the dispatcher takes the target (Judge).
+const EARLIER_ROWS_SRC: &str = r#"
+entity Desk "Desk" {
+  id: Int @pk
+  status: Enum(idle, busy) @default(idle)
+}
+entity Counter "Counter" {
+  id: Int @pk
+}
+entity Ticket "Ticket" {
+  id: Int @pk
+  status: Enum(waiting, called) @default(waiting)
+  verdict: Enum(pending, granted, refused) @default(pending)
+}
+entity Stamp "Stamp" {
+  id: Int @pk
+}
+relate(Ticket, Desk, N:1)
+relate(Counter, Desk, N:1)
+relate(Stamp, Counter, N:1)
+usecase AddDesk "Add desk"
+usecase AddCounter "Add counter"
+usecase AddTicket "Add ticket"
+usecase Visit "Visit"
+usecase Judge "Judge"
+api VisitApi "Visit API"
+api StampApi "Stamp API"
+creates(AddDesk, Desk)
+creates(AddCounter, Counter)
+creates(AddTicket, Ticket)
+invokes(Visit, VisitApi)
+invokes(Visit, StampApi)
+updates(VisitApi, Ticket)
+updates(VisitApi, Desk)
+creates(StampApi, Stamp)
+reads(StampApi, Counter)
+transitions(Visit, Ticket.status, waiting -> called)
+transitions(Visit, Desk.status, idle -> busy)
+transitions(Judge, Ticket.verdict, pending -> granted)
+transitions(Judge, Ticket.verdict, pending -> refused)
+"#;
+
+#[test]
+fn earlier_rows_and_a_second_column_choice_are_printed() {
+    let domain = functions_of(EARLIER_ROWS_SRC);
+    assert!(domain.skipped.is_empty(), "{:?}", domain.skipped);
+    let f = |name: &str| {
+        domain
+            .fns
+            .iter()
+            .find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("{name}: {:?}", domain.fns.iter().map(|f| &f.name)))
+    };
+    // Visit_2 takes the desk and the ticket beside their marks, checks each is the row its
+    // mark names, and rejects a ticket no longer on the desk.
+    let visit = f("Visit2");
+    let rows: Vec<&str> = visit.rows.iter().map(|r| r.name.as_str()).collect();
+    assert_eq!(rows, ["desk", "ticket", "parent_counter"]);
+    assert_eq!(visit.marks_in.len(), 2);
+    let marked = visit
+        .checks
+        .iter()
+        .filter(|c| matches!(c, ir::ArgCheck::MarkRow { .. }))
+        .count();
+    assert_eq!(marked, 2, "{:?}", visit.checks);
+    let ids: Vec<&str> = visit.conditions.iter().map(|c| c.id.as_str()).collect();
+    assert_eq!(ids, ["Key_Ticket_Desk"]);
+    // Judge: one function per source state and target of `verdict`.
+    let names: Vec<&str> = domain
+        .fns
+        .iter()
+        .filter(|f| f.action == "Judge")
+        .map(|f| f.name.as_str())
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "JudgeFromWaitingToGranted",
+            "JudgeFromWaitingToRefused",
+            "JudgeFromCalledToGranted",
+            "JudgeFromCalledToRefused"
+        ]
+    );
+    let judge = f("JudgeFromCalledToRefused");
+    assert_eq!(judge.chosen.len(), 1);
+    assert_eq!(judge.chosen[0].column.as_deref(), Some("verdict"));
+    assert_eq!(judge.chosen[0].value.wire, "refused");
+    let run = domain
+        .dispatchers
+        .iter()
+        .find(|d| d.name == "RunJudge")
+        .unwrap();
+    assert_eq!(
+        run.choices,
+        [("ticket_verdict_to".to_string(), "TicketVerdict".to_string())]
+    );
+
+    let ts = generated_from(EARLIER_ROWS_SRC, "desk.rdra", Lang::TypeScript);
+    for line in [
+        "export function visit2(desk: DeskRow, ticket: TicketRow, parentCounter: Counter, deskMark: VisitDeskMark1, ticketMark: VisitTicketMark1, stampId: StampId)",
+        "if (ticket.id !== ticketMark.id) {",
+        "if (!(ticket.desk_id === desk.id)) {",
+        r#"verdict: ("refused"),"#,
+        r#"if (ticket.kind === "Called" && ticketVerdictTo === "refused") {"#,
+    ] {
+        assert!(ts.contains(line), "{line}\n{ts}");
+    }
+    let rust = generated_from(EARLIER_ROWS_SRC, "desk.rdra", Lang::Rust);
+    for line in [
+        "if ticket.id != ticket_mark.id {",
+        "if !(ticket.desk_id == desk.id) {",
+        "(Ticket::Called(ticket),) if ticket_verdict_to == TicketVerdict::Refused => judge_from_called_to_refused(ticket)",
+    ] {
+        assert!(rust.contains(line), "{line}\n{rust}");
+    }
+    let go = generated_from(EARLIER_ROWS_SRC, "desk.rdra", Lang::Go);
+    for line in [
+        "if ticket.Id != ticketMark.Id {",
+        "if !(ticket.DeskId == desk.Id) {",
+        "if ticketVerdictTo == TicketVerdictRefused {",
+    ] {
+        assert!(go.contains(line), "{line}\n{go}");
+    }
+}
+
 /// A nullable Enum or Bool column compared with a value (#359): null satisfies no
 /// comparison, so `==` takes a present value and `!=` admits null.
 #[test]

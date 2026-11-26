@@ -32,7 +32,7 @@
 
 ### Added
 
-- `codegen` prints 17 of the 19 sample use cases that had no function (#335): `links` /
+- `codegen` prints the 19 sample use cases that had no function (#335): `links` /
   `relinks` / `unlinks` (the condition `Links_<Child>_<role>`), copies from another row, a
   created row's optional key left null, and a condition or `.when` on what the step writes
   (the parent a created row's key names, or the input a chosen value becomes). A guard that
@@ -45,6 +45,13 @@
 - `verify --with-tlc --plan <FILE> -o <DIR>` (experimental) writes as JSON the TLC launches
   `verify` would start, with BFS's verdict and states and the heap, workers and arguments of
   each, and starts no TLC (#384).
+  comparison and every `!=` (#359).
+- `codegen`: a later step of a split use case whose guard reads a row an earlier step wrote
+  takes that row as it is now, beside its mark, and checks the mark names it; a key between
+  two such rows is the condition `Key_<Child>_<role>` (clinic-ops `CheckInPatient_2`), and a
+  key between such a row and a row the step binds is an argument check. A
+  choice among arms of a second lifecycle column is one function per target, and the
+  dispatcher takes the target (insurance-claim-ops `DetermineFault`, six functions) (#335).
 
 ## v3.0.0 - 2026-11-26
 

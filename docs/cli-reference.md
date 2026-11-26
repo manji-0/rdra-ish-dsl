@@ -1818,7 +1818,9 @@ matches no row rolling back as `NotEnabled`.
 - **Choices.** Arms from one state to several are one function per target
   (`decideFilingToDecidedFile`), guarded by the arm's `.when`; the dispatcher takes the chosen
   state. A second lifecycle column is a branch on its value; a row in no `from` state is
-  `Rejected` by `TransitionFrom`. A `.has(..)` / `.none(..)` condition takes a list of related
+  `Rejected` by `TransitionFrom`. A choice among its arms is one function per target too
+  (`determineFaultFromInvestigatingToAtFault`), and the dispatcher takes the target
+  (`claimCaseLiabilityTo`). A `.has(..)` / `.none(..)` condition takes a list of related
   rows (`terminalCertAssignmentRows`), every present row of that entity; the function keeps
   those the key links.
 - **Links and copies.** `links` / `relinks` / `unlinks` is the condition
@@ -1829,9 +1831,8 @@ matches no row rolling back as `NotEnabled`.
   literal, or the input a chosen value becomes (`caseScope === "free"`). A nullable Enum or
   Bool column compared with a value takes a present value (`== Some(..)`, `!= nil && *x ==
   ..`), so null satisfies no `==` and every `!=`.
-- **Not printed yet:** a use case that reads `now`, makes a choice among arms of a second
-  lifecycle column, guards on a comparison proposition, joins two rows an earlier step wrote
-  by a key, joins by a key over several columns, or raises or handles a counted event. It gets
+- **Not printed yet:** a use case that reads `now`, guards on a comparison proposition, joins
+  by a key over several columns, or raises or handles a counted event. It gets
   no function; the header lists it with the reason, and the code that finishes the output
   writes it.
 
