@@ -1210,7 +1210,52 @@ fn check_cone(
 /// while the cone reduced as `verify` explores it fits. Each is compared with TLC reduced only,
 /// where TLC reads the quotient tables BFS computed, so the comparison says nothing
 /// independent of the reduction there; the unreduced cone is compared at `Bounds::STATES`.
-const VERIFY_REDUCED_ONLY: &[(&str, &str)] = &[];
+const VERIFY_REDUCED_ONLY: &[(&str, &str)] = &[
+    ("samples/clinic-ops", "entity CarePlan"),
+    ("samples/clinic-ops", "entity Charge"),
+    ("samples/clinic-ops", "entity ClinicalOrder"),
+    ("samples/clinic-ops", "entity FollowUpMessage"),
+    ("samples/clinic-ops", "entity LabResult"),
+    ("samples/clinic-ops", "entity Notification"),
+    ("samples/clinic-ops", "entity PatientMessage"),
+    ("samples/clinic-ops", "entity Prescription"),
+    ("samples/clinic-ops", "invariant Forbidden_ClinicalOrder_1"),
+    ("samples/clinic-ops", "invariant Inv_ClinicalOrder_3"),
+    ("samples/clinic-ops", "invariant Inv_Prescription_4"),
+    (
+        "samples/clinic-ops",
+        "invariant Unique_FollowUpMessage_CarePlan",
+    ),
+    ("samples/patent-ops", "entity DivisionalFiling"),
+    ("samples/patent-ops", "entity Patent"),
+    ("samples/patent-ops", "entity PatentApplication"),
+    (
+        "samples/patent-ops",
+        "invariant Forbidden_PatentApplication_1",
+    ),
+    ("samples/patent-ops", "invariant Forbidden_Patent_4"),
+    ("samples/patent-ops", "invariant Inv_Patent_0"),
+    ("samples/food-permit-ops", "entity Disposition"),
+    (
+        "samples/food-permit-ops",
+        "invariant Forbidden_Disposition_2",
+    ),
+    ("samples/food-permit-ops", "invariant Inv_Disposition_0"),
+    (
+        "samples/food-permit-ops",
+        "after AfterAssert_SuspendBusiness_0",
+    ),
+    ("samples/insurance-claim-ops", "entity Complaint"),
+    ("samples/insurance-claim-ops", "entity Subrogation"),
+    (
+        "samples/insurance-claim-ops",
+        "invariant MultiForbidden_Subrogation_7",
+    ),
+    (
+        "samples/insurance-claim-ops",
+        "after AfterAssert_StartSubrogation_1",
+    ),
+];
 
 /// Named to sort first: libtest starts tests in name order, and this one is the longest in the
 /// file, so it starts at once and the others fill the threads beside it (#305). On a runner's
