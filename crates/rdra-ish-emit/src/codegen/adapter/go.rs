@@ -807,10 +807,10 @@ pub(super) fn probe(
         "//\n// The adapter probe of `rdra-ish check --code`: *{svc}.{ty} implements the model adapter, and\n// {CONFORMANCE_TEST} drives it along the model's traces ({traces}). `check --code=run` runs it;\n// `rdra-ish codegen --code` writes it again.\n\npackage {svc}_test\n"
     ));
     let mut imports = String::from("import (\n\t\"os\"\n\t\"testing\"\n\n");
-    if !same {
-        imports.push_str(&format!("\t{adp} {}\n", string_literal(&binding.module)));
-    }
-    imports.push_str(&format!("\t{}\n)\n", string_literal(svc_import)));
+    let adp_spec = (!same).then(|| (binding.module.as_str(), format!("{adp} ")));
+    imports.push_str(&super::super::go::import_group(
+        adp_spec.into_iter().chain([(svc_import, String::new())]),
+    ));
     w.line(&imports);
     w.line(&format!("var _ {adp}.ModelAdapter = (*{svc}.{ty})(nil)\n"));
     w.line(&format!(

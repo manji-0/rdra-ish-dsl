@@ -112,7 +112,8 @@ fn the_probe_names_each_use_case_and_tsconfig_holds_only_it() {
         "type Service = service.OrderService;",
         "export const _Ship = (it: Service): domain.ShipUseCase => it; // usecase Ship",
         "domain.conform((): Service => new service.OrderService(), traces).then(",
-        "readFileSync(process.env[\"RDRA_ISH_TRACES\"] || \"src/traces.txt\", \"utf8\")",
+        "const tracesPath = process.env[\"RDRA_ISH_TRACES\"] || \"src/traces.txt\";",
+        "createReadStream(tracesPath), crlfDelay: Infinity",
     ] {
         assert!(probe.contains(line), "no {line:?} in\n{probe}");
     }
