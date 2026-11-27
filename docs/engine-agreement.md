@@ -235,6 +235,7 @@ skips TLC, since `verify` refuses `--with-tlc` under `64MiB`.
 | `safety_count_guard_order` | Two count guards that point opposite ways on one row |  | `Forbidden_Shelf_0` ok, z3 proved, BFS ok/ok/ok; `Deadlock_Shelf_status_open` cex |
 | `safety_count_per_entity` | A count over an entity with its own slot count, in both directions | `--instances Loan=4 --instances Shelf=3` | `Quantifier_Member_0`, `Quantifier_Shelf_1` cex, z3 unproved |
 | `safety_counted_once_per_raise` | A counted handler runs once per raise, where the latch lets one raise drive two runs |  | `Forbidden_Box_0`, `EventOverflow_Box_EvShipped_Receive` ok, z3 proved, BFS ok/ok/ok; `Forbidden_Crate_1` cex, z3 unproved; `BoxBothIn` ok |
+| `safety_created_set_beside_transitions` | A guarded `sets` and `transitions` write one created row's lifecycle column in one use case, which the engines read differently (P24); the build rejects it |  | `ConflictingEffects_Order_Place_status` cex, TLC none; `Forbidden_Order_0` none |
 | `safety_delete_cascade` | `.on_delete(cascade)` keeps its one-row delete, with no guard and no `DanglingKey_*` |  | `Forbidden_OrderLine_0` cex, z3 unproved |
 | `safety_delete_restrict` | A delete the key's children reject waits until no present child names the row |  | `DanglingKey_OrderLine_Order`, `DanglingKey_Payment_Order` ok, z3 proved, BFS ok/ok/ok |
 | `safety_delete_set_null` | `.on_delete(set_null)` keeps its one-row delete, with no guard and no `DanglingKey_*` |  | `Forbidden_OrderLine_0` cex, z3 unproved |

@@ -1,0 +1,30 @@
+// trap: one use case writes a created row's lifecycle column twice, by a guarded `sets` and by `transitions`.
+// `Place` creates the Order with `sets(Place, Order.status == cancelled).when(FlagUp)` and
+// also `transitions` from `pending`, whose source has one target, while `paid` has two. The
+// native step applied the `Choose` of the guarded set after the transition and reached
+// `cancelled`; the printed TLA+ let the transition's `ChooseIn` replace the `Choose`, and the
+// set's post-guard then left `Place` no successor, so TLC never reached it. Before #485 the run
+// printed `native counterexample, TLC ok` on `Forbidden_Order_0` and a second disagreement on
+// `Witness_Order_status_cancelled` (open problem P24). Since #485 the build fails any action
+// that writes one slot twice, so no engine runs and the error names the use case and column.
+// expect ConflictingEffects_Order_Place_status: native=counterexample tlc=none
+// expect Forbidden_Order_0: native=none tlc=none
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid, cancelled) @default(pending)
+}
+entity Flag "旗" {
+  id: Int @pk
+  on: Bool @default(false)
+}
+usecase Raise "旗上げ"
+usecase Place "注文確定"
+creates(Raise, Flag)
+creates(Place, Order)
+condition FlagUp "旗が上がっている"
+holds(FlagUp, Flag.on == false)
+sets(Place, Order.status == cancelled).when(FlagUp)
+transitions(Place, Order.status, pending -> paid)
+transitions(Place, Order.status, paid -> cancelled)
+transitions(Place, Order.status, paid -> pending)
+forbidden(Order, status == cancelled)
