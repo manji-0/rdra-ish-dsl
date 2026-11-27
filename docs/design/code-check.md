@@ -378,10 +378,13 @@ bound, whether the BFS completed or stopped at its cap, the moves run and left o
 refused calls tried, what the harness does not compare, H1 to H5 in one line, and what no
 test can show (the [list above](#what-it-cannot-detect), shortened) in another. A capped suite
 gets `warning[CodeCoverageIncomplete]` and the exit status does not change; `--deny-incomplete`
-makes it an error. `codegen` prints the same statement after it writes the traces. Today a
-complete BFS that tries no refused call means the model refuses none of the calls the harness
-tries (calls on one existing row); creates and actions over several rows are not tried as
-refused, and the statement says `calls on one existing row`.
+makes it an error. `codegen` prints the same statement after it writes the traces.
+
+`--deny-incomplete` fails on the cap only. A complete BFS with no refused call means the
+model refuses none of the calls the harness tries as refused, which are calls on one existing
+row; the model may still refuse a create or an action over several rows, which no trace
+tries (gap 2 of #439), and the statement says `calls on one existing row` for that reason.
+Counting those untried refusals, and failing `--deny-incomplete` on them, is left open.
 
 ## Phases
 

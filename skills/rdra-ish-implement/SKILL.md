@@ -17,7 +17,9 @@ license: MIT
 
 Write or change service code that a model specifies. `codegen` prints the model's data
 layer and use case contracts; you write the service that stores rows and calls them;
-`check --code` proves the service still has what the model requires. `codegen` and
+`check --code` checks that the service still has what the model requires, and at `run`
+that it conforms to the model's traces within their bound (bounded conformance, not
+equivalence). `codegen` and
 `check --code` are experimental, and their output may change in any release.
 
 ## Steps

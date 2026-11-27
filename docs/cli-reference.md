@@ -300,20 +300,21 @@ error[CodeObligationUnowned_Unique_Order_note]: no code owns the obligation Uniq
 
 After `--code=run`, stdout states what the traces of each table cover, before the summary
 line. The lines come in this order and hold counts only, so the text is the same on every
-run of the same model:
+run of the same model. On `tests/fixtures/codegen/conformance.rdra`:
 
 ```
 coverage of [code.rust]: bounded conformance to the model, not equivalence
   bound: 1 row created per entity, Int 0..5
   BFS: complete, 6 states; 6 reached by the traces' calls
-  moves: 5 of 5 run; 3 left out (a tick, or a use case with no function)
+  moves: 5 of 5 run
   refused calls: 9 tried (calls on one existing row); interleaved commits: 7
-  not compared: the clock (`now`): the traces take no tick
   assumes: H1 the service answers from the tracked columns and the call alone; H2 every reachable call is tried; H3 seed and snapshot reach the real store; H4 every write goes through the port, one call one transaction; H5 the rules read tracked columns only
   cannot show: writes outside the port, locking, races, external effects, liveness, who issues a capability, data outside the model
 ```
 
-The `left out` part and the `not compared` line appear only when there is something to list.
+When there is something to list, the `moves` line ends `; <n> left out (a tick, or a use case
+with no function)`, and a `not compared:` line after the refused calls names what the harness
+does not compare (a counted trigger, a proposition, the clock).
 A passing run means bounded conformance: under H1 to H5, the safety rules the model verified
 over tracked columns hold for runs driven through the port, with at most that many rows
 created per entity. It does not mean the service is equivalent to the model. When the BFS
