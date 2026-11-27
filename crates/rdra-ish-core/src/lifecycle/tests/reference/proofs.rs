@@ -13,18 +13,26 @@ use super::{bounds, gen, try_model, Scope, TransitionSystem};
 use crate::lifecycle::prove::{prove, ProveOptions, Verdict, Z3};
 use crate::model::SemanticModel;
 
-/// `RDRA_Z3`, else `z3` on PATH.
+/// `RDRA_Z3`, else `z3` on PATH; `None` prints that the test is skipped, and fails it under
+/// `RDRA_REQUIRE_Z3=1`, which CI sets so that a devShell without z3 cannot pass it unrun.
 fn z3() -> Option<PathBuf> {
-    if let Some(p) = std::env::var_os("RDRA_Z3") {
-        return Some(PathBuf::from(p));
+    let found = std::env::var_os("RDRA_Z3").map(PathBuf::from).or_else(|| {
+        std::env::split_paths(&std::env::var_os("PATH")?)
+            .map(|d| d.join("z3"))
+            .find(|p| p.is_file())
+    });
+    if found.is_none() {
+        assert!(
+            std::env::var("RDRA_REQUIRE_Z3").as_deref() != Ok("1"),
+            "RDRA_REQUIRE_Z3=1 but no z3 on PATH or RDRA_Z3"
+        );
+        eprintln!("skipped: no z3 on PATH or RDRA_Z3");
     }
-    let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path)
-        .map(|d| d.join("z3"))
-        .find(|p| p.is_file())
+    found
 }
 
-/// The rules z3 proves of `model` at `int_max`, by name.
+/// The rules z3 proves of `model` at `int_max`, by name. The proof mines its lemmas from the
+/// system alone (no mining twin), as `verify --prove` does without a scope.
 fn proved(z3: &Path, model: &SemanticModel, int_max: u8) -> BTreeSet<String> {
     let ts = TransitionSystem::build(model, bounds(2, int_max), &Scope::ALL).ts;
     let rules: Vec<usize> = (0..ts.invariants().len()).collect();
@@ -45,9 +53,14 @@ fn proved(z3: &Path, model: &SemanticModel, int_max: u8) -> BTreeSet<String> {
 }
 
 /// The proved rules the reference finds broken at one or two instances and `m + 1` or
-/// `m + 3`.
-fn broken_later(model: &SemanticModel, int_max: u8, proved: &BTreeSet<String>) -> Vec<String> {
+/// `m + 3`, and how many of those four systems it explored.
+fn broken_later(
+    model: &SemanticModel,
+    int_max: u8,
+    proved: &BTreeSet<String>,
+) -> (Vec<String>, usize) {
     let mut out = Vec::new();
+    let mut explored = 0;
     for wider in [1, 3] {
         let m = i64::from(int_max) + wider;
         for n in [1, 2] {
@@ -57,6 +70,7 @@ fn broken_later(model: &SemanticModel, int_max: u8, proved: &BTreeSet<String>) -
             let Some(x) = r.explore(super::MOST_STATES) else {
                 continue;
             };
+            explored += 1;
             for name in x.violated.intersection(proved) {
                 out.push(format!(
                     "{name}: proved at {int_max}, broken at {n} instances and {m}"
@@ -64,7 +78,7 @@ fn broken_later(model: &SemanticModel, int_max: u8, proved: &BTreeSet<String>) -
             }
         }
     }
-    out
+    (out, explored)
 }
 
 const GUARDED_PRESENT: &str =
@@ -80,12 +94,15 @@ const GUARDED_PRESENT: &str =
 #[test]
 fn a_rule_proved_at_one_int_range_holds_at_wider_ones() {
     let Some(z3) = z3() else {
-        eprintln!("skipped: no z3 on PATH or RDRA_Z3");
         return;
     };
     let model = try_model(GUARDED_PRESENT).expect("the model builds");
     let got = proved(&z3, &model, 5);
-    let wrong = broken_later(&model, 5, &got);
+    let (wrong, explored) = broken_later(&model, 5, &got);
+    assert_eq!(
+        explored, 4,
+        "the reference explored {explored} of its 4 systems"
+    );
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
@@ -93,10 +110,9 @@ fn a_rule_proved_at_one_int_range_holds_at_wider_ones() {
 #[test]
 fn rules_proved_on_random_models_hold_at_wider_int_ranges() {
     let Some(z3) = z3() else {
-        eprintln!("skipped: no z3 on PATH or RDRA_Z3");
         return;
     };
-    let (mut checked, mut proofs) = (0, 0);
+    let (mut checked, mut proofs, mut explored) = (0, 0, 0);
     let mut wrong = Vec::new();
     for seed in 0..200 {
         let (src, b) = gen::model(seed);
@@ -114,13 +130,18 @@ fn rules_proved_on_random_models_hold_at_wider_int_ranges() {
         let got = proved(&z3, &model, b.int_max);
         checked += 1;
         proofs += got.len();
-        wrong.extend(
-            broken_later(&model, b.int_max, &got)
-                .into_iter()
-                .map(|w| format!("seed {seed}: {w}")),
-        );
+        let (broken, systems) = broken_later(&model, b.int_max, &got);
+        explored += systems;
+        wrong.extend(broken.into_iter().map(|w| format!("seed {seed}: {w}")));
     }
-    eprintln!("proofs: {checked} models, {proofs} proved rules checked at wider Int ranges");
+    eprintln!(
+        "proofs: {checked} models, {proofs} proved rules, checked on {explored} wider systems"
+    );
+    assert!(
+        explored * 10 >= checked * 4 * 9,
+        "{explored} of {} wider systems explored",
+        checked * 4
+    );
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
     assert!(
         checked >= 150 && proofs >= 100,

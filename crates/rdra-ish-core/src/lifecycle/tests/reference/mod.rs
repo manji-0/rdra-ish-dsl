@@ -13,6 +13,9 @@
 //! the builder's tables. A model outside the subset, or one the builder refuses, is skipped
 //! with its reason, and each test asserts how many systems it compared, so that a subset
 //! that shrinks cannot pass by skipping.
+//!
+//! `RDRA_REF_SEED=<n>` prints the source of random model `n` (`gen.rs`); a sweep prints the
+//! source of the first model that disagrees.
 
 mod gen;
 mod interp;
@@ -380,13 +383,15 @@ fn the_builder_agrees_with_the_reference_on_the_corpus() {
         }
     }
     tally.report("corpus");
+    // 91 systems and 15 violated rules on 2026-11-28: a case that leaves the subset, or a
+    // subset that shrinks, shows here.
     assert!(
-        tally.systems >= 20,
+        tally.systems >= 90,
         "only {} systems compared",
         tally.systems
     );
     assert!(
-        tally.violated >= 5,
+        tally.violated >= 15,
         "only {} violated rules",
         tally.violated
     );
@@ -474,12 +479,16 @@ fn a_value_past_a_byte_is_not_wrapped() {
         let model = try_model(&src).expect("the model builds");
         let b = bounds(1, int_max);
         let outcome = compare(&model, &b);
-        if must_compare {
-            assert!(
-                matches!(outcome, Outcome::Compared { violated: 1, .. }),
-                "{name} at {int_max}: not compared, or the rule held"
-            );
-        }
+        // Past a byte the build may refuse the model, and nothing else may stop the comparison.
+        let ok = match &outcome {
+            Outcome::Compared { violated: 1, .. } => true,
+            Outcome::Skipped(why) => !must_compare && why.starts_with("the build refuses it"),
+            _ => false,
+        };
+        assert!(
+            ok || matches!(outcome, Outcome::Differs(_)),
+            "{name} at {int_max}: neither compared with its rule broken nor refused by the build"
+        );
         tally.add(name, &b, outcome);
     }
     tally.report("a value past a byte");

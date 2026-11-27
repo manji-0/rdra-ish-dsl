@@ -723,8 +723,10 @@ the sections it cites, and carries the tag of the statements it rests on.
    `present` `sets`, with `.when`; `transitions` with choices and `.when`; `applies_to`
    guards on the written entity; and the four single-entity rule forms with `.when`. It runs
    on the corpus cases and formal-verification samples in the subset at three bounds, on 300
-   random models of the subset in every pull request and 2,700 more on main, and checks each
-   rule z3 proves at `m` against the reference at `m + 1` and `m + 3`. It failed on P40 and
+   random models of the subset in every pull request and 2,700 more on main. With z3 present
+   (CI requires it) it also checks the rules z3 proves at `m`, with lemmas mined without a
+   twin, against the reference at `m + 1` and `m + 3`: one fixed model per pull request and
+   200 random models on main. It failed on P40 and
    P54 before #470 and on P43 before its fix. What it leaves to the `expect` lines: every
    construct outside the subset (owners and keys, split use cases, triggers, copies,
    `chooses`, `drives`, `now`, multi-entity rules, quantifiers, `after` assertions, property
