@@ -15,7 +15,8 @@ use super::bfs::BfsCone;
 use super::jobs::{Job, JobKind};
 use crate::state_findings::{render_violation, Finding, TraceSource};
 use rdra_ish_core::lifecycle::{
-    has_errors, label_prefix, Bounds, Caps, RunEnd, Scope, StateDiag, Target, TransitionSystem,
+    has_errors, label_prefix, Bounds, Caps, Cone, RunEnd, Scope, StateDiag, Target,
+    TransitionSystem,
 };
 use rdra_ish_core::{ResolvedProgram, SemanticModel};
 
@@ -48,9 +49,9 @@ pub(super) fn escalate(
         let inv = &ts.invariants()[i];
         let mut said = Vec::new();
         for system in systems.iter().map_while(Option::as_ref) {
-            let n = system.most_slots();
             let run =
                 system.explore_targets_reduced(&[Target::Invariant(i)], caps.until_all_violated());
+            let n = cone_slots(system, &run.cone_of(Target::Invariant(i)).cone);
             let found = run.verdicts().iter().find(|d| {
                 matches!(&d.diag, StateDiag::ConstraintViolated { name, site, .. }
                     if *name == inv.name && *site == inv.site)
@@ -83,8 +84,14 @@ pub(super) fn escalate(
     broken
 }
 
-/// The instances of the safety cone that passed rule `i` of `ts`: a run to the end that did
-/// not violate it, or a cone covered by one that passed. `None` when no cone decided it.
+/// The most instances of an entity in `cone` of `ts`.
+fn cone_slots(ts: &TransitionSystem, cone: &Cone) -> usize {
+    ts.restrict_to(&cone.vars, &cone.keep).most_slots()
+}
+
+/// The instances of rule `i`'s safety cone of `ts` (`cone_slots`) when BFS passed it: a run to
+/// the end that did not violate it, or a cone covered by one that passed. `None` when no cone
+/// decided it.
 fn passed_at(
     ts: &TransitionSystem,
     jobs: &[Job],
@@ -95,10 +102,10 @@ fn passed_at(
     let at = jobs.iter().position(|job| {
         matches!(&job.kind, JobKind::Cone(system) if system.targets.contains(&Target::Invariant(i)))
     })?;
-    let slots = |at: usize| match &jobs[at].kind {
-        JobKind::Cone(system) => system.system.most_slots(),
-        _ => unreachable!("a safety cone's job"),
+    let JobKind::Cone(system) = &jobs[at].kind else {
+        unreachable!("a safety cone's job");
     };
+    let slots = cone_slots(ts, &system.cone);
     match cones[at].as_ref()? {
         BfsCone::Ran {
             found,
@@ -109,12 +116,12 @@ fn passed_at(
                 matches!(&d.diag, StateDiag::ConstraintViolated { name, site, .. }
                     if *name == inv.name && *site == inv.site)
             });
-            (!violated).then(|| slots(at))
+            (!violated).then_some(slots)
         }
         BfsCone::Covered(by) => cones[*by]
             .as_ref()
             .is_some_and(BfsCone::passed)
-            .then(|| slots(*by)),
+            .then_some(slots),
         BfsCone::Ran { .. } | BfsCone::Proved { .. } => None,
     }
 }
@@ -150,4 +157,28 @@ fn same_system(
         && (ts.invariants().iter().zip(other.invariants()))
             .all(|(a, b)| a.name == b.name && a.site == b.site);
     same.then_some(other)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::grown;
+    use rdra_ish_core::lifecycle::Bounds;
+    use std::num::NonZeroU8;
+
+    fn n(k: u8) -> NonZeroU8 {
+        NonZeroU8::new(k).expect("not zero")
+    }
+
+    /// Every count grows, the ones `--instances` names too, and none past 255.
+    #[test]
+    fn grown_bounds_add_to_every_count_and_stop_at_255() {
+        let mut bounds = Bounds::uniform(n(1), 5);
+        bounds.per_entity.insert("Loan".to_string(), n(3));
+        let up = grown(&bounds, 2).expect("fits");
+        assert_eq!((up.instances, up.int_max), (n(3), 5));
+        assert_eq!(up.per_entity["Loan"], n(5));
+        bounds.per_entity.insert("Room".to_string(), n(254));
+        assert!(grown(&bounds, 1).is_some());
+        assert!(grown(&bounds, 2).is_none());
+    }
 }

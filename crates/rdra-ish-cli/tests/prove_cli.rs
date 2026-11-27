@@ -669,4 +669,39 @@ fn an_escalation_the_cap_stops_decides_nothing() {
     );
     let plain = verify(&["--max-states", "20", &case]);
     assert_eq!(capped.status.code(), plain.status.code(), "{stderr}");
+    // A cap that stops the cone at the run's 2 instances leaves the rule to no escalation.
+    let out = verify(&["--prove", "--max-states", "5", &case]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(!stdout.contains("escalated:"), "{stdout}");
+}
+
+/// The escalation's counterexample alone fails a run: at one instance BFS passes the rule
+/// and the proof leaves it unproved, and at two BFS breaks it. Without `--prove` the run
+/// passes.
+#[test]
+fn an_escalation_counterexample_alone_fails_the_run() {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    let args = ["--instance-count", "1", &sample("one_to_one_shared")];
+    let out = verify(&[&["--prove"][..], &args].concat());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(1), "{stdout}{stderr}");
+    assert_eq!(
+        escalated_line(&stdout, "Unique_Shipment_Order"),
+        "escalated: Unique_Shipment_Order: counterexample at 2 instances (BFS on its cone; ok at 1)"
+    );
+    assert!(stderr.contains("result: counterexample"), "{stderr}");
+    assert!(
+        stderr.contains("verification failed: 1 invariant or after-assert violation(s) at more instances than the run's\n"),
+        "{stderr}"
+    );
+    let out = verify(&args);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 }
