@@ -15,10 +15,19 @@ use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::explore::symmetry::Canon;
 use crate::lifecycle::explore::{Caps, ComponentRun, Threads};
 use crate::lifecycle::expr::StateSlice;
-use crate::shadow::{compared, skipped, Twin};
+use crate::shadow::{compared, skipped, Skip, Twin};
 
 /// The most states of the plain run the twin explores.
 const SHADOW_CAP: usize = 200_000;
+
+/// Why a twin lets a call through: the run up to symmetry stopped, which leaves nothing to
+/// compare, or only the plain run passed `SHADOW_CAP`.
+fn why(orbits_stopped: bool) -> Skip {
+    match orbits_stopped {
+        true => Skip::Stopped,
+        false => Skip::OverCap,
+    }
+}
 
 /// The names of the violated invariants and after-asserts of a run's diagnostics.
 fn violated<'a>(diags: impl Iterator<Item = &'a StateDiag>) -> BTreeSet<String> {
@@ -49,7 +58,10 @@ pub(super) fn check(orbits: &OrbitRun, caps: Caps) {
     if stopped(plain.complete, plain.checks_failed)
         || stopped(orbits.complete(), orbits.run.checks_failed)
     {
-        skipped(twin);
+        skipped(
+            twin,
+            why(stopped(orbits.complete(), orbits.run.checks_failed)),
+        );
         return;
     }
     let name = |what: &str| format!("shadow: run_orbits ({} classes): {what}", orbits.orbits());
@@ -140,7 +152,7 @@ pub(super) fn check_liveness(
         Threads::Shared,
     );
     if !plain.complete || !orbits.complete() {
-        skipped(twin);
+        skipped(twin, why(!orbits.complete()));
         return;
     }
     let g = &orbits.group;
@@ -251,7 +263,7 @@ pub(super) fn check_state_models(
         Threads::Shared,
     );
     if !plain.complete || !orbits.complete() {
-        skipped(twin);
+        skipped(twin, why(!orbits.complete()));
         return;
     }
     let want = ts.state_model_findings(e, &plain.graph());
