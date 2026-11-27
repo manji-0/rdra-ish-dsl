@@ -701,6 +701,70 @@ impl {FMT}::Display for NotEnabled {{
 
 impl ::std::error::Error for NotEnabled {{}}
 
+/// A row the call names does not exist: the service's load found no row of that id. The
+/// generated functions take rows already loaded and never return it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotFound {{
+    /// The use case.
+    pub usecase: &'static str,
+    /// The entity of the row, as the model names it.
+    pub entity: &'static str,
+    /// The id the call names, as text.
+    pub id: {STRING},
+}}
+
+impl {FMT}::Display for NotFound {{
+    fn fmt(&self, f: &mut {FMT}::Formatter<'_>) -> {FMT}::Result {{
+        write!(f, "{{}}: no {{}} row has the id {{}}", self.usecase, self.entity, self.id)
+    }}
+}}
+
+impl ::std::error::Error for NotFound {{}}
+
+/// The store failed: a lost connection, a constraint the model does not know. It is no answer
+/// of the use case, and the generated functions never return it. Two are equal when they
+/// carry the same cause.
+#[derive(Debug, Clone)]
+pub struct StoreFailed {{
+    /// The use case.
+    pub usecase: &'static str,
+    /// The store's error, which `source` returns.
+    pub cause: ::std::sync::Arc<dyn ::std::error::Error + ::core::marker::Send + ::core::marker::Sync + 'static>,
+}}
+
+impl StoreFailed {{
+    /// The failure of `usecase`'s store with `cause`.
+    pub fn new(
+        usecase: &'static str,
+        cause: impl ::core::convert::Into<::std::boxed::Box<dyn ::std::error::Error + ::core::marker::Send + ::core::marker::Sync + 'static>>,
+    ) -> Self {{
+        Self {{
+            usecase,
+            cause: ::std::sync::Arc::from(cause.into()),
+        }}
+    }}
+}}
+
+impl ::core::cmp::PartialEq for StoreFailed {{
+    fn eq(&self, other: &Self) -> bool {{
+        self.usecase == other.usecase && ::std::sync::Arc::ptr_eq(&self.cause, &other.cause)
+    }}
+}}
+
+impl ::core::cmp::Eq for StoreFailed {{}}
+
+impl {FMT}::Display for StoreFailed {{
+    fn fmt(&self, f: &mut {FMT}::Formatter<'_>) -> {FMT}::Result {{
+        write!(f, "{{}}: the store failed: {{}}", self.usecase, self.cause)
+    }}
+}}
+
+impl ::std::error::Error for StoreFailed {{
+    fn source(&self) -> {OPTION}<&(dyn ::std::error::Error + 'static)> {{
+        {OPTION}::Some(&*self.cause)
+    }}
+}}
+
 /// A condition applied to the use case does not hold: the use case does not run.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Rejected {{
@@ -748,10 +812,16 @@ impl ::std::error::Error for InvalidArgument {{}}
 
 /// The cases of `e`: `(variant, payload type, doc)`.
 fn error_cases(e: &UseCaseErrorDecl) -> Vec<(&'static str, String)> {
-    let mut cases = vec![(
-        "NotEnabled",
-        format!("The rows are in states {} does not run from, or a commit found a row it writes changed.", e.usecase),
-    )];
+    let mut cases = vec![
+        (
+            "NotEnabled",
+            format!("The rows are in states {} does not run from, or a commit found a row it writes changed.", e.usecase),
+        ),
+        (
+            "NotFound",
+            "A row the call names does not exist: the service's load returns it.".to_string(),
+        ),
+    ];
     if e.rejects {
         cases.push((
             "Rejected",
@@ -764,6 +834,10 @@ fn error_cases(e: &UseCaseErrorDecl) -> Vec<(&'static str, String)> {
             "The arguments break what the verified model keeps.".to_string(),
         ));
     }
+    cases.push((
+        "StoreFailed",
+        "The store failed: the service's load or commit returns it.".to_string(),
+    ));
     cases
 }
 

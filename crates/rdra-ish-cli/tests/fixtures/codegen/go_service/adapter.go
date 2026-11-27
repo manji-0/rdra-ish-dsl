@@ -45,6 +45,10 @@ func outcome(err error) modeladapter.Outcome {
 	switch {
 	case err == nil:
 		return modeladapter.Ran
+	case errors.Is(err, domain.ErrStoreFailed):
+		return modeladapter.StoreFailed
+	case errors.Is(err, domain.ErrNotFound):
+		return modeladapter.NotFound
 	case errors.As(err, &rejected):
 		return modeladapter.Rejected
 	case errors.As(err, &invalid):

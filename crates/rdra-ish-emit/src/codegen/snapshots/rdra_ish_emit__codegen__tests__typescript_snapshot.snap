@@ -488,6 +488,9 @@ export function parseOrderRow(value: unknown): Result<OrderRow, InvalidRow> {
 /** The rows are in states the use case does not run from. Only a dispatcher returns it. */
 export type NotEnabled = Readonly<{ kind: "NotEnabled"; usecase: string }>;
 
+/** A row the call names does not exist. Only the service's load returns it; the functions take rows already loaded. */
+export type NotFound = Readonly<{ kind: "NotFound"; usecase: string; entity: string; id: string }>;
+
 /** A condition of the use case did not hold: the use case does not run. */
 export type Rejected = Readonly<{ kind: "Rejected"; condition: string; label: string; site: string | null }>;
 
@@ -498,6 +501,9 @@ export type Rejected = Readonly<{ kind: "Rejected"; condition: string; label: st
  */
 export type InvalidArgument = Readonly<{ kind: "InvalidArgument"; message: string }>;
 
+/** The store failed: no answer of the use case. Only the service's load or commit returns it; `cause` is the store's error. */
+export type StoreFailed = Readonly<{ kind: "StoreFailed"; usecase: string; cause: unknown }>;
+
 /**
  * What a row a result writes must still be when the write commits, so the store can write it
  * conditionally and take a write that matches no row as NotEnabled (see the obligations).
@@ -507,14 +513,14 @@ export type ExpectedSource =
   | Readonly<{ kind: "present" }>
   | Readonly<{ kind: "in"; column: string; value: string }>;
 
-/** What Pay can fail with: NotEnabled from a dispatcher. */
-export type PayError = NotEnabled;
+/** What Pay can fail with: NotEnabled from a dispatcher, NotFound from the service's load, StoreFailed from the service's store. */
+export type PayError = NotEnabled | NotFound | StoreFailed;
 
-/** What CancelOrder can fail with: NotEnabled from a dispatcher. */
-export type CancelOrderError = NotEnabled;
+/** What CancelOrder can fail with: NotEnabled from a dispatcher, NotFound from the service's load, StoreFailed from the service's store. */
+export type CancelOrderError = NotEnabled | NotFound | StoreFailed;
 
-/** What Place can fail with: NotEnabled from a dispatcher. */
-export type PlaceError = NotEnabled;
+/** What Place can fail with: NotEnabled from a dispatcher, NotFound from the service's load, StoreFailed from the service's store. */
+export type PlaceError = NotEnabled | NotFound | StoreFailed;
 
 /** What pay returns. */
 export type PayResult = Readonly<{
@@ -752,13 +758,14 @@ export type CommitStore<E> = Readonly<{
   recordEvent: (event: RaisedEvent) => Promise<Result<void, E>>;
 }>;
 
-/** Commits `writes` through `store`: every row, then every run mark, then every event, and stops at the first row or mark that is no longer what it names. It begins and ends no transaction: call it inside the transaction of the call, and roll back on an error. NotEnabled when a row or a run mark is no longer what the result expects; the store's error when the store fails. */
-export async function commitWrites<E>(store: CommitStore<E>, writes: Writes): Promise<Result<void, NotEnabled | E>> {
+/** Commits `writes` through `store`: every row, then every run mark, then every event, and stops at the first row or mark that is no longer what it names. It begins and ends no transaction: call it inside the transaction of the call, and roll back on an error. NotEnabled when a row or a run mark is no longer what the result expects; StoreFailed, with the store's error as its cause, when the store fails. */
+export async function commitWrites<E>(store: CommitStore<E>, writes: Writes): Promise<Result<void, NotEnabled | StoreFailed>> {
   const notEnabled: NotEnabled = { kind: "NotEnabled", usecase: writes.usecase };
+  const failed = (cause: E): Result<never, StoreFailed> => ({ ok: false, error: { kind: "StoreFailed", usecase: writes.usecase, cause } });
   for (const write of writes.rows) {
     const written = await store.writeRow(write);
     if (!written.ok) {
-      return written;
+      return failed(written.error);
     }
     if (!written.value) {
       return { ok: false, error: notEnabled };
@@ -767,7 +774,7 @@ export async function commitWrites<E>(store: CommitStore<E>, writes: Writes): Pr
   for (const write of writes.marks) {
     const written = await store.writeMark(write);
     if (!written.ok) {
-      return written;
+      return failed(written.error);
     }
     if (!written.value) {
       return { ok: false, error: notEnabled };
@@ -776,7 +783,7 @@ export async function commitWrites<E>(store: CommitStore<E>, writes: Writes): Pr
   for (const event of writes.events) {
     const recorded = await store.recordEvent(event);
     if (!recorded.ok) {
-      return recorded;
+      return failed(recorded.error);
     }
   }
   return { ok: true, value: undefined };

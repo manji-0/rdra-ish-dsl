@@ -36,24 +36,32 @@ where
 fn place_refused(e: core::PlaceError) -> m::Refusal {
     match e {
         core::PlaceError::NotEnabled(_) => m::Refusal::NotEnabled,
+        core::PlaceError::NotFound(_) => m::Refusal::NotFound,
+        core::PlaceError::StoreFailed(_) => m::Refusal::StoreFailed,
     }
 }
 
 fn pay_refused(e: core::PayError) -> m::Refusal {
     match e {
         core::PayError::NotEnabled(_) => m::Refusal::NotEnabled,
+        core::PayError::NotFound(_) => m::Refusal::NotFound,
+        core::PayError::StoreFailed(_) => m::Refusal::StoreFailed,
     }
 }
 
 fn ship_refused(e: core::ShipError) -> m::Refusal {
     match e {
         core::ShipError::NotEnabled(_) => m::Refusal::NotEnabled,
+        core::ShipError::NotFound(_) => m::Refusal::NotFound,
+        core::ShipError::StoreFailed(_) => m::Refusal::StoreFailed,
     }
 }
 
 fn send_refused(e: core::SendError) -> m::Refusal {
     match e {
         core::SendError::NotEnabled(_) => m::Refusal::NotEnabled,
+        core::SendError::NotFound(_) => m::Refusal::NotFound,
+        core::SendError::StoreFailed(_) => m::Refusal::StoreFailed,
         core::SendError::InvalidArgument(_) => m::Refusal::InvalidArgument,
     }
 }
@@ -61,6 +69,8 @@ fn send_refused(e: core::SendError) -> m::Refusal {
 fn cancel_refused(e: core::CancelError) -> m::Refusal {
     match e {
         core::CancelError::NotEnabled(_) => m::Refusal::NotEnabled,
+        core::CancelError::NotFound(_) => m::Refusal::NotFound,
+        core::CancelError::StoreFailed(_) => m::Refusal::StoreFailed,
         core::CancelError::Rejected(_) => m::Refusal::Rejected,
     }
 }
