@@ -388,6 +388,12 @@
   longer prints `counterexample at k instances` for it. A property on such a cone, like one on
   a cone that frees slots, counts only its `ok` and is decided again on the whole model
   (`its counterexample may run a use case without its event having been raised`).
+- An entity's state-model findings (missing witnesses, deadlocks, use cases that never run,
+  arms never taken) are read on a cone that holds every raiser of the events its use cases
+  wait for (P32). A cone that left the mark out ran the handler without the event, and could
+  witness a state, run a use case, or leave a state that no run of the model does, so a real
+  `NoWitness`, `Deadlock`, or `NeverRuns` could go unreported. On the samples no finding
+  changes.
 - Escalation no longer prints `counterexample at k instances` for a trace that needs more
   rows than `k` of an entity its cone does not count (P11): it decides the rule again on the
   exact cone that counts every slot, and prints that cone's instances.

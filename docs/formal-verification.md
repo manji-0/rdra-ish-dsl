@@ -69,6 +69,8 @@ prints one note with the error count.
 <!-- constrained-by #what-verify-checks -->
 <!-- constrained-by ./state-derivation.md#triggers -->
 `check` and `verify` decide deadlocks and states with no witness by BFS on each entity's cone.
+That cone holds every raiser of an event its use cases wait for, so no handler runs there
+without its event and the findings are the whole model's.
 `export --kind tla` writes the same cones as TLA+, so TLC alone can look for them. For each
 cone whose entities have a state model, it writes three files:
 

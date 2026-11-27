@@ -363,11 +363,24 @@ impl TransitionSystem {
     }
 
     /// The cone a target reads.
+    ///
+    /// An entity's findings say that a state is reached, that a use case runs, or that a
+    /// state can be left: a run the cone adds can make one of them hold where the whole
+    /// system does not. So an entity's cone that would leave a raised mark out, and run the
+    /// handler without its event, is its exact cone instead (`exact_target_cone`, P32). A
+    /// check's cone stays small: only its `ok` is read off a superset, and a counterexample it
+    /// cannot vouch for is decided on the exact cone (`recheck`).
     pub fn target_cone(&self, target: Target) -> Cone {
         let (seed, keep) = self.target_seed(target);
-        Cone {
+        let cone = Cone {
             vars: self.cone(&seed, &keep),
             keep,
+        };
+        match target {
+            Target::Entity(_) if self.cone_leaves_marks(&cone) => {
+                self.exact_target_cone(target, false)
+            }
+            _ => cone,
         }
     }
 

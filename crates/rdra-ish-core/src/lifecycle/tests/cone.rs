@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 
 use super::*;
 use crate::lifecycle::view::entity_view;
-use crate::lifecycle::{At, EntId, EntityStateResult, State, Target, Term};
+use crate::lifecycle::{At, Cone, EntId, EntityStateResult, State, Target, Term};
 use crate::load_project;
 
 pub(super) fn load(rel: &str) -> SemanticModel {
@@ -84,8 +84,9 @@ fn cone_exploration_equals_the_projection_of_the_whole_system() {
 }
 
 /// Each target's cone reaches the projection of the whole system's states, with the same
-/// view and verdict; a cone that frees an unread entity's slots reaches a superset. Returns the
-/// targets checked exactly and the freed ones.
+/// view and verdict; a cone that frees an unread entity's slots reaches a superset, and so
+/// does a check's cone that leaves a raised mark out, with the same verdict. Returns the
+/// targets checked (their verdicts or views) and the freed ones.
 pub(super) fn assert_cones_exact(
     sample: &str,
     model: &SemanticModel,
@@ -139,7 +140,22 @@ pub(super) fn assert_cones_exact(
             freed += 1;
             continue;
         }
-        assert_eq!(projected, reached, "{sample} {target:?}: reachable states");
+        // A check's cone that leaves a raised mark out runs the handler without its event and
+        // reaches a superset; its verdict is still the whole system's, since a counterexample
+        // it cannot vouch for is decided on the exact cone (P1). An entity's cone never
+        // leaves one out (P32).
+        if sub.cone_leaves_marks(&cr.cone) {
+            assert!(
+                !matches!(target, Target::Entity(_)),
+                "{sample} {target:?}: an entity's cone is exact"
+            );
+            assert!(
+                projected.is_subset(&reached),
+                "{sample} {target:?}: a cone without a mark still reaches the projection"
+            );
+        } else {
+            assert_eq!(projected, reached, "{sample} {target:?}: reachable states");
+        }
         match target {
             Target::Entity(e) => {
                 let id = &sub.entity(e).id;
@@ -156,6 +172,51 @@ pub(super) fn assert_cones_exact(
         checked += 1;
     }
     (checked, freed)
+}
+
+/// P1, P32: Review never raises the event (no use case enters phase b), so Finalize never
+/// runs. The rule's cone leaves the mark out and reaches `final`; its verdict is still the
+/// whole system's. Note's cone reads `final` through Close's guard; it holds Finalize, and
+/// Review with it, so it reaches no `final` and Close never runs there either.
+#[test]
+fn a_cone_that_leaves_a_mark_out_keeps_the_whole_systems_verdict_and_view() {
+    let model = model_from(
+        r#"
+entity Doc "文書" { id: Int @pk  status: Enum(draft, final) @default(draft)  phase: Enum(a, b, c) @default(a) }
+entity Note "メモ" { id: Int @pk  status: Enum(open, done) @default(open) }
+usecase Write "作成"
+usecase Jot "メモ"
+usecase Review "確認"
+usecase Finalize "確定"
+usecase Close "完了"
+event EvReviewed "確認済"
+creates(Write, Doc)
+creates(Jot, Note)
+transitions(Review, Doc.phase, b -> c)
+raises(Review, EvReviewed)
+triggers(EvReviewed, Finalize)
+transitions(Finalize, Doc.status, draft -> final)
+transitions(Close, Note.status, open -> done)
+condition Final "確定後"
+holds(Final, Doc.status == final)
+applies_to(Final, Close)
+forbidden(Doc, status == final)
+"#,
+    );
+    let ts = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL).ts;
+    let own = |target| {
+        let (seed, keep) = ts.target_seed(target);
+        Cone {
+            vars: ts.cone(&seed, &keep),
+            keep,
+        }
+    };
+    let rule = Target::Invariant(0);
+    assert!(ts.cone_leaves_marks(&own(rule)), "the rule's cone runs Finalize unordered");
+    let note = Target::Entity(EntId::at(1));
+    assert!(ts.cone_leaves_marks(&own(note)), "so would Note's, through Close's guard");
+    assert!(!ts.cone_leaves_marks(&ts.target_cone(note)));
+    assert_cones_exact("mark_left_out", &model, Bounds::STATES);
 }
 
 #[test]
