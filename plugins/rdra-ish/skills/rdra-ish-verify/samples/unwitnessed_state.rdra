@@ -1,0 +1,39 @@
+// A state nothing reaches. Refund leaves shipped only inside the refund window, and the
+// window holds only while the Order is pending, so no sequence of use cases enters refunded.
+// Refund is also the only way out of shipped, so a shipped Order is a deadlock. TLC finds
+// no violation: the BFS state-model findings fail check and verify.
+// expect check: fail Witness_Order_status_refunded Deadlock_Order_status_shipped
+// expect verify: fail Witness_Order_status_refunded Deadlock_Order_status_shipped
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid, shipped, refunded) @default(pending)
+  shipped_at: DateTime @null
+}
+
+usecase Place "注文確定"
+usecase Pay "支払い"
+usecase Ship "発送"
+usecase Refund "返金"
+
+buc BucOrderRefund "Order refund"
+contains(BucOrderRefund, Place)
+contains(BucOrderRefund, Pay)
+contains(BucOrderRefund, Ship)
+contains(BucOrderRefund, Refund)
+
+creates(Place, Order)
+updates(Pay, Order)
+updates(Ship, Order)
+updates(Refund, Order)
+
+transitions(Pay, Order.status, pending -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+transitions(Refund, Order.status, shipped -> refunded)
+
+sets(Ship, Order.shipped_at == present)
+
+condition RefundWindow "返金受付期間"
+holds(RefundWindow, Order.status == pending)
+applies_to(RefundWindow, Refund)
+
+forbidden(Order, status == pending, shipped_at == present)
