@@ -92,16 +92,28 @@ impl ComponentRun {
             .chain(path.iter().map(|e| e.to))
             .map(|k| self.states.at(k as usize).into_state())
             .collect();
-        let (instance, at) = ts
-            .property_failure(p, &states, states.len() - 1)
-            .expect("the path the search found breaks the property");
-        debug_assert_eq!(at, path.len(), "the path ends where the property fails");
+        // The path the search found breaks the property at its last state, checked in every
+        // build: one that does not is a fault of the search, never a verdict (P20).
+        let Some((instance, at)) = ts.property_failure(p, &states, states.len() - 1) else {
+            return Some(PropertyVerdict::Fault(LassoFault::Satisfies));
+        };
+        if at != path.len() {
+            return Some(PropertyVerdict::Fault(LassoFault::Satisfies));
+        }
         // On a reduced system the trace is lifted and may take more steps than the path; the
-        // property fails at its last state either way.
-        let trace = match self.trace_along(first, &path) {
-            Ok(trace) => trace,
+        // property fails at its last state either way, and an `always` is read again there.
+        let (trace, last) = match self.trace_along_to(first, &path) {
+            Ok(found) => found,
             Err(e) => return Some(PropertyVerdict::Fault(LassoFault::Replay(e))),
         };
+        if matches!(p.formula, Ltl::Always(_))
+            && self.system.reduction().is_some()
+            && ts
+                .property_failure(p, std::slice::from_ref(&last), 0)
+                .is_none()
+        {
+            return Some(PropertyVerdict::Fault(LassoFault::Satisfies));
+        }
         Some(PropertyVerdict::Violated(Box::new(
             StateDiag::PropertyViolated {
                 name: p.name.clone(),

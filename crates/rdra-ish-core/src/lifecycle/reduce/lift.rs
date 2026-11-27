@@ -62,13 +62,15 @@ impl TransitionSystem {
         let succ = Succ::new(run, &ext.rise);
         // The concrete start: an initial S state in the start's class. The run reaches its
         // initial states first.
-        let start_block = block_of_class[&r
-            .class(self, start)
-            .expect("a reduced state holds a representative")];
+        // A start with no class, or whose class holds no initial S state, is no initial state
+        // of the cone: the path's fault, never a panic (P20).
+        let start_block = *(r.class(self, start))
+            .and_then(|c| block_of_class.get(&c))
+            .ok_or(ReplayError::NotInitial)?;
         // A run keeps each state once, so a state's index is where it sits.
         let s0_at = (0..sub.initial_states().len().min(n))
             .find(|&i| blocks[i] == start_block)
-            .expect("the start's class holds an initial S state");
+            .ok_or(ReplayError::NotInitial)?;
         let s0 = run.states.at(s0_at).into_state();
         enum Lifted {
             /// A T step, and the rises of the extended sub-lifecycle it makes.
@@ -81,7 +83,12 @@ impl TransitionSystem {
         // The stored edges the S path takes, for its lift up to `H`.
         let s_first = s_at;
         let mut s_edges = Vec::new();
-        for (act, params, post) in steps {
+        for (k, (act, params, post)) in steps.iter().enumerate() {
+            // A step the lift cannot follow is state `k + 2` of the reduced path.
+            let fails = ReplayError::NoMove {
+                state: k + 2,
+                action: *act,
+            };
             if !r.skips(*act) {
                 let after = run
                     .system
@@ -100,7 +107,7 @@ impl TransitionSystem {
                                 .as_ref()
                                 == stage.as_slice()
                         })
-                        .expect("a T step's rise is a rise of the extended sub-lifecycle");
+                        .ok_or(fails.clone())?;
                     let (a, p) = run.step(&e);
                     s_steps.push((a, p.into(), run.states.at(e.to as usize).into_state()));
                     s_at = e.to;
@@ -109,7 +116,9 @@ impl TransitionSystem {
                 level.push(Lifted::T(*act, params.clone(), post.clone(), stages.len()));
                 continue;
             }
-            let target = block_of_class[&r.class(self, post).expect("a class move enters a class")];
+            let target = *(r.class(self, post))
+                .and_then(|c| block_of_class.get(&c))
+                .ok_or(fails)?;
             let path = succ.shortest_path(s_at, |i| blocks[i as usize] == target);
             let mut count = 0;
             for e in path {
@@ -125,7 +134,9 @@ impl TransitionSystem {
         // `H` keeps the inputs, so a rise's concrete step sets the inputs its stored edge does.
         if let Some(orbits) = &orbits {
             let (first, concrete) = orbits.lift_path(s_first, &s_edges)?;
-            debug_assert!(first == s0, "the S path starts at a stored initial state");
+            if first != s0 {
+                return Err(ReplayError::NotInitial);
+            }
             s_steps = concrete;
         }
         // The S path is a path of the extended sub-lifecycle under its own reduction: lift it
@@ -149,9 +160,11 @@ impl TransitionSystem {
                 Lifted::T(act, params, post, rises) => {
                     // A rise's lifted step leaves S where it was; the T step below carries
                     // the inputs.
+                    // A rise lifts as itself: one group of one step.
                     for _ in 0..rises {
-                        let group = lifted.next().expect("one group per rise");
-                        assert_eq!(group.len(), 1, "a rise lifts as itself");
+                        if lifted.next().is_none_or(|group| group.len() != 1) {
+                            return Err(ReplayError::Length);
+                        }
                     }
                     let mut next = post;
                     r.write(&mut next, &r.key(self, &cur));
@@ -169,12 +182,17 @@ impl TransitionSystem {
                 }
                 Lifted::S(count) => {
                     for _ in 0..count {
-                        for (a, p, s_post) in lifted.next().expect("one group per S step") {
+                        for (a, p, s_post) in lifted.next().ok_or(ReplayError::Length)? {
                             let mut next = cur.clone();
                             r.write(&mut next, &s_post.0);
                             // A folded or merged action binds its T params in the cone:
                             // the cone's step is the variant that leads to the same state.
-                            let first = ext.acts[a.index()].expect("an S step is the cone's");
+                            let Some(first) = ext.acts[a.index()] else {
+                                return Err(ReplayError::NoMove {
+                                    state: done + 2,
+                                    action: a,
+                                });
+                            };
                             let fails = ReplayError::NoMove {
                                 state: done + 2,
                                 action: first,
@@ -268,6 +286,8 @@ impl TransitionSystem {
         start: &State,
         prefix: &[Step],
     ) -> Result<ConeLasso, Spurious> {
+        // Unchecked invariant: `lift_stop` is called only on a reduced cone's lasso
+        // (`decide_liveness_reduced`); it is about the caller, not about a path.
         let r = self.reduction().expect("a reduced cone");
         let (first, steps) = self.lifted(start, prefix).map_err(|_| Spurious::Fails)?;
         let mut states = vec![first];
@@ -276,6 +296,7 @@ impl TransitionSystem {
             actions.push(act);
             states.push(post);
         }
+        // Unchecked invariant: `states` starts with the lifted start, so it is never empty.
         let x = states.last().expect("a lasso has a state").clone();
         let obs = cone.project(&x, r.obs());
         // The walk's graph: its states in the order found, the parent of each on a shortest
@@ -355,6 +376,9 @@ impl TransitionSystem {
                 }
             }
         }
+        // Unchecked invariants of the walk's own graph, not of a path it was given: a strongly
+        // connected component of two or more states has a cycle through `entry`, which the
+        // search finds, and every state it reaches has the parent it was reached through.
         let (last, back_act) = back.expect("a component of two states has a cycle");
         let mut cycle = Vec::new();
         let mut i = last;

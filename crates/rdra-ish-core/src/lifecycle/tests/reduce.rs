@@ -1749,3 +1749,24 @@ fn a_lifted_step_that_is_no_move_of_the_cone_is_a_replay_error() {
         Err(ReplayError::NoMove { state: 2, .. })
     ));
 }
+
+/// A reduced path whose start is no initial state of the cone, here a stored state with its
+/// sub-lifecycle part forged to values no class holds, is `NotInitial`, a fault, never a
+/// panic (P20): the lift's look-ups of the start's class are checked in every build.
+#[test]
+fn a_lift_from_no_initial_state_is_a_replay_error() {
+    let model = model_from(CASE_FOLD);
+    let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+    let targets = ts.targets();
+    let reduced = ts.explore_targets_reduced(&targets, Caps::VERIFY);
+    let run = &reduced.cone_of(entity_target(&ts, "Case")).run;
+    let r = run.system.reduction().expect("the Case view reduces");
+    let mut start = run.states.at(0).into_state();
+    let key = r.key(&run.system, &start);
+    r.write(&mut start, &vec![u8::MAX; key.len()]);
+    assert!(
+        r.class(&run.system, &start).is_none(),
+        "no class holds the forged part"
+    );
+    assert_eq!(run.system.lifted(&start, &[]), Err(ReplayError::NotInitial));
+}

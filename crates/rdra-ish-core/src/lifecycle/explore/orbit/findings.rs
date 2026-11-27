@@ -157,7 +157,7 @@ impl OrbitRun {
         let path = self.run.path_to(at);
         let first = path.first().map_or(at, |e| e.from);
         let (start, steps, tau) =
-            lift_path(&self.run, &self.group, &mut Canon::default(), first, &path);
+            lift_path(&self.run, &self.group, &mut Canon::default(), first, &path)?;
         replays(&self.run.system, &start, &steps)?;
         Ok((start, steps, tau))
     }
