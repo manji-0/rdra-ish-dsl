@@ -68,7 +68,7 @@ pub(super) fn print(
     print_validators(domain, &mut out);
     print_rows(domain, &mut out);
     print_dispatchers(domain, &mut out);
-    print_helpers(domain, &mut out);
+    print_helpers(&mut out);
     super::go_port::print_port(domain, &mut out);
     // `codegen` ends the file with one newline.
     while out.ends_with('\n') {
@@ -78,6 +78,19 @@ pub(super) fn print(
 }
 
 // ── Layout ───────────────────────────────────────────────────────────────────
+
+/// The last group of an import block, and the `)` that closes it: each spec's name prefix
+/// (`"dom "`, or empty) and path, sorted by path as `gofmt` sorts a group.
+pub(super) fn import_group<'a>(specs: impl IntoIterator<Item = (&'a str, String)>) -> String {
+    let mut specs: Vec<(&str, String)> = specs.into_iter().collect();
+    specs.sort_by(|a, b| a.0.cmp(b.0));
+    let mut out = String::new();
+    for (path, name) in specs {
+        out.push_str(&format!("\t{name}{}\n", string_literal(path)));
+    }
+    out.push_str(")\n");
+    out
+}
 
 /// A line of a block whose columns `gofmt` aligns: a comment, which ends the alignment, or
 /// cells (a field's name, type, and tag; a constant's name, type, and value).
@@ -1225,8 +1238,15 @@ fn print_function(domain: &DomainModel, f: &FnDecl, out: &mut String) {
     }
     for c in &f.conditions {
         out.push_str(&format!(
-            "\tif !({}) {{\n{}\t}}\n",
-            expr(&c.expr, &row, &row_ty, &acc, &input, 1),
+            "\tif {} {{\n{}\t}}\n",
+            expr(
+                &super::ir::Expr::Not(Box::new(c.expr.clone())),
+                &row,
+                &row_ty,
+                &acc,
+                &input,
+                1
+            ),
             fail(
                 "Rejected",
                 format!(
@@ -1399,6 +1419,15 @@ fn print_function(domain: &DomainModel, f: &FnDecl, out: &mut String) {
     ));
 }
 
+/// `x` holds `value`: `x` or `!x`, not a comparison with a constant (staticcheck S1002).
+fn bool_is(x: &str, value: bool) -> String {
+    if value {
+        x.to_string()
+    } else {
+        format!("!{x}")
+    }
+}
+
 fn lit_go(lit: &super::ir::Lit, ty: &FieldType) -> String {
     match lit {
         super::ir::Lit::Enum { ty, value } => format!("{ty}{}", value.ident),
@@ -1436,7 +1465,22 @@ fn expr(
     match e {
         Expr::True => "true".to_string(),
         Expr::False => "false".to_string(),
-        Expr::Not(inner) => format!("!({})", sub(inner)),
+        // The negation of a Bool test is the other test, and of a negation its operand: never
+        // `!(!x)` (staticcheck SA4013).
+        Expr::Not(inner) => match &**inner {
+            Expr::BoolEq {
+                row: r,
+                field,
+                value,
+            } if !field.nullable => bool_is(&acc(*r, field), !value),
+            Expr::InputBoolEq {
+                input: i,
+                nullable: false,
+                value,
+            } => bool_is(&input(*i), !value),
+            Expr::Not(x) => sub(x),
+            _ => format!("!({})", sub(inner)),
+        },
         Expr::And(items) if items.is_empty() => "true".to_string(),
         Expr::Or(items) if items.is_empty() => "false".to_string(),
         Expr::And(items) => items
@@ -1470,13 +1514,13 @@ fn expr(
             value,
         } if field.nullable => {
             let a = acc(*r, field);
-            format!("{a} != nil && *{a} == {value}")
+            format!("{a} != nil && {}", bool_is(&format!("*{a}"), *value))
         }
         Expr::BoolEq {
             row: r,
             field,
             value,
-        } => format!("{} == {value}", acc(*r, field)),
+        } => bool_is(&acc(*r, field), *value),
         Expr::IntCmp {
             row: r,
             field,
@@ -1504,9 +1548,9 @@ fn expr(
         } => {
             let x = input(*i);
             if *nullable {
-                format!("{x} != nil && *{x} == {value}")
+                format!("{x} != nil && {}", bool_is(&format!("*{x}"), *value))
             } else {
-                format!("{x} == {value}")
+                bool_is(&x, *value)
             }
         }
         Expr::KeyEq {
@@ -1596,23 +1640,36 @@ pub(super) fn print_validators(domain: &DomainModel, out: &mut String) {
 
 // ── Rows and dispatch ────────────────────────────────────────────────────────
 
-pub(super) fn print_helpers(domain: &DomainModel, out: &mut String) {
+pub(super) fn print_helpers(out: &mut String) {
     out.push_str("// ── Helpers ──\n\n");
     out.push_str("func isDigits(s string) bool {\n\tif s == \"\" {\n\t\treturn false\n\t}\n\tfor i := 0; i < len(s); i++ {\n\t\tif s[i] < '0' || s[i] > '9' {\n\t\t\treturn false\n\t\t}\n\t}\n\treturn true\n}\n\n");
     out.push_str("// isDecimalText reports whether s is -?[0-9]+(.[0-9]+)?.\nfunc isDecimalText(s string) bool {\n\tif len(s) > 0 && s[0] == '-' {\n\t\ts = s[1:]\n\t}\n\tfor i := 0; i < len(s); i++ {\n\t\tif s[i] == '.' {\n\t\t\treturn isDigits(s[:i]) && isDigits(s[i+1:])\n\t\t}\n\t}\n\treturn isDigits(s)\n}\n\n");
     out.push_str("// isDateText reports whether s is YYYY-MM-DD.\nfunc isDateText(s string) bool {\n\treturn len(s) == 10 && isDigits(s[0:4]) && s[4] == '-' && isDigits(s[5:7]) && s[7] == '-' && isDigits(s[8:10])\n}\n\n");
     out.push_str("// isDateTimeText reports whether s is YYYY-MM-DDTHH:MM, then :SS and a fraction if given,\n// then Z or an offset ±HH:MM.\nfunc isDateTimeText(s string) bool {\n\tif len(s) < 17 || !isDateText(s[:10]) || s[10] != 'T' || !isDigits(s[11:13]) || s[13] != ':' || !isDigits(s[14:16]) {\n\t\treturn false\n\t}\n\trest := s[16:]\n\tif len(rest) >= 3 && rest[0] == ':' && isDigits(rest[1:3]) {\n\t\trest = rest[3:]\n\t\tif len(rest) > 1 && rest[0] == '.' {\n\t\t\ti := 1\n\t\t\tfor i < len(rest) && rest[i] >= '0' && rest[i] <= '9' {\n\t\t\t\ti++\n\t\t\t}\n\t\t\tif i == 1 {\n\t\t\t\treturn false\n\t\t\t}\n\t\t\trest = rest[i:]\n\t\t}\n\t}\n\tif rest == \"Z\" {\n\t\treturn true\n\t}\n\treturn len(rest) == 6 && (rest[0] == '+' || rest[0] == '-') && isDigits(rest[1:3]) && rest[3] == ':' && isDigits(rest[4:6])\n}\n\n");
-    if domain.fns.is_empty() && domain.sums.is_empty() {
-        return;
+    // The generic helpers, each only where the code above calls it: staticcheck's U1000 names
+    // an unused one.
+    let helpers = [
+        ("ptrTo", "func ptrTo[T any](v T) *T { return &v }\n\n"),
+        ("copyOf", "// copyOf returns a pointer to a copy of *p, or nil: a state shares no value with a row.\nfunc copyOf[T any](p *T) *T {\n\tif p == nil {\n\t\treturn nil\n\t}\n\tv := *p\n\treturn &v\n}\n\n"),
+        ("anyOf", "// anyOf reports whether some row of rows makes p hold.\nfunc anyOf[T any](rows []T, p func(T) bool) bool {\n\tfor _, r := range rows {\n\t\tif p(r) {\n\t\t\treturn true\n\t\t}\n\t}\n\treturn false\n}\n\n"),
+        ("allOf", "// allOf reports whether every row of rows makes p hold.\nfunc allOf[T any](rows []T, p func(T) bool) bool {\n\tfor _, r := range rows {\n\t\tif !p(r) {\n\t\t\treturn false\n\t\t}\n\t}\n\treturn true\n}\n\n"),
+        ("countOf", "// countOf counts the rows of rows that make p hold.\nfunc countOf[T any](rows []T, p func(T) bool) int {\n\tn := 0\n\tfor _, r := range rows {\n\t\tif p(r) {\n\t\t\tn++\n\t\t}\n\t}\n\treturn n\n}\n\n"),
+    ];
+    for (name, text) in helpers {
+        if calls(out, name) {
+            out.push_str(text);
+        }
     }
-    out.push_str("func ptrTo[T any](v T) *T { return &v }\n\n");
-    out.push_str("// copyOf returns a pointer to a copy of *p, or nil: a state shares no value with a row.\nfunc copyOf[T any](p *T) *T {\n\tif p == nil {\n\t\treturn nil\n\t}\n\tv := *p\n\treturn &v\n}\n\n");
-    if domain.fns.is_empty() {
-        return;
-    }
-    out.push_str("// anyOf reports whether some row of rows makes p hold.\nfunc anyOf[T any](rows []T, p func(T) bool) bool {\n\tfor _, r := range rows {\n\t\tif p(r) {\n\t\t\treturn true\n\t\t}\n\t}\n\treturn false\n}\n\n");
-    out.push_str("// allOf reports whether every row of rows makes p hold.\nfunc allOf[T any](rows []T, p func(T) bool) bool {\n\tfor _, r := range rows {\n\t\tif !p(r) {\n\t\t\treturn false\n\t\t}\n\t}\n\treturn true\n}\n\n");
-    out.push_str("// countOf counts the rows of rows that make p hold.\nfunc countOf[T any](rows []T, p func(T) bool) int {\n\tn := 0\n\tfor _, r := range rows {\n\t\tif p(r) {\n\t\t\tn++\n\t\t}\n\t}\n\treturn n\n}\n\n");
+}
+
+/// `out` calls the function `name`: `name(` not preceded by a character of an identifier.
+fn calls(out: &str, name: &str) -> bool {
+    out.match_indices(&format!("{name}(")).any(|(i, _)| {
+        !out[..i]
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '.')
+    })
 }
 
 pub(super) fn print_rows(domain: &DomainModel, out: &mut String) {

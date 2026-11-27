@@ -290,6 +290,13 @@
 
 ### Fixed
 
+- Go: the contract probe and the adapter probe sort their import group by path, so `gofmt -l`
+  no longer names a probe whose service package's import path sorts before the domain's
+  (`example.com/clinic/clinic` before `example.com/clinic/domain`). The Go domain code passes
+  staticcheck's default checks with its `Code generated` line removed: a Bool test prints as
+  `x` or `!x` in place of `x == true`, `x == false` and `!(!x)` (S1002, SA4013), and
+  `ptrTo`, `copyOf`, `anyOf`, `allOf` and `countOf` print only where the code calls them
+  (U1000). Ids keep the model's spelling (`Id`, not `ID`). What the code does does not change.
 - The conformance traces (`codegen --conformance`, `codegen --code`) no longer leave out the
   moves of a use case that chooses the target of a lifecycle column other than the state
   column, such as `transitions(Decide, Case.liability, undetermined -> at_fault)` beside

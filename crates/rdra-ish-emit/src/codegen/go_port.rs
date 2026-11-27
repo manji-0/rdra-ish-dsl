@@ -223,10 +223,10 @@ pub(super) fn probe(
     if conformance.is_some() {
         imports.push_str("\t\"os\"\n\t\"testing\"\n\n");
     }
-    if !same {
-        imports.push_str(&format!("\t{dom} {}\n", string_literal(&binding.module)));
-    }
-    imports.push_str(&format!("\t{}\n)\n", string_literal(svc_import)));
+    let dom_spec = (!same).then(|| (binding.module.as_str(), format!("{dom} ")));
+    imports.push_str(&super::go::import_group(
+        dom_spec.into_iter().chain([(svc_import, String::new())]),
+    ));
     w.line(&imports);
     let receiver = format!("(*{svc}.{ty})");
     for c in &port.contracts {
