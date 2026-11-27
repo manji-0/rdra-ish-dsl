@@ -29,7 +29,8 @@ Each rule prints one line after the `proof (...)` header:
   at 2)`: the rule was unproved and BFS passed it, so BFS checked its cone again at one and two
   instances more. A counterexample there is an error with its trace (`counterexample (<k>
   steps, at <n> instances):`) and fails the run. `not decided at <n> instances` means the
-  memory limit or `--max-states` stopped that run; it decides nothing.
+  run outgrew ten times the store of the cone at the run's bounds, or met the memory limit or
+  `--max-states`; it decides nothing.
 
 The `OK:` line ends with `; <n> of <m> rules proved for any number of rows and any Int
 value`. An unproved rule fails the run with `--deny-unproved`, or when its escalation finds a

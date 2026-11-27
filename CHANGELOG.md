@@ -6,11 +6,14 @@
 
 - `verify --prove` (experimental) checks each rule the proof leaves unproved and BFS passes
   again on its own cone at one and two instances more per entity, after the other BFS runs
-  and within the memory BFS has left (#421). It prints `escalated: <rule>: ok at 3
+  (#421). Each such run may hold ten times the store the cone held at the run's bounds, and
+  no more than the memory BFS has left: insurance-claim-ops with its lemma dropped stops at
+  3 instances after about 40 s, at 340 MB. It prints `escalated: <rule>: ok at 3
   instances, counterexample at 4 instances (BFS on its cone; ok at 2)`. A counterexample
   there is an error with its trace (`counterexample (4 steps, at 4 instances):`), with or
   without `--deny-unproved`, and fails the run: a `--prove` run of such a model that passed
-  before now exits 1. A run the memory limit or `--max-states` stops decides nothing. No
+  before now exits 1. A run that cap, the memory limit, or `--max-states` stops decides
+  nothing. No
   sample has such a rule; the engine corpus records the verdicts per bound it must match.
 - `verify --prove` (experimental) keeps the set of rules and lemmas a proof kept as a
   certificate under the user's cache directory (`$XDG_CACHE_HOME/rdra-ish/proofs`, else
