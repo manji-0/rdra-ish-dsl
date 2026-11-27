@@ -328,7 +328,10 @@ combined over every entity cone that keeps the action (`targets.rs::RunsSoFar`),
 that fires the action clears the finding. So a single cone with a left-out mark can hide the
 finding for the whole run.
 
-The following model is constructed by hand and has not been run. Order's exit `ShipOrder`
+The following model is constructed by hand and was not run at the pinned commit. A model of
+the same shape, a handler the cone takes while its raiser starts from a state never reached, is
+the test `tests/cone.rs::a_cone_that_leaves_a_mark_out_keeps_the_whole_systems_verdict_and_view`,
+added by #477, which fixes P32 after the pinned commit. Order's exit `ShipOrder`
 reads `Payment.status == paid`. `ConfirmPayment`, triggered by `EvPaid`, writes `Payment.status`.
 The raiser `ReadNotice` writes only Notice and Payment marks and starts from a state that is
 never reached. Order's cone takes `ConfirmPayment`, because it writes the Payment status that
@@ -341,8 +344,8 @@ verdict on Order is wrong.
 
 A freed entity gives a weaker version of the problem. By Proposition A28, the cone's findings
 are those of a larger bound, so the result depends on the bound, not on the event order.
-Problem P32 is being fixed in a separate change. This document records the problem as it
-appears at the pinned commit.
+Problem P32 is fixed in #477, after the pinned commit. This document records the problem as
+it appears at the pinned commit.
 
 **Proposition A3 (counters are never left out).** If `W` holds the counter `κ` of a counted
 edge `triggers(Ev, UC).counted(k)`, then every raiser and the handler of that edge are in
@@ -1126,3 +1129,6 @@ Changes to statements of this document after it was first written, newest last.
   Theorem A8 opened with "Points 1 to 5 of cone-soundness.md"; it now states that its five
   points are numbered as there, and point 5 adds what cone-soundness.md's point 5 says of folds
   and of the monotone rule, so the proof reads without that note.
+- **2026-11-28, after #477 merged.** The P32 model of [Safety cones](#safety-cones) is no
+  longer described as only constructed by hand: it cites the test #477 added for the same shape,
+  and P32 is recorded as fixed in #477 rather than "being fixed in a separate change".

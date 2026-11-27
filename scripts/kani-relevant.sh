@@ -23,7 +23,8 @@ while IFS= read -r path; do
     crates/rdra-ish-core/src/lifecycle/explore/store.rs) relevant=true ;;
     crates/rdra-ish-core/src/lifecycle/explore/table.rs) relevant=true ;;
     crates/rdra-ish-core/src/lifecycle/explore/symmetry/mod.rs) relevant=true ;;
-    # The canonical form the symmetry harness runs.
+    # The canonical form: `symmetry/mod.rs` builds it into the harness's module, though the
+    # harness proves `Group::apply` and `Group::compose` and calls no function of it.
     crates/rdra-ish-core/src/lifecycle/explore/symmetry/canon.rs) relevant=true ;;
     # What they run: `CmpOp`, `Domain`, `Value` and `EntId` (types.rs), `Edge` (explore/mod.rs).
     crates/rdra-ish-core/src/lifecycle/types.rs) relevant=true ;;

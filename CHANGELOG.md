@@ -400,11 +400,44 @@
 
 ### Fixed
 
+- The reduction by an independent sub-lifecycle certifies its partition on every run, in
+  every build (docs/theory P7): the blocks refine the labels, one sweep of the reference
+  refinement with every block a splitter splits nothing, and the states of a block rise into
+  the same blocks. Before, only a `shadow` build compared the worklist with the sweeps, and
+  only up to 2,500,000 states. A partition that fails the certificate is a tool bug; the run
+  prints a warning and uses the sweeps' partition, which is stable when they stop.
+- Instance symmetry leaves out the class of a parent whose key a guard reads on the row the
+  step creates, before the step (docs/theory P30, rule `AbsentOwner`). That row is absent, its
+  key holds the base value, the parent in slot 0, and the group does not relabel a key on an
+  absent row, so a run up to symmetry could merge states the guard tells apart. No cone of the
+  samples or the engine corpus fires the rule, so no run changes.
 - `check --code=fresh` counts one error per stale file: a domain file and traces both stale
   printed two error blocks over `FAIL: code: 1 error(s)`.
 - The obligation ledger reads no marker inside a string literal, nor one whose name is not
   letters, digits and `_`: a script printing `` `-- rdra: obligation ${ob}` `` was a
   `` CodeObligationUnknown_${ob}`); `` warning.
+- A counterexample found on a cone that leaves a raised mark out is no longer reported as a
+  violation of the model (docs/theory P1). Such a cone runs the event's handler without the
+  event, so its counterexample may be a run the event order forbids at every bound. `check`
+  and `verify` now decide the check again on its exact cone, which keeps every action that
+  writes into it (`TransitionSystem::exact_target_cone`, `::recheck`): its counterexample,
+  with the raise on the trace, is the one reported; if it passes, the check holds; if it
+  stops, the check is `not decided`. The cone's line keeps the module's verdict for TLC and
+  says so in a `note:`. `--prove` no longer marks such a rule `refuted`, and escalation no
+  longer prints `counterexample at k instances` for it. A property on such a cone, like one on
+  a cone that frees slots, counts only its `ok` and is decided again on the whole model
+  (`its counterexample may run a use case without its event having been raised`).
+- An entity's state-model findings (missing witnesses, deadlocks, use cases that never run,
+  arms never taken) are read on a cone that holds every raiser of the events its use cases
+  wait for (P32). A cone that left the mark out ran the handler without the event, and could
+  witness a state, run a use case, or leave a state that no run of the model does, so a real
+  `NoWitness`, `Deadlock`, or `NeverRuns` could go unreported. On the samples no finding
+  changes.
+- Escalation no longer prints `counterexample at k instances` for a trace that needs more
+  rows than `k` of an entity its cone does not count (P11): it decides the rule again on the
+  exact cone that counts every slot, and prints that cone's instances. `refuted: ... (BFS
+  counterexample at k instances)` names the rows of an uncounted entity the trace creates when
+  they are more than `k`.
 - Go: the contract probe and the adapter probe sort their import group by path, so `gofmt -l`
   no longer names a probe whose service package's import path sorts before the domain's
   (`example.com/clinic/clinic` before `example.com/clinic/domain`). The Go domain code passes
