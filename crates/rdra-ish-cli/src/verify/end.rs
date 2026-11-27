@@ -136,6 +136,7 @@ impl End {
     /// Rules left unproved when `--deny-unproved` makes that fail the run.
     fn unproved_denied(&self) -> usize {
         self.proof
+            .as_ref()
             .filter(|p| p.deny_unproved)
             .map_or(0, |p| p.unproved)
     }
@@ -186,12 +187,13 @@ impl End {
             }
             eprintln!("warning: {what}; the OK line holds only for what was decided (--deny-undecided fails the run)");
         }
-        match self.proof {
+        match &self.proof {
             Some(p) if p.unproved > 0 && p.deny_unproved => {
                 bail!(
-                    "verification incomplete: {} of {} rules unproved for any number of rows and any Int value (--deny-unproved)",
+                    "verification incomplete: {} of {} rules unproved {} (--deny-unproved)",
                     p.unproved,
-                    p.rules
+                    p.rules,
+                    p.claim.as_str()
                 );
             }
             Some(p) => println!("{}; {}", line.ok(), p.clause()),

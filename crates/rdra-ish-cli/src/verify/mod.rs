@@ -58,7 +58,7 @@ pub(crate) use self::tlc_tool::find_on_path;
 use self::tlc_tool::Tlc;
 use crate::export::{checked_system, Modules};
 use crate::memory::{Budgeted, VerifySplit};
-use crate::prove::{find_z3, run_proof, Marks, Z3Tool};
+use crate::prove::{find_z3, run_proof, Claim, Marks, Z3Tool};
 use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_output::Outcome;
 use anyhow::Result;
@@ -325,7 +325,7 @@ pub fn run(
                             binary: &z3,
                             version: &version,
                         };
-                        let scoped = !scope.is_whole();
+                        let claim = Claim::of(model, scope, ts);
                         run_proof(
                             ts,
                             twin.as_ref(),
@@ -334,7 +334,7 @@ pub fn run(
                             &refuted,
                             tool,
                             deny,
-                            scoped,
+                            claim,
                         )
                     });
                     (note, ran)

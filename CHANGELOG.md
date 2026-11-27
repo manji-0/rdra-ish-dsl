@@ -200,6 +200,16 @@
 
 ### Changed
 
+- `verify --prove` (output change): every line that says a rule or lemma is proved, the
+  `proof (...)` header, the count of the `OK:` line, and the `--deny-unproved` error state one
+  claim, the bounds the proof covers and the scope it holds in: `proved: R (for any number of
+  rows and every --int-range-max from 4 to 254, in the whole model)`, or `in the selected
+  scope: --without-usecase Open` under a scope flag (P2, P4). The Int range runs from the least
+  `--int-range-max` every Int literal fits to the greatest the model builds at (255, or 254
+  with a nullable Int column), found from the build; a model with no Int column names none.
+  It replaces "any Int value", which the docs, the clause, and `Verdict::Proved` stated three
+  ways. A proof costs a few builds more. No verdict changes.
+
 - `DeleteLeavesChildren` (a use case deletes the parent of an `.on_delete(cascade)` key and
   not the child) is a warning, no longer an info (P63): the SQL export's `ON DELETE CASCADE`
   removes the children, and the verified model keeps them. It is no longer drawn for a

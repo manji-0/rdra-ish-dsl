@@ -74,7 +74,9 @@ pub struct RuleProof {
 
 #[derive(Clone, Debug)]
 pub enum Verdict {
-    /// Holds for any number of rows, at the stated value bounds.
+    /// Holds in every system the model builds at any instance counts and any Int range
+    /// (docs/theory/z3.md, Theorem 1 over `Sc(M, β)`); the CLI prints that claim
+    /// (`prove.rs::Claim`).
     Proved,
     Unproved(Unproved),
     /// The encoding cannot state the rule; the reason names the construct.

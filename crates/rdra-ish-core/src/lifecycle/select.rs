@@ -168,6 +168,33 @@ impl Scope {
         self.bucs.is_empty() && self.entities.is_empty() && self.without_flags.is_empty()
     }
 
+    /// The scope flags as given, `--buc A, --entity E, --without-usecase U`: what a proof's
+    /// lines name as the scope they hold in. `None` for a whole run.
+    pub fn flags(&self, model: &SemanticModel) -> Option<String> {
+        if self.is_whole() {
+            return None;
+        }
+        let mut parts = Vec::new();
+        if !self.bucs.is_empty() {
+            parts.push(format!("--buc {}", self.bucs.join(" --buc ")));
+        }
+        if !self.entities.is_empty() {
+            parts.push(self.entity_flags(model));
+        }
+        parts.extend(self.without_flags.iter().cloned());
+        Some(parts.join(", "))
+    }
+
+    /// `--entity A --entity B`, as both `flags` and `line` print it.
+    fn entity_flags(&self, model: &SemanticModel) -> String {
+        let ids: Vec<&str> = self
+            .entities
+            .iter()
+            .map(|k| model.entities[*k].id.as_str())
+            .collect();
+        format!("--entity {}", ids.join(" --entity "))
+    }
+
     /// The `scope:` line: each flag with what it leaves out. `None` for a whole run.
     pub fn line(&self, model: &SemanticModel, selection: &Selection) -> Option<String> {
         if self.is_whole() {
@@ -187,12 +214,7 @@ impl Scope {
             ));
         }
         if !self.entities.is_empty() {
-            let ids: Vec<&str> = self
-                .entities
-                .iter()
-                .map(|k| model.entities[*k].id.as_str())
-                .collect();
-            parts.push(format!("--entity {}", ids.join(" --entity ")));
+            parts.push(self.entity_flags(model));
         }
         if !self.without_flags.is_empty() {
             let ids: Vec<&str> = self
