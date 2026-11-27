@@ -670,6 +670,74 @@ forbidden(Door, state == open)
     assert!(stdout.contains("refuted: Forbidden_Door_0"), "{stdout}");
 }
 
+/// Under `--entity`, a build error the scope defers is in the system the prover encodes, so
+/// it must change nothing a proved rule depends on (P4). Approve's guard reads a derived
+/// column the build cannot evaluate and is built as `false`; Approve raises the event that
+/// starts ShipIt, which ships the shipment the rule forbids. The rule's plain cone runs ShipIt
+/// without the mark and reads no Audit var, so the error was deferred and the run printed
+/// `proved:` for the rule, which the same model with the equivalent `Audit.count == 0`
+/// refutes. The error now blocks the run.
+#[test]
+fn a_deferred_error_never_reaches_a_proved_rule() {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("prove_cli_deferred");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let model = r#"entity Order "注文" { id: Int @pk  status: Enum(pending, closed) @default(pending) }
+entity Shipment "出荷" { id: Int @pk  status: Enum(waiting, shipped) @default(waiting) }
+entity Audit "監査記録" { id: Int @pk  count: Int @default("0")  score: Int @derived(count * 2) }
+relate(Shipment, Order, N:1)
+relate(Audit, Shipment, N:1)
+usecase Place "注文確定"
+usecase Prepare "出荷準備"
+usecase Record "監査記録"
+usecase Approve "承認"
+usecase ShipIt "出荷"
+event EvApproved "承認済"
+creates(Place, Order)
+creates(Prepare, Shipment)
+creates(Record, Audit)
+sets(Approve, Audit.count == 1)
+condition ZeroScore "点数がゼロ"
+holds(ZeroScore, Audit.score == 0)
+applies_to(ZeroScore, Approve)
+raises(Approve, EvApproved)
+triggers(EvApproved, ShipIt)
+transitions(ShipIt, Shipment.status, waiting -> shipped)
+forbidden(Order, Shipment, Order.status == pending, Shipment.status == shipped).along(Order, Shipment)
+"#;
+    let broken = dir.join("broken.rdra");
+    std::fs::write(&broken, model).unwrap();
+    let fixed = dir.join("fixed.rdra");
+    std::fs::write(
+        &fixed,
+        model.replace("Audit.score == 0", "Audit.count == 0"),
+    )
+    .unwrap();
+
+    let out = verify(&["--prove", "--entity", "Order", fixed.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("refuted: MultiForbidden_Order_0"),
+        "{stdout}"
+    );
+
+    let out = verify(&["--prove", "--entity", "Order", broken.to_str().unwrap()]);
+    let (stdout, stderr) = (
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
+    );
+    assert_eq!(out.status.code(), Some(1), "{stdout}{stderr}");
+    assert!(
+        stderr.contains("error[DerivedColumnRead_Audit_score]"),
+        "{stderr}"
+    );
+    assert!(!stdout.contains("proved:"), "{stdout}");
+    assert!(!stderr.contains("deferred"), "{stderr}");
+}
+
 /// A proof holds for any Int value, so no guard of a step may read the run's Int range. A
 /// `present` write guarded by `.when(C)` lists the values it may write, `1..=max` at the run's
 /// range, and the guard that pins the write to `C` named each of them: z3 then read the write

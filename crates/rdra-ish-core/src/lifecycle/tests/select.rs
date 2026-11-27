@@ -73,6 +73,57 @@ applies_to(Audited, Pay)
     assert!(built.selection.deferred.is_empty());
 }
 
+/// Approve raises the event that starts ShipIt, and its guard reads Audit's derived column,
+/// which the build cannot evaluate: the guard is built as `false`, so in the built system
+/// Approve never runs and no shipment is shipped. The rule over Order and Shipment reads no
+/// Audit var, and its plain cone runs ShipIt without the mark, so the error was deferred
+/// under `--entity Order`, and `verify --prove` proved a rule the model breaks (the same
+/// model with `Audit.count == 0`, which says the same, refutes it). Approve is in the rule's
+/// exact cone, so the error now blocks the run (P4).
+const RAISER_ERROR: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, closed) @default(pending) }
+entity Shipment "出荷" { id: Int @pk  status: Enum(waiting, shipped) @default(waiting) }
+entity Audit "監査記録" { id: Int @pk  count: Int @default("0")  score: Int @derived(count * 2) }
+relate(Shipment, Order, N:1)
+relate(Audit, Shipment, N:1)
+usecase Place "注文確定"
+usecase Prepare "出荷準備"
+usecase Record "監査記録"
+usecase Approve "承認"
+usecase ShipIt "出荷"
+event EvApproved "承認済"
+creates(Place, Order)
+creates(Prepare, Shipment)
+creates(Record, Audit)
+sets(Approve, Audit.count == 1)
+condition ZeroScore "点数がゼロ"
+holds(ZeroScore, Audit.score == 0)
+applies_to(ZeroScore, Approve)
+raises(Approve, EvApproved)
+triggers(EvApproved, ShipIt)
+transitions(ShipIt, Shipment.status, waiting -> shipped)
+forbidden(Order, Shipment, Order.status == pending, Shipment.status == shipped).along(Order, Shipment)
+"#;
+
+#[test]
+fn an_error_in_a_raiser_the_plain_cone_leaves_out_blocks() {
+    let model = model_from(RAISER_ERROR);
+    let built = TransitionSystem::build(&model, Bounds::VERIFY, &scope(&model, &["Order"]));
+    let ts = &built.ts;
+    let rule = (built.selection.targets.iter())
+        .find_map(|t| match *t {
+            Target::Invariant(i) => Some(i),
+            _ => None,
+        })
+        .expect("the rule over Order is selected");
+    assert!(
+        ts.cone_leaves_marks(&ts.target_cone(Target::Invariant(rule))),
+        "the plain cone runs ShipIt without the mark"
+    );
+    assert_eq!(derived_column_reads(&built.diags), 1, "{:?}", built.diags);
+    assert!(built.selection.deferred.is_empty());
+}
+
 /// `--entity` keeps the progress findings it can decide: Order's states are witnessed on its
 /// exact cone. Record, which no Order cone keeps, is not decided rather than dead.
 #[test]
