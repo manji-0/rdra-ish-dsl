@@ -394,7 +394,8 @@ fn run_tlc_on(
     std::fs::create_dir_all(dir).expect("work dir");
     std::fs::write(dir.join("Cone.tla"), tla).expect("write tla");
     std::fs::write(dir.join("Cone.cfg"), cfg).expect("write cfg");
-    let mut all: Vec<OsString> = vec!["-workers".into(), "1".into(), "-metadir".into()];
+    let mut all: Vec<OsString> = LIVENESS_AT_THE_END.iter().map(OsString::from).collect();
+    all.extend(["-workers".into(), "1".into(), "-metadir".into()]);
     all.push(dir.join("meta").into());
     all.extend(args.iter().map(OsString::from));
     all.push("-config".into());
@@ -402,6 +403,12 @@ fn run_tlc_on(
     all.push(dir.join("Cone.tla").into());
     tlc_run(route, pool.map(|p| (p, BATCH_LIMIT)), tlc, dir, &all)
 }
+
+/// TLC checks liveness at times set by the clock (`doPeriodicWork`) as well as at the end, so a
+/// warm batch JVM and a fresh process can find a violation at different points of the search
+/// and print different logs (main CI on 5f59fae2: `reduced_gate`'s `JobStarts`). Checking only at
+/// the end makes the two logs depend on the model alone.
+const LIVENESS_AT_THE_END: [&str; 2] = ["-lncheck", "final"];
 
 /// TLC on `args`, whose files are in `dir`, in a JVM of the pool when it answers within the
 /// pool's limit.
@@ -937,7 +944,8 @@ fn recorded_tlc_runs_are_the_same_in_a_batch_jvm() {
             s.spawn(|| {
                 while let Some(dir) = jobs.get(next.fetch_add(1, Ordering::SeqCst)) {
                     let recorded = std::fs::read_to_string(dir.join("args")).expect("args");
-                    let mut all: Vec<OsString> = Vec::new();
+                    let mut all: Vec<OsString> =
+                        LIVENESS_AT_THE_END.iter().map(OsString::from).collect();
                     let mut before = "";
                     let last = recorded.lines().count() - 1;
                     for (i, arg) in recorded.lines().enumerate() {
