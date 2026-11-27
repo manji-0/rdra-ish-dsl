@@ -1037,7 +1037,7 @@ Changes to statements of this document after it was first written, newest last.
   #495: a `.present()` goal in "The goal on absent rows"; `2a373175`, #510: `StateTooWide`;
   `79c4d186` and `9519199b`, #522: N13 and the N16 reading list say a failed replay is a fault).
 - **2026-11-28, after the final audit of docs/theory** (findings 1, 2, 4, 16, 45 to 49;
-  commit `CONTENT_COMMIT`). Re-pinned from `fb6928c7` to `c97c88ef`, with the method of the
+  commit `065e53d7`). Re-pinned from `fb6928c7` to `c97c88ef`, with the method of the
   first paragraph; the sentence that the verifier was the same at `b83b9544` and `fb6928c7`
   is gone, and semantics.md is cited for D1 to D25, N14 citing D25 with its `has_way_on`
   condition. N2's preconditions are enforced (`DomainTooLarge`, #470; `u32` offsets, #479;

@@ -1301,7 +1301,7 @@ Changes to statements of this document after it was first written, newest last.
   [counterexamples](#instance-symmetry) paragraph says a lifted trace that does not replay is a
   fault.
 - **2026-11-28, after the final audit of docs/theory** (findings 1, 2 and 27 to 35; commit
-  `CONTENT_COMMIT`). Re-pinned from `fb6928c7` to `c97c88ef`, with the method of the first
+  `065e53d7`). Re-pinned from `fb6928c7` to `c97c88ef`, with the method of the first
   paragraph; the sentence that every statement held at both `b83b9544` and `fb6928c7` is gone.
   Statements that described P1, P7, P10, P11, P20, P30 and P32 as open now describe the code
   at the pin and give each fix in the past tense with its pull request and test: the
