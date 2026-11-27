@@ -1,0 +1,109 @@
+# The theory of rdra-ish's verification
+
+This directory states what rdra-ish's verification tools decide, under which assumptions,
+and on what evidence, for a reader trained in formal methods. Each document defines its
+terms before it uses them, states its guarantees as propositions, and says for each one
+whether it rests on a proof, a mechanical check, a differential test, or an assumption.
+
+The documents describe the code at commit `b83b9544ccdef3701bf90383cd56d10ea2297787`
+(origin/main, 2026-11-28). They cite code by symbol (`crate/src/path.rs::function`), never by
+line. A document that is brought up to date with a later commit says so in its first
+paragraph.
+
+## Documents
+
+| Document | Status | Contents |
+|---|---|---|
+| [Semantics and notation](./semantics.md) | written | The transition system `T_β(M)` a model denotes, the meaning of every rule and property on it, fairness, and the verdict vocabulary. Definitions D1 to D23. |
+| [Claims inventory](./claims.md) | written | One row per guarantee the tools make or the docs claim, with its evidence class, code, tests, and owning theme. |
+| (a) Cones of influence and reductions | not yet written | The cone of a check and its closure; when a cone's reachable set is the projection of the model's and when it is a superset; the reduction by an independent sub-lifecycle and its quotient; `_WF` runs on reduced cones; instance symmetry (the group, orbits, entity cones, `DeletedRowOwner`); bound escalation to N+1 and N+2 instances; memory caps and the meaning of `not decided`. |
+| (b) Theorem proving with z3 | not yet written | The SMT encoding (`prove/smt.rs`, `prove/encode.rs`), what is folded and how Int terms are bounded; induction with Houdini; the lemma candidate shapes (#428); what `proved` covers for any number of rows and what `.lemma()` adds to the trust base; rlimit determinism; the certificate cache; how proof and BFS refutation interact. |
+| (c) The native verifier | not yet written | BFS and the packed state store; parallel exploration and why it computes the one-thread result; safety, liveness under fairness, the temporal operators, `can_reach`; lifting a counterexample from a reduced or symmetric run to the model. |
+| (d) Agreement with TLC | not yet written | The TLA+ translation, the agreement rules, the engine corpus, the sample and random-model comparisons, shadow twins, Kani harnesses, the mutation run, and known disagreements. |
+
+The theme documents will be named `cones.md`, `z3.md`, `native.md`, and `tlc-agreement.md`
+in this directory. Each one takes its rows of the [claims inventory](./claims.md) as its
+table of contents: a theme document states each of its claims as a proposition in the
+notation of [semantics.md](./semantics.md), gives the proof or proof sketch or names the
+check that stands for one, states the assumptions, and lists threats to validity and
+related work.
+
+## Reading order
+
+1. [semantics.md](./semantics.md), whole. Everything else is stated in its notation.
+2. [claims.md](./claims.md), to see what is claimed and how well each claim is supported.
+3. (c), then (a). The native verifier decides a check on one explored graph; the cone
+   document says why a graph of a cone, a reduced cone, or a quotient by symmetry decides
+   what the model's graph would.
+4. (b), which is independent of (a) and (c) except for the interaction with BFS
+   refutation and bound escalation.
+5. (d), last, since it is the evidence for claims the others make.
+
+## Relation to the existing notes
+
+<!-- derived-from ../formal-verification.md -->
+<!-- derived-from ../engine-agreement.md -->
+<!-- derived-from ../state-derivation.md -->
+
+The notes below stay where they are, unchanged, as records: of what modelers are told, of
+the design decisions and measurements behind each feature, and of the issues they closed.
+This directory does not replace them. Where a theme document and a note disagree, the theme
+document states the code's behavior and records the disagreement; the note is corrected in
+its own pull request.
+
+| Note | Audience and role | Theme |
+|---|---|---|
+| [formal-verification.md](../formal-verification.md) | Modelers: what `check`, `verify`, `--with-tlc`, and `--prove` print and decide. | all |
+| [engine-agreement.md](../engine-agreement.md) | Contributors: the agreement rules and the tests that hold the engines to them. | (d) |
+| [state-derivation.md](../state-derivation.md) | Modelers and contributors: the transition system, bounds, cones, and findings. | semantics, (a) |
+| [design/cone-soundness.md](../design/cone-soundness.md) | The soundness arguments for cones, the sub-lifecycle reduction, and `_WF` on a reduced cone. | (a) |
+| [design/instance-symmetry.md](../design/instance-symmetry.md) | Design and measurements of the quotient by slot permutations. | (a), (c) |
+| [design/native-temporal-verification.md](../design/native-temporal-verification.md) | Design of the native temporal checker and its migration from TLC. | (c), (d) |
+| [design/native-bfs-parallel.md](../design/native-bfs-parallel.md) | Design and measurements of parallel BFS and its shared table. | (c) |
+| [design/counted-events.md](../design/counted-events.md) | Counted triggers: semantics, cones, TLA+, z3. | semantics, (a), (b) |
+| [design/counting-rules.md](../design/counting-rules.md) | Counted quantifiers and per-entity instance counts. | semantics, (a), (b) |
+| [design/event-order.md](../design/event-order.md) | Raised marks, and rounds 3 to 5 of the reduction (monotone inputs, the size guard, the node fold). | semantics, (a) |
+| [design/tlc-scheduling.md](../design/tlc-scheduling.md) | How TLC runs are scheduled under `verify --with-tlc`. | (d) |
+
+## Open problems
+
+Each item is a stated guarantee the code does not give, a disagreement between documents
+that bears on what a verdict means, or a gap in the evidence for a claim. Nothing here has
+been weakened in the code or the notes; the owner decides which become issues. The
+[claims inventory](./claims.md) refers to these by number.
+
+Kinds: **guarantee** (a verdict can mean less than the tools or notes say), **evidence** (the
+claim may hold, but its evidence is weaker than stated), **prose** (a note or code comment
+disagrees with the code, with no effect on a verdict). No item shows an `ok` or a `proved`
+of `T_β(M)` itself that is wrong; P1, P3, P4, and P20 are the ones that bear on what a
+printed verdict means.
+
+Status: **read** means the code was read for this document and shows the problem;
+**reported** means a reading of the code during the survey for the claims inventory found it
+and this document did not re-read it. No item was reproduced by running the tools: each is
+a reading of the code at the pinned commit, and the issue that takes it up should start
+with a reproduction.
+
+| # | Kind | Status | Problem | Where |
+|---|---|---|---|---|
+| P1 | guarantee | read (`refuted.rs`, `escalate.rs`); reported (`property_cone.rs`) | **A cone that leaves a raised mark out is treated as exact.** Such a cone reaches states that the event order forbids at every bound (A2), not only past the bound. Its `ok` is sound, and the guide's "Known verification gaps" warns that a finding can be a run the order prevents. But three places treat its counterexample as a reachable state of `T`: `verify/refuted.rs::refuted` ("BFS reaches only states the whole system reaches, so its violation is a real one") marks the rule `refuted` and skips its proof; `verify/escalate.rs` prints `counterexample at k instances` as "a real one"; and the lifting argument of cone-soundness.md, "A property's cone decides under its own fairness", names the freed-slots case as the only exception, so a property-cone counterexample on such a cone is printed (with a `note:`) instead of being re-decided on `T` as the freed-slots case is. Consequence: a spurious `counterexample`, and a rule that is never proved; not a wrong `ok`. | `cli/src/verify/refuted.rs::refuted`, `cli/src/verify/escalate.rs`, `cli/src/property_cone.rs::counterexample`, `core/restrict.rs::restrict_to` |
+| P2 | prose | read | **What `proved` quantifies over is stated three ways.** `prove/mod.rs::Verdict::Proved` says "at the stated value bounds"; `ProofTally::clause` prints "any Int value"; formal-verification.md says "any non-negative Int value". The encoding asserts `0 ≤ x` with no top, and a rule's literals must be at most `m`, so the claim is B2: every `n ≥ 1` and every `m` at which the model builds. | `core/prove/mod.rs::Verdict`, `cli/src/prove.rs::ProofTally::clause`, `core/prove/encode.rs` |
+| P3 | evidence | reported | **Nothing checks that the encoding's preamble is satisfiable.** If the declarations and domain axioms, or `declarations ∧ initial`, were inconsistent, every query would be `unsat` and every rule `proved`. Post-states are never checked to stay in their domains (true by construction). `Enc::compare` re-implements `expr.rs::compare` and is tied to it only by differential tests. Whether `Enc::step` and `explore/moves.rs` order the forks of a choice the same way relative to an `Assign` of the same variable was not verified. | `core/prove/encode.rs::Enc::declarations`, `::initial`, `::compare`, `::step` |
+| P4 | guarantee | read (`--entity` part not checked) | **`--prove` under a scope proves the scoped system.** `verify --buc`, `--without-usecase`, `--without-buc`, and `--actor` drop use cases from the system the prover encodes (`export.rs::checked_system(model, bounds, scope)`, `select.rs::Scope`), so a `proved` there is a statement about the system without those use cases. The `OK:` line says `in the selected scope` (`states.rs::BoundsLine::ok`), but the `proof (...)` header, the `proved:` lines, and the clause appended to `OK:` ("N of N rules proved for any number of rows and any Int value") do not, and cli-reference.md, "Partial runs", does not mention `--prove`. Under `--entity`, a deferred build error that drops a guard or effect may reach the encoded system; not verified. Separately, `Unproved::Initial`'s doc says the bounded engines report the initial violation, but the encoding's initial states include any number of rows and any Int value, so the violation can lie outside `β`. | `cli/src/verify/mod.rs`, `cli/src/prove.rs::run_proof`, `core/prove/mod.rs::Unproved` |
+| P5 | prose, evidence | reported | **The proof notes overstate details.** The CTI line says "every proved rule hold" where the code assumes every kept candidate; formal-verification.md gives "2,000,000 for a lemma", but a `.lemma()` rule gets the rule limit (20,000,000); "keeps the largest inductive set" is not maximal when waiting lemmas join; "exact up to 8" means `at_least(k)` for `k ≤ 8`, so `.exactly(8)` and `.at_most(8)` are out of scope. Independence from the solver count (B14) is empirical, on 1 against 3 solvers, although `proof_equivalence.rs` itself notes that a check's resource use depends on what its solver checked before. No test supplies a false `.lemma()` and shows it dropped. | `core/prove/mod.rs`, `core/prove/encode.rs`, `cli/tests/proof_equivalence.rs` |
+| P6 | prose | read | **Goals read absent rows at base values.** `eventually` and `leads_to` read the goal on a slot whatever its existence (D21), so deleting a row meets `eventually(E.c == v)` when `v` is the base value of `c`; `can_reach` requires presence along the path, so deletion does not meet it (D22). Both engines agree. The language reference also states `eventually` as `<>expr` and `can_reach` as `AG (present => EF expr)`, which the code does not compute ([semantics.md](./semantics.md#prose-that-the-code-contradicts), S1 and S2). | `core/lasso.rs::TransitionSystem::fails_at`, `core/reach.rs::reach_failure`; language-reference.md |
+| P7 | evidence | reported | **The stability of the sub-lifecycle partition is not certified.** A8 needs `quotient_blocks` to return a partition stable under conditions (1) and (2) of cone-soundness.md. The twin compares two implementations of the same definition, not the conditions, and is skipped above 2,500,000 states; event-order.md says "tested, not proven", while cone-soundness.md states the bisimulation without that caveat. | `core/reduce/partition.rs::quotient_blocks`, `core/reduce/partition/reference.rs` |
+| P8 | prose, evidence | reported twice, independently | **The Kani claims for symmetry are overstated.** instance-symmetry.md, "Verifying the reduction", says a harness proves `canonical(apply(g, s)) = canonical(s)` at one class of 3 slots; the only symmetry harness proves `apply(g∘h) = apply(g)∘apply(h)` on a 2-slot parent and a 2-slot child and never calls `canonical`. `scripts/kani-relevant.sh` calls `canon.rs` "the canonical form the symmetry harness runs". engine-agreement.md lists 14 harnesses; the code has 16 (the two in `explore/table.rs` are missing). | `core/explore/symmetry/mod.rs`, `core/explore/table.rs`; instance-symmetry.md; engine-agreement.md |
+| P9 | prose | reported | **Stale design statements.** instance-symmetry.md, "Soundness per check", still marks the slot-wise and per-binding readers (deadlocks, `stable`, `unchanged`, `precedes`, liveness, `can_reach`) "not sound", while phase 4 and #370 gave the symmetric runs dedicated readers. cone-soundness.md and the comment on `reduce/split.rs::monotone_vars` say a delete resets owners; it resets columns only (the code's choice is conservative). cone-soundness.md names a "`FreesSlots` case", which is `TransitionSystem::cone_frees_slots` and `property_cone.rs::Why::FreesSlots`. The `Twin::OrbitLiveness` twin compares the orbit search with the plain run's `avoid`, so it checks the quotient, not the fair-component rule (N9). | instance-symmetry.md; cone-soundness.md; `core/reduce/split.rs` |
+| P10 | prose | reported | **A stopped cone's invariants.** formal-verification.md, "Known verification gaps", says a stopped cone "leaves its invariants `not decided`"; the code reports a counterexample found before the stop and leaves only the others undecided (A24). | `cli/src/verify/bfs.rs::BfsCone::verdict` |
+| P11 | guarantee | reported | **Escalation can understate the instances a counterexample needs.** At `n+1` or `n+2` the rule's cone may free slots; the printed `k` is the most slots of an entity the cone counts, which excludes the freed entity. | `cli/src/verify/escalate.rs::cone_slots` |
+| P12 | evidence | read | **A TLC trace that does not replay silently skips the comparison.** When both engines find a counterexample, `compare.rs::disagreements` builds TLC's violated set with `collect::<Result<_, _>>().ok()`; if any TLC trace fails to replay, the sets are not compared and nothing prints. (`engine_equivalence` asserts replay separately.) | `cli/src/verify/compare.rs::disagreements` |
+| P13 | evidence | reported | **The corpus harness skips silently in two places.** Rule 2 `continue`s when TLC printed no line for a module, and rule 8 compares only checks both runs decided, so a symmetric run that turns a decided check into `not decided` is not reported. | `cli/tests/engine_corpus.rs::check_case` |
+| P14 | evidence | reported | **TLC agreement is tested at few bounds.** In the corpus, TLC runs at each case's default bounds only (the `bfs=` runs at 1, 3, 4 instances omit it). In the sample comparison, 24 cones (`VERIFY_FALLBACK`), including the largest reduced ones, are compared at 1 instance only, so for example insurance-claim-ops' settlement guard at 2 instances rests on A8 alone. Five sample roots get TLC in CI (`scripts/tlc-roots.txt`). | `cli/tests/engine_equivalence.rs`, `cli/tests/engine_corpus.rs` |
+| P15 | evidence | read | **Deleting corpus cases goes unnoticed.** `every_corpus_header_is_well_formed` asserts at least 30 cases; there are 79. | `cli/tests/engine_corpus.rs` |
+| P16 | evidence, prose | reported | **Gates the notes describe are not in force.** No mutation kill rate is recorded; the mutation run starts by hand. Release-gate items 3 (random models with TLC, seeds `0:2000`) and 7 were waived (CHANGELOG, v3.0.0). `RDRA_TLC_BATCH=both` is not run in CI. The repository has no branch protection or ruleset, so no CI job is a required check, although a `ci.yml` comment speaks of one. native-temporal-verification.md, "How we know it is right", says CI runs every root with `--with-tlc` (it runs the five TLC roots) and describes a whole-model mode of `reduction-diff.py` that does not exist; engine-agreement.md says the `kani` job runs on each push to main (main runs on a 3-hour schedule). | `.github/workflows/ci.yml`, `.github/workflows/mutants.yml`, `scripts/reduction-diff.py` |
+| P17 | evidence | read (twin count); reported (caps) | **Shadow twins skip large inputs without failing.** Twins skip calls above their caps (200,000 or 2,500,000 states; `Twin::Canonical` only for groups of at most 1,296 elements), counted only under `RDRA_ISH_SHADOW_STATS`; CI checks only that each twin compared at least one call. The module's table lists 22 fast paths for 25 twins. | `crates/rdra-ish-core/src/shadow.rs` |
+| P18 | evidence | reported | **Parallel BFS is checked on paths release builds do not take.** Release builds run `Probing::Off`; the probe twins (`Twin::Hit`, `Twin::SameAs`) run only under `RDRA_ISH_FORCE_PROBES`. The loom model, test jitter, Miri job, and "probe finds every key" harness of native-bfs-parallel.md, "Holding it correct", were not built. A wall-clock `--temporal-budget` stop depends on the machine. | `core/explore/bfs.rs`; native-bfs-parallel.md |
+| P19 | evidence | reported | **`can_reach` and deadlocks have no external oracle.** TLC cannot state `can_reach`, and its deadlock check is one-sided (T6). `reach_failure` and `TransitionSystem::verdict` guard against a stopped graph with `debug_assert!` only; the release guard is one match arm in `targets.rs`. | `core/reach.rs`, `core/targets.rs` |
+| P20 | guarantee | reported | **"Every native counterexample replays" holds for liveness on unreduced cones only.** Safety traces are re-evaluated by `property_failure`, not replayed; the lift of a reduced safety trace checks its `T` steps with `debug_assert!` only; a symmetric lift that fails to replay panics instead of printing `LassoFault`; and a reduced liveness lasso is replayed on the reduced system, not after lifting (the `Cone_P_Full` rerun covers it, and if that run stops, a real counterexample becomes `not decided`). | `core/explore/properties.rs`, `core/reduce/lift.rs::lift`, `core/explore/orbit.rs::OrbitRun::replays`, `cli/src/verify/native.rs` |
+| P21 | evidence | read | **A stopped native run is recorded as `ok` for the per-run comparison.** `verify/native.rs::Answer::outcome` maps `Stopped` to `Outcome::Ok`, and that value enters `Native::runs`, which `compare.rs::disagreements` compares run by run. `Native::capped` resets the decision to `Undecided` but leaves the pushed runs, and the `PropertyCone` arm of `compare.rs::disagreements` compares every entry of `runs` with `differ`, which ignores only `ToolError`. A native `Cone_P` or `Cone_P_Full` run stopped at a cap beside a TLC counterexample on the same run therefore reads as a disagreement, against rule 1 ("`not decided` from either engine is no disagreement"). It fails closed (`tool_error`); not reproduced. Also, an `OK:` line still prints after `result: not decided` (qualified by a warning), and the explored-form message names only the state cap or memory limit when a whole-model rerun stopped at the time budget. | `cli/src/verify/native.rs::Answer::outcome`, `cli/src/verify/compare.rs::disagreements`, `cli/src/verify/bfs.rs::explored_properties` |
