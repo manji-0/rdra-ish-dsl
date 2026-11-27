@@ -1,8 +1,9 @@
 // Service of tests/codegen_commit.rs: an in-memory store around the Go that `codegen` prints
 // for commit.rdra, run through the generated harness from outside its package. Every commit is
 // one call of the generated CommitWrites: the store implements CommitStore once, over every
-// entity, run mark and event, so no commit names a result's fields. FAULT=keep-mark plants one
-// bug: the store never deletes a run mark.
+// entity, run mark and event, so no commit names a result's fields. An id is never used twice:
+// a deleted row's id stays taken, as the model's slot does. FAULT=keep-mark plants one bug: the
+// store never deletes a run mark.
 package domain_test
 
 import (
@@ -25,6 +26,7 @@ type store struct {
 	shipments map[domain.ShipmentId]domain.ShipmentRow
 	marks     map[markKey]int
 	evShipped []domain.EvShipped
+	used      map[domain.StoredId]bool
 }
 
 func newStore(keepMarks bool) *store {
@@ -34,6 +36,7 @@ func newStore(keepMarks bool) *store {
 		orders:    map[domain.OrderId]domain.OrderRow{},
 		shipments: map[domain.ShipmentId]domain.ShipmentRow{},
 		marks:     map[markKey]int{},
+		used:      map[domain.StoredId]bool{},
 	}
 }
 
@@ -50,6 +53,9 @@ func (s *store) clone() *store {
 	}
 	for k, v := range s.marks {
 		c.marks[k] = v
+	}
+	for k, v := range s.used {
+		c.used[k] = v
 	}
 	c.evShipped = append(c.evShipped, s.evShipped...)
 	return c
@@ -75,7 +81,7 @@ func (s *store) holds(id domain.StoredId, e domain.ExpectedSource) bool {
 	tag, ok := s.tag(id)
 	switch {
 	case e.Absent:
-		return !ok
+		return !s.used[id]
 	case e.Column == "":
 		return ok
 	default:
@@ -98,6 +104,7 @@ func (s *store) WriteRow(w domain.RowWrite) (bool, error) {
 		}
 		return true, nil
 	}
+	s.used[w.Id] = true
 	switch r := w.Row.(type) {
 	case domain.Account:
 		s.accounts[r.Id] = r
@@ -161,12 +168,15 @@ func (sv *service) Seed(rows domain.StoreSnapshot) {
 	sv.s = newStore(sv.s.keepMarks)
 	for _, a := range rows.Account {
 		sv.s.accounts[a.Id] = a
+		sv.s.used[a.Id] = true
 	}
 	for _, o := range rows.Order {
 		sv.s.orders[o.Id] = o
+		sv.s.used[o.Id] = true
 	}
 	for _, r := range rows.Shipment {
 		sv.s.shipments[r.Id] = r
+		sv.s.used[r.Id] = true
 	}
 	for _, m := range rows.ShipOrderRuns {
 		sv.s.marks[markKey{"Ship", "Order", m.Id}] = m.Step

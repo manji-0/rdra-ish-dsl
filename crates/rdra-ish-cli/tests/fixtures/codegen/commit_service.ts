@@ -1,7 +1,8 @@
 // Service of tests/codegen_commit.rs: an in-memory store around the TypeScript that `codegen`
 // prints for commit.rdra, run through the generated harness. Every commit is one call of the
 // generated `commitWrites` on the result's `writes`: the store implements `CommitStore` once,
-// over every entity, run mark and event, so no commit names a result's fields.
+// over every entity, run mark and event, so no commit names a result's fields. An id is never
+// used twice: a deleted row's id stays taken, as the model's slot does.
 // FAULT=keep-mark plants one bug: the store never deletes a run mark.
 import * as d from "./domain";
 
@@ -16,15 +17,17 @@ type Tables = {
   shipments: Map<number, d.ShipmentRow>;
   marks: Map<string, number>;
   evShipped: d.EvShipped[];
+  used: Set<string>;
 };
 
-const empty = (): Tables => ({ accounts: new Map(), orders: new Map(), shipments: new Map(), marks: new Map(), evShipped: [] });
+const empty = (): Tables => ({ accounts: new Map(), orders: new Map(), shipments: new Map(), marks: new Map(), evShipped: [], used: new Set() });
 const copy = (t: Tables): Tables => ({
   accounts: new Map(t.accounts),
   orders: new Map(t.orders),
   shipments: new Map(t.shipments),
   marks: new Map(t.marks),
   evShipped: [...t.evShipped],
+  used: new Set(t.used),
 });
 const markKey = (usecase: string, entity: string, id: number): string => `${usecase} ${entity} ${id}`;
 const ok = <T>(value: T): d.Result<T, never> => ({ ok: true, value });
@@ -48,7 +51,7 @@ function holds(t: Tables, w: d.RowWrite): boolean {
   const now = tag(t, w);
   switch (w.expected.kind) {
     case "absent":
-      return now === undefined;
+      return !t.used.has(`${w.entity} ${w.id}`);
     case "present":
       return now !== undefined;
     case "in":
@@ -68,6 +71,7 @@ function store(t: Tables, keepMarks: boolean): d.CommitStore<never> {
         if (w.entity === "Shipment") t.shipments.delete(w.id);
         return ok(true);
       }
+      t.used.add(`${w.entity} ${w.id}`);
       if (w.entity === "Account") t.accounts.set(w.id, w.row);
       if (w.entity === "Order") t.orders.set(w.id, w.row);
       if (w.entity === "Shipment") t.shipments.set(w.id, w.row);
@@ -114,9 +118,18 @@ function service(keepMarks: boolean): d.ConformancePort {
   return {
     seed: async (rows) => {
       t = empty();
-      for (const a of rows.account) t.accounts.set(a.id, a);
-      for (const o of rows.order) t.orders.set(o.id, o);
-      for (const s of rows.shipment) t.shipments.set(s.id, s);
+      for (const a of rows.account) {
+        t.accounts.set(a.id, a);
+        t.used.add(`Account ${a.id}`);
+      }
+      for (const o of rows.order) {
+        t.orders.set(o.id, o);
+        t.used.add(`Order ${o.id}`);
+      }
+      for (const s of rows.shipment) {
+        t.shipments.set(s.id, s);
+        t.used.add(`Shipment ${s.id}`);
+      }
       for (const m of rows.ship_order_runs) t.marks.set(markKey("Ship", "Order", m.id), m.step);
       t.evShipped = [...rows.ev_shipped];
     },

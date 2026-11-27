@@ -1,12 +1,13 @@
 // Service of tests/codegen_commit.rs: an in-memory store around the Rust that `codegen` prints
 // for commit.rdra, whose every commit is one call of the generated `commit_writes`. The store
 // implements `CommitStore` once, over every entity, run mark and event, so no commit names a
-// result's fields. FAULT=keep-mark plants one bug: the store never deletes a run mark.
+// result's fields. An id is never used twice: a deleted row's id stays taken, as the model's
+// slot does. FAULT=keep-mark plants one bug: the store never deletes a run mark.
 #[path = "domain.rs"]
 #[allow(dead_code)] // the service uses part of the module
 mod domain;
 use domain::*;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::Infallible;
 
 /// Every table, the run marks by (use case, entity, row id), and the raised events.
@@ -18,6 +19,18 @@ struct Store {
     shipments: BTreeMap<i64, ShipmentRow>,
     marks: BTreeMap<(&'static str, &'static str, i64), u8>,
     ev_shipped: Vec<EvShipped>,
+    /// Every id a row has had, deleted rows' included.
+    used: BTreeSet<(&'static str, i64)>,
+}
+
+/// The entity and the number of an id.
+fn key(id: &StoredId) -> (&'static str, i64) {
+    let n = match id {
+        StoredId::Account(id) => id.get(),
+        StoredId::Order(id) => id.get(),
+        StoredId::Shipment(id) => id.get(),
+    };
+    (id.entity(), n)
 }
 
 impl Store {
@@ -35,7 +48,7 @@ impl Store {
     fn holds(&self, id: &StoredId, expected: ExpectedSource) -> bool {
         let tag = self.tag(id);
         match expected {
-            ExpectedSource::Absent => tag.is_none(),
+            ExpectedSource::Absent => !self.used.contains(&key(id)),
             ExpectedSource::Present => tag.is_some(),
             ExpectedSource::In { value, .. } => tag == Some(value),
         }
@@ -50,6 +63,7 @@ impl CommitStore for Store {
             RowWrite::Put { id, row, expected } => {
                 let ok = self.holds(&id, expected);
                 if ok {
+                    self.used.insert(key(&id));
                     match row {
                         StoredRow::Account(r) => drop(self.accounts.insert(r.id.get(), r)),
                         StoredRow::Order(r) => drop(self.orders.insert(r.id.get(), r)),
@@ -141,12 +155,15 @@ impl ConformancePort for Service {
             ..Store::default()
         };
         for a in rows.account {
+            self.store.used.insert(key(&StoredId::Account(a.id)));
             self.store.accounts.insert(a.id.get(), a);
         }
         for o in rows.order {
+            self.store.used.insert(key(&StoredId::Order(o.id)));
             self.store.orders.insert(o.id.get(), o);
         }
         for s in rows.shipment {
+            self.store.used.insert(key(&StoredId::Shipment(s.id)));
             self.store.shipments.insert(s.id.get(), s);
         }
         for m in rows.ship_order_runs {
