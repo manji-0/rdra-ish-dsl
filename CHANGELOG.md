@@ -558,6 +558,15 @@ and 5 are moved out of this release, and items 3 and 7 are waived. The other ite
   five small samples under 0.01 s / 10 MB against 3.7-7.1 s / 122-152 MB.
 - 8: the docs, compatibility page and skills were rewritten for this release (#375-#379).
 
+*Erratum (2026-11-28).* Item 2 as written asks for `verify --with-tlc` on every root of
+`samples.txt`. The run recorded above ran TLC beside the native checker on the five roots of
+`scripts/tlc-roots.txt` and on the header lines with flags, not on every root. The other roots
+were compared with TLC through `engine_equivalence`, by state graph at 1 and 2 instances, except
+the 24 cones `VERIFY_FALLBACK` lists, which it compares at 1 instance only; oidc-auth's 13 of
+those meet TLC at 2 instances nowhere. So item 2 held on that narrower check, not as written.
+Item 5 held on the same runs. docs/design/native-temporal-verification.md, "What the gate
+checked for v3.0.0", records the gate as it ran.
+
 ### Upgrading from v2.3.0
 
 **Scripts that run `verify`**
