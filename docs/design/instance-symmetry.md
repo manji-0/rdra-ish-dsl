@@ -15,8 +15,8 @@ default.
   room (#361).
 - **Open.** The rest of phase 4: `stable`, `unchanged`, `precedes`, `can_reach`, and an
   `always` property on a reduced cone still run plain. The flip of the default to `always`,
-  a `### Breaking` entry whose release is the owner's call. `PinnedStart` has no witness
-  and goes back to the owner. #212 and #284 stay open.
+  a `### Breaking` entry whose release is the owner's call. `PinnedStart` has a witness
+  since #PRP33 (P33). #212 and #284 stay open.
 - **Superseded.** The `retry` default of [Decisions](#decisions), by
   [Always by default](#always-by-default) (2026-11-25). The cone line with an orbit count,
   by `(about <m> states)`.
@@ -1036,7 +1036,7 @@ build, and a per-thread hook in unit tests (`dropped`). It names a scan rule by 
 | Rule or reason | Witness |
 |---|---|
 | `OrderedId`, `IdAgainstLiteral`, `MixedIds`, `OwnerLiteral`, `OwnerChoice`, `UnlinkedCreate`, `AbsentOwner` | (b): `explore/symmetry/witnesses.rs`, one test each |
-| `PinnedStart` | (e), but it fires in no cone: see below |
+| `PinnedStart` | an always-on assertion: `witnesses.rs::pinned_start_has_a_witness` (P33, #PRP33) |
 | `JointTooLarge` | (d): `joint_too_large_is_a_cost_cap`, `past_the_branch_cap_the_verdict_stands` |
 | `G_T` "S" | (c): implied by "S var", asserted in `Reduction::fixed_why` |
 | `H` "obs", "input" | the assertion in `up_to_h` (`reduce/partition.rs`) that `H` moves nothing the quotient reads; `each_h_reason_a_case_shows_has_a_witness` in engine_corpus |
@@ -1069,8 +1069,7 @@ in `explore/symmetry/snapshot.rs`.
   snapshot changes for a rule that no line names. The snapshot's header counts the lines
   that name each rule and reason.
 - **`PinnedStart` fires in no cone** of the samples or the corpus, so the snapshot cannot see
-  it dropped. The header says so. That leaves `PinnedStart` with no witness at all, which
-  goes back to the owner.
+  it dropped. The header says so. Its witness is a test of its own (below).
 - **The runs of S.** No run of S in the test has a memory limit. A plain run of S stops at
   2,000,000 states, or at `--max-states`. Past that cap, S runs up to `H`, as `--symmetry
   always` does at the memory limit, and the cone line says so. Two sub-lifecycles pass the
@@ -1084,10 +1083,15 @@ in `explore/symmetry/snapshot.rs`.
 
 Why no witness was found:
 
-- `PinnedStart`. Only the start depends on it, and the transitions do not. Dropping it on
-  `sym_identity_pair` with every Balance starting under the first Account leaves the quotient a
-  bisimulation with the same verdicts. The orbit run starts from the canonical form of the
-  initial state, so a start that pins a row is reached up to the group either way.
+- `PinnedStart` has one since #PRP33 (P33). Only the start depends on it, and the
+  transitions do not, so dropping it leaves the quotient a bisimulation with the same
+  verdicts, as dropping it on `sym_identity_pair` showed. What breaks is the trace: the run
+  stores the canonical form of each initial state, and where that form is no initial state
+  the counterexample lifted from it starts nowhere the model starts. `orbit.rs::replays`
+  checks every lifted trace in every build and panics (`NotInitial`), an always-on assertion.
+  `witnesses.rs::pinned_start_has_a_witness` builds that case: pre-existing orders under
+  the shop in slot 0 (a start set by hand, since no built model pins a slot) and shops whose
+  tier is free at the start.
 - The `G_T` reasons other than "S". On the 15 reduced cones the corpus and the samples run up
   to `G_T`, every fixed entity has at least two reasons, with one exception:
   insurance-claim-ops' Claim, fixed for "S action param" alone. Dropping that reason there,
