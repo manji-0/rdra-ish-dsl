@@ -18,6 +18,8 @@
 use crate::lifecycle::narrow::id8;
 mod breaks;
 mod canon;
+#[cfg(test)]
+mod g6;
 #[cfg(any(test, feature = "shadow"))]
 pub(super) mod reference;
 #[cfg(test)]
