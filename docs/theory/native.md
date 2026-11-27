@@ -14,14 +14,15 @@ over `crates/rdra-ish-core/src/lifecycle`, `crates/rdra-ish-core/src/{memory,sha
 `crates/rdra-ish-cli/src/verify` and `crates/rdra-ish-emit/src/tla` is empty, so the
 verifier is the same at both. Code is cited as in [semantics.md](./semantics.md): paths are
 relative to `crates/rdra-ish-core/src/lifecycle/` unless they start with `cli/`
-(`crates/rdra-ish-cli/src/`) or name the crate root (`core-root/`, for
+(`crates/rdra-ish-cli/`) or name the crate root (`core-root/`, for
 `crates/rdra-ish-core/src/`).
 
-Two reproductions in this document ran a release build of the CLI at `64232981`, the
-parent of `fb6928c7` whose `crates/` tree is identical to it. The binary was built in a
-sibling worktree whose cleanliness at build time was not checked; the behaviour it showed
-is the one the code at the pinned commit predicts, which is why it is reported. Both runs
-took under a second.
+Two reproductions in this document ran a release build of the CLI from a sibling worktree
+on `64232981`, the parent of `fb6928c7` with the same `crates/`. That worktree's
+`crates/rdra-ish-core/src` and `crates/rdra-ish-cli/src` are byte-identical to the pinned
+commit's (`diff -rq`), its `crates/rdra-ish-emit/src` differs only under `codegen/`, and no
+core or CLI source file there is newer than the binary. The models and commands are in
+[Reproductions](#reproductions); each run takes under a second.
 
 ---
 
@@ -62,7 +63,7 @@ state (`always`, state rules, `precedes`), a reachable step (`after`, `stable`,
 
 **N1 (BFS).** If a run of `T` is complete, then `S_G = Reach(T)`, every step `s → s'` of
 `T` with `s ∈ Reach(T)` is an edge of `G` (one per binding and fork that produces it), and
-for each non-initial state the parent edge (`Graph::parent`) lies on a shortest trace to it.
+for each non-initial state the parent edge (`ComponentRun::parent`) lies on a shortest trace to it.
 
 *Algorithm.* `Bfs::go` admits the initial states (`TransitionSystem::initial_states`, D4)
 in the order that function lists them. `Bfs::explore` then reads the states in admission
@@ -127,9 +128,9 @@ bits):
   `ok (256 states)` and `result: ok`, in either declaration order of the two use cases.
   This is a wrong `ok`.
 
-The bound is reachable only at large bounds (255 slots and wide entities, or a few hundred
-cells of 8 bits more generally), which no sample uses; but D1 admits it and nothing rejects
-it.
+The bound is reachable only at large bounds: a cone state of more than 8,191 packed bytes,
+about 8,192 cells of 8 bits (for example 255 slots of an entity with 32 or more Int
+columns at `m = 255`). No sample comes near it, but D1 admits it and nothing rejects it.
 
 ## Memory accounting and the stop rule
 
@@ -139,7 +140,10 @@ it.
 **N3 (Charge).** Before each admission `Bfs::admit_packed` computes the bytes the store
 would hold with one more state (`Bfs::bytes_with_one_more`) from the lengths and capacities
 of the run's own collections, and asks the run's `core-root/memory.rs::Charge` to cover
-them; a refusal stops the run before the state is stored. The count is a function of the
+them; a refusal stops the run before the state is stored. The count is
+`kept_with(1) + Seen::bytes_with(1)` (`explore/store.rs`): the states, the steps (parents
+and edges), the orbit self-edges and permutations, the bindings' bytes, and the layers,
+each from its length and capacity, plus the table. It is a function of the
 sequence of admissions and edges alone (`explore/store.rs` models it as `store_bytes`), so
 for a fixed sequence it is the same on every machine and thread count. Kani proves
 `store_bytes` never overflows, only grows, and is at most the model before #296; the unit
@@ -150,7 +154,8 @@ formal-verification.md says.
 
 **N15 (Stops give `not decided`).** Every reader below returns `Undecided` (or
 `NotDecided`, or leaves the finding open) on a stopped graph unless it found a violation in
-the part explored, and the CLI maps that to `not decided` (`cli/src/verify/end.rs::End::result`).
+the part explored, and the CLI maps that to `not decided` (`cli/src/verify/end.rs::End::result`,
+cited from row N15 and not re-read here).
 A stopped run's counterexamples are sound for safety (they are paths of `G`, hence traces
 of `T`) and for liveness by N10. The time budget (`Caps::deadline`, read every 256
 admissions) is the one stop whose position depends on the machine.
@@ -176,9 +181,13 @@ bindings, diagnostics and stop point.
 within the state). Let `Σ_j` be the reader's state after `m_j`. Claim: `Σ_j` is the same in
 `R_k` and `R_0` for every `j`.
 
-1. *The moves of a state, and their order, are a function of the state.* `moves_into`
-   iterates actions and their bindings in index order; canonicalization (`Canon`) and
-   packing carry no state between calls. A worker and the reader call the same functions,
+1. *The moves of a state, and their order, are a function of the state.* On an unreduced
+   system `moves_into` goes through `each_raw_move`, which iterates the actions in index
+   order and, per action, the bindings `each_enabled` yields and the successors
+   `each_successor` yields; it reads the state, the system and its own scratch only. On a
+   reduced system the moves come from `moves_of_into` in `reduce/`, which was not read for
+   this step: that it too reads nothing but the state and the system is the missing part.
+   Canonicalization (`Canon`) and packing carry no state between calls. A worker and the reader call the same functions,
    so the move list read at `m_j` is the same, and so is each move's `Probe::Loop` or
    `Probe::OrbitSelf` flag, packed successor, hash and binding number. Chunk boundaries
    differ between `R_k` and `R_0` (the reader expands what no worker holds), and nothing
@@ -210,13 +219,20 @@ Hence `Σ_j` agrees for all `j`, and with it everything the readers below comput
 
 - *The pool.* "Alone" matters: `Charge::cover` succeeds or fails against what the other
   runs of the command hold (`MemoryPool::charge`), and with `RDRA_JOBS` cones run side by
-  side. The CLI reruns a run that met the memory limit beside others once `in_parallel`
-  returns (`cli/src/verify/bfs.rs::bfs_cones`, `targets.rs` around `seen.crowded`,
-  `Native::crowded`). That the rerun's pool then holds the same bytes whatever the job
-  count, given results kept charged (`MemoryPool`, "kept"), the quotient cache
-  (`reduce/cache.rs`) and released entity cones, is not argued anywhere and was not
-  verified here: open problem P53. Evidence: `cli/tests/memory_cli.rs::cones_side_by_side_stop_where_they_stop_one_at_a_time`
-  and `::a_stopped_entity_cone_leaves_its_room_on_any_number_of_threads`.
+  side. Two mechanisms restore the one-job result. In the entity pass,
+  `targets.rs::TransitionSystem::run_cones` defines the result as that of the cones run one
+  at a time in cone order, each with the room the earlier results leave: a run that was
+  crowded (`memory::Watched::crowded`, a refusal within the pool's room) or whose peak
+  exceeds that room runs again under `pool.with_room(room)`, an explicit room computed from
+  the results before it. The quotients are reduced one at a time in target order
+  (`cli/src/verify/jobs.rs`), so what the quotient cache holds is the same on any job count.
+  native-bfs-parallel.md, "The memory pool", argues the same for #260's rerun. The CLI's
+  safety and property passes (`cli/src/verify/bfs.rs::bfs_cones`, `Native::crowded` in
+  `cli/src/verify/native.rs`) rerun a crowded run against the command's pool itself, not an
+  explicit room. That the pool holds the same bytes at that rerun whatever the job count is
+  the one step not shown (open problem P53). Evidence:
+  `cli/tests/memory_cli.rs::cones_side_by_side_stop_where_they_stop_one_at_a_time` and
+  `::a_stopped_entity_cone_leaves_its_room_on_any_number_of_threads`.
 - *The table under probing* (step 3) holds only on the probe paths, which release builds
   do not take.
 
@@ -239,8 +255,8 @@ and arena tests are Miri-aware (`cfg(miri)` in `explore/table.rs`, `explore/aren
 no workflow runs Miri.
 
 **N17 (Output independent of `RDRA_JOBS`).** Follows from N4 for each run, from the
-in-order collection of `in_parallel` results, and from P53's missing step for runs that
-met the memory limit. Evidence: as N4.
+in-order collection of `in_parallel` results, and, for runs that met the memory limit, from
+the reruns above, up to P53's missing step. Evidence: as N4.
 
 ## Safety
 
@@ -328,7 +344,7 @@ in BFS order over all bindings, ends the reported trace, which is therefore shor
 
 A stopped graph must not be read: an unexpanded state has no out-edges and would look
 stuck. The guard is the match arm `Target::Reach(i) if !cones[at].run.complete` in
-`targets.rs::TransitionSystem::explore_targets_with`, which records the property as
+`targets.rs::TransitionSystem::answer_targets`, which records the property as
 undecided; `reach_failure` and `TransitionSystem::verdict` only `debug_assert!` completeness.
 This confirms open problem P19. TLC cannot state `can_reach`, so the evidence is unit tests
 alone (row N8).
@@ -360,8 +376,15 @@ violation of it, and only when no stored state meets one of its premises
 complete plain run "no stored state" is "no reachable state" by N1. On a reduced run or a
 run up to symmetry the stored states are representatives; that a premise met by some
 member of a class is met by its representative is theme (a). The `after` premise is read
-from the step's ends (`Graph::step_ends`), which count self-loop moves as runs of the use
+from the step's ends (`ComponentRun::step_ends`), which count self-loop moves as runs of the use
 case, consistent with P51.
+
+Properties have a check of the same kind, `targets.rs::TransitionSystem::property_vacuity`,
+on a complete run of the property's cone: it warns when no stored state, under some binding
+of the binders to present rows, meets the `.along` link together with the form's own
+condition (the trigger of a `leads_to`, what a `stable` keeps, the `.when` of an
+`unchanged`, what a `precedes` asks for first). It is read off the same run that decides
+the property and changes no verdict.
 
 ## Liveness
 
@@ -478,6 +501,7 @@ open problem P6; TLC reads the printed formula the same way.
 ## Counterexamples: what is checked before printing
 
 <!-- derived-from ../design/native-temporal-verification.md#counterexamples -->
+<!-- derived-from ../formal-verification.md#what-verify-checks -->
 
 **N16** claims that every printed counterexample replays. The table records, per check and
 per kind of run, what the code does to a trace before it prints. *Replayed* means matched
@@ -541,15 +565,31 @@ The `Twin::OrbitLiveness` twin compares the orbit search with the plain run's `a
 not N9 itself; it skips runs past 200,000 states (`orbit/reference.rs::SHADOW_CAP`), as do
 `Twin::OrbitRun` and `Twin::OrbitStateModels`. This confirms the twin parts of P9 and P17.
 
+## Features that add no case to the verifier
+
+<!-- derived-from ../design/counted-events.md#the-transition-system -->
+<!-- derived-from ../design/counting-rules.md#native-checker -->
+<!-- derived-from ../design/event-order.md#checks-and-findings -->
+
+Raised marks, counted triggers, and counted quantifiers reach the verifier as ordinary
+variables, guards and effects, so every statement above applies to them without a new
+case. A raised latch or counter is a `VarKind::Raised` variable whose raise and handling
+are `Effect::Transition` arms, with the overflow rule an ordinary `Invariant`
+(counted-events.md, "The transition system"). A counted quantifier is evaluated by `eval`
+over every slot of its entity (counting-rules.md, "Native checker"). Deadlocks read view
+columns only, so a mark is never a stuck value; `.fair(UC)` on a triggered use case makes
+each of its variants a fair action whose enabledness reads its mark (event-order.md,
+"Checks and findings").
+
 ## Related work
 
 - **Explicit-state model checking.** The store, BFS and per-state checks follow SPIN
   (Holzmann, "The model checker SPIN", IEEE TSE 23(5), 1997) and TLC (Yu, Manolios,
   Lamport, "Model checking TLA+ specifications", CHARME 1999). Like TLC and unlike SPIN's
-  default, exploration is breadth-first, which gives shortest safety traces; like both,
-  states are stored exactly (no hash compaction or bitstate hashing), so a hash collision
-  costs time, not soundness. TLC stores fingerprints and accepts a small collision
-  probability; rdra-ish compares full packed rows.
+  default, exploration is breadth-first, which gives shortest safety traces; unlike TLC, which stores 64-bit fingerprints and accepts a small probability of merging
+  two states, and unlike SPIN's bitstate mode, rdra-ish stores each state exactly and
+  compares full packed rows, so a hash collision costs time, not soundness (P50 is a fault
+  of the encoding, not of hashing).
 - **Fair cycle detection.** Deciding a liveness property under weak fairness by strongly
   connected components of the graph restricted to the goal's complement goes back to
   Lichtenstein and Pnueli ("Checking that finite state concurrent programs satisfy their
@@ -586,12 +626,16 @@ not N9 itself; it skips runs past 200,000 states (`orbit/reference.rs::SHADOW_CA
   `holds_bound` and `triggers`. Self-certification catches a fault in the search, not in
   these.
 - **Wide states.** P50 is a wrong `ok` reachable within the documented bounds.
-- **Determinism of memory stops beside other runs** rests on the crowded rerun (P53).
+- **Determinism of memory stops beside other runs** rests on the reruns of N4; one step is
+  not shown for the CLI's passes (P53).
 - **Reproductions** used a binary built in another worktree (see the first paragraph); the
   issues that take P50 and P51 up should reproduce them on a clean build.
-- **Not re-read here:** `cli/src/verify/bfs.rs::BfsCone::verdict` (P10),
-  `explore/moves.rs` beyond its iteration order, and the orbit readers' internals beyond
-  their certification steps.
+- **Not re-read here:** `cli/src/verify/end.rs` (N15), `reduce/`'s `moves_of_into` (N4,
+  step 1), and the orbit readers' internals beyond their certification steps.
+- **P10 confirmed.** `cli/src/verify/bfs.rs::BfsCone::verdict` returns `counterexample`
+  whenever the run found a violation, stopped or not, and `None` (`not decided`) only for a
+  stopped run with none; formal-verification.md's "leaves its invariants `not decided`"
+  does not describe that.
 
 ## Open problems this document records
 
@@ -602,8 +646,47 @@ not N9 itself; it skips runs past 200,000 states (`orbit/reference.rs::SHADOW_CA
 
 New: P50 (packing past 65,535 bits; wrong `ok`, reproduced), P51 (`after` skips steps with
 `s' = s`; reproduced; the engines agree), P52 (a reduced safety trace whose lifted last
-state no longer violates keeps the reduced message silently), P53 (memory-stop determinism
-beside other runs is not argued). Confirmed on the code: P6, P17 (orbit twins), P19, P20
-(restated as the table above). Corrected: P18 (`SameAs` and `DenseBinding` are release
+state no longer violates keeps the reduced message silently), P53 (one step of memory-stop
+determinism for the CLI's reruns is not shown). Confirmed on the code: P6, P10, P17 (orbit
+twins), P19, P20 (restated as the table above). Corrected: P18 (`SameAs` and `DenseBinding` are release
 paths whose twins run in every `shadow` run). The [index](./README.md#open-problems) holds
 the entries.
+
+## Reproductions
+
+The two runs behind P50 and P51, with the binary described in the first paragraph.
+
+**P51.** The model:
+
+```
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(open, closed) @default(open)
+  flag: Bool @default(false)
+}
+usecase Create "作成"
+usecase Touch "触る"
+buc B "B"
+contains(B, Create)
+contains(B, Touch)
+creates(Create, Order)
+updates(Touch, Order)
+sets(Touch, Order.status == open)
+after(Touch).assert(Order.flag == true)
+```
+
+`rdra-ish verify` prints `Cone_AfterAssert_Touch_0 [AfterAssert_Touch_0]: ok (3 states)`.
+With `sets(Touch, Order.status == closed)` it prints `counterexample (7 states)`.
+
+**P50.** One entity `Row` with `id: Int @pk` and 34 columns `c0` to `c33`, each
+`Int @default(0)`; every flag below is given to `verify`.
+
+1. One use case `Create` that creates a `Row` and `sets` every column to 1, and
+   `forbidden(Row, Row.c33 == 0, Row.c0 != 2, …, Row.c32 != 2)`. With
+   `--instance-count 255 --int-range-max 255 --memory 1GiB`: `counterexample (256 states)`,
+   a two-step trace whose created rows show `c32=0, c33=0`. With `--instance-count 8`: `ok`.
+2. Two use cases `CreateA` and `CreateB` that create a `Row`; `CreateA` sets every column to
+   1, `CreateB` sets `c32` to 2 and every other column to 1; and
+   `forbidden(Row, Row.c32 == 2, Row.c0 != 3, …)` over every other column. At
+   `--instance-count 8`: `counterexample (511 states)`. At `--instance-count 255`:
+   `ok (256 states)`, `result: ok`, with the two `usecase` declarations in either order.
