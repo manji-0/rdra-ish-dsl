@@ -397,10 +397,13 @@ from the unreduced cone (`property_cone.rs::PropertyCone::bundle`), while the na
 | 4, temporal properties and fairness | above | verdicts only: 23 `TEMPORAL_CASES` at 2 instances and the corpus at each case's flags | TLC's liveness checking under quantified weak fairness |
 | 5, latch | above | verdicts only: `explored_along` (a `TEMPORAL_CASES` fixture) and the corpus case `safety_precedes_latch`. The graph comparison prints `PrintMode::Safety` modules, which declare no latch (`mod.rs::checked_properties` checks no property in that mode), so it never sees one | |
 
-[read] No step of T1 is checked on a binding: the graph comparison compares edges as
-`(from, to, action)` (`engine_equivalence.rs`, `type Move`), so two bindings with the same
-effect are one edge. A fault that attributes a step to the wrong fair instance is visible
-only through a liveness verdict.
+[read] Until #507 no step of T1 was checked on a binding: the graph comparison compared
+edges as `(from, to, action)`, so two bindings with the same effect were one edge, and a
+fault that attributed a step to the wrong fair instance was visible only through a liveness
+verdict (P25). Since #507 the comparison prints the cone with one `Next` disjunct per
+binding (`tla::print_bound`), TLC names each edge after it, and edges compare as
+`(from, to, action, params)` (`engine_equivalence.rs`, `type Move`). A class move of a
+reduced cone prints with no params, so its edges still compare by action alone.
 
 ## 2. The agreement rules
 
@@ -537,7 +540,8 @@ than the translator once for all inputs.
   left out (`plan_model`).
 - **Compares** (`check_cone`). TLC's distinct-state count and its `-dump dot,actionlabels`
   graph, decoded through `dec`, against the BFS graph: the reached states, the initial
-  states, the edges as `(from, to, action)`; the state-model findings of every entity on
+  states, the edges as `(from, to, action, params)` from a module printed with one `Next`
+  disjunct per binding (`tla::print_bound`); the state-model findings of every entity on
   both graphs; the violated invariants and `after` assertions, rerunning TLC without each
   found check until no new one appears; and each TLC trace replayed through the native
   step relation (`replay_violations`). `a_corrupted_tlc_trace_does_not_replay` checks that
