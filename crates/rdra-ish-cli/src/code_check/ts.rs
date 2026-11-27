@@ -8,7 +8,7 @@ use std::path::{Component, Path, PathBuf};
 
 use rdra_ish_emit::codegen::ir::{ContractDecl, PortMethod};
 use rdra_ish_emit::codegen::probe::Probe;
-use rdra_ish_emit::codegen::{probe_for, Lang, ProbeBinding};
+use rdra_ish_emit::codegen::{Lang, ProbeBinding};
 
 use super::map::{CompilerMessage, Finding};
 use super::{Backend, Target};
@@ -125,11 +125,14 @@ impl Backend for TypeScript {
             .unwrap_or_else(|| format!("new service.{ty}()"));
         let binding = ProbeBinding {
             service: format!("{}#{ty}", specifier(&probe_dir, &service_file)),
-            module: specifier(&probe_dir, &normal(&t.path(&t.target.domain))),
+            module: specifier(&probe_dir, &normal(&t.path(t.target.code_file()))),
             conformance: traces.map(|traces| (new, traces)),
             package: None,
         };
-        Some((path, probe_for(Lang::TypeScript, domain, &binding)?))
+        Some((
+            path,
+            super::probe_of(t, Lang::TypeScript, domain, &binding)?,
+        ))
     }
 
     /// The probe, and `tsconfig.rdra.json` in the root.

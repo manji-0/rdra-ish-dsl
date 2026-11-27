@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use rdra_ish_emit::codegen::ir::{ContractDecl, PortMethod};
 use rdra_ish_emit::codegen::probe::Probe;
-use rdra_ish_emit::codegen::{probe_for, Lang, ProbeBinding};
+use rdra_ish_emit::codegen::{Lang, ProbeBinding};
 
 use super::map::{CompilerMessage, Finding};
 use super::{Backend, Target};
@@ -35,7 +35,7 @@ impl Backend for Rust {
             conformance: t.target.new.clone().zip(traces),
             package: None,
         };
-        Some((path, probe_for(Lang::Rust, domain, &binding)?))
+        Some((path, super::probe_of(t, Lang::Rust, domain, &binding)?))
     }
 
     fn build_command(&self, t: &Target<'_>) -> Option<Vec<String>> {
@@ -50,11 +50,14 @@ impl Backend for Rust {
     fn run_command(&self, t: &Target<'_>) -> Option<Vec<String>> {
         let name = test_name(t.target.probe.as_ref()?)?;
         t.target.new.as_ref()?;
-        Some(
-            ["cargo", "test", "--test", &name, "--", "rdra_conformance"]
-                .map(str::to_string)
-                .to_vec(),
-        )
+        let mut command: Vec<String> = ["cargo", "test", "--test", &name, "--", "rdra_conformance"]
+            .map(str::to_string)
+            .to_vec();
+        // The adapter's test prints what it ran, which libtest shows only so.
+        if t.target.adapter.is_some() {
+            command.push("--nocapture".to_string());
+        }
+        Some(command)
     }
 
     fn parse_messages(&self, stdout: &str, _stderr: &str) -> Vec<CompilerMessage> {

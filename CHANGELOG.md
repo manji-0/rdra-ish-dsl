@@ -4,6 +4,21 @@
 
 ### Added
 
+- `codegen --adapter` (experimental, with `--conformance`) prints a black-box model adapter in
+  place of the domain code, for Rust, Go and TypeScript (#439): plain data of the model's
+  state (`ModelState`: rows by id with their tracked columns, run marks, raises) and calls
+  (`Call`), the `ModelAdapter` interface (`reset`, `seed`, `observe`, `invoke`, which returns
+  that the call ran or a refusal kind, and optional `prepare` and `commit`, only as a pair), and a harness over
+  the same traces that reports in the same words. It uses no type of the domain code, so a
+  project that renamed or restructured the code it took maps its service to the model in a
+  small adapter. `adapter = "<file>"` in a `[code.<lang>]` table names it in place of
+  `domain` (a table names one of them, and `adapter` needs `traces`; another table fails to load, as a table without `domain` did): `codegen --code` writes it
+  and an adapter probe, `check --code=fresh` compares only it, the traces and the probe, and
+  `--code=run` runs it, adds a `ran:` line with what the adapter ran (and how many
+  interleaved commits it ran as plain calls when it has no `prepare` and `commit`), and runs
+  the self-check through it. The default run command gains `--nocapture` (Rust) or `-v` (Go)
+  for such a table. Nothing changes for a table with `domain`. See docs/cli-reference.md, "The
+  model adapter".
 - `codegen --lang rust --verus <DIR>` (experimental) also writes a Verus crate to `DIR`, in
   which a modified core is checked against the verified model for any number of rows (#444):
   the model as spec with a proof that every run keeps its rules, a contract per function as

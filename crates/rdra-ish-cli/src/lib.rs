@@ -253,6 +253,7 @@ pub fn run() -> Result<()> {
             seal,
             check,
             verus,
+            adapter,
         } => {
             if seal && !matches!(lang, Some(cli::CodegenLang::Ts) | None) {
                 use clap::CommandFactory;
@@ -290,6 +291,7 @@ pub fn run() -> Result<()> {
                 code,
                 probe,
                 verus: verus.as_deref(),
+                adapter,
             })?
         }
 

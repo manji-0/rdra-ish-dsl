@@ -27,7 +27,8 @@ pub fn code_notes(manifest: &Manifest, program: &ResolvedProgram) -> Vec<CodeNot
     for (name, target) in code.targets() {
         let line = table_line(&text, name);
         let files: Vec<&PathBuf> = [
-            Some(&target.domain),
+            target.domain.as_ref(),
+            target.adapter.as_ref(),
             target.traces.as_ref(),
             target.probe.as_ref(),
         ]

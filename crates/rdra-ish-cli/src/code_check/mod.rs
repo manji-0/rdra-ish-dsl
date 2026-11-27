@@ -18,6 +18,7 @@ use std::process::Command;
 
 use anyhow::{Context, Result};
 use rdra_ish_core::project::{CodeTarget, Manifest};
+use rdra_ish_emit::codegen::adapter::{Ran, REPORT};
 use rdra_ish_emit::codegen::conformance::{mutants, Mutant, MutantKind, TRACES_ENV};
 use rdra_ish_emit::codegen::ir::{ContractDecl, PortMethod};
 use rdra_ish_emit::codegen::probe::{ContractIndex, Probe};
@@ -86,7 +87,7 @@ impl Target<'_> {
         if let Some(root) = &self.target.root {
             return self.path(root);
         }
-        let domain = self.path(&self.target.domain);
+        let domain = self.path(self.target.code_file());
         let start = domain.parent().map(Path::to_path_buf).unwrap_or_default();
         start
             .ancestors()
@@ -178,31 +179,77 @@ pub(crate) trait Backend {
     }
 }
 
+/// The probe of `t` in `lang`: the model adapter's when the table names `adapter`, else the
+/// contract probe of the domain code.
+fn probe_of(
+    t: &Target<'_>,
+    lang: rdra_ish_emit::codegen::Lang,
+    domain: &rdra_ish_emit::codegen::ir::DomainModel,
+    binding: &rdra_ish_emit::codegen::ProbeBinding,
+) -> Option<Probe> {
+    if t.target.adapter.is_some() {
+        rdra_ish_emit::codegen::adapter::probe(lang, domain, binding)
+    } else {
+        rdra_ish_emit::codegen::probe_for(lang, domain, binding)
+    }
+}
+
 /// `build`: the build command (rdra.toml's, else the backend's) in the root, its errors
 /// mapped to use cases; `None` when there is no command.
-fn build(backend: &dyn Backend, t: &Target<'_>) -> Option<Result<Vec<CodeDiagnostic>>> {
+fn build(backend: &dyn Backend, t: &Target<'_>) -> Option<Result<Stepped>> {
     let command = t
         .target
         .build
         .clone()
         .or_else(|| backend.build_command(t))?;
-    Some(compile(backend, t, &command))
+    Some(compile(backend, t, &command).map(|found| (found, Vec::new())))
+}
+
+/// What a step found, and the lines it adds to the coverage statement.
+type Stepped = (Vec<CodeDiagnostic>, Vec<String>);
+
+/// The line of the coverage statement that says what a passing model adapter ran (#439), from
+/// the line its conformance test prints; empty for the generated port, whose test prints none.
+fn ran_line(t: &Target<'_>, stdout: &str, stderr: &str) -> Vec<String> {
+    if t.target.adapter.is_none() {
+        return Vec::new();
+    }
+    let Some(ran) = Ran::read(&format!("{stdout}\n{stderr}")) else {
+        return vec![format!(
+            "  ran: not reported: the run command printed no `{}` line",
+            REPORT.trim_end()
+        )];
+    };
+    let mut line = format!(
+        "  ran: {} traces, {} calls, {} refused calls, {} interleaved commits",
+        ran.traces, ran.calls, ran.refusals, ran.interleavings
+    );
+    if ran.skipped > 0 {
+        line.push_str(&format!(
+            "; {} interleavings run as plain calls: the adapter has no prepare and commit, so conditional writes are not checked",
+            ran.skipped
+        ));
+    }
+    vec![line]
 }
 
 /// `run`: the run command (rdra.toml's, else the backend's) in the root; a failure is one
 /// diagnostic with the harness's report ([`Backend::run_failure`]), else the output's last
 /// line. `None` when there is no command.
-fn run_step(backend: &dyn Backend, t: &Target<'_>) -> Option<Result<Vec<CodeDiagnostic>>> {
+fn run_step(backend: &dyn Backend, t: &Target<'_>) -> Option<Result<Stepped>> {
     let command = t.target.run.clone().or_else(|| backend.run_command(t))?;
     Some((|| {
         let (ok, stdout, stderr) = execute(t, &command, None)?;
         if ok {
-            return Ok(Vec::new());
+            return Ok((Vec::new(), ran_line(t, &stdout, &stderr)));
         }
         // The whole output first: the diagnostic quotes one line of it.
         eprint!("{stdout}");
         eprint!("{stderr}");
-        Ok(vec![run_diagnostic(backend, &command, &stdout, &stderr)])
+        Ok((
+            vec![run_diagnostic(backend, &command, &stdout, &stderr)],
+            Vec::new(),
+        ))
     })())
 }
 
@@ -349,7 +396,7 @@ pub(crate) fn extra_files(
 }
 
 /// A level past `fresh`: [`build`] or [`run_step`].
-type Step = fn(&dyn Backend, &Target<'_>) -> Option<Result<Vec<CodeDiagnostic>>>;
+type Step = fn(&dyn Backend, &Target<'_>) -> Option<Result<Stepped>>;
 
 /// A language with no build or run check yet: `fresh` only.
 struct FreshOnly;
@@ -557,7 +604,7 @@ pub(crate) fn run(
             roots.push(root);
         }
         let extra = backend.extra_files(&t);
-        generated_files.push(t.path(&target.domain));
+        generated_files.push(t.path(target.code_file()));
         generated_files.extend(target.traces.as_ref().map(|p| t.path(p)));
         generated_files.extend(extra.iter().map(|(p, _)| t.path(p)));
         if !fresh(&t, &extra)? {
@@ -586,11 +633,12 @@ pub(crate) fn run(
                     break;
                 }
                 Some(result) => {
-                    let mut found = result?;
+                    let (mut found, ran) = result?;
                     if at == CodeLevel::Run {
                         let passed = found.iter().all(|d| d.warning);
                         let (lines, finding) = coverage(&t, deny_incomplete);
                         statements.extend(lines);
+                        statements.extend(ran);
                         found.extend(finding);
                         if passed && mutation.per_kind > 0 {
                             let (lines, survivors) = self_check(backend.as_ref(), &t, mutation)?;
@@ -668,7 +716,7 @@ pub(crate) fn run(
 /// model generates; prints each difference on stderr.
 fn fresh(t: &Target<'_>, extra: &[(PathBuf, String)]) -> Result<bool> {
     let hash = &t.generated.model_hash;
-    let mut fresh = compare(&t.path(&t.target.domain), |p| {
+    let mut fresh = compare(&t.path(t.target.code_file()), |p| {
         check_code(p, &t.generated.code, hash)
     })?;
     if let (Some(path), Some((text, _))) = (&t.target.traces, &t.generated.traces) {

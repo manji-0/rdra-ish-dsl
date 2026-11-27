@@ -228,7 +228,7 @@ checks nothing, a note says so, and the exit status is the model check's.
 
 | Level | What it checks |
 |---|---|
-| `fresh` | Each file `codegen --code` writes is what the model generates now: the domain code by its text, as [`codegen --check`](#codegen) compares it, and the traces by hash. A missing file is an error. No compiler runs. |
+| `fresh` | Each file `codegen --code` writes is what the model generates now: the domain code (or the [model adapter](#the-model-adapter)) by its text, as [`codegen --check`](#codegen) compares it, and the traces by hash. A missing file is an error. No compiler runs. |
 | `build` | `fresh`, then the language's build command on the probe. Each compiler error maps back to a use case. |
 | `run` | `build`, then the conformance test. |
 
@@ -237,9 +237,9 @@ table. The LSP never does.
 
 | Language | `build` | `run` |
 |---|---|---|
-| Rust | `cargo check --test <probe> --message-format=json` in `root` | `cargo test --test <probe> -- rdra_conformance` |
+| Rust | `cargo check --test <probe> --message-format=json` in `root` | `cargo test --test <probe> -- rdra_conformance`, with `--nocapture` after it for a model adapter |
 | TypeScript | `tsc --noEmit --pretty false -p tsconfig.rdra.json` in `root` | `node <probe>` (Node 22.18 or later, by type stripping; the service imports name the `.ts` files) |
-| Go | `go test -count=1 -run ^$ -gcflags=-e ./<probe dir>` in `root` | `go test -count=1 -run ^TestRdraConformance$ ./<probe dir>` |
+| Go | `go test -count=1 -run ^$ -gcflags=-e ./<probe dir>` in `root` | `go test -count=1 -run ^TestRdraConformance$ ./<probe dir>`, with `-v` for a model adapter |
 
 `tsconfig.rdra.json` is a generated file that extends the project's tsconfig and holds only
 the probe. An older Node fails `run` with a `CodeConformance` that says so; a project that
@@ -327,6 +327,18 @@ call the model refuses passes such a suite. The exit status does not change unle
 `--deny-incomplete` is given. Raise `conformance_states` and run `codegen --code` again to
 complete it. The statement describes the traces, so it is the same when `run` in the table
 replaces the default command.
+
+A table with a [model adapter](#the-model-adapter) adds one line after the statement, read
+from the line the adapter's conformance test prints on a pass:
+
+```
+  ran: 9 traces, 19 calls, 9 refused calls, 7 interleaved commits
+```
+
+An adapter without `prepare` and `commit` runs each interleaved commit as a plain call, and
+the line ends `; 7 interleavings run as plain calls: the adapter has no prepare and commit, so
+conditional writes are not checked`. A `run` command that hides the test's output gets
+`ran: not reported`.
 
 #### The self-check
 
@@ -671,7 +683,8 @@ Error: /work/shop/rdra.toml:3: unknown field `verfiy`, expected one of `model`, 
 
 `[code.rust]`, `[code.go]`, and `[code.ts]` name the files `codegen --code` writes for a
 service in that language, which [`check --code`](#check---code) holds against the model. Each
-path is relative to the directory of `rdra.toml`. Only `domain` is required.
+path is relative to the directory of `rdra.toml`. A table names `domain` or `adapter`, not
+both.
 
 ```toml
 [code.rust]
@@ -700,6 +713,7 @@ Unique_Payment_Order = "../service/migrations/003_payment.sql"
 | Key | Meaning |
 |---|---|
 | `domain` | The file `codegen` writes for the language. |
+| `adapter` | In place of `domain`: the [model adapter](#the-model-adapter) (`codegen --adapter`). Needs `traces`. `fresh` then compares only this file, the traces, and the probe, so the project may rename and edit the domain code it took. |
 | `traces` | The conformance traces. With it, `domain` also holds the conformance port and harness (`--conformance`). |
 | `conformance_states` | `--conformance-states` of the traces. Default `65536`. |
 | `probe` | The file `codegen --code` (or `--probe`) writes: one line per use case stating that `service` implements its contract (`<UseCase>UseCase`). Rust: a file under the service crate's `tests/`. TypeScript: a `.ts` file in the project; `codegen --code` also writes `tsconfig.rdra.json` in `root`. Go: a `_test.go` in the service's package directory (`package <svc>_test`). `build` needs it. |
@@ -713,7 +727,38 @@ Unique_Payment_Order = "../service/migrations/003_payment.sql"
 | `tsconfig` | TypeScript: the tsconfig `tsconfig.rdra.json` extends. Default: `tsconfig.json` in `root` when it exists; else `tsconfig.rdra.json` sets `strict` itself. |
 
 An unknown key fails every loading command, as under `[check]`. `seal` or `tsconfig` under
-`[code.rust]` or `[code.go]` makes `--code` exit 1.
+`[code.rust]` or `[code.go]` makes `--code` exit 1, and so does a table with neither `domain`
+nor `adapter`, with both, or with `adapter` and no `traces`.
+
+#### The model adapter
+<!-- derived-from ./design/code-check.md#the-black-box-model-adapter -->
+
+A project that changed the domain code it took (renamed it, split it, wrote its own) can no
+longer pass `fresh` on it, and its service no longer implements the generated port. It binds
+the service to the traces through a model adapter instead: `adapter` in the table, written
+by `codegen --adapter`. The file holds plain data and no type of the domain code:
+
+- `ModelState`: per entity, the rows with their id and the columns the model tracks (a
+  column whose value the model ignores is a bool, set or not), the pending run marks, and
+  the raises a triggered use case reads.
+- `Call`: one case per use case action, with the ids, the event, the inputs and the choices
+  the traces give.
+- `ModelAdapter`: `reset`, `seed(ModelState)`, `observe() -> ModelState`, and
+  `invoke(Call)`, which says the call ran or the kind of refusal (`NotEnabled`, `Rejected`,
+  `InvalidArgument`). Optional, and only as a pair, `prepare(Call)` and `commit()` split a
+  call for the traces' interleaved commits (Rust: `split()` returns the adapter as a
+  `SplitAdapter`; Go: the adapter also implements `SplitAdapter`; TypeScript: optional
+  members, and each method may return a promise). `invoke` must do what `prepare` then
+  `commit` do: the traces' plain calls go through `invoke` only, so nothing else shows that a
+  commit ever stores its write.
+- `conform` / `Conform`: the harness. It reads the same traces as the port's harness and
+  reports a difference in the same words.
+
+The service implements `ModelAdapter` over its own code; `service` names that type, `module`
+the adapter file's module (Rust) or import path (Go, which puts the file in a package of its
+own named by `package`), and `new` makes one. The probe then holds only the conformance test,
+and the self-check runs through it. The adapter picks the values of the columns the model
+does not track when it seeds, and it must reach the real store (H3).
 
 ### Per-entity instance counts
 <!-- constrained-by #project-manifest -->
@@ -1799,8 +1844,8 @@ finish.
 
 ```
 rdra-ish codegen <INPUTS...> --lang ts|rust|go [-o <FILE> | --check <FILE>] [--package <NAME>]
-                 [--allow-failing] [--conformance <FILE> [--conformance-states <N>]] [--seal]
-                 [--verus <DIR>]
+                 [--allow-failing] [--conformance <FILE> [--conformance-states <N>] [--adapter]]
+                 [--seal] [--verus <DIR>]
 rdra-ish codegen <INPUTS...> --format json [-o <FILE>] [--allow-failing]
 rdra-ish codegen <INPUTS...> --code
 rdra-ish codegen <INPUTS...> --probe
@@ -1828,6 +1873,7 @@ going, and [Generated code style](./design/algebraic-codegen.md#generated-code-s
 | `--conformance-states <N>` | `65536` | The most states the BFS behind the traces explores. After writing the traces, `codegen` prints their coverage statement on stderr (as [`check --code=run`](#what-a-run-covers) does), and `warning: <traces>: the conformance BFS stopped at its cap ...` when it stopped there. |
 | `--seal` | off | `--lang ts` only (else exit 2): each state type gets a property keyed by an unexported `unique symbol`, so code outside the module cannot write a state as an object literal (TS2741). A type assertion still gets around it. |
 | `--check <FILE>` | none | Generate again and compare with `FILE` instead of printing. Not with `-o`. With `--conformance <TRACES>`, also compares the traces by hash. |
+| `--adapter` | off | Experimental, with `--conformance` only (else exit 2). Print the [model adapter](#the-model-adapter) in place of the domain code: plain data of the model's state and calls, `ModelAdapter`, and its harness. The traces are the same. Not with `--code`, `--probe`, `--seal` or `--verus`. |
 | `--verus <DIR>` | none | Experimental, `--lang rust` only (else exit 2). Also write to `DIR` a Verus crate in which a modified core is checked against the verified model for any number of rows: check it with `verus DIR/main.rs`. The ordinary output does not change. Covers `Enum`, `Bool` and key columns, conditions with quantifiers and counts, creates and deletes; on another model it writes the ordinary output, prints one line per reason, and exits 1. Not with `--code`, `--probe`, `--check` or `--conformance`. See [the design](./design/verus.md). |
 
 **Exit codes.** `0` when written or matched; `1` when `check` fails (without
