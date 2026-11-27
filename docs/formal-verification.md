@@ -587,12 +587,13 @@ OK: no errors within 2 instances per entity, Int 0..5; 2 of 2 rules proved for a
 
 A rule that is not proved prints a **counterexample to induction** (CTI): a step, the rows it
 binds, and the rule's rows before and after, with any run mark or event mark they read. The
-state before holds the rule and every kept lemma but need not be reachable:
+state before holds the rule, every proved rule, and every kept lemma but need not be
+reachable:
 
 ```
 $ rdra-ish verify samples/formal-verification/one_to_one_shared.rdra --prove --instance-count 1
 ...
-unproved: Unique_Shipment_Order: not inductive; Ship(Order#1, Shipment#1) breaks it from a state where it and every proved rule hold (not necessarily reachable)
+unproved: Unique_Shipment_Order: not inductive; Ship(Order#1, Shipment#1) breaks it from a state where it, every proved rule, and every kept lemma hold (not necessarily reachable)
   Order#1 (present) status=placed -> status=shipped
   Shipment#1 (absent -> present) Order=Order#2 -> Order=Order#1
   Shipment#2 (present) Order=Order#1
@@ -617,7 +618,7 @@ out itself, in the manner of IC3. The CTI's state before the step, over the step
 the rule's, is a set of facts: each row's columns and marks, the keys between those rows, and
 that two rows of one entity differ. The clause "no rows with all of these" is weakened, one
 fact dropped at a time in a fixed order, while it still holds in every initial state and no
-step breaks it from a state where it, the rule, and the kept lemmas hold. A state of more
+step breaks it from a state where it, the rule, every proved rule, and every kept lemma hold. A state of more
 than 40 facts, or a clause that is not inductive even with every fact, gives none. A clause
 that survives joins the proof as a candidate, which runs again (at most twice more), so it is
 kept only when it is inductive with the rest, and `proved` means what it did. It prints as
@@ -833,7 +834,7 @@ says how to see it in a run and what to do. The
   native checker with TLC's state graph on every sample cone, but a cone whose BFS, reduced as
   `verify` explores it, passes 300,000 states at two instances is compared at one instance
   only. `verify` still checks it at two, and `--with-tlc` runs TLC on it. `VERIFY_FALLBACK` in
-  `crates/rdra-ish-cli/tests/engine_equivalence.rs` lists these 24 cones:
+  `crates/rdra-ish-cli/tests/engine_equivalence.rs` lists these 25 cones:
 
   | Sample | Cones | States at 2 instances | Why it is large |
   |---|---|---:|---|
@@ -841,7 +842,7 @@ says how to see it in a run and what to do. The
   | patent-ops | entity `OfficeAction`, invariant `Forbidden_OfficeAction_3` | 1,341,707 reduced | The office action times 185 classes of the application's side, which the examination guards read |
   | food-permit-ops | entity `BusinessPermit` | 4,648,771 reduced | The permit's side times 444 classes of the disposition's and the application's, read through the events of #112 |
   | insurance-claim-ops | entities `Claim`, `Payment`; invariants `Forbidden_Claim_0`, `Forbidden_Claim_4`, `MultiForbidden_Payment_3`; `AfterAssert_PayClaim_0` | 633,787 to 903,987 reduced | The claim and the payment times 2,428 classes of the case, which `CompleteClaim`'s settlement guard reads |
-  | insurance-claim-ops | entity `ClaimCase` | reduced | The case's side, reduced by the claim's and the payment's side in 4,368 classes under two bits per case (#112) |
+  | insurance-claim-ops | entities `ClaimCase`, `Investigation` | reduced | The case's side, reduced by the claim's and the payment's side in 4,368 classes under two bits per case (#112). Since #477 `Investigation`'s cone is its exact cone, the same as the case's |
   | oidc-auth | 8 entities and 5 invariants of the browser flow | over 2,000,000 | The request, interaction, session, consent, grant, code, and tokens read each other. Nothing reduces; the sample's header runs `verify` at 1 instance with `--prove`. |
 
   See it: the list in the test, which fails when a cone joins or leaves it. What to do: run

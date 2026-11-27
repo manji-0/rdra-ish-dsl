@@ -406,7 +406,7 @@ fn print_verdict(
         Verdict::Unproved(Unproved::NotInductive(cti)) => {
             out!(
             text,
-                "unproved: {name}: not inductive; {} breaks it from a state where it and every proved rule hold (not necessarily reachable)",
+                "unproved: {name}: not inductive; {} breaks it from a state where it, every proved rule, and every kept lemma hold (not necessarily reachable)",
                 cti.step
             );
             for row in &cti.rows {

@@ -156,7 +156,14 @@ fn a_rule_that_breaks_at_two_rows_is_unproved_with_its_step() {
         .lines()
         .find(|l| l.starts_with("unproved: Unique_Shipment_Order: not inductive;"))
         .unwrap_or_else(|| panic!("no unproved line\n{stdout}"));
-    assert!(line.contains("(not necessarily reachable)"), "{line}");
+    // The state before holds what `prove::assume` asserts: every kept candidate, which is
+    // every proved rule and every kept lemma, not the proved rules alone.
+    assert!(
+        line.ends_with(
+            " breaks it from a state where it, every proved rule, and every kept lemma hold (not necessarily reachable)"
+        ),
+        "{line}"
+    );
     assert!(
         stdout.lines().any(|l| l.starts_with("  Shipment#")),
         "the CTI names its rows\n{stdout}"
