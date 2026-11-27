@@ -7,6 +7,11 @@ license.workspace = true
 repository.workspace = true
 description.workspace = true
 
+[features]
+# Every fast function with a reference twin also runs the twin and panics when they differ
+# (`codegen::conformance::mutants`). The CLI's `shadow` turns it on.
+shadow = []
+
 [dependencies]
 rdra-ish-core  = { path = "../rdra-ish-core" }
 rdra-ish-syntax  = { path = "../rdra-ish-syntax" }

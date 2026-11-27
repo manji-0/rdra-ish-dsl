@@ -108,6 +108,12 @@
 
 ### Changed
 
+- The self-check of `check --code=run` picks its mutants in linear time (#439): it built
+  the text of every candidate row and listed the states that differ for every call. On the
+  traces of clinic-ops and patent-ops at the default cap (4.3 and 3.7 million lines),
+  picking them took 299 s and 487 s and now takes 0.36 s and 0.33 s, in a release build.
+  The same seed picks the same mutants: the function it replaces is kept as its twin, which
+  a `shadow` build runs on every call and the tests compare on random traces.
 - `verify --prove` (experimental) finds lemmas from a rule's counterexample to induction
   (#428), in the manner of IC3: the CTI's state over its rows becomes a set of facts, and
   the clause that forbids them is weakened, one fact at a time, while it holds initially and
