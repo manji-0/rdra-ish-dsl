@@ -432,6 +432,9 @@ pub struct TemporalProperty {
     pub global: bool,
     /// `.fair(UC, ...)`: the use cases assumed weakly fair per instance they act on.
     pub fair: Vec<UseCaseKey>,
+    /// `.present()` on `eventually` / `leads_to`: the goal holds only where every bound row
+    /// is present, so deleting a row never meets it, whatever its base values.
+    pub present_goal: bool,
 
     /// Source site of the predicate/declaration that produced this fact.
     pub site: Option<crate::location::LocatedSpan>,

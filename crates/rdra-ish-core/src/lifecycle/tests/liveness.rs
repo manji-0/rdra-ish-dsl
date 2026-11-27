@@ -279,3 +279,50 @@ fn the_fairness_check_rejects_an_unfair_lasso() {
     ));
     assert_eq!(ts.unfair_loop(paid_only, &held, Fairness::Plain), None);
 }
+
+const HELD: &str = r#"
+entity Order "注文" { id: Int @pk  held: Bool @default(false) }
+usecase Place "注文"
+usecase Flag "保留"
+usecase Drop "削除"
+creates(Place, Order)
+sets(Flag, Order.held == true)
+deletes(Drop, Order)
+condition Held "保留中"
+holds(Held, Order.held == true)
+applies_to(Held, Drop)
+property Released leads_to(Order.held == true, Order.held == false).fair(Drop)
+property ReleasedPresent leads_to(Order.held == true, Order.held == false).fair(Drop).present()
+property Unheld eventually(Order.held == false).fair(Drop)
+property UnheldPresent eventually(Order.held == false).fair(Drop).present()
+"#;
+
+/// The deleted row's `held` is its base value, false, so dropping a held order meets the
+/// plain goal; `.present()` asks for a present row, which nothing unholds, so the drop leaves
+/// it unmet and the run stops at the deleted row.
+#[test]
+fn present_keeps_a_delete_from_meeting_the_goal() {
+    let stop = Some((names(&["Place", "Flag", "Drop"]), Loop::Stutter));
+    assert_eq!(decide(HELD, "ReleasedPresent", Fairness::Plain), stop);
+    assert_eq!(decide(HELD, "UnheldPresent", Fairness::Plain), stop);
+    for fairness in [Fairness::Plain, Fairness::WfNext] {
+        assert_eq!(decide(HELD, "Released", fairness), None);
+        assert_eq!(decide(HELD, "Unheld", fairness), None);
+        assert!(decide(HELD, "ReleasedPresent", fairness).is_some());
+        assert!(decide(HELD, "UnheldPresent", fairness).is_some());
+    }
+}
+
+/// `.present()` reads the presence the trigger reads already, so the property's cone is the
+/// plain form's.
+#[test]
+fn present_adds_nothing_to_the_property_cone() {
+    let ts = system_from(HELD, Bounds::VERIFY);
+    let cone = |name: &str| {
+        let i = ts.properties().iter().position(|p| p.name == name).unwrap();
+        let c = ts.property_cone(i);
+        (c.vars, c.keep)
+    };
+    assert_eq!(cone("Released"), cone("ReleasedPresent"));
+    assert_eq!(cone("Unheld"), cone("UnheldPresent"));
+}

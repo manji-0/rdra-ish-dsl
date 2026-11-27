@@ -372,6 +372,14 @@ pub enum StateDiag {
         usecase: String,
         site: Site,
     },
+    /// An `eventually` / `leads_to` goal that a deleted row's base values satisfy, on an entity
+    /// some use case deletes: deleting the row meets the goal. A hint: that is the documented
+    /// reading, and `.present()` asks the goal for a present row instead.
+    GoalMetByDelete {
+        property: String,
+        entity: String,
+        site: Site,
+    },
     /// An Int literal outside the bounded domain `0..=max`: in a rule, or a numeric `@default`
     /// (its site a `ModelRef::Column`).
     IntLiteralOutOfBounds { value: i64, max: u8, site: Site },
@@ -658,6 +666,9 @@ impl StateDiag {
             StateDiag::FairOnInertUseCase {
                 property, usecase, ..
             } => with("FairOnInertUseCase", &[property, usecase]),
+            StateDiag::GoalMetByDelete {
+                property, entity, ..
+            } => with("GoalMetByDelete", &[property, entity]),
             StateDiag::IntLiteralOutOfBounds { value, .. } => {
                 with("IntLiteralOutOfBounds", &[&value.to_string()])
             }
@@ -776,6 +787,7 @@ impl StateDiag {
             | StateDiag::MinCardNeedsCreate { site, .. }
             | StateDiag::AssertOnInertUseCase { site, .. }
             | StateDiag::FairOnInertUseCase { site, .. }
+            | StateDiag::GoalMetByDelete { site, .. }
             | StateDiag::IntLiteralOutOfBounds { site, .. }
             | StateDiag::DomainTooLarge { site, .. }
             | StateDiag::UnbindableScope { site, .. }
@@ -850,6 +862,7 @@ impl StateDiag {
             | StateDiag::UnanchoredTrigger { .. }
             | StateDiag::UnjoinedTrigger { .. }
             | StateDiag::TriggerNeverRuns { .. }
+            | StateDiag::GoalMetByDelete { .. }
             | StateDiag::DefaultOnVariationIgnored { .. } => Severity::Info,
             StateDiag::UnreachableEnumVariant { .. }
             | StateDiag::UnwrittenConstrainedVar { .. }
@@ -1232,6 +1245,12 @@ impl fmt::Display for StateDiag {
             StateDiag::AssertOnInertUseCase { anchor, .. } => {
                 write!(f, "after({anchor}).assert names a use case with no effect")
             }
+            StateDiag::GoalMetByDelete {
+                property, entity, ..
+            } => write!(
+                f,
+                "property {property}: deleting {entity} meets its goal, as the deleted row's base values satisfy it; add .present() if a delete should not count"
+            ),
             StateDiag::FairOnInertUseCase {
                 property, usecase, ..
             } => write!(

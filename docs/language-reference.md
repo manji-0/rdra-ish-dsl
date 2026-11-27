@@ -1864,8 +1864,9 @@ property; a rule `check` must enforce is a `forbidden`, `invariant`, or `after` 
   where every paid order is eventually deleted. A goal the base values do not satisfy is
   never met by a deleted row: deleting a pending order breaks
   `leads_to(Order.status == pending, Order.status == paid)`. `can_reach` reads presence along
-  the whole path, so a delete never finishes it. To keep a delete from meeting a goal, state
-  the goal on a value other than the column's base value.
+  the whole path, so a delete never finishes it. To keep a delete from meeting a goal, add
+  [`.present()`](#goals-on-present-rows-present), or state the goal on a value other than the
+  column's base value.
 - With any `eventually` / `leads_to`, the exported Spec includes `WF_vars(Next)`: some step is
   taken while one can be, but none in particular, so another instance's loop meets it. Name the
   use cases a property relies on with [`.fair`](#fairness-fairusecase-).
@@ -1994,6 +1995,42 @@ violated`); a module declares the latch only where its `.cfg` checks the propert
 only, so a step that moves a key and breaks `p` still breaks the property. `.fair(...)` on them
 is `FairOnSafetyProperty`.
 
+#### Goals on present rows: `.present()`
+
+```rdra
+// Without .present(), dropping a held order meets the goal: its deleted row reads false.
+property HeldReleased "a held order is released"
+  leads_to(Order.held == true, Order.held == false).fair(Release).present()
+```
+
+`.present()` after an `eventually` or `leads_to` asks the goal for a present row: the goal is
+met only where every row the property binds is present and the goal holds on it. Per binding:
+
+| Form | TLA+ with `.present()` |
+|---|---|
+| `eventually(x).present()` | `[](present /\ link => <>(present /\ x))` |
+| `leads_to(p, q).present()` | `(present /\ link /\ p) ~> (present /\ q)` |
+
+`present` is the trigger's: `E_exists[b] = "present"` for each bound row `b`. The `.along`
+link stays in the trigger only, as without `.present()`. A deleted slot is never reused, so
+once a bound row is deleted before its goal, the goal stays unmet and the property fails.
+Without `.present()` the goal reads a deleted row's base values ([Deleting a
+parent](#deleting-a-parent)), and a goal those values satisfy is met by the delete; that stays
+the default.
+
+- `.present()` takes no arguments, is written once, and may come before or after `.fair`,
+  `.along`, `.role`, and `.global()`.
+- On `always`, `stable`, `unchanged`, `precedes`, or `can_reach` it is
+  `PresentOnNonGoalProperty`: those speak only of present rows, and `can_reach` already asks
+  for the row present along its path. With arguments, or written twice, it is
+  `PresentRequiresNoArguments`.
+- Where some use case deletes a row the property binds and the goal holds on that row's base
+  values, the build prints the hint `GoalMetByDelete` (`info`, not a warning): the delete meets
+  the goal. Add `.present()` if it should not; a `.present()` goal never gets the hint.
+- The goal reads the presence the trigger reads, so the property's cone, its reduction, and
+  instance symmetry are the same as without `.present()`. TLC checks the printed formula, so
+  `verify --with-tlc` decides it on both engines.
+
 #### Fairness: `.fair(UseCase, ...)`
 
 ```rdra
@@ -2066,11 +2103,13 @@ samples `can_reach_unmet.rdra` and `can_reach_met.rdra`.
 |---|---|
 | `FairOnSafetyProperty` | `.fair` on `always`, `stable`, `unchanged`, or `precedes`. |
 | `FairOnReachProperty` | `.fair` on `can_reach`. |
+| `PresentOnNonGoalProperty` | `.present()` on `always`, `stable`, `unchanged`, `precedes`, or `can_reach`. |
+| `PresentRequiresNoArguments` | `.present(...)` with arguments, or a second `.present()`. |
 | `FairRequiresUseCases` | `.fair` with no argument, a non-use-case, a use case twice, or a second `.fair`. |
 | `FairOnInertUseCase` | A listed use case changes nothing. |
 | `UndefinedSymbol` | An undefined name. |
 | `UnresolvedPropertyColumn` | An atom whose column no single entity owns (`Order.missing`, or a bare `status` two entities declare). |
-| `UnknownChainMethod` | A method other than `.fair`, `.along`, `.role`, `.global`, or a `.when` not directly after `unchanged(...)`. |
+| `UnknownChainMethod` | A method other than `.fair`, `.present`, `.along`, `.role`, `.global`, or a `.when` not directly after `unchanged(...)`. |
 | `InvalidTemporalProperty` | A column of `unchanged(...)` that is not a column. |
 | `DuplicateProperty` | Two properties with one id. |
 

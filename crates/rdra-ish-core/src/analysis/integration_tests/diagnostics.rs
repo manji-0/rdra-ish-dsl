@@ -31,6 +31,86 @@ property P can_reach(Order.status == paid).fair(Pay)
     assert!(model.temporal_properties.is_empty());
 }
 
+/// The errors of `src`, and the properties the model keeps.
+fn property_errors(src: &str) -> (Vec<RdraError>, usize) {
+    let (ast, parse_errors) = parse(src);
+    assert!(parse_errors.is_empty(), "{parse_errors:?}");
+    let (model, diags) = build_model(&ast);
+    let errors = diags
+        .into_iter()
+        .filter(|d| !d.is_warning)
+        .map(|d| d.error)
+        .collect();
+    (errors, model.temporal_properties.len())
+}
+
+const PRESENT_MODEL: &str = r#"
+entity Order "注文" { id: Int @pk
+  status: Enum(open, paid) @default(open) }
+usecase Pay "支払い"
+transitions(Pay, Order.status, open -> paid)
+"#;
+
+/// `.present()` on `eventually` and `leads_to` asks the goal for a present row; the model
+/// keeps the flag, before or after `.fair`.
+#[test]
+fn present_on_a_goal_form_is_kept() {
+    let src = format!(
+        "{PRESENT_MODEL}property E eventually(Order.status == paid).present()\n\
+         property L leads_to(Order.status == open, Order.status == paid).fair(Pay).present()\n\
+         property M leads_to(Order.status == open, Order.status == paid).present().fair(Pay)\n\
+         property N leads_to(Order.status == open, Order.status == paid)\n"
+    );
+    let (ast, parse_errors) = parse(&src);
+    assert!(parse_errors.is_empty(), "{parse_errors:?}");
+    let (model, diags) = build_model(&ast);
+    assert!(diags.iter().all(|d| d.is_warning), "{diags:?}");
+    let flags: Vec<(&str, bool)> = model
+        .temporal_properties
+        .iter()
+        .map(|p| (p.id.as_str(), p.present_goal))
+        .collect();
+    assert_eq!(flags, [("E", true), ("L", true), ("M", true), ("N", false)]);
+}
+
+/// A form with no goal a deleted row can meet takes no `.present()`.
+#[test]
+fn present_on_a_form_without_a_goal_is_an_error() {
+    for (formula, form) in [
+        ("always(Order.status == paid)", "always"),
+        ("can_reach(Order.status == paid)", "can_reach"),
+        ("stable(Order.status == paid)", "stable"),
+        ("unchanged(Order.status)", "unchanged"),
+        (
+            "precedes(Order.status == open, Order.status == paid)",
+            "precedes",
+        ),
+    ] {
+        let src = format!("{PRESENT_MODEL}property P {formula}.present()\n");
+        let (errors, kept) = property_errors(&src);
+        assert!(
+            matches!(errors.as_slice(), [RdraError::PresentOnNonGoalProperty { id, form: f }] if id == "P" && f == form),
+            "{formula}: {errors:?}"
+        );
+        assert!(errors[0].to_string().contains("drop `.present()`"));
+        assert_eq!(kept, 0, "{formula}");
+    }
+}
+
+/// `.present()` takes no arguments and is written once.
+#[test]
+fn present_with_arguments_or_twice_is_an_error() {
+    for chain in [".present(Pay)", ".present().present()"] {
+        let src = format!("{PRESENT_MODEL}property P eventually(Order.status == paid){chain}\n");
+        let (errors, kept) = property_errors(&src);
+        assert!(
+            matches!(errors.as_slice(), [RdraError::PresentRequiresNoArguments { id }] if id == "P"),
+            "{chain}: {errors:?}"
+        );
+        assert_eq!(kept, 0, "{chain}");
+    }
+}
+
 #[test]
 fn test_duplicate_definition_same_kind() {
     let src = r#"

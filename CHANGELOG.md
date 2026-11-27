@@ -4,6 +4,20 @@
 
 ### Added
 
+- `.present()` on an `eventually` or `leads_to` property asks its goal for a present row:
+  `leads_to(p, q).present()` is `(present /\ link /\ p) ~> (present /\ q)`, and
+  `eventually(x).present()` is `[](present /\ link => <>(present /\ x))`, with `present` the
+  trigger's. Without it a goal reads a deleted row's base values, so deleting a row meets a
+  goal its `@default`s satisfy; that stays the default (docs/theory P6, P64). The native
+  checker, the TLA+ export, and TLC read the same goal, and the property's cone, reduction,
+  and symmetry are unchanged, as the trigger reads the presence already. `.present()` on
+  `always`, `stable`, `unchanged`, `precedes`, or `can_reach` is `PresentOnNonGoalProperty`;
+  with arguments or written twice it is `PresentRequiresNoArguments`
+  ([language reference](./docs/language-reference.md#goals-on-present-rows-present)).
+  `check` and `verify` print the hint `info[GoalMetByDelete_*]` for a plain goal a deleted
+  row's base values satisfy on an entity some use case deletes (none on the samples). New
+  engine-corpus cases `presence_goal_present_modifier` and `presence_goal_present_both_ok`.
+
 - `codegen` (default output changes): the domain code has an unimplemented port, a stand-in
   for the contracts that a service takes while it is unfinished, so it builds before every
   method exists (dogfood G6; docs/design/algebraic-codegen.md, "The unimplemented port"). Go:

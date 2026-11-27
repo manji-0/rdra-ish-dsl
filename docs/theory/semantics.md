@@ -549,6 +549,25 @@ semantics (open problem P6, decided as documented):
 language-reference.md, "Temporal path properties", states it, and the TLA+ formulas
 `[](present => <>x)` and `(present /\ x) ~> y` read it the same way.
 
+With `.present()` (open problem P64), the goal asks for a present binding:
+
+| Form | `cause` | `goal` |
+|---|---|---|
+| `eventually(x).present()` | `true` | `pres_b ∧ x` |
+| `leads_to(x, y).present()` | `x` | `pres_b ∧ y` |
+
+The definition above applies unchanged with this `goal`. `trig_b` is the same, so the link
+`ℓ` stays in the trigger only. A deleted slot is never reused (D7), so once a bound slot is
+deleted at some `k ≥ i` before any `j` with `goal_b(σ_j)`, no later `j` has `pres_b(σ_j)`,
+and the behavior fails the property if it satisfies `F`. The TLA+ forms are
+`[](present /\ link => <>(present /\ x))` and `(present /\ link /\ x) ~> (present /\ y)`.
+`.present()` on any other form is the error `PresentOnNonGoalProperty`. *Implemented by*
+`build/preds/temporal.rs::Builder::goal`, which conjoins `pres_b` into the goal predicate,
+so the native search, the lasso check, and the TLA+ printer all read one predicate. `pres_b`
+reads only the binders' `Exists` variables, which every property's cone already holds
+(`cone.rs::check_reads`). So `.present()` changes neither the cone nor the reduction, and
+the symmetry scan reads no row id in it.
+
 The verdict a property is meant to have is the one under `WfNext`. The exported `Spec`
 conjoins `WF_vars(Next)` whenever the model has an `eventually` or `leads_to`, and `P` is
 printed as `Fair_P ⇒ (…)`. `Plain` is a stronger requirement (more behaviors). So `ok` under
@@ -627,7 +646,8 @@ soundness questions are in the index's [Open problems](./README.md#open-problems
   `draft` the base value, is met by deleting the order. TLC reads the TLA+ formula the same
   way (`[](present => <>x)`), so the engines agree. Open problem P6 decided this as
   documented: language-reference.md, "Temporal path properties", now says so, with an
-  example each way and how to state a goal a delete does not meet.
+  example each way and how to state a goal a delete does not meet. `.present()` (D21, P64)
+  states such a goal per property.
 - **Initial states are not assumed to satisfy anything.** D4 makes the initial set a product.
   That includes N:1 owners of pre-existing children under a created parent that is still
   absent (`PreExistingChildOfCreatedParent`).
@@ -643,6 +663,11 @@ soundness questions are in the index's [Open problems](./README.md#open-problems
   (`Tick`). Nothing else depends on `β`. Theme (b)'s Lemma U uses this.
 
 ## Errata
+
+- **2026-11-28, `.present()` (P64).** D21 gained the goal `pres_b ∧ goal` of
+  `eventually(x).present()` and `leads_to(x, y).present()`, the owner's decision on P6: the
+  reading that a delete meets a goal its base values satisfy stays the default, and the
+  modifier opts out of it per property. No other definition changed.
 
 - **2026-11-28, after the owner's review (P60).** The first version said "the source of
   truth is the code". It defined `I_β(M)` as what `TransitionSystem::initial_states`

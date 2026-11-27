@@ -86,6 +86,7 @@ impl<'m> Builder<'m> {
     fn finish(mut self, scope: &Scope) -> Built {
         self.ts.layout();
         self.one_write_per_slot();
+        self.goals_met_by_delete();
         let model = self.model;
         let mut inactive: Vec<UseCaseKey> = self
             .active_ucs

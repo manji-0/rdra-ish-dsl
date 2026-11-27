@@ -8,7 +8,7 @@ use crate::lifecycle::build::Builder;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::types::{
     ActId, ActionOrigin, AfterAssert, AfterStep, At, CmpOp, Effect, Guard, GuardWhy, Ltl, ModelRef,
-    Pred, Property, Reach, Site, Start, VarId, VarKind,
+    Pred, Property, Reach, Site, Start, Term, Value, VarId, VarKind,
 };
 use crate::model::{
     CrossEntityCondition, EffectValue, EntityKey, TemporalExpr, TemporalFormula, TemporalRhs,
@@ -108,7 +108,8 @@ impl Builder<'_> {
                     Ltl::Always(self.temporal(&prop.id, e, &mut binding, &site))
                 }
                 TemporalFormula::Eventually(e) => {
-                    Ltl::Eventually(self.temporal(&prop.id, e, &mut binding, &site))
+                    let goal = self.temporal(&prop.id, e, &mut binding, &site);
+                    Ltl::Eventually(self.goal(goal, prop.present_goal, &binding))
                 }
                 TemporalFormula::LeadsTo {
                     antecedent,
@@ -116,7 +117,7 @@ impl Builder<'_> {
                 } => {
                     let a = self.temporal(&prop.id, antecedent, &mut binding, &site);
                     let c = self.temporal(&prop.id, consequent, &mut binding, &site);
-                    Ltl::LeadsTo(a, c)
+                    Ltl::LeadsTo(a, self.goal(c, prop.present_goal, &binding))
                 }
                 // `.fair` on it is an error, so there is no fairness to check.
                 TemporalFormula::CanReach(e) => {
@@ -176,6 +177,65 @@ impl Builder<'_> {
                 site,
             });
         }
+    }
+
+    /// `GoalMetByDelete` for each `eventually` / `leads_to` whose goal holds on the base values
+    /// a deleted row of its binders reads, where some action deletes a binder's entity. A
+    /// `.present()` goal reads presence, which no deleted row has, so it is never named. Reads
+    /// the laid-out system.
+    pub(in crate::lifecycle::build) fn goals_met_by_delete(&mut self) {
+        let base = self.ts.base_state();
+        let mut found = Vec::new();
+        for p in &self.ts.properties {
+            let (Ltl::Eventually(goal) | Ltl::LeadsTo(_, goal)) = &p.formula else {
+                continue;
+            };
+            let deleted = p.binders.iter().copied().find(|&e| {
+                self.ts.actions.iter().any(|a| {
+                    a.effects.iter().any(|eff| {
+                        matches!(eff, Effect::Delete { param } if a.params[usize::from(*param)].entity == e)
+                    })
+                })
+            });
+            let Some(e) = deleted else { continue };
+            if !self.ts.holds_bound(goal, &base, &vec![0; p.binders.len()]) {
+                continue;
+            }
+            let keys = p.binders.iter().map(|b| self.ts.entity(*b).key).collect();
+            let diag = StateDiag::GoalMetByDelete {
+                property: p.name.clone(),
+                entity: self.ts.entity(e).id.clone(),
+                site: p.site.clone(),
+            };
+            found.push((keys, diag));
+        }
+        for (keys, diag) in found {
+            self.diag(keys, diag);
+        }
+    }
+
+    /// The goal of `eventually` / `leads_to`; with `.present()`, conjoined with the presence of
+    /// every bound row, the `present` the trigger reads. `binding` is the whole binding, read
+    /// after every operand is lowered. The presence vars are in the property's cone already,
+    /// as the trigger reads them, so the cone, its reduction, and the symmetry scan see the
+    /// same vars as without `.present()`.
+    fn goal(&self, goal: Pred, present: bool, binding: &Binding) -> Pred {
+        if !present {
+            return goal;
+        }
+        let mut parts: Vec<Pred> = binding
+            .iter()
+            .map(|&(ek, at)| {
+                let exists = self.ts.entities[self.ent_of[&ek].index()].exists;
+                Pred::Cmp(
+                    Term::Slot { var: exists, at },
+                    CmpOp::Eq,
+                    Term::Lit(Value::PRESENT),
+                )
+            })
+            .collect();
+        parts.push(goal);
+        Pred::And(parts)
     }
 
     fn bind(binding: &mut Binding, ek: EntityKey) -> At {

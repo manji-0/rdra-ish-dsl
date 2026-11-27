@@ -960,6 +960,7 @@ violation_message(text, pattern_desc)
         | StateDiag::GuardReadsLaterStep { .. }
         | StateDiag::DrivenComparisonColumnWritten { .. }
         | StateDiag::DefaultOnVariationIgnored { .. }
+        | StateDiag::GoalMetByDelete { .. }
         | StateDiag::GoalUnreachable { .. } => diag.to_string(),
     }
 }

@@ -1,0 +1,20 @@
+// trap: `.present()` keeps a deleted row from meeting a goal its base values satisfy.
+// Flag sets `held`, and only Drop ends a held order, by deleting it. The deleted row's
+// `held` is its base value, false, so the plain goal holds after the delete: HeldReleased is
+// ok. HeldReleasedPresent asks for a present row with `held = false`, and no step clears
+// `held` on a present row, so Drop leaves the goal unmet forever: a counterexample. A checker
+// that dropped `.present()`, or read presence only in the trigger, would answer ok for both.
+// expect HeldReleased: native=ok tlc=ok
+// expect HeldReleasedPresent: native=counterexample tlc=counterexample
+entity Order "注文" { id: Int @pk  held: Bool @default(false) }
+usecase Place "注文"
+usecase Flag "保留"
+usecase Drop "削除"
+creates(Place, Order)
+sets(Flag, Order.held == true)
+deletes(Drop, Order)
+condition Held "保留中"
+holds(Held, Order.held == true)
+applies_to(Held, Drop)
+property HeldReleased leads_to(Order.held == true, Order.held == false).fair(Drop)
+property HeldReleasedPresent leads_to(Order.held == true, Order.held == false).fair(Drop).present()
