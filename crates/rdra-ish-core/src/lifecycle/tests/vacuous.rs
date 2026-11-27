@@ -435,3 +435,61 @@ fn a_property_cone_with_a_violated_rule_still_reports_vacuity() {
         )])
     );
 }
+
+/// The model of open problem P51 (docs/theory/native.md): every `Touch` step sets
+/// `status := open` on a row created `open`, so it changes nothing. A stuttering step is not
+/// checked against `after(Touch)` (D17, as TLA+'s `[][…]_vars` reads it), so the assertion,
+/// false on every reachable state, holds; the vacuity warning says why.
+const P51: &str = r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(open, closed) @default(open)
+  flag: Bool @default(false)
+}
+usecase Create "作成"
+usecase Touch "触る"
+buc B "B"
+contains(B, Create)
+contains(B, Touch)
+creates(Create, Order)
+updates(Touch, Order)
+"#;
+
+#[test]
+fn an_assert_after_a_step_that_only_stutters_holds_vacuously() {
+    let only_stutters = format!(
+        "{P51}sets(Touch, Order.status == open)\nafter(Touch).assert(Order.flag == true)\n"
+    );
+    for (bounds, n) in [(Bounds::STATES, 1), (Bounds::VERIFY, 2)] {
+        assert_eq!(
+            vacuous(&only_stutters, bounds, Caps::for_instances(n)),
+            BTreeMap::from([(
+                "AfterAssert_Touch_0".to_string(),
+                vec![
+                    "Touch runs its last step only as a step that changes nothing, which the \
+                     assertion is not checked on"
+                        .to_string()
+                ]
+            )]),
+            "{n} instances"
+        );
+    }
+    // The control: a Touch that closes the order is checked, and fails.
+    let moves = format!(
+        "{P51}sets(Touch, Order.status == closed)\nafter(Touch).assert(Order.flag == true)\n"
+    );
+    let ts = system_from(&moves, Bounds::STATES);
+    let run = ts.explore_targets(&ts.targets(), Caps::for_instances(1));
+    assert!(run.verdicts().iter().any(|d| matches!(
+        &d.diag,
+        StateDiag::AfterAssertViolated { name, .. } if name == "AfterAssert_Touch_0"
+    )));
+    assert!(texts(run.verdicts()).is_empty());
+    // A step that stutters on some states and moves on others is checked where it moves.
+    let some_move = format!(
+        "{P51}transitions(Touch, Order.status, open -> closed)\n\
+         transitions(Touch, Order.status, closed -> closed)\n\
+         after(Touch).assert(Order.status == closed)\n"
+    );
+    assert!(vacuous(&some_move, Bounds::STATES, Caps::for_instances(1)).is_empty());
+}

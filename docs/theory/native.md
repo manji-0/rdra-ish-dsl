@@ -388,8 +388,11 @@ Reproduction: `Touch` sets `Order.status := open` on a row created `open`, and
 `after(Touch).assert(Order.flag == true)` with `flag` false and never written. Every `Touch`
 step is a self-loop; `verify` prints `ok (3 states)`. The control, `Touch` setting `closed`,
 prints `counterexample (7 states)`, so the action is in the cone and the self-loop is what
-hides the step. The engines agree; what differs is D17's wording (or the modeler's
-expectation that an assertion after a use case holds whenever the use case can run).
+hides the step. The engines agree; what differed was D17's wording (or the modeler's
+expectation that an assertion after a use case holds whenever the use case can run). Fixed in
+#494 by the owner's call: D17 and the language reference take TLA+'s reading, and the
+vacuity check reports this model (`Vacuous_AfterAssert_Touch_0`, test
+`lifecycle/tests/vacuous.rs::an_assert_after_a_step_that_only_stutters_holds_vacuously`).
 
 ### Step forms and order forms
 
@@ -473,10 +476,12 @@ N2's preconditions: P50 printed a false vacuity warning, and P54 can too, since 
 that meets the premise is merged away or never built. On a reduced run or a
 run up to symmetry the stored states are representatives; that a premise met by some
 member of a class is met by its representative is theme (a). The `after` premise is read
-from the step's ends (`ComponentRun::step_ends`), filled by `Bfs::push` on every move,
-self-loops (`Probe::Loop`) included. So the vacuity check counts a self-loop as a run of the
-use case while the assertion is never evaluated on it (P51): the two readers treat the step
-in opposite ways.
+from the step's ends (`ComponentRun::step_ends`), filled by `Bfs::push` on every move.
+Until #494 a self-loop (`Probe::Loop`) counted as a run of the use case while the
+assertion is never evaluated on it (P51), so the two readers treated the step in opposite
+ways. Now `Ends::moved` records whether a move of the step changes the state (an orbit
+self-edge does), only such moves count, and a step that only stutters is its own vacuity
+reason (`UnmetPremise::OnlyStutters`).
 
 Properties have a check of the same kind, `targets.rs::TransitionSystem::property_vacuity`,
 on a complete run of the property's cone: it warns when no stored state, under some binding
@@ -835,7 +840,7 @@ The runs behind P50, P51 and P54, with the binaries described in the first parag
 is yet a test or corpus case in the repository: each is marked *repro pending in repo* with the
 fix lane that adds it, and the marker gives way to the test's path when that lands.
 
-**P51** (repro pending in repo; dup of P22, L4). The model:
+**P51** (dup of P22; in the repo as `lifecycle/tests/vacuous.rs::P51`, #494). The model:
 
 ```
 entity Order "注文" {
