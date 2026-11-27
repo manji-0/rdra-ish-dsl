@@ -283,7 +283,7 @@ pub(super) fn explored_properties(
             PropertyVerdict::Holds => "ok",
             PropertyVerdict::Violated(_) => "violated",
             PropertyVerdict::Undecided => {
-                "not decided: BFS stopped at the state cap (--max-states) or the memory limit"
+                "not decided: BFS stopped at the state cap (--max-states), the memory limit, or the time budget (--temporal-budget)"
             }
         };
         println!("property {} (BFS on its cone): {said}", p.name);

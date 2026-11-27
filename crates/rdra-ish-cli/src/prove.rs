@@ -284,6 +284,9 @@ fn print_verdict(
         Verdict::Unproved(Unproved::Initial) => {
             out!(text, "unproved: {name}: an initial state violates it")
         }
+        Verdict::Unproved(Unproved::Premise(why)) => {
+            out!(text, "unproved: {name}: {why}")
+        }
         Verdict::Unproved(Unproved::Unknown { action }) => {
             out!(text, "unproved: {name}: z3 gave up on {action}")
         }

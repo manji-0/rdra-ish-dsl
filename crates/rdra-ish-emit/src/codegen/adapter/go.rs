@@ -251,18 +251,23 @@ type Outcome int
 const (
 	// Ran is a call that ran.
 	Ran Outcome = iota
-	// NotEnabled is a call that does not run from its rows' states, names a row that does not
-	// exist, or a commit whose rows changed since its prepare.
+	// NotEnabled is a call that does not run from its rows' states, or a commit whose rows
+	// changed since its prepare.
 	NotEnabled
 	// Rejected is a call a condition the model applies to the use case rejects.
 	Rejected
 	// InvalidArgument is a call with an argument that breaks what the verified model keeps.
 	InvalidArgument
+	// NotFound is a call that names a row that does not exist.
+	NotFound
+	// StoreFailed is a call the store failed: no refusal of the model, so the harness reports
+	// it as a failure of the service.
+	StoreFailed
 )
 
 // String is the outcome in words.
 // adKinds is the outcome of each kind of refusal, as the traces spell it.
-var adKinds = map[string]Outcome{{"NotEnabled": NotEnabled, "Rejected": Rejected, "InvalidArgument": InvalidArgument}}
+var adKinds = map[string]Outcome{{"NotEnabled": NotEnabled, "Rejected": Rejected, "InvalidArgument": InvalidArgument, "NotFound": NotFound, "StoreFailed": StoreFailed}}
 
 func (o Outcome) String() string {{
 	switch o {{
@@ -274,6 +279,10 @@ func (o Outcome) String() string {{
 		return "rejected"
 	case InvalidArgument:
 		return "invalid argument"
+	case NotFound:
+		return "not found"
+	case StoreFailed:
+		return "store failed"
 	}}
 	return "unknown outcome " + strconv.Itoa(int(o))
 }}
@@ -445,7 +454,7 @@ func adPass(adapter ModelAdapter, traces string, viaSplit bool) (AdapterReport, 
 				return report, at(err)
 			}}
 			if o := adRun(adapter, c, viaSplit); o != Ran {{
-				return report, at(fmt.Errorf("the model runs `%s` here, and the service refused it%s: %v", strings.Join(call, " "), how, o))
+				return report, at(adRefused(call, o, how))
 			}}
 			if err := adCompare(adAbstract(adapter.Observe()), next, "after `"+strings.Join(call, " ")+"`"); err != nil {{
 				return report, at(err)
@@ -464,6 +473,9 @@ func adPass(adapter ModelAdapter, traces string, viaSplit bool) (AdapterReport, 
 			o := adRun(adapter, c, viaSplit)
 			if o == Ran {{
 				return report, at(fmt.Errorf("the model refuses `%s` here, and the service ran it%s", strings.Join(rest, " "), how))
+			}}
+			if o == StoreFailed {{
+				return report, at(adRefused(rest, o, how))
 			}}
 			if kind != "-" && adKinds[kind] != o {{
 				return report, at(fmt.Errorf("the model refuses `%s` here with %s, and the service refused it with %v", strings.Join(rest, " "), kind, o))
@@ -498,18 +510,20 @@ func adPass(adapter ModelAdapter, traces string, viaSplit bool) (AdapterReport, 
 			}}
 			if canSplit {{
 				if o := split.Prepare(early); o != Ran {{
-					return report, at(fmt.Errorf("the model runs `%s` here, and the service refused it: %v", strings.Join(first, " "), o))
+					return report, at(adRefused(first, o, ""))
 				}}
 			}}
 			if o := adapter.Invoke(late); o != Ran {{
-				return report, at(fmt.Errorf("the model runs `%s` here, and the service refused it: %v", strings.Join(second, " "), o))
+				return report, at(adRefused(second, o, ""))
 			}}
 			if err := adCompare(adAbstract(adapter.Observe()), next, "after `"+strings.Join(second, " ")+"`"); err != nil {{
 				return report, at(err)
 			}}
 			if canSplit {{
-				if split.Commit() == Ran {{
+				if o := split.Commit(); o == Ran {{
 					return report, at(fmt.Errorf("the service committed `%s`, prepared before `%s` changed a row it writes: the write must be conditional on what the row was", strings.Join(first, " "), strings.Join(second, " ")))
+				}} else if o == StoreFailed {{
+					return report, at(adRefused(first, o, ""))
 				}}
 				if err := adCompare(adAbstract(adapter.Observe()), next, "after the refused commit of `"+strings.Join(first, " ")+"`"); err != nil {{
 					return report, at(err)
@@ -524,6 +538,15 @@ func adPass(adapter ModelAdapter, traces string, viaSplit bool) (AdapterReport, 
 		}}
 	}}
 	return report, nil
+}}
+
+// adRefused is what is wrong when the service did not run call, which the model runs: a
+// refusal, or, for StoreFailed, a failure of the service.
+func adRefused(call []string, o Outcome, how string) error {{
+	if o == StoreFailed {{
+		return fmt.Errorf("the service failed on `%s`%s: the store failed", strings.Join(call, " "), how)
+	}}
+	return fmt.Errorf("the model runs `%s` here, and the service refused it%s: %v", strings.Join(call, " "), how, o)
 }}
 
 // adCompare reports every line the store and the model's state do not share.

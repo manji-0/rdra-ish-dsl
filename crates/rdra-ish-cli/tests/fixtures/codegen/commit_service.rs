@@ -2,13 +2,13 @@
 // for commit.rdra, whose every commit is one call of the generated `commit_writes`. The store
 // implements `CommitStore` once, over every entity, run mark and event, so no commit names a
 // result's fields. An id is never used twice: a deleted row's id stays taken, as the model's
-// slot does. FAULT=keep-mark plants one bug: the store never deletes a run mark.
+// slot does. FAULT=keep-mark plants one bug: the store never deletes a run mark. With
+// FAULT=store-fails the store fails to record an event, and the helper returns StoreFailed.
 #[path = "domain.rs"]
 #[allow(dead_code)] // the service uses part of the module
 mod domain;
 use domain::*;
 use std::collections::{BTreeMap, BTreeSet};
-use std::convert::Infallible;
 
 /// Every table, the run marks by (use case, entity, row id), and the raised events.
 #[derive(Clone, Default)]
@@ -21,6 +21,15 @@ struct Store {
     ev_shipped: Vec<EvShipped>,
     /// Every id a row has had, deleted rows' included.
     used: BTreeSet<(&'static str, i64)>,
+}
+
+/// `NotFound` for the row `id` of `entity`.
+fn not_found(usecase: &'static str, entity: &'static str, id: i64) -> NotFound {
+    NotFound {
+        usecase,
+        entity,
+        id: id.to_string(),
+    }
 }
 
 /// The entity and the number of an id.
@@ -56,9 +65,9 @@ impl Store {
 }
 
 impl CommitStore for Store {
-    type Error = Infallible;
+    type Error = String;
 
-    fn write_row(&mut self, write: RowWrite) -> Result<bool, Infallible> {
+    fn write_row(&mut self, write: RowWrite) -> Result<bool, String> {
         Ok(match write {
             RowWrite::Put { id, row, expected } => {
                 let ok = self.holds(&id, expected);
@@ -86,7 +95,7 @@ impl CommitStore for Store {
         })
     }
 
-    fn write_mark(&mut self, write: MarkWrite) -> Result<bool, Infallible> {
+    fn write_mark(&mut self, write: MarkWrite) -> Result<bool, String> {
         let (mark, delete) = match write {
             MarkWrite::Put(mark) => (mark, false),
             MarkWrite::Delete(mark) => (mark, true),
@@ -114,7 +123,10 @@ impl CommitStore for Store {
         Ok(true)
     }
 
-    fn record_event(&mut self, event: RaisedEvent) -> Result<(), Infallible> {
+    fn record_event(&mut self, event: RaisedEvent) -> Result<(), String> {
+        if std::env::var("FAULT").is_ok_and(|f| f == "store-fails") {
+            return Err("the event log is down".to_string());
+        }
         match event {
             RaisedEvent::EvShipped(e) => self.ev_shipped.push(e),
         }
@@ -128,21 +140,26 @@ struct Service {
 }
 
 impl Service {
-    /// Commits any result in one transaction: the store as it was comes back on an error.
-    fn commit<E: From<NotEnabled>>(&mut self, writes: impl IntoWrites) -> Result<(), E> {
+    /// Commits any result in one transaction: the store as it was comes back on an error,
+    /// which is the use case's own (`NotEnabled` or `StoreFailed`).
+    fn commit<E: From<CommitFailed>>(&mut self, writes: impl IntoWrites) -> Result<(), E> {
         let saved = self.store.clone();
         commit_writes(&mut self.store, writes).map_err(|e| {
             self.store = saved;
-            match e {
-                CommitFailed::NotEnabled(e) => e.into(),
-                CommitFailed::Store(never) => match never {},
+            if let CommitFailed::StoreFailed(failed) = &e {
+                // The cause stays reachable, and a clone is the same failure.
+                let source = std::error::Error::source(failed).map(|c| c.to_string());
+                assert_eq!(source.as_deref(), Some("the event log is down"));
+                assert_eq!(failed.clone(), *failed);
             }
+            e.into()
         })
     }
 
-    fn order(&self, id: OrderId, usecase: &'static str) -> Result<Order, NotEnabled> {
+    /// The order of `id`: `NotFound` when no order has it.
+    fn order(&self, id: OrderId, usecase: &'static str) -> Result<Order, NotFound> {
         let row = self.store.orders.get(&id.get()).cloned();
-        let row = row.ok_or(NotEnabled { usecase })?;
+        let row = row.ok_or_else(|| not_found(usecase, "Order", id.get()))?;
         Ok(Order::from_row(row).expect("the store holds valid rows"))
     }
 }
@@ -194,7 +211,10 @@ impl ConformancePort for Service {
 impl PlaceUseCase for Service {
     fn prepare_place(&mut self, parent_account: AccountId, order_id: OrderId) -> Result<PlaceResult, PlaceError> {
         let account = self.store.accounts.get(&parent_account.get()).cloned();
-        place(account.ok_or(NotEnabled { usecase: "Place" })?, order_id)
+        place(
+            account.ok_or_else(|| not_found("Place", "Account", parent_account.get()))?,
+            order_id,
+        )
     }
 
     fn commit_place(&mut self, write: PlaceResult) -> Result<(), PlaceError> {
@@ -242,7 +262,7 @@ impl SendUseCase for Service {
             return Err(NotEnabled { usecase: "Send" }.into());
         }
         let row = self.store.shipments.get(&shipment.get()).cloned();
-        let row = row.ok_or(NotEnabled { usecase: "Send" })?;
+        let row = row.ok_or_else(|| not_found("Send", "Shipment", shipment.get()))?;
         run_send(Shipment::from_row(row).expect("the store holds valid rows"), ev_shipped)
     }
 

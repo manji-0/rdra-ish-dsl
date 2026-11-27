@@ -6,7 +6,7 @@
 //! Every case under `tests/engine_corpus/` runs `verify --with-tlc --prove` (without TLC or
 //! z3 when they are missing, which `RDRA_REQUIRE_TLC=1` and `RDRA_REQUIRE_Z3=1` turn into
 //! failures), and `verify --instance-count 1` and `3` when the header names BFS verdicts per
-//! bound. A case passes when every engine gives the verdict its header states and the
+//! bound, with TLC beside BFS there too. A case passes when every engine gives the verdict its header states and the
 //! engines agree with each other by the rules below, whatever the header says. A known
 //! disagreement is a `// known` line with its issue: the case stays green while the engine
 //! keeps giving the recorded wrong verdict, and fails once it stops, so the line goes with
@@ -722,7 +722,14 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
         true => [1u8, 3]
             .into_iter()
             .chain(needs_four.then_some(4))
-            .map(|n| (n, verify(case, &["--instance-count", &n.to_string()])))
+            .map(|n| {
+                let count = n.to_string();
+                let mut args = vec!["--instance-count", count.as_str()];
+                if run_tlc {
+                    args.push("--with-tlc");
+                }
+                (n, verify(case, &args))
+            })
             .collect(),
         false => BTreeMap::new(),
     };
@@ -873,6 +880,14 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
                     got.to_string(),
                 );
                 at_bounds.push((*n, got));
+                // Rule 1 at this bound: TLC runs beside BFS here too.
+                let tlc = run.verdict(true, check, false);
+                if run_tlc && got.decided() && tlc.decided() && got != tlc {
+                    fail(
+                        &mut report,
+                        format!("{check} at {n} instances: native {got}, TLC {tlc}"),
+                    );
+                }
             }
         }
         // Rule 9: the escalation of a rule z3 leaves unproved gives, at each bound past the
@@ -925,21 +940,18 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
             }
         }
     }
-    // Rule 2: per run. Each module both engines ran, and each run a line names, has the same
-    // verdict where both decided it.
-    for mine in &main.native_lines {
-        let Some(theirs) = main.tlc_lines.iter().find(|l| l.module == mine.module) else {
-            continue;
-        };
-        let mut runs = vec![(mine.module.clone(), mine.verdict, theirs.verdict)];
-        for (m, v) in &mine.notes {
-            if let Some(t) = theirs.notes.get(m) {
-                runs.push((m.clone(), *v, *t));
-            }
-        }
-        for (module, a, b) in runs {
-            if a.decided() && b.decided() && a != b {
-                fail(&mut report, format!("{module}: native {a}, TLC {b}"));
+    // Rule 2: per run.
+    if run_tlc {
+        report.failures.extend(rule_2(case, &main));
+        for (n, run) in &bounded {
+            let at = |f: String| format!("at {n} instances: {f}");
+            report
+                .failures
+                .extend(rule_2(case, run).into_iter().map(at));
+            for line in run.unnamed.iter().filter(|l| !rejected(l)) {
+                report
+                    .failures
+                    .push(format!("at {n} instances: an error without a name: {line}"));
             }
         }
     }
@@ -959,7 +971,7 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
         }
     }
     // Rule 8: up to instance symmetry, the native checker gives the verdict it gives without,
-    // for every check both runs decide, at every bound the case runs, and prints no fault and
+    // for every check the plain run decides, at every bound the case runs, and prints no fault and
     // no panic: a lifted counterexample that does not replay panics. Each run takes the
     // flags of the plain run it is compared with, less `--with-tlc`, once unreduced, so that
     // every cone goes through the orbit run of phase 1, and once reduced as `verify` reduces,
@@ -998,21 +1010,72 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
                     format!("rule 8, --symmetry always at {n} instances, {how}: {line}"),
                 );
             }
-            for check in case.expects.keys() {
-                let a = plain.verdict(false, check, can_reach(check));
-                let b = sym.verdict(false, check, can_reach(check));
-                if a.decided() && b.decided() && a != b {
-                    fail(
-                        &mut report,
-                        format!(
-                            "rule 8: {check} at {n} instances: {a}, and {b} up to instance symmetry ({how})"
-                        ),
-                    );
-                }
-            }
+            report.failures.extend(rule_8(
+                case,
+                (plain, &sym),
+                &format!("at {n} instances, {how}"),
+            ));
         }
     }
     report
+}
+
+/// Rule 2: per run. Each module both engines ran, and each run a line names, has the same
+/// verdict where both decided it. A native `Cone_` line whose checks the header gives a TLC
+/// verdict must have TLC's line for the same module: without it the runs on that module are
+/// compared with nothing. A native `RdraSpec_` line may stand alone, since TLC's cone may have
+/// decided what the native cone left to the whole model.
+fn rule_2(case: &Case, main: &Observed) -> Vec<String> {
+    let mut out = Vec::new();
+    for mine in &main.native_lines {
+        let Some(theirs) = main.tlc_lines.iter().find(|l| l.module == mine.module) else {
+            let expected: Vec<&String> = (mine.checks.iter())
+                .filter(|c| case.expects.get(*c).is_some_and(|e| e.tlc != V::None))
+                .collect();
+            if mine.module.starts_with("Cone_") && !expected.is_empty() {
+                out.push(format!(
+                    "rule 2: {}: TLC printed no line for the module, and the header gives {} a TLC verdict",
+                    mine.module,
+                    expected
+                        .iter()
+                        .map(|c| c.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
+            continue;
+        };
+        let mut runs = vec![(mine.module.clone(), mine.verdict, theirs.verdict)];
+        for (m, v) in &mine.notes {
+            if let Some(t) = theirs.notes.get(m) {
+                runs.push((m.clone(), *v, *t));
+            }
+        }
+        for (module, a, b) in runs {
+            if a.decided() && b.decided() && a != b {
+                out.push(format!("{module}: native {a}, TLC {b}"));
+            }
+        }
+    }
+    out
+}
+
+/// Rule 8 for one run up to instance symmetry, `sym`, against the plain run it repeats: each
+/// check the plain run decides gets the same verdict, and is not left `not decided` (or
+/// unnamed) by the run up to symmetry, which explores no more states than the plain run.
+fn rule_8(case: &Case, (plain, sym): (&Observed, &Observed), at: &str) -> Vec<String> {
+    let can_reach = |check: &str| case.can_reach.contains(check);
+    let mut out = Vec::new();
+    for check in case.expects.keys() {
+        let a = plain.verdict(false, check, can_reach(check));
+        let b = sym.verdict(false, check, can_reach(check));
+        if a.decided() && a != b {
+            out.push(format!(
+                "rule 8: {check} {at}: {a}, and {b} up to instance symmetry"
+            ));
+        }
+    }
+    out
 }
 
 /// Every case: its header holds for every engine, and the engines agree by the rules of
@@ -1061,12 +1124,25 @@ fn bfs_and_tlc_and_z3_agree_on_the_adversarial_corpus() {
     );
 }
 
-/// Every header parses, names its trap, and states a verdict for each check. Cheap, so it
+/// Every header parses, names its trap, and states a verdict for each check, and the cases
+/// are the ones `tests/engine_corpus/CASES` lists, so a deleted case fails here. Cheap, so it
 /// runs in the debug `test` step as well.
 #[test]
 fn every_corpus_header_is_well_formed() {
     let cases = cases();
-    assert!(cases.len() >= 30, "{} cases", cases.len());
+    let names: BTreeSet<String> = cases.iter().map(|c| c.name.clone()).collect();
+    let listed: BTreeSet<String> = std::fs::read_to_string(corpus_dir().join("CASES"))
+        .expect("tests/engine_corpus/CASES")
+        .lines()
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(str::to_string)
+        .collect();
+    let missing: Vec<&String> = listed.difference(&names).collect();
+    let unlisted: Vec<&String> = names.difference(&listed).collect();
+    assert!(
+        missing.is_empty() && unlisted.is_empty(),
+        "tests/engine_corpus/CASES lists every case: deleted or renamed {missing:?}, not listed {unlisted:?}"
+    );
 }
 
 /// A graph a cap stopped partway decides nothing the full graph contradicts: on the whole
@@ -1251,6 +1327,54 @@ fn each_h_reason_a_case_shows_has_a_witness() {
             "{case} with {reason} dropped: {stderr}"
         );
     }
+}
+
+/// A case whose header is `header`, parsed as the corpus parses one.
+fn case_with(name: &str, header: &str) -> Case {
+    let path = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("{name}.rdra"));
+    std::fs::write(&path, header).unwrap();
+    parse_case(&path).unwrap_or_else(|e| panic!("{e}"))
+}
+
+/// Rule 2 fails a native `Cone_` line that TLC printed no line for when the header gives its
+/// check a TLC verdict, so a missing TLC run is no longer compared with nothing; a native
+/// `RdraSpec_` line may stand alone, and a check with `tlc=none` needs no TLC line (P13 of
+/// docs/theory/README.md).
+#[test]
+fn rule_2_fails_a_tlc_line_the_header_expects_and_the_run_lacks() {
+    let case = case_with(
+        "rule_2_canned",
+        "// trap: canned\n// expect P: native=ok tlc=ok\n// expect Q: native=ok tlc=none\n",
+    );
+    let failures = |stdout: &str| rule_2(&case, &Observed::parse(stdout, ""));
+    assert_eq!(failures("Cone_P [P]: ok (5 states)\n").len(), 1);
+    assert!(failures("Cone_P [P]: ok (5 states)\ntlc: Cone_P [P]: ok (5 states)\n").is_empty());
+    assert!(failures("RdraSpec_P [P]: ok (9 states)\ntlc: Cone_P [P]: ok (5 states)\n").is_empty());
+    assert!(failures("Cone_Q [Q]: ok (5 states)\n").is_empty());
+    assert_eq!(
+        failures("Cone_P [P]: ok (5 states)\ntlc: Cone_P [P]: counterexample (5 states)\n").len(),
+        1
+    );
+}
+
+/// Rule 8 fails a check the plain run decides and the run up to instance symmetry leaves
+/// `not decided`, as well as one it decides differently (P13 of docs/theory/README.md).
+#[test]
+fn rule_8_fails_a_check_symmetry_leaves_undecided() {
+    let case = case_with(
+        "rule_8_canned",
+        "// trap: canned\n// expect P: native=ok tlc=ok\n",
+    );
+    let plain = Observed::parse("Cone_P [P]: ok (5 states)\n", "");
+    let at = |sym: &str| rule_8(&case, (&plain, &Observed::parse(sym, "")), "at 2 instances");
+    assert!(at("Cone_P [P]: ok (about 3 states)\n").is_empty());
+    assert_eq!(
+        at("Cone_P [P]: not decided (about 3 states, stopped at the state cap (--max-states) or the memory limit)\n").len(),
+        1
+    );
+    assert_eq!(at("Cone_P [P]: counterexample (about 3 states)\n").len(), 1);
+    let undecided = Observed::parse("Cone_P [P]: not decided (5 states)\n", "");
+    assert!(rule_8(&case, (&undecided, &plain), "at 2 instances").is_empty());
 }
 
 /// A twin that lets a call pass unchecked says so without `RDRA_ISH_SHADOW_STATS`: at 7

@@ -112,7 +112,8 @@ fn a_run_at_the_memory_limit_estimates_what_finishing_needs() {
         "{stderr}"
     );
     // A cone still growing, whose variables allow far more states than 1TiB holds, gives no
-    // figure.
+    // figure. The figures are those of an entity cone that holds every raiser of the events its
+    // use cases wait for (P32, #477): such a cone is the entity's exact cone.
     let out = run(
         &repo(),
         &["check", "--memory", "1MiB", "samples/insurance-claim-ops"],
@@ -120,7 +121,7 @@ fn a_run_at_the_memory_limit_estimates_what_finishing_needs() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
         stderr.contains(
-            "the frontier still grows (172 new states at depth 8, 1.3x the depth before), so its \
+            "the frontier still grows (244 new states at depth 9, 1.4x the depth before), so its \
              layers give no estimate of the states left; raise it with --memory or `memory` under \
              [check] in rdra.toml, or narrow with --entity or --buc"
         ),
@@ -202,8 +203,10 @@ fn cones_side_by_side_stop_where_they_stop_one_at_a_time() {
         String::from_utf8_lossy(&out.stderr).into_owned()
     };
     let one = run_on("1");
+    // Ten stop since an entity cone that would leave a raised mark out is the entity's exact
+    // cone (P32, #477), whose states are wider; some cones still finish.
     let stops = one.matches("error[MemoryCapReached_").count();
-    assert!((1..10).contains(&stops), "{stops} cones stopped\n{one}");
+    assert!((1..16).contains(&stops), "{stops} cones stopped\n{one}");
     assert_eq!(run_on("8"), one);
     assert_eq!(run_on("3"), one);
 }

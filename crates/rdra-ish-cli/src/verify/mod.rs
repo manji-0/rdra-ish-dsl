@@ -44,7 +44,7 @@ use self::bfs::{
     bfs_cones, decide_by_proof, explored_properties, recheck_cones, report_bfs_cones, state_models,
     BfsCone, Explored, Safety, STATE_MODEL_TLC_STATES,
 };
-use self::compare::disagreements;
+use self::compare::{disagreements, unreplayed};
 use self::end::{End, TlcEnd};
 use self::jobs::{cone_jobs, explored_jobs, property_jobs, Job, JobKind};
 use self::native::{native_properties, native_wholes, Native, Natives};
@@ -495,6 +495,7 @@ pub fn run(
         disagreed.extend(state_model_disagreements(models, &model_jobs, &model_ran));
         let all_jobs: Vec<&Job> = jobs.iter().chain(&wholes).collect();
         let all_ran: Vec<&Ran> = ran.iter().chain(&whole_ran).collect();
+        disagreed.extend(unreplayed((&ts, &names), (&all_jobs, &all_ran)));
         let model_outcomes: Vec<Outcome> = model_ran.iter().map(|r| r.outcome()).collect();
         let outcome = worst(
             all_ran

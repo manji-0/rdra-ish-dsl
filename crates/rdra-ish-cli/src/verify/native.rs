@@ -20,8 +20,9 @@ pub(super) struct Native {
     /// The states of the run the line reports: the plain cone's, or the whole model's.
     pub(super) states: Option<u64>,
     pub(super) notes: Vec<String>,
-    /// Each cone run and what it said, for `--with-tlc` to compare.
-    pub(super) runs: Vec<(ConeRun, Outcome)>,
+    /// Each cone run and what it said, for `--with-tlc` to compare: `None` for a run that
+    /// stopped at a cap or the budget before it decided, which no TLC verdict contradicts.
+    pub(super) runs: Vec<(ConeRun, Option<Outcome>)>,
     /// The counterexample of a `counterexample` verdict.
     pub(super) found: Option<Box<StateDiag>>,
     /// A counterexample that failed its own check, or a reduced cone that disagrees with its
@@ -97,11 +98,12 @@ impl Answer {
         }
     }
 
-    pub(super) fn outcome(&self) -> Outcome {
+    /// What the run decided, `None` when it stopped first.
+    pub(super) fn outcome(&self) -> Option<Outcome> {
         match self {
-            Answer::Verdict(outcome, _) => *outcome,
-            Answer::Stopped => Outcome::Ok,
-            Answer::Fault(_) => Outcome::ToolError,
+            Answer::Verdict(outcome, _) => Some(*outcome),
+            Answer::Stopped => None,
+            Answer::Fault(_) => Some(Outcome::ToolError),
         }
     }
 }
@@ -221,7 +223,7 @@ fn native_property_after(p: &PropertyJob, caps: Caps, plain: Plain) -> (Native, 
     if let Some((second, found)) = reduced_wf {
         let wf = p.wf.as_ref().expect("checked above");
         out.crowded = crowded_run;
-        out.runs.push((ConeRun::WfNext, second));
+        out.runs.push((ConeRun::WfNext, Some(second)));
         out.notes.push(format!(
             "{}: {} on the reduced cone",
             wf.module,
@@ -385,7 +387,7 @@ fn liveness_up_to_symmetry(
     if cone.is_reduced() {
         drop(run);
         let (plain, vacuous) = native_property(ts, p, caps, false);
-        if plain.runs.first().map(|(_, o)| *o) == Some(Outcome::Ok) {
+        if plain.runs.first().and_then(|(_, o)| *o) == Some(Outcome::Ok) {
             let mut plain = plain;
             plain.fault = Some(
                 "the run up to symmetry finds a counterexample the plain run does not".to_string(),

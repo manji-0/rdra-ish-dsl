@@ -18,8 +18,8 @@ use std::collections::BTreeMap;
 
 use super::smt::{self, and, eq, not, or, Command, Expr, Fun, Rel, Script, Sort};
 use crate::lifecycle::types::{
-    Action, At, Birth, Choice, CmpOp, Domain, Effect, EntId, GuardWhy, ParamRole, Pred, Rhs, Start,
-    Term, Value, VarId, VarKind,
+    Action, At, Birth, CmpOp, Domain, Effect, EntId, GuardWhy, Numbers, ParamRole, Pred, Rhs,
+    Start, Term, Value, VarId, VarKind,
 };
 use crate::lifecycle::TransitionSystem;
 
@@ -450,6 +450,7 @@ impl Enc<'_> {
                     var,
                     param: p,
                     values,
+                    numbers,
                 } => match values
                     .iter()
                     .map(|c| self.value(*var, c.value))
@@ -457,7 +458,7 @@ impl Enc<'_> {
                 {
                     Ok(vals) => {
                         let c = fresh(&mut cmds, self.var_sort(*var));
-                        cmds.push(Command::Assert(self.one_of(*var, values, vals, &c)));
+                        cmds.push(Command::Assert(self.one_of(numbers, vals, &c)));
                         forks.push((*var, *p, None, c));
                     }
                     Err(Unsupported(why)) => {
@@ -521,24 +522,14 @@ impl Enc<'_> {
         }
     }
 
-    /// `c` is one of `values` (whose terms are `terms`). A list of every index from 1 of an Int
-    /// domain at the bounds stands for every index from 1 (every number, or every non-null
-    /// one), and with index 0 for every index.
-    fn one_of(&self, var: VarId, values: &[Choice], terms: Vec<Expr>, c: &Expr) -> Expr {
-        let domain = &self.ts.var(var).domain;
-        let size = domain.size(self.ts);
-        let has = |v: Value| values.iter().any(|c| c.value == v);
-        let listed = |from: usize| (from..size).all(|i| has(Value(i as u8)));
-        // The non-null numbers start at index 1 of a nullable domain; `present` on an Int
-        // column lists 1.. as well.
-        if domain.is_numeric() && listed(1) {
-            let from = match has(Value(0)) {
-                true => 0,
-                false => 1,
-            };
-            return smt::rel(Rel::Le, Expr::int(from), c.clone());
+    /// `c` is one of the values a choice lists (whose terms are `terms`), or, for a choice of
+    /// every number (`Numbers`), any index from its `from`: the list holds those only up to
+    /// the run's top, and a proof holds for every Int range.
+    fn one_of(&self, numbers: &Option<Numbers>, terms: Vec<Expr>, c: &Expr) -> Expr {
+        match numbers {
+            Some(n) => smt::rel(Rel::Le, Expr::int(i64::from(n.from.0)), c.clone()),
+            None => any(terms.into_iter().map(|t| eq(c.clone(), t)).collect()),
         }
-        any(terms.into_iter().map(|t| eq(c.clone(), t)).collect())
     }
 
     /// A fresh constant of `var`'s domain.

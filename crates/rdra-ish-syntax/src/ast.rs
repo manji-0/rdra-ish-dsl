@@ -555,8 +555,8 @@ pub enum AstTemporalFormula {
         antecedent: Expr,
         consequent: Expr,
     },
-    /// `can_reach(p)`: from every reachable state with the instance present, some path
-    /// reaches `p` (CTL `AG (present => EF p)`).
+    /// `can_reach(p)`: from every reachable state with the instance present, some path that
+    /// keeps it present reaches `p` (CTL `AG (present => E[present U (present /\ p)])`).
     CanReach(Expr),
     /// `stable(p)`: once `p` holds it keeps holding while the instance is present.
     Stable(Expr),

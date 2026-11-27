@@ -462,7 +462,13 @@ pub fn reserved_names(lang: Lang) -> &'static [&'static str] {
         // `Symbol`: the sealed state types need the global one (`--seal`).
         Lang::TypeScript => &["Result", "assertNever", "Symbol"],
         // The sentinels errors.Is matches each case of a `<UseCase>Error` with.
-        Lang::Go => &["ErrNotEnabled", "ErrRejected", "ErrInvalidArgument"],
+        Lang::Go => &[
+            "ErrNotEnabled",
+            "ErrNotFound",
+            "ErrRejected",
+            "ErrInvalidArgument",
+            "ErrStoreFailed",
+        ],
         Lang::Rust => &[],
     }
 }
@@ -546,10 +552,10 @@ pub fn build_for(
         "Refused",
         ir::INVALID_ROW,
         "InvalidValue",
-        ir::ERROR_CASES[0],
-        ir::ERROR_CASES[1],
-        ir::ERROR_CASES[2],
-    ] {
+    ]
+    .into_iter()
+    .chain(ir::ERROR_CASES)
+    {
         names.claim(reserved.to_string(), "a reserved word".to_string())?;
     }
 

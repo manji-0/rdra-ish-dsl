@@ -502,7 +502,7 @@ fn a_model_adapter_conforms_whatever_the_domain_code_became() {
     let (code, stdout, stderr) = outcome(&rdra(&dir, &["check", "model", "--code=run"], None));
     assert_eq!(code, Some(0), "{stderr}");
     assert!(
-        stdout.contains("  ran: 11 traces, 21 calls, 11 refused calls, 7 interleaved commits; 32 calls made again by prepare and commit\n"),
+        stdout.contains("  ran: 11 traces, 21 calls, 13 refused calls, 7 interleaved commits; 34 calls made again by prepare and commit\n"),
         "{stdout}"
     );
     assert!(
