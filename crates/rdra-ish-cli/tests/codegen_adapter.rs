@@ -264,6 +264,7 @@ fn models() -> Vec<String> {
         "entry_only.rdra",
         "go_names.rdra",
         "conformance.rdra",
+        "adapter_names.rdra",
     ] {
         models.push(format!(
             "crates/rdra-ish-cli/tests/fixtures/codegen/{fixture}"
@@ -441,7 +442,8 @@ fn typescript_adapters_build() {
 }
 
 /// A `[code.<lang>]` table names its code file once: `domain` or `adapter`, and an adapter
-/// with its traces.
+/// with its traces. Another table fails to load, as a table missing a required key does, so
+/// every command that reads rdra.toml fails on it.
 #[test]
 fn a_code_table_names_the_domain_or_the_adapter() {
     let dir = scratch("tables");
@@ -459,7 +461,11 @@ fn a_code_table_names_the_domain_or_the_adapter() {
             format!("[model]\nname = \"shop\"\n\n[code.rust]\n{table}\n"),
         )
         .unwrap();
-        for args in [["codegen", ".", "--code"], ["check", ".", "--code=fresh"]] {
+        for args in [
+            &["codegen", ".", "--code"][..],
+            &["check", ".", "--code=fresh"][..],
+            &["check", "."][..],
+        ] {
             let out = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
                 .current_dir(&dir)
                 .args(args)
@@ -467,7 +473,7 @@ fn a_code_table_names_the_domain_or_the_adapter() {
                 .expect("runs rdra-ish");
             assert!(!out.status.success(), "{table}: {}", text(&out));
             assert!(
-                text(&out).contains(&format!("[code.rust] in rdra.toml {says}")),
+                text(&out).contains(&format!("rdra.toml:4: [code.rust] {says}")),
                 "{table}: {}",
                 text(&out)
             );

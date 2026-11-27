@@ -452,9 +452,15 @@ port. `codegen --adapter` (with `--conformance`) prints it in place of the domai
   `invoke(Call)`, which returns that the call ran or a refusal kind (`NotEnabled`,
   `Rejected`, `InvalidArgument`, the variants of the core's use-case errors). The harness does
   not check the kind yet: PR 4 does, and the kind is in the interface now so that PR 4 breaks
-  no adapter. `prepare(Call)` and `commit()` are optional. Without them the harness runs an
-  interleaved row (`I`) as its second call alone, which reaches the same state, and counts it
-  as skipped: conditional writes go unchecked, and `--code=run` says so.
+  no adapter. `prepare(Call)` and `commit()` are optional, and only as a pair (in Rust a
+  `SplitAdapter` that `split()` returns, so a forgotten `commit` does not compile). Without
+  them the harness runs an interleaved row (`I`) as its second call alone, which reaches the
+  same state, and counts it as skipped: conditional writes go unchecked, and `--code=run`
+  says so. `commit` takes no token of its prepare (the study had `commit(Pending)`): the
+  adapter holds one prepared write at a time, which is all an `I` row needs. Plain calls go
+  through `invoke` only, so a `commit` that always refuses passes the `I` rows; `invoke` must
+  do what `prepare` then `commit` do, and running a split adapter's `C` rows through the pair
+  is left as an option.
 - **The same traces, the same words.** The harness reads the traces the port's harness
   reads, abstracts `ModelState` to the same lines as the port's snapshot, and reports a
   difference in the same text (`traces line <n>:`). So the self-check runs through it

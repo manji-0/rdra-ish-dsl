@@ -745,9 +745,12 @@ by `codegen --adapter`. The file holds plain data and no type of the domain code
   the traces give.
 - `ModelAdapter`: `reset`, `seed(ModelState)`, `observe() -> ModelState`, and
   `invoke(Call)`, which says the call ran or the kind of refusal (`NotEnabled`, `Rejected`,
-  `InvalidArgument`). Optional `prepare(Call)` and `commit()` split a call for the traces'
-  interleaved commits (Go: `SplitAdapter`; TypeScript: optional members, and each method
-  may return a promise).
+  `InvalidArgument`). Optional, and only as a pair, `prepare(Call)` and `commit()` split a
+  call for the traces' interleaved commits (Rust: `split()` returns the adapter as a
+  `SplitAdapter`; Go: the adapter also implements `SplitAdapter`; TypeScript: optional
+  members, and each method may return a promise). `invoke` must do what `prepare` then
+  `commit` do: the traces' plain calls go through `invoke` only, so nothing else shows that a
+  commit ever stores its write.
 - `conform` / `Conform`: the harness. It reads the same traces as the port's harness and
   reports a difference in the same words.
 

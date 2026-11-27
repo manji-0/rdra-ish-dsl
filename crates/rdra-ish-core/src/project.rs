@@ -310,6 +310,16 @@ fn parse_manifest(path: &Path) -> Result<Manifest, ProjectError> {
         fail(line, e.message().to_string())
     })?;
     manifest.path = path.to_path_buf();
+    // A `[code.<lang>]` table names its code file once, as a required key would.
+    if let Some(code) = &manifest.code {
+        for (name, target) in code.targets() {
+            if let Some(problem) = target.problem() {
+                let table = format!("[code.{name}]");
+                let line = text.lines().position(|l| l.trim() == table).map(|i| i + 1);
+                return Err(fail(line, format!("{table} {problem}")));
+            }
+        }
+    }
     Ok(manifest)
 }
 

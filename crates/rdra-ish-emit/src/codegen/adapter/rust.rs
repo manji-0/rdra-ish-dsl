@@ -294,23 +294,32 @@ pub trait ModelAdapter {{
     ///
     /// The kind of refusal, when the use case does not run.
     fn invoke(&mut self, call: &Call) -> {RESULT}<(), Refusal>;
-    /// Optional, for the interleaved rows of the traces: reads the call's rows and holds its
-    /// write for [`ModelAdapter::commit`], writing nothing. `None`, the default, when the
-    /// service does not split a call: the harness then runs those rows as plain calls and
-    /// counts them as skipped, so conditional writes go unchecked.
-    fn prepare(&mut self, call: &Call) -> {OPTION}<{RESULT}<(), Refusal>> {{
-        let _ = call;
+    /// Optional, for the interleaved rows of the traces: the adapter as a [`SplitAdapter`].
+    /// `None`, the default, when the service does not split a call: the harness then runs
+    /// those rows as plain calls and counts them as skipped, so conditional writes go
+    /// unchecked.
+    fn split(&mut self) -> {OPTION}<&mut dyn SplitAdapter> {{
         {OPTION}::None
     }}
-    /// Stores the write [`ModelAdapter::prepare`] holds in one transaction, only where its
+}}
+
+/// A service that splits a call in two, as the interleaved rows of the traces need: a
+/// prepare that reads, and a commit that writes only where the rows are still what it read.
+/// `invoke` must do what `prepare` then `commit` do.
+pub trait SplitAdapter {{
+    /// Reads the call's rows and holds its write for [`SplitAdapter::commit`], writing nothing.
+    ///
+    /// # Errors
+    ///
+    /// The kind of refusal, when the use case does not run.
+    fn prepare(&mut self, call: &Call) -> {RESULT}<(), Refusal>;
+    /// Stores the write [`SplitAdapter::prepare`] holds in one transaction, only where its
     /// rows are still what the prepare read.
     ///
     /// # Errors
     ///
     /// The kind of refusal, when the rows changed.
-    fn commit(&mut self) -> {RESULT}<(), Refusal> {{
-        {RESULT}::Err(Refusal::NotEnabled)
-    }}
+    fn commit(&mut self) -> {RESULT}<(), Refusal>;
 }}
 
 /// What `conform` checked.
@@ -428,7 +437,7 @@ pub fn conform<A: ModelAdapter>(adapter: &mut A, traces: &str) -> {RESULT}<Adapt
                 let split = rest.iter().position(|t| *t == "|").ok_or_else(|| at("an interleaving without `|`".to_string()))?;
                 let (first, second) = (rest.get(1..split).unwrap_or_default(), rest.get(split + 1..).unwrap_or_default());
                 let (early, late) = (ad_call(first).map_err(at)?, ad_call(second).map_err(at)?);
-                let held = match adapter.prepare(&early) {{
+                let held = match adapter.split().map(|s| s.prepare(&early)) {{
                     {OPTION}::None => false,
                     {OPTION}::Some({RESULT}::Ok(())) => true,
                     {OPTION}::Some({RESULT}::Err(why)) => return {RESULT}::Err(at(format!("the model runs `{{}}` here, and the service refused it: {{}}", first.join(" "), why.as_str()))),
@@ -438,8 +447,10 @@ pub fn conform<A: ModelAdapter>(adapter: &mut A, traces: &str) -> {RESULT}<Adapt
                 }}
                 ad_compare(&ad_abstract(&adapter.observe()), &next, &format!("after `{{}}`", second.join(" "))).map_err(at)?;
                 if held {{
-                    if adapter.commit().is_ok() {{
-                        return {RESULT}::Err(at(format!("the service committed `{{}}`, prepared before `{{}}` changed a row it writes: the write must be conditional on what the row was", first.join(" "), second.join(" "))));
+                    match adapter.split().map(|s| s.commit()) {{
+                        {OPTION}::Some({RESULT}::Err(_)) => {{}}
+                        {OPTION}::Some({RESULT}::Ok(())) => return {RESULT}::Err(at(format!("the service committed `{{}}`, prepared before `{{}}` changed a row it writes: the write must be conditional on what the row was", first.join(" "), second.join(" ")))),
+                        {OPTION}::None => return {RESULT}::Err(at("the adapter split the prepare and then not the commit".to_string())),
                     }}
                     ad_compare(&ad_abstract(&adapter.observe()), &next, &format!("after the refused commit of `{{}}`", first.join(" "))).map_err(at)?;
                     report.interleavings += 1;

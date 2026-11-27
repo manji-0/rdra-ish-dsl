@@ -1,0 +1,9 @@
+// Fixture of tests/codegen_adapter.rs: names that meet the adapter's own. A Go call struct has the
+// method `Action`, so the argument of the entity Action needs another field name.
+entity Action "A" {
+  id: Int @pk
+  status: Enum(open, done) @default(open)
+}
+
+usecase Close "C"
+transitions(Close, Action.status, open -> done)

@@ -57,6 +57,17 @@ fn field(name: &str) -> String {
     type_ident(name)
 }
 
+/// The field of a call's argument: a call struct has the method `Action`, so an argument whose
+/// field would be `Action` gets a suffix.
+fn arg_field(name: &str) -> String {
+    let f = field(name);
+    if f == "Action" {
+        format!("{f}Arg")
+    } else {
+        f
+    }
+}
+
 fn print_enums(a: &Adapter, out: &mut String) {
     for e in &a.enums {
         out.push_str(&doc(
@@ -219,7 +230,7 @@ fn print_calls(a: &Adapter, out: &mut String) {
                     }
                     ArgKind::Event(i) => a.events[*i].name.clone(),
                 };
-                Line::Cells(vec![field(&arg.name), t])
+                Line::Cells(vec![arg_field(&arg.name), t])
             })
             .collect();
         out.push_str(&struct_decl(&c.name, &lines));
@@ -635,14 +646,14 @@ fn print_call_parser(ad: &Adapter, out: &mut String) {
             match &arg.kind {
                 ArgKind::Value { val, nullable } => out.push_str(&format!(
                     "\t\tv.{} = {}\n",
-                    field(&arg.name),
+                    arg_field(&arg.name),
                     read(ad, *val, *nullable, false)
                 )),
                 ArgKind::Event(i) => {
                     for (name, _, val, _) in &ad.events[*i].ids {
                         out.push_str(&format!(
                             "\t\tv.{}.{} = {}\n",
-                            field(&arg.name),
+                            arg_field(&arg.name),
                             field(name),
                             read(ad, *val, false, false)
                         ));

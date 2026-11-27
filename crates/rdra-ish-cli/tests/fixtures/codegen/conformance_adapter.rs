@@ -231,11 +231,18 @@ impl m::ModelAdapter for Adapter {
         self.commit_held(held)
     }
 
-    fn prepare(&mut self, call: &m::Call) -> Option<Result<(), m::Refusal>> {
-        if !self.split {
-            return None;
+    fn split(&mut self) -> Option<&mut dyn m::SplitAdapter> {
+        if self.split {
+            Some(self)
+        } else {
+            None
         }
-        Some(self.prepare_call(call).map(|h| self.held = Some(h)))
+    }
+}
+
+impl m::SplitAdapter for Adapter {
+    fn prepare(&mut self, call: &m::Call) -> Result<(), m::Refusal> {
+        self.prepare_call(call).map(|h| self.held = Some(h))
     }
 
     fn commit(&mut self) -> Result<(), m::Refusal> {

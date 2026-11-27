@@ -376,9 +376,6 @@ pub(crate) fn code_manifest(manifest: Option<&Manifest>) -> Result<&Manifest> {
     match &manifest.code {
         Some(code) if !code.targets().is_empty() => {
             for (name, target) in code.targets() {
-                if let Some(problem) = target.problem() {
-                    bail!("[code.{name}] in {} {problem}", shown(&manifest.path));
-                }
                 if name != "ts" && (target.seal.is_some() || target.tsconfig.is_some()) {
                     bail!(
                         "[code.{name}] in {}: `seal` and `tsconfig` are for [code.ts] only",
