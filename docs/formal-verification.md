@@ -566,7 +566,18 @@ forbidden(Claim, ClaimCase, Claim.completed_on == present, ClaimCase.status in (
 
 **Budgets.** Each z3 check has a budget of resource units (`rlimit`), a count of solver steps,
 not of time: 20,000,000 for a rule and 2,000,000 for a lemma. So the proof is the same on a
-busy machine and an idle one. The rounds that find the inductive set run z3 without model-based quantifier
+busy machine and an idle one. A unit is z3's own count, so the limits hold for the z3 versions
+they were measured on: 5.1.0 today, the one `flake.nix` and `flake.lock` pin. Under any other
+version, or one whose `z3 --version` line it cannot read, `verify --prove` prints `note: z3
+<version> is not a version the proof's resource limits were measured on (5.1.0); ...` on
+stderr. The version must match exactly, since a patch release can change what a check
+spends, and the note changes nothing else. On every sample, on 1, 2, and 3 solvers, no check
+that keeps a rule or lemma spends more than 161,000 units for a rule (1/124 of its limit) or
+114,000 for a lemma (1/17), and the release test `proof_equivalence` fails when one passes a
+tenth of its limit. A check past its limit gives up instead, so the test catches a z3 that
+spends more on these proofs only up to the limit; past it, a domain-sample rule left unproved
+fails the same test, while a lemma that gives up is dropped and fails it only when a rule then
+goes unproved. The rounds that find the inductive set run z3 without model-based quantifier
 instantiation (MBQI), which settles the checks that keep a rule several times faster; the
 counterexamples to induction are then found with it on. A rule z3 gives up on is `unproved` with
 `z3 gave up on <action>`. The checks are shared out over several z3 processes (`RDRA_JOBS`); the result does

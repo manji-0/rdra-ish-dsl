@@ -224,6 +224,7 @@ pub(crate) fn run_proof(
         tally,
         proved: with(proved),
         unproved: unproved_rules,
+        note: prove::unverified_z3_note(&version),
         text,
     })
 }
@@ -235,6 +236,9 @@ pub(crate) struct ProofRun {
     pub proved: BTreeSet<usize>,
     /// The rules left unproved, lemmas left out, by index into `ts.invariants()`.
     pub unproved: BTreeSet<usize>,
+    /// The `note:` for stderr when the z3 that ran is not a version the limits were measured
+    /// on (`prove::unverified_z3_note`).
+    pub note: Option<String>,
     /// The lines to print.
     pub text: String,
 }

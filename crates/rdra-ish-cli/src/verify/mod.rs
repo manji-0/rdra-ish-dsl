@@ -348,6 +348,9 @@ pub fn run(
         rdra_ish_core::perf::pass("proof");
         let proof = match proof.map(|p| p.join()) {
             Some(Ok(ran)) => ran.map(|run| {
+                if let Some(note) = &run.note {
+                    eprintln!("{note}");
+                }
                 print!("{}", run.text);
                 Some(run)
             }),

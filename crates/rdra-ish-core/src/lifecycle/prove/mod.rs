@@ -149,6 +149,37 @@ impl Default for ProveOptions {
     }
 }
 
+/// The z3 versions the limits above were measured on, as `z3 --version` prints them; the
+/// flake pins the first (`flake.nix`, `flake.lock`). A unit is z3's own count of solver work,
+/// which a release may count differently or spend differently on the same query, a patch
+/// release included, so a version is listed only once it has been measured. To add one: run
+/// `examples/prove_rlimit.rs` under it on 1 and 4 solvers, check that no unsat check spends
+/// more than a tenth of either limit and that every domain-sample rule is still proved (the
+/// `proof_equivalence` tests assert both, on 1, 2, and 3 solvers), and update the figures
+/// above.
+pub const VERIFIED_Z3: &[&str] = &["5.1.0"];
+
+/// The note `verify --prove` prints when `version`, the line `z3 --version` printed (as
+/// `Z3 version 5.1.0 - 64 bit`), names no version in `VERIFIED_Z3`; `None` when it names one.
+/// The version must match exactly: see `VERIFIED_Z3`.
+pub fn unverified_z3_note(version: &str) -> Option<String> {
+    let mut words = version.split_whitespace();
+    let number = words
+        .by_ref()
+        .find(|w| w.eq_ignore_ascii_case("version"))
+        .and_then(|_| words.next());
+    let verified = VERIFIED_Z3.join(", ");
+    match number {
+        Some(n) if VERIFIED_Z3.contains(&n) => None,
+        Some(n) => Some(format!(
+            "note: z3 {n} is not a version the proof's resource limits were measured on ({verified}); a check may give up, or settle, where it would not on those"
+        )),
+        None => Some(format!(
+            "note: cannot read the z3 version (`z3 --version` printed {version:?}); the proof's resource limits were measured on z3 {verified}"
+        )),
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Origin {
     Rule(usize),
@@ -1063,6 +1094,43 @@ fn var_label(ts: &TransitionSystem, v: VarId) -> String {
                 Some((_, rest)) => rest.to_string(),
                 None => name,
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::unverified_z3_note;
+
+    #[test]
+    fn a_verified_z3_prints_no_note() {
+        assert_eq!(unverified_z3_note("Z3 version 5.1.0 - 64 bit"), None);
+    }
+
+    #[test]
+    fn any_other_z3_version_prints_a_note() {
+        for (line, number) in [
+            ("Z3 version 5.1.1 - 64 bit", "5.1.1"),
+            ("Z3 version 5.2.0 - 64 bit", "5.2.0"),
+            ("Z3 version 4.13.0 - 64 bit", "4.13.0"),
+            ("Z3 version 5.1.0.1 - 64 bit", "5.1.0.1"),
+        ] {
+            assert_eq!(
+                unverified_z3_note(line).as_deref(),
+                Some(format!("note: z3 {number} is not a version the proof's resource limits were measured on (5.1.0); a check may give up, or settle, where it would not on those").as_str()),
+                "{line}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_unreadable_z3_version_prints_a_note() {
+        for line in ["", "z3", "Z3 version"] {
+            let note = unverified_z3_note(line).unwrap_or_else(|| panic!("{line:?}"));
+            assert!(
+                note.starts_with("note: cannot read the z3 version"),
+                "{note}"
+            );
         }
     }
 }
