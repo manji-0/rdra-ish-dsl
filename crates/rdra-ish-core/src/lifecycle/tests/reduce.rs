@@ -1770,3 +1770,65 @@ fn a_lift_from_no_initial_state_is_a_replay_error() {
     );
     assert_eq!(run.system.lifted(&start, &[]), Err(ReplayError::NotInitial));
 }
+
+/// A class move with no S path behind it, here a reduced path that takes a real class move
+/// and then a forged one back to the class it left, is the `NoMove` of that step, a fault,
+/// never a panic (P20): the claims' S actions only create, review and pay, so no S path leads
+/// back, and the lift's path search is checked in every build like its look-up of the target.
+#[test]
+fn a_class_move_with_no_s_path_is_a_replay_error() {
+    let model = model_from(CASE_FOLD);
+    let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+    let targets = ts.targets();
+    let reduced = ts.explore_targets_reduced(&targets, Caps::VERIFY);
+    let run = &reduced.cone_of(entity_target(&ts, "Case")).run;
+    let r = run.system.reduction().expect("the Case view reduces");
+    let class = |i: u32| r.class(&run.system, &run.states.at(i as usize).into_state());
+    let edges: Vec<_> = run.edges().iter().collect();
+    let moved = *(edges.iter())
+        .find(|e| r.skips(run.step(&**e).0) && class(e.to) != class(e.from))
+        .expect("a class move");
+    // A path of the reduced run from its first state to the class move's source.
+    let mut parent = std::collections::HashMap::new();
+    let mut queue = std::collections::VecDeque::from([0u32]);
+    while let Some(x) = queue.pop_front() {
+        for e in edges.iter().filter(|e| e.from == x) {
+            if e.to != 0 && !parent.contains_key(&e.to) {
+                parent.insert(e.to, *e);
+                queue.push_back(e.to);
+            }
+        }
+    }
+    let mut prefix = Vec::new();
+    let mut at = moved.from;
+    while at != 0 {
+        let e = parent[&at];
+        prefix.push(e);
+        at = e.from;
+    }
+    prefix.reverse();
+    let step = |e: &crate::lifecycle::explore::Edge, to: u32| {
+        let (act, params) = run.step(e);
+        let params: Box<[u8]> = params.into();
+        (act, params, run.states.at(to as usize).into_state())
+    };
+    let mut forged: Vec<_> = prefix.iter().map(|e| step(e, e.to)).collect();
+    forged.push(step(&moved, moved.to));
+    forged.push(step(&moved, moved.from));
+    let start = run.states.at(0).into_state();
+    assert_eq!(
+        run.system
+            .lifted(&start, &forged[..forged.len() - 1])
+            .map(|_| ()),
+        Ok(()),
+        "the path up to the class move lifts"
+    );
+    let back = forged.len() + 1;
+    assert!(
+        matches!(
+            run.system.lifted(&start, &forged),
+            Err(ReplayError::NoMove { state, .. }) if state == back
+        ),
+        "the move back is state {back}"
+    );
+}
