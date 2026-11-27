@@ -102,11 +102,11 @@ pub(super) fn disagreements(
                 };
                 for (run, mine) in &native.runs {
                     let theirs = tlc.runs.iter().find(|(r, _)| r == run).map(|(_, o)| *o);
-                    if differ(Some(*mine), theirs) {
+                    if differ(*mine, theirs) {
                         out.push(line(
                             &module(*run),
                             &job.checks,
-                            mine.as_str(),
+                            as_str(*mine),
                             as_str(theirs),
                         ));
                     }
