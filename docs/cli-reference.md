@@ -2252,8 +2252,10 @@ For developers. These change only diagnostics or turn an optimisation off; the v
 | `RDRA_ISH_NO_WF_REDUCED` | Do not run `WF_vars(Next)` on a reduced cone first. |
 | `RDRA_ISH_FORCE_ORBITS` | Test only: under `--symmetry always`, run every eligible job up to symmetry, sharing nothing. |
 
-A `shadow` build also reads `RDRA_ISH_SHADOW_STATS`, `RDRA_ISH_DROP_RULE`, and
-`RDRA_ISH_FORCE_S_UP_TO_H`, and a `perf` build `RDRA_PERF` (`1` the pass and run lines, `2` the
+A `shadow` build also reads `RDRA_ISH_SHADOW_STATS`, `RDRA_ISH_DROP_RULE`,
+`RDRA_ISH_FORCE_S_UP_TO_H`, and `RDRA_ISH_FORCE_PROBES`, and prints a
+`shadow: compared/skipped/stopped` line at exit whenever a reference twin let a call through
+unchecked, with or without `RDRA_ISH_SHADOW_STATS`; a `perf` build `RDRA_PERF` (`1` the pass and run lines, `2` the
 costly columns too), `RDRA_PERF_EVAL_TWICE`, and the measurement switches the `perf` module
 lists (`crates/rdra-ish-core/src/perf.rs`). The test suites read `RDRA_REQUIRE_*` and other
 variables of their own.
