@@ -31,6 +31,7 @@ use crate::lifecycle::expr::State;
 use crate::lifecycle::lasso::{Fairness, Loop};
 use crate::lifecycle::reduce::Step;
 use crate::lifecycle::types::{ActId, Ltl, Pred};
+use crate::lifecycle::ReplayError;
 
 use super::super::graph::Adjacency;
 use super::super::{LassoFault, PropertyVerdict};
@@ -444,6 +445,8 @@ impl<'r> Product<'r> {
     ) -> Result<PropertyVerdict, LassoFault> {
         let run = &self.run.run;
         // The BFS path to the start's state, its binding read back to the initial state.
+        // Unchecked internal invariant (P20): `path_to` returns the parent edges the BFS
+        // stored, each one of its source's edges, so the look-up finds it.
         let path: Vec<usize> = (run.path_to(self.state_of(start)).iter())
             .map(|e| {
                 let range = run.edges().range_of(e.from);
@@ -455,6 +458,8 @@ impl<'r> Product<'r> {
             .collect();
         let mut walk = path;
         let mut at = start;
+        // Unchecked internal invariant (P20): `search` set `toward[at]` from one of `at`'s
+        // real edges, so the walk finds that edge.
         while search.toward[at as usize] != at {
             let to = search.toward[at as usize];
             let (k, _) = self
@@ -476,7 +481,9 @@ impl<'r> Product<'r> {
             }
         };
         let (states, actions, tail) = {
-            let (start_state, mut steps, tau) = self.lift(first, &walk, None);
+            let (start_state, mut steps, tau) = self
+                .lift(first, &walk, None, 0)
+                .map_err(LassoFault::Replay)?;
             match cycle {
                 None => {
                     let mut states = vec![start_state];
@@ -489,7 +496,9 @@ impl<'r> Product<'r> {
                     let mut tau = tau;
                     let mut copies = 0;
                     loop {
-                        let (_, more, next) = self.lift(first, &cycle, Some(tau));
+                        let (_, more, next) = self
+                            .lift(first, &cycle, Some(tau), steps.len())
+                            .map_err(LassoFault::Replay)?;
                         tau = next;
                         steps.extend(more);
                         copies += 1;
@@ -524,8 +533,17 @@ impl<'r> Product<'r> {
     /// The edges `ks`, a walk of stored edges from stored state `first`, lifted to concrete
     /// states from `τ` (the identity when `None`): each edge's concrete successor is the move
     /// at its place among its source's moves, read through `τ`, and `τ` becomes `τ ∘ σ⁻¹`.
-    /// Also returns the first concrete state and the last `τ`.
-    fn lift(&self, first: u32, ks: &[usize], tau: Option<Vec<u8>>) -> (State, Vec<Step>, Vec<u8>) {
+    /// Also returns the first concrete state and the last `τ`. `before` is the number of steps
+    /// the lasso has before these, so a fault names the lasso's state. An edge that is not the
+    /// move at its place, or whose permutation does not take that move to its target, is a
+    /// `ReplayError::NoMove` (P20), as `orbit::lift_path` reports a stored edge it cannot find.
+    fn lift(
+        &self,
+        first: u32,
+        ks: &[usize],
+        tau: Option<Vec<u8>>,
+        before: usize,
+    ) -> Result<(State, Vec<Step>, Vec<u8>), ReplayError> {
         let (run, g) = (&self.run.run, &self.run.group);
         let ts = &run.system;
         let mut tau = tau.unwrap_or_else(|| g.identity());
@@ -535,29 +553,27 @@ impl<'r> Product<'r> {
             State(out.into_boxed_slice())
         };
         let mut steps = Vec::with_capacity(ks.len());
+        let mut stored = vec![0u8; ts.width];
         for &k in ks {
             let e = run.edges().get(k);
             let (act, params) = run.step(&e);
+            let no_move = ReplayError::NoMove {
+                state: before + steps.len() + 2,
+                action: act,
+            };
             let place = k - run.edges().range_of(e.from).start;
-            let m = ts
-                .moves(&run.states.at(e.from as usize))
-                .nth(place)
-                .expect("an edge is a move of its source, at its place");
-            assert!(
-                m.act == act && *m.params == *params,
-                "symmetry: edge {k} is not the move at its place; a tool bug"
-            );
+            let m = (ts.moves(&run.states.at(e.from as usize)).nth(place))
+                .filter(|m| m.act == act && *m.params == *params)
+                .ok_or_else(|| no_move.clone())?;
             let sigma = self.perms.get(self.perms.id(k));
-            let mut stored = vec![0u8; ts.width];
             g.apply(sigma, &m.next.0, &mut stored);
-            assert!(
-                stored[..] == run.states.at(e.to as usize).0[..],
-                "symmetry: edge {k}'s permutation does not take its move to its target; a tool bug"
-            );
+            if stored[..] != run.states.at(e.to as usize).0[..] {
+                return Err(no_move);
+            }
             steps.push(concrete(ts, g, &tau, act, params, &m.next));
             tau = g.compose(&tau, &g.inverse(sigma));
         }
-        (start, steps, tau)
+        Ok((start, steps, tau))
     }
 
     /// A walk of edges inside `end`'s component from `end` back to it that covers, for every
@@ -622,6 +638,9 @@ impl<'r> Product<'r> {
                 }
             }
         }
+        // Unchecked internal invariant (P20): `fair_loop` asks only for a thread enabled in
+        // a component `search` marked fair, and a fair component has, for every thread, an
+        // edge that takes it or a pair where it is not enabled.
         panic!("a fair component covers every thread")
     }
 
@@ -663,6 +682,8 @@ impl<'r> Product<'r> {
                 }
             }
         }
+        // Unchecked internal invariant (P20): `from` and `to` are pairs of one strongly
+        // connected component, so a walk inside it joins them.
         panic!("a component's pairs reach each other")
     }
 }
@@ -712,5 +733,57 @@ impl OrbitRun {
             });
         };
         product.lasso(i, fairness, &search, start)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lifecycle::tests::system_from;
+    use crate::lifecycle::{Bounds, Caps};
+
+    const SHIP: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid, shipped) @default(pending) }
+usecase Place "注文"
+usecase Pay "支払"
+usecase Ship "出荷"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+property PaidShips leads_to(Order.status == paid, Order.status == shipped)
+"#;
+
+    /// A stored edge whose permutation does not take the move at its place to its target is
+    /// a `ReplayError` of the lasso's lift, not a panic (P20): every edge lifts under the
+    /// run's own permutations, and some edge does not under the identity in their place.
+    #[test]
+    fn an_edge_its_permutation_does_not_explain_is_a_replay_error() {
+        let ts = system_from(SHIP, Bounds::VERIFY);
+        let i = (ts.properties().iter())
+            .position(|p| p.name == "PaidShips")
+            .expect("the property");
+        let run = ts.run_annotated_orbits(Caps::VERIFY);
+        let product = Product::new(&run, i);
+        let edges = run.perms.as_ref().expect("an annotated run").edges();
+        for k in 0..edges {
+            let from = run.run.edges().get(k).from;
+            assert!(product.lift(from, &[k], None, 0).is_ok(), "edge {k} lifts");
+        }
+        let mut identity = EdgePerms::new(&run.group);
+        (0..edges).for_each(|_| identity.push_identity());
+        let wrong = Product {
+            perms: &identity,
+            ..Product::new(&run, i)
+        };
+        let faults: Vec<ReplayError> = (0..edges)
+            .filter_map(|k| {
+                let from = run.run.edges().get(k).from;
+                wrong.lift(from, &[k], None, 3).err()
+            })
+            .collect();
+        assert!(!faults.is_empty(), "some edge moves its successor");
+        assert!(faults
+            .iter()
+            .all(|f| matches!(f, ReplayError::NoMove { state: 5, .. })));
     }
 }
