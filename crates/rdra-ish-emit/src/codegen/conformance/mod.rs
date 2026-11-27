@@ -23,16 +23,16 @@ use rdra_ish_core::lifecycle::{
 use rdra_ish_core::SemanticModel;
 
 use super::ir::{
-    Arg, CallerDecl, CapabilityDecl, ContractDecl, DomainModel, EntryDecl, Field, FieldType,
-    FnDecl, InputType, OutKind, PortDecl, PortEntity, PortEvent, PortInput, PortMethod, PortRun,
-    Scalar, Track,
+    Arg, ArgCheck, CallerDecl, CapabilityDecl, ContractDecl, DomainModel, EntryDecl, Field,
+    FieldType, FnDecl, InputType, OutKind, PortDecl, PortEntity, PortEvent, PortInput, PortMethod,
+    PortRun, Scalar, Track,
 };
 use super::snake;
 use super::{type_ident, CodegenError, Names};
 use eval::{column_var, enum_name, matching, Rows};
 
 /// The format line every traces file starts with; the harness refuses another.
-pub const TRACES_FORMAT: &str = "# rdra-ish conformance traces 3";
+pub const TRACES_FORMAT: &str = "# rdra-ish conformance traces 4";
 
 /// The environment variable a probe's conformance test reads its traces from when it is set
 /// and not empty, in place of the traces file it names: `check --code=run` points it at the
@@ -490,6 +490,30 @@ pub struct Traces {
     pub one_row: Vec<String>,
     /// The text of an id no row of the traces has: one past the most slots of any entity.
     pub absent_id: String,
+    /// The refused calls tried, by the kind of refusal they expect.
+    pub kinds: std::collections::BTreeMap<&'static str, usize>,
+    /// The refusals of the model the traces do not try.
+    pub untried: Untried,
+    /// The refused calls a condition rejects, by condition: what a model without that guard
+    /// would run.
+    pub guards: Vec<Guarded>,
+    /// The port's actions no row of the traces runs.
+    pub never_run: Vec<String>,
+    /// Traces seeded at a state the calls reach, each then one call (seed and path, H1).
+    pub seeded: usize,
+    /// The port's actions no row of the traces tries as refused.
+    pub never_refused: Vec<String>,
+}
+
+/// A refused call of the traces that a condition rejects.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Guarded {
+    /// The condition's id.
+    pub condition: String,
+    /// The state the call is refused in, as the traces number it.
+    pub state: String,
+    /// The `X` row, as the traces spell it.
+    pub row: String,
 }
 
 /// One move of a printed use case: the call that makes it.
@@ -523,7 +547,7 @@ pub fn traces(
         .clone()
         .run(Caps::new(Caps::for_instances(1).patterns, cap));
     let ts = &run.system;
-    let cx = Cx { model, ts, domain };
+    let cx = Cx::new(model, ts, domain);
 
     // Every move, and the calls that make the moves of a printed use case.
     let mut seen: HashSet<(u32, u32, usize, Vec<u8>)> = HashSet::new();
@@ -538,7 +562,7 @@ pub fn traces(
         cap,
         ..Traces::default()
     };
-    out.absent_id = id_text(ts.entity_ids().map(|e| ts.slots(e)).max().unwrap_or(0));
+    out.absent_id = (port.entities.len() * ID_BAND + 1).to_string();
     out.one_row = port
         .methods
         .iter()
@@ -628,13 +652,16 @@ pub fn traces(
     // The calls the model refuses from each reached state: a use case over one row it runs
     // from no state of that row, where BFS makes no move and the functions allow none. Only
     // a complete run says no move exists.
-    let refusals = |s: u32| -> Vec<(String, Vec<String>)> {
+    let refusals = |s: u32, untried: &mut Untried| -> Vec<Refused> {
         if !run.complete {
             return Vec::new();
         }
-        cx.refusals(port, &run.states.at(s as usize), |act, slot| {
-            moved.contains(&(s, act, vec![slot]))
-        })
+        cx.refusals(
+            port,
+            &run.states.at(s as usize),
+            |act, params| moved.contains(&(s, act, params.to_vec())),
+            untried,
+        )
     };
 
     // The walk: take a move not taken yet from where the trace is; when there is none, start
@@ -661,9 +688,19 @@ pub fn traces(
                   used: &mut BTreeSet<u32>| {
         used.insert(s);
         if visited.insert(s) {
-            for (action, args) in refusals(s) {
+            for r in refusals(s, &mut out.untried) {
                 out.refusals += 1;
-                body.push_str(&format!("X {action}{}\n", joined(&args)));
+                *out.kinds.entry(r.kind).or_default() += 1;
+                let row = format!("X {} {}{}", r.kind, r.action, joined(&r.args));
+                for c in r.conditions {
+                    out.guards.push(Guarded {
+                        condition: c,
+                        state: s.to_string(),
+                        row: row.clone(),
+                    });
+                }
+                body.push_str(&row);
+                body.push('\n');
             }
         }
     };
@@ -687,7 +724,7 @@ pub fn traces(
         out.traces += 1;
         used_states.insert(init);
         body.push_str(&format!("T {init}\n"));
-        for line in cx.seed(port, &run.states.at(init as usize)) {
+        for line in cx.seed(port, &run.states.at(init as usize), out.traces - 1) {
             body.push_str(&format!("R {line}\n"));
         }
         body.push_str("G\n");
@@ -771,7 +808,7 @@ pub fn traces(
                 used_states.insert(init);
                 used_states.insert(cb.to);
                 body.push_str(&format!("T {init}\n"));
-                for line in cx.seed(port, &run.states.at(init as usize)) {
+                for line in cx.seed(port, &run.states.at(init as usize), out.traces - 1) {
                     body.push_str(&format!("R {line}\n"));
                 }
                 body.push_str("G\n");
@@ -804,11 +841,79 @@ pub fn traces(
             }
         }
     }
+    // Seed and path (H1): a few reached states seeded directly, each followed by one call
+    // out of it, which the paths above make from the same state reached by calls. A state
+    // with a run mark or a raise is left out: the rows of a seed do not hold those.
+    // The first such states in BFS order, of at most `SEEDED * 16` looked at.
+    let seedable: Vec<u32> = reached
+        .iter()
+        .copied()
+        .filter(|s| root[*s as usize] != Some(*s) && !out_of[*s as usize].is_empty())
+        .take(SEEDED * 16)
+        .filter(|s| {
+            cx.abstract_state(port, &run.states.at(*s as usize))
+                .iter()
+                .all(|l| !l.starts_with("mark ") && !l.starts_with("raised "))
+        })
+        .take(SEEDED)
+        .collect();
+    for &s in &seedable {
+        let call = &calls[out_of[s as usize][0]];
+        out.traces += 1;
+        out.seeded += 1;
+        out.calls += 1;
+        used_states.insert(s);
+        used_states.insert(call.to);
+        body.push_str(&format!("T {s}\n"));
+        for line in cx.seed(port, &run.states.at(s as usize), out.traces - 1) {
+            body.push_str(&format!("R {line}\n"));
+        }
+        body.push_str("G\n");
+        body.push_str(&format!(
+            "C {} {}{}\n",
+            call.to,
+            call.action,
+            joined(&call.args)
+        ));
+    }
     // The states first, so the harness knows each before a trace names it.
     for s in &used_states {
         text.push_str(&format!("S {s}\n"));
         for line in cx.abstract_state(port, &run.states.at(*s as usize)) {
             text.push_str(&format!("A {line}\n"));
+        }
+    }
+    // The port's actions no row runs, and those no row tries as refused.
+    let mut ran: BTreeSet<&str> = BTreeSet::new();
+    let mut refused: BTreeSet<&str> = BTreeSet::new();
+    for line in body.lines() {
+        let mut toks = line.split_whitespace();
+        match (toks.next(), toks.next(), toks.next()) {
+            (Some("C"), _, Some(action)) => {
+                ran.insert(action);
+            }
+            (Some("I"), _, Some(first)) => {
+                ran.insert(first);
+                if let Some(second) = line
+                    .split(" | ")
+                    .nth(1)
+                    .and_then(|r| r.split_whitespace().next())
+                {
+                    ran.insert(second);
+                }
+            }
+            (Some("X"), _, Some(action)) => {
+                refused.insert(action);
+            }
+            _ => {}
+        }
+    }
+    for m in &port.methods {
+        if !ran.contains(m.action.as_str()) {
+            out.never_run.push(m.action.clone());
+        }
+        if !refused.contains(m.action.as_str()) {
+            out.never_refused.push(m.action.clone());
         }
     }
     text.push_str(&body);
@@ -820,18 +925,89 @@ fn joined(args: &[String]) -> String {
     args.iter().map(|a| format!(" {a}")).collect()
 }
 
-/// The text of a row's id: slot `s` is `s + 1`, in every id type the harness parses.
-fn id_text(slot: usize) -> String {
-    (slot + 1).to_string()
+/// The ids of one entity's rows: entity `k` of the port numbers its rows from
+/// `k * ID_BAND + 1`, so a service that reads one entity's id where it should read another's
+/// names a row that does not exist.
+const ID_BAND: usize = 100;
+
+/// The text of the id of `entity`'s row at `slot`: `k * ID_BAND + slot + 1` for the port's
+/// entity `k`, in every id type the harness parses.
+fn row_id(domain: &DomainModel, entity: &str, slot: usize) -> String {
+    let k = domain
+        .port
+        .as_ref()
+        .and_then(|p| p.entities.iter().position(|x| x.entity == entity))
+        .unwrap_or(0);
+    (k * ID_BAND + slot + 1).to_string()
+}
+
+/// The text of the id of the first row of the entity whose id type is `ty`.
+fn first_id(domain: &DomainModel, ty: &str) -> String {
+    let entity = domain
+        .port
+        .as_ref()
+        .and_then(|p| {
+            p.entities
+                .iter()
+                .find(|x| matches!(&x.id.ty, FieldType::Id(n) if n == ty))
+        })
+        .map(|x| x.entity.clone())
+        .unwrap_or_default();
+    row_id(domain, &entity, 0)
 }
 
 struct Cx<'a> {
     model: &'a SemanticModel,
     ts: &'a TransitionSystem,
     domain: &'a DomainModel,
+    /// Per entity of the system, the id of its first row ([`row_id`]).
+    bands: Vec<usize>,
+    /// Per column of a port entity, `(entity, column)`: whether the system tracks its value,
+    /// and whether it tracks whether it is null.
+    tracked: std::collections::HashMap<(String, String), (bool, bool)>,
+}
+
+impl<'a> Cx<'a> {
+    fn new(model: &'a SemanticModel, ts: &'a TransitionSystem, domain: &'a DomainModel) -> Self {
+        let bands = ts
+            .entity_ids()
+            .map(|e| {
+                row_id(domain, &ts.entity(e).id, 0)
+                    .parse::<usize>()
+                    .expect("an id is a number")
+            })
+            .collect();
+        let mut tracked = std::collections::HashMap::new();
+        for p in domain.port.iter().flat_map(|p| &p.entities) {
+            let Some(e) = ts.entity_ids().find(|e| ts.entity(*e).id == p.entity) else {
+                continue;
+            };
+            for field in &p.columns {
+                let column = column_var(ts, &p.entity, &field.wire);
+                let value = owner_var(model, ts, e, &field.wire).is_some()
+                    || column.is_some_and(|v| !matches!(ts.var(v).domain, Domain::Nullable));
+                tracked.insert(
+                    (p.entity.clone(), field.wire.clone()),
+                    (value, column.is_some()),
+                );
+            }
+        }
+        Cx {
+            model,
+            ts,
+            domain,
+            bands,
+            tracked,
+        }
+    }
 }
 
 impl Cx<'_> {
+    /// The text of the id of entity `e`'s row at `slot` ([`row_id`]).
+    fn id(&self, e: EntId, slot: usize) -> String {
+        (self.bands[e.index()] + slot).to_string()
+    }
+
     fn entity(&self, id: &str) -> Option<EntId> {
         self.ts.entity_ids().find(|e| self.ts.entity(*e).id == id)
     }
@@ -912,12 +1088,11 @@ impl Cx<'_> {
             .expect("the function's action");
         let mut args = Vec::new();
         for r in &f.rows {
-            args.push(id_text(usize::from(
-                params[r.param.expect("a function row binds a param")],
-            )));
+            let p = r.param.expect("a function row binds a param");
+            args.push(self.id(act.params[p].entity, usize::from(params[p])));
         }
         for mk in &f.marks_in {
-            args.push(id_text(usize::from(params[mk.param])));
+            args.push(self.id(act.params[mk.param].entity, usize::from(params[mk.param])));
         }
         if let Some(ev) = &f.event_in {
             args.extend(self.event_ids(&ev.ty, act, params));
@@ -961,7 +1136,10 @@ impl Cx<'_> {
                 act.params
                     .iter()
                     .position(|p| self.ts.entity(p.entity).id == field.entity)
-                    .map_or_else(|| id_text(0), |p| id_text(usize::from(params[p])))
+                    .map_or_else(
+                        || row_id(self.domain, &field.entity, 0),
+                        |p| self.id(act.params[p].entity, usize::from(params[p])),
+                    )
             })
             .collect()
     }
@@ -989,7 +1167,7 @@ impl Cx<'_> {
                     continue;
                 }
                 if target.wire == port.id.wire {
-                    return Some(id_text(slot));
+                    return Some(self.id(e, slot));
                 }
                 return Some(self.concrete(e, slot, target, input.nullable, post));
             }
@@ -1074,8 +1252,11 @@ impl Cx<'_> {
             };
         }
         if let Some(var) = owner_var(self.model, ts, e, &field.wire) {
+            let VarKind::Owner { parent, .. } = ts.var(var).kind else {
+                unreachable!("an owner var")
+            };
             return match ts.var(var).domain.slot(state.get(ts, var, slot)) {
-                Some(p) => id_text(usize::from(p)),
+                Some(p) => self.id(parent, usize::from(p)),
                 None => "~".to_string(),
             };
         }
@@ -1086,8 +1267,10 @@ impl Cx<'_> {
         }
     }
 
-    /// The rows of an initial state, every column of each row type in order.
-    fn seed(&self, port: &PortDecl, state: &StateSlice) -> Vec<String> {
+    /// The rows of a state, every column of each row type in order. A value the model does
+    /// not track varies with `fuzz` (H1): trace `fuzz` seeds other values than trace 0, so a
+    /// service that reads one answers differently somewhere.
+    fn seed(&self, port: &PortDecl, state: &StateSlice, fuzz: usize) -> Vec<String> {
         let mut lines = Vec::new();
         for p in &port.entities {
             let Some(e) = self.entity(&p.entity) else {
@@ -1110,11 +1293,24 @@ impl Cx<'_> {
                         v.fields.iter().any(|f| f.wire == field.wire && !f.nullable)
                     });
                     let value = if field.wire == p.id.wire {
-                        id_text(slot)
+                        self.id(e, slot)
                     } else {
                         let v = self.concrete(e, slot, field, field.nullable && !required, state);
-                        if v == "~" && required {
+                        let v = if v == "~" && required {
                             default_value(self.domain, &field.ty)
+                        } else {
+                            v
+                        };
+                        // Null stays null where the system tracks whether it is.
+                        let (value_tracked, null_tracked) = self
+                            .tracked
+                            .get(&(p.entity.clone(), field.wire.clone()))
+                            .copied()
+                            .unwrap_or((false, false));
+                        if fuzz == 0 || value_tracked {
+                            v
+                        } else if v != "~" || (fuzz % 2 == 1 && !null_tracked) {
+                            fuzzed(self.domain, &field.ty, fuzz)
                         } else {
                             v
                         }
@@ -1141,7 +1337,7 @@ impl Cx<'_> {
                 if !state.is_present(ts, e, slot) {
                     continue;
                 }
-                let mut line = format!("{} {}", p.entity, id_text(slot));
+                let mut line = format!("{} {}", p.entity, self.id(e, slot));
                 for (field, how) in &p.tracked {
                     let value = match how {
                         Track::Presence => {
@@ -1177,7 +1373,7 @@ impl Cx<'_> {
                         "mark {} {} {} {}",
                         r.usecase,
                         r.entity,
-                        id_text(slot),
+                        self.id(e, slot),
                         v.0
                     ));
                 }
@@ -1200,7 +1396,7 @@ impl Cx<'_> {
                             "raised {} {} {}",
                             ev.ty,
                             field.entity,
-                            id_text(slot)
+                            self.id(e, slot)
                         ));
                     }
                 }
@@ -1211,14 +1407,18 @@ impl Cx<'_> {
         lines
     }
 
-    /// The calls the model refuses in `state`: a method over one existing row, on each
-    /// present row where no move runs it (`moves`) and the functions allow none.
+    /// The calls the model refuses in `state`: each binding of a method's params to rows (a
+    /// created row on the lowest free slot, as BFS binds it, and never when there is none) that
+    /// no move runs (`moves`), with the kind the functions refuse it with, or `-` when they
+    /// would run it (the model refuses it for a mark, a raise, or a rule the service keeps
+    /// outside them). A method whose bindings pass `BINDINGS` is counted in `untried`.
     fn refusals(
         &self,
         port: &PortDecl,
         state: &StateSlice,
-        moves: impl Fn(usize, u8) -> bool,
-    ) -> Vec<(String, Vec<String>)> {
+        moves: impl Fn(usize, &[u8]) -> bool,
+        untried: &mut Untried,
+    ) -> Vec<Refused> {
         let ts = self.ts;
         let mut out = Vec::new();
         for m in &port.methods {
@@ -1230,55 +1430,280 @@ impl Cx<'_> {
             else {
                 continue;
             };
-            let [param] = action.params.as_slice() else {
-                continue;
-            };
-            if param.role != ParamRole::Existing {
-                continue;
-            }
-            let e = param.entity;
             let fns: Vec<&FnDecl> = self
                 .domain
                 .fns
                 .iter()
                 .filter(|f| f.action == m.action)
                 .collect();
-            for slot in 0..ts.slots(e) {
-                if !state.is_present(ts, e, slot) || moves(act, slot as u8) {
+            let Some(first) = fns.first() else {
+                continue;
+            };
+            // The slots each param may bind before any guard reads them.
+            let mut bindings: Vec<Vec<u8>> = vec![Vec::new()];
+            for p in &action.params {
+                let present = (0..ts.slots(p.entity))
+                    .filter(|s| state.is_present(ts, p.entity, *s))
+                    .map(|s| s as u8);
+                let slots: Vec<u8> = match p.role {
+                    ParamRole::New => (0..ts.slots(p.entity))
+                        .find(|s| !state.is_present(ts, p.entity, *s))
+                        .map(|s| s as u8)
+                        .into_iter()
+                        .collect(),
+                    ParamRole::Existing
+                    | ParamRole::Parent { .. }
+                    | ParamRole::Earlier { .. }
+                    | ParamRole::Triggered => present.collect(),
+                };
+                bindings = bindings
+                    .into_iter()
+                    .flat_map(|b| {
+                        slots.iter().map(move |s| {
+                            let mut b = b.clone();
+                            b.push(*s);
+                            b
+                        })
+                    })
+                    .collect();
+            }
+            if bindings.len() > BINDINGS {
+                untried.capped += bindings.iter().filter(|b| !moves(act, b)).count();
+                continue;
+            }
+            for params in bindings {
+                if moves(act, &params) {
                     continue;
                 }
-                let entity = ts.entity(e).id.clone();
-                let allowed = fns.iter().any(|f| {
-                    let rows = Rows::new(
-                        ts,
-                        self.model,
-                        state,
-                        vec![(entity.clone(), slot)],
-                        f.elems.iter().map(|x| x.entity.clone()).collect(),
-                    );
-                    !matching(std::slice::from_ref(*f), &f.action, &rows).is_empty()
-                        && rows.allows(f)
+                // A refusal the functions do not give (a mark, a raise, a rule the service keeps
+                // outside them) is tried too, with no kind to expect.
+                let (kind, conditions) = self
+                    .refusal_kind(m, &fns, action, &params, state)
+                    .unwrap_or(("-", Vec::new()));
+                out.push(Refused {
+                    kind,
+                    conditions,
+                    action: m.action.clone(),
+                    args: self.refused_args(m, first, action, &params),
                 });
-                if allowed {
-                    continue;
-                }
-                let mut args = vec![id_text(slot)];
-                if let Some(ev) = &m.event {
-                    let event = self.domain.events.iter().find(|x| x.name == ev.ty);
-                    for _ in event.map_or(&[][..], |x| &x.fields[..]) {
-                        args.push(id_text(slot));
-                    }
-                }
-                for input in &m.inputs {
-                    args.push(default_input(self.domain, input));
-                }
-                for choice in &m.choices {
-                    args.push(first_value(self.domain, &choice.ty));
-                }
-                out.push((m.action.clone(), args));
             }
         }
         out
+    }
+
+    /// The arguments of a refused call of `m` at `params`, laid out as `first` takes them:
+    /// the rows' ids, the event's, the id of the row it creates, and the first value of
+    /// every other input and choice.
+    fn refused_args(
+        &self,
+        m: &PortMethod,
+        first: &FnDecl,
+        action: &rdra_ish_core::lifecycle::Action,
+        params: &[u8],
+    ) -> Vec<String> {
+        let mut args = Vec::new();
+        for r in &first.rows {
+            let p = r.param.expect("a function row binds a param");
+            args.push(self.id(action.params[p].entity, usize::from(params[p])));
+        }
+        for mk in &first.marks_in {
+            args.push(self.id(
+                action.params[mk.param].entity,
+                usize::from(params[mk.param]),
+            ));
+        }
+        if let Some(ev) = &first.event_in {
+            args.extend(self.event_ids(&ev.ty, action, params));
+        }
+        for input in &m.inputs {
+            let created = first
+                .inputs
+                .iter()
+                .position(|i| i.name == input.name)
+                .and_then(|i| self.created_by(first, i, action, params));
+            args.push(created.unwrap_or_else(|| default_input(self.domain, input)));
+        }
+        for choice in &m.choices {
+            args.push(self.refused_choice(m, first, &choice.name));
+        }
+        args
+    }
+
+    /// The value a refused call of `m` names for its choice `name`: the target an arm of
+    /// `first` takes, so that the call names a target the use case has.
+    fn refused_choice(&self, m: &PortMethod, first: &FnDecl, name: &str) -> String {
+        first
+            .chosen
+            .iter()
+            .find(|c| first.choice_name(c) == name)
+            .map(|c| c.value.wire.clone())
+            .or_else(|| {
+                m.choices
+                    .iter()
+                    .find(|x| x.name == name)
+                    .map(|x| first_value(self.domain, &x.ty))
+            })
+            .unwrap_or_default()
+    }
+
+    /// The id of the row `f` creates from its input `i`, at `params`; `None` when the input
+    /// is not a created row's id.
+    fn created_by(
+        &self,
+        f: &FnDecl,
+        i: usize,
+        action: &rdra_ish_core::lifecycle::Action,
+        params: &[u8],
+    ) -> Option<String> {
+        f.outputs.iter().find_map(|o| {
+            let OutKind::Row { fields, .. } = &o.kind else {
+                return None;
+            };
+            let port = self.port_entity(&self.ts.entity(action.params[o.param].entity).id)?;
+            fields
+                .iter()
+                .any(|(target, assigned)| {
+                    target.wire == port.id.wire
+                        && matches!(assigned, super::ir::Assigned::Input { input: k, .. } if *k == i)
+                })
+                .then(|| self.id(action.params[o.param].entity, usize::from(params[o.param])))
+        })
+    }
+
+    /// The kind the functions refuse `m` at `params` with, checked in the order the
+    /// dispatcher and the function check: no function from the rows' states (`NotEnabled`),
+    /// a failed argument check (`InvalidArgument`), a condition that does not hold
+    /// (`Rejected`, with the ids of the conditions that do not). `None` when the function the
+    /// call picks runs it, or the functions it may pick disagree.
+    fn refusal_kind(
+        &self,
+        m: &PortMethod,
+        fns: &[&FnDecl],
+        action: &rdra_ish_core::lifecycle::Action,
+        params: &[u8],
+        state: &StateSlice,
+    ) -> Option<(&'static str, Vec<String>)> {
+        let ts = self.ts;
+        let rows_of = |f: &FnDecl| -> Vec<(String, usize)> {
+            f.rows
+                .iter()
+                .map(|r| {
+                    let p = r.param.expect("a function row binds a param");
+                    (
+                        ts.entity(action.params[p].entity).id.clone(),
+                        usize::from(params[p]),
+                    )
+                })
+                .collect()
+        };
+        let rows = Rows::new(ts, self.model, state, rows_of(fns[0]), Vec::new());
+        let from_states: Vec<&FnDecl> = fns
+            .iter()
+            .copied()
+            .filter(|f| !matching(std::slice::from_ref(*f), &m.action, &rows).is_empty())
+            .collect();
+        if from_states.is_empty() {
+            return Some(("NotEnabled", Vec::new()));
+        }
+        // The call names the targets of the first function's arms: the functions of those.
+        let picked = from_states.into_iter().filter(|f| {
+            f.chosen.iter().all(|c| {
+                let name = f.choice_name(c);
+                self.refused_choice(m, fns[0], &name) == c.value.wire
+            })
+        });
+        let kinds: BTreeSet<Option<(&'static str, Vec<String>)>> = picked
+            .map(|f| {
+                let rows = Rows::new(
+                    ts,
+                    self.model,
+                    state,
+                    rows_of(f),
+                    f.elems.iter().map(|x| x.entity.clone()).collect(),
+                );
+                if !self.links_hold(f, action, params, state) || !rows.checks_pass(f) {
+                    Some(("InvalidArgument", Vec::new()))
+                } else if !rows.allows(f) {
+                    let failed = f
+                        .conditions
+                        .iter()
+                        .filter(|c| rows.eval(&c.expr) == Some(false))
+                        .map(|c| c.id.clone())
+                        .collect();
+                    Some(("Rejected", failed))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let mut kinds = kinds.into_iter();
+        match (kinds.next(), kinds.next()) {
+            (Some(kind), None) => kind,
+            _ => None,
+        }
+    }
+
+    /// Whether every `Link` check of `f` holds at `params`: the child row's key names the
+    /// parent row.
+    fn links_hold(
+        &self,
+        f: &FnDecl,
+        action: &rdra_ish_core::lifecycle::Action,
+        params: &[u8],
+        state: &StateSlice,
+    ) -> bool {
+        let ts = self.ts;
+        f.checks.iter().all(|c| {
+            let ArgCheck::Link {
+                child,
+                child_field,
+                parent,
+                ..
+            } = c
+            else {
+                return true;
+            };
+            let (Some(cp), Some(pp)) = (f.row(*child).param, f.row(*parent).param) else {
+                return true;
+            };
+            let e = action.params[cp].entity;
+            let Some(var) = owner_var(self.model, ts, e, &child_field.wire) else {
+                return true;
+            };
+            ts.var(var)
+                .domain
+                .slot(state.get(ts, var, usize::from(params[cp])))
+                == Some(params[pp])
+        })
+    }
+}
+
+/// The most traces seeded at a reached state.
+const SEEDED: usize = 16;
+
+/// The most bindings of one method a state's refusals try.
+const BINDINGS: usize = 64;
+
+/// A call the model refuses, and the kind of refusal the functions give.
+struct Refused {
+    kind: &'static str,
+    /// For `Rejected`: the conditions that do not hold.
+    conditions: Vec<String>,
+    action: String,
+    args: Vec<String>,
+}
+
+/// The refusals of the model the traces do not try, by why.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Untried {
+    /// A method with more bindings in a state than the traces try.
+    pub capped: usize,
+}
+
+impl Untried {
+    /// Every untried refusal.
+    pub fn total(&self) -> usize {
+        self.capped
     }
 }
 
@@ -1287,6 +1712,27 @@ fn default_input(domain: &DomainModel, input: &PortInput) -> String {
         "~".to_string()
     } else {
         default_value(domain, &input.ty)
+    }
+}
+
+/// The `k`-th value of a type the model leaves open: for `k > 0` another than
+/// [`default_value`]'s, where the type has another.
+fn fuzzed(domain: &DomainModel, ty: &FieldType, k: usize) -> String {
+    let day = 1 + k % 28;
+    match ty {
+        FieldType::Scalar(Scalar::Int | Scalar::Money | Scalar::Decimal) => k.to_string(),
+        FieldType::Scalar(Scalar::Bool) => (k % 2 == 1).to_string(),
+        FieldType::Scalar(Scalar::String) => format!("s{k}"),
+        FieldType::Scalar(Scalar::Date) => format!("2026-01-{day:02}"),
+        FieldType::Scalar(Scalar::DateTime) => format!("2026-01-{day:02}T00:00:00Z"),
+        FieldType::Enum(name) => domain
+            .enums
+            .iter()
+            .find(|e| e.name == *name)
+            .filter(|e| !e.values.is_empty())
+            .map(|e| e.values[k % e.values.len()].wire.clone())
+            .unwrap_or_default(),
+        FieldType::Id(ty) => first_id(domain, ty),
     }
 }
 
@@ -1300,7 +1746,7 @@ fn default_value(domain: &DomainModel, ty: &FieldType) -> String {
         FieldType::Scalar(Scalar::Date) => "2026-01-01".to_string(),
         FieldType::Scalar(Scalar::DateTime) => "2026-01-01T00:00:00Z".to_string(),
         FieldType::Enum(name) => first_value(domain, name),
-        FieldType::Id(_) => id_text(0),
+        FieldType::Id(ty) => first_id(domain, ty),
     }
 }
 

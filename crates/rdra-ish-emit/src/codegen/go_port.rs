@@ -421,15 +421,19 @@ func Conform(newPort func() ConformancePort, traces string) (ConformanceReport, 
 			want = next
 			report.Calls++
 		case "X":
-			if port == nil {{
+			if port == nil || len(rest) < 1 {{
 				return report, at(errors.New("a call outside a trace"))
 			}}
+			kind, rest := rest[0], rest[1:]
 			refused, err := confRun(port, rest)
 			if err != nil {{
 				return report, at(err)
 			}}
 			if refused == nil {{
 				return report, at(fmt.Errorf("the model refuses `%s` here, and the service ran it", strings.Join(rest, " ")))
+			}}
+			if got := confKind(refused); kind != "-" && got != kind {{
+				return report, at(fmt.Errorf("the model refuses `%s` here with %s, and the service refused it with %s: %v", strings.Join(rest, " "), kind, got, refused))
 			}}
 			if err := confCompare(confAbstract(port.Snapshot()), want, "after the refused `"+strings.Join(rest, " ")+"`"); err != nil {{
 				return report, at(err)
@@ -481,6 +485,19 @@ func Conform(newPort func() ConformancePort, traces string) (ConformanceReport, 
 		}}
 	}}
 	return report, nil
+}}
+
+// confKind is the kind of a refusal: the detail its error wraps.
+func confKind(refused error) string {{
+	switch {{
+	case errors.Is(refused, ErrNotEnabled):
+		return "NotEnabled"
+	case errors.Is(refused, ErrRejected):
+		return "Rejected"
+	case errors.Is(refused, ErrInvalidArgument):
+		return "InvalidArgument"
+	}}
+	return "an error of no kind"
 }}
 
 // confRun prepares and commits a call: the refusal, or an error in the trace.

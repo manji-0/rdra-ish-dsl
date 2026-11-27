@@ -390,6 +390,8 @@ pub struct Ran {
     pub interleavings: usize,
     /// Interleaved rows run as plain calls: the adapter has no `prepare` and `commit`.
     pub skipped: usize,
+    /// Calls and refused calls made again by `prepare` and then `commit`.
+    pub split: usize,
 }
 
 impl Ran {
@@ -404,12 +406,13 @@ impl Ran {
             .map(|part| part.split_whitespace().next()?.parse().ok())
             .collect::<Option<_>>()?;
         match n.as_slice() {
-            [traces, calls, refusals, interleavings, skipped] => Some(Ran {
+            [traces, calls, refusals, interleavings, skipped, split] => Some(Ran {
                 traces: *traces,
                 calls: *calls,
                 refusals: *refusals,
                 interleavings: *interleavings,
                 skipped: *skipped,
+                split: *split,
             }),
             _ => None,
         }
@@ -491,9 +494,10 @@ mod tests {
             refusals: 9,
             interleavings: 0,
             skipped: 7,
+            split: 0,
         };
         let line = format!(
-            "{REPORT}9 traces, 19 calls, 9 refusals, 0 interleavings, 7 interleavings skipped"
+            "{REPORT}9 traces, 19 calls, 9 refusals, 0 interleavings, 7 interleavings skipped, 0 split calls"
         );
         assert_eq!(Ran::read(&line), Some(ran));
         assert_eq!(

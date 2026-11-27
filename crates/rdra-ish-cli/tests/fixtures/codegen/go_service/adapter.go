@@ -151,7 +151,8 @@ func (a *Adapter) Prepare(c modeladapter.Call) modeladapter.Outcome {
 func (a *Adapter) Commit() modeladapter.Outcome {
 	commit := a.held
 	a.held = nil
-	if commit == nil {
+	// FAULT=stub-commit: a commit that never stores, which only the split pass sees.
+	if commit == nil || os.Getenv("FAULT") == "stub-commit" {
 		return modeladapter.NotEnabled
 	}
 	return outcome(commit())

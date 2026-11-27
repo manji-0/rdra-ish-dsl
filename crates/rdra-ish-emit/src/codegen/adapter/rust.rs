@@ -335,14 +335,17 @@ pub struct AdapterReport {{
     pub interleavings: usize,
     /// The interleaved rows run as plain calls: the adapter has no `prepare`.
     pub skipped: usize,
+    /// The calls and refused calls made again, by `prepare` and then `commit`: none when the
+    /// adapter does not split a call.
+    pub split: usize,
 }}
 
 impl AdapterReport {{
     /// The line a conformance test prints on a pass, which `check --code=run` reads.
     pub fn line(&self) -> {STRING} {{
         format!(
-            "{report}{{}} traces, {{}} calls, {{}} refusals, {{}} interleavings, {{}} interleavings skipped",
-            self.traces, self.calls, self.refusals, self.interleavings, self.skipped
+            "{report}{{}} traces, {{}} calls, {{}} refusals, {{}} interleavings, {{}} interleavings skipped, {{}} split calls",
+            self.traces, self.calls, self.refusals, self.interleavings, self.skipped, self.split
         )
     }}
 }}
@@ -359,14 +362,36 @@ fn print_conform(out: &mut String) {
 
 /// Drives `adapter` along `traces` (the file `codegen --conformance` writes): resets and seeds
 /// each trace's initial state, makes each call, and after each compares what the store holds
-/// with the state the model reaches. A call the model refuses must be refused and change
-/// nothing, and so must a commit whose rows another call changed after its prepare. Returns
-/// the first difference.
+/// with the state the model reaches. A call the model refuses must be refused, with the kind
+/// the traces name, and change nothing, and so must a commit whose rows another call changed
+/// after its prepare. An adapter that splits a call runs the traces again with each call made
+/// by `prepare` and then `commit`. Returns the first difference.
 ///
 /// # Errors
 ///
 /// The first difference, or what is wrong with `traces`, as text naming its line.
 pub fn conform<A: ModelAdapter>(adapter: &mut A, traces: &str) -> {RESULT}<AdapterReport, {STRING}> {{
+    let mut report = ad_pass(adapter, traces, false)?;
+    if adapter.split().is_some() {{
+        let again = ad_pass(adapter, traces, true)?;
+        report.split = again.calls + again.refusals;
+    }}
+    {RESULT}::Ok(report)
+}}
+
+/// Runs `call`: by `invoke`, or, with `split`, by the adapter's prepare and then its commit.
+fn ad_run<A: ModelAdapter>(adapter: &mut A, call: &Call, split: bool) -> {RESULT}<(), Refusal> {{
+    if split {{
+        if let {OPTION}::Some(s) = adapter.split() {{
+            return s.prepare(call).and_then(|()| s.commit());
+        }}
+    }}
+    adapter.invoke(call)
+}}
+
+/// One run of `traces`, with each call made by [`ad_run`].
+fn ad_pass<A: ModelAdapter>(adapter: &mut A, traces: &str, split: bool) -> {RESULT}<AdapterReport, {STRING}> {{
+    let how = if split {{ " through prepare and commit" }} else {{ "" }};
     let mut lines = traces.lines().enumerate();
     match lines.next() {{
         {OPTION}::Some((_, first)) if first.trim_end() == {format} => {{}}
@@ -418,16 +443,23 @@ pub fn conform<A: ModelAdapter>(adapter: &mut A, traces: &str) -> {RESULT}<Adapt
             "C" => {{
                 let next = state(rest.first())?;
                 let call = rest.get(1..).unwrap_or_default();
-                if let {RESULT}::Err(why) = adapter.invoke(&ad_call(call).map_err(at)?) {{
-                    return {RESULT}::Err(at(format!("the model runs `{{}}` here, and the service refused it: {{}}", call.join(" "), why.as_str())));
+                if let {RESULT}::Err(why) = ad_run(adapter, &ad_call(call).map_err(at)?, split) {{
+                    return {RESULT}::Err(at(format!("the model runs `{{}}` here, and the service refused it{{how}}: {{}}", call.join(" "), why.as_str())));
                 }}
                 ad_compare(&ad_abstract(&adapter.observe()), &next, &format!("after `{{}}`", call.join(" "))).map_err(at)?;
                 want = next;
                 report.calls += 1;
             }}
             "X" => {{
-                if adapter.invoke(&ad_call(rest).map_err(at)?).is_ok() {{
-                    return {RESULT}::Err(at(format!("the model refuses `{{}}` here, and the service ran it", rest.join(" "))));
+                let {OPTION}::Some((&kind, rest)) = rest.split_first() else {{
+                    return {RESULT}::Err(at("a refused call without its kind".to_string()));
+                }};
+                match ad_run(adapter, &ad_call(rest).map_err(at)?, split) {{
+                    {RESULT}::Ok(()) => return {RESULT}::Err(at(format!("the model refuses `{{}}` here, and the service ran it{{how}}", rest.join(" ")))),
+                    {RESULT}::Err(why) if kind != "-" && ad_kind(why) != kind => {{
+                        return {RESULT}::Err(at(format!("the model refuses `{{}}` here with {{kind}}, and the service refused it with {{}}", rest.join(" "), why.as_str())));
+                    }}
+                    {RESULT}::Err(_) => {{}}
                 }}
                 ad_compare(&ad_abstract(&adapter.observe()), &want, &format!("after the refused `{{}}`", rest.join(" "))).map_err(at)?;
                 report.refusals += 1;
@@ -463,6 +495,15 @@ pub fn conform<A: ModelAdapter>(adapter: &mut A, traces: &str) -> {RESULT}<Adapt
         }}
     }}
     {RESULT}::Ok(report)
+}}
+
+/// The refusal as the traces spell its kind.
+fn ad_kind(why: Refusal) -> &'static str {{
+    match why {{
+        Refusal::NotEnabled => "NotEnabled",
+        Refusal::Rejected => "Rejected",
+        Refusal::InvalidArgument => "InvalidArgument",
+    }}
 }}
 
 /// The store against the model's state: every line one holds and the other does not.

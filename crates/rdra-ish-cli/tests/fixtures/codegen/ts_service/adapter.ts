@@ -135,7 +135,8 @@ export function adapter(): m.ModelAdapter {
     commit: async () => {
       const commit = held;
       held = undefined;
-      return commit === undefined ? m.refused("notEnabled") : commit();
+      // FAULT=stub-commit: a commit that never stores, which only the split pass sees.
+      return commit === undefined || process.env["FAULT"] === "stub-commit" ? m.refused("notEnabled") : commit();
     },
   };
 }

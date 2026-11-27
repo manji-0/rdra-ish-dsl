@@ -246,6 +246,11 @@ impl m::SplitAdapter for Adapter {
     }
 
     fn commit(&mut self) -> Result<(), m::Refusal> {
+        // FAULT=stub-commit: a commit that never stores, which only the split pass sees.
+        if std::env::var("FAULT").as_deref() == Ok("stub-commit") {
+            self.held = None;
+            return Err(m::Refusal::NotEnabled);
+        }
         match self.held.take() {
             Some(h) => self.commit_held(h),
             None => Err(m::Refusal::NotEnabled),
