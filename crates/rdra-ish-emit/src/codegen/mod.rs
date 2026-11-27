@@ -189,6 +189,16 @@ pub fn entry_name(lang: Lang, name: &str) -> String {
     }
 }
 
+/// The name of a transition function or a dispatcher in `lang`, by its PascalCase name in the
+/// IR: Rust `run_pay`, Go `RunPay`, TypeScript `runPay`.
+pub fn function_name(lang: Lang, pascal: &str) -> String {
+    match lang {
+        Lang::Rust => rust::fn_ident(pascal),
+        Lang::Go => pascal.to_string(),
+        Lang::TypeScript => ts::fn_name(pascal),
+    }
+}
+
 /// What the probe binds (`[code.<lang>]` in rdra.toml): the service type, the path of the
 /// generated module, and for the conformance test, the expression that makes a fresh service
 /// and the traces' path from the build directory.

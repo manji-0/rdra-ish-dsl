@@ -143,9 +143,21 @@ fn other_options_in_rdra_toml_fail_as_a_generator_change() {
         MANIFEST.replace("conformance_states = 4096", "conformance_states = 3"),
     )
     .unwrap();
-    let (code, _, stderr) = outcome(&rdra(&dir, &["check", "model", "--code"]));
+    let (code, stdout, stderr) = outcome(&rdra(&dir, &["check", "model", "--code"]));
     assert_eq!(code, Some(1), "{stderr}");
     assert!(stderr.contains("generator changed"), "{stderr}");
+    // The domain code and the traces are both stale: one error each, as the blocks show.
+    let blocks = stderr.lines().filter(|l| l.starts_with("error: ")).count();
+    assert_eq!(blocks, 2, "{stderr}");
+    assert!(
+        stdout.contains("FAIL: code: 2 error(s) at --code=fresh"),
+        "{stdout}"
+    );
+    // rdra.toml is named first, by the table the settings are in.
+    assert!(
+        stderr.contains("the settings of [code.rust] in rdra.toml"),
+        "{stderr}"
+    );
 }
 
 #[test]

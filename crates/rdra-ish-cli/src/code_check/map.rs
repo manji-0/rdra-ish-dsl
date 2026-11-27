@@ -27,15 +27,22 @@ pub(crate) struct CompilerMessage {
 }
 
 impl CompilerMessage {
-    /// `file:line:col  CODE: text`, cut to the text's first line: the `code:` line.
-    fn shown(&self) -> String {
+    /// `file:line:col  CODE: text`, the file as `file` shows it: the `code:` line, with the
+    /// text's further lines (tsc's elaboration of which member differs, Go's `have` and
+    /// `want`) under it.
+    fn shown(&self, file: &dyn Fn(&str) -> String) -> String {
         let code = self
             .code
             .as_ref()
             .map(|c| format!("{c}: "))
             .unwrap_or_default();
-        let text = self.text.lines().next().unwrap_or_default();
-        format!("{}:{}:{}  {code}{text}", self.file, self.line, self.column)
+        format!(
+            "{}:{}:{}  {code}{}",
+            file(&self.file),
+            self.line,
+            self.column,
+            self.text
+        )
     }
 }
 
@@ -63,6 +70,41 @@ pub(crate) struct Mapping<'a> {
     pub contracts: &'a [ContractDecl],
     /// The service type `[code.<lang>] service` names.
     pub service: &'a str,
+    /// A compiler's path (relative to the directory the build ran in) as the check shows
+    /// paths: relative to the working directory.
+    pub shown: &'a dyn Fn(&str) -> String,
+    /// The generated transition functions and dispatchers (Go `RunPay`, `PayFromOpen`), in
+    /// the language's spelling, each with its use case's contract: a call to one in the
+    /// service is that use case's code.
+    pub functions: &'a ContractIndex,
+    /// The `[code.<lang>]` table, for the `fix:` of a service the probe cannot find.
+    pub table: &'a str,
+    /// The source line a message is on, read for a message about a call's arguments whose
+    /// text names no function (tsc's TS2554, rustc's E0061).
+    pub source_line: &'a dyn Fn(&CompilerMessage) -> Option<String>,
+}
+
+/// Words of a compiler message that cannot resolve a name: Go `undefined:`, rustc E0432 /
+/// E0433 / E0412, tsc TS2305 / TS2307 / TS2724.
+const UNRESOLVED: [&str; 8] = [
+    "undefined",
+    "cannot find",
+    "Cannot find",
+    "unresolved",
+    "failed to resolve",
+    "has no exported member",
+    "could not import",
+    "not found",
+];
+
+/// Whether `msg`, on the probe, says the service `service` names cannot be found: the
+/// message names a part of the service's path or its type, and cannot resolve a name.
+fn names_missing_service(msg: &CompilerMessage, service: &str) -> bool {
+    let parts = service
+        .split(['/', '.', '#', ':'])
+        .filter(|p| p.len() > 2 && !matches!(*p, "ts" | "mts" | "js" | "com" | "org"));
+    UNRESOLVED.iter().any(|w| msg.text.contains(w))
+        && parts.into_iter().any(|p| names(&msg.text, p))
 }
 
 /// Whether `text` holds `word` as a whole word (a contract's name in a message about a bound).
@@ -79,8 +121,11 @@ fn same_file(a: &Path, b: &Path) -> bool {
     a.ends_with(b) || b.ends_with(a)
 }
 
+/// How many of the messages that belong to no use case `CodeUnmapped` quotes.
+const UNMAPPED_LISTED: usize = 20;
+
 /// The diagnostics of `messages`: one per use case and finding, and one `CodeUnmapped`
-/// counting the messages that belong to no use case.
+/// listing the messages that belong to no use case.
 pub(crate) fn map_messages(
     messages: &[CompilerMessage],
     m: &Mapping<'_>,
@@ -88,22 +133,63 @@ pub(crate) fn map_messages(
 ) -> Vec<CodeDiagnostic> {
     let mut out: Vec<CodeDiagnostic> = Vec::new();
     let mut unmapped: Vec<&CompilerMessage> = Vec::new();
+    let on_probe_file = |msg: &CompilerMessage| same_file(Path::new(&msg.file), m.probe_file);
+    // A service the probe cannot find fails every line of the probe: one finding, not one per
+    // use case.
+    let (lost, messages): (Vec<&CompilerMessage>, Vec<&CompilerMessage>) =
+        messages.iter().partition(|msg| {
+            on_probe_file(msg)
+                && backend.classify(msg) == Finding::Other
+                && names_missing_service(msg, m.service)
+        });
+    if let Some(first) = lost.first() {
+        out.push(CodeDiagnostic {
+            name: "CodeServiceNotFound".to_string(),
+            message: format!(
+                "the probe cannot find the service {} ({} compiler error(s) on the probe)",
+                m.service,
+                lost.len()
+            ),
+            model: None,
+            code: Some(first.shown(m.shown)),
+            fix: Some(format!(
+                "if the service's type or path changed, set `service` (and `module`, `new`) in {} of rdra.toml to it, then write the probe again with `rdra-ish codegen --probe` (or `--code`)",
+                m.table
+            )),
+            warning: false,
+        });
+    }
     let on_probe = |msg: &CompilerMessage| {
-        same_file(Path::new(&msg.file), m.probe_file)
+        on_probe_file(msg)
             .then(|| m.probe.at(msg.line))
             .flatten()
             .and_then(|l| m.contracts.iter().position(|c| c.name == l.contract))
     };
+    let named = |text: &str| {
+        m.index
+            .find(text)
+            .or_else(|| m.functions.find(text))
+            .map(|(_, c, _)| c)
+    };
     // The messages on probe lines first: one names the use case where the probe states it,
     // and the same finding elsewhere (an impl that needs the contract) adds nothing.
-    let mut ordered: Vec<&CompilerMessage> = messages.iter().collect();
+    let mut ordered: Vec<&CompilerMessage> = messages;
     ordered.sort_by_key(|msg| on_probe(msg).is_none());
     let routed: Vec<(&CompilerMessage, Option<usize>)> = ordered
         .into_iter()
         .map(|msg| {
             let contract = on_probe(msg)
-                .or_else(|| m.index.find(&msg.text).map(|(_, c, _)| c))
-                .or_else(|| m.contracts.iter().position(|c| names(&msg.text, &c.name)));
+                .or_else(|| named(&msg.text))
+                .or_else(|| m.contracts.iter().position(|c| names(&msg.text, &c.name)))
+                .or_else(|| {
+                    // A wrong number of arguments names no function: the call on its line
+                    // does.
+                    msg.text
+                        .contains("argument")
+                        .then(|| (m.source_line)(msg))
+                        .flatten()
+                        .and_then(|line| named(&line))
+                });
             (msg, contract)
         })
         .collect();
@@ -129,15 +215,34 @@ pub(crate) fn map_messages(
             out.push(d);
         }
     }
-    if let Some(first) = unmapped.first() {
+    if !unmapped.is_empty() {
+        // Each one's first line; the whole of each is in the compiler's output above.
+        let listed: Vec<String> = unmapped
+            .iter()
+            .take(UNMAPPED_LISTED)
+            .map(|msg| {
+                let one = CompilerMessage {
+                    text: msg.text.lines().next().unwrap_or_default().to_string(),
+                    ..(*msg).clone()
+                };
+                one.shown(m.shown)
+            })
+            .collect();
+        let mut code = listed.join("\n");
+        if unmapped.len() > UNMAPPED_LISTED {
+            code.push_str(&format!(
+                "\n... and {} more in the compiler's output above",
+                unmapped.len() - UNMAPPED_LISTED
+            ));
+        }
         out.push(CodeDiagnostic {
             name: "CodeUnmapped".to_string(),
             message: format!(
-                "{} compiler error(s) belong to no use case: see the compiler's output above",
+                "{} compiler error(s) belong to no use case: the compiler's output is above",
                 unmapped.len()
             ),
             model: None,
-            code: Some(first.shown()),
+            code: Some(code),
             fix: None,
             warning: false,
         });
@@ -218,7 +323,7 @@ fn diagnostic(
         name: format!("{kind}_{uc}"),
         message,
         model: Some(model),
-        code: Some(msg.shown()),
+        code: Some(msg.shown(m.shown)),
         fix,
         warning: false,
     }
@@ -229,6 +334,14 @@ mod tests {
     use super::*;
     use rdra_ish_emit::codegen::ir::{PortDecl, PortMethod};
     use rdra_ish_emit::codegen::probe::ProbeWriter;
+
+    fn as_is(file: &str) -> String {
+        file.to_string()
+    }
+
+    fn no_line(_: &CompilerMessage) -> Option<String> {
+        None
+    }
 
     /// A backend of a made-up language: codes `X1` (not implemented) and `X2` (signature).
     struct Toy;
@@ -312,6 +425,10 @@ mod tests {
             index: &index,
             contracts: &port.contracts,
             service: "Svc",
+            shown: &as_is,
+            functions: &ContractIndex::default(),
+            table: "[code.x]",
+            source_line: &no_line,
         };
         let name = |text: &str| {
             map_messages(&[msg("src/svc.x", 3, "X3", text)], &m, &Lister)[0]
@@ -350,6 +467,10 @@ mod tests {
             index: &index,
             contracts: &port.contracts,
             service: "Svc",
+            shown: &as_is,
+            functions: &ContractIndex::default(),
+            table: "[code.x]",
+            source_line: &no_line,
         };
         let both = [
             msg("src/svc.x", 3, "X3", "M: prep_Ship"),
@@ -379,6 +500,10 @@ mod tests {
             index: &index,
             contracts: &port.contracts,
             service: "Svc",
+            shown: &as_is,
+            functions: &ContractIndex::default(),
+            table: "[code.x]",
+            source_line: &no_line,
         };
         let e0046 = |line, member: &str| {
             msg(
@@ -415,6 +540,10 @@ mod tests {
             index: &index,
             contracts: &port.contracts,
             service: "Svc",
+            shown: &as_is,
+            functions: &ContractIndex::default(),
+            table: "[code.x]",
+            source_line: &no_line,
         };
         let ts2741 = |line, member: &str| {
             msg(
@@ -436,6 +565,96 @@ mod tests {
         );
     }
 
+    /// Go messages of a dogfooding run (go/logs/c3_build.txt, c4_rename_full.txt), mapped
+    /// with ScheduleFollowUpVisit's functions.
+    #[test]
+    fn calls_of_generated_functions_and_a_lost_service_name_their_cause() {
+        let port = PortDecl {
+            methods: vec![method("ScheduleFollowUpVisit"), method("Ship")],
+            contracts: vec![contract("ScheduleFollowUpVisit", 0), contract("Ship", 1)],
+            ..PortDecl::default()
+        };
+        let mut w = ProbeWriter::new("// probe");
+        w.usecase(
+            "var _ domain.ScheduleFollowUpVisitUseCase = (*clinic.Service)(nil)",
+            &port.contracts[0],
+        );
+        w.usecase(
+            "var _ domain.ShipUseCase = (*clinic.Service)(nil)",
+            &port.contracts[1],
+        );
+        let probe = w.finish();
+        let index = ContractIndex::new(&port, |m| vec![format!("Prepare{}", m.action)]);
+        // The dispatcher and a transition function of each, as Go spells them.
+        let functions = ContractIndex::new(&port, |m| {
+            vec![
+                format!("Run{}", m.action),
+                format!("{}FromActive", m.action),
+            ]
+        });
+        let shown = |f: &str| format!("svc/{f}");
+        // The line of a call whose message names no function.
+        let line = |msg: &CompilerMessage| {
+            (msg.line == 12).then(|| "    out, err := domain.RunShip(row, at)".to_string())
+        };
+        let m = Mapping {
+            probe_file: Path::new("clinic/rdra_contract_test.go"),
+            probe: &probe,
+            index: &index,
+            contracts: &port.contracts,
+            service: "example.com/clinic/clinic.Service",
+            shown: &shown,
+            functions: &functions,
+            table: "[code.go]",
+            source_line: &line,
+        };
+        let go = |file: &str, line: usize, text: &str| CompilerMessage {
+            file: file.to_string(),
+            line,
+            column: 3,
+            code: None,
+            text: text.to_string(),
+        };
+        let found = map_messages(
+            &[
+                go("clinic/rdra_contract_test.go", 3, "undefined: clinic.Service"),
+                go("clinic/rdra_contract_test.go", 4, "undefined: clinic.Service"),
+                go("clinic/usecases_glue.go", 599, "not enough arguments in call to domain.RunScheduleFollowUpVisit\nhave (domain.ProviderSchedule)\nwant (domain.ProviderSchedule, string)"),
+                go("clinic/usecases_glue.go", 12, "too many arguments"),
+                go("clinic/http.go", 7, "undefined: x"),
+                go("clinic/http.go", 8, "declared and not used: y"),
+            ],
+            &m,
+            &super::super::go::GoBackend::default(),
+        );
+        assert_eq!(
+            names_of(&found),
+            [
+                "CodeServiceNotFound",
+                "CodeError_ScheduleFollowUpVisit",
+                "CodeError_Ship",
+                "CodeUnmapped"
+            ]
+        );
+        assert_eq!(
+            found[0].to_string(),
+            "error[CodeServiceNotFound]: the probe cannot find the service example.com/clinic/clinic.Service (2 compiler error(s) on the probe)\n  \
+             code:  svc/clinic/rdra_contract_test.go:3:3  undefined: clinic.Service\n  \
+             fix:   if the service's type or path changed, set `service` (and `module`, `new`) in [code.go] of rdra.toml to it, then write the probe again with `rdra-ish codegen --probe` (or `--code`)"
+        );
+        assert!(
+            found[1]
+                .to_string()
+                .contains("\n         want (domain.ProviderSchedule, string)"),
+            "{}",
+            found[1]
+        );
+        assert_eq!(
+            found[3].code.as_deref(),
+            Some("svc/clinic/http.go:7:3  undefined: x\nsvc/clinic/http.go:8:3  declared and not used: y")
+        );
+    }
+
     #[test]
     fn messages_go_back_to_use_cases_by_probe_line_and_by_method() {
         let port = PortDecl {
@@ -454,6 +673,10 @@ mod tests {
             index: &index,
             contracts: &port.contracts,
             service: "Svc",
+            shown: &as_is,
+            functions: &ContractIndex::default(),
+            table: "[code.x]",
+            source_line: &no_line,
         };
         let found = map_messages(
             &[
@@ -485,7 +708,7 @@ mod tests {
             found[0].to_string(),
             "error[CodeMissingUseCase_Ship]: use case Ship has no implementation in Svc\n  \
              model: m.rdra:1:1  usecase Ship \"Ship label\"\n  \
-             code:  tests/probe.x:3:7  X1: Svc lacks ShipUseCase\n  \
+             code:  tests/probe.x:3:7  X1: Svc lacks ShipUseCase\n         more\n  \
              fix:   implement ShipUseCase for Svc (prep_Ship)"
         );
         assert!(found[2].message.starts_with("2 compiler error(s)"));

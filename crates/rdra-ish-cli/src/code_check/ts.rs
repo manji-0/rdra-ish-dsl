@@ -226,22 +226,19 @@ impl Backend for TypeScript {
         }
     }
 
-    /// The harness's report: the line after `rdra-ish conformance: `; a Node that runs no
-    /// TypeScript as it is, said as such; else the output's last line.
+    /// The harness's report (`rdra-ish conformance: ` and the rows that differ); a Node that runs no
+    /// TypeScript as it is, said as such; else an error the service threw; else the last line.
     fn run_failure(&self, stdout: &str, stderr: &str) -> Option<String> {
         let all = format!("{stdout}\n{stderr}");
-        if let Some((_, rest)) = all.rsplit_once("rdra-ish conformance: ") {
-            return rest.lines().next().map(str::to_string);
+        if let Some(report) = super::harness_report(&all) {
+            return Some(report);
         }
         if all.contains("ERR_UNKNOWN_FILE_EXTENSION")
             || all.contains("getBuiltinModule is not a function")
         {
             return Some(format!("node runs no TypeScript as it is: `check --code=run` needs Node {NODE} or later (type stripping), or a `run` command in [code.ts]"));
         }
-        all.lines()
-            .rev()
-            .find(|l| !l.trim().is_empty())
-            .map(|l| l.trim().to_string())
+        super::panic_report(&all).or_else(|| super::last_line(&all))
     }
 
     fn method_names(&self, m: &PortMethod) -> Vec<String> {
