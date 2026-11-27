@@ -25,7 +25,7 @@ use super::ir::{DomainModel, FieldType, PortArg, PortDecl, Scalar, Track};
 use super::{type_ident, CodegenError, Names};
 
 /// The names every language's adapter file declares, claimed before the model's.
-const FIXED: [&str; 12] = [
+const FIXED: [&str; 14] = [
     "ModelAdapter",
     "SplitAdapter",
     "ModelState",
@@ -38,6 +38,8 @@ const FIXED: [&str; 12] = [
     "NotEnabled",
     "Rejected",
     "InvalidArgument",
+    "NotFound",
+    "StoreFailed",
 ];
 
 /// A value as the adapter holds it: plain data, with no type of the generated core.

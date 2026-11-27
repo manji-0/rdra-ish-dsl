@@ -1124,8 +1124,9 @@ fn checks(ts: &TransitionSystem, names: &TlaNames, latches: &[Latch], out: &mut 
     }
     if !ts.reach_properties().is_empty() {
         out.push_str(
-            "\\* can_reach properties are CTL, AG (present => EF goal), which no TLA+ formula\n\
-             \\* states and TLC does not check; rdra-ish check and verify decide them by BFS.\n",
+            "\\* can_reach properties are CTL, AG (present => E[present U (present /\\ goal)]),\n\
+             \\* which no TLA+ formula states and TLC does not check; rdra-ish check and verify\n\
+             \\* decide them by BFS.\n",
         );
     }
     for r in ts.reach_properties() {
@@ -1135,13 +1136,15 @@ fn checks(ts: &TransitionSystem, names: &TlaNames, latches: &[Latch], out: &mut 
             primed: false,
             depth: r.binders.len() as u8,
         };
-        let (quant, mut present) = binders(&ctx, &r.binders);
-        if !matches!(r.link, Pred::True) {
-            present = format!("{present} /\\ {}", ctx.pred(&r.link));
-        }
+        // D22: the trigger adds the link; the path keeps only the instance present.
+        let (quant, present) = binders(&ctx, &r.binders);
+        let trigger = match &r.link {
+            Pred::True => present.clone(),
+            link => format!("{present} /\\ {}", ctx.pred(link)),
+        };
         let goal = ctx.pred(&r.goal);
         out.push_str(&format!(
-            "\\*   {}: {quant}AG(({present}) => EF({goal}))\n",
+            "\\*   {}: {quant}AG(({trigger}) => E[({present}) U (({present}) /\\ ({goal}))])\n",
             r.name
         ));
     }

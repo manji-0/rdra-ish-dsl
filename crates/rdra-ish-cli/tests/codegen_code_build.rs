@@ -158,7 +158,7 @@ fn each_omission_is_a_named_diagnostic() {
             "Pay takes a bare integer for OrderId",
             |p| {
                 edit(p, "fn prepare_pay(&mut self, order: OrderId,", "fn prepare_pay(&mut self, order: i64,");
-                edit(p, "self.order(order, \"Pay\")", "self.order(OrderId::from(order), \"Pay\")");
+                edit(p, "self.order::<PayError>(order, \"Pay\")", "self.order::<PayError>(OrderId::from(order), \"Pay\")");
             },
             &[
                 "error[CodeSignature_Pay]: use case Pay takes other inputs than the model's",
@@ -371,7 +371,7 @@ fn a_model_adapter_conforms_whatever_the_domain_code_became() {
     let all = text_slashed(&out);
     assert!(out.status.success(), "{all}");
     assert!(
-        all.contains("  ran: 11 traces, 21 calls, 11 refused calls, 7 interleaved commits; 32 calls made again by prepare and commit\n"),
+        all.contains("  ran: 11 traces, 21 calls, 13 refused calls, 7 interleaved commits; 34 calls made again by prepare and commit\n"),
         "{all}"
     );
     assert!(
@@ -417,7 +417,7 @@ fn a_model_adapter_conforms_whatever_the_domain_code_became() {
     let all = text_slashed(&out);
     assert!(out.status.success(), "{all}");
     assert!(
-        all.contains("  ran: 11 traces, 21 calls, 11 refused calls, 0 interleaved commits; 7 interleavings run as plain calls: the adapter has no prepare and commit, so conditional writes are not checked"),
+        all.contains("  ran: 11 traces, 21 calls, 13 refused calls, 0 interleaved commits; 7 interleavings run as plain calls: the adapter has no prepare and commit, so conditional writes are not checked"),
         "{all}"
     );
 }

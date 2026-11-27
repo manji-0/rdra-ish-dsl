@@ -546,6 +546,7 @@ fn a_refuted_rule_left_out_changes_no_other_verdict() {
         Verdict::Unproved(Unproved::Initial) => "initial",
         Verdict::Unproved(Unproved::NotInductive(_)) => "not inductive",
         Verdict::Unproved(Unproved::Unknown { .. }) => "unknown",
+        Verdict::Unproved(Unproved::Premise(_)) => "premise",
         Verdict::OutOfScope(_) => "out of scope",
         Verdict::Refuted => "refuted",
     };

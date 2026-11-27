@@ -1820,6 +1820,9 @@ after(Pay).assert(Order.status == paid, Payment.status == captured)
 - A use case of k transaction groups is k steps run in order ([Runs](./state-derivation.md#runs)).
   The assertion is read once per run, after the last step, on the run's rows; the state between
   steps is not checked. Its name is `AfterAssert_<UseCase>_<i>`.
+- A last step that changes nothing (every column it sets already holds that value) is not
+  checked, as in TLA+, where `[][…]_vars` admits a stuttering step. When the last step only ever
+  runs that way, the assertion was never evaluated and `Vacuous_AfterAssert_*` says so.
 - An atom on an entity no step writes or binds reads every present row: the warning
   `UnboundAfterRead`. Write the entity in the use case.
 - An `after` on a use case that changes nothing is `AssertOnInertUseCase`.

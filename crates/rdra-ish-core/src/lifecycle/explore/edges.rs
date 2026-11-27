@@ -603,7 +603,12 @@ pub(crate) struct StepEnds {
 pub struct Ends {
     /// A move of the step's action was read.
     pub ran: bool,
-    /// The target of one has a row of every entity the step leaves unbound.
+    /// One of those moves changes the state (`s' ≠ s`, an orbit self-edge included). A
+    /// stuttering step is not checked against the assert (D17), so a step that only ever
+    /// stutters leaves the assert saying nothing.
+    pub moved: bool,
+    /// The target of a move that changes the state has a row of every entity the step
+    /// leaves unbound.
     pub with_rows: bool,
 }
 
@@ -624,11 +629,15 @@ impl StepEnds {
         out
     }
 
-    /// Notes a move of `act` into `to`.
-    pub(crate) fn read(&mut self, ts: &TransitionSystem, act: ActId, to: &StateSlice) {
+    /// Notes a move of `act` into `to`; `moved` when it changes the state.
+    pub(crate) fn read(&mut self, ts: &TransitionSystem, act: ActId, to: &StateSlice, moved: bool) {
         for &k in &self.by_act[act.index()] {
             let (_, binders, ends) = &mut self.steps[k];
             ends.ran = true;
+            if !moved {
+                continue;
+            }
+            ends.moved = true;
             if !ends.with_rows && ts.meets(binders, &Pred::True, to) {
                 ends.with_rows = true;
             }

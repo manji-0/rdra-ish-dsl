@@ -330,7 +330,7 @@ for a reachable state that meets each *premise*, and warn `Vacuous_<name>` when 
 | Every state rule | Rows of the entities it ranges over exist, linked as its `.along` says. `Unique_*` needs two rows of the child, so it has no premise at one instance per entity. |
 | `invariant(...).when(G)`, a quantifier rule with guards | The guards `G` hold for some rows. |
 | `invariant(E).none(R...)` | A row of `R` exists beside a row of `E`. |
-| `after(UC).assert(...)` | `UC` runs to its last step. When the assertion reads an entity the step does not bind, some such step ends with a row of it. |
+| `after(UC).assert(...)` | `UC` runs to its last step, and some such step changes the state: a step that changes nothing is not checked, so a last step that only ever stutters leaves the assertion unchecked (`… runs its last step only as a step that changes nothing`). When the assertion reads an entity the step does not bind, some step that changes the state ends with a row of it. |
 | `property` | Rows of its entities exist together, and some meet the condition the form speaks from: the trigger of a `leads_to`, what a `stable` keeps, the `.when` of an `unchanged`, the second condition of a `precedes`. |
 | `forbidden` of several conditions | Each condition holds for some row, on its own. |
 
@@ -673,6 +673,7 @@ headers of the samples list these names
 | `ContradictoryDrivenComparison { usecase, proposition, driven }` | `ContradictoryDrivenComparison_<E>_<usecase>_<proposition>` | error | A use case drives a comparison to one truth while its own Int `sets` make it the other. |
 | `DrivenComparisonColumnWritten { usecase, column, proposition, drivers }` | `DrivenComparisonColumnWritten_<E>_<usecase>_<column>` | warning | A use case `sets` a column a driven comparison reads without driving the comparison. |
 | `IntLiteralOutOfBounds { value, max }` | `IntLiteralOutOfBounds_<E>_<value>` | error | An Int literal or integer `@default` lies outside `0..max`. |
+| `DomainTooLarge { column, values }` | `DomainTooLarge_<E>_<column>` | error | A column has more than the 256 values a state holds: a nullable Int at `--int-range-max 255`, a nullable Enum of 256 values, or an Enum of 257. |
 | `UnsupportedComparison { comparison }` | `UnsupportedComparison_<E>_<comparison>` | error | An order comparison has a non-numeric operand, or `==` / `!=` compares columns of different domains. |
 | `UnbindableScope { constraint }` | `UnbindableScope_<E>_<constraint>` | error | An `.along` names a hop no `relate` binds, or misses an entity the rule names. |
 | `UnbindableCondition { condition, usecase }` | `UnbindableCondition_<E>_<condition>_<usecase>` | error | A condition body is applied to a use case that writes nothing, or its `.along` cannot be bound. |

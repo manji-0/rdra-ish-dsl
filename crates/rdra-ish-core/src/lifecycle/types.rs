@@ -273,8 +273,10 @@ impl Domain {
             return None;
         }
         match self {
-            Domain::Int => Some(Value(n as u8)),
-            Domain::NullableInt => Some(Value(n as u8 + 1)),
+            // No value past a byte: none for the top of a nullable Int at 255, which the build
+            // then reports (`DomainTooLarge`, `IntLiteralOutOfBounds`), never a wrap to null.
+            Domain::Int => u8::try_from(n).ok().map(Value),
+            Domain::NullableInt => u8::try_from(n + 1).ok().map(Value),
             _ => None,
         }
     }
@@ -322,7 +324,17 @@ impl Domain {
             self,
             Domain::NullableEnum(_) | Domain::NullableBool
         ));
-        Value((i + shift) as u8)
+        Value::at(i + shift)
+    }
+
+    /// `of_variant`, or `None` for a declared value past a byte, which only a domain the build
+    /// rejects (`DomainTooLarge`) has.
+    fn variant_value(&self, i: usize) -> Option<Value> {
+        let shift = usize::from(matches!(
+            self,
+            Domain::NullableEnum(_) | Domain::NullableBool
+        ));
+        u8::try_from(i + shift).ok().map(Value)
     }
 
     /// The declared value an Enum or Bool value stands for, as `of_variant` numbers it; `None`
@@ -344,7 +356,7 @@ impl Domain {
             .iter()
             .position(|v| v == name)
             .or_else(|| values.iter().position(|v| v.eq_ignore_ascii_case(name)))
-            .map(|i| self.of_variant(i))
+            .and_then(|i| self.variant_value(i))
     }
 
     /// The name of an Enum value; `None` for null or a value of another domain.
@@ -387,6 +399,18 @@ impl Domain {
 pub struct Value(pub u8);
 
 impl Value {
+    /// The value of index `i` of a domain. A value is a byte, and a domain of more than 256
+    /// values is a build error (`DomainTooLarge`) whose column gets no var, so no index past
+    /// 255 reaches here: one that does is a bug, and panics rather than wrap onto another value.
+    pub fn at(i: usize) -> Value {
+        match u8::try_from(i) {
+            Ok(v) => Value(v),
+            Err(_) => {
+                panic!("value index {i} past a byte: a domain of more than 256 values was built")
+            }
+        }
+    }
+
     pub const ABSENT: Value = Value(0);
     pub const PRESENT: Value = Value(1);
     pub const DELETED: Value = Value(2);
@@ -702,9 +726,44 @@ pub enum Effect {
         var: VarId,
         param: u8,
         values: Vec<Choice>,
+        /// The choice of every number of an Int column (`present`, a copy) in a form that
+        /// does not depend on the run's bounds; `values` is its expansion at them, which the
+        /// explorer, TLC and the generated code read. The prover reads this, never the list.
+        numbers: Option<Numbers>,
     },
     /// now := now + 1 while now < int_max.
     Tick,
+}
+
+impl Action {
+    /// Each `(var, param)` slot that two of the action's effects write (`Assign`,
+    /// `Transition`, or `Choose`), once. The builder makes none: an action writes each slot
+    /// at most once (`ConflictingEffects`, `DoubleModeledEnum`, a `chooses` that a write
+    /// already covers is dropped, a counted trigger never counts its own raise). The native
+    /// step and the TLA+ printer resolve two writes of one slot differently: the native step
+    /// applies them in order and forks a choice after the rest, the printer keeps the first
+    /// choice and lets a later `Transition` with a choice replace an earlier one. So
+    /// `TransitionSystem::build` fails a model whose actions break the rule.
+    pub fn slots_written_twice(&self) -> Vec<(VarId, u8)> {
+        let mut seen: Vec<(VarId, u8)> = Vec::new();
+        let mut twice: Vec<(VarId, u8)> = Vec::new();
+        for eff in &self.effects {
+            let slot = match eff {
+                Effect::Assign { var, param, .. }
+                | Effect::Transition { var, param, .. }
+                | Effect::Choose { var, param, .. } => (*var, *param),
+                Effect::Create { .. } | Effect::Delete { .. } | Effect::Tick => continue,
+            };
+            if seen.contains(&slot) {
+                if !twice.contains(&slot) {
+                    twice.push(slot);
+                }
+            } else {
+                seen.push(slot);
+            }
+        }
+        twice
+    }
 }
 
 /// One `transitions` arm of an `Effect::Transition`.
@@ -716,6 +775,17 @@ pub struct Arm {
     pub site: Site,
     /// Its `.when` conditions, key and id: any of them enables it. Empty when unguarded.
     pub conds: Vec<(ConditionKey, String)>,
+}
+
+/// Every number an `Effect::Choose` of an Int column may pick, whatever the Int range: every
+/// value from index `from` up, so `from` 0 is every value, and 1 every non-null one (every
+/// number from 1 of a non-null column). `conds` are the `.when` conditions of the line that
+/// asks for them, as `Choice::conds`: empty when unguarded.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Numbers {
+    pub from: Value,
+    pub conds: Vec<(ConditionKey, String)>,
+    pub site: Site,
 }
 
 /// One value of an `Effect::Choose`.

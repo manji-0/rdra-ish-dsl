@@ -12,9 +12,8 @@ The code read is commit `fb6928c74ccc5b479dea07d92cc1e39c34ddd218` (origin/main,
 2026-11-28). The other theory documents pin `b83b9544`; `git diff --stat b83b9544 fb6928c7 --
 crates scripts` touches 30 files, all in codegen, the LSP, the plugin manifest and two
 scripts, and none under `lifecycle/`, `verify/`, `property_cone.rs`, or `emit/tla`, so every
-statement here holds at both commits. The corrections after review re-read the code at
-`fb6928c7` as well (the crates at the pull request's head, `05679a5c`, do not differ from
-it). Paths are relative to
+statement here holds at both commits. How the document changed after it was first written is
+in [Errata](#errata). `unread@pin` marks a statement whose cited code was not read at the pinned commit ([claims inventory](./claims.md#how-to-read-a-row)). Paths are relative to
 `crates/rdra-ish-core/src/lifecycle/` unless they start with `cli/`
 (`crates/rdra-ish-cli/src/`) or `cli/tests/` (`crates/rdra-ish-cli/tests/`), as in
 [semantics.md](./semantics.md). No tool was run for this document; every statement about
@@ -45,6 +44,7 @@ or a guarantee the code does not give, is listed as an open problem of the
 12. [Summary of evidence](#summary-of-evidence)
 13. [Related work](#related-work)
 14. [Threats to validity](#threats-to-validity)
+15. [Errata](#errata)
 
 ---
 
@@ -52,7 +52,10 @@ or a guarantee the code does not give, is listed as an open problem of the
 
 <!-- derived-from ./semantics.md#notation -->
 
-`T = T_β(M) = (S, I, →)` throughout, with variables `V` (D2) and actions `A` (D6). For an
+`T = T_β(M) = (S, I, →)` throughout, with variables `V` (D2) and actions `A` (D6). Read `T`
+as the system the build returns: the theorems here relate a cone to that system, and some
+steps use facts about the builder's output. That it is `T_β(M)` of D13 is claim
+[I1](./claims.md#0-the-build), which no theorem here needs. For an
 action `a`:
 
 - `Rd(a)` is `cone.rs::TransitionSystem::plain_reads`: the existence of each `Existing` and
@@ -316,8 +319,10 @@ branching findings of an entity cone, a left-out mark can produce a wrong `ok`.
 formal-verification.md, "State models with TLC alone", says. Neither function reads
 `free_triggers`, `over_bound`, or `cone_frees_slots`. Outside `cone.rs`, which defines
 `cone_frees_slots`, the code reads those three names only in `property_cone.rs`,
-`explore/properties.rs`, `verify/tlc.rs` (the explored jobs), `verify/jobs.rs`, `trace.rs`, and
-the trace printers (`cli/state_findings.rs`, `rdra-ish-emit`'s `state_pattern.rs`). A left-out mark lets `C` run a handler
+`explore/properties.rs`, `verify/jobs.rs`, `trace.rs`, and the trace printers
+(`cli/state_findings.rs`, `rdra-ish-emit`'s `state_pattern.rs`); `verify/tlc.rs` (the explored
+jobs) reads none of them, only the `frees_slots` field that `verify/jobs.rs` sets from
+`cone_frees_slots`. A left-out mark lets `C` run a handler
 that `T` holds back, and that adds edges and states. An added edge can leave a state that is a
 deadlock of `T`. An added state can witness a lifecycle state that `T` never reaches, or run a
 use case that never runs in `T`. In each case the finding is missing. A missing finding has no
@@ -326,7 +331,10 @@ combined over every entity cone that keeps the action (`targets.rs::RunsSoFar`),
 that fires the action clears the finding. So a single cone with a left-out mark can hide the
 finding for the whole run.
 
-The following model is constructed by hand and has not been run. Order's exit `ShipOrder`
+The following model is constructed by hand and was not run at the pinned commit. A model of
+the same shape, a handler the cone takes while its raiser starts from a state never reached, is
+the test `tests/cone.rs::a_cone_that_leaves_a_mark_out_keeps_the_whole_systems_verdict_and_view`,
+added by #477, which fixes P32 after the pinned commit. Order's exit `ShipOrder`
 reads `Payment.status == paid`. `ConfirmPayment`, triggered by `EvPaid`, writes `Payment.status`.
 The raiser `ReadNotice` writes only Notice and Payment marks and starts from a state that is
 never reached. Order's cone takes `ConfirmPayment`, because it writes the Payment status that
@@ -339,8 +347,8 @@ verdict on Order is wrong.
 
 A freed entity gives a weaker version of the problem. By Proposition A28, the cone's findings
 are those of a larger bound, so the result depends on the bound, not on the event order.
-Problem P32 is being fixed in a separate change. This document records the problem as it
-appears at the pinned commit.
+Problem P32 is fixed in #477, after the pinned commit. This document records the problem as
+it appears at the pinned commit.
 
 **Proposition A3 (counters are never left out).** If `W` holds the counter `κ` of a counted
 edge `triggers(Ev, UC).counted(k)`, then every raiser and the handler of that edge are in
@@ -611,7 +619,8 @@ Then `~` is a divergence-blind stuttering bisimulation between `C` and `R` that 
 4. every property `P` whose reads are in `T_v ∪ obs` and whose fair actions are in `T_a`, under
    `Plain`.
 
-*Proof.* Points 1 to 5 of cone-soundness.md, with Lemma 6 made explicit.
+*Proof.* Five points, numbered as in cone-soundness.md, "Proof obligation", with Lemma 6 made
+explicit.
 
 1. Related states agree on `T_v` (same `t`) and on `obs` (B1).
 2. A `T_a` step that leaves the *input bytes* unchanged. The input bytes are
@@ -632,7 +641,11 @@ Then `~` is a divergence-blind stuttering bisimulation between `C` and `R` that 
 5. A `T_a` step that changes the input bytes (a raw input, a bit, or both): by Lemma 6 it is a
    sequence of rises from `x(t, s)`, one per stage of `stages`; by (B3)
    and (B1) the representative has rises into the same blocks with the same input bytes, stage by
-   stage, which is what `recanon` looks up.
+   stage, which is what `recanon` looks up. A fold is covered by the same argument with its bit
+   in place of the variables it folds, since the folded guard is a function of them and the key
+   (that `Fold::holds` computes it exactly is one of the two steps Lemma 6 names and does not
+   derive). The monotone rule is not used here: it bounds the input histories, which keeps the
+   extended system finite and small.
 
 Items 1 to 3 of the consequences are existential statements over finite paths labelled by
 `T_v ∪ obs` and `T_a` actions, which a stuttering bisimulation preserves (Browne, Clarke and
@@ -674,7 +687,7 @@ it to "worklist = sweeps" plus the sweeps' own correctness, which is argued here
 - **A10** (monotone inputs): Lemma 5c–d and point 5 of Theorem A8. Monotonicity is not used in A8; it
   keeps `X` finite and small. It is used in A15 (case 3 and `s_cycles`).
 - **A11** (folds): Lemma 6, with the fold equivalence twin-checked. A count is never node-folded
-  (counting-rules.md); not re-read.
+  (counting-rules.md); unread@pin.
 - **A12** (counters on `T`): `split_at` seeds `T_v` with every counter, and `monotone_vars` marks
   counters cyclic, so no counter is an input. P-full by reading.
 - **A13** (one reduction for both engines): `reduced_with` rejects a reduction past
@@ -997,7 +1010,7 @@ Evidence: none beyond the reading of `escalate` and the guide.
 | A7 | Theorem A7 | full | D | |
 | A8 | Theorem A8 | sketch: assumes (B1)–(B3) and Lemma 6 | M, D | P7, P31 |
 | A9 | — | none | M (≤ 2,500,000 states), D | P7 |
-| A10, A11 | Lemma 6, point 5 | sketch | M, D | P31 |
+| A10, A11 | Lemma 6, point 5 | sketch (A11: that a count is never node-folded, unread@pin) | M, D | P31 |
 | A12, A13, A14 | by reading | full (by construction) | D (A12, A13) | |
 | A15 | Theorem A15 | full relative to A8's hypotheses | R, D | P7, P31 |
 | A16 | lift | none | R (partial), D | P20 |
@@ -1083,9 +1096,12 @@ Evidence: none beyond the reading of `escalate` and the guide.
   read at `fb6928c7`. A function read only through its doc (named in its proof: `Fold::holds` for Lemma 6)
   may differ from it. No statement was checked by running the tools.
 - **Syntactic over-approximations.** `Wr` lists a deleted entity's owners although D8 keeps them. This only
-  adds actions and variables to cones and makes owners non-monotone; every proof above tolerates it, but a
-  later change that made `Wr` an under-approximation would break Lemma 2 silently, since nothing checks `Wr`
-  against the effects' semantics.
+  adds actions and variables to cones and makes owners non-monotone; every proof above tolerates it, and a
+  later change that made `Wr` an under-approximation would break Lemma 2. Since P35 (fixed in #491) a debug
+  or `shadow` build holds every step to it: `TransitionSystem::check_writes` panics when a step changes a
+  byte of a variable `action_writes` leaves out, so every debug test that explores and CI's shadow job (the
+  `writes` twin, on the samples and the corpus) check `Wr` against the steps they take. A release build does
+  not check it, and a step no run takes is not checked.
 - **Assumed partition correctness.** A8, A15, and every reduced cone's verdict rest on (B1)–(B3), which the
   release build does not check (P7), and on Lemma 6, which no note states (P31). Among those verdicts are the
   printed `ok` of a property's `Plain` run (A5.1) and of a property on a cone that frees slots (A6).
@@ -1104,3 +1120,24 @@ Evidence: none beyond the reading of `escalate` and the guide.
   wrong verdict, `ok` included; none is known.
 - **Bounded results.** Everything here, escalation included, is a statement at a bound. `ok at n` at
   `β + 1` and `β + 2` adds two bounded results; it is not an induction.
+
+## Errata
+
+Changes to statements of this document after it was first written, newest last.
+
+- **2026-11-28, after an adversarial review** (commits `7a3d13df` and `073bdf11`). The
+  corrections re-read the code at `fb6928c7` as well; the crates at the head of the pull
+  request that added this document, `05679a5c`, do not differ from it.
+- **2026-11-28, after the owner's review.** The P32 paragraph of [Safety cones](#safety-cones)
+  listed `verify/tlc.rs` among the files that read `free_triggers`, `over_bound`, or
+  `cone_frees_slots`; at `fb6928c7` it reads only the `frees_slots` field that
+  `verify/jobs.rs` sets from `cone_frees_slots`, and the list now says so. The proof of
+  Theorem A8 opened with "Points 1 to 5 of cone-soundness.md"; it now states that its five
+  points are numbered as there, and point 5 adds what cone-soundness.md's point 5 says of folds
+  and of the monotone rule, so the proof reads without that note.
+- **2026-11-28, after #477 merged.** The P32 model of [Safety cones](#safety-cones) is no
+  longer described as only constructed by hand: it cites the test #477 added for the same shape,
+  and P32 is recorded as fixed in #477 rather than "being fixed in a separate change".
+- **2026-11-28, after the owner's review of semantics.md (P60).** semantics.md now defines
+  `T_β(M)` from the model's text, and the build implementing it is claim I1. "Notation added
+  here" now says that `T` is the built system and that no theorem here depends on I1.
