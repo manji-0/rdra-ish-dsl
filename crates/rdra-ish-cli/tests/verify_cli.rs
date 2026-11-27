@@ -1453,7 +1453,7 @@ fn a_cone_that_takes_steps_the_larger_module_does_not_still_runs() {
         assert!(line.contains(verdict), "{test}: {line}");
         if verdict == ": ok (" {
             assert!(
-                stdout.contains(&format!("{line}\n  note: Forbidden_E_0's counterexample runs a use case without its event having been raised, which this cone does not rule out; on its exact cone: ok\n")),
+                stdout.contains(&format!("{line}\n  note: Forbidden_E_0: the cone's counterexample is a candidate only, since it runs a use case without its event having been raised; on the cone refined with the event's raisers: ok\n")),
                 "{stdout}"
             );
             assert!(!stderr.contains("error[Forbidden_E_0]"), "{stderr}");

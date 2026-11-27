@@ -84,9 +84,9 @@ pub(super) fn escalate(
             // the system at these bounds, and `n` the instances that system has.
             let decided = match found {
                 Some(d) if !d.diag.trace().is_none_or(|t| t.vouched(true)) => {
-                    let exact = system.exact_target_cone(Target::Invariant(i), true);
-                    n = cone_slots(system, &exact);
-                    system.recheck(Target::Invariant(i), true, caps)
+                    let (verdict, refined) = system.recheck_on(Target::Invariant(i), true, caps);
+                    n = cone_slots(system, &refined);
+                    verdict
                 }
                 Some(d) => Recheck::Violated(Box::new(d.clone())),
                 None if complete => Recheck::Holds,

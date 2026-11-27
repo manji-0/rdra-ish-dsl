@@ -609,7 +609,7 @@ impl BfsCone {
                         }
                     };
                     line.push_str(&format!(
-                        "\n  note: {name}'s counterexample runs a use case without its event having been raised, which this cone does not rule out; on its exact cone: {on_exact}"
+                        "\n  note: {name}: the cone's counterexample is a candidate only, since it runs a use case without its event having been raised; on the cone refined with the event's raisers: {on_exact}"
                     ));
                 }
                 // The note under the line: what the canonicalizer cut. What the group left
