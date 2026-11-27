@@ -1359,6 +1359,52 @@ fn a_counted_mark_keeps_its_raiser_and_handler_out_of_the_sub_lifecycle() {
     }
 }
 
+/// A gate whose Int level goes up and down, and a job that starts while it is up.
+const SWINGING_LEVEL: &str = r#"
+entity Gate "門" { id: Int @pk  level: Int @default(0) }
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+relate(Job, Gate, N:1)
+usecase Build "設置"
+usecase Raise "上げる"
+usecase Lower "下げる"
+usecase Submit "投入"
+usecase Start "開始"
+creates(Build, Gate)
+updates(Raise, Gate)
+sets(Raise, Gate.level == 1)
+updates(Lower, Gate)
+sets(Lower, Gate.level == 0)
+creates(Submit, Job)
+transitions(Start, Job.status, waiting -> running)
+condition GateUp "門が上がっている"
+holds(GateUp, Gate.level == 1)
+applies_to(GateUp, Start)
+forbidden(Job, status == running).label("作業は始まらない")
+"#;
+
+/// P65: a column whose domain holds 256 values (a non-null Int at `--int-range-max 255`) that
+/// a use case sets both up and down is not monotone. `monotone_vars` listed the values such a
+/// write starts from as `0..size as u8`, empty at 256, so the column had no edge and read as
+/// monotone at 255 while it was not at 254.
+#[test]
+fn a_256_value_column_set_both_ways_is_not_monotone() {
+    let model = model_from(SWINGING_LEVEL);
+    for int_max in [254, 255] {
+        let bounds = Bounds::uniform(std::num::NonZeroU8::MIN, int_max);
+        let ts = TransitionSystem::build(&model, bounds.clone(), &Scope::ALL).ts;
+        let level = ts
+            .var_ids()
+            .find(|v| ts.var_name(*v).contains("level"))
+            .expect("the gate's level");
+        assert!(
+            !ts.monotone_vars()[level.index()],
+            "int_max {int_max}: {} read as monotone",
+            ts.var_name(level)
+        );
+        assert_reduction_exact("swinging level", &model, bounds);
+    }
+}
+
 /// A counted mark is not monotone even in a system that holds its raiser and not its
 /// handler, where its arms alone (`0 -> 1 -> over`) form no cycle; the latch there is.
 #[test]
