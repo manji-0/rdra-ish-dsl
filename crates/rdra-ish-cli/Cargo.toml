@@ -21,6 +21,7 @@ perf = ["rdra-ish-core/perf"]
 rdra-ish-syntax = { path = "../rdra-ish-syntax" }
 rdra-ish-core   = { path = "../rdra-ish-core" }
 rdra-ish-emit   = { path = "../rdra-ish-emit" }
+rdra-ish-lsp    = { path = "../rdra-ish-lsp" }
 clap        = { workspace = true }
 anyhow      = { workspace = true }
 miette      = { workspace = true, features = ["fancy"] }

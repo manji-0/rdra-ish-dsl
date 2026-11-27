@@ -24,6 +24,7 @@ rdra-ish <COMMAND> --help # or -h; every command takes it
 | [`list`](#list) | Print model elements as a table, JSON, CSV, or Markdown. |
 | [`states`](#states) | Derive the reachable state patterns of each entity. |
 | [`codegen`](#codegen) | Print the model's domain types and functions as TypeScript, Rust, or Go. |
+| [`lsp`](#lsp) | Run the language server over stdin and stdout. |
 
 [compatibility.md](./compatibility.md) says which commands, flags, exit codes, and output
 formats are stable.
@@ -2174,6 +2175,23 @@ A `shadow` build also reads `RDRA_ISH_SHADOW_STATS`, `RDRA_ISH_DROP_RULE`, and
 costly columns too), `RDRA_PERF_EVAL_TWICE`, and the measurement switches the `perf` module
 lists (`crates/rdra-ish-core/src/perf.rs`). The test suites read `RDRA_REQUIRE_*` and other
 variables of their own.
+
+---
+
+## `lsp`
+
+Run the language server over stdin and stdout.
+
+```
+rdra-ish lsp
+```
+
+`rdra-ish lsp` is the server the `rdra-ish-lsp` binary runs, built into the CLI, so a PyPI
+install (`uv tool install rdra-ish`) has it too. It takes no arguments and reads no file
+until a client opens a workspace. Stdout carries only protocol messages; nothing else is
+written to it. It exits after the client's `exit` notification. The
+[Claude Code plugin](../README.md#claude-code-plugin) starts it for `.rdra` files.
+[Editor support](#editor-support) says what the server does.
 
 ---
 

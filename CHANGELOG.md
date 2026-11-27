@@ -4,6 +4,14 @@
 
 ### Added
 
+- A Claude Code plugin. The repository is a plugin marketplace
+  (`.claude-plugin/marketplace.json`), and its `rdra-ish` plugin brings the agent skills and
+  the language server for `.rdra` files: `/plugin marketplace add manji-0/rdra-ish-dsl`, then
+  `/plugin install rdra-ish@rdra-ish`. The server runs `rdra-ish lsp` from `PATH`, which the
+  plugin does not install. `.claude-plugin/plugin.json` carries the workspace version, and
+  `scripts/check-release-version.sh` checks it with the others.
+- `rdra-ish lsp` runs the language server over stdin and stdout, the same server as
+  `rdra-ish-lsp`, so the PyPI install has it. The release binary grows by about a fifth.
 - `serde = true` in `[code.rust]` derives `::serde::Serialize` and `::serde::Deserialize` on
   the data types of the generated Rust code: ids as their value, scalars and value sets in the
   model's spelling and back through their parsers, rows, records, DTOs, events and run marks

@@ -1,0 +1,9 @@
+{
+  "rdra-ish": {
+    "command": "rdra-ish",
+    "args": ["lsp"],
+    "extensionToLanguage": {
+      ".rdra": "rdra"
+    }
+  }
+}
