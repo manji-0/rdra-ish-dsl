@@ -312,47 +312,43 @@ creates(FileReport, Report)
 }
 
 /// A cone that holds the handler but not the raiser's writes leaves the mark out and runs
-/// the handler unordered; its trace says which step ran without its event.
+/// the handler unordered. Such a counterexample is decided again on the rule's exact cone,
+/// which holds the raiser: a real violation is reported with the raise on its trace, and one
+/// the event order rules out at every bound is no violation (P1).
 #[test]
-fn a_cone_without_the_raiser_notes_the_unordered_step_on_its_trace() {
-    let d = derive_at_two(
-        r#"
-entity Doc "文書" { id: Int @pk  status: Enum(draft, final) @default(draft)  seen: Bool @default(false) }
+fn a_cone_without_the_raiser_has_its_counterexample_decided_on_the_exact_cone() {
+    const DOC: &str = r#"
+entity Doc "文書" { id: Int @pk  status: Enum(draft, final) @default(draft)  seen: Bool @default(false)  phase: Enum(a, b, c) @default(a) }
 usecase Write "作成"
 usecase Review "確認"
 usecase Finalize "確定"
 event EvReviewed "確認済"
 creates(Write, Doc)
-updates(Review, Doc)
-sets(Review, Doc.seen == true)
-raises(Review, EvReviewed)
 triggers(EvReviewed, Finalize)
 transitions(Finalize, Doc.status, draft -> final)
-forbidden(Doc, status == final).label("確定しない")
-"#,
-    );
+raises(Review, EvReviewed)
+"#;
+    let d = derive_at_two(&format!(
+        "{DOC}updates(Review, Doc)\nsets(Review, Doc.seen == true)\nforbidden(Doc, status == final).label(\"確定しない\")\n"
+    ));
     assert_eq!(errors(&d), ["Forbidden_Doc_0"]);
     let trace = trace_of(&d, "Forbidden_Doc_0");
-    assert_eq!(
-        trace.free_triggers,
-        [("Finalize".to_string(), "EvReviewed".to_string())]
+    assert_eq!(trace.free_triggers, []);
+    let steps: Vec<&str> = trace.steps.iter().map(|s| s.action.as_str()).collect();
+    assert_eq!(steps, ["Write", "Review", "Finalize"]);
+    // Review needs phase b, which no use case enters: it never raises the event, so Finalize
+    // never runs, although the rule's own cone, without Review, runs it unordered.
+    let d = derive_at_two(&format!(
+        "{DOC}transitions(Review, Doc.phase, b -> c)\nforbidden(Doc, status == final).label(\"確定しない\")\n"
+    ));
+    assert!(
+        !errors(&d).contains(&"Forbidden_Doc_0".to_string()),
+        "{:?}",
+        errors(&d)
     );
-    let d = derive_at_two(
-        r#"
-entity Doc "文書" { id: Int @pk  status: Enum(draft, final) @default(draft)  seen: Bool @default(false) }
-usecase Write "作成"
-usecase Review "確認"
-usecase Finalize "確定"
-event EvReviewed "確認済"
-creates(Write, Doc)
-updates(Review, Doc)
-sets(Review, Doc.seen == true)
-raises(Review, EvReviewed)
-triggers(EvReviewed, Finalize)
-transitions(Finalize, Doc.status, draft -> final)
-forbidden(Doc, status == final, seen == true).label("確認したら確定しない")
-"#,
-    );
+    let d = derive_at_two(&format!(
+        "{DOC}updates(Review, Doc)\nsets(Review, Doc.seen == true)\nforbidden(Doc, status == final, seen == true).label(\"確認したら確定しない\")\n"
+    ));
     assert_eq!(errors(&d), ["Forbidden_Doc_0"]);
     assert_eq!(trace_of(&d, "Forbidden_Doc_0").free_triggers, []);
 }

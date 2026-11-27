@@ -522,6 +522,45 @@ impl TransitionSystem {
         })
     }
 
+    /// Some action of the cone reads a raised mark the cone leaves out (`cone`). The action
+    /// runs there without its event, so the cone reaches states the event order forbids at
+    /// every bound: its `ok` holds, and its counterexample may be no run of the whole system.
+    pub fn cone_leaves_marks(&self, cone: &Cone) -> bool {
+        self.actions.iter().enumerate().any(|(i, a)| {
+            let inside = cone.keep.contains(&ActId::at(i))
+                || self.action_writes(a).iter().any(|v| cone.vars.contains(v));
+            inside
+                && self
+                    .mark_reads(a)
+                    .iter()
+                    .any(|(mark, _)| !cone.vars.contains(mark))
+        })
+    }
+
+    /// The cone of `target` grown until a counterexample on it is a run of the whole system:
+    /// every action that writes into it is kept, so each mark it reads is in it
+    /// (`closed_cone`); with `slots`, the existence of each entity such an action creates is
+    /// in it too, so no entity runs out of slots later than in the whole system
+    /// (`cone_frees_slots`). A check whose cone counterexample the cone cannot vouch for is
+    /// decided again on it (`recheck`).
+    pub fn exact_target_cone(&self, target: Target, slots: bool) -> Cone {
+        let (mut seed, mut keep) = self.target_seed(target);
+        keep.extend(self.keep_writers(&mut seed, slots));
+        let cone = Cone {
+            vars: self.cone(&seed, &keep),
+            keep,
+        };
+        debug_assert!(
+            !self.cone_leaves_marks(&cone),
+            "an exact cone reads every mark"
+        );
+        debug_assert!(
+            !slots || !self.cone_frees_slots(&cone),
+            "and counts every slot"
+        );
+        cone
+    }
+
     /// The targets `check` and `states` explore: views and safety checks. A `can_reach` is a
     /// temporal property, which only `verify` decides (`reach_targets`).
     pub fn targets(&self) -> Vec<Target> {

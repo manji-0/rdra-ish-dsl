@@ -32,8 +32,8 @@ impl TransitionSystem {
     /// its cone under `caps`. An `always` reads the cone reduced by its independent
     /// sub-lifecycle, as TLC's run of it does: the reduction keeps what a state predicate over
     /// the property's vars sees. The other forms read the unreduced cone. A cone that frees an
-    /// entity's slots (`cone_frees_slots`) reaches a superset, so a violation there is decided
-    /// again on the whole system, under `whole`: a whole-model run is bounded as `verify`
+    /// entity's slots (`cone_frees_slots`) or leaves a raised mark out (`cone_leaves_marks`)
+    /// reaches a superset, so a violation there is decided again on the whole system, under `whole`: a whole-model run is bounded as `verify`
     /// bounds one, by its own state cap and `--temporal-budget`.
     pub fn decide_property(&self, i: usize, caps: Caps, whole: Caps) -> PropertyVerdict {
         let cone = self.property_cone(i);
@@ -52,11 +52,14 @@ impl TransitionSystem {
             .decide_property(index)
             .expect("an explored form");
         match verdict {
-            PropertyVerdict::Violated(_) if self.cone_frees_slots(&cone) => self
-                .clone()
-                .run(whole)
-                .decide_property(i)
-                .expect("an explored form"),
+            PropertyVerdict::Violated(_)
+                if self.cone_frees_slots(&cone) || self.cone_leaves_marks(&cone) =>
+            {
+                self.clone()
+                    .run(whole)
+                    .decide_property(i)
+                    .expect("an explored form")
+            }
             verdict => verdict,
         }
     }
