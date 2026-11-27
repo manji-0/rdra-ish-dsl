@@ -546,6 +546,7 @@ after(Decide).assert(Doc.status != drop)
 /// `shadow` build at the step (open problem P35): the cones read `action_writes` as every
 /// var a step can change (Lemma 2 of docs/theory/cones.md), so such a step would let a cone
 /// drop a writer it needs. Every other test that explores holds every step it takes to it.
+#[cfg(any(debug_assertions, feature = "shadow"))]
 #[test]
 #[should_panic(expected = "which action_writes leaves out")]
 fn a_step_that_changes_a_var_its_action_does_not_write_is_caught() {
