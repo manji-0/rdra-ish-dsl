@@ -492,6 +492,122 @@ impl Reduction {
     fn stands_for(&self, act: ActId, a2: ActId) -> bool {
         a2 == act || self.variants.get(&act).is_some_and(|v| v.contains(&a2))
     }
+
+    /// The extended sub-lifecycle of this reduction of `ts`, the cone, built once, to read
+    /// its silent steps from cone states (`SilentSteps::from`).
+    #[cfg(test)]
+    pub(crate) fn silent_steps(&self, ts: &TransitionSystem) -> SilentSteps {
+        SilentSteps {
+            ext: Extended::rebuild(ts, self),
+        }
+    }
+}
+
+/// The extended sub-lifecycle of a reduction, for reading its silent steps in the cone.
+#[cfg(test)]
+pub(crate) struct SilentSteps {
+    ext: Extended,
+}
+
+/// A silent step of the extended sub-lifecycle, from the state a cone state projects to
+/// (`Reduction::key`: its S part, raw inputs, and bits), read back in the cone.
+#[cfg(test)]
+pub(crate) struct SilentStep {
+    /// Each cone action the step stands for (its own, and the variants merged into it), with
+    /// the params the step binds; a T param a fold dropped or binds freely is `None`.
+    pub(crate) acts: Vec<(ActId, Vec<Option<u8>>)>,
+    /// Whether the step reads a bit in place of some of its action's guards on T.
+    pub(crate) folded: bool,
+    /// The slots of the key each bit the step reads is read at.
+    pub(crate) bit_slots: Vec<u8>,
+    /// The cone state with its S part replaced by that of the step's successor.
+    pub(crate) next: State,
+}
+
+#[cfg(test)]
+impl SilentSteps {
+    /// The silent steps of the extended sub-lifecycle from `s`'s projection, a state of
+    /// `ts`, the cone `r` reduces.
+    pub(crate) fn from(
+        &self,
+        r: &Reduction,
+        ts: &TransitionSystem,
+        s: &StateSlice,
+    ) -> Vec<SilentStep> {
+        let ext = &self.ext;
+        let x = State(r.key(ts, s).into());
+        let mut out = Vec::new();
+        for (a, p, post) in ext.system.plain_moves(&x) {
+            if ext.rise[a.index()] {
+                continue;
+            }
+            let first = ext.acts[a.index()].expect("a silent step is a cone action's");
+            let variants = ext.variants.get(&first).cloned();
+            let folded = variants.is_some();
+            let acts = variants
+                .unwrap_or_else(|| vec![first])
+                .into_iter()
+                .map(|v| {
+                    let n = ts.actions[v.index()].params.len();
+                    let local = |i: usize| match &ext.params[v.index()] {
+                        None => Some(i),
+                        Some(index) => index[i].map(usize::from),
+                    };
+                    // A T param a fold binds freely reads no row the step names: the bit
+                    // holds for some binding of it, which the cone's step picks.
+                    let free = |i: usize| {
+                        (ext.bits.iter().flatten()).any(|f| {
+                            f.act == v
+                                && f.key != FoldKey::Param(id8(i))
+                                && f.t_params.iter().any(|(t, _)| usize::from(*t) == i)
+                        })
+                    };
+                    let kept = (0..n)
+                        .map(|i| local(i).filter(|_| !free(i)).map(|j| p[j]))
+                        .collect();
+                    (v, kept)
+                })
+                .collect();
+            // A linked fold pushes its row's param past the action's kept ones, in the order
+            // of the folds.
+            let folds: Vec<&Fold> = ext
+                .bits
+                .iter()
+                .flatten()
+                .filter(|f| f.act == first)
+                .collect();
+            let linked = folds
+                .iter()
+                .filter(|f| matches!(f.key, FoldKey::Linked { .. }))
+                .count();
+            let mut pushed = p.len() - linked;
+            let bit_slots = folds
+                .iter()
+                .map(|f| match f.key {
+                    FoldKey::Param(key) => {
+                        let local = ext.params[first.index()]
+                            .as_ref()
+                            .map_or(Some(key), |m| m[usize::from(key)])
+                            .expect("a fold's key is kept");
+                        p[usize::from(local)]
+                    }
+                    FoldKey::Linked { .. } => {
+                        pushed += 1;
+                        p[pushed - 1]
+                    }
+                })
+                .collect();
+            let mut next = s.to_owned();
+            r.write(&mut next, &post.0);
+            out.push(SilentStep {
+                acts,
+                folded,
+                bit_slots,
+                next,
+            });
+        }
+        out
+    }
 }
 
 impl TransitionSystem {
