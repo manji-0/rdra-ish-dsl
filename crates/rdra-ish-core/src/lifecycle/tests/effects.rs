@@ -378,7 +378,10 @@ invariant(Child).when(alive == true).has(Parent).label("every child has a parent
         left,
         vec![("DeleteParent".into(), "Parent".into(), "Child".into())]
     );
-    assert_eq!(left_diag(&d).severity(), crate::lifecycle::Severity::Info);
+    assert_eq!(
+        left_diag(&d).severity(),
+        crate::lifecycle::Severity::Warning
+    );
     assert!(d.has("Child", |x| matches!(
         x,
         StateDiag::ConstraintViolated {
@@ -397,6 +400,99 @@ invariant(Child).when(alive == true).has(Parent).label("every child has a parent
         ".on_delete(cascade)",
         "deletes(DeleteParent, Child)"
     ));
+}
+
+/// The export's `ON DELETE SET NULL` / `SET DEFAULT` clears a child's key in the database,
+/// which the lifecycle does not do: the child keeps naming the deleted row. The use case that
+/// deletes such a parent draws the warning `DeleteLeavesChildKeys`, once per key, naming the
+/// action; a use case that also deletes the child, or moves its key (`unlinks`, `relinks`),
+/// and a `@soft_delete` parent, which no SQL delete removes, draw nothing (#P63).
+#[test]
+fn a_delete_leaves_the_keys_of_a_set_null_or_set_default_key_and_says_so() {
+    let src = |key: &str, extra: &str, soft: &str| {
+        format!(
+            r#"
+entity Parent "親" {{ id: Int @pk {soft} }}
+entity Child "子" {{ id: Int @pk }}
+entity Other "他" {{ id: Int @pk }}
+relate(Child, Parent, N:1){key}
+relate(Child, Other, N:1).optional()
+usecase CreateParent "親作成"
+usecase CreateChild "子作成"
+usecase Attach "紐付け"
+usecase DeleteParent "親削除"
+creates(CreateParent, Parent)
+creates(CreateChild, Child)
+links(Attach, Child, Parent)
+deletes(DeleteParent, Parent)
+{extra}
+"#
+        )
+    };
+    let keys = |key: &str, extra: &str, soft: &str| -> Vec<(String, String, String, String)> {
+        derive_src(&src(key, extra, soft))
+            .diags
+            .iter()
+            .filter_map(|x| match &x.diag {
+                StateDiag::DeleteLeavesChildKeys {
+                    usecase,
+                    parent,
+                    child,
+                    action,
+                    ..
+                } => Some((
+                    usecase.clone(),
+                    parent.clone(),
+                    child.clone(),
+                    action.as_str().to_string(),
+                )),
+                _ => None,
+            })
+            .collect()
+    };
+    for (key, action) in [
+        (".optional().on_delete(set_null)", "set_null"),
+        (".optional().on_delete(set_default)", "set_default"),
+    ] {
+        assert_eq!(
+            keys(key, "", ""),
+            vec![(
+                "DeleteParent".into(),
+                "Parent".into(),
+                "Child".into(),
+                action.into()
+            )],
+            "{key}"
+        );
+        let d = derive_src(&src(key, "", ""));
+        let diag = d
+            .diags
+            .iter()
+            .map(|x| &x.diag)
+            .find(|x| matches!(x, StateDiag::DeleteLeavesChildKeys { .. }))
+            .expect("DeleteLeavesChildKeys");
+        assert_eq!(diag.severity(), crate::lifecycle::Severity::Warning);
+        assert!(diag.to_string().contains(action), "{diag}");
+        assert!(
+            keys(key, "deletes(DeleteParent, Child)", "").is_empty(),
+            "{key}"
+        );
+        assert!(
+            keys(key, "unlinks(DeleteParent, Child, Parent)", "").is_empty(),
+            "{key}"
+        );
+        assert!(
+            keys(key, "relinks(DeleteParent, Child, Parent)", "").is_empty(),
+            "{key}"
+        );
+        assert!(
+            keys(key, "", "deleted_at: DateTime @null @soft_delete").is_empty(),
+            "{key}"
+        );
+    }
+    // A cascade key draws DeleteLeavesChildren instead, and a restrict key neither.
+    assert!(keys(".optional().on_delete(cascade)", "", "").is_empty());
+    assert!(keys(".optional().on_delete(restrict)", "", "").is_empty());
 }
 
 fn left_diag(d: &Derived) -> &StateDiag {

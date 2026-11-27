@@ -4,6 +4,25 @@
 
 ### Added
 
+- The lint warning `negated-order-admits-null` (P62): a `not` over `<`, `<=`, `>`, or `>=`
+  with a `@null` column, in a `@check` or a `property`, holds while the column is null, so
+  `not (qty < 1)` is not `qty >= 1`. An expression that names the column's null (`qty == null
+  or ...`) is not flagged; neither is a logical `@derived` (three-valued), nor `!=` / `not in`
+  on a nullable column, which samples use on purpose. `check` prints it with its rule id (it
+  does not fail the run), and `lint` and the editor show it; the editor's diagnostic carries
+  the rule id of every lint finding as its code. No sample or corpus model draws it. The
+  language reference (§ Null) gains a truth table of every comparison operator over null, on
+  either side and both, and under `not`, which a test computes through the builder and the
+  evaluator and compares with the page.
+- The warning `DeleteLeavesChildKeys` (P63): a use case deletes the parent of a key with
+  `.on_delete(set_null)` or `.on_delete(set_default)`, which verification does not execute,
+  while the SQL export writes `ON DELETE SET NULL` / `SET DEFAULT`; the children keep naming
+  the deleted row. Not drawn when the same use case deletes the child or moves its key
+  (`unlinks`, `relinks`), or for a `@soft_delete` parent. The language reference states that
+  verification executes no referential action and that generated Go, Rust, and TypeScript
+  code implements none either (it lists an unchecked `OnDelete_*` obligation). The corpus case
+  `safety_delete_set_null` draws it.
+
 - `codegen` (default output changes): the domain code has an unimplemented port, a stand-in
   for the contracts that a service takes while it is unfinished, so it builds before every
   method exists (dogfood G6; docs/design/algebraic-codegen.md, "The unimplemented port"). Go:
@@ -179,6 +198,12 @@
   typescript` spells `--lang ts`. Naming both is an error (one table named twice).
 
 ### Changed
+
+- `DeleteLeavesChildren` (a use case deletes the parent of an `.on_delete(cascade)` key and
+  not the child) is a warning, no longer an info (P63): the SQL export's `ON DELETE CASCADE`
+  removes the children, and the verified model keeps them. It is no longer drawn for a
+  parent with a `@soft_delete` column, which no SQL delete removes. `check` counts it among
+  its warnings; the exit code does not change.
 
 - `check --code` (experimental) says more of what failed, from three services built on the
   generated code: the compiler's whole output prints before the findings (rustc's errors

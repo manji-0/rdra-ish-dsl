@@ -25,6 +25,7 @@ mod liveness;
 mod membership;
 mod names;
 mod never_runs;
+mod null_table;
 mod oracle;
 mod owners;
 mod prove;

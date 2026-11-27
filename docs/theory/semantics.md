@@ -218,11 +218,19 @@ false in every state, and `not`, `and`, and `or` are Boolean.
 - **Sets.** `t in (v₁, …)` is the disjunction of `t == vᵢ`, and `not in` is its negation.
 
 A consequence the reader must keep in mind: `not (x < 3)` is true when `x = ⊥`, so `not`
-does not commute with the SQL reading of a comparison.
+does not commute with the SQL reading of a comparison. The language reference
+([Null](../language-reference.md#null)) gives the full table: every comparison operator with
+`⊥` on the left, the right, or both, and under `not`. The lint warning
+`negated-order-admits-null` flags `not` over an ordering with a nullable operand in a
+`@check` or a `property`, the only forms that take `not` (P62). A logical `@derived` column
+is not a predicate under this definition: it reads its comparison as SQL does and is `⊥`
+while an operand is `⊥`, under `not` too.
 
 *Implemented by* `lifecycle::types::Pred`, `TransitionSystem::eval` (`expr.rs`),
 `expr.rs::compare`, `build/preds/mod.rs::columns_cmp` (the two-column rule), and
-`build/preds/atoms.rs::lists_whole_domain`. The last folds a set that lists every value of a
+`build/preds/atoms.rs::lists_whole_domain`; `lifecycle/tests/null_table.rs` computes the
+reference's table through them and compares it with the page; `build/preds/checks.rs::passes`
+is the `@derived` reading. `lists_whole_domain` folds a set that lists every value of a
 finite domain to `true` (#71, #73) and never folds an Int set (#425). The fold does not
 change a predicate's value under this definition.
 
@@ -332,10 +340,17 @@ same column in one step. Since #485 such a step is an error, so the question doe
 unset, `restrict`, or `no_action`, a `deletes(UC, E)` is guarded by: no present child names
 the slot, apart from a child the same step deletes, unlinks, or relinks. The lifecycle does
 not execute `cascade`, `set_null`, or `set_default`. The children of such a key stay present
-and name a deleted parent, and the info `DeleteLeavesChildren` reports it. An `E` with a
-`@soft_delete` column gets no guard.
+and name a deleted parent, and the key gets no `DanglingKey_*`. The SQL export does write
+`ON DELETE CASCADE`, `SET NULL`, or `SET DEFAULT`, so a database built from it removes the
+children or clears their key where `T_β(M)` keeps them. Generated Go, Rust, and TypeScript
+code executes no action either: it lists an unchecked `OnDelete_*` obligation. The warning
+`DeleteLeavesChildren` (`cascade`) and the warning `DeleteLeavesChildKeys` (`set_null`,
+`set_default`) name each use case that deletes such a parent and neither deletes the child
+nor, for the latter two, moves its key (P63). An `E` with a `@soft_delete` column gets no
+guard and neither warning.
 
-*Implemented by* `GuardWhy::Restrict`.
+*Implemented by* `GuardWhy::Restrict`; the warnings by
+`build/preds/entity_rules.rs::cascade_deletes`.
 
 <a id="d10"></a>**D10 (Split use cases and runs).** A use case whose writes form `k ≥ 2`
 transaction groups (D6) is the actions `UC_1 … UC_k`. Each entity that a step before the
@@ -648,6 +663,15 @@ soundness questions are in the index's [Open problems](./README.md#open-problems
 
 ## Errata
 
+- **2026-11-28, after the owner's review (P62, P63).** **D5** stated the two readings of
+  null but gave no table, and said nothing of `@derived`; it now points to the reference's
+  table, which a test checks against the evaluator, to the lint warning
+  `negated-order-admits-null`, and to the three-valued `@derived` reading. **D9** said the
+  info `DeleteLeavesChildren` reports a key the lifecycle does not execute; that was only
+  `cascade`, and `set_null` and `set_default` had no diagnostic. D9 now says that the SQL
+  export does execute the three actions, that `DeleteLeavesChildren` is a warning and
+  `DeleteLeavesChildKeys` covers the other two, and that neither fires for a `@soft_delete`
+  parent.
 - **2026-11-28, after the owner's review (P60).** The first version said "the source of
   truth is the code". It defined `I_β(M)` as what `TransitionSystem::initial_states`
   computes (D4), `T_β(M)` as what `TransitionSystem::build` constructs (D13), and the

@@ -200,7 +200,7 @@ Predicates connect declared instances by id (kind-qualified when ambiguous).
 | `.on_delete` | The lifecycle |
 |---|---|
 | none, `restrict`, `no_action` | The delete is enabled only when no present child names the row, as the database rejects it otherwise (none is the SQL default, which the export keeps). A child the same step deletes, unlinks, or relinks does not count. Each such key whose parent a use case deletes gets the invariant `DanglingKey_<Child>_<role>`: every present child names a present parent (or none, under `.optional()`). |
-| `cascade`, `set_null`, `set_default` | The action does not run yet. The delete is enabled, and the children stay present and still name the deleted row, where every rule sees them. No `DanglingKey_*`. The info `DeleteLeavesChildren` names each use case that deletes a `cascade` parent and not the child; add `deletes(UC, Child)` to remove one child row per run. |
+| `cascade`, `set_null`, `set_default` | Verification does not execute the action. The delete is enabled, and the children stay present and still name the deleted row, where every rule sees them. No `DanglingKey_*`. The warning `DeleteLeavesChildren` names each use case that deletes a `cascade` parent and not the child; add `deletes(UC, Child)` to remove one child row per run. The warning `DeleteLeavesChildKeys` names each use case that deletes a `set_null` or `set_default` parent and neither deletes the child nor moves its key; add `unlinks(UC, Child, Parent)` to clear one child's key per run (the model has no write of a key's default, so `set_default` has no exact counterpart). |
 
 - A step removes one child row per run, so at two instances an Order with two lines still
   blocks the delete, where one SQL statement could remove both.
@@ -208,6 +208,14 @@ Predicates connect declared instances by id (kind-qualified when ambiguous).
 - A pre-existing child of a created parent starts naming a parent that does not exist
   (`PreExistingChildOfCreatedParent`), so its key gets no `DanglingKey_*`.
 - `.on_update` is not read.
+- The SQL export writes the action (`ON DELETE CASCADE`, `SET NULL`, `SET DEFAULT`), so a
+  database built from it runs what verification does not: there the children go, or their
+  key is cleared or reset. The two warnings above mark each use case where the verified model
+  and that database part. Generated Go, Rust, and TypeScript code implements no referential
+  action either: it does what the model's delete does (one row) and lists the action as an
+  unchecked `OnDelete_<Child>_<columns>` obligation for the implementation to meet.
+- A parent with a `@soft_delete` column draws neither warning: it is marked, so no SQL action
+  fires.
 - **A deleted row keeps its keys.** Its columns reset to their base values and each key still
   names its parent. Only a later step that binds the deleted row reads the key: a step of a
   split use case whose earlier step deleted it (see [Runs of a split use case](./state-derivation.md#runs)).
@@ -2166,6 +2174,47 @@ A comparison is true or false, never unknown:
 - A unique set reads null the same way: two null rows do not agree, so neither breaks
   `Unique_<Entity>_<columns>` ([Unique column sets](./state-derivation.md#unique-column-sets)).
 - `sets(UC, E.col == null)` writes null. `@default(null)` is no value of an `Enum` or `Bool`.
+
+The truth table below is computed by a test (`lifecycle/tests/null_table.rs`) through the
+builder and the evaluator, so it is what `check`, `verify`, and the codegen conditions read.
+`x` and `y` are `Int @null` and both null, `k` is an `Int` holding 3. An `Enum`, `Bool`, or
+`Date` column reads null the same way, and so does `now` in place of a literal. A row names
+the operands `l`, `r` of `l op r`; a cell is whether `l op r` holds / whether `not (l op r)`
+holds.
+
+<!-- null-truth-table:begin -->
+| Operands | `==` | `!=` | `<` | `<=` | `>` | `>=` |
+|---|---|---|---|---|---|---|
+| `x`, `3` | false / true | true / false | false / true | false / true | false / true | false / true |
+| `x`, `k` | false / true | true / false | false / true | false / true | false / true | false / true |
+| `k`, `x` | false / true | true / false | false / true | false / true | false / true | false / true |
+| `x`, `y` | false / true | true / false | false / true | false / true | false / true | false / true |
+
+| Comparison | Holds / `not` holds |
+|---|---|
+| `x == null` | true / false |
+| `x != null` | false / true |
+| `x in (1, 3)` | false / true |
+| `x not in (1, 3)` | true / false |
+<!-- null-truth-table:end -->
+
+Read the table this way:
+
+- A null meets no `==`, `<`, `<=`, `>`, `>=`, with a value or with a column, and meets every
+  `!=`. Two null columns are not equal, and so they differ.
+- `not` flips the two-valued result, so `not (x < 3)` holds while `x` is null, and `x >= 3`
+  does not. An ordering and its negation's rewrite differ exactly on null. `not (x == 3)` is
+  `x != 3`, null included.
+- A logical `@derived` column is the one exception: it reads the comparison as SQL does, so
+  it is null while an operand is null, under `not` too.
+
+The lint warning `negated-order-admits-null` (shown by `check`, `lint`, and the editor) flags
+a `not` over `<`, `<=`, `>`, or `>=` with a nullable column, in a `@check` or a `property`
+(the forms that take `not`), unless the same expression names the column's null (`qty ==
+null or ...`, `qty == present and ...`). Write the ordering itself (`qty >= 1`) to leave null
+out, or `qty == null or qty >= 1` to admit it. A `!=` or `not in` on a nullable column is not
+flagged: it holds on null in every rule, and the models that use it mean that (a `forbidden`
+that fires while the column is unset).
 
 #### Semantics and interaction with `sets`
 

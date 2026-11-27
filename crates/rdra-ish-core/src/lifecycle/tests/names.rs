@@ -230,6 +230,13 @@ fn one_of_each() -> Vec<StateDiag> {
             child: "Child".into(),
             site: site(),
         },
+        StateDiag::DeleteLeavesChildKeys {
+            usecase: "DeleteParent".into(),
+            parent: "Parent".into(),
+            child: "Child".into(),
+            action: crate::model::RefAction::SetNull,
+            site: site(),
+        },
         StateDiag::GuardReadsLaterStep {
             condition: "Captured".into(),
             usecase: "Pay".into(),
@@ -322,6 +329,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::TriggerNeverRuns { .. }
             | StateDiag::UncountedTrigger { .. }
             | StateDiag::DeleteLeavesChildren { .. }
+            | StateDiag::DeleteLeavesChildKeys { .. }
             | StateDiag::GuardReadsLaterStep { .. }
             | StateDiag::DrivenComparisonColumnWritten { .. }
             | StateDiag::DefaultOnVariationIgnored { .. } => {}
