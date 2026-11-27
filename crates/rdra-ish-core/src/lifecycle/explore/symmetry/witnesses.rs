@@ -12,8 +12,8 @@ use crate::lifecycle::explore::Caps;
 use crate::lifecycle::expr::StateSlice;
 use crate::lifecycle::tests::model_from;
 use crate::lifecycle::types::{
-    At, Choice, CmpOp, Effect, Guard, GuardWhy, ModelRef, Pred, Rhs, Site, Term, Value, VarId,
-    VarKind,
+    At, Choice, CmpOp, Effect, Guard, GuardWhy, ModelRef, ParamRole, Pred, Rhs, Site, Term, Value,
+    VarId, VarKind,
 };
 use crate::lifecycle::{Bounds, Scope, TransitionSystem};
 
@@ -237,6 +237,32 @@ fn unlinked_create_has_a_witness() {
     ts.actions[place].effects.remove(at);
     ts.layout();
     witnesses(&ts, Rule::UnlinkedCreate, "Shop");
+}
+
+#[test]
+fn absent_owner_has_a_witness() {
+    // `Place` runs only when the new order's key, read before the step, names the shop it
+    // places under. The order is absent then and its key holds the base value, the shop in
+    // slot 0, so orders go only under that shop, and a promoted shop in slot 0 is not a
+    // promoted shop in slot 1 (P30).
+    let mut ts = shops();
+    let (key, place, _) = order_key(&ts);
+    let params = &ts.actions[place].params;
+    let new = params.iter().position(|p| p.role == ParamRole::New);
+    let shop = params.iter().position(|p| p.role != ParamRole::New);
+    let (Some(new), Some(shop)) = (new, shop) else {
+        panic!("Place creates an order under a shop: {params:?}")
+    };
+    ts.actions[place].guards.push(guard(Pred::Cmp(
+        Term::Slot {
+            var: key,
+            at: At::Param(new as u8),
+        },
+        CmpOp::Eq,
+        Term::Index(At::Param(shop as u8)),
+    )));
+    ts.layout();
+    witnesses(&ts, Rule::AbsentOwner, "Shop");
 }
 
 /// The names of the checks a run's diagnostics report violated.
