@@ -855,11 +855,11 @@ verdict. `symmetry/mod.rs::Rule` has ten variants, and the witnesses are as foll
 | `JointTooLarge` | none needed. `witnesses.rs::joint_too_large_is_a_cost_cap` (release builds only) drops it and shows that the quotient is still a bisimulation with the plain run's verdicts |
 | `Observed` | 2 of its 6 reasons, `obs` and `input`: `cli/tests/engine_corpus.rs::each_h_reason_a_case_shows_has_a_witness`, in `shadow` builds only. The other 4 have none |
 | `Reduced` | none for any of its 7 reasons |
-| `PinnedStart` | none |
+| `PinnedStart` | `witnesses.rs::pinned_start_has_a_witness` (P33, #512): with it dropped the quotient stays a bisimulation with the same verdicts, but a canonical initial form need not be an initial state, and the lifted counterexample fails the always-on replay (`NotInitial`). So the rule guards the traces, not the verdicts |
 
 `explore/symmetry/snapshot.rs::KEPT` lists 11 rules and reasons that the owner kept on
-2026-11-25 without a witness of their own: `PinnedStart`, six `Reduced` reasons, and four
-`Observed` reasons. `Reduced:S` is not in that list, and no witness for it was found. The
+2026-11-25 without a witness of their own: `PinnedStart` (which has one since #512), six
+`Reduced` reasons, and four `Observed` reasons. `Reduced:S` is not in that list, and no witness for it was found. The
 snapshot reports that `PinnedStart` and every scan rule except the `Observed` and `Reduced`
 reasons fire in no cone of the samples. A missing witness does not affect soundness, which
 the subgroup argument gives. It leaves open whether the rule is needed.

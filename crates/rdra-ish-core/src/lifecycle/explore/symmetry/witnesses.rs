@@ -12,8 +12,8 @@ use crate::lifecycle::explore::Caps;
 use crate::lifecycle::expr::StateSlice;
 use crate::lifecycle::tests::model_from;
 use crate::lifecycle::types::{
-    At, Choice, CmpOp, Effect, Guard, GuardWhy, ModelRef, ParamRole, Pred, Rhs, Site, Term, Value,
-    VarId, VarKind,
+    At, Choice, CmpOp, Effect, Guard, GuardWhy, ModelRef, ParamRole, Pred, Rhs, Site, Start, Term,
+    Value, VarId, VarKind,
 };
 use crate::lifecycle::{Bounds, Scope, TransitionSystem};
 
@@ -357,4 +357,70 @@ forbidden(Shop, Shop.tier == gold)",
         names.iter().all(|n| n.starts_with("Forbidden_Shop")),
         "{names:?}"
     );
+}
+
+/// Shops and orders that exist from the start, a shop's tier free at the start and each
+/// order under the shop in slot 0. No built model pins a slot at the start (the builder
+/// turns an identity start between unequal slot counts into an error, and starts a
+/// pre-existing child anywhere), so the key's start is set by hand to its base value.
+const PINNED: &str = "entity Shop \"店\" { id: Int @pk  tier: Enum(basic, gold) @default(basic) }
+entity Order \"注文\" { id: Int @pk  st: Enum(open, done) @default(open) }
+relate(Order, Shop, N:1)
+usecase Promote \"昇\"
+usecase Ship \"送\"
+transitions(Promote, Shop.tier, basic -> gold)
+transitions(Ship, Order.st, open -> done)
+invariant(Shop).when(tier == gold).none(Order.st == done)";
+
+fn pinned() -> TransitionSystem {
+    let mut ts = system(PINNED, 2);
+    for v in ts.var_ids().collect::<Vec<_>>() {
+        match ts.var(v).kind {
+            VarKind::Owner { .. } => ts.vars[v.index()].start = Start::Base,
+            _ if ts.var_name(v).contains("tier") => ts.vars[v.index()].start = Start::Any,
+            _ => {}
+        }
+    }
+    ts.layout();
+    ts
+}
+
+/// `PinnedStart` keeps the initial classes the classes of initial states (G3 of cones.md).
+/// The steps commute with the group either way, so with the rule dropped the quotient is
+/// still a bisimulation and the verdict stands; but a run up to symmetry stores the
+/// canonical form of each initial state, and the form of one whose shops differ in tier puts
+/// the orders under another shop than slot 0: no initial state. The counterexample lifted
+/// from it does not replay. That always-on check (`orbit.rs::replays`) panics, which counts as the witness
+/// (docs/design/instance-symmetry.md, the per-rule gate).
+#[test]
+fn pinned_start_has_a_witness() {
+    let ts = pinned();
+    assert!(
+        (Group::of(&ts).left_out().iter())
+            .any(|l| l.rule == Rule::PinnedStart && l.entity == "Shop"),
+        "{:?}",
+        Group::of(&ts).left_out()
+    );
+    let caps = Caps::new(usize::MAX, 200_000);
+    let plain = ts.clone().run(caps);
+    assert_eq!(
+        violated(plain.diags.iter().map(|d| &d.diag)),
+        BTreeSet::from(["Quantifier_Shop_0".to_string()])
+    );
+    let orbits = ts.clone().run_orbits(caps);
+    assert_eq!(
+        violated(orbits.diags().iter().map(|d| &d.diag)),
+        violated(plain.diags.iter().map(|d| &d.diag))
+    );
+    dropping("PinnedStart", || {
+        assert!(Group::of(&ts).left_out().is_empty(), "the shops move");
+        bisimulation(&ts).expect("the steps commute with the group");
+        let run =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ts.clone().run_orbits(caps)));
+        let message = run.err().and_then(|e| e.downcast::<String>().ok());
+        assert!(
+            message.as_deref().is_some_and(|m| m.contains("NotInitial")),
+            "the lifted counterexample starts at no initial state: {message:?}"
+        );
+    });
 }
