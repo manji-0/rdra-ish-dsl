@@ -8,12 +8,12 @@
 This document states what assurance exists that the native verifier and TLC, reading the
 TLA+ module rdra-ish prints, give the same verdicts, and what kind of assurance each piece
 is. It owns rows T1 to T16 of the [claims inventory](./claims.md#d-agreement-with-tlc) and
-uses the notation of [semantics.md](./semantics.md) (D1 to D24) without redefining it.
+uses the notation of [semantics.md](./semantics.md) (D1 to D25) without redefining it. It
+describes the code at commit `fec53d6a` (origin/main, 2026-11-28).
 
-The code was read at commit `fb6928c74ccc5b479dea07d92cc1e39c34ddd218` (origin/main,
-2026-11-28), later than the index's pin `b83b9544`; [Appendix: the pinned
-commit](#appendix-the-pinned-commit) says what is cited and that none of it changed in a part
-this document relies on. Paths follow the convention of the
+It was first written against `fb6928c7`; [Appendix: the pinned
+commit](#appendix-the-pinned-commit) says what changed in the cited code up to `fec53d6a` and
+what was read again. Paths follow the convention of the
 [claims inventory](./claims.md#how-to-read-a-row): `core` is
 `crates/rdra-ish-core/src/lifecycle`, `cli` is `crates/rdra-ish-cli`, `emit` is
 `crates/rdra-ish-emit/src`. How the document changed after it was first written is in
@@ -36,8 +36,9 @@ statement below is tagged:
   shared upstream code that both engines read.
 - **[read]**: a statement of what the code, tests, workflows, or notes at the pinned commit
   contain or do, taken from reading them (or, where it says so, from one `gh api` query).
-  Nothing was run for it. A defect stated as [read] (P12, P21, P23, P24) is a reading of the
-  code, not a reproduction. A number taken from a note or code comment rather than counted
+  Nothing was run for it. A defect stated as [read] (P12, P21, P23, P24) was a reading of the
+  code when this document found it; the fixes of P12, P21 and P24 reproduced it first, and
+  the index records no reproduction for P23. A number taken from a note or code comment rather than counted
   in the code says where it comes from.
 
 The tag is added to the legend above the four classes because most of sections 2 to 5 is
@@ -172,13 +173,16 @@ pipelines did not fail differently on that input. Three kinds of fault survive a
 Status [read]: **not proved**. The argument below is a paper argument per construct, read from
 `emit/tla/module.rs`, `emit/tla/pred.rs`, and `emit/tla/mod.rs` beside the native step
 relation in `core/explore/moves.rs` and the evaluator `core/expr.rs`. The argument for step 3
-needs an invariant of the builder that nothing enforces as such: no action writes one
-`(var, param)` with a multi-target `Transition` and also an `Assign` after it or a `Choose`
-before it ([Effects](#per-construct-argument); open problem P24). Steps 1 and 2, and the
-existential projection of step 3 (some action and binding gives the edge), are also
-checked as graph equality on every sample cone that fits the comparison's cap
-([Sample comparison](#the-sample-comparison)); step 3 per binding and step 4 are checked
-by verdict comparison only.
+needs an invariant of the builder: no action writes one `(var, param)` with a multi-target
+`Transition` and also an `Assign` after it or a `Choose` before it
+([Effects](#per-construct-argument)). Since #485 the build enforces it: an action that
+writes one slot twice fails with `ConflictingEffects` (`Action::slots_written_twice`,
+checked by `build/mod.rs::Builder::one_write_per_slot`, which `Builder::finish` calls; P24,
+fixed). Steps 1 and 2, and step 3 per binding on unreduced
+cones, are also checked as graph equality on every sample cone that fits the comparison's
+cap, with edges compared with their params since #507
+([Sample comparison](#the-sample-comparison)); step 3 on a reduced cone's class moves, which
+print no params, and step 4 are checked by action and by verdict comparison only.
 
 ### Per-construct argument
 
@@ -218,7 +222,7 @@ present or not, as D7 says. Guards print through `pred.rs::Ctx::pred`; guards th
 successor are printed after the assignments and `UNCHANGED`, which matters only for TLC's
 left-to-right evaluation, not for the meaning of the conjunction.
 
-**Effects [paper; read for the P24 cases].** `module.rs::effects` folds the effects into one
+**Effects [paper; read for the P24 cases; the invariant enforced since #485].** `module.rs::effects` folds the effects into one
 `v' = [v EXCEPT …]` per written variable and `UNCHANGED` for the rest, and
 `moves.rs::each_successor` applies them to a copy of the pre-state. Case by case:
 
@@ -302,7 +306,7 @@ case `fair_split_use_case`.
 of D2 with guards and assignments from the builder; the printer has no code of its own for
 them beyond the generic action path. A cone that leaves the mark out drops the conjunct and
 the `Triggered` parameter in the system, so both engines read the same over-approximation
-(open problem P1 concerns what that cone's counterexample means, not agreement). Tested by
+(P1, fixed in #477, concerned what that cone's counterexample means, not agreement). Tested by
 the corpus cases `fair_triggered_handler`, `fair_counted_exposes_lost_run`,
 `safety_counted_once_per_raise`, `safety_event_overflow`.
 
@@ -387,8 +391,9 @@ from the unreduced cone (`property_cone.rs::PropertyCone::bundle`), while the na
 (P23, [§2](#2-the-agreement-rules)).
 
 **What the module does not state [read].** `can_reach` prints as a comment: TLC cannot state
-`AG EF` (P19). Deadlocks are not TLC's `CHECK_DEADLOCK` (always `FALSE`) but the
-`Deadlock_*` invariants of `print_state_models`, which are one-sided by design (T6).
+`AG EF` (P19). Deadlocks, the finding of D25, are not TLC's `CHECK_DEADLOCK` (always
+`FALSE`) but the `Deadlock_*` invariants of `print_state_models`, which are one-sided by
+design (T6).
 
 ### Status of T1
 
@@ -396,8 +401,8 @@ from the unreduced cone (`property_cone.rs::PropertyCone::bundle`), while the na
 
 | Step of T1 | Paper argument | Test | Assumed |
 |---|---|---|---|
-| 1, 2, 3 (states, init, steps) on unreduced systems | above; step 3 for multi-target transitions only under the builder invariant of P24 | graph equality on every sample cone under 300,000 states, at 1 and 2 instances, without bindings; the 35 `bfs_and_tlc_*` tests of `engine_equivalence.rs` | TLC's `-dump dot` lists every edge, self-loops included |
-| 3 on reduced systems | none (not argued here) | graph equality on reduced sample cones; the reduced cone's violated set against the unreduced one's | the quotient tables (common-mode) |
+| 1, 2, 3 (states, init, steps) on unreduced systems | above; step 3 for multi-target transitions under the builder invariant of P24, which the build enforces since #485 | graph equality on every sample cone under 300,000 states, at 1 and 2 instances, edges with their params since #507; the 36 `bfs_and_tlc_*` tests of `engine_equivalence.rs` | TLC's `-dump dot` lists every edge, self-loops included |
+| 3 on reduced systems | none (not argued here) | graph equality on reduced sample cones, class moves by action alone; the reduced cone's violated set against the unreduced one's | the quotient tables (common-mode) |
 | 4, state rules and `after` | above; P22 | verdict and violated-set comparison on every compared cone; each TLC trace replayed through the native step relation | TLC |
 | 4, temporal properties and fairness | above | verdicts only: 23 `TEMPORAL_CASES` at 2 instances and the corpus at each case's flags | TLC's liveness checking under quantified weak fairness |
 | 5, latch | above | verdicts only: `explored_along` (a `TEMPORAL_CASES` fixture) and the corpus case `safety_precedes_latch`. The graph comparison prints `PrintMode::Safety` modules, which declare no latch (`mod.rs::checked_properties` checks no property in that mode), so it never sees one | |
@@ -452,45 +457,39 @@ run can stop where TLC's run of the same module decides.
 
 **Decided against undecided: the rule and the code [read].** Rule 1 says `not decided` from
 either engine is no disagreement. The code keeps it for final verdicts, where `Decision`
-maps `Undecided` to `None`. It does not keep it per run:
+maps `Undecided` to `None`, and since #469 per run too:
 
-- **P21, confirmed and extended [read; not reproduced].** *Fixed in #469.* `verify/native.rs::Answer::outcome`
-  maps `Answer::Stopped` to `Outcome::Ok`, and every push into `Native::runs` but one uses
-  it: the `Plain` and `Full` runs of `native_property_after` and its `WfNext` run on the
-  unreduced cone, the `Plain` run of `always_up_to_symmetry`, and the `Plain` and `WfNext`
-  runs of `liveness_up_to_symmetry`. The exception is the `WfNext` run on the reduced cone
-  (the `reduced_wf` branch of `native_property_after`): it maps a `ReducedVerdict`, pushes
-  only `Holds` and `Violated`, and pushes nothing for `Undecided` or `Spurious`, so P21 does
-  not reach it. Not read: when `Natives::properties[k]` is `None`, in which case `compare.rs` skips the
-  job. `Native::capped` resets the
-  decision but not `runs`. So a native run stopped at a cap, beside a TLC counterexample on
-  the same `ConeRun`, prints `error[EngineDisagreement]` and fails the run. The same mapping
-  has a second consumer that needs no TLC: in `liveness_up_to_symmetry`, after a
-  counterexample up to symmetry on a reduced cone, the plain run's first entry is tested for
-  `Some(Outcome::Ok)`, and a plain run that stopped reads as `Ok`, so the property is
-  reported `tool_error` ("the run up to symmetry finds a counterexample the plain run does
-  not") although the plain run decided nothing. Both fail closed: a false tool error, never
-  a wrong verdict. No corpus case reaches the path: the two cases with `native=not_decided`
-  are `cap_memory_limit`, which skips TLC, and `cap_temporal_budget_zero`, whose budget
-  stops only whole-model runs.
-- **P12, confirmed and restated [read].** *Fixed in #471.* When both engines report a counterexample on a
-  safety cone, `compare.rs` builds TLC's violated set with `collect::<Result<_, _>>().ok()`;
-  if any TLC trace fails to replay, the sets are not compared. Separately,
-  `tlc.rs::model_traces` replays the first TLC trace of each violated check for display and
-  prints `error: …; BFS and TLC disagree (a tool bug)` when it does not replay. That line is
-  not counted in `disagreements` or `tool_errors`, so the `result:` line and exit status do
-  not change. The corpus harness and `verify-samples.sh` fail on any unnamed `error:` line,
-  so in CI a non-replaying first trace is caught; a non-replaying later trace of the same
-  check is in neither place, and for a user the exit status does not show either.
+- **P21 (fixed in #469) [read].** `verify/native.rs::Answer::outcome` maps `Answer::Stopped`
+  to `None`, so a native run stopped at a cap is recorded in `Native::runs` as not decided and
+  compared with nothing. When this document was written it mapped `Stopped` to
+  `Outcome::Ok`: every push into `Native::runs` but the `WfNext` run on the reduced cone used
+  it (the `Plain` and `Full` runs of `native_property_after` and its unreduced `WfNext` run,
+  the `Plain` run of `always_up_to_symmetry`, and the `Plain` and `WfNext` runs of
+  `liveness_up_to_symmetry`), so a native run stopped at a cap beside a TLC counterexample on
+  the same run printed `error[EngineDisagreement]`, and in `liveness_up_to_symmetry` a stopped
+  plain run read as `Ok` and gave a false `tool_error` without TLC. Both failed closed. The
+  fix reproduced it with `temporal_unmet.rdra` at `--max-states 3`.
+- **P12 (fixed in #471) [read].** `compare.rs::unreplayed` replays every TLC trace of every
+  job, whatever the native verdict, and a job with one that does not replay prints
+  `error[EngineDisagreement]` and ends `tool_error`. When this document was written, a safety
+  cone's TLC violated set was built with `collect::<Result<_, _>>().ok()`, so a trace that
+  failed to replay dropped the comparison, and the display path (`tlc.rs::model_traces`)
+  replayed only the first trace of each check, printing an unnamed `error:` line that changed
+  neither `result:` nor the exit status; a later trace that did not replay was reported
+  nowhere.
 
-**The corpus harness's own reading (P13, confirmed) [read].** In
-`cli/tests/engine_corpus.rs::check_case`, rule 2 `continue`s when TLC printed no line for a
-module the native run names, and rule 8 compares a check only when both the plain and the
-symmetric run decided it. Rule 1 in the harness reads the printed verdicts, so it inherits
-the run-time comparison above.
+**The corpus harness's own reading (P13, fixed in #472) [read].** In
+`cli/tests/engine_corpus.rs::check_case`, rule 2 (`rule_2`) fails a native `Cone_` line
+without TLC's line for the same module when the header gives its checks a TLC verdict, and
+rule 8 (`rule_8`) fails a check the plain run decides and the symmetric run does not decide
+the same way, `not decided` included; `rule_2_fails_a_tlc_line_the_header_expects_and_the_run_lacks`
+and `rule_8_fails_a_check_symmetry_leaves_undecided` test both on canned output. Before #472
+rule 2 `continue`d past such a module and rule 8 compared only checks both runs decided.
+Rule 1 in the harness reads the printed verdicts, so it inherits the run-time comparison
+above.
 
-**Known disagreements [read].** The corpus has none: no case carries a `known` line (0 of 79). No
-run-time disagreement is open as an issue at the pinned commit, as far as the notes say.
+**Known disagreements [read].** The corpus has none: no case carries a `known` line (0 of 86).
+No run-time disagreement is open as an issue at the pinned commit, as far as the notes say.
 
 ## 3. Differential evidence
 
@@ -514,17 +513,18 @@ compares; what the test shows when it passes is [test].
 
 `cli/tests/engine_corpus.rs` over `cli/tests/engine_corpus/*.rdra` (T7).
 
-- **Inputs.** 79 cases with 191 `expect` lines; families `cap` 2, `cone` 11, `fair` 9,
-  `presence` 7, `safety` 24, `sym` 10, `z3` 16. One case (`cap_memory_limit`) skips TLC.
-  38 cases carry a `bfs=` list.
-- **Bounds.** TLC runs once per case, at the case's flags: 2 instances and Int `0..5` by
-  default; 1 instance in the four cases with `--instance-count 1`; per-entity counts above
+- **Inputs.** 86 cases with 210 `expect` lines; families `cap` 2, `cone` 12, `fair` 9,
+  `presence` 9, `safety` 25, `sym` 10, `width` 2, `z3` 17. One case (`cap_memory_limit`)
+  skips TLC. 38 cases carry a `bfs=` list.
+- **Bounds.** TLC runs at the case's flags: 2 instances and Int `0..5` by
+  default; 1 instance in the six cases with `--instance-count 1`; per-entity counts above
   2 in three cases, each raising two entities (`presence_per_entity_slots`: Loan and Room at
   3 over `--instance-count 1`; `safety_count_per_entity`: Loan at 4, Shelf at 3;
   `sym_per_entity_bounds`: Room at 3, Booking at 2); one entity held at 1 instance
   (`--instances X=1`, the others at 2) in four cases (`sym_arm_reorders`,
-  `sym_deleted_row_owner`, `sym_lift_compose`, `sym_relink_loop`); `--int-range-max 6` or `7`
-  in two `z3_` cases. The `bfs=` runs at 1, 3 and 4 instances are native only (P14).
+  `sym_deleted_row_owner`, `sym_lift_compose`, `sym_relink_loop`); `--int-range-max` in four
+  cases (5, 6 or 7 in three `z3_` cases, 255 in `width_nullable_int_top`). Since #476 the
+  `bfs=` runs at 1, 3 and 4 instances run TLC beside BFS too (P14, narrowed).
 - **Compares.** Each engine against the hand-written header, rules 1 to 3 against TLC,
   rule 8 against the symmetric native run.
 - **Detects.** The header is the only check of common-mode code: the planted-bug table of
@@ -532,9 +532,10 @@ compares; what the test shows when it passes is [test].
   planted bugs in the cone ladder that moved both engines and were caught by the headers
   alone.
 - **Cannot detect.** A trap no case names. A header written wrong in the same way as the
-  code (the header is reasoning by the same people who wrote the code). Deleting cases:
-  `every_corpus_header_is_well_formed` asserts at least 30 cases where 79 exist (P15,
-  confirmed).
+  code (the header is reasoning by the same people who wrote the code). Deleting a case is
+  caught since #472: `every_corpus_header_is_well_formed` compares the cases with
+  `tests/engine_corpus/CASES` both ways (P15, fixed; before, it asserted at least 30 cases
+  where 79 existed).
 
 ### The sample comparison
 
@@ -549,20 +550,22 @@ than the translator once for all inputs.
 - **Compares** (`check_cone`). TLC's distinct-state count and its `-dump dot,actionlabels`
   graph, decoded through `dec`, against the BFS graph: the reached states, the initial
   states, the edges as `(from, to, action, params)` from a module printed with one `Next`
-  disjunct per binding (`tla::print_bound`); the state-model findings of every entity on
+  disjunct per binding (`tla::print_bound`, since #507; P25); the state-model findings of every entity on
   both graphs; the violated invariants and `after` assertions, rerunning TLC without each
   found check until no new one appears; and each TLC trace replayed through the native
   step relation (`replay_violations`). `a_corrupted_tlc_trace_does_not_replay` checks that
   the replay rejects a corrupted trace.
 - **Unreduced and reduced.** `check_one_cone` compares the unreduced cone only when its BFS
   completes under `STATE_CAP` (300,000 states), and the reduced cone only when its run
-  completes under the same cap. A cone joins `VERIFY_FALLBACK` (24 cones) when its reduced
+  completes under the same cap. A cone joins `VERIFY_FALLBACK` (25 cones; insurance-claim-ops' Investigation joined in #526) when its reduced
   run at 2 instances passes the cap. A cone whose unreduced BFS passes 300,000 states while
-  its reduced BFS fits is compared reduced only, and nothing lists it. Which sample cones
-  are in that case was not measured here. On such a cone TLC reads the Rust-computed quotient tables, so the comparison
-  says nothing independent about the reduction there. This extends P14.
-- **Cannot detect.** Temporal properties (not printed in `PrintMode::Safety`); bindings;
-  anything at 3 or more instances; any cone of the 24 at 2 instances.
+  its reduced BFS fits is compared reduced only; since #476 `VERIFY_REDUCED_ONLY` lists those
+  (30 cones), and the test fails when the list and the run differ. On such a cone TLC reads
+  the Rust-computed quotient tables, so the comparison says nothing independent about the
+  reduction there (P14). A reduced cone's class move prints with no params, so its edges
+  compare by action alone.
+- **Cannot detect.** Temporal properties (not printed in `PrintMode::Safety`); anything at
+  3 or more instances; any cone of the 25 at 2 instances.
 
 `a_property_cone_decides_what_the_whole_model_decides` (T3) runs the property ladder on 23
 `TEMPORAL_CASES` (7 sample files and 16 inline fixtures; T3 said 26), at 2 instances, each run of each property
@@ -581,7 +584,8 @@ under `verify --with-tlc` (the corpus harness passes `--with-tlc` to every case;
 `VERIFY_FALLBACK` cone (clinic-ops, patent-ops, food-permit-ops, insurance-claim-ops,
 oidc-auth) and on every header line with flags, at each root's header bounds. The domain
 roots' temporal properties are compared with TLC only here. It is held to the run-time
-rules of [§2](#2-the-agreement-rules), including their gaps (P12, P21, P23).
+rules of [§2](#2-the-agreement-rules), whose gaps P12, P21 and P23 were fixed in #471,
+#469 and #503.
 
 For oidc-auth the header bounds do not reach the 13 `VERIFY_FALLBACK` cones at 2 instances.
 Its headers (`samples/oidc-auth/buc/buc_ciba.rdra`) run `verify --instance-count 1 --prove
@@ -615,7 +619,8 @@ generator mode, `reduction-diff.py --counted` (`.counted(k)` with `k` of 1 or 2 
 
 `RDRA_TLC_BATCH=both` (T11) runs each `engine_equivalence` job in a batch JVM and again as a
 process with the same fingerprint and seed, and fails on any difference in exit status, log,
-parsed run, or dumped graph. It is not set in any workflow; it runs by hand. The
+parsed run, or dumped graph. Since #486 the main-only `tlc-batch-both` job of `ci.yml` runs
+`engine_equivalence` that way (scheduled or by hand, never on a pull request). The
 `#[ignore]`d `recorded_tlc_runs_are_the_same_in_a_batch_jvm` replays recorded `verify` runs
 the same way, also by hand. In CI, `RDRA_REQUIRE_TLC_BATCH=1` only requires that some job
 ran batched without falling back. This bears on the test harness only: `verify --with-tlc`
@@ -623,16 +628,27 @@ does not use batch JVMs.
 
 ### Mutation run
 
-`cargo mutants` (T15) over `property_cone.rs`, `verify/native.rs`, `core/cone.rs` and
-`core/explore/liveness.rs` (`.cargo/mutants.toml`), killed by the corpus with `tlc` and `z3`
-off `PATH` (`mutants.yml` checks that they are gone). It measures how well the corpus
-headers alone catch faults in the cone ladder and the liveness search. It does not measure
-agreement with TLC: TLC does not run, and no file of the printer (`emit/tla/`), the
-comparison (`compare.rs`, `tlc.rs`), or the TLC readers (`tlc_output.rs`, `tlc_replay.rs`)
-is mutated. The workflow starts only by hand (`workflow_dispatch`), and no kill rate is
-recorded in the repository (P16, confirmed). Mutation analysis in the sense of DeMillo,
-Lipton and Sayward (1978) would report the fraction of non-equivalent mutants killed; that
-number does not exist here.
+`cargo mutants` (T15) runs by hand only (`mutants.yml`, `workflow_dispatch`), in two
+configurations (docs/engine-agreement.md, "Mutation run"):
+
+- **The liveness ladder** (`.cargo/mutants.toml`): mutants of `property_cone.rs`,
+  `verify/native.rs`, `core/cone.rs` and `core/explore/liveness.rs`, killed by the corpus
+  with `tlc` and `z3` off `PATH` (the workflow checks that they are gone). It measures how
+  well the corpus headers alone catch faults in the cone ladder and the liveness search, not
+  agreement with TLC. Two kill rates are recorded (the first since #486): 139 of 209 viable mutants
+  (66.5%) at `b0f593ba` and 151 of 240 (62.9%) at `6f2d29a1`.
+- **The TLC side** (`-f config=tlc`, `.cargo/mutants-tlc.toml`, since #508): 548 mutants of
+  the TLA+ printer (`emit/tla/{mod,module,names,pred}.rs`), the comparison
+  (`verify/compare.rs`), and the TLC readers (`tlc_output.rs`, `tlc_replay.rs`), killed with
+  `tlc` and `z3` on `PATH` by the corpus, the unit tests of the TLC output reader, the
+  comparison and the TLC driver, and the `verify_cli` tests that run TLC beside the native
+  checker. `verify/tlc.rs` itself is not mutated. This is the run that measures how well
+  agreement catches a fault on the TLC side. Its kill rate is still pending: the run of
+  2026-11-28 at `cb1beccb` is listed with no result yet.
+
+Mutation analysis in the sense of DeMillo, Lipton and Sayward (1978) reports the fraction of
+non-equivalent mutants killed; the recorded rates count every viable mutant, equivalent ones
+included, so they are lower bounds on that fraction.
 
 ### What each source can and cannot detect
 
@@ -640,13 +656,14 @@ number does not exist here.
 
 | Source | Native fault | Printer fault | TLC fault | Common-mode fault | Bounds and inputs |
 |---|---|---|---|---|---|
-| Corpus headers | yes, on the trap | yes, on the trap | yes, on the trap | yes, on the trap | 79 hand cases, TLC at each case's flags |
+| Corpus headers | yes, on the trap | yes, on the trap | yes, on the trap | yes, on the trap | 86 hand cases, TLC at each case's flags and at the `bfs=` counts |
 | Corpus rules 1 to 3 | where TLC differs | where native differs | where native differs | no | as above |
-| Sample graph comparison | states, edges, initial states, safety verdicts | same | same | no | 40 roots, 1 and 2 instances, cones under 300,000 states |
+| Sample graph comparison | states, edges with params, initial states, safety verdicts | same | same | no | 40 roots, 1 and 2 instances, cones under 300,000 states |
 | Temporal cone comparison | liveness and ladder verdicts | same | same | no | 23 cases, 2 instances |
 | `verify --with-tlc` in CI | verdicts | verdicts | verdicts | no | 5 domain roots and flagged header lines, header bounds |
 | Random models with TLC | verdicts | verdicts | verdicts | no | 45 fixed seeds, main only |
-| Mutation run | cone ladder and liveness only, through headers | no | no | ladder only | corpus, by hand, no recorded rate |
+| Mutation run, liveness | cone ladder and liveness only, through headers | no | no | ladder only | corpus, by hand, 66.5% and 62.9% recorded |
+| Mutation run, TLC side | no | printer, comparison, TLC readers | no | no | corpus and CLI tests with TLC, by hand, rate pending |
 
 ## 4. Mechanised evidence
 
@@ -661,7 +678,7 @@ uses it) proves each statement for every input up to its bound. For agreement, t
 `pred.rs::numeric` must mirror. Nothing ties `pred.rs` to them except tests. No harness
 concerns the printer, the decoder, the TLC readers, or the comparison.
 
-**Shadow twins (T14) [read].** A `shadow` build runs 25 reference twins beside fast paths
+**Shadow twins (T14) [read].** A `shadow` build runs 26 reference twins beside fast paths
 (`crates/rdra-ish-core/src/shadow.rs::TWINS`). The ones on the path TLC is compared against are the move
 generation (`EachEnabled`), the edge store (`Edges`, `StepEnds`), and the reduced class
 moves (`ClassMoves`). They compare a fast native path with a slower native one; they say
@@ -680,14 +697,16 @@ cap (P17).
 | `engine-equivalence`: `engine_equivalence`, `proof_equivalence`, `engine_corpus` with `RDRA_REQUIRE_TLC=1` | when `changes` says `verify` | every 3 hours, skipped when the commit was checked | yes |
 | `formal-verify`: `verify-samples.sh --with-tlc --tlc-roots`, reduced against unreduced on random models | when `changes` says `verify`; random models without TLC | with TLC on 45 seeds | yes |
 | `shadow` | as `changes` decides | yes | yes: the corpus on a `shadow` build with `RDRA_REQUIRE_TLC=1` |
+| `tlc-batch-both`: `engine_equivalence` with `RDRA_TLC_BATCH=both` | never | yes | yes: batch JVM against a TLC process |
 | `kani` | when `scripts/kani-relevant.sh` matches a changed file | yes | no |
-| `mutants.yml` | never | never; by hand | no |
+| `mutants.yml` | never | never; by hand | with `-f config=tlc` |
 
 Every TLC run in CI is in the flake's devShell. `ci.yml` sets `shell: nix develop --command
 bash -eo pipefail {0}` as the default, and only two jobs override it with plain `bash`, the
 `changes` job and the `kani` job (Kani is not in nixpkgs, so that job runs on the runner's
 rustup outside the devShell, as its comment says); neither runs TLC. Of the other
-workflows, `mutants.yml` takes TLC off `PATH` on purpose, `portability.yml` runs with no nix
+workflows, `mutants.yml` takes TLC off `PATH` on purpose in its liveness configuration and
+requires it in the TLC one, `portability.yml` runs with no nix
 and no TLC (its comment), and `release.yml`, `publish-pypi.yml` and `verus.yml` do not
 mention TLC. The devShell's TLC is
 `flake.nix`'s `tlcFor`: the nixpkgs `tlaplus` package overridden to the 1.8.0 pre-release
@@ -701,13 +720,15 @@ pull-request checks, which is a convention, not a gate. Main runs on a 3-hour sc
 a merge reaches the main-only steps (random models with TLC, the full `kani` set) hours
 later or, if GitHub drops a scheduled run, later still (P16, confirmed).
 
-Two release-gate statements bear on agreement (P16, extended). The CHANGELOG for v3.0.0
-records item 2 of the gate ("`verify --with-tlc` on every root of `samples.txt` reports no
-disagreement") as held on the evidence that `formal-verify` ran "the TLC roots with
-`--with-tlc`", which is five roots and the flagged header lines, not every root; the other
-roots were compared through `engine_equivalence` instead. And native-temporal-verification.md
-says the `--with-tlc` step moves to `release.yml` once the gate passes; `release.yml` runs no
-`verify`, and the step still runs in `formal-verify`.
+Two release-gate statements bore on agreement (P16, extended; narrowed in #486 and #497).
+The CHANGELOG for v3.0.0 records item 2 of the gate ("`verify --with-tlc` on every root of
+`samples.txt` reports no disagreement") as held on the evidence that `formal-verify` ran "the
+TLC roots with `--with-tlc`", which is five roots and the flagged header lines, not every
+root; the other roots were compared through `engine_equivalence` instead. Since #497 an
+erratum under that entry says so. And native-temporal-verification.md said the `--with-tlc`
+step moves to `release.yml` once the gate passes; `release.yml` runs no `verify`, and the step
+still runs in `formal-verify`. That note now says the step did not move and that the five
+roots are what runs.
 
 ## Residual risk
 
@@ -723,11 +744,12 @@ the sections it cites, and carries the tag of the statements it rests on.
    `T_β(M)` of D13 (a failure of claim I1), a wrong
    cone, a wrong ladder decision (the staging of a property cone's runs), a wrong quotient
    table, or a wrong name in `TlaNames`, which the printer and the decoder both use, moves both
-   engines. P40 and P54 (a value the build wraps; [z3.md](./z3.md#uniformity-in-the-bound),
+   engines. P40 and P54 (a value the build wrapped, fixed in #470;
+   [z3.md](./z3.md#uniformity-in-the-bound),
    [native.md](./native.md#the-state-store-and-its-encoding)) and P32 (an entity cone that
-   leaves a raised mark out; [cones.md](./cones.md#safety-cones)) are faults of this kind.
-   The 191 hand-written `expect` lines see these on the 79 traps they name. For the builder,
-   the reference interpreter of P26 (`core/lifecycle/tests/reference/`) is a second check
+   left a raised mark out, fixed in #477; [cones.md](./cones.md#safety-cones)) were faults of
+   this kind. The 210 hand-written `expect` lines see these on the 86 traps they name. For the builder,
+   the reference interpreter of P26 (`core/tests/reference/`, #492) is a second check
    [test]: it reads a subset of the language from the `SemanticModel` without
    `TransitionSystem::build`, explores it by brute force on plain values (`i64` integers,
    Enum values by name, no packing, cone, reduction or symmetry), and compares the initial
@@ -750,19 +772,25 @@ the sections it cites, and carries the tag of the statements it rests on.
    D2's reading of which Int-typed columns are numbers with the builder.
    The theory index's [conclusion](./README.md#conclusion) takes this item and the next as
    the main residual risks of all four documents.
-2. **A wrong verdict on any input no test ran [read; runtime].** The run-time guard on
-   native counterexamples is partial. By P20 (reported; unread@pin) and D23, only a
-   liveness lasso on an unreduced cone is replayed through the step relation before it
-   prints: a safety counterexample is re-evaluated by `property_failure`, not replayed; the
-   lift of a reduced safety trace checks its steps with `debug_assert!` only; a reduced
-   liveness lasso is replayed on the reduced system; and a symmetric lift that fails to
-   replay panics. So a wrong `counterexample` is caught at run time in one case out of
-   several, and a wrong `ok` has no run-time guard at all; TLC sees either only where a test
-   or a user runs `--with-tlc`.
-3. **Bounds [read].** In CI, TLC runs at 3 or more instances only on three corpus cases with
-   per-entity flags and on the 3-instance seeds among the 45 main random seeds; never on
-   the 24 fallback cones at 2 instances in `engine_equivalence` (`verify --with-tlc` runs
-   the 11 of clinic-ops, patent-ops, food-permit-ops, and insurance-claim-ops at 2
+2. **A wrong verdict on any input no test ran [read; runtime].** Since #518 and #522
+   (P20) every trace the native checker prints, safety or liveness, plain, reduced or
+   symmetric, replays through the step relation of the system it is about before it prints,
+   and one that does not is a fault (`LiftFault`, `LassoFault`, `TraceFault`) that ends the
+   run `tool_error` (D23): the reduced lift checks every lifted step against the cone's steps
+   in every build (`reduce/lift.rs::lift` returns `ReplayError`), and a symmetric path goes
+   through `orbit::replays`. What remains is narrower: some steps of the lift still rest on
+   internal `expect`s, which would panic rather than print a fault
+   (`explore/orbit.rs::lift_path`, and the representative and class lookups of
+   `reduce/lift.rs::lift`); an `always` counterexample is evaluated on the path the search
+   found, not on the lifted trace, and the position where it fails is checked by
+   `debug_assert_eq!` only (`explore/properties.rs`); and a
+   wrong `ok` has no run-time guard at all. TLC sees a wrong `ok` only where a test or a user
+   runs `--with-tlc`.
+3. **Bounds [read].** In CI, TLC runs at 3 or more instances only on the corpus (the three
+   cases with per-entity flags, and since #476 the `bfs=` runs at 3 and 4 instances of 38
+   cases) and on the 3-instance seeds among the 45 main random seeds; never on
+   the 25 fallback cones at 2 instances in `engine_equivalence` (`verify --with-tlc` runs
+   the 12 of clinic-ops, patent-ops, food-permit-ops, and insurance-claim-ops at 2
    instances, verdicts only, and the 13 of oidc-auth at 1 instance only, so those 13 never
    meet TLC at 2 instances); and never as a graph comparison on unreduced cones above
    300,000 states. Open issue #202 proposes comparing large cones with TLC at 2 instances
@@ -774,21 +802,25 @@ the sections it cites, and carries the tag of the statements it rests on.
    (say an ordered comparison of a nullable Int against `now`, or a count inside a
    quantifier on the primed state) shows only if some tested model reaches a state where
    the two readings differ.
-5. **Fairness per instance [read].** No test compares bindings, so a fault in which instance a
-   step counts for shows only through a liveness verdict, on 23 temporal cases and the
-   `fair_*` corpus cases.
+5. **Fairness per instance [read].** Since #507 the graph comparison compares each edge with
+   its params on unreduced sample cones (P25), so a step attributed to the wrong binding shows
+   there. A reduced cone's class moves still compare by action alone, and which fair instance
+   a step counts for is still checked only through a liveness verdict, on 23 temporal cases
+   and the `fair_*` corpus cases.
 6. **The comparison code itself [read].** `compare.rs`, `tlc_output.rs`, `tlc_replay.rs` and
-   `TlaNames` have no Kani harness, no shadow twin, and no mutant; P12 is a place where a
-   disagreement in violated sets can go unreported, and P23 a place where the per-run
-   comparison pairs runs on two different systems.
-7. **Effect orders the builder may not exclude [paper; read].** Fixed in #485, which makes
-   the build reject an action that writes one slot twice. Step 3 of T1 for
-   multi-target transitions rests on a builder invariant (P24). On the one shape not found
-   to be excluded, the two effect readings differ, and the post-guards remove the
-   difference only when the `transitions` arms carry `.when` guards; with unguarded arms,
-   by the reading in [Effects](#per-construct-argument), the printed module and the native
-   step relation would differ. The graph comparison would catch it only if a sample had
-   that shape.
+   `TlaNames` have no Kani harness and no shadow twin. Since #508 the TLC-side mutation run
+   mutates them (`names.rs` for `TlaNames`), but it runs by hand and its kill rate is
+   pending. P12 (a disagreement in violated sets that went unreported) and P23 (a per-run
+   comparison of runs on two different systems) were places of this kind, fixed in #471 and
+   #503.
+7. **Effect orders the builder may not exclude [paper; read].** Closed by #485. Step 3 of T1
+   for multi-target transitions rests on a builder invariant (P24). On the one shape this
+   document did not find excluded, a created row's slot written twice, the two effect
+   readings differed, and the post-guards removed the difference only when the `transitions`
+   arms carried `.when` guards; #485 reproduced the `EngineDisagreement` and made the build
+   reject any action that writes one slot twice (`ConflictingEffects`). What remains is that
+   the check lives in the builder, not in the printer, so the printer's reading is right only
+   for the actions the builder lets through.
 8. **TLC [assumed: TLC].** TLC's fingerprint-based state store can, with small probability, merge two
    distinct states on a hash collision and so miss states (Yu, Manolios and Lamport 1999
    discuss TLC's design; TLC prints its own collision estimate, which
@@ -801,21 +833,24 @@ the sections it cites, and carries the tag of the statements it rests on.
 
 - **Internal.** The argument for T1 is a reading of the printer beside the native step
   relation at one commit. It is not mechanised, and it relies on invariants of the builder
-  (that only pre-existing entities start off base, and the effect-order invariant of P24)
-  that no assertion enforces in the printer. A misreading is possible; each step names the functions so it can be
+  (that only pre-existing entities start off base, and the effect-order invariant of P24,
+  which the build enforces since #485) that no assertion enforces in the printer. A misreading is possible; each step names the functions so it can be
   re-checked.
 - **Construct.** "Agreement" in the tests is agreement of verdicts and of labelled graphs
-  without bindings, not equivalence of the modules. The decoder is the same code in the
+  (with each edge's params since #507, except a reduced cone's class moves), not equivalence
+  of the modules. The decoder is the same code in the
   printing and in the comparison, so a consistent renaming is invisible (harmless) and a
   decoder that maps two TLC states to one native state would show as a count mismatch,
   which the comparison checks.
-- **External.** The inputs are 40 sample roots, 79 corpus cases, 23 temporal cases, the 35
+- **External.** The inputs are 40 sample roots, 86 corpus cases, 23 temporal cases, the 36
   `bfs_and_tlc_*` tests of `engine_equivalence.rs`, and 45 random models with TLC. The samples were written alongside the tools,
   so they exercise what the authors thought of. The random generator has a fixed shape
   (no counts, three to five entities).
-- **Conclusion.** No numbers in this document were re-measured. The P12, P21, P23, and P24
-  statements are readings of the code, not reproductions; the issue that takes each up
-  should start with a reproduction.
+- **Conclusion.** No numbers in this document were re-measured; the counts were recounted
+  from the code at the pin. The P12, P21, P23, and P24 statements were readings of the code
+  when this document found them. The fixes of P12 (#471), P21 (#469) and P24 (#485)
+  reproduced each first, as the index's rows record; P23's fix (#503) records no
+  reproduction.
 
 ## Related work
 
@@ -839,40 +874,60 @@ the sections it cites, and carries the tag of the statements it rests on.
 
 Rows T1 to T16 of the [claims inventory](./claims.md#d-agreement-with-tlc) cite this
 document. The open problems this document confirmed, extended, or added, in the
-[index](./README.md#open-problems). P23 was fixed in #503 and P24
-in #485, after the pinned commit. [read]
+[index](./README.md#open-problems), with what became of each. [read]
 
 | # | What this document found |
 |---|---|
 | P12 | **Fixed in #471.** Confirmed; restated: the display path prints an unnamed `error:` line for the first non-replaying trace only, which does not change `result:` or the exit status. |
 | P13 | **Fixed in #472.** Confirmed as stated. |
-| P14 | **Narrowed in #476.** Confirmed; extended: unreduced cones over 300,000 states are silently compared reduced only; oidc-auth's 13 `VERIFY_FALLBACK` cones meet TLC at 1 instance only, in `engine_equivalence` and in `verify --with-tlc` alike (issue #202 proposes a fix). |
-| P15 | **Fixed in #472.** Confirmed as stated (at least 30 asserted, 79 present). |
-| P16 | **Narrowed in #486.** Confirmed; extended: release-gate item 2 recorded as held on a narrower check; the `--with-tlc` step did not move to `release.yml`; native-temporal-verification.md, "How we know it is right", still says CI runs every root with `--with-tlc`. |
+| P14 | **Narrowed in #476**: the corpus's `bfs=` runs take TLC, and `VERIFY_REDUCED_ONLY` lists the 30 cones compared reduced only. Confirmed; extended: unreduced cones over 300,000 states were silently compared reduced only; oidc-auth's 13 `VERIFY_FALLBACK` cones meet TLC at 1 instance only, in `engine_equivalence` and in `verify --with-tlc` alike (issue #202 proposes a fix; still open). |
+| P15 | **Fixed in #472.** Confirmed as stated (at least 30 asserted, 79 present); the cases are now compared with `CASES` both ways. |
+| P16 | **Narrowed in #486 and #497.** Confirmed; extended: release-gate item 2 recorded as held on a narrower check (the CHANGELOG erratum of #497 says so); the `--with-tlc` step did not move to `release.yml`, and native-temporal-verification.md now says so. Open: branch protection and the owner's decision on the gate proposal. |
 | P21 | **Fixed in #469.** Confirmed; extended to the unreduced `WfNext` runs and to a false `tool_error` under `--symmetry always` without TLC. The reduced `WfNext` run is not affected: it records no entry when undecided. |
-| P22 | New (prose): D17 omits that a step with `s' = s` is checked by neither engine. Both halves read; `Probe::Loop` is set in every build. |
+| P22 | **Fixed in #475 and #494.** New (prose): D17 omitted that a step with `s' = s` is checked by neither engine. Both halves read; `Probe::Loop` is set in every build. |
 | P23 | **Fixed in #503.** New (evidence): the per-run comparison pairs the native `WfNext` run on the reduced cone (`decide_liveness_reduced`) with TLC's `_WF` module printed from the unreduced cone, so Proposition 0 does not apply on that path. |
-| P24 | New (evidence): for a `Transition` with a multi-target source, the printer's and the native effect application agree only under a builder invariant on effect order that nothing enforces as such; one shape was not found to be excluded, and on it the post-guards reconcile the two only when the `transitions` arms carry `.when` guards. |
+| P24 | **Fixed in #485.** New (evidence): for a `Transition` with a multi-target source, the printer's and the native effect application agree only under a builder invariant on effect order that nothing enforced as such; one shape was not found to be excluded, and on it the post-guards reconciled the two only when the `transitions` arms carried `.when` guards. #485 reproduced it and made the build reject an action that writes one slot twice. |
 | P26 | New (evidence), from the owner's review: agreement cannot see a common-mode fault (item 1 of [Residual risk](#residual-risk)). Partly closed by the reference interpreter of that item, for a subset of the language. |
 
 
 ## Appendix: the pinned commit
 
-[read] The code was read at commit `fb6928c74ccc5b479dea07d92cc1e39c34ddd218` (origin/main,
-2026-11-28), later than the index's pin `b83b9544`. `git diff --stat b83b9544 fb6928c7` over the whole tree, read
-against the paths this document cites, shows three cited files changed, none in a part this
-document relies on: `scripts/verify-relevant.sh` adds the Claude Code plugin and LSP files
-to the paths that skip the verification checks; `CHANGELOG.md` gains entries under
-"Unreleased" only (its v3.0.0 section is unchanged); and `docs/cli-reference.md` gains
-lines on the plugin and code generation, not in "Partial runs". Every other cited path is
-identical at both: `crates/rdra-ish-emit/src/tla/`, `crates/rdra-ish-cli/src/verify/`,
-`tlc_output.rs`, `tlc_replay.rs`, `property_cone.rs`, the corpus and equivalence
-tests, `crates/rdra-ish-core/src/`, `.github/workflows/`, `flake.nix`, the samples, the
-other cited scripts (`verify-samples.sh`, `reduction-diff.py`, `tlc-roots.txt`,
-`kani-relevant.sh`), and the notes in `docs/` and `docs/design/`. The rest of the diff
-(code generation, the LSP, the plugin, `cli.rs` and `lib.rs` of the CLI for those,
-`scripts/check-release-version.sh`, and this
-directory's own documents) is outside what this document cites.
+[read] The document was first written against `fb6928c7` (origin/main, 2026-11-28), later
+than the index's first pin `b83b9544`; between those two no path it cites changed in a part
+it relies on. It now describes `fec53d6a`. `git diff --stat fb6928c7 fec53d6a` over the cited
+paths shows changes in the printer (`emit/tla/mod.rs`, `module.rs`, `names.rs`), the TLC
+readers (`tlc_output.rs`), the comparison and the runs (`verify/compare.rs`, `native.rs`,
+`jobs.rs`, `tlc.rs`, `bfs.rs`, `end.rs`, `refuted.rs`, `escalate.rs`, `property_cone.rs`),
+`ci.yml`, `mutants.yml`, `.cargo/mutants-tlc.toml` (new), `scripts/verify-samples.sh`,
+`scripts/kani-relevant.sh`, the corpus, and the equivalence tests. Every `file.rs::symbol`
+this document cites, and the run functions it names, were checked against `git diff fb6928c7
+fec53d6a`; each cited item a hunk touches was read again:
+
+- the printer: `emit/tla/mod.rs::print` (now `print_with`, and `print_bound` of #507), the
+  bound `Next` of `module.rs`, and the `can_reach` comment of `module.rs::checks` (#498);
+  `mod.rs::domain_set`, `names.rs::TlaNames::decoder` and `explore/moves.rs::initial_states`
+  changed only in integer casts. The effect, action, guard, `init` and fairness code the T1
+  argument reads did not change, so that argument carries over;
+- the comparison and the runs: `compare.rs::disagreements` and `unreplayed` (#471, #503),
+  `native.rs::Answer::outcome`, `Plain::of`, `native_property_after`,
+  `always_up_to_symmetry` and `liveness_up_to_symmetry` (#469, #503, and the faults of P20),
+  `property_cone.rs::after_plain` and `after_wf` (a cone that leaves a mark out is inexact,
+  #477), `explore/bfs.rs::Bfs::take` (the `Probe::Loop` branch is unchanged),
+  `reduce/lift.rs::lift` (#518, #522), `End::result` (#522, #524), and
+  `build/mod.rs::Builder::one_write_per_slot` (#485);
+- the tests: `engine_corpus.rs::check_case`, `rule_2`, `rule_8` and the `CASES` check
+  (#472, #476), and `engine_equivalence.rs`'s edge comparison and `VERIFY_REDUCED_ONLY`
+  check (#476, #507);
+- `ci.yml` (`tlc-batch-both`, the seeds), `mutants.yml`, both mutants configurations, and
+  docs/engine-agreement.md's kill-rate tables;
+- the counts: corpus cases, `expect` lines, families and flags, `bfs_and_tlc_*` tests,
+  `TEMPORAL_CASES`, `VERIFY_FALLBACK`, `VERIFY_REDUCED_ONLY`, `TWINS`, and Kani harnesses.
+
+No other cited item changed, so its earlier read carries over; this includes
+`tlc_output.rs`'s `TlcRun::outcome` and `verdict`, `PropertyCone::bundle`, `verify/tlc.rs`'s
+`run_cfg`, `run_whole` and `model_traces`, `tlc_replay.rs::explain_violation`, and
+`pred.rs`. The reduced-cone printer (`bits`, `rise_expr`) was not read at either pin
+(`unread@pin` where cited).
 
 ## Errata
 
@@ -891,3 +946,17 @@ Changes to statements of this document after it was first written, newest last.
   is unchanged: its `v*` is the verdict on the system `T'` both engines read, which is built.
   The common-mode code paragraph and Residual risk item 1 now name I1 as the claim a builder
   fault breaks.
+- **2026-11-28, final audit: pin `fec53d6a`.** The pin moved from `fb6928c7` to `fec53d6a`
+  ([Appendix](#appendix-the-pinned-commit) lists what was read again). The fixes merged in
+  between are now described as fixed, in the past tense, with their PRs and tests: P12
+  (#471), P13 and P15 (#472), P14 narrowed (#476), P16 narrowed (#486, #497), P20 (#518,
+  #522), P21 (#469), P22 (#494), P23 (#503), P24 (#485, which the paragraphs on step 3 had
+  called unenforced while the Effects paragraph said it was enforced), and P25 (#507: edges
+  are compared with their params, so "without bindings" was false). The mutation-run section
+  describes both configurations: the liveness ladder's recorded kill rates and the TLC-side
+  run of #508, whose kill rate is pending. The `tlc-batch-both` job and the CHANGELOG
+  erratum are named. The counts were recounted: 86 corpus cases with 210 `expect` lines, 36
+  `bfs_and_tlc_*` tests, 26 twins; the `bfs=` runs take TLC. Residual risk items 2, 5, 6
+  and 7 were rewritten for P20, P25, the TLC-side mutation run, and P24; item 2 names the
+  internal `expect`s the lift still has. The deadlock text cites D25. `VERIFY_FALLBACK` has
+  25 cones since #526.
