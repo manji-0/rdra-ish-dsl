@@ -424,6 +424,9 @@ impl Bindings {
 /// The id `Reading::ids` holds for a binding number not yet seen.
 const UNSEEN: u32 = u32::MAX;
 
+/// The most states a run numbers: each is a `u32` below `u32::MAX`.
+const MOST_STATES: usize = u32::MAX as usize;
+
 /// What the reader keeps while it reads a run's chunks.
 struct Reading {
     /// Per move of the chunk being read: the state it reached, `u32::MAX` while unread or for
@@ -899,13 +902,17 @@ impl<'t> Bfs<'t> {
         parent: Option<(u32, u32)>,
         found: Canonical,
     ) -> bool {
-        if self.states.len() >= self.caps.states {
+        // A state's number is a `u32` below `u32::MAX`, which marks a move not yet resolved
+        // (`Reading::resolved`) and a component not yet numbered: past that the run stops as
+        // at the state cap rather than numbering two states alike.
+        let cap = self.caps.states.min(MOST_STATES);
+        if self.states.len() >= cap {
             self.complete = false;
             let entities = self.ts.entities.iter().map(|e| e.key).collect();
             self.diags.push(Diag {
                 entities,
                 diag: StateDiag::StateCapReached {
-                    cap: self.caps.states,
+                    cap,
                     growth: self.growth(),
                 },
             });
