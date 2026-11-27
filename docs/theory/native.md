@@ -655,7 +655,7 @@ permutations, lifted by `explore/orbit.rs::lift`.
 
 | Check | Plain | Reduced | Symmetric |
 |---|---|---|---|
-| State rule, `after` | nothing: the trace is the stored path, printed as stored (`trace_violations`) | lifted; re-evaluated on the lifted last state, and if that no longer violates, the reduced message is kept without any fault (`ComponentRun::trace_violations`, `rebuilt` is `None`); a T step is checked against the cone's moves only by `debug_assert!`, an S step of a folded action is checked (`expect`), one taken by `in_cone_params` is not | replayed on the system the run explored (`orbit.rs::replays`, panics on failure), then lifted by `lift` when that system is reduced, without a further replay; re-evaluated on the lifted last state (`expect`, panics) |
+| State rule, `after` | nothing: the trace is the stored path, printed as stored (`trace_violations`) | lifted; re-evaluated on the lifted last state, and if that no longer violates, the violation becomes `LiftFault`, a tool error that leaves the check undecided on the cone (`ComponentRun::trace_violations`, `lifted`; since #487, P52; before, the reduced message was kept without any fault); a T step is checked against the cone's moves only by `debug_assert!`, an S step of a folded action is checked (`expect`), one taken by `in_cone_params` is not | replayed on the system the run explored (`orbit.rs::replays`, panics on failure), then lifted by `lift` when that system is reduced, without a further replay; re-evaluated on the lifted last state (`expect`, panics) |
 | `always` | re-evaluated on the stored path (`property_failure`, then `debug_assert!` on the position) | re-evaluated on the reduced path, then lifted with no re-evaluation (`decide_property`, `trace_along`) | lifted, replayed (panics on failure) and re-evaluated on the lifted path (`OrbitRun::decide_always`, `expect`) |
 | `stable`, `unchanged`, `precedes` | as `always`, plain | never reduced (`decide_property` restricts without reduction) | not run up to symmetry |
 | `eventually`, `leads_to` | replayed, formula re-evaluated, fairness re-checked (N11) | the reduced lasso is replayed on the reduced system and never printed; what prints is either the `WfNext` lasso lifted to the unreduced cone and replayed there (`decide_liveness_reduced`, `Spurious` otherwise), or the lasso of the rerun on the unreduced cone (`Cone_P_Full`); if that rerun stops, the property is `not decided` | replayed, re-evaluated and re-checked after lifting (`orbit/liveness.rs`, `LassoFault` on failure, `LassoFault::Unclosed` past 10,000 copies) |
@@ -839,7 +839,7 @@ each of its variants a fair action whose enabledness reads its mark (event-order
 
 New: P50 (packing past 65,535 bits; wrong `ok`, reproduced), P51 (`after` skips steps with
 `s' = s`; reproduced; the engines agree), P52 (a reduced safety trace whose lifted last
-state no longer violates keeps the reduced message silently), P53 (one step of memory-stop
+state no longer violates kept the reduced message silently; fixed in #487), P53 (one step of memory-stop
 determinism for the CLI's reruns is not shown), P54 (a value past a byte wraps when the
 build encodes it; wrong `ok` at one instance, reproduced by the review; its nullable-Int case
 is P40), P55 (the edge

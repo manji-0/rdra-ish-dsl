@@ -10,7 +10,9 @@ use crate::model::{EntityKey, SemanticModel};
 
 pub(super) fn owning_stage(model: &SemanticModel, diag: &StateDiag) -> StageId {
     match diag {
-        StateDiag::ConstraintViolated { site, .. } | StateDiag::VacuousRule { site, .. } => {
+        StateDiag::ConstraintViolated { site, .. }
+        | StateDiag::VacuousRule { site, .. }
+        | StateDiag::LiftFault { site, .. } => {
             rule_stage(model, &site.fact).unwrap_or(StageId::Lifecycle)
         }
         StateDiag::UnbindableScope { site, .. }

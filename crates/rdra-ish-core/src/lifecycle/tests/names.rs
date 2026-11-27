@@ -281,6 +281,11 @@ fn one_of_each() -> Vec<StateDiag> {
             one_instance: true,
             site: site(),
         },
+        StateDiag::LiftFault {
+            name: "Forbidden_Order_0".into(),
+            site: site(),
+            fault: crate::lifecycle::LassoFault::Satisfies,
+        },
     ];
     // Fails to compile when a variant is added without a value above.
     for d in &all {
@@ -302,6 +307,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::ConstraintViolated { .. }
             | StateDiag::VacuousRule { .. }
             | StateDiag::AfterAssertViolated { .. }
+            | StateDiag::LiftFault { .. }
             | StateDiag::PropertyViolated { .. }
             | StateDiag::GoalUnreachable { .. }
             | StateDiag::NoWitness { .. }
