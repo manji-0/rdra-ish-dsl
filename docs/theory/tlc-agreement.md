@@ -518,8 +518,8 @@ compares; what the test shows when it passes is [test].
   skips TLC. 38 cases carry a `bfs=` list.
 - **Bounds.** TLC runs at the case's flags: 2 instances and Int `0..5` by
   default; 1 instance in the six cases with `--instance-count 1`; per-entity counts above
-  2 in three cases, two entities raised in each of the first two and one in the third (`presence_per_entity_slots`: Loan and Room at
-  3 over `--instance-count 1`; `safety_count_per_entity`: Loan at 4, Shelf at 3;
+  2 in three cases, two entities raised in each of the first two and one in the third
+  (`presence_per_entity_slots`: Loan and Room at 3 over `--instance-count 1`; `safety_count_per_entity`: Loan at 4, Shelf at 3;
   `sym_per_entity_bounds`: Room at 3, Booking at 2); one entity held at 1 instance
   (`--instances X=1`, the others at 2) in four cases (`sym_arm_reorders`,
   `sym_deleted_row_owner`, `sym_lift_compose`, `sym_relink_loop`); `--int-range-max` in four
@@ -786,7 +786,7 @@ the sections it cites, and carries the tag of the statements it rests on.
    lift of a run up to symmetry (`explore/orbit/liveness.rs::Product::lift`) returns `NoMove`
    as well. What remains is narrower: the `expect`s and `panic!`s the index's P20 row lists, with
    the reason each holds (`reduce/lift.rs::lift_stop`, `Product::new`, the searches before a
-   lasso lift, callers' preconditions, and one read of the lifted path that holds whatever path
+   lasso lift, callers' preconditions, and two reads of a lifted path that hold whatever path
    is lifted), would stop the command rather than print a fault; and a
    wrong `ok` has no run-time guard at all. TLC sees a wrong `ok` only where a test or a user
    runs `--with-tlc`.

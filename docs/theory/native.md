@@ -436,8 +436,8 @@ fails, and its parent path.
 violating state admitted has least depth, and its parent path has that length (N1). For
 `always`, `ComponentRun::decide_property` re-evaluates the path's states with
 `TransitionSystem::property_failure` and checks, in every build (a `PropertyVerdict::Fault`
-otherwise, #529), that the failure is at the last state; that holds because every earlier state of the path has a smaller `idx` and so
-breaks no binding. ∎ On a stopped graph a violation found is a path of `G`, hence a trace
+otherwise, #529), that the failure is at the last state; that holds because every earlier
+state of the path has a smaller `idx` and so breaks no binding. ∎ On a stopped graph a violation found is a path of `G`, hence a trace
 of `T`; no violation gives `Undecided`.
 
 **`after` assertions (D17).** `Bfs::check_after` evaluates each `after(UC)` on every move of
@@ -761,9 +761,9 @@ Three consequences.
   `explore/orbit/liveness.rs` `Product::new`'s permutations and the look-ups of the pair search
   before the lift (`lasso`, `thread_walk`, `walk_in`, `threads_covered`), and in
   `explore/liveness.rs` their counterparts on a plain run (`edge_between`, `fair_loop`,
-  `walk_in`); preconditions of a caller; and the deadlock lift's trace slot. Only one reads the
-  lifted path, the last step of an `after` violation in
-  `explore/orbit.rs::run_orbits_annotating`, and it holds whatever path is lifted.
+  `walk_in`); preconditions of a caller; and the deadlock lift's trace slot. The two that read a
+  lifted path, `lift_stop`'s state list and the last step of an `after` violation in
+  `explore/orbit.rs::run_orbits_annotating`, hold whatever path is lifted.
   A failure there stops the command; none can print a trace that does not replay. Until #531
   the lasso lift of `explore/orbit/liveness.rs` held its own with an `expect` and two
   `assert!`s (that an edge is the move at its place and that its permutation takes the move

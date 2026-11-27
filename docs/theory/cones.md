@@ -1317,8 +1317,9 @@ the row; a fixed or closed one carries its pull request.
   at the pin is listed in the index's P20 row, with the reason each holds: `reduce/lift.rs::lift_stop`'s
   `expect`s about its caller and its walk's own graph; the look-ups of the pair search and the lasso
   search before a lift (`explore/orbit/liveness.rs`, `explore/liveness.rs`); preconditions of a caller;
-  the deadlock lift's trace slot; and one read of the lifted path, the last step of an `after` violation
-  in `explore/orbit.rs::run_orbits_annotating`, which holds whatever path is lifted. A failure there
+  the deadlock lift's trace slot; and the last step of an `after` violation in
+  `explore/orbit.rs::run_orbits_annotating`. The two that read a lifted path, that one and `lift_stop`'s
+  state list, hold whatever path is lifted. A failure there
   stops the command; none can print a trace that does not replay.
 - **Bounded results.** Everything here, escalation included, is a statement at a bound. `ok at n` at
   `β + 1` and `β + 2` adds two bounded results; it is not an induction.
