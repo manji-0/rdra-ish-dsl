@@ -266,7 +266,13 @@
   built as an object literal, skipping the transition function, fails `build` instead of
   passing `run`), and show how to answer an API's writes and reads in one shape
   (`<Entity>.toRow` over a result's states) and how to import the scalar `Date` without
-  hiding the global. No generated output changes.
+  hiding the global.
+- TypeScript: the conformance probe reads the traces line by line (`readline` over
+  `createReadStream`) instead of `readFileSync` into one string, which Node refuses past
+  about 512 MB (`ERR_STRING_TOO_LONG`). `conform`, of the domain code and of the model
+  adapter, takes the text as before or a function returning the lines as an
+  `AsyncIterable<string>` (the adapter's `conform` calls it once per run). Generated output changes:
+  the probe's trace reading, and `conform`'s parameter type and loop.
 
 ### Added
 

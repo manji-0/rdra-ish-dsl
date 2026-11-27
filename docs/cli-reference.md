@@ -2052,7 +2052,9 @@ stores it in one transaction; either returns the use case's error when it does n
 test calls `conform(|| MyService::new(), &traces)` (Rust), `Conform(func() ConformancePort {
 return newService() }, traces)` (Go), or `await conform(() => newService(), traces)`
 (TypeScript, whose port members return `Promise`s; it returns `Result<ConformanceReport,
-string>`). Per trace, the harness starts a fresh port, seeds it, makes each call, and compares
+string>`, and `traces` is the file's text or a function returning its lines as an
+`AsyncIterable<string>`, which the probe uses so a file past Node's longest string, about
+512 MB, still runs). Per trace, the harness starts a fresh port, seeds it, makes each call, and compares
 the store, cut down to what the model tracks (an enum's value, null or not, an integer, a key's
 parent), with the state BFS reached. A refused call must fail and change nothing, and so must
 a commit after another call changed a row it writes. It returns the first difference, with
