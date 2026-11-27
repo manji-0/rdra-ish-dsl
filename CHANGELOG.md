@@ -69,6 +69,13 @@
   empty. `check --code=run` clears the variable for the real run. The probe text changes, so
   `check --code=fresh` reports `generator changed` on a probe written by an earlier version
   until `codegen --code` writes it again.
+- **Action needed** for a `[code.<lang>]` table whose `run` replaces the default command
+  (#439). After a passing `--code=run`, the self-check runs that command again with
+  `RDRA_ISH_TRACES` set to each mutant traces file. A command that does not run the generated
+  probe's conformance test, or does not pass that variable through to it, now passes the
+  mutants and fails the check with `CodeMutantSurvived`. Make the command run the probe's
+  test with the variable in its environment. Alternatively, pass `--mutants 0` to turn the
+  self-check off, at the cost of not knowing whether the run read the traces.
 - `verify --prove` (experimental) asserts each rule and lemma once per solver, behind an
   activation literal, and each step's scope asserts only the literals of the set, instead
   of every candidate again (#421). The proof is the same on every sample, its rules, CTIs

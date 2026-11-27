@@ -384,7 +384,8 @@ makes it an error. `codegen` prints the same statement after it writes the trace
 model refuses none of the calls the harness tries as refused, which are calls on one existing
 row; the model may still refuse a create or an action over several rows, which no trace
 tries (gap 2 of #439), and the statement says `calls on one existing row` for that reason.
-Counting those untried refusals, and failing `--deny-incomplete` on them, is left open.
+Counting those untried refusals, and failing `--deny-incomplete` on them, waits for PR 4
+(owner decision, 2026-11-27).
 
 ### The self-check by mutant traces
 
@@ -424,8 +425,9 @@ removed. Such a trace dies at its first row the model refuses:
   (gap 2). Those are where guard removal adds something.
 - On the test fixture the only guard (`Big` on Cancel) is of the first kind.
 
-So guard removal belongs with the wider refusal tests of PR 4. It is an open decision for the
-owner.
+So guard removal belongs with the wider refusal tests of PR 4. The owner decided so on
+2026-11-27, and also that a surviving mutant is an error by default, and that
+`--deny-incomplete` fails on the cap only until PR 4 tries the other refusals.
 
 ## Phases
 
