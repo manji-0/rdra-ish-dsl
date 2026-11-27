@@ -450,8 +450,10 @@ struct Observed {
     tlc_errors: BTreeSet<String>,
     z3: BTreeMap<String, Z3>,
     /// `escalated: <Check>: ok at 3 instances, ...` lines: BFS's verdict per bound past the
-    /// run's, for a rule `--prove` left unproved.
-    escalated: BTreeMap<String, Vec<(u8, V)>>,
+    /// run's, for a rule `--prove` left unproved. The count is `None` where the cone's
+    /// entities have different counts (`--instances E=k`), printed `ok at Loan=3 Member=2
+    /// instances`.
+    escalated: BTreeMap<String, Vec<(Option<u8>, V)>>,
     /// Errors found by the escalation: their trace header says `at <n> instances`.
     escalated_errors: BTreeSet<String>,
     /// `error[EngineDisagreement]` and `error[LassoFault]` lines.
@@ -523,7 +525,7 @@ impl Observed {
                     .split(", ")
                     .filter_map(|v| {
                         let (v, n) = v.strip_suffix(" instances")?.rsplit_once(" at ")?;
-                        Some((n.parse().ok()?, V::parse(&v.replace(' ', "_"))?))
+                        Some((n.parse().ok(), V::parse(&v.replace(' ', "_"))?))
                     })
                     .collect();
                 out.escalated.insert(rule_name(rest), at);
@@ -902,7 +904,9 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
                     format!("{check}: escalated, but z3 gives {z3:?}"),
                 );
             }
-            for (n, v) in at.iter().filter(|(_, v)| v.decided()) {
+            // Only a count every entity of the cone has indexes `bfs=`.
+            let uniform = at.iter().filter_map(|(n, v)| Some((n.as_ref()?, v)));
+            for (n, v) in uniform.filter(|(_, v)| v.decided()) {
                 let want = e.bfs.as_ref().and_then(|b| b.get(usize::from(*n) - 1));
                 if want.is_some_and(|w| w != v) {
                     fail(
