@@ -1022,7 +1022,7 @@ patterns, and `NeverRuns`. The checks that read the annotated quotient (deadlock
 follow a binding through the stored permutations. Their
 soundness past the cap is part of A23, which is a sketch. M: `Twin::Canonical` compares the canonical form with the least layout over every element of
 `G_s` when `|G_s| ≤ 6^4 = 1,296`; D: `explore/symmetry/tests.rs::past_the_branch_cap_a_state_is_cut_and_stays_in_its_orbit`,
-`explore/symmetry/witnesses.rs::past_the_branch_cap_the_verdict_stands`.
+`explore/symmetry/witnesses.rs::past_the_branch_cap_the_verdict_stands` (main only).
 
 **Which checks read a run up to symmetry soundly.** A check whose value on a state is invariant under
 `G_s` (every state rule and `always`: they quantify over all bindings), a check of the concrete triple
@@ -1042,7 +1042,7 @@ some rows. A cycle whose
 permutations compose to `π` is a concrete path from a state to its `π`-image, closed after at most the
 order of `π` repetitions. The theorem for this reading is not written out here (**A23**: P-sketch; M:
 `Twin::OrbitLiveness`, `Twin::OrbitStateModels`; D: corpus rule 8,
-`core/tests/reduce.rs::an_entity_cone_up_to_symmetry_decides_what_its_plain_run_left_open`). The
+`core/tests/reduce.rs::an_entity_cone_up_to_symmetry_decides_what_its_plain_run_left_open` (main only)). The
 `Twin::OrbitLiveness` twin compares with the plain run's search and so checks the quotient, not the
 fair-component rule, as its description has said since #475 (P9).
 
@@ -1159,8 +1159,16 @@ theme (c)'s claim that the run computes the one-thread result. ∎
 formal-verification.md said a stopped cone "leaves its invariants `not decided`", while
 `BfsCone::verdict` reports a counterexample found before the stop; #477 corrected the guide to say
 that only the cone's other checks stay `not decided`. P21 (a stopped native run recorded as `ok` for
-the per-run comparison, fixed in #469) is theme (c)'s and (d)'s. D: `cli/tests/engine_corpus.rs::a_capped_graph_decides_nothing_the_full_graph_contradicts`
-runs every corpus case under every cap from 1 to its size.
+the per-run comparison, fixed in #469) is theme (c)'s and (d)'s. D: `cli/tests/engine_corpus.rs::a_capped_graph_decides_nothing_the_full_graph_contradicts` (main only)
+runs the whole model of every corpus case under caps from 1 to its size and decides each
+`always`, `eventually` and `leads_to` there, never a state rule or `after` assertion, so
+it tests the claim for properties only. For safety cones,
+`cli/tests/prove_cli.rs::a_proof_leaves_an_after_assert_and_a_state_cap_undecided` (with z3)
+shows (2): a cone stopped by the memory limit and one stopped by a state cap print
+`not decided`, though z3 proves their rules. (1) for a safety cone stopped at a cap rests on
+the code path alone; `cli/tests/verify_cli.rs::a_safety_cone_stops_once_every_check_on_it_has_failed`
+(main only) checks a counterexample from a run that stopped early, once every check on it
+failed, against TLC's whole run, which is a stop of another kind.
 
 **A26 (what the memory limit bounds).** The limit is charged by the BFS state stores and, under
 `--with-tlc`, the TLC heaps. The passes over a finished graph (liveness, `can_reach`, deadlocks, the
@@ -1388,3 +1396,6 @@ Changes to statements of this document after it was first written, newest last.
   only on cones that free no slots; the text said on every cone. "Panics left in the
   lifts" follows the index's completed P20 list. A4, A5, A6 and A16 give P1 and P20 the
   index status.
+- **2026-11-28, third audit at `5f59fae2`.** A24's corpus test decides properties only; the
+  text now says so and cites the tests of safety cones. The tests of the `pr` exclusion of `.config/nextest.toml` are marked
+  main only.

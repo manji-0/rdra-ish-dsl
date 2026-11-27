@@ -391,7 +391,8 @@ from the unreduced cone (`property_cone.rs::PropertyCone::bundle`), while the na
 (P23, [§2](#2-the-agreement-rules)).
 
 **What the module does not state [read].** `can_reach` prints as a comment: TLC cannot state
-`AG EF` (P19). Deadlocks, the finding of D25, are not TLC's `CHECK_DEADLOCK` (always
+`AG EF` (P19, fixed in #478 outside TLC: `core/tests/oracle.rs` checks `can_reach` and
+deadlocks against an oracle of its own, on main only). Deadlocks, the finding of D25, are not TLC's `CHECK_DEADLOCK` (always
 `FALSE`) but the `Deadlock_*` invariants of `print_state_models`, which are one-sided by
 design (T6).
 
@@ -404,7 +405,7 @@ design (T6).
 | 1, 2, 3 (states, init, steps) on unreduced systems | above; step 3 for multi-target transitions under the builder invariant of P24, which the build enforces since #485 | graph equality on every sample cone under 300,000 states, at 1 and 2 instances, edges with their params since #507; the 36 `bfs_and_tlc_*` tests of `engine_equivalence.rs` | TLC's `-dump dot` lists every edge, self-loops included |
 | 3 on reduced systems | none (not argued here) | graph equality on reduced sample cones, class moves by action alone; the reduced cone's violated set against the unreduced one's | the quotient tables (common-mode) |
 | 4, state rules and `after` | above; P22 | verdict and violated-set comparison on every compared cone; each TLC trace replayed through the native step relation | TLC |
-| 4, temporal properties and fairness | above | verdicts only: 23 `TEMPORAL_CASES` at 2 instances and the corpus at each case's flags | TLC's liveness checking under quantified weak fairness |
+| 4, temporal properties and fairness | above | verdicts only: 23 `TEMPORAL_CASES` at 2 instances (under `-lncheck final` since af6354a4, [Batch JVMs](#batch-jvms)) and the corpus at each case's flags | TLC's liveness checking under quantified weak fairness |
 | 5, latch | above | verdicts only: `explored_along` (a `TEMPORAL_CASES` fixture) and the corpus case `safety_precedes_latch`. The graph comparison prints `PrintMode::Safety` modules, which declare no latch (`mod.rs::checked_properties` checks no property in that mode), so it never sees one | |
 
 [read] Until #507 no step of T1 was checked on a binding: the graph comparison compared
@@ -617,14 +618,34 @@ generator mode, `reduction-diff.py --counted` (`.counted(k)` with `k` of 1 or 2 
 
 ### Batch JVMs
 
-`RDRA_TLC_BATCH=both` (T11) runs each `engine_equivalence` job in a batch JVM and again as a
-process with the same fingerprint and seed, and fails on any difference in exit status, log,
-parsed run, or dumped graph. Since #486 the main-only `tlc-batch-both` job of `ci.yml` runs
+`RDRA_TLC_BATCH=both` (T11) runs each `engine_equivalence` job routed to a batch JVM
+(`Route::Batch`, which every cone of at most `BATCH_STATES`, 5,000, states takes, and a property cone's
+`Cone_P`, `Cone_P_Full` and `Cone_P_WF` runs) and again as a process with the same fingerprint
+and seed, and fails on any difference in exit status, log, parsed run, invariant scan, or
+dumped graph (`assert_same_run`). A larger cone and a property's whole-model run are
+routed to a process from the start (`Route::Process`, `check_cone`), so they are never
+compared this way. Since #486 the main-only `tlc-batch-both` job of `ci.yml` runs
 `engine_equivalence` that way (scheduled or by hand, never on a pull request). The
 `#[ignore]`d `recorded_tlc_runs_are_the_same_in_a_batch_jvm` replays recorded `verify` runs
 the same way, also by hand. In CI, `RDRA_REQUIRE_TLC_BATCH=1` only requires that some job
 ran batched without falling back. This bears on the test harness only: `verify --with-tlc`
 does not use batch JVMs.
+
+Since af6354a4 (after the pin) every TLC run `engine_equivalence.rs::run_tlc_on` starts,
+batched or a process, which includes every cone, state-model and property run of the
+comparisons, and every replay of `recorded_tlc_runs_are_the_same_in_a_batch_jvm` pass
+`-lncheck final` (`LIVENESS_AT_THE_END`), so TLC checks liveness once, at the end
+of the search, rather than also at times its clock sets; its doc comment gives the reason,
+a warm JVM and a fresh process that found a violation at different points.
+`verify --with-tlc` passes no `-lncheck` (`cli/src/verify/tlc.rs`). The harness's TLC
+evidence on temporal properties (T3) and the batch comparison (T11) are therefore under
+end-only liveness checking, which a user's `--with-tlc` run does not use; that TLC's
+liveness verdict on a finished search does not depend on when it checks is assumed (TLC),
+not tested. The safety and state-model runs of the graph comparison (T5) pass the flag as
+well. Their cfg (`emit/tla/mod.rs::cfg_without` in `PrintMode::Safety`) lists invariants
+and, as `PROPERTY` lines, the `after` assertions, whose form `[][…]_vars` TLC checks on each
+step rather than in its liveness check; that the flag leaves those runs unchanged is
+likewise assumed (TLC).
 
 ### Mutation run
 
@@ -720,7 +741,7 @@ pull-request checks, which is a convention, not a gate. Main runs on a 3-hour sc
 a merge reaches the main-only steps (random models with TLC, the full `kani` set) hours
 later or, if GitHub drops a scheduled run, later still (P16, confirmed).
 
-Two release-gate statements bore on agreement (P16, extended; narrowed in #486 and #497).
+Two release-gate statements bore on agreement (P16, extended; narrowed in #486, #497 and #508).
 The CHANGELOG for v3.0.0 records item 2 of the gate ("`verify --with-tlc` on every root of
 `samples.txt` reports no disagreement") as held on the evidence that `formal-verify` ran "the
 TLC roots with `--with-tlc`", which is five roots and the flagged header lines, not every
@@ -734,6 +755,7 @@ roots are what runs.
 
 <!-- derived-from #what-agreement-can-show -->
 <!-- derived-from #status-of-t1 -->
+<!-- derived-from ./claims.md#0-the-build -->
 <!-- derived-from #what-each-source-can-and-cannot-detect -->
 
 Classes of divergence between `T_β(M)` and what the engines decide that the current
@@ -756,16 +778,21 @@ the sections it cites, and carries the tag of the statements it rests on.
    states, reachable states, edges labelled by use case, rule names and violated rules with
    the native run of the whole model. The subset is entities with Enum, Bool, Int-typed and
    nullable String columns (`@null`, `@default`, `@check`); `creates`, `updates` and
-   `deletes` of one entity per use case, so one transaction group; literal, `null` and
+   `deletes` of one entity per use case, so one transaction group, and not both a create and a
+   delete; literal, `null` and
    `present` `sets`, with `.when`; `transitions` with choices and `.when`; `applies_to`
    guards on the written entity; and the four single-entity rule forms with `.when`. It runs
    on the corpus cases and formal-verification samples in the subset at three bounds, on 300
    random models of the subset in every pull request and 2,700 more on main. With z3 present
    (CI requires it) it also checks the rules z3 proves at `m`, with lemmas mined without a
    twin, against the reference at `m + 1` and `m + 3`: one fixed model per pull request and
-   200 random models on main. It failed on P40 and
-   P54 before #470 and on P43 before #481. What it leaves to the `expect` lines: every
-   construct outside the subset (owners and keys, split use cases, triggers, copies,
+   200 random models on main. The description of #492 records its failing output at
+   `fc505d39`, a commit of its branch on main `8b3b6658`, before #470 and #481: `a_value_past_a_byte_is_not_wrapped`
+   on the nullable Int at 255 (P40) and the nullable Enum of 256 (P54), and
+   `a_rule_proved_at_one_int_range_holds_at_wider_ones` on P43's rule; no test repeats that
+   run, and the tests on main pin the fixed behaviour. What it leaves to the `expect` lines: every
+   construct outside the subset ([claims.md, I1](./claims.md#0-the-build) lists what
+   `RefModel::read` refuses; among it owners and keys, split use cases, triggers, copies,
    `chooses`, `drives`, `now`, multi-entity rules, quantifiers, `after` assertions, property
    verdicts); and, since it compares whole-model runs, the cone choice, the ladder, the
    quotient tables and `TlaNames`. It shares the parser, `build_model`, the rule names, and
@@ -791,8 +818,8 @@ the sections it cites, and carries the tag of the statements it rests on.
    wrong `ok` has no run-time guard at all. TLC sees a wrong `ok` only where a test or a user
    runs `--with-tlc`.
 3. **Bounds [read].** In CI, TLC runs at 3 or more instances only on the corpus (the three
-   cases with per-entity flags, and since #476 the `bfs=` runs at 3 and 4 instances of 38
-   cases) and on the 3-instance seeds among the 45 main random seeds; never on
+   cases with per-entity flags, and since #476 the `bfs=` runs of 38 cases, at 1 and 3
+   instances and, for `safety_at_most_bound` alone, at 4) and on the 3-instance seeds among the 45 main random seeds; never on
    the 25 fallback cones at 2 instances in `engine_equivalence` (`verify --with-tlc` runs
    the 12 of clinic-ops, patent-ops, food-permit-ops, and insurance-claim-ops at 2
    instances, verdicts only, and the 13 of oidc-auth at 1 instance only, so those 13 never
@@ -829,7 +856,10 @@ the sections it cites, and carries the tag of the statements it rests on.
    distinct states on a hash collision and so miss states (Yu, Manolios and Lamport 1999
    discuss TLC's design; TLC prints its own collision estimate, which
    `cli/src/tlc_output.rs` does not parse). A TLC fault that matches a native fault is not detectable.
-9. **Checks with no TLC counterpart [read].** `can_reach` and the one-sided deadlock check (P19).
+9. **Checks with no TLC counterpart [read].** `can_reach` and the one-sided deadlock check (P19,
+   fixed in #478: `core/tests/oracle.rs::can_reach_and_deadlocks_agree_with_a_naive_oracle` (main only),
+   main only, checks both against an exploration of its own, which shares the step relation
+   and the evaluator; TLC still checks neither).
 
 ## Threats to validity
 
@@ -886,7 +916,7 @@ document. The open problems this document confirmed, extended, or added, in the
 | P13 | **Fixed in #472.** Confirmed as stated. |
 | P14 | **Narrowed in #476**: the corpus's `bfs=` runs take TLC, and `VERIFY_REDUCED_ONLY` lists the 30 cones compared reduced only. Confirmed; extended: unreduced cones over 300,000 states were silently compared reduced only; oidc-auth's 13 `VERIFY_FALLBACK` cones meet TLC at 1 instance only, in `engine_equivalence` and in `verify --with-tlc` alike (issue #202 proposes a fix; still open). |
 | P15 | **Fixed in #472.** Confirmed as stated (at least 30 asserted, 79 present); the cases are now compared with `CASES` both ways. |
-| P16 | **Narrowed in #486 and #497.** Confirmed; extended: release-gate item 2 recorded as held on a narrower check (the CHANGELOG erratum of #497 says so); the `--with-tlc` step did not move to `release.yml`, and native-temporal-verification.md now says so. Open: branch protection and the owner's decision on the gate proposal. |
+| P16 | **Narrowed in #486, #497 and #508.** Confirmed; extended: release-gate item 2 recorded as held on a narrower check (the CHANGELOG erratum of #497 says so; #508 added the TLC-side mutation run); the `--with-tlc` step did not move to `release.yml`, and native-temporal-verification.md now says so. Open: branch protection and the owner's decision on the gate proposal. |
 | P21 | **Fixed in #469.** Confirmed; extended to the unreduced `WfNext` runs and to a false `tool_error` under `--symmetry always` without TLC. The reduced `WfNext` run is not affected: it records no entry when undecided. |
 | P22 | **Fixed in #475 and #494.** New (prose): D17 omitted that a step with `s' = s` is checked by neither engine. Both halves read; `Probe::Loop` is set in every build. |
 | P23 | **Fixed in #503.** New (evidence): the per-run comparison pairs the native `WfNext` run on the reduced cone (`decide_liveness_reduced`) with TLC's `_WF` module printed from the unreduced cone, so Proposition 0 does not apply on that path. |
@@ -982,3 +1012,12 @@ Changes to statements of this document after it was first written, newest last.
 - **2026-11-28, second audit at `5f59fae2`.** The Bounds item said each of the three per-entity cases raises
   two entities; `sym_per_entity_bounds` raises Room only, Booking staying at 2. Residual
   risk item 2 follows the index's completed P20 list.
+- **2026-11-28, third audit at `5f59fae2`.** Batch JVMs said `RDRA_TLC_BATCH=both` compares
+  every `engine_equivalence` job; it compares the jobs routed to a batch JVM, and the
+  invariant scan as well. A paragraph there, the T1 summary, and T3's, T5's and T11's rows say
+  that since af6354a4 (`engine_equivalence.rs`, read at that commit) the harness runs TLC
+  under `-lncheck final`, which `verify --with-tlc` does not. P16 is narrowed in #486, #497
+  and #508, as the index has it. The two P19 mentions give its status. Residual risk item 1
+  cites the failing run recorded in #492's description, where it said the interpreter
+  failed before #470 and #481 with no record named, and refers to I1 for the out-of-subset
+  list; item 3 says the `bfs=` runs are at 1 and 3 instances, and at 4 for one case.
