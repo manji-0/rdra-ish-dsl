@@ -164,7 +164,7 @@ func (sv *service) order(id domain.OrderId, usecase string) (domain.Order, error
 	return domain.OrderFromRow(row)
 }
 
-func (sv *service) Seed(rows domain.StoreSnapshot) {
+func (sv *service) Seed(rows domain.StoreSnapshot) error {
 	sv.s = newStore(sv.s.keepMarks)
 	for _, a := range rows.Account {
 		sv.s.accounts[a.Id] = a
@@ -182,9 +182,10 @@ func (sv *service) Seed(rows domain.StoreSnapshot) {
 		sv.s.marks[markKey{"Ship", "Order", m.Id}] = m.Step
 	}
 	sv.s.evShipped = append([]domain.EvShipped(nil), rows.EvShipped...)
+	return nil
 }
 
-func (sv *service) Snapshot() domain.StoreSnapshot {
+func (sv *service) Snapshot() (domain.StoreSnapshot, error) {
 	var snap domain.StoreSnapshot
 	for _, a := range sv.s.accounts {
 		snap.Account = append(snap.Account, a)
@@ -201,7 +202,7 @@ func (sv *service) Snapshot() domain.StoreSnapshot {
 	sort.Slice(snap.Order, func(i, j int) bool { return snap.Order[i].Id < snap.Order[j].Id })
 	sort.Slice(snap.Shipment, func(i, j int) bool { return snap.Shipment[i].Id < snap.Shipment[j].Id })
 	snap.EvShipped = append(snap.EvShipped, sv.s.evShipped...)
-	return snap
+	return snap, nil
 }
 
 func (sv *service) PreparePlace(parent domain.AccountId, orderId domain.OrderId) (domain.PlaceResult, error) {
