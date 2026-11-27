@@ -172,49 +172,59 @@ impl Solver for Meter {
 }
 
 /// Every check that kept its candidate (unsat) spent under a tenth of its limit, for the rule
-/// and the lemma limit of `ProveOptions::default()`, and there was such a check of each kind.
-/// A check past its limit answers `unknown` and leaves the unsat checks, so this sees a z3
-/// that spends more on the same queries only while it spends under the limit: past it a rule
-/// is unproved, which the domain-sample assertion catches, and a lemma is dropped, which shows
-/// only when a rule then fails. The tenth is the margin the limits keep for larger models than
-/// the samples. Returns the most a rule and a lemma check spent, for the message.
-fn assert_headroom(log: &Mutex<Vec<Spent>>, what: &str) -> (u64, u64) {
+/// and the lemma limit of `ProveOptions::default()`, there was such a check of each kind, and
+/// no check of any answer spent nine tenths of its limit. The tenth is the margin the limits
+/// keep for models larger than the samples. A check that runs out answers `unknown` and leaves
+/// the unsat checks, so the tenth alone sees a z3 that spends more on the same queries only
+/// up to the limit; a check that ran out spent the whole limit, which the nine tenths catch.
+/// On z3 5.1.0 the checks that give up do so far below their limit: z3 stops on a quantifier
+/// it cannot decide (the Houdini rounds run without MBQI), not on its budget.
+fn assert_headroom(log: &Mutex<Vec<Spent>>, what: &str) {
     let options = ProveOptions::default();
     let log = log.lock().unwrap();
-    let most = |limit: u32| {
-        let unsat = log
-            .iter()
-            .filter(|(l, s, _)| *l == limit && *s == Sat::Unsat);
-        let most = unsat.map(|(_, _, units)| *units).max();
-        let most = most.unwrap_or_else(|| panic!("{what}: no unsat check under the limit {limit}"));
-        assert!(
-            most * 10 < u64::from(limit),
-            "{what}: a check that kept its candidate spent {most} z3 resource units, over a tenth of its limit {limit}; re-measure the limits (`VERIFIED_Z3` in prove/mod.rs)"
-        );
-        most
+    let most = |limit: u32, sat: Sat| {
+        (log.iter())
+            .filter(|(l, s, _)| *l == limit && *s == sat)
+            .map(|(_, _, units)| *units)
+            .max()
     };
     let gave_up = |limit: u32| {
         (log.iter())
             .filter(|(l, s, _)| *l == limit && *s == Sat::Unknown)
             .count()
     };
-    let (rule, lemma) = (most(options.rlimit), most(options.lemma_rlimit));
-    println!(
-        "{what}: {} checks; unsat at most {rule} units for a rule (1/{} of its limit), {lemma} for a lemma (1/{}); {} rule and {} lemma checks gave up",
-        log.len(),
-        u64::from(options.rlimit) / rule.max(1),
-        u64::from(options.lemma_rlimit) / lemma.max(1),
-        gave_up(options.rlimit),
-        gave_up(options.lemma_rlimit)
-    );
-    (rule, lemma)
+    let mut line = format!("{what}: {} checks", log.len());
+    for (kind, limit) in [("rule", options.rlimit), ("lemma", options.lemma_rlimit)] {
+        let unsat = most(limit, Sat::Unsat)
+            .unwrap_or_else(|| panic!("{what}: no {kind} check kept its candidate"));
+        assert!(
+            unsat * 10 < u64::from(limit),
+            "{what}: a {kind} check that kept its candidate spent {unsat} z3 resource units, over a tenth of its limit {limit}; re-measure the limits (`VERIFIED_Z3` in prove/mod.rs)"
+        );
+        let any = [Sat::Sat, Sat::Unsat, Sat::Unknown]
+            .into_iter()
+            .filter_map(|sat| most(limit, sat))
+            .max()
+            .unwrap_or(0);
+        assert!(
+            any * 10 < u64::from(limit) * 9,
+            "{what}: a {kind} check spent {any} z3 resource units, near its limit {limit}: it ran out; re-measure the limits (`VERIFIED_Z3` in prove/mod.rs)"
+        );
+        line += &format!(
+            "; {kind}: unsat at most {unsat} units (1/{} of the limit), {} gave up, at most {} units",
+            u64::from(limit) / unsat.max(1),
+            gave_up(limit),
+            most(limit, Sat::Unknown).unwrap_or(0)
+        );
+    }
+    println!("{line}");
 }
 
 /// Also: every rule of a domain sample is proved at `verify`'s default two instances, as at
 /// one. oidc-auth's browser flow passes the mining cap at two, and two of its rules were
 /// proved only at one until the prover mined at one instance too (#231). And every check that
-/// kept a candidate spent under a tenth of its limit (`assert_headroom`), so a z3 that spends
-/// much more on the same proofs fails here before a rule is left unproved.
+/// kept a candidate spent under a tenth of its limit and none ran out (`assert_headroom`), so a
+/// z3 that spends much more on the same proofs fails here before a rule is left unproved.
 #[test]
 fn no_proved_rule_has_a_bounded_counterexample() {
     let Some(z3) = find_z3() else { return };

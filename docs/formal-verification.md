@@ -571,13 +571,16 @@ they were measured on: 5.1.0 today, the one `flake.nix` and `flake.lock` pin. Un
 version, or one whose `z3 --version` line it cannot read, `verify --prove` prints `note: z3
 <version> is not a version the proof's resource limits were measured on (5.1.0); ...` on
 stderr. The version must match exactly, since a patch release can change what a check
-spends, and the note changes nothing else. On every sample, on 1, 2, and 3 solvers, no check
-that keeps a rule or lemma spends more than 161,000 units for a rule (1/124 of its limit) or
-114,000 for a lemma (1/17), and the release test `proof_equivalence` fails when one passes a
-tenth of its limit. A check past its limit gives up instead, so the test catches a z3 that
-spends more on these proofs only up to the limit; past it, a domain-sample rule left unproved
-fails the same test, while a lemma that gives up is dropped and fails it only when a rule then
-goes unproved. The rounds that find the inductive set run z3 without model-based quantifier
+spends, and the note changes nothing else. The release test `proof_equivalence` meters every
+check: it fails when a check that keeps a rule or lemma spends more than a tenth of its limit,
+or any check spends nine tenths of it (a check that runs out spends the whole limit). On every
+sample on 2 solvers, and on the formal-verification samples, insurance-claim-ops, and
+oidc-auth on 1 and 3, such a check spends at most 161,000 units for a rule (1/124 of its
+limit) and 114,000 for a lemma (1/17); on 4 solvers, which the test does not run, a lemma
+check has spent 144,000 (1/14). The checks that give up (on 2 solvers, 301 lemma checks and
+13 rule checks, all but one of those in the formal-verification samples) do so far below their
+limit, at most 784,000 units for a lemma and 13,000 for a rule: z3 stops on a quantifier it
+cannot decide, not on its budget. The rounds that find the inductive set run z3 without model-based quantifier
 instantiation (MBQI), which settles the checks that keep a rule several times faster; the
 counterexamples to induction are then found with it on. A rule z3 gives up on is `unproved` with
 `z3 gave up on <action>`. The checks are shared out over several z3 processes (`RDRA_JOBS`); the result does

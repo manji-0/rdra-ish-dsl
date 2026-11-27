@@ -155,8 +155,8 @@ impl Default for ProveOptions {
 /// release included, so a version is listed only once it has been measured. To add one: run
 /// `examples/prove_rlimit.rs` under it on 1 and 4 solvers, check that no unsat check spends
 /// more than a tenth of either limit and that every domain-sample rule is still proved (the
-/// `proof_equivalence` tests assert both, on 1, 2, and 3 solvers), and update the figures
-/// above.
+/// `proof_equivalence` tests assert the first on 1, 2, and 3 solvers, the second on 2), and
+/// update the figures above.
 pub const VERIFIED_Z3: &[&str] = &["5.1.0"];
 
 /// The note `verify --prove` prints when `version`, the line `z3 --version` printed (as

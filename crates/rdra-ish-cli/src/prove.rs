@@ -91,6 +91,13 @@ impl Marks {
     }
 }
 
+/// The z3 a proof runs, and the line its `--version` printed (empty when it printed none).
+#[derive(Clone, Copy)]
+pub(crate) struct Z3Tool<'a> {
+    pub binary: &'a Path,
+    pub version: &'a str,
+}
+
 /// Proves the selected state rules of `ts` and writes one line per rule. Lemmas are mined
 /// from `twin` too (`prove::mining_twin`). A rule in `refuted`, which BFS violated at the
 /// instances it maps to, is not tried: it reads `refuted:`, and is an error of BFS's, not an
@@ -102,12 +109,12 @@ pub(crate) fn run_proof(
     selection: &Selection,
     marks: &Marks,
     refuted: &BTreeMap<usize, usize>,
-    binary: &Path,
+    z3: Z3Tool<'_>,
     deny_unproved: bool,
 ) -> Result<ProofRun> {
     let lemmas = &marks.lemmas;
     let mut text = String::new();
-    let version = Z3::version(binary).unwrap_or_default();
+    let (binary, version) = (z3.binary, z3.version.to_string());
     let rules: Vec<usize> = selection
         .targets
         .iter()
@@ -224,7 +231,6 @@ pub(crate) fn run_proof(
         tally,
         proved: with(proved),
         unproved: unproved_rules,
-        note: prove::unverified_z3_note(&version),
         text,
     })
 }
@@ -236,9 +242,6 @@ pub(crate) struct ProofRun {
     pub proved: BTreeSet<usize>,
     /// The rules left unproved, lemmas left out, by index into `ts.invariants()`.
     pub unproved: BTreeSet<usize>,
-    /// The `note:` for stderr when the z3 that ran is not a version the limits were measured
-    /// on (`prove::unverified_z3_note`).
-    pub note: Option<String>,
     /// The lines to print.
     pub text: String,
 }

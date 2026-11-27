@@ -1568,6 +1568,10 @@ one, the run stops with an error.
 - **Nix:** `nix shell nixpkgs#z3`; `nix develop` here provides it.
 - **A package manager:** `apt install z3`, `brew install z3`, or `pip install z3-solver`.
 
+The proof's budgets were measured on z3 5.1.0, the version `nix develop` provides. Another
+version, as a package manager may install, runs the same and prints a `note:` (see
+[Proofs](#proofs)).
+
 ### Proofs
 
 `--prove` prints one `proved:`, `unproved:`, `out of scope:`, or `refuted:` line per selected
