@@ -195,12 +195,13 @@ pub(crate) enum Commands {
         #[arg(long, requires = "code")]
         deny_incomplete: bool,
         /// With `--code=run`: after the run passes, run it again on this many mutant traces
-        /// of each kind, each wrong at one row, and fail when one passes; 0 runs none
-        #[arg(long, value_name = "N", default_value_t = 1, requires = "code")]
-        mutants: usize,
-        /// The seed that picks the mutant traces
-        #[arg(long, value_name = "SEED", default_value_t = 0, requires = "code")]
-        mutant_seed: u64,
+        /// of each kind (default 1), each wrong at one row, and fail when one passes; 0 runs
+        /// none
+        #[arg(long, value_name = "N", requires = "code")]
+        mutants: Option<usize>,
+        /// With `--code=run`: the seed that picks the mutant traces (default 0)
+        #[arg(long, value_name = "SEED", requires = "code")]
+        mutant_seed: Option<u64>,
         #[command(flatten)]
         bounds: BoundsArgs,
         #[command(flatten)]

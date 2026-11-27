@@ -422,7 +422,7 @@ fn self_check(
     let set = mutants(
         text,
         &traces.one_row,
-        &traces.absent_id(),
+        &traces.absent_id,
         how.per_kind,
         how.seed,
     );
@@ -497,7 +497,7 @@ fn survived(m: &Mutant, command: &[String], what: String, harness_runs: bool) ->
     CodeDiagnostic {
         name: "CodeMutantSurvived".to_string(),
         message: format!(
-            "the {} mutant of traces line {} passed: `{}` became `{}`, which the model never does",
+            "the run did not fail the {} mutant of traces line {} at its changed row: `{}` became `{}`, which the model never does",
             m.kind.name(),
             m.was.0,
             m.was.1,

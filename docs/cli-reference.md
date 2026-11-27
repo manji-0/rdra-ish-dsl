@@ -129,8 +129,8 @@ The consistency checks cover:
 | `--deny-deprecated` | off | Make each `DeprecatedSyntax` warning (a [deprecated form](./language-reference.md#deprecated-and-removed-forms)) an error. |
 | `--guards` | off | After a clean run, print which rules each guard protects. See [Guard dependencies](#guard-dependencies). |
 | `--code[=<LEVEL>]` | off; `fresh` when given bare | After a clean run, check the service code the [`[code]` tables](#the-code-tables) name: `fresh`, `build`, or `run`. Write the level with `=`. See [`check --code`](#check---code). |
-| `--mutants <N>` | `1` | With `--code`: after a passing `--code=run`, run the run command again on `N` mutant traces of each kind and fail when one passes. `0` runs none. See [The self-check](#the-self-check). |
-| `--mutant-seed <SEED>` | `0` | With `--code`: the seed that picks the mutant traces. The same model and seed pick the same ones. |
+| `--mutants <N>` | `1` | With `--code=run` only (else exit 1): after a passing `--code=run`, run the run command again on `N` mutant traces of each kind and fail when one passes. `0` runs none. See [The self-check](#the-self-check). |
+| `--mutant-seed <SEED>` | `0` | With `--code=run` only (else exit 1): the seed that picks the mutant traces. The same model and seed pick the same ones. |
 | `--deny-incomplete` | off | With `--code=run` only (else exit 1; without `--code`, exit 2): fail when a table's traces are not complete, that is, their BFS stopped at `conformance_states`. See [What a run covers](#what-a-run-covers). |
 | `--max-patterns <N>` | 2^(10 + 8·(n − 1)) for n = `--instance-count` (`1024`, `262144`, ...) | Cap on each entity's distinct patterns in its view's cone. Past it: the `PatternCapReached` error. A cone of a rule gathers no pattern, so the cap does not stop it. |
 | `--max-states <N>` | none | Cap on the joint states of one cone. Past it: the `StateCapReached` error, which names what the states vary in. |

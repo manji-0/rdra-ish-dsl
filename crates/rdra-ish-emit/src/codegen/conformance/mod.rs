@@ -486,13 +486,8 @@ pub struct Traces {
     pub cap: usize,
     /// The actions whose call takes one existing row, first: the calls an `X` row tries.
     pub one_row: Vec<String>,
-}
-
-impl Traces {
-    /// The text of an id no row of the traces has: one past the last slot.
-    pub fn absent_id(&self) -> String {
-        id_text(usize::from(self.instances))
-    }
+    /// The text of an id no row of the traces has: one past the most slots of any entity.
+    pub absent_id: String,
 }
 
 /// One move of a printed use case: the call that makes it.
@@ -540,6 +535,7 @@ pub fn traces(
         cap,
         ..Traces::default()
     };
+    out.absent_id = id_text(ts.entity_ids().map(|e| ts.slots(e)).max().unwrap_or(0));
     out.one_row = port
         .methods
         .iter()

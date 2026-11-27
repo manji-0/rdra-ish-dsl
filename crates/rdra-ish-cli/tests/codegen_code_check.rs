@@ -552,6 +552,9 @@ fn a_run_that_ignores_the_traces_fails_the_self_check() {
         &["check", "model", "--code=run", "--mutant-seed", "3"],
     ));
     assert!(seeded.1.contains("(seed 3)"), "{}", seeded.1);
+    let (code, _, stderr) = outcome(&rdra(&dir, &["check", "model", "--code", "--mutants", "2"]));
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(stderr.contains("--mutants needs --code=run"), "{stderr}");
 }
 
 /// A capped suite has no refused call to flip: the self-check says so, and never counts a
