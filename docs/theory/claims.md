@@ -5,15 +5,18 @@
 This table lists every guarantee the verification tools make or the notes in `docs/` claim,
 one per row, at commit `b83b9544ccdef3701bf90383cd56d10ea2297787`. It is the skeleton of the
 theme documents: each row names the theme that owns it, and that document states the claim
-as a proposition and gives its proof, or says what stands in for one.
+as a proposition and gives its proof, or says what stands in for one. Row I1 (theme 0) was
+added at `670eec79`, after the owner's review of [semantics.md](./semantics.md) (P60).
 
 ## How to read a row
 
-- **ID** is `A`, `B`, `N`, or `T` and a number, for themes (a) cones, (b) z3, (c) native, and
-  (d) TLC. `D1` to `D23` are not rows: they are the definitions of
+- **ID** is `I`, `A`, `B`, `N`, or `T` and a number, for themes (0) the build, (a) cones,
+  (b) z3, (c) native, and (d) TLC. `D1` to `D24` are not rows: they are the definitions of
   [semantics.md](./semantics.md).
-- **Claim** is stated in the notation of [semantics.md](./semantics.md). `T` is
-  `T_β(M)` (D13). `C` is a cone `T|W` (D15), `R` the cone reduced by its independent
+- **Claim** is stated in the notation of [semantics.md](./semantics.md). In themes (a) to (d),
+  `T` is the system `TransitionSystem::build` returns. It is `T_β(M)` (D13), or `T_β(M, σ)`
+  (D24) under a scope, exactly when claim I1 holds; the rows of (a) to (d) are about the
+  built system and assume I1 only where they say so. `C` is a cone `T|W` (D15), `R` the cone reduced by its independent
   sub-lifecycle, `Q` the quotient of a run by slot permutations. `⊨` is "the verdict is
   `ok`", `⊭` "the verdict is `counterexample`".
 - **Where** is the note and section that states the claim.
@@ -48,6 +51,20 @@ as a proposition and gives its proof, or says what stands in for one.
   `crates/rdra-ish-emit/src`.
 - **Open** names an item of the index's [Open problems](./README.md#open-problems) that
   bears on the row.
+
+## (0) The build
+
+<!-- constrained-by ./semantics.md#the-transition-system -->
+
+[semantics.md](./semantics.md) defines `T_β(M)` from the model's text (D1 to D13, D24). Every
+engine reads the one system the build returns, so a departure of the build from the definition
+moves every verdict at once, and agreement between the engines cannot show it (the
+common-mode faults of the [index's conclusion](./README.md#conclusion)). This theme has one
+row and no theme document yet.
+
+| ID | Claim | Where | Evidence | Code | Tests | Open |
+|---|---|---|---|---|---|---|
+| I1 | The build implements the definition: for every model `M`, bound `β` (D1), and scope `σ` (D24) at which the build reports no error, `TransitionSystem::build(M, β, σ)` returns `T_β(M, σ)`: the same variables and domains (D2), base values (D3), initial states (D4), and steps `s →_{(a,p)} s'` labelled by use case (D6 to D12), and rules with the same truth value in every state (D16). | [semantics.md](./semantics.md#d13), D13 and the **Implemented by** notes of D1 to D24; state-derivation.md, "The transition system" | none written as a whole: per-construct readings only, namely z3.md's Lemma U for every use of the bound in `core/build` (with `scripts/check-int-bound-sites.py` holding its list of sites), tlc-agreement.md's argument per construct (which reads the builder's invariants), and the **Implemented by** notes, which are pointers, not readings; D (the 79 hand-written corpus headers of T7, the only check of model to `T` in CI, on the models they name; `core/tests/oracle.rs` shares the build and does not count); planned D (P26: an independent interpreter of the model's AST, on branch `fix/p26-reference-interpreter`, lane L6. Its subset is entities with Enum, Bool, Int-like and nullable String columns, `@null`, `@default`, `@check`, pre-existing entities without owners, use cases of one entity and one transaction group, `sets` (literal, `null`, `present`, `.when`), `transitions` with choices and `.when`, `applies_to` on the written entity, and the four single-entity rule forms. It runs at `Scope::ALL` and compares initial states, reachable states, edges labelled by use case, rule names, and the violated set with the native run. It also checks z3's `proved` at `m` against the reference at `m+1` and `m+3`. It shares the parser, `build_model`, rule naming, and D2's reading of which Int columns are numbers. Owners, split use cases, triggers, copies, `chooses`, `drives`, links, `now`, multi-entity rules, `after`, properties, and scopes are outside it) | `core/build/` (`TransitionSystem::build`); `core/explore/moves.rs::initial_states`, `::each_successor` | `cli/tests/engine_corpus.rs::bfs_and_tlc_and_z3_agree_on_the_adversarial_corpus`; `core/tests/reference/` (P26, planned) | P26, P60; counterexamples found so far: P40 and P54 (a value past a byte; fixed in #470 by making such a domain the error `DomainTooLarge`), P24 (an effect order the printer read differently; fixed in #485) |
 
 ## (a) Cones of influence and reductions
 
@@ -98,8 +115,8 @@ entity).
 
 | ID | Claim | Where | Evidence | Code | Tests | Open |
 |---|---|---|---|---|---|---|
-| B1 | Over-approximation: for every `n ≥ 1` and every `m` the model builds at (every literal of a rule ≤ `m`), every state of `Reach(T_{(n,m)})` and every step between two of them is a model of `Enc`. The encoding widens in three ways only: a `New` parameter takes any absent row, Int columns and `now` range over all non-negative integers (`Tick` has no guard), and a choice of every Int value from `k` becomes `c ≥ k`. | formal-verification.md, "Proofs for any number of rows"; `core/prove/encode.rs` (module doc) | P-sketch on `Sc(M, β)` only ([z3.md](./z3.md#faithfulness-of-the-encoding), Proposition 2 and Lemma U); false as stated at the pinned commit for `m` above the run's top with a `.when`-guarded `present` write to a nullable Int (P43) and at `m = 255` with a nullable Int (P40); holds for every `n` at the run's `m`; D, limited (P44); A (z3) | `core/prove/encode.rs::Enc::initial`, `::step`, `::declarations`, `::in_domain`, `::one_of` | `cli/tests/proof_equivalence.rs::no_proved_rule_has_a_bounded_counterexample`, `::no_proved_rule_has_a_bounded_counterexample_in_the_corpus` (1 to 3 instances and `int_max + 2`); corpus `z3_int_and_now_boundary`, `z3_now_past_the_top` | P2, P3, P40, P43, P44 |
-| B2 | `proved: R` ⇒ for every `n ≥ 1` and every such `m`, `T_{(n,m)} ⊨ R` (D16). Follows from B1, B4, B5 and z3's soundness. | formal-verification.md, "Proofs for any number of rows"; `cli/src/prove.rs::ProofTally::clause` | P-sketch conditional on B1 on `Sc(M, β)` ([z3.md](./z3.md#the-soundness-theorem), Theorem 1); "every such `m`" and the printed "any Int value" are false for a model with the P43 construct; D, limited (P44); A (z3's soundness H1, the printer H2, the answer reader H4) | `core/prove/mod.rs::prove_round`; `cli/src/prove.rs::run_proof` | as B1 | P2, P3, P4, P40, P43, P44 |
+| B1 | Over-approximation: for every `n ≥ 1` and every `m` the model builds at (every literal of a rule ≤ `m`), every state of `Reach(T_{(n,m)})` and every step between two of them is a model of `Enc`. The encoding widens in three ways only: a `New` parameter takes any absent row, Int columns and `now` range over all non-negative integers (`Tick` has no guard), and a choice of every Int value from `k` becomes `c ≥ k`. | formal-verification.md, "Proofs for any number of rows"; `core/prove/encode.rs` (module doc) | P-sketch on `Sc(M, β)` only ([z3.md](./z3.md#faithfulness-of-the-encoding), Proposition 2 and Lemma U); false as stated at the pinned commit for `m` above the run's top with a `.when`-guarded `present` write to a nullable Int (P43) and, before #470, at `m = 255` with a nullable Int, where the build departed from D2 (P40; since #470 that bound is the build error `DomainTooLarge`); holds for every `n` at the run's `m`; the encoding reads the build at `β`, so B1 about `T_{β'}` of D13 also assumes I1 at `β`; D, limited (P44); A (z3) | `core/prove/encode.rs::Enc::initial`, `::step`, `::declarations`, `::in_domain`, `::one_of` | `cli/tests/proof_equivalence.rs::no_proved_rule_has_a_bounded_counterexample`, `::no_proved_rule_has_a_bounded_counterexample_in_the_corpus` (1 to 3 instances and `int_max + 2`); corpus `z3_int_and_now_boundary`, `z3_now_past_the_top` | P2, P3, P40, P43, P44 |
+| B2 | `proved: R` ⇒ for every `n ≥ 1` and every such `m`, `T_{(n,m)} ⊨ R` (D16). Follows from B1, B4, B5 and z3's soundness. | formal-verification.md, "Proofs for any number of rows"; `cli/src/prove.rs::ProofTally::clause` | P-sketch conditional on B1 on `Sc(M, β)` ([z3.md](./z3.md#the-soundness-theorem), Theorem 1) and on I1 at `β`; "every such `m`" and the printed "any Int value" are false for a model with the P43 construct; D, limited (P44); A (z3's soundness H1, the printer H2, the answer reader H4) | `core/prove/mod.rs::prove_round`; `cli/src/prove.rs::run_proof` | as B1 | P2, P3, P4, P40, P43, P44 |
 | B3 | A `in`/`not in` set that lists every value is folded to `true`/`false` only for finite domains (Enum, Bool, null-or-present, existence); Int, nullable Int and owner domains never fold, so no rule's meaning depends on `m` through folding (#425). | state-derivation.md, "Exploration by cone of influence" (Cone) | D | `core/build/preds/atoms.rs::lists_whole_domain` | corpus `z3_int_listing_whole_range`, `z3_int_listing_guard`, `z3_int_listing_past_the_top` under `proof_equivalence`'s wider-Int axis | |
 | B4 | Initiation: every candidate the kept set holds is checked against `Enc::initial`, which encodes every row of every entity (created rows absent at base; pre-existing rows present under `Start::Base`, `Any`, `Identity`). | `core/prove/mod.rs` (module doc) | P-full from the code ([z3.md](./z3.md#the-kept-set-is-inductive), Proposition 4); D | `core/prove/mod.rs::initiation`; `core/prove/encode.rs::Enc::initial` | `cli/tests/proof_equivalence.rs` | P4 |
 | B5 | Consecution: Houdini runs to a fixpoint; the loop exits only after a full pass over every step under the final set with no candidate falling, so the kept set is inductive relative to `Enc`. An `unknown` answer counts as a fall. | formal-verification.md, "Proofs for any number of rows"; `core/prove/mod.rs` | P-full from the code ([z3.md](./z3.md#the-kept-set-is-inductive), Proposition 4); D | `core/prove/mod.rs::prove_round`, `::activate`, `::violated_each` | `cli/tests/proof_equivalence.rs` | P5 |
@@ -150,7 +167,8 @@ Every row in this section rests on an assumption no test can remove: **TLC (1.7.
 correct**. The TLA+ printer (`emit/tla/mod.rs::print`, `emit/tla/module.rs`,
 `emit/tla/pred.rs`) prints from the same `TransitionSystem` value BFS explores, so agreement
 with TLC tests BFS against a second reading of `T`. It cannot test the step from the model
-to `T` (D13), which only the hand-written corpus headers check.
+to `T` (claim I1), which only the hand-written corpus headers check, and the reference
+interpreter of P26 once it lands.
 [tlc-agreement.md](./tlc-agreement.md) states each row as a proposition and tags its evidence;
 its CI evidence is about the devShell's TLC, which `flake.nix` pins to the 1.8.0 pre-release on JDK 25.
 
@@ -175,22 +193,22 @@ its CI evidence is about the devShell's TLC, which `flake.nix` pins to the 1.8.0
 
 ## Summary by evidence class
 
-80 rows: 28 in (a), 18 in (b), 18 in (c), 16 in (d). A row counts once per class it carries,
-so the columns add up to more than 80. Every column is counted from the rows as they stand
+81 rows: 1 in (0), 28 in (a), 18 in (b), 18 in (c), 16 in (d). A row counts once per class it carries,
+so the columns add up to more than 81. Every column is counted from the rows as they stand
 after [cones.md](./cones.md), [z3.md](./z3.md), [native.md](./native.md) and [tlc-agreement.md](./tlc-agreement.md); a row whose parts carry different classes
 (A5, A6, A21) counts in each. Every (b) row also assumes z3 (H1) and the answer reader (H4), and every (d) row
 assumes TLC; the **A** column counts only rows whose own evidence names an assumption.
 
-| Class | (a) | (b) | (c) | (d) | Rows |
-|---|---|---|---|---|---|
-| P-full | 18 | 4 | 7 | 0 | 29 |
-| P-sketch | 8 | 9 | 2 | 3 | 22 |
-| M | 8 | 0 | 4 | 2 | 14 |
-| D | 23 | 16 | 13 | 13 | 65 |
-| R | 4 | 0 | 3 | 3 | 10 |
-| A | 0 | 5 | 0 | 1 | 6 |
-| none written (true by construction, no argument in a note) | 0 | 2 | 1 | 0 | 3 |
-| none | 1 | 0 | 0 | 0 | 1 |
+| Class | (0) | (a) | (b) | (c) | (d) | Rows |
+|---|---|---|---|---|---|---|
+| P-full | 0 | 18 | 4 | 7 | 0 | 29 |
+| P-sketch | 0 | 8 | 9 | 2 | 3 | 22 |
+| M | 0 | 8 | 0 | 4 | 2 | 14 |
+| D | 1 | 23 | 16 | 13 | 13 | 66 |
+| R | 0 | 4 | 0 | 3 | 3 | 10 |
+| A | 0 | 0 | 5 | 0 | 1 | 6 |
+| none written (true by construction, no argument in a note) | 1 | 0 | 2 | 1 | 0 | 4 |
+| none | 0 | 1 | 0 | 0 | 0 | 1 |
 
 The one paper proof in the existing notes that a reader can check step by step is A15 (`_WF`
 on a reduced cone, cone-soundness.md). The four (b) rows marked `P-full` (B4, B5, B6, B15) rest
