@@ -936,6 +936,11 @@ Proven by argument: the bisimulation under conditions (1) and (2). Checked on ev
 that the partition `quotient_blocks` returns satisfies (1) and (2) and refines the labels
 (`partition/reference.rs::stable`, a certificate the reduction checks before it uses the
 partition, falling back to the sweeps' partition, stable when they stop, if it fails; P7).
+The fallback keeps the reduction rather than dropping it: the sweeps' partition is stable by
+construction, so the reduced cone stays sound, and dropping the reduction would only make the
+cone larger. On the samples the certificate costs a quarter to a third of the partition's
+own time; the most is food-permit-ops, 0.45 s of CPU over eleven sub-lifecycles of up to
+1.3 million states, in a `verify` run of 3 s (release build, 2026-11-28).
 Tested, not proven: that the staged
 recanonicalization matches the lift (the exactness test), and that the TLA+ printing is the
 explorer's relation (`engine_equivalence`).
