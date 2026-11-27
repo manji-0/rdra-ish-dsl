@@ -1685,6 +1685,39 @@ invariant(Order).when(status == placed).none(Shipment).label("no shipment yet").
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+/// A native property run stopped at `--max-states` decides nothing, so TLC's counterexample on
+/// the same run is no disagreement (agreement rule 1). The stopped run was once recorded as
+/// `ok` for the run-by-run comparison, which read as `native ok, TLC counterexample` and
+/// failed the run as a tool error (P21 of docs/theory/README.md).
+#[test]
+fn a_property_run_stopped_at_the_cap_is_no_disagreement_with_tlc() {
+    if !have_tlc() {
+        return;
+    }
+    let tmp = scratch("verify_cli_capped_property_vs_tlc");
+    let sample = repo().join("samples/formal-verification/temporal_unmet.rdra");
+    let output = verify_with_tlc(
+        &repo(),
+        &tmp,
+        &[sample.to_str().unwrap(), "--max-states", "3"],
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("EngineDisagreement"),
+        "a stopped run disagrees with TLC:\n{stdout}{stderr}"
+    );
+    assert!(
+        stderr.contains("\nresult: not decided\n"),
+        "{stdout}{stderr}"
+    );
+    assert!(
+        stderr.contains("\ntlc_result: counterexample\n"),
+        "{stdout}{stderr}"
+    );
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 /// `eventually` and `leads_to` are decided natively, with no TLC on PATH: on the cone with
 /// `Fair_P` alone, again with `WF_vars(Next)`, and on the whole model when the cone leaves
 /// them open. `--with-tlc` runs TLC's ladder beside it, and the two agree run by run.
