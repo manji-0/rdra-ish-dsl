@@ -4,6 +4,7 @@
 //! every `Fold::holds` call to it.
 
 use crate::lifecycle::expr::StateSlice;
+use crate::lifecycle::narrow::id8;
 use crate::lifecycle::TransitionSystem;
 
 use super::{Fold, FoldKey};
@@ -37,7 +38,7 @@ fn holds(fold: &Fold, ts: &TransitionSystem, s: &StateSlice, c: u8) -> bool {
     (0..radix.iter().product::<usize>()).any(|binding| {
         let mut rest = binding;
         for (p, n) in free.iter().zip(&radix) {
-            params[usize::from(*p)] = (rest % n) as u8;
+            params[usize::from(*p)] = id8(rest % n);
             rest /= n;
         }
         let present = fold.t_params.iter().all(|(p, must)| {

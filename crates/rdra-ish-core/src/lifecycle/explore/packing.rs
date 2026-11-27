@@ -150,6 +150,7 @@ impl Packing {
     /// so a move that changes a few cells costs a few writes, not a whole pack. Panics as
     /// `pack` does when a changed cell holds a value its bits cannot.
     #[inline]
+    #[allow(clippy::cast_possible_truncation)]
     pub(crate) fn patch(&self, from: &[u8], from_packed: &[u8], to: &[u8], out: &mut [u8]) {
         debug_assert!(from.len() == self.width() && to.len() == self.width());
         out.copy_from_slice(from_packed);
@@ -165,6 +166,8 @@ impl Packing {
                 let (at, sh) = (o >> 3, o & 7);
                 let m = ((1u16 << bits) - 1) << sh;
                 let v = (v << sh) & m;
+                // `m` covers at most 8 bits from `sh`; each `as u8` takes one byte of it, and the
+                // byte `m >> 8` its high one.
                 out[at] = (out[at] & !(m as u8)) | v as u8;
                 if m > 0xff {
                     out[at + 1] = (out[at + 1] & !((m >> 8) as u8)) | (v >> 8) as u8;
@@ -177,7 +180,9 @@ impl Packing {
     }
 
     /// Cell `c` of the state `packed` holds.
+    /// The mask keeps the cell's `bits[c]` bits, at most 8, so the `as u8` drops only zeros.
     #[inline]
+    #[allow(clippy::cast_possible_truncation)]
     pub(crate) fn cell(&self, packed: &[u8], c: usize) -> u8 {
         let o = self.offs[c] as usize;
         let byte = |i: usize| u16::from(packed.get(i).copied().unwrap_or(0));
@@ -198,6 +203,9 @@ fn word(bytes: &[u8]) -> u64 {
 /// words: at most `FAST_CELLS` cells. Returns the OR of every value's bits past its width: 0
 /// when every value fits.
 #[inline]
+// Each `as u8` keeps one byte by design: a masked cell of at most 8 bits, the low byte of
+// the accumulator a store writes, or the OR of `v >> b` over cells `v` of a byte.
+#[allow(clippy::cast_possible_truncation)]
 pub(crate) fn pack_words(bits: &[u8], cells: &[u8], out: &mut [u8]) -> u8 {
     debug_assert!(cells.len() <= FAST_CELLS && bits.len() == cells.len());
     // The word being filled stays in a register: a store per word, not per cell.
@@ -226,6 +234,9 @@ pub(crate) fn pack_words(bits: &[u8], cells: &[u8], out: &mut [u8]) -> u8 {
 /// The cells `packed` holds, each in its `bits`, low bits first, into `out`, through 64-bit
 /// words: at most `FAST_CELLS` cells.
 #[inline]
+// Each `as u8` keeps one byte by design: a masked cell of at most 8 bits, the low byte of
+// the accumulator a store writes, or the OR of `v >> b` over cells `v` of a byte.
+#[allow(clippy::cast_possible_truncation)]
 pub(crate) fn unpack_words(bits: &[u8], packed: &[u8], out: &mut [u8]) {
     debug_assert!(out.len() <= FAST_CELLS && bits.len() == out.len());
     let mut words = [0u64; WORDS];
@@ -256,6 +267,9 @@ pub(crate) fn unpack_words(bits: &[u8], packed: &[u8], out: &mut [u8]) {
 
 /// `cells` packed into `out`, each in its `bits`, low bits first, one cell at a time. Returns
 /// the OR of every value's bits past its width: 0 when every value fits.
+// Each `as u8` keeps one byte by design: a masked cell of at most 8 bits, the low byte of
+// the accumulator a store writes, or the OR of `v >> b` over cells `v` of a byte.
+#[allow(clippy::cast_possible_truncation)]
 pub(crate) fn pack_into(bits: &[u8], cells: &[u8], out: &mut [u8]) -> u8 {
     debug_assert_eq!(bits.len(), cells.len());
     let (mut acc, mut held, mut at, mut over) = (0u32, 0u32, 0usize, 0u8);
@@ -278,6 +292,9 @@ pub(crate) fn pack_into(bits: &[u8], cells: &[u8], out: &mut [u8]) -> u8 {
 }
 
 /// The cells `packed` holds, each in its `bits`, into `out`, one cell at a time.
+// Each `as u8` keeps one byte by design: a masked cell of at most 8 bits, the low byte of
+// the accumulator a store writes, or the OR of `v >> b` over cells `v` of a byte.
+#[allow(clippy::cast_possible_truncation)]
 pub(crate) fn unpack_into(bits: &[u8], packed: &[u8], out: &mut [u8]) {
     debug_assert_eq!(bits.len(), out.len());
     let (mut acc, mut held, mut at) = (0u32, 0u32, 0usize);

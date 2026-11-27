@@ -6,6 +6,7 @@
 //! Every build certifies the worklist's partition (`stable`) and falls back to the sweeps
 //! when the certificate fails (P7).
 
+use crate::lifecycle::narrow::id32;
 use std::collections::{BTreeSet, HashMap};
 
 #[cfg(any(test, feature = "shadow"))]
@@ -47,7 +48,7 @@ pub(in crate::lifecycle::reduce) fn stable(
     let blocks: Vec<u32> = blocks
         .iter()
         .map(|b| {
-            let len = index.len() as u32;
+            let len = id32(index.len());
             *index.entry(*b).or_insert(len)
         })
         .collect();
@@ -133,7 +134,7 @@ pub(super) fn quotient_blocks(
         let mut index: HashMap<(u32, &BTreeSet<u32>), u32> = HashMap::new();
         let refined: Vec<u32> = (0..n)
             .map(|i| {
-                let len = index.len() as u32;
+                let len = id32(index.len());
                 *index.entry((block[i], &signature[i])).or_insert(len)
             })
             .collect();
@@ -157,7 +158,7 @@ pub(super) fn stuttering_blocks(n: usize, edges: &[(u32, u32)], initial: &[u32])
     let pred = Adj::new(n, &pred_pairs);
     let mut members: Vec<Vec<u32>> = vec![Vec::new(); nblocks];
     for (i, &b) in block.iter().enumerate() {
-        members[b as usize].push(i as u32);
+        members[b as usize].push(id32(i));
     }
     let mut marked = vec![false; n];
     loop {
@@ -168,7 +169,7 @@ pub(super) fn stuttering_blocks(n: usize, edges: &[(u32, u32)], initial: &[u32])
             let mut touched: Vec<u32> = Vec::new();
             for &t in &members[splitter] {
                 for &p in pred.of(t) {
-                    if block[p as usize] != splitter as u32 && !marked[p as usize] {
+                    if block[p as usize] != id32(splitter) && !marked[p as usize] {
                         marked[p as usize] = true;
                         stack.push(p);
                         touched.push(p);
@@ -192,7 +193,7 @@ pub(super) fn stuttering_blocks(n: usize, edges: &[(u32, u32)], initial: &[u32])
             split.sort_unstable();
             for (b, xs) in split {
                 if xs.len() < members[b as usize].len() {
-                    let nb = nblocks as u32;
+                    let nb = id32(nblocks);
                     nblocks += 1;
                     for &x in &xs {
                         block[x as usize] = nb;

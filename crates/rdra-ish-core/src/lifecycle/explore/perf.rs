@@ -2,6 +2,7 @@
 //! store holds; and the guard counts of #300: the `perf-guards` line of a system, and the
 //! `perf-evals` line of what the move generator left to `eval`.
 
+use crate::lifecycle::narrow::id32;
 use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 use std::sync::OnceLock;
@@ -94,7 +95,7 @@ fn costly(run: &ComponentRun) -> String {
     let const_cols = seen.iter().filter(|c| distinct(c) <= 1).count();
     let (mut delta, mut with_parent) = (0u64, 0u64);
     for i in 0..run.states.len() {
-        if let Some(e) = run.parent(i as u32) {
+        if let Some(e) = run.parent(id32(i)) {
             let (a, b) = (&run.states.at(e.from as usize), &run.states.at(i));
             delta += a.0.iter().zip(b.0.iter()).filter(|(x, y)| x != y).count() as u64;
             with_parent += 1;

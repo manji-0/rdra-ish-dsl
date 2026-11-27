@@ -9,6 +9,7 @@
 //! successor to slot `σ(j)` of the stored target. A deadlock's trace is the lifted path to its
 //! pair, and the deadlock names the slot the concrete instance holds at its end.
 
+use crate::lifecycle::narrow::{id32, id8};
 use std::collections::HashSet;
 
 use super::{lift_path, replays, EdgePerms, OrbitRun};
@@ -115,19 +116,19 @@ impl OrbitRun {
             let progress = match first {
                 None => Progress::Leaves,
                 Some((at, k)) => {
-                    let held: Vec<_> = (pairs.forward(at as u32, k as u8).into_iter())
+                    let held: Vec<_> = (pairs.forward(id32(at), id8(k)).into_iter())
                         .map(|(r, j)| (run.states.at(r as usize), j))
                         .collect();
-                    let (trace, named) = self.trace_to_slot(e, at as u32, k);
+                    let (trace, named) = self.trace_to_slot(e, id32(at), k);
                     let mut diag = ts.deadlock(e, var, value, named, &exits, &held);
                     *diag.trace_mut().expect("a deadlock has a trace") = trace;
                     Progress::Stuck {
-                        at: at as u32,
+                        at: id32(at),
                         diag: Box::new(diag),
                     }
                 }
             };
-            where_stuck.push(first.map(|(at, k)| (at as u32, k)));
+            where_stuck.push(first.map(|(at, k)| (id32(at), k)));
             out.push(ValueProgress {
                 var,
                 value,
@@ -153,7 +154,7 @@ impl OrbitRun {
     fn trace_to_slot(&self, e: EntId, at: u32, k: usize) -> (Trace, usize) {
         let ts = &self.run.system;
         let (start, steps, tau) = self.lift_to(at);
-        let named = usize::from(self.group.map_slot(&tau, e, k as u8));
+        let named = usize::from(self.group.map_slot(&tau, e, id8(k)));
         // On a reduced cone the lifted path still holds class representatives on the S side:
         // #74's lift comes after the symmetry's, which was applied last.
         let (start, steps) = ts.lifted(&start, &steps);
@@ -180,11 +181,11 @@ impl<'a> Pairs<'a> {
     fn new(orbits: &'a OrbitRun, e: EntId) -> Self {
         let (run, g, perms) = (&orbits.run, &orbits.group, orbits.perms());
         let slots = run.system.slots(e);
-        let map = |p: &[u8]| -> Vec<u8> { (0..slots).map(|j| g.map_slot(p, e, j as u8)).collect() };
-        let to: Vec<Vec<u8>> = (0..perms.len() as u32)
+        let map = |p: &[u8]| -> Vec<u8> { (0..slots).map(|j| g.map_slot(p, e, id8(j))).collect() };
+        let to: Vec<Vec<u8>> = (0..id32(perms.len()))
             .map(|id| map(perms.get(id)))
             .collect();
-        let from: Vec<Vec<u8>> = (0..perms.len() as u32)
+        let from: Vec<Vec<u8>> = (0..id32(perms.len()))
             .map(|id| map(&g.inverse(perms.get(id))))
             .collect();
         let n = run.states.len();

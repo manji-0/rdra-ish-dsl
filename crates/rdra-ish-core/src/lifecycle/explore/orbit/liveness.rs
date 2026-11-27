@@ -23,6 +23,7 @@
 //! order of `π` copies; each copy covers every instance again. The concrete lasso then
 //! certifies itself as a plain one does: it replays, fails the property, and is fair.
 
+use crate::lifecycle::narrow::id32;
 use std::collections::VecDeque;
 
 use crate::fasthash::FastMap;
@@ -94,9 +95,9 @@ impl<'r> Product<'r> {
         let p = &ts.properties()[i];
         let bindings: Vec<Vec<u8>> = ts.binder_slots(&p.binders).collect();
         let index: FastMap<&[u8], u32> = (bindings.iter().enumerate())
-            .map(|(k, b)| (&b[..], k as u32))
+            .map(|(k, b)| (&b[..], id32(k)))
             .collect();
-        let bmap: Vec<Vec<u32>> = (0..perms.len() as u32)
+        let bmap: Vec<Vec<u32>> = (0..id32(perms.len()))
             .map(|id| {
                 let perm = perms.get(id);
                 bindings
@@ -119,13 +120,13 @@ impl<'r> Product<'r> {
                 };
                 *key_index.entry((*act, slots.clone())).or_insert_with(|| {
                     keys.push((*act, slots));
-                    keys.len() as u32 - 1
+                    id32(keys.len()) - 1
                 })
             })
             .collect();
         // An instance's slots move as its action's params do; a class move of a reduced cone
         // keeps its params, which name only rows `G_T` leaves where they are (`concrete`).
-        let imap: Vec<u32> = (0..perms.len() as u32)
+        let imap: Vec<u32> = (0..id32(perms.len()))
             .flat_map(|id| {
                 let perm = perms.get(id);
                 let (keys, key_index) = (&keys, &key_index);
@@ -150,7 +151,7 @@ impl<'r> Product<'r> {
         let mut en = Vec::new();
         let mut moves_on = vec![false; n];
         en_start.push(0);
-        for r in 0..n as u32 {
+        for r in 0..id32(n) {
             let from = en.len();
             for (k, e) in edges.range_of(r).zip(edges.from_state(r)) {
                 if !run.is_real(k, &e) {
@@ -197,11 +198,11 @@ impl<'r> Product<'r> {
     }
 
     fn state_of(&self, u: u32) -> u32 {
-        (u as usize / self.nb()) as u32
+        id32(u as usize / self.nb())
     }
 
     fn binding_of(&self, u: u32) -> u32 {
-        (u as usize % self.nb()) as u32
+        id32(u as usize % self.nb())
     }
 
     /// The pair edge `k`, which leaves `state_of(u)`, takes `u` to.
@@ -261,11 +262,11 @@ impl<'r> Product<'r> {
         // pairs, which `Adjacency` leaves out, and an orbit self-edge that keeps the binding is
         // one too, kept apart as `self_loop`.
         let adjacency = Adjacency::new(pairs, || {
-            (0..n as u32).flat_map(move |r| {
+            (0..id32(n)).flat_map(move |r| {
                 (edges.range_of(r).zip(edges.from_state(r)))
                     .filter(move |(k, e)| self.run.is_real(*k, e))
                     .flat_map(move |(k, _)| {
-                        (0..nb as u32).filter_map(move |b| {
+                        (0..id32(nb)).filter_map(move |b| {
                             let u = self.pair(r, b);
                             let v = self.target(u, k);
                             inside(u, v).then_some((u, v))
@@ -274,8 +275,8 @@ impl<'r> Product<'r> {
             })
         });
         let mut self_loop = vec![false; pairs];
-        for r in 0..n as u32 {
-            for b in 0..nb as u32 {
+        for r in 0..id32(n) {
+            for b in 0..id32(nb) {
                 let u = self.pair(r, b);
                 if in_n[u as usize] && self.real_edges(u).any(|(_, v)| v == u) {
                     self_loop[u as usize] = true;
@@ -289,7 +290,7 @@ impl<'r> Product<'r> {
         for u in (0..pairs).filter(|&u| in_n[u]) {
             let c = comp[u] as usize;
             size[c] += 1;
-            open[c] |= self.state_of(u as u32) as usize >= expanded;
+            open[c] |= self.state_of(id32(u)) as usize >= expanded;
             looped[c] |= self_loop[u];
         }
         let candidate: Vec<bool> = (0..count)
@@ -298,7 +299,7 @@ impl<'r> Product<'r> {
         let fair_cycle = self.threads_covered(&in_n, &comp, &candidate);
         let stops: Vec<bool> = (0..pairs)
             .map(|u| {
-                let r = self.state_of(u as u32);
+                let r = self.state_of(id32(u));
                 in_n[u]
                     && (r as usize) < expanded
                     && match fairness {
@@ -311,8 +312,8 @@ impl<'r> Product<'r> {
         let mut queue = VecDeque::new();
         for u in 0..pairs {
             if stops[u] || (in_n[u] && fair_cycle[comp[u] as usize]) {
-                toward[u] = u as u32;
-                queue.push_back(u as u32);
+                toward[u] = id32(u);
+                queue.push_back(id32(u));
             }
         }
         while let Some(at) = queue.pop_front() {
@@ -324,7 +325,7 @@ impl<'r> Product<'r> {
             }
         }
         drop(adjacency);
-        let start = (0..pairs as u32).find(|&u| {
+        let start = (0..id32(pairs)).find(|&u| {
             let (s, b) = (
                 &states.at(self.state_of(u) as usize),
                 &self.bindings[self.binding_of(u) as usize],
@@ -359,7 +360,7 @@ impl<'r> Product<'r> {
         let mut members = vec![0u32; start[count] as usize];
         for u in (0..in_n.len()).filter(|&u| in_n[u] && candidate[comp[u] as usize]) {
             let c = comp[u] as usize;
-            members[fill[c] as usize] = u as u32;
+            members[fill[c] as usize] = id32(u);
             fill[c] += 1;
         }
         drop(fill);
@@ -377,9 +378,9 @@ impl<'r> Product<'r> {
                 base.clear();
                 let mut threads = 0u32;
                 for (at, &u) in of.iter().enumerate() {
-                    local.insert(u, at as u32);
+                    local.insert(u, id32(at));
                     base.push(threads);
-                    threads += self.enabled(self.state_of(u)).len() as u32;
+                    threads += id32(self.enabled(self.state_of(u)).len());
                 }
                 covered.clear();
                 covered.resize(threads as usize, false);
@@ -391,12 +392,12 @@ impl<'r> Product<'r> {
                         .enabled(r)
                         .binary_search(&x)
                         .expect("an enabled instance");
-                    base[local[&u] as usize] + at as u32
+                    base[local[&u] as usize] + id32(at)
                 };
                 for &u in of {
                     let r = self.state_of(u);
                     for (k, v) in self.real_edges(u) {
-                        if !in_n[v as usize] || comp[v as usize] != c as u32 {
+                        if !in_n[v as usize] || comp[v as usize] != id32(c) {
                             continue;
                         }
                         let rv = self.state_of(v);
@@ -686,7 +687,7 @@ impl OrbitRun {
     /// Whether edge `k`, `e`, is a real move: to another stored state, or an orbit self-edge.
     /// A concrete self-loop is a stutter.
     pub(super) fn is_real(&self, k: usize, e: &super::super::Edge) -> bool {
-        e.from != e.to || self.orbit_self.binary_search(&(k as u32)).is_ok()
+        e.from != e.to || self.orbit_self.binary_search(&id32(k)).is_ok()
     }
 
     /// `properties()[i]`, an `eventually` or a `leads_to`, decided on this run's stored graph

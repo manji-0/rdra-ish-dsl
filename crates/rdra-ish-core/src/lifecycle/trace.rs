@@ -1,6 +1,7 @@
 //! A path from an initial state in model terms: the actions with their bound instances, and
 //! what each step changed with the site of the effect that wrote it.
 
+use crate::lifecycle::narrow::id8;
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -143,7 +144,7 @@ impl TransitionSystem {
     pub(crate) fn inst(&self, e: EntId, slot: usize) -> Inst {
         Inst {
             entity: self.entity(e).id.clone(),
-            slot: slot as u8 + 1,
+            slot: id8(slot) + 1,
         }
     }
 

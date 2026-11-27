@@ -23,6 +23,7 @@
 //! be longer than the reduced one and name another use case on an S step. S is explored with
 //! the same reduction applied to it, so a reduction nests.
 
+use crate::lifecycle::narrow::id8;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
@@ -363,7 +364,7 @@ impl Reduction {
     /// some fold of the group holds there.
     fn push_bits(&self, ts: &TransitionSystem, s: &StateSlice, out: &mut Vec<u8>) {
         for group in &self.bits {
-            for c in 0..ts.slots(group[0].key_entity(ts)) as u8 {
+            for c in 0..id8(ts.slots(group[0].key_entity(ts))) {
                 out.push(u8::from(group.iter().any(|f| f.holds(ts, s, c))));
             }
         }
