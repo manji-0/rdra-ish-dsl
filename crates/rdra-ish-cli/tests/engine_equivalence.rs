@@ -75,6 +75,7 @@ const VERIFY_FALLBACK: &[(&str, &str)] = &[
     // Reduced by the claim's and the payment's side in 4,368 classes under the case's two
     // bits (#112); the case's side alone has 63,823 states.
     ("samples/insurance-claim-ops", "entity ClaimCase"),
+    ("samples/insurance-claim-ops", "entity Investigation"),
     ("samples/insurance-claim-ops", "entity Payment"),
     ("samples/insurance-claim-ops", "invariant Forbidden_Claim_0"),
     ("samples/insurance-claim-ops", "invariant Forbidden_Claim_4"),
@@ -560,6 +561,15 @@ fn without_run_noise(log: &str) -> Vec<String> {
             continue;
         }
         let mut line = without_dates(line);
+        // TLC names the trace-exploration spec it writes after a counterexample with a
+        // timestamp (`Cone_TTrace_<seconds>.tla`), so two runs of one job differ there.
+        if let Some(at) = line.find("_TTrace_") {
+            let digits = line[at + "_TTrace_".len()..]
+                .chars()
+                .take_while(char::is_ascii_digit)
+                .count();
+            line.replace_range(at + "_TTrace_".len()..at + "_TTrace_".len() + digits, "N");
+        }
         if line.starts_with("Running breadth-first search Model-Checking with fp ") {
             let mut words: Vec<&str> = line.split(' ').collect();
             for i in 1..words.len() {
