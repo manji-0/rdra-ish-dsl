@@ -69,6 +69,8 @@ prints one note with the error count.
 <!-- constrained-by #what-verify-checks -->
 <!-- constrained-by ./state-derivation.md#triggers -->
 `check` and `verify` decide deadlocks and states with no witness by BFS on each entity's cone.
+That cone holds every raiser of an event its use cases wait for, so no handler runs there
+without its event and the findings are the whole model's.
 `export --kind tla` writes the same cones as TLA+, so TLC alone can look for them. For each
 cone whose entities have a state model, it writes three files:
 
@@ -204,6 +206,12 @@ by BFS, side by side:
   read, the cone does not count that entity's slots and reaches a superset. The `bounds:` line
   says `entities a check does not read are unbounded`. An `ok` still holds. A violation
   there may need more instances of that entity than the bound.
+- **A cone that leaves a raised mark out.** A cone that keeps an event's handler but not
+  every raiser runs the handler without the event. An `ok` still holds; a violation whose
+  trace does so is decided again on the check's exact cone, and the cone's line says what that
+  cone found: `note: <check>'s counterexample runs a use case without its event having been
+  raised, which this cone does not rule out; on its exact cone: ok`. The line's verdict is the
+  exact cone's; TLC is compared with the cone's own.
 - **Covered cones.** When a larger cone holds every check, variable, action, guard, and
   parameter of a smaller one, the smaller one does not run, and its line reads
   `ok (checked in Cone_<larger>)`. When the larger cone fails, the smaller one runs too, so
@@ -294,8 +302,9 @@ native checker decides each on the graph BFS explores:
    checked:`, the run prints `result: not decided` and a `warning:`, and exits 0 unless
    `--deny-undecided` is given.
 
-A cone that frees slots can show a lasso that creates more instances than the bound, so only
-its `ok` counts and a counterexample goes to the whole model. Each line names what happened:
+A cone that frees slots can show a lasso that creates more instances than the bound, and one
+that leaves a raised mark out a lasso that runs a use case without its event, so only its `ok`
+counts and a counterexample goes to the whole model. Each line names what happened:
 `Cone_P [P]: ok (111 states)`, `Cone_P [P]: counterexample (43 states, Cone_P_WF:
 counterexample)`, or `Cone_P [P]: not decided (31 states, Cone_P_WF: ok, needs the whole
 model's WF_vars(Next))` followed by the `RdraSpec_P [P]:` line. A reduced cone may add
@@ -667,7 +676,9 @@ escalated: Forbidden_Item_0: ok at 3 instances, ok at 4 instances (BFS on its co
 ```
 
 A counterexample there is reachable, so it is an error, whether or not `--deny-unproved` is
-set. It prints with its trace, whose header names the instances it needed
+set. One the cone cannot vouch for, which runs a use case without its event or creates more rows
+of an entity than the cone counts, is decided again on the rule's exact cone, which holds every
+raiser and counts every slot; that cone's instances are the ones printed. It prints with its trace, whose header names the instances it needed
 (`counterexample (4 steps, at 3 instances):`), and the run fails with `<n> invariant or
 after-assert violation(s) at more instances than the run's`. The cone line keeps the verdict at
 the run's bounds, and TLC is compared with that one. A run stopped by that cap, the memory
@@ -731,18 +742,26 @@ says how to see it in a run and what to do. The
   raisers with no entity in common order nothing (`UnanchoredTrigger`). Timers and external
   events are free. A cone that does not hold every raiser by its own writes leaves the mark
   out, and the handler runs unordered there. An `ok` of a rule, an `after` assertion, or a
-  temporal property is still sound, and a finding can be a run the order prevents
+  temporal property is still sound. A counterexample that runs the handler without its event
+  is decided again on the check's exact cone, which keeps every action that writes into it and
+  so holds the raiser
   ([Exploration by cone of influence](./state-derivation.md#exploration-by-cone-of-influence)).
-  An entity's own findings are not sound there. The extra handler runs add states and steps, so
-  the cone can miss a deadlock, a state with no witness, or a use case that never runs
-  ([theory, open problem P32](./theory/README.md#open-problems)).
-  See it: the infos on the `triggers` line, and the `note:` row of a trace, `runs <UC> without
-  <Ev> having been raised`. What to do: give the handler a from-state the raiser sets, make the
-  rule read something the raiser writes, or use `.counted(k)`
+  That cone's counterexample is the one reported; if it passes, the check holds, and if it
+  stops, the check is `not decided`. A property on such a cone counts only its `ok` and runs on
+  the whole model otherwise. An entity's findings are read on its exact cone whenever its own
+  cone would leave a mark out, since there the extra handler runs could hide a deadlock, a state
+  with no witness, or a use case that never runs. The exact cone can be much larger.
+  See it: the infos on the `triggers` line, and the `note:` under a cone line, `on its exact
+  cone: ...`; a TLC trace of the cone's module can still carry the `note:` row `runs <UC>
+  without <Ev> having been raised`. What to do: give the handler a from-state the raiser sets,
+  make the rule read something the raiser writes, or use `.counted(k)`
   ([`triggers` and event-driven BUC chaining](./language-reference.md#triggers-and-event-driven-buc-chaining)).
 - **A cone can stop at the memory limit or `--max-states`.** A stopped cone decides none of
   its witnesses, deadlocks, use cases that never run, arms never taken, or values never
-  chosen, and leaves its invariants `not decided`. See it: `not checked:` on stdout and the
+  chosen. A counterexample it found before the stop is reported: BFS reaches only reachable
+  states, so it is real (after the exact-cone check above when it runs a use case without its
+  event). The cone's other invariants and `after` assertions stay `not decided`, and its line
+  reads `not decided` when it found none. See it: `not checked:` on stdout and the
   `warning:` on stderr; `--deny-undecided` fails the run instead. In `check` the stop is the
   error `MemoryCapReached_<E>` or `StateCapReached_<E>`, whose message names the variables the
   states vary in. What to do: raise `--memory`, narrow the cone by moving a guard that reads

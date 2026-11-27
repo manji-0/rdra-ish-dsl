@@ -363,11 +363,24 @@ impl TransitionSystem {
     }
 
     /// The cone a target reads.
+    ///
+    /// An entity's findings say that a state is reached, that a use case runs, or that a
+    /// state can be left: a run the cone adds can make one of them hold where the whole
+    /// system does not. So an entity's cone that would leave a raised mark out, and run the
+    /// handler without its event, is its exact cone instead (`exact_target_cone`, P32). A
+    /// check's cone stays small: only its `ok` is read off a superset, and a counterexample it
+    /// cannot vouch for is decided on the exact cone (`recheck`).
     pub fn target_cone(&self, target: Target) -> Cone {
         let (seed, keep) = self.target_seed(target);
-        Cone {
+        let cone = Cone {
             vars: self.cone(&seed, &keep),
             keep,
+        };
+        match target {
+            Target::Entity(_) if self.cone_leaves_marks(&cone) => {
+                self.exact_target_cone(target, false)
+            }
+            _ => cone,
         }
     }
 
@@ -520,6 +533,45 @@ impl TransitionSystem {
                     p.role == ParamRole::New && !cone.vars.contains(&self.entity(p.entity).exists)
                 })
         })
+    }
+
+    /// Some action of the cone reads a raised mark the cone leaves out (`cone`). The action
+    /// runs there without its event, so the cone reaches states the event order forbids at
+    /// every bound: its `ok` holds, and its counterexample may be no run of the whole system.
+    pub fn cone_leaves_marks(&self, cone: &Cone) -> bool {
+        self.actions.iter().enumerate().any(|(i, a)| {
+            let inside = cone.keep.contains(&ActId::at(i))
+                || self.action_writes(a).iter().any(|v| cone.vars.contains(v));
+            inside
+                && self
+                    .mark_reads(a)
+                    .iter()
+                    .any(|(mark, _)| !cone.vars.contains(mark))
+        })
+    }
+
+    /// The cone of `target` grown until a counterexample on it is a run of the whole system:
+    /// every action that writes into it is kept, so each mark it reads is in it
+    /// (`closed_cone`); with `slots`, the existence of each entity such an action creates is
+    /// in it too, so no entity runs out of slots later than in the whole system
+    /// (`cone_frees_slots`). A check whose cone counterexample the cone cannot vouch for is
+    /// decided again on it (`recheck`).
+    pub fn exact_target_cone(&self, target: Target, slots: bool) -> Cone {
+        let (mut seed, mut keep) = self.target_seed(target);
+        keep.extend(self.keep_writers(&mut seed, slots));
+        let cone = Cone {
+            vars: self.cone(&seed, &keep),
+            keep,
+        };
+        debug_assert!(
+            !self.cone_leaves_marks(&cone),
+            "an exact cone reads every mark"
+        );
+        debug_assert!(
+            !slots || !self.cone_frees_slots(&cone),
+            "and counts every slot"
+        );
+        cone
     }
 
     /// The targets `check` and `states` explore: views and safety checks. A `can_reach` is a

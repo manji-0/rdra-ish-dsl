@@ -708,6 +708,67 @@ for a reference, `UniqueColumns_*`, `OnDelete_*`, `Derived_*`, `OneTransaction`,
 [code-check.md](./code-check.md): the types, states, use cases, functions and obligations with
 their model locations, not the whole intermediate form.
 
+Note (2026-11-27): item 4 is settled. Phase 3 below records that the scaffold landed as two
+pure pieces (row types and dispatchers) and no service stubs, which left a contradiction:
+with `--conformance`, Go's `ConformancePort` embeds every contract, so nothing built until
+the service had every method (clinic-ops: 87 contracts, 180 methods; the dogfooding user
+wrote a 2,326-line generator of stubs). Two ways out were weighed: (A) an unimplemented port
+in the domain code, which a service embeds or extends, and (B) a separate stub file written
+once by a new flag. The owner chose A, in all three languages: see
+[The unimplemented port](#the-unimplemented-port). Stubs with bodies (load, call the core,
+persist) are still not generated; a store differs per project, and the commit helpers of the
+results are where the generated code meets it.
+
+<a id="the-unimplemented-port"></a>
+### The unimplemented port
+
+<!-- derived-from #the-agent-contract -->
+
+The domain code has a stand-in for the contracts, which a service takes while it is
+unfinished, so it builds before it has every method. It stands in for each `prepare` and
+`commit` method, not for an entry point's `Run<Action>`: the harness drives no entry point,
+so a stand-in for one would never be reported, and the build still demands it (Rust gives a
+contract with an entry point no marker). Each method of the stand-in fails as the language
+says "not implemented", and the harness tells that failure from a refusal:
+
+| | Go | Rust | TypeScript |
+|---|---|---|---|
+| The stand-in | `UnimplementedConformancePort`, a struct to embed | `Unimplemented<Contract>`, a marker trait per contract, with `impl<T: UnimplementedPayUseCase> PayUseCase for T` | `UnimplementedConformancePort`, a class to extend |
+| Unit | a method: a method the service declares wins | a contract: the service implements it, or marks it | a member: a member the service declares wins |
+| A method fails by | returning `ErrUnimplemented` | panicking with `unimplemented!("rdra-ish unimplemented port")` | rejecting with `Unimplemented` (an `Error`) |
+| With `--conformance` | also `Seed` and `Snapshot` | `seed` and `snapshot` stay the service's | also `seed` and `snapshot` |
+
+The names are claimed, so a model type takes none of them. Rust has no embedding and no way to
+inherit a default for some methods without making every method optional for every service,
+which would undo the probe's `CodeIncomplete` (E0046); the marker keeps it opt-in, per
+contract, and the blanket impl is coherent because the marker is local. Rust and TypeScript
+fail by panicking or rejecting rather than with a value of the use case's error: an
+unimplemented method is no refusal the model knows, and a new case in every error type
+would change every `match` a service writes.
+
+**How a run reports it.** `conform` counts each call that reached the stand-in, by action.
+One the model runs (or a call of an interleaving) stops its trace, and the next trace starts;
+a refused one is counted and is no refusal, and its trace goes on, since the stand-in changed
+nothing and the model's state did not move. A seed or snapshot that reached it fails the run
+as a store error does. The probe's test always prints `rdra-ish conformance: unimplemented:
+none` or `... <n> traces stopped; <action> <calls>, ...`, so the default `run` command of Go
+and Rust now shows the test's output (`-v`, `--nocapture`). `check --code=run` maps the
+actions to use cases, adds `unimplemented: <n> use cases (<names>): <n> calls reached the
+unimplemented port; <n> traces stopped there` to the coverage statement, and warns
+`CodeUnimplemented`, which `--deny-incomplete` makes an error, as it does the `never run` of
+the traces. A run that printed no such line (a `run` in the table that hides the output)
+cannot say: `unimplemented: not reported`, with the same finding. A mutant of the self-check
+whose changed row the stand-in left unchecked (its trace stopped earlier, or the row's own
+call reached it) is counted as such, not as a survivor, so a partial service passes the
+self-check for what it implements.
+
+**`check --code=build` says nothing of it.** The build checks that the service has the
+contracts with the model's signatures, and the stand-in has them, so an empty service that
+takes it builds. A build-level warning would have to read the service's source (Go embeds by
+a field, TypeScript extends by a clause, Rust marks by an impl), which `check --code` does not
+parse anywhere else, and would say less than the run does: which use cases, how many calls.
+The run is where it is reported.
+
 <a id="conformance"></a>
 ### The conformance harness
 
@@ -1046,7 +1107,10 @@ the function's source state with no BFS move must get `Rejected`. The dispatcher
    ports: a flat row type per state type with checked conversions both ways, and a
    dispatcher per use case over the entity types. A store's or a framework's ports differ
    per project, so the agent writes the service around them; what it cannot get wrong (which
-   function runs from which states, which rows a state rules out) is generated. The tagged
+   function runs from which states, which rows a state rules out) is generated. [Since
+   2026-11-27 the domain code also has the
+   [unimplemented port](#the-unimplemented-port), the owner's choice for item 4: a stand-in a
+   service embeds or extends, so it builds before every method exists.] The tagged
    JSON is the row type: its columns, with the tag inline, are the JSON shape in all three
    languages (Go with `json` tags); the Rust output adds no serde dependency, so the agent
    derives it. `tests/codegen_behaviour.rs` runs the printed code of a fixture in each

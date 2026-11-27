@@ -1130,9 +1130,21 @@ property JobStarts eventually(Job.status == running).fair(Start)
         assert!(!reference::stable(3, &[], &[], &labels, &[0, 0, 0]));
         // A rise from 0 into 1 that 2 does not take.
         assert!(!reference::stable(3, &[], &[(0, 1)], &labels, &[0, 1, 0]));
-        assert!(reference::stable(3, &[], &[(0, 1), (2, 1)], &labels, &[0, 1, 0]));
+        assert!(reference::stable(
+            3,
+            &[],
+            &[(0, 1), (2, 1)],
+            &labels,
+            &[0, 1, 0]
+        ));
         // A silent cycle with no exit in a block whose other state leaves it.
         let labels = [0, 0, 0, 1];
-        assert!(!reference::stable(4, &[(0, 1), (1, 0), (2, 3)], &[], &labels, &[0, 0, 0, 1]));
+        assert!(!reference::stable(
+            4,
+            &[(0, 1), (1, 0), (2, 3)],
+            &[],
+            &labels,
+            &[0, 0, 0, 1]
+        ));
     }
 }

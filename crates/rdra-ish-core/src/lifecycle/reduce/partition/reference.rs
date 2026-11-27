@@ -8,9 +8,9 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use super::Adj;
 #[cfg(any(test, feature = "shadow"))]
 use super::distinct;
+use super::Adj;
 
 /// The most states of a quotient a `shadow` build runs the sweeps on; larger ones pass
 /// unchecked, and the certificate of #275's stage 2 is to check them. A test build checks
@@ -93,7 +93,7 @@ pub(super) fn check(
 ) {
     #[cfg(all(feature = "shadow", not(test)))]
     if n > SHADOW_CAP {
-        crate::shadow::skipped(crate::shadow::Twin::Partition);
+        crate::shadow::skipped(crate::shadow::Twin::Partition, crate::shadow::Skip::OverCap);
         return;
     }
     let want = quotient_blocks(n, silent, rises, initial);

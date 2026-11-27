@@ -839,7 +839,8 @@ Round 4 lets an S action read T vars that only rise. A var is *monotone* when th
 the cone system, taken as edges between the var's values, form no cycle
 (`TransitionSystem::monotone_vars` in `reduce/split.rs`): a create takes an existence from
 `absent` to `present` and a delete from `present` to `deleted`; a delete resets the entity's
-columns and owners, which makes those cyclic; an assignment or a choice in the action that
+columns, which makes those cyclic, and keeps its owners, which the rule counts cyclic all
+the same (conservative: it only gives up a reduction); an assignment or a choice in the action that
 creates the row starts from the base value, elsewhere from any value; a transition is its
 arms; the clock ticks up. The rule is checked on the cone, not declared, so a model that
 adds a backward arm loses the reduction and nothing else. A mark (0 to 1 under the latch,
