@@ -1439,3 +1439,65 @@ fn an_escalation_past_ten_times_the_store_decides_nothing() {
         "escalated: MultiForbidden_Light_0: ok at 3 instances, not decided at 4 instances (BFS on its cone; ok at 2)"
     );
 }
+
+/// P66: a `.when`-guarded `present` and a `.when`-guarded `null` on one nullable Int join one
+/// choice of every number (`build/sets.rs::guarded_set`), with null listed beside the numbers.
+/// The encoding read only the numbers (`c ≥ 1`), so it had no step that writes null: with the
+/// cone stopped at the state cap, `Forbidden_Item_0` printed `proved` and the run `OK`, though
+/// BFS breaks it in three steps (Add, Close, then Fill writes null). The step that writes null
+/// is now encoded, and its counterexample to induction is the one BFS walks.
+#[test]
+fn a_guarded_null_beside_a_guarded_present_is_a_step_of_the_proof() {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    let model = model_file(
+        "guarded_null_beside_present",
+        r#"
+entity Item "i" { id: Int @pk  open: Bool @default(true)  n: Int @null }
+usecase Add "a"
+usecase Close "c"
+usecase Fill "f"
+creates(Add, Item)
+sets(Add, Item.n == 1)
+updates(Close, Item)
+sets(Close, Item.open == false)
+updates(Fill, Item)
+condition IsOpen "o"
+holds(IsOpen, Item.open == true)
+condition IsClosed "x"
+holds(IsClosed, Item.open == false)
+sets(Fill, Item.n == present).when(IsOpen)
+sets(Fill, Item.n == null).when(IsClosed)
+forbidden(Item, n == null)
+"#,
+    );
+    let out = verify(&[
+        "--prove",
+        "--instance-count",
+        "1",
+        "--max-states",
+        "3",
+        &model,
+    ]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains(
+            "unproved: Forbidden_Item_0: not inductive; Fill(Item#1) breaks it from a state where it, every proved rule, and every kept lemma hold (not necessarily reachable)\n  Item#1 (present) open=false, n=0 -> n=null\n"
+        ),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("proved: Forbidden_Item_0 ("), "{stdout}");
+    assert!(
+        stdout.contains("; 0 of 1 rules proved for any number of rows"),
+        "{stdout}"
+    );
+    // Without the cap BFS refutes the rule first.
+    let out = verify(&["--prove", "--instance-count", "1", &model]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(out.status.code(), Some(1), "{stdout}");
+    assert!(
+        stdout.contains("refuted: Forbidden_Item_0 (BFS counterexample at 1 instance)\n"),
+        "{stdout}"
+    );
+}

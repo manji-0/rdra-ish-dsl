@@ -1,0 +1,26 @@
+// trap: a `.when`-guarded `null` write beside a `.when`-guarded `present` of one column (P66).
+// `Fill` writes a number to `n` while `k <= 5` and null while `k > 5`; `Bump` writes any number
+// to `k`. At `--int-range-max 5` no `k` passes 5, so no step writes null and BFS and TLC say
+// `ok`; at a range of 6 `Bump` writes 6 and `Fill` then null, so the rule holds at no range
+// above 5 and z3 must not prove it "for any Int value". The two lines join one choice of every
+// number with null listed beside it (`build/sets.rs::guarded_set`); before the fix the encoding
+// read the numbers only (`c ≥ 1`, `prove/encode.rs::Enc::one_of`), had no step that writes
+// null, and printed `proved`.
+// flags: --int-range-max 5 --instance-count 1
+// expect Forbidden_Item_0: native=ok tlc=ok z3=unproved
+entity Item "商品" { id: Int @pk  k: Int @null  n: Int @null }
+usecase Add "追加"
+usecase Bump "増加"
+usecase Fill "記入"
+creates(Add, Item)
+sets(Add, Item.n == 1)
+updates(Bump, Item)
+sets(Bump, Item.k == present)
+updates(Fill, Item)
+condition Small "小さい"
+holds(Small, Item.k <= 5)
+condition Big "大きい"
+holds(Big, Item.k > 5)
+sets(Fill, Item.n == present).when(Small)
+sets(Fill, Item.n == null).when(Big)
+forbidden(Item, n == null)

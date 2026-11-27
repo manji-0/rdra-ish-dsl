@@ -1847,6 +1847,9 @@ Entity lines that name each rule or reason:
     Light[3] moves
 == engine_corpus/z3_enum_bool_default_outside_values.rdra
   does not load: the model has errors
+== engine_corpus/z3_guarded_null_beside_present.rdra --int-range-max 5 --instance-count 1
+  [entity Item, Forbidden_Item_0] unreduced
+    Item[1] stays
 == engine_corpus/z3_guarded_present_past_the_top.rdra --int-range-max 5 --instance-count 1
   [entity Item, Forbidden_Item_0] unreduced
     Item[1] stays

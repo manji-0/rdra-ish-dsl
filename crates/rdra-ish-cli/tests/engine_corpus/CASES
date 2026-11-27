@@ -71,6 +71,7 @@ width_nullable_enum_256
 width_nullable_int_top
 z3_cti_true_rule
 z3_enum_bool_default_outside_values
+z3_guarded_null_beside_present
 z3_guarded_present_past_the_top
 z3_inductive
 z3_int_and_now_boundary
