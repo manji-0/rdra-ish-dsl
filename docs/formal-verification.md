@@ -730,8 +730,12 @@ says how to see it in a run and what to do. The
   A handler that binds the entity otherwise runs on any raised row (`UnjoinedTrigger`), and
   raisers with no entity in common order nothing (`UnanchoredTrigger`). Timers and external
   events are free. A cone that does not hold every raiser by its own writes leaves the mark
-  out, and the handler runs unordered there: an `ok` is sound, and a finding can be a run the
-  order prevents ([Exploration by cone of influence](./state-derivation.md#exploration-by-cone-of-influence)).
+  out, and the handler runs unordered there. An `ok` of a rule, an `after` assertion, or a
+  temporal property is still sound, and a finding can be a run the order prevents
+  ([Exploration by cone of influence](./state-derivation.md#exploration-by-cone-of-influence)).
+  An entity's own findings are not sound there. The extra handler runs add states and steps, so
+  the cone can miss a deadlock, a state with no witness, or a use case that never runs
+  ([theory, open problem P32](./theory/README.md#open-problems)).
   See it: the infos on the `triggers` line, and the `note:` row of a trace, `runs <UC> without
   <Ev> having been raised`. What to do: give the handler a from-state the raiser sets, make the
   rule read something the raiser writes, or use `.counted(k)`

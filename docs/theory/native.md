@@ -166,8 +166,11 @@ returns `Value(n as u8 + 1)` for a `NullableInt` column; `Domain::size` gives th
 `m + 2` values, 257 at `m = 255`, and for `n = 255` the sum wraps to 0, which is
 `Value::NULL`. The workspace `Cargo.toml` sets no `overflow-checks` for the release
 profile (it has only `[profile.mutants]`), so a release build wraps silently; a debug build
-panics. The callers are the literals of `sets` (`build/sets.rs`), of predicates
-(`build/preds/atoms.rs`) and of defaults (`build/vars.rs`). `Domain::of_variant` returns
+panics. The callers that wrap are the writes of `sets` (`build/sets.rs`) and the `@default`
+values (`build/vars.rs`); a predicate's Int literal is compared as a number
+(`build/preds/atoms.rs::eq_atom`), and the one call in `atoms.rs` (`lists_whole_domain`) is
+reached only for finite domains ([z3.md](./z3.md), item 5 of Lemma U, reads the same). This
+nullable-Int case is open problem P40 of theme (b), found independently. `Domain::of_variant` returns
 `Value((i + shift) as u8)`, an `as` cast that truncates in every build: in an Enum with
 `@null` and 256 values, value `v255` becomes `Value(0)`, the null; in an Enum without
 `@null` and 257 or more values, `v256` becomes `v0`. No check limits the number of values
@@ -189,8 +192,7 @@ Reproduced by the review at one instance (two states):
   trace that shows `s=null`.
 
 The non-null Enum with 257 values was read, not run. The TLA+ printer renders values from
-`T` (`emit/tla/mod.rs::render_value`; a predicate's literal through `Domain::number` in
-`emit/tla/pred.rs`), so a wrapped literal prints as null (`-1` or `"<null>"`) and TLC
+`T` (`emit/tla/mod.rs::render_value`), so a wrapped value prints as null (`-1` or `"<null>"`) and TLC
 checks the same wrong system; TLC was not run on these models.
 
 **Finding P55 (guarantee, read).** `explore/edges.rs::Steps::read` records the first edge
@@ -807,7 +809,8 @@ New: P50 (packing past 65,535 bits; wrong `ok`, reproduced), P51 (`after` skips 
 `s' = s`; reproduced; the engines agree), P52 (a reduced safety trace whose lifted last
 state no longer violates keeps the reduced message silently), P53 (one step of memory-stop
 determinism for the CLI's reruns is not shown), P54 (a value past a byte wraps when the
-build encodes it; wrong `ok` at one instance, reproduced by the review), P55 (the edge
+build encodes it; wrong `ok` at one instance, reproduced by the review; its nullable-Int case
+is P40), P55 (the edge
 index wraps past 2^32 edges; read), P56 (D20 does not say that a step with `s' = s` takes
 nothing, which N9's (⇒) direction needs; the engines agree). All are open. Confirmed on the code: P6, P10, P17 (orbit
 twins), P19, P20 (restated as the table above). Corrected: P18 (`SameAs` and `DenseBinding` are release

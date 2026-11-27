@@ -141,11 +141,32 @@
   spends more than a tenth of its limit, or any check nine tenths of it. On every sample on 2
   solvers, and on the costliest samples on 1 and 3, the most is 161,000 units for a rule (1/124
   of 20,000,000) and 114,000 for a lemma (1/17 of 2,000,000).
+- `codegen --format json` (experimental) holds what a database mapper needs, as keys added
+  under format 1 (every key it had keeps its value): `events` (each event type a use case
+  raises, with the ids of the rows it marks), `actors` per use case (who performs it, as its
+  `Caller` takes them), `primary_key` and `unique` (`@unique`) on each field of an entity, and
+  each obligation's `kind`, `entity`, `columns` and `parent`. `domain_name` is documented.
+  The generated code does not change.
 - `rdra.toml` accepts `[code.typescript]` as another spelling of `[code.ts]`, as `--lang
   typescript` spells `--lang ts`. Naming both is an error (one table named twice).
 
 ### Changed
 
+- `check --code` (experimental) says more of what failed, from three services built on the
+  generated code: the compiler's whole output prints before the findings (rustc's errors
+  were never shown); `CodeUnmapped` lists each unmapped error, and a `code:` line keeps the
+  message's further lines (which member a TS2322 says differs) and shows its path relative
+  to the working directory, as the other paths are; a call of a dispatcher or transition
+  function (Go `RunPay`, `PayFromOpen`) maps to its use case, and so does an argument-count
+  error (TS2554, E0061) by the call on its line; a probe that cannot resolve the service is
+  one `CodeServiceNotFound` pointing at `service` in rdra.toml and `codegen --probe`, not
+  one `CodeError` per use case; a failed run keeps the harness's `model only:` and
+  `store only:` rows, and says where the service panicked or threw when the harness
+  reported nothing, and a file the TypeScript probe cannot open (the traces at a wrong
+  path) as such rather than `the service threw: ENOENT`; a `generator changed` names the
+  table's settings in rdra.toml first.
+  The CLI reference and the implement skill say what a pass does not show: the rest of the
+  application, migrations, held locks, and that a raised event is never consumed.
 - The self-check of `check --code=run` picks its mutants in linear time (#439): it built
   the text of every candidate row and listed the states that differ for every call. On the
   traces of clinic-ops and patent-ops at the default cap (4.3 and 3.7 million lines),
@@ -351,6 +372,11 @@
 
 ### Fixed
 
+- `check --code=fresh` counts one error per stale file: a domain file and traces both stale
+  printed two error blocks over `FAIL: code: 1 error(s)`.
+- The obligation ledger reads no marker inside a string literal, nor one whose name is not
+  letters, digits and `_`: a script printing `` `-- rdra: obligation ${ob}` `` was a
+  `` CodeObligationUnknown_${ob}`); `` warning.
 - Go: the contract probe and the adapter probe sort their import group by path, so `gofmt -l`
   no longer names a probe whose service package's import path sorts before the domain's
   (`example.com/clinic/clinic` before `example.com/clinic/domain`). The Go domain code passes
