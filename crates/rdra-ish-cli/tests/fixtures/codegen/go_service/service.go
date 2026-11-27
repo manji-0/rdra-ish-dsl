@@ -10,6 +10,8 @@
 //	unconditional    every commit writes without checking what the row still is
 //	ignore-id        a call on an order or a shipment runs on the first one, whatever its id
 //	constant-observe the snapshot is what was seeded, whatever the calls stored
+//	seed-error       Seed returns an error, as a store that is down does
+//	snapshot-error   Snapshot returns an error
 package svc
 
 import (
@@ -95,7 +97,10 @@ func (s *Service) order(id domain.OrderId, usecase string) (domain.Order, error)
 }
 
 // Seed empties the store and stores rows.
-func (s *Service) Seed(rows domain.StoreSnapshot) {
+func (s *Service) Seed(rows domain.StoreSnapshot) error {
+	if s.fault == "seed-error" {
+		return errors.New("the store is down")
+	}
 	*s = *newService(s.fault)
 	s.seeded = rows
 	for _, c := range rows.Customer {
@@ -108,12 +113,16 @@ func (s *Service) Seed(rows domain.StoreSnapshot) {
 		s.shipments[sh.Id] = sh
 	}
 	s.evShipped = append(s.evShipped, rows.EvShipped...)
+	return nil
 }
 
 // Snapshot returns what the store holds.
-func (s *Service) Snapshot() domain.StoreSnapshot {
+func (s *Service) Snapshot() (domain.StoreSnapshot, error) {
+	if s.fault == "snapshot-error" {
+		return domain.StoreSnapshot{}, errors.New("the store cannot be read")
+	}
 	if s.fault == "constant-observe" {
-		return s.seeded
+		return s.seeded, nil
 	}
 	var snap domain.StoreSnapshot
 	for _, c := range s.customers {
@@ -127,7 +136,7 @@ func (s *Service) Snapshot() domain.StoreSnapshot {
 	}
 	sort.Slice(snap.Order, func(i, j int) bool { return snap.Order[i].Id < snap.Order[j].Id })
 	snap.EvShipped = append(snap.EvShipped, s.evShipped...)
-	return snap
+	return snap, nil
 }
 
 // PreparePlace reads what Place writes.

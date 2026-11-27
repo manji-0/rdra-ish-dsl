@@ -525,9 +525,9 @@ marks a column as personal, so the generator cannot know which to wrap; tracked 
   CI does not install). Names keep the model's spelling with an initial capital (`Id`,
   `PatientaccountId`, `OrderId`), not Go's initialisms (`ID`), which staticcheck's optional
   ST1003 asks for: the names follow the model's column and entity names one to one in all three
-  languages, and a project that wants `ID` writes it in its own code. Not yet: the conformance
-  harness (`--conformance`) prints its argument parsers whole, so on a model whose calls take
-  no text or set argument `confText` or `confSet` is unused (U1000).
+  languages, and a project that wants `ID` writes it in its own code. The conformance
+  harness (`--conformance`) likewise prints a value parser (`confText`, `confSet`, ...) only
+  where a call or a row reads one.
 
 ## Use cases split into transactions
 

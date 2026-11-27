@@ -106,12 +106,17 @@ func (a *Adapter) Seed(s modeladapter.ModelState) {
 	for _, e := range s.EvShipped {
 		snap.EvShipped = append(snap.EvShipped, domain.EvShipped{ShipmentId: domain.ShipmentId(e.ShipmentId)})
 	}
-	a.svc.Seed(snap)
+	if err := a.svc.Seed(snap); err != nil {
+		panic(err)
+	}
 }
 
 // Observe reads the store as the model sees it.
 func (a *Adapter) Observe() modeladapter.ModelState {
-	snap := a.svc.Snapshot()
+	snap, err := a.svc.Snapshot()
+	if err != nil {
+		panic(err)
+	}
 	var s modeladapter.ModelState
 	for _, c := range snap.Customer {
 		s.Customer = append(s.Customer, modeladapter.CustomerRow{Id: int64(c.Id)})

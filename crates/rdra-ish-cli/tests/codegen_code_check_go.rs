@@ -251,6 +251,11 @@ fn each_fault_fails_the_conformance_run() {
             "unconditional",
             "the write must be conditional on what the row was",
         ),
+        ("seed-error", "the service's Seed failed: the store is down"),
+        (
+            "snapshot-error",
+            "after seeding the initial state, the service's Snapshot failed: the store cannot be read",
+        ),
     ] {
         let (code, stdout, stderr) =
             outcome(&rdra(&dir, &["check", "model", "--code=run"], Some(fault)));

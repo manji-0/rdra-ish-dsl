@@ -274,6 +274,73 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
     print_calls(domain, port, out);
     print_seed_rows(domain, port, out);
     print_abstraction(domain, port, out);
+    print_conf_helpers(out);
+}
+
+/// The harness's value parsers, each only where a call or a row reads one: staticcheck's U1000
+/// names an unused one.
+fn print_conf_helpers(out: &mut String) {
+    let helpers = [
+        (
+            "confA.bool(",
+            r#"func (a *confArgs) bool(t string) bool {
+	b, err := strconv.ParseBool(t)
+	if err != nil && a.err == nil {
+		a.err = err
+	}
+	return b
+}
+"#,
+        ),
+        (
+            "confEnum(",
+            r#"func confEnum[T interface{ Valid() bool }](a *confArgs, v T) T {
+	if !v.Valid() && a.err == nil {
+		a.err = fmt.Errorf("not a value: %v", v)
+	}
+	return v
+}
+"#,
+        ),
+        (
+            "confOpt(",
+            r#"func confOpt[T any](t string, f func(string) T) *T {
+	if t == "~" {
+		return nil
+	}
+	v := f(t)
+	return &v
+}
+"#,
+        ),
+        (
+            "confText(",
+            r#"func confText[T any](p *T, f func(T) string) string {
+	if p == nil {
+		return "~"
+	}
+	return f(*p)
+}
+"#,
+        ),
+        (
+            "confSet(",
+            r#"func confSet[T any](p *T) string {
+	if p == nil {
+		return "~"
+	}
+	return "+"
+}
+"#,
+        ),
+    ];
+    for (call, text) in helpers {
+        let name = call.trim_end_matches('(');
+        if (call.contains('.') && out.contains(call)) || super::go::calls(out, name) {
+            out.push_str(text);
+            out.push('\n');
+        }
+    }
 }
 
 /// The run marks and `StoreSnapshot`: everything a store holds, as the harness reads it.
@@ -323,11 +390,13 @@ fn print_port_trait(port: &PortDecl, out: &mut String) {
         out.push_str(&format!("\t{}\n", c.name));
     }
     out.push_str(
-        "\t// Seed empties the store and stores these rows: the initial state of a trace.\n",
+        "\t// Seed empties the store and stores these rows: the initial state of a trace. An error\n\t// (the store failed) stops Conform, which reports it.\n",
     );
-    out.push_str("\tSeed(rows StoreSnapshot)\n");
-    out.push_str("\t// Snapshot returns everything the store holds now.\n");
-    out.push_str("\tSnapshot() StoreSnapshot\n");
+    out.push_str("\tSeed(rows StoreSnapshot) error\n");
+    out.push_str(
+        "\t// Snapshot returns everything the store holds now, or why the store could not be read.\n",
+    );
+    out.push_str("\tSnapshot() (StoreSnapshot, error)\n");
     out.push_str("}\n\n");
 
     out.push_str("// ConformanceReport is what Conform checked.\ntype ConformanceReport struct {\n\tTraces        int\n\tCalls         int\n\tRefusals      int\n\tInterleavings int\n}\n\n");
@@ -394,9 +463,11 @@ func Conform(newPort func() ConformancePort, traces string) (ConformanceReport, 
 			if port == nil {{
 				return report, at(errors.New("seeding outside a trace"))
 			}}
-			port.Seed(seed)
+			if err := port.Seed(seed); err != nil {{
+				return report, at(fmt.Errorf("the service's Seed failed: %w", err))
+			}}
 			seed = StoreSnapshot{{}}
-			if err := confCompare(confAbstract(port.Snapshot()), want, "after seeding the initial state"); err != nil {{
+			if err := confObserve(port, want, "after seeding the initial state"); err != nil {{
 				return report, at(err)
 			}}
 		case "C":
@@ -415,7 +486,7 @@ func Conform(newPort func() ConformancePort, traces string) (ConformanceReport, 
 			if refused != nil {{
 				return report, at(fmt.Errorf("the model runs `%s` here, and the service refused it: %v", strings.Join(call, " "), refused))
 			}}
-			if err := confCompare(confAbstract(port.Snapshot()), next, "after `"+strings.Join(call, " ")+"`"); err != nil {{
+			if err := confObserve(port, next, "after `"+strings.Join(call, " ")+"`"); err != nil {{
 				return report, at(err)
 			}}
 			want = next
@@ -435,7 +506,7 @@ func Conform(newPort func() ConformancePort, traces string) (ConformanceReport, 
 			if got := confKind(refused); kind != "-" && got != kind {{
 				return report, at(fmt.Errorf("the model refuses `%s` here with %s, and the service refused it with %s: %v", strings.Join(rest, " "), kind, got, refused))
 			}}
-			if err := confCompare(confAbstract(port.Snapshot()), want, "after the refused `"+strings.Join(rest, " ")+"`"); err != nil {{
+			if err := confObserve(port, want, "after the refused `"+strings.Join(rest, " ")+"`"); err != nil {{
 				return report, at(err)
 			}}
 			report.Refusals++
@@ -469,13 +540,13 @@ func Conform(newPort func() ConformancePort, traces string) (ConformanceReport, 
 			if refused != nil {{
 				return report, at(fmt.Errorf("the model runs `%s` here, and the service refused it: %v", strings.Join(second, " "), refused))
 			}}
-			if err := confCompare(confAbstract(port.Snapshot()), next, "after `"+strings.Join(second, " ")+"`"); err != nil {{
+			if err := confObserve(port, next, "after `"+strings.Join(second, " ")+"`"); err != nil {{
 				return report, at(err)
 			}}
 			if commit() == nil {{
 				return report, at(fmt.Errorf("the service committed `%s`, prepared before `%s` changed a row it writes: the write must be conditional on what the row was", strings.Join(first, " "), strings.Join(second, " ")))
 			}}
-			if err := confCompare(confAbstract(port.Snapshot()), next, "after the refused commit of `"+strings.Join(first, " ")+"`"); err != nil {{
+			if err := confObserve(port, next, "after the refused commit of `"+strings.Join(first, " ")+"`"); err != nil {{
 				return report, at(err)
 			}}
 			want = next
@@ -507,6 +578,15 @@ func confRun(confP ConformancePort, call []string) (error, error) {{
 		return refused, err
 	}}
 	return commit(), nil
+}}
+
+// confObserve reads the store through port and compares it with the model's state want.
+func confObserve(port ConformancePort, want []string, when string) error {{
+	snapshot, err := port.Snapshot()
+	if err != nil {{
+		return fmt.Errorf("%s, the service's Snapshot failed: %w", when, err)
+	}}
+	return confCompare(confAbstract(snapshot), want, when)
 }}
 
 // confCompare reports every line the store and the model's state do not share.
@@ -560,43 +640,6 @@ func (a *confArgs) int(t string) int64 {{
 		a.err = err
 	}}
 	return n
-}}
-
-func (a *confArgs) bool(t string) bool {{
-	b, err := strconv.ParseBool(t)
-	if err != nil && a.err == nil {{
-		a.err = err
-	}}
-	return b
-}}
-
-func confEnum[T interface{{ Valid() bool }}](a *confArgs, v T) T {{
-	if !v.Valid() && a.err == nil {{
-		a.err = fmt.Errorf("not a value: %v", v)
-	}}
-	return v
-}}
-
-func confOpt[T any](t string, f func(string) T) *T {{
-	if t == "~" {{
-		return nil
-	}}
-	v := f(t)
-	return &v
-}}
-
-func confText[T any](p *T, f func(T) string) string {{
-	if p == nil {{
-		return "~"
-	}}
-	return f(*p)
-}}
-
-func confSet[T any](p *T) string {{
-	if p == nil {{
-		return "~"
-	}}
-	return "+"
 }}
 
 "##,

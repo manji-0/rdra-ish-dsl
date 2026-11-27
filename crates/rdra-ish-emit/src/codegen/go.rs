@@ -1663,7 +1663,7 @@ pub(super) fn print_helpers(out: &mut String) {
 }
 
 /// `out` calls the function `name`: `name(` not preceded by a character of an identifier.
-fn calls(out: &str, name: &str) -> bool {
+pub(super) fn calls(out: &str, name: &str) -> bool {
     out.match_indices(&format!("{name}(")).any(|(i, _)| {
         !out[..i]
             .chars()

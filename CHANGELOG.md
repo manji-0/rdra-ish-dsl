@@ -296,7 +296,16 @@
   staticcheck's default checks with its `Code generated` line removed: a Bool test prints as
   `x` or `!x` in place of `x == true`, `x == false` and `!(!x)` (S1002, SA4013), and
   `ptrTo`, `copyOf`, `anyOf`, `allOf` and `countOf` print only where the code calls them
-  (U1000). Ids keep the model's spelling (`Id`, not `ID`). What the code does does not change.
+  (U1000), as do the conformance harness's value parsers. Ids keep the model's spelling (`Id`,
+  not `ID`). What the code does does not change.
+- Go (breaking for a service that implements `ConformancePort`): `Seed` returns an `error`
+  and `Snapshot` returns `(StoreSnapshot, error)`, so a store backed by a database reports a
+  failure instead of panicking, and `Conform` ends with `the service's Seed failed: ...` (or
+  `Snapshot`) on the traces line. Add `return nil` / `, nil` to an in-memory service.
+- Docs: a seeded state can hold a child whose parent row is absent (`check` warns
+  `PreExistingChildOfCreatedParent_*`); a store that enforces `Ref_*` as a foreign key turns
+  that check off while `Seed` runs. The harness does not invent the parent
+  (docs/cli-reference.md, "Conformance harness").
 - The conformance traces (`codegen --conformance`, `codegen --code`) no longer leave out the
   moves of a use case that chooses the target of a lifecycle column other than the state
   column, such as `transitions(Decide, Case.liability, undetermined -> at_fault)` beside
