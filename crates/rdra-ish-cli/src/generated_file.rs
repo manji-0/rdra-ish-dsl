@@ -51,12 +51,26 @@ fn insert_second(text: &str, line: &str) -> String {
     }
 }
 
-/// Why a generated file is not what the model generates now.
+/// The settings `codegen` ran with when it takes them from its command line: what a
+/// "generator changed" names first.
+pub(crate) const COMMAND_LINE: &str =
+    "the command line (--lang, --package, --allow-failing, --conformance-states, the input paths)";
+
+/// The settings `check --code` generates the files of `[code.<table>]` with.
+pub(crate) fn table_settings(table: &str) -> String {
+    format!(
+        "the settings of [code.{table}] in rdra.toml (paths, service, module, package, new, conformance_states, seal)"
+    )
+}
+
+/// Why a generated file is not what the model generates now. `settings` names where the
+/// generator's settings come from ([`COMMAND_LINE`], [`table_settings`]).
 pub(crate) fn cause_lines(
     name: &str,
     recorded: Option<&Fingerprint>,
     file_hash: &str,
     model_hash: &str,
+    settings: &str,
 ) -> Vec<String> {
     match recorded {
         None => vec![format!(
@@ -74,7 +88,7 @@ pub(crate) fn cause_lines(
                 out.push(format!("  model changed: its source text is not the text {name} was generated from"));
             }
             if !edited && !model_changed {
-                out.push("  generator changed: neither the file nor the model did, so the output of `codegen` did (another rdra-ish version, or other --lang, --package, --allow-failing, --conformance-states, or input paths)".to_string());
+                out.push(format!("  generator changed: neither the file nor the model did, so the output of `codegen` did: {settings} changed, or another rdra-ish version generated it"));
             }
             out
         }
@@ -82,8 +96,13 @@ pub(crate) fn cause_lines(
 }
 
 /// Whether the file at `path` is `code` (the fingerprint line aside); prints `ok:` or a summary
-/// of the difference on stderr.
-pub(crate) fn check_code(path: &Path, code: &str, model_hash: &str) -> Result<bool> {
+/// of the difference on stderr. `settings` as [`cause_lines`] takes it.
+pub(crate) fn check_code(
+    path: &Path,
+    code: &str,
+    model_hash: &str,
+    settings: &str,
+) -> Result<bool> {
     let name = shown(path);
     let text = fs::read_to_string(path).with_context(|| format!("failed to read {name}"))?;
     let (file, generated) = (body(&text), body(code));
@@ -101,6 +120,7 @@ pub(crate) fn check_code(path: &Path, code: &str, model_hash: &str) -> Result<bo
         recorded.as_ref(),
         &fingerprint::hash(file.as_bytes()),
         model_hash,
+        settings,
     ) {
         eprintln!("{line}");
     }
@@ -144,8 +164,13 @@ pub(crate) fn check_code(path: &Path, code: &str, model_hash: &str) -> Result<bo
 }
 
 /// Whether the traces file at `path` is `traces`, compared by the hash of its lines only: the
-/// file is streamed, never held or diffed.
-pub(crate) fn check_traces(path: &Path, traces: &str, model_hash: &str) -> Result<bool> {
+/// file is streamed, never held or diffed. `settings` as [`cause_lines`] takes it.
+pub(crate) fn check_traces(
+    path: &Path,
+    traces: &str,
+    model_hash: &str,
+    settings: &str,
+) -> Result<bool> {
     let name = shown(path);
     let (recorded, file_hash) =
         fingerprint::scan_file(path).with_context(|| format!("failed to read {name}"))?;
@@ -157,7 +182,7 @@ pub(crate) fn check_traces(path: &Path, traces: &str, model_hash: &str) -> Resul
         return Ok(true);
     }
     eprintln!("error: {name} is not the traces `codegen` generates from the model");
-    for line in cause_lines(&name, recorded.as_ref(), &file_hash, model_hash) {
+    for line in cause_lines(&name, recorded.as_ref(), &file_hash, model_hash, settings) {
         eprintln!("{line}");
     }
     Ok(false)

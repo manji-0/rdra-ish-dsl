@@ -154,6 +154,7 @@ pub(super) fn add_functions(
         )?;
         domain.obligations.push(super::ir::Obligation {
             name: "OneTransaction".to_string(),
+            subject: super::ir::ObligationSubject::of("transaction"),
             checked: false,
             text: "each function runs in one transaction with the reads of its rows, marks, and events: `check` and `verify` explore every use case, and every step of a split one, as one atomic action, and a run of another use case between the read and the write is a state they never explored. Hold what the function read until the write commits (SELECT .. FOR UPDATE, or serializable isolation), and write each row only where it still is what the result's `<row>_expected` (`<Row>Expected` in Go) names (UPDATE .. WHERE id = ? AND <tag> = ?; INSERT a created row only where none has its id; DELETE likewise); when a write matches no row, roll the transaction back and treat the call as NotEnabled. The condition catches a row another call created, deleted, or moved to another state; it does not catch a change to another column a condition read, to a row the function reads and does not write, or to a run mark or event it consumes, which only the held reads keep.".to_string(),
             site: None,
@@ -173,6 +174,7 @@ pub(super) fn add_functions(
             .collect();
         domain.obligations.push(super::ir::Obligation {
             name: format!("RunMarks_{uc}"),
+            subject: super::ir::ObligationSubject::of("run-marks"),
             checked: false,
             text: format!(
                 "{uc} runs as separate transactions linked by run marks ({}): store each mark with its row in the transaction of the step that returns it; keep at most one mark of {uc} per row and start step 1 only on a row with none; never abandon a run, but retry a step that returns NotEnabled or Rejected until it runs.",
@@ -195,6 +197,7 @@ pub(super) fn add_functions(
     for ty in lists {
         domain.obligations.push(super::ir::Obligation {
             name: format!("CompleteRows_{ty}"),
+            subject: super::ir::ObligationSubject::of("complete-rows"),
             checked: false,
             text: format!(
                 "a function input of {ty} rows holds every present row of the entity, read in the function's transaction: a `.has` / `.none` condition reads them all."

@@ -23,7 +23,7 @@ use rdra_ish_emit::codegen::ir::DomainModel;
 use rdra_ish_emit::codegen::{generate_all, generate_json, CheckStatus, Lang, Options};
 
 use crate::cli::CodegenLang;
-use crate::generated_file::{check_code, check_traces, stamp, stamp_traces};
+use crate::generated_file::{check_code, check_traces, stamp, stamp_traces, COMMAND_LINE};
 use crate::load::load_clean;
 use crate::memory::generator_caps;
 use crate::paths::{label, shown};
@@ -149,9 +149,9 @@ pub fn run_codegen(args: CodegenArgs<'_>) -> Result<()> {
     };
     let generated = generate(&loaded, &request)?;
     if let Some(path) = args.check_file {
-        let mut same = check_code(path, &generated.code, &generated.model_hash)?;
+        let mut same = check_code(path, &generated.code, &generated.model_hash, COMMAND_LINE)?;
         if let (Some((traces, _)), Some((tpath, _))) = (&generated.traces, args.conformance) {
-            same &= check_traces(tpath, traces, &generated.model_hash)?;
+            same &= check_traces(tpath, traces, &generated.model_hash, COMMAND_LINE)?;
         }
         if !same {
             std::process::exit(1);
