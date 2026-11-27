@@ -904,6 +904,7 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
             ..
         } => memory_cap_message(diag, raise, *states, held),
         StateDiag::TimeBudgetReached { .. } => format!("{diag}; raise --temporal-budget"),
+        StateDiag::LiftFault { .. } => diag.to_string(),
         StateDiag::ConstraintViolated {
             text,
             label,

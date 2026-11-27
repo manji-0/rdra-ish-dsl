@@ -926,6 +926,12 @@ impl TransitionSystem {
             (Target::AfterAssert(i), StateDiag::AfterAssertViolated { site, .. }) => {
                 *site == self.after[i].site
             }
+            (Target::Invariant(i), StateDiag::LiftFault { name, .. }) => {
+                *name == self.invariants[i].name
+            }
+            (Target::AfterAssert(i), StateDiag::LiftFault { site, .. }) => {
+                *site == self.after[i].site
+            }
             _ => false,
         }
     }

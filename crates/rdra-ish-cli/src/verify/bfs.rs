@@ -317,6 +317,9 @@ pub(super) enum BfsCone {
         states: usize,
         /// The violated invariants and after-asserts, each with BFS's shortest trace.
         found: Vec<Diag>,
+        /// Violations of a reduced cone that do not lift to the cone (`StateDiag::LiftFault`):
+        /// a tool bug, which makes the verdict a tool error (P52).
+        faults: Vec<Diag>,
         /// How the run ended: a run stops once every check has failed.
         end: RunEnd,
         /// The run stopped at the memory limit.
@@ -432,9 +435,14 @@ impl BfsCone {
                 d
             })
             .collect();
+        let faults = (diags.iter())
+            .filter(|d| matches!(d.diag, StateDiag::LiftFault { .. }))
+            .cloned()
+            .collect();
         BfsCone::Ran {
             states: 0,
             found,
+            faults,
             end,
             memory: met_memory_limit(diags),
             orbits: None,
@@ -487,9 +495,11 @@ impl BfsCone {
         self.verdict() == Some(Outcome::Ok)
     }
 
-    /// The verdict, `None` when the run stopped before a violation.
+    /// The verdict, `None` when the run stopped before a violation; a tool error when a
+    /// violation of the reduced cone did not lift to the cone (P52).
     pub(super) fn verdict(&self) -> Option<Outcome> {
         match self {
+            BfsCone::Ran { faults, .. } if !faults.is_empty() => Some(Outcome::ToolError),
             BfsCone::Ran { found, end, .. } => match (found.is_empty(), end) {
                 (false, _) => Some(Outcome::Counterexample),
                 (true, RunEnd::Complete) => Some(Outcome::Ok),
@@ -787,6 +797,8 @@ pub(super) struct Safety {
     pub(super) violated: usize,
     /// Cones the state cap or the memory limit stopped before a violation.
     pub(super) capped: usize,
+    /// Violations of reduced cones that do not lift to their cone (P52): tool errors.
+    pub(super) faults: usize,
 }
 
 /// Prints each safety cone's run line and renders each violation with its BFS trace.
@@ -803,9 +815,16 @@ pub(super) fn report_bfs_cones(
             continue;
         };
         println!("{}", cone.line(&job.module, &job.checks, jobs));
-        let BfsCone::Ran { found, end, .. } = cone else {
+        let BfsCone::Ran {
+            found, faults, end, ..
+        } = cone
+        else {
             continue;
         };
+        for d in faults {
+            eprintln!("{}", Finding::new(&d.diag, &[], d.diag.to_string()));
+        }
+        out.faults += faults.len();
         // A check several cones hold is reported once, from the first cone that breaks it, so
         // the count does not depend on how the cones overlap.
         for d in found.iter().filter(|d| reported.insert(d.diag.name(&[]))) {
@@ -813,7 +832,8 @@ pub(super) fn report_bfs_cones(
                 .expect("a violation renders");
             eprintln!("{}", Finding::new(&d.diag, &[], text));
         }
-        out.capped += usize::from(found.is_empty() && *end != RunEnd::Complete);
+        out.capped +=
+            usize::from(found.is_empty() && faults.is_empty() && *end != RunEnd::Complete);
     }
     out.violated = reported.len();
     out
@@ -826,6 +846,37 @@ mod tests {
     use rdra_ish_core::load_project;
     use rdra_ish_core::memory::{MemoryPool, MemorySize};
     use std::path::Path;
+
+    /// A cone whose reduced run found a violation that does not lift (`LiftFault`) is a tool
+    /// error, never `ok`, though `found` holds no violation and the run is complete (P52); it
+    /// covers no other cone.
+    #[test]
+    fn a_violation_that_does_not_lift_makes_the_cone_a_tool_error() {
+        use super::BfsCone;
+        use crate::tlc_output::Outcome;
+        use rdra_ish_core::lifecycle::{Diag, ModelRef, RunEnd, Site, StateDiag};
+
+        let fault = Diag {
+            entities: Vec::new(),
+            diag: StateDiag::LiftFault {
+                name: "Forbidden_Order_0".into(),
+                site: Site::bare(ModelRef::EntityInvariant(0)),
+            },
+        };
+        let cone = |faults: Vec<Diag>| BfsCone::Ran {
+            states: 7,
+            found: Vec::new(),
+            faults,
+            end: RunEnd::Complete,
+            memory: false,
+            orbits: None,
+            peak: 0,
+        };
+        assert_eq!(cone(Vec::new()).verdict(), Some(Outcome::Ok));
+        let faulty = cone(vec![fault]);
+        assert_eq!(faulty.verdict(), Some(Outcome::ToolError));
+        assert!(!faulty.passed());
+    }
 
     /// Under a memory limit the entity pass releases each entity cone that stops, and the TLC
     /// side reads none of them: a reader of a released cone's graph panics (#284).
