@@ -8,6 +8,7 @@
 //! abstracts the service's store to the same text and compares; it never asks the generated
 //! core what to expect.
 
+mod coverage;
 pub mod eval;
 
 use std::collections::{BTreeSet, HashSet, VecDeque};
@@ -468,6 +469,13 @@ pub struct Traces {
     pub refusals: usize,
     /// Calls whose write the traces try after another call changed a row it writes.
     pub interleavings: usize,
+    /// States the BFS explored, reached by any move (a tick, a use case with no function too).
+    pub explored: usize,
+    /// The bound the BFS ran at: rows per entity, and the top of the Int range `0..=int_max`.
+    pub instances: u8,
+    pub int_max: u8,
+    /// The state cap the BFS stopped at, or would have.
+    pub cap: usize,
 }
 
 /// One move of a printed use case: the call that makes it.
@@ -494,7 +502,8 @@ pub fn traces(
         .port
         .as_ref()
         .expect("traces are written for a model with a port");
-    let built = TransitionSystem::build(model, Bounds::STATES, &Scope::ALL);
+    let bounds = Bounds::STATES;
+    let built = TransitionSystem::build(model, bounds.clone(), &Scope::ALL);
     let run = built
         .ts
         .clone()
@@ -508,6 +517,10 @@ pub fn traces(
     let mut calls: Vec<Call> = Vec::new();
     let mut out = Traces {
         complete: run.complete,
+        explored: run.states.len(),
+        instances: bounds.instances.get(),
+        int_max: bounds.int_max,
+        cap,
         ..Traces::default()
     };
     for edge in run.edges() {

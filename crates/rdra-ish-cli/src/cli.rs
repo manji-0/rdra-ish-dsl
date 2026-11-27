@@ -190,6 +190,10 @@ pub(crate) enum Commands {
         /// `run` that the conformance test passes. Only `build` and `run` start a compiler
         #[arg(long, value_name = "LEVEL", num_args = 0..=1, require_equals = true, default_missing_value = "fresh")]
         code: Option<CodeLevel>,
+        /// With `--code=run`: fail when the conformance traces are not complete (their BFS
+        /// stopped at `conformance_states`, so no refused call is tried); without it, a warning
+        #[arg(long, requires = "code")]
+        deny_incomplete: bool,
         #[command(flatten)]
         bounds: BoundsArgs,
         #[command(flatten)]

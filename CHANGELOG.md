@@ -15,6 +15,18 @@
   finds and renames the entity, use case, and event a mark names. The engine corpus case
   `z3_lemma_run_mark` proves `z3_needs_run_mark`'s rule with such a lemma. Mined candidates
   already read marks; nothing changes there.
+
+- `check --code=run` (experimental) states what the conformance traces cover, on stdout
+  before the `OK: code` / `FAIL: code` line, one statement per `[code.<lang>]` table (#439):
+  the bound (rows created per entity, the Int range), whether the BFS behind the traces
+  completed or stopped at its cap, the moves run and left out, the refused calls tried, what
+  the harness does not compare, the assumptions H1 to H5, and what no test can show. A pass is
+  called bounded conformance, never equivalence. Traces whose BFS stopped at
+  `conformance_states` try no refused call: the run prints `warning[CodeCoverageIncomplete]`
+  on stderr and the exit status does not change. The new flag `--deny-incomplete` (with
+  `--code=run` only) makes it an error. `codegen --conformance` and `codegen --code` print the
+  same statement on stderr after the `wrote <traces>` line, and `warning: <traces>: the
+  conformance BFS stopped at its cap ...` when it stopped there. No generated file changes.
 - `verify --prove` (experimental) prints `note: z3 <version> is not a version the proof's
   resource limits were measured on (5.1.0); ...` on stderr when the z3 it runs is not one the
   rule and lemma limits were measured on (exactly 5.1.0, the version the flake pins), or its

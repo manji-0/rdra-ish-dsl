@@ -320,3 +320,151 @@ fn seal_is_for_typescript_only() {
         "{stderr}"
     );
 }
+
+/// A manifest whose `build` and `run` are rdra-ish's own `--version`: the conformance run
+/// passes with no toolchain, so what is tested is the statement of what it covered.
+fn noop_run(states: usize) -> String {
+    let bin = env!("CARGO_BIN_EXE_rdra-ish");
+    format!(
+        "{}root = \"../svc\"\nbuild = ['{bin}', '--version']\nrun = ['{bin}', '--version']\n",
+        MANIFEST.replace(
+            "conformance_states = 4096",
+            &format!("conformance_states = {states}")
+        )
+    )
+}
+
+fn run_project(name: &str, states: usize) -> PathBuf {
+    let dir = project(name, &noop_run(states));
+    let (code, _, stderr) = outcome(&rdra(&dir, &["codegen", "model", "--code"]));
+    assert_eq!(code, Some(0), "{stderr}");
+    dir
+}
+
+/// The lines of the coverage statement on stdout: from its title to the summary line.
+fn statement(stdout: &str) -> Vec<&str> {
+    stdout
+        .lines()
+        .skip_while(|l| !l.starts_with("coverage of "))
+        .take_while(|l| !l.starts_with("OK: code") && !l.starts_with("FAIL: code"))
+        .collect()
+}
+
+/// #439: `--code=run` states what the traces cover, on stdout before the summary line: the
+/// bound, the BFS, the moves run and left out, the refused calls, and the assumptions of
+/// bounded conformance. A complete suite warns of nothing.
+#[test]
+fn a_conformance_run_states_its_coverage() {
+    let dir = run_project("coverage", 4096);
+    let (code, stdout, stderr) = outcome(&rdra(&dir, &["check", "model", "--code=run"]));
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(
+        stdout.ends_with("OK: code: what the model requires, at --code=run\n"),
+        "{stdout}"
+    );
+    let lines = statement(&stdout);
+    assert_eq!(
+        lines[..5],
+        [
+            "coverage of [code.rust]: bounded conformance to the model, not equivalence",
+            "  bound: 1 row created per entity, Int 0..5",
+            "  BFS: complete, 6 states; 6 reached by the traces' calls",
+            "  moves: 5 of 5 run",
+            "  refused calls: 9 tried (calls on one existing row); interleaved commits: 7",
+        ],
+        "{stdout}"
+    );
+    assert!(lines[5].starts_with("  assumes: H1 "), "{stdout}");
+    assert!(
+        lines[6].starts_with("  cannot show: writes outside the port"),
+        "{stdout}"
+    );
+    assert_eq!(lines.len(), 7, "{stdout}");
+    assert!(!stderr.contains("CodeCoverageIncomplete"), "{stderr}");
+    // The same statement whenever it runs, and none below --code=run.
+    let again = outcome(&rdra(&dir, &["check", "model", "--code=run"])).1;
+    assert_eq!(statement(&again), lines);
+    let (_, build, _) = outcome(&rdra(&dir, &["check", "model", "--code=build"]));
+    assert!(!build.contains("coverage of"), "{build}");
+}
+
+/// A suite whose BFS stopped at its cap tries no refused call: it warns and passes, and
+/// `--deny-incomplete` fails it. The flag needs `--code=run`.
+#[test]
+fn a_capped_suite_warns_and_deny_incomplete_fails_it() {
+    let dir = run_project("capped", 3);
+    let (code, stdout, stderr) = outcome(&rdra(&dir, &["check", "model", "--code=run"]));
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(
+        stderr.contains("warning[CodeCoverageIncomplete]: [code.rust]: the conformance BFS stopped at its cap of 3 states"),
+        "{stderr}"
+    );
+    let lines = statement(&stdout);
+    assert!(
+        lines.contains(&"  BFS: stopped at its cap of 3 states; 3 reached by the traces' calls"),
+        "{stdout}"
+    );
+    assert!(
+        lines.contains(
+            &"  refused calls: none tried (the BFS stopped at its cap); interleaved commits: 2"
+        ),
+        "{stdout}"
+    );
+
+    let (code, stdout, stderr) = outcome(&rdra(
+        &dir,
+        &["check", "model", "--code=run", "--deny-incomplete"],
+    ));
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(
+        stderr.contains("error[CodeCoverageIncomplete]: [code.rust]:"),
+        "{stderr}"
+    );
+    assert!(
+        stdout.ends_with("FAIL: code: 1 error(s) at --code=run\n"),
+        "{stdout}"
+    );
+
+    let complete = run_project("complete-deny", 4096);
+    let (code, _, stderr) = outcome(&rdra(
+        &complete,
+        &["check", "model", "--code=run", "--deny-incomplete"],
+    ));
+    assert_eq!(code, Some(0), "{stderr}");
+
+    let (code, _, stderr) = outcome(&rdra(
+        &dir,
+        &["check", "model", "--code=build", "--deny-incomplete"],
+    ));
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(
+        stderr.contains("--deny-incomplete needs --code=run"),
+        "{stderr}"
+    );
+    let (code, _, stderr) = outcome(&rdra(&dir, &["check", "model", "--deny-incomplete"]));
+    assert_eq!(code, Some(2), "{stderr}");
+}
+
+/// `codegen` states the coverage of the traces it writes, on stderr, and warns of a cap.
+#[test]
+fn codegen_states_the_coverage_of_the_traces_it_writes() {
+    let dir = project("codegen-coverage", &noop_run(3));
+    let (code, _, stderr) = outcome(&rdra(&dir, &["codegen", "model", "--code"]));
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(
+        stderr.contains(
+            "coverage of svc/tests/traces.txt: bounded conformance to the model, not equivalence"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains(
+            "warning: svc/tests/traces.txt: the conformance BFS stopped at its cap of 3 states"
+        ),
+        "{stderr}"
+    );
+    let dir = project("codegen-complete", MANIFEST);
+    let (_, _, stderr) = outcome(&rdra(&dir, &["codegen", "model", "--code"]));
+    assert!(stderr.contains("  BFS: complete, 6 states"), "{stderr}");
+    assert!(!stderr.contains("warning: "), "{stderr}");
+}

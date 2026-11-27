@@ -778,7 +778,9 @@ computes the same rows without calling the core passes. A column the system does
 (a string, a `present` timestamp's value) is not compared. The traces cover the bounds of
 `check`, one row per entity, so a service that is wrong only with two rows passes. A BFS
 stopped at the cap covers the states it reached and tries no refused call, and the header
-says so. A counted trigger, a comparison proposition, and the clock are not compared, and no
+says so; `check --code=run` and `codegen` print a coverage statement and a warning for it,
+and `--deny-incomplete` fails the check
+([code-check.md](./code-check.md#what-a-passing-run-claims)). A counted trigger, a comparison proposition, and the clock are not compared, and no
 trace takes a tick, so a move after one is left out; the header lists these. An
 interleaving is tried only where B changes the state of a row A writes, so a service that
 does not hold a non-tag column a condition read, a row it reads and does not write, or a run

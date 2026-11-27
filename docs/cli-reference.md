@@ -96,6 +96,7 @@ Type-check the model, run the consistency checks, and explore the lifecycle. Wri
 
 ```
 rdra-ish check <INPUTS...> [--strict] [--deny-deprecated] [--guards] [--code[=fresh|build|run]]
+               [--deny-incomplete]
                [--max-patterns <N>] [--max-states <N>] [--memory <SIZE>]
                [--instance-count <N>] [--instances <ENTITY=N>]... [--int-range-max <N>]
                [--buc <ID>]... [--entity <ID>]... [--without-usecase <ID>]...
@@ -128,6 +129,7 @@ The consistency checks cover:
 | `--deny-deprecated` | off | Make each `DeprecatedSyntax` warning (a [deprecated form](./language-reference.md#deprecated-and-removed-forms)) an error. |
 | `--guards` | off | After a clean run, print which rules each guard protects. See [Guard dependencies](#guard-dependencies). |
 | `--code[=<LEVEL>]` | off; `fresh` when given bare | After a clean run, check the service code the [`[code]` tables](#the-code-tables) name: `fresh`, `build`, or `run`. Write the level with `=`. See [`check --code`](#check---code). |
+| `--deny-incomplete` | off | With `--code=run` only (else exit 1; without `--code`, exit 2): fail when a table's traces are not complete, that is, their BFS stopped at `conformance_states`. See [What a run covers](#what-a-run-covers). |
 | `--max-patterns <N>` | 2^(10 + 8·(n − 1)) for n = `--instance-count` (`1024`, `262144`, ...) | Cap on each entity's distinct patterns in its view's cone. Past it: the `PatternCapReached` error. A cone of a rule gathers no pattern, so the cap does not stop it. |
 | `--max-states <N>` | none | Cap on the joint states of one cone. Past it: the `StateCapReached` error, which names what the states vary in. |
 | `--memory <SIZE>` | `memory` under `[check]`, else `4GiB` | What the run may hold. A cone past it stops with the `MemoryCapReached` error. See [Memory limit](#memory-limit). |
@@ -289,9 +291,39 @@ error[CodeObligationUnowned_Unique_Order_note]: no code owns the obligation Uniq
 | `CodeUnmapped` | error | The count of errors that belong to no use case, the first one quoted. |
 | `CodeBuildFailed` | error | The build failed with no error rdra-ish reads. |
 | `CodeConformance` | error | `run`: the conformance test failed; the message is the harness's first difference. |
+| `CodeCoverageIncomplete` | warning; error with `--deny-incomplete` | `run`: the BFS behind the traces stopped at `conformance_states`, so the moves past it are not run and no call is tried as refused. |
 | `CodeObligationUnowned_<name>` | error | The obligation has no owner. |
 | `CodeObligationOwnerMissing_<name>` | error | Its owner names a file that does not exist. |
 | `CodeObligationUnknown_<name>` | warning | An owner names an obligation the model does not have. |
+
+#### What a run covers
+
+After `--code=run`, stdout states what the traces of each table cover, before the summary
+line. The lines come in this order and hold counts only, so the text is the same on every
+run of the same model. On `tests/fixtures/codegen/conformance.rdra`:
+
+```
+coverage of [code.rust]: bounded conformance to the model, not equivalence
+  bound: 1 row created per entity, Int 0..5
+  BFS: complete, 6 states; 6 reached by the traces' calls
+  moves: 5 of 5 run
+  refused calls: 9 tried (calls on one existing row); interleaved commits: 7
+  assumes: H1 the service answers from the tracked columns and the call alone; H2 every reachable call is tried; H3 seed and snapshot reach the real store; H4 every write goes through the port, one call one transaction; H5 the rules read tracked columns only
+  cannot show: writes outside the port, locking, races, external effects, liveness, who issues a capability, data outside the model
+```
+
+When there is something to list, the `moves` line ends `; <n> left out (a tick, or a use case
+with no function)`, and a `not compared:` line after the refused calls names what the harness
+does not compare (a counted trigger, a proposition, the clock).
+A passing run means bounded conformance: under H1 to H5, the safety rules the model verified
+over tracked columns hold for runs driven through the port, with at most that many rows
+created per entity. It does not mean the service is equivalent to the model. When the BFS
+stopped at its cap, the `BFS` line says `stopped at its cap of <N> states`, the refused calls
+are `none tried`, and stderr gets `warning[CodeCoverageIncomplete]`: a service that runs a
+call the model refuses passes such a suite. The exit status does not change unless
+`--deny-incomplete` is given. Raise `conformance_states` and run `codegen --code` again to
+complete it. The statement describes the traces, so it is the same when `run` in the table
+replaces the default command.
 
 **Output and exit codes.** The last stdout line, after the model check's `OK:` line, is
 `OK: code: what the model requires, at --code=<level>`, or `FAIL: code: <n> error(s) at
@@ -1751,7 +1783,7 @@ going, and [Generated code style](./design/algebraic-codegen.md#generated-code-s
 | `--package <NAME>` | `domain` | Go only: the package name. Put the file in its own directory and finish it in another package, so only code outside it is kept from building a state. |
 | `--allow-failing` | off | Generate when `check` fails. The state types then narrow no column, there are no functions or rule checks, and each error is an obligation `NotMet_<error>`. |
 | `--conformance <FILE>` | none | On a model `check` passes, also print the conformance port and harness, and write the traces to `FILE`. |
-| `--conformance-states <N>` | `65536` | The most states the BFS behind the traces explores. |
+| `--conformance-states <N>` | `65536` | The most states the BFS behind the traces explores. After writing the traces, `codegen` prints their coverage statement on stderr (as [`check --code=run`](#what-a-run-covers) does), and `warning: <traces>: the conformance BFS stopped at its cap ...` when it stopped there. |
 | `--seal` | off | `--lang ts` only (else exit 2): each state type gets a property keyed by an unexported `unique symbol`, so code outside the module cannot write a state as an object literal (TS2741). A type assertion still gets around it. |
 | `--check <FILE>` | none | Generate again and compare with `FILE` instead of printing. Not with `-o`. With `--conformance <TRACES>`, also compares the traces by hash. |
 
