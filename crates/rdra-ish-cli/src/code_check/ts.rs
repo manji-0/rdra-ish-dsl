@@ -11,7 +11,7 @@ use rdra_ish_emit::codegen::probe::Probe;
 use rdra_ish_emit::codegen::{Lang, ProbeBinding};
 
 use super::map::{CompilerMessage, Finding};
-use super::{Backend, Target};
+use super::{Backend, CodeDiagnostic, Target};
 use crate::generated_file::stamp;
 use crate::paths::relative;
 
@@ -185,6 +185,33 @@ impl Backend for TypeScript {
         out
     }
 
+    /// ES module syntax in a file tsc compiles as CommonJS under `verbatimModuleSyntax`
+    /// (TS1286, TS1287, TS1295): the package says `"type": "commonjs"`, or says nothing and
+    /// the tsconfig's `module` reads that as CommonJS. Every generated file then fails, so
+    /// the cause is named once instead of a `CodeError` per use case.
+    fn build_cause(&self, messages: &[CompilerMessage]) -> Option<CodeDiagnostic> {
+        let cjs: Vec<&CompilerMessage> = messages
+            .iter()
+            .filter(|m| matches!(m.code.as_deref(), Some("TS1286" | "TS1287" | "TS1295")))
+            .collect();
+        let first = cjs.first()?;
+        Some(CodeDiagnostic {
+            name: "CodeCommonJs".to_string(),
+            message: format!(
+                "tsc compiles the probe and the domain code as CommonJS, and they are ES modules: {} of the build's {} error(s) say so",
+                cjs.len(),
+                messages.len()
+            ),
+            model: None,
+            code: Some(first.shown()),
+            fix: Some(
+                "set \"type\": \"module\" in the package.json above them (npm 11's `npm init -y` writes \"commonjs\")"
+                    .to_string(),
+            ),
+            warning: false,
+        })
+    }
+
     /// The probe line's function returns the service as the contract: TS2741 is one member
     /// missing, TS2739 / TS2740 several, TS2322 a member of another type. tsc has no code for
     /// a contract missing whole; the shared mapping tells it by every member named.
@@ -240,7 +267,7 @@ impl Backend for TypeScript {
             return Some(format!("node runs no TypeScript as it is: `check --code=run` needs Node {NODE} or later (type stripping), or a `run` command in [code.ts]"));
         }
         if all.contains("Cannot use import statement outside a module") {
-            return Some("node ran the probe as CommonJS: the probe and the domain code are ES modules, so the package.json above them needs \"type\": \"module\" (`npm init -y` writes \"commonjs\")".to_string());
+            return Some("node ran the probe as CommonJS: the probe and the domain code are ES modules, so the package.json above them needs \"type\": \"module\" (npm 11's `npm init -y` writes \"commonjs\")".to_string());
         }
         all.lines()
             .rev()
@@ -354,6 +381,33 @@ mod tests {
             TypeScript.run_failure("", report).as_deref(),
             Some("traces line 7: after `Pay 1`, the store differs")
         );
+    }
+
+    #[test]
+    fn a_commonjs_build_is_one_finding() {
+        let messages = TypeScript.parse_messages(
+            "src/rdra_contract.ts(12,1): error TS1287: A top-level 'export' modifier cannot be used on value declarations in a CommonJS module when 'verbatimModuleSyntax' is enabled.\nsrc/domain.ts(46,1): error TS1287: A top-level 'export' modifier cannot be used on value declarations in a CommonJS module when 'verbatimModuleSyntax' is enabled.\n",
+            "",
+        );
+        let cause = TypeScript.build_cause(&messages).unwrap();
+        assert_eq!(cause.name, "CodeCommonJs");
+        assert!(
+            cause
+                .message
+                .ends_with("2 of the build's 2 error(s) say so"),
+            "{}",
+            cause.message
+        );
+        assert!(cause
+            .code
+            .unwrap()
+            .starts_with("src/rdra_contract.ts:12:1  TS1287"));
+        assert!(cause.fix.unwrap().contains("\"type\": \"module\""));
+        let other = TypeScript.parse_messages(
+            "src/rdra_contract.ts(12,1): error TS2741: Property 'commitShip' is missing.\n",
+            "",
+        );
+        assert!(TypeScript.build_cause(&other).is_none());
     }
 
     #[test]

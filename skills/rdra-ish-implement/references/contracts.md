@@ -33,7 +33,7 @@ new = "svc.New()"
 | `module` | Rust: the generated module's path (`svc::domain`). Go: `domain`'s import path. |
 | `new` | An expression making a fresh service, for the conformance test. Required in Rust. |
 | `package` | Go: the package name of `domain`. Default `domain`. |
-| `seal` | TypeScript: write `domain` as `codegen --seal` does. Set it: a state built as an object literal, skipping the transition function, then fails `build` (TS2741) instead of passing `run`. |
+| `seal` | TypeScript: write `domain` as `codegen --seal` does. Set it with `domain`: a state built as an object literal, skipping the transition function, then fails `build` (TS2741) instead of passing `run`. |
 | `tsconfig` | TypeScript: the tsconfig the probe's `tsconfig.rdra.json` extends. |
 | `root` | Where the build runs. Default: the nearest directory above `domain` with `Cargo.toml`, `go.mod`, `package.json`, or `tsconfig.json`. |
 | `build`, `run` | A command list replacing the language's default. |
@@ -41,8 +41,9 @@ new = "svc.New()"
 
 `[code.typescript]` is another spelling of `[code.ts]`. An unknown key fails every loading
 command with the line. TypeScript `run` needs Node 22.18 or later, the service's imports
-name the `.ts` files, and the `package.json` sets `"type": "module"` (`npm init -y` writes
-`"commonjs"`, and Node then refuses the probe's `import`).
+name the `.ts` files, and the `package.json` sets `"type": "module"` (npm 11's `npm init -y`
+writes `"commonjs"`: `build` then fails with `CodeCommonJs`, or `run` with a
+`CodeConformance` that says so).
 
 ## What `codegen` prints
 

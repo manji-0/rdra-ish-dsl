@@ -256,9 +256,12 @@
   the CLI reference. Verdicts and stdout do not change; in a release build the
   `RDRA_ISH_WF_REDUCED_STATS` line no longer fills its divergence columns. The test-only
   `RDRA_ISH_TEST_QUOTIENT_HITS` prints the quotient cache's hits for the CLI tests.
-- TypeScript: `check --code=run` on a probe Node loads as CommonJS (a `package.json` with
-  `"type": "commonjs"`, which `npm init -y` writes) now says that the probe and the domain
-  code are ES modules and the package needs `"type": "module"`, in place of Node's last line.
+- TypeScript: `check --code` names a package that makes the probe and the domain code
+  CommonJS (`"type": "commonjs"`, which npm 11's `npm init -y` writes); they are ES modules
+  and need `"type": "module"`. At `build` under `verbatimModuleSyntax`, the new
+  `CodeCommonJs` stands in for the `CodeError` per use case and `CodeUnmapped` that tsc's
+  TS1286 / TS1287 / TS1295 gave; at `run`, the `CodeConformance` says so in place of Node's
+  last line.
   The docs and the implement skill say so, recommend `seal = true` in `[code.ts]` (a state
   built as an object literal, skipping the transition function, fails `build` instead of
   passing `run`), and show how to answer an API's writes and reads in one shape

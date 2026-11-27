@@ -242,10 +242,11 @@ table. The LSP never does.
 | Go | `go test -count=1 -run ^$ -gcflags=-e ./<probe dir>` in `root` | `go test -count=1 -run ^TestRdraConformance$ ./<probe dir>`, with `-v` for a model adapter |
 
 `tsconfig.rdra.json` is a generated file that extends the project's tsconfig and holds only
-the probe. An older Node fails `run` with a `CodeConformance` that says so, and so does a
-probe Node loads as CommonJS: the probe and the domain code are ES modules, and `npm init -y`
-writes `"type": "commonjs"`. A project that
-runs TypeScript another way sets `run` (`["npx", "tsx", "src/rdra_contract.ts"]`). Go names
+the probe. An older Node fails `run` with a `CodeConformance` that says so. The probe and
+the domain code are ES modules, and npm 11's `npm init -y` writes `"type": "commonjs"`: under
+`verbatimModuleSyntax` tsc then fails `build` with one `CodeCommonJs` in place of an error
+per use case, and without it Node fails `run` with a `CodeConformance` that names the
+setting. A project that runs TypeScript another way sets `run` (`["npx", "tsx", "src/rdra_contract.ts"]`). Go names
 one missing method per error, so the Go probe names each method of a contract on a line of
 its own.
 
@@ -294,6 +295,7 @@ error[CodeObligationUnowned_Unique_Order_note]: no code owns the obligation Uniq
 | `CodeError_<UseCase>` | error | Another error on the use case's probe line or naming its methods. |
 | `CodeUnmapped` | error | The count of errors that belong to no use case, the first one quoted. |
 | `CodeBuildFailed` | error | The build failed with no error rdra-ish reads. |
+| `CodeCommonJs` | error | TypeScript: tsc compiles the probe and the domain code as CommonJS under `verbatimModuleSyntax` (TS1286, TS1287, TS1295); the one finding of that build. Fix: `"type": "module"` in `package.json`. |
 | `CodeConformance` | error | `run`: the conformance test failed; the message is the harness's first difference. |
 | `CodeMutantSurvived` | error | `run`: a mutant trace of the self-check passed. The `code:` line says whether the run passed or failed at another row. |
 | `CodeCoverageIncomplete` | warning; error with `--deny-incomplete` | `run`: the BFS behind the traces stopped at `conformance_states`, so the moves past it are not run and no call is tried as refused; or the traces leave refusals of the model untried, or never run a use case of the port. |
@@ -753,7 +755,7 @@ Unique_Payment_Order = "../service/migrations/003_payment.sql"
 | `package` | Go: the package name of `domain` (`--package`), default `domain`. When set, the probe imports the domain package under this name, so an import path whose last element differs builds. |
 | `root` | The directory the build runs in and the ledger scans. Default: the nearest directory above `domain` with `Cargo.toml`, `go.mod`, `package.json`, or `tsconfig.json`. |
 | `build`, `run` | The command `--code=build` / `--code=run` runs in place of the default, as a list of arguments. Runs only when that level is given on the command line. |
-| `seal` | TypeScript: `true` writes `domain` as `codegen --seal` does. Default `false`; set it. Without it, a service can build a state as an object literal and skip the transition function and its rule checks, and `run`, which compares only what is stored, passes it wherever the traces store the same rows. With it, the literal fails `build` (TS2741). A service that makes states only through `fromRow` and the transition functions builds the same either way. |
+| `seal` | TypeScript: `true` writes `domain` as `codegen --seal` does. Default `false`; set it in a table with `domain` (an `adapter` has no state types, and ignores it). Without it, a service can build a state as an object literal and skip the transition function and its rule checks, and `run`, which compares only what is stored, passes it wherever the traces store the same rows. With it, the literal fails `build` (TS2741). A service that makes states only through `fromRow` and the transition functions builds the same either way. |
 | `tsconfig` | TypeScript: the tsconfig `tsconfig.rdra.json` extends. Default: `tsconfig.json` in `root` when it exists; else `tsconfig.rdra.json` sets `strict` itself. |
 
 An unknown key fails every loading command, as under `[check]`. `seal` or `tsconfig` under
