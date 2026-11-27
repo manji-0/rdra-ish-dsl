@@ -8,16 +8,22 @@ on a smaller system decides what `T_β(M)` (D13) would: a cone of influence, a c
 an independent sub-lifecycle, a run up to slot permutations, and a run at more instances. It
 uses the notation of [semantics.md](./semantics.md) and does not redefine it.
 
-The code read is commit `fb6928c74ccc5b479dea07d92cc1e39c34ddd218` (origin/main,
-2026-11-28). The other theory documents pin `b83b9544`; `git diff --stat b83b9544 fb6928c7 --
-crates scripts` touches 30 files, all in codegen, the LSP, the plugin manifest and two
-scripts, and none under `lifecycle/`, `verify/`, `property_cone.rs`, or `emit/tla`, so every
-statement here holds at both commits. How the document changed after it was first written is
-in [Errata](#errata). `unread@pin` marks a statement whose cited code was not read at the pinned commit ([claims inventory](./claims.md#how-to-read-a-row)). Paths are relative to
+The code read is commit `c97c88ef0531a528a69809cdc55b2f83147cd9e8` (origin/main,
+2026-11-28, the merge of #525). The document was first written against `fb6928c7` and was
+brought up to date with `c97c88ef` after the final audit of docs/theory: the code that the
+fixes of P1, P7, P10, P11, P20, P30, P31, P32 and P33 changed (#477, #480, #488, #509, #512,
+#516, #518, #521, #522) was re-read at `c97c88ef`, and for every other function, type and
+constant this document names, its definition at `fb6928c7` was compared with the one at
+`c97c88ef`. A definition that did not change, or changed only by a checked narrowing cast
+(`id8`, `id32`, #513), reads as it did; one that changed otherwise was re-read. `#525`, the
+last merge before the pin, changes only `cli/src/prove.rs`, `cli/src/cli.rs` and prose, none
+of which this document cites. How the document changed after it was first written is in
+[Errata](#errata). `unread@pin` marks a statement whose cited code was not read at the
+pinned commit ([claims inventory](./claims.md#how-to-read-a-row)). Paths are relative to
 `crates/rdra-ish-core/src/lifecycle/` unless they start with `cli/`
 (`crates/rdra-ish-cli/src/`) or `cli/tests/` (`crates/rdra-ish-cli/tests/`), as in
-[semantics.md](./semantics.md). No tool was run for this document; every statement about
-behavior is a reading of the code, and every measured number is quoted from the note or
+[semantics.md](./semantics.md). No rdra-ish tool was run for this document; every statement
+about behavior is a reading of the code, and every measured number is quoted from the note or
 pull request named beside it.
 
 Each result has four parts: the statement, its hypotheses with the code that establishes
@@ -71,8 +77,8 @@ action `a`:
   effects: the existence for `Create`; the existence, every column, and every owner of the
   entity for `Delete`; the variable for `Assign`, `Transition`, `Choose`; `now` for `Tick`.
   `Wr(a)` is syntactic. It over-approximates what a step can change: D8 keeps a deleted row's
-  owners, but `Wr` lists them (open problem P9 records the prose; the over-listing only adds
-  actions to a cone).
+  owners, but `Wr` lists them (the over-listing only adds actions to a cone; problem P9
+  recorded design prose that said a delete resets owners, corrected in #475).
 - `ex(v)` is `cone.rs::TransitionSystem::existences`: the existence of `v`'s entity, and for an
   owner also the existence of its parent.
 
@@ -133,7 +139,8 @@ restrict_to(W, K)`. `W` has
 - a *freed entity* `E` when some `a ∈ A_W` has a `New` parameter on `E` and `Exists(E) ∉ W`
   (`cone.rs::TransitionSystem::cone_frees_slots`);
 - a *left-out mark* `μ` when some `a ∈ A_W` has `(μ, R_μ) ∈ Mk(a)` and `μ ∉ W`
-  (`trace.rs::TransitionSystem::free_triggers` names the use cases a trace runs this way);
+  (`cone.rs::TransitionSystem::cone_leaves_marks` decides it for a cone, since #477;
+  `trace.rs::TransitionSystem::free_triggers` names the use cases a trace runs this way);
 - a *dropped copy* when some `a ∈ A_W` has `(τ, R_τ) ∈ Cp(a)` with `τ ∉ W`.
 
 `W` is *exact* when it has no freed entity and no left-out mark. A dropped copy does not
@@ -228,17 +235,22 @@ value at `s` depends on `π_W(s)` only, so a violation exists in one system iff 
 the other. For an `after` assertion, the checked step's writes are in the seed, so a step of
 `T` changes the state iff its projection does (D17 checks state-changing steps). ∎
 
-*Hypotheses and code.* Exactness: `cone_frees_slots` is false and `free_triggers` of every
-trace is empty, the latter checked per trace, not per cone. The builder facts of (iv):
-`build/sets.rs` and `analysis/effect.rs::copyable`.
+*Hypotheses and code.* Exactness: `cone_frees_slots` and `cone_leaves_marks` are false for the
+cone. Per trace, `trace.rs::TransitionSystem::annotate` records the freed entities a trace
+creates past the bound (`over_bound`) and the left-out marks it runs without
+(`free_triggers`), and `trace.rs::Trace::vouched` holds when both are empty (Corollary A28′
+below). The builder facts of (iv): `build/sets.rs` and `analysis/effect.rs::copyable`.
 
 *Evidence.* P-full (this section). D: `core/tests/cone.rs::cone_exploration_equals_the_projection_of_the_whole_system`
 compares the cone's reachable set with the projection of the whole system's;
 `::a_parent_existence_joins_the_cone_without_its_columns` checks (C4). The comparison
-(`core/tests/cone.rs::assert_cones_exact`) separates only the cones that free slots: it asserts
-equality for every other cone, a cone with a left-out mark included. It therefore shows that no
-cone of its samples has a left-out mark that changes the reachable set; it does not test the
-exactness condition of A1 against a cone that has one.
+(`core/tests/cone.rs::assert_cones_exact`) asserts equality of the reachable set with the
+projection only on cones with neither deviation. On a cone that frees slots or leaves a mark
+out it asserts the inclusion `π_W(Reach(T)) ⊆ Reach(C)` of Theorem A2, and it asserts that no
+entity cone leaves a mark out (P32, below). Until #477 it asserted equality on every cone that
+freed no slot, a cone with a left-out mark included, so it did not test the exactness condition
+against a cone that has one; `::a_cone_that_leaves_a_mark_out_keeps_the_whole_systems_verdict_and_view`
+now runs it on one.
 
 ---
 
@@ -267,8 +279,9 @@ findings of an entity cone are existential or branching. `StateDiag::NoWitness`,
 has a property. `::Deadlock` says that a reachable state is stuck: no path from it changes the lifecycle column or deletes the row ([semantics.md, D25](./semantics.md#d25)). An over-approximating `C`
 reaches more states and edges than `π_W(T)` does, so it can satisfy such a check that `T`
 fails, and it can also fail one that `T` satisfies. Those checks need exactness (Theorem A1),
-or A8's bisimulation on a reduced cone. Their soundness on a cone with a left-out mark is open
-problem P32, below.
+or A8's bisimulation on a reduced cone. Since #477 no entity cone leaves a mark out
+(`cone.rs::TransitionSystem::target_cone`, P32 below); an entity cone can still free slots,
+and then its findings are those of a larger bound (Proposition A28).
 
 A counterexample of a non-exact cone is a run of `C`. What it says about `T` depends on the
 deviation.
@@ -292,49 +305,84 @@ other step of the proof of Lemma 3 reads `F`. ∎
 allows`. So a safety counterexample with an empty `over_bound` is a reachable violation of
 `T_β(M)`, and one with a non-empty `over_bound` is one of `T_{β'}(M)`.
 
-**Left-out marks have no lifting statement.** A cone leaves `μ` out when some writer of `μ` is
-not taken; then `restrict_to` drops the handler's guard on `μ` and its `Triggered` parameter, and
-`C` runs the handler without the event. Nothing bounds the bound at which `T` would allow it:
-the event order (D11) can forbid the run at every `β`. Such a counterexample is a candidate
-only. The code treats it as follows.
+**Corollary A28′ (exactness per trace).** Let `ρ` be a trace of `C = T|W` none of whose steps
+runs an action that reads a mark outside `W` (`free_triggers` of `ρ` is empty). Then `ρ` lifts,
+step for step, as in Proposition A28, whether or not `W` has a left-out mark elsewhere.
 
-- `verify/bfs.rs::BfsCone::verdict` prints it as `counterexample` (and fails the run), with the
-  trace's `note: … runs UC without Ev having been raised`.
-- `verify/refuted.rs::refuted` marks the rule `refuted` and skips its proof.
-  `verify/escalate.rs::escalate` prints it as `counterexample at k instances` and fails the run.
-  Neither reads `free_triggers` or `over_bound`.
-- `property_cone.rs::counterexample` and `explore/properties.rs::TransitionSystem::decide_property`
-  re-decide a counterexample on `T` only when `cone_frees_slots`; a property cone whose
-  non-fair actions leave a mark out reports its counterexample as `counterexample`.
+*Proof sketch.* The proofs of Lemma 3 and Proposition A28 use exactness one step at a time:
+case (i) needs that the step's own action has no dropped `Triggered` parameter, and case (ii)
+that its own mark guards read marks in `W`. Both hold for an action that reads no mark outside
+`W`, and no step of `ρ` runs any other action. ∎ That `free_triggers` lists every step whose
+action reads a mark outside the cone (`trace.rs`, read at the pin) is the one fact the corollary
+takes from the code.
 
-This is open problem P1, confirmed at all four sites. For a universal check P1 yields no
-wrong `ok`. A state rule, an `after` assertion, or a property passes on `C` only if it passes on
-`T` (Theorems A2 and A4.1). `refuted.rs` and `escalate.rs` also ignore `over_bound`, so
-`at k instances` can understate the bound a freed-slot counterexample needs (P11).
+**Left-out marks: candidates and refinement.** A cone leaves `μ` out when some writer of `μ`
+is not taken; then `restrict_to` drops the handler's guard on `μ` and its `Triggered`
+parameter, and `C` runs the handler without the event. Nothing bounds the bound at which `T`
+would allow it: the event order (D11) can forbid the run at every `β`. A counterexample that
+runs such a handler is a candidate only. Since #477 and #509 the code decides every candidate
+again before it counts, as counterexample-guided refinement does (Clarke et al. 2000):
 
-**Entity-cone findings on a cone with a left-out mark (P32).** For the existential and
-branching findings of an entity cone, a left-out mark can produce a wrong `ok`.
-`targets.rs::entity_findings` and `findings.rs::state_model_findings` decide `NoWitness`,
+- `targets.rs::TransitionSystem::recheck_on` decides a state rule or an `after` assertion by
+  rounds. Each round runs the current cone, reduced as `verify` reduces one. A counterexample
+  the cone vouches for (`Trace::vouched`: no `free_triggers`, and with `slots` no `over_bound`)
+  is the verdict, a lifted trace by Corollary A28′. Otherwise `TransitionSystem::refine` adds
+  to the kept actions every action that raises an event the trace ran without, and with
+  `slots` adds the existence of each entity the trace created past the bound, and the next
+  round runs. A round that names nothing new runs the exact cone
+  (`cone.rs::TransitionSystem::exact_target_cone`: `keep_writers` to its fixed point, so no
+  mark is left out and, with `slots`, no slot is freed). A round without a counterexample
+  decides the check: it holds when the run ended, and is undecided when a cap stopped it.
+  The loop ends because each round keeps more actions or reads more variables, and the exact
+  cone bounds both. That the exact cone's counterexample is vouched for is a `debug_assert!`
+  only; it follows from `exact_target_cone`, whose own `debug_assert!`s state the same.
+- `verify` (`cli/verify/bfs.rs::recheck_cones`, called before the prover reads the safety
+  verdicts) and `check` (`targets.rs`, the verdict of an invariant or `after` target) recheck,
+  without `slots`, each violation whose trace has a free trigger; only the vouched violations
+  and the rechecked ones count (`BfsCone::violations`), so `verify/refuted.rs::refuted` and the
+  run's result read no candidate. A freed-slot counterexample without a free trigger still
+  prints, with its `over_bound` note, as Proposition A28 allows, and `refuted.rs::instances`
+  adds the rows it creates past the bound to the instances it records (P11).
+- `verify/escalate.rs::escalate` rechecks with `slots`, so a counterexample it prints is a run of
+  `T_{β+k}(M)` itself, and it prints the instances of the cone that found it.
+- A property cone with a left-out mark counts only its `ok`: `property_cone.rs::inexact` gives
+  `Why::LeavesMarks` (after `Why::FreesSlots`), so a counterexample there is `not decided` on
+  the cone and runs on the whole model, and `explore/properties.rs::TransitionSystem::decide_property`
+  decides an explored form's violation again on `T` when `cone_frees_slots` or
+  `cone_leaves_marks` holds.
+
+Before #477 every one of these sites printed or counted a candidate as a counterexample (open
+problem P1, read at all four sites), and `refuted.rs` and `escalate.rs` ignored `over_bound`, so
+`at k instances` could understate the bound a freed-slot counterexample needs (P11). For a
+universal check neither yielded a wrong `ok`: a state rule, an `after` assertion, or a property
+passes on `C` only if it passes on `T` (Theorems A2 and A4.1). Evidence:
+`core/tests/trace.rs::a_candidate_counterexample_refines_its_cone_with_the_events_raisers`
+(one round adds the raiser and finds the vouched trace, on a cone smaller than the exact one),
+`::a_recheck_that_counts_every_slot_finds_only_runs_within_the_bound`, and
+`core/tests/cone.rs::a_cone_that_leaves_a_mark_out_keeps_the_whole_systems_verdict_and_view`.
+
+**Entity-cone findings on a cone with a left-out mark (P32, fixed in #477).** For the
+existential and branching findings of an entity cone, a left-out mark could produce a wrong
+`ok`. `targets.rs::entity_findings` and `findings.rs::state_model_findings` decide `NoWitness`,
 `Deadlock`, `NeverRuns`, arms never taken, and values never chosen on the entity's cone, as
-formal-verification.md, "State models with TLC alone", says. Neither function reads
-`free_triggers`, `over_bound`, or `cone_frees_slots`. Outside `cone.rs`, which defines
-`cone_frees_slots`, the code reads those three names only in `property_cone.rs`,
-`explore/properties.rs`, `verify/jobs.rs`, `trace.rs`, and the trace printers
-(`cli/state_findings.rs`, `rdra-ish-emit`'s `state_pattern.rs`); `verify/tlc.rs` (the explored
-jobs) reads none of them, only the `frees_slots` field that `verify/jobs.rs` sets from
-`cone_frees_slots`. A left-out mark lets `C` run a handler
-that `T` holds back, and that adds edges and states. An added edge can leave a state that is a
-deadlock of `T`. An added state can witness a lifecycle state that `T` never reaches, or run a
-use case that never runs in `T`. In each case the finding is missing. A missing finding has no
-trace, so the per-trace `free_triggers` note never appears. `NeverRuns`, arms, and values are
-combined over every entity cone that keeps the action (`targets.rs::RunsSoFar`), and one cone
-that fires the action clears the finding. So a single cone with a left-out mark can hide the
-finding for the whole run.
+formal-verification.md, "State models with TLC alone", says, and neither reads a trace's
+`free_triggers`. A left-out mark lets `C` run a handler that `T` holds back, and that adds
+edges and states. An added edge can leave a state that is a deadlock of `T`. An added state can
+witness a lifecycle state that `T` never reaches, or run a use case that never runs in `T`. In
+each case the finding is missing, and a missing finding has no trace for a per-trace check to
+read. `NeverRuns`, arms, and values are combined over every entity cone that keeps the action
+(`targets.rs::RunsSoFar`), and one cone that fires the action clears the finding, so a single
+cone with a left-out mark could hide the finding for the whole run.
 
-The following model is constructed by hand and was not run at the pinned commit. A model of
-the same shape, a handler the cone takes while its raiser starts from a state never reached, is
-the test `tests/cone.rs::a_cone_that_leaves_a_mark_out_keeps_the_whole_systems_verdict_and_view`,
-added by #477, which fixes P32 after the pinned commit. Order's exit `ShipOrder`
+The fix makes the cone exact for marks instead of checking traces:
+`cone.rs::TransitionSystem::target_cone` returns `exact_target_cone(target, false)` for an
+entity whose own cone would leave a mark out, so every cone that feeds the state-model findings
+and `RunsSoFar` has no left-out mark, and Theorem A1 or A8 applies to it given its freed
+slots. `core/tests/cone.rs::assert_cones_exact` asserts that no entity cone leaves a mark out on
+every sample it runs. A model of the shape below, a handler the cone takes while its raiser
+starts from a state never reached, is
+`core/tests/cone.rs::a_cone_that_leaves_a_mark_out_keeps_the_whole_systems_verdict_and_view`.
+The model as first written here, constructed by hand and not run: Order's exit `ShipOrder`
 reads `Payment.status == paid`. `ConfirmPayment`, triggered by `EvPaid`, writes `Payment.status`.
 The raiser `ReadNotice` writes only Notice and Payment marks and starts from a state that is
 never reached. Order's cone takes `ConfirmPayment`, because it writes the Payment status that
@@ -343,12 +391,12 @@ does not hold `ReadNotice`, since it writes nothing in `W`. So the mark `EvPaid`
 by (C2) and is left out.
 In `C`, Payment reaches `paid`. Order's deadlock and the `NoWitness` of `shipped` disappear.
 Payment's own cone may still report its `NoWitness`, so the run as a whole can stay red, but the
-verdict on Order is wrong.
+verdict on Order was wrong. Under the fix, Order's cone is its exact cone, which keeps every
+action that writes into it and so `ReadNotice`, the writer of the mark `ConfirmPayment` reads.
 
-A freed entity gives a weaker version of the problem. By Proposition A28, the cone's findings
-are those of a larger bound, so the result depends on the bound, not on the event order.
-Problem P32 is fixed in #477, after the pinned commit. This document records the problem as
-it appears at the pinned commit.
+A freed entity gives a weaker version of the problem, which stays: by Proposition A28 the
+cone's findings are those of a larger bound, so the result depends on the bound, not on the
+event order.
 
 **Proposition A3 (counters are never left out).** If `W` holds the counter `κ` of a counted
 edge `triggers(Ev, UC).counted(k)`, then every raiser and the handler of that edge are in
@@ -399,7 +447,8 @@ dropped-copy case does not arise.
 
 *Evidence.* P-full relative to the covering cone's `ok`, because the proof reduces to Theorem
 A2. `cone_jobs` reduces `C_ℓ` (`reduced_cone_in`), and when it is reduced its `ok` rests on
-Theorem A8 (P7, P31), as every reduced cone's verdict does. No test names A27. The claims
+Theorem A8 (Lemma 6, P31; (B1)–(B3) certified at run time, P7), as every reduced cone's verdict
+does. No test names A27. The claims
 inventory had no row for this verdict, so A27 is added.
 
 ---
@@ -454,8 +503,8 @@ exact by construction.
    `verify/native.rs::native_property` runs `p.cone.reduced`, and `Plain::of` asserts
    (`shadow_assert!`) that its run is of `cone.reduced`. So the implication is Theorem A8.4
    (`R ⊨ P ⇔ C ⊨ P` under `Plain`), then Theorem A4.1, then D21. A8 is a sketch: it assumes
-   (B1)–(B3) (P7) and Lemma 6 (P31). When nothing reduces, `reduced` is `C` itself and A4.1
-   alone suffices.
+   (B1)–(B3), which every build has certified on the partition it uses since #480 (P7), and
+   Lemma 6 (P31). When nothing reduces, `reduced` is `C` itself and A4.1 alone suffices.
 2. `Cone_P_WF` (`WfNext` on `C`) counterexample, `W` exact ⇒ `T ⊭ P` under `WfNext`.
 3. `Cone_P_WF` `ok` and `whole` ⇒ `T ⊨ P` under `WfNext`. On a reduced cone, the first
    `WfNext` run reads `R` (`decide_liveness_reduced`), and its `ok` is `C`'s by Theorem A15,
@@ -475,14 +524,17 @@ every created entity's existence is in `Wr ⊆ W`. So `W` is exact and every ste
 the state changes `π_W`. Then `WF_vars(Next)` of `T` projects to `WF_vars(Next)` of `C`, and
 the proof of A4.1 goes through under `WfNext`. ∎
 
-`property_cone.rs::after_plain` and `::after_wf` implement exactly these implications; the
-`debug_assert!(!whole || !frees_slots)` in `PropertyCone::under` is the second sentence of (3).
+`property_cone.rs::after_plain` and `::after_wf` implement exactly these implications, with
+"`W` exact" read as `property_cone.rs::inexact` being `None` (neither `cone_frees_slots` nor
+`cone_leaves_marks`); the `debug_assert!(!whole || inexact.is_none())` in `PropertyCone::under`
+is the second sentence of (3).
 When neither run decides, `RdraSpec_P` runs on `T`, or the verdict is `not decided`.
 
-**Proposition A6.** On a cone with a freed entity, `property_cone.rs::counterexample` maps every
-counterexample to `Undecided(Why::FreesSlots)`, and `explore/properties.rs::decide_property` runs the
-explored forms (`stable`, `unchanged`, `precedes`, and `always`) again on `T` after a violation. Only
-`ok` is taken from such a cone. The argument depends on the form:
+**Proposition A6.** On a cone with a freed entity or a left-out mark, `property_cone.rs::counterexample`
+maps every counterexample to `Undecided(why)`, with `why` the `Why::FreesSlots` or `Why::LeavesMarks`
+that `inexact` gives, and `explore/properties.rs::decide_property` runs the explored forms (`stable`,
+`unchanged`, `precedes`, and `always`) again on `T` after a violation. Only `ok` is taken from such a
+cone. The argument depends on the form:
 
 - `stable`, `unchanged`, and `precedes` read the unreduced cone, so their `ok` is sound by
   Theorems A4.1 and A2. Both engines run them there. `verify/jobs.rs` builds their explored
@@ -490,14 +542,16 @@ explored forms (`stable`, `unchanged`, `precedes`, and `always`) again on `T` af
   calls `decide_property`, which also uses `restrict_to` for every form except `always`.
 - `always` reads the reduced cone (`decide_property` calls `reduced_cone` for `Ltl::Always`). So
   do `eventually`, `leads_to`, and `always` in `verify`, through the `Plain` run of A5.1. For
-  these forms the `ok` is sound by Theorem A8 (points 1 and 4), then A4.1 and A2. A8 assumes P7
-  and P31.
+  these forms the `ok` is sound by Theorem A8 (points 1 and 4), then A4.1 and A2. A8 assumes
+  (B1)–(B3), certified at run time since #480 (P7), and Lemma 6 (P31).
 
-The same treatment is not given to a left-out mark (P1).
+Until #477 a left-out mark had none of this treatment: only `cone_frees_slots` sent a
+counterexample to `T` (P1).
 
 *Evidence for A4 to A6.* Theorem A4, a statement about the unreduced cone `C`: P-full, given
 Lemmas 2 to 4. A5.1, A6, and A5.3 on a reduced cone: P-sketch, because the printed verdict is
-read on the reduced cone and rests on Theorems A8 and A15 (P7, P31). A5.2: P-full. D:
+read on the reduced cone and rests on Theorems A8 and A15, whose Lemma 6 is argued, not proved
+(P31). A5.2: P-full. D:
 `cli/tests/engine_equivalence.rs::a_property_cone_decides_what_the_whole_model_decides`; corpus rules 1
 to 3 (`cli/tests/engine_corpus.rs`); `core/tests/explored.rs::a_cone_that_frees_slots_decides_a_violation_on_the_whole_model`;
 the unit tests in `cli/src/property_cone.rs`.
@@ -673,30 +727,48 @@ by point 3. ∎
 What the proof does not cover is `WF_vars(Next)`, which a stop inside a diverging block violates;
 the next section treats it.
 
-*Hypotheses and code.* (B1)–(B3): `reduce/partition.rs::quotient_blocks` (open problem P7, below);
+*Hypotheses and code.* (B1)–(B3): `reduce/partition.rs::quotient_blocks`, certified by
+`reduce/partition/reference.rs::stable` before use (P7, fixed in #480, below);
 Lemma 5: `split_at`, `split_with`; Lemma 6: `Extended::build`, `reduce/fold.rs`; the checks a
 reduced cone keeps: `drop_unreadable_checks` (A14).
 
-*Evidence.* P-sketch (Lemma 6 and B1–B3 are assumed). M: `Twin::Partition` (worklist against
+*Evidence.* P-sketch (Lemma 6 is argued, not proved; (B1)–(B3) are checked at run time on each
+partition the reduction uses, R). M: `Twin::Partition` (worklist against
 sweeps), `Twin::ClassMoves`, `Twin::FoldHolds`, the `shadow_assert!` that a steady action leaves the
 inputs. D: `core/tests/reduce.rs::reduced_cones_decide_what_the_cones_decide`,
 `::reduced_domain_cones_decide_what_the_cones_decide`, `::a_violation_behind_the_sub_lifecycle_lifts_to_a_longer_real_trace`;
 `scripts/reduction-diff.py`; `cli/tests/engine_equivalence.rs` on reduced cones.
 
-**On (B1)–(B3) (P7, confirmed).** `quotient_blocks` starts from the blocks of `obs` and inputs
-(B1), refines with `Stutter::blocks`, then splits by the set of blocks each state reaches by one
-rise and refines again, until a pass splits nothing. The reference twin
+**On (B1)–(B3) (P7, fixed in #480).** `quotient_blocks` starts from the blocks of `obs` and
+inputs (B1), refines with `Stutter::blocks`, then splits by the set of blocks each state reaches
+by one rise and refines again, until a pass splits nothing. The reference
 (`reduce/partition/reference.rs`) computes the same definition by sweeps: every block a splitter in
 each sweep, the loop ending only when a sweep splits nothing, so its output satisfies (B2) and (B3)
-when it returns. What is not checked is that the worklist computes the same partition outside
-test builds: a `shadow` build compares the two up to 2,500,000 states (`SHADOW_CAP`), a release build
-never, and no check of (B1)–(B3) on the returned partition exists. P7 holds as stated; this narrows
-it to "worklist = sweeps" plus the sweeps' own correctness, which is argued here by inspection only.
+when it returns. Until #480 nothing outside test builds checked the worklist's partition: a
+`shadow` build compared it with the sweeps' up to 2,500,000 states (`SHADOW_CAP`), a release
+build never, and no check of (B1)–(B3) on the returned partition existed (P7, read).
+
+Since #480 `reduce/partition.rs::of_graph` certifies, in every build, each partition before the
+reduction uses it, with `reference::stable`: (B1) every block lies inside one block of the
+labels the partition starts from; (B2) one sweep of `stuttering_blocks` with every block a
+splitter splits nothing; (B3) every state of a block enters by a rise the same set of blocks as
+the block's first state. A partition that fails is reported as a tool bug on stderr and replaced
+by the sweeps' partition. So (B1)–(B3) hold of every partition a reduction uses, given two
+things argued by inspection only: that one splitting sweep of `stuttering_blocks` that splits
+nothing is (B2), and that the sweeps' fallback partition is stable when they stop.
+Coarseness is not certified and is not needed: a finer stable partition is still a
+bisimulation. Evidence: `reduce/partition.rs::the_stability_certificate_rejects_a_partition_that_is_not_stable`
+(a partition that mixes labels, one where a block's states reach different blocks silently, one
+where they rise into different blocks, and a silent cycle without an exit beside a state that
+leaves) and the random-graph test below, which also certifies every worklist partition it builds.
 
 **A9 to A14 and A16, A17.**
 
 - **A9** (worklist = sweeps): M (`Twin::Partition`, skipped above 2,500,000 states) and the test
   `reduce/partition.rs::the_worklist_partition_is_the_partition_of_repeated_sweeps` on random graphs.
+  Since #480 the verdicts no longer rest on it: the certificate above checks the partition used,
+  so a worklist that returned another stable partition would cost states, not soundness, and an
+  unstable one falls back to the sweeps.
 - **A10** (monotone inputs): Lemma 5c–d and point 5 of Theorem A8. Monotonicity is not used in A8; it
   keeps `X` finite and small. It is used in A15 (case 3 and `s_cycles`).
 - **A11** (folds): Lemma 6, with the fold equivalence twin-checked. A count is never node-folded
@@ -715,8 +787,20 @@ it to "worklist = sweeps" plus the sweeps' own correctness, which is argued here
   no test targets it.
 - **A16** (lifted traces): `reduce/lift.rs::TransitionSystem::lift` replaces each class move by the
   silent path (B2) promises, recursively through nested reductions, and the violation is re-read on
-  the lifted last state. The lifted `T` steps are checked against the cone's moves by `debug_assert!`
-  only, and an unfolded `S` step is not checked at all (P20, confirmed).
+  the lifted last state (`LiftFault` when it no longer violates, #487). Since #522 every lifted step,
+  a `T` step and an `S` step alike, is checked against the unreduced cone's moves in every build
+  (`is_move` over `plain_moves`), and a step that is not one is a `ReplayError`, reported as a fault,
+  not a counterexample (P20, fixed in #518 and #522; before, the `T` steps were checked by
+  `debug_assert!` only and an unfolded `S` step not at all). The lifted start state is built from
+  the run's initial state and an initial `S` state of its class, and is not itself checked against
+  the unreduced cone's initial states. Some of `lift`'s own invariants still panic in a release
+  build at the pin rather than return a fault: the `expect`s that the start's class holds a
+  representative and an initial `S` state, that a `T` step's rise and a class move's target exist
+  in the extended sub-lifecycle, and that the inner lift returns one group per rise and per `S`
+  step; the `assert_eq!` that a rise lifts as itself; the indexing of `block_of_class`; and, up to
+  `H`, the `debug_assert!` that the concrete `S` path starts at the stored initial state. Each
+  states a property of the reduction's own tables; none can make a trace print that does not
+  replay, but a failure stops the command instead of reporting a fault.
 - **A17** (the cache): the cached quotient is keyed by the extended system, the caps, and the group;
   `Twin::CacheHit` recomputes every hit in a `shadow` build. M.
 
@@ -785,11 +869,12 @@ The proof does not use that the mark is tight; extra marks only add stops, so ex
 replayed there (`replay_lasso`), checked to fail `P` (`explain_property`) and to pass `unfair_loop` under
 `WfNext`; otherwise it is `ReducedVerdict::Spurious` and `verify/native.rs::native_property_after` runs
 `Cone_P_Full` and `Cone_P_WF` on `C`. `lift_cycle` gives up after `MAX_COPIES` (4,096) copies of the loop,
-which also yields `Spurious`. A printed counterexample of this run is therefore a lasso of `C` that the
-checker certified. Whether it is a counterexample of `T` is Theorem A5.2 (needs `W` exact).
+which also yields `Spurious`, as does a lift that fails its own step checks (`Spurious::Fails`, since
+#522; before, such a lift could panic). A printed counterexample of this run is therefore a lasso of
+`C` that the checker certified. Whether it is a counterexample of `T` is Theorem A5.2 (needs `W` exact).
 
-*Evidence.* P-full relative to (B1)–(B3) (P7) and Lemma 6 (P31). R: lift, replay, and fairness check of
-each candidate. D: corpus cases `cone_reduced_class_loops`, `cone_reduced_inner_class_loops`,
+*Evidence.* P-full relative to (B1)–(B3), certified at run time since #480 (P7), and Lemma 6, argued
+and not proved (P31). R: lift, replay, and fairness check of each candidate. D: corpus cases `cone_reduced_class_loops`, `cone_reduced_inner_class_loops`,
 `cone_reduced_loop_fair_enabled`, `cone_reduced_loop_unreached`, `cone_reduced_no_loop_capped`;
 `cli/tests/engine_corpus.rs::a_reduced_wf_next_run_decides_what_the_unreduced_one_decides`;
 `reduce/partition.rs::an_unobserved_sub_lifecycle_can_loop_unless_every_var_only_rises`.
@@ -832,7 +917,12 @@ binding `p` to `g(p)`.
 - (G4) No step leaves a mandatory owner at its base value on a non-absent row. Rule `UnlinkedCreate`.
 - (G5) A deleted row keeps its owners (D8, `DeletedRowOwner`), in the native checker, z3, and the TLA+
   export, so `apply` relabels them with the parent's rows.
-- (G6) No predicate reads the owner of an absent row. *Not checked by the scan* (P30).
+- (G6) No predicate reads the owner of an absent row. Rule `AbsentOwner` (P30, fixed in #488):
+  the scan leaves the parent's class out when a guard reads, in the state before the step, an
+  owner on a `New` parameter, the row the step creates (`breaks.rs`, `absent_owners`). By reading,
+  that is the one way a predicate reaches an absent row: `Forall`, `Exists` and `Count` range over
+  present slots, `Existing`, `Parent` and `Triggered` bind present slots, and `Earlier` binds a
+  slot by its run mark, which only a created row holds. Until #488 the scan did not check (G6).
 
 **Theorem A18.** Under (G1)–(G6), for every reachable `s`, every `g ∈ G_s`, and every step `s →_{a,p} t`:
 `g(s) →_{a,g(p)} g(t)` is a step and `g ∈ G_t`. Hence `≈ = {(s, g(s)) : g ∈ G_s}` is an equivalence and a
@@ -860,22 +950,27 @@ Leaving more classes out gives a subgroup of `G_s`, and the statement holds for 
 the scan can always leave a class out and lose only reduction (**A20**, P-full). A *witness*
 shows that a rule is needed. It is a model on which dropping the rule (`symmetry/mod.rs::dropped`,
 set per test or by `RDRA_ISH_DROP_RULE` in a `shadow` build) breaks the bisimulation or the
-verdict. `symmetry/mod.rs::Rule` has ten variants, and the witnesses are as follows.
+verdict. `symmetry/mod.rs::Rule` has eleven variants, and the witnesses are as follows.
 
 | Rule | Witness |
 |---|---|
 | `OrderedId`, `IdAgainstLiteral`, `MixedIds`, `OwnerLiteral`, `OwnerChoice`, `UnlinkedCreate` | `explore/symmetry/witnesses.rs::*_has_a_witness`, one unit test each |
+| `AbsentOwner` | `witnesses.rs::absent_owner_has_a_witness` (P30, #488): a guard on `Place` that reads the new order's key before the step lets orders go only under the shop in slot 0, which a permutation of the shops does not preserve |
 | `JointTooLarge` | none needed. `witnesses.rs::joint_too_large_is_a_cost_cap` (release builds only) drops it and shows that the quotient is still a bisimulation with the plain run's verdicts |
 | `Observed` | 2 of its 6 reasons, `obs` and `input`: `cli/tests/engine_corpus.rs::each_h_reason_a_case_shows_has_a_witness`, in `shadow` builds only. The other 4 have none |
 | `Reduced` | none for any of its 7 reasons |
 | `PinnedStart` | `witnesses.rs::pinned_start_has_a_witness` (P33, #512): with it dropped the quotient stays a bisimulation with the same verdicts, but a canonical initial form need not be an initial state, and the lifted counterexample fails the always-on replay (`NotInitial`). So the rule guards the traces, not the verdicts |
 
-`explore/symmetry/snapshot.rs::KEPT` lists 11 rules and reasons that the owner kept on
-2026-11-25 without a witness of their own: `PinnedStart` (which has one since #512), six
-`Reduced` reasons, and four `Observed` reasons. `Reduced:S` is not in that list, and no witness for it was found. The
-snapshot reports that `PinnedStart` and every scan rule except the `Observed` and `Reduced`
-reasons fire in no cone of the samples. A missing witness does not affect soundness, which
-the subgroup argument gives. It leaves open whether the rule is needed.
+`explore/symmetry/snapshot.rs::KEPT` lists the ten reasons that the owner kept on 2026-11-25
+without a witness of their own and that still have none: six `Reduced` reasons (`S var`,
+`input`, `named by S`, `named by an input`, `bit key`, `S action param`) and four `Observed`
+reasons (`named by obs`, `named by an input`, `stub`, `named by T`). `PinnedStart` was the
+eleventh until it got its witness (#512). `Reduced:S` is not in the list, since `S var` implies
+it (`reduce/mod.rs` asserts that no entity has `S` without `S var`). The snapshot reports that
+`PinnedStart` and every scan rule except the `Observed` and `Reduced` reasons fire in no cone of
+the samples. A missing witness does not affect soundness, which the subgroup argument gives:
+P33 was closed as a coverage question in #516, the risk being a reason that is missing, not one
+without a witness. It leaves open whether each rule is needed.
 
 **Canonical forms (A21).** `explore/symmetry/canon.rs::Canon::canonical` returns the least layout over
 `G_s` while it branches on at most `BRANCH_CAP` (4,096) tied orders, and some member of the class past
@@ -883,8 +978,8 @@ that. Theorem A18 needs only "some member": the run reaches every class, and a c
 under two forms only inflates the printed count, which `about` then marks as an upper bound. The
 argument is P-full given A18 for the checks whose value on a state is invariant under `G_s`.
 Those are the first group of the next paragraph: state rules, `always`, `after` assertions, view
-patterns, and `NeverRuns`. The checks that read the annotated quotient (deadlocks, `stable`,
-`unchanged`, `precedes`, liveness) follow a binding through the stored permutations. Their
+patterns, and `NeverRuns`. The checks that read the annotated quotient (deadlocks, liveness)
+follow a binding through the stored permutations. Their
 soundness past the cap is part of A23, which is a sketch. M: `Twin::Canonical` compares the canonical form with the least layout over every element of
 `G_s` when `|G_s| ≤ 6^4 = 1,296`; D: `explore/symmetry/tests.rs::past_the_branch_cap_a_state_is_cut_and_stays_in_its_orbit`,
 `explore/symmetry/witnesses.rs::past_the_branch_cap_the_verdict_stands`.
@@ -893,16 +988,20 @@ soundness past the cap is part of A23, which is a sketch. M: `Twin::Canonical` c
 `G_s` (every state rule and `always`: they quantify over all bindings), a check of the concrete triple
 `(state, params, successor)` before canonicalization (`after`, view patterns), and a check of which
 actions label some edge (`NeverRuns`) is decided on the run up to symmetry exactly as on the plain run,
-by Theorem A18. Checks that compare two stored states slot by slot across an edge (deadlocks, `stable`,
-`unchanged`) or follow one binding along a path (liveness, `precedes`) read an *annotated* quotient: each
-edge keeps the permutation `σ` that took its concrete successor to the stored one, and a binding moves by
-`σ` (`explore/orbit/liveness.rs::OrbitRun::decide_liveness`, `explore/orbit/findings.rs`). A cycle whose
+by Theorem A18. Checks that compare two stored states slot by slot across an edge (deadlocks) or
+follow one binding along a path (liveness) read an *annotated* quotient: each edge keeps the
+permutation `σ` that took its concrete successor to the stored one, and a binding moves by `σ`
+(`explore/orbit/liveness.rs::OrbitRun::decide_liveness`, `explore/orbit/findings.rs`). `stable`,
+`unchanged`, `precedes` and `can_reach` are not run up to symmetry at the pin:
+`explore/properties.rs::TransitionSystem::decide_property` runs `stable`, `unchanged` and `precedes`
+on the plain restricted cone, and `verify` calls no orbit reader for them (`decide_always` reads
+only `always`). A cycle whose
 permutations compose to `π` is a concrete path from a state to its `π`-image, closed after at most the
 order of `π` repetitions. The theorem for this reading is not written out here (**A23**: P-sketch; M:
 `Twin::OrbitLiveness`, `Twin::OrbitStateModels`; D: corpus rule 8,
 `core/tests/reduce.rs::an_entity_cone_up_to_symmetry_decides_what_its_plain_run_left_open`). The
 `Twin::OrbitLiveness` twin compares with the plain run's search and so checks the quotient, not the
-fair-component rule (P9).
+fair-component rule, as its description has said since #475 (P9).
 
 **`DeletedRowOwner` (A19).** `Earlier` binds a row by its run mark whatever its existence, so a later step
 of a split use case reads the key of a row an earlier step deleted. If a delete reset the key to its
@@ -914,9 +1013,16 @@ Theorem A18 would fail for every `g` moving slot 0. (G5) removes the case. D: co
 edge recompute the move from `r_i`, take the first successor `t` that canonicalizes to `r_{i+1}` with
 `σ_i(t) = r_{i+1}`, and set `c_{i+1} = τ_i(t)`, `τ_{i+1} = τ_i ∘ σ_i⁻¹`. By Theorem A18 each concrete step
 is a step of the system, and each `τ_i` fixes the absent slots of `r_i`, so creations replay under the
-lowest-absent-slot rule. `explore/orbit.rs::replays` replays the lifted trace and returns the
-`ReplayError` if it does not replay; the run reports it as a tool error (`LiftFault`, `LassoFault`,
-or `TraceFault`), never a panic (P20, fixed in #518 and #522).
+lowest-absent-slot rule. `explore/orbit.rs::replays` replays the lifted trace from an initial state
+and returns the `ReplayError` if it does not replay; the run reports it as a tool error
+(`LiftFault`, `LassoFault`, or `TraceFault`), not as a counterexample (P20, fixed in #518 and #522;
+before, a lifted symmetric trace that did not replay panicked). The lift itself still holds two
+invariants by panicking in a release build at the pin: `explore/orbit.rs::lift_path`, which the
+safety, `always` and deadlock lifts share, `expect`s that a stored edge is a move of its source
+whose successor canonicalizes to the stored target, and `explore/orbit/liveness.rs`'s lift of a
+lasso `expect`s and `assert!`s that each edge is the move at its place and that its permutation
+takes that move to the stored target. A failure there stops the command rather than printing a
+trace that does not replay.
 
 **Composition with the reduction (A22).** On a reduced cone, `R` runs up to `G_T`, which leaves out every
 entity `Reduction::fixed_why` names (each `S` entity, each entity holding an `S` variable, an input, or a bit
@@ -932,7 +1038,9 @@ self-edge stands for a concrete cycle inside its class and marks it (Definition 
 
 *Evidence for A18.* P-full given (G1)–(G6). M: the Kani harness
 `explore/symmetry/mod.rs::apply_of_a_composition_is_the_composition_of_applies` proves that `apply` is a group
-action on a 2-slot parent and a 2-slot child; it does not call `canonical` (P8). `Twin::Canonical`,
+action on a 2-slot parent and a 2-slot child; it does not call `canonical` (P8: the design note
+overstated the harnesses; #475 corrected the prose, and no canonical-form harness was added).
+`Twin::Canonical`,
 `Twin::OrbitRun`, `Twin::ReducedOrbitRun` (up to 200,000 states). D: corpus `sym_*` cases, rule 8.
 
 ---
@@ -942,27 +1050,30 @@ action on a 2-slot parent and a 2-slot child; it does not call `canonical` (P8).
 <!-- derived-from ../formal-verification.md#proofs-for-any-number-of-rows -->
 
 **What the code does (A25).** `cli/verify/escalate.rs::escalate` takes each state rule `i` that the prover
-left unproved and that BFS passed at `β` (`passed_at`: a complete run of its cone without a violation, or a
-cone covered by one that passed with no finding, and not a run up to symmetry). For `k = 1, 2` it builds
-`T_{β+k}(M)` with `grown` (every count plus `k`, `None` past 255) and keeps it only when `same_system`
-holds (no build error, the same entities, variable count, and rules by name and site), explores the rule's
-cone reduced (`explore_targets_reduced`), and prints `ok at n`, `counterexample at n`, or `not decided at n`,
-where `n = cone_slots` is `restrict_to(cone).most_slots()`, the largest slot count among the cone's entities.
+left unproved and that BFS passed at `β` (`passed_at`: a complete run of its cone with no violation of
+it other than ones its recheck found to hold, or a cone covered by one that passed, and not a run up to
+symmetry). For `k = 1, 2` it builds `T_{β+k}(M)` with `grown` (every count plus `k`, `None` past 255) and
+keeps it only when `same_system` holds (no build error, the same entities, variable count, and rules by
+name and site), and explores the rule's cone reduced (`explore_targets_reduced`). A counterexample its
+cone cannot vouch for with `slots` (a free trigger, or more rows of an entity than the cone counts) is
+decided again by `recheck_on(…, true, …)`, the refinement loop of [Safety cones](#safety-cones). It
+prints `ok at n`, `counterexample at n`, or `not decided at n`, where `n = cone_slots` is
+`restrict_to(cone).most_slots()`, the largest slot count among the entities of the cone that decided:
+the rule's cone, or the last cone of the recheck.
 
-**Proposition A25.** If the cone of rule `i` at `β + k` is exact, a `counterexample at n` is a reachable
-violation of `T_{β+k}(M)`. If it has a freed entity and no left-out mark, it is a reachable violation of
-`T_{β'}(M)` for the `β'` of Proposition A28. If it has a left-out mark, nothing follows.
+**Proposition A25.** A `counterexample at n` is a reachable violation of `T_{β+k}(M)`.
 
-*Proof.* Theorem A1 (or A28) on `T_{β+k}(M)` for the cone. The run reads the reduced cone, and
-Theorem A8.1 says that a valuation of `T_v ∪ obs` breaking the rule is reachable in `R` iff it
-is reachable in `C`. So a violation found on `R` is one of `C`. The printed trace is the lift of
-A16, whose evidence is runtime checks only. The existence of the violation does not depend on
-it. ∎
+*Proof.* The printed counterexample is one the cone that found it vouches for with `slots`: its trace
+runs no use case without its event and creates no more rows of an uncounted entity than `β + k`
+allows (`Trace::vouched(true)`), so it lifts to `T_{β+k}(M)` itself by Corollary A28′. The run reads
+the reduced cone, and Theorem A8.1 says that a valuation of `T_v ∪ obs` breaking the rule is reachable
+in `R` iff it is reachable in `C`, so a violation found on `R` is one of `C`. The printed trace is the
+lift of A16, checked step by step against `C` in every build. ∎
 
-Two gaps, both confirmed by reading. P1: `escalate` reads neither `free_triggers` nor `over_bound` and calls
-every counterexample "a real one". P11: `n` excludes the freed entity, whose count the trace can exceed
-(the trace's `over_bound` note says so, but the `escalated:` line does not), and under `--instances E=k`
-`n` is a maximum over entities, not the bound of any one of them.
+Until #477 `escalate` read neither `free_triggers` nor `over_bound` and called every counterexample
+"a real one" (P1), and `n` excluded the freed entity whose count the trace could exceed, which the
+trace's `over_bound` note said but the `escalated:` line did not (P11). One reading of `n` stays: under
+`--instances E=k` it is a maximum over the cone's entities, not the bound of any one of them.
 
 **Memory.** Each escalated run is charged to `pool.with_room(min(pool.left(), GROWTH × peak))`
 (`memory.rs::MemoryPool::with_room`), with `GROWTH = 10` and `peak` the store the rule's cone held at `β`;
@@ -986,8 +1097,8 @@ memory limit, or a time budget.
 1. A state BFS admitted is a reachable state of `U`: BFS admits only initial states and successors of
    admitted states. So a safety violation found before the stop is a counterexample of `U`, with the
    same meaning (Theorems A1, A2, A28) as on a complete run.
-2. No `ok` is printed: `cli/verify/bfs.rs::BfsCone::verdict` maps an empty finding list on a `Capped` run to
-   `None` (`not decided`), and `decide_liveness` and `decide_liveness_reduced` return `Undecided` when the
+2. No `ok` is printed: `cli/verify/bfs.rs::BfsCone::verdict` maps a `Capped` run with no violation of
+   the whole system (`BfsCone::violations`) to `None` (`not decided`), and `decide_liveness` and `decide_liveness_reduced` return `Undecided` when the
    graph is incomplete and no counterexample was found.
 3. A liveness lasso on an incomplete graph is built from expanded states only
    (`ComponentRun::expanded`: on an incomplete run, the states before the source of the last edge), whose
@@ -997,10 +1108,11 @@ memory limit, or a time budget.
 edge's source was fully expanded, which holds for the one-thread BFS order; for the parallel BFS it is
 theme (c)'s claim that the run computes the one-thread result. ∎
 
-`not decided` means: the run made no claim either way. P10 (formal-verification.md says a stopped cone
-"leaves its invariants `not decided`", but a counterexample found before the stop is reported) is
-confirmed by `BfsCone::verdict`. P21 (a stopped native run recorded as `ok` for the per-run comparison) is
-theme (c)'s and (d)'s. D: `cli/tests/engine_corpus.rs::a_capped_graph_decides_nothing_the_full_graph_contradicts`
+`not decided` means: the run made no claim either way. P10 was prose, not a code fault:
+formal-verification.md said a stopped cone "leaves its invariants `not decided`", while
+`BfsCone::verdict` reports a counterexample found before the stop; #477 corrected the guide to say
+that only the cone's other checks stay `not decided`. P21 (a stopped native run recorded as `ok` for
+the per-run comparison, fixed in #469) is theme (c)'s and (d)'s. D: `cli/tests/engine_corpus.rs::a_capped_graph_decides_nothing_the_full_graph_contradicts`
 runs every corpus case under every cap from 1 to its size.
 
 **A26 (what the memory limit bounds).** The limit is charged by the BFS state stores and, under
@@ -1013,31 +1125,34 @@ Evidence: none beyond the reading of `escalate` and the guide.
 
 ## Summary of evidence
 
+The Open column names every problem of the [index](./README.md#open-problems) that bears on
+the row; a fixed or closed one carries its pull request.
+
 | Claim | Statement here | Proof | Other evidence | Open |
 |---|---|---|---|---|
-| A1 | Theorem A1 | full | D (does not single out left-out marks) | P32 |
-| A2 | Theorem A2; left-out marks | full (`ok` of universal checks); none for left-out-mark counterexamples or for existential and branching findings | D | P1, P32 |
+| A1 | Theorem A1 | full | D (equality on exact cones, inclusion on the others) | P32 (fixed, #477) |
+| A2 | Theorem A2; Corollary A28′; refinement of candidates | full (`ok` of universal checks; a vouched counterexample lifts, A28′); existential and branching findings are read on cones exact for marks | D | P1 (fixed, #477, #509), P32 (fixed, #477) |
 | A3 | Proposition A3 | full (`count_up`, `count_down`) | D | |
-| A4 | Theorem A4 (on the unreduced cone) | full | D | P1 |
-| A5 | Theorem A5 | sketch for parts 1 and 3 (read on the reduced cone: A8, A15); full for part 2 | D, unit tests | P1, P7, P31 |
-| A6 | Proposition A6 | sketch for `always`, `eventually`, `leads_to` (A8); full for `stable`, `unchanged`, `precedes` | D | P1, P7, P31 |
+| A4 | Theorem A4 (on the unreduced cone) | full | D | P1 (fixed, #477) |
+| A5 | Theorem A5 | sketch for parts 1 and 3 (read on the reduced cone: A8, A15); full for part 2 | D, unit tests | P1 (fixed, #477), P7 (fixed, #480), P31 (fixed, #521) |
+| A6 | Proposition A6 | sketch for `always`, `eventually`, `leads_to` (A8); full for `stable`, `unchanged`, `precedes` | D | P1 (fixed, #477), P7 (fixed, #480), P31 (fixed, #521) |
 | A7 | Theorem A7 | full | D | |
-| A8 | Theorem A8 | sketch: assumes (B1)–(B3) and Lemma 6 | M, D | P7, P31 |
-| A9 | — | none | M (≤ 2,500,000 states), D | P7 |
-| A10, A11 | Lemma 6, point 5 | sketch (A11: that a count is never node-folded, unread@pin) | M, D | P31 |
+| A8 | Theorem A8 | sketch: Lemma 6 argued; (B1)–(B3) certified at run time | R, M, D | P7 (fixed, #480), P31 (fixed, #521) |
+| A9 | — | none; no verdict rests on it since #480 | M (≤ 2,500,000 states), D | P7 (fixed, #480) |
+| A10, A11 | Lemma 6, point 5 | sketch (A11: that a count is never node-folded, unread@pin) | M, D | P31 (fixed, #521) |
 | A12, A13, A14 | by reading | full (by construction) | D (A12, A13) | |
-| A15 | Theorem A15 | full relative to A8's hypotheses | R, D | P7, P31 |
-| A16 | lift | none | R (partial), D | P20 |
+| A15 | Theorem A15 | full relative to A8's hypotheses | R, D | P7 (fixed, #480), P31 (fixed, #521) |
+| A16 | lift | none | R (every lifted step, every build), D | P20 (fixed, #518, #522; release `expect`s remain) |
 | A17 | — | none | M, D | |
-| A18 | Theorem A18 | full given (G1)–(G6) | M, D | P8, P30 |
+| A18 | Theorem A18 | full given (G1)–(G6) | M, D | P8 (prose fixed, #475), P30 (fixed, #488) |
 | A19 | `DeletedRowOwner` | full (as the case (G5) removes) | D | |
-| A20, A21 | subgroup; canonical form | full given A18 (A21: checks invariant under `G_s`; annotated-quotient checks are A23) | D | |
-| A22, A23 | composition; annotated quotient | sketch | R, M, D | P9 |
-| A24 | Proposition A24 | sketch | D | P10 |
-| A25 | Proposition A25 | full given A1, A28, A8 | unit test | P1, P11 |
+| A20, A21 | subgroup; canonical form | full given A18 (A21: checks invariant under `G_s`; annotated-quotient checks are A23) | D | P33 (closed, #512, #516) |
+| A22, A23 | composition; annotated quotient | sketch | R, M, D | P9 (prose fixed, #475) |
+| A24 | Proposition A24 | sketch | D | P10 (prose fixed, #477) |
+| A25 | Proposition A25 | full given A28′, A8 | unit test | P1 (fixed, #477, #509), P11 (fixed, #477) |
 | A26 | scope | none | none | |
-| A27 | Proposition A27 | full relative to the covering cone's `ok` (Theorem A2; A8 when that cone is reduced) | none | P7, P31 |
-| A28 | Proposition A28 | full | D (via A2) | P11 |
+| A27 | Proposition A27 | full relative to the covering cone's `ok` (Theorem A2; A8 when that cone is reduced) | none | P7 (fixed, #480), P31 (fixed, #521) |
+| A28 | Proposition A28 | full | D (via A2) | P11 (fixed, #477) |
 
 ---
 
@@ -1050,7 +1165,7 @@ Evidence: none beyond the reading of `escalate` and the guide.
   marks. Over-approximating cones (A2) are an existential abstraction in the sense of Clarke, Grumberg and
   Long 1994: they preserve universal safety, and their counterexamples need a check against the concrete
   system, as in counterexample-guided refinement (Clarke et al. 2000); A28 is such a check for freed slots,
-  and P1 is the absence of one for left-out marks.
+  and since #477 and #509 `recheck_on` is a refinement loop for left-out marks (P1 recorded its absence).
 - **Stuttering equivalence.** Browne, Clarke and Grumberg 1988 show that stuttering-equivalent finite
   structures satisfy the same CTL\* formulas without next; De Nicola and Vaandrager 1995 relate the
   divergence-blind and divergence-sensitive variants and their logics; Groote and Vaandrager 1990 give the
@@ -1107,8 +1222,11 @@ Evidence: none beyond the reading of `escalate` and the guide.
 ## Threats to validity
 
 - **Proofs about a reading of the code.** Every lemma models a Rust function by its doc comment and body as
-  read at `fb6928c7`. A function read only through its doc (named in its proof: `Fold::holds` for Lemma 6)
-  may differ from it. No statement was checked by running the tools.
+  read at `fb6928c7`, and, for a function whose definition changed by more than a narrowing cast, as
+  re-read at `c97c88ef` (the first paragraph). The Lemma 6 evidence cites tests from #516 and #521, read
+  at `c97c88ef`. A function read only through its doc (named in its proof: `Fold::holds` for Lemma 6)
+  may differ from it. A function whose definition did not change can still behave differently through a
+  callee that did; callees were not traced. No statement was checked by running the tools.
 - **Syntactic over-approximations.** `Wr` lists a deleted entity's owners although D8 keeps them. This only
   adds actions and variables to cones and makes owners non-monotone; every proof above tolerates it, and a
   later change that made `Wr` an under-approximation would break Lemma 2. Since P35 (fixed in #491) a debug
@@ -1116,23 +1234,37 @@ Evidence: none beyond the reading of `escalate` and the guide.
   byte of a variable `action_writes` leaves out, so every debug test that explores and CI's shadow job (the
   `writes` twin, on the samples and the corpus) check `Wr` against the steps they take. A release build does
   not check it, and a step no run takes is not checked.
-- **Assumed partition correctness.** A8, A15, and every reduced cone's verdict rest on (B1)–(B3), which the
-  release build does not check (P7), and on Lemma 6, argued and not proved, whose fold half is
-  checked against the cone's step relation on the domain samples and the case fold only (P31). Among those verdicts are the
-  printed `ok` of a property's `Plain` run (A5.1) and of a property on a cone that frees slots (A6).
+- **Partition and Lemma 6.** A8, A15, and every reduced cone's verdict rest on (B1)–(B3), which every build
+  has certified on the partition it uses since #480 (P7; before, a release build checked nothing), given
+  that one non-splitting sweep of `stuttering_blocks` is (B2), argued by inspection; and on Lemma 6, argued
+  and not proved, whose fold half is checked against the cone's step relation on the domain samples and the
+  case fold only (P31, #521). Among those verdicts are the printed `ok` of a property's `Plain` run (A5.1)
+  and of a property on a cone that frees slots or leaves a mark out (A6).
 - **Differential evidence compares implementations, not specifications.** The shadow twins compare two
-  implementations of one definition and skip large inputs without failing (P17). The corpus and sample
+  implementations of one definition and skip large inputs (P17; since #473 a `shadow` build reports
+  every skipped call, and the corpus harness fails a case on one except where
+  `cli/tests/engine_corpus.rs::PAST_A_TWIN_CAP` names the run). The corpus and sample
   comparisons check agreement with TLC on the cones the code chooses; a soundness bug in the cone or the
   reduction that TLC's module shares (one `Reduction` value feeds both, A13) is invisible to them. Only
   `scripts/reduction-diff.py` and `core/tests/cone.rs` compare a reduced or restricted system with a less
   reduced one.
-- **Hypotheses checked per trace, not per cone.** Exactness is a property of the cone, but the code reports a
-  left-out mark only on a trace that uses it (`free_triggers`). A cone with a left-out mark whose counterexample
-  does not use it is exact for that trace; one that uses it is P1. A finding the cone fails to report (an
-  entity cone's `NoWitness`, `Deadlock`, `NeverRuns`, arm, or value) has no trace, so the per-trace check never
-  sees it (P32).
-- **Symmetry hypothesis (G6).** Not enforced (P30). If a model reached it, a run up to symmetry could print a
-  wrong verdict, `ok` included; none is known.
+- **Hypotheses checked per trace and per cone.** A check's cone may leave a mark out: its `ok` is sound by
+  Theorem A2, and its counterexample counts only once vouched for (Corollary A28′), after the refinement of
+  `recheck_on` where needed (P1, fixed in #477 and #509). That `free_triggers` lists every step that runs an
+  action reading a mark outside the cone is a reading, not tested on its own, and that the exact cone's
+  counterexample is vouched for is a `debug_assert!` only. A finding a cone fails to report has no trace, so
+  a per-trace check never sees it; since #477 entity cones are exact for marks per cone instead (P32).
+- **Symmetry hypothesis (G6).** Enforced since #488 by `Rule::AbsentOwner` for a guard's pre-state read
+  through a `New` parameter (P30); that this is the only way a predicate reaches an absent row's owner is a
+  reading of the binding rules (Hypotheses, (G6)). Before #488 a model that reached it could have printed a
+  wrong verdict up to symmetry, `ok` included; none was known, and no sample or corpus cone fires the rule.
+- **Panics left in the lifts.** Every printed trace replays before it prints (P20, fixed in #518 and #522),
+  but `reduce/lift.rs::lift`, `explore/orbit.rs::lift_path` and the lasso lift of
+  `explore/orbit/liveness.rs` still hold some invariants of the reduction's and the group's own tables by
+  `expect` or `assert!` (A16, Counterexamples), and `explore/properties.rs::ComponentRun::decide_property`
+  `expect`s that the stored path it found breaks the property and checks the position by
+  `debug_assert_eq!` only. A failure of one of these stops the command; none can print a trace that does
+  not replay.
 - **Bounded results.** Everything here, escalation included, is a statement at a bound. `ok at n` at
   `β + 1` and `β + 2` adds two bounded results; it is not an induction.
 
@@ -1143,16 +1275,43 @@ Changes to statements of this document after it was first written, newest last.
 - **2026-11-28, after an adversarial review** (commits `7a3d13df` and `073bdf11`). The
   corrections re-read the code at `fb6928c7` as well; the crates at the head of the pull
   request that added this document, `05679a5c`, do not differ from it.
-- **2026-11-28, after the owner's review.** The P32 paragraph of [Safety cones](#safety-cones)
+- **2026-11-28, after the owner's review** (commit `5b3d232b`). The P32 paragraph of [Safety cones](#safety-cones)
   listed `verify/tlc.rs` among the files that read `free_triggers`, `over_bound`, or
   `cone_frees_slots`; at `fb6928c7` it reads only the `frees_slots` field that
   `verify/jobs.rs` sets from `cone_frees_slots`, and the list now says so. The proof of
   Theorem A8 opened with "Points 1 to 5 of cone-soundness.md"; it now states that its five
   points are numbered as there, and point 5 adds what cone-soundness.md's point 5 says of folds
   and of the monotone rule, so the proof reads without that note.
-- **2026-11-28, after #477 merged.** The P32 model of [Safety cones](#safety-cones) is no
+- **2026-11-28, `unread@pin` markers** (commit `3345c389`). Statements whose cited code was not
+  read at the pinned commit were marked, as the claims inventory defines the marker.
+- **2026-11-28, after #477 merged** (#489, merge `edb1d436`). The P32 model of [Safety cones](#safety-cones) is no
   longer described as only constructed by hand: it cites the test #477 added for the same shape,
   and P32 is recorded as fixed in #477 rather than "being fixed in a separate change".
-- **2026-11-28, after the owner's review of semantics.md (P60).** semantics.md now defines
+- **2026-11-28, P35** (commits `3635840b` and `b1edf3ee`, #491). "Threats to validity" says that
+  a debug or `shadow` build holds every step to `Wr(a)` (`check_writes`).
+- **2026-11-28, after the owner's review of semantics.md (P60)** (commit `c55dfa60`). semantics.md now defines
   `T_β(M)` from the model's text, and the build implementing it is claim I1. "Notation added
   here" now says that `T` is the built system and that no theorem here depends on I1.
+- **2026-11-28, P33 and P31** (commits `50e2bd37` and `809369fe`, #512; `8697ae87`, #516;
+  `165b5cbe` and `8f6644f9`, #521). The witness table gained the `PinnedStart` row, and the
+  evidence of Lemma 6 cites the fold tests of #516 and #521.
+- **2026-11-28, D25** (commit `377538a5`, #520). [Safety cones](#safety-cones) and consequence 3
+  of Theorem A8 cite semantics.md's definition of the deadlock finding.
+- **2026-11-28, P20** (commits `79c4d186` and `9519199b`, #522). The symmetric
+  [counterexamples](#instance-symmetry) paragraph says a lifted trace that does not replay is a
+  fault.
+- **2026-11-28, after the final audit of docs/theory** (findings 1, 2 and 27 to 35; commit
+  `CONTENT_COMMIT`). Re-pinned from `fb6928c7` to `c97c88ef`, with the method of the first
+  paragraph; the sentence that every statement held at both `b83b9544` and `fb6928c7` is gone.
+  Statements that described P1, P7, P10, P11, P20, P30 and P32 as open now describe the code
+  at the pin and give each fix in the past tense with its pull request and test: the
+  refinement loop `recheck_on` and the per-trace Corollary A28′ (P1, P11; #477, #509); the
+  exact entity cones of `target_cone` and the new `assert_cones_exact` (P32, #477); the
+  partition certificate `reference::stable` with its fallback (P7, #480); `Rule::AbsentOwner`,
+  its witness, and eleven `Rule` variants (P30, #488); the per-step check of `lift` (P20,
+  #518, #522), with the release `expect`s and `assert!`s that remain listed. `KEPT` holds ten
+  reasons, not eleven. The quoted `debug_assert!` in `PropertyCone::under` is
+  `!whole || inexact.is_none()`. "Which checks read a run up to symmetry soundly" no longer
+  lists `stable`, `unchanged` and `precedes` among the annotated-quotient readers: they are
+  not run up to symmetry. The summary's Open column marks each fixed problem with its pull
+  request.

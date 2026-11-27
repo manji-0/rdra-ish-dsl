@@ -6,18 +6,23 @@
 This document states how rdra-ish's native verifier decides a check on a graph that its
 breadth-first search (BFS) explored, and on what evidence each step rests. It owns rows N1
 to N18 of the [claims inventory](./claims.md#c-the-native-verifier) and uses the notation
-of [semantics.md](./semantics.md) (D1 to D24) without redefining it. `T` is the system the
+of [semantics.md](./semantics.md) (D1 to D25) without redefining it. `T` is the system the
 build returns; that it is `T_β(M)` (D13) is claim [I1](./claims.md#0-the-build), not a step
 of any proof here.
 
-It describes the code at commit `fb6928c74ccc5b479dea07d92cc1e39c34ddd218` (origin/main,
-2026-11-28). The other theory documents pin `b83b9544`; `git diff --stat b83b9544 fb6928c7`
-over `crates/rdra-ish-core/src/lifecycle`, `crates/rdra-ish-core/src/{memory,shadow,fasthash}.rs`,
-`crates/rdra-ish-cli/src/verify` and `crates/rdra-ish-emit/src/tla` is empty, so the
-verifier is the same at both. Code is cited as in [semantics.md](./semantics.md): paths are
-relative to `crates/rdra-ish-core/src/lifecycle/` unless they start with `cli/`
-(`crates/rdra-ish-cli/`) or name the crate root (`core-root/`, for
-`crates/rdra-ish-core/src/`).
+It describes the code at commit `c97c88ef0531a528a69809cdc55b2f83147cd9e8` (origin/main,
+2026-11-28, the merge of #525). The document was first written against `fb6928c7` and was
+brought up to date with `c97c88ef` after the final audit of docs/theory: the code that the
+fixes of P19, P20, P50, P51, P52, P53, P54 and P55 changed (#470, #478, #479, #484, #487,
+#494, #510, #518, #522) was re-read at `c97c88ef`, and for every other function, type and
+constant this document names, its definition at `fb6928c7` was compared with the one at
+`c97c88ef`. A definition that did not change, or changed only by a checked narrowing cast
+(`id8`, `id32`, #513), reads as it did; one that changed otherwise was re-read or carries
+`unread@pin`. `#525`, the last merge before the pin, changes only `cli/src/prove.rs`,
+`cli/src/cli.rs` and prose, none of which this document cites. Code is cited as in
+[semantics.md](./semantics.md): paths are relative to `crates/rdra-ish-core/src/lifecycle/`
+unless they start with `cli/` (`crates/rdra-ish-cli/`) or name the crate root (`core-root/`,
+for `crates/rdra-ish-core/src/`).
 
 The reproductions of P50 and P51 ran a release build of the CLI from a sibling worktree
 on `64232981`, the parent of `fb6928c7` with the same `crates/`. That worktree's
@@ -26,8 +31,10 @@ commit's (`diff -rq`), its `crates/rdra-ish-emit/src` differs only under `codege
 core or CLI source file there is newer than the binary. The reproductions of P54 were run
 by the independent review of this document, on a release binary of another sibling worktree
 (possibly the same one) whose core and CLI `src` it checked against the same sources with
-`diff -rq`; that binary no longer exists, so they were not re-run for the current text. The models
-and commands are in [Reproductions](#reproductions); each run takes under a second. How the
+`diff -rq`; that binary no longer exists, so they were not re-run for the current text. These
+runs describe the code before the fixes of P50 (#479), P51 (#494) and P54 (#470); the
+models are now tests, named in [Reproductions](#reproductions), with the commands; each run
+takes under a second. How the
 document changed after it was first written is in [Errata](#errata). `unread@pin` marks a statement whose cited code was not read at the pinned commit ([claims inventory](./claims.md#how-to-read-a-row)).
 
 ---
@@ -88,9 +95,10 @@ D13 (every admissible binding of D7, every fork of D8); that is evidenced differ
 (TLC on the same cone, `cli/tests/engine_equivalence.rs::a_bfs_and_tlc_reach_the_same_states_and_verdicts`)
 and by the twin `Twin::EachEnabled` (`explore/moves/reference.rs`), which compares the
 planned enumeration with a filter over all bindings. Two further premises are not part of
-this sketch: that the built `T` is `T_β(M)` of D13 (claim I1; open problem P54 was a
-case where the build departed from it by encoding a literal as another value), and that the edge list reads back the edges it
-recorded (open problem P55 is a case where it does not).
+this sketch: that the built `T` is `T_β(M)` of D13 (claim I1; problem P54, fixed in #470,
+was a case where the build departed from it by encoding a literal as another value), and that
+the edge list reads back the edges it recorded (problem P55, fixed in #479, was a case where it
+did not past 2^32 edges).
 
 ## The state store and its encoding
 
@@ -104,18 +112,25 @@ multiply-rotate hash of `core-root/fasthash.rs` with a fixed seed (`arena.rs::ha
 
 **N2 (Store).** Suppose (i) every domain has at most 256 values, so that each value of
 `T_β(M)` is a distinct byte and fits its cell (`packing.rs::bits_for` caps a cell at 8
-bits), and (ii) every cell of non-zero width starts at a bit offset of at most 65,535. Then
-on states whose cells hold values inside their domains, packing is injective and unpacking
-inverts it; the patch path (`Packing::patch`, which writes only the cells a move changed
-into the source's packed row) equals packing the successor, and `Packing::cell` reads the
-cell back; the arena, segment and table read back what they stored.
+bits), and (ii) every cell starts at a bit offset that `Packing` holds exactly
+(`packing.rs::offsets`, a `u32` per cell since #479). Then on states whose cells hold values
+inside their domains, packing is injective and unpacking inverts it; the patch path
+(`Packing::patch`, which writes only the cells a move changed into the source's packed row)
+equals packing the successor, and `Packing::cell` reads the cell back; the arena, segment and
+table read back what they stored.
 
-Neither precondition is enforced today. (i) fails for a nullable Int column at `m = 255`
-and for an Enum column with 256 values and `@null` or with 257 or more values (open problem
-P54); (ii) failed for some cone states wider than 65,536 bits (open problem P50, fixed in
-#479: offsets are `u32` since, and their sum panics past `u32::MAX` bits, so (ii) holds of
-every state a run can hold). Every claim below that reads a stored state ("by N1", "by N2")
-holds only under both.
+Both preconditions are enforced by the build at the pin. (i): a column whose domain has more
+than 256 values is the build error `DomainTooLarge` and gets no variable
+(`build/vars.rs`, #470), and `types.rs::Domain::of_number` returns no value past a byte
+instead of wrapping. (ii): `build/mod.rs` sums the packed bits of the whole system in a `u64`
+(`explore/packing.rs::packed_bits`) and stops with the build error `StateTooWide` past
+`MOST_PACKED_BITS = u32::MAX` (#510), so every offset of every cone, a restriction of that
+system, fits the `u32`; `offsets` also panics on overflow of its checked add, which the build
+error keeps out of reach (#479). Before these fixes neither held: (i) failed for a nullable
+Int column at `m = 255` and for an Enum column with 256 values and `@null` or with 257 or more
+values (P54), and (ii), then an offset of at most 65,535 in a `u16`, failed for some cone
+states wider than 65,536 bits (P50). Every claim below that reads a stored state ("by N1",
+"by N2") holds under both.
 
 *Evidence.* Kani proves the round trip, the patch path, and the arena and table operations
 on small widths (4 or 11 cells, widths up to 8 bits; the harnesses are listed in row N2).
@@ -123,32 +138,33 @@ The table lookup compares whole packed rows (`Seen::find_hashed`), so a hash col
 time and never merges two states; the hash's quality does not bear on correctness. The
 seed is fixed and no table is iterated into the output (`fasthash.rs` states the rule for
 `FastMap`), so the hash does not bear on determinism either. `Packing::pack` panics when a
-value does not fit its bits, in release builds too; that check cannot catch P54, whose
-values are already wrapped to a byte before they reach the store.
+value does not fit its bits, in release builds too; that check could not catch P54, whose
+values were already wrapped to a byte before they reached the store.
 
-**Finding P50 (guarantee, reproduced).** `packing.rs::offsets` stores each cell's bit
-offset as a `u16` and saturates at `u16::MAX`. `pack_into` and `unpack_into` count offsets
-as they go and are unaffected, but `Packing::patch` and `Packing::cell` use the saturated
-offsets, so every cell of non-zero width whose true offset exceeds 65,535 is written to and
-read from the bits at 65,535. That is the exact failure condition: a total width above
-65,536 bits is necessary but not sufficient (cells of zero width past the bound do no harm).
-On a plain run every successor takes the patch path (`probe.rs::Probes::read`), so distinct
-successors pack alike and are merged, and stored rows unpack to states `T` does not have.
-On a run up to symmetry the successor is the canonical form packed whole
-(`States::pack_into`), so only `Packing::cell` is affected there: the deadlock readers
-(`findings.rs::can_leave`, `orbit/findings.rs`). No check guards the width in a release
-build. The Kani harnesses stop at 11 cells, far below the bound. The shadow twins would see
-it: `Twin::Packed` compares `States::patch` with a whole pack and `States::cell` with the
-unpacked row (`explore/arena.rs`) on every read, and `Twin::Seen` keys its reference table
-on unpacked states (`core-root/shadow.rs` gives neither a cap); but `shadow` builds run only
-in tests and CI, and none of their inputs reaches that width.
+**Finding P50 (guarantee, reproduced; fixed in #479).** *As read at `fb6928c7`, before the
+fix:* `packing.rs::offsets` stored each cell's bit offset as a `u16` and saturated at
+`u16::MAX`. `pack_into` and `unpack_into` count offsets as they go and were unaffected, but
+`Packing::patch` and `Packing::cell` used the saturated offsets, so every cell of non-zero
+width whose true offset exceeded 65,535 was written to and read from the bits at 65,535.
+That was the exact failure condition: a total width above 65,536 bits was necessary but not
+sufficient (cells of zero width past the bound did no harm). On a plain run every successor
+takes the patch path (`probe.rs::Probes::read`), so distinct successors packed alike and were
+merged, and stored rows unpacked to states `T` does not have. On a run up to symmetry the
+successor is the canonical form packed whole (`States::pack_into`), so only `Packing::cell`
+was affected there: the deadlock readers (`findings.rs::can_leave`, `orbit/findings.rs`). No
+check guarded the width in a release build. The Kani harnesses stop at 11 cells, far below the
+bound. The shadow twins would have seen it: `Twin::Packed` compares `States::patch` with a
+whole pack and `States::cell` with the unpacked row (`explore/arena.rs`) on every read, and
+`Twin::Seen` keys its reference table on unpacked states (`core-root/shadow.rs` gives neither
+a cap); but `shadow` builds run only in tests and CI, and none of their inputs reached that
+width.
 
-The merged states also reach the warnings. When the review re-ran the second reproduction below, the run
-also printed `warning[Vacuous_Forbidden_Row_0] … holds vacuously`: no stored state meets the
-premise because the state that would has been merged away. That is a false claim about
-`Reach(T)`, and N18's "by N1" fails with N2's precondition (ii).
+The merged states also reached the warnings. When the review re-ran the second reproduction
+below, the run also printed `warning[Vacuous_Forbidden_Row_0] … holds vacuously`: no stored
+state met the premise because the state that would have was merged away. That was a false
+claim about `Reach(T)`, and N18's "by N1" failed with N2's precondition (ii).
 
-Reproduction (a model in which every row is created with `c0 … c33 = 1`, 34 Int columns,
+Reproduction, before #479 (a model in which every row is created with `c0 … c33 = 1`, 34 Int columns,
 at `--instance-count 255 --int-range-max 255`, a cone state of 255 × (34 × 8 + 2) = 69,870
 bits):
 
@@ -161,43 +177,52 @@ bits):
   `ok (256 states)` and `result: ok`, in either declaration order of the two use cases.
   This is a wrong `ok`.
 
-P50 needs large bounds: a cell of non-zero width past bit 65,535, about 8,192 cells of 8
+P50 needed large bounds: a cell of non-zero width past bit 65,535, about 8,192 cells of 8
 bits (for example 255 slots of an entity with 32 or more Int columns at `m = 255`). No
-sample comes near it, but D1 admits it and nothing rejected it. P54 below needs far less.
+sample comes near it, but D1 admits it and nothing rejected it. P54 below needed far less.
 
-*Fixed in #479.* `Packing` keeps offsets as `u32`, summed with a checked add that panics
-past `u32::MAX` bits; below the old limit the offsets are the same numbers, so no narrower
-state changes. Both reproductions give the verdicts of 8 instances at 255
-(`cli/tests/verify_cli.rs::a_state_past_bit_65535_keeps_its_verdicts`), and
+*Fixed in #479 and #510.* `Packing` keeps offsets as `u32`, summed with a checked add that
+panics past `u32::MAX` bits; below the old limit the offsets are the same numbers, so no
+narrower state changes. Both reproductions give the verdicts of 8 instances at 255
+(`cli/tests/verify_cli.rs::a_state_past_bit_65535_keeps_its_verdicts`, on the fixtures
+`cli/tests/fixtures/wide_state/`), and
 `packing.rs::tests::a_state_past_bit_65535_packs_patches_and_reads_back` checks the patch,
-the unpack and `Packing::cell` on either side of the first cell past bit 65,535. The same PR
+the unpack and `Packing::cell` on either side of the first cell past bit 65,535. #479 also
 stops a run, as at the state cap, before it numbers a state `u32::MAX`, the marker of an
-unresolved move and of an unnumbered component. Past `u32::MAX` bits the build stops first:
-`StateTooWide`, an error of the same family as `DomainTooLarge`, so the checked add is never
-reached from a model (`build/mod.rs::width_tests`).
+unresolved move and of an unnumbered component (`Bfs::admit_packed`, `MOST_STATES`). #510
+stops the build first past `u32::MAX` bits: `StateTooWide`, an error of the same family as
+`DomainTooLarge`, so the checked add is never reached from a model
+(`build/mod.rs::width_tests::a_state_past_the_packed_width_is_a_build_error`).
 
-**Finding P54 (guarantee, reproduced by the review; fixed in #470, where the build rejects a
-column domain past 256 values as `DomainTooLarge`).** A value outside a byte is
-truncated when the build encodes it, so the built `T` departs from `T_β(M)` of D13 (D2,
-D8): claim I1 fails. `types.rs::Domain::of_number`
-returns `Value(n as u8 + 1)` for a `NullableInt` column; `Domain::size` gives that domain
-`m + 2` values, 257 at `m = 255`, and for `n = 255` the sum wraps to 0, which is
-`Value::NULL`. The workspace `Cargo.toml` sets no `overflow-checks` for the release
-profile (it has only `[profile.mutants]`), so a release build wraps silently; a debug build
-panics. The callers that wrap are the writes of `sets` (`build/sets.rs`) and the `@default`
-values (`build/vars.rs`); a predicate's Int literal is compared as a number
+**Finding P54 (guarantee, reproduced by the review; fixed in #470).** *As read at `fb6928c7`,
+before the fix:* a value outside a byte was truncated when the build encoded it, so the built
+`T` departed from `T_β(M)` of D13 (D2, D8): claim I1 failed. `types.rs::Domain::of_number`
+returned `Value(n as u8 + 1)` for a `NullableInt` column; `Domain::size` gives that domain
+`m + 2` values, 257 at `m = 255`, and for `n = 255` the sum wrapped to 0, which is
+`Value::NULL`. The workspace `Cargo.toml` sets no `overflow-checks` for the release profile
+(it has only `[profile.mutants]`), so a release build wrapped silently; a debug build
+panicked. The callers that wrapped were the writes of `sets` (`build/sets.rs`) and the
+`@default` values (`build/vars.rs`); a predicate's Int literal is compared as a number
 (`build/preds/atoms.rs::eq_atom`), and the one call in `atoms.rs` (`lists_whole_domain`) is
 reached only for finite domains ([z3.md](./z3.md), item 5 of Lemma U, reads the same). This
-nullable-Int case is open problem P40 of theme (b), found independently. `Domain::of_variant` returns
-`Value((i + shift) as u8)`, an `as` cast that truncates in every build: in an Enum with
-`@null` and 256 values, value `v255` becomes `Value(0)`, the null; in an Enum without
-`@null` and 257 or more values, `v256` becomes `v0`. No check limits the number of values
-of an Enum (none was found in the model, the resolver, the lint or the build), and the CLI
-accepts `--int-range-max 255` (`cli/src/export.rs::checked_bounds`), as D1 does. Because
-the fault is in `T`, every engine reading `T` inherits it, a replay of the trace against `T`
-passes, and the store's checks (N2) do not see it.
+nullable-Int case is problem P40 of theme (b), found independently. `Domain::of_variant`
+returned `Value((i + shift) as u8)`, an `as` cast that truncated in every build: in an Enum
+with `@null` and 256 values, value `v255` became `Value(0)`, the null; in an Enum without
+`@null` and 257 or more values, `v256` became `v0`. No check limited the number of values of
+an Enum, and the CLI accepts `--int-range-max 255` (`cli/src/export.rs::checked_bounds`), as
+D1 does. Because the fault was in `T`, every engine reading `T` inherited it, a replay of the
+trace against `T` passed, and the store's checks (N2) did not see it.
 
-Reproduced by the review at one instance (two states):
+*Fixed in #470.* A column whose domain has more than 256 values is the build error
+`DomainTooLarge` (`build/vars.rs`) and gets no variable, so no value past a byte exists;
+`Domain::of_number` returns `None` past a byte (`u8::try_from`), and `Domain::of_variant` goes
+through `Value::at`, which panics rather than wrap a value past a byte. Tests: the engine-corpus cases `width_nullable_int_top` and
+`width_nullable_enum_256`, `cli/tests/check_cli.rs::an_enum_column_takes_no_more_values_than_a_state_holds`,
+and the reference interpreter's `core/tests/reference/mod.rs::a_value_past_a_byte_is_not_wrapped`
+(P26, #492), which decodes each native state through `Domain`'s documented encoding rather
+than the builder's tables.
+
+Reproduced by the review at one instance (two states), before #470:
 
 - `n: Int @null`, `sets(Create, Row.n == 255)`, `forbidden(Row, Row.n >= 200)`,
   `--instance-count 1 --int-range-max 255`: `ok (2 states)`, `result: ok`. A wrong `ok`.
@@ -210,19 +235,19 @@ Reproduced by the review at one instance (two states):
   trace that shows `s=null`.
 
 The non-null Enum with 257 values was read, not run. The TLA+ printer renders values from
-`T` (`emit/tla/mod.rs::render_value`), so a wrapped value prints as null (`-1` or `"<null>"`) and TLC
-checks the same wrong system; TLC was not run on these models.
+`T` (`emit/tla/mod.rs::render_value`), so a wrapped value printed as null (`-1` or `"<null>"`)
+and TLC checked the same wrong system; TLC was not run on these models.
 
-**Finding P55 (guarantee, read).** `explore/edges.rs::Steps::read` records the first edge
-of each state read as `edges.first.push(self.moves as u32)`, a bare cast, while
-`Steps::admit` and the orbit self-edge in `Bfs::take` use `u32::try_from(…).expect`. Once a
-run has recorded 2^32 edges, a state read after that point with no admission
-following it (late layers whose moves reach only known states) gets a wrapped index in
-`EdgeList::first`. `EdgeList::source_of` and the per-state ranges then attribute edges to
-the wrong sources, and liveness, `can_reach` and deadlocks read a graph that is not `G`.
-Each edge takes at least 4 bytes for its target and more for its binding, so the edges alone
-exceed `verify`'s default memory limit of 16 GiB, which stops the run first; a larger
-`--memory` reaches it. Not reproduced. *Fixed in #479:* every edge number (`first`, the edge
+**Finding P55 (guarantee, read; fixed in #479).** *As read at `fb6928c7`, before the fix:*
+`explore/edges.rs::Steps::read` recorded the first edge of each state read as
+`edges.first.push(self.moves as u32)`, a bare cast, while `Steps::admit` and the orbit
+self-edge in `Bfs::take` used `u32::try_from(…).expect`. Once a run had recorded 2^32 edges, a
+state read after that point with no admission following it (late layers whose moves reach
+only known states) got a wrapped index in `EdgeList::first`. `EdgeList::source_of` and the
+per-state ranges then attributed edges to the wrong sources, and liveness, `can_reach` and
+deadlocks read a graph that is not `G`. Each edge takes at least 4 bytes for its target and
+more for its binding, so the edges alone exceed `verify`'s default memory limit of 16 GiB,
+which stops the run first; a larger `--memory` reached it. Not reproduced. *Fixed in #479:* every edge number (`first`, the edge
 being pushed, a parent edge) goes through `edges.rs::edge_number`, which panics past the
 last `u32` below the `INITIAL` marker instead of wrapping
 (`edges.rs::tests::an_edge_number_past_u32_panics`).
@@ -339,7 +364,7 @@ Hence `Σ_j` agrees for all `j`, and with it everything the readers below comput
   room, and a safety cone with partner properties whose first, complete-to-the-end run met
   the limit beside others fell back to its early-stopping run inside the parallel phase
   without being marked: one thread printed `counterexample (65793 states)` where eight
-  printed `(15150 states)` (open problem P53, reproduced). Since #484 the first run's memory
+  printed `(15150 states)` (problem P53, reproduced). Since #484 the first run's memory
   stop marks the cone, and every rerun of both passes goes alone under `Caps::alone`, a child
   pool with the room the command's pool has left (`MemoryPool::whole`), which refuses by its
   own room whatever the parent holds. The reruns come after every run of the pass has ended,
@@ -407,20 +432,22 @@ the successor is resolved. The trace is the parent path to the move's source and
 itself (`Reach::Step`); the first violating move in reading order has a source of least
 depth, so the trace is shortest.
 
-**Finding P51 (guarantee, reproduced).** `Bfs::take` skips `check_after` on a move whose
-successor equals its source (`Probe::Loop`), so an `after` assertion is never evaluated on a
-step with `s' = s`. D17 quantifies over every step of the last step of `UC`, and D13 says a
-step with `s' = s` is possible. TLC agrees with the code, not with D17: the TLA+ printer
-emits `[][… => …]_vars` (`crates/rdra-ish-emit/src/tla/module.rs`), whose subscript exempts stuttering steps.
+**Finding P51 (guarantee, reproduced; a duplicate of P22, resolved in #475 and #494).**
+`Bfs::take` skips `check_after` on a move whose successor equals its source (`Probe::Loop`),
+so an `after` assertion is never evaluated on a step with `s' = s`. D17 as first written
+quantified over every step of the last step of `UC`, and D13 says a step with `s' = s` is
+possible. TLC agrees with the code: the TLA+ printer emits `[][… => …]_vars`
+(`crates/rdra-ish-emit/src/tla/module.rs`), whose subscript exempts stuttering steps.
 Reproduction: `Touch` sets `Order.status := open` on a row created `open`, and
 `after(Touch).assert(Order.flag == true)` with `flag` false and never written. Every `Touch`
 step is a self-loop; `verify` prints `ok (3 states)`. The control, `Touch` setting `closed`,
 prints `counterexample (7 states)`, so the action is in the cone and the self-loop is what
 hides the step. The engines agree; what differed was D17's wording (or the modeler's
-expectation that an assertion after a use case holds whenever the use case can run). Fixed in
-#494 by the owner's call: D17 and the language reference take TLA+'s reading, and the
-vacuity check reports this model (`Vacuous_AfterAssert_Touch_0`, test
-`lifecycle/tests/vacuous.rs::an_assert_after_a_step_that_only_stutters_holds_vacuously`).
+expectation that an assertion after a use case holds whenever the use case can run).
+Resolved by the owner's call: D17 and the language reference take TLA+'s reading (#475), and
+since #494 the vacuity check reports this model (`Vacuous_AfterAssert_Touch_0`, test
+`tests/vacuous.rs::an_assert_after_a_step_that_only_stutters_holds_vacuously`). The `ok`
+the code prints for it is the one D17 now licenses.
 
 ### Step forms and order forms
 
@@ -478,18 +505,22 @@ and the samples (row N8).
 
 <!-- derived-from ../state-derivation.md#deadlocks -->
 
-**N14 (Deadlock).** On a complete entity-cone graph, value `v` of a lifecycle column `c` of
-`E` (not `@end`, with some exit arm: `findings.rs::exits`, `has_way_on`) is reported stuck
-iff some `s ∈ S_G` and slot `k` have `E[k]` present, `c[k] = v`, and no path from `s`
-through states where `E[k]` is present reaches an edge that changes `c[k]` or makes `E[k]`
-non-present. The state reported is the least such `s` in BFS order (over all slots).
+**N14 (Deadlock).** The finding is the one [semantics.md, D25](./semantics.md#d25)
+defines. On a complete entity-cone graph, an open value `v` of a lifecycle column `c` of `E`
+(not `@end`, and with some `transitions` arm from `v` to another value: `findings.rs::exits`
+and `has_way_on`, which `findings.rs::deadlocks` filters on; a value whose only way out is a
+delete is an end state and never reported) is reported stuck iff some `s ∈ S_G` and slot `k`
+have `E[k]` present, `c[k] = v`, and no path from `s` through states where `E[k]` is present
+reaches an edge that changes `c[k]` or makes `E[k]` non-present. The state reported is the
+least such `s` in BFS order (over all slots).
 
 *Proof.* `findings.rs::TransitionSystem::can_leave` marks the sources of leaving edges
 (source present, and target not present or with another value) and closes backwards
 through present predecessors; this is `E[present U leave]` per slot, as in N8. A state not
 marked has no such path, which is the definition. The reported state is the minimum over
 `(idx, k)`. ∎ On a stopped graph every candidate value is `Progress::NotDecided`. Both
-`can_leave` and the trace read packed cells through `Packing::cell`, so P50 applies.
+`can_leave` and the trace read packed cells through `Packing::cell`, so P50 applied here
+until #479.
 TLC's deadlock check is one-sided (row T6); the naive oracle of `core/tests/oracle.rs`
 checks this one against a forward search on its own exploration (P19, fixed in #478).
 
@@ -500,8 +531,9 @@ assertion as vacuous only on a complete run of its cone, only when the run repor
 violation of it, and only when no stored state meets one of its premises
 (`unmet_of_rule`, `unmet_of_assert`). It is a warning and changes no verdict (D18). On a
 complete plain run "no stored state" is "no reachable state" by N1 and N2, so only under
-N2's preconditions: P50 printed a false vacuity warning, and P54 can too, since the state
-that meets the premise is merged away or never built. On a reduced run or a
+N2's preconditions, which hold since #470, #479 and #510: before, P50 printed a
+false vacuity warning, and P54 could have too, since the state that met the premise was
+merged away or never built. On a reduced run or a
 run up to symmetry the stored states are representatives; that a premise met by some
 member of a class is met by its representative is theme (a). The `after` premise is read
 from the step's ends (`ComponentRun::step_ends`), filled by `Bfs::push` on every move.
@@ -546,7 +578,7 @@ enabledness but not for *taken*: it says a fair instance is taken "by a step who
 `a` and whose binding extends `κ`", and D13 allows such a step with `s' = s`. The code and the
 TLA+ output read *taken* as requiring a change of state: `fair_steps` keeps only edges with
 `from ≠ to`, and the printer's `WF_vars` takes `⟨A⟩_vars` steps only. This document adopts
-that reading as assumption τ, which D20 states since #475 (open problem P56). A second reading
+that reading as assumption τ, which D20 states since #475 (problem P56, fixed there). A second reading
 goes with it: D14's behaviors are sequences of states without action labels, so the code
 counts a step `s → s'` as taking every fair instance that labels some edge from `s` to `s'`
 (`En`, `Tk` above; `lasso.rs::unfair_loop` likewise), not only the instance of the action a
@@ -601,7 +633,8 @@ both cases `σ_i` reaches the end by the non-stuttering steps of `σ`, which are
 `E_N`. ∎
 
 Without τ, (⇒) fails in exactly the way the note on assumption τ describes, and the
-consequence is an `ok` that D20 and D21 as written do not license; the counterexamples of
+consequence would be an `ok` that D20 and D21 as first written did not license (P56, fixed in
+#475 by stating τ in D20); the counterexamples of
 (⇐), and with them N10 and N11, do not depend on τ.
 
 *Code.* `liveness.rs::ComponentRun::liveness_search` runs `ComponentRun::avoid` per binding:
@@ -650,8 +683,8 @@ a counterexample under `WfNext` is one under `Plain`) and the cone's own fairnes
 
 `fails_at` and `avoid` evaluate the goal on a slot whatever its existence, so a behavior
 that deletes the row meets `eventually(E.c == v)` when `v` is `c`'s base value, while
-`can_reach` keeps the slot present along the path. Read on the code here, this confirms
-open problem P6; TLC reads the printed formula the same way. #475 decided P6 as documented:
+`can_reach` keeps the slot present along the path. Read on the code here, this confirmed
+problem P6; TLC reads the printed formula the same way. #475 decided P6 as documented:
 language-reference.md and D21 now state the reading. A `.present()` goal (P64) has the
 presence of every bound row in its predicate, conjoined by the build
 (`build/preds/temporal.rs::Builder::goal`), so the same evaluation never meets it on a
@@ -663,35 +696,60 @@ deleted row.
 <!-- derived-from ../formal-verification.md#what-verify-checks -->
 
 **N16** claims that every printed counterexample replays. The table records, per check and
-per kind of run, what the code does to a trace before it prints. *Replayed* means matched
-step by step against `moves` from an initial state. *Re-evaluated* means the check is
+per kind of run, what the code at the pin does to a trace before it prints; it was rebuilt
+row by row from the code after #518 and #522 (P20). *Replayed* means matched step by step,
+action, parameters and successor, against `moves` from an initial state
+(`explore/orbit.rs::replays`, which calls `trace.rs::TransitionSystem::replay`, or
+`lasso.rs::TransitionSystem::replay_lasso` for a lasso). *Re-evaluated* means the check is
 evaluated again on the trace's last state or step. *Plain* is an unreduced run without
 symmetry; *reduced* a run of a cone reduced by its independent sub-lifecycle (#74), whose
-trace is lifted by `reduce/lift.rs::TransitionSystem::lift`; *symmetric* a run up to slot
-permutations, lifted by `explore/orbit.rs::lift`.
+trace is lifted by `reduce/lift.rs::TransitionSystem::lift`, which checks every lifted step
+against the unreduced cone's moves in every build and returns a `ReplayError` on the first
+that is not one; *symmetric* a run up to slot permutations, lifted by
+`explore/orbit.rs::lift_path` (safety, `always`, deadlocks) or the lasso lift of
+`explore/orbit/liveness.rs`. The shared path for stored traces is
+`explore/graph.rs::ComponentRun::lifted_path` (behind `trace_to`, `trace_of` and
+`trace_along`): it replays the stored path on the system the run explored, then lifts it. A
+failure is a fault, a tool error that the run counts as such and prints without a trace:
+`LiftFault` for a state rule or `after` assertion, `LassoFault` for a property, `TraceFault`
+for a deadlock or `can_reach`.
 
 | Check | Plain | Reduced | Symmetric |
 |---|---|---|---|
-| State rule, `after` | nothing: the trace is the stored path, printed as stored (`trace_violations`) | lifted; re-evaluated on the lifted last state, and if that no longer violates, the violation becomes `LiftFault`, a tool error that leaves the check undecided on the cone (`ComponentRun::trace_violations`, `lifted`; since #487, P52; before, the reduced message was kept without any fault); a T step is checked against the cone's moves only by `debug_assert!`, an S step of a folded action is checked (`expect`), one taken by `in_cone_params` is not | replayed on the system the run explored (`orbit.rs::replays`, panics on failure), then lifted by `lift` when that system is reduced, without a further replay; re-evaluated on the lifted last state (`expect`, panics) |
-| `always` | re-evaluated on the stored path (`property_failure`, then `debug_assert!` on the position) | re-evaluated on the reduced path, then lifted with no re-evaluation (`decide_property`, `trace_along`) | lifted, replayed (panics on failure) and re-evaluated on the lifted path (`OrbitRun::decide_always`, `expect`) |
+| State rule, `after` | replayed (`explore/mod.rs::ComponentRun::trace_violations`, `trace_of`; `LiftFault` carrying `LassoFault::Replay` on failure, since #518); not re-evaluated: the violation was evaluated at admission on the same states | replayed on the reduced system, then lifted step by step (`LiftFault` on failure, since #522); re-evaluated on the lifted last state, and a lifted state that no longer violates is `LiftFault` carrying `LassoFault::Satisfies` (#487, P52) | lifted (`lift_path`), replayed on the system the run explored, lifted through the reduction when that system is reduced (`explore/orbit.rs`, `LiftFault` on either failure, since #522); re-evaluated on the lifted last state (`LassoFault::Satisfies` as in the reduced column) |
+| `always` | re-evaluated on the stored path (`explore/properties.rs::ComponentRun::decide_property`: `property_failure`, which `expect`s a failure, then `debug_assert_eq!` on its position), then replayed (`trace_along`; `PropertyVerdict::Fault` with `LassoFault::Replay` on failure, since #522) | re-evaluated on the reduced path as in the plain column, then replayed on the reduced system and lifted step by step (`trace_along`); not re-evaluated on the lifted path | only on a cone the reduction leaves whole (`cli/verify/native.rs::native_property`): lifted, replayed (`LassoFault::Replay`) and re-evaluated on the lifted path (`OrbitRun::decide_always`, `LassoFault::Satisfies`) |
 | `stable`, `unchanged`, `precedes` | as `always`, plain | never reduced (`decide_property` restricts without reduction) | not run up to symmetry |
-| `eventually`, `leads_to` | replayed, formula re-evaluated, fairness re-checked (N11) | the reduced lasso is replayed on the reduced system and never printed; what prints is either the `WfNext` lasso lifted to the unreduced cone and replayed there (`decide_liveness_reduced`, `Spurious` otherwise), or the lasso of the rerun on the unreduced cone (`Cone_P_Full`); if that rerun stops, the property is `not decided` | replayed, re-evaluated and re-checked after lifting (`orbit/liveness.rs`, `LassoFault` on failure, `LassoFault::Unclosed` past 10,000 copies) |
-| `can_reach` | nothing: the parent path to the stuck state | never reduced | not run up to symmetry |
-| Deadlock | nothing beyond the stored path | entity cones are not reduced by #74 | lifted and replayed (`orbit/findings.rs`, panics on failure) |
+| `eventually`, `leads_to` | replayed, formula re-evaluated, fairness re-checked (N11; `LassoFault` on failure) | the reduced lasso is never printed; what prints is either the `WfNext` lasso lifted to the unreduced cone and replayed, re-evaluated and fairness-checked there (`decide_liveness_reduced`; `Spurious` otherwise, `Spurious::Fails` for a lift that fails its step checks since #522), or the lasso of the rerun on the unreduced cone (`Cone_P_Full`); if that rerun stops, the property is `not decided` | only on a cone the reduction leaves whole: replayed, re-evaluated and fairness-checked after lifting (`orbit/liveness.rs`, `LassoFault` on failure, `LassoFault::Unclosed` past 10,000 copies) |
+| `can_reach` | replayed (`targets.rs::TransitionSystem::verdict`, `trace_to`; `TraceFault` on failure, since #522); the finding is not decided again on the trace | never reduced (`explore_cone` keeps a `can_reach` cone whole) | not run up to symmetry |
+| Deadlock | replayed (`targets.rs::read_entity`, `trace_to`; `TraceFault` in the deadlock's place on failure, since #522); not decided again on the trace | `verify` reduces entity cones (`explore_targets_reduced_in`), `check` does not: replayed on the reduced system and lifted step by step (`TraceFault`); the finding is decided on the reduced graph (cones.md, Theorem A8, consequence 3) | lifted (`lift_path`), replayed, and lifted through the reduction when the cone is reduced (`orbit/findings.rs::trace_to_slot`, `TraceFault` on failure) |
 
-Two consequences.
+Three consequences.
 
-- *Unchecked traces are where P50 becomes visible.* A plain safety trace is never replayed,
-  so the corrupted states of the P50 reproduction printed as a counterexample with no
-  `LassoFault`. A replay of every safety trace would have turned that wrong verdict into a
-  tool error, though not the wrong `ok`. A replay cannot catch P54 at all: it replays
-  against `T`, which already holds the wrapped value.
-- *P20, restated.* Liveness lassos that print are replayed on the system the verdict is
-  about in every case; the gaps are on the safety side: plain traces are not replayed at
-  all, reduced traces are lifted with `debug_assert!` checks and can keep a reduced message
-  silently, and symmetric traces are replayed but fail by panic rather than `LassoFault`.
-  A reduced liveness counterexample whose unreduced rerun stops becomes `not decided`
-  rather than printing the lifted lasso.
+- *P50 was visible only in a trace that was not replayed.* At `fb6928c7` a plain safety
+  trace was printed as stored, so the corrupted states of the P50 reproduction printed as a
+  counterexample with no fault. The replay of #518 would have turned that wrong verdict into a
+  tool error, though not the wrong `ok`. A replay cannot catch P54 at all: it replays against
+  `T`, which held the wrapped value.
+- *P20, fixed.* Every printed trace now replays on the system the run explored and, when that
+  system is reduced or a quotient, lifts with every step checked against the unreduced cone
+  (#518 for state rules and `after`; #522 for the rest). Before, plain safety traces were not
+  replayed, reduced traces were lifted with `debug_assert!` checks only, and symmetric traces
+  were replayed but failed by panic. A reduced liveness counterexample whose unreduced rerun
+  stops still becomes `not decided` rather than printing the lifted lasso.
+- *What is still unchecked or panics.* A reduced `always` is not re-evaluated on its lifted
+  path. A plain `always`'s position is checked by `debug_assert_eq!` only, and
+  `decide_property` `expect`s that the stored path breaks the property. Deadlock and
+  `can_reach` traces replay, but the finding is not decided again on them. The lifted start of
+  a reduced trace is not checked against the unreduced cone's initial states. And the lifts
+  hold invariants of their own tables by release `expect`s and `assert!`s:
+  `reduce/lift.rs::lift` (that the start's class holds a representative and an initial S
+  state, that a T step's rise and a class move's target exist, one inner group per rise and
+  per S step, `assert_eq!` that a rise lifts as itself, the indexing of `block_of_class`, and
+  up to `H` a `debug_assert!` that the concrete S path starts at the stored initial state),
+  `explore/orbit.rs::lift_path` (that a stored edge is a move of its source), and the lasso
+  lift of `explore/orbit/liveness.rs` (that an edge is the move at its place and its
+  permutation takes the move to the stored target). A failure there stops the command; none
+  can print a trace that does not replay.
 
 ### The lift's mechanics
 
@@ -715,15 +773,23 @@ only what the lift computes.
 - **Symmetric** (`orbit.rs::lift_path`). Each stored edge is recomputed from its source as
   the first move of its action and parameters whose successor `t` canonicalizes to the
   stored target; with `σ` the permutation that takes `t` there, the concrete step is the
-  move read through the accumulated `τ`, and `τ := τ ∘ σ⁻¹`. A liveness loop on
+  move read through the accumulated `τ`, and `τ := τ ∘ σ⁻¹`. The lasso lift of
+  `orbit/liveness.rs` takes instead the move at the edge's place among its source's moves and
+  the permutation the annotated run stored for the edge, and `assert!`s that they match the
+  edge. A liveness loop on
   (state, binding) pairs (**N12**) closes after at most the order of the loop's composed
-  permutation, capped at 10,000 copies (`orbit/liveness.rs::MOST_COPIES`). **N13**: the lifted
-  trace replays, or the run reports a tool error (since #522, not a panic; P20).
+  permutation, capped at 10,000 copies (`orbit/liveness.rs::MOST_COPIES`). **N13**: a
+  lifted trace that does not replay is a tool error, never a printed counterexample (P20,
+  fixed in #518 and #522; before, it panicked). The lift itself still `expect`s that each
+  stored edge is a move of its source, a release panic if the quotient's tables are wrong
+  (the third consequence above).
 
 The `Twin::OrbitLiveness` twin compares the orbit search with the plain run's `avoid`
 (`ComponentRun::liveness_reference`), so it tests the quotient against N9's implementation,
 not N9 itself; it skips runs past 200,000 states (`orbit/reference.rs::SHADOW_CAP`), as do
-`Twin::OrbitRun` and `Twin::OrbitStateModels`. This confirms the twin parts of P9 and P17.
+`Twin::OrbitRun` and `Twin::OrbitStateModels`. This confirmed the twin parts of P9 and P17:
+since #475 the twin's description says it checks the quotient only (P9), and since #473 a
+`shadow` build reports each skipped call (P17).
 
 ## Features that add no case to the verifier
 
@@ -803,48 +869,58 @@ each of its variants a fair action whose enabledness reads its mark (event-order
   steps of the built `T` (N1) and that the built `T` is `T_β(M)` of D13 (claim I1). The evidence is differential (TLC, which reads
   the same `TransitionSystem`, so a fault in the build of `T` would pass both) and one twin.
   P54 was such a fault in the build, fixed in #470: a literal wrapped to another value of its
-  domain. The planned reference interpreter (P26) is the first check of I1 that does not read
-  the build's output.
+  domain. Since #492 a reference interpreter (`core/tests/reference/`, P26, partly closed)
+  checks I1 without reading the build's output, on a subset of the language: it explores the
+  model on its own and compares initial states, reachable states, labelled edges and broken
+  rules with the native run of the whole model, on the engine corpus and on random models.
 - **Bounded mechanical evidence.** The Kani harnesses cover widths far below where P50
-  begins and no domain of more than 256 values (P54); `Twin::Packed` and `Twin::Seen` would
-  detect P50 but no `shadow` input is that wide; other shadow twins skip runs above 200,000
+  began and no domain of more than 256 values (P54); the fixes of both are pinned by the
+  tests named in their findings, not by Kani. `Twin::Packed` and `Twin::Seen` would detect a
+  wrong offset but no `shadow` input is that wide; other shadow twins skip runs above 200,000
   or 2,500,000 states, and since #473 say so (P17), and the probe twins run in one CI job,
-  on code release builds do not run (P18).
+  on code release builds do not run (P18, corrected and partly fixed in #473).
 - **Readers share code with the checks they certify.** `unfair_loop` and `avoid` both use
   `moves` and `Property::fair_instance`; `explain_property` and `liveness_search` both use
   `holds_bound` and `triggers`. Self-certification catches a fault in the search, not in
   these.
-- **Fixed-width integers.** Three places truncate or saturate silently in a release build,
-  and each gives a wrong verdict within the documented bounds: the value encoding (P54, a
+- **Fixed-width integers.** Three places truncated or saturated silently in a release build,
+  and each gave a wrong verdict within the documented bounds: the value encoding (P54, a
   wrong `ok` at one instance with a nullable Int at `m = 255` or a nullable Enum of 256
-  values), the bit offsets of the packing (P50, a wrong `ok` past 65,535 bits), and the
-  edge index (P55, read only, past 2^32 edges). P50 and P55 are fixed in #479, which also
-  audited the narrowing casts of the explore store (state numbers, edge numbers, slot
-  counts); `build/` was not audited.
+  values; fixed in #470), the bit offsets of the packing (P50, a wrong `ok` past 65,535 bits;
+  fixed in #479, with `StateTooWide` in #510), and the edge index (P55, read only, past 2^32
+  edges; fixed in #479). #479 also audited the narrowing casts of the explore store (state
+  numbers, edge numbers, slot counts), and #513 replaced the narrowing `as` casts of the
+  lifecycle code with the checked `id8` and `id32` (`narrow.rs`), which panic rather than
+  wrap.
 - **Fairness wording.** N9's (⇒) direction, hence every liveness `ok`, rests on assumption
   τ, which D20 states since #475 (P56).
 - **Determinism of memory stops beside other runs** rests on the reruns of N4; the CLI's
   passes rerun alone with an explicit room since #484 (P53).
 - **Reproductions** used binaries built in other worktrees, and those of P54 were run by
-  the review rather than for this document (see the first paragraph); the issues that take
-  P50, P51 and P54 up should reproduce them on a clean build.
-- **Read for the N16 table and the lift's mechanics:** `reduce/lift.rs::lift` (the
-  `debug_assert!` on a T step, the `expect` on a folded S step, the unchecked
-  `in_cone_params` branch; since #522 each is a release check that returns `ReplayError`), `::lift_cycle` (the doubling to `MAX_COPIES` and the closing
-  test), and `explore/orbit.rs::replays` (a failed replay is a fault since #518 and #522). For N18,
+  the review rather than for this document (see the first paragraph). Each is now a test on
+  a clean build ([Reproductions](#reproductions)).
+- **Read at the pin for the N16 table and the lift's mechanics:** `reduce/lift.rs::lift`
+  (every lifted step checked by `is_move`, the remaining `expect`s), `::lift_cycle` and
+  `::lift_stop` (a failed lift is `Spurious::Fails`), `explore/graph.rs::ComponentRun::lifted_path`,
+  `explore/mod.rs::ComponentRun::trace_violations`, `explore/properties.rs::ComponentRun::decide_property`,
+  `explore/orbit.rs::lift_path`, `::replays` and `OrbitRun::decide_always`, the safety lift of
+  `explore/orbit.rs`, `explore/orbit/findings.rs::lift_to` and `trace_to_slot`, the lasso lift
+  of `explore/orbit/liveness.rs`, `explore/liveness.rs::ComponentRun::decide_liveness` and
+  `decide_liveness_reduced`, and the `TraceFault` arms of `targets.rs`. For N18,
   `targets.rs::vacuity`, `unmet_of_rule` and `unmet_of_assert` (which reads `step_ends`)
-  and `edges.rs::StepEnds::read` (no filter on self-loops); for N14, the choice of the least
-  `(idx, k)` per column value in `findings.rs`.
-- **Not re-read here (unread@pin):** `cli/src/verify/end.rs` (N15); `reduce/lift.rs::lift_stop` beyond
-  `MAX_WALK` and `Spurious::NoLoop`; `explore/orbit.rs::lift_path` and
-  `orbit/liveness.rs` beyond their certification steps (the "Symmetric" bullet of the lift's
-  mechanics rests on the first version's reading of them; see [Errata](#errata)); the
-  `Twin::EachEnabled` path; `fasthash.rs` beyond the rule quoted in N2; and
-  `cli/src/verify/native.rs::native_property_after` beyond the order of its runs.
-- **P10 confirmed.** `cli/src/verify/bfs.rs::BfsCone::verdict` returns `counterexample`
-  whenever the run found a violation, stopped or not, and `None` (`not decided`) only for a
-  stopped run with none; formal-verification.md's "leaves its invariants `not decided`"
-  does not describe that.
+  and `edges.rs::StepEnds::read` (which records whether a move changes the state,
+  `Ends::moved`, since #494); for N14, the choice of the least `(idx, k)` per column value
+  and the `has_way_on` filter in `findings.rs`.
+- **Not re-read here (unread@pin):** `cli/src/verify/end.rs` (N15); `reduce/lift.rs::lift_stop`
+  beyond `MAX_WALK`, `Spurious::NoLoop` and its error path; the `Twin::EachEnabled` path;
+  `fasthash.rs` beyond the rule quoted in N2; `cli/src/verify/native.rs::native_property_after`
+  beyond the order of its runs and what it records for the comparison; and the condition
+  under which `verify` runs a property up to symmetry (`Shared::up_to_symmetry`), taken from
+  `native_property`'s doc comment.
+- **P10, prose.** `cli/src/verify/bfs.rs::BfsCone::verdict` returns `counterexample`
+  whenever the run found a violation of the whole system, stopped or not, and `None`
+  (`not decided`) for a stopped run with none; formal-verification.md said a stopped cone
+  "leaves its invariants `not decided`" until #477 corrected it.
 
 ## Open problems this document records
 
@@ -854,25 +930,42 @@ each of its variants a fair action whose enabledness reads its mark (event-order
 <!-- derived-from #parallel-exploration -->
 <!-- derived-from #the-fairness-model -->
 
-New: P50 (packing past 65,535 bits; wrong `ok`, reproduced), P51 (`after` skips steps with
-`s' = s`; reproduced; the engines agree), P52 (a reduced safety trace whose lifted last
-state no longer violates kept the reduced message silently; fixed in #487), P53 (one step of memory-stop
-determinism for the CLI's reruns is not shown), P54 (a value past a byte wraps when the
-build encodes it; wrong `ok` at one instance, reproduced by the review; its nullable-Int case
-is P40), P55 (the edge
-index wraps past 2^32 edges; read), P56 (D20 does not say that a step with `s' = s` takes
-nothing, which N9's (⇒) direction needs; the engines agree). All are open. Confirmed on the code: P6, P10, P17 (orbit
-twins), P19, P20 (restated as the table above). Corrected: P18 (`SameAs` and `DenseBinding` are release
-paths whose twins run in every `shadow` run). The [index](./README.md#open-problems) holds
-the entries.
+New, with their status at the pin; none is open:
+
+- P50 (packing past 65,535 bits; wrong `ok`, reproduced): fixed in #479, with the build
+  error `StateTooWide` in #510 ([The state store](#the-state-store-and-its-encoding)).
+- P51 (`after` skips steps with `s' = s`; reproduced; the engines agree): a duplicate of P22,
+  resolved by D17's TLA+ reading (#475) and the vacuity warning of #494 ([Safety](#safety)).
+- P52 (a reduced safety trace whose lifted last state no longer violates kept the reduced
+  message silently): fixed in #487 for state rules and `after` assertions; the rest went
+  under P20.
+- P53 (one step of memory-stop determinism for the CLI's reruns was not shown; reproduced):
+  fixed in #484 ([Parallel exploration](#parallel-exploration)).
+- P54 (a value past a byte wrapped when the build encoded it; wrong `ok` at one instance,
+  reproduced by the review; its nullable-Int case is P40): fixed in #470.
+- P55 (the edge index wrapped past 2^32 edges; read): fixed in #479.
+- P56 (D20 did not say that a step with `s' = s` takes nothing, which N9's (⇒) direction
+  needs; the engines agree): fixed in #475, which states τ in D20 ([The fairness
+  model](#the-fairness-model)).
+
+Read on the code here, with their status at the pin: P6 (decided as documented, #475); P10
+(prose, corrected in #477); P17, the orbit twins' caps (fixed in #473: a skip is reported);
+P19 (fixed in #478: a naive oracle, and `assert!` on completeness in every build); P20
+(fixed in #518 and #522: every printed trace replays, the table of
+[Counterexamples](#counterexamples-what-is-checked-before-printing); the release `expect`s
+and `assert!`s it lists remain). Corrected: P18 (`SameAs` and `DenseBinding` are release paths
+whose twins run in every `shadow` run; `Twin::SeenGrowth` runs on the release path since
+#473; the loom model and a Miri job still do not exist). The [index](./README.md#open-problems)
+holds the entries.
 
 ## Reproductions
 
-The runs behind P50, P51 and P54, with the binaries described in the first paragraph. None
-is yet a test or corpus case in the repository: each is marked *repro pending in repo* with the
-fix lane that adds it, and the marker gives way to the test's path when that lands.
+The runs behind P50, P51 and P54, with the binaries described in the first paragraph, at
+`fb6928c7` before the fixes. Each is now a test or corpus case in the repository, named in
+its heading; the outputs quoted are those of the runs before the fix.
 
-**P51** (dup of P22; in the repo as `lifecycle/tests/vacuous.rs::P51`, #494). The model:
+**P51** (a duplicate of P22; in the repository since #494 as
+`tests/vacuous.rs::an_assert_after_a_step_that_only_stutters_holds_vacuously`). The model:
 
 ```
 entity Order "注文" {
@@ -891,10 +984,12 @@ sets(Touch, Order.status == open)
 after(Touch).assert(Order.flag == true)
 ```
 
-`rdra-ish verify` prints `Cone_AfterAssert_Touch_0 [AfterAssert_Touch_0]: ok (3 states)`.
-With `sets(Touch, Order.status == closed)` it prints `counterexample (7 states)`.
+`rdra-ish verify` printed `Cone_AfterAssert_Touch_0 [AfterAssert_Touch_0]: ok (3 states)`.
+With `sets(Touch, Order.status == closed)` it printed `counterexample (7 states)`. Since #494
+the vacuity check reports `AfterAssert_Touch_0` as vacuous, the step running only as one that
+changes nothing, which the test asserts at one and two instances with the control.
 
-**P50** (in the repository: `crates/rdra-ish-cli/tests/fixtures/wide_state/{two_creates,one_create}.rdra`, run by `verify_cli.rs::a_state_past_bit_65535_keeps_its_verdicts`, #479). One entity `Row` with `id: Int @pk` and 34 columns `c0` to `c33`, each
+**P50** (in the repository since #479: `crates/rdra-ish-cli/tests/fixtures/wide_state/{two_creates,one_create}.rdra`, run by `cli/tests/verify_cli.rs::a_state_past_bit_65535_keeps_its_verdicts`, which asserts the 8-instance verdicts at 255). One entity `Row` with `id: Int @pk` and 34 columns `c0` to `c33`, each
 `Int @default(0)`; every flag below is given to `verify`.
 
 1. One use case `Create` that creates a `Row` and `sets` every column to 1, and
@@ -907,7 +1002,7 @@ With `sets(Touch, Order.status == closed)` it prints `counterexample (7 states)`
    `--instance-count 8`: `counterexample (511 states)`. At `--instance-count 255`:
    `ok (256 states)`, `result: ok`, with the two `usecase` declarations in either order.
 
-**P54** (run by the review; in the repository since #470 as the engine-corpus case `width_nullable_enum_256.rdra` and `check_cli::an_enum_column_takes_no_more_values_than_a_state_holds`). An entity
+**P54** (run by the review; in the repository as the engine-corpus cases `width_nullable_int_top.rdra` and `width_nullable_enum_256.rdra` and `cli/tests/check_cli.rs::an_enum_column_takes_no_more_values_than_a_state_holds`, since #470, and `core/tests/reference/mod.rs::a_value_past_a_byte_is_not_wrapped`, since #492). An entity
 `Row { id: Int @pk; n: Int @null }`, a use case `Create` that creates a `Row` with
 `sets(Create, Row.n == 255)`, and `forbidden(Row, Row.n >= 200)`, under
 `--instance-count 1 --int-range-max 255`: `ok (2 states)`, `result: ok`. With 254 in place
@@ -927,8 +1022,35 @@ Changes to statements of this document after it was first written, newest last.
   (`6e1451a1`) from a reading of `explore/orbit.rs::lift_path` and `orbit/liveness.rs` up to
   their certification steps; the revisions after the review did not re-check it against their
   bodies.
-- **2026-11-28, after the owner's review of semantics.md (P60).** This document said that
+- **2026-11-28, fixes recorded as they merged.** P50 and P55 fixed in #479 (commit
+  `37b58561`); P54 and P40 fixed in #470 (commit `82ba631f`); P19 fixed in #478 (`26768ce4`);
+  P53 fixed in #484 (`2f0bc045`, `9745f938`); P17 and P18 in #473 (`101ff45c`); P6, P22 and
+  P51, P56 marked for #475 (`a92020fe`); P52 fixed in #487 for state rules and `after`
+  (`a14a3fae`); the revision history moved into this section (`5fe8931f`); `unread@pin`
+  markers and *repro pending in repo* (`3345c389`).
+- **2026-11-28, after the owner's review of semantics.md (P60)** (commit `c55dfa60`). This document said that
   under P54 "`T` is not `T_β(M)`". semantics.md defined `T_β(M)` as the build's output, so
   under its own definitions that sentence was false. semantics.md now defines `T_β(M)` from
   the model's text. P54 and the threats to validity now say that the built `T` departs from
   D13, a failure of claim I1. No proof here changes: every proof is about the built `T`.
+- **2026-11-28, later fixes** (commits `16a701b7` and `58b7f522`, #494: P51's vacuity; `1aeba6e0`,
+  #495: a `.present()` goal in "The goal on absent rows"; `2a373175`, #510: `StateTooWide`;
+  `79c4d186` and `9519199b`, #522: N13 and the N16 reading list say a failed replay is a fault).
+- **2026-11-28, after the final audit of docs/theory** (findings 1, 2, 4, 16, 45 to 49;
+  commit `CONTENT_COMMIT`). Re-pinned from `fb6928c7` to `c97c88ef`, with the method of the
+  first paragraph; the sentence that the verifier was the same at `b83b9544` and `fb6928c7`
+  is gone, and semantics.md is cited for D1 to D25, N14 citing D25 with its `has_way_on`
+  condition. N2's preconditions are enforced (`DomainTooLarge`, #470; `u32` offsets, #479;
+  `StateTooWide`, #510), where the text said neither was. The findings P50, P54 and P55 and
+  the warnings of N18 describe the code before their fixes in the past tense. The table of
+  [Counterexamples](#counterexamples-what-is-checked-before-printing) was rebuilt row by row
+  from the code after #518 and #522: every printed trace replays, the reduced lift checks each
+  step, and a failure is a fault, where the old table gave "nothing", "`debug_assert!` only"
+  and "panics"; it also said entity cones are not reduced, but `verify` reduces them. What
+  remains unchecked, and the release `expect`s and `assert!`s of the lifts, are listed there.
+  The "Symmetric" bullet of [The lift's mechanics](#the-lifts-mechanics) was re-read against
+  `explore/orbit.rs::lift_path` and the lasso lift of `orbit/liveness.rs`, which takes the
+  move at the edge's place rather than the first matching one. "All are open" became a status
+  per problem; the Reproductions no longer say *repro pending in repo*, and name the P51
+  test `an_assert_after_a_step_that_only_stutters_holds_vacuously` instead of a test called
+  `P51`, which does not exist. The P26 reference interpreter is described as it exists (#492).
