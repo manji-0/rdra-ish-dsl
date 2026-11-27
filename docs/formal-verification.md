@@ -834,7 +834,7 @@ says how to see it in a run and what to do. The
   native checker with TLC's state graph on every sample cone, but a cone whose BFS, reduced as
   `verify` explores it, passes 300,000 states at two instances is compared at one instance
   only. `verify` still checks it at two, and `--with-tlc` runs TLC on it. `VERIFY_FALLBACK` in
-  `crates/rdra-ish-cli/tests/engine_equivalence.rs` lists these 24 cones:
+  `crates/rdra-ish-cli/tests/engine_equivalence.rs` lists these 25 cones:
 
   | Sample | Cones | States at 2 instances | Why it is large |
   |---|---|---:|---|
@@ -842,7 +842,7 @@ says how to see it in a run and what to do. The
   | patent-ops | entity `OfficeAction`, invariant `Forbidden_OfficeAction_3` | 1,341,707 reduced | The office action times 185 classes of the application's side, which the examination guards read |
   | food-permit-ops | entity `BusinessPermit` | 4,648,771 reduced | The permit's side times 444 classes of the disposition's and the application's, read through the events of #112 |
   | insurance-claim-ops | entities `Claim`, `Payment`; invariants `Forbidden_Claim_0`, `Forbidden_Claim_4`, `MultiForbidden_Payment_3`; `AfterAssert_PayClaim_0` | 633,787 to 903,987 reduced | The claim and the payment times 2,428 classes of the case, which `CompleteClaim`'s settlement guard reads |
-  | insurance-claim-ops | entity `ClaimCase` | reduced | The case's side, reduced by the claim's and the payment's side in 4,368 classes under two bits per case (#112) |
+  | insurance-claim-ops | entities `ClaimCase`, `Investigation` | reduced | The case's side, reduced by the claim's and the payment's side in 4,368 classes under two bits per case (#112). Since #477 `Investigation`'s cone is its exact cone, the same as the case's |
   | oidc-auth | 8 entities and 5 invariants of the browser flow | over 2,000,000 | The request, interaction, session, consent, grant, code, and tokens read each other. Nothing reduces; the sample's header runs `verify` at 1 instance with `--prove`. |
 
   See it: the list in the test, which fails when a cone joins or leaves it. What to do: run
