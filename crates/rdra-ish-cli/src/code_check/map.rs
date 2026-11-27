@@ -30,7 +30,7 @@ impl CompilerMessage {
     /// `file:line:col  CODE: text`, the file as `file` shows it: the `code:` line, with the
     /// text's further lines (tsc's elaboration of which member differs, Go's `have` and
     /// `want`) under it.
-    fn shown(&self, file: &dyn Fn(&str) -> String) -> String {
+    pub(crate) fn shown(&self, file: &dyn Fn(&str) -> String) -> String {
         let code = self
             .code
             .as_ref()
@@ -131,6 +131,9 @@ pub(crate) fn map_messages(
     m: &Mapping<'_>,
     backend: &dyn Backend,
 ) -> Vec<CodeDiagnostic> {
+    if let Some(cause) = backend.build_cause(messages) {
+        return vec![cause];
+    }
     let mut out: Vec<CodeDiagnostic> = Vec::new();
     let mut unmapped: Vec<&CompilerMessage> = Vec::new();
     let on_probe_file = |msg: &CompilerMessage| same_file(Path::new(&msg.file), m.probe_file);

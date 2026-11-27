@@ -58,6 +58,7 @@ FAIL: code: 1 error(s) at --code=build
 | `CodeIncomplete_<UC>` | Some methods are missing | Add the methods the `fix:` line names |
 | `CodeSignature_<UC>` | A method takes or returns other types | Match the contract's signature |
 | `CodeError_<UC>` | Another error on the use case's probe line or methods | Read the quoted compiler error |
+| `CodeCommonJs` | TypeScript: the package makes the probe and the domain code CommonJS | Set `"type": "module"` in `package.json` |
 | `CodeServiceNotFound` | The probe cannot resolve the type `service` names: it was renamed or moved | Set `service` (and `module`, `new`) in the table, then `rdra-ish codegen model --probe` |
 | `CodeUnmapped`, `CodeBuildFailed` | Errors that belong to no use case, each listed; a failed build with no error rdra-ish reads | Fix the build by hand |
 | `CodeConformance` | `run`: the store differs from the model after a call, or the service panicked or threw | Read the first difference: the traces line, and the `model only:` / `store only:` rows; or where it panicked |

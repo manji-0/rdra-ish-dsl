@@ -1,7 +1,7 @@
 //! The TypeScript model adapter: `ModelState`, `Call`, `ModelAdapter` and `conform`. An
 //! adapter's methods may return promises: a real store is asynchronous.
 
-use super::super::conformance::{TRACES_ENV, TRACES_FORMAT};
+use super::super::conformance::TRACES_FORMAT;
 use super::super::string_literal;
 use super::super::ts::{doc, property};
 use super::{AdColumn, Adapter, ArgKind, RowToken, Val, REPORT};
@@ -360,9 +360,11 @@ fn print_conform(out: &mut String) {
  * with the state the model reaches. A call the model refuses must be refused, with the kind the
  * traces name, and change nothing, and so must a commit whose rows another call changed after
  * its prepare. An adapter with `prepare` and `commit` runs the traces again with each call made
- * by them. Returns the first difference.
+ * by them. Returns the first difference. `traces` is the file's text, or a function that reads
+ * its lines, called once per run (a file too large for one string: `readline` over
+ * `createReadStream`).
  */
-export async function conform(adapter: ModelAdapter, traces: string): Promise<AdResult<AdapterReport>> {{
+export async function conform(adapter: ModelAdapter, traces: string | (() => AsyncIterable<string>)): Promise<AdResult<AdapterReport>> {{
   const report = await adPass(adapter, traces, false);
   if (!report.ok || adapter.prepare === undefined || adapter.commit === undefined) {{
     return report;
@@ -385,12 +387,9 @@ async function adRun(adapter: ModelAdapter, call: Call, split: boolean): Promise
 }}
 
 /** One run of `traces`, with each call made by `adRun`. */
-async function adPass(adapter: ModelAdapter, traces: string, viaSplit: boolean): Promise<AdResult<AdapterReport>> {{
+async function adPass(adapter: ModelAdapter, traces: string | (() => AsyncIterable<string>), viaSplit: boolean): Promise<AdResult<AdapterReport>> {{
   const how = viaSplit ? " through prepare and commit" : "";
-  const lines = traces.split("\n");
-  if (lines[0]?.trimEnd() !== {format}) {{
-    return {{ ok: false, error: "not a traces file of this version: generate the adapter and the traces again" }};
-  }}
+  const stale: AdResult<never> = {{ ok: false, error: "not a traces file of this version: generate the adapter and the traces again" }};
   const states = new Map<string, string[]>();
   let defining: string[] | null = null;
   let report: AdapterReport = {{ traces: 0, calls: 0, refusals: 0, interleavings: 0, skipped: 0, split: 0 }};
@@ -398,10 +397,18 @@ async function adPass(adapter: ModelAdapter, traces: string, viaSplit: boolean):
   let seed = adEmpty();
   let want: readonly string[] = [];
   const observe = async (): Promise<readonly string[]> => adAbstract(await adapter.observe());
-  for (let n = 1; n < lines.length; n++) {{
-    const toks = (lines[n] ?? "").split(/\s+/).filter((t) => t !== "");
+  let n = 0;
+  for await (const line of typeof traces === "string" ? traces.split("\n") : traces()) {{
+    n++;
+    if (n === 1) {{
+      if (line.trimEnd() !== {format}) {{
+        return stale;
+      }}
+      continue;
+    }}
+    const toks = line.split(/\s+/).filter((t) => t !== "");
     const [kind, ...rest] = toks;
-    const at = (what: string): AdResult<never> => ({{ ok: false, error: `traces line ${{n + 1}}: ${{what}}` }});
+    const at = (what: string): AdResult<never> => ({{ ok: false, error: `traces line ${{n}}: ${{what}}` }});
     if (kind === undefined || kind === "#") {{
       continue;
     }}
@@ -550,7 +557,7 @@ async function adPass(adapter: ModelAdapter, traces: string, viaSplit: boolean):
         return at(`unknown record ${{kind}}`);
     }}
   }}
-  return {{ ok: true, value: report }};
+  return n === 0 ? stale : {{ ok: true, value: report }};
 }}
 
 /** The store against the model's state, both as sorted sets of lines: what one holds and the other does not, or null. */
@@ -779,21 +786,9 @@ pub(super) fn probe(
     w.line("");
     w.line("// The adapter against the model's traces, by the generated harness. What it needs of");
     w.line("// Node is declared here, so the probe builds with or without @types/node.");
-    w.line("declare const process: {");
-    w.line("  exitCode: number | undefined;");
-    w.line("  env: { readonly [name: string]: string | undefined };");
-    w.line(
-        "  getBuiltinModule: (id: \"node:fs\") => { readFileSync: (path: string, encoding: \"utf8\") => string };",
-    );
-    w.line("};");
-    w.line(
-        "declare const console: { log: (line: string) => void; error: (line: string) => void };",
-    );
-    w.line(&format!(
-        "const traces = process.getBuiltinModule(\"node:fs\").readFileSync(process.env[{}] || {}, \"utf8\");",
-        string_literal(TRACES_ENV),
-        string_literal(traces)
-    ));
+    for line in super::super::ts_port::probe_traces(traces) {
+        w.line(&line);
+    }
     w.line(&format!(
         "const adapter: model.ModelAdapter = ((): Adapter => {new})();"
     ));

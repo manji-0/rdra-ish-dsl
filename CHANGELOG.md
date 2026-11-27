@@ -111,6 +111,8 @@
   `Caller` takes them), `primary_key` and `unique` (`@unique`) on each field of an entity, and
   each obligation's `kind`, `entity`, `columns` and `parent`. `domain_name` is documented.
   The generated code does not change.
+- `rdra.toml` accepts `[code.typescript]` as another spelling of `[code.ts]`, as `--lang
+  typescript` spells `--lang ts`. Naming both is an error (one table named twice).
 
 ### Changed
 
@@ -124,7 +126,9 @@
   one `CodeServiceNotFound` pointing at `service` in rdra.toml and `codegen --probe`, not
   one `CodeError` per use case; a failed run keeps the harness's `model only:` and
   `store only:` rows, and says where the service panicked or threw when the harness
-  reported nothing; a `generator changed` names the table's settings in rdra.toml first.
+  reported nothing, and a file the TypeScript probe cannot open (the traces at a wrong
+  path) as such rather than `the service threw: ENOENT`; a `generator changed` names the
+  table's settings in rdra.toml first.
   The CLI reference and the implement skill say what a pass does not show: the rest of the
   application, migrations, held locks, and that a raised event is never consumed.
 - `verify --prove` (experimental) finds lemmas from a rule's counterexample to induction
@@ -273,6 +277,23 @@
   the CLI reference. Verdicts and stdout do not change; in a release build the
   `RDRA_ISH_WF_REDUCED_STATS` line no longer fills its divergence columns. The test-only
   `RDRA_ISH_TEST_QUOTIENT_HITS` prints the quotient cache's hits for the CLI tests.
+- TypeScript: `check --code` names a package that makes the probe and the domain code
+  CommonJS (`"type": "commonjs"`, which npm 11's `npm init -y` writes); they are ES modules
+  and need `"type": "module"`. At `build` under `verbatimModuleSyntax`, the new
+  `CodeCommonJs` stands in for the `CodeError` per use case and `CodeUnmapped` that tsc's
+  TS1286 / TS1287 / TS1295 gave; at `run`, the `CodeConformance` says so in place of Node's
+  last line.
+  The docs and the implement skill say so, recommend `seal = true` in `[code.ts]` (a state
+  built as an object literal, skipping the transition function, fails `build` instead of
+  passing `run`), and show how to answer an API's writes and reads in one shape
+  (`<Entity>.toRow` over a result's states) and how to import the scalar `Date` without
+  hiding the global.
+- TypeScript: the conformance probe reads the traces line by line (`readline` over
+  `createReadStream`) instead of `readFileSync` into one string, which Node refuses past
+  about 512 MB (`ERR_STRING_TOO_LONG`). `conform`, of the domain code and of the model
+  adapter, takes the text as before or a function returning the lines as an
+  `AsyncIterable<string>` (the adapter's `conform` calls it once per run). Generated output changes:
+  the probe's trace reading, and `conform`'s parameter type and loop.
 
 ### Added
 
@@ -314,6 +335,22 @@
 - The obligation ledger reads no marker inside a string literal, nor one whose name is not
   letters, digits and `_`: a script printing `` `-- rdra: obligation ${ob}` `` was a
   `` CodeObligationUnknown_${ob}`); `` warning.
+- Go: the contract probe and the adapter probe sort their import group by path, so `gofmt -l`
+  no longer names a probe whose service package's import path sorts before the domain's
+  (`example.com/clinic/clinic` before `example.com/clinic/domain`). The Go domain code passes
+  staticcheck's default checks with its `Code generated` line removed: a Bool test prints as
+  `x` or `!x` in place of `x == true`, `x == false` and `!(!x)` (S1002, SA4013), and
+  `ptrTo`, `copyOf`, `anyOf`, `allOf` and `countOf` print only where the code calls them
+  (U1000), as do the conformance harness's value parsers. Ids keep the model's spelling (`Id`,
+  not `ID`). What the code does does not change.
+- Go (breaking for a service that implements `ConformancePort`): `Seed` returns an `error`
+  and `Snapshot` returns `(StoreSnapshot, error)`, so a store backed by a database reports a
+  failure instead of panicking, and `Conform` ends with `the service's Seed failed: ...` (or
+  `Snapshot`) on the traces line. Add `return nil` / `, nil` to an in-memory service.
+- Docs: a seeded state can hold a child whose parent row is absent (`check` warns
+  `PreExistingChildOfCreatedParent_*`); a store that enforces `Ref_*` as a foreign key turns
+  that check off while `Seed` runs. The harness does not invent the parent
+  (docs/cli-reference.md, "Conformance harness").
 - The conformance traces (`codegen --conformance`, `codegen --code`) no longer leave out the
   moves of a use case that chooses the target of a lifecycle column other than the state
   column, such as `transitions(Decide, Case.liability, undetermined -> at_fault)` beside

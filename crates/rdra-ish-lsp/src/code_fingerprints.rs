@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use rdra_ish_core::fingerprint;
-use rdra_ish_core::project::Manifest;
+use rdra_ish_core::project::{CodeSection, Manifest};
 use rdra_ish_core::ResolvedProgram;
 
 /// A note on one line (0-based) of rdra.toml.
@@ -60,15 +60,19 @@ fn note(path: &Path, shown: &Path, model: &str) -> Option<String> {
     }
 }
 
-/// The 0-based line of `[code.<name>]` in `text`, or of `[code]`, or 0.
+/// The 0-based line of `[code.<name>]` (in any of its spellings) in `text`, or of `[code]`,
+/// or 0.
 fn table_line(text: &str, name: &str) -> u32 {
-    let header = format!("[code.{name}]");
     let find = |h: &str| {
         text.lines()
             .position(|l| l.trim_start().starts_with(h))
             .map(|i| i as u32)
     };
-    find(&header).or_else(|| find("[code")).unwrap_or(0)
+    CodeSection::headers(name)
+        .iter()
+        .find_map(|h| find(h))
+        .or_else(|| find("[code"))
+        .unwrap_or(0)
 }
 
 #[cfg(test)]

@@ -14,6 +14,7 @@ domain = "../web/src/domain.ts"
 traces = "../web/src/traces.txt"
 probe = "../web/src/rdra_contract.ts"
 service = "../web/src/order_service.ts#OrderService"
+seal = true
 
 [code.go]
 domain = "../shop/domain/domain.go"
@@ -32,14 +33,17 @@ new = "svc.New()"
 | `module` | Rust: the generated module's path (`svc::domain`). Go: `domain`'s import path. |
 | `new` | An expression making a fresh service, for the conformance test. Required in Rust. |
 | `package` | Go: the package name of `domain`. Default `domain`. |
-| `seal`, `tsconfig` | TypeScript: write `domain` as `codegen --seal` does; the tsconfig the probe's `tsconfig.rdra.json` extends. |
+| `seal` | TypeScript: write `domain` as `codegen --seal` does. Set it with `domain`: a state built as an object literal, skipping the transition function, then fails `build` (TS2741) instead of passing `run`. |
+| `tsconfig` | TypeScript: the tsconfig the probe's `tsconfig.rdra.json` extends. |
 | `root` | Where the build runs. Default: the nearest directory above `domain` with `Cargo.toml`, `go.mod`, `package.json`, or `tsconfig.json`. |
 | `build`, `run` | A command list replacing the language's default. |
 | `conformance_states` | The states the BFS behind the traces explores at most. Default `65536`. |
 
-An unknown key fails every loading command with the line. The TypeScript table is
-`[code.ts]`, whichever spelling `--lang` takes. TypeScript `run` needs Node 22.18 or later,
-and the service's imports name the `.ts` files.
+`[code.typescript]` is another spelling of `[code.ts]`. An unknown key fails every loading
+command with the line. TypeScript `run` needs Node 22.18 or later, the service's imports
+name the `.ts` files, and the `package.json` sets `"type": "module"` (npm 11's `npm init -y`
+writes `"commonjs"`: `build` then fails with `CodeCommonJs`, or `run` with a
+`CodeConformance` that says so).
 
 ## What `codegen` prints
 
@@ -92,8 +96,11 @@ and the service's imports name the `.ts` files.
 3. `ConformancePort`: `seed` empties the store and stores a snapshot's rows; `snapshot`
    returns every row (state types as `<Entity>Row`), every pending run mark, and every
    raised event a triggered use case reads. Nothing consumes a raised event: it stays on its
-   row. The harness makes a port with `new` once per trace, so keep `new` cheap (one shared
-   database that `seed` clears).
+   row. In Go both return an `error` for a store that fails; return it rather
+   than panic. A seeded state can hold a child whose parent row is absent (`check` warns
+   `PreExistingChildOfCreatedParent_*`), so a store that enforces `Ref_*` as a foreign key
+   turns that check off while `seed` runs. The harness makes a port with `new` once per
+   trace, so keep `new` cheap (one shared database that `seed` clears).
 
 The harness runs each trace on a fresh service, compares the store with the model's state
 after every call, and expects each call the model refuses to fail and change nothing. It
@@ -117,3 +124,14 @@ impl PayUseCase for Service {
 
 `self.order` loads a row and converts it with `Order::from_row`; `self.check` is the
 conditional write of step 2.
+
+In TypeScript:
+
+- A result holds states (`kind: "Paid"`), the store rows (`status: "paid"`). Answer an
+  API's writes and reads in one shape: pass the result's states through `Order.toRow`.
+- The scalar `Date` hides the global `Date` where it is imported by name. Import it
+  renamed (`import { Date as IsoDate }`) or import the module as a namespace.
+- Inputs are positional. Two of one type (`title: string, technicalField: string`) can be
+  swapped without a compile error, and the conformance run does not see the values of
+  columns the model does not track. Check such a call against the contract's parameter
+  names, and test it with distinct values.

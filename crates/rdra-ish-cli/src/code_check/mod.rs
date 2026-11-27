@@ -157,6 +157,12 @@ pub(crate) trait Backend {
         None
     }
 
+    /// One finding for a build that fails as a whole, for a cause no use case has (a project
+    /// setting): it stands in for the per-use-case findings its messages would give.
+    fn build_cause(&self, _messages: &[CompilerMessage]) -> Option<CodeDiagnostic> {
+        None
+    }
+
     /// What a message says about the contract it belongs to.
     fn classify(&self, _message: &CompilerMessage) -> Finding {
         Finding::Other
