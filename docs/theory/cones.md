@@ -321,7 +321,10 @@ the trace printers (`cli/state_findings.rs`, `rdra-ish-emit`'s `state_pattern.rs
 that `T` holds back, and that adds edges and states. An added edge can leave a state that is a
 deadlock of `T`. An added state can witness a lifecycle state that `T` never reaches, or run a
 use case that never runs in `T`. In each case the finding is missing. A missing finding has no
-trace, so the per-trace `free_triggers` note never appears.
+trace, so the per-trace `free_triggers` note never appears. `NeverRuns`, arms, and values are
+combined over every entity cone that keeps the action (`targets.rs::RunsSoFar`), and one cone
+that fires the action clears the finding. So a single cone with a left-out mark can hide the
+finding for the whole run.
 
 The following model is constructed by hand and has not been run. Order's exit `ShipOrder`
 reads `Payment.status == paid`. `ConfirmPayment`, triggered by `EvPaid`, writes `Payment.status`.
@@ -353,9 +356,14 @@ raise to read `κ`. `build/events.rs::count_up` builds the raise as an `Effect::
 `over`. `count_down` builds the handler's decrement as a `Transition` on `κ` on its first action
 in the same way. A `Transition`'s source is in `plain_reads` (Notation: "every transition
 source"), so `κ ∈ Rd(a)` for the raising action and for the handler. Once either action is in
-`A_W`, (C1) brings `κ` into `W`. `count_up` adds nothing when the raiser's last action has no
-parameter on the entity. That action does not write `κ` and so does not raise it, and the
-claim says nothing about it. Both halves are proved.
+`A_W`, (C1) brings `κ` into `W`. `count_up` returns early when the raiser's last action has no
+parameter on the entity, but that case does not arise. `build/events.rs::edge` takes the
+entities whose marks the handler reads (`reads`) from `common`, the entities that every
+raiser's last action binds. `countable` rejects a raiser that binds two rows of such an entity.
+So `count_up` always adds the effect. `count_down` also adds a `Transition` on `κ` for every
+`GuardWhy::Raised` guard that `read_mark` puts on `κ`. So an action that reads the counter's
+mark has `κ ∈ Rd(a)`, and no counter can be left out, even without the `is_counted` disjunct
+of (C2). Both halves are proved.
 
 *Evidence.* P-full (by reading `count_up`, `count_down`, and `plain_reads`); D: `core/tests/reduce.rs::a_counted_mark_keeps_its_raiser_and_handler_out_of_the_sub_lifecycle`.
 
@@ -381,9 +389,10 @@ sets `C_s` keeps subsets of those `C_ℓ` keeps. Equal counts therefore mean equ
 that `C_ℓ` keeps for such an action is a copy guard with a target outside `W_s`, so the
 dropped-copy case does not arise.
 
-*Evidence.* P-full (it reduces to Theorem A2); no test names it. The claims inventory had no
-row for this verdict, so A27 is added. When `C_ℓ` passed on its reduced cone, its `ok` rests on
-Theorem A8, as every reduced cone's verdict does.
+*Evidence.* P-full relative to the covering cone's `ok`, because the proof reduces to Theorem
+A2. `cone_jobs` reduces `C_ℓ` (`reduced_cone_in`), and when it is reduced its `ok` rests on
+Theorem A8 (P7, P31), as every reduced cone's verdict does. No test names A27. The claims
+inventory had no row for this verdict, so A27 is added.
 
 ---
 
@@ -467,8 +476,10 @@ counterexample to `Undecided(Why::FreesSlots)`, and `explore/properties.rs::deci
 explored forms (`stable`, `unchanged`, `precedes`, and `always`) again on `T` after a violation. Only
 `ok` is taken from such a cone. The argument depends on the form:
 
-- `stable`, `unchanged`, and `precedes` read the unreduced cone (`decide_property`), so their
-  `ok` is sound by Theorems A4.1 and A2.
+- `stable`, `unchanged`, and `precedes` read the unreduced cone, so their `ok` is sound by
+  Theorems A4.1 and A2. Both engines run them there. `verify/jobs.rs` builds their explored
+  jobs on `restrict_to(cone)` (`LtlKind::is_explored`). `verify/bfs.rs::explored_properties`
+  calls `decide_property`, which also uses `restrict_to` for every form except `always`.
 - `always` reads the reduced cone (`decide_property` calls `reduced_cone` for `Ltl::Always`). So
   do `eventually`, `leads_to`, and `always` in `verify`, through the `Plain` run of A5.1. For
   these forms the `ok` is sound by Theorem A8 (points 1 and 4), then A4.1 and A2. A8 assumes P7
@@ -977,7 +988,7 @@ Evidence: none beyond the reading of `escalate` and the guide.
 
 | Claim | Statement here | Proof | Other evidence | Open |
 |---|---|---|---|---|
-| A1 | Theorem A1 | full | D | |
+| A1 | Theorem A1 | full | D (does not single out left-out marks) | P32 |
 | A2 | Theorem A2; left-out marks | full (`ok` of universal checks); none for left-out-mark counterexamples or for existential and branching findings | D | P1, P32 |
 | A3 | Proposition A3 | full (`count_up`, `count_down`) | D | |
 | A4 | Theorem A4 (on the unreduced cone) | full | D | P1 |
@@ -998,7 +1009,7 @@ Evidence: none beyond the reading of `escalate` and the guide.
 | A24 | Proposition A24 | sketch | D | P10 |
 | A25 | Proposition A25 | full given A1, A28, A8 | unit test | P1, P11 |
 | A26 | scope | none | none | |
-| A27 | Proposition A27 | full (Theorem A2 on the covering cone) | none | |
+| A27 | Proposition A27 | full relative to the covering cone's `ok` (Theorem A2; A8 when that cone is reduced) | none | P7, P31 |
 | A28 | Proposition A28 | full | D (via A2) | P11 |
 
 ---
