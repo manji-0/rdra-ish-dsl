@@ -4,7 +4,7 @@
 //! `conformance::traces` writes. The contracts are async (`Promise<Result<..>>`): a TypeScript
 //! service reads its store asynchronously; the Rust and Go ones are sync.
 
-use super::conformance::TRACES_FORMAT;
+use super::conformance::{TRACES_ENV, TRACES_FORMAT};
 use super::ir::{DomainModel, Field, FieldType, PortArg, PortDecl, PortMethod, Scalar, Track};
 use super::probe::{Probe, ProbeWriter};
 use super::string_literal;
@@ -220,13 +220,15 @@ pub(super) fn probe(domain: &DomainModel, binding: &super::ProbeBinding) -> Opti
         w.line("// Node is declared here, so the probe builds with or without @types/node.");
         w.line("declare const process: {");
         w.line("  exitCode: number | undefined;");
+        w.line("  env: { readonly [name: string]: string | undefined };");
         w.line(
             "  getBuiltinModule: (id: \"node:fs\") => { readFileSync: (path: string, encoding: \"utf8\") => string };",
         );
         w.line("};");
         w.line("declare const console: { log: (line: string) => void; error: (line: string) => void };");
         w.line(&format!(
-            "const traces = process.getBuiltinModule(\"node:fs\").readFileSync({}, \"utf8\");",
+            "const traces = process.getBuiltinModule(\"node:fs\").readFileSync(process.env[{}] || {}, \"utf8\");",
+            string_literal(TRACES_ENV),
             string_literal(traces)
         ));
         w.line(&format!(

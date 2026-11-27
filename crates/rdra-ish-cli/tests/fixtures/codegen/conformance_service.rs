@@ -6,6 +6,8 @@
 //   drop-row         Ship stores the order but not the shipment the core returns
 //   accept-disabled  Cancel cancels an order the core refuses, as if it were paid, unconditionally
 //   unconditional    every commit writes without checking what the row still is
+//   ignore-id        a call on an order or a shipment runs on the first one, whatever its id
+//   constant-observe the snapshot is what was seeded, whatever the calls stored
 #[path = "domain.rs"]
 #[allow(dead_code)] // the service uses part of the module
 mod domain;
@@ -19,6 +21,7 @@ struct Service {
     orders: BTreeMap<i64, OrderRow>,
     shipments: BTreeMap<i64, ShipmentRow>,
     ev_shipped: Vec<EvShipped>,
+    seeded: StoreSnapshot,
 }
 
 /// `NotEnabled` as the error of any use case.
@@ -37,11 +40,13 @@ fn holds(tag: Option<&str>, expected: ExpectedSource) -> bool {
 
 impl Service {
     fn order(&self, id: OrderId, usecase: &'static str) -> Result<Order, NotEnabled> {
-        let row = self
-            .orders
-            .get(&id.get())
-            .cloned()
-            .ok_or(NotEnabled { usecase })?;
+        let row = if self.fault == "ignore-id" {
+            self.orders.values().next()
+        } else {
+            self.orders.get(&id.get())
+        }
+        .cloned()
+        .ok_or(NotEnabled { usecase })?;
         Ok(Order::from_row(row).expect("the store holds valid rows"))
     }
 
@@ -76,6 +81,7 @@ impl ConformancePort for Service {
             fault: std::mem::take(&mut self.fault),
             ..Service::default()
         };
+        self.seeded = rows.clone();
         for c in rows.customer {
             self.customers.insert(c.id.get(), c);
         }
@@ -89,6 +95,9 @@ impl ConformancePort for Service {
     }
 
     fn snapshot(&mut self) -> StoreSnapshot {
+        if self.fault == "constant-observe" {
+            return self.seeded.clone();
+        }
         StoreSnapshot {
             customer: self.customers.values().cloned().collect(),
             order: self.orders.values().cloned().collect(),
@@ -170,11 +179,13 @@ impl SendUseCase for Service {
         if !self.ev_shipped.contains(&ev_shipped) {
             return Err(not_enabled("Send"));
         }
-        let row = self
-            .shipments
-            .get(&shipment.get())
-            .cloned()
-            .ok_or(NotEnabled { usecase: "Send" })?;
+        let row = if self.fault == "ignore-id" {
+            self.shipments.values().next()
+        } else {
+            self.shipments.get(&shipment.get())
+        }
+        .cloned()
+        .ok_or(NotEnabled { usecase: "Send" })?;
         run_send(
             Shipment::from_row(row).expect("the store holds valid rows"),
             ev_shipped,

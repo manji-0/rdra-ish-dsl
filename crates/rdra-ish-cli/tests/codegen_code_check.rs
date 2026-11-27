@@ -322,7 +322,8 @@ fn seal_is_for_typescript_only() {
 }
 
 /// A manifest whose `build` and `run` are rdra-ish's own `--version`: the conformance run
-/// passes with no toolchain, so what is tested is the statement of what it covered.
+/// passes with no toolchain, so what is tested is the statement of what it covered (with
+/// `--mutants 0`: such a run fails the self-check) or the self-check itself.
 fn noop_run(states: usize) -> String {
     let bin = env!("CARGO_BIN_EXE_rdra-ish");
     format!(
@@ -356,7 +357,10 @@ fn statement(stdout: &str) -> Vec<&str> {
 #[test]
 fn a_conformance_run_states_its_coverage() {
     let dir = run_project("coverage", 4096);
-    let (code, stdout, stderr) = outcome(&rdra(&dir, &["check", "model", "--code=run"]));
+    let (code, stdout, stderr) = outcome(&rdra(
+        &dir,
+        &["check", "model", "--code=run", "--mutants", "0"],
+    ));
     assert_eq!(code, Some(0), "{stderr}");
     assert!(
         stdout.ends_with("OK: code: what the model requires, at --code=run\n"),
@@ -382,7 +386,11 @@ fn a_conformance_run_states_its_coverage() {
     assert_eq!(lines.len(), 7, "{stdout}");
     assert!(!stderr.contains("CodeCoverageIncomplete"), "{stderr}");
     // The same statement whenever it runs, and none below --code=run.
-    let again = outcome(&rdra(&dir, &["check", "model", "--code=run"])).1;
+    let again = outcome(&rdra(
+        &dir,
+        &["check", "model", "--code=run", "--mutants", "0"],
+    ))
+    .1;
     assert_eq!(statement(&again), lines);
     let (_, build, _) = outcome(&rdra(&dir, &["check", "model", "--code=build"]));
     assert!(!build.contains("coverage of"), "{build}");
@@ -393,7 +401,10 @@ fn a_conformance_run_states_its_coverage() {
 #[test]
 fn a_capped_suite_warns_and_deny_incomplete_fails_it() {
     let dir = run_project("capped", 3);
-    let (code, stdout, stderr) = outcome(&rdra(&dir, &["check", "model", "--code=run"]));
+    let (code, stdout, stderr) = outcome(&rdra(
+        &dir,
+        &["check", "model", "--code=run", "--mutants", "0"],
+    ));
     assert_eq!(code, Some(0), "{stderr}");
     assert!(
         stderr.contains("warning[CodeCoverageIncomplete]: [code.rust]: the conformance BFS stopped at its cap of 3 states"),
@@ -413,7 +424,14 @@ fn a_capped_suite_warns_and_deny_incomplete_fails_it() {
 
     let (code, stdout, stderr) = outcome(&rdra(
         &dir,
-        &["check", "model", "--code=run", "--deny-incomplete"],
+        &[
+            "check",
+            "model",
+            "--code=run",
+            "--deny-incomplete",
+            "--mutants",
+            "0",
+        ],
     ));
     assert_eq!(code, Some(1), "{stderr}");
     assert!(
@@ -428,7 +446,14 @@ fn a_capped_suite_warns_and_deny_incomplete_fails_it() {
     let complete = run_project("complete-deny", 4096);
     let (code, _, stderr) = outcome(&rdra(
         &complete,
-        &["check", "model", "--code=run", "--deny-incomplete"],
+        &[
+            "check",
+            "model",
+            "--code=run",
+            "--deny-incomplete",
+            "--mutants",
+            "0",
+        ],
     ));
     assert_eq!(code, Some(0), "{stderr}");
 
@@ -467,4 +492,81 @@ fn codegen_states_the_coverage_of_the_traces_it_writes() {
     let (_, _, stderr) = outcome(&rdra(&dir, &["codegen", "model", "--code"]));
     assert!(stderr.contains("  BFS: complete, 6 states"), "{stderr}");
     assert!(!stderr.contains("warning: "), "{stderr}");
+}
+
+/// #439, the self-check: a run command that never reads the traces (`rdra-ish --version`)
+/// passes every mutant trace, and each is an error that says the command must run the
+/// harness on them. `--mutants 0` runs none; the seed picks the same mutants every time.
+#[test]
+fn a_run_that_ignores_the_traces_fails_the_self_check() {
+    let dir = run_project("self-check", 4096);
+    let (code, stdout, stderr) = outcome(&rdra(&dir, &["check", "model", "--code=run"]));
+    assert_eq!(code, Some(1), "{stderr}");
+    let survived: Vec<&str> = stderr
+        .lines()
+        .filter(|l| l.starts_with("error[CodeMutantSurvived]"))
+        .collect();
+    assert_eq!(survived.len(), 4, "{stderr}");
+    for kind in [
+        "refused-call-runs",
+        "call-refused",
+        "wrong-state",
+        "absent-row",
+    ] {
+        assert!(
+            survived
+                .iter()
+                .any(|l| l.contains(&format!("the {kind} mutant"))),
+            "{kind}: {stderr}"
+        );
+    }
+    // No harness ran, so even the absent row points at the command, not the service.
+    assert_eq!(
+        stderr
+            .matches("must run the probe's conformance test on the traces RDRA_ISH_TRACES names")
+            .count(),
+        4,
+        "{stderr}"
+    );
+    assert!(
+        stdout
+            .contains("  self-check: 0 of 4 mutant traces failed at their changed row (seed 0)\n"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.ends_with("FAIL: code: 4 error(s) at --code=run\n"),
+        "{stdout}"
+    );
+    let again = outcome(&rdra(&dir, &["check", "model", "--code=run"])).2;
+    assert_eq!(again, stderr, "the same mutants on every run");
+
+    let (code, stdout, stderr) = outcome(&rdra(
+        &dir,
+        &["check", "model", "--code=run", "--mutants", "0"],
+    ));
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(!stdout.contains("self-check"), "{stdout}");
+
+    let seeded = outcome(&rdra(
+        &dir,
+        &["check", "model", "--code=run", "--mutant-seed", "3"],
+    ));
+    assert!(seeded.1.contains("(seed 3)"), "{}", seeded.1);
+}
+
+/// A capped suite has no refused call to flip: the self-check says so, and never counts a
+/// mutant it could not make.
+#[test]
+fn a_capped_suite_has_no_refused_call_to_flip() {
+    let dir = run_project("self-check-capped", 3);
+    let (_, stdout, _) = outcome(&rdra(&dir, &["check", "model", "--code=run"]));
+    let line = stdout
+        .lines()
+        .find(|l| l.starts_with("  self-check:"))
+        .unwrap_or_default();
+    assert!(
+        line.contains("; no refused-call-runs: the traces try no refused call"),
+        "{stdout}"
+    );
+    assert!(line.contains(" of 3 mutant traces"), "{stdout}");
 }

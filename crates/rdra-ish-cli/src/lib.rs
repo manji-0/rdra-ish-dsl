@@ -65,6 +65,8 @@ pub fn run() -> Result<()> {
             guards,
             code,
             deny_incomplete,
+            mutants,
+            mutant_seed,
             bounds,
             scope,
         } => {
@@ -174,7 +176,11 @@ pub fn run() -> Result<()> {
             println!("{}", lifecycle.bounds.ok());
             if let Some(level) = code {
                 let manifest = manifest.as_ref().expect("checked above");
-                if !code_check::run(&inputs, manifest, level, deny_incomplete)? {
+                let mutation = code_check::SelfCheck {
+                    per_kind: mutants,
+                    seed: mutant_seed,
+                };
+                if !code_check::run(&inputs, manifest, level, deny_incomplete, mutation)? {
                     std::process::exit(1);
                 }
             }

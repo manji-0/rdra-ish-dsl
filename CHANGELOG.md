@@ -27,6 +27,21 @@
   `--code=run` only) makes it an error. `codegen --conformance` and `codegen --code` print the
   same statement on stderr after the `wrote <traces>` line, and `warning: <traces>: the
   conformance BFS stopped at its cap ...` when it stopped there. No generated file changes.
+- `check --code=run` (experimental) checks the check (#439). After a passing run, it runs the
+  run command again on mutant traces, by default one of each of four kinds, picked by
+  `--mutant-seed` (default 0):
+  - `refused-call-runs`: a refused call expected to run.
+  - `call-refused`: a call that runs, expected to be refused.
+  - `wrong-state`: a call expected to reach another state.
+  - `absent-row`: a call on a row that does not exist, expected to run.
+
+  Each is a cut trace whose last row the model never does, so a conforming service fails
+  each at that row. A mutant that passes is the error `CodeMutantSurvived`, and the exit code
+  is 1. It means the run command did not run the harness on the traces it was given, or
+  (absent-row) the service runs a call without looking the row up by its id. The statement
+  gains `self-check: <killed> of <n> mutant traces failed at their changed row (seed <s>)`.
+  `--mutants <N>` sets how many of each kind; `0` turns the self-check off. The service code
+  is never changed.
 - `verify --prove` (experimental) prints `note: z3 <version> is not a version the proof's
   resource limits were measured on (5.1.0); ...` on stderr when the z3 it runs is not one the
   rule and lemma limits were measured on (exactly 5.1.0, the version the flake pins), or its
@@ -49,6 +64,11 @@
   cache off, medians of 3: clinic-ops 6.56 s to 6.70 s, food-permit-ops 4.75 s to 4.74 s,
   insurance-claim-ops 8.64 s to 8.64 s, patent-ops 1.44 s to 1.45 s). Unpruned, the view
   cost food-permit-ops 16%.
+- The probe's conformance test (experimental), in Rust, Go and TypeScript, reads its traces
+  from the file the environment variable `RDRA_ISH_TRACES` names when it is set and not
+  empty. `check --code=run` clears the variable for the real run. The probe text changes, so
+  `check --code=fresh` reports `generator changed` on a probe written by an earlier version
+  until `codegen --code` writes it again.
 - `verify --prove` (experimental) asserts each rule and lemma once per solver, behind an
   activation literal, and each step's scope asserts only the literals of the set, instead
   of every candidate again (#421). The proof is the same on every sample, its rules, CTIs

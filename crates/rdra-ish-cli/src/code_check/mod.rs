@@ -18,6 +18,7 @@ use std::process::Command;
 
 use anyhow::{Context, Result};
 use rdra_ish_core::project::{CodeTarget, Manifest};
+use rdra_ish_emit::codegen::conformance::{mutants, Mutant, MutantKind, TRACES_ENV};
 use rdra_ish_emit::codegen::ir::{ContractDecl, PortMethod};
 use rdra_ish_emit::codegen::probe::{ContractIndex, Probe};
 
@@ -194,7 +195,7 @@ fn build(backend: &dyn Backend, t: &Target<'_>) -> Option<Result<Vec<CodeDiagnos
 fn run_step(backend: &dyn Backend, t: &Target<'_>) -> Option<Result<Vec<CodeDiagnostic>>> {
     let command = t.target.run.clone().or_else(|| backend.run_command(t))?;
     Some((|| {
-        let (ok, stdout, stderr) = execute(t, &command)?;
+        let (ok, stdout, stderr) = execute(t, &command, None)?;
         if ok {
             return Ok(Vec::new());
         }
@@ -225,13 +226,25 @@ fn run_diagnostic(
     }
 }
 
-/// Runs `command` in the target's root: whether it succeeded, its stdout and stderr.
-fn execute(t: &Target<'_>, command: &[String]) -> Result<(bool, String, String)> {
+/// Runs `command` in the target's root: whether it succeeded, its stdout and stderr. With
+/// `traces`, the probe's conformance test reads them in place of its traces file
+/// ([`TRACES_ENV`]); without, the variable is cleared, so a value in the environment never
+/// stands in for the real traces.
+fn execute(
+    t: &Target<'_>,
+    command: &[String],
+    traces: Option<&Path>,
+) -> Result<(bool, String, String)> {
     let (program, args) = command
         .split_first()
         .context("an empty command in [code]")?;
     let root = t.root();
-    let output = Command::new(program)
+    let mut cmd = Command::new(program);
+    match traces {
+        Some(path) => cmd.env(TRACES_ENV, path),
+        None => cmd.env_remove(TRACES_ENV),
+    };
+    let output = cmd
         .args(args)
         .current_dir(&root)
         .output()
@@ -250,7 +263,7 @@ fn compile(
     t: &Target<'_>,
     command: &[String],
 ) -> Result<Vec<CodeDiagnostic>> {
-    let (ok, stdout, stderr) = execute(t, command)?;
+    let (ok, stdout, stderr) = execute(t, command, None)?;
     let messages = backend.parse_messages(&stdout, &stderr);
     if ok && messages.is_empty() {
         return Ok(Vec::new());
@@ -384,6 +397,119 @@ fn coverage(t: &Target<'_>, deny_incomplete: bool) -> (Vec<String>, Option<CodeD
     (traces.coverage(&subject, &unchecked), finding)
 }
 
+/// How many mutant traces of each kind the self-check of `--code=run` runs, and the seed
+/// that picks them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct SelfCheck {
+    pub per_kind: usize,
+    pub seed: u64,
+}
+
+/// The self-check of a run that passed (#439): the run command again on mutant traces, each
+/// wrong at its last row, which a run of the harness on them fails at that row. The line of
+/// the coverage statement, and a `CodeMutantSurvived` per mutant that did not fail there.
+fn self_check(
+    backend: &dyn Backend,
+    t: &Target<'_>,
+    how: SelfCheck,
+) -> Result<(Vec<String>, Vec<CodeDiagnostic>)> {
+    let (Some((text, traces)), Some(command)) = (
+        &t.generated.traces,
+        t.target.run.clone().or_else(|| backend.run_command(t)),
+    ) else {
+        return Ok((Vec::new(), Vec::new()));
+    };
+    let set = mutants(
+        text,
+        &traces.one_row,
+        &traces.absent_id(),
+        how.per_kind,
+        how.seed,
+    );
+    let dir = std::env::temp_dir().join(format!(
+        "rdra-ish-mutants-{}-{}",
+        std::process::id(),
+        t.name
+    ));
+    std::fs::create_dir_all(&dir).with_context(|| format!("failed to create {}", dir.display()))?;
+    let mut survivors = Vec::new();
+    let result = (|| -> Result<()> {
+        for (i, m) in set.mutants.iter().enumerate() {
+            let path = dir.join(format!("{i}-{}.txt", m.kind.name()));
+            std::fs::write(&path, &m.text)
+                .with_context(|| format!("failed to write {}", path.display()))?;
+            let (ok, stdout, stderr) = execute(t, &command, Some(&path))?;
+            let at = format!("traces line {}:", m.line);
+            if !ok && format!("{stdout}\n{stderr}").contains(&at) {
+                continue;
+            }
+            let what = if ok {
+                "the run passed".to_string()
+            } else {
+                format!(
+                    "the run failed elsewhere: {}",
+                    backend.run_failure(&stdout, &stderr).unwrap_or_default()
+                )
+            };
+            survivors.push((m, what));
+        }
+        Ok(())
+    })();
+    let _ = std::fs::remove_dir_all(&dir);
+    result?;
+    // A run that fails no mutant of the harness's own kinds runs no harness on them, so an
+    // absent row passing says nothing of the service then.
+    let pipeline = set
+        .mutants
+        .iter()
+        .filter(|m| m.kind != MutantKind::AbsentRow)
+        .count();
+    let harness_runs = survivors
+        .iter()
+        .filter(|(m, _)| m.kind != MutantKind::AbsentRow)
+        .count()
+        < pipeline;
+    let total = set.mutants.len();
+    let survivors: Vec<CodeDiagnostic> = survivors
+        .into_iter()
+        .map(|(m, what)| survived(m, &command, what, harness_runs))
+        .collect();
+    let mut line = format!(
+        "  self-check: {} of {total} mutant traces failed at their changed row (seed {})",
+        total - survivors.len(),
+        how.seed
+    );
+    for (kind, why) in &set.none {
+        line.push_str(&format!("; no {}: {why}", kind.name()));
+    }
+    Ok((vec![line], survivors))
+}
+
+/// The error of a mutant the run did not fail at its changed row.
+fn survived(m: &Mutant, command: &[String], what: String, harness_runs: bool) -> CodeDiagnostic {
+    let fix = match m.kind {
+        MutantKind::AbsentRow if harness_runs => "the service must look the row up by the id it is given and refuse a call on a row that does not exist".to_string(),
+        _ => format!(
+            "`{}` must run the probe's conformance test on the traces {TRACES_ENV} names, and fail when it fails",
+            command.join(" ")
+        ),
+    };
+    CodeDiagnostic {
+        name: "CodeMutantSurvived".to_string(),
+        message: format!(
+            "the {} mutant of traces line {} passed: `{}` became `{}`, which the model never does",
+            m.kind.name(),
+            m.was.0,
+            m.was.1,
+            m.now
+        ),
+        model: None,
+        code: Some(what),
+        fix: Some(fix),
+        warning: false,
+    }
+}
+
 /// Checks the code `manifest`'s `[code]` names at `level`; prints the findings on stderr and
 /// a summary line on stdout, after the coverage statement of each conformance run. With
 /// `deny_incomplete`, traces whose BFS stopped at its cap fail the run. Whether it passed.
@@ -392,6 +518,7 @@ pub(crate) fn run(
     manifest: &Manifest,
     level: CodeLevel,
     deny_incomplete: bool,
+    mutation: SelfCheck,
 ) -> Result<bool> {
     let loaded = Loaded::load(inputs)?;
     let code = manifest.code.as_ref().expect("the caller checked [code]");
@@ -461,9 +588,15 @@ pub(crate) fn run(
                 Some(result) => {
                     let mut found = result?;
                     if at == CodeLevel::Run {
+                        let passed = found.iter().all(|d| d.warning);
                         let (lines, finding) = coverage(&t, deny_incomplete);
                         statements.extend(lines);
                         found.extend(finding);
+                        if passed && mutation.per_kind > 0 {
+                            let (lines, survivors) = self_check(backend.as_ref(), &t, mutation)?;
+                            statements.extend(lines);
+                            found.extend(survivors);
+                        }
                     }
                     let errors = found.iter().filter(|d| !d.warning).count();
                     findings.extend(found);

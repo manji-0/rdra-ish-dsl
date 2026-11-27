@@ -96,7 +96,7 @@ Type-check the model, run the consistency checks, and explore the lifecycle. Wri
 
 ```
 rdra-ish check <INPUTS...> [--strict] [--deny-deprecated] [--guards] [--code[=fresh|build|run]]
-               [--deny-incomplete]
+               [--deny-incomplete] [--mutants <N>] [--mutant-seed <SEED>]
                [--max-patterns <N>] [--max-states <N>] [--memory <SIZE>]
                [--instance-count <N>] [--instances <ENTITY=N>]... [--int-range-max <N>]
                [--buc <ID>]... [--entity <ID>]... [--without-usecase <ID>]...
@@ -129,6 +129,8 @@ The consistency checks cover:
 | `--deny-deprecated` | off | Make each `DeprecatedSyntax` warning (a [deprecated form](./language-reference.md#deprecated-and-removed-forms)) an error. |
 | `--guards` | off | After a clean run, print which rules each guard protects. See [Guard dependencies](#guard-dependencies). |
 | `--code[=<LEVEL>]` | off; `fresh` when given bare | After a clean run, check the service code the [`[code]` tables](#the-code-tables) name: `fresh`, `build`, or `run`. Write the level with `=`. See [`check --code`](#check---code). |
+| `--mutants <N>` | `1` | With `--code`: after a passing `--code=run`, run the run command again on `N` mutant traces of each kind and fail when one passes. `0` runs none. See [The self-check](#the-self-check). |
+| `--mutant-seed <SEED>` | `0` | With `--code`: the seed that picks the mutant traces. The same model and seed pick the same ones. |
 | `--deny-incomplete` | off | With `--code=run` only (else exit 1; without `--code`, exit 2): fail when a table's traces are not complete, that is, their BFS stopped at `conformance_states`. See [What a run covers](#what-a-run-covers). |
 | `--max-patterns <N>` | 2^(10 + 8·(n − 1)) for n = `--instance-count` (`1024`, `262144`, ...) | Cap on each entity's distinct patterns in its view's cone. Past it: the `PatternCapReached` error. A cone of a rule gathers no pattern, so the cap does not stop it. |
 | `--max-states <N>` | none | Cap on the joint states of one cone. Past it: the `StateCapReached` error, which names what the states vary in. |
@@ -291,6 +293,7 @@ error[CodeObligationUnowned_Unique_Order_note]: no code owns the obligation Uniq
 | `CodeUnmapped` | error | The count of errors that belong to no use case, the first one quoted. |
 | `CodeBuildFailed` | error | The build failed with no error rdra-ish reads. |
 | `CodeConformance` | error | `run`: the conformance test failed; the message is the harness's first difference. |
+| `CodeMutantSurvived` | error | `run`: a mutant trace of the self-check passed. The `code:` line says whether the run passed or failed at another row. |
 | `CodeCoverageIncomplete` | warning; error with `--deny-incomplete` | `run`: the BFS behind the traces stopped at `conformance_states`, so the moves past it are not run and no call is tried as refused. |
 | `CodeObligationUnowned_<name>` | error | The obligation has no owner. |
 | `CodeObligationOwnerMissing_<name>` | error | Its owner names a file that does not exist. |
@@ -324,6 +327,44 @@ call the model refuses passes such a suite. The exit status does not change unle
 `--deny-incomplete` is given. Raise `conformance_states` and run `codegen --code` again to
 complete it. The statement describes the traces, so it is the same when `run` in the table
 replaces the default command.
+
+#### The self-check
+
+After a run passes, `--code=run` checks the check. It runs the run command again on mutant
+traces, by default one of each kind. Each mutant is one trace of the real traces, cut after
+one row and with that row changed into something the model never does:
+
+| Kind | The row becomes |
+|---|---|
+| `refused-call-runs` | A call the model refuses (`X`), expected to run. |
+| `call-refused` | A call the model runs (`C`), expected to be refused. |
+| `wrong-state` | A call expected to reach another state, one whose rows differ. |
+| `absent-row` | A call on one existing row that names an id no row has, expected to run as before. |
+
+The probe's conformance test reads its traces from the file `RDRA_ISH_TRACES` names, when the
+variable is set and not empty, instead of the file it names. The self-check sets the variable
+for each mutant, and the real run clears it. A mutant counts as failed only when the run fails
+and its output names the changed row (`traces line <n>:`). The statement ends with one line:
+
+```
+  self-check: 4 of 4 mutant traces failed at their changed row (seed 0)
+```
+
+When the traces give no mutant of a kind, the line says so (`; no refused-call-runs: the
+traces try no refused call` on traces whose BFS stopped at its cap). A mutant that passes is
+a `CodeMutantSurvived` error, and the exit code is 1. No mutant is equivalent to the real
+traces, so a conforming service never passes one:
+
+- Every kind but `absent-row` passes only when the run command does not run the harness on
+  the traces it is given, or swallows its failure. For example, a `run` that tests something
+  else, or a probe test that ignores the result. These kinds check the pipeline, not the
+  service.
+- `absent-row` passes when the service runs a call on a row it never looked up: it ignores
+  the id. At one row per entity every id is `1`, so the real traces cannot show this.
+- A service whose snapshot ignores the store fails the real traces first.
+
+The service code is never changed. A table without `traces` or without a run command gets no
+self-check.
 
 **Output and exit codes.** The last stdout line, after the model check's `OK:` line, is
 `OK: code: what the model requires, at --code=<level>`, or `FAIL: code: <n> error(s) at

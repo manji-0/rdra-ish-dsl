@@ -1,7 +1,7 @@
 //! The Go conformance port and harness: `StoreSnapshot`, `ConformancePort`, and `Conform`,
 //! which drives a port along the traces `conformance::traces` writes.
 
-use super::conformance::TRACES_FORMAT;
+use super::conformance::{TRACES_ENV, TRACES_FORMAT};
 use super::go::{doc, field_type, local, struct_decl, Line};
 use super::ir::{DomainModel, Field, FieldType, PortArg, PortDecl, PortMethod, Scalar, Track};
 use super::{string_literal, type_ident};
@@ -248,7 +248,7 @@ pub(super) fn probe(
     }
     if let Some((new, traces)) = conformance {
         w.line(&format!(
-            "// {CONFORMANCE_TEST} drives a fresh service per trace along the model's traces\n// ({traces}): `rdra-ish check --code=run` runs it.\nfunc {CONFORMANCE_TEST}(t *testing.T) {{\n\ttraces, err := os.ReadFile({})\n\tif err != nil {{\n\t\tt.Fatal(err)\n\t}}\n\treport, err := {dom}.Conform(func() {dom}.ConformancePort {{ return {new} }}, string(traces))\n\tif err != nil {{\n\t\tt.Fatal(\"rdra-ish conformance: \" + err.Error())\n\t}}\n\tt.Logf(\"ok %d traces, %d calls, %d refusals, %d interleavings\", report.Traces, report.Calls, report.Refusals, report.Interleavings)\n}}",
+            "// {CONFORMANCE_TEST} drives a fresh service per trace along the model's traces\n// ({traces}): `rdra-ish check --code=run` runs it.\nfunc {CONFORMANCE_TEST}(t *testing.T) {{\n\tpath := {}\n\tif substitute := os.Getenv(\"{TRACES_ENV}\"); substitute != \"\" {{\n\t\tpath = substitute\n\t}}\n\ttraces, err := os.ReadFile(path)\n\tif err != nil {{\n\t\tt.Fatal(err)\n\t}}\n\treport, err := {dom}.Conform(func() {dom}.ConformancePort {{ return {new} }}, string(traces))\n\tif err != nil {{\n\t\tt.Fatal(\"rdra-ish conformance: \" + err.Error())\n\t}}\n\tt.Logf(\"ok %d traces, %d calls, %d refusals, %d interleavings\", report.Traces, report.Calls, report.Refusals, report.Interleavings)\n}}",
             string_literal(traces)
         ));
     }
