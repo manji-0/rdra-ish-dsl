@@ -3,7 +3,7 @@
 <!-- derived-from ./semantics.md -->
 
 This table lists every guarantee the verification tools make or the notes in `docs/` claim,
-one per row, at commit `c97c88ef0531a528a69809cdc55b2f83147cd9e8` (origin/main, 2026-11-28).
+one per row, at commit `307ee4e84ffc466bd69ce998c047092f37c6ccc6` (origin/main, 2026-11-28).
 It is the skeleton of the theme documents: each row names the theme that owns it, and that
 document states the claim as a proposition and gives its proof, or says what stands in for
 one. Every row's Open column was checked at this commit against the status of each open
@@ -11,7 +11,7 @@ problem in the [index](./README.md#open-problems). The rows whose evidence a fix
 re-read at this commit, and every test they add was read for what it checks. A row whose
 Evidence cell ends in `unread@pin` was not re-read here: its evidence is the reading at
 `b83b9544` (or at its theme document's own pinned commit), and code it cites has changed
-since; `git diff --name-only b83b9544 c97c88ef` decides which rows carry it. How this inventory changed is in
+since; `git diff --name-only b83b9544 307ee4e8` decides which rows carry it. How this inventory changed is in
 [Errata](#errata).
 
 ## How to read a row
@@ -228,9 +228,9 @@ own cone) and A25 (bound escalation; one unit test of the arithmetic) now have t
 
 ## Errata
 
-- **2026-11-28, re-pin to `c97c88ef`.** The inventory described `b83b9544`, with row I1
+- **2026-11-28, re-pin to `307ee4e8`.** The inventory described `b83b9544`, with row I1
   added at `670eec79` after the owner's review of [semantics.md](./semantics.md) (P60, #493).
-  It now describes `c97c88ef`. Changes:
+  It now describes `307ee4e8`. Changes:
   - I1 called the reference interpreter of P26 planned, on branch
     `fix/p26-reference-interpreter`; it is on main (#492), and its tests are named. The
     corpus had 79 headers; it has 86.
@@ -257,7 +257,7 @@ own cone) and A25 (bound escalation; one unit test of the arithmetic) now have t
     T5 counted 33 `bfs_and_tlc_agree_on_*` (34); T7 79 cases and 191 `expect` lines (86, 210);
     T14 25 twins (26). T11 said batch JVMs run in no workflow (`tlc-batch-both`, #486). T15
     said no kill rate is recorded and no TLC-side file is mutated (#486, #508).
-  - Rows not re-read at `c97c88ef` whose cited code changed since `b83b9544` now end their
+  - Rows not re-read at `307ee4e8` whose cited code changed since `b83b9544` now end their
     Evidence cell with `unread@pin` (56 rows).
   - The Open column now gives each item's status; fixed items had been annotated on some
     rows and not others. The **R** column was recounted (10 to 12); the other columns are
