@@ -417,8 +417,11 @@ An `ok` of that run is the `ok` of `Cone_<P>_WF` on the full cone
 ([proof](./design/cone-soundness.md#wf_varsnext-on-a-reduced-cone)). A counterexample is only
 a candidate: `verify` lifts it to the full cone and replays it there. A candidate that does
 not lift is dropped, and `verify` runs `Cone_<P>_Full` and `Cone_<P>_WF` on the full cone.
-The line then notes `Cone_P_WF: ok on the reduced cone`, `Cone_P_WF: counterexample on the
-reduced cone`, or `Cone_P_Full: counterexample` before the `_WF` note.
+The line then notes `WF_vars(Next) on the reduced cone (native only): ok` or `…: counterexample`,
+or `Cone_P_Full: counterexample` before the `_WF` note. TLC runs no module of the reduced run's
+system: `WF_vars(Next)` on the reduced module would not let a behavior stop where a class can
+loop. So `--with-tlc` compares that run only through the final verdict, against
+`Cone_P_WF` on the full cone.
 
 ### Instance symmetry
 
