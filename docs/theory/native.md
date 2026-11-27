@@ -432,9 +432,11 @@ in BFS order over all bindings, ends the reported trace, which is therefore shor
 A stopped graph must not be read: an unexpanded state has no out-edges and would look
 stuck. The guard is the match arm `Target::Reach(i) if !cones[at].run.complete` in
 `targets.rs::TransitionSystem::answer_targets`, which records the property as
-undecided; `reach_failure` and `TransitionSystem::verdict` only `debug_assert!` completeness.
-This confirms open problem P19. TLC cannot state `can_reach`, so the evidence is unit tests
-alone (row N8).
+undecided; `reach_failure` and `TransitionSystem::verdict` also `assert!` completeness in
+every build (they only `debug_assert!`ed it before P19 was fixed in #478). TLC cannot state
+`can_reach`; besides the unit tests, a naive oracle (`core/tests/oracle.rs`) with its own
+exploration and a forward search from every state agrees with the checker on the corpus
+and the samples (row N8).
 
 ## Deadlocks
 
@@ -452,7 +454,8 @@ through present predecessors; this is `E[present U leave]` per slot, as in N8. A
 marked has no such path, which is the definition. The reported state is the minimum over
 `(idx, k)`. ∎ On a stopped graph every candidate value is `Progress::NotDecided`. Both
 `can_leave` and the trace read packed cells through `Packing::cell`, so P50 applies.
-TLC's deadlock check is one-sided (row T6); this check has no external oracle (P19).
+TLC's deadlock check is one-sided (row T6); the naive oracle of `core/tests/oracle.rs`
+checks this one against a forward search on its own exploration (P19, fixed in #478).
 
 ## Vacuity
 
