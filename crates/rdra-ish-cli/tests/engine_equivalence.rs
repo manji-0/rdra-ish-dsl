@@ -1235,7 +1235,11 @@ const VERIFY_REDUCED_ONLY: &[(&str, &str)] = &[
     ),
     ("samples/patent-ops", "invariant Forbidden_Patent_4"),
     ("samples/patent-ops", "invariant Inv_Patent_0"),
+    ("samples/food-permit-ops", "entity ChangeNotice"),
     ("samples/food-permit-ops", "entity Disposition"),
+    ("samples/food-permit-ops", "entity Inspection"),
+    ("samples/food-permit-ops", "entity PermitApplication"),
+    ("samples/food-permit-ops", "entity SuccessionNotice"),
     (
         "samples/food-permit-ops",
         "invariant Forbidden_Disposition_2",
