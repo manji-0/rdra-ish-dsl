@@ -735,6 +735,30 @@ forbidden(Lamp, Order, Lamp.state == on, Order.status == d).global()
     );
 }
 
+/// A rule whose cone splits off a sub-lifecycle is escalated on the reduced cone, as BFS
+/// explores it at the run's bounds: the sub-lifecycle keeps its whole graph, which the
+/// quotient reads, even though the rule's own run stops once the rule fails. The run used
+/// to panic there.
+#[test]
+fn an_unproved_rule_whose_cone_reduces_is_escalated() {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    let out = verify(&["--prove", &corpus("z3_needs_run_mark")]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!stderr.contains("panicked"), "{stderr}");
+    assert!(
+        escalated_line(&stdout, "MultiForbidden_Light_0")
+            .starts_with("escalated: MultiForbidden_Light_0: ok at 3 instances, "),
+        "{stdout}"
+    );
+    assert!(
+        !stderr.contains("more instances than the run's"),
+        "{stderr}"
+    );
+}
+
 /// An escalation the state cap stops decides nothing: it says so and leaves the run's exit
 /// to what the run decided at its own bounds.
 #[test]

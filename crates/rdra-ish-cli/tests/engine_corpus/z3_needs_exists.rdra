@@ -1,0 +1,29 @@
+// trap: a true rule whose proof needs a ∀∃ lemma (#428): every order in one state has a
+// child in another. Prepare readies an order only while it has a sent shipment, Finish
+// closes a ready order with no guard, and nothing deletes a shipment or unsends one, so
+// every done order has a sent shipment, at any count. The rule is not inductive alone: from
+// a ready order with no sent shipment, which no reachable state has, Finish breaks it. The
+// fact that rules that state out, "every ready order has a sent shipment", says a row
+// exists; every mined lemma is universal, so z3 leaves the rule unproved, and BFS finds
+// nothing. The fact is also a count of the order's children (at least one sent shipment);
+// z3_needs_exists_global.rdra needs one over rows no key links.
+// expect Quantifier_Order_0: native=ok tlc=ok z3=unproved bfs=ok,ok,ok
+// expect Deadlock_Order_status_open: native=counterexample tlc=counterexample
+entity Order "注文" { id: Int @pk  status: Enum(open, ready, done) @default(open) }
+entity Shipment "出荷" { id: Int @pk  status: Enum(packed, sent) @default(packed) }
+relate(Shipment, Order, N:1)
+usecase Place "注文"
+usecase Pack "梱包"
+usecase Send "発送"
+usecase Prepare "準備完了"
+usecase Finish "完了"
+creates(Place, Order)
+creates(Pack, Shipment)
+updates(Pack, Order)
+transitions(Send, Shipment.status, packed -> sent)
+transitions(Prepare, Order.status, open -> ready)
+transitions(Finish, Order.status, ready -> done)
+condition Sent "発送済みの出荷がある"
+holds(Sent, Order.status == open).has(Shipment.status == sent)
+applies_to(Sent, Prepare)
+invariant(Order).when(status == done).has(Shipment.status == sent)

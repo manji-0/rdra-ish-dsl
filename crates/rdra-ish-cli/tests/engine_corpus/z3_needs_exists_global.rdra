@@ -1,0 +1,29 @@
+// trap: a true rule whose proof needs a ∀∃ lemma over rows no key links (#428). Crack sets
+// a gate ajar only while some guard is on duty, Swing opens an ajar gate with no guard, and
+// Leave takes a guard off duty only while no gate is ajar or open. So every open gate has a
+// guard on duty somewhere, at any count. The rule is not inductive alone: from an ajar gate
+// and no guard on duty, which no reachable state has, Swing breaks it. The fact that rules
+// that state out, "while a gate is ajar, some guard is on duty", says a row exists, and no
+// key links a gate to a guard, so no count of a row's children states it either.
+// expect Quantifier_Gate_0: native=ok tlc=ok z3=unproved bfs=ok,ok,ok
+// expect Deadlock_Gate_state_shut: native=counterexample tlc=counterexample
+// expect Deadlock_Guard_state_on: native=counterexample tlc=counterexample
+entity Gate "門" { id: Int @pk  state: Enum(shut, ajar, open) @default(shut) }
+entity Guard "警備員" { id: Int @pk  state: Enum(on, off) @default(on) }
+usecase Build "門設置"
+usecase Hire "配置"
+usecase Crack "少し開ける"
+usecase Swing "開ける"
+usecase Leave "離席"
+creates(Build, Gate)
+creates(Hire, Guard)
+transitions(Crack, Gate.state, shut -> ajar)
+transitions(Swing, Gate.state, ajar -> open)
+transitions(Leave, Guard.state, on -> off)
+condition Watched "警備員がいる"
+holds(Watched, Gate.state == shut).has(Guard.state == on)
+applies_to(Watched, Crack)
+condition AllShut "開いた門がない"
+holds(AllShut, Guard.state == on).none(Gate.state in (ajar, open))
+applies_to(AllShut, Leave)
+invariant(Gate).when(state == open).has(Guard.state == on)
