@@ -341,7 +341,10 @@ impl QuotientCache {
                 {
                     let fresh = run();
                     if !fresh.complete {
-                        crate::shadow::skipped(crate::shadow::Twin::SharedRun);
+                        crate::shadow::skipped(
+                            crate::shadow::Twin::SharedRun,
+                            crate::shadow::Skip::Stopped,
+                        );
                     } else {
                         assert!(
                             fresh.same_graph(&h.run),
@@ -424,7 +427,10 @@ impl QuotientCache {
                     Stored::Declined { .. } => !seen.crowded,
                 };
                 if !telling {
-                    crate::shadow::skipped(crate::shadow::Twin::CacheHit);
+                    crate::shadow::skipped(
+                        crate::shadow::Twin::CacheHit,
+                        crate::shadow::Skip::Stopped,
+                    );
                 } else {
                     assert!(
                         fresh == hit.0 && ended.is_clean() == hit.1.is_clean(),

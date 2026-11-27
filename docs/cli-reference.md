@@ -132,13 +132,13 @@ The consistency checks cover:
 | `--code[=<LEVEL>]` | off; `fresh` when given bare | After a clean run, check the service code the [`[code]` tables](#the-code-tables) name: `fresh`, `build`, or `run`. Write the level with `=`. See [`check --code`](#check---code). |
 | `--mutants <N>` | `1` | With `--code=run` only (else exit 1): after a passing `--code=run`, run the run command again on `N` mutant traces of each kind and fail when one passes. `0` runs none. See [The self-check](#the-self-check). |
 | `--mutant-seed <SEED>` | `0` | With `--code=run` only (else exit 1): the seed that picks the mutant traces. The same model and seed pick the same ones. |
-| `--deny-incomplete` | off | With `--code=run` only (else exit 1; without `--code`, exit 2): fail when a table's traces are not complete: their BFS stopped at `conformance_states`, they leave refusals of the model untried, or they never run a use case of the port. See [What a run covers](#what-a-run-covers). |
+| `--deny-incomplete` | off | With `--code=run` only (else exit 1; without `--code`, exit 2): fail when a table's traces are not complete: their BFS stopped at `conformance_states`, they leave refusals of the model untried, or they never run a use case of the port; and when calls reached the unimplemented port or the run did not say (`CodeUnimplemented`). See [What a run covers](#what-a-run-covers). |
 | `--max-patterns <N>` | 2^(10 + 8·(n − 1)) for n = `--instance-count` (`1024`, `262144`, ...) | Cap on each entity's distinct patterns in its view's cone. Past it: the `PatternCapReached` error. A cone of a rule gathers no pattern, so the cap does not stop it. |
 | `--max-states <N>` | none | Cap on the joint states of one cone. Past it: the `StateCapReached` error, which names what the states vary in. |
 | `--memory <SIZE>` | `memory` under `[check]`, else `4GiB` | What the run may hold. A cone past it stops with the `MemoryCapReached` error. See [Memory limit](#memory-limit). |
 | `--instance-count <N>` | `1` | Slots per entity, `1..=255`. A violation that needs two rows of an entity shows only from `2`. A larger value raises the default `--max-patterns`. |
 | `--instances <ENTITY=N>` | `instances` under `[check]` | One entity's slots, `1..=255`; repeatable. See [Per-entity instance counts](#per-entity-instance-counts). |
-| `--int-range-max <N>` | `5` | The Int domain is `0..=N`, `1..=255`. |
+| `--int-range-max <N>` | `5` | The Int domain is `0..=N`, `1..=255`; at most `254` when the model has a nullable Int column (`DomainTooLarge`). |
 | `--buc`, `--entity`, `--without-usecase`, `--without-buc`, `--actor` `<ID>` | whole model | Check part of the model; each repeatable. See [Partial runs](#partial-runs). |
 
 **Output.** stderr opens with a `bounds:` line (the slots per entity, the Int range, the state
@@ -238,9 +238,9 @@ table. The LSP never does.
 
 | Language | `build` | `run` |
 |---|---|---|
-| Rust | `cargo check --test <probe> --message-format=json` in `root` | `cargo test --test <probe> -- rdra_conformance`, with `--nocapture` after it for a model adapter |
+| Rust | `cargo check --test <probe> --message-format=json` in `root` | `cargo test --test <probe> -- rdra_conformance --nocapture` |
 | TypeScript | `tsc --noEmit --pretty false -p tsconfig.rdra.json` in `root` | `node <probe>` (Node 22.18 or later, by type stripping; the service imports name the `.ts` files; the `package.json` above the probe sets `"type": "module"`) |
-| Go | `go test -count=1 -run ^$ -gcflags=-e ./<probe dir>` in `root` | `go test -count=1 -run ^TestRdraConformance$ ./<probe dir>`, with `-v` for a model adapter |
+| Go | `go test -count=1 -run ^$ -gcflags=-e ./<probe dir>` in `root` | `go test -count=1 -v -run ^TestRdraConformance$ ./<probe dir>` |
 
 `tsconfig.rdra.json` is a generated file that extends the project's tsconfig and holds only
 the probe. An older Node fails `run` with a `CodeConformance` that says so. The probe and
@@ -314,6 +314,7 @@ error[CodeObligationUnowned_Unique_Order_note]: no code owns the obligation Uniq
 | `CodeCommonJs` | error | TypeScript: tsc compiles the probe and the domain code as CommonJS under `verbatimModuleSyntax` (TS1286, TS1287, TS1295); the one finding of that build. Fix: `"type": "module"` in `package.json`. |
 | `CodeConformance` | error | `run`: the conformance test failed. The `code:` line is the harness's first difference with its `model only:` and `store only:` rows; when the harness reported nothing, where the service panicked (Rust, Go) or what it threw (Node); else the output's last line. |
 | `CodeMutantSurvived` | error | `run`: a mutant trace of the self-check passed. The `code:` line says whether the run passed or failed at another row. |
+| `CodeUnimplemented` | warning; error with `--deny-incomplete` | `run`: the run passed, but calls reached the [unimplemented port](#the-unimplemented-port) (the message names their use cases and calls), or the run printed no line saying whether any did. |
 | `CodeCoverageIncomplete` | warning; error with `--deny-incomplete` | `run`: the BFS behind the traces stopped at `conformance_states`, so the moves past it are not run and no call is tried as refused; or the traces leave refusals of the model untried, or never run a use case of the port. |
 | `CodeObligationUnowned_<name>` | error | The obligation has no owner. |
 | `CodeObligationOwnerMissing_<name>` | error | Its owner names a file that does not exist. |
@@ -396,6 +397,40 @@ call the model refuses passes such a suite. The same warning names untried refus
 use cases never run. The exit status does not change unless `--deny-incomplete` is given.
 Raise `conformance_states` and run `codegen --code` again to complete a capped suite. The statement describes the traces, so it is the same when `run` in the table
 replaces the default command.
+
+#### The unimplemented port
+
+The domain code has a stand-in for the contracts, which a service takes while it is
+unfinished, so it builds before every method exists: Go's `UnimplementedConformancePort` to
+embed, TypeScript's `UnimplementedConformancePort` class to extend, and Rust's
+`Unimplemented<Contract>` marker trait per contract (`impl UnimplementedPayUseCase for
+Service {}`), which gives the service the contract. It stands in for each `prepare` and
+`commit` method, and with `--conformance` Go's and TypeScript's also for `Seed` / `seed` and
+`Snapshot` / `snapshot`. It stands in for no entry point (`Run<Action>`): the harness drives
+none, so the service writes each, and Rust gives a contract with one no marker. Each method
+fails as the language says "not implemented": Go returns `ErrUnimplemented`, TypeScript
+rejects with `Unimplemented`, Rust panics with `unimplemented!`. A method the service
+declares takes the place of the stand-in's.
+
+`check --code=build` passes such a service: the build checks signatures, and cannot tell a
+stand-in from a method the service wrote. The run tells them apart. The harness counts every
+call that reached the stand-in. One the model runs (or either call of an interleaving) stops
+its trace, and the next trace starts; a refused one is no refusal, and its trace goes on. A
+`Seed` or `Snapshot` that reached it fails the run, as any store error does. The probe's
+test prints `rdra-ish conformance: unimplemented: none`, or `... unimplemented: <n> traces
+stopped; <action> <calls>, ...`. When calls reached the stand-in, the statement gains a line
+and stderr a `CodeUnimplemented` warning, which `--deny-incomplete` makes an error:
+
+```
+  unimplemented: 1 use case (Cancel): 7 calls reached the unimplemented port; 4 traces stopped there
+warning[CodeUnimplemented]: [code.go]: the service has not implemented Cancel (7 calls): a trace stops at such a call the model runs, so nothing after it is checked, and such a refused call is no refusal
+```
+
+A `run` command in the table that hides the test's output on a pass hides the line too: the
+statement then says `unimplemented: not reported`, with the same warning. A mutant of the
+self-check whose changed row the stand-in left unchecked (its trace stopped earlier, or the
+row's own call reached it) is counted on the `self-check` line as `left unchecked by a call
+that reached the unimplemented port`, not as a survivor.
 
 A table with a [model adapter](#the-model-adapter) adds one line after the statement, read
 from the line the adapter's conformance test prints on a pass:
@@ -1471,7 +1506,7 @@ rdra-ish export <INPUTS...> [--kind <KIND>] [-o <OUT>] [--dialect postgres|sqlit
 | `--dialect` | `postgres` | `sql` only: `postgres` or `sqlite`. |
 | `--instance-count <N>` | `2` | `tla` only: slots per entity, `1..=255`; `1` warns (one id cannot tell instances apart). |
 | `--instances <ENTITY=N>` | `instances` under `[verify]` | `tla` only: one entity's slots; repeatable. See [Per-entity instance counts](#per-entity-instance-counts). |
-| `--int-range-max <N>` | `5` | `tla` only: `IntRange == 0..N`, `1..=255`. |
+| `--int-range-max <N>` | `5` | `tla` only: `IntRange == 0..N`, `1..=255`; at most `254` with a nullable Int column. |
 
 **Output path.** For every kind but `tla`, a path with an extension is used as is; otherwise
 the kind's suffix is appended: `out.openapi.json`, `out.asyncapi.json`, `out.schema.dbml`,
@@ -1588,7 +1623,7 @@ rdra-ish verify <INPUTS...> [--with-tlc [--tlc-jar <PATH>] [--tlc-jobs <N>] [--t
 | `-o`, `--out <DIR>` | none; a temp dir under `--with-tlc` | Write the specs for a TLC run by hand; see [Specs](#with-tlc). The native checker reads none of them. |
 | `--instance-count <N>` | `2` | Slots per entity, `1..=255`; `1` warns. |
 | `--instances <ENTITY=N>` | `instances` under `[verify]` | One entity's slots; repeatable. See [Per-entity instance counts](#per-entity-instance-counts). |
-| `--int-range-max <N>` | `5` | `IntRange == 0..N`, `1..=255`. |
+| `--int-range-max <N>` | `5` | `IntRange == 0..N`, `1..=255`; at most `254` with a nullable Int column. |
 | `--max-states <N>` | none | State cap of every BFS run (entity, safety, and property cones, `_Full` and `_WF` included, and the whole-model run). A run past it is `not decided`. Under `--with-tlc` TLC's whole-model run keeps 2,097,152 states without it; its cone runs have no cap. |
 | `--max-patterns <N>` | `256` | Accepted for scripts; no `verify` run builds an entity view, so it stops nothing. |
 | `--memory <SIZE>` | `memory` under `[verify]`, else `16GiB` | BFS takes all of it; under `--with-tlc`, half, and the TLC runs the rest (at least `64MiB`). See [Memory limit](#memory-limit). |
@@ -2217,8 +2252,10 @@ For developers. These change only diagnostics or turn an optimisation off; the v
 | `RDRA_ISH_NO_WF_REDUCED` | Do not run `WF_vars(Next)` on a reduced cone first. |
 | `RDRA_ISH_FORCE_ORBITS` | Test only: under `--symmetry always`, run every eligible job up to symmetry, sharing nothing. |
 
-A `shadow` build also reads `RDRA_ISH_SHADOW_STATS`, `RDRA_ISH_DROP_RULE`, and
-`RDRA_ISH_FORCE_S_UP_TO_H`, and a `perf` build `RDRA_PERF` (`1` the pass and run lines, `2` the
+A `shadow` build also reads `RDRA_ISH_SHADOW_STATS`, `RDRA_ISH_DROP_RULE`,
+`RDRA_ISH_FORCE_S_UP_TO_H`, and `RDRA_ISH_FORCE_PROBES`, and prints a
+`shadow: compared/skipped/stopped` line at exit whenever a reference twin let a call through
+unchecked, with or without `RDRA_ISH_SHADOW_STATS`; a `perf` build `RDRA_PERF` (`1` the pass and run lines, `2` the
 costly columns too), `RDRA_PERF_EVAL_TWICE`, and the measurement switches the `perf` module
 lists (`crates/rdra-ish-core/src/perf.rs`). The test suites read `RDRA_REQUIRE_*` and other
 variables of their own.

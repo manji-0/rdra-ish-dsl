@@ -1843,10 +1843,10 @@ property; a rule `check` must enforce is a `forbidden`, `invariant`, or `after` 
 
 | Form | TLA+ |
 |---|---|
-| `always(expr)` | `[]expr` |
-| `eventually(expr)` | `<>expr` |
-| `leads_to(p, q)` | `p ~> q` |
-| `can_reach(expr)` | none: CTL `AG (present => EF expr)`, a comment |
+| `always(expr)` | `[](present => expr)` |
+| `eventually(expr)` | `[](present => <>expr)` |
+| `leads_to(p, q)` | `(present /\ p) ~> q` |
+| `can_reach(expr)` | none: CTL `AG (present => E[present U (present /\ expr)])`, a comment |
 | `stable(p)` | `[][(present /\ p) => (present' => p')]_vars` |
 | `unchanged(E.col, ..).when(p)` | `[][(present /\ p) => (present' => col' = col)]_vars` |
 | `precedes(p, q)` | `[](present /\ q => <P>_seen)`, a latch per instance |
@@ -1856,6 +1856,16 @@ property; a rule `check` must enforce is a `forbidden`, `invariant`, or `after` 
   (`/\`, `\/`, `~` are aliases).
 - A formula ranges over the present rows of each entity, every combination unless `.along`
   limits it ([Scope](#scope-of-a-property-over-several-entities)).
+- `present` is read where a property starts to speak of a row: all of `always`, the trigger
+  of `eventually` and `leads_to`. Their goal is read on the row whether it is present or
+  not, and a deleted row's columns read their base values ([Deleting a
+  parent](#deleting-a-parent)). So deleting a row meets a goal its base values satisfy: with
+  `pending` the `@default`, `leads_to(Order.status == paid, Order.status == pending)` holds
+  where every paid order is eventually deleted. A goal the base values do not satisfy is
+  never met by a deleted row: deleting a pending order breaks
+  `leads_to(Order.status == pending, Order.status == paid)`. `can_reach` reads presence along
+  the whole path, so a delete never finishes it. To keep a delete from meeting a goal, state
+  the goal on a value other than the column's base value.
 - With any `eventually` / `leads_to`, the exported Spec includes `WF_vars(Next)`: some step is
   taken while one can be, but none in particular, so another instance's loop meets it. Name the
   use cases a property relies on with [`.fair`](#fairness-fairusecase-).
@@ -2027,7 +2037,8 @@ property OrderCanFinish "every order can still be delivered or cancelled"
 
 `can_reach(expr)`: for each present instance, from every reachable state, some path, which may
 move other instances, reaches a state where `expr` holds for it, with the instance present
-throughout (deleting it does not finish it). This is CTL `AG (present => EF expr)`. It takes
+throughout (deleting it does not finish it). This is CTL
+`AG (present => E[present U (present /\ expr)])`. It takes
 `.along`, `.role`, and `.global()`. An instance may still loop forever: an order that can be held
 and resumed forever passes while it can also be delivered. It finds what the others miss: a
 `Deadlock_*` needs a state with no way out, and `eventually` / `leads_to` need `.fair` and fail
