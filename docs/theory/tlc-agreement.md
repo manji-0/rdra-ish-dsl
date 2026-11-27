@@ -316,7 +316,7 @@ whose successor equals its pre-state. The native checker skips that check explic
 (`core/explore/bfs.rs::Bfs::take` continues before `check_after` on `Probe::Loop`, which
 `explore/probe.rs::Probes::read` sets for a successor equal to its source in every build,
 independent of `Probing`). The
-engines agree; D17 states the exemption since #475, and since #PRP51 the language reference
+engines agree; D17 states the exemption since #475, and since #494 the language reference
 does too and a last step that only stutters is reported as vacuous (P22).
 
 **Temporal properties [paper].** `checks` prints the binding quantifier `\A b …` in one of

@@ -386,7 +386,7 @@ step is a self-loop; `verify` prints `ok (3 states)`. The control, `Touch` setti
 prints `counterexample (7 states)`, so the action is in the cone and the self-loop is what
 hides the step. The engines agree; what differed was D17's wording (or the modeler's
 expectation that an assertion after a use case holds whenever the use case can run). Fixed in
-#PRP51 by the owner's call: D17 and the language reference take TLA+'s reading, and the
+#494 by the owner's call: D17 and the language reference take TLA+'s reading, and the
 vacuity check reports this model (`Vacuous_AfterAssert_Touch_0`, test
 `lifecycle/tests/vacuous.rs::an_assert_after_a_step_that_only_stutters_holds_vacuously`).
 
@@ -473,7 +473,7 @@ that meets the premise is merged away or never built. On a reduced run or a
 run up to symmetry the stored states are representatives; that a premise met by some
 member of a class is met by its representative is theme (a). The `after` premise is read
 from the step's ends (`ComponentRun::step_ends`), filled by `Bfs::push` on every move.
-Until #PRP51 a self-loop (`Probe::Loop`) counted as a run of the use case while the
+Until #494 a self-loop (`Probe::Loop`) counted as a run of the use case while the
 assertion is never evaluated on it (P51), so the two readers treated the step in opposite
 ways. Now `Ends::moved` records whether a move of the step changes the state (an orbit
 self-edge does), only such moves count, and a step that only stutters is its own vacuity
@@ -834,7 +834,7 @@ The runs behind P50, P51 and P54, with the binaries described in the first parag
 is yet a test or corpus case in the repository: each is marked *repro pending in repo* with the
 fix lane that adds it, and the marker gives way to the test's path when that lands.
 
-**P51** (dup of P22; in the repo as `lifecycle/tests/vacuous.rs::P51`, #PRP51). The model:
+**P51** (dup of P22; in the repo as `lifecycle/tests/vacuous.rs::P51`, #494). The model:
 
 ```
 entity Order "注文" {
