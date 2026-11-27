@@ -38,8 +38,10 @@ the probe's test on the file `RDRA_ISH_TRACES` names and fail when that test fai
 
 ## Findings
 
-A build error maps back to a use case: by the probe line it is on, or by the method or
-contract it names. One block per use case and kind:
+The compiler's whole output prints first. A build error then maps back to a use case: by the
+probe line it is on, by the method, contract, or generated function it names (Go `RunPay`),
+or, for a wrong number of arguments, by the generated function its line calls. One block per
+use case and kind:
 
 ```text
 error[CodeMissingUseCase_Ship]: use case Ship has no implementation in svc::service::Service
@@ -57,8 +59,9 @@ FAIL: code: 1 error(s) at --code=build
 | `CodeSignature_<UC>` | A method takes or returns other types | Match the contract's signature |
 | `CodeError_<UC>` | Another error on the use case's probe line or methods | Read the quoted compiler error |
 | `CodeCommonJs` | TypeScript: the package makes the probe and the domain code CommonJS | Set `"type": "module"` in `package.json` |
-| `CodeUnmapped`, `CodeBuildFailed` | Errors that belong to no use case; a failed build with no error rdra-ish reads | Fix the build by hand |
-| `CodeConformance` | `run`: the store differs from the model after a call | Read the first difference: the traces line, and the rows only the model or only the store holds |
+| `CodeServiceNotFound` | The probe cannot resolve the type `service` names: it was renamed or moved | Set `service` (and `module`, `new`) in the table, then `rdra-ish codegen model --probe` |
+| `CodeUnmapped`, `CodeBuildFailed` | Errors that belong to no use case, each listed; a failed build with no error rdra-ish reads | Fix the build by hand |
+| `CodeConformance` | `run`: the store differs from the model after a call, or the service panicked or threw | Read the first difference: the traces line, and the `model only:` / `store only:` rows; or where it panicked |
 | `CodeMutantSurvived` | `run`: a mutant trace of the self-check passed | The `fix:` line: look rows up by id, or make the run command use `RDRA_ISH_TRACES` |
 | `CodeCoverageIncomplete` | `run`: the BFS behind the traces stopped at `conformance_states`; a warning, an error with `--deny-incomplete` | Raise `conformance_states`, then `codegen --code` |
 
@@ -75,7 +78,23 @@ table's `root`, or an entry under `[code.obligations]`:
 Unique_Payment_Order = "../service/migrations/003_payment.sql"
 ```
 
-The ledger says an obligation **has an owner**, never that it holds.
+A name is letters, digits, and `_`; a marker inside a string literal (after an odd number of
+`"` or `` ` `` on its line) is not one, so a script that prints markers owns nothing.
+
+The ledger says an obligation **has an owner**, never that it holds. A `OneTransaction`
+owner says who keeps it; what `run` shows of it is the interleaved commits, which the
+optimistic write passes (`UPDATE .. WHERE id = ? AND status = ?`, no row matched is
+`NotEnabled`). The harness is one thread, so held locks and races are not shown.
+
+## What a pass does not show
+
+- `build` compiles the probe and what it imports, not the rest of the application.
+- Each trace starts from a fresh store: `new` runs once per trace (181,095 times on
+  clinic-ops at the default `conformance_states`), and `seed` empties the store. Share one
+  database and keep `new` cheap. Migrations and data an earlier version stored are not run.
+- A raised event is never consumed: the raise stays recorded on its row (a delete does not
+  clear it), and the use case it triggers may run there again. Keep it as long as the row's
+  history matters; `snapshot` lists it.
 
 | Finding | Fix |
 |---|---|

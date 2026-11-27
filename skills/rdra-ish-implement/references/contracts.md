@@ -84,16 +84,24 @@ writes `"commonjs"`: `build` then fails with `CodeCommonJs`, or `run` with a
 1. `prepare`: load the rows by id, convert each with `fromRow`, call the dispatcher, and
    return its result. Write nothing. An absent row is `NotEnabled`.
 2. `commit`: in one transaction, write each row only where it still is what the result's
-   `<row>_expected` names (`Absent` for a created row, `In { column, value }` for a state,
-   `Present` for a record): `UPDATE .. WHERE id = ? AND status = ?`. A write that matches no
+   `<row>_expected` names: `UPDATE .. WHERE id = ? AND status = ?`. A write that matches no
    row rolls back and is `NotEnabled`. Hold what `prepare` read until then (the
-   `OneTransaction` obligation).
+   `OneTransaction` obligation). The expected source per language:
+
+   | | Created row | Row in a state | Record |
+   |---|---|---|---|
+   | Rust `ExpectedSource` | `Absent` | `In { column, value }` | `Present` |
+   | TypeScript `ExpectedSource` | `{ kind: "absent" }` | `{ kind: "in", column, value }` | `{ kind: "present" }` |
+   | Go `ExpectedSource` | `{Absent: true}` | `{Column: "status", Value: "paid"}` | `{}` |
+
 3. `ConformancePort`: `seed` empties the store and stores a snapshot's rows; `snapshot`
    returns every row (state types as `<Entity>Row`), every pending run mark, and every
-   unconsumed event. In Go both return an `error` for a store that fails; return it rather
+   raised event a triggered use case reads. Nothing consumes a raised event: it stays on its
+   row. In Go both return an `error` for a store that fails; return it rather
    than panic. A seeded state can hold a child whose parent row is absent (`check` warns
    `PreExistingChildOfCreatedParent_*`), so a store that enforces `Ref_*` as a foreign key
-   turns that check off while `seed` runs.
+   turns that check off while `seed` runs. The harness makes a port with `new` once per
+   trace, so keep `new` cheap (one shared database that `seed` clears).
 
 The harness runs each trace on a fresh service, compares the store with the model's state
 after every call, and expects each call the model refuses to fail and change nothing. It

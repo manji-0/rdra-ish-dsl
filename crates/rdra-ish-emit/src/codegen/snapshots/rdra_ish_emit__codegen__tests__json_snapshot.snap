@@ -7,6 +7,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
     "bounds": "1 instance per entity, Int 0..5",
     "passed": true
   },
+  "events": [],
   "format": "rdra-ish codegen json 1",
   "functions": [
     {
@@ -116,37 +117,71 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
   "obligations": [
     {
       "checked": false,
+      "columns": [
+        "email"
+      ],
+      "entity": "Customer",
+      "kind": "unique",
       "name": "Unique_Customer_email",
+      "parent": null,
       "site": null,
       "text": "no two Customer rows share email."
     },
     {
       "checked": false,
+      "columns": [
+        "customer_id"
+      ],
+      "entity": "Order",
+      "kind": "reference",
       "name": "Ref_Order_customer_id",
+      "parent": "Customer",
       "site": null,
       "text": "Order.customer_id names a present Customer."
     },
     {
       "checked": true,
+      "columns": [
+        "total"
+      ],
+      "entity": "Order",
+      "kind": "check",
       "name": "Check_Order_total_0",
+      "parent": null,
       "site": null,
       "text": "every Order row satisfies total >= 0 (@check on total)."
     },
     {
       "checked": false,
+      "columns": [
+        "order_id"
+      ],
+      "entity": "OrderLine",
+      "kind": "reference",
       "name": "Ref_OrderLine_order_id",
+      "parent": "Order",
       "site": null,
       "text": "OrderLine.order_id names a present Order."
     },
     {
       "checked": true,
+      "columns": [
+        "order_id"
+      ],
+      "entity": "OrderLine",
+      "kind": "min-children",
       "name": "MinCard_OrderLine_Order",
+      "parent": "Order",
       "site": null,
       "text": "every present Order has at least one OrderLine through OrderLine.order_id."
     },
     {
       "checked": false,
+      "columns": [],
+      "entity": null,
+      "kind": "transaction",
       "name": "OneTransaction",
+      "parent": null,
       "site": null,
       "text": "each function runs in one transaction with the reads of its rows, marks, and events: `check` and `verify` explore every use case, and every step of a split one, as one atomic action, and a run of another use case between the read and the write is a state they never explored. Hold what the function read until the write commits (SELECT .. FOR UPDATE, or serializable isolation), and write each row only where it still is what the result's `<row>_expected` (`<Row>Expected` in Go) names (UPDATE .. WHERE id = ? AND <tag> = ?; INSERT a created row only where none has its id; DELETE likewise); when a write matches no row, roll the transaction back and treat the call as NotEnabled. The condition catches a row another call created, deleted, or moved to another state; it does not catch a change to another column a condition read, to a row the function reads and does not write, or to a run mark or event it consumes, which only the held reads keep."
     }
@@ -462,20 +497,24 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
           "ident": "Id",
           "name": "id",
           "nullable": false,
+          "primary_key": true,
           "type": {
             "kind": "id",
             "name": "CustomerId"
-          }
+          },
+          "unique": false
         },
         {
           "domain_name": "email",
           "ident": "Email",
           "name": "email",
           "nullable": false,
+          "primary_key": false,
           "type": {
             "kind": "scalar",
             "name": "String"
-          }
+          },
+          "unique": true
         }
       ],
       "id": "Customer",
@@ -490,30 +529,36 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
           "ident": "Id",
           "name": "id",
           "nullable": false,
+          "primary_key": true,
           "type": {
             "kind": "id",
             "name": "OrderLineId"
-          }
+          },
+          "unique": false
         },
         {
           "domain_name": "qty",
           "ident": "Qty",
           "name": "qty",
           "nullable": false,
+          "primary_key": false,
           "type": {
             "kind": "scalar",
             "name": "Int"
-          }
+          },
+          "unique": false
         },
         {
           "domain_name": "order_id",
           "ident": "OrderId",
           "name": "order_id",
           "nullable": false,
+          "primary_key": false,
           "type": {
             "kind": "id",
             "name": "OrderId"
-          }
+          },
+          "unique": false
         }
       ],
       "id": "OrderLine",
@@ -562,6 +607,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
           "unprinted": null
         }
       ],
+      "actors": [],
       "error": "PlaceError",
       "id": "Place",
       "kind": "functions",
@@ -579,6 +625,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
           "unprinted": null
         }
       ],
+      "actors": [],
       "error": "PayError",
       "id": "Pay",
       "kind": "functions",
@@ -596,6 +643,7 @@ expression: "generate_json(&model, &options, &|_| None).expect(\"generates\")"
           "unprinted": null
         }
       ],
+      "actors": [],
       "error": "CancelOrderError",
       "id": "CancelOrder",
       "kind": "functions",
