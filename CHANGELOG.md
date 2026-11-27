@@ -17,7 +17,7 @@
   the coverage statement and warns `CodeUnimplemented`, an error with `--deny-incomplete`; a
   self-check mutant stopped so is counted as stopped, not survived. `check --code=build`
   reports nothing of it. Every Go, Rust and TypeScript output with contracts grows by the
-  stand-in (samples: +1 to +7 %), the names `UnimplementedConformancePort`,
+  stand-in (samples: +3 to +10 %, Rust the most), the names `UnimplementedConformancePort`,
   `ErrUnimplemented`, `Unimplemented` and `Unimplemented<Contract>` are claimed, Rust's
   `ConformanceReport` is no longer `Copy`, and the default `run` command of a domain table
   shows the test's output (Go `-v`, Rust `--nocapture`), as an adapter table's did.
