@@ -151,7 +151,10 @@ fn skipped(
 
 /// Prints the comparisons a test skipped (`assert_no_proved_rule_violated`), so a run says
 /// how much of its evidence it did not gather.
-fn report_skipped(what: &str, skipped: &[String]) {
+/// The count is pinned (`expected`): a passing test prints nothing a CI log shows, so a
+/// comparison that starts to be skipped fails the test instead of passing unseen. A change that
+/// moves the count updates `expected` after reading the list.
+fn report_skipped(what: &str, skipped: &[String], expected: usize) {
     println!(
         "{what}: {} comparisons of a proved rule skipped, its cone stopped at {STATE_CAP} states{}",
         skipped.len(),
@@ -159,6 +162,12 @@ fn report_skipped(what: &str, skipped: &[String]) {
             .iter()
             .map(|s| format!("\n  {s}"))
             .collect::<String>()
+    );
+    assert_eq!(
+        skipped.len(),
+        expected,
+        "{what}: {} comparisons of a proved rule skipped at the state cap, where {expected} were; read the list above (--nocapture) and update the count",
+        skipped.len()
     );
 }
 
@@ -424,7 +433,7 @@ fn no_proved_rule_has_a_bounded_counterexample() {
             wider_int(),
         ));
     }
-    report_skipped("the samples", &not_compared);
+    report_skipped("the samples", &not_compared, 130);
     assert!(proved_total > 0, "no sample rule was proved");
     assert_eq!(
         domain_unproved,
@@ -467,7 +476,7 @@ fn no_proved_rule_has_a_bounded_counterexample_in_the_corpus() {
             not_compared.extend(assert_no_proved_rule_violated(&case, &verdicts, bounds));
         }
     }
-    report_skipped("the corpus", &not_compared);
+    report_skipped("the corpus", &not_compared, 0);
     assert!(proved_total > 0, "no corpus rule was proved");
 }
 
