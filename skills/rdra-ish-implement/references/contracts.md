@@ -14,6 +14,7 @@ domain = "../web/src/domain.ts"
 traces = "../web/src/traces.txt"
 probe = "../web/src/rdra_contract.ts"
 service = "../web/src/order_service.ts#OrderService"
+seal = true
 
 [code.go]
 domain = "../shop/domain/domain.go"
@@ -32,13 +33,16 @@ new = "svc.New()"
 | `module` | Rust: the generated module's path (`svc::domain`). Go: `domain`'s import path. |
 | `new` | An expression making a fresh service, for the conformance test. Required in Rust. |
 | `package` | Go: the package name of `domain`. Default `domain`. |
-| `seal`, `tsconfig` | TypeScript: write `domain` as `codegen --seal` does; the tsconfig the probe's `tsconfig.rdra.json` extends. |
+| `seal` | TypeScript: write `domain` as `codegen --seal` does. Set it: a state built as an object literal, skipping the transition function, then fails `build` (TS2741) instead of passing `run`. |
+| `tsconfig` | TypeScript: the tsconfig the probe's `tsconfig.rdra.json` extends. |
 | `root` | Where the build runs. Default: the nearest directory above `domain` with `Cargo.toml`, `go.mod`, `package.json`, or `tsconfig.json`. |
 | `build`, `run` | A command list replacing the language's default. |
 | `conformance_states` | The states the BFS behind the traces explores at most. Default `65536`. |
 
-An unknown key fails every loading command with the line. TypeScript `run` needs Node
-22.18 or later, and the service's imports name the `.ts` files.
+`[code.typescript]` is another spelling of `[code.ts]`. An unknown key fails every loading
+command with the line. TypeScript `run` needs Node 22.18 or later, the service's imports
+name the `.ts` files, and the `package.json` sets `"type": "module"` (`npm init -y` writes
+`"commonjs"`, and Node then refuses the probe's `import`).
 
 ## What `codegen` prints
 
@@ -111,3 +115,14 @@ impl PayUseCase for Service {
 
 `self.order` loads a row and converts it with `Order::from_row`; `self.check` is the
 conditional write of step 2.
+
+In TypeScript:
+
+- A result holds states (`kind: "Paid"`), the store rows (`status: "paid"`). Answer an
+  API's writes and reads in one shape: pass the result's states through `Order.toRow`.
+- The scalar `Date` hides the global `Date` where it is imported by name. Import it
+  renamed (`import { Date as IsoDate }`) or import the module as a namespace.
+- Inputs are positional. Two of one type (`title: string, technicalField: string`) can be
+  swapped without a compile error, and the conformance run does not see the values of
+  columns the model does not track. Check such a call against the contract's parameter
+  names, and test it with distinct values.

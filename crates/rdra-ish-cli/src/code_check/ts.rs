@@ -227,7 +227,8 @@ impl Backend for TypeScript {
     }
 
     /// The harness's report: the line after `rdra-ish conformance: `; a Node that runs no
-    /// TypeScript as it is, said as such; else the output's last line.
+    /// TypeScript as it is, or a package that makes the probe CommonJS, said as such; else the
+    /// output's last line.
     fn run_failure(&self, stdout: &str, stderr: &str) -> Option<String> {
         let all = format!("{stdout}\n{stderr}");
         if let Some((_, rest)) = all.rsplit_once("rdra-ish conformance: ") {
@@ -237,6 +238,9 @@ impl Backend for TypeScript {
             || all.contains("getBuiltinModule is not a function")
         {
             return Some(format!("node runs no TypeScript as it is: `check --code=run` needs Node {NODE} or later (type stripping), or a `run` command in [code.ts]"));
+        }
+        if all.contains("Cannot use import statement outside a module") {
+            return Some("node ran the probe as CommonJS: the probe and the domain code are ES modules, so the package.json above them needs \"type\": \"module\" (`npm init -y` writes \"commonjs\")".to_string());
         }
         all.lines()
             .rev()
@@ -338,10 +342,13 @@ mod tests {
     }
 
     #[test]
-    fn a_node_without_type_stripping_is_named() {
+    fn a_node_without_type_stripping_or_esm_is_named() {
         let old = "node:internal/modules/esm/get_format:218\n  throw new ERR_UNKNOWN_FILE_EXTENSION(ext, filepath);\nTypeError [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file extension \".ts\"\n\nNode.js v20.11.0";
         let said = TypeScript.run_failure("", old).unwrap();
         assert!(said.contains("needs Node 22.18 or later"), "{said}");
+        let cjs = "SyntaxError: Cannot use import statement outside a module\n    at wrapSafe (node:internal/modules/cjs/loader:1861:18)\n\nNode.js v24.21.0";
+        let said = TypeScript.run_failure("", cjs).unwrap();
+        assert!(said.contains("\"type\": \"module\""), "{said}");
         let report = "rdra-ish conformance: traces line 7: after `Pay 1`, the store differs";
         assert_eq!(
             TypeScript.run_failure("", report).as_deref(),
