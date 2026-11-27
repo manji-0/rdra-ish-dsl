@@ -600,7 +600,8 @@ those are kept by `restrict_to` with havoc off, so it has the same successors on
 they hold in `C`; it writes the raw inputs, and each changed bit slot then has a free flip. Two steps
 are named and not derived here: that `Fold::holds` computes the folded guard exactly (the
 `Twin::FoldHolds` twin compares it with `reduce/fold/reference.rs`, an implementation of the same
-definition), and that a fold's key binding (`Extended::cone_params` binds a dropped `T` parameter to
+definition; `core/tests/reduce.rs::reduced_domain_cones_hold_each_fold_bit_where_its_action_runs` checks, against the cone's step relation, that the bit holds wherever the
+action runs, on the domain samples' 71 folds, P31), and that a fold's key binding (`Extended::cone_params` binds a dropped `T` parameter to
 slot 0) loses no successor. ∎
 
 cone-soundness.md, "Proof obligation", uses Lemma 6 in points 2, 3, and 5 without stating it.

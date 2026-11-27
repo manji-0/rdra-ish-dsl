@@ -1507,3 +1507,76 @@ fn an_entity_cone_up_to_symmetry_decides_what_its_plain_run_left_open() {
         plain.undecided().len()
     );
 }
+
+/// The fold half of Lemma 6 of docs/theory/cones.md (open problem P31), checked against the
+/// cone's own step relation rather than against a second evaluation of the folded guards:
+/// for every reachable state of every reduced cone of `samples` whose reduction folds an S
+/// action's reads of T into a bit, and every move of that action, the bit holds at the slot
+/// the move binds its key to (or, for a node fold, at the row the folded quantifier is
+/// satisfied by, which the link names). A bit that is false where the action runs would drop
+/// that step from the extended sub-lifecycle. Returns the folds seen and the moves checked.
+fn fold_bits_hold_where_their_actions_run(samples: &[&str]) -> (usize, usize) {
+    let caps = Caps::new(usize::MAX, 200_000);
+    let (mut folds, mut checked) = (0, 0);
+    for sample in samples {
+        let model = load(sample);
+        for bounds in [Bounds::STATES, Bounds::VERIFY] {
+            let ts = TransitionSystem::build(&model, bounds, &Scope::ALL).ts;
+            let targets = ts.targets();
+            let reduced = ts.explore_targets_reduced(&targets, caps);
+            for target in &targets {
+                let r = reduced.cone_of(*target);
+                let Some(red) = r.run.system.reduction() else {
+                    continue;
+                };
+                let bits: Vec<&Fold> = red.bits().iter().flatten().collect();
+                if bits.is_empty() {
+                    continue;
+                }
+                let cone = ts.restrict_to(&r.cone.vars, &r.cone.keep);
+                let run = cone.clone().run(caps);
+                if !run.complete {
+                    continue;
+                }
+                folds += bits.len();
+                for s in run.states.iter() {
+                    for m in cone.moves(&s) {
+                        for fold in bits.iter().filter(|f| f.act() == m.act) {
+                            let slot = match fold.key() {
+                                FoldKey::Param(p) => m.params[usize::from(*p)],
+                                FoldKey::Linked {
+                                    link_var, s_param, ..
+                                } => {
+                                    let row = m.params[usize::from(*s_param)];
+                                    let at = cone.offset(*link_var) + usize::from(row);
+                                    match s.0[at].checked_sub(1) {
+                                        Some(slot) => slot,
+                                        None => continue,
+                                    }
+                                }
+                            };
+                            assert!(
+                                fold.holds(&cone, &s, slot),
+                                "{sample} {target:?}: the bit of {} is false at slot {slot} \
+                                 where the action runs, in {:?}",
+                                cone.actions[m.act.index()].name,
+                                &s.0
+                            );
+                            checked += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    (folds, checked)
+}
+
+/// The bundled samples fold nothing; the domain samples' reduced cones hold 71 folds. CI runs
+/// this in release beside `reduced_domain_cones_decide_what_the_cones_decide` (about 9 s).
+#[test]
+fn reduced_domain_cones_hold_each_fold_bit_where_its_action_runs() {
+    let (folds, checked) = fold_bits_hold_where_their_actions_run(DOMAIN_SAMPLES);
+    assert!(folds >= 71, "{folds} folds");
+    assert!(checked >= 2_000, "{checked} moves checked");
+}

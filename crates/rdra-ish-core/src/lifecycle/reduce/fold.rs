@@ -101,7 +101,7 @@ impl Fold {
     /// Whether the bit holds for slot `c` of the key in `s`. A build with debug assertions or
     /// the `shadow` feature checks the answer against the reference twin
     /// (`fold/reference.rs`), which computes it with the allocations this one does without.
-    pub(super) fn holds(&self, ts: &TransitionSystem, s: &StateSlice, c: u8) -> bool {
+    pub(crate) fn holds(&self, ts: &TransitionSystem, s: &StateSlice, c: u8) -> bool {
         let held = self.holds_fast(ts, s, c);
         #[cfg(any(debug_assertions, feature = "shadow"))]
         reference::check_holds(self, ts, s, c, held);
