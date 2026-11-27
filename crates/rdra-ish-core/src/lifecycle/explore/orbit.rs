@@ -204,7 +204,7 @@ impl TransitionSystem {
         );
         let mut canon = Canon::default();
         for (at, reach) in &violations {
-            let (start, steps) = match reach {
+            let lifted = match reach {
                 Reach::State { at, .. } => lift(&run, &group, &mut canon, *at, None),
                 Reach::Step {
                     from,
@@ -221,11 +221,16 @@ impl TransitionSystem {
                 ),
             };
             let ts = &run.system;
-            if let Err(e) = replays(ts, &start, &steps) {
-                let reduced = &run.diags[*at].diag;
-                run.diags[*at].diag = super::faulted(reduced, LassoFault::Replay(e));
-                continue;
-            }
+            let replayed = lifted
+                .and_then(|(start, steps)| replays(ts, &start, &steps).map(|()| (start, steps)));
+            let (start, steps) = match replayed {
+                Ok(path) => path,
+                Err(e) => {
+                    let reduced = &run.diags[*at].diag;
+                    run.diags[*at].diag = super::faulted(reduced, LassoFault::Replay(e));
+                    continue;
+                }
+            };
             // On a reduced cone the lifted path still holds class representatives on the S
             // side: #74's lift comes after the symmetry's, which was applied last.
             let (start, steps) = match ts.lifted(&start, &steps) {
@@ -284,31 +289,32 @@ fn lift(
     canon: &mut Canon,
     at: u32,
     extra: Option<(ActId, &[u8], &StateSlice)>,
-) -> (State, Vec<Step>) {
+) -> Result<(State, Vec<Step>), ReplayError> {
     let path: Vec<Edge> = run.path_to(at);
     let first = path.first().map_or(at, |e| e.from);
-    let (start, mut steps, tau) = lift_path(run, g, canon, first, &path);
+    let (start, mut steps, tau) = lift_path(run, g, canon, first, &path)?;
     if let Some((act, params, to)) = extra {
         steps.push(concrete(&run.system, g, &tau, act, params, to));
     }
-    (start, steps)
+    Ok((start, steps))
 }
 
 /// `path`, stored edges from `states[first]` on, lifted to concrete states as `lift` does,
-/// with the permutation `τ` the last concrete state is read through.
-fn lift_path(
+/// with the permutation `τ` the last concrete state is read through. A stored edge that is no
+/// move of its source is the `ReplayError` of that step, a fault, never a panic (P20).
+pub(super) fn lift_path(
     run: &ComponentRun,
     g: &Group,
     canon: &mut Canon,
     first: u32,
     path: &[Edge],
-) -> (State, Vec<Step>, Vec<u8>) {
+) -> Result<(State, Vec<Step>, Vec<u8>), ReplayError> {
     let ts = &run.system;
     let start = run.states.at(first as usize).into_state();
     let mut tau = g.identity();
     let mut out = vec![0u8; ts.width];
     let mut steps = Vec::with_capacity(path.len() + 1);
-    for e in path {
+    for (k, e) in path.iter().enumerate() {
         let (act, params) = run.step(e);
         let target = &run.states.at(e.to as usize);
         let t = ts
@@ -319,12 +325,15 @@ fn lift_path(
                     out[..] == target.0
                 }
             })
-            .expect("symmetry: a stored edge is a move of its source");
+            .ok_or(ReplayError::NoMove {
+                state: k + 2,
+                action: act,
+            })?;
         let sigma = canon.perm().to_vec();
         steps.push(concrete(ts, g, &tau, act, params, &t.next));
         tau = g.compose(&tau, &g.inverse(&sigma));
     }
-    (start, steps, tau)
+    Ok((start, steps, tau))
 }
 
 /// The step of `act` under `params` into `t`, read through `tau`. A class move of a reduced
@@ -410,7 +419,7 @@ impl OrbitRun {
         path: &[Edge],
     ) -> Result<(State, Vec<Step>), ReplayError> {
         let (start, steps, _) =
-            lift_path(&self.run, &self.group, &mut Canon::default(), first, path);
+            lift_path(&self.run, &self.group, &mut Canon::default(), first, path)?;
         replays(&self.run.system, &start, &steps)?;
         Ok((start, steps))
     }
@@ -521,16 +530,19 @@ impl OrbitRun {
                 false => PropertyVerdict::Undecided,
             }));
         };
-        let (start, steps) = lift(
+        let lifted = lift(
             &self.run,
             &self.group,
             &mut Canon::default(),
             id32(at),
             None,
         );
-        if let Err(e) = replays(ts, &start, &steps) {
-            return Some(Err(LassoFault::Replay(e)));
-        }
+        let (start, steps) = match lifted
+            .and_then(|(start, steps)| replays(ts, &start, &steps).map(|()| (start, steps)))
+        {
+            Ok(path) => path,
+            Err(e) => return Some(Err(LassoFault::Replay(e))),
+        };
         let states: Vec<State> = std::iter::once(start.clone())
             .chain(steps.iter().map(|s| s.2.clone()))
             .collect();

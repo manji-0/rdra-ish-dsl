@@ -484,6 +484,12 @@
 
 ### Fixed
 
+- The lifts of a counterexample no longer panic on a path they cannot follow (P20, after
+  #522): a stored edge that is no move of its source up to symmetry, and in the reduced lift a
+  start with no class or initial state, a rise or class move it cannot find, and a mismatched
+  inner lift, are faults of the tool. A property path that does not break the property, and a
+  reduced `always` whose lifted last state does not, are `tool_error` instead of a
+  `debug_assert!` or an `expect`.
 - A deadlock's, a `can_reach` failure's, or a witness's trace that fails to replay
   (`TraceFault`) now counts on `verify`'s tool-error line, as a `LiftFault` does: the run's
   `result:` is `tool_error`, not `counterexample` (P20 follow-up).

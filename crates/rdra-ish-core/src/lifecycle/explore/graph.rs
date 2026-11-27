@@ -446,9 +446,14 @@ impl ComponentRun {
         self.lifted_path(first, &path, extra)
     }
 
-    /// `path`, a walk of edges from `states[first]`, lifted and in model terms.
-    pub(crate) fn trace_along(&self, first: u32, path: &[Edge]) -> Result<Trace, ReplayError> {
-        Ok(self.lifted_path(first, path, None)?.0)
+    /// `path`, a walk of edges from `states[first]`, lifted and in model terms, with the lifted
+    /// path's last state.
+    pub(crate) fn trace_along_to(
+        &self,
+        first: u32,
+        path: &[Edge],
+    ) -> Result<(Trace, State), ReplayError> {
+        self.lifted_path(first, path, None)
     }
 
     /// Before it lifts, the path replays through the run's own step relation from one of its
