@@ -23,6 +23,7 @@
 //! placement that reaches the least layout, with the tied rows no child names in any order.
 //! The orbit of `s` then has `|G_s| / |Aut(s)|` states.
 
+use crate::lifecycle::narrow::id8;
 use crate::lifecycle::types::Value;
 
 use super::{factorial, Class, Group, BRANCH_CAP};
@@ -114,7 +115,7 @@ impl Canon {
         if !sorts {
             self.pos.clear();
             for class in &g.classes {
-                self.pos.extend((0..class.slots).map(|s| s as u8));
+                self.pos.extend((0..class.slots).map(|s| id8(s)));
             }
             self.mult.clear();
             self.mult.push(1);
@@ -143,7 +144,7 @@ impl Canon {
         }
         self.pos.clear();
         for class in &g.classes {
-            self.pos.extend((0..class.slots).map(|s| s as u8));
+            self.pos.extend((0..class.slots).map(|s| id8(s)));
         }
         self.mult.clear();
         self.mult.push(1);
@@ -225,7 +226,7 @@ impl Canon {
     fn layout(g: &Group, s: &[u8], class: &Class, pos: &[u8], key: &mut Vec<u8>) {
         let mut at = [0u8; 256];
         for old in 0..class.slots {
-            at[usize::from(pos[class.first + old])] = old as u8;
+            at[usize::from(pos[class.first + old])] = id8(old);
         }
         for &old in &at[..class.slots] {
             for col in 0..class.cols.len() {
@@ -268,7 +269,7 @@ impl Canon {
         self.slots.extend(
             (0..class.slots)
                 .filter(|&x| self.movable[class.first + x])
-                .map(|x| x as u8),
+                .map(|x| id8(x)),
         );
         let m = self.slots.len();
         // Nothing to sort, and the layout depends on the branch only through owners: one
@@ -436,7 +437,7 @@ impl Canon {
                 let class = &g.classes[c];
                 (0..class.slots)
                     .filter(|&x| self.movable[class.first + x])
-                    .map(|x| x as u8)
+                    .map(|x| id8(x))
                     .collect()
             })
             .collect();
@@ -540,7 +541,7 @@ fn placements(memo: &mut Vec<((usize, usize), Vec<u8>)>, j: usize, k: usize) -> 
     }
     let flat = injections(j, k)
         .into_iter()
-        .flat_map(|p| p.into_iter().map(|x| x as u8))
+        .flat_map(|p| p.into_iter().map(|x| id8(x)))
         .collect();
     memo.push(((j, k), flat));
     memo.len() - 1
@@ -578,6 +579,6 @@ fn injections(j: usize, k: usize) -> Vec<Vec<usize>> {
 pub(super) fn permutations(m: usize) -> Vec<Vec<u8>> {
     injections(m, m)
         .into_iter()
-        .map(|p| p.into_iter().map(|x| x as u8).collect())
+        .map(|p| p.into_iter().map(|x| id8(x)).collect())
         .collect()
 }

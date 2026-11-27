@@ -7,6 +7,7 @@
 //! sound. Deterministic: the literals are tried in a fixed order, and the rounds and the
 //! literals are bounded.
 
+use crate::lifecycle::narrow::id8;
 use std::collections::BTreeSet;
 
 use crate::lifecycle::cone::VarSet;
@@ -100,16 +101,16 @@ pub(super) fn diagram(
     }
     let slot = |var: VarId, b: usize| Term::Slot {
         var,
-        at: At::Bound(b as u8),
+        at: At::Bound(id8(b)),
     };
     let mut lits = Vec::new();
     for (i, a) in kept.iter().enumerate() {
         for (j, b) in kept.iter().enumerate().skip(i + 1) {
             if a.entity == b.entity {
                 lits.push(Pred::Cmp(
-                    Term::Index(At::Bound(i as u8)),
+                    Term::Index(At::Bound(id8(i))),
                     CmpOp::Ne,
-                    Term::Index(At::Bound(j as u8)),
+                    Term::Index(At::Bound(id8(j))),
                 ));
             }
         }
@@ -123,7 +124,7 @@ pub(super) fn diagram(
                         lits.push(Pred::Cmp(
                             slot(*v, i),
                             CmpOp::Eq,
-                            Term::Index(At::Bound(j as u8)),
+                            Term::Index(At::Bound(id8(j))),
                         ));
                     } else if nil_of(parent) == Some(x) {
                         lits.push(Pred::Cmp(slot(*v, i), CmpOp::Eq, Term::Lit(Value::NULL)));
@@ -253,7 +254,7 @@ fn trim(binders: &[EntId], lits: &[Pred]) -> Formula {
         }
     }
     let order: Vec<u8> = used.into_iter().collect();
-    let at = |b: &u8| order.iter().position(|x| x == b).expect("a used binder") as u8;
+    let at = |b: &u8| id8(order.iter().position(|x| x == b).expect("a used binder"));
     let renumber = |t: &Term| match t {
         Term::Slot {
             var,

@@ -2,6 +2,7 @@
 //! replayed through `moves`, the property it violates, evaluated on the infinite behavior the
 //! lasso stands for with the semantics the TLA printer gives it, and the fairness of its loop.
 
+use crate::lifecycle::narrow::id8;
 use std::collections::BTreeSet;
 
 use super::diag::StateDiag;
@@ -211,7 +212,7 @@ impl TransitionSystem {
         (0..radix.iter().product::<usize>()).map(move |mut k| {
             let mut b = vec![0u8; radix.len()];
             for (slot, n) in b.iter_mut().zip(&radix).rev() {
-                *slot = (k % n) as u8;
+                *slot = id8(k % n);
                 k /= n;
             }
             b

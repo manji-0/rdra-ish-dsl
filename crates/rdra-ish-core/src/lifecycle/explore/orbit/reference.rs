@@ -7,6 +7,7 @@
 //!    moves something a guard reads fails here, though the reached set says nothing;
 //! 3. the two runs end alike and report the same violated checks.
 
+use crate::lifecycle::narrow::{id32, id8};
 use std::collections::BTreeSet;
 
 use super::findings::StuckAt;
@@ -168,7 +169,7 @@ pub(super) fn check_liveness(
     // (1) Each edge's permutation.
     let edges = orbits.run.edges();
     let mut out = vec![0u8; ts.width];
-    for r in 0..orbits.run.states.len() as u32 {
+    for r in 0..id32(orbits.run.states.len()) {
         let moves: Vec<_> = ts.moves(&orbits.run.states.at(r as usize)).collect();
         let first = edges.range_of(r).start;
         for (k, e) in edges.range_of(r).zip(edges.from_state(r)) {
@@ -185,10 +186,10 @@ pub(super) fn check_liveness(
     // (2) The pairs against the plain bindings.
     let reference = plain.liveness_reference(i, fairness);
     let stored: FastMap<Vec<u8>, u32> = (orbits.run.states.iter().enumerate())
-        .map(|(r, s)| (s.0.to_vec(), r as u32))
+        .map(|(r, s)| (s.0.to_vec(), id32(r)))
         .collect();
     let index: FastMap<&[u8], u32> = (product.bindings.iter().enumerate())
-        .map(|(k, b)| (&b[..], k as u32))
+        .map(|(k, b)| (&b[..], id32(k)))
         .collect();
     let cause = match &p.formula {
         crate::lifecycle::types::Ltl::LeadsTo(x, _) => Some(x),
@@ -323,7 +324,7 @@ pub(super) fn check_state_models(
             (Progress::Stuck { diag, .. }, Progress::Stuck { .. }, Some((at, k))) => {
                 let (start, steps, tau) = orbits.lift_to(*at);
                 let last = steps.last().map_or(&start, |s| &s.2);
-                let named = usize::from(orbits.group.map_slot(&tau, e, *k as u8));
+                let named = usize::from(orbits.group.map_slot(&tau, e, id8(*k)));
                 let p = (0..plain.states.len())
                     .find(|&p| plain.states.at(p) == *last)
                     .unwrap_or_else(|| panic!("{}", name("a deadlock's state is not reached")));
@@ -340,9 +341,9 @@ pub(super) fn check_state_models(
                     ))
                 );
                 let held: Vec<_> = adjacency
-                    .forward_from(p as u32, |_| true)
+                    .forward_from(id32(p), |_| true)
                     .into_iter()
-                    .map(|i| (plain.states.at(i as usize), named as u8))
+                    .map(|i| (plain.states.at(i as usize), id8(named)))
                     .collect();
                 let exits = ts.exits(e, a.var, a.value);
                 let want = ts.deadlock(e, a.var, a.value, named, &exits, &held);

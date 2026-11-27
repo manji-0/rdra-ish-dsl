@@ -1,5 +1,6 @@
 //! The actions of a system: one per use case transaction step, named apart, with their run marks.
 
+use crate::lifecycle::narrow::id8;
 use rdra_ish_syntax::ast::Kind;
 use std::collections::HashSet;
 
@@ -259,7 +260,7 @@ impl<'m> Builder<'m> {
         let mut earlier: Vec<(EntId, u8)> = groups[..step]
             .iter()
             .enumerate()
-            .flat_map(|(j, ents)| ents.iter().map(move |ek| (ent_of[ek], j as u8 + 1)))
+            .flat_map(|(j, ents)| ents.iter().map(move |ek| (ent_of[ek], id8(j) + 1)))
             .collect();
         earlier.sort();
         for (e, wrote) in earlier {
@@ -303,7 +304,7 @@ impl<'m> Builder<'m> {
     /// row carries the previous step's number and takes this step's, or `none` at the last
     /// step. A created row's mark is at base already.
     fn run_marks(&mut self, uc: UseCaseKey, a: &mut ActionDraft, step: usize, k: usize) {
-        let this = step as u8 + 1;
+        let this = id8(step) + 1;
         let next = if usize::from(this) < k {
             Value(this)
         } else {
@@ -326,7 +327,7 @@ impl<'m> Builder<'m> {
                     pred: Pred::Cmp(
                         Term::Slot {
                             var,
-                            at: At::Param(p as u8),
+                            at: At::Param(id8(p)),
                         },
                         CmpOp::Eq,
                         Term::Lit(Value(mark)),
@@ -337,7 +338,7 @@ impl<'m> Builder<'m> {
             }
             a.effects.push(Effect::Assign {
                 var,
-                param: p as u8,
+                param: id8(p),
                 rhs: Rhs::Lit(next),
                 site,
             });

@@ -1,6 +1,7 @@
 //! `SemanticModel` -> `TransitionSystem`. The only reader of the model's lifecycle facts:
 //! columns, `transitions`, `sets`, CRUD edges, relates, constraints, asserts, and properties.
 
+use crate::lifecycle::narrow::id8;
 mod actions;
 mod events;
 mod links;
@@ -216,7 +217,7 @@ impl ActionDraft {
             role,
             via_api: None,
         });
-        (self.params.len() - 1) as u8
+        id8(self.params.len() - 1)
     }
 
     /// The param of a row of `entity` the action writes.
@@ -224,7 +225,7 @@ impl ActionDraft {
         self.params
             .iter()
             .position(|p| p.entity == entity && p.role.is_written())
-            .map(|i| i as u8)
+            .map(|i| id8(i))
     }
 
     /// The param of the action's row of `entity`: one it writes, or one an earlier step of
@@ -233,7 +234,7 @@ impl ActionDraft {
         self.params
             .iter()
             .position(|p| p.entity == entity && p.role.is_row())
-            .map(|i| i as u8)
+            .map(|i| id8(i))
     }
 
     fn writes(&self, var: VarId, param: u8) -> bool {

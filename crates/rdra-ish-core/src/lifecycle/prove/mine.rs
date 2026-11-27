@@ -10,6 +10,7 @@
 //! it is inductive with the others, so a capped or over-approximate exploration costs proofs,
 //! not soundness.
 
+use crate::lifecycle::narrow::id8;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::lifecycle::cone::Target;
@@ -161,7 +162,7 @@ fn record(
             for (v, w) in sub_vars.iter().zip(whole_vars) {
                 of_entity.push(universe.len());
                 for x in 0..sys.var(*v).domain.size(sys) {
-                    universe.push((*w, x as u8));
+                    universe.push((*w, id8(x)));
                     owner.push(i);
                 }
             }

@@ -2,6 +2,7 @@
 //! collections rather than read from the process, so a run stops at the same state on any
 //! machine and with any number of worker threads.
 
+use crate::lifecycle::narrow::id32;
 use std::mem::size_of;
 
 use crate::lifecycle::types::ActId;
@@ -171,7 +172,7 @@ impl Bfs<'_> {
             .var_ids()
             .map(|v| {
                 let decl = self.ts.var(v);
-                (decl.domain.size(self.ts) as u64).checked_pow(self.ts.slots_of(&decl.kind) as u32)
+                (decl.domain.size(self.ts) as u64).checked_pow(id32(self.ts.slots_of(&decl.kind)))
             })
             .try_fold(1u64, |bound, size| bound.checked_mul(size?));
         Held {

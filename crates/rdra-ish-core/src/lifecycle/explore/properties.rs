@@ -6,6 +6,7 @@
 //! path reaches through states where `p` never held, so the search walks the graph that
 //! keeps only those states.
 
+use crate::lifecycle::narrow::id32;
 use std::collections::VecDeque;
 
 use crate::lifecycle::diag::StateDiag;
@@ -118,11 +119,11 @@ impl ComponentRun {
     fn unsafe_state(&self, p: &Property, x: &Pred) -> Option<(u32, Vec<Edge>)> {
         let ts = &self.system;
         let bindings: Vec<Vec<u8>> = ts.binder_slots(&p.binders).collect();
-        let at = self.states.iter().position(|s| {
+        let at = id32(self.states.iter().position(|s| {
             bindings
                 .iter()
                 .any(|bd| ts.triggers(p, bd, &s) && !ts.holds_bound(x, &s, bd))
-        })? as u32;
+        })?);
         let path = self.path_to(at);
         Some((path.first().map_or(at, |e| e.from), path))
     }
@@ -154,7 +155,7 @@ impl ComponentRun {
         let mut out: Vec<Vec<u32>> = vec![Vec::new(); self.states.len()];
         let edges = self.edges();
         for (k, e) in edges.iter().enumerate() {
-            out[e.from as usize].push(k as u32);
+            out[e.from as usize].push(id32(k));
         }
         let mut best: Option<(u32, Vec<Edge>)> = None;
         for bd in ts.binder_slots(&p.binders) {
@@ -166,9 +167,9 @@ impl ComponentRun {
             let mut via: Vec<Option<Option<u32>>> = vec![None; self.states.len()];
             let mut queue: VecDeque<u32> = VecDeque::new();
             for k in 0..self.states.len() {
-                if self.parent(k as u32).is_none() && open[k] {
+                if self.parent(id32(k)).is_none() && open[k] {
                     via[k] = Some(None);
-                    queue.push_back(k as u32);
+                    queue.push_back(id32(k));
                 }
             }
             let mut found = None;
@@ -181,7 +182,7 @@ impl ComponentRun {
                     let to = edges.get(ek as usize).to as usize;
                     if open[to] && via[to].is_none() {
                         via[to] = Some(Some(ek));
-                        queue.push_back(to as u32);
+                        queue.push_back(id32(to));
                     }
                 }
             }

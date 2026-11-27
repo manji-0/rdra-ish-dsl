@@ -1,6 +1,7 @@
 //! Per-entity views of the reached states, in the shape `states` prints: one pattern per
 //! distinct column assignment of a present slot, with initial, terminal, and provenance.
 
+use crate::lifecycle::narrow::id32;
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::diag::{Diag, StateDiag};
@@ -219,7 +220,7 @@ fn first_states(run: &ComponentRun, e: EntId) -> Vec<Option<u32>> {
                 continue;
             }
             if let Some(id) = view.id(&ts.pattern_key(&s, e, slot)) {
-                first[id].get_or_insert(at as u32);
+                first[id].get_or_insert(id32(at));
             }
         }
     }

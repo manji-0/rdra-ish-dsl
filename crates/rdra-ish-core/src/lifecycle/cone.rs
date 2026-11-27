@@ -7,6 +7,7 @@
 //! cone reaches a superset (`cone_frees_slots`; the `bounds:` line says such entities are
 //! unbounded).
 
+use crate::lifecycle::narrow::id8;
 use std::collections::BTreeSet;
 
 use super::expr::{State, StateSlice};
@@ -131,7 +132,7 @@ impl TransitionSystem {
             .enumerate()
             .filter(|(_, param)| param.role == ParamRole::Triggered)
             .filter_map(|(p, _)| {
-                let p = p as u8;
+                let p = id8(p);
                 let mark = action.guards.iter().find_map(|g| match (&g.why, &g.pred) {
                     (
                         GuardWhy::Raised { .. },

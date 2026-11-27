@@ -1,6 +1,7 @@
 //! The subsystem over a set of vars (`restrict_to`), and the renumbering of params and ids
 //! it needs.
 
+use crate::lifecycle::narrow::id8;
 use std::collections::BTreeSet;
 
 use super::cone::{named_params, VarSet};
@@ -140,7 +141,7 @@ impl TransitionSystem {
                     .filter(|(_, p)| {
                         p.role != ParamRole::New && map.ent[p.entity.index()].is_none()
                     })
-                    .map(|(i, _)| i as u8),
+                    .map(|(i, _)| id8(i)),
             );
             action.guards.retain(|g| {
                 if g.copy_target().is_some_and(|t| !vars.contains(&t)) {
@@ -239,7 +240,7 @@ fn drop_params(
     let mut index: Vec<Option<u8>> = Vec::with_capacity(action.params.len());
     let mut params = Vec::new();
     for (i, p) in action.params.iter().enumerate() {
-        if drop(i as u8, p) {
+        if drop(id8(i), p) {
             index.push(None);
         } else {
             index.push(Some(u8::try_from(params.len()).expect("params fit in u8")));

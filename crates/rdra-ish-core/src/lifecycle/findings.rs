@@ -9,6 +9,7 @@ use super::types::{
     ActId, ActionOrigin, Domain, Effect, EntId, ParamRole, Site, Value, VarId, VarKind,
 };
 use super::TransitionSystem;
+use crate::lifecycle::narrow::{id32, id8};
 use crate::model::ConditionKey;
 
 /// A guarded arm `(from, to, site, conditions)`; a chosen value has no `from`.
@@ -258,7 +259,7 @@ impl TransitionSystem {
                 }
                 for (i, (var, value)) in targets.iter().enumerate() {
                     if first[i].is_none() && s.get(self, *var, slot) == *value {
-                        first[i] = Some(at as u32);
+                        first[i] = Some(id32(at));
                         open -= 1;
                     }
                 }
@@ -363,12 +364,12 @@ impl TransitionSystem {
             let progress = match first {
                 None => Progress::Leaves,
                 Some((at, k)) => {
-                    let held = adjacency.forward_from(at as u32, |_| true);
+                    let held = adjacency.forward_from(id32(at), |_| true);
                     let held: Vec<(Unpacked, u8)> = (held.iter())
-                        .map(|&i| (g.states.at(i as usize), k as u8))
+                        .map(|&i| (g.states.at(i as usize), id8(k)))
                         .collect();
                     Progress::Stuck {
-                        at: at as u32,
+                        at: id32(at),
                         diag: Box::new(self.deadlock(e, var, value, k, &exits, &held)),
                     }
                 }

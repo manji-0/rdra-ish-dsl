@@ -1,5 +1,6 @@
 //! The guards a `holds` condition body gives an action: one per body, with its `.along` path.
 
+use crate::lifecycle::narrow::id8;
 use std::collections::HashSet;
 
 use super::{at_of, cond_entities, implies, Binding};
@@ -200,7 +201,7 @@ impl<'m> Builder<'m> {
             .chain(read.iter().copied());
         for ek in outer {
             if at_of(&binding, ek).is_none() {
-                binding.push((ek, At::Bound(witnesses.len() as u8)));
+                binding.push((ek, At::Bound(id8(witnesses.len()))));
                 witnesses.push(self.ent_of[&ek]);
             }
         }
@@ -251,7 +252,7 @@ impl<'m> Builder<'m> {
                 .iter()
                 .map(|c| self.cross_atom(c, &binding, site)),
         );
-        let depth = witnesses.len() as u8;
+        let depth = id8(witnesses.len());
         for q in &body.quantifiers {
             let counted = path
                 .iter()
@@ -446,7 +447,7 @@ impl<'m> Builder<'m> {
             .copied()
             .collect();
         for (i, &ek) in order.iter().enumerate() {
-            inner.push((ek, At::Bound(depth + i as u8)));
+            inner.push((ek, At::Bound(depth + id8(i))));
         }
         let links = self.path_links(segment, keys, &inner, &owner, path_site);
         let conds = self.cross_all(&q.conditions, &inner, site);

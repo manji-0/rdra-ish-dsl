@@ -1,6 +1,7 @@
 //! What a use case's `transitions` and `chooses` do: arm guards, chosen columns, and creation choices.
 
 use super::{ActionDraft, Builder, GuardedArm};
+use crate::lifecycle::narrow::id8;
 use crate::lifecycle::types::{
     Arm, At, Choice, CmpOp, Effect, Guard, GuardWhy, ModelRef, Param, ParamRole, Pred, Site, Term,
     Value, VarKind,
@@ -254,13 +255,13 @@ impl Builder<'_> {
                 else {
                     continue;
                 };
-                if a.writes(var, p as u8) {
+                if a.writes(var, id8(p)) {
                     continue;
                 }
                 let size = self.ts.vars[var.index()].domain.size(&self.ts);
                 a.effects.push(Effect::Choose {
                     var,
-                    param: p as u8,
+                    param: id8(p),
                     numbers: None,
                     values: (0..size)
                         .map(|i| Choice {

@@ -4,6 +4,7 @@ use super::{prior_write, slots_eq, ActionDraft, Builder, CopyMiss, EffectRhs};
 use crate::analysis::AppliedBody;
 use crate::lifecycle::build::preds;
 use crate::lifecycle::diag::StateDiag;
+use crate::lifecycle::narrow::id8;
 use crate::lifecycle::types::{
     At, Choice, CmpOp, Domain, Effect, EntId, Guard, GuardWhy, ModelRef, Numbers, Param, ParamRole,
     Pred, Rhs, Site, Term, Value, VarId, VarKind,
@@ -416,7 +417,7 @@ impl<'m> Builder<'m> {
     /// naming one, `None`: the statement joins its own row of `e`.
     pub(super) fn read_param(&self, params: &[Param], e: EntId, by: &[String]) -> Option<u8> {
         if let Some(p) = params.iter().position(|p| p.entity == e && p.role.is_row()) {
-            return Some(p as u8);
+            return Some(id8(p));
         }
         let model = self.model;
         let ek = self.ts.entities[e.index()].key;
@@ -424,7 +425,7 @@ impl<'m> Builder<'m> {
             .iter()
             .enumerate()
             .filter_map(|(i, p)| match p.role {
-                ParamRole::Parent { key } if p.entity == e => Some((i as u8, key)),
+                ParamRole::Parent { key } if p.entity == e => Some((id8(i), key)),
                 _ => None,
             })
             .collect();

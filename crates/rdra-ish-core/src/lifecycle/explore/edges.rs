@@ -13,6 +13,7 @@
 //! as "no moves".
 
 use crate::lifecycle::expr::StateSlice;
+use crate::lifecycle::narrow::id32;
 use crate::lifecycle::types::{ActId, EntId, Pred};
 use crate::lifecycle::TransitionSystem;
 
@@ -125,6 +126,9 @@ impl Ids {
                 *self = Ids::Four(std::mem::take(b).widen());
             }
         }
+        // The widening above leaves `One` only for an `id` that fits a `u8`, `Two` only for one
+        // that fits a `u16`.
+        #[allow(clippy::cast_possible_truncation)]
         match self {
             Ids::One(b) => b.push(id as u8),
             Ids::Two(b) => b.push(id as u16),
@@ -174,7 +178,7 @@ impl EdgeList {
 
     /// The state edge `k` leaves: the last state read whose first edge is at or before it.
     fn source_of(&self, k: usize) -> u32 {
-        (self.first.partition_point(|f| f as usize <= k) - 1) as u32
+        id32(self.first.partition_point(|f| f as usize <= k) - 1)
     }
 
     fn get(&self, k: usize) -> Edge {

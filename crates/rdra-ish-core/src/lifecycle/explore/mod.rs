@@ -3,6 +3,7 @@
 //! edges as they are found. The run keeps every edge and, per state, the edge that first
 //! reached it.
 
+use crate::lifecycle::narrow::id32;
 mod arena;
 mod bfs;
 mod edges;
@@ -129,6 +130,8 @@ impl Caps {
     /// a run that outgrows the machine. A shift past `usize` saturates, and `0` counts as `1`.
     pub const fn for_instances(instances: u32) -> Self {
         let shift = 10 + 8 * (instances.saturating_sub(1) as u64);
+        // `shift` is at most `u32::MAX` in the arm that casts it.
+        #[allow(clippy::cast_possible_truncation)]
         let patterns = match 1usize.checked_shl(if shift > u32::MAX as u64 {
             u32::MAX
         } else {
@@ -395,9 +398,7 @@ impl ComponentRun {
     #[cfg(any(test, feature = "shadow"))]
     pub(crate) fn same_graph(&self, other: &ComponentRun) -> bool {
         let parents = |run: &ComponentRun| -> Vec<Option<Edge>> {
-            (0..run.states.len() as u32)
-                .map(|k| run.parent(k))
-                .collect()
+            (0..id32(run.states.len())).map(|k| run.parent(k)).collect()
         };
         self.states == other.states
             && parents(self) == parents(other)
@@ -754,7 +755,8 @@ impl TransitionSystem {
             charge.shrink_to(kept);
         }
         if let Some(perms) = &mut bfs.perms {
-            perms.truncate(bfs.steps.moves() as usize);
+            perms
+                .truncate(usize::try_from(bfs.steps.moves()).expect("the moves of a run it holds"));
         }
         let Bfs {
             states,
