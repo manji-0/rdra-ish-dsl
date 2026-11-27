@@ -39,6 +39,14 @@
 
 ### Changed
 
+- The release test `proof_equivalence` fails on a z3 check that runs out of its limit (z3
+  says `canceled` for `get-info :reason-unknown`), in place of any check that spent nine tenths
+  of it (#435). A check z3 gives up on by itself, on a quantifier it cannot decide, no longer
+  counts: what it spends depends on what its solver checked before. On 2 solvers the most
+  such a lemma check spends rose from 784,000 to 1,576,000 units of 2,000,000 with #440, with
+  the same 301 checks giving up. The test still fails at a tenth for a check that keeps its
+  candidate, and with the lemma limit at 50,000 it fails on the 44 insurance-claim-ops lemma
+  checks that run out. Nothing `verify` prints changes.
 - `verify --prove` (experimental) also mines a lemma over one child column and two parent
   columns: the values a present child row's column took together with two columns of the
   parent its key names (#428). It is offered only when the pairs it is made of do not already

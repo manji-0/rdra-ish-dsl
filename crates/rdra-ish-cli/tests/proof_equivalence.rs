@@ -127,12 +127,14 @@ fn assert_no_proved_rule_violated(
     }
 }
 
-/// One `check-sat`: the limit it ran under, its answer, and the z3 resource units it spent.
-type Spent = (u32, Sat, u64);
+/// One `check-sat`: the limit it ran under, its answer, the z3 resource units it spent, and
+/// for an `unknown` whether z3 ran out of its limit (`canceled`) rather than gave up on its own.
+type Spent = (u32, Sat, u64, bool);
 
 /// A z3 that records what each `check-sat` spent (`examples/prove_rlimit.rs` measures the
-/// same way). `get-info :rlimit` reads the units the process has spent so far and changes
-/// nothing the proof sees.
+/// same way). `get-info :rlimit` reads the units the process has spent so far, and
+/// `get-info :reason-unknown` why the last check answered `unknown`; neither changes what the
+/// proof sees.
 struct Meter {
     z3: Z3,
     log: Arc<Mutex<Vec<Spent>>>,
@@ -155,6 +157,13 @@ impl Meter {
             .parse()
             .map_err(|_| SolverError(format!("cannot read the rlimit: {out}")))
     }
+
+    /// Whether the last `unknown` came from the resource limit: z3 then says `canceled`. One
+    /// it gave up on by itself names its reason, `(incomplete quantifiers)` for one.
+    fn ran_out(&mut self) -> Result<bool, SolverError> {
+        let reason = self.z3.exec("(get-info :reason-unknown)")?.join(" ");
+        Ok(reason.contains("canceled") || reason.contains("resource limit"))
+    }
 }
 
 impl Solver for Meter {
@@ -166,58 +175,143 @@ impl Solver for Meter {
         let before = self.units()?;
         let sat = self.z3.check_sat(rlimit)?;
         let units = self.units()? - before;
-        self.log.lock().unwrap().push((rlimit, sat, units));
+        let ran_out = sat == Sat::Unknown && self.ran_out()?;
+        self.log.lock().unwrap().push((rlimit, sat, units, ran_out));
         Ok(sat)
     }
 }
 
-/// Every check that kept its candidate (unsat) spent under a tenth of its limit, for the rule
-/// and the lemma limit of `ProveOptions::default()`, there was such a check of each kind, and
-/// no check of any answer spent nine tenths of its limit. The tenth is the margin the limits
-/// keep for models larger than the samples. A check that runs out answers `unknown` and leaves
-/// the unsat checks, so the tenth alone sees a z3 that spends more on the same queries only
-/// up to the limit; a check that ran out spent the whole limit, which the nine tenths catch.
-/// On z3 5.1.0 the checks that give up do so far below their limit: z3 stops on a quantifier
-/// it cannot decide (the Houdini rounds run without MBQI), not on its budget.
-fn assert_headroom(log: &Mutex<Vec<Spent>>, what: &str) {
-    let options = ProveOptions::default();
+/// The headroom of `log` under the limits of `options`, as one line, or why it is too small:
+/// every check that kept its candidate (unsat) spent under a tenth of its limit, for the rule
+/// and the lemma limit, there was such a check of each kind, no check ran out of its limit,
+/// and no check that answered spent nine tenths of it. The tenth is the margin the limits keep
+/// for models larger than the samples. A check that runs out answers `unknown` and leaves the
+/// unsat checks, so the tenth alone sees a z3 that spends more on the same queries only up to
+/// the limit; z3 says `canceled` for a check that ran out, which fails here. A check z3 gave
+/// up on by itself (a quantifier it cannot decide: the Houdini rounds run without MBQI) is
+/// counted and its units printed, not asserted: what it spends before it stops depends on
+/// what its solver checked before, not on the limit.
+fn headroom(log: &Mutex<Vec<Spent>>, what: &str, options: ProveOptions) -> Result<String, String> {
     let log = log.lock().unwrap();
-    let most = |limit: u32, sat: Sat| {
-        (log.iter())
-            .filter(|(l, s, _)| *l == limit && *s == sat)
-            .map(|(_, _, units)| *units)
-            .max()
-    };
-    let gave_up = |limit: u32| {
-        (log.iter())
-            .filter(|(l, s, _)| *l == limit && *s == Sat::Unknown)
-            .count()
-    };
+    let of = |limit: u32| log.iter().filter(move |(l, ..)| *l == limit);
     let mut line = format!("{what}: {} checks", log.len());
     for (kind, limit) in [("rule", options.rlimit), ("lemma", options.lemma_rlimit)] {
-        let unsat = most(limit, Sat::Unsat)
-            .unwrap_or_else(|| panic!("{what}: no {kind} check kept its candidate"));
-        assert!(
-            unsat * 10 < u64::from(limit),
-            "{what}: a {kind} check that kept its candidate spent {unsat} z3 resource units, over a tenth of its limit {limit}; re-measure the limits (`VERIFIED_Z3` in prove/mod.rs)"
-        );
-        let any = [Sat::Sat, Sat::Unsat, Sat::Unknown]
-            .into_iter()
-            .filter_map(|sat| most(limit, sat))
+        let ran_out = of(limit).filter(|(.., r)| *r).count();
+        if ran_out > 0 {
+            return Err(format!(
+                "{what}: {ran_out} {kind} check(s) ran out of their limit {limit}; re-measure the limits (`VERIFIED_Z3` in prove/mod.rs)"
+            ));
+        }
+        let unsat = of(limit)
+            .filter(|(_, s, ..)| *s == Sat::Unsat)
+            .map(|(_, _, units, _)| *units)
+            .max()
+            .ok_or_else(|| format!("{what}: no {kind} check kept its candidate"))?;
+        if unsat * 10 >= u64::from(limit) {
+            return Err(format!(
+                "{what}: a {kind} check that kept its candidate spent {unsat} z3 resource units, over a tenth of its limit {limit}; re-measure the limits (`VERIFIED_Z3` in prove/mod.rs)"
+            ));
+        }
+        let answered = of(limit)
+            .filter(|(_, s, ..)| *s != Sat::Unknown)
+            .map(|(_, _, units, _)| *units)
             .max()
             .unwrap_or(0);
-        assert!(
-            any * 10 < u64::from(limit) * 9,
-            "{what}: a {kind} check spent {any} z3 resource units, near its limit {limit}: it ran out; re-measure the limits (`VERIFIED_Z3` in prove/mod.rs)"
-        );
+        if answered * 10 >= u64::from(limit) * 9 {
+            return Err(format!(
+                "{what}: a {kind} check spent {answered} z3 resource units, near its limit {limit}; re-measure the limits (`VERIFIED_Z3` in prove/mod.rs)"
+            ));
+        }
+        let gave_up: Vec<u64> = of(limit)
+            .filter(|(_, s, ..)| *s == Sat::Unknown)
+            .map(|(_, _, units, _)| *units)
+            .collect();
         line += &format!(
-            "; {kind}: unsat at most {unsat} units (1/{} of the limit), {} gave up, at most {} units",
+            "; {kind}: unsat at most {unsat} units (1/{} of the limit), none ran out, {} gave up by itself, at most {} units",
             u64::from(limit) / unsat.max(1),
-            gave_up(limit),
-            most(limit, Sat::Unknown).unwrap_or(0)
+            gave_up.len(),
+            gave_up.iter().max().unwrap_or(&0)
         );
     }
-    println!("{line}");
+    Ok(line)
+}
+
+/// `headroom` under `ProveOptions::default()`, printed, or a failure.
+fn assert_headroom(log: &Mutex<Vec<Spent>>, what: &str) {
+    match headroom(log, what, ProveOptions::default()) {
+        Ok(line) => println!("{line}"),
+        Err(why) => panic!("{why}"),
+    }
+}
+
+/// A check z3 gave up on by itself does not count however much it spent, and one that ran
+/// out does however little: the reason, not the units, tells them apart.
+#[test]
+fn only_a_check_that_ran_out_fails_the_headroom_check() {
+    let options = ProveOptions::default();
+    let (rule, lemma) = (options.rlimit, options.lemma_rlimit);
+    let log = |last: Spent| {
+        Mutex::new(vec![
+            (rule, Sat::Unsat, 1_000, false),
+            (lemma, Sat::Unsat, 1_000, false),
+            last,
+        ])
+    };
+    let gave_up = log((lemma, Sat::Unknown, u64::from(lemma) * 95 / 100, false));
+    let line = headroom(&gave_up, "gave up", options).expect("a check z3 gave up on passes");
+    assert!(line.contains("lemma: unsat at most 1000 units (1/2000 of the limit), none ran out, 1 gave up by itself, at most 1900000 units"), "{line}");
+    let ran_out = log((lemma, Sat::Unknown, 10, true));
+    let why = headroom(&ran_out, "ran out", options).expect_err("a check that ran out fails");
+    assert!(
+        why.contains("1 lemma check(s) ran out of their limit 2000000"),
+        "{why}"
+    );
+    let near = log((lemma, Sat::Sat, u64::from(lemma) * 95 / 100, false));
+    let why = headroom(&near, "near", options).expect_err("an answer near the limit fails");
+    assert!(why.contains("near its limit 2000000"), "{why}");
+}
+
+/// The headroom check fails on a limit too low for the samples: with the lemma limit at
+/// 50,000, a fortieth of the default, lemma checks run out (z3 says `canceled`) and the check
+/// names them. The checks z3 gave up on by itself under the default limits do not count.
+#[test]
+fn the_headroom_check_fails_when_a_check_runs_out() {
+    let Some(z3) = find_z3() else { return };
+    let low = ProveOptions {
+        lemma_rlimit: 50_000,
+        ..ProveOptions::default()
+    };
+    let sample = "samples/insurance-claim-ops".to_string();
+    let (ts, twin) = proving(&sample).expect("insurance-claim-ops builds");
+    let rules: Vec<usize> = (0..ts.invariants().len()).collect();
+    for (options, fails) in [(low, true), (ProveOptions::default(), false)] {
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let mut solvers = [(); 2].map(|()| Meter::start(&z3, &log));
+        prove::prove(
+            &ts,
+            twin.as_ref(),
+            &rules,
+            &BTreeSet::new(),
+            &mut solvers,
+            options,
+        )
+        .unwrap_or_else(|e| panic!("{sample}: {e}"));
+        let ran_out = log.lock().unwrap().iter().filter(|(.., r)| *r).count();
+        let result = headroom(&log, &sample, options);
+        println!(
+            "lemma limit {}: {ran_out} ran out; {result:?}",
+            options.lemma_rlimit
+        );
+        assert_eq!(result.is_err(), fails, "{result:?}");
+        assert_eq!(ran_out > 0, fails, "{result:?}");
+        if fails {
+            let why = result.unwrap_err();
+            assert!(
+                why.contains("lemma check(s) ran out of their limit 50000"),
+                "{why}"
+            );
+        }
+    }
 }
 
 /// Also: every rule of a domain sample is proved at `verify`'s default two instances, as at

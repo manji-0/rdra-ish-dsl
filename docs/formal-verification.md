@@ -579,14 +579,17 @@ version, or one whose `z3 --version` line it cannot read, `verify --prove` print
 stderr. The version must match exactly, since a patch release can change what a check
 spends, and the note changes nothing else. The release test `proof_equivalence` meters every
 check: it fails when a check that keeps a rule or lemma spends more than a tenth of its limit,
-or any check spends nine tenths of it (a check that runs out spends the whole limit). On every
-sample on 2 solvers, and on the formal-verification samples, insurance-claim-ops, and
-oidc-auth on 1 and 3, such a check spends at most 161,000 units for a rule (1/124 of its
-limit) and 114,000 for a lemma (1/17); on 4 solvers, which the test does not run, a lemma
-check has spent 144,000 (1/14). The checks that give up (on 2 solvers, 301 lemma checks and
-13 rule checks, all but one of those in the formal-verification samples) do so far below their
-limit, at most 784,000 units for a lemma and 13,000 for a rule: z3 stops on a quantifier it
-cannot decide, not on its budget. The rounds that find the inductive set run z3 without model-based quantifier
+when a check runs out of its limit (z3 answers `unknown` and `get-info :reason-unknown` says
+`canceled`), or when a check that answers spends nine tenths of it. With the lemma limit at
+50,000, insurance-claim-ops has 44 lemma checks that run out, and the test fails on them. On
+every sample on 2 solvers, and on the formal-verification samples, insurance-claim-ops, and
+oidc-auth on 1 and 3, a check that keeps its candidate spends at most 161,000 units for a
+rule (1/124 of its limit) and 116,000 for a lemma (1/17); on 4 solvers, which the test does
+not run, a lemma check has spent 144,000 (1/14). No check runs out. The checks z3 gives up on
+by itself (on 2 solvers, 301 lemma checks and 13 rule checks) stop on a quantifier it cannot
+decide, not on the budget: the test prints what they spend and does not assert it, since that
+depends on what the solver checked before. On 2 solvers it is at most 1,576,000 units for a
+lemma, in food-permit-ops, and 13,000 for a rule. The rounds that find the inductive set run z3 without model-based quantifier
 instantiation (MBQI), which settles the checks that keep a rule several times faster; the
 counterexamples to induction are then found with it on. A rule z3 gives up on is `unproved` with
 `z3 gave up on <action>`. The checks are shared out over several z3 processes (`RDRA_JOBS`); the result does
