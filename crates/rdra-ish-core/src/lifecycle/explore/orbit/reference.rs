@@ -322,7 +322,9 @@ pub(super) fn check_state_models(
         match (&a.progress, &b.progress, at) {
             (Progress::Leaves, Progress::Leaves, _) => {}
             (Progress::Stuck { diag, .. }, Progress::Stuck { .. }, Some((at, k))) => {
-                let (start, steps, tau) = orbits.lift_to(*at);
+                let (start, steps, tau) = orbits
+                    .lift_to(*at)
+                    .expect("shadow: a deadlock's path replays");
                 let last = steps.last().map_or(&start, |s| &s.2);
                 let named = usize::from(orbits.group.map_slot(&tau, e, id8(*k)));
                 let p = (0..plain.states.len())

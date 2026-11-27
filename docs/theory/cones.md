@@ -914,8 +914,9 @@ Theorem A18 would fail for every `g` moving slot 0. (G5) removes the case. D: co
 edge recompute the move from `r_i`, take the first successor `t` that canonicalizes to `r_{i+1}` with
 `σ_i(t) = r_{i+1}`, and set `c_{i+1} = τ_i(t)`, `τ_{i+1} = τ_i ∘ σ_i⁻¹`. By Theorem A18 each concrete step
 is a step of the system, and each `τ_i` fixes the absent slots of `r_i`, so creations replay under the
-lowest-absent-slot rule. `explore/orbit.rs::replays` replays the lifted trace and panics if it does not
-replay (P20: a panic, not `LassoFault`).
+lowest-absent-slot rule. `explore/orbit.rs::replays` replays the lifted trace and returns the
+`ReplayError` if it does not replay; the run reports it as a tool error (`LiftFault`, `LassoFault`,
+or `TraceFault`), never a panic (P20, fixed in #518 and #522).
 
 **Composition with the reduction (A22).** On a reduced cone, `R` runs up to `G_T`, which leaves out every
 entity `Reduction::fixed_why` names (each `S` entity, each entity holding an `S` variable, an input, or a bit

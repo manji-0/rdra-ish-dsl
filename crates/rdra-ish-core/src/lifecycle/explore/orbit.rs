@@ -228,7 +228,14 @@ impl TransitionSystem {
             }
             // On a reduced cone the lifted path still holds class representatives on the S
             // side: #74's lift comes after the symmetry's, which was applied last.
-            let (start, steps) = ts.lifted(&start, &steps);
+            let (start, steps) = match ts.lifted(&start, &steps) {
+                Ok(lifted) => lifted,
+                Err(e) => {
+                    let reduced = &run.diags[*at].diag;
+                    run.diags[*at].diag = super::faulted(reduced, LassoFault::Replay(e));
+                    continue;
+                }
+            };
             let last = steps.last().map_or(&start, |s| &s.2);
             // The diagnostic names the binding the concrete last state violates.
             let rebuilt = match reach {
@@ -376,14 +383,6 @@ pub(super) fn replays(
     Ok(())
 }
 
-/// `replays`, for a path that only feeds a finding's trace: one that does not replay stops
-/// the run as a tool bug.
-fn replays_or_panic(ts: &TransitionSystem, start: &State, steps: &[Step]) {
-    if let Err(e) = replays(ts, start, steps) {
-        panic!("symmetry: a lifted path does not replay ({e:?}); a tool bug");
-    }
-}
-
 impl OrbitRun {
     /// The stored graph, for `Classes::of` and the lift of a reduced trace alone (#212 phase
     /// 2): a run up to `H` keeps what the quotient reads on every edge, so its stuttering
@@ -405,11 +404,15 @@ impl OrbitRun {
     }
 
     /// The stored edges `path` from `states[first]`, lifted to concrete states.
-    pub(crate) fn lift_path(&self, first: u32, path: &[Edge]) -> (State, Vec<Step>) {
+    pub(crate) fn lift_path(
+        &self,
+        first: u32,
+        path: &[Edge],
+    ) -> Result<(State, Vec<Step>), ReplayError> {
         let (start, steps, _) =
             lift_path(&self.run, &self.group, &mut Canon::default(), first, path);
-        replays_or_panic(&self.run.system, &start, &steps);
-        (start, steps)
+        replays(&self.run.system, &start, &steps)?;
+        Ok((start, steps))
     }
 
     /// The system explored; the stored states are its states.

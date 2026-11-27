@@ -28,6 +28,7 @@ fn decide_under(src: &str, name: &str, fairness: Fairness, caps: Caps) -> Result
     match verdict {
         PropertyVerdict::Holds => Ok(None),
         PropertyVerdict::Undecided => Err(()),
+        PropertyVerdict::Fault(fault) => panic!("{name}: a tool fault: {fault:?}"),
         PropertyVerdict::Violated(diag) => match *diag {
             StateDiag::PropertyViolated { lasso, trace, .. } => Ok(Some((
                 trace.steps.iter().map(|s| s.action.clone()).collect(),

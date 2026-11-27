@@ -291,6 +291,10 @@ fn one_of_each() -> Vec<StateDiag> {
             site: site(),
             fault: crate::lifecycle::LassoFault::Satisfies,
         },
+        StateDiag::TraceFault {
+            name: "Deadlock_Order_status_open".into(),
+            fault: crate::lifecycle::LassoFault::Satisfies,
+        },
         StateDiag::StateTooWide {
             bits: 1 << 33,
             most: u64::from(u32::MAX),
@@ -318,6 +322,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::VacuousRule { .. }
             | StateDiag::AfterAssertViolated { .. }
             | StateDiag::LiftFault { .. }
+            | StateDiag::TraceFault { .. }
             | StateDiag::PropertyViolated { .. }
             | StateDiag::GoalUnreachable { .. }
             | StateDiag::NoWitness { .. }

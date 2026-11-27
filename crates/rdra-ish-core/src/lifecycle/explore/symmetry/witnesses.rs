@@ -8,6 +8,7 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::num::NonZeroU8;
 
+use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::explore::Caps;
 use crate::lifecycle::expr::StateSlice;
 use crate::lifecycle::tests::model_from;
@@ -15,7 +16,7 @@ use crate::lifecycle::types::{
     At, Choice, CmpOp, Effect, Guard, GuardWhy, ModelRef, ParamRole, Pred, Rhs, Site, Start, Term,
     Value, VarId, VarKind,
 };
-use crate::lifecycle::{Bounds, Scope, TransitionSystem};
+use crate::lifecycle::{Bounds, ReplayError, Scope, TransitionSystem};
 
 use super::{Canon, Group, Rule};
 
@@ -390,7 +391,8 @@ fn pinned() -> TransitionSystem {
 /// still a bisimulation and the verdict stands; but a run up to symmetry stores the
 /// canonical form of each initial state, and the form of one whose shops differ in tier puts
 /// the orders under another shop than slot 0: no initial state. The counterexample lifted
-/// from it does not replay. That always-on check (`orbit.rs::replays`) panics, which counts as the witness
+/// from it does not replay. That always-on check (`orbit.rs::replays`) reports the fault, a
+/// `LiftFault` the run counts as a tool error, which counts as the witness
 /// (docs/design/instance-symmetry.md, the per-rule gate).
 #[test]
 fn pinned_start_has_a_witness() {
@@ -415,12 +417,20 @@ fn pinned_start_has_a_witness() {
     dropping("PinnedStart", || {
         assert!(Group::of(&ts).left_out().is_empty(), "the shops move");
         bisimulation(&ts).expect("the steps commute with the group");
-        let run =
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ts.clone().run_orbits(caps)));
-        let message = run.err().and_then(|e| e.downcast::<String>().ok());
+        let run = ts.clone().run_orbits(caps);
+        let faults: Vec<&StateDiag> = (run.diags().iter())
+            .map(|d| &d.diag)
+            .filter(|d| matches!(d, StateDiag::LiftFault { .. }))
+            .collect();
         assert!(
-            message.as_deref().is_some_and(|m| m.contains("NotInitial")),
-            "the lifted counterexample starts at no initial state: {message:?}"
+            faults.iter().any(|d| matches!(
+                d,
+                StateDiag::LiftFault {
+                    fault: crate::lifecycle::LassoFault::Replay(ReplayError::NotInitial),
+                    ..
+                }
+            )),
+            "the lifted counterexample starts at no initial state: {faults:?}"
         );
     });
 }

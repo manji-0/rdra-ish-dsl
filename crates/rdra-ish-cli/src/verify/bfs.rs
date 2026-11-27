@@ -240,6 +240,9 @@ pub(super) struct Explored {
     pub(super) violated: usize,
     /// Properties whose cone BFS stopped at the state cap or the memory limit before a violation.
     pub(super) capped: usize,
+    /// Properties whose counterexample fails its own check: a path that does not replay or
+    /// lift (P20), a tool error.
+    pub(super) faults: usize,
     /// Each property's index and its verdict, `None` when not decided, for `--with-tlc` to
     /// compare.
     pub(super) verdicts: Vec<(usize, Option<Outcome>)>,
@@ -285,6 +288,7 @@ pub(super) fn explored_properties(
             PropertyVerdict::Undecided => {
                 "not decided: BFS stopped at the state cap (--max-states), the memory limit, or the time budget (--temporal-budget)"
             }
+            PropertyVerdict::Fault(_) => "tool_error",
         };
         println!("property {} (BFS on its cone): {said}", p.name);
         out.verdicts.push((
@@ -293,11 +297,19 @@ pub(super) fn explored_properties(
                 PropertyVerdict::Holds => Some(Outcome::Ok),
                 PropertyVerdict::Violated(_) => Some(Outcome::Counterexample),
                 PropertyVerdict::Undecided => None,
+                PropertyVerdict::Fault(_) => Some(Outcome::ToolError),
             },
         ));
         match verdict {
             PropertyVerdict::Holds => {}
             PropertyVerdict::Undecided => out.capped += 1,
+            PropertyVerdict::Fault(fault) => {
+                eprintln!(
+                    "error[LassoFault]: {} [{}]: the counterexample fails its own check ({fault:?}); a tool bug, not a finding about the model",
+                    p.name, p.name
+                );
+                out.faults += 1;
+            }
             PropertyVerdict::Violated(diag) => {
                 let text = render_violation(program, model, &diag, TraceSource::Bfs)
                     .expect("a property violation renders");

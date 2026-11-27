@@ -247,7 +247,7 @@ fn replay_violations(
             .map(|s| names.action_index(ts, &s.label).expect("a known label"))
             .collect();
         let replay = ts.replay(states, &labels).expect("TLC's trace replays");
-        let (path, steps) = ts.lifted_path(&replay);
+        let (path, steps) = ts.lifted_path(&replay).expect("a reduced trace lifts");
         assert_eq!(
             target_side(&steps),
             target_side(&labels),
@@ -3830,7 +3830,7 @@ fn native_agrees(
     let native = match &verdict {
         PropertyVerdict::Holds => Outcome::Ok,
         PropertyVerdict::Violated(_) => Outcome::Counterexample,
-        PropertyVerdict::Undecided => Outcome::ToolError,
+        PropertyVerdict::Undecided | PropertyVerdict::Fault(_) => Outcome::ToolError,
     };
     assert_eq!(
         native,

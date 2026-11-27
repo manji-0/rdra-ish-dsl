@@ -111,7 +111,7 @@ impl End {
                 "property violation(s)",
             ),
             failure(
-                self.temporal.faults + self.safety.faults,
+                self.temporal.faults + self.safety.faults + self.explored.faults,
                 true,
                 "counterexample(s) that fail their own check (a tool bug)",
             ),

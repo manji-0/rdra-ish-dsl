@@ -12,6 +12,7 @@ use std::collections::VecDeque;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::expr::{State, StateSlice};
 use crate::lifecycle::types::{Ltl, Pred, Property};
+use crate::lifecycle::LassoFault;
 
 use super::{Caps, ComponentRun, Edge};
 use crate::lifecycle::TransitionSystem;
@@ -26,6 +27,9 @@ pub enum PropertyVerdict {
     Violated(Box<StateDiag>),
     /// The run stopped at the state cap with no violation in what it reached.
     Undecided,
+    /// The counterexample found fails its own check: its path does not replay or does not
+    /// lift (P20). A tool bug, never a verdict about the model.
+    Fault(LassoFault),
 }
 
 impl TransitionSystem {
@@ -94,7 +98,10 @@ impl ComponentRun {
         debug_assert_eq!(at, path.len(), "the path ends where the property fails");
         // On a reduced system the trace is lifted and may take more steps than the path; the
         // property fails at its last state either way.
-        let trace = self.trace_along(first, &path);
+        let trace = match self.trace_along(first, &path) {
+            Ok(trace) => trace,
+            Err(e) => return Some(PropertyVerdict::Fault(LassoFault::Replay(e))),
+        };
         Some(PropertyVerdict::Violated(Box::new(
             StateDiag::PropertyViolated {
                 name: p.name.clone(),

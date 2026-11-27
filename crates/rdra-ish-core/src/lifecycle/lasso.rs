@@ -116,7 +116,8 @@ impl TransitionSystem {
         let p = &self.properties[i];
         let states = &replay.prefix.states;
         let (instance, witness) = self.property_failure(p, states, replay.entry())?;
-        let mut trace = self.replay_trace(&replay.prefix);
+        // A lasso whose lift fails explains nothing: the caller reports the fault.
+        let mut trace = self.replay_trace(&replay.prefix).ok()?;
         if let Some(b) = &replay.back {
             let last = states.last().expect("replay has a state");
             trace

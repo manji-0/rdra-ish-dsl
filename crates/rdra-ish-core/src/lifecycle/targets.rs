@@ -759,9 +759,20 @@ impl TransitionSystem {
         let mut findings = run.system.state_model_findings(local, &run.graph());
         for d in &mut findings.deadlocks {
             if let Progress::Stuck { at, diag } = &mut d.progress {
-                if let Some(trace) = diag.trace_mut() {
-                    *trace = run.trace_to(*at);
-                    self.annotate(&cone.cone, trace);
+                // A trace that fails to replay or lift is a fault in the deadlock's place.
+                match run.trace_to(*at) {
+                    Ok(found) => {
+                        if let Some(trace) = diag.trace_mut() {
+                            *trace = found;
+                            self.annotate(&cone.cone, trace);
+                        }
+                    }
+                    Err(e) => {
+                        **diag = StateDiag::TraceFault {
+                            name: diag.name(&[]),
+                            fault: crate::lifecycle::LassoFault::Replay(e),
+                        };
+                    }
                 }
             }
         }
@@ -959,8 +970,18 @@ impl TransitionSystem {
                 .position(|r| r.name == *name)
                 .expect("the cone holds what the property reads");
             if let Some((at, mut diag)) = run.system.reach_failure(local, &run.graph()) {
-                if let Some(trace) = diag.trace_mut() {
-                    *trace = run.trace_to(at);
+                match run.trace_to(at) {
+                    Ok(found) => {
+                        if let Some(trace) = diag.trace_mut() {
+                            *trace = found;
+                        }
+                    }
+                    Err(e) => {
+                        diag = StateDiag::TraceFault {
+                            name: diag.name(&[]),
+                            fault: crate::lifecycle::LassoFault::Replay(e),
+                        };
+                    }
                 }
                 return vec![Diag { entities, diag }];
             }

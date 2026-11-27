@@ -419,49 +419,14 @@ impl ComponentRun {
 
     /// The BFS path to `states[at]` in model terms: a shortest one, since BFS reaches states
     /// in depth order. On a reduced system the path is lifted (`TransitionSystem::lift`).
-    pub fn trace_to(&self, at: u32) -> Trace {
-        self.lifted_trace(at, None).0
+    pub fn trace_to(&self, at: u32) -> Result<Trace, ReplayError> {
+        Ok(self.lifted_trace(at, None)?.0)
     }
 
     /// The trace of a violation: the path to the violating state, or for an after-assert the
     /// path to the step's source and the step itself. The step need not be on the BFS path to
     /// its target, which another path may reach first. Also the trace's last state.
-    /// Replays the stored path of a violation, the path to its state or to its step's source
-    /// and the step, through the run's own step relation from one of its initial states
-    /// (agreement rule 3, P20). A path that does not replay is a tool bug.
-    pub(super) fn replay_reach(&self, reach: &Reach) -> Result<(), ReplayError> {
-        let (at, extra) = match reach {
-            Reach::State { at, .. } => (*at, None),
-            Reach::Step {
-                from,
-                act,
-                params,
-                to,
-                ..
-            } => (*from, Some((*act, params.clone(), to.clone()))),
-        };
-        let path = self.path_to(at);
-        let first = path.first().map_or(at, |e| e.from);
-        let mut steps: Vec<Step> = path
-            .iter()
-            .map(|e| {
-                let (act, params) = self.step(e);
-                (
-                    act,
-                    params.into(),
-                    self.states.at(e.to as usize).into_state(),
-                )
-            })
-            .collect();
-        steps.extend(extra);
-        super::orbit::replays(
-            &self.system,
-            &self.states.at(first as usize).into_state(),
-            &steps,
-        )
-    }
-
-    pub(super) fn trace_of(&self, reach: &Reach) -> (Trace, State) {
+    pub(super) fn trace_of(&self, reach: &Reach) -> Result<(Trace, State), ReplayError> {
         match reach {
             Reach::State { at, .. } => self.lifted_trace(*at, None),
             Reach::Step {
@@ -475,18 +440,26 @@ impl ComponentRun {
     }
 
     /// The path to `states[at]`, then `extra`, lifted and in model terms, with its last state.
-    fn lifted_trace(&self, at: u32, extra: Option<Step>) -> (Trace, State) {
+    fn lifted_trace(&self, at: u32, extra: Option<Step>) -> Result<(Trace, State), ReplayError> {
         let path = self.path_to(at);
         let first = path.first().map_or(at, |e| e.from);
         self.lifted_path(first, &path, extra)
     }
 
     /// `path`, a walk of edges from `states[first]`, lifted and in model terms.
-    pub(crate) fn trace_along(&self, first: u32, path: &[Edge]) -> Trace {
-        self.lifted_path(first, path, None).0
+    pub(crate) fn trace_along(&self, first: u32, path: &[Edge]) -> Result<Trace, ReplayError> {
+        Ok(self.lifted_path(first, path, None)?.0)
     }
 
-    fn lifted_path(&self, first: u32, path: &[Edge], extra: Option<Step>) -> (Trace, State) {
+    /// Before it lifts, the path replays through the run's own step relation from one of its
+    /// initial states (agreement rule 3, P20); one that does not, or whose lift fails, is the
+    /// `ReplayError`, a tool bug the caller reports as a fault.
+    fn lifted_path(
+        &self,
+        first: u32,
+        path: &[Edge],
+        extra: Option<Step>,
+    ) -> Result<(Trace, State), ReplayError> {
         let mut steps: Vec<Step> = path
             .iter()
             .map(|e| {
@@ -500,11 +473,13 @@ impl ComponentRun {
             .collect();
         steps.extend(extra);
         let ts = &self.system;
-        let (start, steps) = ts.lifted(&self.states.at(first as usize), &steps);
-        (
+        let first = self.states.at(first as usize).into_state();
+        super::orbit::replays(ts, &first, &steps)?;
+        let (start, steps) = ts.lifted(&first, &steps)?;
+        Ok((
             ts.trace_from(&start, &steps),
             steps.last().map_or(start, |s| s.2.clone()),
-        )
+        ))
     }
 }
 

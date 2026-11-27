@@ -286,6 +286,13 @@ pub enum StateDiag {
         site: Site,
         fault: crate::lifecycle::LassoFault,
     },
+    /// The trace of the finding `name` (a deadlock, a `can_reach` failure, a view's witness)
+    /// does not replay through the step relation or its lift to the cone fails: the finding
+    /// is not reported, and the run is a tool error (P20). It goes on the finding's entity.
+    TraceFault {
+        name: String,
+        fault: crate::lifecycle::LassoFault,
+    },
     /// A temporal property fails on the infinite behavior of a lasso, `trace` then `lasso`,
     /// or on the finite `trace` of a form `LtlKind::is_explored` names. A replayed TLC
     /// counterexample builds it, and so does `ComponentRun::decide_property`.
@@ -693,6 +700,7 @@ impl StateDiag {
             StateDiag::MemoryCapReached { .. } => with("MemoryCapReached", &[]),
             StateDiag::TimeBudgetReached { .. } => with("TimeBudgetReached", &[]),
             StateDiag::LiftFault { name, .. } => with("LiftFault", &[name]),
+            StateDiag::TraceFault { name, .. } => with("TraceFault", &[name]),
             StateDiag::AssertOnInertUseCase { anchor, .. } => {
                 with("AssertOnInertUseCase", &[anchor])
             }
@@ -807,6 +815,7 @@ impl StateDiag {
     /// compile until it says where it goes.
     fn place(&self) -> Place<'_> {
         match self {
+            StateDiag::TraceFault { .. } => Place::ItsEntity,
             StateDiag::ConstraintViolated { site, .. }
             | StateDiag::AfterAssertViolated { site, .. }
             | StateDiag::LiftFault { site, .. }
@@ -928,6 +937,7 @@ impl StateDiag {
             | StateDiag::TimeBudgetReached { .. }
             | StateDiag::ConstraintViolated { .. }
             | StateDiag::AfterAssertViolated { .. }
+            | StateDiag::TraceFault { .. }
             | StateDiag::LiftFault { .. }
             | StateDiag::PropertyViolated { .. }
             | StateDiag::GoalUnreachable { .. }
@@ -1146,6 +1156,10 @@ impl fmt::Display for StateDiag {
                 f,
                 "{}after({anchor}).assert({requireds}) fails: {actual}",
                 label_prefix(label)
+            ),
+            StateDiag::TraceFault { name, fault } => write!(
+                f,
+                "tool error: the trace of {name} fails to replay ({fault:?}), so {name} is not reported (a tool bug, not a finding about the model)"
             ),
             StateDiag::LiftFault { name, fault, .. } => write!(
                 f,
