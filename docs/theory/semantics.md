@@ -271,12 +271,16 @@ slots and the scope entities the action does not bind universally quantified ove
 slots of `s'` (`AfterStep::post`). States between two steps of a run are not checked,
 and neither is a last step that changes nothing: the native run skips the check on a
 self-loop (`explore/bfs.rs`, `Probe::Loop`, in every build), and TLC checks the `PROPERTY`
-`[][(\A p : UC(p) => post')]_vars`, which every stuttering step satisfies. The language
-reference promises a check after every run (S6, open problem P22).
+`[][(\A p : UC(p) => post')]_vars`, which every stuttering step satisfies. This is the
+intended reading, as TLA+'s (P22, fixed in #PRP51): the language reference says so, and D18
+reports an assert whose last step only ever stutters as vacuous.
 
 **D18 (Vacuity).** A rule *holds vacuously* when no reachable state meets one of its
 premises (`Invariant::premises`, `state-derivation.md`, "Rules that hold vacuously").
-Vacuity is a warning about a rule that holds; it never changes a verdict.
+Vacuity is a warning about a rule that holds; it never changes a verdict. An after-assert's
+premise is a step of its use case's last step with `s' ≠ s`, the steps D17 checks: a last
+step that runs only with `s' = s` is reported (`UnmetPremise::OnlyStutters`), and so is one
+that never runs (`targets.rs::unmet_of_assert`).
 
 ## Temporal properties
 
@@ -400,7 +404,7 @@ soundness questions are in the index's [Open problems](./README.md#open-problems
 |---|---|---|---|
 | S1 | `language-reference.md`, "Temporal path properties": `eventually(expr)` is `<>expr`. | `lasso.rs::fails_at` and `explore/liveness.rs::liveness_search`: `□(present ∧ link ⇒ ◇x)` per binding. | `formal-verification.md`, "Mapping", states the code's form. Resolved with P6: the language reference now gives `[](present => <>expr)` and `(present /\ p) ~> q`. |
 | S2 | `language-reference.md`, "Temporal path properties" and "Recoverability": `can_reach` is `AG (present => EF expr)`. | `reach.rs::reach_failure`: `AG (trig ⇒ E[pres U (pres ∧ goal)])`; the path must keep the instance present. | `formal-verification.md`, "Recoverability on a cone", and `types.rs::Reach` state the code's form. The two differ when the goal holds on a deleted slot's base values. Resolved with P6: the language reference now gives the code's form. The doc comments of `model/constraints.rs::Ltl` and `syntax/ast.rs`, and the comment the TLA+ module prints, still say `AG (present => EF …)`. |
-| S6 | `language-reference.md`, "Entity state constraints": `after(UC).assert(…)` "checks the state each run of the use case leaves" and "must hold after every arm". | D17: a step with `s' = s` is not checked. The native run skips the `after` check on a self-loop (`explore/bfs.rs`, `Probe::Loop`, in every build), and the TLA+ `PROPERTY` `[][(\A p : UC(p) => post')]_vars` admits a stuttering step. | Open problem P22: the two engines agree, so no verdict differs between them; a run whose last step changes nothing goes unchecked although the reference promises a check. |
+| S6 | `language-reference.md`, "Entity state constraints": `after(UC).assert(…)` "checks the state each run of the use case leaves" and "must hold after every arm". | D17: a step with `s' = s` is not checked. The native run skips the `after` check on a self-loop (`explore/bfs.rs`, `Probe::Loop`, in every build), and the TLA+ `PROPERTY` `[][(\A p : UC(p) => post')]_vars` admits a stuttering step. | Resolved (P22, #PRP51): the reference now says a last step that changes nothing is not checked, as in TLA+, and `Vacuous_AfterAssert_*` warns when the last step only ever runs that way. |
 | S3 | `formal-verification.md`, "Mapping": `always` is `[](present => x)`. | The trigger is `present ∧ link`; without `.along` the link is `true`. | Consistent once `.along` is read into `present`, as the "Scope" table of `language-reference.md` does. |
 | S4 | `state-derivation.md`, "Bounds", and `language-reference.md`: Int columns range over `0..5`. | `Domain::Int` is `[m+1]` with `m = int_max`; `--int-range-max` sets `m` and 5 is only the default. | The language reference mentions `--int-range-max`; listed so that theme writers quote `m`, not 5. |
 | S5 | `prove/mod.rs::Verdict::Proved` doc comment: "Holds for any number of rows, at the stated value bounds"; `cli/src/prove.rs::ProofTally::clause`: "any Int value". | `prove/encode.rs` (module doc, `Enc::in_domain`): Int terms and `now` range over every non-negative integer with no top, and a rule names only literals up to `m`. | formal-verification.md ("any non-negative Int value") matches the code. Open problem P2. |

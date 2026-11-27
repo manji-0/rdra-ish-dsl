@@ -330,7 +330,7 @@ for a reachable state that meets each *premise*, and warn `Vacuous_<name>` when 
 | Every state rule | Rows of the entities it ranges over exist, linked as its `.along` says. `Unique_*` needs two rows of the child, so it has no premise at one instance per entity. |
 | `invariant(...).when(G)`, a quantifier rule with guards | The guards `G` hold for some rows. |
 | `invariant(E).none(R...)` | A row of `R` exists beside a row of `E`. |
-| `after(UC).assert(...)` | `UC` runs to its last step. When the assertion reads an entity the step does not bind, some such step ends with a row of it. |
+| `after(UC).assert(...)` | `UC` runs to its last step, and some such step changes the state: a step that changes nothing is not checked, so a last step that only ever stutters leaves the assertion unchecked (`… runs its last step only as a step that changes nothing`). When the assertion reads an entity the step does not bind, some step that changes the state ends with a row of it. |
 | `property` | Rows of its entities exist together, and some meet the condition the form speaks from: the trigger of a `leads_to`, what a `stable` keeps, the `.when` of an `unchanged`, the second condition of a `precedes`. |
 | `forbidden` of several conditions | Each condition holds for some row, on its own. |
 
