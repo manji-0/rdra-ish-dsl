@@ -648,6 +648,42 @@ fn an_unproved_rule_that_passes_at_3_is_checked_at_4() {
     );
 }
 
+/// A rule whose cone did not run, because a larger cone that passed covers it, is escalated
+/// on its own cone from that cover's run.
+#[test]
+fn an_unproved_rule_whose_cone_is_covered_is_escalated() {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("prove_cli_covered");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("m.rdra");
+    // The corpus trap, and a rule over its orders and a lamp: that rule's cone holds the
+    // trap's, checks its rule too, and covers it.
+    let trap = std::fs::read_to_string(repo().join(corpus("z3_two_ok_three_fails"))).unwrap();
+    std::fs::write(
+        &file,
+        format!(
+            r#"{trap}
+entity Lamp "灯" {{ id: Int @pk  state: Enum(on, off) @default(off) }}
+usecase Switch "切替"
+transitions(Switch, Lamp.state, off -> on)
+forbidden(Lamp, Order, Lamp.state == on, Order.status == d).global()
+"#
+        ),
+    )
+    .unwrap();
+    let out = verify(&["--prove", file.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("cones: 2 for 2 invariant(s)"), "{stdout}");
+    assert_eq!(
+        escalated_line(&stdout, "Forbidden_Order_0"),
+        "escalated: Forbidden_Order_0: counterexample at 3 instances (BFS on its cone; ok at 2)",
+        "{stdout}"
+    );
+}
+
 /// An escalation the state cap stops decides nothing: it says so and leaves the run's exit
 /// to what the run decided at its own bounds.
 #[test]
