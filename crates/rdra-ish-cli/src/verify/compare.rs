@@ -4,8 +4,9 @@ use super::native::Natives;
 use super::tlc::{Decision, Ran};
 use crate::property_cone::ConeRun;
 use crate::tlc_output::Outcome;
-use crate::tlc_replay::explain_violation;
-use anyhow::Result;
+use crate::tlc_replay::{explain_property, explain_violation};
+use rdra_ish_core::lifecycle::TransitionSystem;
+use rdra_ish_emit::tla::TlaNames;
 use std::collections::BTreeSet;
 
 /// Under `--with-tlc`, each check the two engines decide differently, as an
@@ -49,10 +50,9 @@ pub(super) fn disagreements(
                     continue;
                 };
                 let mine: BTreeSet<String> = found.iter().map(|d| d.diag.name(&[])).collect();
-                let theirs: Option<BTreeSet<String>> = tlc
-                    .run
-                    .violations
-                    .iter()
+                // A trace that does not replay is reported by `unreplayed`, whatever the
+                // native verdict; the sets are compared only when every trace replays.
+                let theirs: Option<BTreeSet<String>> = (tlc.run.violations.iter())
                     .map(|v| explain_violation(&cs.system, &cs.names, v).map(|d| d.name(&[])))
                     .collect::<Result<_, _>>()
                     .ok();
@@ -133,6 +133,103 @@ pub(super) fn disagreements(
     out
 }
 
+/// Under `--with-tlc`, one `error[EngineDisagreement]` line per job with a TLC counterexample
+/// that does not replay through BFS's step relation, any of its traces: TLC reached a state,
+/// or took a step, the native checker's system does not have, so one engine is wrong whatever
+/// the native verdict. `jobs` and `ran` hold the cone, property, and whole-model jobs.
+pub(super) fn unreplayed(
+    (ts, names): (&TransitionSystem, &TlaNames),
+    (jobs, ran): (&[&Job], &[&Ran]),
+) -> Vec<String> {
+    let mut out = Vec::new();
+    for (job, tlc) in jobs.iter().zip(ran) {
+        let failed: Vec<String> = (tlc.run.violations.iter())
+            .filter_map(|v| {
+                let replayed = match &job.kind {
+                    JobKind::Cone(cs) => explain_violation(&cs.system, &cs.names, v).map(drop),
+                    JobKind::PropertyCone(p) => {
+                        explain_property(&p.cone.system, &p.names, p.cone.index, v).map(drop)
+                    }
+                    JobKind::Explored(e) => {
+                        explain_property(&e.system, &e.names, e.cone_index, v).map(drop)
+                    }
+                    JobKind::Whole(i) => explain_property(ts, names, *i, v).map(drop),
+                };
+                replayed.err()
+            })
+            .collect();
+        let Some(first) = failed.first() else {
+            continue;
+        };
+        out.push(format!(
+            "error[EngineDisagreement]: {} [{}]: {} of TLC's {} counterexample(s) do not replay through BFS's step relation (the first: {first}); one engine is wrong (a tool bug, not a finding about the model)",
+            job.module,
+            job.checks.join(", "),
+            failed.len(),
+            tlc.run.violations.len(),
+        ));
+    }
+    out
+}
+
 fn as_str(outcome: Option<Outcome>) -> &'static str {
     outcome.map_or("not decided", Outcome::as_str)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::jobs::whole_job;
+    use super::super::tlc::Ran;
+    use super::unreplayed;
+    use crate::tlc_output::{TlcRun, TraceStep, Violation, ViolationKind};
+    use rdra_ish_core::lifecycle::{Bounds, Scope, TransitionSystem};
+    use rdra_ish_emit::tla::TlaNames;
+    use std::path::Path;
+
+    /// A TLC counterexample whose trace leaves the native step relation is a disagreement,
+    /// on any job, and one that replays is none. Such a trace was once only printed, and
+    /// on a safety cone it silently skipped the comparison of the violated sets (P12 of
+    /// docs/theory/README.md).
+    #[test]
+    fn a_tlc_trace_that_does_not_replay_is_a_disagreement() {
+        let sample = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../samples/formal-verification/temporal_unmet.rdra");
+        let model = rdra_ish_core::load_project(&[sample], None)
+            .expect("the sample loads")
+            .model;
+        let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+        let names = TlaNames::new(&ts);
+        let i = (ts.properties().iter())
+            .position(|p| p.formula.kind().is_liveness())
+            .expect("a liveness property");
+        let job = whole_job(&ts, &names, "RdraSpec_P", i);
+        let stranger = Violation {
+            kind: ViolationKind::Temporal,
+            name: None,
+            line: "Error: Temporal properties were violated.".to_string(),
+            trace: vec![
+                TraceStep {
+                    label: "Initial predicate".to_string(),
+                    state: Default::default(),
+                },
+                TraceStep {
+                    label: "NoSuchAction".to_string(),
+                    state: Default::default(),
+                },
+            ],
+            lasso: None,
+        };
+        let ran = Ran::counterexample(TlcRun {
+            violations: vec![stranger],
+            ..TlcRun::default()
+        });
+        let lines = unreplayed((&ts, &names), (&[&job], &[&ran]));
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        assert!(
+            lines[0].starts_with("error[EngineDisagreement]: RdraSpec_P ["),
+            "{lines:?}"
+        );
+        let none = Ran::counterexample(TlcRun::default());
+        assert!(unreplayed((&ts, &names), (&[&job], &[&none])).is_empty());
+    }
 }

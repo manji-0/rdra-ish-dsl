@@ -1700,7 +1700,11 @@ the checks its counterexample breaks, and each property's verdict on every run b
 `not decided` on one side is no disagreement. Two verdicts print `error[EngineDisagreement]:
 <module> [<checks>]: native <verdict>, TLC <verdict>; one engine is wrong (a tool bug, not a
 finding about the model)`; both result lines read `tool_error`, and the run fails with `<n>
-check(s) the native checker and TLC decide differently (a tool bug)`.
+check(s) the native checker and TLC decide differently (a tool bug)`. Every TLC counterexample,
+each trace of each run, is replayed through BFS's step relation, whatever the native verdict;
+a run with a trace that does not replay prints `error[EngineDisagreement]: <module> [<checks>]:
+<k> of TLC's <n> counterexample(s) do not replay through BFS's step relation (the first:
+<why>); ...` and counts as one disagreement.
 
 **TLC's output** prints after the native lines. Each TLC run prints a `tlc: ` line, and a
 `tlc_result: ok|counterexample|tool_error` line follows `result:`. The line of a cone,
