@@ -214,6 +214,15 @@ impl Caps {
     }
 
     /// These caps, with every run charged to `pool`.
+    /// These caps for a run that goes alone: charged to a pool with the whole room of this
+    /// one's (`MemoryPool::whole`), so the runs beside it do not change where it stops.
+    pub fn alone(self) -> Self {
+        match self.memory {
+            Some(pool) => self.charged_to(pool.whole()),
+            None => self,
+        }
+    }
+
     pub const fn charged_to(self, pool: &'static MemoryPool) -> Self {
         Caps {
             memory: Some(pool),

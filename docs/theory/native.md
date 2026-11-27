@@ -333,10 +333,22 @@ Hence `Σ_j` agrees for all `j`, and with it everything the readers below comput
   (`cli/src/verify/bfs.rs::bfs_cones`, the `crowded` flag of `Native` in
   `cli/src/verify/native.rs`) use the other test: `cli/src/verify/bfs.rs::crowded` is
   `met_memory_limit`, true for any `MemoryCapReached` diagnostic, crowded in the pool or
-  not. Such a run is rerun against the command's pool itself, not an explicit room; in
-  `bfs_cones` the reruns go one at a time in `open` order (the property pass's order was not
-  read: unread@pin). That the pool holds the same bytes at that rerun whatever the job count is
-  the one step not shown (open problem P53). Evidence:
+  not. Until #484 such a run was rerun against the command's pool itself, not an explicit
+  room, and a safety cone with partner properties whose first, complete-to-the-end run met
+  the limit beside others fell back to its early-stopping run inside the parallel phase
+  without being marked: one thread printed `counterexample (65793 states)` where eight
+  printed `(15150 states)` (open problem P53, reproduced). Since #484 the first run's memory
+  stop marks the cone, and every rerun of both passes goes alone under `Caps::alone`, a child
+  pool with the room the command's pool has left (`MemoryPool::whole`), which refuses by its
+  own room whatever the parent holds. The reruns come after every run of the pass has ended,
+  and the results a pass keeps (`BfsCone`, `Plain`, `Native`, `Diag`, the entity pass's
+  `Bfs`) hold no charge, the quotient cache being dropped at the end of the entity pass; so
+  the room left is the whole room, which a debug build asserts at each rerun. A rerun's stop
+  point is then a function of the run alone (N4), the same as at one job, where every run of
+  a pass already had the pool to itself; a run that met no limit beside others meets none
+  alone, with at least as much room. Evidence:
+  `cli/tests/memory_cli.rs::safety_and_property_passes_stop_where_they_stop_one_at_a_time`
+  (1, 3, 8 jobs at 7, 8, 10 MiB; fails on main before #484),
   `cli/tests/memory_cli.rs::cones_side_by_side_stop_where_they_stop_one_at_a_time` and
   `::a_stopped_entity_cone_leaves_its_room_on_any_number_of_threads`.
 - *The table under probing* (step 3) holds only on the probe paths, which release builds
@@ -362,7 +374,7 @@ no workflow runs Miri.
 
 **N17 (Output independent of `RDRA_JOBS`).** Follows from N4 for each run, from the
 in-order collection of `in_parallel` results, and, for runs that met the memory limit, from
-the reruns above, up to P53's missing step. Evidence: as N4.
+the reruns above (P53 fixed in #484). Evidence: as N4.
 
 ## Safety
 
@@ -806,8 +818,8 @@ each of its variants a fair action whose enabledness reads its mark (event-order
   counts); `build/` was not audited.
 - **Fairness wording.** N9's (⇒) direction, hence every liveness `ok`, rests on assumption
   τ, which D20 states since #475 (P56).
-- **Determinism of memory stops beside other runs** rests on the reruns of N4; one step is
-  not shown for the CLI's passes (P53).
+- **Determinism of memory stops beside other runs** rests on the reruns of N4; the CLI's
+  passes rerun alone with an explicit room since #484 (P53).
 - **Reproductions** used binaries built in other worktrees, and those of P54 were run by
   the review rather than for this document (see the first paragraph); the issues that take
   P50, P51 and P54 up should reproduce them on a clean build.
