@@ -8,9 +8,12 @@
 //	drop-row         Ship stores the order but not the shipment the core returns
 //	accept-disabled  Cancel runs on an order the core refuses to cancel, as if it were paid
 //	unconditional    every commit writes without checking what the row still is
+//	ignore-id        a call on an order or a shipment runs on the first one, whatever its id
+//	constant-observe the snapshot is what was seeded, whatever the calls stored
 package svc
 
 import (
+	"cmp"
 	"errors"
 	"os"
 	"sort"
@@ -25,6 +28,7 @@ type Service struct {
 	orders    map[domain.OrderId]domain.OrderRow
 	shipments map[domain.ShipmentId]domain.ShipmentRow
 	evShipped []domain.EvShipped
+	seeded    domain.StoreSnapshot
 }
 
 // New returns an empty service with the fault FAULT names, if any.
@@ -66,8 +70,24 @@ func (s *Service) shipmentHolds(id domain.ShipmentId, e domain.ExpectedSource) b
 	return s.fault == "unconditional" || holds(string(row.Status), ok, e)
 }
 
+// first is the row of the lowest id, for the ignore-id fault.
+func first[K cmp.Ordered, R any](rows map[K]R) (R, bool) {
+	var row R
+	found := false
+	var at K
+	for k, r := range rows {
+		if !found || k < at {
+			row, at, found = r, k, true
+		}
+	}
+	return row, found
+}
+
 func (s *Service) order(id domain.OrderId, usecase string) (domain.Order, error) {
 	row, ok := s.orders[id]
+	if s.fault == "ignore-id" {
+		row, ok = first(s.orders)
+	}
 	if !ok {
 		return nil, notEnabled(usecase)
 	}
@@ -77,6 +97,7 @@ func (s *Service) order(id domain.OrderId, usecase string) (domain.Order, error)
 // Seed empties the store and stores rows.
 func (s *Service) Seed(rows domain.StoreSnapshot) {
 	*s = *newService(s.fault)
+	s.seeded = rows
 	for _, c := range rows.Customer {
 		s.customers[c.Id] = c
 	}
@@ -91,6 +112,9 @@ func (s *Service) Seed(rows domain.StoreSnapshot) {
 
 // Snapshot returns what the store holds.
 func (s *Service) Snapshot() domain.StoreSnapshot {
+	if s.fault == "constant-observe" {
+		return s.seeded
+	}
 	var snap domain.StoreSnapshot
 	for _, c := range s.customers {
 		snap.Customer = append(snap.Customer, c)
@@ -181,6 +205,9 @@ func (s *Service) PrepareSend(id domain.ShipmentId, ev domain.EvShipped) (domain
 		raised = raised || e == ev
 	}
 	row, ok := s.shipments[id]
+	if s.fault == "ignore-id" {
+		row, ok = first(s.shipments)
+	}
 	if !raised || !ok {
 		return domain.SendOutcome{}, notEnabled("Send")
 	}

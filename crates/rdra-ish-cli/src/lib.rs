@@ -65,13 +65,21 @@ pub fn run() -> Result<()> {
             guards,
             code,
             deny_incomplete,
+            mutants,
+            mutant_seed,
             bounds,
             scope,
         } => {
-            if deny_incomplete && code != Some(cli::CodeLevel::Run) {
-                anyhow::bail!(
-                    "--deny-incomplete needs --code=run: only a conformance run uses the traces"
-                );
+            for (given, flag) in [
+                (deny_incomplete, "--deny-incomplete"),
+                (mutants.is_some(), "--mutants"),
+                (mutant_seed.is_some(), "--mutant-seed"),
+            ] {
+                if given && code != Some(cli::CodeLevel::Run) {
+                    anyhow::bail!(
+                        "{flag} needs --code=run: only a conformance run uses the traces"
+                    );
+                }
             }
             let Project {
                 program,
@@ -174,7 +182,11 @@ pub fn run() -> Result<()> {
             println!("{}", lifecycle.bounds.ok());
             if let Some(level) = code {
                 let manifest = manifest.as_ref().expect("checked above");
-                if !code_check::run(&inputs, manifest, level, deny_incomplete)? {
+                let mutation = code_check::SelfCheck {
+                    per_kind: mutants.unwrap_or(1),
+                    seed: mutant_seed.unwrap_or(0),
+                };
+                if !code_check::run(&inputs, manifest, level, deny_incomplete, mutation)? {
                     std::process::exit(1);
                 }
             }

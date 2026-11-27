@@ -368,3 +368,44 @@ fn the_probe_names_the_domain_package_by_its_package_clause() {
         "{probe}"
     );
 }
+
+/// The self-check of `--code=run` (#439): the reference service fails every mutant trace at
+/// its changed row; a snapshot that is what was seeded fails the real traces; a service that
+/// runs a call on whatever row it finds passes them and is caught by the absent-row mutant.
+#[test]
+fn the_self_check_catches_a_service_that_ignores_the_id() {
+    if !tool("go", CODEGEN) {
+        return;
+    }
+    let dir = shop("self-check", &[]);
+    let (code, stdout, stderr) = outcome(&rdra(&dir, &["check", "model", "--code=run"], None));
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(
+        stdout
+            .contains("  self-check: 4 of 4 mutant traces failed at their changed row (seed 0)\n"),
+        "{stdout}"
+    );
+
+    let (code, stdout, stderr) = outcome(&rdra(
+        &dir,
+        &["check", "model", "--code=run"],
+        Some("constant-observe"),
+    ));
+    assert_eq!(code, Some(1), "{stderr}");
+    assert_eq!(errors(&stderr), ["CodeConformance"], "{stderr}");
+    assert!(!stdout.contains("self-check:"), "{stdout}");
+
+    let (code, stdout, stderr) = outcome(&rdra(
+        &dir,
+        &["check", "model", "--code=run"],
+        Some("ignore-id"),
+    ));
+    assert_eq!(code, Some(1), "{stderr}");
+    assert_eq!(errors(&stderr), ["CodeMutantSurvived"], "{stderr}");
+    assert!(stderr.contains("the absent-row mutant"), "{stderr}");
+    assert!(
+        stdout
+            .contains("  self-check: 3 of 4 mutant traces failed at their changed row (seed 0)\n"),
+        "{stdout}"
+    );
+}

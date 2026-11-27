@@ -30,6 +30,12 @@ refuses passes. `run` then prints `warning[CodeCoverageIncomplete]` and still ex
 `conformance_states` in the table and run `codegen --code` again, or pass `--deny-incomplete`
 in CI to fail on it.
 
+After a passing run, the self-check runs the run command again on four mutant traces, each
+wrong at one row (`self-check: 4 of 4 mutant traces failed at their changed row`). A
+`CodeMutantSurvived` error means one passed. When the absent-row mutant passes, make the
+service look rows up by the id it is given. For any other kind, make the run command run
+the probe's test on the file `RDRA_ISH_TRACES` names and fail when that test fails.
+
 ## Findings
 
 A build error maps back to a use case: by the probe line it is on, or by the method or
@@ -52,6 +58,7 @@ FAIL: code: 1 error(s) at --code=build
 | `CodeError_<UC>` | Another error on the use case's probe line or methods | Read the quoted compiler error |
 | `CodeUnmapped`, `CodeBuildFailed` | Errors that belong to no use case; a failed build with no error rdra-ish reads | Fix the build by hand |
 | `CodeConformance` | `run`: the store differs from the model after a call | Read the first difference: the traces line, and the rows only the model or only the store holds |
+| `CodeMutantSurvived` | `run`: a mutant trace of the self-check passed | The `fix:` line: look rows up by id, or make the run command use `RDRA_ISH_TRACES` |
 | `CodeCoverageIncomplete` | `run`: the BFS behind the traces stopped at `conformance_states`; a warning, an error with `--deny-incomplete` | Raise `conformance_states`, then `codegen --code` |
 
 ## The obligation ledger

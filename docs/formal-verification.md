@@ -506,8 +506,10 @@ lemmas come from facts about absent and deleted rows and keys, and from what BFS
 cone at the run's bounds and at one instance: the patterns a row takes, the values of each
 column and pair of columns, and the patterns of a child with its parent (whole, per parent
 column, one column of each, and one child column with two parent columns when its pairs do
-not already imply it). Each mining run stops
-at 50,000 states. A lemma is only a guess until it survives the same checks, so a capped
+not already imply it). The lemmas of one column of each and of one child column with two
+parent columns wait: they join only when a rule stays unproved without them, and until then
+z3 sees nothing of them, so a proof that needs none of them sends z3 the same checks whatever
+of them a model offers. Each mining run stops at 50,000 states. A lemma is only a guess until it survives the same checks, so a capped
 exploration costs proofs, not soundness. The lemmas a proof kept print as `lemma:` lines, and
 one that only the one-instance run offered ends in `(mined at 1 instance per entity)`:
 
@@ -588,8 +590,10 @@ rule (1/124 of its limit) and 116,000 for a lemma (1/17); on 4 solvers, which th
 not run, a lemma check has spent 144,000 (1/14). No check runs out. The checks z3 gives up on
 by itself (on 2 solvers, 301 lemma checks and 13 rule checks) stop on a quantifier it cannot
 decide, not on the budget: the test prints what they spend and does not assert it, since that
-depends on what the solver checked before. On 2 solvers it is at most 1,576,000 units for a
-lemma, in food-permit-ops, and 13,000 for a rule. The rounds that find the inductive set run z3 without model-based quantifier
+depends on what the solver checked before. On 2 solvers it is at most 1,887,000 units for a
+lemma, in food-permit-ops, and 10,000 for a rule; food-permit-ops has such lemma checks from
+1,200,000 units up on 1 to 6 solvers, and on 3 one of them runs out, which the test, running
+food-permit-ops on 2, does not see. The rounds that find the inductive set run z3 without model-based quantifier
 instantiation (MBQI), which settles the checks that keep a rule several times faster; the
 counterexamples to induction are then found with it on. A rule z3 gives up on is `unproved` with
 `z3 gave up on <action>`. The checks are shared out over several z3 processes (`RDRA_JOBS`); the result does
