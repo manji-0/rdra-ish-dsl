@@ -317,9 +317,10 @@ fn always_up_to_symmetry(
     out.notes
         .push(format!("about {} states", about(run.estimate())));
     let answer = match run.decide_always(cone.reduced_index) {
-        Some(PropertyVerdict::Holds) => Answer::Verdict(Outcome::Ok, None),
-        Some(PropertyVerdict::Violated(d)) => Answer::Verdict(Outcome::Counterexample, Some(d)),
-        Some(PropertyVerdict::Undecided) => Answer::Stopped,
+        Some(Ok(PropertyVerdict::Holds)) => Answer::Verdict(Outcome::Ok, None),
+        Some(Ok(PropertyVerdict::Violated(d))) => Answer::Verdict(Outcome::Counterexample, Some(d)),
+        Some(Ok(PropertyVerdict::Undecided)) => Answer::Stopped,
+        Some(Err(fault)) => Answer::Fault(fault),
         None => unreachable!("an always"),
     };
     out.runs.push((p.run_on(ConeRun::Plain), answer.outcome()));

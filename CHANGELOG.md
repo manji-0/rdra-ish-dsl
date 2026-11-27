@@ -488,6 +488,11 @@
   the bound. The `note:` reads `the cone's counterexample is a candidate only ... on the cone
   refined with the event's raisers: ...`; a property that cannot use its cone's counterexample
   says `its counterexample is a candidate: ...`.
+- Every state-rule and `after` counterexample now replays from an initial state through the
+  run's own step relation before it prints, on plain runs too (docs/theory P20). A trace that
+  does not replay is `error[LiftFault_<check>]` (a tool error, no trace), the fault type of
+  P52, never a counterexample. Up to symmetry, a lifted violation or `always` trace that fails
+  to replay, or whose last state no longer violates, is that fault instead of a panic.
 - The reduction by an independent sub-lifecycle certifies its partition on every run, in
   every build (docs/theory P7): the blocks refine the labels, one sweep of the reference
   refinement with every block a splitter splits nothing, and the states of a block rise into

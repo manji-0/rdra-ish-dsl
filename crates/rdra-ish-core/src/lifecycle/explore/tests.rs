@@ -718,3 +718,37 @@ fn a_violation_that_does_not_lift_is_a_lift_fault() {
         assert!(fault.to_string().starts_with("tool error:"), "{fault}");
     }
 }
+
+/// A path that does not replay through the step relation is a fault, never a panic and never
+/// a counterexample (P20): a step to a state its action does not reach fails at that state,
+/// and a violation whose stored path fails to replay becomes the `LiftFault` of its check.
+#[test]
+fn a_path_that_does_not_replay_is_a_fault() {
+    use crate::lifecycle::{LassoFault, ReplayError, StateDiag};
+
+    let ts = TransitionSystem::build(&model_from(SHOP), Bounds::VERIFY, &Scope::ALL).ts;
+    let start = ts
+        .initial_states()
+        .into_iter()
+        .next()
+        .expect("an initial state");
+    let m = ts.moves(&start).next().expect("a first move");
+    // The move's action and rows, landing on the state it left.
+    let wrong = vec![(m.act, m.params.clone(), start.clone())];
+    assert!(matches!(
+        super::orbit::replays(&ts, &start, &wrong),
+        Err(ReplayError::NoMove { state: 2, .. })
+    ));
+    let right = vec![(m.act, m.params.clone(), m.next.clone())];
+    assert_eq!(super::orbit::replays(&ts, &start, &right), Ok(()));
+
+    let run = ts.run_on(Caps::VERIFY, Checks::All, Threads::Fixed(0));
+    let found = (run.diags.iter())
+        .map(|d| &d.diag)
+        .find(|d| matches!(d, StateDiag::ConstraintViolated { .. }));
+    if let Some(found) = found {
+        let fault = super::faulted(found, LassoFault::Replay(ReplayError::NotInitial));
+        assert_eq!(fault.name(&[]), format!("LiftFault_{}", found.name(&[])));
+        assert!(fault.trace().is_none());
+    }
+}
