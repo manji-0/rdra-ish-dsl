@@ -1,0 +1,36 @@
+// Quantifier none over finite Cert_Ids / Assign_Ids (InstanceCount == 2).
+// relate(Assign, Cert, N:1) adds Assign_owner_Cert linking related instances.
+// TLC intent: expected FAIL if Revoke runs while a linked Assign stays active.
+// expect check: fail Quantifier_Cert_0
+// expect verify: fail Quantifier_Cert_0
+entity Cert "証明書" {
+  id: Int @pk
+  status: Enum(active, revoked) @default(active)
+}
+
+entity Assign "割当" {
+  id: Int @pk
+  status: Enum(active, ended) @default(active)
+}
+
+usecase Issue "発行"
+usecase Revoke "失効"
+usecase EndAssign "割当終了"
+
+buc BucCertAssignment "Certificate assignment"
+contains(BucCertAssignment, Issue)
+contains(BucCertAssignment, Revoke)
+contains(BucCertAssignment, EndAssign)
+
+creates(Issue, Cert)
+creates(Issue, Assign)
+updates(Revoke, Cert)
+updates(EndAssign, Assign)
+
+transitions(Revoke, Cert.status, active -> revoked)
+transitions(EndAssign, Assign.status, active -> ended)
+
+relate(Assign, Cert, N:1)
+
+// When a cert is revoked, no assignment may stay active.
+invariant(Cert).when(status == revoked).none(Assign.status == active)

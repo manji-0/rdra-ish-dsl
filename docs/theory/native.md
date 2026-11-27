@@ -24,8 +24,9 @@ commit's (`diff -rq`), its `crates/rdra-ish-emit/src` differs only under `codege
 core or CLI source file there is newer than the binary. The reproductions of P54 were run
 by the independent review of this document, on a release binary of another sibling worktree
 (possibly the same one) whose core and CLI `src` it checked against the same sources with
-`diff -rq`; they were not re-run for this revision, because that binary no longer exists. The models and commands are in [Reproductions](#reproductions);
-each run takes under a second.
+`diff -rq`; that binary no longer exists, so they were not re-run for the current text. The models
+and commands are in [Reproductions](#reproductions); each run takes under a second. How the
+document changed after it was first written is in [Errata](#errata). `unread@pin` marks a statement whose cited code was not read at the pinned commit ([claims inventory](./claims.md#how-to-read-a-row)).
 
 ---
 
@@ -229,7 +230,7 @@ formal-verification.md says.
 **N15 (Stops give `not decided`).** Every reader below returns `Undecided` (or
 `NotDecided`, or leaves the finding open) on a stopped graph unless it found a violation in
 the part explored, and the CLI maps that to `not decided` (`cli/src/verify/end.rs::End::result`,
-cited from row N15 and not re-read here).
+cited from row N15; unread@pin).
 A stopped run's counterexamples are sound for safety (they are paths of `G`, hence traces
 of `T`) and for liveness by N10. The time budget (`Caps::deadline`, read every 256
 admissions) is the one stop whose position depends on the machine.
@@ -320,13 +321,16 @@ Hence `Σ_j` agrees for all `j`, and with it everything the readers below comput
   without being marked: one thread printed `counterexample (65793 states)` where eight
   printed `(15150 states)` (open problem P53, reproduced). Since #484 the first run's memory
   stop marks the cone, and every rerun of both passes goes alone under `Caps::alone`, a child
-  pool with the whole room of the command's (`MemoryPool::whole`), which refuses by its own
-  room whatever the parent holds. So a rerun's stop point is a function of the run alone
-  (N4), the same as at one job, where every run of a pass already had the pool to itself:
-  the results kept from a pass (`BfsCone`, `Plain`, `Native`, `Diag`) hold no charge, and
-  the quotient cache is dropped at the end of the entity pass. A run that met no limit
-  beside others meets none alone, with at least as much room. Evidence: `cli/tests/memory_cli.rs::safety_and_property_passes_stop_where_they_stop_one_at_a_time`
-  (1, 3, 8 jobs at 7, 8, 10 MiB; fails on main),
+  pool with the room the command's pool has left (`MemoryPool::whole`), which refuses by its
+  own room whatever the parent holds. The reruns come after every run of the pass has ended,
+  and the results a pass keeps (`BfsCone`, `Plain`, `Native`, `Diag`, the entity pass's
+  `Bfs`) hold no charge, the quotient cache being dropped at the end of the entity pass; so
+  the room left is the whole room, which a debug build asserts at each rerun. A rerun's stop
+  point is then a function of the run alone (N4), the same as at one job, where every run of
+  a pass already had the pool to itself; a run that met no limit beside others meets none
+  alone, with at least as much room. Evidence:
+  `cli/tests/memory_cli.rs::safety_and_property_passes_stop_where_they_stop_one_at_a_time`
+  (1, 3, 8 jobs at 7, 8, 10 MiB; fails on main before #484),
   `cli/tests/memory_cli.rs::cones_side_by_side_stop_where_they_stop_one_at_a_time` and
   `::a_stopped_entity_cone_leaves_its_room_on_any_number_of_threads`.
 - *The table under probing* (step 3) holds only on the probe paths, which release builds
@@ -340,8 +344,8 @@ Hence `Σ_j` agrees for all `j`, and with it everything the readers below comput
 | `Twin::DenseBinding` | `Bindings::id_numbered` | yes | every `shadow` run |
 | `Twin::Seen` | `Seen` lookups | yes | every `shadow` run |
 | `Twin::Hit` | `Probe::Hit` | no (`Probing::Off`) | `shadow` runs under `RDRA_ISH_FORCE_PROBES` (one CI run, clinic-ops) |
-| `Twin::Recent` | the reader's `Recent` lookup | no | same |
-| `Twin::SeenGrowth` | the shared table's growth (`table::Writer`) | no | same |
+| `Twin::Recent` | the reader's `Recent` lookup | no | `shadow` runs under `RDRA_ISH_FORCE_PROBES` |
+| `Twin::SeenGrowth` | the growth of `Seen`'s index, after every insert: the shared table's (`table::Writer`) under probing, the plain one's otherwise | yes | every `shadow` run (P18, fixed in #473) |
 
 The unit test `explore/tests.rs::a_run_is_the_same_on_any_number_of_threads` compares 1, 2,
 3, 4, 7 and 17 workers with `R_0`, on a complete and a capped run, with probing on at 4
@@ -441,9 +445,11 @@ in BFS order over all bindings, ends the reported trace, which is therefore shor
 A stopped graph must not be read: an unexpanded state has no out-edges and would look
 stuck. The guard is the match arm `Target::Reach(i) if !cones[at].run.complete` in
 `targets.rs::TransitionSystem::answer_targets`, which records the property as
-undecided; `reach_failure` and `TransitionSystem::verdict` only `debug_assert!` completeness.
-This confirms open problem P19. TLC cannot state `can_reach`, so the evidence is unit tests
-alone (row N8).
+undecided; `reach_failure` and `TransitionSystem::verdict` also `assert!` completeness in
+every build (they only `debug_assert!`ed it before P19 was fixed in #478). TLC cannot state
+`can_reach`; besides the unit tests, a naive oracle (`core/tests/oracle.rs`) with its own
+exploration and a forward search from every state agrees with the checker on the corpus
+and the samples (row N8).
 
 ## Deadlocks
 
@@ -461,7 +467,8 @@ through present predecessors; this is `E[present U leave]` per slot, as in N8. A
 marked has no such path, which is the definition. The reported state is the minimum over
 `(idx, k)`. ∎ On a stopped graph every candidate value is `Progress::NotDecided`. Both
 `can_leave` and the trace read packed cells through `Packing::cell`, so P50 applies.
-TLC's deadlock check is one-sided (row T6); this check has no external oracle (P19).
+TLC's deadlock check is one-sided (row T6); the naive oracle of `core/tests/oracle.rs`
+checks this one against a forward search on its own exploration (P19, fixed in #478).
 
 ## Vacuity
 
@@ -514,7 +521,7 @@ enabledness but not for *taken*: it says a fair instance is taken "by a step who
 `a` and whose binding extends `κ`", and D13 allows such a step with `s' = s`. The code and the
 TLA+ output read *taken* as requiring a change of state: `fair_steps` keeps only edges with
 `from ≠ to`, and the printer's `WF_vars` takes `⟨A⟩_vars` steps only. This document adopts
-that reading as assumption τ; D20 does not state it (open problem P56). A second reading
+that reading as assumption τ, which D20 states since #475 (open problem P56). A second reading
 goes with it: D14's behaviors are sequences of states without action labels, so the code
 counts a step `s → s'` as taking every fair instance that labels some edge from `s` to `s'`
 (`En`, `Tk` above; `lasso.rs::unfair_loop` likewise), not only the instance of the action a
@@ -619,7 +626,8 @@ a counterexample under `WfNext` is one under `Plain`) and the cone's own fairnes
 `fails_at` and `avoid` evaluate the goal on a slot whatever its existence, so a behavior
 that deletes the row meets `eventually(E.c == v)` when `v` is `c`'s base value, while
 `can_reach` keeps the slot present along the path. Read on the code here, this confirms
-open problem P6; TLC reads the printed formula the same way.
+open problem P6; TLC reads the printed formula the same way. #475 decided P6 as documented:
+language-reference.md and D21 now state the reading.
 
 ## Counterexamples: what is checked before printing
 
@@ -770,7 +778,8 @@ each of its variants a fair action whose enabledness reads its mark (event-order
 - **Bounded mechanical evidence.** The Kani harnesses cover widths far below where P50
   begins and no domain of more than 256 values (P54); `Twin::Packed` and `Twin::Seen` would
   detect P50 but no `shadow` input is that wide; other shadow twins skip runs above 200,000
-  or 2,500,000 states (P17) and the probe twins run in one CI job (P18).
+  or 2,500,000 states, and since #473 say so (P17), and the probe twins run in one CI job,
+  on code release builds do not run (P18).
 - **Readers share code with the checks they certify.** `unfair_loop` and `avoid` both use
   `moves` and `Property::fair_instance`; `explain_property` and `liveness_search` both use
   `holds_bound` and `triggers`. Self-certification catches a fault in the search, not in
@@ -782,7 +791,7 @@ each of its variants a fair action whose enabledness reads its mark (event-order
   edge index (P55, read only, past 2^32 edges). P50 and P54 are not the only conceivable
   ones: this document did not audit every `as` cast in `explore/` and `build/`.
 - **Fairness wording.** N9's (⇒) direction, hence every liveness `ok`, rests on assumption
-  τ, which D20 does not state (P56).
+  τ, which D20 states since #475 (P56).
 - **Determinism of memory stops beside other runs** rests on the reruns of N4; the CLI's
   passes rerun alone with an explicit room since #484 (P53).
 - **Reproductions** used binaries built in other worktrees, and those of P54 were run by
@@ -795,10 +804,10 @@ each of its variants a fair action whose enabledness reads its mark (event-order
   `targets.rs::vacuity`, `unmet_of_rule` and `unmet_of_assert` (which reads `step_ends`)
   and `edges.rs::StepEnds::read` (no filter on self-loops); for N14, the choice of the least
   `(idx, k)` per column value in `findings.rs`.
-- **Not re-read here:** `cli/src/verify/end.rs` (N15); `reduce/lift.rs::lift_stop` beyond
+- **Not re-read here (unread@pin):** `cli/src/verify/end.rs` (N15); `reduce/lift.rs::lift_stop` beyond
   `MAX_WALK` and `Spurious::NoLoop`; `explore/orbit.rs::lift_path` and
   `orbit/liveness.rs` beyond their certification steps (the "Symmetric" bullet of the lift's
-  mechanics was not re-checked against their bodies for this revision); the
+  mechanics rests on the first version's reading of them; see [Errata](#errata)); the
   `Twin::EachEnabled` path; `fasthash.rs` beyond the rule quoted in N2; and
   `cli/src/verify/native.rs::native_property_after` beyond the order of its runs.
 - **P10 confirmed.** `cli/src/verify/bfs.rs::BfsCone::verdict` returns `counterexample`
@@ -828,9 +837,11 @@ the entries.
 
 ## Reproductions
 
-The runs behind P50, P51 and P54, with the binaries described in the first paragraph.
+The runs behind P50, P51 and P54, with the binaries described in the first paragraph. None
+is yet a test or corpus case in the repository: each is marked *repro pending in repo* with the
+fix lane that adds it, and the marker gives way to the test's path when that lands.
 
-**P51.** The model:
+**P51** (repro pending in repo; dup of P22, L4). The model:
 
 ```
 entity Order "注文" {
@@ -852,7 +863,7 @@ after(Touch).assert(Order.flag == true)
 `rdra-ish verify` prints `Cone_AfterAssert_Touch_0 [AfterAssert_Touch_0]: ok (3 states)`.
 With `sets(Touch, Order.status == closed)` it prints `counterexample (7 states)`.
 
-**P50.** One entity `Row` with `id: Int @pk` and 34 columns `c0` to `c33`, each
+**P50** (repro pending in repo, L5). One entity `Row` with `id: Int @pk` and 34 columns `c0` to `c33`, each
 `Int @default(0)`; every flag below is given to `verify`.
 
 1. One use case `Create` that creates a `Row` and `sets` every column to 1, and
@@ -865,7 +876,7 @@ With `sets(Touch, Order.status == closed)` it prints `counterexample (7 states)`
    `--instance-count 8`: `counterexample (511 states)`. At `--instance-count 255`:
    `ok (256 states)`, `result: ok`, with the two `usecase` declarations in either order.
 
-**P54** (run by the review; models kept outside the repository). An entity
+**P54** (run by the review; models kept outside the repository; repro pending in repo, L2). An entity
 `Row { id: Int @pk; n: Int @null }`, a use case `Create` that creates a `Row` with
 `sets(Create, Row.n == 255)`, and `forbidden(Row, Row.n >= 200)`, under
 `--instance-count 1 --int-range-max 255`: `ok (2 states)`, `result: ok`. With 254 in place
@@ -873,3 +884,15 @@ of 255, or with `n: Int @default(0)`, the same command prints `counterexample`. 
 case replaces `n` with `s: Enum(v0, v1, …, v255) @null` (256 declared values), sets
 `Row.s == v255`, and forbids `Row.s != null`, at the default bounds: `ok`; with `v254`,
 `counterexample`.
+
+## Errata
+
+Changes to statements of this document after it was first written, newest last.
+
+- **2026-11-28, after an independent review** (commits `5cd4c35e`, `02e5b48f`, and
+  `12baa870`). The review ran the P54 reproductions on its own release binary; the revisions
+  that followed did not re-run them, because that binary no longer exists. The "Symmetric"
+  bullet of [The lift's mechanics](#the-lifts-mechanics) was written in the first version
+  (`6e1451a1`) from a reading of `explore/orbit.rs::lift_path` and `orbit/liveness.rs` up to
+  their certification steps; the revisions after the review did not re-check it against their
+  bodies.

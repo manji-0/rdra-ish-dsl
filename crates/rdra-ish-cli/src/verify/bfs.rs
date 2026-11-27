@@ -7,7 +7,7 @@ use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_output::Outcome;
 use rdra_ish_core::lifecycle::{
     Caps, Checks, ComponentRun, Diag, EntId, NotChecked, OrbitRun, PropertyVerdict, QuotientCache,
-    RunEnd, Scope, Selection, Severity, StateDiag, StoredRun, Target, TargetExploration,
+    Recheck, RunEnd, Scope, Selection, Severity, StateDiag, StoredRun, Target, TargetExploration,
     TransitionSystem, Undecided,
 };
 use rdra_ish_core::{in_parallel, ResolvedProgram, SemanticModel};
@@ -315,8 +315,12 @@ pub(super) enum BfsCone {
     Ran {
         /// The states stored: under symmetry, one per class.
         states: usize,
-        /// The violated invariants and after-asserts, each with BFS's shortest trace.
+        /// The violated invariants and after-asserts of the cone's module, each with BFS's
+        /// shortest trace: what TLC's run of the module is compared with.
         found: Vec<Diag>,
+        /// Each violation of `found` the cone cannot vouch for (`Trace::vouched`), by name,
+        /// decided again on its exact cone (`recheck_cones`); empty until then.
+        rechecks: Vec<(String, Recheck)>,
         /// How the run ended: a run stops once every check has failed.
         end: RunEnd,
         /// The run stopped at the memory limit.
@@ -435,6 +439,7 @@ impl BfsCone {
         BfsCone::Ran {
             states: 0,
             found,
+            rechecks: Vec::new(),
             end,
             memory: met_memory_limit(diags),
             orbits: None,
@@ -487,8 +492,11 @@ impl BfsCone {
         self.verdict() == Some(Outcome::Ok)
     }
 
-    /// The verdict, `None` when the run stopped before a violation.
-    pub(super) fn verdict(&self) -> Option<Outcome> {
+    /// The verdict of the cone's module, `None` when the run stopped before a violation: what
+    /// TLC's run of the same module is compared with. A cone that leaves a raised mark out
+    /// reaches more than the whole system, so its counterexample may be none of the whole
+    /// system's; `verdict` is what the run reports.
+    pub(super) fn module_verdict(&self) -> Option<Outcome> {
         match self {
             BfsCone::Ran { found, end, .. } => match (found.is_empty(), end) {
                 (false, _) => Some(Outcome::Counterexample),
@@ -499,6 +507,56 @@ impl BfsCone {
         }
     }
 
+    /// The verdict on the whole system, `None` when it is not decided: a counterexample when
+    /// some violation is one of the whole system's (`violations`), `ok` when the cone found
+    /// none or its exact cone showed each one it found spurious, and `None` when the run
+    /// stopped first or a violation is neither vouched for nor rechecked to hold.
+    pub(super) fn verdict(&self) -> Option<Outcome> {
+        let BfsCone::Ran {
+            found,
+            rechecks,
+            end,
+            ..
+        } = self
+        else {
+            return self.module_verdict();
+        };
+        if self.violations().next().is_some() {
+            return Some(Outcome::Counterexample);
+        }
+        if found.is_empty() {
+            return self.module_verdict();
+        }
+        // Every violation it found was rechecked; the run stopped once every check failed,
+        // or ran to the end, so each check of the cone is decided.
+        let held = |d: &Diag| {
+            let name = d.diag.name(&[]);
+            (rechecks.iter()).any(|(n, r)| *n == name && matches!(r, Recheck::Holds))
+        };
+        match (found.iter().all(held), end) {
+            (true, RunEnd::Complete | RunEnd::ChecksFailed) => Some(Outcome::Ok),
+            _ => None,
+        }
+    }
+
+    /// The violations of the whole system the cone found: each one the cone vouches for
+    /// (`Trace::vouched`, slots aside: a trace past the bound is a run at a larger bound),
+    /// and the counterexample of each exact cone that rechecked one it does not.
+    pub(super) fn violations(&self) -> impl Iterator<Item = &Diag> {
+        let (found, rechecks): (&[Diag], &[(String, Recheck)]) = match self {
+            BfsCone::Ran {
+                found, rechecks, ..
+            } => (found, rechecks),
+            BfsCone::Covered(_) | BfsCone::Proved { .. } => (&[], &[]),
+        };
+        let vouched = found.iter().filter(|d| vouched(d));
+        let rechecked = rechecks.iter().filter_map(|(_, r)| match r {
+            Recheck::Violated(d) => Some(&**d),
+            Recheck::Holds | Recheck::Undecided(_) => None,
+        });
+        vouched.chain(rechecked)
+    }
+
     /// The run line, in the form of `Ran::line`.
     pub(super) fn line(&self, module: &str, checks: &[String], jobs: &[Job]) -> String {
         let verdict = self.verdict().map_or("not decided", Outcome::as_str);
@@ -507,6 +565,7 @@ impl BfsCone {
                 states,
                 end,
                 orbits,
+                rechecks,
                 ..
             } => {
                 let mut notes = Vec::new();
@@ -521,6 +580,18 @@ impl BfsCone {
                     );
                 }
                 let mut line = run_line(module, checks, verdict, count, &notes);
+                for (name, recheck) in rechecks {
+                    let on_exact = match recheck {
+                        Recheck::Violated(_) => "counterexample",
+                        Recheck::Holds => "ok",
+                        Recheck::Undecided(_) => {
+                            "not decided (stopped at the state cap or the memory limit)"
+                        }
+                    };
+                    line.push_str(&format!(
+                        "\n  note: {name}'s counterexample runs a use case without its event having been raised, which this cone does not rule out; on its exact cone: {on_exact}"
+                    ));
+                }
                 // The note under the line: what the canonicalizer cut. What the group left
                 // out goes to `RDRA_ISH_SYMMETRY_STATS` (`symmetry_stats`).
                 if let Some(o) = orbits.as_ref().filter(|o| o.cut > 0) {
@@ -568,6 +639,52 @@ pub(super) fn decide_by_proof(
             (_, cone) => cone,
         })
         .collect()
+}
+
+/// The cone vouches for the violation as one of the whole system (`Trace::vouched`), slots
+/// aside: its trace runs no use case without its event.
+fn vouched(d: &Diag) -> bool {
+    d.diag.trace().is_none_or(|t| t.vouched(false))
+}
+
+/// Each violation a safety cone found and cannot vouch for, decided again on its check's exact
+/// cone under `caps` (`TransitionSystem::recheck`), once per check, before anything reads the
+/// verdicts: the proof leaves out only the rules a real violation refutes. A cone that leaves
+/// a raised mark out runs the handler without the event, so its counterexample may be a run
+/// the event order forbids at every bound.
+pub(super) fn recheck_cones(
+    ts: &TransitionSystem,
+    jobs: &[Job],
+    cones: &mut [Option<BfsCone>],
+    caps: Caps,
+) {
+    let mut done: Vec<(String, Recheck)> = Vec::new();
+    for (job, cone) in jobs.iter().zip(cones) {
+        let (
+            JobKind::Cone(_),
+            Some(BfsCone::Ran {
+                found, rechecks, ..
+            }),
+        ) = (&job.kind, cone)
+        else {
+            continue;
+        };
+        for d in found.iter().filter(|d| !vouched(d)) {
+            let name = d.diag.name(&[]);
+            let recheck = match done.iter().find(|(n, _)| *n == name) {
+                Some((_, r)) => r.clone(),
+                None => {
+                    let target = ts
+                        .violated_check(&d.diag)
+                        .expect("a cone's check is the whole system's");
+                    let r = ts.recheck(target, false, caps);
+                    done.push((name.clone(), r.clone()));
+                    r
+                }
+            };
+            rechecks.push((name, recheck));
+        }
+    }
 }
 
 /// The run met the memory limit, maybe only because the runs beside it held the rest.
@@ -810,17 +927,17 @@ pub(super) fn report_bfs_cones(
             continue;
         };
         println!("{}", cone.line(&job.module, &job.checks, jobs));
-        let BfsCone::Ran { found, end, .. } = cone else {
-            continue;
-        };
         // A check several cones hold is reported once, from the first cone that breaks it, so
         // the count does not depend on how the cones overlap.
-        for d in found.iter().filter(|d| reported.insert(d.diag.name(&[]))) {
+        for d in cone
+            .violations()
+            .filter(|d| reported.insert(d.diag.name(&[])))
+        {
             let text = render_violation(program, model, &d.diag, TraceSource::Bfs)
                 .expect("a violation renders");
             eprintln!("{}", Finding::new(&d.diag, &[], text));
         }
-        out.capped += usize::from(found.is_empty() && *end != RunEnd::Complete);
+        out.capped += usize::from(cone.verdict().is_none());
     }
     out.violated = reported.len();
     out

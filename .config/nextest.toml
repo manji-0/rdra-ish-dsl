@@ -43,7 +43,8 @@ not (
       | test(=the_probe_names_the_domain_package_by_its_package_clause)
       | test(=the_reference_service_builds_and_conforms)
       | test(=the_self_check_catches_a_service_that_ignores_the_id)
-      | test(=a_model_adapter_conforms_whatever_the_domain_code_became)))
+      | test(=a_model_adapter_conforms_whatever_the_domain_code_became)
+      | test(=a_service_embedding_the_unimplemented_port_builds_and_its_calls_are_reported)))
   | (binary_id(rdra-ish-cli::memory_cli) & (
         test(=shared_quotients_stop_no_cone_elsewhere_on_any_number_of_threads)
       | test(=the_generators_finish_a_cone_check_finishes)
