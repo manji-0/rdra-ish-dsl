@@ -10,6 +10,9 @@
 
 mod coverage;
 pub mod eval;
+mod mutants;
+
+pub use mutants::{mutants, Mutant, MutantKind, Mutants};
 
 use std::collections::{BTreeSet, HashSet, VecDeque};
 
@@ -30,6 +33,11 @@ use eval::{column_var, enum_name, matching, Rows};
 
 /// The format line every traces file starts with; the harness refuses another.
 pub const TRACES_FORMAT: &str = "# rdra-ish conformance traces 3";
+
+/// The environment variable a probe's conformance test reads its traces from when it is set
+/// and not empty, in place of the traces file it names: `check --code=run` points it at the
+/// mutant traces of its self-check (#439), and clears it for the run itself.
+pub const TRACES_ENV: &str = "RDRA_ISH_TRACES";
 
 /// The states the traces explore at most by default.
 pub const DEFAULT_STATES: usize = 1 << 16;
@@ -476,6 +484,10 @@ pub struct Traces {
     pub int_max: u8,
     /// The state cap the BFS stopped at, or would have.
     pub cap: usize,
+    /// The actions whose call takes one existing row, first: the calls an `X` row tries.
+    pub one_row: Vec<String>,
+    /// The text of an id no row of the traces has: one past the most slots of any entity.
+    pub absent_id: String,
 }
 
 /// One move of a printed use case: the call that makes it.
@@ -523,6 +535,19 @@ pub fn traces(
         cap,
         ..Traces::default()
     };
+    out.absent_id = id_text(ts.entity_ids().map(|e| ts.slots(e)).max().unwrap_or(0));
+    out.one_row = port
+        .methods
+        .iter()
+        .filter(|m| {
+            ts.actions().iter().any(|a| {
+                a.name == m.action
+                    && matches!(a.params.as_slice(), [p] if p.role == ParamRole::Existing)
+            })
+        })
+        .map(|m| m.action.clone())
+        .collect();
+
     for edge in run.edges() {
         let (act, params) = run.step(edge);
         moved.insert((edge.from, act.index(), params.to_vec()));

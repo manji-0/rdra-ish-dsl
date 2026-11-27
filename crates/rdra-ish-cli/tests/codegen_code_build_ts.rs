@@ -112,7 +112,7 @@ fn the_probe_names_each_use_case_and_tsconfig_holds_only_it() {
         "type Service = service.OrderService;",
         "export const _Ship = (it: Service): domain.ShipUseCase => it; // usecase Ship",
         "domain.conform((): Service => new service.OrderService(), traces).then(",
-        "readFileSync(\"src/traces.txt\", \"utf8\")",
+        "readFileSync(process.env[\"RDRA_ISH_TRACES\"] || \"src/traces.txt\", \"utf8\")",
     ] {
         assert!(probe.contains(line), "no {line:?} in\n{probe}");
     }
@@ -298,4 +298,43 @@ fn each_fault_fails_the_run() {
         assert!(all.contains("error[CodeConformance]"), "{fault}: {all}");
         assert!(all.contains(says), "{fault}: {all}");
     }
+}
+
+/// The self-check of `--code=run` (#439): the reference service fails every mutant trace at
+/// its changed row; a snapshot that is what was seeded fails the real traces; a service that
+/// runs a call on whatever row it finds passes them and is caught by the absent-row mutant.
+#[test]
+fn the_self_check_catches_a_service_that_ignores_the_id() {
+    if !tools(&["tsc", "node"], CODEGEN) {
+        return;
+    }
+    let dir = project("self-check", MANIFEST);
+    let out = rdra(&dir, &["check", "model", "--code=run"], "");
+    let all = text_slashed(&out);
+    assert!(out.status.success(), "{all}");
+    assert!(
+        all.contains("  self-check: 4 of 4 mutant traces failed at their changed row (seed 0)"),
+        "{all}"
+    );
+
+    let out = rdra(&dir, &["check", "model", "--code=run"], "constant-observe");
+    let all = text_slashed(&out);
+    assert_eq!(out.status.code(), Some(1), "{all}");
+    assert!(all.contains("error[CodeConformance]"), "{all}");
+    assert!(!all.contains("self-check:"), "{all}");
+
+    let out = rdra(&dir, &["check", "model", "--code=run"], "ignore-id");
+    let all = text_slashed(&out);
+    assert_eq!(out.status.code(), Some(1), "{all}");
+    assert!(!all.contains("error[CodeConformance]"), "{all}");
+    let survived: Vec<&str> = all
+        .lines()
+        .filter(|l| l.starts_with("error[CodeMutantSurvived]"))
+        .collect();
+    assert_eq!(survived.len(), 1, "{all}");
+    assert!(survived[0].contains("the absent-row mutant"), "{all}");
+    assert!(
+        all.contains("  self-check: 3 of 4 mutant traces failed at their changed row (seed 0)"),
+        "{all}"
+    );
 }

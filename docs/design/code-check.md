@@ -384,7 +384,50 @@ makes it an error. `codegen` prints the same statement after it writes the trace
 model refuses none of the calls the harness tries as refused, which are calls on one existing
 row; the model may still refuse a create or an action over several rows, which no trace
 tries (gap 2 of #439), and the statement says `calls on one existing row` for that reason.
-Counting those untried refusals, and failing `--deny-incomplete` on them, is left open.
+Counting those untried refusals, and failing `--deny-incomplete` on them, waits for PR 4
+(owner decision, 2026-11-27).
+
+### The self-check by mutant traces
+
+<!-- constrained-by #decisions -->
+
+A pass says nothing if the run never read the traces. After a passing `--code=run`, rdra-ish
+runs the same command on a few mutant traces, by default one of each kind and picked by a
+seed. Each mutant fails a conforming service at the row it changes. The service code is
+never changed (decision 1). The run is evidence only as a CI run (decision 11).
+
+- **Kinds.** Each kind changes the last row of a cut trace into something the model never
+  does: `X` to `C` (`refused-call-runs`), `C` to `X` (`call-refused`), `C` to a state whose
+  rows differ (`wrong-state`), and `C` on a one-row call naming an absent id
+  (`absent-row`).
+- **No equivalent mutants.** No mutant is equivalent to the real traces, so a survivor is
+  never a false alarm. A survivor is therefore an error by default, and `--mutants 0` turns
+  the self-check off.
+- **What the first three show.** A deterministic service that passed the real traces does
+  again what it did there, so it fails these three whether or not its adapter is honest. Their
+  kill rate checks the pipeline: whether the command runs the harness on `RDRA_ISH_TRACES`
+  and fails when it fails.
+- **What `absent-row` shows.** It is the one kind about the service. At one row per entity
+  every id is `1`, so an invoke that ignores the id passes the real traces; it fails only
+  this kind.
+- **Constant snapshots.** A snapshot that returns what was seeded fails the real traces at the
+  first call that changes a row, before the self-check runs.
+- **Kill criterion.** A mutant counts as killed only when the run fails and its output names
+  the changed row (`traces line <n>:`). All three harnesses number the lines of the file the
+  same way.
+
+**Guard removal is not built.** The plan in #439 also named traces from a model with one guard
+removed. Such a trace dies at its first row the model refuses:
+
+- When that row is a call on one existing row, the real traces already try it as `X`, so the
+  mutant is `refused-call-runs` again.
+- Otherwise it is a create or an action over several rows, which no trace tries as refused
+  (gap 2). Those are where guard removal adds something.
+- On the test fixture the only guard (`Big` on Cancel) is of the first kind.
+
+So guard removal belongs with the wider refusal tests of PR 4. The owner decided so on
+2026-11-27, and also that a surviving mutant is an error by default, and that
+`--deny-incomplete` fails on the cap only until PR 4 tries the other refusals.
 
 ## Phases
 

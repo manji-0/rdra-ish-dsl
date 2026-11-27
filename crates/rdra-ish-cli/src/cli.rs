@@ -194,6 +194,14 @@ pub(crate) enum Commands {
         /// stopped at `conformance_states`, so no refused call is tried); without it, a warning
         #[arg(long, requires = "code")]
         deny_incomplete: bool,
+        /// With `--code=run`: after the run passes, run it again on this many mutant traces
+        /// of each kind (default 1), each wrong at one row, and fail when one passes; 0 runs
+        /// none
+        #[arg(long, value_name = "N", requires = "code")]
+        mutants: Option<usize>,
+        /// With `--code=run`: the seed that picks the mutant traces (default 0)
+        #[arg(long, value_name = "SEED", requires = "code")]
+        mutant_seed: Option<u64>,
         #[command(flatten)]
         bounds: BoundsArgs,
         #[command(flatten)]

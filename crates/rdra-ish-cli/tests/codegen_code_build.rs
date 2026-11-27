@@ -218,3 +218,62 @@ fn each_fault_fails_the_run() {
         assert!(all.contains(says), "{fault}: {all}");
     }
 }
+
+/// The self-check of `--code=run` (#439) on a real harness: the reference service fails every
+/// mutant trace at its changed row. Of two lying services, the one whose snapshot is what was
+/// seeded fails the real traces already, and the one that runs a call on whatever row it
+/// finds passes them (every id is 1 at one row per entity) and is caught by the absent-row
+/// mutant alone.
+#[test]
+fn the_self_check_catches_a_service_that_ignores_the_id() {
+    if !tool("cargo", CODEGEN) {
+        return;
+    }
+    let dir = project("self-check");
+    let out = rdra(&dir, &["check", "model", "--code=run"], "");
+    let all = text_slashed(&out);
+    assert!(out.status.success(), "{all}");
+    assert!(
+        all.contains("  self-check: 4 of 4 mutant traces failed at their changed row (seed 0)"),
+        "{all}"
+    );
+
+    let out = rdra(&dir, &["check", "model", "--code=run"], "constant-observe");
+    let all = text_slashed(&out);
+    assert_eq!(out.status.code(), Some(1), "{all}");
+    assert!(all.contains("error[CodeConformance]"), "{all}");
+    assert!(
+        !all.contains("self-check:"),
+        "the real traces failed first: {all}"
+    );
+
+    // The variable that points the probe at substitute traces is cleared for the real run:
+    // one left in the environment never stands in for the real traces.
+    let out = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .current_dir(&dir)
+        .args(["check", "model", "--code=run", "--mutants", "0"])
+        .env("RDRA_ISH_TRACES", dir.join("no-such-traces.txt"))
+        .env("CARGO_TARGET_DIR", dir.join("target"))
+        .output()
+        .expect("runs rdra-ish");
+    assert!(out.status.success(), "{}", text_slashed(&out));
+
+    let out = rdra(&dir, &["check", "model", "--code=run"], "ignore-id");
+    let all = text_slashed(&out);
+    assert_eq!(out.status.code(), Some(1), "{all}");
+    assert!(!all.contains("error[CodeConformance]"), "{all}");
+    let survived: Vec<&str> = all
+        .lines()
+        .filter(|l| l.starts_with("error[CodeMutantSurvived]"))
+        .collect();
+    assert_eq!(survived.len(), 1, "{all}");
+    assert!(survived[0].contains("the absent-row mutant"), "{all}");
+    assert!(
+        all.contains("fix:   the service must look the row up by the id it is given"),
+        "{all}"
+    );
+    assert!(
+        all.contains("  self-check: 3 of 4 mutant traces failed at their changed row (seed 0)"),
+        "{all}"
+    );
+}

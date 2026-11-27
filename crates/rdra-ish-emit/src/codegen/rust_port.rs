@@ -1,7 +1,7 @@
 //! The Rust conformance port and harness: `StoreSnapshot`, `ConformancePort`, and `conform`,
 //! which drives a port along the traces `conformance::traces` writes.
 
-use super::conformance::TRACES_FORMAT;
+use super::conformance::{TRACES_ENV, TRACES_FORMAT};
 use super::ir::{DomainModel, Field, FieldType, PortArg, PortDecl, PortMethod, Scalar, Track};
 use super::rust::{doc, field_type, ident, OPTION, STRING};
 use super::snake;
@@ -444,11 +444,18 @@ pub(super) fn probe(
         w.line("#[test]");
         w.line("fn rdra_conformance() {");
         w.line(&format!(
-            "    let traces = include_str!(concat!(env!(\"CARGO_MANIFEST_DIR\"), {}));",
+            "    let traces = match std::env::var({}) {{",
+            string_literal(TRACES_ENV)
+        ));
+        w.line("        Ok(path) if !path.is_empty() => std::fs::read_to_string(&path)");
+        w.line("            .unwrap_or_else(|e| panic!(\"rdra-ish conformance: cannot read {path}: {e}\")),");
+        w.line(&format!(
+            "        _ => include_str!(concat!(env!(\"CARGO_MANIFEST_DIR\"), {})).to_string(),",
             string_literal(&format!("/{traces}"))
         ));
+        w.line("    };");
         w.line(&format!(
-            "    if let Err(why) = {module}::conform(|| -> Service {{ {new} }}, traces) {{"
+            "    if let Err(why) = {module}::conform(|| -> Service {{ {new} }}, &traces) {{"
         ));
         w.line("        panic!(\"rdra-ish conformance: {why}\");");
         w.line("    }");

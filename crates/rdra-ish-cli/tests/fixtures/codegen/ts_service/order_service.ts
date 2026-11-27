@@ -6,6 +6,8 @@
 //   drop-row         Ship stores the order but not the shipment the core returns
 //   accept-disabled  Cancel cancels an order the core refuses, as if it were paid, unconditionally
 //   unconditional    every commit writes without checking what the row still is
+//   ignore-id        a call on an order or a shipment runs on the first one, whatever its id
+//   constant-observe the snapshot is what was seeded, whatever the calls stored
 // Node runs it as it is (type stripping): the imports name the `.ts` files.
 import * as d from "./domain.ts";
 
@@ -46,6 +48,7 @@ export class OrderService {
   private orders = new Map<number, d.OrderRow>();
   private shipments = new Map<number, d.ShipmentRow>();
   private evShipped: d.EvShipped[] = [];
+  private seeded: d.StoreSnapshot | undefined;
 
   /** The conditional write's WHERE clause, all of a commit's rows at once. */
   private check(
@@ -60,23 +63,27 @@ export class OrderService {
   }
 
   private order(id: d.OrderId): d.Order | undefined {
-    const row = this.orders.get(id);
+    const row = this.fault === "ignore-id" ? [...this.orders.values()][0] : this.orders.get(id);
     return row === undefined ? undefined : stored(d.Order.fromRow(row));
   }
 
   seed = async (rows: d.StoreSnapshot): Promise<void> => {
+    this.seeded = rows;
     this.customers = new Map(rows.customer.map((c) => [c.id, c]));
     this.orders = new Map(rows.order.map((o) => [o.id, o]));
     this.shipments = new Map(rows.shipment.map((s) => [s.id, s]));
     this.evShipped = [...rows.ev_shipped];
   };
 
-  snapshot = async (): Promise<d.StoreSnapshot> => ({
-    customer: [...this.customers.values()],
-    order: [...this.orders.values()],
-    shipment: [...this.shipments.values()],
-    ev_shipped: [...this.evShipped],
-  });
+  snapshot = async (): Promise<d.StoreSnapshot> =>
+    this.fault === "constant-observe" && this.seeded !== undefined
+      ? this.seeded
+      : {
+          customer: [...this.customers.values()],
+          order: [...this.orders.values()],
+          shipment: [...this.shipments.values()],
+          ev_shipped: [...this.evShipped],
+        };
 
   preparePlace = async (
     parentCustomer: d.CustomerId,
@@ -137,7 +144,7 @@ export class OrderService {
     ev: d.EvShipped,
   ): Promise<d.Result<d.SendOutcome, d.SendError>> => {
     if (!this.evShipped.some((e) => e.shipment_id === ev.shipment_id)) return notEnabled("Send");
-    const row = this.shipments.get(id);
+    const row = this.fault === "ignore-id" ? [...this.shipments.values()][0] : this.shipments.get(id);
     return row === undefined
       ? notEnabled("Send")
       : d.runSend(stored(d.Shipment.fromRow(row)), ev);

@@ -30,6 +30,8 @@ not (
   | (binary_id(rdra-ish-cli::codegen_builds) & (test(=go_builds) | test(=rust_builds) | test(=typescript_builds) | test(=rust_probes_name_every_contract) | test(=typescript_probes_name_every_contract)))
   | (binary_id(rdra-ish-cli::codegen_behaviour) & (test(=go_behaves) | test(=go_states_are_not_built_outside) | test(=rust_a_use_case_takes_the_capability_of_an_actor_that_performs_it) | test(=typescript_a_use_case_takes_the_capability_of_an_actor_that_performs_it) | test(=go_visitor_fails_to_compile_on_a_new_state) | test(=go_a_use_case_takes_the_capability_of_an_actor_that_performs_it)))
   | (binary_id(rdra-ish-cli::codegen_conformance) & test(=go_harness_tells_faults_apart))
+  | (binary_id(rdra-ish-cli::codegen_code_build) & test(=the_self_check_catches_a_service_that_ignores_the_id))
+  | (binary_id(rdra-ish-cli::codegen_code_build_ts) & test(=the_self_check_catches_a_service_that_ignores_the_id))
   | (binary_id(rdra-ish-cli::codegen_code_check_go) & (
         test(=the_probe_of_every_sample_compiles)
       | test(=a_prepare_takes_the_caller_of_its_use_case)
@@ -37,7 +39,8 @@ not (
       | test(=a_build_command_in_rdra_toml_replaces_the_default)
       | test(=each_planted_omission_is_named)
       | test(=the_probe_names_the_domain_package_by_its_package_clause)
-      | test(=the_reference_service_builds_and_conforms)))
+      | test(=the_reference_service_builds_and_conforms)
+      | test(=the_self_check_catches_a_service_that_ignores_the_id)))
   | (binary_id(rdra-ish-cli::memory_cli) & (
         test(=shared_quotients_stop_no_cone_elsewhere_on_any_number_of_threads)
       | test(=the_generators_finish_a_cone_check_finishes)
