@@ -98,7 +98,7 @@ impl Why {
             Why::WfNext => "needs the whole model's WF_vars(Next)",
             Why::FreesSlots => "its counterexample may create instances past the bound",
             Why::LeavesMarks => {
-                "its counterexample may run a use case without its event having been raised"
+                "its counterexample is a candidate: it may run a use case without its event having been raised"
             }
         }
     }

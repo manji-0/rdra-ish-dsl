@@ -479,6 +479,15 @@
   any engine runs (docs/theory P50); before, the explorer panicked when it laid out the
   packing. No reachable bound comes near it: 255 slots of an entity take 2,040 bits per
   8-bit column.
+- A counterexample that runs a use case without its event having been raised is a candidate
+  only (docs/theory P1). The check's cone takes in that event's raisers and runs again, and
+  repeats until a counterexample runs no use case without its event, or the cone is the
+  check's exact cone (`TransitionSystem::recheck_on`): a counterexample-guided refinement in
+  place of going straight to the exact cone, so the cone that decides is often smaller.
+  Escalation refines the same way, counting the slots of an entity the candidate creates past
+  the bound. The `note:` reads `the cone's counterexample is a candidate only ... on the cone
+  refined with the event's raisers: ...`; a property that cannot use its cone's counterexample
+  says `its counterexample is a candidate: ...`.
 - The reduction by an independent sub-lifecycle certifies its partition on every run, in
   every build (docs/theory P7): the blocks refine the labels, one sweep of the reference
   refinement with every block a splitter splits nothing, and the states of a block rise into

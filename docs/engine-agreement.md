@@ -343,7 +343,9 @@ the case `sym_arm_reorders`.
 at 1 and 2 instances per entity, and compares on each cone:
 
 - the reached and initial states, against the graph `tlc -dump dot,actionlabels` writes;
-- the edge sets, as `(from, to, use case)`, self-loops included;
+- the edge sets, as `(from, to, use case, params)`, self-loops included: the cone is printed
+  with one `Next` disjunct per binding of each use case's params (`tla::print_bound`), so TLC
+  names the binding of each edge. A class move of a reduced cone has no params to compare;
 - the state-model findings of every entity: witnesses, use cases that never run, deadlocks;
 - the verdict of each invariant and `after` assertion, with every TLC trace replayed through
   the BFS step relation;
@@ -442,7 +444,20 @@ It starts only by hand, before a release gate of the
 ```sh
 gh workflow run mutants.yml                 # every mutant, over 4 shards
 gh workflow run mutants.yml -f re=liveness  # only the mutants whose name matches
+gh workflow run mutants.yml -f config=tlc -f shards=14   # the TLC-side run below
 ```
+
+**The TLC-side run.** `-f config=tlc` reads `.cargo/mutants-tlc.toml` instead: it mutates the
+TLA+ printer (`emit/src/tla/{mod,module,names,pred}.rs`), `verify/compare.rs`,
+`tlc_output.rs`, and `tlc_replay.rs`, 548 mutants, and runs with `tlc` and `z3` on `PATH`
+(`RDRA_REQUIRE_TLC=1`, `RDRA_REQUIRE_Z3=1`). Each mutant runs the corpus under TLC and z3,
+the unit tests of the TLC output reader, the comparison and the TLC driver, and the
+`verify_cli` tests that run TLC beside the native checker, as the `additional_cargo_test_args`
+filters name them. `rdra-ish-emit`'s own tests are left out: their snapshots fail on any
+change to the printed text, which says nothing about whether agreement catches it. The
+unmutated tests take about 2.5 minutes, so a mutant times out at 15 minutes, and the run has
+no address-space cap, which the JVM cannot start under. At 14 shards it takes several hours
+and holds 14 runners.
 
 The `summary` job lists the `missed` and `timeout` mutants, and each shard's `mutants.out` is an
 artifact with each mutant's diff and log. Kill a missed mutant with a corpus case it gets wrong,
@@ -458,12 +473,17 @@ entry, so that a fall shows:
 | Run | Commit | Date | Mutants | Caught | Timeout | Missed | Unviable | Kill rate |
 |---|---|---|---|---|---|---|---|---|
 | [45212589802](https://github.com/manji-0/rdra-ish-dsl/actions/runs/45212589802) | `b0f593ba` | 2026-11-23 | 251 | 137 | 2 | 70 | 42 | 139 of 209, 66.5% |
+| [46034352562](https://github.com/manji-0/rdra-ish-dsl/actions/runs/46034352562) | `6f2d29a1` | 2026-11-27 | 298 | 147 | 4 | 89 | 58 | 151 of 240, 62.9% |
 
-The missed mutants of that run: 27 in `cone.rs`, 26 in `explore/liveness.rs`, 12 in
-`verify/native.rs`, 5 in `property_cone.rs`. The run mutates only those four files. The TLA+
-printer, `compare.rs`, `tlc_output.rs`, and `tlc_replay.rs` are not on the list: the run keeps
-`tlc` off `PATH`, so the corpus could not catch a mutant there. Mutating them needs a run with
-TLC on `PATH`, at many times the cost.
+The missed mutants of the first run: 27 in `cone.rs`, 26 in `explore/liveness.rs`, 12 in
+`verify/native.rs`, 5 in `property_cone.rs`; of the second: 32, 38, 17 and 2. The second run
+lists 47 more mutants, from code added since, and its missed ones grow mostly in
+`explore/liveness.rs`. These runs mutate only those four files and keep `tlc` off `PATH`; the
+TLA+ printer and the TLC reading code are the TLC-side run's:
+
+| Run | Commit | Date | Mutants | Caught | Timeout | Missed | Unviable | Kill rate |
+|---|---|---|---|---|---|---|---|---|
+| [46052978676](https://github.com/manji-0/rdra-ish-dsl/actions/runs/46052978676) (`config=tlc`) | `cb1beccb` | 2026-11-28 | 548 | pending | | | | |
 
 ## Kani harnesses
 
