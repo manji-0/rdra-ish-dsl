@@ -16,7 +16,7 @@ default.
 - **Open.** The rest of phase 4: `stable`, `unchanged`, `precedes`, `can_reach`, and an
   `always` property on a reduced cone still run plain. The flip of the default to `always`,
   a `### Breaking` entry whose release is the owner's call. `PinnedStart` has a witness
-  since #PRP33 (P33). #212 and #284 stay open.
+  since #512 (P33). #212 and #284 stay open.
 - **Superseded.** The `retry` default of [Decisions](#decisions), by
   [Always by default](#always-by-default) (2026-11-25). The cone line with an orbit count,
   by `(about <m> states)`.
@@ -1036,7 +1036,7 @@ build, and a per-thread hook in unit tests (`dropped`). It names a scan rule by 
 | Rule or reason | Witness |
 |---|---|
 | `OrderedId`, `IdAgainstLiteral`, `MixedIds`, `OwnerLiteral`, `OwnerChoice`, `UnlinkedCreate`, `AbsentOwner` | (b): `explore/symmetry/witnesses.rs`, one test each |
-| `PinnedStart` | an always-on assertion: `witnesses.rs::pinned_start_has_a_witness` (P33, #PRP33) |
+| `PinnedStart` | an always-on assertion: `witnesses.rs::pinned_start_has_a_witness` (P33, #512) |
 | `JointTooLarge` | (d): `joint_too_large_is_a_cost_cap`, `past_the_branch_cap_the_verdict_stands` |
 | `G_T` "S" | (c): implied by "S var", asserted in `Reduction::fixed_why` |
 | `H` "obs", "input" | the assertion in `up_to_h` (`reduce/partition.rs`) that `H` moves nothing the quotient reads; `each_h_reason_a_case_shows_has_a_witness` in engine_corpus |
@@ -1083,7 +1083,7 @@ in `explore/symmetry/snapshot.rs`.
 
 Why no witness was found:
 
-- `PinnedStart` has one since #PRP33 (P33). Only the start depends on it, and the
+- `PinnedStart` has one since #512 (P33). Only the start depends on it, and the
   transitions do not, so dropping it leaves the quotient a bisimulation with the same
   verdicts, as dropping it on `sym_identity_pair` showed. What breaks is the trace: the run
   stores the canonical form of each initial state, and where that form is no initial state
