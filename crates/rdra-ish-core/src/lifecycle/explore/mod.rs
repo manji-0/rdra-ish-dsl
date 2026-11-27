@@ -840,13 +840,15 @@ impl ComponentRun {
     fn trace_violations(&mut self, violations: &[(usize, Reach)]) {
         let run = self;
         for (at, reach) in violations {
-            // Every stored path replays through the run's own step relation before it prints
-            // (P20): one that does not is a fault of the tool, with no trace.
-            if let Err(e) = run.replay_reach(reach) {
-                run.diags[*at].diag = faulted(&run.diags[*at].diag, LassoFault::Replay(e));
-                continue;
-            }
-            let (trace, last) = run.trace_of(reach);
+            // Every stored path replays through the run's own step relation, and lifts, before
+            // it prints (P20): one that does not is a fault of the tool, with no trace.
+            let (trace, last) = match run.trace_of(reach) {
+                Ok(found) => found,
+                Err(e) => {
+                    run.diags[*at].diag = faulted(&run.diags[*at].diag, LassoFault::Replay(e));
+                    continue;
+                }
+            };
             // A reduced run holds representatives: the message describes the lifted state.
             if run.system.reduction().is_some() {
                 let rebuilt = match reach {

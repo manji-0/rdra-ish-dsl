@@ -161,7 +161,7 @@ fn a_replayed_path_explains_its_violation_and_a_corrupted_one_fails() {
         .find(|d| matches!(d, StateDiag::ConstraintViolated { .. }))
         .expect("a violation");
     let at = (0..run.states.len() as u32)
-        .find(|&i| run.trace_to(i) == *bfs.trace().unwrap())
+        .find(|&i| run.trace_to(i).as_ref() == Ok(bfs.trace().unwrap()))
         .expect("the violating state");
     let path = run.path_to(at);
     let states: Vec<_> = std::iter::once(path[0].from)

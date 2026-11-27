@@ -61,6 +61,7 @@ fn decide(ts: &TransitionSystem, name: &str) -> Option<Violation> {
     match ts.decide_property(i, Caps::VERIFY, Caps::VERIFY) {
         PropertyVerdict::Holds => None,
         PropertyVerdict::Undecided => panic!("{name}: undecided"),
+        PropertyVerdict::Fault(fault) => panic!("{name}: a tool fault: {fault:?}"),
         PropertyVerdict::Violated(diag) => match *diag {
             StateDiag::PropertyViolated {
                 kind,

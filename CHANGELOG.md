@@ -484,6 +484,14 @@
 
 ### Fixed
 
+- Every printed trace now replays before it prints, and none panics when it does not (docs/theory
+  P20, after #518): `always`, `stable`, `unchanged`, `precedes`, and `can_reach` traces,
+  deadlock traces, and `states` witnesses replay through the run's step relation; the reduced
+  lift checks each lifted step against the cone's steps in release builds (it was a
+  `debug_assert!`); and a symmetric path that feeds a deadlock trace or the reduction's lift
+  returns its fault. A failed trace is a tool error: `LiftFault` for a rule, `LassoFault` for a
+  property, and the new `TraceFault_<finding>` for a deadlock, a `can_reach` failure, or a
+  witness.
 - A system whose packed state would pass `u32::MAX` bits, the width of a cell's bit offset
   in the native explorer, is the build error `StateTooWide`, beside `DomainTooLarge`, before
   any engine runs (docs/theory P50); before, the explorer panicked when it laid out the

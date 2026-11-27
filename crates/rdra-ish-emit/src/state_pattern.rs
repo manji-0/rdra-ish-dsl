@@ -189,6 +189,7 @@ violation_message(text, pattern_desc)
         | StateDiag::MemoryCapReached { .. }
         | StateDiag::TimeBudgetReached { .. }
         | StateDiag::LiftFault { .. }
+        | StateDiag::TraceFault { .. }
         | StateDiag::NoWitness { .. }
         | StateDiag::VacuousRule { .. }
         | StateDiag::NeverRuns { .. }

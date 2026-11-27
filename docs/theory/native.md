@@ -718,7 +718,7 @@ only what the lift computes.
   move read through the accumulated `τ`, and `τ := τ ∘ σ⁻¹`. A liveness loop on
   (state, binding) pairs (**N12**) closes after at most the order of the loop's composed
   permutation, capped at 10,000 copies (`orbit/liveness.rs::MOST_COPIES`). **N13**: the lifted
-  trace replays or the process panics.
+  trace replays, or the run reports a tool error (since #TBD, not a panic; P20).
 
 The `Twin::OrbitLiveness` twin compares the orbit search with the plain run's `avoid`
 (`ComponentRun::liveness_reference`), so it tests the quotient against N9's implementation,
@@ -830,8 +830,8 @@ each of its variants a fair action whose enabledness reads its mark (event-order
   P50, P51 and P54 up should reproduce them on a clean build.
 - **Read for the N16 table and the lift's mechanics:** `reduce/lift.rs::lift` (the
   `debug_assert!` on a T step, the `expect` on a folded S step, the unchecked
-  `in_cone_params` branch), `::lift_cycle` (the doubling to `MAX_COPIES` and the closing
-  test), and `explore/orbit.rs::replays` (panics on a failed replay). For N18,
+  `in_cone_params` branch; since #TBD each is a release check that returns `ReplayError`), `::lift_cycle` (the doubling to `MAX_COPIES` and the closing
+  test), and `explore/orbit.rs::replays` (a failed replay is a fault since #518 and #TBD). For N18,
   `targets.rs::vacuity`, `unmet_of_rule` and `unmet_of_assert` (which reads `step_ends`)
   and `edges.rs::StepEnds::read` (no filter on self-loops); for N14, the choice of the least
   `(idx, k)` per column value in `findings.rs`.

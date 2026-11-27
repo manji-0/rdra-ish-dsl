@@ -8,6 +8,7 @@ use super::*;
 use crate::lifecycle::explore::{Adjacency, Caps, Spurious};
 use crate::lifecycle::expr::State;
 use crate::lifecycle::lasso::Loop;
+use crate::lifecycle::trace::ReplayError;
 use crate::lifecycle::types::ActId;
 use crate::lifecycle::TransitionSystem;
 
@@ -15,13 +16,19 @@ impl TransitionSystem {
     /// A reduced path, each step `(action, params, successor)` from `start`, lifted to a path
     /// of the unreduced cone: a class move becomes the S-action path that realizes it from the
     /// concrete S state the lifted path holds. Returns the start with its S part concrete and
-    /// the lifted steps, grouped per input step.
-    pub(crate) fn lift(&self, start: &State, steps: &[Step]) -> (State, Vec<Vec<Step>>) {
+    /// the lifted steps, grouped per input step. Every lifted step is checked against the
+    /// unreduced cone's step relation in every build: a step that is not one of its moves is
+    /// the `ReplayError` of that step, a fault of the reduction, never a panic (P20).
+    pub(crate) fn lift(
+        &self,
+        start: &State,
+        steps: &[Step],
+    ) -> Result<(State, Vec<Vec<Step>>), ReplayError> {
         let Some(r) = self.reduction() else {
-            return (
+            return Ok((
                 start.clone(),
                 steps.iter().map(|s| vec![s.clone()]).collect(),
-            );
+            ));
         };
         let ext = Extended::rebuild(self, r);
         let mut sub = ext.system.clone();
@@ -117,18 +124,25 @@ impl TransitionSystem {
         // Up to `H` the S path runs through stored forms: lift it to concrete S states first.
         // `H` keeps the inputs, so a rise's concrete step sets the inputs its stored edge does.
         if let Some(orbits) = &orbits {
-            let (first, concrete) = orbits.lift_path(s_first, &s_edges);
+            let (first, concrete) = orbits.lift_path(s_first, &s_edges)?;
             debug_assert!(first == s0, "the S path starts at a stored initial state");
             s_steps = concrete;
         }
         // The S path is a path of the extended sub-lifecycle under its own reduction: lift it
         // there and splice the concrete S parts back under the T steps.
-        let (s_start, lifted) = sub.lift(&s0, &s_steps);
+        let (s_start, lifted) = sub.lift(&s0, &s_steps)?;
         let mut lifted = lifted.into_iter();
         let mut out_start = start.clone();
         r.write(&mut out_start, &s_start.0);
         let mut cur = out_start.clone();
         let mut out = Vec::new();
+        // The lifted steps so far: a step that fails is state `done + 2` of the lifted path.
+        let mut done = 0usize;
+        let is_move = |cur: &State, step: &Step| {
+            self.plain_moves(cur)
+                .iter()
+                .any(|(a, p, n)| *a == step.0 && *p == step.1 && *n == step.2)
+        };
         for step in level {
             let mut group = Vec::new();
             match step {
@@ -141,13 +155,16 @@ impl TransitionSystem {
                     }
                     let mut next = post;
                     r.write(&mut next, &r.key(self, &cur));
-                    debug_assert!(
-                        self.plain_moves(&cur)
-                            .iter()
-                            .any(|(a, p, n)| *a == act && *p == params && *n == next),
-                        "a T step lifts as itself"
-                    );
-                    group.push((act, params, next.clone()));
+                    // A T step lifts as itself.
+                    let step = (act, params, next.clone());
+                    if !is_move(&cur, &step) {
+                        return Err(ReplayError::NoMove {
+                            state: done + 2,
+                            action: act,
+                        });
+                    }
+                    group.push(step);
+                    done += 1;
                     cur = next;
                 }
                 Lifted::S(count) => {
@@ -158,15 +175,23 @@ impl TransitionSystem {
                             // A folded or merged action binds its T params in the cone:
                             // the cone's step is the variant that leads to the same state.
                             let first = ext.acts[a.index()].expect("an S step is the cone's");
+                            let fails = ReplayError::NoMove {
+                                state: done + 2,
+                                action: first,
+                            };
                             let step = if r.in_cone_params(self, first, &p) {
                                 (first, p, next.clone())
                             } else {
                                 self.plain_moves(&cur)
                                     .into_iter()
                                     .find(|(a2, _, n2)| r.stands_for(first, *a2) && *n2 == next)
-                                    .expect("a folded step is a step of the cone")
+                                    .ok_or(fails.clone())?
                             };
+                            if !is_move(&cur, &step) {
+                                return Err(fails);
+                            }
                             group.push(step);
+                            done += 1;
                             cur = next;
                         }
                     }
@@ -174,7 +199,7 @@ impl TransitionSystem {
             }
             out.push(group);
         }
-        (out_start, out)
+        Ok((out_start, out))
     }
 }
 
@@ -203,7 +228,8 @@ impl TransitionSystem {
         while copies <= MAX_COPIES {
             let mut steps = prefix.to_vec();
             (0..copies).for_each(|_| steps.extend_from_slice(cycle));
-            let (first, groups) = self.lift(start, &steps);
+            // A lift that fails is no lasso of the cone: the reduced one is spurious.
+            let (first, groups) = self.lift(start, &steps).map_err(|_| Spurious::Fails)?;
             let mut states = vec![first];
             let mut actions = Vec::new();
             let mut ends = Vec::new();
@@ -243,7 +269,7 @@ impl TransitionSystem {
         prefix: &[Step],
     ) -> Result<ConeLasso, Spurious> {
         let r = self.reduction().expect("a reduced cone");
-        let (first, steps) = self.lifted(start, prefix);
+        let (first, steps) = self.lifted(start, prefix).map_err(|_| Spurious::Fails)?;
         let mut states = vec![first];
         let mut actions = Vec::new();
         for (act, _, post) in steps {

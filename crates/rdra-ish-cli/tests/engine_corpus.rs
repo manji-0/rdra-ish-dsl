@@ -1214,6 +1214,7 @@ fn a_capped_graph_decides_nothing_the_full_graph_contradicts() {
                             case.name
                         ),
                         PropertyVerdict::Undecided => {}
+                        PropertyVerdict::Fault(fault) => panic!("{}: {name}: a tool fault: {fault:?}", case.name),
                     }
                 }
             }

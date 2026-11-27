@@ -76,7 +76,7 @@ impl Answer {
             Ok(PropertyVerdict::Holds) => Answer::Verdict(Outcome::Ok, None),
             Ok(PropertyVerdict::Violated(d)) => Answer::Verdict(Outcome::Counterexample, Some(d)),
             Ok(PropertyVerdict::Undecided) => Answer::Stopped,
-            Err(fault) => Answer::Fault(fault),
+            Ok(PropertyVerdict::Fault(fault)) | Err(fault) => Answer::Fault(fault),
         }
     }
 
@@ -87,7 +87,7 @@ impl Answer {
             Ok(PropertyVerdict::Holds) => Answer::Verdict(Outcome::Ok, None),
             Ok(PropertyVerdict::Violated(d)) => Answer::Verdict(Outcome::Counterexample, Some(d)),
             Ok(PropertyVerdict::Undecided) => Answer::Stopped,
-            Err(fault) => Answer::Fault(fault),
+            Ok(PropertyVerdict::Fault(fault)) | Err(fault) => Answer::Fault(fault),
         }
     }
 
@@ -320,7 +320,7 @@ fn always_up_to_symmetry(
         Some(Ok(PropertyVerdict::Holds)) => Answer::Verdict(Outcome::Ok, None),
         Some(Ok(PropertyVerdict::Violated(d))) => Answer::Verdict(Outcome::Counterexample, Some(d)),
         Some(Ok(PropertyVerdict::Undecided)) => Answer::Stopped,
-        Some(Err(fault)) => Answer::Fault(fault),
+        Some(Ok(PropertyVerdict::Fault(fault)) | Err(fault)) => Answer::Fault(fault),
         None => unreachable!("an always"),
     };
     out.runs.push((p.run_on(ConeRun::Plain), answer.outcome()));

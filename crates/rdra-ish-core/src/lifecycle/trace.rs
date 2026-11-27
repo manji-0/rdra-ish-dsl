@@ -395,9 +395,9 @@ impl TransitionSystem {
     }
 
     /// The replayed path in model terms, lifted on a reduced system.
-    pub(crate) fn replay_trace(&self, replay: &Replay) -> Trace {
-        let (start, steps) = self.lifted_replay(replay);
-        self.trace_from(&start, &steps)
+    pub(crate) fn replay_trace(&self, replay: &Replay) -> Result<Trace, ReplayError> {
+        let (start, steps) = self.lifted_replay(replay)?;
+        Ok(self.trace_from(&start, &steps))
     }
 
     /// A path from `start` in model terms.
@@ -421,15 +421,15 @@ impl TransitionSystem {
     /// The path a printed counterexample of `replay` shows: on a reduced system, the replay
     /// lifted to a path of the system without its reduction, as its states and the action of
     /// each step; otherwise the replay itself.
-    pub fn lifted_path(&self, replay: &Replay) -> (Vec<State>, Vec<ActId>) {
-        let (start, steps) = self.lifted_replay(replay);
+    pub fn lifted_path(&self, replay: &Replay) -> Result<(Vec<State>, Vec<ActId>), ReplayError> {
+        let (start, steps) = self.lifted_replay(replay)?;
         let actions = steps.iter().map(|s| s.0).collect();
         let states = std::iter::once(start).chain(steps.into_iter().map(|s| s.2));
-        (states.collect(), actions)
+        Ok((states.collect(), actions))
     }
 
     /// The replay as a path from its first state, lifted (`lift`) and flattened.
-    fn lifted_replay(&self, replay: &Replay) -> (State, Vec<Step>) {
+    fn lifted_replay(&self, replay: &Replay) -> Result<(State, Vec<Step>), ReplayError> {
         let steps: Vec<Step> = replay
             .moves
             .iter()
@@ -440,9 +440,13 @@ impl TransitionSystem {
     }
 
     /// `lift`, flattened.
-    pub(crate) fn lifted(&self, start: &StateSlice, steps: &[Step]) -> (State, Vec<Step>) {
-        let (start, groups) = self.lift(&start.to_owned(), steps);
-        (start, groups.into_iter().flatten().collect())
+    pub(crate) fn lifted(
+        &self,
+        start: &StateSlice,
+        steps: &[Step],
+    ) -> Result<(State, Vec<Step>), ReplayError> {
+        let (start, groups) = self.lift(&start.to_owned(), steps)?;
+        Ok((start, groups.into_iter().flatten().collect()))
     }
 
     /// The violation of `target` the replayed trace ends in, built by the code BFS reports
@@ -450,7 +454,8 @@ impl TransitionSystem {
     /// last state (for an after-assert, the last step) does not violate it. On a reduced
     /// system the trace is lifted first and the violation read on the lifted last state.
     pub fn explain(&self, target: Target, replay: &Replay) -> Option<StateDiag> {
-        let (start, steps) = self.lifted_replay(replay);
+        // A replay whose lift fails explains nothing: the caller reports the fault.
+        let (start, steps) = self.lifted_replay(replay).ok()?;
         let last = steps.last().map_or(&start, |s| &s.2);
         let mut d = match target {
             Target::Entity(_) | Target::Reach(_) => return None,

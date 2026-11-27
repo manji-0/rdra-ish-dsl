@@ -1024,8 +1024,8 @@ Decided on 2026-11-25. Every rule that leaves a class out of the group, and ever
   cone of the samples and the corpus, it records which entities `G_T` keeps in place and
   why, which entities `H` keeps in place and why, and which scan rules fire.
 
-An always-on assertion that panics when the rule is dropped also counts as a witness, since
-that failure is loud. A reason with no witness, even hand-built, stays in the code and goes
+An always-on check that panics, or that reports a tool error (`LiftFault`), when the rule is
+dropped also counts as a witness, since that failure is loud. A reason with no witness, even hand-built, stays in the code and goes
 to the owner as possibly over-conservative.
 
 A test-only switch drops one rule at a time: `RDRA_ISH_DROP_RULE=<rule>` in a `shadow`

@@ -270,12 +270,15 @@ error[PendingLeadsToDelivered]: property PendingLeadsToDelivered is violated: it
 ```
 
 Every native counterexample replays through the step relation and fails its property before
-it prints. One that does not is a tool bug, `error[LassoFault]`. A state rule's or an `after`
-assertion's trace replays from an initial state through the run's own steps, on a plain, a
-reduced, or a symmetric run; up to symmetry an `always` trace does too. One that does not
-replay is `error[LiftFault_<check>]` with no trace, counted as a tool error. The traces of
-state-model findings (deadlocks) up to symmetry and the reduction's own lift still stop the
-run with a panic when they do not replay.
+it prints. One that does not is a tool bug, `error[LassoFault]`. Every other printed trace
+replays too: a state rule's, an `after` assertion's, an `always`, `stable`, `unchanged`, or
+`precedes` property's, a `can_reach` failure's, a deadlock's, and a `states` view's witness.
+Each replays from an initial state through the run's own steps, on a plain, a reduced, or a
+symmetric run, and on a reduced run each lifted step is checked against the cone's steps in
+every build. A trace that fails is a tool error with no trace: `error[LiftFault_<check>]` for
+a rule or an assertion, `error[LassoFault]` for a property, and `error[TraceFault_<finding>]`
+for a deadlock, a `can_reach` failure, or a witness. A reduced lasso whose lift fails counts
+as spurious, and the property is decided on the unreduced cone.
 
 **Under `--with-tlc`.** TLC runs each cone and property run beside BFS, as many at once as
 their heaps fit TLC's share of the [memory limit](./cli-reference.md#memory-limit), each

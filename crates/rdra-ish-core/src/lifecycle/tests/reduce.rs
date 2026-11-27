@@ -10,8 +10,8 @@ use crate::memory::{MemoryPool, MemorySize};
 use super::cone::{load, SAMPLES};
 use super::*;
 use crate::lifecycle::{
-    Action, ActionOrigin, ComponentRun, EntId, Fold, FoldKey, QuotientCache, Reduction, State,
-    Step, Target, TargetExploration, VarSet,
+    Action, ActionOrigin, ComponentRun, EntId, Fold, FoldKey, QuotientCache, Reduction,
+    ReplayError, State, Step, Target, TargetExploration, VarSet,
 };
 
 const DOMAIN_SAMPLES: &[&str] = &[
@@ -391,7 +391,9 @@ fn lifted_path(run: &ComponentRun, at: u32) -> (State, Vec<Step>) {
             )
         })
         .collect();
-    run.system.lifted(&run.states.at(first as usize), &steps)
+    (run.system)
+        .lifted(&run.states.at(first as usize), &steps)
+        .expect("a reduced path lifts")
 }
 
 /// Every step of a lifted path is a move of the unreduced cone system from the state before
@@ -825,8 +827,13 @@ fn a_reduced_cone_up_to_g_t_stores_fewer_states_and_lifts_its_trace() {
     for at in 0..graph.states.len() as u32 {
         let path = graph.path_to(at);
         let first = path.first().map_or(at, |e| e.from);
-        let (start, steps) = orbits.lift_path(first, &path);
-        let (start, steps) = p.system.lifted(&start, &steps);
+        let (start, steps) = orbits
+            .lift_path(first, &path)
+            .expect("a stored path replays");
+        let (start, steps) = p
+            .system
+            .lifted(&start, &steps)
+            .expect("a reduced path lifts");
         assert_real_path(&unreduced, &start, &steps);
     }
 }
@@ -1716,4 +1723,29 @@ fn a_silent_cycle_and_a_stuck_state_give_the_same_deadlocks_reduced() {
             assert!(a.contains(e), "{bounds:?}: {e} in {a:?}");
         }
     }
+}
+
+/// The lift checks every lifted step against the unreduced cone's step relation in every
+/// build, not only under `debug_assert!`: a T step that is no move of the cone is the
+/// `ReplayError` of that step, which the caller reports as a fault, never a panic (P20). Here
+/// the first T step of a reduced path is forged to land on the state it left.
+#[test]
+fn a_lifted_step_that_is_no_move_of_the_cone_is_a_replay_error() {
+    let model = model_from(CASE_FOLD);
+    let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+    let targets = ts.targets();
+    let reduced = ts.explore_targets_reduced(&targets, Caps::VERIFY);
+    let run = &reduced.cone_of(entity_target(&ts, "Case")).run;
+    let r = run.system.reduction().expect("the Case view reduces");
+    let start = run.states.at(0).into_state();
+    let (act, params) = (run.edges().iter())
+        .filter(|e| e.from == 0)
+        .map(|e| run.step(&e))
+        .find(|(act, _)| !r.skips(*act))
+        .expect("a T step from the start");
+    let forged = vec![(act, params.into(), start.clone())];
+    assert!(matches!(
+        run.system.lifted(&start, &forged),
+        Err(ReplayError::NoMove { state: 2, .. })
+    ));
 }

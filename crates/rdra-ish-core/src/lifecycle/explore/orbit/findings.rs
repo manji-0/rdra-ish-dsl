@@ -10,9 +10,10 @@
 //! pair, and the deadlock names the slot the concrete instance holds at its end.
 
 use crate::lifecycle::narrow::{id32, id8};
+use crate::lifecycle::{LassoFault, ReplayError, StateDiag};
 use std::collections::HashSet;
 
-use super::{lift_path, replays_or_panic, EdgePerms, OrbitRun};
+use super::{lift_path, replays, EdgePerms, OrbitRun};
 use crate::lifecycle::explore::symmetry::Canon;
 use crate::lifecycle::expr::State;
 use crate::lifecycle::findings::{ExitArm, Progress, StateModelFindings, ValueProgress};
@@ -119,9 +120,21 @@ impl OrbitRun {
                     let held: Vec<_> = (pairs.forward(id32(at), id8(k)).into_iter())
                         .map(|(r, j)| (run.states.at(r as usize), j))
                         .collect();
-                    let (trace, named) = self.trace_to_slot(e, id32(at), k);
-                    let mut diag = ts.deadlock(e, var, value, named, &exits, &held);
-                    *diag.trace_mut().expect("a deadlock has a trace") = trace;
+                    // A trace that fails to replay or lift is a fault in the deadlock's place.
+                    let diag = match self.trace_to_slot(e, id32(at), k) {
+                        Ok((trace, named)) => {
+                            let mut diag = ts.deadlock(e, var, value, named, &exits, &held);
+                            *diag.trace_mut().expect("a deadlock has a trace") = trace;
+                            diag
+                        }
+                        Err(fault) => {
+                            let diag = ts.deadlock(e, var, value, k, &exits, &held);
+                            StateDiag::TraceFault {
+                                name: diag.name(&[]),
+                                fault: LassoFault::Replay(fault),
+                            }
+                        }
+                    };
                     Progress::Stuck {
                         at: id32(at),
                         diag: Box::new(diag),
@@ -140,25 +153,25 @@ impl OrbitRun {
 
     /// The stored path to `states[at]` lifted to concrete states, with the permutation `τ`
     /// that reads its last state: the concrete last state is `τ(states[at])`.
-    pub(super) fn lift_to(&self, at: u32) -> (State, Vec<Step>, Vec<u8>) {
+    pub(super) fn lift_to(&self, at: u32) -> Result<(State, Vec<Step>, Vec<u8>), ReplayError> {
         let path = self.run.path_to(at);
         let first = path.first().map_or(at, |e| e.from);
         let (start, steps, tau) =
             lift_path(&self.run, &self.group, &mut Canon::default(), first, &path);
-        replays_or_panic(&self.run.system, &start, &steps);
-        (start, steps, tau)
+        replays(&self.run.system, &start, &steps)?;
+        Ok((start, steps, tau))
     }
 
     /// The trace to the pair (`states[at]`, slot `k` of `e`), in model terms, and the slot
     /// of `e` the concrete instance holds at its end.
-    fn trace_to_slot(&self, e: EntId, at: u32, k: usize) -> (Trace, usize) {
+    fn trace_to_slot(&self, e: EntId, at: u32, k: usize) -> Result<(Trace, usize), ReplayError> {
         let ts = &self.run.system;
-        let (start, steps, tau) = self.lift_to(at);
+        let (start, steps, tau) = self.lift_to(at)?;
         let named = usize::from(self.group.map_slot(&tau, e, id8(k)));
         // On a reduced cone the lifted path still holds class representatives on the S side:
         // #74's lift comes after the symmetry's, which was applied last.
-        let (start, steps) = ts.lifted(&start, &steps);
-        (ts.trace_from(&start, &steps), named)
+        let (start, steps) = ts.lifted(&start, &steps)?;
+        Ok((ts.trace_from(&start, &steps), named))
     }
 }
 

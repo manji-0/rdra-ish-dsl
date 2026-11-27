@@ -274,6 +274,9 @@ pub(crate) fn entity_view(
     }
     let via = view.via();
     let first = first_states(run, e);
+    // A witness whose path fails to replay or lift is left out, and the view says why: a
+    // fault of the tool (P20).
+    let mut faults = Vec::new();
     let patterns: Vec<ReachablePattern> = (0..view.patterns.len())
         .map(|id| ReachablePattern {
             pattern: pattern(ts, e, &view.patterns[id]),
@@ -291,9 +294,19 @@ pub(crate) fn entity_view(
                     })
                     .collect(),
             },
-            witness: first[id].map(|at| run.trace_to(at)),
+            witness: first[id].and_then(|at| match run.trace_to(at) {
+                Ok(trace) => Some(trace),
+                Err(e) => {
+                    faults.push(StateDiag::TraceFault {
+                        name: format!("Witness_{}", decl.id),
+                        fault: crate::lifecycle::LassoFault::Replay(e),
+                    });
+                    None
+                }
+            }),
         })
         .collect();
+    diagnostics.extend(faults);
     let caps = run.diags.iter().filter(|d| d.diag.stopped_why().is_some());
     for d in caps {
         if !diagnostics.contains(&d.diag) {
