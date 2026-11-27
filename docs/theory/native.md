@@ -160,7 +160,8 @@ P50 needs large bounds: a cell of non-zero width past bit 65,535, about 8,192 ce
 bits (for example 255 slots of an entity with 32 or more Int columns at `m = 255`). No
 sample comes near it, but D1 admits it and nothing rejects it. P54 below needs far less.
 
-**Finding P54 (guarantee, reproduced by the review).** A value outside a byte is
+**Finding P54 (guarantee, reproduced by the review; fixed in #470, where the build rejects a
+column domain past 256 values as `DomainTooLarge`).** A value outside a byte is
 truncated when the build encodes it, so `T` is not `T_β(M)`. `types.rs::Domain::of_number`
 returns `Value(n as u8 + 1)` for a `NullableInt` column; `Domain::size` gives that domain
 `m + 2` values, 257 at `m = 255`, and for `n = 255` the sum wraps to 0, which is

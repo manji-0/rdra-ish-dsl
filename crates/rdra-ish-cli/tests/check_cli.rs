@@ -974,6 +974,38 @@ forbidden(Item, n == {top})
         assert_eq!(code, Some(1), "{command}: {stderr}");
         assert!(stderr.contains("Forbidden_Item_0"), "{command}: {stderr}");
     }
+    // The TLA+ export renders values through the same system, so TLC would have checked the
+    // same wrapped write: it writes 254 at 254 and refuses 255.
+    let out = std::env::temp_dir().join(format!("rdra-nullable-top-{}.tla", std::process::id()));
+    for (top, writes) in [("254", true), ("255", false)] {
+        let _ = std::fs::remove_file(&out);
+        let (code, _, stderr) = run_on_source(
+            "nullable-top-tla",
+            &src(top, "@null"),
+            &[
+                "export",
+                "--kind",
+                "tla",
+                "-o",
+                out.to_str().unwrap(),
+                "--int-range-max",
+                top,
+            ],
+        );
+        match writes {
+            true => {
+                assert_eq!(code, Some(0), "{top}: {stderr}");
+                let tla = std::fs::read_to_string(&out).unwrap();
+                assert!(tla.contains("254"), "{tla}");
+            }
+            false => {
+                assert_eq!(code, Some(1), "{top}: {stderr}");
+                assert!(stderr.contains("error[DomainTooLarge_Item_n]"), "{stderr}");
+                assert!(!out.exists(), "a TLA+ module was written at 255");
+            }
+        }
+    }
+    let _ = std::fs::remove_file(&out);
 }
 
 /// The same for Enums, at the default bounds: a nullable Enum of 256 values (257 with null)
@@ -1021,6 +1053,32 @@ forbidden(Row, {rule})
             }
         }
     }
+    // The TLA+ export refuses the same columns, so TLC never checks the wrapped write.
+    let out = std::env::temp_dir().join(format!("rdra-enum-top-{}.tla", std::process::id()));
+    for (n, null, writes) in [
+        (255, "@null", true),
+        (256, "@null", false),
+        (257, "", false),
+    ] {
+        let _ = std::fs::remove_file(&out);
+        let (code, _, stderr) = run_on_source(
+            "enum-tla",
+            &src(n, null, "s != v0"),
+            &["export", "--kind", "tla", "-o", out.to_str().unwrap()],
+        );
+        assert_eq!(
+            code,
+            Some(if writes { 0 } else { 1 }),
+            "{n} {null}: {stderr}"
+        );
+        assert_eq!(out.exists(), writes, "{n} {null}: {stderr}");
+        assert_eq!(
+            stderr.contains("DomainTooLarge"),
+            !writes,
+            "{n} {null}: {stderr}"
+        );
+    }
+    let _ = std::fs::remove_file(&out);
 }
 
 /// An Enum or Bool `@default` outside the column's values stops the model from loading, so
