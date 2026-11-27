@@ -6,7 +6,7 @@
 //! Every case under `tests/engine_corpus/` runs `verify --with-tlc --prove` (without TLC or
 //! z3 when they are missing, which `RDRA_REQUIRE_TLC=1` and `RDRA_REQUIRE_Z3=1` turn into
 //! failures), and `verify --instance-count 1` and `3` when the header names BFS verdicts per
-//! bound. A case passes when every engine gives the verdict its header states and the
+//! bound, with TLC beside BFS there too. A case passes when every engine gives the verdict its header states and the
 //! engines agree with each other by the rules below, whatever the header says. A known
 //! disagreement is a `// known` line with its issue: the case stays green while the engine
 //! keeps giving the recorded wrong verdict, and fails once it stops, so the line goes with
@@ -697,7 +697,14 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
         true => [1u8, 3]
             .into_iter()
             .chain(needs_four.then_some(4))
-            .map(|n| (n, verify(case, &["--instance-count", &n.to_string()])))
+            .map(|n| {
+                let count = n.to_string();
+                let mut args = vec!["--instance-count", count.as_str()];
+                if run_tlc {
+                    args.push("--with-tlc");
+                }
+                (n, verify(case, &args))
+            })
             .collect(),
         false => BTreeMap::new(),
     };
@@ -823,6 +830,14 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
                     got.to_string(),
                 );
                 at_bounds.push((*n, got));
+                // Rule 1 at this bound: TLC runs beside BFS here too.
+                let tlc = run.verdict(true, check, false);
+                if run_tlc && got.decided() && tlc.decided() && got != tlc {
+                    fail(
+                        &mut report,
+                        format!("{check} at {n} instances: native {got}, TLC {tlc}"),
+                    );
+                }
             }
         }
         // Rule 9: the escalation of a rule z3 leaves unproved gives, at each bound past the
@@ -878,6 +893,17 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
     // Rule 2: per run.
     if run_tlc {
         report.failures.extend(rule_2(case, &main));
+        for (n, run) in &bounded {
+            let at = |f: String| format!("at {n} instances: {f}");
+            report
+                .failures
+                .extend(rule_2(case, run).into_iter().map(at));
+            for line in run.unnamed.iter().filter(|l| !rejected(l)) {
+                report
+                    .failures
+                    .push(format!("at {n} instances: an error without a name: {line}"));
+            }
+        }
     }
     // Rule 3: no engine disagreement and no counterexample that fails its own check, unless
     // a `known` line covers a check the fault line names.

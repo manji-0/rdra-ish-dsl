@@ -9,7 +9,9 @@
 //! (`TransitionSystem::reduced_cone`): the reduced cone's BFS and TLC agree the same way, and
 //! the checks it keeps have the cone's verdicts. A cone whose BFS as `verify` runs it passes
 //! `STATE_CAP` at VERIFY is compared at STATES only; `VERIFY_FALLBACK` lists those cones, so a
-//! cone that grows past the cap fails the test until it is listed.
+//! cone that grows past the cap fails the test until it is listed. A cone whose unreduced BFS
+//! passes the cap while its reduced one fits is compared reduced only at VERIFY;
+//! `VERIFY_REDUCED_ONLY` lists those the same way.
 //!
 //! TLC stops at the first violation unless run with `-continue`, which explores the whole
 //! state space but reports one violated check per state or step, the first in cfg order. One
@@ -1204,6 +1206,12 @@ fn check_cone(
     }
 }
 
+/// `(sample, cone)`: the cones whose unreduced BFS at `Bounds::VERIFY` passes `STATE_CAP`
+/// while the cone reduced as `verify` explores it fits. Each is compared with TLC reduced only,
+/// where TLC reads the quotient tables BFS computed, so the comparison says nothing
+/// independent of the reduction there; the unreduced cone is compared at `Bounds::STATES`.
+const VERIFY_REDUCED_ONLY: &[(&str, &str)] = &[];
+
 /// Named to sort first: libtest starts tests in name order, and this one is the longest in the
 /// file, so it starts at once and the others fill the threads beside it (#305). On a runner's
 /// 4 test threads, `a_corrupted_tlc_trace_does_not_replay`, `a_property_cone_decides_what_the_whole_model_decides`
@@ -1236,17 +1244,28 @@ fn a_bfs_and_tlc_reach_the_same_states_and_verdicts() {
     let _ = std::fs::remove_dir_all(&scratch);
     assert_batch_ran();
     let mut fallback = Vec::new();
+    let mut reduced_only = Vec::new();
     for (plan, report) in plans.iter().zip(reports) {
         if plan.bounds == Bounds::STATES {
             assert!(
-                report.capped.is_empty(),
+                report.capped.is_empty() && report.reduced_only.is_empty(),
                 "{}: a cone passes the state cap at STATES",
                 plan.sample
             );
         } else {
             fallback.extend(report.capped.into_iter().map(|c| (plan.sample.clone(), c)));
+            reduced_only
+                .extend((report.reduced_only.into_iter()).map(|c| (plan.sample.clone(), c)));
         }
     }
+    let listed: Vec<(String, String)> = VERIFY_REDUCED_ONLY
+        .iter()
+        .map(|(s, c)| (s.to_string(), c.to_string()))
+        .collect();
+    assert_eq!(
+        reduced_only, listed,
+        "the cones compared reduced only at VERIFY (the unreduced cone passes the state cap) are not VERIFY_REDUCED_ONLY"
+    );
     let expected: Vec<(String, String)> = VERIFY_FALLBACK
         .iter()
         .map(|(s, c)| (s.to_string(), c.to_string()))
@@ -1293,6 +1312,9 @@ fn target_label(ts: &TransitionSystem, t: Target) -> String {
 /// both found violated in the others.
 struct ModelReport {
     capped: Vec<String>,
+    /// The cones whose unreduced BFS passes the cap while the reduced one fits: compared
+    /// reduced only, where TLC reads the quotient tables BFS computed.
+    reduced_only: Vec<String>,
     violated: BTreeSet<String>,
 }
 
@@ -1504,7 +1526,16 @@ fn model_report(plan: &ModelPlan, reports: Vec<(usize, ConeRuns)>) -> ModelRepor
         checked.len(),
         reduced.len()
     );
-    ModelReport { capped, violated }
+    let reduced_only: Vec<String> = reports
+        .iter()
+        .filter(|(_, r)| r.plain.is_none() && r.reduced.is_some())
+        .map(|(i, _)| cones[*i].1.clone())
+        .collect();
+    ModelReport {
+        capped,
+        reduced_only,
+        violated,
+    }
 }
 
 /// Condition guards in both engines: a bound atom, an `Exists` along an owner, an independent
