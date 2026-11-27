@@ -33,6 +33,7 @@ new = "svc.New()"
 | `new` | An expression making a fresh service, for the conformance test. Required in Rust. |
 | `package` | Go: the package name of `domain`. Default `domain`. |
 | `seal`, `tsconfig` | TypeScript: write `domain` as `codegen --seal` does; the tsconfig the probe's `tsconfig.rdra.json` extends. |
+| `serde` | Rust: `true` derives `::serde::Serialize` and `::serde::Deserialize` on ids, scalars, value sets, rows, records, events and run marks, in the model's spelling; an entity with states goes over the wire as its row and comes back through `from_row`. The crate needs `serde` with `derive`. Default `false`. |
 | `root` | Where the build runs. Default: the nearest directory above `domain` with `Cargo.toml`, `go.mod`, `package.json`, or `tsconfig.json`. |
 | `build`, `run` | A command list replacing the language's default. |
 | `conformance_states` | The states the BFS behind the traces explores at most. Default `65536`. |
@@ -108,3 +109,30 @@ impl PayUseCase for Service {
 
 `self.order` loads a row and converts it with `Order::from_row`; `self.check` is the
 conditional write of step 2.
+
+## An async Rust service
+<!-- derived-from ../../../docs/cli-reference.md#an-async-rust-service -->
+
+The Rust contracts are synchronous `&mut self`. On an async database crate (sqlx), keep the
+domain calls pure and do the I/O around them: write prepare and commit once as async methods,
+and let the HTTP handlers call those. For the conformance test, implement the contracts on an
+adapter that `block_on`s the same methods, with the runtime and pool shared across the
+per-trace `new`:
+
+```rust
+static RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+
+pub struct Conform(Service); // Service: the async service over a shared sqlx pool
+
+impl PayUseCase for Conform {
+    fn prepare_pay(&mut self, order: OrderId, paid_at: DateTime) -> Result<PayOutcome, PayError> {
+        RT.get().unwrap().block_on(self.0.prepare_pay(order, paid_at))
+    }
+    fn commit_pay(&mut self, write: PayOutcome) -> Result<(), PayError> {
+        RT.get().unwrap().block_on(self.0.commit_pay(write))
+    }
+}
+```
+
+Do not wrap the async service in a mutex behind the synchronous contracts for production:
+that serialises every request.

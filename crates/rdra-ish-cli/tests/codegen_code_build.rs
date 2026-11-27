@@ -421,3 +421,89 @@ fn a_model_adapter_conforms_whatever_the_domain_code_became() {
         "{all}"
     );
 }
+
+/// `[code.rust] serde = true`: the domain code builds against serde with no clippy warning,
+/// and fixtures/codegen/serde_roundtrip.rs takes a row, its state, and an event through
+/// serde_json and back in the model's wire spelling. The crate resolves its dependencies
+/// offline, at the workspace's lock file, from the registry the workspace's own build filled.
+/// Without the key no line of the output names serde (the snapshots hold the rest).
+#[test]
+fn serde_derives_round_trip_a_row() {
+    if !tool("cargo", CODEGEN) {
+        return;
+    }
+    let dir = std::env::temp_dir()
+        .join(format!("rdra-ish-code-build-{}", std::process::id()))
+        .join("serde");
+    let _ = std::fs::remove_dir_all(&dir);
+    for d in ["model", "svc/src", "svc/tests", ".git"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    std::fs::copy(
+        fixtures().join("conformance.rdra"),
+        dir.join("model/order.rdra"),
+    )
+    .unwrap();
+    let manifest = "[model]\nname = \"shop\"\n\n[code.rust]\ndomain = \"../svc/src/domain.rs\"\n";
+    std::fs::write(dir.join("model/rdra.toml"), manifest).unwrap();
+    let out = rdra(&dir, &["codegen", "model", "--code"], "");
+    assert!(out.status.success(), "{}", text_slashed(&out));
+    let plain = std::fs::read_to_string(dir.join("svc/src/domain.rs")).unwrap();
+    assert!(!plain.contains("serde"), "serde without the key");
+
+    std::fs::write(
+        dir.join("model/rdra.toml"),
+        format!("{manifest}serde = true\n"),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("svc/Cargo.toml"),
+        "[package]\nname = \"svc\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\nserde = { version = \"1\", features = [\"derive\"] }\nserde_json = \"1\"\n\n[workspace]\n",
+    )
+    .unwrap();
+    std::fs::copy(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Cargo.lock"),
+        dir.join("svc/Cargo.lock"),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("svc/src/lib.rs"),
+        "//! The generated domain code with serde.\n#[allow(dead_code)]\npub mod domain;\n",
+    )
+    .unwrap();
+    std::fs::copy(
+        fixtures().join("serde_roundtrip.rs"),
+        dir.join("svc/tests/serde_roundtrip.rs"),
+    )
+    .unwrap();
+    let out = rdra(&dir, &["codegen", "model", "--code"], "");
+    assert!(out.status.success(), "{}", text_slashed(&out));
+    let with = std::fs::read_to_string(dir.join("svc/src/domain.rs")).unwrap();
+    assert!(
+        with.contains("::serde::Deserialize"),
+        "the key derives serde"
+    );
+
+    let cargo = |args: &[&str]| {
+        Command::new("cargo")
+            .current_dir(dir.join("svc"))
+            .args(args)
+            .env("CARGO_TARGET_DIR", dir.join("target"))
+            .output()
+            .expect("runs cargo")
+    };
+    let out = cargo(&[
+        "clippy",
+        "--offline",
+        "--",
+        "-D",
+        "warnings",
+        "-D",
+        "missing_docs",
+    ]);
+    assert!(out.status.success(), "clippy: {}", text_slashed(&out));
+    let out = cargo(&["test", "--offline"]);
+    let all = text_slashed(&out);
+    assert!(out.status.success(), "{all}");
+    assert!(all.contains("test result: ok. 4 passed"), "{all}");
+}
