@@ -325,7 +325,17 @@ pub fn run(
                             binary: &z3,
                             version: &version,
                         };
-                        run_proof(ts, twin.as_ref(), selection, &marks, &refuted, tool, deny)
+                        let scoped = !scope.is_whole();
+                        run_proof(
+                            ts,
+                            twin.as_ref(),
+                            selection,
+                            &marks,
+                            &refuted,
+                            tool,
+                            deny,
+                            scoped,
+                        )
                     });
                     (note, ran)
                 }))

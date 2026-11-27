@@ -192,36 +192,69 @@ impl Builder<'_> {
         }
     }
 
-    /// `DeleteLeavesChildren` per key with `.on_delete(cascade)` and use case that deletes
-    /// its parent and not its child: a delete removes the one row, so the children stay,
-    /// and the lifecycle does not read the cascade.
+    /// Per key with `.on_delete(cascade)`, `set_null`, or `set_default`, and use case that
+    /// deletes its parent: the lifecycle runs none of these actions, so the children stay and
+    /// keep naming the deleted row, where the database the SQL export describes removes them
+    /// or clears their key. `DeleteLeavesChildren` for `cascade` unless the use case deletes
+    /// the child too; `DeleteLeavesChildKeys` for the other two unless it deletes the child or
+    /// moves its key (`unlinks`, `relinks`). A `@soft_delete` parent is marked, not removed,
+    /// so no SQL action fires and neither is drawn.
     fn cascade_deletes(&mut self) {
         let model = self.model;
-        for (_, fk) in model
-            .foreign_keys()
-            .filter(|(_, fk)| fk.on_delete == Some(RefAction::Cascade))
-        {
-            let (parent, child) = (self.ent_of[&fk.parent], self.ent_of[&fk.child]);
+        for (id, fk) in model.foreign_keys() {
+            let Some(action) = fk.on_delete.filter(|_| !fk.delete_rejected()) else {
+                continue;
+            };
+            let (Some(&parent), Some(&child)) =
+                (self.ent_of.get(&fk.parent), self.ent_of.get(&fk.child))
+            else {
+                continue;
+            };
+            if !self.hard_deleted_parent(fk) {
+                continue;
+            }
+            let owner = self.owner_var(id);
+            let moves_key = |a: &Action| {
+                owner.is_some_and(|owner| {
+                    a.effects
+                        .iter()
+                        .any(|eff| matches!(eff, Effect::Assign { var, .. } if *var == owner))
+                })
+            };
             let deleting: Vec<UseCaseKey> = self
                 .ts
                 .actions
                 .iter()
                 .filter(|a| deletes(a, parent) && !deletes(a, child))
+                .filter(|a| action == RefAction::Cascade || !moves_key(a))
                 .filter_map(|a| match a.origin {
                     ActionOrigin::UseCase { uc, .. } => Some(uc),
                     _ => None,
                 })
                 .collect();
             for uc in deleting {
-                self.diag(
-                    vec![fk.parent],
-                    StateDiag::DeleteLeavesChildren {
-                        usecase: model.use_cases[uc].id.clone(),
-                        parent: model.entities[fk.parent].id.clone(),
-                        child: model.entities[fk.child].id.clone(),
-                        site: Site::new(ModelRef::Relation(fk.relation), &fk.site),
-                    },
+                let (usecase, parent, child) = (
+                    model.use_cases[uc].id.clone(),
+                    model.entities[fk.parent].id.clone(),
+                    model.entities[fk.child].id.clone(),
                 );
+                let site = Site::new(ModelRef::Relation(fk.relation), &fk.site);
+                let diag = match action {
+                    RefAction::Cascade => StateDiag::DeleteLeavesChildren {
+                        usecase,
+                        parent,
+                        child,
+                        site,
+                    },
+                    _ => StateDiag::DeleteLeavesChildKeys {
+                        usecase,
+                        parent,
+                        child,
+                        action,
+                        site,
+                    },
+                };
+                self.diag(vec![fk.parent], diag);
             }
         }
     }

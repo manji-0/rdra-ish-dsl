@@ -64,7 +64,9 @@ pub use event_flow::{
     event_diagnostics, EventFlow, TimerFlow,
 };
 pub use import_scope::{build_import_scopes, FileScope, FlatBinding, ImportScopes};
-pub use lint::{lint_issues, lint_review_diagnostics, LintIssue, LintSeverity};
+pub use lint::{
+    check_lint_diagnostics, lint_issues, lint_review_diagnostics, LintIssue, LintSeverity,
+};
 pub use location::{
     byte_offset_to_position, format_diagnostic_message, format_location, push_decl_diagnostic,
     push_model_decl_diagnostic, DeclIndex, DeclSite, DiagCtxt, LocatedSpan, Position, SourceId,
