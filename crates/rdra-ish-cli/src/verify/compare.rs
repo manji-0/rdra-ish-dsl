@@ -100,6 +100,10 @@ pub(super) fn disagreements(
                             .map_or(job.module.clone(), |s| s.module.clone())
                     }
                 };
+                // Runs are matched by `ConeRun`, not by the system each run decides. The native
+                // `WfNext` run on the reduced graph (`decide_liveness_reduced`) is paired with
+                // TLC's `_WF` run on the unreduced cone; their agreement holds only as far as the
+                // reduction (A8) and the reduced WF reading (A15) do (P23, open).
                 for (run, mine) in &native.runs {
                     let theirs = tlc.runs.iter().find(|(r, _)| r == run).map(|(_, o)| *o);
                     if differ(*mine, theirs) {
