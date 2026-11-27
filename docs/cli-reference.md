@@ -512,10 +512,11 @@ checked against the model; an unknown one is an error.
 
 Under a scope, `verify --prove` proves the rules of the system the scope leaves, which lacks
 the use cases it drops: a rule `proved` there may still break in the whole model. So every
-line that says something is proved says so: the `proof (...)` header ends `, in the selected
-scope`, each `proved:` and `lemma:` line ends `(in the selected scope)`, the count reads
-`<n> proved in the selected scope`, and the clause the `OK:` line ends with reads `<n> of <m>
-rules proved for any number of rows and any Int value in the selected scope`. `unproved:` and
+line that says something is proved says so: the `proof (...)` header, each `proved:` and
+`lemma:` line, and the clause the `OK:` line ends with end `in the selected scope: <flags>`
+where a whole run says `in the whole model` (see [the claim a proof
+makes](formal-verification.md#proofs-for-any-number-of-rows)), and the count reads `<n>
+proved in the selected scope`. `unproved:` and
 `refuted:` lines carry no such note: what breaks a rule in the smaller system breaks it in the
 whole model too.
 
@@ -1646,7 +1647,7 @@ rdra-ish verify <INPUTS...> [--with-tlc [--tlc-jar <PATH>] [--tlc-jobs <N>] [--t
 | `--symmetry` | `symmetry` under `[verify]`, else `never` | Experimental. `always` explores cones up to instance symmetry; see [Instance symmetry](#instance-symmetry). |
 | `--temporal-budget <SECS>` | `300` | Seconds a property's whole-model run gets when its cone does not decide it. Past them (or `--max-states`, or `--memory`) the property is `not decided` unless a counterexample was found. Under `--with-tlc`, TLC's whole-model run gets the same. |
 | `--deny-undecided` | off | Exit 1 when a finding is left undecided: a property past the budget, or a check, state, deadlock, or use case a cone left at a cap. What `--buc` or `--entity` leaves open does not count. |
-| `--prove` | off | Experimental. Also try to prove each selected state rule (`forbidden`, `invariant`, `required`, `@check`, quantifiers, `Unique_*`, `MinCard_*`) for any number of rows and any non-negative Int (`now` has no top) with z3. See [Proofs](#proofs). Needs z3 ([Getting z3](#getting-z3)). |
+| `--prove` | off | Experimental. Also try to prove each selected state rule (`forbidden`, `invariant`, `required`, `@check`, quantifiers, `Unique_*`, `MinCard_*`) for any number of rows and every Int range the model builds at, with z3. See [Proofs](#proofs). Needs z3 ([Getting z3](#getting-z3)). |
 | `--deny-unproved` | off | With `--prove`: exit 1 when a rule is unproved. A rule out of scope, or one BFS refuted (already an error), does not count. |
 | `--z3 <PATH>` | `RDRA_Z3`, else `z3` on `PATH` | The z3 binary for `--prove`. |
 | `--tlc-jobs <N>` | `RDRA_TLC_JOBS`, else as many as the cores and memory allow | With `--with-tlc`: at most `N` TLC runs at once. The memory they share still bounds them. The verdicts do not change. Without `--with-tlc` it warns. |
@@ -1847,7 +1848,9 @@ encoding, which re-checks it in one round and reuses it only when every rule is 
 round passes. A missing, stale, or damaged certificate costs only that round; the output is the
 same with or without one. `RDRA_ISH_NO_PROOF_CACHE=1` turns it off. A rule BFS violated in the same run is not tried: it reads `refuted: <rule> (BFS
 counterexample at <n> instances)`, with no CTI, and `--deny-unproved` does not count it. The
-`OK:` line gains `; <n> of <m> rules proved for any number of rows and any Int value`. A rule
+`OK:` line gains `; <n> of <m> rules proved for any number of rows and every --int-range-max
+from <least> to <greatest>, in the whole model`, the claim each `proved:` line ends with too
+([what it covers](formal-verification.md#proofs-for-any-number-of-rows)). A rule
 the SQL schema does not enforce is marked `[not enforced by the SQL schema: <why>]`, and a
 `proof: the SQL schema leaves ...` line counts them. Each z3 check has a fixed budget of z3
 resource units, not time, so the verdicts do not depend on the machine or its load. The

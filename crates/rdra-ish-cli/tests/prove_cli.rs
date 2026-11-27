@@ -125,11 +125,11 @@ fn a_rule_that_holds_for_any_number_of_rows_is_proved() {
     let out = verify(&["--prove", &sample("check_met")]);
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
-        stdout.contains("proved: Forbidden_CartLine_0\n"),
+        stdout.contains("proved: Forbidden_CartLine_0 (for any number of rows"),
         "{stdout}"
     );
     assert!(
-        stdout.contains("proved: Check_CartLine_qty_0\n"),
+        stdout.contains("proved: Check_CartLine_qty_0 (for any number of rows"),
         "{stdout}"
     );
     assert!(
@@ -186,7 +186,10 @@ fn a_rule_bfs_refutes_is_not_tried_and_the_others_are() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert_eq!(out.status.code(), Some(1), "{stderr}");
-    assert!(stdout.contains("\nproved: Forbidden_Order_0\n"), "{stdout}");
+    assert!(
+        stdout.contains("\nproved: Forbidden_Order_0 (for any number of rows"),
+        "{stdout}"
+    );
     assert!(
         stdout.contains("\nrefuted: Forbidden_Order_1 (BFS counterexample at 2 instances)\n"),
         "{stdout}"
@@ -268,7 +271,10 @@ forbidden(Doc, status == final)
     }
     let out = verify(&["--prove", &model]);
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("\nproved: Forbidden_Doc_0\n"), "{stdout}");
+    assert!(
+        stdout.contains("\nproved: Forbidden_Doc_0 (for any number of rows"),
+        "{stdout}"
+    );
     assert!(!stdout.contains("refuted"), "{stdout}");
 }
 
@@ -348,7 +354,10 @@ fn an_unreachable_cti_is_ruled_out_by_a_mined_lemma() {
     // with a delivery date, which no run reaches. The reached patterns rule that state out.
     let out = verify(&["--prove", &sample("order")]);
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("proved: Forbidden_Order_0\n"), "{stdout}");
+    assert!(
+        stdout.contains("proved: Forbidden_Order_0 (for any number of rows"),
+        "{stdout}"
+    );
     assert!(
         stdout.contains("lemma: every present Order row is one of"),
         "{stdout}"
@@ -373,6 +382,7 @@ fn a_lemma_from_the_cti_proves_the_rule_and_reads_as_model_text() {
     let text = stdout
         .lines()
         .find_map(|l| l.strip_prefix(prefix))
+        .and_then(|l| l.split(" (for any number of rows").next())
         .unwrap_or_else(|| panic!("no lemma from the CTI\n{stdout}"));
     assert_eq!(
         text,
@@ -409,7 +419,7 @@ fn a_forall_exists_lemma_joins_only_past_the_fine_ones() {
     assert!(stdout.contains("\nproved: Quantifier_Gate_0"), "{stdout}");
     assert!(
         stdout.contains(
-            "\nlemma: while a present Gate row has state == ajar, some present Guard row has state == on\n"
+            "\nlemma: while a present Gate row has state == ajar, some present Guard row has state == on (for any number of rows"
         ),
         "{stdout}"
     );
@@ -498,6 +508,55 @@ fn deny_unproved_needs_prove() {
     assert!(stderr.contains("--prove"), "{stderr}");
 }
 
+/// A proof covers every bound at which the model builds (z3.md, Definition 3), and each line
+/// that says so names them: any number of rows, and every `--int-range-max` from the least
+/// one every Int literal fits (4 here) to 255, or 254 with a nullable Int column, past which
+/// the column has more values than a state holds. The run's own range, 5, is one of them.
+#[test]
+fn a_proved_line_names_the_bounds_the_proof_covers() {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("prove_cli_claim");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    for (column, top) in [("n: Int @null", 254), ("n: Int @default(0)", 255)] {
+        let file = dir.join(format!("m{top}.rdra"));
+        std::fs::write(
+            &file,
+            format!(
+                r#"entity Item "商品" {{ id: Int @pk  {column} }}
+usecase Add "追加"
+usecase Set "設定"
+creates(Add, Item)
+updates(Set, Item)
+sets(Set, Item.n == 3)
+forbidden(Item, n == 4)
+"#
+            ),
+        )
+        .unwrap();
+        let out = verify(&["--prove", file.to_str().unwrap()]);
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let claim = format!(
+            "for any number of rows and every --int-range-max from 4 to {top}, in the whole model"
+        );
+        assert!(
+            stdout.contains(&format!("proved: Forbidden_Item_0 ({claim})\n")),
+            "{column}: {stdout}"
+        );
+        assert!(
+            stdout.contains(&format!(": 1 state rules, {claim}\n")),
+            "{column}: {stdout}"
+        );
+        assert!(
+            stdout.contains(&format!("; 1 of 1 rules proved {claim}\n")),
+            "{column}: {stdout}"
+        );
+        assert!(!stdout.contains("any Int value"), "{column}: {stdout}");
+    }
+}
+
 #[test]
 fn the_ok_line_says_how_many_rules_were_proved() {
     if !tool("z3", "RDRA_REQUIRE_Z3") || !tool("tlc", "RDRA_REQUIRE_TLC") {
@@ -507,7 +566,7 @@ fn the_ok_line_says_how_many_rules_were_proved() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert_eq!(out.status.code(), Some(0), "{stdout}");
     assert!(
-        stdout.contains("; 2 of 2 rules proved for any number of rows and any Int value\n"),
+        stdout.contains("; 2 of 2 rules proved for any number of rows"),
         "{stdout}"
     );
 }
@@ -532,9 +591,7 @@ fn deny_unproved_fails_a_run_that_bfs_passes() {
         "{stdout}"
     );
     assert!(
-        stderr.contains(
-            "1 of 1 rules unproved for any number of rows and any Int value (--deny-unproved)"
-        ),
+        stderr.contains("1 of 1 rules unproved for any number of rows"),
         "{stderr}"
     );
 }
@@ -564,7 +621,6 @@ forbidden(Door, state == open)
     )
     .unwrap();
     let file = file.to_str().unwrap();
-    let scope = " (in the selected scope)";
     for flags in [
         &["--without-usecase", "Open"][..],
         &["--entity", "Door"][..],
@@ -581,17 +637,19 @@ forbidden(Door, state == open)
             })
             .collect();
         assert!(!claims.is_empty(), "{flags:?}: {stdout}");
+        let claim = format!(
+            "for any number of rows, in the selected scope: {}",
+            flags.join(" ")
+        );
         for line in &claims {
-            let scoped = line.ends_with(scope)
+            let scoped = line.ends_with(&format!(" ({claim})"))
                 || line.contains(" proved in the selected scope,")
-                || line.contains(", in the selected scope");
+                || line.ends_with(&format!(", {claim}"));
             assert!(scoped, "{flags:?}: {line}\n{stdout}");
         }
         if let Some(ok) = stdout.lines().find(|l| l.starts_with("OK:")) {
             assert!(
-                ok.ends_with(
-                    " rules proved for any number of rows and any Int value in the selected scope"
-                ),
+                ok.ends_with(&format!(" rules proved {claim}")),
                 "{flags:?}: {ok}"
             );
         }
@@ -600,7 +658,9 @@ forbidden(Door, state == open)
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert_eq!(out.status.code(), Some(0), "{stdout}");
     assert!(
-        stdout.contains(&format!("proved: Forbidden_Door_0{scope}\n")),
+        stdout.contains(
+            "proved: Forbidden_Door_0 (for any number of rows, in the selected scope: --without-usecase Open)\n"
+        ),
         "{stdout}"
     );
 
@@ -697,7 +757,7 @@ invariant(Order).when(status == placed).none(Shipment).label("no shipment yet").
         "{stdout}"
     );
     assert!(
-        stdout.contains("proved: lemma 「no shipment yet」: Quantifier_Order_0 [not enforced by the SQL schema: related rows]\n"),
+        stdout.contains("proved: lemma 「no shipment yet」: Quantifier_Order_0 [not enforced by the SQL schema: related rows] (for any number of rows"),
         "{stdout}"
     );
     assert!(
@@ -765,7 +825,7 @@ fn a_rule_the_sql_schema_leaves_to_the_application_says_so() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
         stdout.contains(
-            "proved: MultiForbidden_Order_0 [not enforced by the SQL schema: several entities]\n"
+            "proved: MultiForbidden_Order_0 [not enforced by the SQL schema: several entities] (for any number of rows"
         ),
         "{stdout}"
     );
@@ -859,7 +919,7 @@ fn a_false_lemma_is_refuted_where_bfs_reaches_it_and_dropped_where_not() {
         "{stdout}"
     );
     assert!(
-        stdout.contains("; 1 of 1 rules proved for any number of rows and any Int value\n"),
+        stdout.contains("; 1 of 1 rules proved for any number of rows"),
         "{stdout}"
     );
 }
