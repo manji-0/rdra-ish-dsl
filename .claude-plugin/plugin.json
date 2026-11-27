@@ -1,0 +1,12 @@
+{
+  "name": "rdra-ish",
+  "version": "3.0.0",
+  "description": "Agent skills for writing, reviewing, diagramming, verifying and implementing RDRA-ish models, and the .rdra language server (needs rdra-ish on PATH).",
+  "author": {
+    "name": "rdra-ish-dsl contributors"
+  },
+  "homepage": "https://github.com/manji-0/rdra-ish-dsl",
+  "repository": "https://github.com/manji-0/rdra-ish-dsl",
+  "license": "MIT",
+  "keywords": ["rdra", "dsl", "requirements", "lsp"]
+}

@@ -9,7 +9,7 @@ projects the model into diagrams, review tables, exports and domain code.
 
 | From | Command | Gives |
 |---|---|---|
-| PyPI | `uv tool install rdra-ish` | `rdra-ish` |
+| PyPI | `uv tool install rdra-ish` | `rdra-ish`, whose `rdra-ish lsp` runs the language server |
 | Nix (flakes) | `nix profile install github:manji-0/rdra-ish-dsl` | `rdra-ish`, `rdra-ish-lsp`, and the `tlc` and `z3` that `verify` runs |
 | Cargo | `cargo install --locked --git https://github.com/manji-0/rdra-ish-dsl rdra-ish-cli rdra-ish-lsp` | `rdra-ish`, `rdra-ish-lsp` |
 
@@ -17,6 +17,21 @@ Each [GitHub release](https://github.com/manji-0/rdra-ish-dsl/releases) also has
 binaries for Linux, macOS and Windows. For a Nix install of a release after v2.3.0, add
 `/<tag>` to the URL. `nix run github:manji-0/rdra-ish-dsl -- --help` runs without
 installing. A `tlc` or `z3` already on `PATH` takes precedence over the ones Nix brings.
+
+### Claude Code plugin
+
+The repository is also a Claude Code plugin marketplace. The `rdra-ish` plugin brings the
+[agent skills](./skills/README.md) and the language server for `.rdra` files:
+
+```text
+/plugin marketplace add manji-0/rdra-ish-dsl
+/plugin install rdra-ish@rdra-ish
+```
+
+Claude Code 2.1.275 or later also takes one step,
+`/plugin install rdra-ish --marketplace manji-0/rdra-ish-dsl`. The plugin does not install
+the binary: the language server runs `rdra-ish lsp`, so put `rdra-ish` on `PATH` with the
+PyPI or Nix install above. The skills work without it, but they run `rdra-ish` too.
 
 ## Five-minute tour
 
@@ -59,7 +74,8 @@ rdra-ish codegen samples/ec-site --lang ts -o domain.ts
 
 The VS Code extension in [`editors/vscode`](./editors/vscode/) runs `rdra-ish-lsp` from
 `PATH`, or from the `rdra-ish.languageServerPath` setting. Build it with `npm run package`
-there.
+there. The [Claude Code plugin](#claude-code-plugin) runs the same server as
+`rdra-ish lsp`.
 
 ## Where the method comes from
 

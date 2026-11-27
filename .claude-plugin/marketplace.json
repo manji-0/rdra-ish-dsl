@@ -1,0 +1,14 @@
+{
+  "name": "rdra-ish",
+  "owner": {
+    "name": "manji-0"
+  },
+  "description": "The rdra-ish plugin: agent skills and the language server for the RDRA-ish DSL.",
+  "plugins": [
+    {
+      "name": "rdra-ish",
+      "source": "./",
+      "description": "Agent skills for writing, reviewing, diagramming, verifying and implementing RDRA-ish models, and the .rdra language server (needs rdra-ish on PATH)."
+    }
+  ]
+}

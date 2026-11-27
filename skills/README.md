@@ -16,6 +16,21 @@ skills/
 
 Replace `OWNER/REPO` with this repository (`manji-0/rdra-ish-dsl`) or a fork.
 
+### Claude Code plugin
+
+The repository is a Claude Code plugin marketplace. Its `rdra-ish` plugin installs all eight
+skills, under the `rdra-ish:` namespace (`rdra-ish:rdra-ish-write`), and the `.rdra`
+language server:
+
+```text
+/plugin marketplace add manji-0/rdra-ish-dsl
+/plugin install rdra-ish@rdra-ish
+```
+
+The language server runs `rdra-ish lsp`, and the skills run `rdra-ish`; the plugin installs
+neither. Put `rdra-ish` on `PATH` with `uv tool install rdra-ish` or
+`nix profile install github:manji-0/rdra-ish-dsl` ([Install](../README.md#install)).
+
 ### npx skills (skills.sh)
 
 ```sh

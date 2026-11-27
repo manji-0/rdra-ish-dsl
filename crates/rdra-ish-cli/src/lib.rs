@@ -305,6 +305,8 @@ pub fn run() -> Result<()> {
             }
         }
 
+        Commands::Lsp => rdra_ish_lsp::run_stdio(),
+
         Commands::Fmt {
             inputs,
             write,
