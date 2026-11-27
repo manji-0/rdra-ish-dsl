@@ -814,20 +814,24 @@ impl TransitionSystem {
 /// `LassoFault::Satisfies` when the lifted state does not violate the check, as a liveness
 /// lasso that satisfies its property is a fault; never the reduced message as if it did (P52).
 fn lifted(rebuilt: Option<StateDiag>, reduced: &StateDiag) -> StateDiag {
-    match (rebuilt, reduced) {
-        (Some(d), _) => d,
-        (
-            None,
-            StateDiag::ConstraintViolated { name, site, .. }
-            | StateDiag::AfterAssertViolated { name, site, .. },
-        ) => StateDiag::LiftFault {
+    match rebuilt {
+        Some(d) => d,
+        None => faulted(reduced, LassoFault::Satisfies),
+    }
+}
+
+/// The `LiftFault` of `found`, a run's violation, whose trace failed its own check by
+/// `fault`: a tool bug, never a finding about the model (P20, P52).
+fn faulted(found: &StateDiag, fault: LassoFault) -> StateDiag {
+    match found {
+        StateDiag::ConstraintViolated { name, site, .. }
+        | StateDiag::AfterAssertViolated { name, site, .. }
+        | StateDiag::LiftFault { name, site, .. } => StateDiag::LiftFault {
             name: name.clone(),
             site: site.clone(),
-            fault: LassoFault::Satisfies,
+            fault,
         },
-        (None, other) => {
-            unreachable!("a run's violation is a state rule's or an assert's: {other:?}")
-        }
+        other => unreachable!("a run's violation is a state rule's or an assert's: {other:?}"),
     }
 }
 
@@ -836,6 +840,12 @@ impl ComponentRun {
     fn trace_violations(&mut self, violations: &[(usize, Reach)]) {
         let run = self;
         for (at, reach) in violations {
+            // Every stored path replays through the run's own step relation before it prints
+            // (P20): one that does not is a fault of the tool, with no trace.
+            if let Err(e) = run.replay_reach(reach) {
+                run.diags[*at].diag = faulted(&run.diags[*at].diag, LassoFault::Replay(e));
+                continue;
+            }
             let (trace, last) = run.trace_of(reach);
             // A reduced run holds representatives: the message describes the lifted state.
             if run.system.reduction().is_some() {

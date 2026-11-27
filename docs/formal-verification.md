@@ -270,7 +270,12 @@ error[PendingLeadsToDelivered]: property PendingLeadsToDelivered is violated: it
 ```
 
 Every native counterexample replays through the step relation and fails its property before
-it prints. One that does not is a tool bug, `error[LassoFault]`.
+it prints. One that does not is a tool bug, `error[LassoFault]`. A state rule's or an `after`
+assertion's trace replays from an initial state through the run's own steps, on a plain, a
+reduced, or a symmetric run; up to symmetry an `always` trace does too. One that does not
+replay is `error[LiftFault_<check>]` with no trace, counted as a tool error. The traces of
+state-model findings (deadlocks) up to symmetry and the reduction's own lift still stop the
+run with a panic when they do not replay.
 
 **Under `--with-tlc`.** TLC runs each cone and property run beside BFS, as many at once as
 their heaps fit TLC's share of the [memory limit](./cli-reference.md#memory-limit), each

@@ -3,7 +3,7 @@
 use crate::lifecycle::expr::State;
 use crate::lifecycle::narrow::id32;
 use crate::lifecycle::reduce::Step;
-use crate::lifecycle::trace::Trace;
+use crate::lifecycle::trace::{ReplayError, Trace};
 use crate::lifecycle::types::ActId;
 use crate::lifecycle::TransitionSystem;
 
@@ -426,6 +426,41 @@ impl ComponentRun {
     /// The trace of a violation: the path to the violating state, or for an after-assert the
     /// path to the step's source and the step itself. The step need not be on the BFS path to
     /// its target, which another path may reach first. Also the trace's last state.
+    /// Replays the stored path of a violation, the path to its state or to its step's source
+    /// and the step, through the run's own step relation from one of its initial states
+    /// (agreement rule 3, P20). A path that does not replay is a tool bug.
+    pub(super) fn replay_reach(&self, reach: &Reach) -> Result<(), ReplayError> {
+        let (at, extra) = match reach {
+            Reach::State { at, .. } => (*at, None),
+            Reach::Step {
+                from,
+                act,
+                params,
+                to,
+                ..
+            } => (*from, Some((*act, params.clone(), to.clone()))),
+        };
+        let path = self.path_to(at);
+        let first = path.first().map_or(at, |e| e.from);
+        let mut steps: Vec<Step> = path
+            .iter()
+            .map(|e| {
+                let (act, params) = self.step(e);
+                (
+                    act,
+                    params.into(),
+                    self.states.at(e.to as usize).into_state(),
+                )
+            })
+            .collect();
+        steps.extend(extra);
+        super::orbit::replays(
+            &self.system,
+            &self.states.at(first as usize).into_state(),
+            &steps,
+        )
+    }
+
     pub(super) fn trace_of(&self, reach: &Reach) -> (Trace, State) {
         match reach {
             Reach::State { at, .. } => self.lifted_trace(*at, None),

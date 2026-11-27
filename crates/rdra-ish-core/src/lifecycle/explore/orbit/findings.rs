@@ -12,7 +12,7 @@
 use crate::lifecycle::narrow::{id32, id8};
 use std::collections::HashSet;
 
-use super::{lift_path, replays, EdgePerms, OrbitRun};
+use super::{lift_path, replays_or_panic, EdgePerms, OrbitRun};
 use crate::lifecycle::explore::symmetry::Canon;
 use crate::lifecycle::expr::State;
 use crate::lifecycle::findings::{ExitArm, Progress, StateModelFindings, ValueProgress};
@@ -145,7 +145,7 @@ impl OrbitRun {
         let first = path.first().map_or(at, |e| e.from);
         let (start, steps, tau) =
             lift_path(&self.run, &self.group, &mut Canon::default(), first, &path);
-        replays(&self.run.system, &start, &steps);
+        replays_or_panic(&self.run.system, &start, &steps);
         (start, steps, tau)
     }
 
