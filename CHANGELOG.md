@@ -426,6 +426,12 @@
   clippy.
 - A time budget (`Caps::until`) on the entity cones `check` explores leaves their findings
   undecided (`UndecidedWhy::TimeBudget`) instead of panicking.
+- `verify --prove` no longer proves a rule a guarded `present` write to an Int column breaks
+  past the run's Int range. `sets(UC, E.n == present).when(C)` built its guard from one arm
+  per value up to `--int-range-max`, which z3 read as a cap on the write, so `forbidden(E, n >
+  5)` was `proved` at a range of 5 though the write reaches 6 at 7. The values that stand for
+  every number now make one arm, `n != null` for a nullable column, which states the same
+  within the range and nothing of its top. BFS and TLC explore as before.
 
 ## v3.0.0 - 2026-11-26
 

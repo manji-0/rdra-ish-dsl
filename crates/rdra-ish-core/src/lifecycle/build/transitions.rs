@@ -3,7 +3,7 @@
 use super::{ActionDraft, Builder, GuardedArm};
 use crate::lifecycle::types::{
     Arm, At, Choice, CmpOp, Effect, Guard, GuardWhy, ModelRef, Param, ParamRole, Pred, Site, Term,
-    Value, VarKind,
+    Value, VarId, VarKind,
 };
 use crate::model::{ConditionKey, UseCaseKey};
 
@@ -110,15 +110,21 @@ impl Builder<'_> {
                         var: *var,
                         at: At::Next(*param),
                     };
+                    let tail = self.int_tail(*var, values);
                     // A creation's own choice has no line, so no `.when` guards it.
-                    values
+                    let mut arms: Vec<GuardedArm> = values
                         .iter()
+                        .filter(|c| tail.as_ref().is_none_or(|t| !t.covers(c)))
                         .filter_map(|c| {
                             let parts =
                                 vec![Pred::Cmp(next.clone(), CmpOp::Eq, Term::Lit(c.value))];
                             Some((parts, c.site.as_ref()?, &c.conds))
                         })
-                        .collect()
+                        .collect();
+                    if let Some(t) = &tail {
+                        arms.push((vec![t.pred(&next)], t.site, t.conds));
+                    }
+                    arms
                 }
                 _ => continue,
             };
@@ -146,6 +152,45 @@ impl Builder<'_> {
             });
         }
         a.guards.extend(guards);
+    }
+
+    /// The values of a choice of an Int column that stand for every number (`present`, from
+    /// index 1, or every value, from index 0) under the same `.when` conditions, as one arm.
+    /// The list holds the numbers up to the run's top; an arm per value would cap the write
+    /// there in a guard, which the prover reads as stated, so a proof for every Int value
+    /// would rest on the bounds (Lemma U of docs/theory/z3.md). `value != null` (or `true`)
+    /// says the same within the bounds and nothing of the top. A value whose own conditions
+    /// add to these keeps its arm too: an arm's conditions are a disjunction, so its value is
+    /// enabled under these through the tail and under its own through its arm.
+    fn int_tail<'c>(&self, var: VarId, values: &'c [Choice]) -> Option<IntTail<'c>> {
+        let domain = &self.ts.vars[var.index()].domain;
+        if !domain.is_numeric() {
+            return None;
+        }
+        let size = domain.size(&self.ts);
+        let at = |i: usize| values.iter().find(|c| usize::from(c.value.0) == i);
+        let from = match at(0) {
+            Some(_) => 0,
+            None => 1,
+        };
+        let tail: Vec<&Choice> = (from..size).map(at).collect::<Option<_>>()?;
+        // The fewest conditions any of them has, which every other must hold too.
+        let least = tail.iter().min_by_key(|c| c.conds.len())?;
+        let conds = &least.conds;
+        if conds.is_empty() && tail.iter().any(|c| !c.conds.is_empty()) {
+            return None;
+        }
+        if !tail
+            .iter()
+            .all(|c| conds.iter().all(|k| c.conds.contains(k)))
+        {
+            return None;
+        }
+        Some(IntTail {
+            from: from as u8,
+            site: least.site.as_ref()?,
+            conds,
+        })
     }
 
     /// `chooses(UC, E.col)`: the actor picks the variation column's value again, one successor
@@ -259,5 +304,30 @@ fn join_conds(have: &mut Vec<(ConditionKey, String)>, guard: Vec<(ConditionKey, 
         if !have.contains(&c) {
             have.push(c);
         }
+    }
+}
+
+/// The values of an Int choice from index `from` to the top, under `conds` (`int_tail`).
+struct IntTail<'c> {
+    from: u8,
+    site: &'c Site,
+    conds: &'c Vec<(ConditionKey, String)>,
+}
+
+impl IntTail<'_> {
+    /// The tail's arm, without the top: every value (`true`), or every non-null one.
+    fn pred(&self, next: &Term) -> Pred {
+        match self.from {
+            0 => Pred::True,
+            _ => Pred::Cmp(next.clone(), CmpOp::Ne, Term::Lit(Value(0))),
+        }
+    }
+
+    /// `c` is in the tail and has no condition of its own beyond the tail's, so the tail's
+    /// arm stands for its arm.
+    fn covers(&self, c: &Choice) -> bool {
+        c.value.0 >= self.from
+            && c.conds.len() == self.conds.len()
+            && c.conds.iter().all(|k| self.conds.contains(k))
     }
 }
