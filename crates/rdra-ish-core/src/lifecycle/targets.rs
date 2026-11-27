@@ -1,16 +1,17 @@
 //! Exploration per target: each entity view and each constraint verdict is computed on the
 //! cone it reads, and identical cones are explored once.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::fmt;
 
-use super::cone::{Cone, Target};
+use super::cone::{Cone, Target, VarSet};
 use super::diag::{Diag, StateDiag, UnmetPremise};
 use super::explore::{Caps, Checks, ComponentRun, Ends, OrbitRun, StoredRun};
 use super::findings::{Progress, Runs, StateModelFindings, Taken, Witness};
+use super::trace::Trace;
 use super::types::{
-    ActionOrigin, AfterAssert, AfterStep, EntId, GuardWhy, Invariant, Ltl, Pred, Premise, Site,
-    Term, VarKind,
+    ActId, ActionOrigin, AfterAssert, AfterStep, EntId, GuardWhy, Invariant, Ltl, Pred, Premise,
+    Site, Term, VarKind,
 };
 use super::view::{entity_view, AbstractValue, EntityStateResult};
 use super::{QuotientCache, TransitionSystem};
@@ -1245,45 +1246,99 @@ impl TransitionSystem {
         invariants.chain(asserts).find(|t| self.reports(*t, d))
     }
 
-    /// The invariant or after-assert `target` decided on its exact cone
-    /// (`exact_target_cone`), reduced by its independent sub-lifecycle as `verify` reduces a
-    /// cone, under `caps`. A counterexample there runs no use case without its event and, with
-    /// `slots`, stays within the bound: the whole system reaches it.
-    pub fn recheck(&self, target: Target, slots: bool, caps: Caps) -> Recheck {
+    /// The invariant or after-assert `target` decided by refining its cone until a
+    /// counterexample is one the cone vouches for (`Trace::vouched`), under `caps`: a
+    /// counterexample-guided loop. Each round runs the cone, reduced by its independent
+    /// sub-lifecycle as `verify` reduces one. A counterexample that runs a use case without
+    /// its event is a candidate only: the actions that raise that event join the cone's kept
+    /// actions, so the mark is read exactly, and the cone runs again. With `slots`, a
+    /// candidate that creates more rows than the bound allows brings that entity's existence
+    /// into the cone too. A round with no counterexample decides the check: it holds when the
+    /// run ended, and is undecided when a cap or the memory limit stopped it. The loop ends:
+    /// each round keeps more actions or reads more vars, and the exact cone
+    /// (`exact_target_cone`) is the most it can grow to. Returns the verdict and the last
+    /// cone run.
+    pub fn recheck_on(&self, target: Target, slots: bool, caps: Caps) -> (Recheck, Cone) {
         debug_assert!(
             self.check_name(target).is_some(),
             "only an invariant or an after-assert is rechecked"
         );
-        let cone = self.exact_target_cone(target, slots);
+        let target_seed = self.target_seed(target);
+        let (mut seed, mut keep) = target_seed.clone();
+        let mut exact = false;
         // The reduction's run of the sub-lifecycle keeps its whole graph, so its caps stay
         // plain; the cone's run evaluates every check it holds and stops once each failed.
         let caps = caps.without_views();
-        let system = self.reduced_cone(&cone, [self.target_seed(target)], caps);
-        let run = system.run(caps.until_all_violated());
-        let found = run
-            .diags
-            .iter()
-            .find(|d| self.reports(target, &d.diag))
-            .cloned();
-        match found {
-            Some(mut d) => {
-                if let Some(trace) = d.diag.trace_mut() {
-                    self.annotate(&cone, trace);
-                }
+        loop {
+            let cone = match exact {
+                true => self.exact_target_cone(target, slots),
+                false => Cone {
+                    vars: self.cone(&seed, &keep),
+                    keep: keep.clone(),
+                },
+            };
+            let system = self.reduced_cone(&cone, [target_seed.clone()], caps);
+            let run = system.run(caps.until_all_violated());
+            let found = run
+                .diags
+                .iter()
+                .find(|d| self.reports(target, &d.diag))
+                .cloned();
+            let Some(mut d) = found else {
+                let verdict = match run.complete {
+                    true => Recheck::Holds,
+                    false => Recheck::Undecided(
+                        (run.diags.iter())
+                            .filter(|d| d.diag.stopped_why().is_some())
+                            .map(|d| d.diag.clone())
+                            .collect(),
+                    ),
+                };
+                return (verdict, cone);
+            };
+            let Some(trace) = d.diag.trace_mut() else {
+                return (Recheck::Violated(Box::new(d)), cone);
+            };
+            self.annotate(&cone, trace);
+            if exact || trace.vouched(slots) {
                 debug_assert!(
-                    d.diag.trace().is_none_or(|t| t.vouched(slots)),
+                    trace.vouched(slots),
                     "an exact cone's counterexample is a run of the whole system"
                 );
-                Recheck::Violated(Box::new(d))
+                return (Recheck::Violated(Box::new(d)), cone);
             }
-            None if run.complete => Recheck::Holds,
-            None => Recheck::Undecided(
-                (run.diags.iter())
-                    .filter(|d| d.diag.stopped_why().is_some())
-                    .map(|d| d.diag.clone())
-                    .collect(),
-            ),
+            // When the trace names nothing left to add, the exact cone decides.
+            exact = !self.refine(trace, &mut seed, &mut keep);
         }
+    }
+
+    /// `recheck_on`, the verdict alone.
+    pub fn recheck(&self, target: Target, slots: bool, caps: Caps) -> Recheck {
+        self.recheck_on(target, slots, caps).0
+    }
+
+    /// Grows `seed` and `keep` by what `trace`, a candidate counterexample, needed and its
+    /// cone left out: the raisers of each event a step ran without (`Trace::free_triggers`),
+    /// and the existence of each entity the trace creates past the bound
+    /// (`Trace::over_bound`). Returns whether anything was added.
+    fn refine(&self, trace: &Trace, seed: &mut VarSet, keep: &mut BTreeSet<ActId>) -> bool {
+        let mut grew = false;
+        for (_, event) in &trace.free_triggers {
+            for (k, a) in self.actions.iter().enumerate() {
+                let raises = self.action_writes(a).iter().any(|v| {
+                    matches!(&self.var(*v).kind, VarKind::Raised { event: e, .. } if e == event)
+                });
+                if raises {
+                    grew |= keep.insert(ActId::at(k));
+                }
+            }
+        }
+        for id in &trace.over_bound {
+            if let Some(e) = self.entities.iter().find(|e| e.id == *id) {
+                grew |= seed.insert(e.exists);
+            }
+        }
+        grew
     }
 }
 

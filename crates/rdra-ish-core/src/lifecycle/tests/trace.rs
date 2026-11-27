@@ -209,3 +209,41 @@ fn a_replayed_path_explains_its_violation_and_a_corrupted_one_fails() {
     );
     assert_eq!(ts.replay(states, &acts[1..]), Err(ReplayError::Length));
 }
+
+/// A counterexample that runs a handler without its event is a candidate: the recheck adds
+/// the event's raisers to the cone and runs it again, until a counterexample is a run of the
+/// whole system (P1). The cone it ends on reads the mark and lies inside the exact cone.
+#[test]
+fn a_candidate_counterexample_refines_its_cone_with_the_events_raisers() {
+    let model = model_from(
+        r#"
+entity Doc "文書" { id: Int @pk  status: Enum(draft, final) @default(draft)  seen: Bool @default(false) }
+usecase Write "作成"
+usecase Review "確認"
+usecase Finalize "確定"
+event EvReviewed "確認済"
+creates(Write, Doc)
+updates(Review, Doc)
+sets(Review, Doc.seen == true)
+raises(Review, EvReviewed)
+triggers(EvReviewed, Finalize)
+transitions(Finalize, Doc.status, draft -> final)
+forbidden(Doc, status == final)
+"#,
+    );
+    let caps = Caps::new(usize::MAX, 100_000);
+    let ts = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL).ts;
+    let rule = Target::Invariant(0);
+    assert!(ts.cone_leaves_marks(&ts.target_cone(rule)));
+    let (verdict, refined) = ts.recheck_on(rule, false, caps);
+    let Recheck::Violated(d) = verdict else {
+        panic!("Review raises the event, so Finalize runs");
+    };
+    let trace = d.diag.trace().expect("a trace");
+    assert!(trace.free_triggers.is_empty(), "{trace:?}");
+    assert_eq!(actions(trace), ["Write", "Review", "Finalize"]);
+    assert!(!ts.cone_leaves_marks(&refined));
+    assert!(refined
+        .vars
+        .is_subset(&ts.exact_target_cone(rule, false).vars));
+}
