@@ -32,7 +32,7 @@ not (
   | (binary_id(rdra-ish-cli::codegen_conformance) & test(=go_harness_tells_faults_apart))
   | (binary_id(rdra-ish-cli::codegen_adapter) & (test(=go_adapter_tells_faults_apart) | test(=rust_adapters_build) | test(=go_adapters_build) | test(=typescript_adapters_build)))
   | (binary_id(rdra-ish-cli::codegen_code_build) & (test(=the_self_check_catches_a_service_that_ignores_the_id) | test(=a_model_adapter_conforms_whatever_the_domain_code_became)))
-  | (binary_id(rdra-ish-cli::codegen_code_build_ts) & (test(=the_self_check_catches_a_service_that_ignores_the_id) | test(=a_model_adapter_conforms_whatever_the_domain_code_became)))
+  | (binary_id(rdra-ish-cli::codegen_code_build_ts) & (test(=the_self_check_catches_a_service_that_ignores_the_id) | test(=a_model_adapter_conforms_whatever_the_domain_code_became) | test(=each_fault_fails_the_run) | test(=each_omission_is_a_named_diagnostic)))
   | (binary_id(rdra-ish-cli::codegen_code_check_go) & (
         test(=the_probe_of_every_sample_compiles)
       | test(=a_prepare_takes_the_caller_of_its_use_case)
