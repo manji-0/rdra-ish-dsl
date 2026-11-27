@@ -92,8 +92,12 @@ fn print_port_trait(port: &PortDecl, out: &mut String) {
     out.push_str("}\n\n");
 
     out.push_str("/// What `conform` checked.\n");
-    out.push_str("#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]\n");
-    out.push_str("pub struct ConformanceReport {\n    /// The traces run.\n    pub traces: usize,\n    /// The calls the model runs, made.\n    pub calls: usize,\n    /// The calls the model refuses, made and refused.\n    pub refusals: usize,\n    /// The commits after another call changed a row they write, refused.\n    pub interleavings: usize,\n}\n\n");
+    out.push_str("#[derive(Debug, Clone, Default, PartialEq, Eq)]\n");
+    out.push_str("pub struct ConformanceReport {\n    /// The traces run.\n    pub traces: usize,\n    /// The calls the model runs, made.\n    pub calls: usize,\n    /// The calls the model refuses, made and refused.\n    pub refusals: usize,\n    /// The commits after another call changed a row they write, refused.\n    pub interleavings: usize,\n    /// The calls that reached an `Unimplemented<Contract>` method, by action.\n    pub unimplemented: ::std::collections::BTreeMap<::std::string::String, usize>,\n    /// The traces stopped at one (a refused call does not stop its trace).\n    pub stopped: usize,\n}\n\n");
+    out.push_str(&format!(
+        "impl ConformanceReport {{\n    /// The line `rdra-ish check --code=run` reads for the calls that reached an unimplemented\n    /// method: `none` when none did.\n    #[must_use]\n    pub fn unimplemented_line(&self) -> {STRING} {{\n        if self.unimplemented.is_empty() {{\n            return format!(\"{{}} none\", {0});\n        }}\n        let calls: {VEC}<{STRING}> = self.unimplemented.iter().map(|(a, n)| format!(\"{{a}} {{n}}\")).collect();\n        format!(\"{{}} {{}} traces stopped; {{}}\", {0}, self.stopped, calls.join(\", \"))\n    }}\n}}\n\n",
+        string_literal(super::conformance::UNIMPLEMENTED_REPORT)
+    ));
 }
 
 /// `conform`, which drives a fresh port per trace, and the helpers it shares with every model.
@@ -126,11 +130,15 @@ pub fn conform<P: ConformancePort>(mut new_port: impl FnMut() -> P, traces: &str
     let mut conf_port: {OPTION}<P> = None;
     let mut seed = StoreSnapshot::default();
     let mut want: {VEC}<{STRING}> = {VEC}::new();
+    let mut stopped = false;
     for (n, line) in lines {{
         let toks: {VEC}<&str> = line.split_whitespace().collect();
         let ::core::option::Option::Some((&kind, rest)) = toks.split_first() else {{
             continue;
         }};
+        if stopped && matches!(kind, "R" | "G" | "C" | "X" | "I") {{
+            continue;
+        }}
         let at = |what: {STRING}| format!("traces line {{}}: {{what}}", n + 1);
         let state = |id: {OPTION}<&&str>| -> {RESULT}<{VEC}<{STRING}>, {STRING}> {{
             id.and_then(|id| states.get(*id)).cloned().ok_or_else(|| at("names no state defined above".to_string()))
@@ -152,6 +160,7 @@ pub fn conform<P: ConformancePort>(mut new_port: impl FnMut() -> P, traces: &str
                 want = state(rest.first())?;
                 conf_port = Some(new_port());
                 seed = StoreSnapshot::default();
+                stopped = false;
                 report.traces += 1;
             }}
             "R" => conf_seed_row(&mut seed, rest).map_err(at)?,
@@ -165,7 +174,11 @@ pub fn conform<P: ConformancePort>(mut new_port: impl FnMut() -> P, traces: &str
                 let call = rest.get(1..).unwrap_or_default();
                 let p = conf_port.as_mut().ok_or_else(|| at("a call outside a trace".to_string()))?;
                 if let {RESULT}::Err(why) = conf_run(p, call).map_err(at)? {{
-                    return {RESULT}::Err(at(format!("the model runs `{{}}` here, and the service refused it: {{why}}", call.join(" "))));
+                    if why == CONF_UNIMPLEMENTED {{
+                        stopped = conf_stop(&mut report, call);
+                        continue;
+                    }}
+                    return {RESULT}::Err(at(conf_refused(call, &why)));
                 }}
                 conf_compare(&conf_abstract(&p.snapshot()), &next, &format!("after `{{}}`", call.join(" "))).map_err(at)?;
                 want = next;
@@ -177,7 +190,12 @@ pub fn conform<P: ConformancePort>(mut new_port: impl FnMut() -> P, traces: &str
                 }};
                 let p = conf_port.as_mut().ok_or_else(|| at("a call outside a trace".to_string()))?;
                 match conf_run(p, rest).map_err(at)? {{
+                    {RESULT}::Err(why) if why == CONF_UNIMPLEMENTED => {{
+                        conf_count(&mut report, rest);
+                        continue;
+                    }}
                     {RESULT}::Ok(()) => return {RESULT}::Err(at(format!("the model refuses `{{}}` here, and the service ran it", rest.join(" ")))),
+                    {RESULT}::Err(why) if why.starts_with(CONF_STORE_FAILED) => return {RESULT}::Err(at(conf_refused(rest, &why))),
                     {RESULT}::Err(why) if kind != "-" && !why.starts_with(&format!("{{kind}}: ")) => {{
                         return {RESULT}::Err(at(format!("the model refuses `{{}}` here with {{kind}}, and the service refused it with {{why}}", rest.join(" "))));
                     }}
@@ -193,14 +211,28 @@ pub fn conform<P: ConformancePort>(mut new_port: impl FnMut() -> P, traces: &str
                 let p = conf_port.as_mut().ok_or_else(|| at("a call outside a trace".to_string()))?;
                 let early = match conf_prepare(p, first).map_err(at)? {{
                     {RESULT}::Ok(w) => w,
-                    {RESULT}::Err(why) => return {RESULT}::Err(at(format!("the model runs `{{}}` here, and the service refused it: {{why}}", first.join(" ")))),
+                    {RESULT}::Err(why) if why == CONF_UNIMPLEMENTED => {{
+                        stopped = conf_stop(&mut report, first);
+                        continue;
+                    }}
+                    {RESULT}::Err(why) => return {RESULT}::Err(at(conf_refused(first, &why))),
                 }};
                 if let {RESULT}::Err(why) = conf_run(p, second).map_err(at)? {{
-                    return {RESULT}::Err(at(format!("the model runs `{{}}` here, and the service refused it: {{why}}", second.join(" "))));
+                    if why == CONF_UNIMPLEMENTED {{
+                        stopped = conf_stop(&mut report, second);
+                        continue;
+                    }}
+                    return {RESULT}::Err(at(conf_refused(second, &why)));
                 }}
                 conf_compare(&conf_abstract(&p.snapshot()), &next, &format!("after `{{}}`", second.join(" "))).map_err(at)?;
-                if conf_commit(p, early).is_ok() {{
-                    return {RESULT}::Err(at(format!("the service committed `{{}}`, prepared before `{{}}` changed a row it writes: the write must be conditional on what the row was", first.join(" "), second.join(" "))));
+                match conf_commit(p, early) {{
+                    {RESULT}::Err(why) if why == CONF_UNIMPLEMENTED => {{
+                        stopped = conf_stop(&mut report, first);
+                        continue;
+                    }}
+                    {RESULT}::Ok(()) => return {RESULT}::Err(at(format!("the service committed `{{}}`, prepared before `{{}}` changed a row it writes: the write must be conditional on what the row was", first.join(" "), second.join(" ")))),
+                    {RESULT}::Err(why) if why.starts_with(CONF_STORE_FAILED) => return {RESULT}::Err(at(conf_refused(first, &why))),
+                    {RESULT}::Err(_) => {{}}
                 }}
                 conf_compare(&conf_abstract(&p.snapshot()), &next, &format!("after the refused commit of `{{}}`", first.join(" "))).map_err(at)?;
                 want = next;
@@ -210,6 +242,19 @@ pub fn conform<P: ConformancePort>(mut new_port: impl FnMut() -> P, traces: &str
         }}
     }}
     {RESULT}::Ok(report)
+}}
+
+/// How the text of a `StoreFailed` starts: a failure of the service, never a refusal.
+const CONF_STORE_FAILED: &str = "StoreFailed: ";
+
+/// What is wrong when the service did not run `call`, which the model runs, or refused it with
+/// `why`: a refusal, or, for `StoreFailed`, a failure of the service.
+fn conf_refused(call: &[&str], why: &str) -> {STRING} {{
+    if why.starts_with(CONF_STORE_FAILED) {{
+        format!("the service failed on `{{}}`: {{why}}", call.join(" "))
+    }} else {{
+        format!("the model runs `{{}}` here, and the service refused it: {{why}}", call.join(" "))
+    }}
 }}
 
 /// The store against the model's state: every line one holds and the other does not.
@@ -234,6 +279,22 @@ fn conf_run<P: ConformancePort>(conf_port: &mut P, call: &[&str]) -> {RESULT}<{R
         {RESULT}::Ok(w) => conf_commit(conf_port, w),
         {RESULT}::Err(why) => {RESULT}::Err(why),
     }})
+}}
+
+/// The refusal `conf_catch` turns the panic of an `Unimplemented<Contract>` method into.
+const CONF_UNIMPLEMENTED: &str = "not implemented: rdra-ish unimplemented port";
+
+/// Counts a call that reached an unimplemented method.
+fn conf_count(report: &mut ConformanceReport, call: &[&str]) {{
+    let action = call.first().copied().unwrap_or_default().to_string();
+    *report.unimplemented.entry(action).or_insert(0) += 1;
+}}
+
+/// Counts a call that reached an unimplemented method, and its trace as stopped there.
+fn conf_stop(report: &mut ConformanceReport, call: &[&str]) -> bool {{
+    conf_count(report, call);
+    report.stopped += 1;
+    true
 }}
 
 fn conf_next<'a>(args: &mut impl ::core::iter::Iterator<Item = &'a str>) -> {RESULT}<&'a str, {STRING}> {{
@@ -267,6 +328,39 @@ fn print_calls(domain: &DomainModel, port: &PortDecl, out: &mut String) {
         return;
     }
     // The calls.
+    out.push_str(&format!(
+        r##"/// Calls `f`: its value, or `Err(CONF_UNIMPLEMENTED)` when it panicked as an
+/// `Unimplemented<Contract>` method does. Any other panic goes on.
+fn conf_catch<T>(f: impl FnOnce() -> T) -> {RESULT}<T, {STRING}> {{
+    static QUIET: ::std::sync::Once = ::std::sync::Once::new();
+    // The panic of an unimplemented method is the harness's to report, not the test's to print.
+    QUIET.call_once(|| {{
+        let previous = ::std::panic::take_hook();
+        ::std::panic::set_hook(::std::boxed::Box::new(move |info| {{
+            if conf_message(info.payload()) != {OPTION}::Some(CONF_UNIMPLEMENTED) {{
+                previous(info);
+            }}
+        }}));
+    }});
+    match ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(f)) {{
+        {RESULT}::Ok(v) => {RESULT}::Ok(v),
+        {RESULT}::Err(payload) if conf_message(&*payload) == {OPTION}::Some(CONF_UNIMPLEMENTED) => {{
+            {RESULT}::Err(CONF_UNIMPLEMENTED.to_string())
+        }}
+        {RESULT}::Err(payload) => ::std::panic::resume_unwind(payload),
+    }}
+}}
+
+/// The text of a panic.
+fn conf_message(payload: &(dyn ::core::any::Any + ::core::marker::Send)) -> {OPTION}<&str> {{
+    payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<{STRING}>().map({STRING}::as_str))
+}}
+
+"##
+    ));
     out.push_str(&format!(
         "#[allow(unused_mut, unused_variables)] // a model whose calls take no values reads none\nfn conf_prepare<P: ConformancePort>(conf_port: &mut P, call: &[&str]) -> {RESULT}<{RESULT}<ConfWrite, {STRING}>, {STRING}> {{\n"
     ));
@@ -317,7 +411,7 @@ fn print_calls(domain: &DomainModel, port: &PortDecl, out: &mut String) {
             args.push(v);
         }
         out.push_str(&format!(
-            "            {RESULT}::Ok(conf_port.{}({}).map(ConfWrite::{}).map_err(|e| conf_why(&e)))\n        }}\n",
+            "            {RESULT}::Ok(conf_catch(|| conf_port.{}({})).and_then(|r| r.map(ConfWrite::{}).map_err(|e| conf_why(&e))))\n        }}\n",
             method_names(m)[0],
             args.join(", "),
             m.name
@@ -331,14 +425,14 @@ fn print_calls(domain: &DomainModel, port: &PortDecl, out: &mut String) {
     ));
     for m in &port.methods {
         out.push_str(&format!(
-            "        ConfWrite::{}(w) => conf_port.{}(w).map_err(|e| conf_why(&e)),\n",
+            "        ConfWrite::{}(w) => conf_catch(|| conf_port.{}(w)).and_then(|r| r.map_err(|e| conf_why(&e))),\n",
             m.name,
             method_names(m)[1]
         ));
     }
     out.push_str("    }\n}\n\n");
     out.push_str(&format!(
-        "/// Why the service refused a call: the kind of its error, `: `, and its text.\nfn conf_why(e: &(dyn ::std::error::Error + 'static)) -> {STRING} {{\n    let kind = match e.source() {{\n        {OPTION}::Some(d) if d.is::<NotEnabled>() => \"NotEnabled\",\n        {OPTION}::Some(d) if d.is::<Rejected>() => \"Rejected\",\n        {OPTION}::Some(d) if d.is::<InvalidArgument>() => \"InvalidArgument\",\n        _ => \"an error of no kind\",\n    }};\n    format!(\"{{kind}}: {{e}}\")\n}}\n\n"
+        "/// Why the service refused a call: the kind of its error, `: `, and its text.\nfn conf_why(e: &(dyn ::std::error::Error + 'static)) -> {STRING} {{\n    let kind = match e.source() {{\n        {OPTION}::Some(d) if d.is::<NotEnabled>() => \"NotEnabled\",\n        {OPTION}::Some(d) if d.is::<NotFound>() => \"NotFound\",\n        {OPTION}::Some(d) if d.is::<StoreFailed>() => \"StoreFailed\",\n        {OPTION}::Some(d) if d.is::<Rejected>() => \"Rejected\",\n        {OPTION}::Some(d) if d.is::<InvalidArgument>() => \"InvalidArgument\",\n        _ => \"an error of no kind\",\n    }};\n    format!(\"{{kind}}: {{e}}\")\n}}\n\n"
     ));
 }
 
@@ -465,9 +559,10 @@ pub(super) fn probe(
         ));
         w.line("    };");
         w.line(&format!(
-            "    if let Err(why) = {module}::conform(|| -> Service {{ {new} }}, &traces) {{"
+            "    match {module}::conform(|| -> Service {{ {new} }}, &traces) {{"
         ));
-        w.line("        panic!(\"rdra-ish conformance: {why}\");");
+        w.line("        Err(why) => panic!(\"rdra-ish conformance: {why}\"),");
+        w.line("        Ok(report) => println!(\"{}\", report.unimplemented_line()),");
         w.line("    }");
         w.line("}");
     }
@@ -619,7 +714,51 @@ fn print_contracts(domain: &DomainModel, port: &super::ir::PortDecl, out: &mut S
             ));
         }
         out.push_str("}\n\n");
+        print_unimplemented(port, c, out);
     }
+}
+
+/// `Unimplemented<Contract>` (docs/design/algebraic-codegen.md, "The unimplemented port"): a
+/// marker a service implements for a contract it has not implemented yet, and the impl of the
+/// contract for every type that has it, whose methods panic as `unimplemented!` does with the
+/// message the harness tells apart. Rust has no embedding, so the unit is the contract.
+/// A contract with an entry point (`run_<action>`) gets none.
+fn print_unimplemented(port: &PortDecl, c: &super::ir::ContractDecl, out: &mut String) {
+    // An entry point's method is the service's to write: the harness drives none, so a
+    // stand-in for it would never be reported. A contract with one gets no marker.
+    if !c.entries.is_empty() {
+        return;
+    }
+    let marker = super::conformance::unimplemented_contract(&c.name);
+    out.push_str(&doc(
+        &[
+            format!("Implement it for a service that does not implement `{}` yet: the service then has `{0}`, each method of which panics as `unimplemented!` does. `conform` stops a trace at such a call and reports the calls by use case; `rdra-ish check --code=run` lists them, and `--deny-incomplete` fails on any. Remove the impl when the service implements `{0}`.", c.name),
+        ],
+        "",
+    ));
+    out.push_str(&format!("pub trait {marker} {{}}\n\n"));
+    out.push_str(&format!("impl<T: {marker}> {} for T {{\n", c.name));
+    let error = &c.error;
+    let blank = |p: &String| format!(", _: {}", p.split_once(": ").map_or(p.as_str(), |(_, t)| t));
+    for &i in &c.methods {
+        let m = &port.methods[i];
+        let mut params = params(m);
+        if let Some(caller) = &c.caller {
+            params.insert(0, format!("by: {}", caller.name));
+        }
+        let [prepare, commit] = method_names(m);
+        out.push_str(&super::rust::allow_arguments(params.len() + 1, "    "));
+        out.push_str(&format!(
+            "    fn {prepare}(&mut self{}) -> {RESULT}<{}, {error}> {{\n        unimplemented!(\"rdra-ish unimplemented port\")\n    }}\n",
+            params.iter().map(blank).collect::<String>(),
+            m.write
+        ));
+        out.push_str(&format!(
+            "    fn {commit}(&mut self, _: {}) -> {RESULT}<(), {error}> {{\n        unimplemented!(\"rdra-ish unimplemented port\")\n    }}\n",
+            m.write
+        ));
+    }
+    out.push_str("}\n\n");
 }
 
 fn params(m: &super::ir::PortMethod) -> Vec<String> {

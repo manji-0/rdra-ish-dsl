@@ -558,7 +558,9 @@ impl TransitionSystem {
                             .collect(),
                     ),
                     // A creation's own choice has no line, so no `.when` guards it.
-                    Effect::Choose { var, param, values } => (
+                    Effect::Choose {
+                        var, param, values, ..
+                    } => (
                         *var,
                         *param,
                         values

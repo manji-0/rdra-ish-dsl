@@ -768,3 +768,89 @@ forbidden(Ticket, method == card, open == false)
         .expect("DefaultOnVariationIgnored");
     assert_eq!(info.severity(), crate::lifecycle::Severity::Info);
 }
+
+/// Each action writes each slot at most once, the invariant the native step and the TLA+
+/// printer both rely on: `transitions`, `sets`, and `chooses` on one column of one use case
+/// give one write. A second write of a slot is what `Action::slots_written_twice` names, and
+/// `build` fails such a model with `ConflictingEffects`.
+#[test]
+fn an_action_writes_each_slot_once() {
+    let built = built_from(
+        r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid, cancelled) @default(pending)
+  note: Enum(x, y) @default(x)
+}
+usecase Place "注文確定"
+usecase Pay "支払い"
+creates(Place, Order)
+updates(usecase::Pay, Order)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Pay, Order.status, pending -> cancelled)
+transitions(Pay, Order.status, paid -> cancelled)
+sets(Pay, Order.note == y)
+"#,
+        Bounds::VERIFY,
+    );
+    assert!(
+        !built
+            .diags
+            .iter()
+            .any(|d| matches!(d.diag, StateDiag::ConflictingEffects { .. })),
+        "{:?}",
+        built.diags
+    );
+    for a in built.ts.actions() {
+        assert!(a.slots_written_twice().is_empty(), "{}", a.name);
+    }
+    let pay = (built.ts.actions().iter())
+        .find(|a| a.name == "Pay")
+        .expect("Pay");
+    let mut twice = pay.clone();
+    let write = (pay.effects.iter())
+        .find(|e| matches!(e, crate::lifecycle::types::Effect::Transition { .. }))
+        .expect("a transition")
+        .clone();
+    twice.effects.push(write);
+    assert_eq!(twice.slots_written_twice().len(), 1);
+}
+
+/// A guarded `sets` of a created row's lifecycle column and a `transitions` of the same use
+/// case write one slot twice: a `Choose` and then a `Transition` with a choice. The native
+/// step applied both and kept the chosen value; the printed TLA+ let the transition's
+/// choice replace it, so on this model the native checker found the forbidden state and TLC
+/// did not (P24 of docs/theory/README.md). The build now fails the model instead.
+#[test]
+fn a_created_rows_guarded_set_beside_its_transitions_conflicts() {
+    let built = built_from(
+        r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid, cancelled) @default(pending)
+}
+entity Flag "旗" { id: Int @pk  on: Bool @default(false) }
+usecase Raise "旗上げ"
+usecase Place "注文確定"
+creates(Raise, Flag)
+creates(Place, Order)
+condition FlagUp "旗が上がっている"
+holds(FlagUp, Flag.on == false)
+sets(Place, Order.status == cancelled).when(FlagUp)
+transitions(Place, Order.status, pending -> paid)
+transitions(Place, Order.status, paid -> cancelled)
+transitions(Place, Order.status, paid -> pending)
+forbidden(Order, status == cancelled)
+"#,
+        Bounds::VERIFY,
+    );
+    assert!(
+        built.diags.iter().any(|d| matches!(
+            &d.diag,
+            StateDiag::ConflictingEffects { usecase, column, .. }
+                if usecase == "Place" && column.contains("status")
+        )),
+        "{:?}",
+        built.diags
+    );
+}

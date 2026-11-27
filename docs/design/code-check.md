@@ -411,6 +411,14 @@ functions refuse with, or `-` where they would run the call. `--deny-incomplete`
 the cap, on refusals no trace tries (a use case with more than 64 bindings in a state), and
 on use cases of the port no trace runs (owner decision, 2026-11-27).
 
+A passing run claims nothing of a call that reached the
+[unimplemented port](./algebraic-codegen.md#the-unimplemented-port) (dogfood G6, owner
+decision 2026-11-27): the harness stops the trace at such a call the model runs and does not
+count such a refused call as a refusal, so the statement adds `unimplemented: <n> use cases
+(...)`, stderr gets `CodeUnimplemented`, and `--deny-incomplete` fails on it as on the gaps
+above. A run that does not print the harness's line (a `run` in the table that hides the
+test's output) cannot say, and gets the same finding.
+
 ### The self-check by mutant traces
 
 <!-- constrained-by #decisions -->
@@ -472,8 +480,9 @@ port. `codegen --adapter` (with `--conformance`) prints it in place of the domai
   a type of the core, so a project maps its own code to the model in a small adapter.
 - **The interface.** `reset`, `seed(ModelState)`, `observe() -> ModelState`, and
   `invoke(Call)`, which returns that the call ran or a refusal kind (`NotEnabled`,
-  `Rejected`, `InvalidArgument`, the variants of the core's use-case errors), which the
-  harness checks against the kind an `X` row names. `prepare(Call)` and `commit()` are
+  `NotFound`, `Rejected`, `InvalidArgument`, `StoreFailed`, the variants of the core's
+  use-case errors), which the harness checks against the kind an `X` row names. A
+  `StoreFailed` fails the run as a failure of the service. `prepare(Call)` and `commit()` are
   optional, and only as a pair (in Rust a
   `SplitAdapter` that `split()` returns, so a forgotten `commit` does not compile). Without
   them the harness runs an interleaved row (`I`) as its second call alone, which reaches the

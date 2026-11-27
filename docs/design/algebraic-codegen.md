@@ -708,6 +708,67 @@ for a reference, `UniqueColumns_*`, `OnDelete_*`, `Derived_*`, `OneTransaction`,
 [code-check.md](./code-check.md): the types, states, use cases, functions and obligations with
 their model locations, not the whole intermediate form.
 
+Note (2026-11-27): item 4 is settled. Phase 3 below records that the scaffold landed as two
+pure pieces (row types and dispatchers) and no service stubs, which left a contradiction:
+with `--conformance`, Go's `ConformancePort` embeds every contract, so nothing built until
+the service had every method (clinic-ops: 87 contracts, 180 methods; the dogfooding user
+wrote a 2,326-line generator of stubs). Two ways out were weighed: (A) an unimplemented port
+in the domain code, which a service embeds or extends, and (B) a separate stub file written
+once by a new flag. The owner chose A, in all three languages: see
+[The unimplemented port](#the-unimplemented-port). Stubs with bodies (load, call the core,
+persist) are still not generated; a store differs per project, and the commit helpers of the
+results are where the generated code meets it.
+
+<a id="the-unimplemented-port"></a>
+### The unimplemented port
+
+<!-- derived-from #the-agent-contract -->
+
+The domain code has a stand-in for the contracts, which a service takes while it is
+unfinished, so it builds before it has every method. It stands in for each `prepare` and
+`commit` method, not for an entry point's `Run<Action>`: the harness drives no entry point,
+so a stand-in for one would never be reported, and the build still demands it (Rust gives a
+contract with an entry point no marker). Each method of the stand-in fails as the language
+says "not implemented", and the harness tells that failure from a refusal:
+
+| | Go | Rust | TypeScript |
+|---|---|---|---|
+| The stand-in | `UnimplementedConformancePort`, a struct to embed | `Unimplemented<Contract>`, a marker trait per contract, with `impl<T: UnimplementedPayUseCase> PayUseCase for T` | `UnimplementedConformancePort`, a class to extend |
+| Unit | a method: a method the service declares wins | a contract: the service implements it, or marks it | a member: a member the service declares wins |
+| A method fails by | returning `ErrUnimplemented` | panicking with `unimplemented!("rdra-ish unimplemented port")` | rejecting with `Unimplemented` (an `Error`) |
+| With `--conformance` | also `Seed` and `Snapshot` | `seed` and `snapshot` stay the service's | also `seed` and `snapshot` |
+
+The names are claimed, so a model type takes none of them. Rust has no embedding and no way to
+inherit a default for some methods without making every method optional for every service,
+which would undo the probe's `CodeIncomplete` (E0046); the marker keeps it opt-in, per
+contract, and the blanket impl is coherent because the marker is local. Rust and TypeScript
+fail by panicking or rejecting rather than with a value of the use case's error: an
+unimplemented method is no refusal the model knows, and a new case in every error type
+would change every `match` a service writes.
+
+**How a run reports it.** `conform` counts each call that reached the stand-in, by action.
+One the model runs (or a call of an interleaving) stops its trace, and the next trace starts;
+a refused one is counted and is no refusal, and its trace goes on, since the stand-in changed
+nothing and the model's state did not move. A seed or snapshot that reached it fails the run
+as a store error does. The probe's test always prints `rdra-ish conformance: unimplemented:
+none` or `... <n> traces stopped; <action> <calls>, ...`, so the default `run` command of Go
+and Rust now shows the test's output (`-v`, `--nocapture`). `check --code=run` maps the
+actions to use cases, adds `unimplemented: <n> use cases (<names>): <n> calls reached the
+unimplemented port; <n> traces stopped there` to the coverage statement, and warns
+`CodeUnimplemented`, which `--deny-incomplete` makes an error, as it does the `never run` of
+the traces. A run that printed no such line (a `run` in the table that hides the output)
+cannot say: `unimplemented: not reported`, with the same finding. A mutant of the self-check
+whose changed row the stand-in left unchecked (its trace stopped earlier, or the row's own
+call reached it) is counted as such, not as a survivor, so a partial service passes the
+self-check for what it implements.
+
+**`check --code=build` says nothing of it.** The build checks that the service has the
+contracts with the model's signatures, and the stand-in has them, so an empty service that
+takes it builds. A build-level warning would have to read the service's source (Go embeds by
+a field, TypeScript extends by a clause, Rust marks by an impl), which `check --code` does not
+parse anywhere else, and would say less than the run does: which use cases, how many calls.
+The run is where it is reported.
+
 <a id="conformance"></a>
 ### The conformance harness
 
@@ -884,14 +945,16 @@ matches nothing:
 
 Each operation can fail with the store's own error. The helper is `commit_writes(store,
 result)` in Rust (trait `CommitStore` with an associated `Error`, result
-`Result<(), CommitFailed<E>>`, where `CommitFailed` is `NotEnabled` or `Store(E)`),
-`CommitWrites(store, result) error` in Go (`*NotEnabled`, or the store's error as it is),
-and `commitWrites(store, writes)` in TypeScript (async, generic in the store's error,
-`Result<void, NotEnabled | E>`). The helper does not begin or end the transaction. The
-caller runs it inside the transaction of the call and rolls back on an error, as
-[one transaction per function](#one-transaction-per-function) requires. The caller turns
-`NotEnabled` into its `<UseCase>Error` with `From` / `errors.As` / the union, and decides
-what a store error becomes.
+`Result<(), CommitFailed>`, where `CommitFailed` is `NotEnabled` or `StoreFailed`),
+`CommitWrites(store, result) error` in Go (`*NotEnabled`, or `*StoreFailed` wrapping the
+store's error), and `commitWrites(store, writes)` in TypeScript (async, generic in the
+store's error, `Result<void, NotEnabled | StoreFailed>`). The helper does not begin or end
+the transaction. The caller runs it inside the transaction of the call and rolls back on an
+error, as [one transaction per function](#one-transaction-per-function) requires. Both
+cases are cases of every `<UseCase>Error` ([Not found and store
+failures](#not-found-and-store-failures)): Rust converts `CommitFailed` with `From`, Go
+wraps the detail, and TypeScript returns it as it is. (Before that change the helper
+returned the store's error itself: `CommitFailed::Store(E)` in Rust.)
 
 **Names.** Each new type and helper name is claimed after the model's names. A model type
 with the same name gets the trailing `_`, as the other derived names do. In Go a result field
@@ -906,46 +969,69 @@ TypeScript; ec-site gains 566, 336, and 300 lines. `tests/codegen_commit.rs` sho
 in each language that commits every result through the helper and passes the conformance
 harness, and fails it when its store keeps a mark the last step ends.
 
-### Not found and store failures (proposed, not built)
+### Not found and store failures
 
 <!-- constrained-by #committing-a-result -->
 
-A `<UseCase>Error` has three cases: `NotEnabled`, `Rejected`, and `InvalidArgument`. A
-service that loads a row by id and finds none has no case for it, nor does a store that
-fails (a lost connection, a constraint the model does not know). Both services answered
-`NotEnabled`. The HTTP layer then could not tell 404 from 409, and a store failure became a
-409 or a panic. Two cases would close the gap:
+A `<UseCase>Error` had three cases: `NotEnabled`, `Rejected`, and `InvalidArgument`. A
+service that loaded a row by id and found none had no case for it, nor did a store that
+failed (a lost connection, a constraint the model does not know). Both services built on the
+output in November 2026 answered `NotEnabled`. The HTTP layer then could not tell 404 from
+409, and a store failure became a 409 or a panic.
+
+The owner decided (2026-11-28) to add two cases to every `<UseCase>Error` in all three
+languages, by default and with no opt-in flag:
 
 - `NotFound { usecase, entity, id }`: a row the call names by id does not exist when it is
-  loaded. This answer comes at load time. A commit whose conditional write matches no row
-  stays `NotEnabled`, because the row may have been deleted or moved, and the model answers
-  both the same way. A run mark or an event that is missing is `NotEnabled`: the row exists
-  and is not in that run, or the trigger has not happened. Only a use case that loads a row by
-  id gets the case.
-- `StoreFailed { usecase, reason }`: the store failed. Every use case gets the case. In Go,
-  `Err` wraps the store's error so that `errors.Is` reaches it.
+  loaded. `id` is the id as text, so one type serves every entity. The answer comes at load
+  time. A commit whose conditional write matches no row stays `NotEnabled`, because the row
+  may have been deleted or moved, and the model answers both the same way. A run mark or an
+  event that is missing is `NotEnabled`: the row exists and is not in that run, or the
+  trigger has not happened.
+- `StoreFailed { usecase, cause }`: the store failed. `cause` is the store's error. In Rust
+  it is an `Arc<dyn Error + Send + Sync>` that `source()` returns, so `<UseCase>Error` keeps
+  `Clone`, `PartialEq` and `Eq` (two `StoreFailed` are equal when they carry the same cause),
+  and `StoreFailed::new(usecase, e)` takes any error that converts into `Box<dyn Error + Send
+  + Sync>`. In Go `*StoreFailed` has `Unwrap() error` returning `Cause`, so `errors.Is` and
+  `errors.As` reach the store's error. In TypeScript `cause` is `unknown`.
 
-The generated functions never return either case. Only a service's `prepare` and `commit`
-do. The conformance harness would count `NotFound` as `NotEnabled`, the kind the model
-refuses with (#452 checks refusal kinds), and would fail the run on `StoreFailed`, which no
-trace expects.
+Every use case gets both cases, even one that loads no row by id (a create with no parent),
+so a `match` or `switch` and an HTTP mapping read the same for every use case: `NotFound`
+404, `NotEnabled` 409, `Rejected` 422, `InvalidArgument` 400, `StoreFailed` 500.
 
-Adding a case is additive in Go. In Rust and TypeScript it breaks every exhaustive match on
-the error: a `match` with no wildcard, or a `switch` that ends in `assertNever`. The model
-adapter of the conformance fixture has such matches. The options are these:
+The generated functions take rows already loaded, so they cannot tell a missing row from a
+row in the wrong state, and never return `NotFound` or `StoreFailed`. A service's `prepare`
+returns `NotFound` from its load and `StoreFailed` from its store; `commit` returns
+`StoreFailed` from its store. The commit helper is the one generated code that meets the
+store, and it returns `StoreFailed` (see below).
 
-1. **Opt-in.** `--store-errors` and `[code.<lang>] store_errors = true` add both cases. The
-   default output does not change. This needs a new CLI flag, an `rdra.toml` key, a
-   generator option, and the harness mapping above in the files #452 changes.
-2. **Default, breaking.** Add both cases to every `<UseCase>Error` in the next release, with a
-   CHANGELOG migration note: add an arm for each case to every exhaustive match.
-3. **Outside the error.** Leave `<UseCase>Error` as it is, and let the port's methods return
-   a wrapper such as `ServiceError<E> { UseCase(E), NotFound, StoreFailed }`. This breaks
-   every implementation of the port, which is worse than option 2.
+**The commit helper.** `CommitFailed::Store(E)` duplicated what `StoreFailed` now says, so it
+is gone. In Rust `CommitFailed` is `NotEnabled(NotEnabled)` or `StoreFailed(StoreFailed)`,
+with no type parameter, and converts into every `<UseCase>Error` by `From`, so
+`commit_writes(store, result)?` returns the use case's own error. The store's `Error` must
+convert into `Box<dyn Error + Send + Sync>`, which every `Error + Send + Sync + 'static` type
+and `String` do; a service that needs the typed error back reads it with
+`cause.downcast_ref`. In Go `CommitWrites` returns `*NotEnabled` or `*StoreFailed` wrapping
+the store's error. In TypeScript `commitWrites` returns `Result<void, NotEnabled |
+StoreFailed>`, which every `<UseCase>Error` union holds.
 
-Recommendation: option 1 now, and option 2 at the next release that breaks the codegen
-output anyway. The owner decides. Until then the commit helper keeps the store's error apart
-(`CommitFailed::Store`), so a service can map it to its own 500 without a new case.
+**The conformance harness.** The first trace calls, once, each use case whose call names one
+existing row and no run mark or event, with an id no row has: `X NotFound <call>`. The
+service must refuse it with `NotFound`. The kind check of #452 stays strict both ways:
+`NotEnabled` does not pass a `NotFound` row, and `NotFound` does not pass a `NotEnabled` row,
+so a service that answers every missing row with `NotEnabled` fails, as do the two services
+above. These rows do not depend on the BFS, so a capped run tries them too, and they do not
+count for `never refused`. A call that names a run mark or an event is left out, because
+the service may refuse it for the missing mark or raise first. A `StoreFailed` on any row
+(`C`, `X` of any kind, the prepare or the late commit of an `I` row) fails the run as a
+failure of the service, not as a refusal. The traces format is 5.
+
+**What breaks.** Adding a case breaks every exhaustive match on the error in Rust and
+TypeScript: a `match` with no wildcard, or a `switch` that ends in `assertNever`. Go code
+that switches on `Kind` keeps compiling. The CHANGELOG says what to add. `<UseCase>Error` and
+the Rust and Go output are outside the compatibility contract, so this needs no major
+release. The Verus output (`--verus`) keeps its three cases: it is a separate experimental
+crate, and a cause of `dyn Error` inside `verus!` needs its own design.
 
 ## Architecture
 
@@ -1046,7 +1132,10 @@ the function's source state with no BFS move must get `Rejected`. The dispatcher
    ports: a flat row type per state type with checked conversions both ways, and a
    dispatcher per use case over the entity types. A store's or a framework's ports differ
    per project, so the agent writes the service around them; what it cannot get wrong (which
-   function runs from which states, which rows a state rules out) is generated. The tagged
+   function runs from which states, which rows a state rules out) is generated. [Since
+   2026-11-27 the domain code also has the
+   [unimplemented port](#the-unimplemented-port), the owner's choice for item 4: a stand-in a
+   service embeds or extends, so it builds before every method exists.] The tagged
    JSON is the row type: its columns, with the tag inline, are the JSON shape in all three
    languages (Go with `json` tags); the Rust output adds no serde dependency, so the agent
    derives it. `tests/codegen_behaviour.rs` runs the printed code of a fixture in each

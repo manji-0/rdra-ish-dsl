@@ -270,7 +270,7 @@ fn each_fault_fails_the_run() {
     );
     assert!(
         text_slashed(&out)
-            .contains("rdra-ish conformance: ok 11 traces, 21 calls, 11 refusals, 7 interleavings")
+            .contains("rdra-ish conformance: ok 11 traces, 21 calls, 13 refusals, 7 interleavings")
             || text_slashed(&out).contains("OK: code: what the model requires, at --code=run"),
         "{}",
         text_slashed(&out)
@@ -417,7 +417,7 @@ fn a_model_adapter_conforms_whatever_the_domain_code_became() {
     let all = text_slashed(&out);
     assert!(out.status.success(), "{all}");
     assert!(
-        all.contains("  ran: 11 traces, 21 calls, 11 refused calls, 7 interleaved commits; 32 calls made again by prepare and commit\n"),
+        all.contains("  ran: 11 traces, 21 calls, 13 refused calls, 7 interleaved commits; 34 calls made again by prepare and commit\n"),
         "{all}"
     );
     assert!(
@@ -443,4 +443,43 @@ fn a_model_adapter_conforms_whatever_the_domain_code_became() {
         .collect();
     assert_eq!(survived.len(), 1, "{all}");
     assert!(survived[0].contains("the absent-row mutant"), "{all}");
+}
+
+/// The unimplemented port (docs/design/algebraic-codegen.md): a service class that extends
+/// `UnimplementedConformancePort` and declares no Cancel members builds, and its run passes
+/// with the calls of Cancel listed by use case and a warning, which `--deny-incomplete` makes
+/// an error.
+#[test]
+fn a_service_extending_the_unimplemented_port_builds_and_its_calls_are_reported() {
+    if !tools(&["tsc", "node"], CODEGEN) {
+        return;
+    }
+    let dir = project("unimplemented", MANIFEST);
+    let service = dir.join("svc/src/order_service.ts");
+    let text = std::fs::read_to_string(&service).unwrap();
+    let text = text
+        .replacen(
+            "export class OrderService {",
+            "export class OrderService extends d.UnimplementedConformancePort {",
+            1,
+        )
+        .replacen("  prepareCancel = async", "  prepareCancelLater = async", 1)
+        .replacen("  commitCancel = async", "  commitCancelLater = async", 1);
+    std::fs::write(&service, text).unwrap();
+    let out = rdra(&dir, &["check", "model", "--code=run"], "");
+    let all = text_slashed(&out);
+    assert!(out.status.success(), "{all}");
+    assert!(
+        all.contains("  unimplemented: 1 use case (Cancel): "),
+        "{all}"
+    );
+    assert!(all.contains("warning[CodeUnimplemented]"), "{all}");
+    let out = rdra(
+        &dir,
+        &["check", "model", "--code=run", "--deny-incomplete"],
+        "",
+    );
+    let all = text_slashed(&out);
+    assert_eq!(out.status.code(), Some(1), "{all}");
+    assert!(all.contains("error[CodeUnimplemented]"), "{all}");
 }

@@ -29,7 +29,7 @@ while IFS= read -r path; do
     .github/workflows/release.yml | .github/workflows/publish-pypi.yml) ;;
     .github/workflows/portability.yml | scripts/check-skill-snippets.py | pyproject.toml) ;;
     scripts/check-release-version.sh) ;;
-    .claude-plugin/* | .lsp.json) ;;
+    .claude-plugin/* | plugins/*) ;;
     crates/rdra-ish-cli/tests/lsp_cli.rs | crates/rdra-ish-cli/tests/plugin_manifest.rs) ;;
     *) relevant=true ;;
   esac

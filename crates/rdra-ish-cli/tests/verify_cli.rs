@@ -1403,7 +1403,7 @@ forbidden(E, status == closed, a == false)
 
 /// Handle runs only on an event that Raise raises, and Raise never runs. The cone of
 /// `v == true` alone leaves the event's mark out, so Handle runs freely there and the rule
-/// fails; the cone of the pair holds `status`, and with it the mark, so Handle never runs and
+/// fails there, in no run of the model; the cone of the pair holds `status`, and with it the mark, so Handle never runs and
 /// both rules pass there. The larger cone holds Handle back where the smaller lets it run.
 const GUARD_ONLY_THE_LARGER_CONE_KEEPS: &str = r#"
 entity E "e" { id: Int @pk  status: Enum(open, ready, raised) @default(open)  v: Bool @default(false) }
@@ -1424,19 +1424,23 @@ forbidden(E, v == true, status == raised)
 
 /// A module that holds a cone's checks does not cover the cone when it takes fewer steps
 /// than the cone does: it lacks a var the cone's use case writes, or it keeps a guard the
-/// cone drops. Each cone runs and reports its counterexample.
+/// cone drops. Each cone runs. The assert's cone reports its counterexample; the rule's cone
+/// finds one that runs Handle without its event, which the rule's exact cone, holding Raise,
+/// rules out (P1), so the line reads `ok` and says why.
 #[test]
 fn a_cone_that_takes_steps_the_larger_module_does_not_still_runs() {
-    for (test, src, failing) in [
+    for (test, src, failing, verdict) in [
         (
             "verify_cli_assert_cone",
             ASSERT_BEYOND_THE_LARGER_MODULE,
             "Cone_AfterAssert_Mark_0 ",
+            ": counterexample (",
         ),
         (
             "verify_cli_dropped_guard_cone",
             GUARD_ONLY_THE_LARGER_CONE_KEEPS,
             "Cone_Forbidden_E_0 ",
+            ": ok (",
         ),
     ] {
         let (stdout, stderr, code, _) = verify_model(test, src, "specs");
@@ -1446,7 +1450,14 @@ fn a_cone_that_takes_steps_the_larger_module_does_not_still_runs() {
             .lines()
             .find(|l| l.starts_with(failing))
             .unwrap_or_else(|| panic!("{test}: no line for {failing}\n{stdout}"));
-        assert!(line.contains(": counterexample ("), "{test}: {line}");
+        assert!(line.contains(verdict), "{test}: {line}");
+        if verdict == ": ok (" {
+            assert!(
+                stdout.contains(&format!("{line}\n  note: Forbidden_E_0's counterexample runs a use case without its event having been raised, which this cone does not rule out; on its exact cone: ok\n")),
+                "{stdout}"
+            );
+            assert!(!stderr.contains("error[Forbidden_E_0]"), "{stderr}");
+        }
     }
 }
 

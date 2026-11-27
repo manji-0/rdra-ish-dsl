@@ -232,6 +232,9 @@ export function parseOrderRow(value: unknown): Result<OrderRow, InvalidRow> {
 /** The rows are in states the use case does not run from. Only a dispatcher returns it. */
 export type NotEnabled = Readonly<{ kind: "NotEnabled"; usecase: string }>;
 
+/** A row the call names does not exist. Only the service's load returns it; the functions take rows already loaded. */
+export type NotFound = Readonly<{ kind: "NotFound"; usecase: string; entity: string; id: string }>;
+
 /** A condition of the use case did not hold: the use case does not run. */
 export type Rejected = Readonly<{ kind: "Rejected"; condition: string; label: string; site: string | null }>;
 
@@ -242,11 +245,14 @@ export type Rejected = Readonly<{ kind: "Rejected"; condition: string; label: st
  */
 export type InvalidArgument = Readonly<{ kind: "InvalidArgument"; message: string }>;
 
-/** What Ship can fail with: NotEnabled from a dispatcher. */
-export type ShipError = NotEnabled;
+/** The store failed: no answer of the use case. Only the service's load or commit returns it; `cause` is the store's error. */
+export type StoreFailed = Readonly<{ kind: "StoreFailed"; usecase: string; cause: unknown }>;
 
-/** What Place can fail with: NotEnabled from a dispatcher. */
-export type PlaceError = NotEnabled;
+/** What Ship can fail with: NotEnabled from a dispatcher, NotFound from the service's load, StoreFailed from the service's store. */
+export type ShipError = NotEnabled | NotFound | StoreFailed;
+
+/** What Place can fail with: NotEnabled from a dispatcher, NotFound from the service's load, StoreFailed from the service's store. */
+export type PlaceError = NotEnabled | NotFound | StoreFailed;
 
 // ── Rule checks ──
 
@@ -296,3 +302,27 @@ export type PlaceUseCase = {
   /** Runs the action Place of Place whole, by the ids of its rows: the generator printed no function for it (#335), so the service writes it and keeps the obligations. */
   readonly runPlace: (order: OrderId) => Promise<Result<void, PlaceError>>;
 };
+
+// ── The unimplemented port: extend it to build before every member exists ──
+
+/**
+ * What the members of `UnimplementedConformancePort` reject with: the service has not implemented the call
+ * yet. `conform` stops a trace at such a call and reports the calls by use case;
+ * `rdra-ish check --code=run` lists them, and `--deny-incomplete` fails on any.
+ */
+export class Unimplemented extends globalThis.Error {
+  constructor(member: string) {
+    super(`rdra-ish: not implemented: ${member}`);
+    this.name = "Unimplemented";
+  }
+}
+
+/**
+ * The `prepare*` and `commit*` members of every contract, each rejecting with `Unimplemented`.
+ * Extend it to build before every member exists: a member the service declares takes
+ * the place of this one, and `check --code=run` reports each call that still reaches it.
+ * An entry point's `run*` member is not here: the harness drives none, so the service
+ * writes each.
+ */
+export class UnimplementedConformancePort {
+}

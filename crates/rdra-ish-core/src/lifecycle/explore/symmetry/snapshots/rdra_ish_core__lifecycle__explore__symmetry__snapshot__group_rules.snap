@@ -6,6 +6,7 @@ The group rules and reasons, per cone (docs/design/instance-symmetry.md, the per
 A line: entity[slots], then G (G_T on a reduced cone): moves or stays, scan=<the scan rules>, G_T=<the reasons>; then, on a reduced cone, H on the sub-lifecycle: the same, H=<the reasons>.
 Flags read: --instance-count, --int-range-max, --instances, --max-states. S runs plainly up to 2000000 states (or --max-states) with no memory limit, and past them up to H, as under --symmetry always at the memory limit. The models build with Scope::ALL, a superset of the cones of an --entity line.
 Entity lines that name each rule or reason:
+  AbsentOwner: 0: fires in no cone
   IdAgainstLiteral: 0: fires in no cone
   JointTooLarge: 0: fires in no cone
   MixedIds: 0: fires in no cone

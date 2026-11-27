@@ -173,6 +173,26 @@ func (e *NotEnabled) Is(target error) bool {
 	return target == ErrNotEnabled
 }
 
+// ErrNotFound is what errors.Is matches a *NotFound with.
+var ErrNotFound = errors.New("no row has the id the call names")
+
+// NotFound reports a row the call names by id that does not exist: the service's load returns it, and the generated functions, which take rows already loaded, never do. Id is the id as text.
+type NotFound struct {
+	UseCase string
+	Entity  string
+	Id      string
+}
+
+// Error says what happened.
+func (e *NotFound) Error() string {
+	return "the use case " + e.UseCase + " found no " + e.Entity + " row with the id " + e.Id
+}
+
+// Is reports whether target is ErrNotFound.
+func (e *NotFound) Is(target error) bool {
+	return target == ErrNotFound
+}
+
 // ErrRejected is what errors.Is matches a *Rejected with.
 var ErrRejected = errors.New("rejected by a condition")
 
@@ -209,6 +229,36 @@ func (e *InvalidArgument) Error() string {
 // Is reports whether target is ErrInvalidArgument.
 func (e *InvalidArgument) Is(target error) bool {
 	return target == ErrInvalidArgument
+}
+
+// ErrStoreFailed is what errors.Is matches a *StoreFailed with.
+var ErrStoreFailed = errors.New("the store failed")
+
+// StoreFailed reports a failure of the store (a lost connection, a constraint the model does not
+// know), not an answer of the use case: the service's load or commit returns it, and the
+// generated functions never do. Unwrap returns Cause, so errors.Is and errors.As reach the
+// store's error.
+type StoreFailed struct {
+	UseCase string
+	Cause   error
+}
+
+// Error says what happened.
+func (e *StoreFailed) Error() string {
+	if e.Cause == nil {
+		return "the use case " + e.UseCase + ": the store failed"
+	}
+	return "the use case " + e.UseCase + ": the store failed: " + e.Cause.Error()
+}
+
+// Is reports whether target is ErrStoreFailed.
+func (e *StoreFailed) Is(target error) bool {
+	return target == ErrStoreFailed
+}
+
+// Unwrap returns the store's error.
+func (e *StoreFailed) Unwrap() error {
+	return e.Cause
 }
 
 // ── Entities with states ──
@@ -448,3 +498,14 @@ type PlaceUseCase interface {
 	// function for it (#335), so the service writes it and keeps the obligations.
 	RunPlace(order OrderId) error
 }
+
+// ── The unimplemented port: embed it to build before every method exists ──
+
+// ErrUnimplemented is what the methods of UnimplementedConformancePort return: the service has not
+// implemented the call yet. Conform stops a trace at such a call and reports the calls by use
+// case; `rdra-ish check --code=run` lists them, and --deny-incomplete fails on any.
+var ErrUnimplemented = errors.New("rdra-ish: not implemented")
+
+// UnimplementedConformancePort has every Prepare and Commit method of the contracts, each returning ErrUnimplemented.
+// Embed it in a service to build before every method exists: a method the service declares takes the place of the embedded one, and `check --code=run` reports each call that still reaches it. A Run method of an entry point is not here: the harness drives none, so the service writes each.
+type UnimplementedConformancePort struct{}
