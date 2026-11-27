@@ -11,20 +11,9 @@ is. It owns rows T1 to T16 of the [claims inventory](./claims.md#d-agreement-wit
 uses the notation of [semantics.md](./semantics.md) (D1 to D23) without redefining it.
 
 The code was read at commit `fb6928c74ccc5b479dea07d92cc1e39c34ddd218` (origin/main,
-2026-11-28), later than the index's pin `b83b9544`. `git diff --stat b83b9544 fb6928c7` over the whole tree, read
-against the paths this document cites, shows three cited files changed, none in a part this
-document relies on: `scripts/verify-relevant.sh` adds the Claude Code plugin and LSP files
-to the paths that skip the verification checks; `CHANGELOG.md` gains entries under
-"Unreleased" only (its v3.0.0 section is unchanged); and `docs/cli-reference.md` gains
-lines on the plugin and code generation, not in "Partial runs". Every other cited path is
-identical at both: `crates/rdra-ish-emit/src/tla/`, `crates/rdra-ish-cli/src/verify/`,
-`tlc_output.rs`, `tlc_replay.rs`, `property_cone.rs`, the corpus and equivalence
-tests, `crates/rdra-ish-core/src/`, `.github/workflows/`, `flake.nix`, the samples, the
-other cited scripts (`verify-samples.sh`, `reduction-diff.py`, `tlc-roots.txt`,
-`kani-relevant.sh`), and the notes in `docs/` and `docs/design/`. The rest of the diff
-(code generation, the LSP, the plugin, `cli.rs` and `lib.rs` of the CLI for those,
-`scripts/check-release-version.sh`, and this
-directory's own documents) is outside what this document cites. Paths follow the convention of the
+2026-11-28), later than the index's pin `b83b9544`; [Appendix: the pinned
+commit](#appendix-the-pinned-commit) says what is cited and that none of it changed in a part
+this document relies on. Paths follow the convention of the
 [claims inventory](./claims.md#how-to-read-a-row): `core` is
 `crates/rdra-ish-core/src/lifecycle`, `cli` is `crates/rdra-ish-cli`, `emit` is
 `crates/rdra-ish-emit/src`. How the document changed after it was first written is in
@@ -715,8 +704,14 @@ evidence would not catch, most consequential first. Each item is an assessment d
 the sections it cites, and carries the tag of the statements it rests on.
 
 1. **Common-mode faults outside the corpus traps [read].** A wrong `T` from the builder, a wrong
-   cone, a wrong ladder decision, or a wrong quotient table moves both engines. Only the 191
-   hand-written `expect` lines see these, and only on the 79 traps they name.
+   cone, a wrong ladder decision (the staging of a property cone's runs), a wrong quotient
+   table, or a wrong name in `TlaNames`, which the printer and the decoder both use, moves both
+   engines. P40 and P54 (a value the build wraps; [z3.md](./z3.md#uniformity-in-the-bound),
+   [native.md](./native.md#the-state-store-and-its-encoding)) and P32 (an entity cone that
+   leaves a raised mark out; [cones.md](./cones.md#safety-cones)) are faults of this kind.
+   Only the 191 hand-written `expect` lines see these, and only on the 79 traps they name.
+   The theory index's [conclusion](./README.md#conclusion) takes this item and the next as
+   the main residual risks of all four documents.
 2. **A wrong verdict on any input no test ran [read; runtime].** The run-time guard on
    native counterexamples is partial. By P20 (reported; unread@pin) and D23, only a
    liveness lasso on an unreduced cone is replayed through the step relation before it
@@ -820,6 +815,25 @@ document or by the code at the pinned commit. [read]
 | P23 | New (evidence): the per-run comparison pairs the native `WfNext` run on the reduced cone (`decide_liveness_reduced`) with TLC's `_WF` module printed from the unreduced cone, so Proposition 0 does not apply on that path. |
 | P24 | New (evidence): for a `Transition` with a multi-target source, the printer's and the native effect application agree only under a builder invariant on effect order that nothing enforces as such; one shape was not found to be excluded, and on it the post-guards reconcile the two only when the `transitions` arms carry `.when` guards. |
 
+
+## Appendix: the pinned commit
+
+[read] The code was read at commit `fb6928c74ccc5b479dea07d92cc1e39c34ddd218` (origin/main,
+2026-11-28), later than the index's pin `b83b9544`. `git diff --stat b83b9544 fb6928c7` over the whole tree, read
+against the paths this document cites, shows three cited files changed, none in a part this
+document relies on: `scripts/verify-relevant.sh` adds the Claude Code plugin and LSP files
+to the paths that skip the verification checks; `CHANGELOG.md` gains entries under
+"Unreleased" only (its v3.0.0 section is unchanged); and `docs/cli-reference.md` gains
+lines on the plugin and code generation, not in "Partial runs". Every other cited path is
+identical at both: `crates/rdra-ish-emit/src/tla/`, `crates/rdra-ish-cli/src/verify/`,
+`tlc_output.rs`, `tlc_replay.rs`, `property_cone.rs`, the corpus and equivalence
+tests, `crates/rdra-ish-core/src/`, `.github/workflows/`, `flake.nix`, the samples, the
+other cited scripts (`verify-samples.sh`, `reduction-diff.py`, `tlc-roots.txt`,
+`kani-relevant.sh`), and the notes in `docs/` and `docs/design/`. The rest of the diff
+(code generation, the LSP, the plugin, `cli.rs` and `lib.rs` of the CLI for those,
+`scripts/check-release-version.sh`, and this
+directory's own documents) is outside what this document cites.
+
 ## Errata
 
 Changes to statements of this document after it was first written, newest last.
@@ -827,3 +841,8 @@ Changes to statements of this document after it was first written, newest last.
 - **2026-11-28, after an adversarial review** (commits `b75044db`, `25185bd9`, and
   `7227d440`). The revisions that followed the review were checked against the same commit as
   the first version, `fb6928c7`.
+- **2026-11-28, after the owner's review.** The paragraph on what the document cites and what
+  changed between `b83b9544` and `fb6928c7` moved from the opening to
+  [Appendix: the pinned commit](#appendix-the-pinned-commit), unchanged. Item 1 of
+  [Residual risk](#residual-risk) now also names the staging of a property cone's runs and
+  `TlaNames`, and P40, P54, and P32 as faults of its kind.

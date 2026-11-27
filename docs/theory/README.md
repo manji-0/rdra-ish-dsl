@@ -67,6 +67,31 @@ stated a guarantee for every verdict that holds only for some.
 | [design/event-order.md](../design/event-order.md) | Raised marks, and rounds 3 to 5 of the reduction (monotone inputs, the size guard, the node fold). | semantics, (a) |
 | [design/tlc-scheduling.md](../design/tlc-scheduling.md) | How TLC runs are scheduled under `verify --with-tlc`. | (d) |
 
+## Conclusion
+
+<!-- derived-from ./tlc-agreement.md#residual-risk -->
+
+Across the four theme documents, two residual risks outweigh the rest. They are the first two
+items of [tlc-agreement.md, "Residual risk"](./tlc-agreement.md#residual-risk), and the other
+three documents arrive at them from their own side.
+
+1. **Common-mode faults.** The builder of `T_β(M)`, the choice of a cone, the staging of a
+   property cone's runs, the quotient tables of a reduced cone, and the names that map native
+   states to TLA+ ones (`TlaNames`) are read by both engines, so a fault in any of them moves
+   the native verifier and TLC alike and agreement with TLC cannot show it. P40 and P54 (a
+   value the build wraps) and P32 (an entity cone that leaves a raised mark out) are faults of
+   this kind; P43 is a fault of the prover's encoding at bounds past the run's, which no
+   comparison with TLC reaches. Only hand-written expectations, such as the engine corpus's
+   `expect` lines, see these, and only on the models they name.
+2. **No run-time defence against a wrong `ok`.** A printed counterexample is checked before it
+   prints in some cases ([native.md](./native.md#counterexamples-what-is-checked-before-printing));
+   an `ok`, and a `proved`, are never checked at run time. P50 and P54 give a wrong `ok`, P32 a
+   missing finding, and P43 a `proved` that reaches too far, each with nothing in the run that
+   notices.
+
+Planned mitigation: P26, an independent check path for the builder (lane L6; planned, not
+yet in the [open problems](#open-problems) table).
+
 ## Open problems
 
 Each item is a stated guarantee the code does not give, a disagreement between documents
