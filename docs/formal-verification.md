@@ -511,10 +511,13 @@ not already imply it). From each count guard (`.at_most`, `.at_least`, `.exactly
 row with a value that step writes has at most or at least the guard's number of children by
 that key, all of them or those the guard pins, when no reached state shows otherwise. A
 parent value no state reached gets one too, since the count a guard asks for often needs
-more rows than the run's bounds. The lemmas of one column of each, of one child column with
-two parent columns, and of counts wait: they join only when a rule stays unproved without them, and until then
-z3 sees nothing of them, so a proof that needs none of them sends z3 the same checks whatever
-of them a model offers. Each mining run stops at 50,000 states. A lemma is only a guess until it survives the same checks, so a capped
+more rows than the run's bounds. From the run's bounds come ∀∃ lemmas too: while a present
+row of one entity holds a value, some present row of another entity holds one, for each such
+pair of column values that every reached state showing the first keeps; no key need link the
+rows. The lemmas of one column of each, of one child column with two parent columns, of
+counts, and ∀∃ wait: they join only when a rule stays unproved without them, the ∀∃ ones
+only when a rule stays unproved with the others in, and until then z3 sees nothing of them,
+so a proof that needs none of them sends z3 the same checks whatever of them a model offers. Each mining run stops at 50,000 states. A lemma is only a guess until it survives the same checks, so a capped
 exploration costs proofs, not soundness. The lemmas a proof kept print as `lemma:` lines, and
 one that only the one-instance run offered ends in `(mined at 1 instance per entity)`:
 
@@ -593,7 +596,7 @@ every sample on 2 solvers, and on the formal-verification samples, insurance-cla
 oidc-auth on 1 and 3, a check that keeps its candidate spends at most 161,000 units for a
 rule (1/124 of its limit) and 116,000 for a lemma (1/17); on 4 solvers, which the test does
 not run, a lemma check has spent 144,000 (1/14). No check runs out. The checks z3 gives up on
-by itself (on 2 solvers, 301 lemma checks and 13 rule checks) stop on a quantifier it cannot
+by itself (on 2 solvers, 303 lemma checks and 14 rule checks) stop on a quantifier it cannot
 decide, not on the budget: the test prints what they spend and does not assert it, since that
 depends on what the solver checked before. On 2 solvers it is at most 1,887,000 units for a
 lemma, in food-permit-ops, and 10,000 for a rule; food-permit-ops has such lemma checks from

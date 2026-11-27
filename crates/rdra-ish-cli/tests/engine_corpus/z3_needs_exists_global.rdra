@@ -4,8 +4,10 @@
 // guard on duty somewhere, at any count. The rule is not inductive alone: from an ajar gate
 // and no guard on duty, which no reachable state has, Swing breaks it. The fact that rules
 // that state out, "while a gate is ajar, some guard is on duty", says a row exists, and no
-// key links a gate to a guard, so no count of a row's children states it either.
-// expect Quantifier_Gate_0: native=ok tlc=ok z3=unproved bfs=ok,ok,ok
+// key links a gate to a guard, so no count of a row's children states it either. Every
+// reached state keeps it, so it is mined as a ∀∃ lemma over the two entities, and z3 proves
+// the rule with it (#428).
+// expect Quantifier_Gate_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 // expect Deadlock_Gate_state_shut: native=counterexample tlc=counterexample
 // expect Deadlock_Guard_state_on: native=counterexample tlc=counterexample
 entity Gate "門" { id: Int @pk  state: Enum(shut, ajar, open) @default(shut) }
