@@ -1,0 +1,42 @@
+// The model `codegen --verus` is shown on (codegen_verus.rs, docs/design/verus.md): Member and
+// Loan, a key (relate N:1 with MaxCard 3), a counted guard (.at_most), two creates, a guarded
+// transition (Withdraw needs no open loan), and a delete of a closed loan.
+entity Member "会員" {
+  id: Int @pk
+  status: Enum(active, withdrawn) @default(active)
+}
+
+entity Loan "貸出" {
+  id: Int @pk
+  status: Enum(open, closed) @default(open)
+}
+
+usecase Join "入会"
+usecase Withdraw "退会"
+usecase Borrow "貸出"
+usecase GiveBack "返却"
+usecase Purge "返却済み貸出の削除"
+
+creates(Join, Member)
+transitions(Withdraw, Member.status, active -> withdrawn)
+creates(Borrow, Loan)
+updates(Borrow, Member)
+transitions(GiveBack, Loan.status, open -> closed)
+deletes(Purge, Loan)
+
+relate(Loan, Member, 0..3:1)
+
+condition RoomForLoan "貸出が2件以下の会員だけ借りられる"
+holds(RoomForLoan, Member.status == active).at_most(2, Loan)
+applies_to(RoomForLoan, Borrow)
+
+condition NoOpenLoan "未返却の貸出がない会員だけ退会できる"
+holds(NoOpenLoan, Member.status == active).none(Loan.status == open)
+applies_to(NoOpenLoan, Withdraw)
+
+condition LoanClosed "返却済みの貸出だけ削除できる"
+holds(LoanClosed, Loan.status == closed)
+applies_to(LoanClosed, Purge)
+
+invariant(Member).at_most(3, Loan.status == open).label("a member holds at most 3 open loans")
+invariant(Member).when(status == withdrawn).none(Loan.status == open)

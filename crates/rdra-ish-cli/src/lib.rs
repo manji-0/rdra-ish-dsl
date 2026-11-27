@@ -240,6 +240,7 @@ pub fn run() -> Result<()> {
             conformance_states,
             seal,
             check,
+            verus,
         } => {
             if seal && !matches!(lang, Some(cli::CodegenLang::Ts) | None) {
                 use clap::CommandFactory;
@@ -247,6 +248,18 @@ pub fn run() -> Result<()> {
                     .error(
                         clap::error::ErrorKind::ArgumentConflict,
                         "--seal is for --lang ts only",
+                    )
+                    .exit();
+            }
+            if verus.is_some()
+                && (!matches!(lang, Some(cli::CodegenLang::Rust))
+                    || format == cli::CodegenFormat::Json)
+            {
+                use clap::CommandFactory;
+                Cli::command()
+                    .error(
+                        clap::error::ErrorKind::ArgumentConflict,
+                        "--verus is for --lang rust only",
                     )
                     .exit();
             }
@@ -264,6 +277,7 @@ pub fn run() -> Result<()> {
                 check_file: check.as_deref(),
                 code,
                 probe,
+                verus: verus.as_deref(),
             })?
         }
 

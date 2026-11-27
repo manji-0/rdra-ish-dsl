@@ -331,6 +331,13 @@ pub(crate) enum Commands {
         /// With --conformance, the traces in that file are compared too, by hash
         #[arg(long, value_name = "FILE", conflicts_with = "out")]
         check: Option<PathBuf>,
+        /// [experimental] --lang rust only: also write to DIR a Verus crate (`verus DIR/main.rs`)
+        /// with the model as spec, a contract per function, and a verified port, so a modified
+        /// core is checked against the verified model for any number of rows. The ordinary
+        /// output does not change. Covers Enum, Bool and key columns, conditions with
+        /// quantifiers and counts, creates and deletes; refuses other models with the reasons
+        #[arg(long, value_name = "DIR", conflicts_with_all = ["code", "probe", "check", "conformance"])]
+        verus: Option<PathBuf>,
     },
     /// Derive reachable state patterns per entity (aggregated across BUCs)
     States {
