@@ -266,7 +266,8 @@ left-to-right evaluation, not for the meaning of the conjunction.
   invariant: no action has an `Assign` after, or a `Choose` before, such a `Transition` on
   the same `(var, param)` (or, more weakly, the post-guards reconcile it). Open problem P24
   records where the builder excludes each shape and the one shape it was not found to
-  exclude.
+  exclude. Since #485 the build enforces the invariant: an action that writes one slot
+  twice fails with `ConflictingEffects`, the created-row shape included.
 - `Delete`: both reset `Exists` to `deleted` and every column of `decl.columns` to base,
   and keep owners (D8). Both drop a choice on the deleted slot (`moves.rs` retains only
   choices on other params; the printer overwrites the slot with the base value).
@@ -748,7 +749,8 @@ the sections it cites, and carries the tag of the statements it rests on.
    `TlaNames` have no Kani harness, no shadow twin, and no mutant; P12 is a place where a
    disagreement in violated sets can go unreported, and P23 a place where the per-run
    comparison pairs runs on two different systems.
-7. **Effect orders the builder may not exclude [paper; read].** Step 3 of T1 for
+7. **Effect orders the builder may not exclude [paper; read].** Fixed in #485, which makes
+   the build reject an action that writes one slot twice. Step 3 of T1 for
    multi-target transitions rests on a builder invariant (P24). On the one shape not found
    to be excluded, the two effect readings differ, and the post-guards remove the
    difference only when the `transitions` arms carry `.when` guards; with unguarded arms,
