@@ -225,27 +225,27 @@ jobs:
       - uses: cachix/install-nix-action@v31
       - uses: Swatinem/rust-cache@v2
       - name: Build CLI
-        run: cargo build -p rdra-ish-cli --release
+        run: cargo build -p rdra-ish-cli --profile ci-checked
       - name: The same, with TLC beside the native checker (--with-tlc)
         # Every header line runs, each must match its header. TLC runs beside the native
         # checker on the roots scripts/tlc-roots.txt lists and on every header line with
         # flags (#305); such a run must also print tlc_result: and report no
         # error[EngineDisagreement]. engine_equivalence compares every other root's cones
         # with TLC's state graph. The run with no JVM on PATH is the shadow job's.
-        run: scripts/verify-samples.sh --with-tlc --tlc-roots scripts/tlc-roots.txt target/release/rdra-ish
+        run: scripts/verify-samples.sh --with-tlc --tlc-roots scripts/tlc-roots.txt target/ci-checked/rdra-ish
         timeout-minutes: 20
       - name: A reduced cone decides what its cone decides on the domain samples
         run: |
-          cargo test --release -p rdra-ish-core --lib reduced_domain_cones_decide_what_the_cones_decide
-          cargo test --release -p rdra-ish-core --lib reduced_domain_cones_hold_each_fold_bit_where_its_action_runs
-          cargo test --release -p rdra-ish-core --lib reduced_domain_cones_step_by_a_true_fold_bit_only_where_the_cone_steps
-          cargo test --release -p rdra-ish-core --lib case_fold_bits_hold_exactly_where_their_actions_run_past_slot_0
+          cargo test --profile ci-checked -p rdra-ish-core --lib reduced_domain_cones_decide_what_the_cones_decide
+          cargo test --profile ci-checked -p rdra-ish-core --lib reduced_domain_cones_hold_each_fold_bit_where_its_action_runs
+          cargo test --profile ci-checked -p rdra-ish-core --lib reduced_domain_cones_step_by_a_true_fold_bit_only_where_the_cone_steps
+          cargo test --profile ci-checked -p rdra-ish-core --lib case_fold_bits_hold_exactly_where_their_actions_run_past_slot_0
       - name: Each group rule has a witness, and the cost caps keep the verdict
         # The witnesses run in the debug test step too, but for the one that enumerates up
         # to BRANCH_CAP arrangements a state, which takes minutes there. The snapshot of the
         # group rules is the witness of the rules kept without one of their own; it runs
         # here alone: about 3 s in release, a minute in debug.
-        run: cargo test --release -p rdra-ish-core --lib -- symmetry::witnesses symmetry::snapshot
+        run: cargo test --profile ci-checked -p rdra-ish-core --lib -- symmetry::witnesses symmetry::snapshot
       - name: The reduced-unreduced comparison gets each saved output pair right
         run: python3 -I scripts/reduction-diff.py selfcheck
       - name: Reduced and unreduced verify agree on random models, and TLC agrees with both
@@ -265,10 +265,10 @@ jobs:
           EVENT: ${{ github.event_name }}
         run: |
           if [ "$EVENT" = pull_request ]; then
-            python3 -I scripts/reduction-diff.py run target/release/rdra-ish --fail-on-timeout \
+            python3 -I scripts/reduction-diff.py run target/ci-checked/rdra-ish --fail-on-timeout \
               --min-compared 500 --min-reduced 200 --seeds @scripts/reduction-diff-pr-seeds.txt
           else
-            python3 -I scripts/reduction-diff.py run target/release/rdra-ish --fail-on-timeout --with-tlc \
+            python3 -I scripts/reduction-diff.py run target/ci-checked/rdra-ish --fail-on-timeout --with-tlc \
               --min-compared 40 --min-reduced 20 \
               --seeds 0,2,4,7,8,13,15,18,22,23,27,31,32,38,39,41,45,46,47,49,52,53,55,57,59,188,244,417,419,459,496,78,79,86,88,89,92,95,99,100,109,113,114,125,127
           fi
@@ -288,13 +288,13 @@ jobs:
         # RDRA_REQUIRE_TLC_BATCH: the TLC runs of up to 5,000 states go through the batch
         # JVMs (#310, the flake's `tlc-batch`), and the test fails when one of them falls
         # back to a process of its own, which would otherwise only show as a slower job.
-        run: RDRA_REQUIRE_TLC=1 RDRA_REQUIRE_TLC_BATCH=1 cargo test --release -p rdra-ish-cli --test engine_equivalence
+        run: RDRA_REQUIRE_TLC=1 RDRA_REQUIRE_TLC_BATCH=1 cargo test --profile ci-checked -p rdra-ish-cli --test engine_equivalence
       - name: No rule z3 proves has a BFS counterexample at 1 to 3 instances
-        run: RDRA_REQUIRE_Z3=1 cargo test --release -p rdra-ish-cli --test proof_equivalence
+        run: RDRA_REQUIRE_Z3=1 cargo test --profile ci-checked -p rdra-ish-cli --test proof_equivalence
       - name: The adversarial corpus gives its stated verdicts, and native, TLC and z3 agree on it
         # docs/engine-agreement.md: each case under crates/rdra-ish-cli/tests/engine_corpus/
         # states every engine's verdict; about 45 s locally.
-        run: RDRA_REQUIRE_TLC=1 RDRA_REQUIRE_Z3=1 cargo test --release -p rdra-ish-cli --test engine_corpus
+        run: RDRA_REQUIRE_TLC=1 RDRA_REQUIRE_Z3=1 cargo test --profile ci-checked -p rdra-ish-cli --test engine_corpus
 
   tlc-batch-both:
     # On main only (scheduled or by hand): engine_equivalence once more with every TLC job
@@ -310,7 +310,7 @@ jobs:
       - uses: cachix/install-nix-action@v31
       - uses: Swatinem/rust-cache@v2
       - name: A batch JVM gives what a TLC process of its own gives (RDRA_TLC_BATCH=both)
-        run: RDRA_REQUIRE_TLC=1 RDRA_REQUIRE_TLC_BATCH=1 RDRA_TLC_BATCH=both cargo test --release -p rdra-ish-cli --test engine_equivalence
+        run: RDRA_REQUIRE_TLC=1 RDRA_REQUIRE_TLC_BATCH=1 RDRA_TLC_BATCH=both cargo test --profile ci-checked -p rdra-ish-cli --test engine_equivalence
         timeout-minutes: 65
 
   shadow:
@@ -329,7 +329,7 @@ jobs:
       - name: Build the shadow CLI
         # Through the corpus test's build, so the last step finds it built: a separate
         # `cargo build` resolves other features and compiled every crate a second time.
-        run: cargo test --release -p rdra-ish-cli --features shadow --test engine_corpus --no-run
+        run: cargo test --profile ci-checked -p rdra-ish-cli --features shadow --test engine_corpus --no-run
       - name: Every twin compares calls
         # How many calls each twin compared and skipped on ten runs. `verify` of patent-ops
         # reaches every twin but `Fold::holds`, which quantifier_guard reaches, a shared run
@@ -364,14 +364,14 @@ jobs:
                      "verify crates/rdra-ish-cli/tests/engine_corpus/presence_first_absent_asymmetry.rdra --symmetry always" \
                      "verify crates/rdra-ish-cli/tests/engine_corpus/presence_along_key_moves.rdra --symmetry always"; do
             RDRA_ISH_SHADOW_STATS=1 RDRA_ISH_FORCE_ORBITS=1 RDRA_ISH_FORCE_S_UP_TO_H=1 \
-              target/release/rdra-ish $run 2>&1 >/dev/null \
+              target/ci-checked/rdra-ish $run 2>&1 >/dev/null \
               | grep '^shadow: compared/skipped/stopped ' >> shadow-stats.txt || true
           done
           # The workers of a BFS run probe its shared table (#296 item 3.1 part 2) only under
           # the test-only `RDRA_ISH_FORCE_PROBES`, which a release build never sets: this run
           # holds the probes (`hit`, `recent`) to their twins. The code they check is code a
           # release build does not run.
-          RDRA_ISH_SHADOW_STATS=1 RDRA_ISH_FORCE_PROBES=1 target/release/rdra-ish verify samples/clinic-ops 2>&1 >/dev/null \
+          RDRA_ISH_SHADOW_STATS=1 RDRA_ISH_FORCE_PROBES=1 target/ci-checked/rdra-ish verify samples/clinic-ops 2>&1 >/dev/null \
             | grep '^shadow: compared/skipped/stopped ' >> shadow-stats.txt || true
           cat shadow-stats.txt
           test "$(wc -l < shadow-stats.txt)" -eq 10
@@ -406,10 +406,10 @@ jobs:
           assert runs[9]["hit"][0] and runs[9]["recent"][0], "the probing run probed nothing"
           EOF
       - name: Every sample against its expect header, each fast path held to its twin
-        run: scripts/verify-samples.sh target/release/rdra-ish
+        run: scripts/verify-samples.sh target/ci-checked/rdra-ish
         timeout-minutes: 20
       - name: The adversarial corpus, each fast path held to its twin
-        run: RDRA_REQUIRE_TLC=1 RDRA_REQUIRE_Z3=1 cargo test --release -p rdra-ish-cli --features shadow --test engine_corpus
+        run: RDRA_REQUIRE_TLC=1 RDRA_REQUIRE_Z3=1 cargo test --profile ci-checked -p rdra-ish-cli --features shadow --test engine_corpus
         timeout-minutes: 20
 
   kani:
