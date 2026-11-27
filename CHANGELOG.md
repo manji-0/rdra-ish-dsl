@@ -484,6 +484,9 @@
 
 ### Fixed
 
+- A deadlock's, a `can_reach` failure's, or a witness's trace that fails to replay
+  (`TraceFault`) now counts on `verify`'s tool-error line, as a `LiftFault` does: the run's
+  `result:` is `tool_error`, not `counterexample` (P20 follow-up).
 - Every printed trace now replays before it prints, and none panics when it does not (docs/theory
   P20, after #518): `always`, `stable`, `unchanged`, `precedes`, and `can_reach` traces,
   deadlock traces, and `states` witnesses replay through the run's step relation; the reduced
