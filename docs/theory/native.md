@@ -112,8 +112,10 @@ cell back; the arena, segment and table read back what they stored.
 
 Neither precondition is enforced today. (i) fails for a nullable Int column at `m = 255`
 and for an Enum column with 256 values and `@null` or with 257 or more values (open problem
-P54); (ii) fails for some cone states wider than 65,536 bits (open problem P50). Every claim
-below that reads a stored state ("by N1", "by N2") holds only under both.
+P54); (ii) failed for some cone states wider than 65,536 bits (open problem P50, fixed in
+#479: offsets are `u32` since, and their sum panics past `u32::MAX` bits, so (ii) holds of
+every state a run can hold). Every claim below that reads a stored state ("by N1", "by N2")
+holds only under both.
 
 *Evidence.* Kani proves the round trip, the patch path, and the arena and table operations
 on small widths (4 or 11 cells, widths up to 8 bits; the harnesses are listed in row N2).
@@ -161,7 +163,16 @@ bits):
 
 P50 needs large bounds: a cell of non-zero width past bit 65,535, about 8,192 cells of 8
 bits (for example 255 slots of an entity with 32 or more Int columns at `m = 255`). No
-sample comes near it, but D1 admits it and nothing rejects it. P54 below needs far less.
+sample comes near it, but D1 admits it and nothing rejected it. P54 below needs far less.
+
+*Fixed in #479.* `Packing` keeps offsets as `u32`, summed with a checked add that panics
+past `u32::MAX` bits; below the old limit the offsets are the same numbers, so no narrower
+state changes. Both reproductions give the verdicts of 8 instances at 255
+(`cli/tests/verify_cli.rs::a_state_past_bit_65535_keeps_its_verdicts`), and
+`packing.rs::tests::a_state_past_bit_65535_packs_patches_and_reads_back` checks the patch,
+the unpack and `Packing::cell` on either side of the first cell past bit 65,535. The same PR
+stops a run, as at the state cap, before it numbers a state `u32::MAX`, the marker of an
+unresolved move and of an unnumbered component.
 
 **Finding P54 (guarantee, reproduced by the review; fixed in #470, where the build rejects a
 column domain past 256 values as `DomainTooLarge`).** A value outside a byte is
@@ -209,7 +220,10 @@ following it (late layers whose moves reach only known states) gets a wrapped in
 the wrong sources, and liveness, `can_reach` and deadlocks read a graph that is not `G`.
 Each edge takes at least 4 bytes for its target and more for its binding, so the edges alone
 exceed `verify`'s default memory limit of 16 GiB, which stops the run first; a larger
-`--memory` reaches it. Not reproduced.
+`--memory` reaches it. Not reproduced. *Fixed in #479:* every edge number (`first`, the edge
+being pushed, a parent edge) goes through `edges.rs::edge_number`, which panics past the
+last `u32` below the `INITIAL` marker instead of wrapping
+(`edges.rs::tests::an_edge_number_past_u32_panics`).
 
 ## Memory accounting and the stop rule
 
@@ -787,8 +801,9 @@ each of its variants a fair action whose enabledness reads its mark (event-order
   and each gives a wrong verdict within the documented bounds: the value encoding (P54, a
   wrong `ok` at one instance with a nullable Int at `m = 255` or a nullable Enum of 256
   values), the bit offsets of the packing (P50, a wrong `ok` past 65,535 bits), and the
-  edge index (P55, read only, past 2^32 edges). P50 and P54 are not the only conceivable
-  ones: this document did not audit every `as` cast in `explore/` and `build/`.
+  edge index (P55, read only, past 2^32 edges). P50 and P55 are fixed in #479, which also
+  audited the narrowing casts of the explore store (state numbers, edge numbers, slot
+  counts); `build/` was not audited.
 - **Fairness wording.** N9's (⇒) direction, hence every liveness `ok`, rests on assumption
   τ, which D20 states since #475 (P56).
 - **Determinism of memory stops beside other runs** rests on the reruns of N4; one step is
@@ -862,7 +877,7 @@ after(Touch).assert(Order.flag == true)
 `rdra-ish verify` prints `Cone_AfterAssert_Touch_0 [AfterAssert_Touch_0]: ok (3 states)`.
 With `sets(Touch, Order.status == closed)` it prints `counterexample (7 states)`.
 
-**P50** (repro pending in repo, L5). One entity `Row` with `id: Int @pk` and 34 columns `c0` to `c33`, each
+**P50** (in the repository: `crates/rdra-ish-cli/tests/fixtures/wide_state/{two_creates,one_create}.rdra`, run by `verify_cli.rs::a_state_past_bit_65535_keeps_its_verdicts`, #479). One entity `Row` with `id: Int @pk` and 34 columns `c0` to `c33`, each
 `Int @default(0)`; every flag below is given to `verify`.
 
 1. One use case `Create` that creates a `Row` and `sets` every column to 1, and
