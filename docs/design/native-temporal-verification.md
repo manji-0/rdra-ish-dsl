@@ -62,7 +62,8 @@ prints a note and points at `verify`.
 (`lifecycle/lasso.rs:149-179`) evaluates a property on the infinite behavior a lasso stands
 for, per binding of the binders, the way the TLA+ printer spells it. `always x` is
 `[](present => x)`, `eventually x` is `[](present => <>x)`, and `leads_to x y` is
-`(present /\ x) ~> y`. Only the trigger reads `present`. `replay_lasso` matches a lasso from
+`(present /\ x) ~> y`. Only the trigger reads `present`, except that a `.present()` goal
+carries it in its own predicate (semantics.md D21). `replay_lasso` matches a lasso from
 another engine against the step relation, and `explain_property` builds the message
 (`lasso.rs:57`, `lasso.rs:92`). Nothing in `lasso.rs` reads fairness, because TLC has
 already applied it.
@@ -208,6 +209,8 @@ trigger predicate and a goal predicate.
 **Presence.** Only the trigger reads `present` and `link`. A goal holds or fails on the
 values of its columns whatever the slot's existence, as `fails_at` evaluates it today. A
 deleted row has base values, so a goal over base values can hold for a deleted row.
+`.present()` conjoins presence with the goal when the build lowers it, so the goal
+predicate itself then fails on a deleted row; the evaluators are unchanged.
 
 **Creation and deletion.** A binding whose slot is absent in every state triggers nothing.
 A row created later triggers from the state that creates it. A row deleted after its

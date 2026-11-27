@@ -330,6 +330,9 @@ three places: outside the temporal operator for `always`, `eventually` and `lead
 - `eventually(x)`: `[](trig => <>x)`, which is D21 with `cause = true`: `<>` includes the
   current state, as D21 reads `goal` at `j = i`.
 - `leads_to(x, y)`: `(trig /\ x) ~> y`, by definition `[]((trig /\ x) => <>y)`, D21.
+- With `.present()` the build conjoins `pres` into the goal predicate before printing, so
+  the printed goal is `pres /\ x` (`pres /\ y`), D21's goal for the modifier; the steps
+  above apply to it unchanged.
 - `stable(p)`, `unchanged(…).when(p)`: `[][\A b : (trig /\ p) => (pres' => …')]_vars`, D19,
   with the link read before the step only and stuttering steps exempt in both.
 - `precedes(p, q)`: a latch `P_seen[b]` initialised to `trig /\ p` on the initial state and

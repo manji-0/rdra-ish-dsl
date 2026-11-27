@@ -228,6 +228,8 @@ skips TLC, since `verify` refuses `--with-tlc` under `64MiB`.
 | `presence_deleted_row_owes_goal` | A row deleted after its trigger still owes its goal, read on its base values |  | `PendingPays` cex |
 | `presence_first_absent_asymmetry` | Creation takes the lowest absent slot, so the slots are not symmetric |  | `RushFinishes`, `Deadlock_Order_status_open` cex |
 | `presence_goal_on_base_values` | A goal holds on the base values of a deleted row |  | `HeldReleased` ok |
+| `presence_goal_present_both_ok` | `.present()` changes nothing where no delete can come before the goal |  | `ReviewApproved`, `ReviewApprovedPresent`, `EventuallyApproved`, `EventuallyApprovedPresent` ok |
+| `presence_goal_present_modifier` | `.present()` keeps a deleted row from meeting a goal its base values satisfy |  | `HeldReleased` ok; `HeldReleasedPresent` cex |
 | `presence_no_slot_reuse` | A deleted slot is never reused, so creating and deleting cannot go on forever |  | `PaidShips` ok |
 | `presence_per_entity_slots` | Per-entity slot counts give each entity its own slot set, in both directions | `--instance-count 1 --instances Loan=3 --instances Room=3` | `Unique_Loan_tag`, `Unique_Room_tag` cex, z3 unproved; `Unique_Member_tag`, `Unique_Booking_tag` ok, z3 unproved |
 | `safety_at_least_guard` | An `at_least` guard and the rule it keeps, against a delete |  | `Quantifier_Claim_0` cex, z3 unproved, BFS ok/cex/cex; `Quantifier_Order_1` ok, z3 proved, BFS ok/ok/ok; `Deadlock_Claim_status_open`, `Deadlock_Order_status_open` cex |

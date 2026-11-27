@@ -28,6 +28,8 @@ presence_created_later
 presence_deleted_row_owes_goal
 presence_first_absent_asymmetry
 presence_goal_on_base_values
+presence_goal_present_both_ok
+presence_goal_present_modifier
 presence_no_slot_reuse
 presence_per_entity_slots
 safety_at_least_guard

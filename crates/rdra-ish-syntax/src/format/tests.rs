@@ -261,6 +261,18 @@ fn formats_a_property_fair_chain() {
     assert_eq!(formatted, src);
 }
 
+/// `.present()` keeps its place in the chain, and formatting again changes nothing.
+#[test]
+fn formats_a_property_present_chain() {
+    let src = "property Released leads_to(A.held==true,A.held==false).fair( Drop ).present( )\nproperty Done eventually(A.status==done).present().along(A)\n";
+    let formatted = format_source(src).unwrap();
+    assert_eq!(
+        formatted,
+        "property Released\n  leads_to(A.held == true, A.held == false).fair(Drop).present()\n\nproperty Done\n  eventually(A.status == done).present().along(A)\n"
+    );
+    assert_eq!(format_source(&formatted).unwrap(), formatted);
+}
+
 #[test]
 fn formats_a_can_reach_property() {
     let src = "property OrderCanFinish \"every order can finish\"\n  can_reach(Order.status == delivered)\n";

@@ -50,6 +50,9 @@ pub(crate) fn register_property(
     let Ok(fair) = fair_use_cases(model, decl, ctx, diags) else {
         return;
     };
+    let Ok(present_goal) = present_goal(decl, ctx, diags) else {
+        return;
+    };
     let scope_semantics =
         cross_scope_semantics_from_chain(model, "property", &decl.chain, ctx, diags);
     let global = global_chain("property", &decl.chain, &scope_semantics, ctx, diags);
@@ -66,6 +69,7 @@ pub(crate) fn register_property(
                 scope_semantics,
                 global,
                 fair,
+                present_goal,
             });
         }
         Err(LowerError::Comparison(err)) => push_error(ctx, diags, decl.span.clone(), err),
@@ -103,14 +107,14 @@ fn fair_use_cases(
     let mut ok = true;
     let id = || decl.id.clone();
     for (index, cc) in decl.chain.iter().enumerate() {
-        if matches!(cc.name.as_str(), "along" | "role" | "global") {
+        if matches!(cc.name.as_str(), "along" | "role" | "global" | "present") {
             continue;
         }
         if cc.name != "fair" {
             let err = RdraError::UnknownChainMethod {
                 pred: "property".into(),
                 name: cc.name.clone(),
-                hint: "a property takes `.fair(UseCase, ...)`, `.along(A, B, ..)` with `.role(role)`, and `.global()`; `.when(p)` follows `unchanged(..)` directly".into(),
+                hint: "a property takes `.fair(UseCase, ...)`, `.present()`, `.along(A, B, ..)` with `.role(role)`, and `.global()`; `.when(p)` follows `unchanged(..)` directly".into(),
             };
             push_error(ctx, diags, cc.span.clone(), err);
             ok = false;
@@ -158,6 +162,48 @@ fn fair_use_cases(
     }
     if ok {
         Ok(fair)
+    } else {
+        Err(())
+    }
+}
+
+/// Whether the chain says `.present()`, `Err` after reporting one on a form with no goal a
+/// deleted row can meet (every form but `eventually` and `leads_to`), or one with arguments or
+/// written twice.
+fn present_goal(
+    decl: &PropertyDecl,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> Result<bool, ()> {
+    let mut present = false;
+    let mut ok = true;
+    for cc in decl.chain.iter().filter(|cc| cc.name == "present") {
+        let form = match &decl.formula {
+            AstTemporalFormula::Eventually(_) | AstTemporalFormula::LeadsTo { .. } => None,
+            AstTemporalFormula::Always(_) => Some("always"),
+            AstTemporalFormula::CanReach(_) => Some("can_reach"),
+            AstTemporalFormula::Stable(_) => Some("stable"),
+            AstTemporalFormula::Unchanged { .. } => Some("unchanged"),
+            AstTemporalFormula::Precedes { .. } => Some("precedes"),
+        };
+        let err = match form {
+            Some(form) => RdraError::PresentOnNonGoalProperty {
+                id: decl.id.clone(),
+                form: form.into(),
+            },
+            None if present || !cc.args.is_empty() => RdraError::PresentRequiresNoArguments {
+                id: decl.id.clone(),
+            },
+            None => {
+                present = true;
+                continue;
+            }
+        };
+        push_error(ctx, diags, cc.span.clone(), err);
+        ok = false;
+    }
+    if ok {
+        Ok(present)
     } else {
         Err(())
     }

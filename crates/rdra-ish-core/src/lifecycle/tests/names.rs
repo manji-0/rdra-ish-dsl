@@ -142,6 +142,11 @@ fn one_of_each() -> Vec<StateDiag> {
             usecase: "Noop".into(),
             site: site(),
         },
+        StateDiag::GoalMetByDelete {
+            property: "Ends".into(),
+            entity: "Order".into(),
+            site: site(),
+        },
         StateDiag::IntLiteralOutOfBounds {
             value: -7,
             max: 5,
@@ -317,6 +322,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::Deadlock { .. }
             | StateDiag::AssertOnInertUseCase { .. }
             | StateDiag::FairOnInertUseCase { .. }
+            | StateDiag::GoalMetByDelete { .. }
             | StateDiag::IntLiteralOutOfBounds { .. }
             | StateDiag::UnbindableScope { .. }
             | StateDiag::UnbindableCondition { .. }

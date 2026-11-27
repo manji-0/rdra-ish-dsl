@@ -753,6 +753,27 @@ fn a_property_along_joins_the_link_to_its_trigger() {
     }
 }
 
+/// `.present()` conjoins the presence of every bound row with the goal, and only with the
+/// goal: the link stays in the trigger.
+#[test]
+fn present_conjoins_every_bound_rows_presence_with_the_goal() {
+    let src = format!(
+        "{ALONG}property LeadsPresent leads_to(Payment.status == captured, Order.status == paid).along(Payment, Order).present()\n\
+         property EventuallyPresent eventually(Payment.status == captured).present()\n"
+    );
+    let tla = print(&system(&src), PrintMode::Check, "M").tla;
+    let goal = "(Payment_exists[b0] = \"present\") /\\ (Order_exists[b1] = \"present\") /\\ (Order_status[b1] = \"paid\")";
+    let expected = [
+        format!(
+            "LeadsPresent == \\A b0 \\in Payment_Ids, b1 \\in Order_Ids : ((Payment_exists[b0] = \"present\" /\\ Order_exists[b1] = \"present\" /\\ Payment_owner_Order[b0] = b1) /\\ (Payment_status[b0] = \"captured\")) ~> ({goal})\n"
+        ),
+        "EventuallyPresent == \\A b0 \\in Payment_Ids : []((Payment_exists[b0] = \"present\") => <>((Payment_exists[b0] = \"present\") /\\ (Payment_status[b0] = \"captured\")))\n".to_string(),
+    ];
+    for line in expected {
+        assert!(tla.contains(&line), "{line}\n{tla}");
+    }
+}
+
 /// A use case split into transaction groups is fair on each of its actions, the later ones
 /// per run: the second step binds the application the first step moved (an `Earlier` param,
 /// selected by its run mark), so a started run is fair to finish.

@@ -226,6 +226,7 @@ violation_message(text, pattern_desc)
         | StateDiag::DeleteLeavesChildKeys { .. }
         | StateDiag::GuardReadsLaterStep { .. }
         | StateDiag::DrivenComparisonColumnWritten { .. }
+        | StateDiag::GoalMetByDelete { .. }
         | StateDiag::DefaultOnVariationIgnored { .. } => d.to_string(),
     };
     format!("[{label}][{}] {body}", d.name(&[entity]))

@@ -650,7 +650,10 @@ a counterexample under `WfNext` is one under `Plain`) and the cone's own fairnes
 that deletes the row meets `eventually(E.c == v)` when `v` is `c`'s base value, while
 `can_reach` keeps the slot present along the path. Read on the code here, this confirms
 open problem P6; TLC reads the printed formula the same way. #475 decided P6 as documented:
-language-reference.md and D21 now state the reading.
+language-reference.md and D21 now state the reading. A `.present()` goal (P64) has the
+presence of every bound row in its predicate, conjoined by the build
+(`build/preds/temporal.rs::Builder::goal`), so the same evaluation never meets it on a
+deleted row.
 
 ## Counterexamples: what is checked before printing
 
