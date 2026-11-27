@@ -8,7 +8,7 @@ gives the meaning of the model's rules and properties on that system, and of eve
 the tools print. The theme documents listed in the [index](./README.md) state their guarantees
 in this notation. The [claims inventory](./claims.md) refers to the definitions by number
 (D1, D2, …), and each definition has an anchor of its own (`semantics.md#d1` … `#d25`).
-The code it cites was read at commit `c97c88ef` (origin/main, 2026-11-28).
+The code it cites was read at commit `fec53d6a` (origin/main, 2026-11-28).
 
 **What the definitions rest on.** D1 to D13 and D24 define `T_β(M)` from the model's text.
 Each clause names the surface construct it gives meaning to (an entity, a column and its
@@ -36,12 +36,12 @@ D14 to D23 define the meaning of rules, properties, and verdicts on a transition
 `T`, and D25 that of the deadlock finding. They apply to `T_β(M)` and to every system derived from it (a cone, a reduced cone, a
 quotient), and they cite code where a verdict is printed.
 
-This document was checked against commit `c97c88ef` (origin/main, 2026-11-28; first
+This document was checked against commit `fec53d6a` (origin/main, 2026-11-28; first
 `b83b9544`, then `670eec79`, see [Errata](#errata)). Code is cited by Rust path (`lifecycle::types::Bounds`) or as
 `file.rs::symbol`, with file paths relative to `crates/rdra-ish-core/src/lifecycle/` unless
 they start with `cli/` (`crates/rdra-ish-cli/`), as in the [claims inventory](./claims.md).
 **Implemented by** notes are pointers, not statements, and carry no read status. A code
-citation in a statement was read at `c97c88ef` unless it carries `unread@pin`
+citation in a statement was read at `fec53d6a` unless it carries `unread@pin`
 ([claims inventory](./claims.md#how-to-read-a-row)). Revisions are listed in
 [Errata](#errata).
 
@@ -706,8 +706,8 @@ soundness questions are in the index's [Open problems](./README.md#open-problems
 
 ## Errata
 
-- **2026-11-28, final audit.** **Pin** moved from `670eec79` to `c97c88ef`. Every
-  `file.rs::symbol` a statement cites was checked against `git diff 670eec79 c97c88ef`, and
+- **2026-11-28, final audit.** **Pin** moved from `670eec79` to `fec53d6a`. Every
+  `file.rs::symbol` a statement cites was checked against `git diff 670eec79 fec53d6a`, and
   each cited item a hunk touches was read again: `cli/src/verify/end.rs::End::result` (the
   `unread@pin` mark on the `result: ok` row is gone), `targets.rs::TransitionSystem::recheck_on`
   and `unmet_of_assert`, `cli/src/verify/refuted.rs`, `cli/src/verify/escalate.rs` (the #477

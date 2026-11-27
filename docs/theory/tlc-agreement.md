@@ -9,10 +9,10 @@ This document states what assurance exists that the native verifier and TLC, rea
 TLA+ module rdra-ish prints, give the same verdicts, and what kind of assurance each piece
 is. It owns rows T1 to T16 of the [claims inventory](./claims.md#d-agreement-with-tlc) and
 uses the notation of [semantics.md](./semantics.md) (D1 to D25) without redefining it. It
-describes the code at commit `c97c88ef` (origin/main, 2026-11-28).
+describes the code at commit `fec53d6a` (origin/main, 2026-11-28).
 
 It was first written against `fb6928c7`; [Appendix: the pinned
-commit](#appendix-the-pinned-commit) says what changed in the cited code up to `c97c88ef` and
+commit](#appendix-the-pinned-commit) says what changed in the cited code up to `fec53d6a` and
 what was read again. Paths follow the convention of the
 [claims inventory](./claims.md#how-to-read-a-row): `core` is
 `crates/rdra-ish-core/src/lifecycle`, `cli` is `crates/rdra-ish-cli`, `emit` is
@@ -557,7 +557,7 @@ than the translator once for all inputs.
   the replay rejects a corrupted trace.
 - **Unreduced and reduced.** `check_one_cone` compares the unreduced cone only when its BFS
   completes under `STATE_CAP` (300,000 states), and the reduced cone only when its run
-  completes under the same cap. A cone joins `VERIFY_FALLBACK` (24 cones) when its reduced
+  completes under the same cap. A cone joins `VERIFY_FALLBACK` (25 cones; insurance-claim-ops' Investigation joined in #526) when its reduced
   run at 2 instances passes the cap. A cone whose unreduced BFS passes 300,000 states while
   its reduced BFS fits is compared reduced only; since #476 `VERIFY_REDUCED_ONLY` lists those
   (30 cones), and the test fails when the list and the run differ. On such a cone TLC reads
@@ -565,7 +565,7 @@ than the translator once for all inputs.
   reduction there (P14). A reduced cone's class move prints with no params, so its edges
   compare by action alone.
 - **Cannot detect.** Temporal properties (not printed in `PrintMode::Safety`); anything at
-  3 or more instances; any cone of the 24 at 2 instances.
+  3 or more instances; any cone of the 25 at 2 instances.
 
 `a_property_cone_decides_what_the_whole_model_decides` (T3) runs the property ladder on 23
 `TEMPORAL_CASES` (7 sample files and 16 inline fixtures; T3 said 26), at 2 instances, each run of each property
@@ -789,8 +789,8 @@ the sections it cites, and carries the tag of the statements it rests on.
 3. **Bounds [read].** In CI, TLC runs at 3 or more instances only on the corpus (the three
    cases with per-entity flags, and since #476 the `bfs=` runs at 3 and 4 instances of 38
    cases) and on the 3-instance seeds among the 45 main random seeds; never on
-   the 24 fallback cones at 2 instances in `engine_equivalence` (`verify --with-tlc` runs
-   the 11 of clinic-ops, patent-ops, food-permit-ops, and insurance-claim-ops at 2
+   the 25 fallback cones at 2 instances in `engine_equivalence` (`verify --with-tlc` runs
+   the 12 of clinic-ops, patent-ops, food-permit-ops, and insurance-claim-ops at 2
    instances, verdicts only, and the 13 of oidc-auth at 1 instance only, so those 13 never
    meet TLC at 2 instances); and never as a graph comparison on unreduced cones above
    300,000 states. Open issue #202 proposes comparing large cones with TLC at 2 instances
@@ -894,14 +894,14 @@ document. The open problems this document confirmed, extended, or added, in the
 
 [read] The document was first written against `fb6928c7` (origin/main, 2026-11-28), later
 than the index's first pin `b83b9544`; between those two no path it cites changed in a part
-it relies on. It now describes `c97c88ef`. `git diff --stat fb6928c7 c97c88ef` over the cited
+it relies on. It now describes `fec53d6a`. `git diff --stat fb6928c7 fec53d6a` over the cited
 paths shows changes in the printer (`emit/tla/mod.rs`, `module.rs`, `names.rs`), the TLC
 readers (`tlc_output.rs`), the comparison and the runs (`verify/compare.rs`, `native.rs`,
 `jobs.rs`, `tlc.rs`, `bfs.rs`, `end.rs`, `refuted.rs`, `escalate.rs`, `property_cone.rs`),
 `ci.yml`, `mutants.yml`, `.cargo/mutants-tlc.toml` (new), `scripts/verify-samples.sh`,
 `scripts/kani-relevant.sh`, the corpus, and the equivalence tests. Every `file.rs::symbol`
 this document cites, and the run functions it names, were checked against `git diff fb6928c7
-c97c88ef`; each cited item a hunk touches was read again:
+fec53d6a`; each cited item a hunk touches was read again:
 
 - the printer: `emit/tla/mod.rs::print` (now `print_with`, and `print_bound` of #507), the
   bound `Next` of `module.rs`, and the `can_reach` comment of `module.rs::checks` (#498);
@@ -946,7 +946,7 @@ Changes to statements of this document after it was first written, newest last.
   is unchanged: its `v*` is the verdict on the system `T'` both engines read, which is built.
   The common-mode code paragraph and Residual risk item 1 now name I1 as the claim a builder
   fault breaks.
-- **2026-11-28, final audit: pin `c97c88ef`.** The pin moved from `fb6928c7` to `c97c88ef`
+- **2026-11-28, final audit: pin `fec53d6a`.** The pin moved from `fb6928c7` to `fec53d6a`
   ([Appendix](#appendix-the-pinned-commit) lists what was read again). The fixes merged in
   between are now described as fixed, in the past tense, with their PRs and tests: P12
   (#471), P13 and P15 (#472), P14 narrowed (#476), P16 narrowed (#486, #497), P20 (#518,
@@ -958,4 +958,5 @@ Changes to statements of this document after it was first written, newest last.
   erratum are named. The counts were recounted: 86 corpus cases with 210 `expect` lines, 36
   `bfs_and_tlc_*` tests, 26 twins; the `bfs=` runs take TLC. Residual risk items 2, 5, 6
   and 7 were rewritten for P20, P25, the TLC-side mutation run, and P24; item 2 names the
-  internal `expect`s the lift still has. The deadlock text cites D25.
+  internal `expect`s the lift still has. The deadlock text cites D25. `VERIFY_FALLBACK` has
+  25 cones since #526.
