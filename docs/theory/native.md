@@ -10,10 +10,14 @@ of [semantics.md](./semantics.md) (D1 to D25) without redefining it. `T` is the 
 build returns; that it is `T_β(M)` (D13) is claim [I1](./claims.md#0-the-build), not a step
 of any proof here.
 
-It describes the code at commit `307ee4e84ffc466bd69ce998c047092f37c6ccc6` (origin/main,
-2026-11-28, the merge of #511), the pin of the [index](./README.md). Its `crates/` are those
-of `c97c88ef` (the merge of #525): #511 changes only `Cargo.toml`, adding the `ci-checked`
-profile (Threats to validity, "Fixed-width integers"), and the CI workflow. The document was
+It describes the code at commit `41882b4f4c59d5fabf80ab9eb7b11d0730a76f98` (origin/main,
+2026-11-28, the merge of #529). From `c97c88ef` (the merge of #525) to the pin, the crates
+change only by #526, a test of `cli/tests/engine_equivalence.rs`, and #529, which turned the
+lifts' remaining invariants into faults; #529's changes to `reduce/lift.rs`,
+`explore/orbit.rs`, `explore/orbit/findings.rs`, `explore/properties.rs` and
+`explore/graph.rs` were read at the pin. #511 in between changes only `Cargo.toml`, adding the
+`ci-checked` profile (Threats to validity, "Fixed-width integers"), and the CI workflow. The
+[index](./README.md) pins `307ee4e8`, whose crates are those of `c97c88ef`. The document was
 first written against `fb6928c7` and was
 brought up to date with `c97c88ef` after the final audit of docs/theory: the code that the
 fixes of P19, P20, P50, P51, P52, P53, P54 and P55 changed (#470, #478, #479, #484, #487,
@@ -715,7 +719,7 @@ that is not one; *symmetric* a run up to slot permutations, lifted by
 `explore/orbit.rs::lift_path` (safety, `always`, deadlocks) or the lasso lift of
 `explore/orbit/liveness.rs`. The shared path for stored traces is
 `explore/graph.rs::ComponentRun::lifted_path` (behind `trace_to`, `trace_of` and
-`trace_along`): it replays the stored path on the system the run explored, then lifts it. A
+`trace_along_to`): it replays the stored path on the system the run explored, then lifts it. A
 failure is a fault, a tool error that the run counts as such and prints without a trace:
 `LiftFault` for a state rule or `after` assertion, `LassoFault` for a property, `TraceFault`
 for a deadlock or `can_reach`.
@@ -723,7 +727,7 @@ for a deadlock or `can_reach`.
 | Check | Plain | Reduced | Symmetric |
 |---|---|---|---|
 | State rule, `after` | replayed (`explore/mod.rs::ComponentRun::trace_violations`, `trace_of`; `LiftFault` carrying `LassoFault::Replay` on failure, since #518); not re-evaluated: the violation was evaluated at admission on the same states | replayed on the reduced system, then lifted step by step (`LiftFault` on failure, since #522); re-evaluated on the lifted last state, and a lifted state that no longer violates is `LiftFault` carrying `LassoFault::Satisfies` (#487, P52) | lifted (`lift_path`), replayed on the system the run explored, lifted through the reduction when that system is reduced (`explore/orbit.rs`, `LiftFault` on either failure, since #522); re-evaluated on the lifted last state (`LassoFault::Satisfies` as in the reduced column) |
-| `always` | re-evaluated on the stored path (`explore/properties.rs::ComponentRun::decide_property`: `property_failure`, which `expect`s a failure, then `debug_assert_eq!` on its position), then replayed (`trace_along`; `PropertyVerdict::Fault` with `LassoFault::Replay` on failure, since #522) | re-evaluated on the reduced path as in the plain column, then replayed on the reduced system and lifted step by step (`trace_along`); not re-evaluated on the lifted path | only on a cone the reduction leaves whole (`cli/verify/jobs.rs::PropertyJob::symmetric`), so no lift through a reduction is needed: lifted, replayed (`LassoFault::Replay`) and re-evaluated on the lifted path (`OrbitRun::decide_always`, `LassoFault::Satisfies`) |
+| `always` | re-evaluated on the stored path, failing at its last state, in every build (`explore/properties.rs::ComponentRun::decide_property`, `property_failure`; `PropertyVerdict::Fault` with `LassoFault::Satisfies` otherwise, since #529; before, an `expect` and a `debug_assert_eq!`), then replayed (`trace_along_to`; `LassoFault::Replay` on failure, since #522) | re-evaluated on the reduced path as in the plain column, replayed on the reduced system and lifted step by step (`trace_along_to`), then re-evaluated on the lifted last state (`LassoFault::Satisfies` if it no longer fails, since #529) | only on a cone the reduction leaves whole (`cli/verify/jobs.rs::PropertyJob::symmetric`), so no lift through a reduction is needed: lifted, replayed (`LassoFault::Replay`) and re-evaluated on the lifted path (`OrbitRun::decide_always`, `LassoFault::Satisfies`) |
 | `stable`, `unchanged`, `precedes` | as `always`, plain | never reduced (`decide_property` restricts without reduction) | not run up to symmetry |
 | `eventually`, `leads_to` | replayed, formula re-evaluated, fairness re-checked (N11; `LassoFault` on failure) | the reduced lasso is never printed; what prints is either the `WfNext` lasso lifted to the unreduced cone and replayed, re-evaluated and fairness-checked there (`decide_liveness_reduced`; `Spurious` otherwise, `Spurious::Fails` for a lift that fails its step checks since #522), or the lasso of the rerun on the unreduced cone (`Cone_P_Full`); if that rerun stops, the property is `not decided` | run up to symmetry on any cone, but on a reduced cone a counterexample of that run is decided again by the plain runs and never printed (`cli/verify/native.rs::liveness_up_to_symmetry`); on a cone the reduction leaves whole, replayed, re-evaluated and fairness-checked after lifting (`orbit/liveness.rs`, `LassoFault` on failure, `LassoFault::Unclosed` past 10,000 copies) |
 | `can_reach` | replayed (`targets.rs::TransitionSystem::verdict`, `trace_to`; `TraceFault` on failure, since #522); the finding is not decided again on the trace | never reduced (`explore_cone` keeps a `can_reach` cone whole) | not run up to symmetry |
@@ -738,24 +742,27 @@ Three consequences.
   `T`, which held the wrapped value.
 - *P20, fixed.* Every printed trace now replays on the system the run explored and, when that
   system is reduced or a quotient, lifts with every step checked against the unreduced cone
-  (#518 for state rules and `after`; #522 for the rest). Before, plain safety traces were not
+  (#518 for state rules and `after`; #522 for the rest; #529 for the lifts' own look-ups and
+  the `always` checks). Before, plain safety traces were not
   replayed, reduced traces were lifted with `debug_assert!` checks only, and symmetric traces
   were replayed but failed by panic. A reduced liveness counterexample whose unreduced rerun
   stops still becomes `not decided` rather than printing the lifted lasso.
-- *What is still unchecked or panics.* A reduced `always` is not re-evaluated on its lifted
-  path. A plain `always`'s position is checked by `debug_assert_eq!` only, and
-  `decide_property` `expect`s that the stored path breaks the property. Deadlock and
-  `can_reach` traces replay, but the finding is not decided again on them. The lifted start of
-  a reduced trace is not checked against the unreduced cone's initial states. And the lifts
-  hold invariants of their own tables by release `expect`s and `assert!`s:
-  `reduce/lift.rs::lift` (that the start's class holds a representative and an initial S
-  state, that a T step's rise and a class move's target exist, one inner group per rise and
-  per S step, `assert_eq!` that a rise lifts as itself, the indexing of `block_of_class`, and
-  up to `H` a `debug_assert!` that the concrete S path starts at the stored initial state),
-  `explore/orbit.rs::lift_path` (that a stored edge is a move of its source), and the lasso
-  lift of `explore/orbit/liveness.rs` (that an edge is the move at its place and its
-  permutation takes the move to the stored target). A failure there stops the command; none
-  can print a trace that does not replay.
+- *What is still unchecked or panics.* Deadlock and `can_reach` traces replay, but the
+  finding is not decided again on them. The lifted start of a reduced trace is built from an
+  initial S state of the start's class (a start with none is `ReplayError::NotInitial` since
+  #529) and is not itself checked against the unreduced cone's initial states. Two places hold
+  invariants of their own by release panics at the pin: the lasso lift of
+  `explore/orbit/liveness.rs` (an `expect` and two `assert!`s that an edge is the move at its
+  place and that its permutation takes the move to the stored target) and
+  `reduce/lift.rs::lift_stop` (`expect`s about its caller, a reduced cone, and its walk's own
+  graph, marked in the code as unchecked invariants). A failure there stops the command;
+  neither can print a trace that does not replay. Before #529, `reduce/lift.rs::lift` (its
+  look-ups of the start's class and initial S state, of a T step's rise and a class move's
+  target, one inner group per rise and S step, and up to `H` the concrete start),
+  `explore/orbit.rs::lift_path` (that a stored edge is a move of its source) and
+  `decide_property` (that the stored path breaks the property) held theirs the same way; each
+  is now a `ReplayError` or `LassoFault::Satisfies` (test
+  `core/tests/reduce.rs::a_lift_from_no_initial_state_is_a_replay_error`).
 
 ### The lift's mechanics
 
@@ -786,9 +793,10 @@ only what the lift computes.
   (state, binding) pairs (**N12**) closes after at most the order of the loop's composed
   permutation, capped at 10,000 copies (`orbit/liveness.rs::MOST_COPIES`). **N13**: a
   lifted trace that does not replay is a tool error, never a printed counterexample (P20,
-  fixed in #518 and #522; before, it panicked). The lift itself still `expect`s that each
-  stored edge is a move of its source, a release panic if the quotient's tables are wrong
-  (the third consequence above).
+  fixed in #518 and #522; before, it panicked). Since #529 `lift_path` also reports a stored
+  edge that is no move of its source as `ReplayError::NoMove` rather than panicking; the
+  lasso lift of `orbit/liveness.rs` still panics on its own invariants (the third consequence
+  above).
 
 The `Twin::OrbitLiveness` twin compares the orbit search with the plain run's `avoid`
 (`ComponentRun::liveness_reference`), so it tests the quotient against N9's implementation,
@@ -909,7 +917,7 @@ each of its variants a fair action whose enabledness reads its mark (event-order
   the review rather than for this document (see the first paragraph). Each is now a test on
   a clean build ([Reproductions](#reproductions)).
 - **Read at the pin for the N16 table and the lift's mechanics:** `reduce/lift.rs::lift`
-  (every lifted step checked by `is_move`, the remaining `expect`s), `::lift_cycle` and
+  (every lifted step checked by `is_move`, and since #529 every look-up), `::lift_cycle` and
   `::lift_stop` (a failed lift is `Spurious::Fails`), `explore/graph.rs::ComponentRun::lifted_path`,
   `explore/mod.rs::ComponentRun::trace_violations`, `explore/properties.rs::ComponentRun::decide_property`,
   `explore/orbit.rs::lift_path`, `::replays` and `OrbitRun::decide_always`, the safety lift of
@@ -961,8 +969,8 @@ Read on the code here, with their status at the pin: P6 (decided as documented, 
 (prose, corrected in #477); P17, the orbit twins' caps (fixed in #473: a skip is reported);
 P19 (fixed in #478: a naive oracle, and `assert!` on completeness in every build); P20
 (fixed in #518 and #522: every printed trace replays, the table of
-[Counterexamples](#counterexamples-what-is-checked-before-printing); the release `expect`s
-and `assert!`s it lists remain). Corrected: P18 (`SameAs` and `DenseBinding` are release paths
+[Counterexamples](#counterexamples-what-is-checked-before-printing), and #529 for the lifts'
+own look-ups; the release `expect`s and `assert!`s it lists remain). Corrected: P18 (`SameAs` and `DenseBinding` are release paths
 whose twins run in every `shadow` run; `Twin::SeenGrowth` runs on the release path since
 #473; the loom model and a Miri job still do not exist). The [index](./README.md#open-problems)
 holds the entries.
@@ -1046,9 +1054,9 @@ Changes to statements of this document after it was first written, newest last.
   #495: a `.present()` goal in "The goal on absent rows"; `2a373175`, #510: `StateTooWide`;
   `79c4d186` and `9519199b`, #522: N13 and the N16 reading list say a failed replay is a fault).
 - **2026-11-28, after the final audit of docs/theory** (findings 1, 2, 4, 16, 45 to 49;
-  commit `065e53d7`). Re-pinned from `fb6928c7` to `307ee4e8`, whose crates are those of `c97c88ef`
-  (commit `2e9ff3e6` named the content commit; a follow-up moved the pin from `c97c88ef` to
-  `307ee4e8`, the index's pin, after #511), with the method of the
+  commit `065e53d7`, with follow-ups on the same branch). Re-pinned from `fb6928c7` to
+  `41882b4f`, the merge of #529, which landed while this revision was written, with the method
+  of the
   first paragraph; the sentence that the verifier was the same at `b83b9544` and `fb6928c7`
   is gone, and semantics.md is cited for D1 to D25, N14 citing D25 with its `has_way_on`
   condition. N2's preconditions are enforced (`DomainTooLarge`, #470; `u32` offsets, #479;

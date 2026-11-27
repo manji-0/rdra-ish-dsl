@@ -8,10 +8,14 @@ on a smaller system decides what `T_β(M)` (D13) would: a cone of influence, a c
 an independent sub-lifecycle, a run up to slot permutations, and a run at more instances. It
 uses the notation of [semantics.md](./semantics.md) and does not redefine it.
 
-The code read is commit `307ee4e84ffc466bd69ce998c047092f37c6ccc6` (origin/main,
-2026-11-28, the merge of #511), the pin of the [index](./README.md). Its `crates/` are those
-of `c97c88ef` (the merge of #525): #511 changes only `Cargo.toml`, adding the `ci-checked`
-profile, and the CI workflow. The document was first written against `fb6928c7` and was
+The code read is commit `41882b4f4c59d5fabf80ab9eb7b11d0730a76f98` (origin/main,
+2026-11-28, the merge of #529). From `c97c88ef` (the merge of #525) to the pin, the crates
+change only by #526, a test of `cli/tests/engine_equivalence.rs`, and #529, which turned the
+lifts' remaining invariants into faults; #529's changes to `reduce/lift.rs`, `explore/orbit.rs`,
+`explore/orbit/findings.rs`, `explore/properties.rs` and `explore/graph.rs` were read at the
+pin. #511 in between changes only `Cargo.toml`, adding the `ci-checked` profile, and the CI
+workflow. The [index](./README.md) pins `307ee4e8`, whose crates are those of `c97c88ef`. The
+document was first written against `fb6928c7` and was
 brought up to date with `c97c88ef` after the final audit of docs/theory: the code that the
 fixes of P1, P7, P10, P11, P20, P30, P31, P32 and P33 changed (#477, #480, #488, #509, #512,
 #516, #518, #521, #522) was re-read at `c97c88ef`, and for every other function, type and
@@ -798,16 +802,16 @@ leaves) and the random-graph test below, which also certifies every worklist par
   a `T` step and an `S` step alike, is checked against the unreduced cone's moves in every build
   (`is_move` over `plain_moves`), and a step that is not one is a `ReplayError`, reported as a fault,
   not a counterexample (P20, fixed in #518 and #522; before, the `T` steps were checked by
-  `debug_assert!` only and an unfolded `S` step not at all). The lifted start state is built from
-  the run's initial state and an initial `S` state of its class, and is not itself checked against
-  the unreduced cone's initial states. Some of `lift`'s own invariants still panic in a release
-  build at the pin rather than return a fault: the `expect`s that the start's class holds a
-  representative and an initial `S` state, that a `T` step's rise and a class move's target exist
-  in the extended sub-lifecycle, and that the inner lift returns one group per rise and per `S`
-  step; the `assert_eq!` that a rise lifts as itself; the indexing of `block_of_class`; and, up to
-  `H`, the `debug_assert!` that the concrete `S` path starts at the stored initial state. Each
-  states a property of the reduction's own tables; none can make a trace print that does not
-  replay, but a failure stops the command instead of reporting a fault.
+  `debug_assert!` only and an unfolded `S` step not at all). Since #529 `lift`'s look-ups are
+  checked too: a start with no class, or whose class holds no initial `S` state, or whose concrete
+  `S` path up to `H` starts elsewhere, is `ReplayError::NotInitial`; a `T` step's rise or a class
+  move's target that the extended sub-lifecycle lacks is `NoMove`; an inner lift that returns the
+  wrong number of groups is `Length` (test `core/tests/reduce.rs::a_lift_from_no_initial_state_is_a_replay_error`,
+  beside `::a_lifted_step_that_is_no_move_of_the_cone_is_a_replay_error`). Before #529 these were
+  `expect`s, an `assert_eq!` and a `debug_assert!`. The lifted start state is built from the run's
+  initial state and an initial `S` state of its class, and is not itself checked against the
+  unreduced cone's initial states. `lift_stop` keeps `expect`s about its caller (a reduced cone)
+  and its walk's own graph, each marked in the code as an unchecked invariant.
 - **A17** (the cache): the cached quotient is keyed by the extended system, the caps, and the group;
   `Twin::CacheHit` recomputes every hit in a `shadow` build. M.
 
@@ -1028,13 +1032,13 @@ is a step of the system, and each `τ_i` fixes the absent slots of `r_i`, so cre
 lowest-absent-slot rule. `explore/orbit.rs::replays` replays the lifted trace from an initial state
 and returns the `ReplayError` if it does not replay; the run reports it as a tool error
 (`LiftFault`, `LassoFault`, or `TraceFault`), not as a counterexample (P20, fixed in #518 and #522;
-before, a lifted symmetric trace that did not replay panicked). The lift itself still holds two
-invariants by panicking in a release build at the pin: `explore/orbit.rs::lift_path`, which the
-safety, `always` and deadlock lifts share, `expect`s that a stored edge is a move of its source
-whose successor canonicalizes to the stored target, and `explore/orbit/liveness.rs`'s lift of a
-lasso `expect`s and `assert!`s that each edge is the move at its place and that its permutation
-takes that move to the stored target. A failure there stops the command rather than printing a
-trace that does not replay.
+before, a lifted symmetric trace that did not replay panicked). Since #529
+`explore/orbit.rs::lift_path`, which the safety, `always` and deadlock lifts share, returns
+`ReplayError::NoMove` for a stored edge that is no move of its source whose successor
+canonicalizes to the stored target, where it had an `expect`. The lasso lift of
+`explore/orbit/liveness.rs` still `expect`s and `assert!`s, in a release build at the pin, that
+each edge is the move at its place and that its permutation takes that move to the stored
+target; a failure there stops the command rather than printing a trace that does not replay.
 
 **Composition with the reduction (A22).** On a reduced cone, `R` runs up to `G_T`, which leaves out every
 entity `Reduction::fixed_why` names (each `S` entity, each entity holding an `S` variable, an input, or a bit
@@ -1154,7 +1158,7 @@ the row; a fixed or closed one carries its pull request.
 | A10, A11 | Lemma 6, point 5 | sketch (A11: that a count is never node-folded, unread@pin) | M, D | P31 (fixed, #521) |
 | A12, A13, A14 | by reading | full (by construction) | D (A12, A13) | |
 | A15 | Theorem A15 | full relative to A8's hypotheses | R, D | P7 (fixed, #480), P31 (fixed, #521) |
-| A16 | lift | none | R (every lifted step, every build), D | P20 (fixed, #518, #522; release `expect`s remain) |
+| A16 | lift | none | R (every lifted step and look-up, every build), D | P20 (fixed, #518, #522, #529) |
 | A17 | — | none | M, D | |
 | A18 | Theorem A18 | full given (G1)–(G6) | M, D | P8 (prose fixed, #475), P30 (fixed, #488) |
 | A19 | `DeletedRowOwner` | full (as the case (G5) removes) | D | |
@@ -1272,12 +1276,13 @@ the row; a fixed or closed one carries its pull request.
   shown (Hypotheses, (G6)). A model that broke it could print a wrong verdict up to symmetry, `ok`
   included; none is known, and no sample or corpus cone fires the rule.
 - **Panics left in the lifts.** Every printed trace replays before it prints (P20, fixed in #518 and #522),
-  but `reduce/lift.rs::lift`, `explore/orbit.rs::lift_path` and the lasso lift of
-  `explore/orbit/liveness.rs` still hold some invariants of the reduction's and the group's own tables by
-  `expect` or `assert!` (A16, Counterexamples), and `explore/properties.rs::ComponentRun::decide_property`
-  `expect`s that the stored path it found breaks the property and checks the position by
-  `debug_assert_eq!` only. A failure of one of these stops the command; none can print a trace that does
-  not replay.
+  and since #529 `reduce/lift.rs::lift`, `explore/orbit.rs::lift_path` and
+  `explore/properties.rs::ComponentRun::decide_property` report a broken invariant of their own as a
+  fault. Two places still hold invariants by panicking in a release build at the pin: the lasso lift of
+  `explore/orbit/liveness.rs` (`expect` and `assert!` that each edge is the move at its place and that its
+  permutation takes it to the stored target), and `reduce/lift.rs::lift_stop` (`expect`s about its caller
+  and its walk's own graph). A failure there stops the command; neither can print a trace that does not
+  replay.
 - **Bounded results.** Everything here, escalation included, is a statement at a bound. `ok at n` at
   `β + 1` and `β + 2` adds two bounded results; it is not an induction.
 
@@ -1314,9 +1319,8 @@ Changes to statements of this document after it was first written, newest last.
   [counterexamples](#instance-symmetry) paragraph says a lifted trace that does not replay is a
   fault.
 - **2026-11-28, after the final audit of docs/theory** (findings 1, 2 and 27 to 35; commit
-  `065e53d7`). Re-pinned from `fb6928c7` to `307ee4e8`, whose crates are those of `c97c88ef`
-  (commit `2e9ff3e6` named the content commit; a follow-up moved the pin from `c97c88ef` to
-  `307ee4e8`, the index's pin, after #511), with the method of the first
+  `065e53d7`, with follow-ups on the same branch). Re-pinned from `fb6928c7` to `41882b4f`, the
+  merge of #529, with the method of the first
   paragraph; the sentence that every statement held at both `b83b9544` and `fb6928c7` is gone.
   Statements that described P1, P7, P10, P11, P20, P30 and P32 as open now describe the code
   at the pin and give each fix in the past tense with its pull request and test: the
@@ -1324,7 +1328,8 @@ Changes to statements of this document after it was first written, newest last.
   exact entity cones of `target_cone` and the new `assert_cones_exact` (P32, #477); the
   partition certificate `reference::stable` with its fallback (P7, #480); `Rule::AbsentOwner`,
   its witness, and eleven `Rule` variants (P30, #488); the per-step check of `lift` (P20,
-  #518, #522), with the release `expect`s and `assert!`s that remain listed. `KEPT` holds ten
+  #518, #522, #529), with the release `expect`s and `assert!`s that remain listed (#529 merged
+  while this revision was written and was read at the pin, `41882b4f`). `KEPT` holds ten
   reasons, not eleven. The quoted `debug_assert!` in `PropertyCone::under` is
   `!whole || inexact.is_none()`. "Which checks read a run up to symmetry soundly" no longer
   lists `stable`, `unchanged` and `precedes` among the annotated-quotient readers: they are
