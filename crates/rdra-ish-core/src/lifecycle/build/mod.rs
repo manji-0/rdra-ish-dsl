@@ -257,7 +257,7 @@ fn variant_index(values: &[String], name: &str) -> Option<u8> {
         .iter()
         .position(|v| v == name)
         .or_else(|| values.iter().position(|v| v.eq_ignore_ascii_case(name)))
-        .map(|i| i as u8)
+        .and_then(|i| u8::try_from(i).ok())
 }
 
 /// Term equality of two slots whose domains `compares_with` each other, under which null

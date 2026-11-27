@@ -215,7 +215,7 @@ impl Scan<'_> {
                     if let Some((parent, _)) = owner_parent(*var) {
                         let size = ts.var(*var).domain.size(ts);
                         let chosen: BTreeSet<Value> = values.iter().map(|c| c.value).collect();
-                        if (0..size).any(|v| !chosen.contains(&Value(v as u8))) {
+                        if (0..size).any(|v| !chosen.contains(&Value::at(v))) {
                             self.leave_out(parent, Rule::OwnerChoice);
                         }
                     }

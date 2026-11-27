@@ -214,6 +214,8 @@ impl Builder<'_> {
                     site,
                 },
             );
+            // No var: nothing then lists its values, and a value past a byte never exists.
+            return None;
         }
         let var = self.push_var(
             VarKind::Column {

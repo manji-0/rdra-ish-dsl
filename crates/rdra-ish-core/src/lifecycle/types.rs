@@ -273,9 +273,10 @@ impl Domain {
             return None;
         }
         match self {
-            Domain::Int => Some(Value(n as u8)),
-            // At int_max 255 the top has no value (`DomainTooLarge`): never wrap to null.
-            Domain::NullableInt => (n as u8).checked_add(1).map(Value),
+            // No value past a byte: none for the top of a nullable Int at 255, which the build
+            // then reports (`DomainTooLarge`, `IntLiteralOutOfBounds`), never a wrap to null.
+            Domain::Int => u8::try_from(n).ok().map(Value),
+            Domain::NullableInt => u8::try_from(n + 1).ok().map(Value),
             _ => None,
         }
     }
@@ -317,15 +318,23 @@ impl Domain {
     }
 
     /// The value of declared value `i` of an Enum domain (`false` is 0 and `true` 1 of a Bool
-    /// one): `i`, or `i + 1` past the null of a nullable one. A value past the 256 a state
-    /// holds is the top one, never a wrap onto null or the first value; the build reports such
-    /// a domain (`DomainTooLarge`), which no engine then explores.
+    /// one): `i`, or `i + 1` past the null of a nullable one.
     pub fn of_variant(&self, i: usize) -> Value {
         let shift = usize::from(matches!(
             self,
             Domain::NullableEnum(_) | Domain::NullableBool
         ));
-        Value(u8::try_from(i + shift).unwrap_or(u8::MAX))
+        Value::at(i + shift)
+    }
+
+    /// `of_variant`, or `None` for a declared value past a byte, which only a domain the build
+    /// rejects (`DomainTooLarge`) has.
+    fn variant_value(&self, i: usize) -> Option<Value> {
+        let shift = usize::from(matches!(
+            self,
+            Domain::NullableEnum(_) | Domain::NullableBool
+        ));
+        u8::try_from(i + shift).ok().map(Value)
     }
 
     /// The declared value an Enum or Bool value stands for, as `of_variant` numbers it; `None`
@@ -347,7 +356,7 @@ impl Domain {
             .iter()
             .position(|v| v == name)
             .or_else(|| values.iter().position(|v| v.eq_ignore_ascii_case(name)))
-            .map(|i| self.of_variant(i))
+            .and_then(|i| self.variant_value(i))
     }
 
     /// The name of an Enum value; `None` for null or a value of another domain.
@@ -390,6 +399,18 @@ impl Domain {
 pub struct Value(pub u8);
 
 impl Value {
+    /// The value of index `i` of a domain. A value is a byte, and a domain of more than 256
+    /// values is a build error (`DomainTooLarge`) whose column gets no var, so no index past
+    /// 255 reaches here: one that does is a bug, and panics rather than wrap onto another value.
+    pub fn at(i: usize) -> Value {
+        match u8::try_from(i) {
+            Ok(v) => Value(v),
+            Err(_) => {
+                panic!("value index {i} past a byte: a domain of more than 256 values was built")
+            }
+        }
+    }
+
     pub const ABSENT: Value = Value(0);
     pub const PRESENT: Value = Value(1);
     pub const DELETED: Value = Value(2);
