@@ -26,7 +26,7 @@ by the independent review of this document, on a release binary of another sibli
 (possibly the same one) whose core and CLI `src` it checked against the same sources with
 `diff -rq`; that binary no longer exists, so they were not re-run for the current text. The models
 and commands are in [Reproductions](#reproductions); each run takes under a second. How the
-document changed after it was first written is in [Errata](#errata).
+document changed after it was first written is in [Errata](#errata). `unread@pin` marks a statement whose cited code was not read at the pinned commit ([claims inventory](./claims.md#how-to-read-a-row)).
 
 ---
 
@@ -230,7 +230,7 @@ formal-verification.md says.
 **N15 (Stops give `not decided`).** Every reader below returns `Undecided` (or
 `NotDecided`, or leaves the finding open) on a stopped graph unless it found a violation in
 the part explored, and the CLI maps that to `not decided` (`cli/src/verify/end.rs::End::result`,
-cited from row N15 and not re-read here).
+cited from row N15; unread@pin).
 A stopped run's counterexamples are sound for safety (they are paths of `G`, hence traces
 of `T`) and for liveness by N10. The time budget (`Caps::deadline`, read every 256
 admissions) is the one stop whose position depends on the machine.
@@ -317,7 +317,7 @@ Hence `Σ_j` agrees for all `j`, and with it everything the readers below comput
   `met_memory_limit`, true for any `MemoryCapReached` diagnostic, crowded in the pool or
   not. Such a run is rerun against the command's pool itself, not an explicit room; in
   `bfs_cones` the reruns go one at a time in `open` order (the property pass's order was not
-  read). That the pool holds the same bytes at that rerun whatever the job count is
+  read: unread@pin). That the pool holds the same bytes at that rerun whatever the job count is
   the one step not shown (open problem P53). Evidence:
   `cli/tests/memory_cli.rs::cones_side_by_side_stop_where_they_stop_one_at_a_time` and
   `::a_stopped_entity_cone_leaves_its_room_on_any_number_of_threads`.
@@ -787,7 +787,7 @@ each of its variants a fair action whose enabledness reads its mark (event-order
   `targets.rs::vacuity`, `unmet_of_rule` and `unmet_of_assert` (which reads `step_ends`)
   and `edges.rs::StepEnds::read` (no filter on self-loops); for N14, the choice of the least
   `(idx, k)` per column value in `findings.rs`.
-- **Not re-read here:** `cli/src/verify/end.rs` (N15); `reduce/lift.rs::lift_stop` beyond
+- **Not re-read here (unread@pin):** `cli/src/verify/end.rs` (N15); `reduce/lift.rs::lift_stop` beyond
   `MAX_WALK` and `Spurious::NoLoop`; `explore/orbit.rs::lift_path` and
   `orbit/liveness.rs` beyond their certification steps (the "Symmetric" bullet of the lift's
   mechanics rests on the first version's reading of them; see [Errata](#errata)); the
@@ -820,9 +820,11 @@ the entries.
 
 ## Reproductions
 
-The runs behind P50, P51 and P54, with the binaries described in the first paragraph.
+The runs behind P50, P51 and P54, with the binaries described in the first paragraph. None
+is yet a test or corpus case in the repository: each is marked *repro pending in repo* with the
+fix lane that adds it, and the marker gives way to the test's path when that lands.
 
-**P51.** The model:
+**P51** (repro pending in repo; dup of P22, L4). The model:
 
 ```
 entity Order "注文" {
@@ -844,7 +846,7 @@ after(Touch).assert(Order.flag == true)
 `rdra-ish verify` prints `Cone_AfterAssert_Touch_0 [AfterAssert_Touch_0]: ok (3 states)`.
 With `sets(Touch, Order.status == closed)` it prints `counterexample (7 states)`.
 
-**P50.** One entity `Row` with `id: Int @pk` and 34 columns `c0` to `c33`, each
+**P50** (repro pending in repo, L5). One entity `Row` with `id: Int @pk` and 34 columns `c0` to `c33`, each
 `Int @default(0)`; every flag below is given to `verify`.
 
 1. One use case `Create` that creates a `Row` and `sets` every column to 1, and
@@ -857,7 +859,7 @@ With `sets(Touch, Order.status == closed)` it prints `counterexample (7 states)`
    `--instance-count 8`: `counterexample (511 states)`. At `--instance-count 255`:
    `ok (256 states)`, `result: ok`, with the two `usecase` declarations in either order.
 
-**P54** (run by the review; models kept outside the repository). An entity
+**P54** (run by the review; models kept outside the repository; repro pending in repo, L2). An entity
 `Row { id: Int @pk; n: Int @null }`, a use case `Create` that creates a `Row` with
 `sets(Create, Row.n == 255)`, and `forbidden(Row, Row.n >= 200)`, under
 `--instance-count 1 --int-range-max 255`: `ok (2 states)`, `result: ok`. With 254 in place

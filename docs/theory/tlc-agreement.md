@@ -28,7 +28,7 @@ directory's own documents) is outside what this document cites. Paths follow the
 [claims inventory](./claims.md#how-to-read-a-row): `core` is
 `crates/rdra-ish-core/src/lifecycle`, `cli` is `crates/rdra-ish-cli`, `emit` is
 `crates/rdra-ish-emit/src`. How the document changed after it was first written is in
-[Errata](#errata).
+[Errata](#errata). `unread@pin` marks a statement whose cited code was not read at the pinned commit ([claims inventory](./claims.md#how-to-read-a-row)).
 
 **The central point [read].** Agreement with TLC is evidence, not a theorem. No part of the TLA+
 translation is proved. What exists is (1) an argument, written here for the first time,
@@ -380,7 +380,7 @@ code computed it. It checks the native exploration of that quotient, not the quo
 soundness (A8, theme (a)). This document gives no paper argument that the printed class
 move (the `is_class_move` branch of `action`), the `Rise` lookup, and the bits denote the
 native reduced step (`moves_of_into` with a reduction); `bits`, `rise_expr`, and the native
-reduced step were not read for it. Step 3 on reduced systems therefore rests on the graph
+reduced step were not read for it (unread@pin). Step 3 on reduced systems therefore rests on the graph
 comparison of reduced sample cones alone. The sample comparison does compare the reduced cone's violated
 checks with the unreduced cone's, through TLC on both
 ([Sample comparison](#the-sample-comparison)), but only on cones whose unreduced BFS fits
@@ -718,7 +718,7 @@ the sections it cites, and carries the tag of the statements it rests on.
    cone, a wrong ladder decision, or a wrong quotient table moves both engines. Only the 191
    hand-written `expect` lines see these, and only on the 79 traps they name.
 2. **A wrong verdict on any input no test ran [read; runtime].** The run-time guard on
-   native counterexamples is partial. By P20 (reported, not re-read here) and D23, only a
+   native counterexamples is partial. By P20 (reported; unread@pin) and D23, only a
    liveness lasso on an unreduced cone is replayed through the step relation before it
    prints: a safety counterexample is re-evaluated by `property_failure`, not replayed; the
    lift of a reduced safety trace checks its steps with `debug_assert!` only; a reduced

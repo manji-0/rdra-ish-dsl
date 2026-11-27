@@ -13,7 +13,7 @@ The code read is commit `fb6928c74ccc5b479dea07d92cc1e39c34ddd218` (origin/main,
 crates scripts` touches 30 files, all in codegen, the LSP, the plugin manifest and two
 scripts, and none under `lifecycle/`, `verify/`, `property_cone.rs`, or `emit/tla`, so every
 statement here holds at both commits. How the document changed after it was first written is
-in [Errata](#errata). Paths are relative to
+in [Errata](#errata). `unread@pin` marks a statement whose cited code was not read at the pinned commit ([claims inventory](./claims.md#how-to-read-a-row)). Paths are relative to
 `crates/rdra-ish-core/src/lifecycle/` unless they start with `cli/`
 (`crates/rdra-ish-cli/src/`) or `cli/tests/` (`crates/rdra-ish-cli/tests/`), as in
 [semantics.md](./semantics.md). No tool was run for this document; every statement about
@@ -681,7 +681,7 @@ it to "worklist = sweeps" plus the sweeps' own correctness, which is argued here
 - **A10** (monotone inputs): Lemma 5c–d and point 5 of Theorem A8. Monotonicity is not used in A8; it
   keeps `X` finite and small. It is used in A15 (case 3 and `s_cycles`).
 - **A11** (folds): Lemma 6, with the fold equivalence twin-checked. A count is never node-folded
-  (counting-rules.md); not re-read.
+  (counting-rules.md); unread@pin.
 - **A12** (counters on `T`): `split_at` seeds `T_v` with every counter, and `monotone_vars` marks
   counters cyclic, so no counter is an input. P-full by reading.
 - **A13** (one reduction for both engines): `reduced_with` rejects a reduction past
@@ -1004,7 +1004,7 @@ Evidence: none beyond the reading of `escalate` and the guide.
 | A7 | Theorem A7 | full | D | |
 | A8 | Theorem A8 | sketch: assumes (B1)–(B3) and Lemma 6 | M, D | P7, P31 |
 | A9 | — | none | M (≤ 2,500,000 states), D | P7 |
-| A10, A11 | Lemma 6, point 5 | sketch | M, D | P31 |
+| A10, A11 | Lemma 6, point 5 | sketch (A11: that a count is never node-folded, unread@pin) | M, D | P31 |
 | A12, A13, A14 | by reading | full (by construction) | D (A12, A13) | |
 | A15 | Theorem A15 | full relative to A8's hypotheses | R, D | P7, P31 |
 | A16 | lift | none | R (partial), D | P20 |
