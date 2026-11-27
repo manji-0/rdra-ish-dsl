@@ -3,10 +3,14 @@
 //! nothing, and the rises' signatures as sets. A test build holds every quotient the tests
 //! compute to it, and the random graphs of `the_worklist_partition_is_the_partition_of_
 //! repeated_sweeps`. A `shadow` build holds the quotients of up to `SHADOW_CAP` states.
+//! Every build certifies the worklist's partition (`stable`) and falls back to the sweeps
+//! when the certificate fails (P7).
 
 use std::collections::{BTreeSet, HashMap};
 
-use super::{distinct, Adj};
+#[cfg(any(test, feature = "shadow"))]
+use super::distinct;
+use super::Adj;
 
 /// The most states of a quotient a `shadow` build runs the sweeps on; larger ones pass
 /// unchecked, and the certificate of #275's stage 2 is to check them. A test build checks
@@ -21,8 +25,65 @@ use super::{distinct, Adj};
 #[cfg(all(feature = "shadow", not(test)))]
 const SHADOW_CAP: usize = 2_500_000;
 
+/// Whether `blocks` is a partition the reduction may use (P7): it refines `initial`, it is
+/// divergence-blind stuttering stable under the silent edges (a sweep of
+/// `stuttering_blocks` with every block a splitter splits nothing), and it is strongly
+/// stable under the rises (the states of a block enter the same blocks by a rise). These are
+/// what cone-soundness.md's bisimulation needs of the partition; coarseness is not. A sweep
+/// that splits nothing returns at once, so a stable partition costs one sweep and one pass
+/// over the rises.
+pub(in crate::lifecycle::reduce) fn stable(
+    n: usize,
+    silent: &[(u32, u32)],
+    rises: &[(u32, u32)],
+    initial: &[u32],
+    blocks: &[u32],
+) -> bool {
+    if blocks.len() != n || initial.len() != n {
+        return false;
+    }
+    // Numbered from 0 in order of first appearance, as the sweep's block table wants.
+    let mut index: HashMap<u32, u32> = HashMap::new();
+    let blocks: Vec<u32> = blocks
+        .iter()
+        .map(|b| {
+            let len = index.len() as u32;
+            *index.entry(*b).or_insert(len)
+        })
+        .collect();
+    let mut label: Vec<Option<u32>> = vec![None; index.len()];
+    for (b, l) in blocks.iter().zip(initial) {
+        if *label[*b as usize].get_or_insert(*l) != *l {
+            return false;
+        }
+    }
+    if !same_partition(&stuttering_blocks(n, silent, &blocks), &blocks) {
+        return false;
+    }
+    let mut entered: Vec<(u32, u32)> = rises
+        .iter()
+        .map(|&(x, y)| (x, blocks[y as usize]))
+        .collect();
+    entered.sort_unstable();
+    entered.dedup();
+    let mut ends = vec![0usize; n + 1];
+    for &(x, _) in &entered {
+        ends[x as usize + 1] += 1;
+    }
+    for i in 0..n {
+        ends[i + 1] += ends[i];
+    }
+    let of = |x: usize| entered[ends[x]..ends[x + 1]].iter().map(|e| e.1);
+    let mut first: Vec<Option<usize>> = vec![None; index.len()];
+    (0..n).all(|x| {
+        let f = *first[blocks[x] as usize].get_or_insert(x);
+        of(f).eq(of(x))
+    })
+}
+
 /// Holds `blocks`, what `quotient_blocks` returned for these arguments, to the sweeps, and
 /// panics naming the call when the two partitions differ beyond the numbering of blocks.
+#[cfg(any(test, feature = "shadow"))]
 pub(super) fn check(
     n: usize,
     silent: &[(u32, u32)],

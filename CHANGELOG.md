@@ -400,6 +400,12 @@
 
 ### Fixed
 
+- The reduction by an independent sub-lifecycle certifies its partition on every run, in
+  every build (docs/theory P7): the blocks refine the labels, one sweep of the reference
+  refinement with every block a splitter splits nothing, and the states of a block rise into
+  the same blocks. Before, only a `shadow` build compared the worklist with the sweeps, and
+  only up to 2,500,000 states. A partition that fails the certificate is a tool bug; the run
+  prints a warning and uses the sweeps' partition, which is stable when they stop.
 - Instance symmetry leaves out the class of a parent whose key a guard reads on the row the
   step creates, before the step (docs/theory P30, rule `AbsentOwner`). That row is absent, its
   key holds the base value, the parent in slot 0, and the group does not relabel a key on an
