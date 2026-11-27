@@ -35,6 +35,7 @@ new = "svc.New()"
 | `package` | Go: the package name of `domain`. Default `domain`. |
 | `seal` | TypeScript: write `domain` as `codegen --seal` does. Set it with `domain`: a state built as an object literal, skipping the transition function, then fails `build` (TS2741) instead of passing `run`. |
 | `tsconfig` | TypeScript: the tsconfig the probe's `tsconfig.rdra.json` extends. |
+| `serde` | Rust: `true` derives `::serde::Serialize` and `::serde::Deserialize` on ids, scalars, value sets, rows, records, events and run marks, in the model's spelling; an entity with states goes over the wire as its row and comes back through `from_row`. The crate needs `serde` with `derive`. Default `false`. |
 | `root` | Where the build runs. Default: the nearest directory above `domain` with `Cargo.toml`, `go.mod`, `package.json`, or `tsconfig.json`. |
 | `build`, `run` | A command list replacing the language's default. |
 | `conformance_states` | The states the BFS behind the traces explores at most. Default `65536`. |
@@ -125,6 +126,20 @@ impl PayUseCase for Service {
 `self.order` loads a row and converts it with `Order::from_row`; `self.check` is the
 conditional write of step 2.
 
+The output also lists what each result commits, so `commit` need not name a result's fields.
+Implement `CommitStore` once, over every entity, run mark, and event: `write_row` writes a
+`RowWrite` (a put or a delete, with its `expected`), `write_mark` stores, advances, or deletes a
+run mark, and `record_event` keeps a raised event. Then each `commit_*` is one call, made
+inside the call's transaction, which rolls back on an error:
+
+| Rust | TypeScript | Go |
+|---|---|---|
+| `commit_writes(&mut store, write)` | `commitWrites(store, PayOutcome.writes(write))` | `CommitWrites(store, write)` |
+
+The helper stops with `NotEnabled` at the first row or mark that is no longer what the result
+names. The last step of a split use case returns the marks it ends (`ended_<row>_mark`), and
+the helper deletes them.
+
 In TypeScript:
 
 - A result holds states (`kind: "Paid"`), the store rows (`status: "paid"`). Answer an
@@ -135,3 +150,34 @@ In TypeScript:
   swapped without a compile error, and the conformance run does not see the values of
   columns the model does not track. Check such a call against the contract's parameter
   names, and test it with distinct values.
+
+## An async Rust service
+<!-- derived-from ../../../docs/cli-reference.md#an-async-rust-service -->
+
+The Rust contracts are synchronous `&mut self`. On an async database crate (sqlx), keep the
+domain calls pure and do the I/O around them: write prepare and commit once as async methods,
+and let the HTTP handlers call those. For the conformance test, implement the contracts on an
+adapter that `block_on`s the same methods, with the runtime and pool shared across the
+per-trace `new`:
+
+```rust
+static RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+
+pub struct Conform(Service); // Service: the async service over a shared sqlx pool
+
+fn rt() -> &'static tokio::runtime::Runtime {
+    RT.get_or_init(|| tokio::runtime::Runtime::new().expect("a runtime"))
+}
+
+impl PayUseCase for Conform {
+    fn prepare_pay(&mut self, order: OrderId, paid_at: DateTime) -> Result<PayOutcome, PayError> {
+        rt().block_on(self.0.prepare_pay(order, paid_at))
+    }
+    fn commit_pay(&mut self, write: PayOutcome) -> Result<(), PayError> {
+        rt().block_on(self.0.commit_pay(write))
+    }
+}
+```
+
+Do not wrap the async service in a mutex behind the synchronous contracts for production:
+that serialises every request.

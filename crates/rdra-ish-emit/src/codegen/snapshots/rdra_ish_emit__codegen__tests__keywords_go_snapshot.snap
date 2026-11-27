@@ -2035,6 +2035,280 @@ func RunNew(parentFunction Function, parentFunc Func, parentMod Mod, matchId Mat
 	return NewOutcome{}, &NewError{Kind: NewErrorNotEnabled, Err: &NotEnabled{UseCase: "New"}}
 }
 
+// ── Commit: what a result writes ──
+
+// StoredRow is a row of any entity as a store holds it: its type names the entity.
+type StoredRow interface {
+	isStoredRow()
+}
+
+func (Function) isStoredRow() {}
+
+func (Mod) isStoredRow() {}
+
+func (FuncRow) isStoredRow() {}
+
+func (MatchRow) isStoredRow() {}
+
+// StoredId is the id of a row of any entity: its type names the entity.
+type StoredId interface {
+	isStoredId()
+}
+
+func (FunctionId) isStoredId() {}
+
+func (ModId) isStoredId() {}
+
+func (FuncId) isStoredId() {}
+
+func (MatchId) isStoredId() {}
+
+// RowWrite is one row a commit writes, only where the row is still what Expected names: when
+// it is not, the commit writes nothing and the call is NotEnabled. Row is stored (inserted when
+// Expected is Absent, else updated), or the row is deleted when Delete is set.
+type RowWrite struct {
+	// Entity is the entity of the row, as the model names it.
+	Entity string
+	// Id is the row's id: nil when the entity has no one-column key.
+	Id StoredId
+	// Row is the row to store: nil for a delete.
+	Row StoredRow
+	// Delete says the row is deleted.
+	Delete bool
+	// Expected is what the row must still be.
+	Expected ExpectedSource
+}
+
+// RunMark is a run mark of a use case split into transactions, on one row.
+type RunMark struct {
+	// UseCase is the use case of the run, as the model names it.
+	UseCase string
+	// Entity is the entity of the marked row, as the model names it.
+	Entity string
+	// Id is the id of the marked row.
+	Id StoredId
+	// Step is the step of the run that last wrote the row.
+	Step int
+}
+
+// MarkWrite is one run mark a commit writes. A put at step 1 inserts the mark, where the
+// row holds no mark of the use case; a put at a later step advances the row's mark from the
+// step before; a delete removes the mark at its step, and the run ends on the row.
+type MarkWrite struct {
+	// Mark is the mark.
+	Mark RunMark
+	// Delete says the mark is deleted.
+	Delete bool
+}
+
+// RaisedEvent is an event of any type a use case raises: its type names the event.
+type RaisedEvent interface {
+	isRaisedEvent()
+}
+
+func (Switch) isRaisedEvent() {}
+
+// Writes is what one commit stores, in order: the rows, then the run marks, then the events.
+type Writes struct {
+	// UseCase is the use case whose result it is.
+	UseCase string
+	// Rows are the rows to write.
+	Rows []RowWrite
+	// Marks are the run marks to store, advance, or delete.
+	Marks []MarkWrite
+	// Events are the events raised.
+	Events []RaisedEvent
+}
+
+// Committable is a result or an outcome a commit stores: every result and outcome type is one.
+type Committable interface {
+	// Writes returns every row, run mark, and event the commit writes, in order.
+	Writes() Writes
+}
+
+// Writes returns what a commit of the result stores.
+func (r ReturnResult) Writes() Writes {
+	row0 := MatchToRow(r.Match)
+	return Writes{UseCase: "Return", Rows: []RowWrite{{Entity: "Match", Id: row0.Id, Row: row0, Expected: r.MatchExpected}}, Events: []RaisedEvent{r.Switch}}
+}
+
+// Writes returns what a commit of the result stores.
+func (r DeleteResult) Writes() Writes {
+	row0 := MatchToRow(r.Match)
+	return Writes{UseCase: "Delete", Rows: []RowWrite{{Entity: "Match", Id: row0.Id, Row: row0, Expected: r.MatchExpected}}}
+}
+
+// Writes returns what a commit of the result stores.
+func (r SuperResult) Writes() Writes {
+	row0 := MatchToRow(r.Match)
+	return Writes{UseCase: "Super", Rows: []RowWrite{{Entity: "Match", Id: row0.Id, Row: row0, Expected: r.MatchExpected}}}
+}
+
+// Writes returns what a commit of the result stores.
+func (r CrateResult) Writes() Writes {
+	row0 := MatchToRow(r.Match)
+	return Writes{UseCase: "Crate", Rows: []RowWrite{{Entity: "Match", Id: row0.Id, Row: row0, Expected: r.MatchExpected}}}
+}
+
+// Writes returns what a commit of the result stores.
+func (r DefaultResult) Writes() Writes {
+	row0 := MatchToRow(r.Match)
+	return Writes{UseCase: "Default", Rows: []RowWrite{{Entity: "Match", Id: row0.Id, Row: row0, Expected: r.MatchExpected}}}
+}
+
+// Writes returns what a commit of the result stores.
+func (r TypeResult) Writes() Writes {
+	row0 := FuncToRow(r.Func)
+	return Writes{UseCase: "Type", Rows: []RowWrite{{Entity: "Func", Id: row0.Id, Row: row0, Expected: r.FuncExpected}}}
+}
+
+// Writes returns what a commit of the result stores.
+func (r ClassResult) Writes() Writes {
+	row0 := FuncToRow(r.Func)
+	return Writes{UseCase: "Class", Rows: []RowWrite{{Entity: "Func", Id: row0.Id, Row: row0, Expected: r.FuncExpected}}}
+}
+
+// Writes returns what a commit of the result stores.
+func (r NewFromNewResult) Writes() Writes {
+	row0 := MatchToRow(r.Match)
+	return Writes{UseCase: "New", Rows: []RowWrite{{Entity: "Match", Id: row0.Id, Row: row0, Expected: r.MatchExpected}}}
+}
+
+// Writes returns what a commit of the result stores.
+func (r NewFromReturnResult) Writes() Writes {
+	row0 := MatchToRow(r.Match)
+	return Writes{UseCase: "New", Rows: []RowWrite{{Entity: "Match", Id: row0.Id, Row: row0, Expected: r.MatchExpected}}}
+}
+
+// Writes returns what a commit of the result stores.
+func (r NewFromFuncResult) Writes() Writes {
+	row0 := MatchToRow(r.Match)
+	return Writes{UseCase: "New", Rows: []RowWrite{{Entity: "Match", Id: row0.Id, Row: row0, Expected: r.MatchExpected}}}
+}
+
+// Writes returns what a commit of the result stores.
+func (r StaticResult) Writes() Writes {
+	row0 := r.Function
+	return Writes{UseCase: "Static", Rows: []RowWrite{{Entity: "Function", Id: row0.Id, Row: row0, Expected: r.FunctionExpected}}}
+}
+
+// Writes returns what a commit of the case that ran stores: nothing when no case is set.
+func (o ReturnOutcome) Writes() Writes {
+	if o.Ran != nil {
+		return o.Ran.Writes()
+	}
+	return Writes{UseCase: "Return"}
+}
+
+// Writes returns what a commit of the case that ran stores: nothing when no case is set.
+func (o DeleteOutcome) Writes() Writes {
+	if o.Ran != nil {
+		return o.Ran.Writes()
+	}
+	return Writes{UseCase: "Delete"}
+}
+
+// Writes returns what a commit of the case that ran stores: nothing when no case is set.
+func (o SuperOutcome) Writes() Writes {
+	if o.Ran != nil {
+		return o.Ran.Writes()
+	}
+	return Writes{UseCase: "Super"}
+}
+
+// Writes returns what a commit of the case that ran stores: nothing when no case is set.
+func (o CrateOutcome) Writes() Writes {
+	if o.Ran != nil {
+		return o.Ran.Writes()
+	}
+	return Writes{UseCase: "Crate"}
+}
+
+// Writes returns what a commit of the case that ran stores: nothing when no case is set.
+func (o DefaultOutcome) Writes() Writes {
+	if o.Ran != nil {
+		return o.Ran.Writes()
+	}
+	return Writes{UseCase: "Default"}
+}
+
+// Writes returns what a commit of the case that ran stores: nothing when no case is set.
+func (o TypeOutcome) Writes() Writes {
+	if o.Ran != nil {
+		return o.Ran.Writes()
+	}
+	return Writes{UseCase: "Type"}
+}
+
+// Writes returns what a commit of the case that ran stores: nothing when no case is set.
+func (o ClassOutcome) Writes() Writes {
+	if o.Ran != nil {
+		return o.Ran.Writes()
+	}
+	return Writes{UseCase: "Class"}
+}
+
+// Writes returns what a commit of the case that ran stores: nothing when no case is set.
+func (o NewOutcome) Writes() Writes {
+	if o.FromNew != nil {
+		return o.FromNew.Writes()
+	}
+	if o.FromReturn != nil {
+		return o.FromReturn.Writes()
+	}
+	if o.FromFunc != nil {
+		return o.FromFunc.Writes()
+	}
+	return Writes{UseCase: "New"}
+}
+
+// CommitStore is a store that commits a result inside the transaction of the call: CommitWrites calls
+// it once per write, in order. Each method writes one item only where it is still what it names.
+type CommitStore interface {
+	// WriteRow writes the row where it is still what w.Expected names: false, and nothing
+	// written, when it is not. Its error is the store's own.
+	WriteRow(w RowWrite) (bool, error)
+	// WriteMark writes the run mark where the row's mark is still what the step needs: none of
+	// the use case for a put at step 1, the step before for a later put, the mark's own step
+	// for a delete. False, and nothing written, when it is not. Its error is the store's own.
+	WriteMark(w MarkWrite) (bool, error)
+	// RecordEvent records a raised event. Its error is the store's own.
+	RecordEvent(e RaisedEvent) error
+}
+
+// CommitWrites commits what w writes through store: every row, then every run mark, then every
+// event, and stops at the first row or mark that is no longer what it names. It begins and
+// ends no transaction: call it inside the transaction of the call, and roll back on an error.
+// Its error is a *NotEnabled when a row or a run mark is no longer what the result expects,
+// or the store's error as the store returned it.
+func CommitWrites(store CommitStore, w Committable) error {
+	writes := w.Writes()
+	for _, row := range writes.Rows {
+		ok, err := store.WriteRow(row)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return &NotEnabled{UseCase: writes.UseCase}
+		}
+	}
+	for _, mark := range writes.Marks {
+		ok, err := store.WriteMark(mark)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return &NotEnabled{UseCase: writes.UseCase}
+		}
+	}
+	for _, event := range writes.Events {
+		if err := store.RecordEvent(event); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ── Helpers ──
 
 func isDigits(s string) bool {

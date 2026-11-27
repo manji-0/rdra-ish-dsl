@@ -68,6 +68,7 @@ pub(super) fn print(
     print_validators(domain, &mut out);
     print_rows(domain, &mut out);
     print_dispatchers(domain, &mut out);
+    super::writes::go::print(domain, &mut out);
     print_helpers(&mut out);
     super::go_port::print_port(domain, &mut out);
     // `codegen` ends the file with one newline.
@@ -1065,6 +1066,13 @@ fn print_result(f: &FnDecl, out: &mut String) {
     for event in &f.raises {
         lines.push(Line::Cells(vec![event.ty.clone(), event.ty.clone()]));
     }
+    for (m, field) in f.marks_ended() {
+        let name = super::type_ident(&field);
+        lines.push(Line::Comment(format!(
+            "{name} is the run mark the step took and ends: delete it in the same transaction."
+        )));
+        lines.push(Line::Cells(vec![name, m.ty.clone()]));
+    }
     out.push_str(&struct_decl(&f.result, &lines));
 }
 
@@ -1411,6 +1419,9 @@ fn print_function(domain: &DomainModel, f: &FnDecl, out: &mut String) {
             .map(|(field, s)| format!("{}: {}", super::type_ident(&field.name), source(s)))
             .collect();
         parts.push(format!("{0}: {0}{{{1}}}", event.ty, ids.join(", ")));
+    }
+    for (m, field) in f.marks_ended() {
+        parts.push(format!("{}: {}", super::type_ident(&field), local(&m.name)));
     }
     out.push_str(&format!(
         "\treturn {}{{{}}}, nil\n}}\n\n",

@@ -333,6 +333,28 @@ fn seal_is_for_typescript_only() {
     );
 }
 
+/// `serde` is a `[code.rust]` key for the domain code: under another language's table, or in a
+/// table that names `adapter`, it is an error naming the table.
+#[test]
+fn serde_is_for_rust_domain_code_only() {
+    let go = MANIFEST.replace("[code.rust]", "[code.go]");
+    let dir = project("serde-go", &format!("{go}serde = true\n"));
+    let (code, _, stderr) = outcome(&rdra(&dir, &["codegen", "model", "--code"]));
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(
+        stderr.contains("[code.go] in model/rdra.toml: `serde` is for [code.rust] only"),
+        "{stderr}"
+    );
+    let adapter = MANIFEST.replace("domain = ", "adapter = ");
+    let dir = project("serde-adapter", &format!("{adapter}serde = true\n"));
+    let (code, _, stderr) = outcome(&rdra(&dir, &["codegen", "model", "--code"]));
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(
+        stderr.contains("[code.rust] in model/rdra.toml: `serde` derives on the domain code, and this table names `adapter`"),
+        "{stderr}"
+    );
+}
+
 /// A manifest whose `build` and `run` are rdra-ish's own `--version`: the conformance run
 /// passes with no toolchain, so what is tested is the statement of what it covered (with
 /// `--mutants 0`: such a run fails the self-check) or the self-check itself.

@@ -4,6 +4,23 @@
 
 ### Added
 
+- A Claude Code plugin. The repository is a plugin marketplace
+  (`.claude-plugin/marketplace.json`), and its `rdra-ish` plugin brings the agent skills and
+  the language server for `.rdra` files: `/plugin marketplace add manji-0/rdra-ish-dsl`, then
+  `/plugin install rdra-ish@rdra-ish`. The server runs `rdra-ish lsp` from `PATH`, which the
+  plugin does not install. `.claude-plugin/plugin.json` carries the workspace version, and
+  `scripts/check-release-version.sh` checks it with the others.
+- `rdra-ish lsp` runs the language server over stdin and stdout, the same server as
+  `rdra-ish-lsp`, so the PyPI install has it. The release binary grows by about a fifth.
+- `serde = true` in `[code.rust]` derives `::serde::Serialize` and `::serde::Deserialize` on
+  the data types of the generated Rust code: ids as their value, scalars and value sets in the
+  model's spelling and back through their parsers, rows, records, DTOs, events and run marks
+  as plain structs, and each entity with states as its row, back through `from_row`. The
+  state structs, errors, results and conformance types get no derive. Off by default, and the
+  output without it does not change; `serde` under `[code.go]` or `[code.ts]`, or `serde = true`
+  with `adapter`, makes `--code` exit 1. docs/cli-reference.md, "The code tables", also says how a
+  service on an async database crate keeps the synchronous contracts: the I/O goes around
+  the pure domain functions, and the conformance test `block_on`s the same async methods.
 - The conformance traces try every refusal of the model and check its kind (#439, PR 4). The
   format line is now `# rdra-ish conformance traces 4`, so traces and harnesses of an earlier
   version must be generated again (`check --code=fresh` says they are stale).
@@ -32,6 +49,25 @@
   - **Size.** On insurance-claim-ops the traces take 16 s and 109 MB, against 4 s and 15 MB
     before this change and the fix of the second-column choices. The traces of every model
     that has them change.
+- The codegen output (experimental) lists what each result commits, as data, in Rust, Go and
+  TypeScript (docs/design/algebraic-codegen.md, "Committing a result"). Three services built on
+  the output each wrote this glue by hand (about 160 lines in Rust, 550 in TypeScript, and a
+  script that generated 2,326 lines in Go).
+  - **Types.** `RowWrite` (a put or a delete of any entity's row, with its id and `expected`),
+    `RunMark` and `MarkWrite` (a run mark stored, advanced, or deleted), `RaisedEvent`, and
+    `Writes`. Rust and Go also have `StoredRow` and `StoredId`.
+  - **Accessor.** Every result and outcome type lists its rows, marks, and events: the trait
+    `IntoWrites` in Rust, the method `Writes()` and the interface `Committable` in Go, and a
+    companion `<Type>.writes(r)` in TypeScript.
+  - **Helper.** `commit_writes` / `CommitWrites` / `commitWrites` writes a `Writes` through a
+    `CommitStore` the service implements once (write a row, write a mark, record an event). It
+    stops with `NotEnabled` at the first row or mark that is no longer what it names.
+  - **Marks to end.** The result of a step of a split use case now carries each run mark it
+    takes and ends (`ended_<row>_mark`), so the commit can delete the mark.
+
+  The change adds items only. It adds about 15% to the output (clinic-ops in Rust: 3,898 of
+  25,212 lines). A model type named like one of the new types keeps its name, and the new
+  type takes a trailing `_`.
 - `codegen --adapter` (experimental, with `--conformance`) prints a black-box model adapter in
   place of the domain code, for Rust, Go and TypeScript (#439): plain data of the model's
   state (`ModelState`: rows by id with their tracked columns, run marks, raises) and calls

@@ -25,6 +25,7 @@ mod ts;
 mod ts_port;
 mod validators;
 pub mod verus;
+mod writes;
 
 use rdra_ish_syntax::ast::Kind;
 use std::collections::BTreeMap;
@@ -63,6 +64,10 @@ pub struct Options {
     /// TypeScript: brand the state types with a symbol only the module can name, so only its
     /// functions make a state (decision 9 of docs/design/code-check.md: opt-in).
     pub seal: bool,
+    /// Rust: derive serde's `Serialize` and `Deserialize` on the data types (`[code.rust]
+    /// serde`): the scalars and value sets in their wire spelling, the ids, the rows, the
+    /// entities with states through their rows, the records, events, and run marks.
+    pub serde: bool,
 }
 
 /// The result of the `check` the generator ran before printing.
@@ -479,6 +484,13 @@ pub struct DerivedName {
 /// The names `lang`'s printer derives from the IR's names, beyond the IR's own fields.
 /// Each language's pull request fills in its arm.
 pub fn derived_names(lang: Lang, domain: &DomainModel) -> Vec<DerivedName> {
+    let mut names = lang_derived_names(lang, domain);
+    // The commit part's types and helper, in every language.
+    names.extend(writes::derived_names());
+    names
+}
+
+fn lang_derived_names(lang: Lang, domain: &DomainModel) -> Vec<DerivedName> {
     match lang {
         // Every name the Rust output declares in the module scope is a field of the IR:
         // the Rust printer derives none.
