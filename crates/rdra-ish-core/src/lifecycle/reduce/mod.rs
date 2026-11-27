@@ -371,7 +371,7 @@ impl Reduction {
     }
 
     /// Writes the S part of `bytes`, an extended sub-lifecycle state, into `s`.
-    fn write(&self, s: &mut State, bytes: &[u8]) {
+    pub(crate) fn write(&self, s: &mut State, bytes: &[u8]) {
         let mut i = 0;
         for &(at, w, in_s) in &self.spans {
             if in_s {
