@@ -1,5 +1,5 @@
 use crate::export::Modules;
-use crate::property_cone::{ConeRun, PropertyCone};
+use crate::property_cone::{inexact, ConeRun, PropertyCone, Why};
 use rdra_ish_core::lifecycle::{
     ActId, Caps, Cone, LtlKind, QuotientCache, Target, TransitionSystem, VarSet,
 };
@@ -44,7 +44,9 @@ pub(super) struct ExploredJob {
     pub(super) system: TransitionSystem,
     pub(super) cone_index: usize,
     pub(super) names: TlaNames,
-    pub(super) frees_slots: bool,
+    /// Why a counterexample of the cone may be no behavior of the whole model
+    /// (`property_cone::inexact`).
+    pub(super) inexact: Option<Why>,
 }
 
 /// A property on its cone; the `_Full` module beside it is the unreduced cone, run after a
@@ -291,7 +293,7 @@ pub(super) fn explored_jobs(
                 checks: vec![name.to_string()],
                 kind: JobKind::Explored(Box::new(ExploredJob {
                     index: i,
-                    frees_slots: ts.cone_frees_slots(&cone),
+                    inexact: inexact(ts, &cone),
                     system,
                     cone_index,
                     names: bundle.names,

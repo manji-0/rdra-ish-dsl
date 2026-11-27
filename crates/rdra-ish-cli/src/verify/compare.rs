@@ -37,7 +37,7 @@ pub(super) fn disagreements(
                 let Some(native) = &natives.safety[k] else {
                     continue;
                 };
-                let (a, b) = (native.verdict(), tlc.decision.verdict());
+                let (a, b) = (native.module_verdict(), tlc.decision.verdict());
                 if differ(a, b) {
                     out.push(line(&job.module, &job.checks, as_str(a), as_str(b)));
                     continue;

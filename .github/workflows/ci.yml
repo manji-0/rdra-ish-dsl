@@ -181,6 +181,10 @@ jobs:
       - name: skill snippets
         # Debug binary; a verify transcript with --with-tlc needs the devShell's tlc.
         run: python3 -I scripts/check-skill-snippets.py target/debug/rdra-ish
+      - name: Int-bound sites of Lemma U
+        # The places that read the Int bound against the list under Lemma U in
+        # docs/theory/z3.md. Text only, so it runs on prose and code changes alike.
+        run: python3 -I scripts/check-int-bound-sites.py
       - name: nix package
         # The package `nix profile install github:manji-0/rdra-ish-dsl` installs. A release
         # build from scratch (about 4.5 minutes), so only when `nix` says a change can break it
@@ -321,6 +325,12 @@ jobs:
         # key that moves. The variables change nothing without `--symmetry`. The step fails
         # when a line is missing (a build without the feature) or a twin compared none in all
         # ten. The tenth runs clinic-ops with the BFS workers probing (#296 item 3.1 part 2).
+        # Each line counts `compared/skipped/stopped` per twin: a call skipped over the twin's
+        # cap, or stopped at a limit of the run, passed unchecked (P17 of
+        # docs/theory/README.md), so the step fails on such a call in a run and twin
+        # `expected_skips` does not name. The fourth run is the path a release build takes
+        # (workers that do not probe): the twins of that path must compare calls there, and
+        # the probe twins (`hit`, `recent`) none but in the tenth (P18).
         run: |
           for run in "verify samples/patent-ops --symmetry always" \
                      "verify samples/clinic-ops --symmetry always" \
@@ -333,23 +343,45 @@ jobs:
                      "verify crates/rdra-ish-cli/tests/engine_corpus/presence_along_key_moves.rdra --symmetry always"; do
             RDRA_ISH_SHADOW_STATS=1 RDRA_ISH_FORCE_ORBITS=1 RDRA_ISH_FORCE_S_UP_TO_H=1 \
               target/release/rdra-ish $run 2>&1 >/dev/null \
-              | grep '^shadow: compared/skipped ' >> shadow-stats.txt || true
+              | grep '^shadow: compared/skipped/stopped ' >> shadow-stats.txt || true
           done
           # The workers of a BFS run probe its shared table (#296 item 3.1 part 2) only under
           # the test-only `RDRA_ISH_FORCE_PROBES`, which a release build never sets: this run
-          # holds the probes (`hit`, `recent`) and the shared table's growth to their twins.
+          # holds the probes (`hit`, `recent`) to their twins. The code they check is code a
+          # release build does not run.
           RDRA_ISH_SHADOW_STATS=1 RDRA_ISH_FORCE_PROBES=1 target/release/rdra-ish verify samples/clinic-ops 2>&1 >/dev/null \
-            | grep '^shadow: compared/skipped ' >> shadow-stats.txt || true
+            | grep '^shadow: compared/skipped/stopped ' >> shadow-stats.txt || true
           cat shadow-stats.txt
           test "$(wc -l < shadow-stats.txt)" -eq 10
           python3 - <<'EOF'
           import collections, re
-          compared = collections.Counter()
+          runs = []
           for line in open("shadow-stats.txt"):
-              for twin, n in re.findall(r"(\w+)=(\d+)/", line):
-                  compared[twin] += int(n)
+              runs.append({twin: tuple(map(int, n)) for twin, *n in
+                           re.findall(r"(\w+)=(\d+)/(\d+)/(\d+)", line)})
+          compared = collections.Counter()
+          for run in runs:
+              for twin, (n, _, _) in run.items():
+                  compared[twin] += n
           none = [twin for twin, n in compared.items() if n == 0]
           assert compared and not none, f"twins that compared no call: {none}"
+          # The calls each run lets through: a sample past a twin's cap of 200,000 states.
+          expected_skips = {
+              0: {"reduced_orbit_run", "orbit_state_models"},
+              1: {"orbit_run", "s_up_to_h", "orbit_state_models"},
+          }
+          unexpected = [(i + 1, twin, s, t) for i, run in enumerate(runs)
+                        for twin, (_, s, t) in run.items()
+                        if s + t and twin not in expected_skips.get(i, set())]
+          assert not unexpected, f"calls a twin let through (run, twin, skipped, stopped): {unexpected}"
+          release = runs[3]
+          idle = [t for t in ("each_enabled", "seen", "seen_growth", "same_as", "dense_binding",
+                              "packed", "edges") if release[t][0] == 0]
+          assert not idle, f"twins of a release build's path that compared nothing there: {idle}"
+          probed = [(i + 1, t) for i, run in enumerate(runs[:9]) for t in ("hit", "recent")
+                    if run[t][0]]
+          assert not probed, f"probe twins that compared calls without probing: {probed}"
+          assert runs[9]["hit"][0] and runs[9]["recent"][0], "the probing run probed nothing"
           EOF
       - name: Every sample against its expect header, each fast path held to its twin
         run: scripts/verify-samples.sh target/release/rdra-ish
