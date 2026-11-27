@@ -51,6 +51,15 @@ impl Graph<'_> {
             .map(|e| (e.from, e.to, self.bindings[e.binding as usize].0))
     }
 
+    /// Every move as `(from, to, action, params)`, each param's slot from 0, self-loops and
+    /// repeats included. A graph of another engine's moves names no params.
+    pub fn bound_edges(&self) -> impl Iterator<Item = (u32, u32, ActId, &[u8])> + '_ {
+        self.edges.iter().map(|e| {
+            let (act, params) = &self.bindings[e.binding as usize];
+            (e.from, e.to, *act, &params[..])
+        })
+    }
+
     /// The distinct successors and predecessors of every state, self-loops left out, for the
     /// passes that walk the graph rather than replay a run (`can_reach`, deadlock).
     ///

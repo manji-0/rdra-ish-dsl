@@ -55,6 +55,18 @@ pub struct TlaBundle {
 }
 
 pub fn print(ts: &TransitionSystem, mode: PrintMode, module_name: &str) -> TlaBundle {
+    print_with(ts, mode, module_name, false)
+}
+
+/// `print`, with `Next` split into one operator per binding of each action's params, so
+/// that TLC labels each step with its binding (`TlaNames::bound_action`). The state graph
+/// is the same; only the graph comparison of `tests/engine_equivalence.rs` reads it (P25 of
+/// docs/theory/README.md).
+pub fn print_bound(ts: &TransitionSystem, mode: PrintMode, module_name: &str) -> TlaBundle {
+    print_with(ts, mode, module_name, true)
+}
+
+fn print_with(ts: &TransitionSystem, mode: PrintMode, module_name: &str, bound: bool) -> TlaBundle {
     let module_name = module_name_of(module_name);
     let names = TlaNames::new(ts);
     let wf_next = !matches!(mode, PrintMode::ConeProperty(_)) && needs_fairness(ts);
@@ -63,7 +75,7 @@ pub fn print(ts: &TransitionSystem, mode: PrintMode, module_name: &str) -> TlaBu
     let latched: Vec<usize> = checked_properties(ts, mode)
         .filter(|i| names.seen(*i).is_some())
         .collect();
-    let tla = module::render(ts, &names, &module_name, wf_next, &latched);
+    let tla = module::render(ts, &names, &module_name, (wf_next, bound), &latched);
     let cfg = cfg_without(ts, &names, mode, &BTreeSet::new());
     TlaBundle {
         module_name,
@@ -86,7 +98,7 @@ pub fn print_state_models(
 ) -> TlaBundle {
     let module_name = module_name_of(module_name);
     let names = TlaNames::with_state_models(ts, entities);
-    let tla = module::render(ts, &names, &module_name, false, &[]);
+    let tla = module::render(ts, &names, &module_name, (false, false), &[]);
     let none = BTreeSet::new();
     TlaBundle {
         cfg: cfg_without(ts, &names, PrintMode::Deadlocks, &none),

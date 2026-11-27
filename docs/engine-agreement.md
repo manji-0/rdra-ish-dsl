@@ -343,7 +343,9 @@ the case `sym_arm_reorders`.
 at 1 and 2 instances per entity, and compares on each cone:
 
 - the reached and initial states, against the graph `tlc -dump dot,actionlabels` writes;
-- the edge sets, as `(from, to, use case)`, self-loops included;
+- the edge sets, as `(from, to, use case, params)`, self-loops included: the cone is printed
+  with one `Next` disjunct per binding of each use case's params (`tla::print_bound`), so TLC
+  names the binding of each edge. A class move of a reduced cone has no params to compare;
 - the state-model findings of every entity: witnesses, use cases that never run, deadlocks;
 - the verdict of each invariant and `after` assertion, with every TLC trace replayed through
   the BFS step relation;

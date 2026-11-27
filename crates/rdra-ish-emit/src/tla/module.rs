@@ -13,12 +13,13 @@ use super::pred::Ctx;
 use super::{domain_set, render_value, TlaNames};
 
 /// `wf_next` adds `WF_vars(Next)` to `Spec`; `latched` are the `precedes` properties whose
-/// latch the module declares, and only those it defines.
+/// latch the module declares, and only those it defines. `bound` splits `Next` into one
+/// disjunct per binding of each action's params (`next`).
 pub(super) fn render(
     ts: &TransitionSystem,
     names: &TlaNames,
     module_name: &str,
-    wf_next: bool,
+    (wf_next, bound): (bool, bool),
     latched: &[usize],
 ) -> String {
     // `Cardinality` of a count is `FiniteSets`'; `:>` and `@@` of the `Rise` table are TLC's.
@@ -88,7 +89,7 @@ pub(super) fn render(
     for a in ts.action_ids() {
         action(ts, names, a, &latches, &mut out);
     }
-    next(ts, names, wf_next, &mut out);
+    next(ts, names, (wf_next, bound), &mut out);
     checks(ts, names, &latches, &mut out);
     state_checks(ts, names, &mut out);
     out.push_str("====\n");
@@ -920,18 +921,42 @@ fn from_guarded(a: &Action, var: VarId, param: u8, arms: &[Arm]) -> bool {
     })
 }
 
-fn next(ts: &TransitionSystem, names: &TlaNames, wf_next: bool, out: &mut String) {
-    out.push_str("Next ==\n");
-    if ts.actions().is_empty() {
-        out.push_str("  UNCHANGED vars\n\n");
-    } else {
-        for id in ts.action_ids() {
-            let a = &ts.actions()[id.index()];
-            out.push_str(&format!(
-                "  \\/ {}{}\n",
+/// With `bound`, an action with params is one zero-arity operator per binding,
+/// `TlaNames::bound_action`, each a disjunct of `Next`: TLC labels a step by the operator it
+/// takes, so `-dump dot,actionlabels` then names the binding of each edge. The `/\ TRUE`
+/// keeps TLC from naming the step after the action the operator calls.
+fn next(ts: &TransitionSystem, names: &TlaNames, (wf_next, bound): (bool, bool), out: &mut String) {
+    let mut disjuncts = Vec::new();
+    for id in ts.action_ids() {
+        let a = &ts.actions()[id.index()];
+        if !bound || a.params.is_empty() || is_class_move(ts, id) {
+            disjuncts.push(format!(
+                "{}{}",
                 binder(ts, names, id, a, "\\E"),
                 signature(ts, names, id, a)
             ));
+            continue;
+        }
+        for slots in bindings(ts, a) {
+            let name = names.bound_action(id, &slots);
+            let ids: Vec<String> = slots.iter().map(|s| (s + 1).to_string()).collect();
+            out.push_str(&format!(
+                "{name} == {}({}) /\\ TRUE\n",
+                names.action(id),
+                ids.join(", ")
+            ));
+            disjuncts.push(name);
+        }
+    }
+    if bound {
+        out.push('\n');
+    }
+    out.push_str("Next ==\n");
+    if disjuncts.is_empty() {
+        out.push_str("  UNCHANGED vars\n\n");
+    } else {
+        for d in disjuncts {
+            out.push_str(&format!("  \\/ {d}\n"));
         }
         out.push('\n');
     }
@@ -940,6 +965,24 @@ fn next(ts: &TransitionSystem, names: &TlaNames, wf_next: bool, out: &mut String
     } else {
         out.push_str("Spec == Init /\\ [][Next]_vars\n\n");
     }
+}
+
+/// Every binding of `a`'s params, each param's slot from 0, in the order of `a.params`.
+fn bindings(ts: &TransitionSystem, a: &Action) -> Vec<Vec<u8>> {
+    let mut out = vec![Vec::new()];
+    for param in &a.params {
+        let n = ts.slots(param.entity) as u8;
+        out = (out.into_iter())
+            .flat_map(|b| {
+                (0..n).map(move |s| {
+                    let mut b = b.clone();
+                    b.push(s);
+                    b
+                })
+            })
+            .collect();
+    }
+    out
 }
 
 /// `\A b0 \in E_Ids, .. : ` and the conjunction that the bound slots are present.
