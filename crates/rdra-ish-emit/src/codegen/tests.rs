@@ -1072,7 +1072,7 @@ fn the_rest_of_the_use_case_vocabulary_is_printed() {
     }
     let go = generated_from(VOCAB_SRC, "vocab.rdra", Lang::Go);
     for line in [
-        "if !(((caseScope == ScopeFree) && (case_.First() == true)) || (caseScope == ScopeLimited)) {",
+        "if !(((caseScope == ScopeFree) && (case_.First())) || (caseScope == ScopeLimited)) {",
         "if !(case_.OwnerId() == nil) {",
         "ownerId: ptrTo(parentOwner.Id)",
     ] {
@@ -1250,10 +1250,7 @@ applies_to(NotOff, Clear)
         go.contains("if !(item.K != nil && *item.K == ItemKRed) {"),
         "{go}"
     );
-    assert!(
-        go.contains("if !(!(item.F != nil && *item.F == false)) {"),
-        "{go}"
-    );
+    assert!(go.contains("if item.F != nil && !*item.F {"), "{go}");
 }
 
 /// G5 (round-2 audit): every target a function is named for (`To<Target>`) is in its
@@ -1331,4 +1328,86 @@ fn every_choice_a_function_is_named_for_is_chosen() {
         }
     }
     assert!(named > 0 && cases > 0, "no function chose a target");
+}
+
+/// The Go output passes staticcheck's default checks on what the printer chooses: a Bool test
+/// is `x` or `!x`, never a comparison with a constant (S1002) or `!(!x)` (SA4013), and a
+/// generic helper is printed only where something calls it (U1000).
+#[test]
+fn go_bool_tests_and_helpers_pass_staticcheck() {
+    let nullable = r#"
+entity Item "Item" {
+  id: Int @pk
+  f: Bool @null
+  g: Bool
+}
+usecase Make "Make"
+usecase Clear "Clear"
+creates(Make, Item)
+condition NotOff "not off"
+holds(NotOff, Item.f != false)
+applies_to(NotOff, Clear)
+condition GOff "g off"
+holds(GOff, Item.g == false)
+applies_to(GOff, Clear)
+sets(Clear, Item.g == true)
+"#;
+    for (src, path) in [
+        (SRC, "order.rdra"),
+        (VOCAB_SRC, "vocab.rdra"),
+        (nullable, "item.rdra"),
+    ] {
+        let go = generated_from(src, path, Lang::Go);
+        for bad in ["== true", "== false", "!= true", "!= false", "!(!"] {
+            assert!(!go.contains(bad), "{path}: {bad}\n{go}");
+        }
+        for helper in ["ptrTo", "copyOf", "anyOf", "allOf", "countOf"] {
+            if go.contains(&format!("func {helper}[")) {
+                assert!(
+                    go.matches(&format!("{helper}(")).count() > 0,
+                    "{path}: {helper} is printed and not called"
+                );
+            }
+        }
+    }
+    assert!(generated_from(nullable, "item.rdra", Lang::Go).contains("if item.G {"));
+}
+
+/// Both Go probes list their last import group as `gofmt` sorts it, by path, whichever of the
+/// service's and the domain's import paths sorts first.
+#[test]
+fn go_probe_imports_are_sorted_by_path() {
+    let model = model_from(SRC);
+    let domain = build_with(&model, Some(CAPS), true, &|_| None).unwrap();
+    let group = |text: &str| -> Vec<String> {
+        let block = text
+            .split_once("import (\n")
+            .and_then(|(_, rest)| rest.split_once("\n)\n"))
+            .expect("an import block")
+            .0;
+        let last = block.rsplit("\n\n").next().unwrap();
+        last.lines()
+            .map(|l| l.rsplit('"').nth(1).expect("a quoted path").to_string())
+            .collect()
+    };
+    for service in [
+        "example.com/clinic/clinic.Service",
+        "example.com/clinic/svc.Service",
+    ] {
+        let binding = ProbeBinding {
+            service: service.to_string(),
+            module: "example.com/clinic/domain".to_string(),
+            conformance: Some(("svc.New()".to_string(), "traces.txt".to_string())),
+            package: None,
+        };
+        let contract = go_port::probe(&domain, &binding).expect("a contract probe");
+        let adapter = adapter::probe(Lang::Go, &domain, &binding).expect("an adapter probe");
+        for text in [&contract.text, &adapter.text] {
+            let paths = group(text);
+            assert_eq!(paths.len(), 2, "{text}");
+            let mut sorted = paths.clone();
+            sorted.sort();
+            assert_eq!(paths, sorted, "{text}");
+        }
+    }
 }

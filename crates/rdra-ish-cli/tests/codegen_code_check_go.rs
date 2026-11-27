@@ -251,6 +251,11 @@ fn each_fault_fails_the_conformance_run() {
             "unconditional",
             "the write must be conditional on what the row was",
         ),
+        ("seed-error", "the service's Seed failed: the store is down"),
+        (
+            "snapshot-error",
+            "after seeding the initial state, the service's Snapshot failed: the store cannot be read",
+        ),
     ] {
         let (code, stdout, stderr) =
             outcome(&rdra(&dir, &["check", "model", "--code=run"], Some(fault)));
@@ -288,14 +293,15 @@ fn copy_model(from: &Path, to: &Path) {
 }
 
 /// The probe of every sample compiles against a service with no method: the compiler's only
-/// complaints are the use cases the service lacks, each one `CodeMissingUseCase`.
+/// complaints are the use cases the service lacks, each one `CodeMissingUseCase`. The service's
+/// package `app` sorts before `domain`, and the probe is what `gofmt` prints all the same.
 #[test]
 fn the_probe_of_every_sample_compiles() {
     if !tool("go", CODEGEN) {
         return;
     }
-    let manifest = "[model]\nname = \"sample\"\n\n[code.go]\ndomain = \"../domain/domain.go\"\nprobe = \"../svc/rdra_contract_test.go\"\nservice = \"example.com/shop/svc.Service\"\n";
-    let empty = "// Package svc implements no use case.\npackage svc\n\n// Service has no method.\ntype Service struct{}\n";
+    let manifest = "[model]\nname = \"sample\"\n\n[code.go]\ndomain = \"../domain/domain.go\"\nprobe = \"../app/rdra_contract_test.go\"\nservice = \"example.com/shop/app.Service\"\n";
+    let empty = "// Package app implements no use case.\npackage app\n\n// Service has no method.\ntype Service struct{}\n";
     let mut checked = Vec::new();
     for sample in samples() {
         let path = repo().join(&sample);
@@ -308,18 +314,24 @@ fn the_probe_of_every_sample_compiles() {
             .join(&name);
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("model")).unwrap();
-        std::fs::create_dir_all(dir.join("svc")).unwrap();
+        std::fs::create_dir_all(dir.join("app")).unwrap();
         std::fs::create_dir_all(dir.join(".git")).unwrap();
         copy_model(&path, &dir.join("model"));
         std::fs::write(dir.join("model/rdra.toml"), manifest).unwrap();
         std::fs::write(dir.join("go.mod"), "module example.com/shop\n\ngo 1.21\n").unwrap();
-        std::fs::write(dir.join("svc/service.go"), empty).unwrap();
+        std::fs::write(dir.join("app/service.go"), empty).unwrap();
         let (code, _, stderr) = outcome(&rdra(&dir, &["codegen", "model", "--code"], None));
         if code != Some(0) && stderr.contains("refusing to generate code") {
             continue;
         }
         assert_eq!(code, Some(0), "{sample}: {stderr}");
-        let contracts = std::fs::read_to_string(dir.join("svc/rdra_contract_test.go"))
+        let gofmt = Command::new("gofmt")
+            .arg("-l")
+            .arg(dir.join("app/rdra_contract_test.go"))
+            .output()
+            .expect("runs gofmt");
+        assert!(gofmt.stdout.is_empty(), "{sample}: gofmt names the probe");
+        let contracts = std::fs::read_to_string(dir.join("app/rdra_contract_test.go"))
             .unwrap()
             .lines()
             .filter(|l| l.starts_with("var _ domain."))

@@ -517,7 +517,17 @@ marks a column as personal, so the generator cannot know which to wrap; tracked 
   runs `tsc --strict` with the strictest optional flags on the output of every sample, and
   checks the text for interfaces, type assertions and throws.
 - Go: in these shapes since the Go pull request of #363. `codegen_builds.rs` runs `go vet` and
-  `gofmt -l` on the output of every sample and checks that it calls no `panic`.
+  `gofmt -l` on the output of every sample and checks that it calls no `panic`;
+  `codegen_code_check_go.rs` runs `gofmt -l` on the probe, with a service package whose import
+  path sorts before the domain's. The domain code also passes staticcheck's default checks
+  with its `Code generated` line removed: a Bool test is `x` or `!x`, and a generic helper is
+  printed only where something calls it (tested in the emit crate, not with staticcheck, which
+  CI does not install). Names keep the model's spelling with an initial capital (`Id`,
+  `PatientaccountId`, `OrderId`), not Go's initialisms (`ID`), which staticcheck's optional
+  ST1003 asks for: the names follow the model's column and entity names one to one in all three
+  languages, and a project that wants `ID` writes it in its own code. The conformance
+  harness (`--conformance`) likewise prints a value parser (`confText`, `confSet`, ...) only
+  where a call or a row reads one.
 
 ## Use cases split into transactions
 

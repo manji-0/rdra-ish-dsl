@@ -746,6 +746,11 @@ mirrors them instead of inventing its own:
   turns a message that misses every member into `NotImplemented`, and so do messages that
   together miss every member of one contract (Rust's E0046 too, as Go's backend counts
   them). TS2322 is `Signature`.
+- The probe and the domain code are ES modules. A package Node and tsc read as CommonJS
+  (`"type": "commonjs"`, npm 11's `npm init -y`) fails `build` under `verbatimModuleSyntax`
+  with TS1286 / TS1287 / TS1295 on every file, which the backend's `build_cause` turns into
+  one `CodeCommonJs`; without that option, `run` fails on Node's `Cannot use import
+  statement outside a module`, which `run_failure` names.
 - `--seal` / `[code.ts] seal` adds `[$sealed]: true` to each state type, keyed by a `unique
   symbol` the module does not export. A literal outside the module fails with TS2741, and
   `as unknown as` still passes (`codegen_behaviour.rs`). `Symbol` is reserved for it.

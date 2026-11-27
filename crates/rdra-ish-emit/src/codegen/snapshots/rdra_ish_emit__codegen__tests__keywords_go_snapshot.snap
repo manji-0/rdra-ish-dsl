@@ -2095,46 +2095,6 @@ func isDateTimeText(s string) bool {
 
 func ptrTo[T any](v T) *T { return &v }
 
-// copyOf returns a pointer to a copy of *p, or nil: a state shares no value with a row.
-func copyOf[T any](p *T) *T {
-	if p == nil {
-		return nil
-	}
-	v := *p
-	return &v
-}
-
-// anyOf reports whether some row of rows makes p hold.
-func anyOf[T any](rows []T, p func(T) bool) bool {
-	for _, r := range rows {
-		if p(r) {
-			return true
-		}
-	}
-	return false
-}
-
-// allOf reports whether every row of rows makes p hold.
-func allOf[T any](rows []T, p func(T) bool) bool {
-	for _, r := range rows {
-		if !p(r) {
-			return false
-		}
-	}
-	return true
-}
-
-// countOf counts the rows of rows that make p hold.
-func countOf[T any](rows []T, p func(T) bool) int {
-	n := 0
-	for _, r := range rows {
-		if p(r) {
-			n++
-		}
-	}
-	return n
-}
-
 // ── Contracts: one per use case, which the service implements ──
 
 // ReturnUseCase is the use case Return: Return.

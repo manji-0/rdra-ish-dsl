@@ -942,37 +942,6 @@ func copyOf[T any](p *T) *T {
 	return &v
 }
 
-// anyOf reports whether some row of rows makes p hold.
-func anyOf[T any](rows []T, p func(T) bool) bool {
-	for _, r := range rows {
-		if p(r) {
-			return true
-		}
-	}
-	return false
-}
-
-// allOf reports whether every row of rows makes p hold.
-func allOf[T any](rows []T, p func(T) bool) bool {
-	for _, r := range rows {
-		if !p(r) {
-			return false
-		}
-	}
-	return true
-}
-
-// countOf counts the rows of rows that make p hold.
-func countOf[T any](rows []T, p func(T) bool) int {
-	n := 0
-	for _, r := range rows {
-		if p(r) {
-			n++
-		}
-	}
-	return n
-}
-
 // ── Contracts: one per use case, which the service implements ──
 
 // PayUseCase is the use case Pay: Pay.
