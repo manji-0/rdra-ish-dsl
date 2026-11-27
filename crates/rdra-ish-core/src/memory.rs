@@ -161,10 +161,18 @@ impl MemoryPool {
         }))
     }
 
-    /// A pool with this one's whole room, for a run that goes alone: what the other runs of
-    /// this pool hold does not stop it, so where it stops is a function of the run alone.
+    /// A pool for a run that goes alone, with the room this one has left: what other runs
+    /// charge to this pool from now on does not stop it, so where it stops is a function of
+    /// the run alone. The callers rerun once every other run of their pass has ended and
+    /// every result they keep holds no charge, so the room left is the whole room; a debug
+    /// build checks that (P53), and a release build never lets the run pass the limit.
     pub fn whole(&'static self) -> &'static MemoryPool {
-        self.with_room(self.room)
+        debug_assert_eq!(
+            self.left(),
+            self.room,
+            "a run alone has the whole room: nothing else holds a charge"
+        );
+        self.with_room(self.left())
     }
 
     pub fn limit(&self) -> MemorySize {
