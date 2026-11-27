@@ -31,6 +31,9 @@ language server:
 The language server runs `rdra-ish lsp`, and the skills run `rdra-ish`; the plugin installs
 neither. Put `rdra-ish` on `PATH` with `uv tool install rdra-ish` or
 `nix profile install github:manji-0/rdra-ish-dsl` ([Install](../README.md#install)).
+`--sparse .claude-plugin plugins skills` after the `marketplace add` clones only what the
+plugin needs. The plugin lives in `plugins/rdra-ish/`; its `skills` is a link to this
+directory, so these files stay the one copy.
 
 ### npx skills (skills.sh)
 

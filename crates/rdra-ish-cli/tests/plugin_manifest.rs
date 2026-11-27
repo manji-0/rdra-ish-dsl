@@ -1,7 +1,8 @@
-//! The Claude Code plugin at the repository root: `.claude-plugin/marketplace.json`,
-//! `.claude-plugin/plugin.json` and `.lsp.json` parse, name each other, keep the workspace
-//! version, and use only the keys Claude Code documents (an unknown key in `.lsp.json`
-//! makes Claude Code skip the whole file).
+//! The Claude Code plugin: the marketplace at `.claude-plugin/marketplace.json` lists the
+//! plugin in `plugins/rdra-ish/`, whose `.claude-plugin/plugin.json` and `.lsp.json` parse,
+//! keep the workspace version, and use only the keys Claude Code documents (an unknown key
+//! in `.lsp.json` makes Claude Code skip the whole file). Its `skills` is a link to the
+//! repository's `skills/`, which an install copies into the plugin's cache.
 
 use std::path::{Path, PathBuf};
 
@@ -19,7 +20,7 @@ fn read_json(relative: &str) -> Value {
 }
 
 #[test]
-fn the_marketplace_lists_the_plugin_at_the_root() {
+fn the_marketplace_lists_the_plugin_in_plugins_rdra_ish() {
     let marketplace = read_json(".claude-plugin/marketplace.json");
     assert_eq!(marketplace["name"], "rdra-ish");
     assert!(marketplace["owner"]["name"].is_string());
@@ -27,17 +28,17 @@ fn the_marketplace_lists_the_plugin_at_the_root() {
     let plugins = marketplace["plugins"].as_array().unwrap();
     assert_eq!(plugins.len(), 1);
     assert_eq!(plugins[0]["name"], "rdra-ish");
-    assert_eq!(plugins[0]["source"], "./");
+    assert_eq!(plugins[0]["source"], "./plugins/rdra-ish");
 }
 
 #[test]
 fn the_plugin_version_is_the_workspace_version() {
-    let plugin = read_json(".claude-plugin/plugin.json");
+    let plugin = read_json("plugins/rdra-ish/.claude-plugin/plugin.json");
     assert_eq!(plugin["name"], "rdra-ish");
     assert_eq!(
         plugin["version"],
         env!("CARGO_PKG_VERSION"),
-        "bump .claude-plugin/plugin.json with Cargo.toml and pyproject.toml"
+        "bump plugins/rdra-ish/.claude-plugin/plugin.json with Cargo.toml and pyproject.toml"
     );
 }
 
@@ -59,7 +60,7 @@ fn the_language_server_runs_rdra_ish_lsp_for_rdra_files() {
         "maxRestarts",
         "diagnostics",
     ];
-    let servers = read_json(".lsp.json");
+    let servers = read_json("plugins/rdra-ish/.lsp.json");
     let servers = servers.as_object().unwrap();
     assert_eq!(
         servers.keys().collect::<Vec<_>>(),
@@ -90,4 +91,17 @@ fn the_language_server_runs_rdra_ish_lsp_for_rdra_files() {
         })
         .unwrap();
     assert_eq!(server["extensionToLanguage"][".rdra"], language["id"]);
+}
+
+#[test]
+fn the_plugin_skills_are_a_link_to_the_repository_skills() {
+    let link = repo().join("plugins/rdra-ish/skills");
+    let meta = std::fs::symlink_metadata(&link).unwrap();
+    // A checkout without symlinks (Windows, core.symlinks=false) writes the target as text.
+    let target = if meta.file_type().is_symlink() {
+        std::fs::read_link(&link).unwrap()
+    } else {
+        PathBuf::from(std::fs::read_to_string(&link).unwrap().trim())
+    };
+    assert_eq!(target, Path::new("../../skills"));
 }
