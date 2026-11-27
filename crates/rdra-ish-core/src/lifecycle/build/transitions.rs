@@ -105,20 +105,48 @@ impl Builder<'_> {
                         })
                         .collect()
                 }
-                Effect::Choose { var, param, values } => {
+                Effect::Choose {
+                    var,
+                    param,
+                    values,
+                    numbers,
+                } => {
                     let next = Term::Slot {
                         var: *var,
                         at: At::Next(*param),
                     };
+                    // The numbers stay one arm that names no value past the bottom, so the
+                    // guard reads the same at every Int range (`Numbers`). A value with
+                    // conditions of its own beyond theirs keeps its arm too: an arm's
+                    // conditions are a disjunction, so the value is enabled under theirs
+                    // through the numbers and under its own through its arm.
+                    let in_numbers = |c: &Choice| {
+                        numbers.as_ref().is_some_and(|n| {
+                            c.value >= n.from
+                                && c.conds.len() == n.conds.len()
+                                && c.conds.iter().all(|k| n.conds.contains(k))
+                        })
+                    };
                     // A creation's own choice has no line, so no `.when` guards it.
-                    values
+                    let mut arms: Vec<GuardedArm> = values
                         .iter()
+                        .filter(|c| !in_numbers(c))
                         .filter_map(|c| {
                             let parts =
                                 vec![Pred::Cmp(next.clone(), CmpOp::Eq, Term::Lit(c.value))];
                             Some((parts, c.site.as_ref()?, &c.conds))
                         })
-                        .collect()
+                        .collect();
+                    if let Some(n) = numbers {
+                        let part = match n.from {
+                            Value(0) => Pred::True,
+                            from => {
+                                Pred::Cmp(next.clone(), CmpOp::Ne, Term::Lit(Value(from.0 - 1)))
+                            }
+                        };
+                        arms.push((vec![part], &n.site, &n.conds));
+                    }
+                    arms
                 }
                 _ => continue,
             };
@@ -206,6 +234,7 @@ impl Builder<'_> {
                 var,
                 param: p,
                 values,
+                numbers: None,
             });
         }
     }
@@ -232,6 +261,7 @@ impl Builder<'_> {
                 a.effects.push(Effect::Choose {
                     var,
                     param: p as u8,
+                    numbers: None,
                     values: (0..size)
                         .map(|i| Choice {
                             value: Value::at(i),

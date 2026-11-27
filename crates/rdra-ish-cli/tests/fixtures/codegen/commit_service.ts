@@ -3,7 +3,8 @@
 // generated `commitWrites` on the result's `writes`: the store implements `CommitStore` once,
 // over every entity, run mark and event, so no commit names a result's fields. An id is never
 // used twice: a deleted row's id stays taken, as the model's slot does.
-// FAULT=keep-mark plants one bug: the store never deletes a run mark.
+// FAULT=keep-mark plants one bug: the store never deletes a run mark. With FAULT=store-fails
+// the store fails to record an event, and the helper returns StoreFailed with its error.
 import * as d from "./domain";
 
 // What the service needs of Node, declared here: the repository installs no @types/node.
@@ -32,6 +33,10 @@ const copy = (t: Tables): Tables => ({
 const markKey = (usecase: string, entity: string, id: number): string => `${usecase} ${entity} ${id}`;
 const ok = <T>(value: T): d.Result<T, never> => ({ ok: true, value });
 const notEnabled = (usecase: string): d.Result<never, d.NotEnabled> => ({ ok: false, error: { kind: "NotEnabled", usecase } });
+const notFound = (usecase: string, entity: string, id: number): d.Result<never, d.NotFound> => ({
+  ok: false,
+  error: { kind: "NotFound", usecase, entity, id: String(id) },
+});
 
 /** The tag of a row ("" for a record), or undefined when there is no such row. */
 function tag(t: Tables, w: d.RowWrite): string | undefined {
@@ -61,7 +66,7 @@ function holds(t: Tables, w: d.RowWrite): boolean {
   }
 }
 
-function store(t: Tables, keepMarks: boolean): d.CommitStore<never> {
+function store(t: Tables, keepMarks: boolean): d.CommitStore<string> {
   return {
     writeRow: async (w) => {
       if (!holds(t, w)) return ok(false);
@@ -90,6 +95,7 @@ function store(t: Tables, keepMarks: boolean): d.CommitStore<never> {
       return ok(true);
     },
     recordEvent: async (e) => {
+      if (process.env["FAULT"] === "store-fails") return { ok: false, error: "the event log is down" };
       t.evShipped.push(e);
       return ok(undefined);
     },
@@ -105,15 +111,15 @@ function stored<T, E>(r: d.Result<T, E>): T {
 function service(keepMarks: boolean): d.ConformancePort {
   let t = empty();
   /** Commits any result's writes in one transaction: the tables as they were come back on an error. */
-  const commit = async (writes: d.Writes): Promise<d.Result<void, d.NotEnabled>> => {
+  const commit = async (writes: d.Writes): Promise<d.Result<void, d.NotEnabled | d.StoreFailed>> => {
     const saved = copy(t);
     const r = await d.commitWrites(store(t, keepMarks), writes);
     if (!r.ok) t = saved;
     return r;
   };
-  const order = (id: d.OrderId, usecase: string): d.Result<d.Order, d.NotEnabled> => {
+  const order = (id: d.OrderId, usecase: string): d.Result<d.Order, d.NotFound> => {
     const row = t.orders.get(id);
-    return row === undefined ? notEnabled(usecase) : ok(stored(d.Order.fromRow(row)));
+    return row === undefined ? notFound(usecase, "Order", id) : ok(stored(d.Order.fromRow(row)));
   };
   return {
     seed: async (rows) => {
@@ -145,7 +151,7 @@ function service(keepMarks: boolean): d.ConformancePort {
     }),
     preparePlace: async (parent, orderId) => {
       const account = t.accounts.get(parent);
-      return account === undefined ? notEnabled("Place") : d.place(account, orderId);
+      return account === undefined ? notFound("Place", "Account", parent) : d.place(account, orderId);
     },
     commitPlace: (w) => commit(d.PlaceResult.writes(w)),
     preparePay: async (id) => {
@@ -167,7 +173,8 @@ function service(keepMarks: boolean): d.ConformancePort {
     prepareSend: async (id, ev) => {
       const row = t.shipments.get(id);
       const raised = t.evShipped.some((e) => e.shipment_id === ev.shipment_id);
-      if (row === undefined || !raised) return notEnabled("Send");
+      if (!raised) return notEnabled("Send");
+      if (row === undefined) return notFound("Send", "Shipment", id);
       return d.runSend(stored(d.Shipment.fromRow(row)), ev);
     },
     commitSend: (w) => commit(d.SendOutcome.writes(w)),

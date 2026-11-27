@@ -5,8 +5,8 @@ use crate::analysis::AppliedBody;
 use crate::lifecycle::build::preds;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::types::{
-    At, Choice, CmpOp, Domain, Effect, EntId, Guard, GuardWhy, ModelRef, Param, ParamRole, Pred,
-    Rhs, Site, Term, Value, VarId, VarKind,
+    At, Choice, CmpOp, Domain, Effect, EntId, Guard, GuardWhy, ModelRef, Numbers, Param, ParamRole,
+    Pred, Rhs, Site, Term, Value, VarId, VarKind,
 };
 use crate::model::{
     CmpOpModel, CmpRhs, ConditionKey, CrossConstraintScope, EffectValue, EntityKey, FkId, Join,
@@ -57,12 +57,15 @@ impl<'m> Builder<'m> {
             let domain = decl.domain.clone();
             let rhs = self.effect_value(&domain, value, &site, ce.entity);
             if let Some(ck) = ce.guard {
-                let values = match rhs {
-                    EffectRhs::Value(v) => vec![v],
-                    EffectRhs::AnyNonNull => (1..domain.size(&self.ts)).map(Value::at).collect(),
+                let (values, every) = match rhs {
+                    EffectRhs::Value(v) => (vec![v], false),
+                    EffectRhs::AnyNonNull => (
+                        (1..domain.size(&self.ts)).map(Value::at).collect(),
+                        domain.is_numeric(),
+                    ),
                     EffectRhs::None => continue,
                 };
-                self.guarded_set(a, uc, ce.entity, var, p, values, (ck, site));
+                self.guarded_set(a, uc, ce.entity, var, p, (values, every), (ck, site));
                 continue;
             }
             match rhs {
@@ -71,6 +74,11 @@ impl<'m> Builder<'m> {
                     a.effects.push(Effect::Choose {
                         var,
                         param: p,
+                        numbers: domain.is_numeric().then(|| Numbers {
+                            from: Value(1),
+                            conds: Vec::new(),
+                            site: site.clone(),
+                        }),
                         values: (1..domain.size(&self.ts))
                             .map(|i| Choice {
                                 value: Value::at(i),
@@ -114,12 +122,12 @@ impl<'m> Builder<'m> {
         ek: EntityKey,
         var: VarId,
         p: u8,
-        values: Vec<Value>,
+        (values, every): (Vec<Value>, bool),
         (ck, site): (ConditionKey, Site),
     ) {
         let cond = (ck, self.model.conditions[ck].id.clone());
         let guarded = a.effects.iter().position(|eff| {
-            matches!(eff, Effect::Choose { var: v, param: q, values }
+            matches!(eff, Effect::Choose { var: v, param: q, values, .. }
                 if (*v, *q) == (var, p) && !values.is_empty() && values.iter().all(|c| !c.conds.is_empty()))
         });
         let at = match guarded {
@@ -141,13 +149,29 @@ impl<'m> Builder<'m> {
                     var,
                     param: p,
                     values: Vec::new(),
+                    numbers: None,
                 });
                 a.effects.len() - 1
             }
         };
-        let Effect::Choose { values: have, .. } = &mut a.effects[at] else {
+        let Effect::Choose {
+            values: have,
+            numbers,
+            ..
+        } = &mut a.effects[at]
+        else {
             return;
         };
+        if every {
+            let numbers = numbers.get_or_insert_with(|| Numbers {
+                from: Value(1),
+                conds: Vec::new(),
+                site: site.clone(),
+            });
+            if !numbers.conds.contains(&cond) {
+                numbers.conds.push(cond.clone());
+            }
+        }
         for v in values {
             match have.iter_mut().find(|x| x.value == v) {
                 Some(c) if !c.conds.contains(&cond) => c.conds.push(cond.clone()),
@@ -278,10 +302,16 @@ impl<'m> Builder<'m> {
                 );
                 continue;
             }
-            let size = self.ts.vars[var.index()].domain.size(&self.ts);
+            let domain = &self.ts.vars[var.index()].domain;
+            let size = domain.size(&self.ts);
             a.effects.push(Effect::Choose {
                 var,
                 param: p,
+                numbers: domain.is_numeric().then(|| Numbers {
+                    from: Value(0),
+                    conds: Vec::new(),
+                    site: site.clone(),
+                }),
                 values: (0..size)
                     .map(|i| Choice {
                         value: Value::at(i),

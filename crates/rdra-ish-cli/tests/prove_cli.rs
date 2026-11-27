@@ -610,6 +610,53 @@ forbidden(Door, state == open)
     assert!(stdout.contains("refuted: Forbidden_Door_0"), "{stdout}");
 }
 
+/// A proof holds for any Int value, so no guard of a step may read the run's Int range. A
+/// `present` write guarded by `.when(C)` lists the values it may write, `1..=max` at the run's
+/// range, and the guard that pins the write to `C` named each of them: z3 then read the write
+/// as capped at `max`, and proved `n > 5` at `--int-range-max 5` though `Fill` writes 6 at a
+/// range of 7. The same write without `.when` was unproved, as both are now.
+#[test]
+fn a_guarded_present_write_reaches_past_the_int_range() {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("prove_cli_guarded_present");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    for (name, when) in [("guarded", ".when(IsOpen)"), ("unguarded", "")] {
+        let file = dir.join(format!("{name}.rdra"));
+        std::fs::write(
+            &file,
+            format!(
+                r#"entity Item "i" {{ id: Int @pk  open: Bool @default(true)  n: Int @null }}
+usecase Add "a"
+usecase Fill "f"
+creates(Add, Item)
+updates(Fill, Item)
+condition IsOpen "o"
+holds(IsOpen, Item.open == true)
+sets(Fill, Item.n == present){when}
+forbidden(Item, n > 5)
+"#
+            ),
+        )
+        .unwrap();
+        let out = verify(&[
+            "--prove",
+            "--int-range-max",
+            "5",
+            "--instance-count",
+            "1",
+            file.to_str().unwrap(),
+        ]);
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            stdout.contains("unproved: Forbidden_Item_0: not inductive; Fill(Item#1) breaks it"),
+            "{name}: {stdout}"
+        );
+    }
+}
+
 #[test]
 fn a_lemma_the_model_marks_is_reported_apart_from_the_rules() {
     if !tool("z3", "RDRA_REQUIRE_Z3") {

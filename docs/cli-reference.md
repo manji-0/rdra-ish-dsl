@@ -315,7 +315,7 @@ error[CodeObligationUnowned_Unique_Order_note]: no code owns the obligation Uniq
 | `CodeConformance` | error | `run`: the conformance test failed. The `code:` line is the harness's first difference with its `model only:` and `store only:` rows; when the harness reported nothing, where the service panicked (Rust, Go) or what it threw (Node); else the output's last line. |
 | `CodeMutantSurvived` | error | `run`: a mutant trace of the self-check passed. The `code:` line says whether the run passed or failed at another row. |
 | `CodeUnimplemented` | warning; error with `--deny-incomplete` | `run`: the run passed, but calls reached the [unimplemented port](#the-unimplemented-port) (the message names their use cases and calls), or the run printed no line saying whether any did. |
-| `CodeCoverageIncomplete` | warning; error with `--deny-incomplete` | `run`: the BFS behind the traces stopped at `conformance_states`, so the moves past it are not run and no call is tried as refused; or the traces leave refusals of the model untried, or never run a use case of the port. |
+| `CodeCoverageIncomplete` | warning; error with `--deny-incomplete` | `run`: the BFS behind the traces stopped at `conformance_states`, so the moves past it are not run and no call on an existing row is tried as refused; or the traces leave refusals of the model untried, or never run a use case of the port. |
 | `CodeObligationUnowned_<name>` | error | The obligation has no owner. |
 | `CodeObligationOwnerMissing_<name>` | error | Its owner names a file that does not exist. |
 | `CodeObligationUnknown_<name>` | warning | An owner names an obligation the model does not have. |
@@ -356,7 +356,7 @@ coverage of [code.rust]: bounded conformance to the model, not equivalence
   bound: 1 row created per entity, Int 0..5
   BFS: complete, 6 states; 6 reached by the traces' calls
   moves: 5 of 5 run
-  refused calls: 11 tried (NotEnabled 10, Rejected 1); interleaved commits: 7
+  refused calls: 13 tried (NotEnabled 10, NotFound 2, Rejected 1); interleaved commits: 7
   seeded at a reached state: 2 traces, each then one call (H1: seed and path agree)
   never refused: 1 (Place)
   assumes: H1 the service answers from the tracked columns and the call alone; H2 every reachable call is tried; H3 seed and snapshot reach the real store; H4 every write goes through the port, one call one transaction; H5 the rules read tracked columns only
@@ -375,7 +375,11 @@ does not compare (a counted trigger, a proposition, the clock).
   from the rows' states, `InvalidArgument` when an argument check fails, `Rejected` when a
   condition does not hold. A call the functions would run, which the model refuses for a run
   mark, a raise, or a rule the service keeps outside them, expects any kind (`any kind` in
-  the counts).
+  the counts). The first trace also calls, once, each use case over one existing row with
+  no run mark or event, naming an id no row has: the service must refuse it with
+  `NotFound`. `NotEnabled` does not pass there, and `NotFound` does not pass for a row that
+  exists. These calls are tried even when the BFS stopped at its cap, and do not count for
+  `never refused:`. A `StoreFailed` fails the run as a failure of the service, on any row.
 - **`untried refusals:`** counts the refusals no trace tries: those of a use case with more
   than 64 bindings in one state.
 - **`seeded at a reached state:`** counts the traces that seed a state the calls reach (one
@@ -470,7 +474,8 @@ and its output names the changed row (`traces line <n>:`). The statement ends wi
 ```
 
 `guard-removed mutants:` names the conditions. When the traces give no mutant of a kind, the line says so (`; no refused-call-runs: the
-traces try no refused call` on traces whose BFS stopped at its cap). A mutant that passes is
+traces try no refused call` on traces whose BFS stopped at its cap and that call no use case
+over one row with an id no row has). A mutant that passes is
 a `CodeMutantSurvived` error, and the exit code is 1. No mutant is equivalent to the real
 traces, so a conforming service never passes one:
 
@@ -878,8 +883,9 @@ by `codegen --adapter`. The file holds plain data and no type of the domain code
 - `Call`: one case per use case action, with the ids, the event, the inputs and the choices
   the traces give.
 - `ModelAdapter`: `reset`, `seed(ModelState)`, `observe() -> ModelState`, and
-  `invoke(Call)`, which says the call ran or the kind of refusal (`NotEnabled`, `Rejected`,
-  `InvalidArgument`). Optional, and only as a pair, `prepare(Call)` and `commit()` split a
+  `invoke(Call)`, which says the call ran or the kind of refusal (`NotEnabled`, `NotFound`,
+  `Rejected`, `InvalidArgument`), or `StoreFailed`, which the harness reports as a failure of
+  the service. Optional, and only as a pair, `prepare(Call)` and `commit()` split a
   call for the traces' interleaved commits (Rust: `split()` returns the adapter as a
   `SplitAdapter`; Go: the adapter also implements `SplitAdapter`; TypeScript: optional
   members, and each method may return a promise). `invoke` must do what `prepare` then
@@ -2084,7 +2090,7 @@ doc says why. It returns `<Name>Result` with the rows written or created, the id
 deleted row, the raised events, and per written row the source it must still have at commit
 (`order_expected`: `Absent`, `In { column, value }`, or `Present`); the obligations ask for one
 transaction per call and a guarded write (`UPDATE .. WHERE id = ? AND status = ?`), a write that
-matches no row rolling back as `NotEnabled`. The last step of a split use case also returns
+matches no row rolling back as `NotEnabled`, and a store error as `StoreFailed`. The last step of a split use case also returns
 the run marks it ends (`ended_<row>_mark`). Every result and outcome lists what its commit
 writes (`into_writes`, `Writes()`, `<Type>.writes`), and `commit_writes` / `CommitWrites` /
 `commitWrites` writes that list through a `CommitStore` the service implements once
@@ -2093,12 +2099,21 @@ writes (`into_writes`, `Writes()`, `<Type>.writes`), and `commit_writes` / `Comm
 - **Errors.** A condition applied to the use case is checked first; when it fails the
   function returns `Rejected` (TypeScript `{ kind: "Rejected", condition, label, site }`). A row
   that breaks what the model keeps, or a parent that is not the child's, is
-  `InvalidArgument`. Rust returns `Result<_, <UseCase>Error>` (`NotEnabled`, `Rejected`,
-  `InvalidArgument`, each `std::error::Error`); TypeScript `Result<<Name>Result,
-  <UseCase>Error>`; Go `(<Result>, error)` with a `*<UseCase>Error` whose `Kind` is
-  `<UseCase>ErrorNotEnabled`, `...Rejected`, or `...InvalidArgument`, reachable by `errors.As`
-  and `errors.Is` (`ErrNotEnabled`, `ErrRejected`, `ErrInvalidArgument`). Nothing panics or
-  throws but TypeScript's `assertNever`.
+  `InvalidArgument`. Every `<UseCase>Error` also has `NotFound` (`usecase`, `entity`, `id`: a
+  row the call names does not exist) and `StoreFailed` (`usecase` and the store's error as
+  `cause`), which only the service's load and commit return: the functions take rows already
+  loaded. An HTTP service maps `NotFound` to 404, `NotEnabled` to 409, `Rejected` to 422,
+  `InvalidArgument` to 400, and `StoreFailed` to 500. Rust returns
+  `Result<_, <UseCase>Error>` (`NotEnabled`, `NotFound`, `Rejected`, `InvalidArgument`,
+  `StoreFailed`, each `std::error::Error`; `StoreFailed::new(usecase, cause)` takes any error
+  that converts into `Box<dyn Error + Send + Sync>`, and `source()` returns it); TypeScript
+  `Result<<Name>Result, <UseCase>Error>` (`StoreFailed.cause` is `unknown`); Go
+  `(<Result>, error)` with a `*<UseCase>Error` whose `Kind` is `<UseCase>ErrorNotEnabled`,
+  `...NotFound`, `...Rejected`, `...InvalidArgument`, or `...StoreFailed`, reachable by
+  `errors.As` and `errors.Is` (`ErrNotEnabled`, `ErrNotFound`, `ErrRejected`,
+  `ErrInvalidArgument`, `ErrStoreFailed`); `*StoreFailed` unwraps to its `Cause`, so
+  `errors.Is` reaches the store's error. Nothing panics or throws but TypeScript's
+  `assertNever`.
 - **Split use cases** get one function per step (`openSettlement1`, `openSettlement2`), linked
   by **run marks**: a step that leaves a row for the next returns a mark
   (`OpenSettlementClaimMark1 { id }`) the next takes. The obligations say how to store marks:
@@ -2182,10 +2197,11 @@ The harness does not invent the missing parent, because the model's state has no
 **Traces.** A text file from a BFS of the whole system at `check`'s bounds, taking every move
 of a use case with a function in as few traces as a greedy walk finds, and in each state
 trying every call the model refuses, with the kind it must fail with (`X <kind> <call>`, `-`
-for any kind; see [What a run covers](#what-a-run-covers)). A BFS that stops at
-`--conformance-states` covers only what it reached and tries no refusal. The header says how
+for any kind; see [What a run covers](#what-a-run-covers)), and once a call on a row that
+does not exist (`X NotFound <call>`). A BFS that stops at `--conformance-states` covers only
+what it reached and tries no refusal of the model's states. The header says how
 many moves are covered and what the harness does not compare (a counted trigger, a comparison
-proposition, the clock). The file opens `# rdra-ish conformance traces 4`, then a fingerprint
+proposition, the clock). The file opens `# rdra-ish conformance traces 5`, then a fingerprint
 line.
 
 **Fingerprint.** The output's second line is `// rdra-ish codegen fingerprint: model=<hash>

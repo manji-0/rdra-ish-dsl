@@ -118,6 +118,7 @@ pub(crate) struct Z3Tool<'a> {
 /// instances it maps to, is not tried: it reads `refuted:`, and is an error of BFS's, not an
 /// unproved rule. Returns what `ProofRun` holds; the caller prints its lines where the proof's
 /// place in the report is, whenever the proof ran.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn run_proof(
     ts: &TransitionSystem,
     twin: Option<&TransitionSystem>,

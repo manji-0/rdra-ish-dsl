@@ -57,7 +57,7 @@ fn generate(lang: &str, dir: &Path, file: &str) {
 }
 
 /// Each fault, and what the harness reports for it.
-const FAULTS: [(&str, &str); 4] = [
+const FAULTS: [(&str, &str); 6] = [
     (
         "skip-core",
         "after `Pay 101 2026-01-01T00:00:00Z`, the store differs from the model:\n  model only: Order 101 status=paid paid_at=+ qty=2 customer_id=1",
@@ -71,6 +71,14 @@ const FAULTS: [(&str, &str); 4] = [
         "unconditional",
         "the service committed `Place 1 101 card s`, prepared before `Place 1 101 card s` changed a row it writes",
     ),
+    (
+        "missing-not-enabled",
+        "here with NotFound, and the service refused it with NotEnabled",
+    ),
+    (
+        "store-fails",
+        "the service failed on `Place 1 101 card s`\nthe connection was lost",
+    ),
 ];
 
 fn check(lang: &str, run: impl Fn(&str) -> Output) {
@@ -81,7 +89,7 @@ fn check(lang: &str, run: impl Fn(&str) -> Output) {
         "{lang}: the reference service fails:\n{out}"
     );
     assert!(
-        out.contains("ok 11 traces, 21 calls, 11 refusals, 7 interleavings"),
+        out.contains("ok 11 traces, 21 calls, 13 refusals, 7 interleavings"),
         "{lang}: the reference service checked less than expected:\n{out}"
     );
     for (fault, report) in FAULTS {

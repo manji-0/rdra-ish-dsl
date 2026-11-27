@@ -714,9 +714,28 @@ the sections it cites, and carries the tag of the statements it rests on.
    engines. P40 and P54 (a value the build wraps; [z3.md](./z3.md#uniformity-in-the-bound),
    [native.md](./native.md#the-state-store-and-its-encoding)) and P32 (an entity cone that
    leaves a raised mark out; [cones.md](./cones.md#safety-cones)) are faults of this kind.
-   Only the 191 hand-written `expect` lines see these, and only on the 79 traps they name.
-   For the builder, the reference interpreter of P26 (planned) would add a second reading of
-   the model's text on its subset.
+   The 191 hand-written `expect` lines see these on the 79 traps they name. For the builder,
+   the reference interpreter of P26 (`core/lifecycle/tests/reference/`) is a second check
+   [test]: it reads a subset of the language from the `SemanticModel` without
+   `TransitionSystem::build`, explores it by brute force on plain values (`i64` integers,
+   Enum values by name, no packing, cone, reduction or symmetry), and compares the initial
+   states, reachable states, edges labelled by use case, rule names and violated rules with
+   the native run of the whole model. The subset is entities with Enum, Bool, Int-typed and
+   nullable String columns (`@null`, `@default`, `@check`); `creates`, `updates` and
+   `deletes` of one entity per use case, so one transaction group; literal, `null` and
+   `present` `sets`, with `.when`; `transitions` with choices and `.when`; `applies_to`
+   guards on the written entity; and the four single-entity rule forms with `.when`. It runs
+   on the corpus cases and formal-verification samples in the subset at three bounds, on 300
+   random models of the subset in every pull request and 2,700 more on main. With z3 present
+   (CI requires it) it also checks the rules z3 proves at `m`, with lemmas mined without a
+   twin, against the reference at `m + 1` and `m + 3`: one fixed model per pull request and
+   200 random models on main. It failed on P40 and
+   P54 before #470 and on P43 before #481. What it leaves to the `expect` lines: every
+   construct outside the subset (owners and keys, split use cases, triggers, copies,
+   `chooses`, `drives`, `now`, multi-entity rules, quantifiers, `after` assertions, property
+   verdicts); and, since it compares whole-model runs, the cone choice, the ladder, the
+   quotient tables and `TlaNames`. It shares the parser, `build_model`, the rule names, and
+   D2's reading of which Int-typed columns are numbers with the builder.
    The theory index's [conclusion](./README.md#conclusion) takes this item and the next as
    the main residual risks of all four documents.
 2. **A wrong verdict on any input no test ran [read; runtime].** The run-time guard on
@@ -822,6 +841,7 @@ document or by the code at the pinned commit. [read]
 | P22 | New (prose): D17 omits that a step with `s' = s` is checked by neither engine. Both halves read; `Probe::Loop` is set in every build. |
 | P23 | New (evidence): the per-run comparison pairs the native `WfNext` run on the reduced cone (`decide_liveness_reduced`) with TLC's `_WF` module printed from the unreduced cone, so Proposition 0 does not apply on that path. |
 | P24 | New (evidence): for a `Transition` with a multi-target source, the printer's and the native effect application agree only under a builder invariant on effect order that nothing enforces as such; one shape was not found to be excluded, and on it the post-guards reconcile the two only when the `transitions` arms carry `.when` guards. |
+| P26 | New (evidence), from the owner's review: agreement cannot see a common-mode fault (item 1 of [Residual risk](#residual-risk)). Partly closed by the reference interpreter of that item, for a subset of the language. |
 
 
 ## Appendix: the pinned commit

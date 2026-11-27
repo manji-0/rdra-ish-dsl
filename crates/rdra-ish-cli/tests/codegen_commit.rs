@@ -5,7 +5,9 @@
 //! language implements the generated `CommitStore` once, commits every result through
 //! `commit_writes` / `CommitWrites` / `commitWrites`, and passes the conformance harness. With
 //! `FAULT=keep-mark` its store keeps the run mark the last step ends, and the harness fails at
-//! that step: the result carries the mark to delete.
+//! that step: the result carries the mark to delete. With `FAULT=store-fails` its store fails
+//! to record an event: the helper returns `StoreFailed` with the store's error as its cause,
+//! and the harness reports a failure of the service, not a refusal.
 //!
 //! A compiler missing from PATH skips its language, except under
 //! `RDRA_REQUIRE_CODEGEN_TOOLS=1`, which CI sets in the dev shell.
@@ -65,6 +67,16 @@ fn check(lang: &str, run: impl Fn(&str) -> Output) {
     assert!(
         out.contains("after `Ship_2 ") && out.contains("store only: mark Ship Order "),
         "{lang}: keep-mark fails for another reason:\n{out}"
+    );
+    let failed = run("store-fails");
+    let out = text(&failed);
+    assert!(
+        !failed.status.success(),
+        "{lang}: store-fails passes:\n{out}"
+    );
+    assert!(
+        out.contains("the service failed on `") && out.contains("the event log is down"),
+        "{lang}: store-fails fails for another reason:\n{out}"
     );
 }
 
