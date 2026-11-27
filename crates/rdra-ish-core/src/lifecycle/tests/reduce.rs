@@ -10,8 +10,8 @@ use crate::memory::{MemoryPool, MemorySize};
 use super::cone::{load, SAMPLES};
 use super::*;
 use crate::lifecycle::{
-    Action, ActionOrigin, ComponentRun, EntId, Fold, FoldKey, QuotientCache, State, Step, Target,
-    TargetExploration, VarSet,
+    Action, ActionOrigin, ComponentRun, EntId, Fold, FoldKey, QuotientCache, Reduction, State,
+    Step, Target, TargetExploration, VarSet,
 };
 
 const DOMAIN_SAMPLES: &[&str] = &[
@@ -1508,20 +1508,17 @@ fn an_entity_cone_up_to_symmetry_decides_what_its_plain_run_left_open() {
     );
 }
 
-/// The fold half of Lemma 6 of docs/theory/cones.md (open problem P31), checked against the
-/// cone's own step relation rather than against a second evaluation of the folded guards:
-/// for every reachable state of every reduced cone of `samples` whose reduction folds an S
-/// action's reads of T into a bit, and every move of that action, the bit holds at the slot
-/// the move binds its key to (or, for a node fold, at the row the folded quantifier is
-/// satisfied by, which the link names). A bit that is false where the action runs would drop
-/// that step from the extended sub-lifecycle. Returns the folds seen and the moves checked.
-fn fold_bits_hold_where_their_actions_run(samples: &[&str]) -> (usize, usize) {
+/// The complete reduced cones of `models` under each of `bounds` whose reduction folds, each
+/// with its plain cone, that cone's complete run, and the reduction; `f` sees each one.
+fn each_folded_cone(
+    models: &[(&str, SemanticModel)],
+    bounds: &[Bounds],
+    mut f: impl FnMut(&str, Target, &TransitionSystem, &ComponentRun, &Reduction),
+) {
     let caps = Caps::new(usize::MAX, 200_000);
-    let (mut folds, mut checked) = (0, 0);
-    for sample in samples {
-        let model = load(sample);
-        for bounds in [Bounds::STATES, Bounds::VERIFY] {
-            let ts = TransitionSystem::build(&model, bounds, &Scope::ALL).ts;
+    for (name, model) in models {
+        for bounds in bounds {
+            let ts = TransitionSystem::build(model, bounds.clone(), &Scope::ALL).ts;
             let targets = ts.targets();
             let reduced = ts.explore_targets_reduced(&targets, caps);
             for target in &targets {
@@ -1529,56 +1526,166 @@ fn fold_bits_hold_where_their_actions_run(samples: &[&str]) -> (usize, usize) {
                 let Some(red) = r.run.system.reduction() else {
                     continue;
                 };
-                let bits: Vec<&Fold> = red.bits().iter().flatten().collect();
-                if bits.is_empty() {
+                if red.bits().iter().all(Vec::is_empty) {
                     continue;
                 }
                 let cone = ts.restrict_to(&r.cone.vars, &r.cone.keep);
                 let run = cone.clone().run(caps);
-                if !run.complete {
-                    continue;
-                }
-                folds += bits.len();
-                for s in run.states.iter() {
-                    for m in cone.moves(&s) {
-                        for fold in bits.iter().filter(|f| f.act() == m.act) {
-                            let slot = match fold.key() {
-                                FoldKey::Param(p) => m.params[usize::from(*p)],
-                                FoldKey::Linked {
-                                    link_var, s_param, ..
-                                } => {
-                                    let row = m.params[usize::from(*s_param)];
-                                    let at = cone.offset(*link_var) + usize::from(row);
-                                    match s.0[at].checked_sub(1) {
-                                        Some(slot) => slot,
-                                        None => continue,
-                                    }
-                                }
-                            };
-                            assert!(
-                                fold.holds(&cone, &s, slot),
-                                "{sample} {target:?}: the bit of {} is false at slot {slot} \
-                                 where the action runs, in {:?}",
-                                cone.actions[m.act.index()].name,
-                                &s.0
-                            );
-                            checked += 1;
-                        }
-                    }
+                if run.complete {
+                    f(name, *target, &cone, &run, red);
                 }
             }
         }
     }
-    (folds, checked)
 }
 
-/// The bundled samples fold nothing; the domain samples' reduced cones hold 71 folds. CI runs
-/// this in release beside `reduced_domain_cones_decide_what_the_cones_decide` (about 9 s).
+/// What a fold check saw: the folds, the moves or steps it checked, and those of them that
+/// bind the bit's key past slot 0.
+#[derive(Debug, Default)]
+struct FoldsChecked {
+    folds: usize,
+    checked: usize,
+    past_0: usize,
+}
+
+/// The fold half of Lemma 6 of docs/theory/cones.md (open problem P31), checked against the
+/// cone's own step relation rather than against a second evaluation of the folded guards:
+/// for every reachable state of every reduced cone of `models` whose reduction folds an S
+/// action's reads of T into a bit, and every move of that action, the bit holds at the slot
+/// the move binds its key to (or, for a node fold, at the row the folded quantifier is
+/// satisfied by, which the link names). A bit that is false where the action runs would drop
+/// that step from the extended sub-lifecycle.
+fn fold_bits_hold_where_their_actions_run(
+    models: &[(&str, SemanticModel)],
+    bounds: &[Bounds],
+) -> FoldsChecked {
+    let mut seen = FoldsChecked::default();
+    each_folded_cone(models, bounds, |name, target, cone, run, red| {
+        let bits: Vec<&Fold> = red.bits().iter().flatten().collect();
+        seen.folds += bits.len();
+        for s in run.states.iter() {
+            for m in cone.moves(&s) {
+                for fold in bits.iter().filter(|f| f.act() == m.act) {
+                    let slot = match fold.key() {
+                        FoldKey::Param(p) => m.params[usize::from(*p)],
+                        FoldKey::Linked {
+                            link_var, s_param, ..
+                        } => {
+                            // The link names the row through its domain: an optional link
+                            // holds slot + 1, and 0 for no row; a required one the slot.
+                            let row = usize::from(m.params[usize::from(*s_param)]);
+                            let link = s.get(cone, *link_var, row);
+                            match cone.var(*link_var).domain.slot(link) {
+                                Some(slot) => slot,
+                                None => continue,
+                            }
+                        }
+                    };
+                    assert!(
+                        fold.holds(cone, &s, slot),
+                        "{name} {target:?}: the bit of {} is false at slot {slot} where the \
+                         action runs, in {:?}",
+                        cone.actions[m.act.index()].name,
+                        &s.0
+                    );
+                    seen.checked += 1;
+                    seen.past_0 += usize::from(slot > 0);
+                }
+            }
+        }
+    });
+    seen
+}
+
+/// The converse, the other half of the fold half of Lemma 6 (P31): a bit adds no step the
+/// cone lacks. For every reachable state of every reduced cone of `models` whose reduction
+/// folds, every silent step the extended sub-lifecycle takes from the state's projection (its
+/// S part, raw inputs, and bits, as `Reduction::key` computes them) is a move of the cone: an
+/// action the step stands for, with the params the step binds outside the folded T params,
+/// leads the cone to the same state. A bit true where no binding of the folded guards holds
+/// would add such a step. The steps of unfolded S actions are checked too, but not counted.
+fn folded_steps_are_steps_of_the_cone(
+    models: &[(&str, SemanticModel)],
+    bounds: &[Bounds],
+) -> FoldsChecked {
+    let mut seen = FoldsChecked::default();
+    each_folded_cone(models, bounds, |name, target, cone, run, red| {
+        seen.folds += red.bits().iter().flatten().count();
+        let silent = red.silent_steps(cone);
+        for s in run.states.iter() {
+            let moves: Vec<_> = cone.moves(&s).collect();
+            for step in silent.from(red, cone, &s) {
+                let realized = moves.iter().any(|m| {
+                    m.next == step.next
+                        && step.acts.iter().any(|(a, kept)| {
+                            *a == m.act
+                                && (kept.iter().zip(m.params.iter()))
+                                    .all(|(k, p)| k.is_none_or(|k| k == *p))
+                        })
+                });
+                assert!(
+                    realized,
+                    "{name} {target:?}: the extended sub-lifecycle steps by {} (bits at slots \
+                     {:?}) where the cone has no such step, in {:?}",
+                    cone.actions[step.acts[0].0.index()].name,
+                    step.bit_slots,
+                    &s.0
+                );
+                if step.folded {
+                    seen.checked += 1;
+                    seen.past_0 += usize::from(step.bit_slots.iter().any(|c| *c > 0));
+                }
+            }
+        }
+    });
+    seen
+}
+
+fn domain_samples() -> Vec<(&'static str, SemanticModel)> {
+    DOMAIN_SAMPLES.iter().map(|s| (*s, load(s))).collect()
+}
+
+/// The bundled samples fold nothing; the domain samples' reduced cones hold 71 folds (about
+/// 3,100 moves of folded actions, none past slot 0). CI runs this in release beside
+/// `reduced_domain_cones_decide_what_the_cones_decide` (about 9 s).
 #[test]
 fn reduced_domain_cones_hold_each_fold_bit_where_its_action_runs() {
-    let (folds, checked) = fold_bits_hold_where_their_actions_run(DOMAIN_SAMPLES);
-    assert!(folds >= 71, "{folds} folds");
-    assert!(checked >= 2_000, "{checked} moves checked");
+    let seen = fold_bits_hold_where_their_actions_run(
+        &domain_samples(),
+        &[Bounds::STATES, Bounds::VERIFY],
+    );
+    assert!(seen.folds >= 71, "{seen:?}");
+    assert!(seen.checked >= 3_000, "{seen:?}");
+}
+
+/// The converse on the domain samples: on their 71 folds, every step a true bit lets the
+/// extended sub-lifecycle take (about 3,100) is a step of the cone. CI runs this in release
+/// beside the test above (about 9 s).
+#[test]
+fn reduced_domain_cones_step_by_a_true_fold_bit_only_where_the_cone_steps() {
+    let seen =
+        folded_steps_are_steps_of_the_cone(&domain_samples(), &[Bounds::STATES, Bounds::VERIFY]);
+    assert!(seen.folds >= 71, "{seen:?}");
+    assert!(seen.checked >= 3_000, "{seen:?}");
+}
+
+/// Both halves past slot 0. No checked move of the domain samples binds a fold's key past
+/// slot 0, so a bit planted false at slot 1 alone passes the two tests above. The case fold's
+/// folds (File's, and Pay's node fold keyed by the linked case) at two and three instances
+/// bind keys at every slot, about 1,700 of their 2,800 moves past slot 0. A bit
+/// planted false at slot 1 in `Fold::holds` fails the first half, on File; one planted true
+/// at a present row 1 fails the second, on Pay (and the domain samples' converse too).
+#[test]
+fn case_fold_bits_hold_exactly_where_their_actions_run_past_slot_0() {
+    let models = [("case fold", model_from(CASE_FOLD))];
+    let bounds = [
+        Bounds::VERIFY,
+        Bounds::VERIFY.at(std::num::NonZeroU8::new(3).unwrap()),
+    ];
+    let held = fold_bits_hold_where_their_actions_run(&models, &bounds);
+    assert!(held.past_0 > 0, "{held:?}");
+    let stepped = folded_steps_are_steps_of_the_cone(&models, &bounds);
+    assert!(stepped.past_0 > 0, "{stepped:?}");
 }
 
 /// The reduction is a divergence-blind stuttering bisimulation, and `Deadlock` reads "no

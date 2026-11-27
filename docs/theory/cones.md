@@ -600,12 +600,23 @@ those are kept by `restrict_to` with havoc off, so it has the same successors on
 they hold in `C`; it writes the raw inputs, and each changed bit slot then has a free flip. Two steps
 are named and not derived here: that `Fold::holds` computes the folded guard exactly (the
 `Twin::FoldHolds` twin compares it with `reduce/fold/reference.rs`, an implementation of the same
-definition; `core/tests/reduce.rs::reduced_domain_cones_hold_each_fold_bit_where_its_action_runs` checks, against the cone's step relation, that the bit holds wherever the
-action runs, on the domain samples' 71 folds, P31), and that a fold's key binding (`Extended::cone_params` binds a dropped `T` parameter to
+definition), and that a fold's key binding (`Extended::cone_params` binds a dropped `T` parameter to
 slot 0) loses no successor. ∎
 
-cone-soundness.md, "Proof obligation", uses Lemma 6 in points 2, 3, and 5 without stating it.
-Open problem P31 records the gap.
+*Evidence (P31, fixed in #521).* The fold equivalence is checked against the cone's own step
+relation, in both directions, on every reachable state of every complete reduced cone that folds
+(`core/tests/reduce.rs`). `::reduced_domain_cones_hold_each_fold_bit_where_its_action_runs`: the
+bit holds at the slot every move of a folded action binds its key to (for a node fold, the row its
+link names), so the bit drops no step. `::reduced_domain_cones_step_by_a_true_fold_bit_only_where_the_cone_steps`:
+from the state's projection `x(t, s)` (`Reduction::key`), every silent step of `X` is a move of `C`
+to the same state, by an action the step stands for, with the params it binds outside the folded
+`T` params, so a true bit adds no step. Both run on the domain samples' 71 folds at 1 and 2
+instances, about 3,100 moves each, none of which binds a key past slot 0;
+`::case_fold_bits_hold_exactly_where_their_actions_run_past_slot_0` runs both on the case fold at 2
+and 3 instances, where about 1,700 of 2,800 moves bind slot 1 or 2. A bit planted false at slot 1
+fails the first, and one planted true at a present row 1 fails the second. This is evidence on
+these models and bounds, not a proof of Lemma 6; cone-soundness.md, "Proof obligation", states
+the lemma in points 2, 3, and 5 (#475).
 
 **Theorem A8 (the reduced cone is stuttering equivalent to the cone).** Assume (B1) to (B3) for
 `B` and Lemma 6. Let `(t, s) ~ (t, ρ)` when `ρ` is the representative of the block of `x(t, s)`.
@@ -1105,7 +1116,8 @@ Evidence: none beyond the reading of `escalate` and the guide.
   `writes` twin, on the samples and the corpus) check `Wr` against the steps they take. A release build does
   not check it, and a step no run takes is not checked.
 - **Assumed partition correctness.** A8, A15, and every reduced cone's verdict rest on (B1)–(B3), which the
-  release build does not check (P7), and on Lemma 6, which no note states (P31). Among those verdicts are the
+  release build does not check (P7), and on Lemma 6, argued and not proved, whose fold half is
+  checked against the cone's step relation on the domain samples and the case fold only (P31). Among those verdicts are the
   printed `ok` of a property's `Plain` run (A5.1) and of a property on a cone that frees slots (A6).
 - **Differential evidence compares implementations, not specifications.** The shadow twins compare two
   implementations of one definition and skip large inputs without failing (P17). The corpus and sample
