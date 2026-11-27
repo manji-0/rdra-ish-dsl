@@ -60,7 +60,7 @@ impl<'m> Builder<'m> {
                 let (values, every) = match rhs {
                     EffectRhs::Value(v) => (vec![v], false),
                     EffectRhs::AnyNonNull => (
-                        (1..domain.size(&self.ts)).map(|i| Value(i as u8)).collect(),
+                        (1..domain.size(&self.ts)).map(Value::at).collect(),
                         domain.is_numeric(),
                     ),
                     EffectRhs::None => continue,
@@ -81,7 +81,7 @@ impl<'m> Builder<'m> {
                         }),
                         values: (1..domain.size(&self.ts))
                             .map(|i| Choice {
-                                value: Value(i as u8),
+                                value: Value::at(i),
                                 site: Some(site.clone()),
                                 conds: Vec::new(),
                             })
@@ -314,7 +314,7 @@ impl<'m> Builder<'m> {
                 }),
                 values: (0..size)
                     .map(|i| Choice {
-                        value: Value(i as u8),
+                        value: Value::at(i),
                         site: Some(site.clone()),
                         conds: Vec::new(),
                     })

@@ -149,9 +149,7 @@ fn quote(s: &str) -> String {
 /// The set of a domain, as TypeOK and free initial choices read it.
 fn domain_set(ts: &TransitionSystem, names: &TlaNames, domain: &Domain) -> String {
     let values = |n: usize| -> String {
-        let items: Vec<String> = (0..n)
-            .map(|v| render_value(domain, Value(v as u8)))
-            .collect();
+        let items: Vec<String> = (0..n).map(|v| render_value(domain, Value::at(v))).collect();
         format!("{{{}}}", items.join(", "))
     };
     match domain {

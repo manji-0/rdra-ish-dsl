@@ -161,7 +161,8 @@ P50 needs large bounds: a cell of non-zero width past bit 65,535, about 8,192 ce
 bits (for example 255 slots of an entity with 32 or more Int columns at `m = 255`). No
 sample comes near it, but D1 admits it and nothing rejects it. P54 below needs far less.
 
-**Finding P54 (guarantee, reproduced by the review).** A value outside a byte is
+**Finding P54 (guarantee, reproduced by the review; fixed in #470, where the build rejects a
+column domain past 256 values as `DomainTooLarge`).** A value outside a byte is
 truncated when the build encodes it, so `T` is not `T_β(M)`. `types.rs::Domain::of_number`
 returns `Value(n as u8 + 1)` for a `NullableInt` column; `Domain::size` gives that domain
 `m + 2` values, 257 at `m = 255`, and for `n = 255` the sum wraps to 0, which is
@@ -864,7 +865,7 @@ With `sets(Touch, Order.status == closed)` it prints `counterexample (7 states)`
    `--instance-count 8`: `counterexample (511 states)`. At `--instance-count 255`:
    `ok (256 states)`, `result: ok`, with the two `usecase` declarations in either order.
 
-**P54** (run by the review; models kept outside the repository; repro pending in repo, L2). An entity
+**P54** (run by the review; in the repository since #470 as the engine-corpus case `width_nullable_enum_256.rdra` and `check_cli::an_enum_column_takes_no_more_values_than_a_state_holds`). An entity
 `Row { id: Int @pk; n: Int @null }`, a use case `Create` that creates a `Row` with
 `sets(Create, Row.n == 255)`, and `forbidden(Row, Row.n >= 200)`, under
 `--instance-count 1 --int-range-max 255`: `ok (2 states)`, `result: ok`. With 254 in place

@@ -205,7 +205,7 @@ impl Builder<'_> {
                 let site = Site::new(fact.clone(), &choice.site);
                 values = (0..size)
                     .map(|i| Choice {
-                        value: Value(i as u8),
+                        value: Value::at(i),
                         site: Some(site.clone()),
                         conds: Vec::new(),
                     })
@@ -264,7 +264,7 @@ impl Builder<'_> {
                     numbers: None,
                     values: (0..size)
                         .map(|i| Choice {
-                            value: Value(i as u8),
+                            value: Value::at(i),
                             site: None,
                             conds: Vec::new(),
                         })

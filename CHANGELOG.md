@@ -494,6 +494,12 @@
   every number are now kept in a form free of the bounds (`Effect::Choose::numbers`), which the
   prover reads in the effect and the guard states as one arm, `n != null` for a nullable
   column: the same within the range, and nothing of its top. BFS and TLC explore as before.
+- A column with more than the 256 values a state cell holds is an error, `DomainTooLarge`: a
+  nullable Int at `--int-range-max 255`, a nullable Enum of 256 values, or an Enum of 257. Its
+  top values wrapped onto its first ones (null, for a nullable column) in writes, defaults and
+  choices, so a rule the model breaks printed `ok`, and `proved` under `--prove`; for the Enums
+  at the default bounds. A nullable Int column takes `--int-range-max 254` at most; a model
+  without one still takes 255.
 
 ## v3.0.0 - 2026-11-26
 
