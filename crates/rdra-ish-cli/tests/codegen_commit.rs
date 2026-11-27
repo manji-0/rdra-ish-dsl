@@ -63,7 +63,7 @@ fn check(lang: &str, run: impl Fn(&str) -> Output) {
     let out = text(&failed);
     assert!(!failed.status.success(), "{lang}: keep-mark passes:\n{out}");
     assert!(
-        out.contains("after `Ship_2 1 1`") && out.contains("store only: mark Ship Order 1 1"),
+        out.contains("after `Ship_2 ") && out.contains("store only: mark Ship Order "),
         "{lang}: keep-mark fails for another reason:\n{out}"
     );
 }

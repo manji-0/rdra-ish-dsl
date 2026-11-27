@@ -81,13 +81,20 @@ pub(in crate::codegen) fn print(domain: &DomainModel, out: &mut String) {
     for d in &domain.dispatchers {
         // The cases of one action write the same fields; only their states differ, so the
         // union's fields are read without telling the cases apart.
-        let Some(f) = d
+        let fns: Vec<&FnDecl> = d
             .cases
-            .first()
-            .and_then(|c| domain.fns.iter().find(|f| f.name == c.function))
-        else {
+            .iter()
+            .filter_map(|c| domain.fns.iter().find(|f| f.name == c.function))
+            .collect();
+        let Some(f) = fns.first() else {
             continue;
         };
+        let shape = |f: &FnDecl| super::shape(&items(domain, &m, f));
+        assert!(
+            fns.iter().all(|g| shape(g) == shape(f)),
+            "the cases of {} write the same fields",
+            d.outcome
+        );
         out.push_str(&companion(domain, &m, f, &d.outcome, &d.usecase, &writes));
     }
 

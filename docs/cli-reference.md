@@ -1982,7 +1982,11 @@ doc says why. It returns `<Name>Result` with the rows written or created, the id
 deleted row, the raised events, and per written row the source it must still have at commit
 (`order_expected`: `Absent`, `In { column, value }`, or `Present`); the obligations ask for one
 transaction per call and a guarded write (`UPDATE .. WHERE id = ? AND status = ?`), a write that
-matches no row rolling back as `NotEnabled`.
+matches no row rolling back as `NotEnabled`. The last step of a split use case also returns
+the run marks it ends (`ended_<row>_mark`). Every result and outcome lists what its commit
+writes (`into_writes`, `Writes()`, `<Type>.writes`), and `commit_writes` / `CommitWrites` /
+`commitWrites` writes that list through a `CommitStore` the service implements once
+([design](design/algebraic-codegen.md#committing-a-result)).
 
 - **Errors.** A condition applied to the use case is checked first; when it fails the
   function returns `Rejected` (TypeScript `{ kind: "Rejected", condition, label, site }`). A row

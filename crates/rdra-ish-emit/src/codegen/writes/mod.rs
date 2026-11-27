@@ -101,6 +101,25 @@ pub(super) enum Item {
     Event { field: String, ty: String },
 }
 
+/// What `items` writes, by field and target: the cases of one dispatcher must agree on it,
+/// since a TypeScript outcome reads their union's fields without telling them apart.
+pub(super) fn shape(items: &[Item]) -> Vec<String> {
+    items
+        .iter()
+        .map(|i| match i {
+            Item::Put { field, stored, .. } => format!("put {field} {stored}"),
+            Item::Delete { field, stored, .. } => format!("delete {field:?} {stored}"),
+            Item::Mark {
+                field,
+                mark,
+                step,
+                delete,
+            } => format!("mark {field} {mark} {step} {delete}"),
+            Item::Event { field, ty } => format!("event {field} {ty}"),
+        })
+        .collect()
+}
+
 /// The entities, marks, and events of `domain`.
 pub(super) fn model<'d>(domain: &'d DomainModel) -> Model<'d> {
     fn key<'d>(
