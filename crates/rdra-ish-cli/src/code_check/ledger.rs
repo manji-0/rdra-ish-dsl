@@ -28,15 +28,27 @@ pub(crate) struct Marker {
     pub line: usize,
 }
 
-/// The markers in `text`, the content of `file`.
+/// Whether `name` can be an obligation's name: the generator builds each from model
+/// identifiers, so letters, digits and `_` only.
+fn is_name(name: &str) -> bool {
+    !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// The markers in `text`, the content of `file`. A marker inside a string literal (an odd
+/// number of `"` or `` ` `` before it on its line) is code that prints one, not a marker, and
+/// so is a name that is no identifier (`${ob}`).
 pub(crate) fn scan(file: &str, text: &str) -> Vec<Marker> {
     let mut out = Vec::new();
     for (i, line) in text.lines().enumerate() {
-        let Some((_, rest)) = line.split_once(MARKER) else {
+        let Some((before, rest)) = line.split_once(MARKER) else {
             continue;
         };
+        let quoted = |q: char| before.chars().filter(|c| *c == q).count() % 2 == 1;
+        if quoted('"') || quoted('`') {
+            continue;
+        }
         let mut words = rest.split_whitespace();
-        let Some(name) = words.next() else {
+        let Some(name) = words.next().filter(|n| is_name(n)) else {
             continue;
         };
         out.push(Marker {
@@ -202,6 +214,15 @@ mod tests {
             (m[1].name.as_str(), m[1].path.as_deref()),
             ("Ref_Order_customer_id", None)
         );
+    }
+
+    #[test]
+    fn a_marker_built_in_a_string_is_no_marker() {
+        // svc/scripts/gen-schema.mjs of a dogfooding run: a script that prints markers.
+        let text = "for (const ob of obligations) {\n  out.push(`-- rdra: obligation ${ob}`);\n}\nconst s = \"// rdra: obligation Unique_A x\";\n// rdra: obligation Ref_B_c_id \n";
+        let m = scan("scripts/gen-schema.mjs", text);
+        let names: Vec<&str> = m.iter().map(|m| m.name.as_str()).collect();
+        assert_eq!(names, ["Ref_B_c_id"]);
     }
 
     #[test]
