@@ -8,24 +8,27 @@ on a smaller system decides what `T_β(M)` (D13) would: a cone of influence, a c
 an independent sub-lifecycle, a run up to slot permutations, and a run at more instances. It
 uses the notation of [semantics.md](./semantics.md) and does not redefine it.
 
-The code read is commit `41882b4f4c59d5fabf80ab9eb7b11d0730a76f98` (origin/main,
-2026-11-28, the merge of #529). From `c97c88ef` (the merge of #525) to the pin, the crates
-change only by #526, a test of `cli/tests/engine_equivalence.rs`, and #529, which turned the
-lifts' remaining invariants into faults; #529's changes to `reduce/lift.rs`, `explore/orbit.rs`,
-`explore/orbit/findings.rs`, `explore/properties.rs` and `explore/graph.rs` were read at the
-pin. #511 in between changes only `Cargo.toml`, adding the `ci-checked` profile, and the CI
-workflow. The [index](./README.md) pins `307ee4e8`, whose crates are those of `c97c88ef`. The
-document was first written against `fb6928c7` and was
-brought up to date with `c97c88ef` after the final audit of docs/theory: the code that the
-fixes of P1, P7, P10, P11, P20, P30, P31, P32 and P33 changed (#477, #480, #488, #509, #512,
-#516, #518, #521, #522) was re-read at `c97c88ef`, and for every other function, type and
-constant this document names, its definition at `fb6928c7` was compared with the one at
-`c97c88ef`. A definition that did not change, or changed only by a checked narrowing cast
-(`id8`, `id32`, #513), reads as it did; one that changed otherwise was re-read, or the
-statement that cites it carries `unread@pin`. The comparison matched definitions by name with a
-script and read every difference that was not a narrowing cast. `#525`, the
-last merge before the pin, changes only `cli/src/prove.rs`, `cli/src/cli.rs` and prose, none
-of which this document cites. How the document changed after it was first written is in
+The code read is commit `5f59fae21e582b397b42c8b6594356ac5892420e` (origin/main,
+2026-11-28, the merge of #537), the commit the [index](./README.md) and every theme document
+are pinned to. The document was first written against `fb6928c7` and has been brought up to
+date three times. After the final audit of docs/theory it was re-read at `c97c88ef` (the
+merge of #525): the code that the fixes of P1, P7, P10, P11, P20, P30, P31, P32 and P33
+changed (#477, #480, #488, #509, #512, #516, #518, #521, #522) was re-read there, and for every
+other function, type and constant this document names, its definition at `fb6928c7` was
+compared with the one at `c97c88ef` by a script that matched definitions by name; every
+difference that was not a checked narrowing cast (`id8`, `id32`, #513) was read, and a
+statement whose cited code changed otherwise was re-read or marked `unread@pin`. It was then
+pinned to `41882b4f` (the merge of #529): in between, the crates change only by #526, a test
+of `cli/tests/engine_equivalence.rs`, and #529, which turned the lifts' remaining invariants
+into faults; #529's changes to `reduce/lift.rs`, `explore/orbit.rs`,
+`explore/orbit/findings.rs`, `explore/properties.rs` and `explore/graph.rs` were read. From
+`41882b4f` to the pin, the crates change by #531 and #536 (`explore/orbit/liveness.rs`: the
+symmetric lasso lift faults instead of panicking), #532 (`cli/verify/escalate.rs`,
+`cli/verify/refuted.rs`, `cli/state_findings.rs`, `cli/prove.rs`: counts per entity), #534
+(`cli/tests/proof_equivalence.rs`), #535 (`cli/tests/engine_corpus.rs`'s reader) and #537
+(`explore/symmetry/g6.rs`, the test of (G6) outside guards); each was read at the pin, and the
+statements that cite them were rewritten ([Errata](#errata)). #533 changes only
+`.config/nextest.toml`. How the document changed after it was first written is in
 [Errata](#errata). `unread@pin` marks a statement whose cited code was not read at the
 pinned commit ([claims inventory](./claims.md#how-to-read-a-row)). Paths are relative to
 `crates/rdra-ish-core/src/lifecycle/` unless they start with `cli/`
@@ -353,7 +356,8 @@ again before it counts, as counterexample-guided refinement does (Clarke et al. 
   and the rechecked ones count (`BfsCone::violations`), so `verify/refuted.rs::refuted` and the
   run's result read no candidate. A freed-slot counterexample without a free trigger still
   prints, with its `over_bound` note, as Proposition A28 allows, and `refuted.rs::instances`
-  adds the rows it creates past the bound to the instances it records (P11).
+  raises the count of each entity in `over_bound` to the rows the trace creates of it, keeping
+  every other entity's count (P11; per entity since #532).
 - `verify/escalate.rs::escalate` rechecks with `slots`, so a counterexample it prints is a run of
   `T_{β+k}(M)` itself, and it prints the instances of the cone that found it.
 - A property cone with a left-out mark counts only its `ok`: `property_cone.rs::inexact` gives
@@ -668,7 +672,7 @@ are named and not derived here: that `Fold::holds` computes the folded guard exa
 definition), and that a fold's key binding (`Extended::cone_params` binds a dropped `T` parameter to
 slot 0) loses no successor. ∎
 
-*Evidence (P31, fixed in #521).* The fold equivalence is checked against the cone's own step
+*Evidence (P31; its fold evidence fixed in #516 and #521).* The fold equivalence is checked against the cone's own step
 relation, in both directions, on every reachable state of every complete reduced cone that folds
 (`core/tests/reduce.rs`). `::reduced_domain_cones_hold_each_fold_bit_where_its_action_runs`: the
 bit holds at the slot every move of a folded action binds its key to (for a node fold, the row its
@@ -782,8 +786,9 @@ leaves) and the random-graph test below, which also certifies every worklist par
   unstable one falls back to the sweeps.
 - **A10** (monotone inputs): Lemma 5c–d and point 5 of Theorem A8. Monotonicity is not used in A8; it
   keeps `X` finite and small. It is used in A15 (case 3 and `s_cycles`).
-- **A11** (folds): Lemma 6, with the fold equivalence twin-checked. A count is never node-folded
-  (counting-rules.md); unread@pin.
+- **A11** (folds): Lemma 6, with the fold equivalence twin-checked. A count that reads `T` is never
+  node-folded (counting-rules.md): `reduce/fold.rs::as_node` makes a node only of an existential (or an
+  And/Or of them), and `strip_links` returns `None` on a `Pred::Count` in its body.
 - **A12** (counters on `T`): `split_at` seeds `T_v` with every counter, and `monotone_vars` marks
   counters cyclic, so no counter is an input. P-full by reading.
 - **A13** (one reduction for both engines): `reduced_with` rejects a reduction past
@@ -934,11 +939,29 @@ binding `p` to `g(p)`.
   applies that rule to action guards only. Within a guard it is the one way to reach an absent
   row: `Forall`, `Exists` and `Count` range over present slots, `Existing`, `Parent` and
   `Triggered` bind present slots, and `Earlier` binds a slot by its run mark, which only a
-  created row holds. The predicates the scan reads with other rules (invariants, `after`
-  assertions, properties, `can_reach` goals) bind their binders to slots by their own rules,
-  and a property's goal is evaluated on a slot whatever its existence (native.md, "The goal on
-  absent rows"); that none of them reads an absent row's owner is not shown here (unread@pin).
-  Until #488 the scan did not check (G6) at all.
+  created row holds. The predicates outside guards (invariants, `after` assertions,
+  properties, `can_reach` goals) need no rule: every read of them that a verdict depends on is
+  gated by presence, whatever the predicate reads (#537). An invariant binds present slots
+  (`expr.rs::TransitionSystem::find_violation`) and quantifies over present slots; an `after`
+  assertion reads the state after its step, where each parameter's row is present (created
+  by the step or present before it) or deleted; a property's trigger is
+  `present ∧ link` (`lasso.rs::TransitionSystem::triggers`), its other reads are taken where
+  the trigger holds or, for the second state of a step, where the bound rows are present
+  (`step_breaks`), and the goal of `eventually` and `leads_to` counts only on states after a
+  trigger, where a row present then is present or deleted, since a slot never becomes absent
+  again; `can_reach` reads its link and goal only where the bound rows are present
+  (`reach.rs`). An owner on a present or deleted row is one `apply` relabels (G5), so these
+  reads take the same value on `s` and `g(s)`. A goal is still *evaluated* on a slot whatever
+  its existence (native.md, "The goal on absent rows"), but that value reaches no verdict
+  unless the rows were present at the trigger. Test:
+  `explore/symmetry/g6.rs::reads_outside_guards_meet_no_absent_owner`, on a model of shops and
+  orders at 2 instances that reads the order's owner through a cross `forbidden` with
+  `.along`, an `at_most` invariant, two `after` assertions, and `leads_to`, `eventually`,
+  `can_reach`, `stable` and `precedes` with `.along`: each gated read is the same on every
+  reachable state of the plain run and its canonical form, the `eventually` and `leads_to`
+  verdicts and the safety findings of the plain run and the run up to symmetry agree, and a
+  goal given a read of an order's key by hand differs on rows never created and changes none
+  of them. Until #488 the scan did not check (G6) at all.
 
 **Theorem A18.** Under (G1)–(G6), for every reachable `s`, every `g ∈ G_s`, and every step `s →_{a,p} t`:
 `g(s) →_{a,g(p)} g(t)` is a step and `g ∈ G_t`. Hence `≈ = {(s, g(s)) : g ∈ G_s}` is an equivalence and a
@@ -1011,7 +1034,10 @@ permutation `σ` that took its concrete successor to the stored one, and a bindi
 `unchanged`, `precedes` and `can_reach` are not run up to symmetry at the pin:
 `explore/properties.rs::TransitionSystem::decide_property` runs `stable`, `unchanged` and `precedes`
 on the plain restricted cone, and `verify` calls no orbit reader for them (`decide_always` reads
-only `always`). A cycle whose
+only `always`). An `always` runs up to symmetry only on a cone the sub-lifecycle reduction
+leaves whole (`cli/verify/jobs.rs::PropertyJob::symmetric`: `reduction().is_none()` for
+`LtlKind::Always`); `eventually` and `leads_to` run up to symmetry on any cone whose group moves
+some rows. A cycle whose
 permutations compose to `π` is a concrete path from a state to its `π`-image, closed after at most the
 order of `π` repetitions. The theorem for this reading is not written out here (**A23**: P-sketch; M:
 `Twin::OrbitLiveness`, `Twin::OrbitStateModels`; D: corpus rule 8,
@@ -1035,10 +1061,11 @@ and returns the `ReplayError` if it does not replay; the run reports it as a too
 before, a lifted symmetric trace that did not replay panicked). Since #529
 `explore/orbit.rs::lift_path`, which the safety, `always` and deadlock lifts share, returns
 `ReplayError::NoMove` for a stored edge that is no move of its source whose successor
-canonicalizes to the stored target, where it had an `expect`. The lasso lift of
-`explore/orbit/liveness.rs` still `expect`s and `assert!`s, in a release build at the pin, that
-each edge is the move at its place and that its permutation takes that move to the stored
-target; a failure there stops the command rather than printing a trace that does not replay.
+canonicalizes to the stored target, where it had an `expect`. Since #531 the lasso lift of
+`explore/orbit/liveness.rs` (`Product::lift`) returns `ReplayError::NoMove` when an edge is not the
+move at its place or its permutation does not take that move to the stored target, which `lasso`
+reports as `LassoFault::Replay`, where it had an `expect` and two `assert!`s (test
+`explore/orbit/liveness.rs::an_edge_its_permutation_does_not_explain_is_a_replay_error`).
 
 **Composition with the reduction (A22).** On a reduced cone, `R` runs up to `G_T`, which leaves out every
 entity `Reduction::fixed_why` names (each `S` entity, each entity holding an `S` variable, an input, or a bit
@@ -1057,7 +1084,8 @@ self-edge stands for a concrete cycle inside its class and marks it (Definition 
 action on a 2-slot parent and a 2-slot child; it does not call `canonical` (P8: the design note
 overstated the harnesses; #475 corrected the prose, and no canonical-form harness was added).
 `Twin::Canonical`,
-`Twin::OrbitRun`, `Twin::ReducedOrbitRun` (up to 200,000 states). D: corpus `sym_*` cases, rule 8.
+`Twin::OrbitRun`, `Twin::ReducedOrbitRun` (up to 200,000 states). D: corpus `sym_*` cases, rule 8;
+for (G6) outside guards, `explore/symmetry/g6.rs::reads_outside_guards_meet_no_absent_owner` (#537).
 
 ---
 
@@ -1073,9 +1101,10 @@ keeps it only when `same_system` holds (no build error, the same entities, varia
 name and site), and explores the rule's cone reduced (`explore_targets_reduced`). A counterexample its
 cone cannot vouch for with `slots` (a free trigger, or more rows of an entity than the cone counts) is
 decided again by `recheck_on(…, true, …)`, the refinement loop of [Safety cones](#safety-cones). It
-prints `ok at n`, `counterexample at n`, or `not decided at n`, where `n = cone_slots` is
-`restrict_to(cone).most_slots()`, the largest slot count among the entities of the cone that decided:
-the rule's cone, or the last cone of the recheck.
+prints `ok at n`, `counterexample at n`, or `not decided at n`, where `n = cone_instances` is
+`cli/state_findings.rs::Instances::of(restrict_to(cone))`, the slot count of each entity of the cone that
+decided (the rule's cone, or the last cone of the recheck), printed as one number when every entity
+has it and else per entity, as `Loan=4 Member=3` (#532).
 
 **Proposition A25.** A `counterexample at n` is a reachable violation of `T_{β+k}(M)`.
 
@@ -1088,8 +1117,9 @@ lift of A16, checked step by step against `C` in every build. ∎
 
 Until #477 `escalate` read neither `free_triggers` nor `over_bound` and called every counterexample
 "a real one" (P1), and `n` excluded the freed entity whose count the trace could exceed, which the
-trace's `over_bound` note said but the `escalated:` line did not (P11). One reading of `n` stays: under
-`--instances E=k` it is a maximum over the cone's entities, not the bound of any one of them.
+trace's `over_bound` note said but the `escalated:` line did not (P11). Until #532, under
+`--instances E=k`, `n` was the maximum over the cone's entities (`most_slots`), not the bound of any
+one of them; it is now each entity's own count (`cli/tests/prove_cli.rs::escalation_names_each_entitys_instances_under_per_entity_bounds`).
 
 **Memory.** Each escalated run is charged to `pool.with_room(min(pool.left(), GROWTH × peak))`
 (`memory.rs::MemoryPool::with_room`), with `GROWTH = 10` and `peak` the store the rule's cone held at `β`;
@@ -1150,25 +1180,25 @@ the row; a fixed or closed one carries its pull request.
 | A2 | Theorem A2; Corollary A28′; refinement of candidates | full (`ok` of universal checks; a vouched counterexample lifts, A28′); existential and branching findings are read on cones exact for marks | D | P1 (fixed, #477, #509), P32 (fixed, #477) |
 | A3 | Proposition A3 | full (`count_up`, `count_down`) | D | |
 | A4 | Theorem A4 (on the unreduced cone) | full | D | P1 (fixed, #477) |
-| A5 | Theorem A5 | sketch for parts 1 and 3 (read on the reduced cone: A8, A15); full for part 2 | D, unit tests | P1 (fixed, #477), P7 (fixed, #480), P31 (fixed, #521) |
-| A6 | Proposition A6 | sketch for `always`, `eventually`, `leads_to` (A8); full for `stable`, `unchanged`, `precedes` | D | P1 (fixed, #477), P7 (fixed, #480), P31 (fixed, #521) |
+| A5 | Theorem A5 | sketch for parts 1 and 3 (read on the reduced cone: A8, A15); full for part 2 | D, unit tests | P1 (fixed, #477), P7 (fixed, #480), P31 (partly fixed; fold evidence #516, #521) |
+| A6 | Proposition A6 | sketch for `always`, `eventually`, `leads_to` (A8); full for `stable`, `unchanged`, `precedes` | D | P1 (fixed, #477), P7 (fixed, #480), P31 (partly fixed; fold evidence #516, #521) |
 | A7 | Theorem A7 | full | D | |
-| A8 | Theorem A8 | sketch: Lemma 6 argued; (B1)–(B3) certified at run time | R, M, D | P7 (fixed, #480), P31 (fixed, #521) |
+| A8 | Theorem A8 | sketch: Lemma 6 argued; (B1)–(B3) certified at run time | R, M, D | P7 (fixed, #480), P31 (partly fixed; fold evidence #516, #521) |
 | A9 | — | none; no verdict rests on it since #480 | M (≤ 2,500,000 states), D | P7 (fixed, #480) |
-| A10, A11 | Lemma 6, point 5 | sketch (A11: that a count is never node-folded, unread@pin) | M, D | P31 (fixed, #521) |
+| A10, A11 | Lemma 6, point 5 | sketch (A11: that a count is never node-folded is read from `fold.rs::strip_links`) | M, D | P31 (partly fixed; fold evidence #516, #521) |
 | A12, A13, A14 | by reading | full (by construction) | D (A12, A13) | |
-| A15 | Theorem A15 | full relative to A8's hypotheses | R, D | P7 (fixed, #480), P31 (fixed, #521) |
+| A15 | Theorem A15 | full relative to A8's hypotheses | R, D | P7 (fixed, #480), P31 (partly fixed; fold evidence #516, #521) |
 | A16 | lift | none | R (every lifted step and look-up, every build), D | P20 (fixed, #518, #522, #529) |
 | A17 | — | none | M, D | |
-| A18 | Theorem A18 | full given (G1)–(G6) | M, D | P8 (prose fixed, #475), P30 (fixed, #488) |
+| A18 | Theorem A18 | full given (G1)–(G6) | M, D | P8 (prose fixed, #475), P30 (fixed, #488; outside guards refuted, #537) |
 | A19 | `DeletedRowOwner` | full (as the case (G5) removes) | D | |
 | A20, A21 | subgroup; canonical form | full given A18 (A21: checks invariant under `G_s`; annotated-quotient checks are A23) | D | P33 (closed, #512, #516) |
 | A22, A23 | composition; annotated quotient | sketch | R, M, D | P9 (prose fixed, #475) |
 | A24 | Proposition A24 | sketch | D | P10 (prose fixed, #477) |
-| A25 | Proposition A25 | full given A28′, A8 | unit test | P1 (fixed, #477, #509), P11 (fixed, #477) |
+| A25 | Proposition A25 | full given A28′, A8 | unit test | P1 (fixed, #477, #509), P11 (fixed, #477, #509, #532) |
 | A26 | scope | none | none | |
-| A27 | Proposition A27 | full relative to the covering cone's `ok` (Theorem A2; A8 when that cone is reduced) | none | P7 (fixed, #480), P31 (fixed, #521) |
-| A28 | Proposition A28 | full | D (via A2) | P11 (fixed, #477) |
+| A27 | Proposition A27 | full relative to the covering cone's `ok` (Theorem A2; A8 when that cone is reduced) | none | P7 (fixed, #480), P31 (partly fixed; fold evidence #516, #521) |
+| A28 | Proposition A28 | full | D (via A2) | P11 (fixed, #477, #509, #532) |
 
 ---
 
@@ -1271,18 +1301,22 @@ the row; a fixed or closed one carries its pull request.
   counterexample is vouched for is a `debug_assert!` only. A finding a cone fails to report has no trace, so
   a per-trace check never sees it; since #477 entity cones are exact for marks per cone instead (P32).
 - **Symmetry hypothesis (G6).** Enforced since #488 by `Rule::AbsentOwner` for a guard's pre-state read
-  through a `New` parameter (P30), the one way a guard reaches an absent row. For invariants, `after`
-  assertions, properties and `can_reach` goals, whose binders and goals the rule does not scan, (G6) is not
-  shown (Hypotheses, (G6)). A model that broke it could print a wrong verdict up to symmetry, `ok`
-  included; none is known, and no sample or corpus cone fires the rule.
+  through a `New` parameter (P30), the one way a guard reaches an absent row; no sample or corpus cone
+  fires the rule. For invariants, `after` assertions, properties and `can_reach` goals, which the rule
+  does not scan, (G6) holds by the presence gates of their evaluators, whatever the predicate reads
+  (Hypotheses, (G6); #537). That argument is a reading of the evaluators, tested on one built model
+  (`explore/symmetry/g6.rs::reads_outside_guards_meet_no_absent_owner`); a new evaluator that read a
+  predicate on an ungated binding would fall outside it, and no rule or run-time check would catch that.
 - **Panics left in the lifts.** Every printed trace replays before it prints (P20, fixed in #518 and #522),
   and since #529 `reduce/lift.rs::lift`, `explore/orbit.rs::lift_path` and
   `explore/properties.rs::ComponentRun::decide_property` report a broken invariant of their own as a
-  fault. Two places still hold invariants by panicking in a release build at the pin: the lasso lift of
-  `explore/orbit/liveness.rs` (`expect` and `assert!` that each edge is the move at its place and that its
-  permutation takes it to the stored target), and `reduce/lift.rs::lift_stop` (`expect`s about its caller
-  and its walk's own graph). A failure there stops the command; neither can print a trace that does not
-  replay.
+  fault. Since #531 the lasso lift of a run up to symmetry, `explore/orbit/liveness.rs::Product::lift`,
+  returns `NoMove` for an edge that is not the move at its place or whose permutation does not take it to
+  the stored target, which `lasso` reports as `LassoFault::Replay`. What still panics in a release build
+  at the pin is listed in the index's P20 row (#536): `reduce/lift.rs::lift_stop`'s `expect`s about its
+  caller and its walk's own graph, and in `explore/orbit/liveness.rs` `Product::new`'s permutations and
+  the look-ups of the pair search before the lift. None depends on the path being lifted. A failure there
+  stops the command; none can print a trace that does not replay.
 - **Bounded results.** Everything here, escalation included, is a statement at a bound. `ok at n` at
   `β + 1` and `β + 2` adds two bounded results; it is not an induction.
 
@@ -1335,3 +1369,14 @@ Changes to statements of this document after it was first written, newest last.
   lists `stable`, `unchanged` and `precedes` among the annotated-quotient readers: they are
   not run up to symmetry. The summary's Open column marks each fixed problem with its pull
   request.
+- **2026-11-28, re-pin to `5f59fae2`** (the merge of #537), with the method of the first
+  paragraph. (G6) and its limitation no longer say that no read outside a guard is shown to
+  avoid an absent owner: the presence gates of the invariant, `after`, property and
+  `can_reach` evaluators are cited, with the test of #537. "Which checks read a run up to
+  symmetry soundly" says that an `always` runs up to symmetry only on a cone the reduction
+  leaves whole (`PropertyJob::symmetric`). The symmetric lasso lift is described as faulting
+  (#531), and the panics left are those the index's P20 row lists (#536). Escalation and
+  `refuted.rs::instances` print counts per entity (#532), where the text said a maximum over
+  entities stays. A11's "a count is never node-folded" is read from `reduce/fold.rs`
+  (`strip_links`) and loses its `unread@pin`. The summary gives P31 its index status, partly
+  fixed, where it said fixed, and P11 and P30 their later pull requests.

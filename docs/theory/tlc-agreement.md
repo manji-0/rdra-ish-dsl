@@ -9,10 +9,10 @@ This document states what assurance exists that the native verifier and TLC, rea
 TLA+ module rdra-ish prints, give the same verdicts, and what kind of assurance each piece
 is. It owns rows T1 to T16 of the [claims inventory](./claims.md#d-agreement-with-tlc) and
 uses the notation of [semantics.md](./semantics.md) (D1 to D25) without redefining it. It
-describes the code at commit `fec53d6a` (origin/main, 2026-11-28).
+describes the code at commit `5f59fae2` (origin/main, 2026-11-28, the merge of #537).
 
-It was first written against `fb6928c7`; [Appendix: the pinned
-commit](#appendix-the-pinned-commit) says what changed in the cited code up to `fec53d6a` and
+It was first written against `fb6928c7`, then pinned to `fec53d6a`; [Appendix: the pinned
+commit](#appendix-the-pinned-commit) says what changed in the cited code up to `5f59fae2` and
 what was read again. Paths follow the convention of the
 [claims inventory](./claims.md#how-to-read-a-row): `core` is
 `crates/rdra-ish-core/src/lifecycle`, `cli` is `crates/rdra-ish-cli`, `emit` is
@@ -778,12 +778,15 @@ the sections it cites, and carries the tag of the statements it rests on.
    and one that does not is a fault (`LiftFault`, `LassoFault`, `TraceFault`) that ends the
    run `tool_error` (D23): the reduced lift checks every lifted step against the cone's steps
    in every build (`reduce/lift.rs::lift` returns `ReplayError`), and a symmetric path goes
-   through `orbit::replays`. What remains is narrower: some steps of the lift still rest on
-   internal `expect`s, which would panic rather than print a fault
-   (`explore/orbit.rs::lift_path`, and the representative and class lookups of
-   `reduce/lift.rs::lift`); an `always` counterexample is evaluated on the path the search
-   found, not on the lifted trace, and the position where it fails is checked by
-   `debug_assert_eq!` only (`explore/properties.rs`); and a
+   through `orbit::replays`. Since #529 the lifts' own look-ups fault too
+   (`explore/orbit.rs::lift_path` and `reduce/lift.rs::lift` return `NoMove`, `NotInitial` or
+   `Length`), and `explore/properties.rs::ComponentRun::decide_property` checks in every build
+   that its path breaks the property at its last state and, on a reduced system, reads an
+   `always` again on the lifted last state (`PropertyVerdict::Fault`); since #531 the lasso
+   lift of a run up to symmetry (`explore/orbit/liveness.rs::Product::lift`) returns `NoMove`
+   as well. What remains is narrower: the `expect`s and `panic!`s the index's P20 row lists
+   (`reduce/lift.rs::lift_stop`, `Product::new` and the pair search before the lasso lift),
+   none on the path being lifted, would stop the command rather than print a fault; and a
    wrong `ok` has no run-time guard at all. TLC sees a wrong `ok` only where a test or a user
    runs `--with-tlc`.
 3. **Bounds [read].** In CI, TLC runs at 3 or more instances only on the corpus (the three
@@ -894,7 +897,8 @@ document. The open problems this document confirmed, extended, or added, in the
 
 [read] The document was first written against `fb6928c7` (origin/main, 2026-11-28), later
 than the index's first pin `b83b9544`; between those two no path it cites changed in a part
-it relies on. It now describes `fec53d6a`. `git diff --stat fb6928c7 fec53d6a` over the cited
+it relies on. It was then pinned to `fec53d6a`, and it now describes `5f59fae2` (the last
+paragraph of this appendix). `git diff --stat fb6928c7 fec53d6a` over the cited
 paths shows changes in the printer (`emit/tla/mod.rs`, `module.rs`, `names.rs`), the TLC
 readers (`tlc_output.rs`), the comparison and the runs (`verify/compare.rs`, `native.rs`,
 `jobs.rs`, `tlc.rs`, `bfs.rs`, `end.rs`, `refuted.rs`, `escalate.rs`, `property_cone.rs`),
@@ -929,6 +933,15 @@ No other cited item changed, so its earlier read carries over; this includes
 `pred.rs`. The reduced-cone printer (`bits`, `rise_expr`) was not read at either pin
 (`unread@pin` where cited).
 
+[read] From `fec53d6a` to `5f59fae2` the cited paths change by #529 (`reduce/lift.rs::lift`,
+`explore/orbit.rs::lift_path`, `explore/properties.rs::ComponentRun::decide_property` and
+`explore/graph.rs`: the lifts' look-ups and the `always` checks fault), #531 and #536
+(`explore/orbit/liveness.rs::Product::lift`), #532 (`refuted.rs`, `escalate.rs`: instances per
+entity) and #535 (`engine_corpus.rs`: an escalated line with per-entity counts indexes no
+`bfs=` verdict). Each was read at `5f59fae2`; residual risk item 2 was rewritten for #529 and
+#531, and nothing else here cites what changed. #534 changes a z3 test, #537 a symmetry
+test, and #533 `.config/nextest.toml`; this document cites none of them.
+
 ## Errata
 
 Changes to statements of this document after it was first written, newest last.
@@ -960,3 +973,8 @@ Changes to statements of this document after it was first written, newest last.
   and 7 were rewritten for P20, P25, the TLC-side mutation run, and P24; item 2 names the
   internal `expect`s the lift still has. The deadlock text cites D25. `VERIFY_FALLBACK` has
   25 cones since #526.
+- **2026-11-28, re-pin to `5f59fae2`** (the merge of #537). The Appendix says what changed
+  after `fec53d6a` and what was read. Residual risk item 2 no longer lists
+  `explore/orbit.rs::lift_path` and the look-ups of `reduce/lift.rs::lift` as panicking, nor
+  an `always` counterexample as checked by `debug_assert_eq!` only: since #529 both fault, and
+  since #531 so does the symmetric lasso lift.

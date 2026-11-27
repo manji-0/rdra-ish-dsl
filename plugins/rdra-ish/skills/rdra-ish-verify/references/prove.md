@@ -51,7 +51,7 @@ decided by proof: ...)`.
 ```text
 $ rdra-ish verify --prove --instance-count 1 samples/one_to_one_shared.rdra
 ...
-unproved: Unique_Shipment_Order: not inductive; Ship(Order#1, Shipment#1) breaks it from a state where it and every proved rule hold (not necessarily reachable)
+unproved: Unique_Shipment_Order: not inductive; Ship(Order#1, Shipment#1) breaks it from a state where it, every proved rule, and every kept lemma hold (not necessarily reachable)
   Order#1 (present) status=placed -> status=shipped
   Shipment#1 (absent -> present) Order=Order#2 -> Order=Order#1
   Shipment#2 (present) Order=Order#1
@@ -67,7 +67,7 @@ escalated: Unique_Shipment_Order: counterexample at 2 instances (BFS on its cone
 
 ## Reading a CTI
 
-A CTI is one step from a state where the rule and every kept lemma hold. The first line
+A CTI is one step from a state where the rule, every proved rule, and every kept lemma hold. The first line
 names the step and the rows it binds. Each indented line is one row: present or absent, its
 columns before the step, and after `->` what the step changed. A run mark
 (`_run_<UseCase>`) or event mark (`_raised_<Event>`) shows when the step or rule reads it.
