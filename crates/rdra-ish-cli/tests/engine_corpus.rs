@@ -461,6 +461,11 @@ struct Observed {
     unnamed: Vec<String>,
     /// A panic's line: a tool bug, such as a lifted counterexample that does not replay.
     panics: Vec<String>,
+    /// In a `shadow` build, each twin that let a call over its cap pass unchecked, as
+    /// `name=compared/skipped/stopped` from the line the process prints whenever a call
+    /// passed unchecked (`rdra_ish_core::shadow::report`). A call `stopped` at a limit of the
+    /// run, as the capped cases' are, leaves nothing to compare and is not listed.
+    shadow_skips: Vec<String>,
     tlc_ran: bool,
 }
 
@@ -525,6 +530,13 @@ impl Observed {
         out.panics = stderr
             .lines()
             .filter(|l| l.contains("panicked at"))
+            .map(str::to_string)
+            .collect();
+        out.shadow_skips = stderr
+            .lines()
+            .filter_map(|l| l.strip_prefix("shadow: compared/skipped/stopped "))
+            .flat_map(str::split_whitespace)
+            .filter(|count| count.split('/').nth(1).is_some_and(|n| n != "0"))
             .map(str::to_string)
             .collect();
         // An error block is its `error[Name]:` line and the indented lines under it; TLC's
@@ -677,6 +689,19 @@ struct Report {
     known: Vec<String>,
 }
 
+/// The runs of a corpus case whose input is past a twin's cap, and those twins: the harness
+/// lets them skip calls there and fails a case on any other skip (P17 of
+/// docs/theory/README.md). Each entry says how far past the cap the run is.
+const PAST_A_TWIN_CAP: &[(&str, &str, &[&str])] = &[
+    // The unreduced cone at 3 instances holds 670,896 states, past the 200,000 at which the
+    // orbit twins' plain run stops; the run up to symmetry completes.
+    (
+        "cone_reduced_class_loops",
+        "rule 8, --symmetry always at 3 instances, unreduced",
+        &["orbit_run", "orbit_liveness", "orbit_state_models"],
+    ),
+];
+
 fn check_case(case: &Case, tools: &Tools) -> Report {
     let mut report = Report::default();
     let run_tlc = tools.tlc && !case.tlc_skip;
@@ -709,6 +734,31 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
         false => BTreeMap::new(),
     };
     let fail = |report: &mut Report, msg: String| report.failures.push(msg);
+    // Every corpus case is small enough for every twin to hold every call, but for the runs
+    // `PAST_A_TWIN_CAP` names: a skip elsewhere is a twin that stopped checking.
+    let skips = |report: &mut Report, run: &str, observed: &Observed| {
+        let allowed: &[&str] = PAST_A_TWIN_CAP
+            .iter()
+            .find(|(name, at, _)| *name == case.name && *at == run)
+            .map_or(&[], |(_, _, twins)| twins);
+        let unchecked: Vec<&str> = (observed.shadow_skips.iter())
+            .filter(|count| !allowed.iter().any(|t| count.starts_with(&format!("{t}="))))
+            .map(String::as_str)
+            .collect();
+        if !unchecked.is_empty() {
+            fail(
+                report,
+                format!(
+                    "{run}: a shadow twin let calls over its cap pass unchecked: {}",
+                    unchecked.join(" ")
+                ),
+            );
+        }
+    };
+    skips(&mut report, "the main run", &main);
+    for (n, observed) in &bounded {
+        skips(&mut report, &format!("the run at {n} instances"), observed);
+    }
 
     let rejected = |line: &str| {
         (line.starts_with("Error: model has errors") && !case.rejects.is_empty())
@@ -949,6 +999,11 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
             ("reduced", &[("RDRA_ISH_FORCE_ORBITS", "1")][..]),
         ] {
             let sym = verify_with(case, &args, env);
+            skips(
+                &mut report,
+                &format!("rule 8, --symmetry always at {n} instances, {how}"),
+                &sym,
+            );
             for line in sym.panics.iter().chain(&sym.faults) {
                 fail(
                     &mut report,
@@ -1320,4 +1375,33 @@ fn rule_8_fails_a_check_symmetry_leaves_undecided() {
     assert_eq!(at("Cone_P [P]: counterexample (about 3 states)\n").len(), 1);
     let undecided = Observed::parse("Cone_P [P]: not decided (5 states)\n", "");
     assert!(rule_8(&case, (&undecided, &plain), "at 2 instances").is_empty());
+}
+
+/// A twin that lets a call pass unchecked says so without `RDRA_ISH_SHADOW_STATS`: at 7
+/// instances a state's group can have 7! elements, past the 6^4 the canonical form's twin
+/// enumerates, so the twin skips those calls, and the process names the twin and the count
+/// (open problem P17 of docs/theory/README.md). The corpus harness fails a case on such a
+/// line. Only a `shadow` build has twins.
+#[cfg(feature = "shadow")]
+#[test]
+fn a_twin_that_skips_a_call_says_so() {
+    let model = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../samples/formal-verification/check_met.rdra");
+    let out = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .args(["verify", "--instance-count", "7", "--symmetry", "always"])
+        .arg(&model)
+        .env("RDRA_ISH_FORCE_ORBITS", "1")
+        .env_remove("RDRA_ISH_SHADOW_STATS")
+        .env_remove("RDRA_TLC_JAR")
+        .output()
+        .expect("rdra-ish runs");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let observed = Observed::parse(&String::from_utf8_lossy(&out.stdout), &stderr);
+    assert!(
+        observed
+            .shadow_skips
+            .iter()
+            .any(|count| count.starts_with("canonical=")),
+        "no skip of the canonical form's twin named: {stderr}"
+    );
 }

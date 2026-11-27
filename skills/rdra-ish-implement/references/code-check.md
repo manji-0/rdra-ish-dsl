@@ -64,6 +64,7 @@ FAIL: code: 1 error(s) at --code=build
 | `CodeConformance` | `run`: the store differs from the model after a call, or the service panicked or threw | Read the first difference: the traces line, and the `model only:` / `store only:` rows; or where it panicked |
 | `CodeMutantSurvived` | `run`: a mutant trace of the self-check passed | The `fix:` line: look rows up by id, or make the run command use `RDRA_ISH_TRACES` |
 | `CodeCoverageIncomplete` | `run`: the BFS behind the traces stopped at `conformance_states`; a warning, an error with `--deny-incomplete` | Raise `conformance_states`, then `codegen --code` |
+| `CodeUnimplemented` | `run`: calls reached the unimplemented port, so their traces stopped; a warning, an error with `--deny-incomplete` | Implement the use cases it names in place of the stand-in |
 
 ## The obligation ledger
 

@@ -14,12 +14,12 @@ use super::{Classes, Classified, Ended};
 use crate::lifecycle::explore::{Caps, Checks, OrbitRun};
 use crate::lifecycle::TransitionSystem;
 
-/// Counts a call the twin compared or skipped, in a `shadow` build.
+/// Counts a call the twin compared, or skipped over its cap, in a `shadow` build.
 fn count(compared: bool) {
     #[cfg(feature = "shadow")]
     match compared {
         true => crate::shadow::compared(crate::shadow::Twin::SUpToH),
-        false => crate::shadow::skipped(crate::shadow::Twin::SUpToH),
+        false => crate::shadow::skipped(crate::shadow::Twin::SUpToH, crate::shadow::Skip::OverCap),
     }
     #[cfg(not(feature = "shadow"))]
     let _ = compared;
