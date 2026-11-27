@@ -12,14 +12,20 @@ uses the notation of [semantics.md](./semantics.md) (D1 to D23) without redefini
 
 The code was read at commit `fb6928c74ccc5b479dea07d92cc1e39c34ddd218` (origin/main,
 2026-11-28), later than the index's pin `b83b9544`; the revision after review was checked
-against the same commit. Between `b83b9544` and `fb6928c7`, two cited paths changed, neither
-in a way that bears on a statement here: `scripts/verify-relevant.sh` adds the Claude Code
-plugin and LSP files to the paths that skip the verification checks, and `CHANGELOG.md`
-gains entries under "Unreleased" only (its v3.0.0 section is unchanged). Every other cited
-path (`crates/rdra-ish-emit/src/tla/`, `crates/rdra-ish-cli/src/verify/`, `tlc_output.rs`,
-`tlc_replay.rs`, `property_cone.rs`, the corpus and equivalence tests,
-`crates/rdra-ish-core/src/lifecycle/`, the workflows, the other scripts, the samples, and
-the notes) is identical at both. Paths follow the convention of the
+against the same commit. `git diff --stat b83b9544 fb6928c7` over the whole tree, read
+against the paths this document cites, shows three cited files changed, none in a part this
+document relies on: `scripts/verify-relevant.sh` adds the Claude Code plugin and LSP files
+to the paths that skip the verification checks; `CHANGELOG.md` gains entries under
+"Unreleased" only (its v3.0.0 section is unchanged); and `docs/cli-reference.md` gains
+lines on the plugin and code generation, not in "Partial runs". Every other cited path is
+identical at both: `crates/rdra-ish-emit/src/tla/`, `crates/rdra-ish-cli/src/verify/`,
+`tlc_output.rs`, `tlc_replay.rs`, `property_cone.rs`, the corpus and equivalence
+tests, `crates/rdra-ish-core/src/`, `.github/workflows/`, `flake.nix`, the samples, the
+other cited scripts (`verify-samples.sh`, `reduction-diff.py`, `tlc-roots.txt`,
+`kani-relevant.sh`), and the notes in `docs/` and `docs/design/`. The rest of the diff
+(code generation, the LSP, the plugin, `cli.rs` and `lib.rs` of the CLI for those,
+`scripts/check-release-version.sh`, and this
+directory's own documents) is outside what this document cites. Paths follow the convention of the
 [claims inventory](./claims.md#how-to-read-a-row): `core` is
 `crates/rdra-ish-core/src/lifecycle`, `cli` is `crates/rdra-ish-cli`, `emit` is
 `crates/rdra-ish-emit/src`.
@@ -48,7 +54,10 @@ The tag is added to the legend above the four classes because most of sections 2
 neither an argument nor a test result but a description of what the evidence is. The
 tagging unit is a paragraph with a bold lead, a list item, a table, or a subsection: a tag
 at the start of a subsection or on the sentence that introduces a list or table covers it
-until the next tag. The Related work section cites literature and carries no tag.
+until the next tag. Tags combine with `;` (`[paper; test]` means both kinds of support),
+and a tag may carry a qualifier after a colon or `;` (`[assumed: TLC]`, `[read; not
+reproduced]`, `[paper; see Status]`, `[test; no paper argument; …]`); the class is always
+one of the five above. The Related work section cites literature and carries no tag.
 
 ---
 
@@ -245,10 +254,19 @@ left-to-right evaluation, not for the meaning of the conjunction.
   transition's target, or on no match the pre-state value), and so does a `Choose`
   *before* it (native: the `Choose`, forked last, wins; printer: the transition's target,
   or the pre-state value, since `prev` is the pre-state when the slot held a `Choose`). On a state whose current source has two or
-  more targets, all four orders agree. So step 3 holds for multi-target transitions only
-  under a builder invariant: no action has an `Assign` after, or a `Choose` before, such a
-  `Transition` on the same `(var, param)`. Open problem P24 records where the builder
-  excludes each shape and the one shape it was not found to exclude.
+  more targets, all four orders agree. The no-match case cannot arise in an action built
+  from `transitions`, whose `TransitionFrom` pre-guard holds the column at a source. The
+  post-guards (`build/transitions.rs::arm_guards`: one guard per `Transition` or `Choose`
+  effect that has a `.when` arm or value) filter the successors the same way in both
+  engines, so they reconcile the two effect readings only when they leave a single value:
+  when both the `Choose` and the `Transition` carry such guards, both engines keep exactly
+  the current source's target `t`, if the `Choose` guard allows it; when the `Transition`'s
+  arms carry no `.when`, the native step keeps every enabled `Choose` value and the printed
+  step keeps only `t`. So step 3 holds for multi-target transitions only under a builder
+  invariant: no action has an `Assign` after, or a `Choose` before, such a `Transition` on
+  the same `(var, param)` (or, more weakly, the post-guards reconcile it). Open problem P24
+  records where the builder excludes each shape and the one shape it was not found to
+  exclude.
 - `Delete`: both reset `Exists` to `deleted` and every column of `decl.columns` to base,
   and keep owners (D8). Both drop a choice on the deleted slot (`moves.rs` retains only
   choices on other params; the printer overwrites the slot with the base value).
@@ -348,7 +366,7 @@ The property is printed as `Fair_P => (…)`. `ConeProperty(i)` omits `WF_vars(N
 liveness property ([Module](#terms)); the `_WF` run's module is `Property(i)` of a liveness
 property, so it always has it (`WfNext`). Where a module has it but checks only safety, it
 is harmless: `WF_vars(Next)` is a fairness condition on a subaction of `Next`, so `Init /\
-[][Next]_vars /\ WF_vars(Next)` is machine closed (Lamport 2002, §8.9.2; the notion is
+[][Next]_vars /\ WF_vars(Next)` is machine closed (Lamport 2002, §8.9; the notion is
 Abadi and Lamport's, 1991), and adding it changes no safety verdict. TLC's support for
 fairness quantified over a finite constant set is [assumed: TLC].
 
@@ -404,8 +422,9 @@ only through a liveness verdict.
   whole-model run's where a cone left the property open;
 - a property cone: each run in `Native::runs` against the TLC run of the same `ConeRun`,
   then the final verdicts. The pairing is by label, not by system. For a liveness property
-  whose `Plain` run on a reduced cone finds a counterexample, `native.rs::native_property`
-  first runs `ComponentRun::decide_liveness_reduced` on the reduced cone (every class that
+  whose `Plain` run on a reduced cone finds a counterexample, `native.rs::Plain::of`
+  (called from `native_property`) first runs `ComponentRun::decide_liveness_reduced` on the
+  reduced cone (every class that
   can loop taken as a stop; A15), and when that returns `Holds` or `Violated`,
   `native_property_after` records it as the native `WfNext` run. TLC's `WfNext` run is
   always the `_WF` module, which `PropertyCone::bundle(ConeRun::WfNext)` prints with
@@ -475,6 +494,7 @@ run-time disagreement is open as an issue at the pinned commit, as far as the no
 <!-- derived-from ../engine-agreement.md#the-reduction-on-random-models -->
 <!-- derived-from ../engine-agreement.md#batch-jvms -->
 <!-- derived-from ../engine-agreement.md#mutation-run -->
+<!-- derived-from ../cli-reference.md#partial-runs -->
 
 Differential testing (McKeeman 1998) runs two implementations of one specification on the
 same input and treats a difference as a fault in one of them. Its power is bounded by the
@@ -544,7 +564,9 @@ against TLC's run of the same module, and the cone's final verdict against the w
 model's TLC verdict. It compares verdicts, not graphs. Its native `WfNext` run is always
 `Fairness::WfNext` on the unreduced cone, as TLC's is; it never calls
 `decide_liveness_reduced`, so the reduced-graph `_WF` search is compared with TLC only
-under `verify --with-tlc` (the corpus cases `cone_reduced_*` and the sample roots; P23).
+under `verify --with-tlc` (the corpus harness passes `--with-tlc` to every case; the
+`cone_reduced_*` cases are written for A15, and this reading traced the path through
+`cone_reduced_no_loop_capped`; P23).
 
 ### `verify --with-tlc` on the sample roots
 
@@ -655,10 +677,13 @@ cap (P17).
 | `kani` | when `scripts/kani-relevant.sh` matches a changed file | yes | no |
 | `mutants.yml` | never | never; by hand | no |
 
-Every TLC run in CI is in the flake's devShell: `ci.yml` sets `shell: nix develop --command
+Every TLC run in CI is in the flake's devShell. `ci.yml` sets `shell: nix develop --command
 bash -eo pipefail {0}` as the default, and only two jobs override it with plain `bash`, the
 `changes` job and the `kani` job (Kani is not in nixpkgs, so that job runs on the runner's
-rustup outside the devShell, as its comment says); neither runs TLC. The devShell's TLC is
+rustup outside the devShell, as its comment says); neither runs TLC. Of the other
+workflows, `mutants.yml` takes TLC off `PATH` on purpose, `portability.yml` runs with no nix
+and no TLC (its comment), and `release.yml`, `publish-pypi.yml` and `verus.yml` do not
+mention TLC. The devShell's TLC is
 `flake.nix`'s `tlcFor`: the nixpkgs `tlaplus` package overridden to the 1.8.0 pre-release
 jar (build of 2026-11-19, rev `bc1b506`, by the flake's comment) on JDK 25. The CI evidence
 is about that TLC; the notes also name 1.7.4, which nixpkgs ships.
@@ -723,9 +748,12 @@ the sections it cites, and carries the tag of the statements it rests on.
    disagreement in violated sets can go unreported, and P23 a place where the per-run
    comparison pairs runs on two different systems.
 7. **Effect orders the builder may not exclude [paper; read].** Step 3 of T1 for
-   multi-target transitions rests on a builder invariant (P24). A model that reaches the
-   one shape not found to be excluded would make the printed module and the native step
-   relation differ; the graph comparison would catch it only if a sample had that shape.
+   multi-target transitions rests on a builder invariant (P24). On the one shape not found
+   to be excluded, the two effect readings differ, and the post-guards remove the
+   difference only when the `transitions` arms carry `.when` guards; with unguarded arms,
+   by the reading in [Effects](#per-construct-argument), the printed module and the native
+   step relation would differ. The graph comparison would catch it only if a sample had
+   that shape.
 8. **TLC [assumed: TLC].** TLC's fingerprint-based state store can, with small probability, merge two
    distinct states on a hash collision and so miss states (Yu, Manolios and Lamport 1999
    discuss TLC's design; TLC prints its own collision estimate, which
@@ -757,7 +785,7 @@ the sections it cites, and carries the tag of the statements it rests on.
 ## Related work
 
 - **TLA+ and TLC.** Lamport, *Specifying Systems* (2002), for `WF`, stuttering, `~>`, and
-  machine closure (§8.9.2: weak fairness of a subaction of `Next` conjoined to
+  machine closure (§8.9: weak fairness of a subaction of `Next` conjoined to
   `Init /\ [][Next]_vars` is machine closed); Yu, Manolios and Lamport, "Model checking TLA+
   specifications" (CHARME 1999), for TLC. Abadi and Lamport, "The existence of refinement
   mappings" (TCS 1991), for history variables and the definition of machine closure.
@@ -789,4 +817,4 @@ document or by the code at the pinned commit. [read]
 | P21 | Confirmed; extended to the unreduced `WfNext` runs and to a false `tool_error` under `--symmetry always` without TLC. The reduced `WfNext` run is not affected: it records no entry when undecided. |
 | P22 | New (prose): D17 omits that a step with `s' = s` is checked by neither engine. Both halves read; `Probe::Loop` is set in every build. |
 | P23 | New (evidence): the per-run comparison pairs the native `WfNext` run on the reduced cone (`decide_liveness_reduced`) with TLC's `_WF` module printed from the unreduced cone, so Proposition 0 does not apply on that path. |
-| P24 | New (evidence): for a `Transition` with a multi-target source, the printer and the native step relation agree only under a builder invariant on effect order that nothing enforces as such; one shape was not found to be excluded. |
+| P24 | New (evidence): for a `Transition` with a multi-target source, the printer's and the native effect application agree only under a builder invariant on effect order that nothing enforces as such; one shape was not found to be excluded, and on it the post-guards reconcile the two only when the `transitions` arms carry `.when` guards. |
