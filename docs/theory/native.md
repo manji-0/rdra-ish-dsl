@@ -10,8 +10,14 @@ of [semantics.md](./semantics.md) (D1 to D25) without redefining it. `T` is the 
 build returns; that it is `T_β(M)` (D13) is claim [I1](./claims.md#0-the-build), not a step
 of any proof here.
 
-It describes the code at commit `41882b4f4c59d5fabf80ab9eb7b11d0730a76f98` (origin/main,
-2026-11-28, the merge of #529). From `c97c88ef` (the merge of #525) to the pin, the crates
+It describes the code at commit `5f59fae21e582b397b42c8b6594356ac5892420e` (origin/main,
+2026-11-28, the merge of #537). From `41882b4f` (the merge of #529) to the pin, the crates
+change by #531 and #536 (`explore/orbit/liveness.rs`: the symmetric lasso lift faults
+instead of panicking), which were read at the pin; by #532 (`cli/src/prove.rs`,
+`cli/src/state_findings.rs`, `cli/src/verify/escalate.rs`, `cli/src/verify/refuted.rs`),
+#534 (`cli/tests/proof_equivalence.rs`), #535 (`cli/tests/engine_corpus.rs`) and #537
+(`explore/symmetry/g6.rs`, a test, and its `mod` line), none of which this document cites;
+and #533 changes only `.config/nextest.toml`. Before that re-pin it described `41882b4f`. From `c97c88ef` (the merge of #525) to the pin, the crates
 change only by #526, a test of `cli/tests/engine_equivalence.rs`, and #529, which turned the
 lifts' remaining invariants into faults; #529's changes to `reduce/lift.rs`,
 `explore/orbit.rs`, `explore/orbit/findings.rs`, `explore/properties.rs` and
@@ -284,8 +290,8 @@ formal-verification.md says.
 
 **N15 (Stops give `not decided`).** Every reader below returns `Undecided` (or
 `NotDecided`, or leaves the finding open) on a stopped graph unless it found a violation in
-the part explored, and the CLI maps that to `not decided` (`cli/src/verify/end.rs::End::result`,
-cited from row N15; unread@pin).
+the part explored, and the CLI maps that to `not decided` (`cli/src/verify/end.rs::End::result`: with no failure and no tool error, a capped,
+undecided or denied-unproved finding makes the result `RunResult::NotDecided`).
 A stopped run's counterexamples are sound for safety (they are paths of `G`, hence traces
 of `T`) and for liveness by N10. The time budget (`Caps::deadline`, read every 256
 admissions) is the one stop whose position depends on the machine.
@@ -750,13 +756,18 @@ Three consequences.
 - *What is still unchecked or panics.* Deadlock and `can_reach` traces replay, but the
   finding is not decided again on them. The lifted start of a reduced trace is built from an
   initial S state of the start's class (a start with none is `ReplayError::NotInitial` since
-  #529) and is not itself checked against the unreduced cone's initial states. Two places hold
-  invariants of their own by release panics at the pin: the lasso lift of
-  `explore/orbit/liveness.rs` (an `expect` and two `assert!`s that an edge is the move at its
-  place and that its permutation takes the move to the stored target) and
-  `reduce/lift.rs::lift_stop` (`expect`s about its caller, a reduced cone, and its walk's own
-  graph, marked in the code as unchecked invariants). A failure there stops the command;
-  neither can print a trace that does not replay. Before #529, `reduce/lift.rs::lift` (its
+  #529) and is not itself checked against the unreduced cone's initial states. Some code
+  holds invariants of its own by release panics at the pin, each listed in the index's P20
+  row (#536): `reduce/lift.rs::lift_stop` (`expect`s about its caller, a reduced cone, and its
+  walk's own graph, marked in the code as unchecked invariants), and in
+  `explore/orbit/liveness.rs` `Product::new`'s permutations and the look-ups of the pair search
+  before the lift (`lasso`, `thread_walk`, `walk_in`). None depends on the path being lifted.
+  A failure there stops the command; none can print a trace that does not replay. Until #531
+  the lasso lift of `explore/orbit/liveness.rs` held its own with an `expect` and two
+  `assert!`s (that an edge is the move at its place and that its permutation takes the move
+  to the stored target); `Product::lift` now returns `ReplayError::NoMove` there, which
+  `lasso` reports as `LassoFault::Replay` (test
+  `explore/orbit/liveness.rs::an_edge_its_permutation_does_not_explain_is_a_replay_error`). Before #529, `reduce/lift.rs::lift` (its
   look-ups of the start's class and initial S state, of a T step's rise and a class move's
   target, one inner group per rise and S step, and up to `H` the concrete start),
   `explore/orbit.rs::lift_path` (that a stored edge is a move of its source) and
@@ -788,15 +799,15 @@ only what the lift computes.
   stored target; with `σ` the permutation that takes `t` there, the concrete step is the
   move read through the accumulated `τ`, and `τ := τ ∘ σ⁻¹`. The lasso lift of
   `orbit/liveness.rs` takes instead the move at the edge's place among its source's moves and
-  the permutation the annotated run stored for the edge, and `assert!`s that they match the
-  edge. A liveness loop on
+  the permutation the annotated run stored for the edge, and returns `ReplayError::NoMove`
+  when they do not match the edge (#531). A liveness loop on
   (state, binding) pairs (**N12**) closes after at most the order of the loop's composed
   permutation, capped at 10,000 copies (`orbit/liveness.rs::MOST_COPIES`). **N13**: a
   lifted trace that does not replay is a tool error, never a printed counterexample (P20,
   fixed in #518 and #522; before, it panicked). Since #529 `lift_path` also reports a stored
-  edge that is no move of its source as `ReplayError::NoMove` rather than panicking; the
-  lasso lift of `orbit/liveness.rs` still panics on its own invariants (the third consequence
-  above).
+  edge that is no move of its source as `ReplayError::NoMove` rather than panicking, and
+  since #531 so does the lasso lift of `orbit/liveness.rs` (the third consequence above lists
+  what still panics).
 
 The `Twin::OrbitLiveness` twin compares the orbit search with the plain run's `avoid`
 (`ComponentRun::liveness_reference`), so it tests the quotient against N9's implementation,
@@ -928,8 +939,8 @@ each of its variants a fair action whose enabledness reads its mark (event-order
   and `edges.rs::StepEnds::read` (which records whether a move changes the state,
   `Ends::moved`, since #494); for N14, the choice of the least `(idx, k)` per column value
   and the `has_way_on` filter in `findings.rs`.
-- **Not re-read here (unread@pin):** `cli/src/verify/end.rs` (N15); `reduce/lift.rs::lift_stop`
-  beyond `MAX_WALK`, `Spurious::NoLoop` and its error path; the `Twin::EachEnabled` path;
+- **Not re-read here (unread@pin):** `reduce/lift.rs::lift_stop`
+  beyond `MAX_WALK`, `Spurious::NoLoop` and its error path;
   `fasthash.rs` beyond the rule quoted in N2; `cli/src/verify/native.rs::native_property_after`
   beyond the order of its runs and what it records for the comparison; and
   `cli/src/verify/shared.rs::Shared::up_to_symmetry` beyond its use of
@@ -970,7 +981,8 @@ Read on the code here, with their status at the pin: P6 (decided as documented, 
 P19 (fixed in #478: a naive oracle, and `assert!` on completeness in every build); P20
 (fixed in #518 and #522: every printed trace replays, the table of
 [Counterexamples](#counterexamples-what-is-checked-before-printing), and #529 for the lifts'
-own look-ups; the release `expect`s and `assert!`s it lists remain). Corrected: P18 (`SameAs` and `DenseBinding` are release paths
+own look-ups, #531 for the symmetric lasso lift; the release `expect`s and `panic!`s it
+lists remain). Corrected: P18 (`SameAs` and `DenseBinding` are release paths
 whose twins run in every `shadow` run; `Twin::SeenGrowth` runs on the release path since
 #473; the loom model and a Miri job still do not exist). The [index](./README.md#open-problems)
 holds the entries.
@@ -1073,3 +1085,8 @@ Changes to statements of this document after it was first written, newest last.
   per problem; the Reproductions no longer say *repro pending in repo*, and name the P51
   test `an_assert_after_a_step_that_only_stutters_holds_vacuously` instead of a test called
   `P51`, which does not exist. The P26 reference interpreter is described as it exists (#492).
+- **2026-11-28, re-pin to `5f59fae2`** (the merge of #537), with the method of the first
+  paragraph. The lasso lift of `explore/orbit/liveness.rs` faults since #531
+  (`Product::lift` returns `NoMove`), and the release panics left are those of the index's
+  P20 row (#536); the Counterexamples list, the Symmetric bullet and the P20 status say so.
+  N15's `End::result` and the `Twin::EachEnabled` path were read and lose `unread@pin`.

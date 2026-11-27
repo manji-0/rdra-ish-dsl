@@ -8,7 +8,7 @@ gives the meaning of the model's rules and properties on that system, and of eve
 the tools print. The theme documents listed in the [index](./README.md) state their guarantees
 in this notation. The [claims inventory](./claims.md) refers to the definitions by number
 (D1, D2, …), and each definition has an anchor of its own (`semantics.md#d1` … `#d25`).
-The code it cites was read at commit `fec53d6a` (origin/main, 2026-11-28).
+The code it cites was read at commit `5f59fae2` (origin/main, 2026-11-28, the merge of #537).
 
 **What the definitions rest on.** D1 to D13 and D24 define `T_β(M)` from the model's text.
 Each clause names the surface construct it gives meaning to (an entity, a column and its
@@ -36,12 +36,12 @@ D14 to D23 define the meaning of rules, properties, and verdicts on a transition
 `T`, and D25 that of the deadlock finding. They apply to `T_β(M)` and to every system derived from it (a cone, a reduced cone, a
 quotient), and they cite code where a verdict is printed.
 
-This document was checked against commit `fec53d6a` (origin/main, 2026-11-28; first
-`b83b9544`, then `670eec79`, see [Errata](#errata)). Code is cited by Rust path (`lifecycle::types::Bounds`) or as
+This document was checked against commit `5f59fae2` (origin/main, 2026-11-28; first
+`b83b9544`, then `670eec79` and `fec53d6a`, see [Errata](#errata)). Code is cited by Rust path (`lifecycle::types::Bounds`) or as
 `file.rs::symbol`, with file paths relative to `crates/rdra-ish-core/src/lifecycle/` unless
 they start with `cli/` (`crates/rdra-ish-cli/`), as in the [claims inventory](./claims.md).
 **Implemented by** notes are pointers, not statements, and carry no read status. A code
-citation in a statement was read at `fec53d6a` unless it carries `unread@pin`
+citation in a statement was read at `5f59fae2` unless it carries `unread@pin`
 ([claims inventory](./claims.md#how-to-read-a-row)). Revisions are listed in
 [Errata](#errata).
 
@@ -625,7 +625,7 @@ this table says only as far as the build returns `T_β(M, σ)` (claim
 |---|---|---|
 | `ok` | a cone or property line of `verify` (`cli/src/tlc_output.rs::Outcome::Ok`) | The checks of the line hold on `T_β(M)` (D16, D17, D19, D21 under the fairness of D20, D22). For a line of a cone the verdict is derived from the cone, and theme (a) owns the step from cone to model. |
 | `ok (checked in Cone_X)` | a covered safety cone (`cli/src/verify/bfs.rs`) | `ok`, decided by the run of a cone `Cone_X` that holds every variable, action, guard, and parameter of this one. |
-| `counterexample` | a line, or `result:` (`RunResult::Counterexample`) | A finite trace (safety) or a lasso (liveness) of the explored system that breaks a check. It is a behavior of `T_β(M)` except where theme (a) says otherwise. A cone that frees slots may need more instances of an entity it does not read; such a counterexample is re-decided on the whole model for properties, or printed with the instances it needs. A cone that leaves a raised mark out may reach states the event order forbids; since #477 such a counterexample of a state rule or `after` is decided again, and since #509 by a refinement loop (`targets.rs::TransitionSystem::recheck_on`): the cone grows by the raisers of the events the trace runs without (`free_triggers`) and by the entities it creates past the bound (`over_bound`) until its run vouches for the trace or finds none, with the exact cone (`exact_target_cone`) as the last step (P1, fixed). Every printed trace, safety or liveness, replays through the step relation of the system it is about before it prints; one that does not is a `tool_error` (P20, fixed in #518 and #522). Some steps of the lift still rest on internal `expect`s, which would panic rather than print a fault (`explore/orbit.rs::lift_path`, `reduce/lift.rs::lift`). |
+| `counterexample` | a line, or `result:` (`RunResult::Counterexample`) | A finite trace (safety) or a lasso (liveness) of the explored system that breaks a check. It is a behavior of `T_β(M)` except where theme (a) says otherwise. A cone that frees slots may need more instances of an entity it does not read; such a counterexample is re-decided on the whole model for properties, or printed with the instances it needs. A cone that leaves a raised mark out may reach states the event order forbids; since #477 such a counterexample of a state rule or `after` is decided again, and since #509 by a refinement loop (`targets.rs::TransitionSystem::recheck_on`): the cone grows by the raisers of the events the trace runs without (`free_triggers`) and by the entities it creates past the bound (`over_bound`) until its run vouches for the trace or finds none, with the exact cone (`exact_target_cone`) as the last step (P1, fixed). Every printed trace, safety or liveness, replays through the step relation of the system it is about before it prints; one that does not is a `tool_error` (P20, fixed in #518 and #522). Since #529 and #531 the lifts' own look-ups are faults too (`explore/orbit.rs::lift_path`, `reduce/lift.rs::lift`, the lasso lift `explore/orbit/liveness.rs::Product::lift`); the `expect`s and `panic!`s left, none on the path being lifted, are listed in the index's P20 row. |
 | `violated` | `property P (BFS on its cone): violated`; `can_reach (BFS on N cones): k checked, m violated` (`cli/src/verify/bfs.rs`) | `counterexample`, in the lines of the forms only BFS decides (`stable`, `unchanged`, `precedes`, `can_reach`). |
 | `not decided` | a line (`cli/src/verify/native.rs::Answer::Stopped`, `RunResult::NotDecided`) | The run stopped before it found a counterexample. No claim is made either way. The line's note names the stop: `stopped at the state cap (--max-states) or the memory limit`, `stopped at the state cap of N states`, `stopped at the memory limit of L`, `stopped at the time budget of S s`, or, for a property its cone cannot decide, `needs the whole model's WF_vars(Next)` and `its counterexample may create instances past the bound`. |
 | `tool_error` | a line or `result:` | A tool fault, not a fact about the model: a counterexample or trace that does not certify itself (`LassoFault` for a property, `LiftFault` for a state rule or `after`, `TraceFault` for a deadlock, a `can_reach` failure, or a witness; P20), a disagreement between the native checker and TLC, or a TLC failure without a violation. |
@@ -635,8 +635,8 @@ this table says only as far as the build returns `T_β(M, σ)` (claim
 | `proved: R` | `verify --prove` (`prove/mod.rs::Verdict::Proved`) | `R` belongs to a set of formulas that is inductive for the z3 encoding of the built system. That encoding widens D13: any absent row for `New`, and Int terms and `now` over all non-negative integers. Hence, if z3 is sound and the hypotheses of [z3.md, Theorem 1](./z3.md#the-soundness-theorem) hold, `T_{β'}(M, σ) ⊨ R` for every `β'` in the proof's scope `Sc(M, β)` ([z3.md, Definition 3](./z3.md#the-soundness-theorem)). That scope contains `β` whenever the run builds. Since #481 it is every bound at which the model builds (P43, fixed); its conditions are owned by z3.md (claim B2). Since #514 the `proved:` line, like every line that claims a proof, prints that scope: `for any number of rows and every --int-range-max from L to M`, where `L` and `M` are the least and the greatest `m'` at which the build reports no error (`cli/src/prove.rs::Claim::of`). Under a scope `σ` (D24) the encoded system is the scoped one, and since #483 and #514 the same claim ends `in the selected scope: <flags>` (P4); otherwise it ends `in the whole model`. |
 | `unproved: R: not inductive; …` / `unproved: R: z3 gave up on A` / `unproved: R: an initial state violates it` | `verify --prove` (`Verdict::Unproved`, printed by `cli/src/prove.rs`) | Not proved. `NotInductive`: a counterexample to induction exists from a state where `R` and every kept candidate hold, not necessarily reachable (since #525 the printed line says so: "it, every proved rule, and every kept lemma hold", P5). `Unknown`: z3 answered `unknown` or ran out of its resource limit on the step of action `A` (this is the verdict the task list calls "unknown"). `Initial`: an initial state of the encoding, possibly with more rows or larger Int values than `β`, breaks `R`. None of these says anything about the bounded verdict. |
 | `out of scope: R: why` | `verify --prove` (`Verdict::OutOfScope`) | The encoding cannot state `R`. No claim. |
-| `refuted: R (BFS counterexample at k instances)` | `verify --prove` (`Verdict::Refuted`) | A safety cone of the same run reached a state that breaks `R`, so the prover did not try it (`cli/src/verify/refuted.rs`). The violation is BFS's error, not an unproved rule. Since #477 only a violation the cone vouches for, or one a rerun found again (`recheck_cones`, the refinement loop of the `counterexample` row, #509), refutes a rule (P1, fixed). |
-| `escalated: R: ok at k instances` / `counterexample at k instances` / `not decided at k instances` | `verify --prove` (`cli/src/verify/escalate.rs`) | For a rule BFS passed and the prover left unproved, BFS on its cone at one and two more instances per entity. `counterexample` there fails the run. It is a violation of `T_{β'}(M)` for some larger `β'` under the conditions of `counterexample` above. Since #477 a counterexample the cone cannot vouch for, one that runs a use case without its event or creates more instances than the cone counts, is decided again (`recheck_on`, refined since #509) and its instances are printed (P11, fixed). |
+| `refuted: R (BFS counterexample at k instances)` | `verify --prove` (`Verdict::Refuted`) | A safety cone of the same run reached a state that breaks `R`, so the prover did not try it (`cli/src/verify/refuted.rs`). The violation is BFS's error, not an unproved rule. Since #477 only a violation the cone vouches for, or one a rerun found again (`recheck_cones`, the refinement loop of the `counterexample` row, #509), refutes a rule (P1, fixed). `k` is the count of every entity of the cone when they share it; since #532 a cone whose entities differ (`--instances E=k`) prints each, as `Loan=4 Member=3 instances` (`cli/src/state_findings.rs::Instances`, P11). |
+| `escalated: R: ok at k instances` / `counterexample at k instances` / `not decided at k instances` | `verify --prove` (`cli/src/verify/escalate.rs`) | For a rule BFS passed and the prover left unproved, BFS on its cone at one and two more instances per entity. `counterexample` there fails the run. It is a violation of `T_{β'}(M)` for some larger `β'` under the conditions of `counterexample` above. Since #477 a counterexample the cone cannot vouch for, one that runs a use case without its event or creates more instances than the cone counts, is decided again (`recheck_on`, refined since #509) and its instances are printed (P11, fixed): `k` is one number when every entity of the cone that decided has it, else each entity's own, as `ok at Loan=3 Member=2 instances` (#532). |
 | `decided` | prose, design notes | Not printed as a verdict. A check is decided when its verdict is `ok` or `counterexample`. |
 
 `stopped at the memory limit` and `stopped at the state cap` describe why a run is
@@ -645,7 +645,7 @@ this table says only as far as the build returns `T_β(M, σ)` (claim
 <a id="d25"></a>**D25 (Deadlock finding).** For an entity `E`, a lifecycle column `v` of `E`,
 and a slot `k`, a reachable state `s` of the explored system with row `k` present is
 *stuck at `v`* when no path from `s` takes an edge that changes `v` at `k` or deletes row
-`k` (`core/src/lifecycle/findings.rs::can_leave`). A value `x` of `v` is *open* when `@end`
+`k` (`findings.rs::TransitionSystem::can_leave`). A value `x` of `v` is *open* when `@end`
 does not name it and some `transitions` arm of `v` leads from `x` to a value other than `x`
 (`findings.rs::deadlocks`, which keeps a value only when `has_way_on` holds of its `exits`).
 Every other value is an end state: one `@end` names, one no arm leaves, one whose only arms
@@ -706,6 +706,15 @@ soundness questions are in the index's [Open problems](./README.md#open-problems
 
 ## Errata
 
+- **2026-11-28, re-pin to `5f59fae2`** (the merge of #537). Every `file.rs::symbol` a statement
+  cites was checked against `git diff fec53d6a 5f59fae2`, and each cited item a hunk touches
+  was read again: `cli/src/verify/refuted.rs`, `cli/src/verify/escalate.rs` and
+  `cli/src/state_findings.rs::Instances` (#532), `explore/orbit.rs::lift_path` and
+  `reduce/lift.rs::lift` (#529), and `explore/orbit/liveness.rs` (#531). Changes: the
+  `refuted` and `escalated` rows give the per-entity form of `k`; the `counterexample` row no
+  longer says the lifts rest on `expect`s, which #529 and #531 made faults; D25's citation
+  of `can_leave` follows this document's path convention (`findings.rs`), where it read
+  `core/src/lifecycle/findings.rs`.
 - **2026-11-28, final audit.** **Pin** moved from `670eec79` to `fec53d6a`. Every
   `file.rs::symbol` a statement cites was checked against `git diff 670eec79 fec53d6a`, and
   each cited item a hunk touches was read again: `cli/src/verify/end.rs::End::result` (the
