@@ -587,12 +587,13 @@ OK: no errors within 2 instances per entity, Int 0..5; 2 of 2 rules proved for a
 
 A rule that is not proved prints a **counterexample to induction** (CTI): a step, the rows it
 binds, and the rule's rows before and after, with any run mark or event mark they read. The
-state before holds the rule and every kept lemma but need not be reachable:
+state before holds the rule, every proved rule, and every kept lemma but need not be
+reachable:
 
 ```
 $ rdra-ish verify samples/formal-verification/one_to_one_shared.rdra --prove --instance-count 1
 ...
-unproved: Unique_Shipment_Order: not inductive; Ship(Order#1, Shipment#1) breaks it from a state where it and every proved rule hold (not necessarily reachable)
+unproved: Unique_Shipment_Order: not inductive; Ship(Order#1, Shipment#1) breaks it from a state where it, every proved rule, and every kept lemma hold (not necessarily reachable)
   Order#1 (present) status=placed -> status=shipped
   Shipment#1 (absent -> present) Order=Order#2 -> Order=Order#1
   Shipment#2 (present) Order=Order#1
@@ -617,7 +618,7 @@ out itself, in the manner of IC3. The CTI's state before the step, over the step
 the rule's, is a set of facts: each row's columns and marks, the keys between those rows, and
 that two rows of one entity differ. The clause "no rows with all of these" is weakened, one
 fact dropped at a time in a fixed order, while it still holds in every initial state and no
-step breaks it from a state where it, the rule, and the kept lemmas hold. A state of more
+step breaks it from a state where it, the rule, every proved rule, and every kept lemma hold. A state of more
 than 40 facts, or a clause that is not inductive even with every fact, gives none. A clause
 that survives joins the proof as a candidate, which runs again (at most twice more), so it is
 kept only when it is inductive with the rest, and `proved` means what it did. It prints as

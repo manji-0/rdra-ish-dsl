@@ -643,8 +643,15 @@ this table says only as far as the build returns `T_β(M, σ)` (claim
 <a id="d25"></a>**D25 (Deadlock finding).** For an entity `E`, a lifecycle column `v` of `E`,
 and a slot `k`, a reachable state `s` of the explored system with row `k` present is
 *stuck at `v`* when no path from `s` takes an edge that changes `v` at `k` or deletes row
-`k` (`core/src/lifecycle/findings.rs::can_leave`). `Deadlock_<E>_<v>_<value>` reports a
-reachable state stuck at `v` whose value of `v` is not an end state. The definition reads
+`k` (`core/src/lifecycle/findings.rs::can_leave`). A value `x` of `v` is *open* when `@end`
+does not name it and some `transitions` arm of `v` leads from `x` to a value other than `x`
+(`findings.rs::deadlocks`, which keeps a value only when `has_way_on` holds of its `exits`).
+Every other value is an end state: one `@end` names, one no arm leaves, one whose only arms
+lead back to itself, and one whose only way out is a use case that deletes the row. Such a
+value gets no deadlock finding, even where a state holds it with no path out.
+`Deadlock_<E>_<v>_<x>` reports the first reachable state, in BFS order, that is stuck at `v`
+with row `k` holding an open value `x`. A deletion counts as leaving `x` only once `x` is
+open: it is one of the edges `can_leave` reads, never what makes `x` open. The definition reads
 paths, not single steps: a state whose only paths run forever through steps that leave `v`
 and row `k` alone, a silent cycle, is stuck exactly as a state with no step left is. This is
 on purpose. It is the reading the cone reduction keeps, since a divergence-blind stuttering
