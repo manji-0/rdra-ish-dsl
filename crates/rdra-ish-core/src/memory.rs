@@ -152,7 +152,7 @@ impl MemoryPool {
 
     /// A pool that lets its runs hold `room` bytes and names this pool's limit. What its runs
     /// hold counts in this pool too, past its limit if need be.
-    pub(crate) fn with_room(&'static self, room: u64) -> &'static MemoryPool {
+    pub fn with_room(&'static self, room: u64) -> &'static MemoryPool {
         Box::leak(Box::new(MemoryPool {
             room,
             held: AtomicU64::new(0),
@@ -171,6 +171,11 @@ impl MemoryPool {
 
     pub(crate) fn room(&self) -> u64 {
         self.room
+    }
+
+    /// What the pool's runs may still take: its room less what they hold.
+    pub fn left(&self) -> u64 {
+        self.room.saturating_sub(self.held.load(Ordering::Relaxed))
     }
 
     /// What the pool holds now.

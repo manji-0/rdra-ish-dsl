@@ -27,6 +27,7 @@
 mod bfs;
 mod compare;
 mod end;
+mod escalate;
 mod jobs;
 mod native;
 mod plan;
@@ -346,9 +347,9 @@ pub fn run(
         pool.bfs_ended(memory.limit.bytes());
         rdra_ish_core::perf::pass("proof");
         let proof = match proof.map(|p| p.join()) {
-            Some(Ok(ran)) => ran.map(|(tally, proved, text)| {
-                print!("{text}");
-                Some((tally, proved))
+            Some(Ok(ran)) => ran.map(|run| {
+                print!("{}", run.text);
+                Some(run)
             }),
             Some(Err(panic)) => std::panic::resume_unwind(panic),
             None => Ok(None),
@@ -367,9 +368,21 @@ pub fn run(
     rdra_ish_core::perf::pass("report");
     let proof = proof?;
     // A cone BFS left open at the memory limit is decided by the rules the proof proved.
-    if let Some((_, proved)) = &proof {
-        natives.safety = decide_by_proof(&ts, &jobs, natives.safety, proved);
+    if let Some(run) = &proof {
+        natives.safety = decide_by_proof(&ts, &jobs, natives.safety, &run.proved);
     }
+    // A rule the proof left unproved and BFS passed is checked again at more instances, on
+    // its own cone (#421); a counterexample there is an error.
+    let escalated = match &proof {
+        Some(run) => escalate::escalate(
+            (program, model),
+            (&ts, &ts.bounds, scope),
+            (&jobs, &natives.safety),
+            &run.unproved,
+            caps,
+        ),
+        None => 0,
+    };
     let mut end = End {
         bfs,
         explored,
@@ -377,7 +390,8 @@ pub fn run(
         temporal: Temporal::default(),
         tlc: TlcEnd::default(),
         deny_undecided,
-        proof: proof.map(|(tally, _)| tally),
+        proof: proof.map(|run| run.tally),
+        escalated,
     };
 
     let mut index = match written {

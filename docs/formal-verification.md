@@ -591,11 +591,31 @@ Cone_Forbidden_CartLine_0 [Forbidden_CartLine_0, Check_CartLine_qty_0]: ok (16 s
 ```
 
 A cone that also checks an `after` assertion, or a rule left unproved or out of scope, stays
-`not decided`, as does a cone stopped at `--max-states`. Otherwise a proof changes the exit
-status only under `--deny-unproved`. A rule that the schema of `export --kind sql` does not
+`not decided`, as does a cone stopped at `--max-states`. A proof changes the exit status
+under `--deny-unproved`, and through the escalation below. A rule that the schema of `export --kind sql` does not
 enforce is marked `[not enforced by the SQL schema: <why>]`, and a `proof: the SQL schema
 leaves <n> rules to the application: ...` line counts them; a proved one is an obligation the
 use cases already discharge.
+
+**Escalation past the bound.** A rule the proof leaves unproved and BFS passes at the run's
+instances is checked again on its own cone at one and then two instances more per entity (each
+`--instances` count grows too), after every other BFS run, one rule at a time. Each such run
+may hold ten times the store the rule's cone held at the run's bounds, and never more than the
+memory BFS has left; the escalation is bounded by memory, with no state count. Each such rule prints one line after the proof's:
+
+```
+escalated: Forbidden_Order_0: counterexample at 3 instances (BFS on its cone; ok at 2)
+escalated: Forbidden_Item_0: ok at 3 instances, ok at 4 instances (BFS on its cone; ok at 2)
+```
+
+A counterexample there is reachable, so it is an error, whether or not `--deny-unproved` is
+set. It prints with its trace, whose header names the instances it needed
+(`counterexample (4 steps, at 3 instances):`), and the run fails with `<n> invariant or
+after-assert violation(s) at more instances than the run's`. The cone line keeps the verdict at
+the run's bounds, and TLC is compared with that one. A run stopped by that cap, the memory
+limit, or `--max-states` reads `not decided at <n> instances`; it decides nothing and leaves the exit
+status alone. The escalation stops at the first counterexample or stop, and at two instances
+more.
 
 ## Approximations and limitations
 

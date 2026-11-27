@@ -94,8 +94,7 @@ impl Marks {
 /// Proves the selected state rules of `ts` and writes one line per rule. Lemmas are mined
 /// from `twin` too (`prove::mining_twin`). A rule in `refuted`, which BFS violated at the
 /// instances it maps to, is not tried: it reads `refuted:`, and is an error of BFS's, not an
-/// unproved rule. Returns the tally, the rules proved, lemmas included, by index into
-/// `ts.invariants()`, and the lines to print, which the caller prints where the proof's
+/// unproved rule. Returns what `ProofRun` holds; the caller prints its lines where the proof's
 /// place in the report is, whenever the proof ran.
 pub(crate) fn run_proof(
     ts: &TransitionSystem,
@@ -105,7 +104,7 @@ pub(crate) fn run_proof(
     refuted: &BTreeMap<usize, usize>,
     binary: &Path,
     deny_unproved: bool,
-) -> Result<(ProofTally, BTreeSet<usize>, String)> {
+) -> Result<ProofRun> {
     let lemmas = &marks.lemmas;
     let mut text = String::new();
     let version = Z3::version(binary).unwrap_or_default();
@@ -209,13 +208,35 @@ pub(crate) fn run_proof(
         unproved: count(&rules, unproved),
         deny_unproved,
     };
-    let proved = proof
-        .rules
-        .iter()
-        .filter(|r| matches!(r.verdict, Verdict::Proved))
-        .map(|r| r.inv)
+    let with = |f: fn(&Verdict) -> bool| -> BTreeSet<usize> {
+        proof
+            .rules
+            .iter()
+            .filter(|r| f(&r.verdict))
+            .map(|r| r.inv)
+            .collect()
+    };
+    let unproved_rules = with(unproved)
+        .into_iter()
+        .filter(|i| !lemmas.contains(i))
         .collect();
-    Ok((tally, proved, text))
+    Ok(ProofRun {
+        tally,
+        proved: with(proved),
+        unproved: unproved_rules,
+        text,
+    })
+}
+
+/// What `run_proof` found.
+pub(crate) struct ProofRun {
+    pub tally: ProofTally,
+    /// The rules proved, lemmas included, by index into `ts.invariants()`.
+    pub proved: BTreeSet<usize>,
+    /// The rules left unproved, lemmas left out, by index into `ts.invariants()`.
+    pub unproved: BTreeSet<usize>,
+    /// The lines to print.
+    pub text: String,
 }
 
 /// One rule's line, and the CTI under an unproved one, onto `text`. A lemma the model marks reads

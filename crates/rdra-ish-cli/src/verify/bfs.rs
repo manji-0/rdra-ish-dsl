@@ -323,6 +323,9 @@ pub(super) enum BfsCone {
         memory: bool,
         /// The run was up to instance symmetry (`--symmetry`).
         orbits: Option<Box<Orbits>>,
+        /// The largest store a plain run asked `Caps::memory` to cover
+        /// (`ComponentRun::peak`); 0 for a run up to symmetry.
+        peak: u64,
     },
     /// The cone at this index of the jobs covers this one (`covering`) and passed.
     Covered(usize),
@@ -394,8 +397,9 @@ impl BfsCone {
     /// The verdict of `run`, a run of `cone`'s system.
     pub(super) fn of(ts: &TransitionSystem, cone: &ConeSystem, run: &ComponentRun) -> BfsCone {
         let mut out = Self::of_parts(ts, cone, run.checks(), &run.diags, run.end());
-        if let BfsCone::Ran { states, .. } = &mut out {
+        if let BfsCone::Ran { states, peak, .. } = &mut out {
             *states = run.states.len();
+            *peak = run.peak;
         }
         out
     }
@@ -434,6 +438,7 @@ impl BfsCone {
             end,
             memory: met_memory_limit(diags),
             orbits: None,
+            peak: 0,
         }
     }
 

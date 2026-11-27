@@ -447,6 +447,11 @@ struct Observed {
     native_errors: BTreeSet<String>,
     tlc_errors: BTreeSet<String>,
     z3: BTreeMap<String, Z3>,
+    /// `escalated: <Check>: ok at 3 instances, ...` lines: BFS's verdict per bound past the
+    /// run's, for a rule `--prove` left unproved.
+    escalated: BTreeMap<String, Vec<(u8, V)>>,
+    /// Errors found by the escalation: their trace header says `at <n> instances`.
+    escalated_errors: BTreeSet<String>,
     /// `error[EngineDisagreement]` and `error[LassoFault]` lines.
     faults: Vec<String>,
     /// The `M` of `can_reach (BFS on N cones): N checked, M violated`, which may end in
@@ -504,6 +509,17 @@ impl Observed {
                 out.z3.insert(rule_name(rest), Z3::OutOfScope);
             } else if let Some(rest) = line.strip_prefix("refuted: ") {
                 out.z3.insert(rule_name(rest), Z3::Refuted);
+            } else if let Some(rest) = line.strip_prefix("escalated: ") {
+                let (said, _) = rest.rsplit_once(" (BFS on its cone").unwrap_or((rest, ""));
+                let (_, said) = said.split_once(": ").unwrap_or(("", said));
+                let at = said
+                    .split(", ")
+                    .filter_map(|v| {
+                        let (v, n) = v.strip_suffix(" instances")?.rsplit_once(" at ")?;
+                        Some((n.parse().ok()?, V::parse(&v.replace(' ', "_"))?))
+                    })
+                    .collect();
+                out.escalated.insert(rule_name(rest), at);
             }
         }
         out.panics = stderr
@@ -524,15 +540,19 @@ impl Observed {
                     continue;
                 };
                 let name = rest.split(']').next().unwrap_or("").to_string();
-                let mut from_tlc = false;
+                let (mut from_tlc, mut escalated) = (false, false);
                 while let Some(next) = lines.peek() {
                     if !next.starts_with(' ') {
                         break;
                     }
                     from_tlc |= next.contains(", from TLC)");
+                    escalated |=
+                        next.starts_with("  counterexample (") && next.contains(" instances):");
                     lines.next();
                 }
-                if name == "EngineDisagreement" || name == "LassoFault" {
+                if escalated {
+                    out.escalated_errors.insert(name);
+                } else if name == "EngineDisagreement" || name == "LassoFault" {
                     if !out.faults.iter().any(|f| f == line) {
                         out.faults.push(line.to_string());
                     }
@@ -804,6 +824,41 @@ fn check_case(case: &Case, tools: &Tools) -> Report {
                 );
                 at_bounds.push((*n, got));
             }
+        }
+        // Rule 9: the escalation of a rule z3 leaves unproved gives, at each bound past the
+        // run's it decides, the verdict BFS gives there, and prints an error exactly when it
+        // finds a counterexample.
+        if let Some(at) = main.escalated.get(check) {
+            if z3 != Some(Z3::Unproved) {
+                fail(
+                    &mut report,
+                    format!("{check}: escalated, but z3 gives {z3:?}"),
+                );
+            }
+            for (n, v) in at.iter().filter(|(_, v)| v.decided()) {
+                let want = e.bfs.as_ref().and_then(|b| b.get(usize::from(*n) - 1));
+                if want.is_some_and(|w| w != v) {
+                    fail(
+                        &mut report,
+                        format!(
+                            "{check}: the escalation gives {v} at {n} instances, bfs= states {}",
+                            want.unwrap()
+                        ),
+                    );
+                }
+            }
+            let broken = at.iter().any(|(_, v)| *v == V::Counterexample);
+            if broken != main.escalated_errors.contains(check) {
+                fail(
+                    &mut report,
+                    format!("{check}: the escalation line and its error disagree"),
+                );
+            }
+        } else if main.escalated_errors.contains(check) {
+            fail(
+                &mut report,
+                format!("{check}: an escalation error without its line"),
+            );
         }
         // Rules 4 and 5: a rule z3 proves for any number of rows has no counterexample at any
         // bound.

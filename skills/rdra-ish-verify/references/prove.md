@@ -25,9 +25,16 @@ Each rule prints one line after the `proof (...)` header:
 - `[not enforced by the SQL schema: <why>]` after a name: `export --kind sql` writes no
   `CHECK` for it, so the application keeps it.
 - `lemma: <text>`: a helper fact the proof kept.
+- `escalated: <rule>: ok at 3 instances, counterexample at 4 instances (BFS on its cone; ok
+  at 2)`: the rule was unproved and BFS passed it, so BFS checked its cone again at one and two
+  instances more. A counterexample there is an error with its trace (`counterexample (<k>
+  steps, at <n> instances):`) and fails the run. `not decided at <n> instances` means the
+  run outgrew ten times the store of the cone at the run's bounds, or met the memory limit or
+  `--max-states`; it decides nothing.
 
 The `OK:` line ends with `; <n> of <m> rules proved for any number of rows and any Int
-value`. An unproved rule fails the run only with `--deny-unproved`. A cone that BFS stopped
+value`. An unproved rule fails the run with `--deny-unproved`, or when its escalation finds a
+counterexample. A cone that BFS stopped
 at the memory limit is decided when z3 proves every rule in it: its line reads `ok (...,
 decided by proof: ...)`.
 
@@ -40,6 +47,11 @@ unproved: Unique_Shipment_Order: not inductive; Ship(Order#1, Shipment#1) breaks
   Shipment#2 (present) Order=Order#1
 ...
 proof: 0 proved, 1 unproved, 0 out of scope
+error[Unique_Shipment_Order]: invariant Unique_Shipment_Order is violated: 1:1 key is shared: two 'Shipment' rows belong to one 'Order' through 'Order', witnessed by Shipment[1](); Shipment[2]()
+...
+  counterexample (3 steps, at 2 instances):
+...
+escalated: Unique_Shipment_Order: counterexample at 2 instances (BFS on its cone; ok at 1)
 ...
 ```
 
@@ -53,8 +65,8 @@ columns before the step, and after `->` what the step changed. A run mark
 The state before the step need not be reachable. Decide which case it is:
 
 1. **Reachable.** The rule really breaks, usually at more instances than the bounded run
-   uses. Above, Ship and Reship each link a Shipment to one Order; `verify` at two
-   instances reports it with a trace. Fix the model, not the proof.
+   uses. Above, Ship and Reship each link a Shipment to one Order; the escalation finds it at
+   two instances and reports it with a trace. Fix the model, not the proof.
 2. **Not reachable.** A fact that rules the state out is missing from the proof. Write it
    as a lemma.
 

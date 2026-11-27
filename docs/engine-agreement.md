@@ -68,6 +68,14 @@ case, whatever the case's header says.
    bound the case runs BFS at. A lifted counterexample that does not replay, or whose steps do
    not bind the rows they name, panics.
 
+**The native checker past the run's bounds**, on `verify --prove`:
+
+9. A rule z3 leaves unproved and BFS passes is checked again at more instances
+   ([Escalation past the bound](./formal-verification.md#proofs-for-any-number-of-rows)). Each
+   verdict the `escalated:` line decides at `n` instances is the `bfs=` entry for `n`, and the
+   run prints the escalation's error, whose trace says `at <n> instances`, exactly when the
+   line has a counterexample. That error is not the native verdict at the run's bounds.
+
 **Each engine against the header.** Every case states its expected verdict per engine, so the
 corpus also catches a drift all engines share. The cone ladder decides both the native and the
 TLC verdict, and the model builder feeds every engine, so one mistake in either moves every
