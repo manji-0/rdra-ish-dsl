@@ -797,8 +797,9 @@ impl TransitionSystem {
 }
 
 /// What a reduced run reports for `reduced`, a violation it found, given `rebuilt`, the check
-/// evaluated on the lifted last state: that violation, or a `LiftFault` when the lifted state
-/// does not violate the check, never the reduced message as if it did (P52).
+/// evaluated on the lifted last state: that violation, or a `LiftFault` with
+/// `LassoFault::Satisfies` when the lifted state does not violate the check, as a liveness
+/// lasso that satisfies its property is a fault; never the reduced message as if it did (P52).
 fn lifted(rebuilt: Option<StateDiag>, reduced: &StateDiag) -> StateDiag {
     match (rebuilt, reduced) {
         (Some(d), _) => d,
@@ -809,6 +810,7 @@ fn lifted(rebuilt: Option<StateDiag>, reduced: &StateDiag) -> StateDiag {
         ) => StateDiag::LiftFault {
             name: name.clone(),
             site: site.clone(),
+            fault: LassoFault::Satisfies,
         },
         (None, other) => {
             unreachable!("a run's violation is a state rule's or an assert's: {other:?}")

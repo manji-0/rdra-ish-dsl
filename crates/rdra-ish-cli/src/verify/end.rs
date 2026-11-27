@@ -82,7 +82,7 @@ impl End {
     }
 
     /// Each count that fails the run, in the order the failure message lists them.
-    fn failures(&self) -> [Failure; 9] {
+    fn failures(&self) -> [Failure; 8] {
         let failure = |count, tool, what| Failure { count, tool, what };
         [
             failure(
@@ -111,14 +111,9 @@ impl End {
                 "property violation(s)",
             ),
             failure(
-                self.temporal.faults,
+                self.temporal.faults + self.safety.faults,
                 true,
                 "counterexample(s) that fail their own check (a tool bug)",
-            ),
-            failure(
-                self.safety.faults,
-                true,
-                "violation(s) of a reduced cone that do not violate once lifted to the cone (a tool bug)",
             ),
             failure(
                 self.tlc.disagreements,

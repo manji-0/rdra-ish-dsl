@@ -271,6 +271,7 @@ fn one_of_each() -> Vec<StateDiag> {
         StateDiag::LiftFault {
             name: "Forbidden_Order_0".into(),
             site: site(),
+            fault: crate::lifecycle::LassoFault::Satisfies,
         },
     ];
     // Fails to compile when a variant is added without a value above.

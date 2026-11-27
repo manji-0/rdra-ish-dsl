@@ -269,9 +269,15 @@ pub enum StateDiag {
         trace: Trace,
     },
     /// A run of a reduced cone found a violation of the invariant or assertion `name`, but the
-    /// state its trace lifts to on the cone does not violate it: the reduction or its lift is
-    /// at fault, never the model, and the check is not decided on this cone (P52).
-    LiftFault { name: String, site: Site },
+    /// trace lifted to the cone does not certify itself: `fault` says why, as it does for a
+    /// liveness lasso (`LassoFault::Satisfies`: the lifted last state does not violate the
+    /// check). The reduction or its lift is at fault, never the model, and the check is not
+    /// decided on this cone (P52).
+    LiftFault {
+        name: String,
+        site: Site,
+        fault: crate::lifecycle::LassoFault,
+    },
     /// A temporal property fails on the infinite behavior of a lasso, `trace` then `lasso`,
     /// or on the finite `trace` of a form `LtlKind::is_explored` names. A replayed TLC
     /// counterexample builds it, and so does `ComponentRun::decide_property`.
@@ -1085,9 +1091,9 @@ impl fmt::Display for StateDiag {
                 "{}after({anchor}).assert({requireds}) fails: {actual}",
                 label_prefix(label)
             ),
-            StateDiag::LiftFault { name, .. } => write!(
+            StateDiag::LiftFault { name, fault, .. } => write!(
                 f,
-                "tool error: the reduced cone's counterexample of {name} does not violate it once lifted to the cone, so {name} is not decided there (a tool bug, not a finding about the model)"
+                "tool error: the counterexample of {name} fails its own check ({fault:?}) once lifted from the reduced cone to the cone, so {name} is not decided there (a tool bug, not a finding about the model)"
             ),
             StateDiag::PropertyViolated {
                 name,

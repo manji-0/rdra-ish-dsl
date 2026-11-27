@@ -826,8 +826,15 @@ pub(super) fn report_bfs_cones(
         else {
             continue;
         };
+        // As a liveness lasso that fails its own check (`report.rs`): one `LassoFault` line,
+        // counted with those.
         for d in faults {
-            eprintln!("{}", Finding::new(&d.diag, &[], d.diag.to_string()));
+            eprintln!(
+                "error[LassoFault]: {} [{}]: {}",
+                job.module,
+                job.checks.join(", "),
+                d.diag
+            );
         }
         out.faults += faults.len();
         // A check several cones hold is reported once, from the first cone that breaks it, so
@@ -859,13 +866,14 @@ mod tests {
     fn a_violation_that_does_not_lift_makes_the_cone_a_tool_error() {
         use super::BfsCone;
         use crate::tlc_output::Outcome;
-        use rdra_ish_core::lifecycle::{Diag, ModelRef, RunEnd, Site, StateDiag};
+        use rdra_ish_core::lifecycle::{Diag, LassoFault, ModelRef, RunEnd, Site, StateDiag};
 
         let fault = Diag {
             entities: Vec::new(),
             diag: StateDiag::LiftFault {
                 name: "Forbidden_Order_0".into(),
                 site: Site::bare(ModelRef::EntityInvariant(0)),
+                fault: LassoFault::Satisfies,
             },
         };
         let cone = |faults: Vec<Diag>| BfsCone::Ran {
