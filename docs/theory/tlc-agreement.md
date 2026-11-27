@@ -7,11 +7,11 @@
 
 This document states what assurance exists that the native verifier and TLC, reading the
 TLA+ module rdra-ish prints, give the same verdicts, and what kind of assurance each piece
-is. It owns rows T1 to T16 of the [claims inventory](./claims.md#d-agreement-with-tlc) and
+is. It describes the code at commit `fb6928c74ccc5b479dea07d92cc1e39c34ddd218`, later than
+the index's pin `b83b9544`; no path it cites differs between the two. It owns rows T1 to T16 of the [claims inventory](./claims.md#d-agreement-with-tlc) and
 uses the notation of [semantics.md](./semantics.md) (D1 to D23) without redefining it.
 
-The code was read at commit `fb6928c74ccc5b479dea07d92cc1e39c34ddd218` (origin/main,
-2026-11-28). The [index](./README.md) pins `b83b9544`; `git diff b83b9544 fb6928c7` is empty
+The code was read at `fb6928c7` (origin/main, 2026-11-28). The diff from `b83b9544` is empty
 on every path this document cites (`crates/rdra-ish-emit/src/tla/`,
 `crates/rdra-ish-cli/src/verify/`, `tlc_output.rs`, `tlc_replay.rs`, `property_cone.rs`, the
 corpus and equivalence tests, `crates/rdra-ish-core/src/lifecycle/`, the workflows, the
@@ -47,8 +47,10 @@ assertions; `Property(i)` adds `WF_vars(Next)` to `Spec` and checks property `i`
 behaviors of `Spec` in the standard TLA+ semantics (Lamport 2002).
 
 **Decoder.** `emit/tla/names.rs::TlaNames::decoder` maps a TLC state, given as the text of
-each variable, to a `State` of `T'`, skipping the `precedes` latches and the class variable
-of a reduced cone. Write `dec` for it. The printer and the decoder are built from one
+each variable, to a `State` of `T'`. It skips the `precedes` latches, which are no state of `T'`; on a
+reduced cone it reads the class variable and fills the sub-lifecycle's variables from that
+class's representative (`Decoder::decode`). It returns nothing unless it used every key.
+Write `dec` for it. The printer and the decoder are built from one
 `TlaNames` value, so a renaming that is consistent in both is harmless and undetectable.
 
 **Decided.** A run is decided when its verdict is `ok` or `counterexample` (D23). A TLC run is
@@ -104,14 +106,16 @@ pipelines did not fail differently on that input. Three kinds of fault survive a
 
 **Proposition T1.** Let `T' = (S, I, →)` be a system `verify` hands to TLC, and `𝓜 =
 𝓜(T')`. Let `X` be the state variables of `𝓜` other than the `precedes` latches, and
-`dec` as above. Then:
+`dec` as above (on a reduced cone, `X` includes the class variable). Then:
 
 1. *(Types)* every reachable state of `𝓜` satisfies `TypeOK`, and `dec` is a bijection from
    the valuations of `X` that satisfy `TypeOK` onto `S`;
 2. *(Init)* `dec(Init) = I`;
-3. *(Steps)* for states `x, x'` with `dec(x) = s`, `dec(x') = s'`: `(x, x')` satisfies the
-   disjunct `\E p : A_a(p)` of `Next` iff `s' ∈ Post_a(s, p)` for some admissible binding
-   `p` (D7, D8), including steps with `s' = s`;
+3. *(Steps)* for states `x, x'` with `dec(x) = s`, `dec(x') = s'`, every action `a`, and
+   every binding `p` (parameters numbered as slots, TLA+ index `slot + 1`): `(x, x')`
+   satisfies `A_a(p)` iff `p` is admissible in `s` (D7) and `s' ∈ Post_a(s, p)` (D8),
+   including steps with `s' = s`. Per binding, not only for the disjunction `Next`: the
+   fairness of D20 and the `after` check of D17 read `A_a(p)` at a fixed `p`;
 4. *(Checks)* each `INVARIANT` holds at `x` iff the state rule of the same name holds at
    `dec(x)` (D16); each `after` `PROPERTY` holds on `⟦𝓜⟧` iff D17 holds (with the
    stuttering exception of [P22](./README.md#open-problems)); each temporal `PROPERTY`
@@ -122,10 +126,11 @@ pipelines did not fail differently on that input. Three kinds of fault survive a
 
 Status: **not proved**. The argument below is a paper argument per construct, read from
 `emit/tla/module.rs`, `emit/tla/pred.rs`, and `emit/tla/mod.rs` beside the native step
-relation in `core/explore/moves.rs` and the evaluator `core/expr.rs`. Steps 1 to 3 are also
+relation in `core/explore/moves.rs` and the evaluator `core/expr.rs`. Steps 1 and 2, and the
+existential projection of step 3 (some action and binding gives the edge), are also
 checked as graph equality on every sample cone that fits the comparison's cap
-([Sample comparison](#the-sample-comparison)); step 4 is checked by verdict comparison
-only.
+([Sample comparison](#the-sample-comparison)); step 3 per binding and step 4 are checked
+by verdict comparison only.
 
 ### Per-construct argument
 
@@ -136,9 +141,12 @@ three existence values, Enum values as quoted names, Bool as `TRUE`/`FALSE`, nul
 and Bool as strings with `"<null>"` first (no Enum value can be spelled `<null>`, since a
 value is an identifier), nullable Int as `-1` then `0..m`, owners as slot `+1` with `0` for
 an unlinked optional key. So `dec` is a bijection on `TypeOK` valuations (step 1).
-`TypeOK` itself is `INVARIANT` in every cfg, so a step of `𝓜` that leaves the domain would
+`TypeOK` is an `INVARIANT` of every cfg `verify` and the comparison check (all print modes
+but `Explore`, which lists no invariant), so a step of `𝓜` that leaves the domain would
 be reported by TLC [assumed: TLC]. The test `engine_equivalence.rs::tla_names_cover_every_slot`
 checks the naming; the graph comparison checks `dec` on every reached state [test].
+A binding prints as TLA+ index `slot + 1` (`pred.rs::at`), so the quantifier
+`\E p \in <E>_Ids` ranges over exactly the slots of D7.
 
 **Init [paper].** `module.rs::init` prints, for each variable outside the reduced part: the
 class variable's initial classes; `Exists` at `present` on a pre-existing entity and at
@@ -229,7 +237,9 @@ last step of each variant. Because `UC(p)` is a predicate on state pairs, it hol
 the same steps as D17, with one difference D17 does not state: `[A]_vars` is true on every
 step with `vars' = vars`, so neither TLC nor the native checker checks an `after` on a step
 whose successor equals its pre-state. The native checker skips that check explicitly
-(`core/explore/bfs.rs::Bfs::take` continues before `check_after` on `Probe::Loop`). The
+(`core/explore/bfs.rs::Bfs::take` continues before `check_after` on `Probe::Loop`, which
+`explore/probe.rs::Probes::read` sets for a successor equal to its source in every build,
+independent of `Probing`). The
 engines agree; D17 is incomplete (open problem P22).
 
 **Temporal properties [paper].** `checks` prints, per binding `\A b …` outside the
@@ -271,13 +281,17 @@ with respect to `WF_vars(Next)` (Abadi and Lamport 1991), so adding it changes n
 verdict. TLC's support for fairness quantified over a finite constant set is
 [assumed: TLC].
 
-**Reduced cones [paper for the printing; the quotient itself is common-mode].** A cone
+**Reduced cones [test only; the quotient itself is common-mode].** A cone
 reduced by its sub-lifecycle prints a class variable and tables computed in Rust
 (`module.rs::reduction`, `bits`, `rise_expr`): the observed values of each class's
 representative, the class successors per action of the sub-lifecycle, and the `Rise` table
 from inputs and bits to the next class. TLC therefore explores the quotient as the Rust
 code computed it. It checks the native exploration of that quotient, not the quotient's
-soundness (A8, theme (a)). The sample comparison does compare the reduced cone's violated
+soundness (A8, theme (a)). This document gives no paper argument that the printed class
+move (the `is_class_move` branch of `action`), the `Rise` lookup, and the bits denote the
+native reduced step (`moves_of_into` with a reduction); `bits`, `rise_expr`, and the native
+reduced step were not read for it. Step 3 on reduced systems therefore rests on the graph
+comparison of reduced sample cones alone. The sample comparison does compare the reduced cone's violated
 checks with the unreduced cone's, through TLC on both
 ([Sample comparison](#the-sample-comparison)), but only on cones whose unreduced BFS fits
 its cap.
@@ -290,10 +304,10 @@ its cap.
 
 | Step of T1 | Paper argument | Test | Assumed |
 |---|---|---|---|
-| 1, 2, 3 (states, init, steps) on unreduced systems | above | graph equality on every sample cone under 300,000 states, at 1 and 2 instances; about 30 fixtures | TLC's `-dump dot` lists every edge, self-loops included |
-| 3 on reduced systems | printing of the tables | graph equality on reduced sample cones; the reduced cone's violated set against the unreduced one's | the quotient tables (common-mode) |
+| 1, 2, 3 (states, init, steps) on unreduced systems | above | graph equality on every sample cone under 300,000 states, at 1 and 2 instances, without bindings; 35 `bfs_and_tlc_*` tests | TLC's `-dump dot` lists every edge, self-loops included |
+| 3 on reduced systems | none (not argued here) | graph equality on reduced sample cones; the reduced cone's violated set against the unreduced one's | the quotient tables (common-mode) |
 | 4, state rules and `after` | above; P22 | verdict and violated-set comparison on every compared cone; each TLC trace replayed through the native step relation | TLC |
-| 4, temporal properties and fairness | above | verdicts only: 23 `TEMPORAL_CASES` and the corpus, at default bounds | TLC's liveness checking under quantified weak fairness |
+| 4, temporal properties and fairness | above | verdicts only: 23 `TEMPORAL_CASES` at 2 instances and the corpus at each case's flags | TLC's liveness checking under quantified weak fairness |
 | 5, latch | above | `explored_along`, `safety_precedes_latch` | |
 
 No step of T1 is checked on a binding: the graph comparison compares edges as
@@ -332,8 +346,10 @@ maps `Undecided` to `None`. It does not keep it per run:
 
 - **P21, confirmed and extended [read; not reproduced].** `verify/native.rs::Answer::outcome`
   maps `Answer::Stopped` to `Outcome::Ok`, and every push into `Native::runs` uses it: the
-  `Plain`, `Full` and `WfNext` runs of `native_property_after`, and the `Plain` and `WfNext`
-  runs of `always_up_to_symmetry` and `liveness_up_to_symmetry`. `Native::capped` resets the
+  `Plain`, `Full` and `WfNext` runs of `native_property_after`, the `Plain` run of
+  `always_up_to_symmetry`, and the `Plain` and `WfNext` runs of `liveness_up_to_symmetry`.
+  Not read: when `Natives::properties[k]` is `None`, in which case `compare.rs` skips the
+  job. `Native::capped` resets the
   decision but not `runs`. So a native run stopped at a cap, beside a TLC counterexample on
   the same `ConeRun`, prints `error[EngineDisagreement]` and fails the run. The same mapping
   has a second consumer that needs no TLC: in `liveness_up_to_symmetry`, after a
@@ -384,9 +400,11 @@ those recorded in the notes and code at the pinned commit; none was re-measured.
 - **Inputs.** 79 cases with 191 `expect` lines; families `cap` 2, `cone` 11, `fair` 9,
   `presence` 7, `safety` 24, `sym` 10, `z3` 16. One case (`cap_memory_limit`) skips TLC.
   38 cases carry a `bfs=` list.
-- **Bounds.** TLC runs once per case, at the case's flags (default 2 instances, Int `0..5`,
-  or the per-entity counts in `flags`). The `bfs=` runs at 1, 3 and 4 instances are native
-  only (P14).
+- **Bounds.** TLC runs once per case, at the case's flags: 2 instances and Int `0..5` by
+  default; 1 instance in the cases with `--instance-count 1`; 3 or 4 instances of one entity
+  in the three cases with per-entity flags (`presence_per_entity_slots`,
+  `safety_count_per_entity`, `sym_per_entity_bounds`); `--int-range-max 6` or `7` in two
+  `z3_` cases. The `bfs=` runs at 1, 3 and 4 instances are native only (P14).
 - **Compares.** Each engine against the hand-written header, rules 1 to 3 against TLC,
   rule 8 against the symmetric native run.
 - **Detects.** The header is the only check of common-mode code: the planted-bug table of
@@ -419,15 +437,14 @@ than the translator once for all inputs.
   completes under `STATE_CAP` (300,000 states), and the reduced cone only when its run
   completes under the same cap. A cone joins `VERIFY_FALLBACK` (24 cones) when its reduced
   run at 2 instances passes the cap. A cone whose unreduced BFS passes 300,000 states while
-  its reduced BFS fits is compared reduced only, and nothing lists it; for example the
-  comment on `STATE_CAP` gives patent-ops' `PatentApplication` cone at 293,833 states
-  reduced. On such a cone TLC reads the Rust-computed quotient tables, so the comparison
+  its reduced BFS fits is compared reduced only, and nothing lists it. Which sample cones
+  are in that case was not measured here. On such a cone TLC reads the Rust-computed quotient tables, so the comparison
   says nothing independent about the reduction there. This extends P14.
 - **Cannot detect.** Temporal properties (not printed in `PrintMode::Safety`); bindings;
   anything at 3 or more instances; any cone of the 24 at 2 instances.
 
 `a_property_cone_decides_what_the_whole_model_decides` (T3) runs the property ladder on 23
-`TEMPORAL_CASES` (9 sample files and 14 fixtures; T3 said 26), each run of each property
+`TEMPORAL_CASES` (7 sample files and 16 inline fixtures; T3 said 26), at 2 instances, each run of each property
 against TLC's run of the same module, and the cone's final verdict against the whole
 model's TLC verdict. It compares verdicts, not graphs.
 
@@ -447,7 +464,7 @@ quantified guards, `.along`, a split use case, `chooses`, a timer, `after` asser
 properties, at 2 or 3 instances, and compares `verify --deny-undecided` reduced against
 unreduced. With `--with-tlc` both runs also run TLC, and a seed with
 `error[EngineDisagreement]` is listed as `disagreed`. In CI, a pull request runs 522 seeds
-without TLC, and main runs 45 fixed seeds with TLC (measured 2026-11-25: 522 compared, 284
+without TLC, and main runs 45 fixed seeds with TLC, some at 3 instances (`ci.yml`) (measured 2026-11-25: 522 compared, 284
 reduced; 45 compared, 33 reduced). TLC therefore sees 45 random models per main run, the
 same 45 each time. The release gate's item 3 (seeds `0:2000` with TLC) was waived for
 v3.0.0 (P16). The generator has no count guard (A11), so counts get no random coverage.
@@ -479,7 +496,7 @@ number does not exist here.
 
 | Source | Native fault | Printer fault | TLC fault | Common-mode fault | Bounds and inputs |
 |---|---|---|---|---|---|
-| Corpus headers | yes, on the trap | yes, on the trap | yes, on the trap | yes, on the trap | 79 hand cases, TLC at default bounds |
+| Corpus headers | yes, on the trap | yes, on the trap | yes, on the trap | yes, on the trap | 79 hand cases, TLC at each case's flags |
 | Corpus rules 1 to 3 | where TLC differs | where native differs | where native differs | no | as above |
 | Sample graph comparison | states, edges, initial states, safety verdicts | same | same | no | 40 roots, 1 and 2 instances, cones under 300,000 states |
 | Temporal cone comparison | liveness and ladder verdicts | same | same | no | 23 cases, 2 instances |
@@ -516,13 +533,14 @@ cap (P17).
 |---|---|---|---|
 | `engine-equivalence`: `engine_equivalence`, `proof_equivalence`, `engine_corpus` with `RDRA_REQUIRE_TLC=1` | when `changes` says `verify` | every 3 hours, skipped when the commit was checked | yes |
 | `formal-verify`: `verify-samples.sh --with-tlc --tlc-roots`, reduced against unreduced on random models | when `changes` says `verify`; random models without TLC | with TLC on 45 seeds | yes |
-| `shadow` | as `changes` decides | yes | no (corpus with TLC under `shadow`) |
+| `shadow` | as `changes` decides | yes | yes: the corpus on a `shadow` build with `RDRA_REQUIRE_TLC=1` |
 | `kani` | when `scripts/kani-relevant.sh` matches a changed file | yes | no |
 | `mutants.yml` | never | never; by hand | no |
 
-The TLC version the CI evidence is about is the flake's TLC 1.8.0 pre-release (build of
-2026-11-19, rev `bc1b506`) on JDK 25 (`flake.nix`); the notes also name 1.7.4, which the
-nixpkgs package still ships.
+Every CI step runs in the flake's devShell (`ci.yml`, `shell: nix develop`), whose TLC is
+`flake.nix`'s `tlcFor`: the nixpkgs `tlaplus` package overridden to the 1.8.0 pre-release
+jar (build of 2026-11-19, rev `bc1b506`, by the flake's comment) on JDK 25. The CI evidence
+is about that TLC; the notes also name 1.7.4, which nixpkgs ships.
 
 **None of these is a required check.** `gh api repos/manji-0/rdra-ish-dsl/branches/main/protection`
 answers "Branch not protected", and the repository has no rulesets (checked 2026-11-28).
@@ -554,8 +572,11 @@ evidence would not catch, most consequential first:
 2. **A wrong `ok` on any input no test ran.** Native counterexamples replay, so a wrong
    `counterexample` is caught at run time (with the exceptions of P20); a wrong `ok` has no
    run-time guard, and TLC sees it only where a test or a user runs `--with-tlc`.
-3. **Bounds.** TLC never runs at 3 or more instances in CI, never on the 24 fallback cones at
-   2 instances in `engine_equivalence`, and never on unreduced cones above 300,000 states.
+3. **Bounds.** In CI, TLC runs at 3 or more instances only on three corpus cases with
+   per-entity flags and on the 3-instance seeds among the 45 main random seeds; never on
+   the 24 fallback cones at 2 instances in `engine_equivalence` (`verify --with-tlc` runs
+   them at the roots' header bounds, verdicts only); and never as a graph comparison on
+   unreduced cones above 300,000 states.
    A divergence that needs more rows than the tested bounds is invisible to every
    differential source (P14).
 4. **Predicate shapes no test reaches in a discriminating state.** `pred.rs` and `expr.rs`
@@ -571,8 +592,8 @@ evidence would not catch, most consequential first:
    disagreement in violated sets can go unreported.
 7. **TLC.** TLC's fingerprint-based state store can, with small probability, merge two
    distinct states on a hash collision and so miss states (Yu, Manolios and Lamport 1999
-   discuss TLC's design; TLC prints its own collision estimate, which rdra-ish does not
-   read). A TLC fault that matches a native fault is not detectable.
+   discuss TLC's design; TLC prints its own collision estimate, which
+   `cli/src/tlc_output.rs` does not parse). A TLC fault that matches a native fault is not detectable.
 8. **Checks with no TLC counterpart.** `can_reach` and the one-sided deadlock check (P19).
 
 ## Threats to validity
@@ -587,8 +608,8 @@ evidence would not catch, most consequential first:
   printing and in the comparison, so a consistent renaming is invisible (harmless) and a
   decoder that maps two TLC states to one native state would show as a count mismatch,
   which the comparison checks.
-- **External.** The inputs are 40 sample roots, 79 corpus cases, 23 temporal cases, about
-  30 fixtures, and 45 random models with TLC. The samples were written alongside the tools,
+- **External.** The inputs are 40 sample roots, 79 corpus cases, 23 temporal cases, 35
+  `bfs_and_tlc_*` tests, and 45 random models with TLC. The samples were written alongside the tools,
   so they exercise what the authors thought of. The random generator has a fixed shape
   (no counts, three to five entities).
 - **Conclusion.** No numbers in this document were re-measured. The P21 and P12 statements
@@ -624,6 +645,6 @@ document. The open problems this document confirmed, extended, or added, in the
 | P13 | Confirmed as stated. |
 | P14 | Confirmed; extended: unreduced cones over 300,000 states are silently compared reduced only. |
 | P15 | Confirmed as stated (at least 30 asserted, 79 present). |
-| P16 | Confirmed; extended: release-gate item 2 recorded as held on a narrower check; the `--with-tlc` step did not move to `release.yml`. |
+| P16 | Confirmed; extended: release-gate item 2 recorded as held on a narrower check; the `--with-tlc` step did not move to `release.yml`; native-temporal-verification.md, "How we know it is right", still says CI runs every root with `--with-tlc`. |
 | P21 | Confirmed; extended to the `WfNext` runs and to a false `tool_error` under `--symmetry always` without TLC. |
-| P22 | New (prose): D17 omits that a step with `s' = s` is checked by neither engine. |
+| P22 | New (prose): D17 omits that a step with `s' = s` is checked by neither engine. Both halves read; `Probe::Loop` is set in every build. |
