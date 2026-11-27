@@ -1,0 +1,11 @@
+// Fixture of tests/codegen_commit.rs: entities named like the commit part's types. Each of
+// those takes a `_`, and in Go the method `Writes` does too, beside the result field `Writes`.
+entity Writes "W" {
+  id: Int @pk
+  status: Enum(open, done) @default(open)
+}
+entity RowWrite "R" { id: Int @pk }
+usecase Open "O"
+usecase Finish "F"
+creates(Open, Writes)
+transitions(Finish, Writes.status, open -> done)

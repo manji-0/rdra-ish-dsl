@@ -873,6 +873,172 @@ func RunCancelOrder(order Order) (CancelOrderOutcome, error) {
 	return CancelOrderOutcome{}, &CancelOrderError{Kind: CancelOrderErrorNotEnabled, Err: &NotEnabled{UseCase: "CancelOrder"}}
 }
 
+// ── Commit: what a result writes ──
+
+// StoredRow is a row of any entity as a store holds it: its type names the entity.
+type StoredRow interface {
+	isStoredRow()
+}
+
+func (Customer) isStoredRow() {}
+
+func (OrderLine) isStoredRow() {}
+
+func (OrderRow) isStoredRow() {}
+
+// StoredId is the id of a row of any entity: its type names the entity.
+type StoredId interface {
+	isStoredId()
+}
+
+func (CustomerId) isStoredId() {}
+
+func (OrderLineId) isStoredId() {}
+
+func (OrderId) isStoredId() {}
+
+// RowWrite is one row a commit writes, only where the row is still what Expected names: when
+// it is not, the commit writes nothing and the call is NotEnabled. Row is stored (inserted when
+// Expected is Absent, else updated), or the row is deleted when Delete is set.
+type RowWrite struct {
+	// Entity is the entity of the row, as the model names it.
+	Entity string
+	// Id is the row's id: nil when the entity has no one-column key.
+	Id StoredId
+	// Row is the row to store: nil for a delete.
+	Row StoredRow
+	// Delete says the row is deleted.
+	Delete bool
+	// Expected is what the row must still be.
+	Expected ExpectedSource
+}
+
+// RunMark is a run mark of a use case split into transactions, on one row.
+type RunMark struct {
+	// UseCase is the use case of the run, as the model names it.
+	UseCase string
+	// Entity is the entity of the marked row, as the model names it.
+	Entity string
+	// Id is the id of the marked row.
+	Id StoredId
+	// Step is the step of the run that last wrote the row.
+	Step int
+}
+
+// MarkWrite is one run mark a commit writes. A put at step 1 inserts the mark, where the
+// row holds no mark of the use case; a put at a later step advances the row's mark from the
+// step before; a delete removes the mark at its step, and the run ends on the row.
+type MarkWrite struct {
+	// Mark is the mark.
+	Mark RunMark
+	// Delete says the mark is deleted.
+	Delete bool
+}
+
+// RaisedEvent is an event of any type a use case raises: its type names the event.
+type RaisedEvent interface {
+	isRaisedEvent()
+}
+
+// Writes is what one commit stores, in order: the rows, then the run marks, then the events.
+type Writes struct {
+	// UseCase is the use case whose result it is.
+	UseCase string
+	// Rows are the rows to write.
+	Rows []RowWrite
+	// Marks are the run marks to store, advance, or delete.
+	Marks []MarkWrite
+	// Events are the events raised.
+	Events []RaisedEvent
+}
+
+// Committable is a result or an outcome a commit stores: every result and outcome type is one.
+type Committable interface {
+	// Writes returns every row, run mark, and event the commit writes, in order.
+	Writes() Writes
+}
+
+// Writes returns what a commit of the result stores.
+func (r PayResult) Writes() Writes {
+	row0 := OrderToRow(r.Order)
+	return Writes{UseCase: "Pay", Rows: []RowWrite{{Entity: "Order", Id: row0.Id, Row: row0, Expected: r.OrderExpected}}}
+}
+
+// Writes returns what a commit of the result stores.
+func (r CancelOrderResult) Writes() Writes {
+	row0 := OrderToRow(r.Order)
+	return Writes{UseCase: "CancelOrder", Rows: []RowWrite{{Entity: "Order", Id: row0.Id, Row: row0, Expected: r.OrderExpected}}}
+}
+
+// Writes returns what a commit of the result stores.
+func (r PlaceResult) Writes() Writes {
+	row0 := OrderToRow(r.Order)
+	return Writes{UseCase: "Place", Rows: []RowWrite{{Entity: "Order", Id: row0.Id, Row: row0, Expected: r.OrderExpected}}}
+}
+
+// Writes returns what a commit of the case that ran stores: nothing when no case is set.
+func (o PayOutcome) Writes() Writes {
+	if o.Ran != nil {
+		return o.Ran.Writes()
+	}
+	return Writes{UseCase: "Pay"}
+}
+
+// Writes returns what a commit of the case that ran stores: nothing when no case is set.
+func (o CancelOrderOutcome) Writes() Writes {
+	if o.Ran != nil {
+		return o.Ran.Writes()
+	}
+	return Writes{UseCase: "CancelOrder"}
+}
+
+// CommitStore is a store that commits a result inside the transaction of the call: CommitWrites calls
+// it once per write, in order. Each method writes one item only where it is still what it names.
+type CommitStore interface {
+	// WriteRow writes the row where it is still what w.Expected names: false, and nothing
+	// written, when it is not. Its error is the store's own.
+	WriteRow(w RowWrite) (bool, error)
+	// WriteMark writes the run mark where the row's mark is still what the step needs: none of
+	// the use case for a put at step 1, the step before for a later put, the mark's own step
+	// for a delete. False, and nothing written, when it is not. Its error is the store's own.
+	WriteMark(w MarkWrite) (bool, error)
+	// RecordEvent records a raised event. Its error is the store's own.
+	RecordEvent(e RaisedEvent) error
+}
+
+// CommitWrites commits what w writes through store: every row, then every run mark, then every
+// event, and stops at the first row or mark that is no longer what it names. It begins and
+// ends no transaction: call it inside the transaction of the call, and roll back on an error.
+// Its error is a *NotEnabled when a row or a run mark is no longer what the result expects,
+// or the store's error as the store returned it.
+func CommitWrites(store CommitStore, w Committable) error {
+	writes := w.Writes()
+	for _, row := range writes.Rows {
+		ok, err := store.WriteRow(row)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return &NotEnabled{UseCase: writes.UseCase}
+		}
+	}
+	for _, mark := range writes.Marks {
+		ok, err := store.WriteMark(mark)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return &NotEnabled{UseCase: writes.UseCase}
+		}
+	}
+	for _, event := range writes.Events {
+		if err := store.RecordEvent(event); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ── Helpers ──
 
 func isDigits(s string) bool {

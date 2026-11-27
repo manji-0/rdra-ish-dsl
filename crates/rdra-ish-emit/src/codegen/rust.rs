@@ -103,6 +103,7 @@ pub(super) fn print(
     print_validators(domain, &mut out);
     print_rows(domain, serde, &mut out);
     print_dispatchers(domain, &mut out);
+    super::writes::rust::print(domain, &mut out);
     super::rust_port::print_port(domain, &mut out);
     while out.ends_with("\n\n") {
         out.pop();
@@ -817,7 +818,7 @@ fn invalid_argument(domain: &DomainModel, f: &FnDecl, reason: &str) -> String {
 // ── Use cases ────────────────────────────────────────────────────────────────
 
 /// Whether a value of `ty` is `Copy`: read by value, never cloned.
-fn is_copy(domain: &DomainModel, ty: &FieldType) -> bool {
+pub(super) fn is_copy(domain: &DomainModel, ty: &FieldType) -> bool {
     match ty {
         FieldType::Scalar(s) => matches!(s, Scalar::Int | Scalar::Bool),
         FieldType::Enum(_) => true,
@@ -1004,6 +1005,13 @@ fn print_result(f: &FnDecl, out: &mut String) {
             "    /// The event raised.\n    pub {}: {},\n",
             ident(&snake(&event.ty)),
             event.ty
+        ));
+    }
+    for (m, field) in f.marks_ended() {
+        out.push_str(&format!(
+            "    /// The run mark the step took and ends: delete it in the same transaction.\n    pub {}: {},\n",
+            ident(&field),
+            m.ty
         ));
     }
     out.push_str("}\n\n");
@@ -1309,6 +1317,12 @@ fn print_function(domain: &DomainModel, f: &FnDecl, out: &mut String) {
             "        {}: out_{},\n",
             ident(&snake(&event.ty)),
             snake(&event.ty)
+        ));
+    }
+    for (m, field) in f.marks_ended() {
+        result.push_str(&format!(
+            "        {},\n",
+            init(&ident(&field), &ident(&m.name))
         ));
     }
     result.push_str("    }");

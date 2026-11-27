@@ -2334,6 +2334,449 @@ pub fn run_new(parent_function: Function, parent_func: Func, parent_mod: Mod, ma
     }
 }
 
+// ── Commit: what a result writes ──
+
+/// A row of any entity, as a store holds it: the case names the entity.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StoredRow {
+    /// A row of Function.
+    Function(Function),
+    /// A row of Mod.
+    Mod(Mod),
+    /// A row of Func.
+    Func(FuncRow),
+    /// A row of Match.
+    Match(MatchRow),
+}
+
+impl StoredRow {
+    /// The entity of the row, as the model names it.
+    pub fn entity(&self) -> &'static str {
+        match *self {
+            Self::Function(_) => "Function",
+            Self::Mod(_) => "Mod",
+            Self::Func(_) => "Func",
+            Self::Match(_) => "Match",
+        }
+    }
+}
+
+/// The id of a row of any entity: the case names the entity.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StoredId {
+    /// An id of Function.
+    Function(FunctionId),
+    /// An id of Mod.
+    Mod(ModId),
+    /// An id of Func.
+    Func(FuncId),
+    /// An id of Match.
+    Match(MatchId),
+}
+
+impl StoredId {
+    /// The entity of the row, as the model names it.
+    pub fn entity(&self) -> &'static str {
+        match *self {
+            Self::Function(_) => "Function",
+            Self::Mod(_) => "Mod",
+            Self::Func(_) => "Func",
+            Self::Match(_) => "Match",
+        }
+    }
+}
+
+/// One row a commit writes, only where the row is still what `expected` names: when it is
+/// not, the commit writes nothing and the call is `NotEnabled`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RowWrite {
+    /// Store the row: insert it when `expected` is `Absent`, else update it.
+    Put {
+        /// The row's id.
+        id: StoredId,
+        /// The row.
+        row: StoredRow,
+        /// What the row must still be.
+        expected: ExpectedSource,
+    },
+    /// Delete the row.
+    Delete {
+        /// The row's id.
+        id: StoredId,
+        /// What the row must still be.
+        expected: ExpectedSource,
+    },
+}
+
+/// A run mark of a use case split into transactions, on one row: the case names the use
+/// case and the entity.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RunMark {}
+
+impl RunMark {
+    /// The use case of the run, as the model names it.
+    pub fn usecase(&self) -> &'static str {
+        match *self {
+        }
+    }
+
+    /// The entity of the marked row, as the model names it.
+    pub fn entity(&self) -> &'static str {
+        match *self {
+        }
+    }
+
+    /// The step of the run that last wrote the row.
+    pub fn step(&self) -> u8 {
+        match *self {
+        }
+    }
+}
+
+/// One run mark a commit writes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MarkWrite {
+    /// Store the mark: insert it at step 1, where the row holds no mark of the use case;
+    /// at a later step, advance the row's mark from the step before.
+    Put(RunMark),
+    /// Delete the mark, which is at the step it names: the run ends on the row.
+    Delete(RunMark),
+}
+
+/// An event of any type a use case raises: the case names the event.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RaisedEvent {
+    /// The event Switch.
+    Switch(Switch),
+}
+
+/// What one commit stores, in order: the rows, then the run marks, then the events.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Writes {
+    /// The use case whose result it is.
+    pub usecase: &'static str,
+    /// The rows to write.
+    pub rows: ::std::vec::Vec<RowWrite>,
+    /// The run marks to store, advance, or delete.
+    pub marks: ::std::vec::Vec<MarkWrite>,
+    /// The events raised.
+    pub events: ::std::vec::Vec<RaisedEvent>,
+}
+
+/// A result or an outcome a commit stores: every row, run mark, and event it writes.
+pub trait IntoWrites {
+    /// The writes, in the order a commit makes them.
+    fn into_writes(self) -> Writes;
+}
+
+impl IntoWrites for ReturnResult {
+    fn into_writes(self) -> Writes {
+        let row_0 = Match::from(self.r#match).into_row();
+        Writes {
+            usecase: "Return",
+            rows: ::std::vec![
+                RowWrite::Put { id: StoredId::Match(row_0.id), row: StoredRow::Match(row_0), expected: self.match_expected },
+            ],
+            marks: ::std::vec::Vec::new(),
+            events: ::std::vec![
+                RaisedEvent::Switch(self.switch),
+            ],
+        }
+    }
+}
+
+impl IntoWrites for DeleteResult {
+    fn into_writes(self) -> Writes {
+        let row_0 = Match::from(self.r#match).into_row();
+        Writes {
+            usecase: "Delete",
+            rows: ::std::vec![
+                RowWrite::Put { id: StoredId::Match(row_0.id), row: StoredRow::Match(row_0), expected: self.match_expected },
+            ],
+            marks: ::std::vec::Vec::new(),
+            events: ::std::vec::Vec::new(),
+        }
+    }
+}
+
+impl IntoWrites for SuperResult {
+    fn into_writes(self) -> Writes {
+        let row_0 = Match::from(self.r#match).into_row();
+        Writes {
+            usecase: "Super",
+            rows: ::std::vec![
+                RowWrite::Put { id: StoredId::Match(row_0.id), row: StoredRow::Match(row_0), expected: self.match_expected },
+            ],
+            marks: ::std::vec::Vec::new(),
+            events: ::std::vec::Vec::new(),
+        }
+    }
+}
+
+impl IntoWrites for CrateResult {
+    fn into_writes(self) -> Writes {
+        let row_0 = Match::from(self.r#match).into_row();
+        Writes {
+            usecase: "Crate",
+            rows: ::std::vec![
+                RowWrite::Put { id: StoredId::Match(row_0.id), row: StoredRow::Match(row_0), expected: self.match_expected },
+            ],
+            marks: ::std::vec::Vec::new(),
+            events: ::std::vec::Vec::new(),
+        }
+    }
+}
+
+impl IntoWrites for DefaultResult {
+    fn into_writes(self) -> Writes {
+        let row_0 = Match::from(self.r#match).into_row();
+        Writes {
+            usecase: "Default",
+            rows: ::std::vec![
+                RowWrite::Put { id: StoredId::Match(row_0.id), row: StoredRow::Match(row_0), expected: self.match_expected },
+            ],
+            marks: ::std::vec::Vec::new(),
+            events: ::std::vec::Vec::new(),
+        }
+    }
+}
+
+impl IntoWrites for TypeResult {
+    fn into_writes(self) -> Writes {
+        let row_0 = Func::from(self.func).into_row();
+        Writes {
+            usecase: "Type",
+            rows: ::std::vec![
+                RowWrite::Put { id: StoredId::Func(row_0.id), row: StoredRow::Func(row_0), expected: self.func_expected },
+            ],
+            marks: ::std::vec::Vec::new(),
+            events: ::std::vec::Vec::new(),
+        }
+    }
+}
+
+impl IntoWrites for ClassResult {
+    fn into_writes(self) -> Writes {
+        let row_0 = Func::from(self.func).into_row();
+        Writes {
+            usecase: "Class",
+            rows: ::std::vec![
+                RowWrite::Put { id: StoredId::Func(row_0.id), row: StoredRow::Func(row_0), expected: self.func_expected },
+            ],
+            marks: ::std::vec::Vec::new(),
+            events: ::std::vec::Vec::new(),
+        }
+    }
+}
+
+impl IntoWrites for NewFromNewResult {
+    fn into_writes(self) -> Writes {
+        let row_0 = Match::from(self.r#match).into_row();
+        Writes {
+            usecase: "New",
+            rows: ::std::vec![
+                RowWrite::Put { id: StoredId::Match(row_0.id), row: StoredRow::Match(row_0), expected: self.match_expected },
+            ],
+            marks: ::std::vec::Vec::new(),
+            events: ::std::vec::Vec::new(),
+        }
+    }
+}
+
+impl IntoWrites for NewFromReturnResult {
+    fn into_writes(self) -> Writes {
+        let row_0 = Match::from(self.r#match).into_row();
+        Writes {
+            usecase: "New",
+            rows: ::std::vec![
+                RowWrite::Put { id: StoredId::Match(row_0.id), row: StoredRow::Match(row_0), expected: self.match_expected },
+            ],
+            marks: ::std::vec::Vec::new(),
+            events: ::std::vec::Vec::new(),
+        }
+    }
+}
+
+impl IntoWrites for NewFromFuncResult {
+    fn into_writes(self) -> Writes {
+        let row_0 = Match::from(self.r#match).into_row();
+        Writes {
+            usecase: "New",
+            rows: ::std::vec![
+                RowWrite::Put { id: StoredId::Match(row_0.id), row: StoredRow::Match(row_0), expected: self.match_expected },
+            ],
+            marks: ::std::vec::Vec::new(),
+            events: ::std::vec::Vec::new(),
+        }
+    }
+}
+
+impl IntoWrites for StaticResult {
+    fn into_writes(self) -> Writes {
+        let row_0 = self.function;
+        Writes {
+            usecase: "Static",
+            rows: ::std::vec![
+                RowWrite::Put { id: StoredId::Function(row_0.id), row: StoredRow::Function(row_0), expected: self.function_expected },
+            ],
+            marks: ::std::vec::Vec::new(),
+            events: ::std::vec::Vec::new(),
+        }
+    }
+}
+
+impl IntoWrites for ReturnOutcome {
+    fn into_writes(self) -> Writes {
+        match self {
+            Self::Ran(r) => r.into_writes(),
+        }
+    }
+}
+
+impl IntoWrites for DeleteOutcome {
+    fn into_writes(self) -> Writes {
+        match self {
+            Self::Ran(r) => r.into_writes(),
+        }
+    }
+}
+
+impl IntoWrites for SuperOutcome {
+    fn into_writes(self) -> Writes {
+        match self {
+            Self::Ran(r) => r.into_writes(),
+        }
+    }
+}
+
+impl IntoWrites for CrateOutcome {
+    fn into_writes(self) -> Writes {
+        match self {
+            Self::Ran(r) => r.into_writes(),
+        }
+    }
+}
+
+impl IntoWrites for DefaultOutcome {
+    fn into_writes(self) -> Writes {
+        match self {
+            Self::Ran(r) => r.into_writes(),
+        }
+    }
+}
+
+impl IntoWrites for TypeOutcome {
+    fn into_writes(self) -> Writes {
+        match self {
+            Self::Ran(r) => r.into_writes(),
+        }
+    }
+}
+
+impl IntoWrites for ClassOutcome {
+    fn into_writes(self) -> Writes {
+        match self {
+            Self::Ran(r) => r.into_writes(),
+        }
+    }
+}
+
+impl IntoWrites for NewOutcome {
+    fn into_writes(self) -> Writes {
+        match self {
+            Self::FromNew(r) => r.into_writes(),
+            Self::FromReturn(r) => r.into_writes(),
+            Self::FromFunc(r) => r.into_writes(),
+        }
+    }
+}
+
+/// A store that commits a result, inside the transaction of the call: [`commit_writes`] calls it
+/// once per write, in order. Each method writes one item only where it is still what it names.
+pub trait CommitStore {
+    /// The store's own error: a failure of the store, not an answer of the use case.
+    type Error;
+
+    /// Writes the row where it is still what its `expected` names: `Ok(false)`, and nothing
+    /// written, when it is not.
+    ///
+    /// # Errors
+    ///
+    /// The store's error when the store fails.
+    fn write_row(&mut self, write: RowWrite) -> ::core::result::Result<bool, Self::Error>;
+
+    /// Writes the run mark where the row's mark is still what the step needs: none of the
+    /// use case for a put at step 1, the step before for a later put, the mark's own step for
+    /// a delete. `Ok(false)`, and nothing written, when it is not.
+    ///
+    /// # Errors
+    ///
+    /// The store's error when the store fails.
+    fn write_mark(&mut self, write: MarkWrite) -> ::core::result::Result<bool, Self::Error>;
+
+    /// Records a raised event.
+    ///
+    /// # Errors
+    ///
+    /// The store's error when the store fails.
+    fn record_event(&mut self, event: RaisedEvent) -> ::core::result::Result<(), Self::Error>;
+}
+
+/// Why [`commit_writes`] stopped. Either way the caller rolls the transaction back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CommitFailed<E> {
+    /// A row or a run mark is no longer what the result expects: another call changed it,
+    /// and the use case does not run from the state it left.
+    NotEnabled(NotEnabled),
+    /// The store failed.
+    Store(E),
+}
+
+impl<E: ::core::fmt::Display> ::core::fmt::Display for CommitFailed<E> {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        match self {
+            Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
+            Self::Store(e) => write!(f, "the store failed: {e}"),
+        }
+    }
+}
+
+impl<E: ::std::error::Error + 'static> ::std::error::Error for CommitFailed<E> {
+    fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
+        match self {
+            Self::NotEnabled(e) => ::core::option::Option::Some(e),
+            Self::Store(e) => ::core::option::Option::Some(e),
+        }
+    }
+}
+
+/// Commits `writes` through `store`: every row, then every run mark, then every event, and
+/// stops at the first row or mark that is no longer what it names. It begins and ends no
+/// transaction: call it inside the transaction of the call, and roll back on an error.
+///
+/// # Errors
+///
+/// `NotEnabled` when a row or a run mark is no longer what the result expects, and the store's
+/// error when the store fails.
+pub fn commit_writes<S: CommitStore + ?Sized>(store: &mut S, writes: impl IntoWrites) -> ::core::result::Result<(), CommitFailed<S::Error>> {
+    let writes = writes.into_writes();
+    let not_enabled = NotEnabled { usecase: writes.usecase };
+    for write in writes.rows {
+        if !store.write_row(write).map_err(CommitFailed::Store)? {
+            return ::core::result::Result::Err(CommitFailed::NotEnabled(not_enabled));
+        }
+    }
+    for write in writes.marks {
+        if !store.write_mark(write).map_err(CommitFailed::Store)? {
+            return ::core::result::Result::Err(CommitFailed::NotEnabled(not_enabled));
+        }
+    }
+    for event in writes.events {
+        store.record_event(event).map_err(CommitFailed::Store)?;
+    }
+    ::core::result::Result::Ok(())
+}
+
 // ── Contracts: one per use case, which the service implements ──
 
 /// The use case Return: Return.
