@@ -65,6 +65,15 @@
 
 ### Changed
 
+- `verify --prove` (experimental) finds lemmas from a rule's counterexample to induction
+  (#428), in the manner of IC3: the CTI's state over its rows becomes a set of facts, and
+  the clause that forbids them is weakened, one fact at a time, while it holds initially and
+  no step breaks it from a state where it, the rule, and the kept lemmas hold. A clause that
+  survives joins the proof as a candidate and is kept only when it is inductive with the
+  rest. It prints as `lemma: from the CTI of <rule>: <text>`, with `.lemma()` source to copy
+  into the model where the language states it. The engine corpus case `z3_cti_true_rule` is
+  now proved. A proof that needs no such lemma is unchanged; one that does is not reused from
+  the proof cache.
 - `verify --prove` (experimental) mines ∀∃ lemmas (#428): while a present row of one entity
   holds a column value, some present row of another entity holds one, for each pair of values
   that every state BFS reached at the run's bounds and that showed the first keeps. No key need
