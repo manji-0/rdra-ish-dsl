@@ -87,6 +87,8 @@ pub(super) struct Search {
 
 impl<'r> Product<'r> {
     pub(super) fn new(run: &'r OrbitRun, i: usize) -> Self {
+        // Unchecked internal invariant (P20): a precondition of `decide_liveness`, whose
+        // callers run it on `run_annotated_orbits` only.
         let perms = run
             .perms
             .as_ref()
