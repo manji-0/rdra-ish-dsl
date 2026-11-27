@@ -1084,7 +1084,7 @@ Evidence: none beyond the reading of `escalate` and the guide.
   may differ from it. No statement was checked by running the tools.
 - **Syntactic over-approximations.** `Wr` lists a deleted entity's owners although D8 keeps them. This only
   adds actions and variables to cones and makes owners non-monotone; every proof above tolerates it, and a
-  later change that made `Wr` an under-approximation would break Lemma 2. Since P35 (fixed in #PRP35) a debug
+  later change that made `Wr` an under-approximation would break Lemma 2. Since P35 (fixed in #491) a debug
   or `shadow` build holds every step to it: `TransitionSystem::check_writes` panics when a step changes a
   byte of a variable `action_writes` leaves out, so every debug test that explores and CI's shadow job (the
   `writes` twin, on the samples and the corpus) check `Wr` against the steps they take. A release build does
