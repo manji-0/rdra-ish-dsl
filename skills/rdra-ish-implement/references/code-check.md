@@ -56,6 +56,7 @@ FAIL: code: 1 error(s) at --code=build
 | `CodeIncomplete_<UC>` | Some methods are missing | Add the methods the `fix:` line names |
 | `CodeSignature_<UC>` | A method takes or returns other types | Match the contract's signature |
 | `CodeError_<UC>` | Another error on the use case's probe line or methods | Read the quoted compiler error |
+| `CodeCommonJs` | TypeScript: the package makes the probe and the domain code CommonJS | Set `"type": "module"` in `package.json` |
 | `CodeUnmapped`, `CodeBuildFailed` | Errors that belong to no use case; a failed build with no error rdra-ish reads | Fix the build by hand |
 | `CodeConformance` | `run`: the store differs from the model after a call | Read the first difference: the traces line, and the rows only the model or only the store holds |
 | `CodeMutantSurvived` | `run`: a mutant trace of the self-check passed | The `fix:` line: look rows up by id, or make the run command use `RDRA_ISH_TRACES` |

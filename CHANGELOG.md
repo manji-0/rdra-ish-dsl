@@ -105,6 +105,8 @@
   spends more than a tenth of its limit, or any check nine tenths of it. On every sample on 2
   solvers, and on the costliest samples on 1 and 3, the most is 161,000 units for a rule (1/124
   of 20,000,000) and 114,000 for a lemma (1/17 of 2,000,000).
+- `rdra.toml` accepts `[code.typescript]` as another spelling of `[code.ts]`, as `--lang
+  typescript` spells `--lang ts`. Naming both is an error (one table named twice).
 
 ### Changed
 
@@ -254,6 +256,23 @@
   the CLI reference. Verdicts and stdout do not change; in a release build the
   `RDRA_ISH_WF_REDUCED_STATS` line no longer fills its divergence columns. The test-only
   `RDRA_ISH_TEST_QUOTIENT_HITS` prints the quotient cache's hits for the CLI tests.
+- TypeScript: `check --code` names a package that makes the probe and the domain code
+  CommonJS (`"type": "commonjs"`, which npm 11's `npm init -y` writes); they are ES modules
+  and need `"type": "module"`. At `build` under `verbatimModuleSyntax`, the new
+  `CodeCommonJs` stands in for the `CodeError` per use case and `CodeUnmapped` that tsc's
+  TS1286 / TS1287 / TS1295 gave; at `run`, the `CodeConformance` says so in place of Node's
+  last line.
+  The docs and the implement skill say so, recommend `seal = true` in `[code.ts]` (a state
+  built as an object literal, skipping the transition function, fails `build` instead of
+  passing `run`), and show how to answer an API's writes and reads in one shape
+  (`<Entity>.toRow` over a result's states) and how to import the scalar `Date` without
+  hiding the global.
+- TypeScript: the conformance probe reads the traces line by line (`readline` over
+  `createReadStream`) instead of `readFileSync` into one string, which Node refuses past
+  about 512 MB (`ERR_STRING_TOO_LONG`). `conform`, of the domain code and of the model
+  adapter, takes the text as before or a function returning the lines as an
+  `AsyncIterable<string>` (the adapter's `conform` calls it once per run). Generated output changes:
+  the probe's trace reading, and `conform`'s parameter type and loop.
 
 ### Added
 

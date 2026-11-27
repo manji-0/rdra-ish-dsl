@@ -28,7 +28,7 @@ pub(crate) struct CompilerMessage {
 
 impl CompilerMessage {
     /// `file:line:col  CODE: text`, cut to the text's first line: the `code:` line.
-    fn shown(&self) -> String {
+    pub(crate) fn shown(&self) -> String {
         let code = self
             .code
             .as_ref()
@@ -86,6 +86,9 @@ pub(crate) fn map_messages(
     m: &Mapping<'_>,
     backend: &dyn Backend,
 ) -> Vec<CodeDiagnostic> {
+    if let Some(cause) = backend.build_cause(messages) {
+        return vec![cause];
+    }
     let mut out: Vec<CodeDiagnostic> = Vec::new();
     let mut unmapped: Vec<&CompilerMessage> = Vec::new();
     let on_probe = |msg: &CompilerMessage| {

@@ -238,12 +238,15 @@ table. The LSP never does.
 | Language | `build` | `run` |
 |---|---|---|
 | Rust | `cargo check --test <probe> --message-format=json` in `root` | `cargo test --test <probe> -- rdra_conformance`, with `--nocapture` after it for a model adapter |
-| TypeScript | `tsc --noEmit --pretty false -p tsconfig.rdra.json` in `root` | `node <probe>` (Node 22.18 or later, by type stripping; the service imports name the `.ts` files) |
+| TypeScript | `tsc --noEmit --pretty false -p tsconfig.rdra.json` in `root` | `node <probe>` (Node 22.18 or later, by type stripping; the service imports name the `.ts` files; the `package.json` above the probe sets `"type": "module"`) |
 | Go | `go test -count=1 -run ^$ -gcflags=-e ./<probe dir>` in `root` | `go test -count=1 -run ^TestRdraConformance$ ./<probe dir>`, with `-v` for a model adapter |
 
 `tsconfig.rdra.json` is a generated file that extends the project's tsconfig and holds only
-the probe. An older Node fails `run` with a `CodeConformance` that says so; a project that
-runs TypeScript another way sets `run` (`["npx", "tsx", "src/rdra_contract.ts"]`). Go names
+the probe. An older Node fails `run` with a `CodeConformance` that says so. The probe and
+the domain code are ES modules, and npm 11's `npm init -y` writes `"type": "commonjs"`: under
+`verbatimModuleSyntax` tsc then fails `build` with one `CodeCommonJs` in place of an error
+per use case, and without it Node fails `run` with a `CodeConformance` that names the
+setting. A project that runs TypeScript another way sets `run` (`["npx", "tsx", "src/rdra_contract.ts"]`). Go names
 one missing method per error, so the Go probe names each method of a contract on a line of
 its own.
 
@@ -292,6 +295,7 @@ error[CodeObligationUnowned_Unique_Order_note]: no code owns the obligation Uniq
 | `CodeError_<UseCase>` | error | Another error on the use case's probe line or naming its methods. |
 | `CodeUnmapped` | error | The count of errors that belong to no use case, the first one quoted. |
 | `CodeBuildFailed` | error | The build failed with no error rdra-ish reads. |
+| `CodeCommonJs` | error | TypeScript: tsc compiles the probe and the domain code as CommonJS under `verbatimModuleSyntax` (TS1286, TS1287, TS1295); the one finding of that build. Fix: `"type": "module"` in `package.json`. |
 | `CodeConformance` | error | `run`: the conformance test failed; the message is the harness's first difference. |
 | `CodeMutantSurvived` | error | `run`: a mutant trace of the self-check passed. The `code:` line says whether the run passed or failed at another row. |
 | `CodeCoverageIncomplete` | warning; error with `--deny-incomplete` | `run`: the BFS behind the traces stopped at `conformance_states`, so the moves past it are not run and no call is tried as refused; or the traces leave refusals of the model untried, or never run a use case of the port. |
@@ -708,7 +712,8 @@ Error: /work/shop/rdra.toml:3: unknown field `verfiy`, expected one of `model`, 
 
 ### The code tables
 
-`[code.rust]`, `[code.go]`, and `[code.ts]` name the files `codegen --code` writes for a
+`[code.rust]`, `[code.go]`, and `[code.ts]` (also spelled `[code.typescript]`, as
+`--lang typescript` is; one of the two) name the files `codegen --code` writes for a
 service in that language, which [`check --code`](#check---code) holds against the model. Each
 path is relative to the directory of `rdra.toml`. A table names `domain` or `adapter`, not
 both.
@@ -750,7 +755,7 @@ Unique_Payment_Order = "../service/migrations/003_payment.sql"
 | `package` | Go: the package name of `domain` (`--package`), default `domain`. When set, the probe imports the domain package under this name, so an import path whose last element differs builds. |
 | `root` | The directory the build runs in and the ledger scans. Default: the nearest directory above `domain` with `Cargo.toml`, `go.mod`, `package.json`, or `tsconfig.json`. |
 | `build`, `run` | The command `--code=build` / `--code=run` runs in place of the default, as a list of arguments. Runs only when that level is given on the command line. |
-| `seal` | TypeScript: `true` writes `domain` as `codegen --seal` does. Default `false`. |
+| `seal` | TypeScript: `true` writes `domain` as `codegen --seal` does. Default `false`; set it in a table with `domain` (an `adapter` has no state types, and ignores it). Without it, a service can build a state as an object literal and skip the transition function and its rule checks, and `run`, which compares only what is stored, passes it wherever the traces store the same rows. With it, the literal fails `build` (TS2741). A service that makes states only through `fromRow` and the transition functions builds the same either way. |
 | `tsconfig` | TypeScript: the tsconfig `tsconfig.rdra.json` extends. Default: `tsconfig.json` in `root` when it exists; else `tsconfig.rdra.json` sets `strict` itself. |
 
 An unknown key fails every loading command, as under `[check]`. `seal` or `tsconfig` under
@@ -1931,6 +1936,10 @@ set, and each entity and DTO as a record. A key column takes its parent's id typ
 column is `T | null`, `Option<T>`, or `*T`. Ids and scalars are opaque and made only by parsing:
 `OrderId.parse(1)` / `OrderId::from(7)` / `ParseOrderId`, `"12.50".parse::<Money>()`,
 `ParseMoney("12.50")`; text of another shape is `InvalidValue`.
+TypeScript exports each scalar as a type and a companion object of the same name, so a
+module that imports `Date` by name hides the global `Date` (as any model name that is also a
+global's would): import it renamed (`import { Date as IsoDate } from "./domain.ts"`) or
+import the module as a namespace (`import * as d`).
 
 **State types.** An entity whose tag column is an inline `Enum` that `transitions` drive is a
 state type: one variant per value of the tag (among the columns `transitions` names: `status`,
@@ -1955,6 +1964,13 @@ or `InvalidRow` naming the column; `Order.toRow` / `into_row` / `OrderToRow` the
 column marked `@null` keeps its declared values as states: its row column is nullable, and a
 row whose state column is null is an `InvalidRow`. TypeScript's `parseOrderRow(value:
 unknown)` reads a row from outside, each column through its type's parser.
+
+The two serialize differently: a state names its variant in `kind` (`"Paid"`, the state's
+name) and has no tag column, a row holds the tag column with the model's value (`status:
+"paid"`). A result holds states, a store holds rows. An API that answers a write with the
+result and a read with the stored row sends two shapes for one entity unless it converts one:
+pass each state of the result through `Order.toRow` (it takes any state of the entity) to
+answer both with rows, or each row through `Order.fromRow` to answer both with states.
 
 **Transition functions.** Each use case gets one function per combination of its rows'
 source states (`cancelFromPending`, `cancelFromPaid`), so a call from another state does not
@@ -2036,7 +2052,9 @@ stores it in one transaction; either returns the use case's error when it does n
 test calls `conform(|| MyService::new(), &traces)` (Rust), `Conform(func() ConformancePort {
 return newService() }, traces)` (Go), or `await conform(() => newService(), traces)`
 (TypeScript, whose port members return `Promise`s; it returns `Result<ConformanceReport,
-string>`). Per trace, the harness starts a fresh port, seeds it, makes each call, and compares
+string>`, and `traces` is the file's text or a function returning its lines as an
+`AsyncIterable<string>`, which the probe uses so a file past Node's longest string, about
+512 MB, still runs). Per trace, the harness starts a fresh port, seeds it, makes each call, and compares
 the store, cut down to what the model tracks (an enum's value, null or not, an integer, a key's
 parent), with the state BFS reached. A refused call must fail and change nothing, and so must
 a commit after another call changed a row it writes. It returns the first difference, with
