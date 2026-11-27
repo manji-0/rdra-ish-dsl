@@ -64,9 +64,15 @@ pub fn run() -> Result<()> {
             caps,
             guards,
             code,
+            deny_incomplete,
             bounds,
             scope,
         } => {
+            if deny_incomplete && code != Some(cli::CodeLevel::Run) {
+                anyhow::bail!(
+                    "--deny-incomplete needs --code=run: only a conformance run uses the traces"
+                );
+            }
             let Project {
                 program,
                 model,
@@ -168,7 +174,7 @@ pub fn run() -> Result<()> {
             println!("{}", lifecycle.bounds.ok());
             if let Some(level) = code {
                 let manifest = manifest.as_ref().expect("checked above");
-                if !code_check::run(&inputs, manifest, level)? {
+                if !code_check::run(&inputs, manifest, level, deny_incomplete)? {
                     std::process::exit(1);
                 }
             }

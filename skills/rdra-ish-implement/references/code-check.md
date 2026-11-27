@@ -16,6 +16,20 @@ on a model that fails it.
 A passing run prints one `ok:` line per file on stderr and ends with
 `OK: code: what the model requires, at --code=<level>` on stdout.
 
+At `run`, a coverage statement per table comes before that line: the bound (rows created per
+entity, the Int range), whether the BFS behind the traces completed or stopped at its cap,
+the moves run and left out, the refused calls tried, and the assumptions H1 to H5. A pass is
+**bounded conformance**, never equivalence: the safety rules the model verified over tracked
+columns hold for runs through the port, within that bound, if the service answers from the
+tracked columns alone (H1), every reachable call is tried (H2), seed and snapshot reach the
+real store (H3), every write goes through the port (H4), and the rules read tracked columns
+only (H5). Say so when you report a pass.
+
+A BFS stopped at its cap tries no refused call, so a service that runs a call the model
+refuses passes. `run` then prints `warning[CodeCoverageIncomplete]` and still exits 0; raise
+`conformance_states` in the table and run `codegen --code` again, or pass `--deny-incomplete`
+in CI to fail on it.
+
 ## Findings
 
 A build error maps back to a use case: by the probe line it is on, or by the method or
@@ -38,6 +52,7 @@ FAIL: code: 1 error(s) at --code=build
 | `CodeError_<UC>` | Another error on the use case's probe line or methods | Read the quoted compiler error |
 | `CodeUnmapped`, `CodeBuildFailed` | Errors that belong to no use case; a failed build with no error rdra-ish reads | Fix the build by hand |
 | `CodeConformance` | `run`: the store differs from the model after a call | Read the first difference: the traces line, and the rows only the model or only the store holds |
+| `CodeCoverageIncomplete` | `run`: the BFS behind the traces stopped at `conformance_states`; a warning, an error with `--deny-incomplete` | Raise `conformance_states`, then `codegen --code` |
 
 ## The obligation ledger
 
