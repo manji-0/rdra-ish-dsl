@@ -11,7 +11,7 @@
 //! per entity, with a `can_reach` added per value of each state model column, up to
 //! `MOST_STATES` states.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::num::NonZeroU8;
 
 use super::cone::load;
@@ -226,7 +226,7 @@ struct Tally {
 
 fn compare(name: &str, model: &SemanticModel, n: u8, tally: &mut Tally) {
     let bounds = Bounds::uniform(NonZeroU8::new(n).expect("n > 0"), 5);
-    let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
+    let ts = TransitionSystem::build(model, bounds.clone(), &Scope::ALL).ts;
     let Some(naive) = Naive::explore(&ts) else {
         return;
     };
@@ -270,9 +270,38 @@ fn compare(name: &str, model: &SemanticModel, n: u8, tally: &mut Tally) {
             ));
         }
     }
+    // What `check` prints: the deadlocks of each entity's own cone (`derive_states`). A cone
+    // that takes slots of an entity it leaves out counts that entity unbounded ("entities a
+    // check does not read are unbounded"), so a deadlock that only the bound on that entity
+    // causes is not one `check` reports: those entities are left out of this comparison.
+    let exact = |e: EntId| !ts.cone_frees_slots(&ts.target_cone(Target::Entity(e)));
+    let caps = Caps::new(usize::MAX, 1 << 20);
+    let printed: BTreeSet<(String, String, String)> =
+        (super::super::derive_states_built(model, &Scope::ALL, bounds, caps).0)
+            .diags
+            .iter()
+            .filter_map(|d| match &d.diag {
+                StateDiag::Deadlock {
+                    entity,
+                    column,
+                    value,
+                    ..
+                } => Some((entity.clone(), column.clone(), value.clone())),
+                _ => None,
+            })
+            .filter(|(entity, ..)| exact(ent(&ts, entity)))
+            .collect();
+    let mut stuck_here = BTreeSet::new();
     for e in ts.entity_ids() {
         let found = ts.state_model_findings(e, &graph);
         for ((var, value), stuck) in naive.deadlocks(&ts, e) {
+            if stuck && exact(e) {
+                stuck_here.insert((
+                    ts.entity(e).id.clone(),
+                    ts.var_name(var),
+                    ts.value_text(var, value),
+                ));
+            }
             tally.deadlocks += 1;
             tally.stuck += usize::from(stuck);
             let got = (found.deadlocks.iter())
@@ -293,6 +322,11 @@ fn compare(name: &str, model: &SemanticModel, n: u8, tally: &mut Tally) {
                 ));
             }
         }
+    }
+    if printed != stuck_here {
+        tally.wrong.push(format!(
+            "{name} at {n}: `check` prints the deadlocks {printed:?}, the oracle finds {stuck_here:?}"
+        ));
     }
 }
 
