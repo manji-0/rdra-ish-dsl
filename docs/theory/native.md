@@ -505,7 +505,7 @@ enabledness but not for *taken*: it says a fair instance is taken "by a step who
 `a` and whose binding extends `κ`", and D13 allows such a step with `s' = s`. The code and the
 TLA+ output read *taken* as requiring a change of state: `fair_steps` keeps only edges with
 `from ≠ to`, and the printer's `WF_vars` takes `⟨A⟩_vars` steps only. This document adopts
-that reading as assumption τ; D20 does not state it (open problem P56). A second reading
+that reading as assumption τ, which D20 states since #475 (open problem P56). A second reading
 goes with it: D14's behaviors are sequences of states without action labels, so the code
 counts a step `s → s'` as taking every fair instance that labels some edge from `s` to `s'`
 (`En`, `Tk` above; `lasso.rs::unfair_loop` likewise), not only the instance of the action a
@@ -610,7 +610,8 @@ a counterexample under `WfNext` is one under `Plain`) and the cone's own fairnes
 `fails_at` and `avoid` evaluate the goal on a slot whatever its existence, so a behavior
 that deletes the row meets `eventually(E.c == v)` when `v` is `c`'s base value, while
 `can_reach` keeps the slot present along the path. Read on the code here, this confirms
-open problem P6; TLC reads the printed formula the same way.
+open problem P6; TLC reads the printed formula the same way. #475 decided P6 as documented:
+language-reference.md and D21 now state the reading.
 
 ## Counterexamples: what is checked before printing
 
@@ -773,7 +774,7 @@ each of its variants a fair action whose enabledness reads its mark (event-order
   edge index (P55, read only, past 2^32 edges). P50 and P54 are not the only conceivable
   ones: this document did not audit every `as` cast in `explore/` and `build/`.
 - **Fairness wording.** N9's (⇒) direction, hence every liveness `ok`, rests on assumption
-  τ, which D20 does not state (P56).
+  τ, which D20 states since #475 (P56).
 - **Determinism of memory stops beside other runs** rests on the reruns of N4; one step is
   not shown for the CLI's passes (P53).
 - **Reproductions** used binaries built in other worktrees, and those of P54 were run by
