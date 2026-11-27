@@ -449,7 +449,7 @@ run can stop where TLC's run of the same module decides.
 either engine is no disagreement. The code keeps it for final verdicts, where `Decision`
 maps `Undecided` to `None`. It does not keep it per run:
 
-- **P21, confirmed and extended [read; not reproduced].** `verify/native.rs::Answer::outcome`
+- **P21, confirmed and extended [read; not reproduced].** *Fixed in #469.* `verify/native.rs::Answer::outcome`
   maps `Answer::Stopped` to `Outcome::Ok`, and every push into `Native::runs` but one uses
   it: the `Plain` and `Full` runs of `native_property_after` and its `WfNext` run on the
   unreduced cone, the `Plain` run of `always_up_to_symmetry`, and the `Plain` and `WfNext`
@@ -814,7 +814,7 @@ document or by the code at the pinned commit. [read]
 | P14 | Confirmed; extended: unreduced cones over 300,000 states are silently compared reduced only; oidc-auth's 13 `VERIFY_FALLBACK` cones meet TLC at 1 instance only, in `engine_equivalence` and in `verify --with-tlc` alike (issue #202 proposes a fix). |
 | P15 | Confirmed as stated (at least 30 asserted, 79 present). |
 | P16 | Confirmed; extended: release-gate item 2 recorded as held on a narrower check; the `--with-tlc` step did not move to `release.yml`; native-temporal-verification.md, "How we know it is right", still says CI runs every root with `--with-tlc`. |
-| P21 | Confirmed; extended to the unreduced `WfNext` runs and to a false `tool_error` under `--symmetry always` without TLC. The reduced `WfNext` run is not affected: it records no entry when undecided. |
+| P21 | **Fixed in #469.** Confirmed; extended to the unreduced `WfNext` runs and to a false `tool_error` under `--symmetry always` without TLC. The reduced `WfNext` run is not affected: it records no entry when undecided. |
 | P22 | New (prose): D17 omits that a step with `s' = s` is checked by neither engine. Both halves read; `Probe::Loop` is set in every build. |
 | P23 | New (evidence): the per-run comparison pairs the native `WfNext` run on the reduced cone (`decide_liveness_reduced`) with TLC's `_WF` module printed from the unreduced cone, so Proposition 0 does not apply on that path. |
 | P24 | New (evidence): for a `Transition` with a multi-target source, the printer's and the native effect application agree only under a builder invariant on effect order that nothing enforces as such; one shape was not found to be excluded, and on it the post-guards reconcile the two only when the `transitions` arms carry `.when` guards. |
