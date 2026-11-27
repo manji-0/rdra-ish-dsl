@@ -468,7 +468,7 @@ maps `Undecided` to `None`. It does not keep it per run:
   a wrong verdict. No corpus case reaches the path: the two cases with `native=not_decided`
   are `cap_memory_limit`, which skips TLC, and `cap_temporal_budget_zero`, whose budget
   stops only whole-model runs.
-- **P12, confirmed and restated [read].** When both engines report a counterexample on a
+- **P12, confirmed and restated [read].** *Fixed in #471.* When both engines report a counterexample on a
   safety cone, `compare.rs` builds TLC's violated set with `collect::<Result<_, _>>().ok()`;
   if any TLC trace fails to replay, the sets are not compared. Separately,
   `tlc.rs::model_traces` replays the first TLC trace of each violated check for display and
@@ -809,7 +809,7 @@ document or by the code at the pinned commit. [read]
 
 | # | What this document found |
 |---|---|
-| P12 | Confirmed; restated: the display path prints an unnamed `error:` line for the first non-replaying trace only, which does not change `result:` or the exit status. |
+| P12 | **Fixed in #471.** Confirmed; restated: the display path prints an unnamed `error:` line for the first non-replaying trace only, which does not change `result:` or the exit status. |
 | P13 | Confirmed as stated. |
 | P14 | Confirmed; extended: unreduced cones over 300,000 states are silently compared reduced only; oidc-auth's 13 `VERIFY_FALLBACK` cones meet TLC at 1 instance only, in `engine_equivalence` and in `verify --with-tlc` alike (issue #202 proposes a fix). |
 | P15 | Confirmed as stated (at least 30 asserted, 79 present). |
