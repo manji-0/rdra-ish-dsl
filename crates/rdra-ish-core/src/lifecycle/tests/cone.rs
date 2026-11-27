@@ -212,9 +212,15 @@ forbidden(Doc, status == final)
         }
     };
     let rule = Target::Invariant(0);
-    assert!(ts.cone_leaves_marks(&own(rule)), "the rule's cone runs Finalize unordered");
+    assert!(
+        ts.cone_leaves_marks(&own(rule)),
+        "the rule's cone runs Finalize unordered"
+    );
     let note = Target::Entity(EntId::at(1));
-    assert!(ts.cone_leaves_marks(&own(note)), "so would Note's, through Close's guard");
+    assert!(
+        ts.cone_leaves_marks(&own(note)),
+        "so would Note's, through Close's guard"
+    );
     assert!(!ts.cone_leaves_marks(&ts.target_cone(note)));
     assert_cones_exact("mark_left_out", &model, Bounds::STATES);
 }
