@@ -498,12 +498,15 @@ names, the verdict of each check, and the state-model summary. The
 generator already emits `leads_to` and `eventually` with and without `.fair`. It gains
 `always`, the forms of #166 and #167, `.along` on a two-entity property, a fair use case
 that creates, and a fair use case split over two APIs. A second mode, at 2 instances on
-models small enough for a whole-model TLC run, compares every native verdict with the
-whole model, so that steps 4 to 6 are tested where no fixture was written for them.
+models small enough for a whole-model TLC run, was to compare every native verdict with the
+whole model, so that steps 4 to 6 are tested where no fixture was written for them. That
+mode was not built: `reduction-diff.py` has the `--with-tlc` mode only.
 
-**Samples.** `scripts/verify-samples.sh` runs every root as its header says, and CI runs
-every root once more with `--with-tlc`, which fails on a check the engines decide
-differently.
+**Samples.** `scripts/verify-samples.sh` runs every root as its header says. CI runs TLC
+beside it on the five roots `scripts/tlc-roots.txt` lists and on every header line with flags,
+and fails on a check the engines decide differently; `engine_equivalence` compares the cones of
+every other root with TLC's state graph instead (`--with-tlc` on every root was the plan; the
+five roots are what runs).
 
 **When the engines disagree.** In a test, the case fails, the model is copied out, and
 `minimize` shrinks it, as `reduction-diff.py` does today. In a run with `--with-tlc`,
@@ -688,6 +691,30 @@ plan's proposal:
 
 Item 7 is a waiting time and the others are checks. The owner ends the wait when they
 judge it long enough; it has no fixed number of days.
+
+**What the gate checked for v3.0.0, and a proposal for the next release.** These are facts
+about the v3.0.0 gate as of 2026-11-28 and a proposal; the owner decides.
+
+- Item 2 was recorded as held on the `formal-verify` job, which runs `--with-tlc` on the five
+  roots of `scripts/tlc-roots.txt` and the header lines with flags, not on every root of
+  `samples.txt`. The other roots were compared through `engine_equivalence`, by state graph
+  at 1 and 2 instances, except the cones `VERIFY_FALLBACK` lists, which it compares at 1
+  instance only.
+- Item 3 cannot be run as written: `reduction-diff.py` has no whole-model mode. Its
+  `--with-tlc` mode runs on `main` on 45 fixed seeds, not on `0:2000`.
+- Item 7 is a judgement, not a check, and was waived for v3.0.0.
+- The `--with-tlc` step was to move to `release.yml` once the gate passed. It did not:
+  `release.yml` runs no `verify`, and the step still runs in `formal-verify` on every pull
+  request and on `main`.
+
+Proposal: restate item 2 as "`formal-verify` with `--with-tlc` on `scripts/tlc-roots.txt`
+and `engine_equivalence` on every other root report no disagreement", which is what runs.
+Restate item 3 as "`reduction-diff.py run --with-tlc` reports no disagreement on seeds
+`0:2000` at 2 and at 3 instances", dropping the whole-model mode, and run it by hand before
+the tag, as the mutation run is (about 2,000 seeds at the 45-seed rate of 7 to 9 minutes is
+5 to 7 hours a bound, so it needs shards). Keep item 7 as the owner's judgement, and record
+in the changelog entry the date the owner ended the wait, so that a waived item reads as
+waived.
 
 **CI.** Before the default changes, the `formal-verify` job runs the samples as today and
 once more under `RDRA_ISH_NATIVE`. After it, the step that checks every sample against its
