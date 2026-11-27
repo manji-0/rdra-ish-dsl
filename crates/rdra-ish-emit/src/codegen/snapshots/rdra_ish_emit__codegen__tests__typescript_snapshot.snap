@@ -819,3 +819,33 @@ export type PlaceUseCase = {
   readonly preparePlace: (parentCustomer: CustomerId, orderId: OrderId, orderMethod: PaymentMethod) => Promise<Result<PlaceResult, PlaceError>>;
   readonly commitPlace: (write: PlaceResult) => Promise<Result<void, PlaceError>>;
 };
+
+// ── The unimplemented port: extend it to build before every member exists ──
+
+/**
+ * What the members of `UnimplementedConformancePort` reject with: the service has not implemented the call
+ * yet. `conform` stops a trace at such a call and reports the calls by use case;
+ * `rdra-ish check --code=run` lists them, and `--deny-incomplete` fails on any.
+ */
+export class Unimplemented extends globalThis.Error {
+  constructor(member: string) {
+    super(`rdra-ish: not implemented: ${member}`);
+    this.name = "Unimplemented";
+  }
+}
+
+/**
+ * The `prepare*` and `commit*` members of every contract, each rejecting with `Unimplemented`.
+ * Extend it to build before every member exists: a member the service declares takes
+ * the place of this one, and `check --code=run` reports each call that still reaches it.
+ * An entry point's `run*` member is not here: the harness drives none, so the service
+ * writes each.
+ */
+export class UnimplementedConformancePort {
+  preparePay = (_order: OrderId, _orderPaidAt: DateTime): Promise<Result<PayOutcome, PayError>> => Promise.reject(new Unimplemented("preparePay"));
+  commitPay = (_write: PayOutcome): Promise<Result<void, PayError>> => Promise.reject(new Unimplemented("commitPay"));
+  prepareCancelOrder = (_order: OrderId): Promise<Result<CancelOrderOutcome, CancelOrderError>> => Promise.reject(new Unimplemented("prepareCancelOrder"));
+  commitCancelOrder = (_write: CancelOrderOutcome): Promise<Result<void, CancelOrderError>> => Promise.reject(new Unimplemented("commitCancelOrder"));
+  preparePlace = (_parentCustomer: CustomerId, _orderId: OrderId, _orderMethod: PaymentMethod): Promise<Result<PlaceResult, PlaceError>> => Promise.reject(new Unimplemented("preparePlace"));
+  commitPlace = (_write: PlaceResult): Promise<Result<void, PlaceError>> => Promise.reject(new Unimplemented("commitPlace"));
+}

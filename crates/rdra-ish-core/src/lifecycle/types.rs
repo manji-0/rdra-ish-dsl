@@ -731,6 +731,37 @@ pub enum Effect {
     Tick,
 }
 
+impl Action {
+    /// Each `(var, param)` slot that two of the action's effects write (`Assign`,
+    /// `Transition`, or `Choose`), once. The builder makes none: an action writes each slot
+    /// at most once (`ConflictingEffects`, `DoubleModeledEnum`, a `chooses` that a write
+    /// already covers is dropped, a counted trigger never counts its own raise). The native
+    /// step and the TLA+ printer resolve two writes of one slot differently: the native step
+    /// applies them in order and forks a choice after the rest, the printer keeps the first
+    /// choice and lets a later `Transition` with a choice replace an earlier one. So
+    /// `TransitionSystem::build` fails a model whose actions break the rule.
+    pub fn slots_written_twice(&self) -> Vec<(VarId, u8)> {
+        let mut seen: Vec<(VarId, u8)> = Vec::new();
+        let mut twice: Vec<(VarId, u8)> = Vec::new();
+        for eff in &self.effects {
+            let slot = match eff {
+                Effect::Assign { var, param, .. }
+                | Effect::Transition { var, param, .. }
+                | Effect::Choose { var, param, .. } => (*var, *param),
+                Effect::Create { .. } | Effect::Delete { .. } | Effect::Tick => continue,
+            };
+            if seen.contains(&slot) {
+                if !twice.contains(&slot) {
+                    twice.push(slot);
+                }
+            } else {
+                seen.push(slot);
+            }
+        }
+        twice
+    }
+}
+
 /// One `transitions` arm of an `Effect::Transition`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Arm {

@@ -839,7 +839,8 @@ Round 4 lets an S action read T vars that only rise. A var is *monotone* when th
 the cone system, taken as edges between the var's values, form no cycle
 (`TransitionSystem::monotone_vars` in `reduce/split.rs`): a create takes an existence from
 `absent` to `present` and a delete from `present` to `deleted`; a delete resets the entity's
-columns and owners, which makes those cyclic; an assignment or a choice in the action that
+columns, which makes those cyclic, and keeps its owners, which the rule counts cyclic all
+the same (conservative: it only gives up a reduction); an assignment or a choice in the action that
 creates the row starts from the base value, elsewhere from any value; a transition is its
 arms; the clock ticks up. The rule is checked on the cone, not declared, so a model that
 adds a backward arm loses the reduction and nothing else. A mark (0 to 1 under the latch,
@@ -931,9 +932,11 @@ touches, so an S divergence shows the same `change` on both sides. The exactness
 against the cone's run, now on a model whose S reads folded and raw inputs (the new test
 below), so what the argument says is also what the explorer does.
 
-Proven by argument: the bisimulation under conditions (1) and (2). Tested, not proven:
-that `quotient_blocks` computes a partition that satisfies (1) and (2) (the exactness
-test, the reduction-diff on random models, and the TLC agreement below), that the staged
+Proven by argument: the bisimulation under conditions (1) and (2). Checked on every run:
+that the partition `quotient_blocks` returns satisfies (1) and (2) and refines the labels
+(`partition/reference.rs::stable`, a certificate the reduction checks before it uses the
+partition, falling back to the sweeps' partition, stable when they stop, if it fails; P7).
+Tested, not proven: that the staged
 recanonicalization matches the lift (the exactness test), and that the TLA+ printing is the
 explorer's relation (`engine_equivalence`).
 

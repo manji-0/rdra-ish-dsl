@@ -1,7 +1,9 @@
 //! `verify --prove`'s bound escalation (#421): a state rule the proof left unproved and BFS
 //! passed at the run's instances is checked again on its own cone at one and two instances
-//! more per entity. A counterexample there is a real one, since BFS reaches only reachable
-//! states, so it is an error, printed with its trace and the instances it needed.
+//! more per entity. A counterexample there is an error, printed with its trace and the
+//! instances it needed, once it is a run of the system at those bounds: one its cone cannot
+//! vouch for (a use case run without its event, or more instances than the cone counts) is
+//! decided again on the rule's exact cone (`TransitionSystem::recheck`).
 //!
 //! Each run may hold `GROWTH` times the store the rule's cone held at the run's bounds, and
 //! never more than BFS's pool has left (owner decision, #421: managed by memory, with no state
@@ -18,7 +20,7 @@ use super::bfs::BfsCone;
 use super::jobs::{Job, JobKind};
 use crate::state_findings::{render_violation, Finding, TraceSource};
 use rdra_ish_core::lifecycle::{
-    has_errors, label_prefix, Bounds, Caps, Cone, RunEnd, Scope, StateDiag, Target,
+    has_errors, label_prefix, Bounds, Caps, Cone, Diag, Recheck, RunEnd, Scope, StateDiag, Target,
     TransitionSystem,
 };
 use rdra_ish_core::{ResolvedProgram, SemanticModel};
@@ -69,25 +71,42 @@ pub(super) fn escalate(
             // The cone of one rule stops once the rule fails (`explore_cone`); the caps stay
             // plain, since the sub-lifecycle a reduction runs keeps its whole graph.
             let run = system.explore_targets_reduced(&[Target::Invariant(i)], caps);
-            let n = cone_slots(system, &run.cone_of(Target::Invariant(i)).cone);
+            let cone = &run.cone_of(Target::Invariant(i)).cone;
+            let mut n = cone_slots(system, cone);
             let found = run.verdicts().iter().find(|d| {
                 matches!(&d.diag, StateDiag::ConstraintViolated { name, site, .. }
                     if *name == inv.name && *site == inv.site)
             });
-            if let Some(d) = found {
-                said.push(format!("counterexample at {n} instances"));
-                let text = render_violation(program, model, &d.diag, TraceSource::BfsAt(n))
-                    .expect("a violation renders");
-                eprintln!("{}", Finding::new(&d.diag, &[], text));
-                broken += 1;
-                break;
-            }
             let complete = run.cone_of(Target::Invariant(i)).run.complete;
-            if !complete {
-                said.push(format!("not decided at {n} instances"));
-                break;
+            // A counterexample the cone cannot vouch for, one that runs a use case without
+            // its event or creates more instances than the cone counts, is decided again on
+            // the rule's exact cone, which counts every slot: its counterexample is a run of
+            // the system at these bounds, and `n` the instances that system has.
+            let decided = match found {
+                Some(d) if !d.diag.trace().is_none_or(|t| t.vouched(true)) => {
+                    let exact = system.exact_target_cone(Target::Invariant(i), true);
+                    n = cone_slots(system, &exact);
+                    system.recheck(Target::Invariant(i), true, caps)
+                }
+                Some(d) => Recheck::Violated(Box::new(d.clone())),
+                None if complete => Recheck::Holds,
+                None => Recheck::Undecided(Vec::new()),
+            };
+            match decided {
+                Recheck::Violated(d) => {
+                    said.push(format!("counterexample at {n} instances"));
+                    let text = render_violation(program, model, &d.diag, TraceSource::BfsAt(n))
+                        .expect("a violation renders");
+                    eprintln!("{}", Finding::new(&d.diag, &[], text));
+                    broken += 1;
+                    break;
+                }
+                Recheck::Undecided(_) => {
+                    said.push(format!("not decided at {n} instances"));
+                    break;
+                }
+                Recheck::Holds => said.push(format!("ok at {n} instances")),
             }
-            said.push(format!("ok at {n} instances"));
         }
         if said.is_empty() {
             continue;
@@ -128,23 +147,30 @@ fn passed_at(
     let peak = match cones[at].as_ref()? {
         BfsCone::Ran {
             found,
+            rechecks,
             end: RunEnd::Complete,
             peak,
             ..
         } => {
+            // Passed: no violation of it, or only ones its exact cone showed spurious
+            // (`recheck_cones`).
+            let held = |d: &Diag| {
+                let name = d.diag.name(&[]);
+                (rechecks.iter()).any(|(n, r)| *n == name && matches!(r, Recheck::Holds))
+            };
             let violated = found.iter().any(|d| {
                 matches!(&d.diag, StateDiag::ConstraintViolated { name, site, .. }
                     if *name == inv.name && *site == inv.site)
+                    && !held(d)
             });
             (!violated).then_some(*peak)?
         }
         BfsCone::Covered(by) => match cones[*by].as_ref()? {
-            BfsCone::Ran {
-                found,
+            cone @ BfsCone::Ran {
                 end: RunEnd::Complete,
                 peak,
                 ..
-            } if found.is_empty() => *peak,
+            } if cone.passed() => *peak,
             _ => return None,
         },
         BfsCone::Ran { .. } | BfsCone::Proved { .. } => return None,

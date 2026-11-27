@@ -6,7 +6,7 @@ use super::tlc_tool::Tlc;
 use super::{WholeRun, WHOLE_MODEL_STATE_CAP};
 use crate::export::Modules;
 use crate::memory::TlcHeap;
-use crate::property_cone::{AfterPlain, ConeRun, Verdict, Why};
+use crate::property_cone::{AfterPlain, ConeRun, Verdict};
 use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_env::{current_user_heap, heap_from_states, tlc_env_sized, xmx, Heap, Jit};
 use crate::tlc_output::{out_of_memory, progress, summarize, Banner, Outcome, TlcRun};
@@ -305,11 +305,11 @@ fn run_job(
             };
         }
         // The native checker reads the unreduced cone, as this run does; a counterexample
-        // there may create instances past the bound when the cone frees slots, and the
-        // whole-model run decides.
+        // there may create instances past the bound when the cone frees slots, or run a use
+        // case without its event when it leaves a mark out, and the whole-model run decides.
         JobKind::Explored(e) => {
-            if let (Outcome::Counterexample, true) = (ran.decision.outcome(), e.frees_slots) {
-                let why = Why::FreesSlots.as_str().to_string();
+            if let (Outcome::Counterexample, Some(why)) = (ran.decision.outcome(), e.inexact) {
+                let why = why.as_str().to_string();
                 ran.notes.push(why.clone());
                 ran.decision = Decision::Undecided { why, stop: None };
             }

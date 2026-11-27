@@ -22,7 +22,8 @@ existence of each entity it creates or deletes. Closed means what it means for a
 cone: every action that writes a var of the cone reads only vars of the cone, with two
 exceptions. A copy guard (`sets(UC, Child.col == Parent.col)`) whose target column is
 outside the cone is dropped with the column, and a creation of an entity outside the cone
-is dropped with its slot (the `FreesSlots` case of the guide's
+is dropped with its slot (the case `TransitionSystem::cone_frees_slots` detects and
+`property_cone.rs` reports as `Why::FreesSlots`; see the guide's
 [Temporal properties on a cone](../formal-verification.md#temporal-properties-on-a-cone)). The cone decides the property's
 verdict under the property's own fairness because, for a fair action `A`, whether `A(p)` is
 enabled in the whole model is a function of the cone's vars, every step of `A(p)` that
@@ -47,8 +48,8 @@ that satisfies `Fair_P` therefore projects onto a behavior of the cone that sati
   extends to a behavior that satisfies both, and an `always` is violated by the prefix
   alone.
 
-The lift needs the cone to count the slots of every entity its actions create; the
-`FreesSlots` case is the one where it does not.
+The lift needs the cone to count the slots of every entity its actions create; a cone that
+frees slots (`cone_frees_slots`) is the one where it does not.
 
 What does not restrict to a cone is the `WF_vars(Next)` that `Spec` adds for any `eventually`
 or `leads_to`: a step outside the cone satisfies it, so the cone with `WF_vars(Next)` of its
@@ -109,7 +110,8 @@ The cone's vars split into a target side T and the rest S:
 - Since #112 an S action may read T vars that only rise, its *inputs*. A var is monotone
   when the cone's writes, taken as edges between its values, form no cycle
   (`TransitionSystem::monotone_vars`): a create and a delete move an existence forward, a
-  delete resets the entity's columns and owners (which makes them cyclic), an assignment or
+  delete resets the entity's columns (which makes them cyclic; the row keeps its owners, but
+  the rule counts them cyclic too, which only gives up a reduction), an assignment or
   a choice starts from the base value in the creating action and from any value elsewhere, a
   transition is its arms, and the clock ticks up. A raised mark, an existence, an owner key,
   and a status whose arms all point forward are monotone. The rule is checked on the cone,
@@ -183,7 +185,15 @@ bisimulation that preserves T and `obs`:
    rise into the same class, which `Rise` takes. A fold is sound by the same argument with
    the bit in place of the vars it folds, since the folded guard is a function of them and
    the key. The monotone rule is not used here: it bounds the input histories, which keeps
-   the extended system finite and small.
+   the extended system finite and small. The `_WF` run below does use it: its case 3 and
+   the shortcut for an `S` with no cycle (`s_cycles`) rest on `monotone_vars`.
+
+Points 2, 3 and 5 also use a step they do not state: every reachable state of C has an `S`
+part, inputs and bits that form a reachable state of the extended system, and a silent edge
+of the extended system from there is a step of C. The theory notes call it Lemma 6 of the
+cones theme; it is argued there, not proved, and folds rest on `Fold::holds` matching the
+folded guard, which only the `fold_holds` twin compares with a second implementation (P31 of
+[the theory's open problems](../theory/README.md#open-problems)).
 
 A divergence-blind stuttering bisimulation preserves every formula of CTL\* without the next
 operator, and the reduced cone's findings are such formulas over T and `obs`: a state is
@@ -282,7 +292,8 @@ bits that rise and fall freely. So a counterexample of the run on R is
 lifted to C and certified there before anything uses it. The prefix lifts with `lift`. A
 loop of R lifts by lifting the prefix and the loop repeated, until the concrete state at the
 end of a copy is one at the end of an earlier copy. That takes at most as many copies as the
-class has concrete states. A stop lifts to the concrete state `x` that the lifted prefix
+class has concrete states; `lift.rs::lift_cycle` gives up after `MAX_COPIES` (4,096)
+copies, and a loop it gives up on is dropped as a lasso that fails a check is. A stop lifts to the concrete state `x` that the lifted prefix
 ends at, followed by a walk from `x` of S steps of C that keep T and `obs` as they are at
 `x`, to a state with no move or around a cycle. The lifted lasso must replay through the
 moves of C, fail the property there, and pass the fairness check under `WF_vars(Next)`. A
