@@ -9,30 +9,26 @@ an independent sub-lifecycle, a run up to slot permutations, and a run at more i
 uses the notation of [semantics.md](./semantics.md) and does not redefine it.
 
 The code read is commit `5f59fae21e582b397b42c8b6594356ac5892420e` (origin/main,
-2026-11-28, the merge of #537). From `41882b4f` (the merge of #529) to the pin, the crates
-change by #531 and #536 (`explore/orbit/liveness.rs`: the symmetric lasso lift faults
-instead of panicking), #532 (`cli/src/verify/escalate.rs`, `cli/src/verify/refuted.rs`,
-`cli/src/state_findings.rs`, `cli/src/prove.rs`: counts per entity), #534
+2026-11-28, the merge of #537), the commit the [index](./README.md) and every theme document
+are pinned to. The document was first written against `fb6928c7` and has been brought up to
+date three times. After the final audit of docs/theory it was re-read at `c97c88ef` (the
+merge of #525): the code that the fixes of P1, P7, P10, P11, P20, P30, P31, P32 and P33
+changed (#477, #480, #488, #509, #512, #516, #518, #521, #522) was re-read there, and for every
+other function, type and constant this document names, its definition at `fb6928c7` was
+compared with the one at `c97c88ef` by a script that matched definitions by name; every
+difference that was not a checked narrowing cast (`id8`, `id32`, #513) was read, and a
+statement whose cited code changed otherwise was re-read or marked `unread@pin`. It was then
+pinned to `41882b4f` (the merge of #529): in between, the crates change only by #526, a test
+of `cli/tests/engine_equivalence.rs`, and #529, which turned the lifts' remaining invariants
+into faults; #529's changes to `reduce/lift.rs`, `explore/orbit.rs`,
+`explore/orbit/findings.rs`, `explore/properties.rs` and `explore/graph.rs` were read. From
+`41882b4f` to the pin, the crates change by #531 and #536 (`explore/orbit/liveness.rs`: the
+symmetric lasso lift faults instead of panicking), #532 (`cli/verify/escalate.rs`,
+`cli/verify/refuted.rs`, `cli/state_findings.rs`, `cli/prove.rs`: counts per entity), #534
 (`cli/tests/proof_equivalence.rs`), #535 (`cli/tests/engine_corpus.rs`'s reader) and #537
 (`explore/symmetry/g6.rs`, the test of (G6) outside guards); each was read at the pin, and the
 statements that cite them were rewritten ([Errata](#errata)). #533 changes only
-`.config/nextest.toml`. Before that re-pin the document described `41882b4f`. From `c97c88ef` (the merge of #525) to the pin, the crates
-change only by #526, a test of `cli/tests/engine_equivalence.rs`, and #529, which turned the
-lifts' remaining invariants into faults; #529's changes to `reduce/lift.rs`, `explore/orbit.rs`,
-`explore/orbit/findings.rs`, `explore/properties.rs` and `explore/graph.rs` were read at the
-pin. #511 in between changes only `Cargo.toml`, adding the `ci-checked` profile, and the CI
-workflow. The [index](./README.md) pins `307ee4e8`, whose crates are those of `c97c88ef`. The
-document was first written against `fb6928c7` and was
-brought up to date with `c97c88ef` after the final audit of docs/theory: the code that the
-fixes of P1, P7, P10, P11, P20, P30, P31, P32 and P33 changed (#477, #480, #488, #509, #512,
-#516, #518, #521, #522) was re-read at `c97c88ef`, and for every other function, type and
-constant this document names, its definition at `fb6928c7` was compared with the one at
-`c97c88ef`. A definition that did not change, or changed only by a checked narrowing cast
-(`id8`, `id32`, #513), reads as it did; one that changed otherwise was re-read, or the
-statement that cites it carries `unread@pin`. The comparison matched definitions by name with a
-script and read every difference that was not a narrowing cast. `#525`, the
-last merge before the pin, changes only `cli/src/prove.rs`, `cli/src/cli.rs` and prose, none
-of which this document cites. How the document changed after it was first written is in
+`.config/nextest.toml`. How the document changed after it was first written is in
 [Errata](#errata). `unread@pin` marks a statement whose cited code was not read at the
 pinned commit ([claims inventory](./claims.md#how-to-read-a-row)). Paths are relative to
 `crates/rdra-ish-core/src/lifecycle/` unless they start with `cli/`
@@ -1106,7 +1102,7 @@ name and site), and explores the rule's cone reduced (`explore_targets_reduced`)
 cone cannot vouch for with `slots` (a free trigger, or more rows of an entity than the cone counts) is
 decided again by `recheck_on(…, true, …)`, the refinement loop of [Safety cones](#safety-cones). It
 prints `ok at n`, `counterexample at n`, or `not decided at n`, where `n = cone_instances` is
-`state_findings.rs::Instances::of(restrict_to(cone))`, the slot count of each entity of the cone that
+`cli/state_findings.rs::Instances::of(restrict_to(cone))`, the slot count of each entity of the cone that
 decided (the rule's cone, or the last cone of the recheck), printed as one number when every entity
 has it and else per entity, as `Loan=4 Member=3` (#532).
 

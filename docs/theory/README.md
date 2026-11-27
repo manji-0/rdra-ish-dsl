@@ -95,8 +95,9 @@ three documents arrive at them from their own side.
 2. **No run-time check of an `ok` or a `proved` as such.** Every printed counterexample
    replays through the step relation of the system it is about before it prints, and one that
    does not is a `tool_error` (P20, #518 and #522; [semantics.md, D23](./semantics.md#d23)).
-   Some invariant checks inside the lift can still panic instead (P20, open part), which
-   stops the run but prints no wrong trace. An `ok` and a `proved` have no such check.
+   Since #529 and #531 the lifts' own look-ups are faults too; the internal invariants left as
+   `expect`s and `panic!`s (P20's row lists them, none on the path being lifted) stop the run
+   but print no wrong trace. An `ok` and a `proved` have no such check.
    Several known causes of a wrong one are now refused or checked at run time in every
    build: a column domain past a byte and a state past the packed width are build errors
    (`DomainTooLarge`, #470; `StateTooWide`, #510), an edge number past `u32` panics
@@ -131,7 +132,7 @@ so, and under `--entity` one the model breaks), and P32 (an entity cone that hid
 P51 and P56 were readings of D17 and D20 that did not license the `ok` both engines printed;
 the definitions were aligned with the code (#475, #494). The guarantee items P24, P34, P63,
 and P65 bore on a verdict only through the builder, the reduction, or the SQL export. Of all
-these, P20 is partly fixed (internal invariants of the lift can panic), P3 keeps an evidence
+these, P3 keeps an evidence
 gap (`Enc::compare`), and P63 keeps its referential actions unexecuted, the owner's call;
 the rest are fixed or closed. This list is what has been found, not a bound on what
 exists.
@@ -215,7 +216,8 @@ reproduced; every other item was a reading of the code.
 - **2026-11-28, re-pin to `5f59fae2`** (the merge of #537), with every theme document. P14
   counts 25 `VERIFY_FALLBACK` cones (#526), and its claim that oidc-auth's 2-instance header
   selects none of them was read (`select.rs`) and run. P11 names the corpus reader of #535.
-  P20's status names #531, the symmetric lasso lift its body already described.
+  P20's status names #531, the symmetric lasso lift its body already described, and the
+  Conclusion no longer calls P20 partly fixed.
   P26 and P43 lose their `unread@pin`: `interp.rs`, `build/sets.rs`,
   `build/transitions.rs::arm_guards` and `Enc::one_of` were read.
 - **2026-11-28, P20 closed (#529).** The row said the lift's internal invariants panicked and a lifted reduced `always` was not re-evaluated; #529 turned each look-up into a `ReplayError` fault, added the release checks in `decide_property`, and lists the three `expect`s left as unchecked internal invariants.

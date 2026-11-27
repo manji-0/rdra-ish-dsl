@@ -897,7 +897,8 @@ document. The open problems this document confirmed, extended, or added, in the
 
 [read] The document was first written against `fb6928c7` (origin/main, 2026-11-28), later
 than the index's first pin `b83b9544`; between those two no path it cites changed in a part
-it relies on. It now describes `fec53d6a`. `git diff --stat fb6928c7 fec53d6a` over the cited
+it relies on. It was then pinned to `fec53d6a`, and it now describes `5f59fae2` (the last
+paragraph of this appendix). `git diff --stat fb6928c7 fec53d6a` over the cited
 paths shows changes in the printer (`emit/tla/mod.rs`, `module.rs`, `names.rs`), the TLC
 readers (`tlc_output.rs`), the comparison and the runs (`verify/compare.rs`, `native.rs`,
 `jobs.rs`, `tlc.rs`, `bfs.rs`, `end.rs`, `refuted.rs`, `escalate.rs`, `property_cone.rs`),

@@ -11,29 +11,27 @@ build returns; that it is `T_β(M)` (D13) is claim [I1](./claims.md#0-the-build)
 of any proof here.
 
 It describes the code at commit `5f59fae21e582b397b42c8b6594356ac5892420e` (origin/main,
-2026-11-28, the merge of #537). From `41882b4f` (the merge of #529) to the pin, the crates
-change by #531 and #536 (`explore/orbit/liveness.rs`: the symmetric lasso lift faults
-instead of panicking), which were read at the pin; by #532 (`cli/src/prove.rs`,
+2026-11-28, the merge of #537), the commit the [index](./README.md) and every theme document
+are pinned to. The document was first written against `fb6928c7` and has been brought up to
+date three times. After the final audit of docs/theory it was re-read at `c97c88ef` (the
+merge of #525): the code that the fixes of P19, P20, P50, P51, P52, P53, P54 and P55 changed
+(#470, #478, #479, #484, #487, #494, #510, #518, #522) was re-read there, and for every other
+function, type and constant this document names, its definition at `fb6928c7` was compared
+with the one at `c97c88ef` by a script that matched definitions by name; every difference
+that was not a checked narrowing cast (`id8`, `id32`, #513) was read, and a statement whose
+cited code changed otherwise was re-read or marked `unread@pin`. It was then pinned to
+`41882b4f` (the merge of #529): in between, the crates change by #526, a test of
+`cli/tests/engine_equivalence.rs`; #529, which turned the lifts' remaining invariants into
+faults, and whose changes to `reduce/lift.rs`, `explore/orbit.rs`,
+`explore/orbit/findings.rs`, `explore/properties.rs` and `explore/graph.rs` were read; and
+#511, which changes only `Cargo.toml`, adding the `ci-checked` profile (Threats to validity,
+"Fixed-width integers"), and the CI workflow. From `41882b4f` to the pin, the crates change
+by #531 and #536 (`explore/orbit/liveness.rs`: the symmetric lasso lift faults instead of
+panicking), which were read at the pin; by #532 (`cli/src/prove.rs`,
 `cli/src/state_findings.rs`, `cli/src/verify/escalate.rs`, `cli/src/verify/refuted.rs`),
 #534 (`cli/tests/proof_equivalence.rs`), #535 (`cli/tests/engine_corpus.rs`) and #537
 (`explore/symmetry/g6.rs`, a test, and its `mod` line), none of which this document cites;
-and #533 changes only `.config/nextest.toml`. Before that re-pin it described `41882b4f`. From `c97c88ef` (the merge of #525) to the pin, the crates
-change only by #526, a test of `cli/tests/engine_equivalence.rs`, and #529, which turned the
-lifts' remaining invariants into faults; #529's changes to `reduce/lift.rs`,
-`explore/orbit.rs`, `explore/orbit/findings.rs`, `explore/properties.rs` and
-`explore/graph.rs` were read at the pin. #511 in between changes only `Cargo.toml`, adding the
-`ci-checked` profile (Threats to validity, "Fixed-width integers"), and the CI workflow. The
-[index](./README.md) pins `307ee4e8`, whose crates are those of `c97c88ef`. The document was
-first written against `fb6928c7` and was
-brought up to date with `c97c88ef` after the final audit of docs/theory: the code that the
-fixes of P19, P20, P50, P51, P52, P53, P54 and P55 changed (#470, #478, #479, #484, #487,
-#494, #510, #518, #522) was re-read at `c97c88ef`, and for every other function, type and
-constant this document names, its definition at `fb6928c7` was compared with the one at
-`c97c88ef`, by a script that matched definitions by name, and every difference that was not a
-narrowing cast was read. A definition that did not change, or changed only by a checked
-narrowing cast (`id8`, `id32`, #513), reads as it did; one that changed otherwise was re-read
-or the statement that cites it carries `unread@pin`. `#525`, the last merge before the pin, changes only `cli/src/prove.rs`,
-`cli/src/cli.rs` and prose, none of which this document cites. Code is cited as in
+and #533 changes only `.config/nextest.toml`. Code is cited as in
 [semantics.md](./semantics.md): paths are relative to `crates/rdra-ish-core/src/lifecycle/`
 unless they start with `cli/` (`crates/rdra-ish-cli/`) or name the crate root (`core-root/`,
 for `crates/rdra-ish-core/src/`).
