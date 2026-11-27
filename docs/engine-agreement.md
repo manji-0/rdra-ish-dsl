@@ -134,7 +134,9 @@ free text that explains the trap.
   `z3=`, and `z3=proved` also needs `bfs=`.
 - `bfs=` lists the native verdicts at 1, 2, and 3 instances per entity, and at 4 with a fourth
   entry. The second entry equals `native=`. The harness runs 1 and 3 instances only for a case
-  with a `bfs=`, and 4 only for a four-entry one.
+  with a `bfs=`, and 4 only for a four-entry one, with TLC beside BFS at each: rules 1 to 3
+  hold there too, so TLC's verdict at that bound equals the `bfs=` entry wherever both
+  engines decide.
 - `<Check>` is the name the run prints: `error[<Check>]`, a `Cone_` line's bracket list, a
   `property <Check> (BFS on its cone)` line, a `proved:` line, or a `Deadlock_*` or `Witness_*`
   finding. Every check the run names needs an `expect` line, and every `expect` line needs a
@@ -344,7 +346,14 @@ A cone whose BFS, reduced as `verify` explores it, passes 300,000 states at 2 in
 compared at 1 instance only. `VERIFY_FALLBACK` lists these cones and the test fails when the
 list changes; [Known verification gaps](./formal-verification.md#known-verification-gaps) gives
 each one's size. `scripts/tlc-roots.txt` names the sample roots with such a cone, and CI's
-`formal-verify` job runs TLC on them at their header bounds instead (#305).
+`formal-verify` job runs TLC on them at their header bounds instead (#305). oidc-auth's header
+runs 1 instance, so its 13 cones on that list meet TLC at 2 instances nowhere: its browser-flow
+cone passes 2,000,000 states there, a TLC run of over an hour.
+
+A cone whose unreduced BFS passes 300,000 states at 2 instances while its reduced one fits is
+compared reduced only: TLC reads the quotient tables BFS computed, so on that cone the
+comparison checks the reduced system, not the reduction. `VERIFY_REDUCED_ONLY` lists these
+cones, and the test fails when the list changes.
 `a_property_cone_decides_what_the_whole_model_decides` compares each property's cone verdict
 with the whole model's, and the native verdict of each run with TLC's. CI runs the test in
 release with `RDRA_REQUIRE_TLC=1`.
