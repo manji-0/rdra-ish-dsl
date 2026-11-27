@@ -198,6 +198,7 @@ mod tests {
             checked: false,
             text: format!("{name} text"),
             site: Some("m.rdra:3:1".to_string()),
+            subject: Default::default(),
         }
     }
 
