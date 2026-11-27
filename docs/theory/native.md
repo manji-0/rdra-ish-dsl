@@ -155,7 +155,7 @@ seed is fixed and no table is iterated into the output (`fasthash.rs` states the
 value does not fit its bits, in release builds too; that check could not catch P54, whose
 values were already wrapped to a byte before they reached the store.
 
-**Finding P50 (guarantee, reproduced; fixed in #479).** *As read at `fb6928c7`, before the
+**Finding P50 (guarantee, reproduced; fixed in #479 and #510).** *As read at `fb6928c7`, before the
 fix:* `packing.rs::offsets` stored each cell's bit offset as a `u16` and saturated at
 `u16::MAX`. `pack_into` and `unpack_into` count offsets as they go and were unaffected, but
 `Packing::patch` and `Packing::cell` used the saturated offsets, so every cell of non-zero
@@ -197,16 +197,19 @@ sample comes near it, but D1 admits it and nothing rejected it. P54 below needed
 
 *Fixed in #479 and #510.* `Packing` keeps offsets as `u32`, summed with a checked add that
 panics past `u32::MAX` bits; below the old limit the offsets are the same numbers, so no
-narrower state changes. Both reproductions give the verdicts of 8 instances at 255
-(`cli/tests/verify_cli.rs::a_state_past_bit_65535_keeps_its_verdicts`, on the fixtures
-`cli/tests/fixtures/wide_state/`), and
+narrower state changes. At 255 instances both reproductions now give the verdicts they gave
+at 8: `cli/tests/verify_cli.rs::a_state_past_bit_65535_keeps_its_verdicts` (main only), on
+the fixtures `cli/tests/fixtures/wide_state/`, runs each at 255 only and asserts the verdict
+written in it (`counterexample` for two creates, `ok` for one), not a run at 8; and
 `packing.rs::tests::a_state_past_bit_65535_packs_patches_and_reads_back` checks the patch,
 the unpack and `Packing::cell` on either side of the first cell past bit 65,535. #479 also
 stops a run, as at the state cap, before it numbers a state `u32::MAX`, the marker of an
 unresolved move and of an unnumbered component (`Bfs::admit_packed`, `MOST_STATES`). #510
 stops the build first past `u32::MAX` bits: `StateTooWide`, an error of the same family as
 `DomainTooLarge`, so the checked add is never reached from a model
-(`build/mod.rs::width_tests::a_state_past_the_packed_width_is_a_build_error`).
+(`build/mod.rs::width_tests::a_state_past_the_packed_width_is_a_build_error`, which checks
+the threshold function `too_wide` one bit past a width and at `MOST_PACKED_BITS`, and that
+the P50 model, past bit 65,535, builds without `StateTooWide`).
 
 **Finding P54 (guarantee, reproduced by the review; fixed in #470).** *As read at `fb6928c7`,
 before the fix:* a value outside a byte was truncated when the build encoded it, so the built
@@ -281,7 +284,7 @@ each from its length and capacity, plus the table. It is a function of the
 sequence of admissions and edges alone (`explore/store.rs` models it as `store_bytes`), so
 for a fixed sequence it is the same on every machine and thread count. Kani proves
 `store_bytes` never overflows, only grows, and is at most the model before #296; the unit
-test `store_bytes_models_the_store_a_run_counts` holds the model above what a run counts.
+test `store_bytes_models_the_store_a_run_counts` (main only) holds the model above what a run counts.
 The charge covers the state store only: the passes over a finished graph (liveness,
 `can_reach`, deadlocks, the partition) and the workers' scratch are outside it, as
 formal-verification.md says.
@@ -388,10 +391,10 @@ Hence `Σ_j` agrees for all `j`, and with it everything the readers below comput
   point is then a function of the run alone (N4), the same as at one job, where every run of
   a pass already had the pool to itself; a run that met no limit beside others meets none
   alone, with at least as much room. Evidence:
-  `cli/tests/memory_cli.rs::safety_and_property_passes_stop_where_they_stop_one_at_a_time`
+  `cli/tests/memory_cli.rs::safety_and_property_passes_stop_where_they_stop_one_at_a_time` (main only)
   (1, 3, 8 jobs at 7, 8, 10 MiB; fails on main before #484),
-  `cli/tests/memory_cli.rs::cones_side_by_side_stop_where_they_stop_one_at_a_time` and
-  `::a_stopped_entity_cone_leaves_its_room_on_any_number_of_threads`.
+  `cli/tests/memory_cli.rs::cones_side_by_side_stop_where_they_stop_one_at_a_time` (main only) and
+  `::a_stopped_entity_cone_leaves_its_room_on_any_number_of_threads` (main only).
 - *The table under probing* (step 3) holds only on the probe paths, which release builds
   do not take.
 
@@ -406,7 +409,7 @@ Hence `Σ_j` agrees for all `j`, and with it everything the readers below comput
 | `Twin::Recent` | the reader's `Recent` lookup | no | `shadow` runs under `RDRA_ISH_FORCE_PROBES` |
 | `Twin::SeenGrowth` | the growth of `Seen`'s index, after every insert: the shared table's (`table::Writer`) under probing, the plain one's otherwise | yes | every `shadow` run (P18, fixed in #473) |
 
-The unit test `explore/tests.rs::a_run_is_the_same_on_any_number_of_threads` compares 1, 2,
+The unit test `explore/tests.rs::a_run_is_the_same_on_any_number_of_threads` (main only) compares 1, 2,
 3, 4, 7 and 17 workers with `R_0`, on a complete and a capped run, with probing on at 4
 and 17 workers (`probes_at`), not under `shadow`. The loom model, the test-only jitter and a
 Miri CI job named in native-bfs-parallel.md, "Holding it correct", do not exist; the table
@@ -513,7 +516,8 @@ undecided; `reach_failure` and `TransitionSystem::verdict` also `assert!` comple
 every build (they only `debug_assert!`ed it before P19 was fixed in #478). TLC cannot state
 `can_reach`; besides the unit tests, a naive oracle (`core/tests/oracle.rs`) with its own
 exploration and a forward search from every state agrees with the checker on the corpus
-and the samples (row N8).
+and the samples (row N8; that comparison,
+`can_reach_and_deadlocks_agree_with_a_naive_oracle`, runs on main only).
 
 ## Deadlocks
 
@@ -536,7 +540,7 @@ marked has no such path, which is the definition. The reported state is the mini
 `can_leave` and the trace read packed cells through `Packing::cell`, so P50 applied here
 until #479.
 TLC's deadlock check is one-sided (row T6); the naive oracle of `core/tests/oracle.rs`
-checks this one against a forward search on its own exploration (P19, fixed in #478).
+checks this one against a forward search on its own exploration, on main only (P19, fixed in #478).
 
 ## Vacuity
 
@@ -1020,7 +1024,7 @@ With `sets(Touch, Order.status == closed)` it printed `counterexample (7 states)
 the vacuity check reports `AfterAssert_Touch_0` as vacuous, the step running only as one that
 changes nothing, which the test asserts at one and two instances with the control.
 
-**P50** (in the repository since #479: `crates/rdra-ish-cli/tests/fixtures/wide_state/{two_creates,one_create}.rdra`, run by `cli/tests/verify_cli.rs::a_state_past_bit_65535_keeps_its_verdicts`, which asserts the 8-instance verdicts at 255). One entity `Row` with `id: Int @pk` and 34 columns `c0` to `c33`, each
+**P50** (in the repository since #479: `crates/rdra-ish-cli/tests/fixtures/wide_state/{two_creates,one_create}.rdra`, run by `cli/tests/verify_cli.rs::a_state_past_bit_65535_keeps_its_verdicts` (main only), which asserts at 255 the verdicts the two models gave at 8: `counterexample` and `ok`). One entity `Row` with `id: Int @pk` and 34 columns `c0` to `c33`, each
 `Int @default(0)`; every flag below is given to `verify`.
 
 1. One use case `Create` that creates a `Row` and `sets` every column to 1, and
@@ -1097,3 +1101,8 @@ Changes to statements of this document after it was first written, newest last.
   gives a `PropertyVerdict::Fault`. The Counterexamples list adds the release panics of
   `explore/liveness.rs` and the deadlock lift that the index's P20 row now lists, and no
   longer says none is on the path being lifted.
+- **2026-11-28, third audit at `5f59fae2`.** Finding P50's heading names #510 beside #479,
+  as its fix paragraph did. That paragraph said both reproductions give the 8-instance
+  verdicts at 255; the test runs them at 255 only, against the verdicts written into it,
+  and the paragraph says what the build test checks. The tests of the `pr` exclusion of
+  `.config/nextest.toml`, among them the oracle's comparison, are marked main only.
