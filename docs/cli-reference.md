@@ -316,7 +316,8 @@ coverage of [code.rust]: bounded conformance to the model, not equivalence
 ```
 
 When there is something to list, the `moves` line ends `; <n> left out (a tick, or a use case
-with no function)`, and a `not compared:` line after the refused calls names what the harness
+with no function: <what> <n>, ...)`, counted by use case (`a tick` for the clock), and a
+`not compared:` line after the refused calls names what the harness
 does not compare (a counted trigger, a proposition, the clock).
 A passing run means bounded conformance: under H1 to H5, the safety rules the model verified
 over tracked columns hold for runs driven through the port, with at most that many rows

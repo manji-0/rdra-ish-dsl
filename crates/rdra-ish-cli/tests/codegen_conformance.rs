@@ -177,3 +177,31 @@ fn typescript_harness_tells_faults_apart() {
             .expect("runs the service")
     });
 }
+
+/// A use case that chooses the target of a lifecycle column other than the state column has
+/// one function per target; the traces run every move of each, with the target the move
+/// took (#439).
+#[test]
+fn every_target_of_a_second_lifecycle_column_is_run() {
+    let dir = scratch("choice");
+    let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .args(["codegen", "--lang", "rust", "-o"])
+        .arg(dir.join("domain.rs"))
+        .arg("--conformance")
+        .arg(dir.join("traces.txt"))
+        .arg(fixture().join("choice_column.rdra"))
+        .output()
+        .expect("runs rdra-ish");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    assert!(stderr.contains("  moves: 8 of 8 run\n"), "{stderr}");
+    let traces = std::fs::read_to_string(dir.join("traces.txt")).unwrap();
+    for target in ["at_fault", "no_fault"] {
+        assert!(
+            traces
+                .lines()
+                .any(|l| l.starts_with("C ") && l.ends_with(&format!(" Decide 1 {target}"))),
+            "{traces}"
+        );
+    }
+}

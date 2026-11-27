@@ -262,6 +262,16 @@
 
 ### Fixed
 
+- The conformance traces (`codegen --conformance`, `codegen --code`) no longer leave out the
+  moves of a use case that chooses the target of a lifecycle column other than the state
+  column, such as `transitions(Decide, Case.liability, undetermined -> at_fault)` beside
+  `undetermined -> no_fault` (#439). They were counted as `left out (a tick, or a use case
+  with no function)` although the code has a function for each target, so the traces never
+  ran them, nor the states and rows past them; on insurance-claim-ops 15 of 59 actions never
+  ran. Such a move now runs with the target it took. The `moves` line names what it leaves
+  out by use case (`a tick` for the clock), and a move whose use case has functions but none
+  that makes it fails `codegen` instead of being left out. The traces of such a model change,
+  so `check --code=fresh` reports them stale until `codegen --code` writes them again.
 - `verify --prove` no longer panics (`a run that stops once every check fails keeps no edge
   list`) when it checks an unproved rule at more instances and the rule's cone splits off a
   sub-lifecycle (#421). The escalation now explores the cone with the caps BFS uses at the
