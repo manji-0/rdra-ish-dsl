@@ -630,6 +630,7 @@ present, else `0`; warnings do not fail.
 | `naming-column` | warning | A column that is not snake_case. |
 | `naming-dto-field` | warning | A DTO field that is not snake_case. |
 | `naming-id` | warning | An element id that is not UpperCamelCase. |
+| `negated-order-admits-null` | warning | A `not` over `<`, `<=`, `>`, or `>=` with a `@null` column, in a `@check` or a `property`, whose expression does not name the column's null. It holds while the column is null, unlike the ordering it reads as ([Null](./language-reference.md#null)). |
 | `nfr-unscoped` | warning | An `nfr` that `applies_to` nothing. |
 | `orphan-node` | warning | An element no predicate connects; the `rdra-*` rules replace it for their kinds. |
 | `query-index-missing` | warning | A lookup no index serves; skipped below 10,000 `rows`. See [Query shapes](./language-reference.md#query-shapes). |

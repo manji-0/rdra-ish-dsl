@@ -4,6 +4,7 @@ mod columns;
 mod conditions;
 mod elements;
 mod naming;
+mod nulls;
 mod score;
 mod structure;
 
@@ -25,6 +26,7 @@ use self::elements::{
     lint_goals, lint_rule_labels, lint_screen_transitions, lint_unscoped_multi_rules,
 };
 use self::naming::{is_upper_camelish_id, lint_node_refs};
+use self::nulls::lint_negated_null_orders;
 use self::score::{coverage_score_issue, relation_degree, stage_readiness_issue};
 use self::structure::{lint_flow_cycles, lint_structural_coverage};
 
@@ -105,6 +107,14 @@ pub fn lint_review_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
         .filter(|issue| issue.severity != LintSeverity::Info)
         .map(|issue| issue.to_diagnostic())
         .collect()
+}
+
+/// The lint warnings `check` prints beside its own findings: each marks a rule that `check`
+/// and `verify` read otherwise than it is written. `lint` and the editor show them too.
+pub fn check_lint_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
+    let mut issues = Vec::new();
+    lint_negated_null_orders(model, &mut issues);
+    issues.iter().map(LintIssue::to_diagnostic).collect()
 }
 
 const STAGED_RULES: &[(&str, StageId)] = &[("buc-empty", StageId::Skeleton)];
@@ -271,6 +281,7 @@ fn collect_findings(model: &SemanticModel) -> Vec<LintIssue> {
     lint_condition_anchors(model, &mut findings);
     lint_bodiless_guards(model, &mut findings);
     lint_int_comparisons(model, &mut findings);
+    lint_negated_null_orders(model, &mut findings);
     lint_unguarded_triggered(model, &mut findings);
     lint_rule_labels(model, &mut findings);
     lint_unscoped_multi_rules(model, &mut findings);
@@ -309,3 +320,6 @@ mod rule_label_tests;
 
 #[cfg(test)]
 mod range_and_guard_tests;
+
+#[cfg(test)]
+mod null_tests;

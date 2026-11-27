@@ -222,6 +222,7 @@ violation_message(text, pattern_desc)
         | StateDiag::TriggerNeverRuns { .. }
         | StateDiag::UncountedTrigger { .. }
         | StateDiag::DeleteLeavesChildren { .. }
+        | StateDiag::DeleteLeavesChildKeys { .. }
         | StateDiag::GuardReadsLaterStep { .. }
         | StateDiag::DrivenComparisonColumnWritten { .. }
         | StateDiag::DefaultOnVariationIgnored { .. } => d.to_string(),

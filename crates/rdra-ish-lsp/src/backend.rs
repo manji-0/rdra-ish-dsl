@@ -874,6 +874,13 @@ fn to_lsp_diagnostic(diag: &Diagnostic, source: &str) -> tower_lsp::lsp_types::D
             DiagnosticSeverity::ERROR
         }),
         source: Some("rdra-ish".to_string()),
+        // A lint finding carries its rule id, as a lifecycle finding carries its name.
+        code: match &diag.error {
+            rdra_ish_core::RdraError::LintFinding { rule, .. } => {
+                Some(NumberOrString::String(rule.to_string()))
+            }
+            _ => None,
+        },
         message: diag.error.to_string(),
         ..Default::default()
     }

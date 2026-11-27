@@ -145,6 +145,22 @@ pub fn run() -> Result<()> {
                 });
             }
 
+            for diag in rdra_ish_core::check_lint_diagnostics(&model) {
+                if let rdra_ish_core::RdraError::LintFinding { rule, .. } = &diag.error {
+                    let message = format!("[{rule}] {}", diag.error);
+                    eprintln!(
+                        "{}",
+                        rdra_ish_core::format_diagnostic_message(
+                            Some(&program),
+                            true,
+                            diag.location.as_ref(),
+                            &message,
+                        )
+                    );
+                    tally.count(Severity::Warning);
+                }
+            }
+
             for finding in lifecycle.findings {
                 tally.count(finding.severity);
                 eprintln!("{finding}");

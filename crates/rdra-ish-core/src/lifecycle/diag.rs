@@ -8,7 +8,7 @@ use super::targets::UndecidedWhy;
 use super::trace::{Inst, Trace};
 use super::types::{ActionOrigin, GuardWhy, InvText, LtlKind, ModelRef, ParamRole, Site};
 use crate::memory::MemorySize;
-use crate::model::EntityKey;
+use crate::model::{EntityKey, RefAction};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Severity {
@@ -519,6 +519,16 @@ pub enum StateDiag {
         child: String,
         site: Site,
     },
+    /// A use case deletes the parent of a key with `.on_delete(set_null)` or
+    /// `.on_delete(set_default)`, which the lifecycle does not run: the children keep naming
+    /// the deleted row, where the database would clear or reset their key.
+    DeleteLeavesChildKeys {
+        usecase: String,
+        parent: String,
+        child: String,
+        action: RefAction,
+        site: Site,
+    },
     /// A `holds` body applied to a split use case, which its first transaction group carries,
     /// compares an entity that only a later group creates, so it reads rows that are not the
     /// run's.
@@ -712,6 +722,9 @@ impl StateDiag {
             StateDiag::DeleteLeavesChildren { usecase, child, .. } => {
                 with("DeleteLeavesChildren", &[usecase, child])
             }
+            StateDiag::DeleteLeavesChildKeys { usecase, child, .. } => {
+                with("DeleteLeavesChildKeys", &[usecase, child])
+            }
             StateDiag::GuardReadsLaterStep {
                 condition, usecase, ..
             } => with("GuardReadsLaterStep", &[condition, usecase]),
@@ -801,6 +814,7 @@ impl StateDiag {
             | StateDiag::UnjoinedTrigger { site, .. }
             | StateDiag::UncountedTrigger { site, .. }
             | StateDiag::DeleteLeavesChildren { site, .. }
+            | StateDiag::DeleteLeavesChildKeys { site, .. }
             | StateDiag::GuardReadsLaterStep { site, .. }
             | StateDiag::DefaultOnVariationIgnored { site, .. } => {
                 Place::Sites(std::slice::from_ref(site))
@@ -854,7 +868,6 @@ impl StateDiag {
             }
             StateDiag::NoCreationPath
             | StateDiag::MinCardNeedsCreate { .. }
-            | StateDiag::DeleteLeavesChildren { .. }
             | StateDiag::UnanchoredTrigger { .. }
             | StateDiag::UnjoinedTrigger { .. }
             | StateDiag::TriggerNeverRuns { .. }
@@ -872,6 +885,8 @@ impl StateDiag {
             | StateDiag::UnjoinedWrite { .. }
             | StateDiag::UnboundAfterRead { .. }
             | StateDiag::GuardReadsLaterStep { .. }
+            | StateDiag::DeleteLeavesChildren { .. }
+            | StateDiag::DeleteLeavesChildKeys { .. }
             | StateDiag::DrivenComparisonColumnWritten { .. } => Severity::Warning,
             StateDiag::ConflictingEffects { .. }
             | StateDiag::DoubleModeledEnum { .. }
@@ -1389,8 +1404,30 @@ impl fmt::Display for StateDiag {
                 ..
             } => write!(
                 f,
-                "{usecase} deletes a {parent} whose key from {child} says .on_delete(cascade), which the lifecycle does not read: the {child} rows stay, and every rule still sees them; add deletes({usecase}, {child}) to remove them with it"
+                "{usecase} deletes a {parent} whose key from {child} says .on_delete(cascade), which the lifecycle does not read: the {child} rows stay, and every rule still sees them, while the database the SQL export describes removes them; add deletes({usecase}, {child}) to remove them with it"
             ),
+            StateDiag::DeleteLeavesChildKeys {
+                usecase,
+                parent,
+                child,
+                action,
+                ..
+            } => {
+                let fix = match action {
+                    RefAction::SetDefault => format!(
+                        "the model has no write of a key's default: add unlinks({usecase}, {child}, {parent}) or relinks({usecase}, {child}, {parent}) to move it, or deletes({usecase}, {child})"
+                    ),
+                    _ => format!(
+                        "add unlinks({usecase}, {child}, {parent}) to clear it with the delete"
+                    ),
+                };
+                write!(
+                    f,
+                    "{usecase} deletes a {parent} whose key from {child} says .on_delete({}), which the lifecycle does not run: the {child} rows still name the deleted {parent}, and every rule still sees them, while the database the SQL export describes {} their key; {fix}",
+                    action.as_str(),
+                    if *action == RefAction::SetNull { "nulls" } else { "resets" }
+                )
+            }
             StateDiag::GuardReadsLaterStep {
                 condition,
                 usecase,
