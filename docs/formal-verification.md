@@ -503,7 +503,12 @@ with no top on `now`. It never finds a counterexample; the bounded engines do th
 Each entity's rows become an uninterpreted sort, each column a function, and each use case a
 step relation built from the transition system BFS explores. A rule is proved when it belongs
 to an **inductive** set of formulas: every formula holds initially, and no step from a state
-where all hold breaks one. The step relation is widened in two ways, which only add steps: a
+where all hold breaks one. Every proof also has a canary candidate, `false`, which must fall
+at initiation: it survives only when the encoding's declarations and initial states are
+inconsistent, and then every check would pass and every rule would read `proved`. The
+encoding over-approximates BFS, so BFS's initial state satisfies them, and a canary that
+survives is a bug in rdra-ish; then no rule is proved and each reads `unproved: <rule>: the
+canary `false` survived initiation: ...`. The step relation is widened in two ways, which only add steps: a
 creation may take any absent row, and numbers have no top. A guard or write the encoding cannot
 state is widened the same way and printed as a `note:`. A rule the encoding cannot state is
 `out of scope`. A count (`.at_most`, `.at_least`, `.exactly`, `MaxCard_*`) is exact up to 8;

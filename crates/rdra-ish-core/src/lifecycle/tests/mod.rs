@@ -27,6 +27,7 @@ mod names;
 mod never_runs;
 mod oracle;
 mod owners;
+mod prove;
 mod reach;
 mod reduce;
 mod reference;
