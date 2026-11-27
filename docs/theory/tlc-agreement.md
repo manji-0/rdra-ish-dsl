@@ -122,13 +122,14 @@ prefix of a behavior; fairness of D20 reads only actions, bindings, and enabledn
 graph. TLC computes the TLA+ meaning of the check on `⟦𝓜(T')⟧`, which by T1 and the
 projection equals `v*`. ∎
 
-**Scope [read].** The proposition needs both verdicts to be about the same `T'`. On one path of the
-per-run comparison they are not (P23, open): for a liveness property on a reduced cone, the
-native `WfNext` run may be `decide_liveness_reduced` on the reduced cone, while TLC's
-`WfNext` run checks the `_WF` module printed from the unreduced cone
-([§2](#2-the-agreement-rules)). On that path a difference can also mean a fault in the
-reduction (A8) or in the reduced-graph `_WF` argument (A15), and agreement shows that those
-and the native search together gave TLC's verdict on the unreduced cone.
+**Scope [read].** The proposition needs both verdicts to be about the same `T'`. Since #503 the
+per-run comparison pairs runs by that system (`RunOn`: property, graph, fairness). One native
+run has no TLC run on its system: for a liveness property on a reduced cone, the native
+`WfNext` run may be `decide_liveness_reduced` on the reduced cone, while TLC's `_WF` module is
+printed from the unreduced cone ([§2](#2-the-agreement-rules)). That run is compared only
+through the final verdict, where a difference can also mean a fault in the reduction (A8) or
+in the reduced-graph `_WF` argument (A15), and agreement shows that those and the native
+search together gave TLC's verdict on the unreduced cone (P23, fixed in #503).
 
 The proposition runs in one direction [paper]. Agreement `v_N = v_L` shows only that the two
 pipelines did not fail differently on that input. Three kinds of fault survive agreement:
@@ -382,7 +383,8 @@ checks with the unreduced cone's, through TLC on both
 ([Sample comparison](#the-sample-comparison)), but only on cones whose unreduced BFS fits
 its cap. TLC never reads a reduced module with `WF_vars(Next)`: the `_WF` module is printed
 from the unreduced cone (`property_cone.rs::PropertyCone::bundle`), while the native
-`WfNext` run may run on the reduced cone (P23, [§2](#2-the-agreement-rules)).
+`WfNext` run may run on the reduced cone, which is compared only through the final verdict
+(P23, [§2](#2-the-agreement-rules)).
 
 **What the module does not state [read].** `can_reach` prints as a comment: TLC cannot state
 `AG EF` (P19). Deadlocks are not TLC's `CHECK_DEADLOCK` (always `FALSE`) but the
@@ -417,17 +419,20 @@ only through a liveness verdict.
   each run violates, TLC's read by replaying each TLC trace (`tlc_replay::explain_violation`);
 - an `Explored` property (`stable`, `unchanged`, `precedes`): the final verdicts, the
   whole-model run's where a cone left the property open;
-- a property cone: each run in `Native::runs` against the TLC run of the same `ConeRun`,
-  then the final verdicts. The pairing is by label, not by system. For a liveness property
+- a property cone: each run in `Native::runs` against the TLC run on the same system
+  (`RunOn`: property, graph, fairness; by `ConeRun` label before #503), then the final
+  verdicts. For a liveness property
   whose `Plain` run on a reduced cone finds a counterexample, `native.rs::Plain::of`
   (called from `native_property`) first runs `ComponentRun::decide_liveness_reduced` on the
   reduced cone (every class that
   can loop taken as a stop; A15), and when that returns `Holds` or `Violated`,
   `native_property_after` records it as the native `WfNext` run. TLC's `WfNext` run is
   always the `_WF` module, which `PropertyCone::bundle(ConeRun::WfNext)` prints with
-  `PrintMode::Property` from the unreduced cone (`verify/jobs.rs`). So that pair compares the
-  reduced-graph search with TLC on the unreduced cone (P23, open; see
-  [Scope](#what-agreement-can-show)).
+  `PrintMode::Property` from the unreduced cone (`verify/jobs.rs`). Before #503 the two were
+  paired by label, which compared the reduced-graph search with TLC on the unreduced cone
+  as one run (P23; see [Scope](#what-agreement-can-show)). Now that native run, printed
+  `WF_vars(Next) on the reduced cone (native only)`, meets no TLC run and is compared only
+  through the final verdict.
 
 `differ` treats a pair as a disagreement when both are `Some`, they differ, and neither is
 `ToolError`. Each disagreement prints `error[EngineDisagreement]` and makes the run's
@@ -830,8 +835,8 @@ the sections it cites, and carries the tag of the statements it rests on.
 
 Rows T1 to T16 of the [claims inventory](./claims.md#d-agreement-with-tlc) cite this
 document. The open problems this document confirmed, extended, or added, in the
-[index](./README.md#open-problems). P23 and P24 are open: neither is resolved by this
-document or by the code at the pinned commit. [read]
+[index](./README.md#open-problems). P23 was fixed in #503 and P24
+in #485, after the pinned commit. [read]
 
 | # | What this document found |
 |---|---|
@@ -842,7 +847,7 @@ document or by the code at the pinned commit. [read]
 | P16 | **Narrowed in #486.** Confirmed; extended: release-gate item 2 recorded as held on a narrower check; the `--with-tlc` step did not move to `release.yml`; native-temporal-verification.md, "How we know it is right", still says CI runs every root with `--with-tlc`. |
 | P21 | **Fixed in #469.** Confirmed; extended to the unreduced `WfNext` runs and to a false `tool_error` under `--symmetry always` without TLC. The reduced `WfNext` run is not affected: it records no entry when undecided. |
 | P22 | New (prose): D17 omits that a step with `s' = s` is checked by neither engine. Both halves read; `Probe::Loop` is set in every build. |
-| P23 | New (evidence): the per-run comparison pairs the native `WfNext` run on the reduced cone (`decide_liveness_reduced`) with TLC's `_WF` module printed from the unreduced cone, so Proposition 0 does not apply on that path. |
+| P23 | **Fixed in #503.** New (evidence): the per-run comparison pairs the native `WfNext` run on the reduced cone (`decide_liveness_reduced`) with TLC's `_WF` module printed from the unreduced cone, so Proposition 0 does not apply on that path. |
 | P24 | New (evidence): for a `Transition` with a multi-target source, the printer's and the native effect application agree only under a builder invariant on effect order that nothing enforces as such; one shape was not found to be excluded, and on it the post-guards reconcile the two only when the `transitions` arms carry `.when` guards. |
 | P26 | New (evidence), from the owner's review: agreement cannot see a common-mode fault (item 1 of [Residual risk](#residual-risk)). Partly closed by the reference interpreter of that item, for a subset of the language. |
 

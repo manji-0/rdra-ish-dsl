@@ -1789,6 +1789,31 @@ fn a_property_run_stopped_at_the_cap_is_no_disagreement_with_tlc() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+/// The native `WF_vars(Next)` run on a reduced cone decides a system TLC runs no module of,
+/// so its line names it apart, not as TLC's `Cone_P_WF` on the unreduced cone. The note once
+/// read `Cone_P_WF: ok on the reduced cone`, and both the run-by-run comparison and the corpus
+/// harness paired it with TLC's `Cone_P_WF` by that label (P23 of docs/theory/README.md).
+#[test]
+fn a_wf_run_on_the_reduced_cone_is_named_native_only() {
+    let tmp = scratch("verify_cli_reduced_wf_native_only");
+    let case =
+        repo().join("crates/rdra-ish-cli/tests/engine_corpus/cone_reduced_loop_fair_enabled.rdra");
+    let args = [case.to_str().unwrap(), "--instance-count", "1"];
+    let expected = "Cone_JobStarts [JobStarts]: ok (8 states, WF_vars(Next) on the reduced cone (native only): ok)";
+    let output = verify(&repo(), &tmp, &args);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.lines().any(|l| l == expected), "{stdout}");
+    if have_tlc() {
+        let output = verify_with_tlc(&repo(), &tmp, &args);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stdout}{stderr}");
+        assert!(!stderr.contains("EngineDisagreement"), "{stdout}{stderr}");
+        assert!(stdout.lines().any(|l| l == expected), "{stdout}");
+    }
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 /// `eventually` and `leads_to` are decided natively, with no TLC on PATH: on the cone with
 /// `Fair_P` alone, again with `WF_vars(Next)`, and on the whole model when the cone leaves
 /// them open. `--with-tlc` runs TLC's ladder beside it, and the two agree run by run.

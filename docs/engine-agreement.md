@@ -37,7 +37,10 @@ case, whatever the case's header says.
      states it as `tlc=none`.
 2. The rule holds per run as well as for the final verdict. Each property line names its runs
    (`Cone_P`, `Cone_P_Full`, `Cone_P_WF`, `RdraSpec_P`), and the two engines must agree on
-   each run both decided. Two runs can disagree in ways that cancel. A native `Cone_` line
+   each run both decided on the same system: the same graph, reduced or not, under the same
+   fairness. Two runs can disagree in ways that cancel. The native `WF_vars(Next)` run on a
+   reduced cone, noted `WF_vars(Next) on the reduced cone (native only)`, has no TLC run on
+   its system, and meets TLC's `Cone_P_WF` only in the final verdict. A native `Cone_` line
    whose checks the header gives a TLC verdict needs TLC's line for the same module; a
    native `RdraSpec_` line may stand alone, since TLC's cone may decide what the native cone
    left to the whole model.

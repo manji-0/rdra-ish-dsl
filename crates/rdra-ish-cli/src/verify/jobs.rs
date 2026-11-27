@@ -1,7 +1,7 @@
 use crate::export::Modules;
 use crate::property_cone::{inexact, ConeRun, PropertyCone, Why};
 use rdra_ish_core::lifecycle::{
-    ActId, Caps, Cone, LtlKind, QuotientCache, Target, TransitionSystem, VarSet,
+    ActId, Caps, Cone, Fairness, LtlKind, QuotientCache, Target, TransitionSystem, VarSet,
 };
 use rdra_ish_core::{in_parallel, jobs};
 use rdra_ish_emit::tla::{self, PrintMode, TlaBundle, TlaNames};
@@ -59,6 +59,53 @@ pub(super) struct PropertyJob {
     pub(super) names: TlaNames,
     pub(super) full: Option<Spec>,
     pub(super) wf: Option<Spec>,
+}
+
+/// The graph a run of a property's cone explores.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Graph {
+    /// `PropertyCone::reduced`: the cone reduced by its independent sub-lifecycle, or the
+    /// cone itself when nothing reduces.
+    Reduced,
+    /// `PropertyCone::system`: the cone unreduced.
+    Unreduced,
+}
+
+/// The system one run of a property's cone decides: the property, the graph, and the
+/// fairness. `--with-tlc` pairs a native run with the TLC run of the same system, never by
+/// the module a note names (P23 of docs/theory/README.md).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct RunOn {
+    pub(super) property: usize,
+    pub(super) graph: Graph,
+    pub(super) fairness: Fairness,
+}
+
+impl PropertyJob {
+    /// The system `run` decides: the one its module prints (`PropertyCone::bundle`).
+    pub(super) fn run_on(&self, run: ConeRun) -> RunOn {
+        let (graph, fairness) = match run {
+            ConeRun::Plain => (Graph::Reduced, Fairness::Plain),
+            ConeRun::Full => (Graph::Unreduced, Fairness::Plain),
+            ConeRun::WfNext => (Graph::Unreduced, Fairness::WfNext),
+        };
+        RunOn {
+            property: self.index,
+            graph,
+            fairness,
+        }
+    }
+
+    /// The native run with `WF_vars(Next)` on the reduced graph, every class that can loop
+    /// taken as a place to stop (`decide_liveness_reduced`). No module prints it, so TLC runs
+    /// nothing to pair it with; its verdict meets TLC's only in the final one.
+    pub(super) fn reduced_wf(&self) -> RunOn {
+        RunOn {
+            property: self.index,
+            graph: Graph::Reduced,
+            fairness: Fairness::WfNext,
+        }
+    }
 }
 
 impl Job {
