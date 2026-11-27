@@ -314,11 +314,11 @@ Hence `Σ_j` agrees for all `j`, and with it everything the readers below comput
   (`cli/src/verify/bfs.rs::bfs_cones`, the `crowded` flag of `Native` in
   `cli/src/verify/native.rs`) use the other test: `cli/src/verify/bfs.rs::crowded` is
   `met_memory_limit`, true for any `MemoryCapReached` diagnostic, crowded in the pool or
-  not. Until #480 such a run was rerun against the command's pool itself, not an explicit
+  not. Until #484 such a run was rerun against the command's pool itself, not an explicit
   room, and a safety cone with partner properties whose first, complete-to-the-end run met
   the limit beside others fell back to its early-stopping run inside the parallel phase
   without being marked: one thread printed `counterexample (65793 states)` where eight
-  printed `(15150 states)` (open problem P53, reproduced). Since #480 the first run's memory
+  printed `(15150 states)` (open problem P53, reproduced). Since #484 the first run's memory
   stop marks the cone, and every rerun of both passes goes alone under `Caps::alone`, a child
   pool with the whole room of the command's (`MemoryPool::whole`), which refuses by its own
   room whatever the parent holds. So a rerun's stop point is a function of the run alone
@@ -352,7 +352,7 @@ no workflow runs Miri.
 
 **N17 (Output independent of `RDRA_JOBS`).** Follows from N4 for each run, from the
 in-order collection of `in_parallel` results, and, for runs that met the memory limit, from
-the reruns above (P53 fixed in #480). Evidence: as N4.
+the reruns above (P53 fixed in #484). Evidence: as N4.
 
 ## Safety
 
@@ -784,7 +784,7 @@ each of its variants a fair action whose enabledness reads its mark (event-order
 - **Fairness wording.** N9's (⇒) direction, hence every liveness `ok`, rests on assumption
   τ, which D20 does not state (P56).
 - **Determinism of memory stops beside other runs** rests on the reruns of N4; the CLI's
-  passes rerun alone with an explicit room since #480 (P53).
+  passes rerun alone with an explicit room since #484 (P53).
 - **Reproductions** used binaries built in other worktrees, and those of P54 were run by
   the review rather than for this document (see the first paragraph); the issues that take
   P50, P51 and P54 up should reproduce them on a clean build.
