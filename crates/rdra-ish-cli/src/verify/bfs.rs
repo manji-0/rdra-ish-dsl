@@ -464,6 +464,7 @@ impl BfsCone {
         let BfsCone::Ran {
             states,
             found,
+            faults,
             end: RunEnd::Capped,
             memory: true,
             ..
@@ -471,6 +472,10 @@ impl BfsCone {
         else {
             return self;
         };
+        // A violation that did not lift (P52) stays a tool error, whatever the proof says.
+        if !faults.is_empty() {
+            return self;
+        }
         // A cone's invariant is the whole system's of the same name; should two share a name,
         // both must be proved.
         let is_proved = |name: &str| {
