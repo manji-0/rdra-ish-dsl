@@ -12,9 +12,8 @@ The code read is commit `fb6928c74ccc5b479dea07d92cc1e39c34ddd218` (origin/main,
 2026-11-28). The other theory documents pin `b83b9544`; `git diff --stat b83b9544 fb6928c7 --
 crates scripts` touches 30 files, all in codegen, the LSP, the plugin manifest and two
 scripts, and none under `lifecycle/`, `verify/`, `property_cone.rs`, or `emit/tla`, so every
-statement here holds at both commits. The corrections after review re-read the code at
-`fb6928c7` as well (the crates at the pull request's head, `05679a5c`, do not differ from
-it). Paths are relative to
+statement here holds at both commits. How the document changed after it was first written is
+in [Errata](#errata). Paths are relative to
 `crates/rdra-ish-core/src/lifecycle/` unless they start with `cli/`
 (`crates/rdra-ish-cli/src/`) or `cli/tests/` (`crates/rdra-ish-cli/tests/`), as in
 [semantics.md](./semantics.md). No tool was run for this document; every statement about
@@ -45,6 +44,7 @@ or a guarantee the code does not give, is listed as an open problem of the
 12. [Summary of evidence](#summary-of-evidence)
 13. [Related work](#related-work)
 14. [Threats to validity](#threats-to-validity)
+15. [Errata](#errata)
 
 ---
 
@@ -316,8 +316,10 @@ branching findings of an entity cone, a left-out mark can produce a wrong `ok`.
 formal-verification.md, "State models with TLC alone", says. Neither function reads
 `free_triggers`, `over_bound`, or `cone_frees_slots`. Outside `cone.rs`, which defines
 `cone_frees_slots`, the code reads those three names only in `property_cone.rs`,
-`explore/properties.rs`, `verify/tlc.rs` (the explored jobs), `verify/jobs.rs`, `trace.rs`, and
-the trace printers (`cli/state_findings.rs`, `rdra-ish-emit`'s `state_pattern.rs`). A left-out mark lets `C` run a handler
+`explore/properties.rs`, `verify/jobs.rs`, `trace.rs`, and the trace printers
+(`cli/state_findings.rs`, `rdra-ish-emit`'s `state_pattern.rs`); `verify/tlc.rs` (the explored
+jobs) reads none of them, only the `frees_slots` field that `verify/jobs.rs` sets from
+`cone_frees_slots`. A left-out mark lets `C` run a handler
 that `T` holds back, and that adds edges and states. An added edge can leave a state that is a
 deadlock of `T`. An added state can witness a lifecycle state that `T` never reaches, or run a
 use case that never runs in `T`. In each case the finding is missing. A missing finding has no
@@ -611,7 +613,8 @@ Then `~` is a divergence-blind stuttering bisimulation between `C` and `R` that 
 4. every property `P` whose reads are in `T_v ∪ obs` and whose fair actions are in `T_a`, under
    `Plain`.
 
-*Proof.* Points 1 to 5 of cone-soundness.md, with Lemma 6 made explicit.
+*Proof.* Five points, numbered as in cone-soundness.md, "Proof obligation", with Lemma 6 made
+explicit.
 
 1. Related states agree on `T_v` (same `t`) and on `obs` (B1).
 2. A `T_a` step that leaves the *input bytes* unchanged. The input bytes are
@@ -632,7 +635,11 @@ Then `~` is a divergence-blind stuttering bisimulation between `C` and `R` that 
 5. A `T_a` step that changes the input bytes (a raw input, a bit, or both): by Lemma 6 it is a
    sequence of rises from `x(t, s)`, one per stage of `stages`; by (B3)
    and (B1) the representative has rises into the same blocks with the same input bytes, stage by
-   stage, which is what `recanon` looks up.
+   stage, which is what `recanon` looks up. A fold is covered by the same argument with its bit
+   in place of the variables it folds, since the folded guard is a function of them and the key
+   (that `Fold::holds` computes it exactly is one of the two steps Lemma 6 names and does not
+   derive). The monotone rule is not used here: it bounds the input histories, which keeps the
+   extended system finite and small.
 
 Items 1 to 3 of the consequences are existential statements over finite paths labelled by
 `T_v ∪ obs` and `T_a` actions, which a stuttering bisimulation preserves (Browne, Clarke and
@@ -1104,3 +1111,18 @@ Evidence: none beyond the reading of `escalate` and the guide.
   wrong verdict, `ok` included; none is known.
 - **Bounded results.** Everything here, escalation included, is a statement at a bound. `ok at n` at
   `β + 1` and `β + 2` adds two bounded results; it is not an induction.
+
+## Errata
+
+Changes to statements of this document after it was first written, newest last.
+
+- **2026-11-28, after an adversarial review** (commits `7a3d13df` and `073bdf11`). The
+  corrections re-read the code at `fb6928c7` as well; the crates at the head of the pull
+  request that added this document, `05679a5c`, do not differ from it.
+- **2026-11-28, after the owner's review.** The P32 paragraph of [Safety cones](#safety-cones)
+  listed `verify/tlc.rs` among the files that read `free_triggers`, `over_bound`, or
+  `cone_frees_slots`; at `fb6928c7` it reads only the `frees_slots` field that
+  `verify/jobs.rs` sets from `cone_frees_slots`, and the list now says so. The proof of
+  Theorem A8 opened with "Points 1 to 5 of cone-soundness.md"; it now states that its five
+  points are numbered as there, and point 5 adds what cone-soundness.md's point 5 says of folds
+  and of the monotone rule, so the proof reads without that note.
