@@ -114,6 +114,10 @@ pub enum UnmetPremise {
     /// An `after(UC).assert`: no run takes the last step of the use case, the one the
     /// assertion follows. A split use case may still run its earlier transactions.
     NeverRuns { usecase: String },
+    /// An `after(UC).assert`: the last step of the use case runs, but only ever as a step
+    /// that changes nothing (`s' = s`). The assertion is checked on a step that changes the
+    /// state (D17, as TLA+'s `[][…]_vars` reads it), so it was never evaluated.
+    OnlyStutters { usecase: String },
     /// An `after(UC).assert` over entities no param of the step binds: the step runs, but
     /// never into a state with rows of them.
     NoRowsAfter { usecase: String, rows: Vec<String> },
@@ -146,6 +150,10 @@ impl fmt::Display for UnmetPremise {
             UnmetPremise::NeverRuns { usecase } => {
                 write!(f, "{usecase} never runs to its last step")
             }
+            UnmetPremise::OnlyStutters { usecase } => write!(
+                f,
+                "{usecase} runs its last step only as a step that changes nothing, which the assertion is not checked on"
+            ),
             UnmetPremise::NoRowsAfter { usecase, rows } => {
                 write!(
                     f,
