@@ -1800,6 +1800,7 @@ finish.
 ```
 rdra-ish codegen <INPUTS...> --lang ts|rust|go [-o <FILE> | --check <FILE>] [--package <NAME>]
                  [--allow-failing] [--conformance <FILE> [--conformance-states <N>]] [--seal]
+                 [--verus <DIR>]
 rdra-ish codegen <INPUTS...> --format json [-o <FILE>] [--allow-failing]
 rdra-ish codegen <INPUTS...> --code
 rdra-ish codegen <INPUTS...> --probe
@@ -1827,6 +1828,7 @@ going, and [Generated code style](./design/algebraic-codegen.md#generated-code-s
 | `--conformance-states <N>` | `65536` | The most states the BFS behind the traces explores. After writing the traces, `codegen` prints their coverage statement on stderr (as [`check --code=run`](#what-a-run-covers) does), and `warning: <traces>: the conformance BFS stopped at its cap ...` when it stopped there. |
 | `--seal` | off | `--lang ts` only (else exit 2): each state type gets a property keyed by an unexported `unique symbol`, so code outside the module cannot write a state as an object literal (TS2741). A type assertion still gets around it. |
 | `--check <FILE>` | none | Generate again and compare with `FILE` instead of printing. Not with `-o`. With `--conformance <TRACES>`, also compares the traces by hash. |
+| `--verus <DIR>` | none | Experimental, `--lang rust` only (else exit 2). Also write to `DIR` a Verus crate in which a modified core is checked against the verified model for any number of rows: check it with `verus DIR/main.rs`. The ordinary output does not change. Covers `Enum`, `Bool` and key columns, conditions with quantifiers and counts, creates and deletes; on another model it writes the ordinary output, prints one line per reason, and exits 1. Not with `--code`, `--probe`, `--check` or `--conformance`. See [the design](./design/verus.md). |
 
 **Exit codes.** `0` when written or matched; `1` when `check` fails (without
 `--allow-failing`), on model errors, on a name collision (two declarations that generate one

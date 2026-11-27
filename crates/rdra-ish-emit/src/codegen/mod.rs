@@ -23,6 +23,7 @@ mod states;
 mod ts;
 mod ts_port;
 mod validators;
+pub mod verus;
 
 use rdra_ish_syntax::ast::Kind;
 use std::collections::BTreeMap;

@@ -90,6 +90,8 @@ pub(crate) struct CodegenArgs<'a> {
     pub check_file: Option<&'a Path>,
     pub code: bool,
     pub probe: bool,
+    /// Also write the Verus crate to this directory (`--verus`).
+    pub verus: Option<&'a Path>,
 }
 
 pub(crate) fn lang_of(lang: CodegenLang) -> Lang {
@@ -115,6 +117,9 @@ pub fn run_codegen(args: CodegenArgs<'_>) -> Result<()> {
     };
     if args.seal && lang != Lang::TypeScript {
         bail!("--seal is for --lang ts only");
+    }
+    if args.verus.is_some() && (lang != Lang::Rust || args.json) {
+        bail!("--verus is for --lang rust only");
     }
     let request = Request {
         lang,
@@ -149,6 +154,38 @@ pub fn run_codegen(args: CodegenArgs<'_>) -> Result<()> {
         Some(path) => write_file(path, &generated.code)?,
         None => println!("{}", generated.code),
     }
+    if let Some(dir) = args.verus {
+        write_verus(dir, &loaded.model, generated.domain.as_ref())?;
+    }
+    Ok(())
+}
+
+/// Writes the Verus crate of `--verus` into `dir`, or says why the model is outside it.
+fn write_verus(dir: &Path, model: &SemanticModel, domain: Option<&DomainModel>) -> Result<()> {
+    let Some(domain) = domain else {
+        bail!("--verus needs the Rust code");
+    };
+    let files = match rdra_ish_emit::codegen::verus::generate(model, domain) {
+        Ok(files) => files,
+        Err(reasons) => {
+            for r in &reasons {
+                eprintln!("  {r}");
+            }
+            bail!(
+                "--verus does not cover this model yet ({} reason(s) above); the ordinary output is unaffected",
+                reasons.len()
+            );
+        }
+    };
+    fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
+    for (name, text) in files {
+        write_file(&dir.join(name), &text)?;
+    }
+    eprintln!(
+        "wrote the Verus crate to {} (check it with `verus {}`)",
+        shown(dir),
+        shown(&dir.join("main.rs"))
+    );
     Ok(())
 }
 

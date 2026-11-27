@@ -4,6 +4,17 @@
 
 ### Added
 
+- `codegen --lang rust --verus <DIR>` (experimental) also writes a Verus crate to `DIR`, in
+  which a modified core is checked against the verified model for any number of rows (#444):
+  the model as spec with a proof that every run keeps its rules, a contract per function as
+  the methods of a trait the user's `core.rs` implements, and a port whose proof says the
+  store moves exactly as one step of the model, with the store as the one trusted part. The
+  ordinary output does not change. It covers `Enum`, `Bool` and key columns, conditions with
+  quantifiers and counts, creates and deletes; on another model it writes the ordinary
+  output, prints one line per reason, and exits 1. A differential test runs the verified port
+  against every BFS move at two rows per entity. The output is checked with Verus
+  `0.2026.11.22.1ce6a59` on Rust 1.100.0, which the new `Verus` workflow installs; the
+  repository's toolchain does not change. See docs/design/verus.md.
 - A `.lemma()` rule can read a row's marks (#428): `E.in_run(UC)` (a step of the split use
   case is in progress on the row), `E.in_run(UC, k)` (the row's run has done step `k` and not
   the next), and `E.raised(Ev)` (the row's event latch is set), among a `forbidden`'s
