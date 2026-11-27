@@ -399,6 +399,77 @@ fn deny_unproved_fails_a_run_that_bfs_passes() {
     );
 }
 
+/// A scope flag drops use cases from the system the prover encodes, so a proof under one is
+/// a proof about the smaller system: here `Open` breaks the rule, and without it the rule
+/// holds. Every line that says something is proved says the scope too, as the `OK:` line
+/// does; a whole run prints none of it.
+#[test]
+fn a_proof_under_a_scope_says_so_on_every_proved_line() {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("prove_cli_scope");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("m.rdra");
+    std::fs::write(
+        &file,
+        r#"entity Door "扉" { id: Int @pk  state: Enum(closed, open) @default(closed) }
+usecase Fit "扉設置"
+usecase Open "開ける"
+creates(Fit, Door)
+transitions(Open, Door.state, closed -> open)
+forbidden(Door, state == open)
+"#,
+    )
+    .unwrap();
+    let file = file.to_str().unwrap();
+    let scope = " (in the selected scope)";
+    for flags in [
+        &["--without-usecase", "Open"][..],
+        &["--entity", "Door"][..],
+    ] {
+        let mut args = vec!["--prove"];
+        args.extend_from_slice(flags);
+        args.push(file);
+        let out = verify(&args);
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let claims: Vec<&str> = stdout
+            .lines()
+            .filter(|l| {
+                l.starts_with("proved: ") || l.starts_with("lemma: ") || l.starts_with("proof")
+            })
+            .collect();
+        assert!(!claims.is_empty(), "{flags:?}: {stdout}");
+        for line in &claims {
+            let scoped = line.ends_with(scope)
+                || line.contains(" proved in the selected scope,")
+                || line.contains(", in the selected scope");
+            assert!(scoped, "{flags:?}: {line}\n{stdout}");
+        }
+        if let Some(ok) = stdout.lines().find(|l| l.starts_with("OK:")) {
+            assert!(
+                ok.ends_with(
+                    " rules proved for any number of rows and any Int value in the selected scope"
+                ),
+                "{flags:?}: {ok}"
+            );
+        }
+    }
+    let out = verify(&["--prove", "--without-usecase", "Open", file]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(out.status.code(), Some(0), "{stdout}");
+    assert!(
+        stdout.contains(&format!("proved: Forbidden_Door_0{scope}\n")),
+        "{stdout}"
+    );
+
+    let out = verify(&["--prove", file]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(!stdout.contains("selected scope"), "{stdout}");
+    assert!(stdout.contains("refuted: Forbidden_Door_0"), "{stdout}");
+}
+
 #[test]
 fn a_lemma_the_model_marks_is_reported_apart_from_the_rules() {
     if !tool("z3", "RDRA_REQUIRE_Z3") {

@@ -470,6 +470,15 @@ checked against the model; an unknown one is an error.
 | `--without-buc <ID>` | Every use case but those the BUC reaches and no other BUC reaches. | Yes, under that assumption. |
 | `--actor <ID>` | The use cases the actor performs, and those no actor performs (started by an event or a timer, or with no `performs`). | Yes, under that assumption. |
 
+Under a scope, `verify --prove` proves the rules of the system the scope leaves, which lacks
+the use cases it drops: a rule `proved` there may still break in the whole model. So every
+line that says something is proved says so: the `proof (...)` header ends `, in the selected
+scope`, each `proved:` and `lemma:` line ends `(in the selected scope)`, the count reads
+`<n> proved in the selected scope`, and the clause the `OK:` line ends with reads `<n> of <m>
+rules proved for any number of rows and any Int value in the selected scope`. `unproved:` and
+`refuted:` lines carry no such note: what breaks a rule in the smaller system breaks it in the
+whole model too.
+
 A deadlock that another actor's use case hides is an error under `--actor`: `check --actor
 Staff` finds a state a staff member cannot leave by their own use cases, even though an
 operator's deletion leaves it.

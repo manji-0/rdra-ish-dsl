@@ -82,8 +82,10 @@ pub enum Verdict {
 
 #[derive(Clone, Debug)]
 pub enum Unproved {
-    /// Some initial state violates the rule: a real violation, which the bounded engines
-    /// report with its trace.
+    /// Some initial state of the encoding violates the rule. Those states hold any number of
+    /// rows, and a column that starts at any value holds any Int value, so the violation may
+    /// lie past the run's bounds, where the bounded engines do not see it; within them they
+    /// report it with its trace.
     Initial,
     /// A step breaks the rule from a state where it and every kept candidate hold.
     NotInductive(Cti),
