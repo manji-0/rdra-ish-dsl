@@ -5,6 +5,7 @@ use super::guards::{Chain, PathOwner};
 use super::{at_of, forbidden_premises, implies, premise, Binding};
 use crate::lifecycle::build::Builder;
 use crate::lifecycle::diag::StateDiag;
+use crate::lifecycle::narrow::id8;
 use crate::lifecycle::types::{At, InvText, ModelRef, Pred, Site};
 use crate::lifecycle::types::{CmpOp, Premise};
 use crate::model::{
@@ -23,7 +24,7 @@ impl Builder<'_> {
         let mut binding: Binding = Vec::new();
         for &ek in scope {
             if at_of(&binding, ek).is_none() {
-                binding.push((ek, At::Bound(binding.len() as u8)));
+                binding.push((ek, At::Bound(id8(binding.len()))));
             }
         }
         let CrossConstraintScope::RelationPath {
@@ -42,7 +43,7 @@ impl Builder<'_> {
         // depend on it, so binding it universally under the link is binding it existentially.
         for &ek in path {
             if at_of(&binding, ek).is_none() {
-                binding.push((ek, At::Bound(binding.len() as u8)));
+                binding.push((ek, At::Bound(id8(binding.len()))));
             }
         }
         match self.hop_links(path, keys, &binding) {
@@ -353,7 +354,7 @@ impl Builder<'_> {
                 rule: rule.to_string(),
                 entity,
                 n,
-                slots: slots as u8,
+                slots: id8(slots),
                 site: site.clone(),
             },
         );

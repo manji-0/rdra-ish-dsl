@@ -943,6 +943,7 @@ violation_message(text, pattern_desc)
         | StateDiag::PreExistingChildOfCreatedParent { .. }
         | StateDiag::IdentityStartSlots { .. }
         | StateDiag::DomainTooLarge { .. }
+        | StateDiag::StateTooWide { .. }
         | StateDiag::CountAboveBound { .. }
         | StateDiag::MinCardOfPreExistingParent { .. }
         | StateDiag::MinCardNeedsCreate { .. }
@@ -962,6 +963,7 @@ violation_message(text, pattern_desc)
         | StateDiag::GuardReadsLaterStep { .. }
         | StateDiag::DrivenComparisonColumnWritten { .. }
         | StateDiag::DefaultOnVariationIgnored { .. }
+        | StateDiag::GoalMetByDelete { .. }
         | StateDiag::GoalUnreachable { .. } => diag.to_string(),
     }
 }

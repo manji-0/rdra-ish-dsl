@@ -37,7 +37,10 @@ case, whatever the case's header says.
      states it as `tlc=none`.
 2. The rule holds per run as well as for the final verdict. Each property line names its runs
    (`Cone_P`, `Cone_P_Full`, `Cone_P_WF`, `RdraSpec_P`), and the two engines must agree on
-   each run both decided. Two runs can disagree in ways that cancel. A native `Cone_` line
+   each run both decided on the same system: the same graph, reduced or not, under the same
+   fairness. Two runs can disagree in ways that cancel. The native `WF_vars(Next)` run on a
+   reduced cone, noted `WF_vars(Next) on the reduced cone (native only)`, has no TLC run on
+   its system, and meets TLC's `Cone_P_WF` only in the final verdict. A native `Cone_` line
    whose checks the header gives a TLC verdict needs TLC's line for the same module; a
    native `RdraSpec_` line may stand alone, since TLC's cone may decide what the native cone
    left to the whole model.
@@ -204,6 +207,7 @@ skips TLC, since `verify` refuses `--with-tlc` under `64MiB`.
 | `cap_temporal_budget_zero` | `--temporal-budget 0` stops the whole-model run before it decides | `--temporal-budget 0` | `PaidShipsUnfair` nd; `PaidShips` ok |
 | `cone_always_frees_slots` | `always` on a cone that frees slots |  | `NeverD` ok |
 | `cone_copy_from_parent` | A fair use case copies its parent's column into the cone |  | `IssueEventually`, `IssueEventuallyPlain` ok |
+| `cone_entity_mark_left_out` | An entity cone that leaves a raised mark out, and its state-model findings (P32) |  | `Deadlock_Order_status_placed`, `Deadlock_Payment_status_unpaid`, `Witness_Order_status_shipped`, `Witness_Payment_status_paid`, `Witness_Notice_status_received`, `Witness_Notice_status_read` cex |
 | `cone_handler_mark_left_out` | A handler whose raised mark the cone leaves out |  | `ShipsUnfair`, `ShipsFair`, `Deadlock_Order_status_paid` cex |
 | `cone_independent_loop` | An independent loop outside the cone keeps the whole model's `WF_vars(Next)` met |  | `PaidShipsUnfair` cex; `PaidShips` ok |
 | `cone_outside_monotone` | A var outside the cone that is monotone only because nothing deletes it |  | `PaidShipsStamp`, `PaidShipsNotes` ok |
@@ -227,6 +231,8 @@ skips TLC, since `verify` refuses `--with-tlc` under `64MiB`.
 | `presence_deleted_row_owes_goal` | A row deleted after its trigger still owes its goal, read on its base values |  | `PendingPays` cex |
 | `presence_first_absent_asymmetry` | Creation takes the lowest absent slot, so the slots are not symmetric |  | `RushFinishes`, `Deadlock_Order_status_open` cex |
 | `presence_goal_on_base_values` | A goal holds on the base values of a deleted row |  | `HeldReleased` ok |
+| `presence_goal_present_both_ok` | `.present()` changes nothing where no delete can come before the goal |  | `ReviewApproved`, `ReviewApprovedPresent`, `EventuallyApproved`, `EventuallyApprovedPresent` ok |
+| `presence_goal_present_modifier` | `.present()` keeps a deleted row from meeting a goal its base values satisfy |  | `HeldReleased` ok; `HeldReleasedPresent` cex |
 | `presence_no_slot_reuse` | A deleted slot is never reused, so creating and deleting cannot go on forever |  | `PaidShips` ok |
 | `presence_per_entity_slots` | Per-entity slot counts give each entity its own slot set, in both directions | `--instance-count 1 --instances Loan=3 --instances Room=3` | `Unique_Loan_tag`, `Unique_Room_tag` cex, z3 unproved; `Unique_Member_tag`, `Unique_Booking_tag` ok, z3 unproved |
 | `safety_at_least_guard` | An `at_least` guard and the rule it keeps, against a delete |  | `Quantifier_Claim_0` cex, z3 unproved, BFS ok/cex/cex; `Quantifier_Order_1` ok, z3 proved, BFS ok/ok/ok; `Deadlock_Claim_status_open`, `Deadlock_Order_status_open` cex |
@@ -337,7 +343,9 @@ the case `sym_arm_reorders`.
 at 1 and 2 instances per entity, and compares on each cone:
 
 - the reached and initial states, against the graph `tlc -dump dot,actionlabels` writes;
-- the edge sets, as `(from, to, use case)`, self-loops included;
+- the edge sets, as `(from, to, use case, params)`, self-loops included: the cone is printed
+  with one `Next` disjunct per binding of each use case's params (`tla::print_bound`), so TLC
+  names the binding of each edge. A class move of a reduced cone has no params to compare;
 - the state-model findings of every entity: witnesses, use cases that never run, deadlocks;
 - the verdict of each invariant and `after` assertion, with every TLC trace replayed through
   the BFS step relation;
@@ -436,7 +444,20 @@ It starts only by hand, before a release gate of the
 ```sh
 gh workflow run mutants.yml                 # every mutant, over 4 shards
 gh workflow run mutants.yml -f re=liveness  # only the mutants whose name matches
+gh workflow run mutants.yml -f config=tlc -f shards=14   # the TLC-side run below
 ```
+
+**The TLC-side run.** `-f config=tlc` reads `.cargo/mutants-tlc.toml` instead: it mutates the
+TLA+ printer (`emit/src/tla/{mod,module,names,pred}.rs`), `verify/compare.rs`,
+`tlc_output.rs`, and `tlc_replay.rs`, 548 mutants, and runs with `tlc` and `z3` on `PATH`
+(`RDRA_REQUIRE_TLC=1`, `RDRA_REQUIRE_Z3=1`). Each mutant runs the corpus under TLC and z3,
+the unit tests of the TLC output reader, the comparison and the TLC driver, and the
+`verify_cli` tests that run TLC beside the native checker, as the `additional_cargo_test_args`
+filters name them. `rdra-ish-emit`'s own tests are left out: their snapshots fail on any
+change to the printed text, which says nothing about whether agreement catches it. The
+unmutated tests take about 2.5 minutes, so a mutant times out at 15 minutes, and the run has
+no address-space cap, which the JVM cannot start under. At 14 shards it takes several hours
+and holds 14 runners.
 
 The `summary` job lists the `missed` and `timeout` mutants, and each shard's `mutants.out` is an
 artifact with each mutant's diff and log. Kill a missed mutant with a corpus case it gets wrong,
@@ -452,12 +473,17 @@ entry, so that a fall shows:
 | Run | Commit | Date | Mutants | Caught | Timeout | Missed | Unviable | Kill rate |
 |---|---|---|---|---|---|---|---|---|
 | [45212589802](https://github.com/manji-0/rdra-ish-dsl/actions/runs/45212589802) | `b0f593ba` | 2026-11-23 | 251 | 137 | 2 | 70 | 42 | 139 of 209, 66.5% |
+| [46034352562](https://github.com/manji-0/rdra-ish-dsl/actions/runs/46034352562) | `6f2d29a1` | 2026-11-27 | 298 | 147 | 4 | 89 | 58 | 151 of 240, 62.9% |
 
-The missed mutants of that run: 27 in `cone.rs`, 26 in `explore/liveness.rs`, 12 in
-`verify/native.rs`, 5 in `property_cone.rs`. The run mutates only those four files. The TLA+
-printer, `compare.rs`, `tlc_output.rs`, and `tlc_replay.rs` are not on the list: the run keeps
-`tlc` off `PATH`, so the corpus could not catch a mutant there. Mutating them needs a run with
-TLC on `PATH`, at many times the cost.
+The missed mutants of the first run: 27 in `cone.rs`, 26 in `explore/liveness.rs`, 12 in
+`verify/native.rs`, 5 in `property_cone.rs`; of the second: 32, 38, 17 and 2. The second run
+lists 47 more mutants, from code added since, and its missed ones grow mostly in
+`explore/liveness.rs`. These runs mutate only those four files and keep `tlc` off `PATH`; the
+TLA+ printer and the TLC reading code are the TLC-side run's:
+
+| Run | Commit | Date | Mutants | Caught | Timeout | Missed | Unviable | Kill rate |
+|---|---|---|---|---|---|---|---|---|
+| [46052978676](https://github.com/manji-0/rdra-ish-dsl/actions/runs/46052978676) (`config=tlc`) | `cb1beccb` | 2026-11-28 | 548 | pending | | | | |
 
 ## Kani harnesses
 

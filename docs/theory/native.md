@@ -172,7 +172,9 @@ state changes. Both reproductions give the verdicts of 8 instances at 255
 `packing.rs::tests::a_state_past_bit_65535_packs_patches_and_reads_back` checks the patch,
 the unpack and `Packing::cell` on either side of the first cell past bit 65,535. The same PR
 stops a run, as at the state cap, before it numbers a state `u32::MAX`, the marker of an
-unresolved move and of an unnumbered component.
+unresolved move and of an unnumbered component. Past `u32::MAX` bits the build stops first:
+`StateTooWide`, an error of the same family as `DomainTooLarge`, so the checked add is never
+reached from a model (`build/mod.rs::width_tests`).
 
 **Finding P54 (guarantee, reproduced by the review; fixed in #470, where the build rejects a
 column domain past 256 values as `DomainTooLarge`).** A value outside a byte is
@@ -650,7 +652,10 @@ a counterexample under `WfNext` is one under `Plain`) and the cone's own fairnes
 that deletes the row meets `eventually(E.c == v)` when `v` is `c`'s base value, while
 `can_reach` keeps the slot present along the path. Read on the code here, this confirms
 open problem P6; TLC reads the printed formula the same way. #475 decided P6 as documented:
-language-reference.md and D21 now state the reading.
+language-reference.md and D21 now state the reading. A `.present()` goal (P64) has the
+presence of every bound row in its predicate, conjoined by the build
+(`build/preds/temporal.rs::Builder::goal`), so the same evaluation never meets it on a
+deleted row.
 
 ## Counterexamples: what is checked before printing
 

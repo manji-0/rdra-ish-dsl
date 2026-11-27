@@ -1,4 +1,5 @@
 //! The extended sub-lifecycle of a cone: S with its inputs, and the rises.
+use crate::lifecycle::narrow::id8;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use super::fold::{Fold, FoldKey};
@@ -342,7 +343,7 @@ impl BitGroups {
             }
         };
         let a = &mut system.actions[ext_id.index()];
-        let q = a.params.len() as u8;
+        let q = id8(a.params.len());
         a.params.push(Param {
             entity: map.e(*entity),
             role: ParamRole::Earlier { step: 0 },

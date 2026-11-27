@@ -82,6 +82,46 @@ fn check_cfg_names_each_invariant_and_explore_cfg_checks_nothing() {
     assert_eq!(explore, "SPECIFICATION Spec\nCHECK_DEADLOCK FALSE\n");
 }
 
+/// `print_bound` splits `Next` into one operator per binding, which TLC names each step
+/// by, and `bound_action_index` reads the action and binding back from that name (P25 of
+/// docs/theory/README.md). The cfg is `print`'s.
+#[test]
+fn a_bound_module_names_each_binding_of_an_action() {
+    let ts = system(&sample("order.rdra"));
+    let (plain, bound) = (
+        print(&ts, PrintMode::Safety, "M"),
+        print_bound(&ts, PrintMode::Safety, "M"),
+    );
+    assert_eq!(plain.cfg, bound.cfg);
+    let pay = (ts.action_ids())
+        .find(|&a| ts.actions()[a.index()].name == "CapturePay")
+        .expect("CapturePay");
+    let names = &bound.names;
+    let slots = ts.slots(ts.actions()[pay.index()].params[0].entity);
+    assert_eq!(slots, 2, "VERIFY bounds give two orders");
+    for s in 0..slots as u8 {
+        let name = names.bound_action(pay, &[s]);
+        assert_eq!(name, format!("{}_at_{}", names.action(pay), s + 1));
+        let def = format!("{name} == {}({}) /\\ TRUE\n", names.action(pay), s + 1);
+        assert!(bound.tla.contains(&def), "{}", bound.tla);
+        assert!(
+            bound.tla.contains(&format!("  \\/ {name}\n")),
+            "{}",
+            bound.tla
+        );
+        assert_eq!(
+            names.bound_action_index(&ts, &name),
+            Some((pay, Some(vec![s])))
+        );
+        assert_eq!(names.action_index(&ts, &name), Some(pay));
+    }
+    let plain_name = names.action(pay);
+    assert_eq!(names.bound_action_index(&ts, plain_name), Some((pay, None)));
+    let two = format!("{plain_name}_at_1_1");
+    assert_eq!(names.bound_action_index(&ts, &two), None);
+    assert!(!plain.tla.contains(&format!("{plain_name}_at_1")));
+}
+
 #[test]
 fn a_property_cfg_checks_that_property_alone() {
     let ts = system(&sample("order.rdra"));
@@ -747,6 +787,27 @@ fn a_property_along_joins_the_link_to_its_trigger() {
             "AnyPair == \\A b0 \\in Payment_Ids, b1 \\in Order_Ids : [](({}) => ((~(Payment_status[b0] = \"captured\")) \\/ (Order_status[b1] = \"paid\")))\n",
             present("Payment", "Order")
         ),
+    ];
+    for line in expected {
+        assert!(tla.contains(&line), "{line}\n{tla}");
+    }
+}
+
+/// `.present()` conjoins the presence of every bound row with the goal, and only with the
+/// goal: the link stays in the trigger.
+#[test]
+fn present_conjoins_every_bound_rows_presence_with_the_goal() {
+    let src = format!(
+        "{ALONG}property LeadsPresent leads_to(Payment.status == captured, Order.status == paid).along(Payment, Order).present()\n\
+         property EventuallyPresent eventually(Payment.status == captured).present()\n"
+    );
+    let tla = print(&system(&src), PrintMode::Check, "M").tla;
+    let goal = "(Payment_exists[b0] = \"present\") /\\ (Order_exists[b1] = \"present\") /\\ (Order_status[b1] = \"paid\")";
+    let expected = [
+        format!(
+            "LeadsPresent == \\A b0 \\in Payment_Ids, b1 \\in Order_Ids : ((Payment_exists[b0] = \"present\" /\\ Order_exists[b1] = \"present\" /\\ Payment_owner_Order[b0] = b1) /\\ (Payment_status[b0] = \"captured\")) ~> ({goal})\n"
+        ),
+        "EventuallyPresent == \\A b0 \\in Payment_Ids : []((Payment_exists[b0] = \"present\") => <>((Payment_exists[b0] = \"present\") /\\ (Payment_status[b0] = \"captured\")))\n".to_string(),
     ];
     for line in expected {
         assert!(tla.contains(&line), "{line}\n{tla}");

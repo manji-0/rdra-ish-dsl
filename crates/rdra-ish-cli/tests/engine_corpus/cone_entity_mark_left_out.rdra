@@ -1,0 +1,37 @@
+// trap: an entity cone that leaves a raised mark out, and the state-model findings on it.
+// Order's exit ShipOrder reads Payment.status == paid. ConfirmPayment, run on EvPaid, writes
+// that status, so Order's cone takes it. The raiser ReadNotice writes only Notice and starts
+// at `read`, which no use case reaches: EvPaid is never raised, Payment never becomes paid,
+// and Order is stuck at `placed`. A cone that left the mark out ran ConfirmPayment unordered,
+// so Payment reached `paid`, Order shipped, and the deadlock and the missing witness of
+// `shipped` went unreported (docs/theory P32).
+// expect Deadlock_Order_status_placed: native=counterexample tlc=counterexample
+// expect Witness_Order_status_shipped: native=counterexample tlc=counterexample
+// The rest follow from the same unreached `read`: Notice never leaves `new`, Payment never
+// becomes paid and waits at `unpaid`.
+// expect Witness_Notice_status_received: native=counterexample tlc=counterexample
+// expect Witness_Notice_status_read: native=counterexample tlc=counterexample
+// expect Witness_Payment_status_paid: native=counterexample tlc=counterexample
+// expect Deadlock_Payment_status_unpaid: native=counterexample tlc=counterexample
+entity Order "注文" { id: Int @pk  status: Enum(placed, shipped) @default(placed) }
+entity Payment "決済" { id: Int @pk  status: Enum(unpaid, paid) @default(unpaid) }
+entity Notice "通知" { id: Int @pk  status: Enum(new, received, read) @default(new) }
+relate(Payment, Order, N:1)
+relate(Notice, Payment, N:1)
+usecase PlaceOrder "注文"
+usecase SendNotice "通知"
+usecase ReadNotice "通知確認"
+usecase ConfirmPayment "入金確認"
+usecase ShipOrder "出荷"
+event EvPaid "入金"
+creates(PlaceOrder, Order)
+creates(PlaceOrder, Payment)
+creates(SendNotice, Notice)
+transitions(ReadNotice, Notice.status, received -> read)
+raises(ReadNotice, EvPaid)
+triggers(EvPaid, ConfirmPayment)
+transitions(ConfirmPayment, Payment.status, unpaid -> paid)
+transitions(ShipOrder, Order.status, placed -> shipped)
+condition Paid "支払済"
+holds(Paid, Payment.status == paid)
+applies_to(Paid, ShipOrder)

@@ -152,7 +152,7 @@ system.
 | An action that creates a parent and updates an existing child | The action links the child. An `.optional()` key links only an unlinked child; a mandatory key moves it. |
 | `invariant(...).when(...).none/has(...)` | `\A` / `\E` over the ids, named `Quantifier_<Entity>_<n>` |
 | `after(UC).assert(...)` | `PROPERTY AfterAssert_<UC>_<n>`: `[][(\A p : UC(p) => post')]_vars` on the last action of each run |
-| `always`, `eventually`, `leads_to` | A named formula and a `PROPERTY`, per present instance: `[](present => x)`, `[](present => <>x)`, `(present /\ x) ~> y`. `.along` joins the owner link to `present`. |
+| `always`, `eventually`, `leads_to` | A named formula and a `PROPERTY`, per present instance: `[](present => x)`, `[](present => <>x)`, `(present /\ x) ~> y`. `.along` joins the owner link to `present`. With `.present()` the goal is `present /\ x` (`present /\ y`). |
 | `stable(p)` | `[][\A b0 \in E_Ids : (present /\ p) => (present' => p')]_vars` |
 | `unchanged(E.col, ..).when(p)` | `[][\A b0 \in E_Ids : (present /\ p) => (present' => E_col'[b0] = E_col[b0] /\ ..)]_vars` |
 | `precedes(p, q)` | A latch `P_seen`, set by every action once `present /\ p` holds, and `[](\A b0 : (present /\ q) => P_seen[b0])`. Only a module whose `.cfg` checks `P` declares it. |
@@ -207,11 +207,13 @@ by BFS, side by side:
   says `entities a check does not read are unbounded`. An `ok` still holds. A violation
   there may need more instances of that entity than the bound.
 - **A cone that leaves a raised mark out.** A cone that keeps an event's handler but not
-  every raiser runs the handler without the event. An `ok` still holds; a violation whose
-  trace does so is decided again on the check's exact cone, and the cone's line says what that
-  cone found: `note: <check>'s counterexample runs a use case without its event having been
-  raised, which this cone does not rule out; on its exact cone: ok`. The line's verdict is the
-  exact cone's; TLC is compared with the cone's own.
+  every raiser runs the handler without the event. An `ok` still holds. A violation whose
+  trace does so is only a candidate: the cone takes in the event's raisers and runs again,
+  until its counterexample runs no use case without its event or the cone is the check's exact
+  cone. The cone's line says what that refined cone found: `note: <check>: the cone's
+  counterexample is a candidate only, since it runs a use case without its event having been
+  raised; on the cone refined with the event's raisers: ok`. The line's verdict is the refined
+  cone's; TLC is compared with the cone's own.
 - **Covered cones.** When a larger cone holds every check, variable, action, guard, and
   parameter of a smaller one, the smaller one does not run, and its line reads
   `ok (checked in Cone_<larger>)`. When the larger cone fails, the smaller one runs too, so
@@ -417,8 +419,11 @@ An `ok` of that run is the `ok` of `Cone_<P>_WF` on the full cone
 ([proof](./design/cone-soundness.md#wf_varsnext-on-a-reduced-cone)). A counterexample is only
 a candidate: `verify` lifts it to the full cone and replays it there. A candidate that does
 not lift is dropped, and `verify` runs `Cone_<P>_Full` and `Cone_<P>_WF` on the full cone.
-The line then notes `Cone_P_WF: ok on the reduced cone`, `Cone_P_WF: counterexample on the
-reduced cone`, or `Cone_P_Full: counterexample` before the `_WF` note.
+The line then notes `WF_vars(Next) on the reduced cone (native only): ok` or `…: counterexample`,
+or `Cone_P_Full: counterexample` before the `_WF` note. TLC runs no module of the reduced run's
+system: `WF_vars(Next)` on the reduced module would not let a behavior stop where a class can
+loop. So `--with-tlc` compares that run only through the final verdict, against
+`Cone_P_WF` on the full cone.
 
 ### Instance symmetry
 
@@ -707,8 +712,10 @@ escalated: Forbidden_Item_0: ok at 3 instances, ok at 4 instances (BFS on its co
 
 A counterexample there is reachable, so it is an error, whether or not `--deny-unproved` is
 set. One the cone cannot vouch for, which runs a use case without its event or creates more rows
-of an entity than the cone counts, is decided again on the rule's exact cone, which holds every
-raiser and counts every slot; that cone's instances are the ones printed. It prints with its trace, whose header names the instances it needed
+of an entity than the cone counts, is a candidate: the cone takes in the event's raisers and
+counts the entity's slots, and runs again until its counterexample needs neither (at most the
+rule's exact cone, which holds every raiser and counts every slot); that cone's instances are
+the ones printed. It prints with its trace, whose header names the instances it needed
 (`counterexample (4 steps, at 3 instances):`), and the run fails with `<n> invariant or
 after-assert violation(s) at more instances than the run's`. The cone line keeps the verdict at
 the run's bounds, and TLC is compared with that one. A run stopped by that cap, the memory
@@ -775,16 +782,18 @@ says how to see it in a run and what to do. The
   events are free. A cone that does not hold every raiser by its own writes leaves the mark
   out, and the handler runs unordered there. An `ok` of a rule, an `after` assertion, or a
   temporal property is still sound. A counterexample that runs the handler without its event
-  is decided again on the check's exact cone, which keeps every action that writes into it and
-  so holds the raiser
+  is a candidate, never reported as one: the cone takes in the raisers of that event and runs
+  again, and repeats while a counterexample still runs a handler without its event. It ends at
+  the check's exact cone at the latest, which keeps every action that writes into it and so
+  holds every raiser
   ([Exploration by cone of influence](./state-derivation.md#exploration-by-cone-of-influence)).
-  That cone's counterexample is the one reported; if it passes, the check holds, and if it
+  The refined cone's counterexample is the one reported; if it passes, the check holds, and if it
   stops, the check is `not decided`. A property on such a cone counts only its `ok` and runs on
   the whole model otherwise. An entity's findings are read on its exact cone whenever its own
   cone would leave a mark out, since there the extra handler runs could hide a deadlock, a state
   with no witness, or a use case that never runs. The exact cone can be much larger.
-  See it: the infos on the `triggers` line, and the `note:` under a cone line, `on its exact
-  cone: ...`; a TLC trace of the cone's module can still carry the `note:` row `runs <UC>
+  See it: the infos on the `triggers` line, and the `note:` under a cone line, `on the cone
+  refined with the event's raisers: ...`; a TLC trace of the cone's module can still carry the `note:` row `runs <UC>
   without <Ev> having been raised`. What to do: give the handler a from-state the raiser sets,
   make the rule read something the raiser writes, or use `.counted(k)`
   ([`triggers` and event-driven BUC chaining](./language-reference.md#triggers-and-event-driven-buc-chaining)).

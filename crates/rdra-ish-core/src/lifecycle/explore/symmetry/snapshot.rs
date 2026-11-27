@@ -35,9 +35,8 @@ use super::{Group, Rule};
 const S_CAP: usize = 2_000_000;
 
 /// The rules and reasons the owner kept on 2026-11-25 with no witness of their own: this
-/// snapshot is theirs.
-const KEPT: [&str; 11] = [
-    "PinnedStart",
+/// snapshot is theirs. `PinnedStart` has had its own since (`witnesses.rs`, P33).
+const KEPT: [&str; 10] = [
     "Reduced:S var",
     "Reduced:input",
     "Reduced:named by S",

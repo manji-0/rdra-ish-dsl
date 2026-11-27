@@ -19,7 +19,7 @@ Entity lines that name each rule or reason:
   OrderedId: 0: fires in no cone
   OwnerChoice: 0: fires in no cone
   OwnerLiteral: 0: fires in no cone
-  PinnedStart: 0: fires in no cone (kept without a witness of its own)
+  PinnedStart: 0: fires in no cone
   Reduced:S: 283
   Reduced:S action param: 288 (kept without a witness of its own)
   Reduced:S var: 283 (kept without a witness of its own)
@@ -1129,6 +1129,17 @@ Entity lines that name each rule or reason:
   [property IssueEventuallyPlain] unreduced
     Application[2] moves
     Permit[2] moves
+== engine_corpus/cone_entity_mark_left_out.rdra
+  [entity Notice] unreduced
+    Notice[2] moves
+    Payment[2] moves
+  [entity Order] unreduced
+    Notice[2] moves
+    Order[2] moves
+    Payment[2] moves
+  [entity Payment] unreduced
+    Notice[2] moves
+    Payment[2] moves
 == engine_corpus/cone_handler_mark_left_out.rdra
   [entity Order, property ShipsFair] unreduced
     Order[2] moves
@@ -1273,6 +1284,12 @@ Entity lines that name each rule or reason:
     Order[2] moves
 == engine_corpus/presence_goal_on_base_values.rdra
   [entity Order, property HeldReleased] unreduced
+    Order[2] moves
+== engine_corpus/presence_goal_present_both_ok.rdra
+  [entity Doc, property ReviewApproved, property ReviewApprovedPresent, property EventuallyApproved, property EventuallyApprovedPresent] unreduced
+    Doc[2] moves
+== engine_corpus/presence_goal_present_modifier.rdra
+  [entity Order, property HeldReleased, property HeldReleasedPresent] unreduced
     Order[2] moves
 == engine_corpus/presence_no_slot_reuse.rdra
   [entity Order, property PaidShips] unreduced

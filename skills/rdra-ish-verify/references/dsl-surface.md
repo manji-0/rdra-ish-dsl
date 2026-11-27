@@ -44,6 +44,13 @@ property ShippedOnceCaptured
   atom whose column no single entity owns is `UnresolvedPropertyColumn`.
 - A property holds per present instance: `always x` is `[](present => x)`, `eventually x`
   is `[](present => <>x)`, and `leads_to(x, y)` is `(present /\ x) ~> y`.
+- Only the trigger reads `present`. The goal of `eventually` and `leads_to` reads a deleted
+  row's base values, so deleting a row meets a goal its `@default`s satisfy:
+  `eventually(Order.status == pending)` holds where every order is eventually deleted.
+  `.present()` on `eventually` or `leads_to` asks the goal for a present row
+  (`(present /\ x) ~> (present /\ y)`), so a delete before the goal is a counterexample.
+  On any other form it is `PresentOnNonGoalProperty`; with arguments or written twice,
+  `PresentRequiresNoArguments`.
 - `eventually` and `leads_to` assume `WF_vars(Next)`: some step is taken, not a step in
   particular, so another instance's loop satisfies it.
 - `.fair(UC, ...)` on `eventually` or `leads_to` assumes weak fairness per instance on the

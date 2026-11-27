@@ -4,6 +4,19 @@
 
 ### Added
 
+- `.present()` on an `eventually` or `leads_to` property asks its goal for a present row:
+  `leads_to(p, q).present()` is `(present /\ link /\ p) ~> (present /\ q)`, and
+  `eventually(x).present()` is `[](present /\ link => <>(present /\ x))`, with `present` the
+  trigger's. Without it a goal reads a deleted row's base values, so deleting a row meets a
+  goal its `@default`s satisfy; that stays the default (docs/theory P6, P64). The native
+  checker, the TLA+ export, and TLC read the same goal, and the property's cone, reduction,
+  and symmetry are unchanged, as the trigger reads the presence already. `.present()` on
+  `always`, `stable`, `unchanged`, `precedes`, or `can_reach` is `PresentOnNonGoalProperty`;
+  with arguments or written twice it is `PresentRequiresNoArguments`
+  ([language reference](./docs/language-reference.md#goals-on-present-rows-present)).
+  `check` and `verify` print the hint `info[GoalMetByDelete_*]` for a plain goal a deleted
+  row's base values satisfy on an entity some use case deletes (none on the samples). New
+  engine-corpus cases `presence_goal_present_modifier` and `presence_goal_present_both_ok`.
 - The lint warning `negated-order-admits-null` (P62): a `not` over `<`, `<=`, `>`, or `>=`
   with a `@null` column, in a `@check` or a `property`, holds while the column is null, so
   `not (qty < 1)` is not `qty >= 1`. An expression that names the column's null (`qty == null
@@ -471,6 +484,20 @@
 
 ### Fixed
 
+- A system whose packed state would pass `u32::MAX` bits, the width of a cell's bit offset
+  in the native explorer, is the build error `StateTooWide`, beside `DomainTooLarge`, before
+  any engine runs (docs/theory P50); before, the explorer panicked when it laid out the
+  packing. No reachable bound comes near it: 255 slots of an entity take 2,040 bits per
+  8-bit column.
+- A counterexample that runs a use case without its event having been raised is a candidate
+  only (docs/theory P1). The check's cone takes in that event's raisers and runs again, and
+  repeats until a counterexample runs no use case without its event, or the cone is the
+  check's exact cone (`TransitionSystem::recheck_on`): a counterexample-guided refinement in
+  place of going straight to the exact cone, so the cone that decides is often smaller.
+  Escalation refines the same way, counting the slots of an entity the candidate creates past
+  the bound. The `note:` reads `the cone's counterexample is a candidate only ... on the cone
+  refined with the event's raisers: ...`; a property that cannot use its cone's counterexample
+  says `its counterexample is a candidate: ...`.
 - The reduction by an independent sub-lifecycle certifies its partition on every run, in
   every build (docs/theory P7): the blocks refine the labels, one sweep of the reference
   refinement with every block a splitter splits nothing, and the states of a block rise into

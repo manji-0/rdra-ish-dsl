@@ -113,7 +113,7 @@ const CHECK_READERS: &[(&str, &str)] = &[
     ),
     // Reads the violation of the check it decides again, on a run of the check's exact cone
     // that evaluates every check (`run`).
-    ("rdra-ish-core/src/lifecycle/targets.rs", "recheck"),
+    ("rdra-ish-core/src/lifecycle/targets.rs", "recheck_on"),
     ("rdra-ish-core/src/lifecycle/targets.rs", "unmet_of_assert"),
     ("rdra-ish-core/src/lifecycle/targets.rs", "unmet_of_rule"),
     ("rdra-ish-core/src/lifecycle/targets.rs", "verdict"),

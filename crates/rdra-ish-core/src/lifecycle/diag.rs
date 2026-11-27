@@ -390,6 +390,14 @@ pub enum StateDiag {
         usecase: String,
         site: Site,
     },
+    /// An `eventually` / `leads_to` goal that a deleted row's base values satisfy, on an entity
+    /// some use case deletes: deleting the row meets the goal. A hint: that is the documented
+    /// reading, and `.present()` asks the goal for a present row instead.
+    GoalMetByDelete {
+        property: String,
+        entity: String,
+        site: Site,
+    },
     /// An Int literal outside the bounded domain `0..=max`: in a rule, or a numeric `@default`
     /// (its site a `ModelRef::Column`).
     IntLiteralOutOfBounds { value: i64, max: u8, site: Site },
@@ -403,6 +411,10 @@ pub enum StateDiag {
         int: bool,
         site: Site,
     },
+    /// A state of the system packs into more than the `most` bits a packed state addresses:
+    /// each cell's bit offset is a `u32` (`explore/packing.rs`), and past it two cells would
+    /// share bits (P50). The width-of-a-state member of `DomainTooLarge`'s family.
+    StateTooWide { bits: u64, most: u64 },
     /// A cross-entity constraint whose entities no relate path binds.
     UnbindableScope {
         constraint: String,
@@ -687,10 +699,14 @@ impl StateDiag {
             StateDiag::FairOnInertUseCase {
                 property, usecase, ..
             } => with("FairOnInertUseCase", &[property, usecase]),
+            StateDiag::GoalMetByDelete {
+                property, entity, ..
+            } => with("GoalMetByDelete", &[property, entity]),
             StateDiag::IntLiteralOutOfBounds { value, .. } => {
                 with("IntLiteralOutOfBounds", &[&value.to_string()])
             }
             StateDiag::DomainTooLarge { column, .. } => with("DomainTooLarge", &[column]),
+            StateDiag::StateTooWide { .. } => with("StateTooWide", &[]),
             StateDiag::UnbindableScope { constraint, .. } => with("UnbindableScope", &[constraint]),
             StateDiag::UnbindableCondition {
                 condition, usecase, ..
@@ -809,6 +825,7 @@ impl StateDiag {
             | StateDiag::MinCardNeedsCreate { site, .. }
             | StateDiag::AssertOnInertUseCase { site, .. }
             | StateDiag::FairOnInertUseCase { site, .. }
+            | StateDiag::GoalMetByDelete { site, .. }
             | StateDiag::IntLiteralOutOfBounds { site, .. }
             | StateDiag::DomainTooLarge { site, .. }
             | StateDiag::UnbindableScope { site, .. }
@@ -842,7 +859,8 @@ impl StateDiag {
             | StateDiag::PatternCapReached { .. }
             | StateDiag::StateCapReached { .. }
             | StateDiag::MemoryCapReached { .. }
-            | StateDiag::TimeBudgetReached { .. } => Place::ItsEntity,
+            | StateDiag::TimeBudgetReached { .. }
+            | StateDiag::StateTooWide { .. } => Place::ItsEntity,
         }
     }
 
@@ -883,6 +901,7 @@ impl StateDiag {
             | StateDiag::UnanchoredTrigger { .. }
             | StateDiag::UnjoinedTrigger { .. }
             | StateDiag::TriggerNeverRuns { .. }
+            | StateDiag::GoalMetByDelete { .. }
             | StateDiag::DefaultOnVariationIgnored { .. } => Severity::Info,
             StateDiag::UnreachableEnumVariant { .. }
             | StateDiag::UnwrittenConstrainedVar { .. }
@@ -919,6 +938,7 @@ impl StateDiag {
             | StateDiag::IntLiteralOutOfBounds { .. }
             | StateDiag::IdentityStartSlots { .. }
             | StateDiag::DomainTooLarge { .. }
+            | StateDiag::StateTooWide { .. }
             | StateDiag::UnbindableScope { .. }
             | StateDiag::UnbindableCondition { .. }
             | StateDiag::UnboundCopySource { .. }
@@ -1272,6 +1292,12 @@ impl fmt::Display for StateDiag {
             StateDiag::AssertOnInertUseCase { anchor, .. } => {
                 write!(f, "after({anchor}).assert names a use case with no effect")
             }
+            StateDiag::GoalMetByDelete {
+                property, entity, ..
+            } => write!(
+                f,
+                "property {property}: deleting {entity} meets its goal, as the deleted row's base values satisfy it; add .present() if a delete should not count"
+            ),
             StateDiag::FairOnInertUseCase {
                 property, usecase, ..
             } => write!(
@@ -1290,6 +1316,10 @@ impl fmt::Display for StateDiag {
             StateDiag::DomainTooLarge { column, values, .. } => write!(
                 f,
                 "{column} takes {values} values, more than the 256 a state holds; declare at most 256 values (255 with @null)"
+            ),
+            StateDiag::StateTooWide { bits, most } => write!(
+                f,
+                "a state of the system packs into {bits} bits, more than the {most} a packed state addresses; give fewer instances (--instance-count, --instances) or a smaller --int-range-max"
             ),
             StateDiag::IntLiteralOutOfBounds { value, max, site } => match &site.fact {
                 ModelRef::Column { column, .. } => write!(

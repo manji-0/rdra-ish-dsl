@@ -394,7 +394,9 @@ struct RunLine {
     module: String,
     checks: Vec<String>,
     verdict: V,
-    /// The other runs the line names, `Cone_P_WF: ok`, by module.
+    /// The other runs the line names, `Cone_P_WF: ok`, by module. A run no module prints,
+    /// `WF_vars(Next) on the reduced cone (native only): ok`, is left out: TLC runs no system
+    /// to pair it with (P23 of docs/theory/README.md).
     notes: BTreeMap<String, V>,
 }
 
@@ -1351,6 +1353,11 @@ fn rule_2_fails_a_tlc_line_the_header_expects_and_the_run_lacks() {
     assert!(failures("Cone_P [P]: ok (5 states)\ntlc: Cone_P [P]: ok (5 states)\n").is_empty());
     assert!(failures("RdraSpec_P [P]: ok (9 states)\ntlc: Cone_P [P]: ok (5 states)\n").is_empty());
     assert!(failures("Cone_Q [Q]: ok (5 states)\n").is_empty());
+    // The native run on the reduced cone is not TLC's `Cone_P_WF` on the unreduced one.
+    assert!(failures(
+        "Cone_P [P]: ok (5 states, WF_vars(Next) on the reduced cone (native only): ok)\ntlc: Cone_P [P]: ok (5 states, Cone_P_WF: counterexample)\n"
+    )
+    .is_empty());
     assert_eq!(
         failures("Cone_P [P]: ok (5 states)\ntlc: Cone_P [P]: counterexample (5 states)\n").len(),
         1

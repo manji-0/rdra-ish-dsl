@@ -21,6 +21,7 @@ use super::{
 };
 use crate::lifecycle::diag::{Diag, StateDiag};
 use crate::lifecycle::expr::{State, StateSlice};
+use crate::lifecycle::narrow::id32;
 use crate::lifecycle::reduce::Step;
 use crate::lifecycle::types::{ActId, EntId, Ltl};
 use crate::lifecycle::TransitionSystem;
@@ -503,7 +504,7 @@ impl OrbitRun {
             &self.run,
             &self.group,
             &mut Canon::default(),
-            at as u32,
+            id32(at),
             None,
         );
         replays(ts, &start, &steps);

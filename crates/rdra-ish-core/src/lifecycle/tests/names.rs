@@ -142,6 +142,11 @@ fn one_of_each() -> Vec<StateDiag> {
             usecase: "Noop".into(),
             site: site(),
         },
+        StateDiag::GoalMetByDelete {
+            property: "Ends".into(),
+            entity: "Order".into(),
+            site: site(),
+        },
         StateDiag::IntLiteralOutOfBounds {
             value: -7,
             max: 5,
@@ -286,6 +291,10 @@ fn one_of_each() -> Vec<StateDiag> {
             site: site(),
             fault: crate::lifecycle::LassoFault::Satisfies,
         },
+        StateDiag::StateTooWide {
+            bits: 1 << 33,
+            most: u64::from(u32::MAX),
+        },
     ];
     // Fails to compile when a variant is added without a value above.
     for d in &all {
@@ -297,6 +306,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::PreExistingChildOfCreatedParent { .. }
             | StateDiag::IdentityStartSlots { .. }
             | StateDiag::DomainTooLarge { .. }
+            | StateDiag::StateTooWide { .. }
             | StateDiag::CountAboveBound { .. }
             | StateDiag::MinCardOfPreExistingParent { .. }
             | StateDiag::MinCardNeedsCreate { .. }
@@ -317,6 +327,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::Deadlock { .. }
             | StateDiag::AssertOnInertUseCase { .. }
             | StateDiag::FairOnInertUseCase { .. }
+            | StateDiag::GoalMetByDelete { .. }
             | StateDiag::IntLiteralOutOfBounds { .. }
             | StateDiag::UnbindableScope { .. }
             | StateDiag::UnbindableCondition { .. }

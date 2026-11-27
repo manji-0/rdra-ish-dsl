@@ -240,7 +240,7 @@ forbidden(Doc, status == final)
         String::from_utf8_lossy(&out.stderr),
     );
     assert!(
-        stdout.contains("Cone_Forbidden_Doc_0 [Forbidden_Doc_0]: ok (3 states)\n  note: Forbidden_Doc_0's counterexample runs a use case without its event having been raised, which this cone does not rule out; on its exact cone: ok\n"),
+        stdout.contains("Cone_Forbidden_Doc_0 [Forbidden_Doc_0]: ok (3 states)\n  note: Forbidden_Doc_0: the cone's counterexample is a candidate only, since it runs a use case without its event having been raised; on the cone refined with the event's raisers: ok\n"),
         "{stdout}"
     );
     assert!(!stderr.contains("error[Forbidden_Doc_0]"), "{stderr}");
@@ -260,7 +260,7 @@ forbidden(Doc, status == final)
         "{stdout}"
     );
     assert!(
-        stdout.contains("Cone_NeverFinal [NeverFinal]: not decided (7 states, its counterexample may run a use case without its event having been raised)\n"),
+        stdout.contains("Cone_NeverFinal [NeverFinal]: not decided (7 states, its counterexample is a candidate: it may run a use case without its event having been raised)\n"),
         "{stdout}"
     );
     assert!(stdout.contains("[NeverFinal]: ok ("), "{stdout}");

@@ -10,6 +10,7 @@
 //! `N` is still enabled. The property fails when a triggered state of `N` reaches such an end
 //! inside `N`.
 
+use crate::lifecycle::narrow::id32;
 use std::collections::hash_map::Entry;
 use std::collections::VecDeque;
 
@@ -233,7 +234,7 @@ impl ComponentRun {
         let mut best: Option<(u32, Avoid)> = None;
         for b in ts.binder_slots(&p.binders) {
             let avoid = self.avoid(&fair, goal, &b, rule);
-            let found = (0..self.states.len() as u32).find(|&s| {
+            let found = (0..id32(self.states.len())).find(|&s| {
                 let st = &self.states.at(s as usize);
                 avoid.toward[s as usize] != NONE
                     && ts.triggers(p, &b, st)
@@ -259,7 +260,7 @@ impl ComponentRun {
                 let Some(slots) = p.fair_instance(&ts.actions()[act.index()], params) else {
                     return NONE;
                 };
-                let next = ids.len() as u32;
+                let next = id32(ids.len());
                 *ids.entry((*act, slots)).or_insert(next)
             })
             .collect();
@@ -321,7 +322,7 @@ impl ComponentRun {
             let c = comp[s] as usize;
             size[c] += 1;
             open[c] |= s >= expanded;
-            for (acc, en) in always[c * w..][..w].iter_mut().zip(fair.enabled(s as u32)) {
+            for (acc, en) in always[c * w..][..w].iter_mut().zip(fair.enabled(id32(s))) {
                 *acc &= en;
             }
         }
@@ -352,11 +353,11 @@ impl ComponentRun {
                     && s < expanded
                     && match rule {
                         StopRule::Fair(Fairness::Plain) => {
-                            fair.enabled(s as u32).iter().all(|w| *w == 0)
+                            fair.enabled(id32(s)).iter().all(|w| *w == 0)
                         }
                         StopRule::Fair(Fairness::WfNext) => !fair.moves_on[s],
                         StopRule::Looping(looping) => {
-                            fair.enabled(s as u32).iter().all(|w| *w == 0)
+                            fair.enabled(id32(s)).iter().all(|w| *w == 0)
                                 && (!fair.moves_on[s] || looping[s])
                         }
                     }
@@ -366,8 +367,8 @@ impl ComponentRun {
         let mut queue = VecDeque::new();
         for s in 0..n {
             if stops[s] || (in_n[s] && fair_cycle[comp[s] as usize]) {
-                toward[s] = s as u32;
-                queue.push_back(s as u32);
+                toward[s] = id32(s);
+                queue.push_back(id32(s));
             }
         }
         while let Some(at) = queue.pop_front() {
@@ -439,7 +440,7 @@ impl ComponentRun {
         let c = avoid.comp[end as usize];
         let w = fair.words;
         let mut all = vec![0u64; w];
-        (0..fair.count as u32).for_each(|a| set(&mut all, a));
+        (0..id32(fair.count)).for_each(|a| set(&mut all, a));
         let mut covered = vec![0u64; w];
         let visit = |covered: &mut [u64], s: u32| {
             for (cv, en) in covered.iter_mut().zip(fair.enabled(s)) {

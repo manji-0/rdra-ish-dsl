@@ -675,6 +675,7 @@ headers of the samples list these names
 | `DrivenComparisonColumnWritten { usecase, column, proposition, drivers }` | `DrivenComparisonColumnWritten_<E>_<usecase>_<column>` | warning | A use case `sets` a column a driven comparison reads without driving the comparison. |
 | `IntLiteralOutOfBounds { value, max }` | `IntLiteralOutOfBounds_<E>_<value>` | error | An Int literal or integer `@default` lies outside `0..max`. |
 | `DomainTooLarge { column, values }` | `DomainTooLarge_<E>_<column>` | error | A column has more than the 256 values a state holds: a nullable Int at `--int-range-max 255`, a nullable Enum of 256 values, or an Enum of 257. |
+| `StateTooWide { bits, most }` | `StateTooWide` | error | A state of the system packs into more bits than a packed state addresses (`u32::MAX`, the width of a cell's bit offset): fewer instances or a smaller Int range. |
 | `UnsupportedComparison { comparison }` | `UnsupportedComparison_<E>_<comparison>` | error | An order comparison has a non-numeric operand, or `==` / `!=` compares columns of different domains. |
 | `UnbindableScope { constraint }` | `UnbindableScope_<E>_<constraint>` | error | An `.along` names a hop no `relate` binds, or misses an entity the rule names. |
 | `UnbindableCondition { condition, usecase }` | `UnbindableCondition_<E>_<condition>_<usecase>` | error | A condition body is applied to a use case that writes nothing, or its `.along` cannot be bound. |
@@ -695,6 +696,7 @@ headers of the samples list these names
 | `GoalUnreachable { name, instance, confined, states, .. }` | the property's name, such as `OrderCanFinish` | error | A `can_reach` property fails; `confined` lists what the goal reads in the states left. Only `verify` reports it. |
 | `AssertOnInertUseCase { anchor }` | `AssertOnInertUseCase_<E>_<anchor>` | error | `after(UC).assert` names a use case with no action. |
 | `FairOnInertUseCase { property, usecase }` | `FairOnInertUseCase_<E>_<property>_<usecase>` | error | A property's `.fair(...)` names a use case with no action. |
+| `GoalMetByDelete { property, entity }` | `GoalMetByDelete_<E>_<property>_<entity>` | info | An `eventually` / `leads_to` goal holds on the base values of a bound row some use case deletes, so the delete meets it; `.present()` asks for a present row. |
 | `PatternCapReached { cap, bound }` | `PatternCapReached_<E>` | error | An entity view exceeded `--max-patterns`. |
 | `StateCapReached { cap, growth }` | `StateCapReached_<E>` | error | A cone exceeded `--max-states`. The message names what the states vary in. |
 | `MemoryCapReached { limit, states, growth, held, .. }` | `MemoryCapReached_<E>` | error | A cone outgrew the [memory limit](./cli-reference.md#memory-limit). The message estimates what finishing needs. In `verify`, the cone's findings are `not decided` instead. |

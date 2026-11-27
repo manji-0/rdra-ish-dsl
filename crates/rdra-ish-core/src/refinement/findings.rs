@@ -29,6 +29,7 @@ pub(super) fn owning_stage(model: &SemanticModel, diag: &StateDiag) -> StageId {
         | StateDiag::PreExistingChildOfCreatedParent { .. }
         | StateDiag::IdentityStartSlots { .. }
         | StateDiag::DomainTooLarge { .. }
+        | StateDiag::StateTooWide { .. }
         | StateDiag::CountAboveBound { .. }
         | StateDiag::MinCardOfPreExistingParent { .. }
         | StateDiag::MinCardNeedsCreate { .. }
@@ -62,6 +63,7 @@ pub(super) fn owning_stage(model: &SemanticModel, diag: &StateDiag) -> StageId {
         | StateDiag::DeleteLeavesChildKeys { .. }
         | StateDiag::GuardReadsLaterStep { .. }
         | StateDiag::DrivenComparisonColumnWritten { .. }
+        | StateDiag::GoalMetByDelete { .. }
         | StateDiag::DefaultOnVariationIgnored { .. } => StageId::Lifecycle,
     }
 }

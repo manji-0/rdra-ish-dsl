@@ -3,6 +3,7 @@
 
 use super::types::{At, CmpOp, Domain, EntId, Pred, Term, Value, VarId};
 use super::TransitionSystem;
+use crate::lifecycle::narrow::id8;
 
 /// One flat byte per slot. Slot `(var, inst)` lives at `offset(var) + inst`; `now` has one slot.
 /// It reads as a `StateSlice`, the form a run's store (`States`) lends its states in.
@@ -152,7 +153,7 @@ impl TransitionSystem {
             if !state.is_present(self, entity, slot) {
                 continue;
             }
-            env.bound.push(slot as u8);
+            env.bound.push(id8(slot));
             count += usize::from(self.eval(body, state, env));
             env.bound.pop();
         }
@@ -171,7 +172,7 @@ impl TransitionSystem {
             if !state.is_present(self, entity, slot) {
                 continue;
             }
-            env.bound.push(slot as u8);
+            env.bound.push(id8(slot));
             let holds = self.eval(body, state, env);
             env.bound.pop();
             if holds != all {
@@ -256,7 +257,7 @@ impl TransitionSystem {
             if !state.is_present(self, first, slot) {
                 continue;
             }
-            env.bound.push(slot as u8);
+            env.bound.push(id8(slot));
             let found = self.search(rest, body, state, env);
             env.bound.pop();
             if found.is_some() {
@@ -304,7 +305,7 @@ impl TransitionSystem {
             }
             Term::Lit(value) => Operand::Value(*value, None),
             Term::Int(n) => Operand::Number(*n),
-            Term::Index(at) => Operand::Slot(env.slot(*at) as u8),
+            Term::Index(at) => Operand::Slot(id8(env.slot(*at))),
             Term::Now => {
                 let now = self.now.expect("predicate reads now without a clock");
                 Operand::Number(i64::from(state.get(self, now, 0).0))

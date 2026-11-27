@@ -1,6 +1,7 @@
 //! The graph both engines hand to findings, and the run's edge, path and trace readers.
 
 use crate::lifecycle::expr::State;
+use crate::lifecycle::narrow::id32;
 use crate::lifecycle::reduce::Step;
 use crate::lifecycle::trace::Trace;
 use crate::lifecycle::types::ActId;
@@ -49,6 +50,15 @@ impl Graph<'_> {
         self.edges
             .iter()
             .map(|e| (e.from, e.to, self.bindings[e.binding as usize].0))
+    }
+
+    /// Every move as `(from, to, action, params)`, each param's slot from 0, self-loops and
+    /// repeats included. A graph of another engine's moves names no params.
+    pub fn bound_edges(&self) -> impl Iterator<Item = (u32, u32, ActId, &[u8])> + '_ {
+        self.edges.iter().map(|e| {
+            let (act, params) = &self.bindings[e.binding as usize];
+            (e.from, e.to, *act, &params[..])
+        })
     }
 
     /// The distinct successors and predecessors of every state, self-loops left out, for the
@@ -176,7 +186,7 @@ impl Adjacency {
         let mut stack: Vec<u32> = Vec::new();
         let mut call: Vec<(u32, usize)> = Vec::new();
         let (mut counter, mut count) = (0u32, 0u32);
-        for root in 0..n as u32 {
+        for root in 0..id32(n) {
             if index[root as usize] != UNSEEN {
                 continue;
             }
@@ -247,7 +257,7 @@ impl Csr {
             let row = from..start[at + 1] as usize;
             from = row.end;
             next[row.clone()].sort_unstable();
-            start[at] = kept as u32;
+            start[at] = id32(kept);
             let mut last = None;
             for i in row {
                 if last != Some(next[i]) {
@@ -257,7 +267,7 @@ impl Csr {
                 }
             }
         }
-        start[n] = kept as u32;
+        start[n] = id32(kept);
         next.truncate(kept);
         Csr { start, next }
     }
@@ -374,7 +384,7 @@ impl ComponentRun {
                     continue;
                 }
                 ends.ran = true;
-                let moved = e.from != e.to || orbit_self.binary_search(&(k as u32)).is_ok();
+                let moved = e.from != e.to || orbit_self.binary_search(&id32(k)).is_ok();
                 if !moved {
                     continue;
                 }

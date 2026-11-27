@@ -6,6 +6,7 @@
 //! the reader, which reads the moves in order, only looks it up. The reader still decides every
 //! number a state gets: a `Miss` here is a hint it checks against its own table.
 
+use crate::lifecycle::narrow::id32;
 use std::sync::Arc;
 
 use hashbrown::HashTable;
@@ -225,7 +226,7 @@ impl Numbering {
                 .filter(|&t| t <= Self::MOST)
             {
                 Some(t) => {
-                    actions.push((total as u32, radix));
+                    actions.push((id32(total), radix));
                     total = t;
                 }
                 None => {

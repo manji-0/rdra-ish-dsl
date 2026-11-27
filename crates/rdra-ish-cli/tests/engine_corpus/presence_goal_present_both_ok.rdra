@@ -1,0 +1,26 @@
+// trap: `.present()` changes nothing where no delete can come before the goal.
+// Only an approved document can be archived (deleted), and Submit and Approve are fair, so
+// every document is approved while present before anything deletes it: each goal is met on a
+// present row, and both forms of each property hold. A checker that read `.present()` as
+// "the row is never deleted", or that kept the obligation of a goal already met, would report
+// counterexamples for the `.present()` forms.
+// expect ReviewApproved: native=ok tlc=ok
+// expect ReviewApprovedPresent: native=ok tlc=ok
+// expect EventuallyApproved: native=ok tlc=ok
+// expect EventuallyApprovedPresent: native=ok tlc=ok
+entity Doc "文書" { id: Int @pk  status: Enum(draft, review, approved) @default(draft) }
+usecase Write "作成"
+usecase Submit "提出"
+usecase Approve "承認"
+usecase Archive "保管"
+creates(Write, Doc)
+transitions(Submit, Doc.status, draft -> review)
+transitions(Approve, Doc.status, review -> approved)
+deletes(Archive, Doc)
+condition Approved "承認済"
+holds(Approved, Doc.status == approved)
+applies_to(Approved, Archive)
+property ReviewApproved leads_to(Doc.status == review, Doc.status == approved).fair(Approve)
+property ReviewApprovedPresent leads_to(Doc.status == review, Doc.status == approved).present().fair(Approve)
+property EventuallyApproved eventually(Doc.status == approved).fair(Submit, Approve)
+property EventuallyApprovedPresent eventually(Doc.status == approved).present().fair(Submit, Approve)
