@@ -191,7 +191,8 @@ pub(crate) enum Commands {
         #[arg(long, value_name = "LEVEL", num_args = 0..=1, require_equals = true, default_missing_value = "fresh")]
         code: Option<CodeLevel>,
         /// With `--code=run`: fail when the conformance traces are not complete (their BFS
-        /// stopped at `conformance_states`, so no refused call is tried); without it, a warning
+        /// stopped at `conformance_states`, so no refused call is tried), or when calls reached
+        /// the unimplemented port; without it, a warning
         #[arg(long, requires = "code")]
         deny_incomplete: bool,
         /// With `--code=run`: after the run passes, run it again on this many mutant traces

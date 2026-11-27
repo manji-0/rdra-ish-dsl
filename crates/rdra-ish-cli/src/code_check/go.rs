@@ -191,13 +191,11 @@ impl Backend for GoBackend {
         target.target.traces.as_ref()?;
         let dir = package_dir(target)?;
         let run = format!("^{CONFORMANCE_TEST}$");
-        let mut command: Vec<String> = ["go", "test", "-count=1", "-run", &run, &dir]
+        // The test logs what it ran and the calls that reached the unimplemented port, which
+        // `go test` shows only so.
+        let command: Vec<String> = ["go", "test", "-count=1", "-v", "-run", &run, &dir]
             .map(String::from)
             .to_vec();
-        // The adapter's test logs what it ran, which `go test` shows only so.
-        if target.target.adapter.is_some() {
-            command.insert(3, "-v".to_string());
-        }
         Some(command)
     }
 

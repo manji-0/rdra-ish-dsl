@@ -58,6 +58,16 @@ pub struct Trace {
     pub free_triggers: Vec<(String, String)>,
 }
 
+impl Trace {
+    /// Whether the cone that found this trace vouches for it as a run of the whole system: it
+    /// runs no use case without its event (`free_triggers`) and, with `slots`, creates no more
+    /// instances than the bound allows (`over_bound`). A trace past the bound is a run of the
+    /// whole system at a larger bound; one with a free trigger may be a run of none.
+    pub fn vouched(&self, slots: bool) -> bool {
+        self.free_triggers.is_empty() && (!slots || self.over_bound.is_empty())
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TraceStep {
     /// `Place`, `Pay_1`, or `Tick`.

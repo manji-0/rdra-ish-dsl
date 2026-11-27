@@ -1,0 +1,24 @@
+// Global `now` clock + arithmetic comparison (expired_at < now).
+// Nothing pins `expired_at`, so the clock can tick past it: TLC finds that
+// `forbidden(expired_at < now)` is reachable (expected TLC fail / counterexample).
+// expect check: fail Forbidden_Coupon_0
+// expect verify: fail Forbidden_Coupon_0
+entity Coupon "クーポン" {
+  id: Int @pk
+  status: Enum(active, expired) @default(active)
+  expired_at: DateTime
+}
+
+usecase Issue "発行"
+usecase Expire "失効"
+
+buc BucCouponLifecycle "Coupon lifecycle"
+contains(BucCouponLifecycle, Issue)
+contains(BucCouponLifecycle, Expire)
+
+creates(Issue, Coupon)
+updates(Expire, Coupon)
+
+transitions(Expire, Coupon.status, active -> expired)
+
+forbidden(Coupon, expired_at < now)
