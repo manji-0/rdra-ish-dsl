@@ -682,6 +682,7 @@ impl Frame<'_> {
                     var: v,
                     param,
                     values,
+                    ..
                 } if *v == var && *param == p => {
                     return Some(match values.as_slice() {
                         [one] => NextRead::Value(one.value),
