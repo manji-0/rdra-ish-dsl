@@ -1568,6 +1568,10 @@ one, the run stops with an error.
 - **Nix:** `nix shell nixpkgs#z3`; `nix develop` here provides it.
 - **A package manager:** `apt install z3`, `brew install z3`, or `pip install z3-solver`.
 
+The proof's budgets were measured on z3 5.1.0, the version `nix develop` provides. Another
+version, as a package manager may install, runs the same and prints a `note:` (see
+[Proofs](#proofs)).
+
 ### Proofs
 
 `--prove` prints one `proved:`, `unproved:`, `out of scope:`, or `refuted:` line per selected
@@ -1583,7 +1587,11 @@ counterexample at <n> instances)`, with no CTI, and `--deny-unproved` does not c
 `OK:` line gains `; <n> of <m> rules proved for any number of rows and any Int value`. A rule
 the SQL schema does not enforce is marked `[not enforced by the SQL schema: <why>]`, and a
 `proof: the SQL schema leaves ...` line counts them. Each z3 check has a fixed budget of z3
-resource units, not time, so the verdicts do not depend on the machine or its load. An
+resource units, not time, so the verdicts do not depend on the machine or its load. The
+budgets were measured on z3 5.1.0; with another z3, or one whose `z3 --version` line cannot be
+read, the run prints `note: z3 <version> is not a version the proof's resource limits were
+measured on (5.1.0); a check may give up, or settle, where it would not on those` on stderr,
+and nothing else changes. An
 invariant cone stopped at the memory limit is `ok` when z3 proves every rule in it (see
 [Memory limit](#memory-limit)). See
 [Proofs for any number of rows](./formal-verification.md#proofs-for-any-number-of-rows).

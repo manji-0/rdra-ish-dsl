@@ -231,6 +231,57 @@ fn a_missing_z3_is_a_tool_error() {
     );
 }
 
+/// A z3 whose `--version` line names a version the resource limits were not measured on
+/// prints one `note:` on stderr; the proof, stdout past the version in its header, and the
+/// exit code are the same. A verified version prints none; a proof that then fails prints it
+/// too. The version comes from a script
+/// in front of the z3 on PATH, so the test does not depend on which z3 that is.
+#[cfg(unix)]
+#[test]
+fn an_unverified_z3_version_is_a_note() {
+    use std::os::unix::fs::PermissionsExt;
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    let z3 = tools::on_path("z3").expect("z3 on PATH");
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("prove_cli_z3_version");
+    std::fs::create_dir_all(&dir).unwrap();
+    // `solve` runs for every call but `--version`.
+    let run = |version: &str, solve: &str| {
+        let script = dir.join(format!("z3-{version}-{}", solve.len()));
+        std::fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'Z3 version {version} - 64 bit'; else {solve}; fi\n"
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let script = script.to_string_lossy().into_owned();
+        let out = verify(&["--prove", "--z3", &script, &sample("check_unmet")]);
+        let stdout = String::from_utf8_lossy(&out.stdout).replace(version, "<version>");
+        let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+        (out.status.code(), stdout, stderr)
+    };
+    let real = format!("exec '{}' \"$@\"", z3.display());
+    let (verified_code, verified_out, verified_err) = run("5.1.0", &real);
+    let (code, out, err) = run("5.9.1", &real);
+    assert!(
+        out.contains("proof (Z3 version <version> - 64 bit): "),
+        "{out}"
+    );
+    assert_eq!((code, &out), (verified_code, &verified_out));
+    assert!(!verified_err.contains("note: z3"), "{verified_err}");
+    let note = "note: z3 5.9.1 is not a version the proof's resource limits were measured on (5.1.0); a check may give up, or settle, where it would not on those\n";
+    assert_eq!(err.matches(note).count(), 1, "{err}");
+    assert_eq!(err.replacen(note, "", 1), verified_err);
+    // A z3 that cannot solve: the note still prints, beside the error.
+    let (code, _, err) = run("5.9.1", "exit 3");
+    assert_eq!(code, Some(1), "{err}");
+    assert_eq!(err.matches(note).count(), 1, "{err}");
+    assert!(err.contains("z3"), "{err}");
+}
+
 #[test]
 fn deny_unproved_needs_prove() {
     let out = verify(&["--deny-unproved", &sample("check_met")]);

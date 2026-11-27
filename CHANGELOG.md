@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Added
+
+- `verify --prove` (experimental) prints `note: z3 <version> is not a version the proof's
+  resource limits were measured on (5.1.0); ...` on stderr when the z3 it runs is not one the
+  rule and lemma limits were measured on (exactly 5.1.0, the version the flake pins), or its
+  version line cannot be read (#427). Nothing else changes: the exit code, stdout, and runs on
+  z3 5.1.0 print the same as before. The note prints even when the proof then fails. The
+  release test `proof_equivalence` now also fails when a check that keeps a rule or lemma
+  spends more than a tenth of its limit, or any check nine tenths of it. On every sample on 2
+  solvers, and on the costliest samples on 1 and 3, the most is 161,000 units for a rule (1/124
+  of 20,000,000) and 114,000 for a lemma (1/17 of 2,000,000).
+
 ### Changed
 
 - `verify --prove` (experimental) asserts each rule and lemma once per solver, behind an

@@ -58,10 +58,11 @@ pub(crate) use self::tlc_tool::find_on_path;
 use self::tlc_tool::Tlc;
 use crate::export::{checked_system, Modules};
 use crate::memory::{Budgeted, VerifySplit};
-use crate::prove::{find_z3, run_proof, Marks};
+use crate::prove::{find_z3, run_proof, Marks, Z3Tool};
 use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_output::Outcome;
 use anyhow::Result;
+use rdra_ish_core::lifecycle::prove::{unverified_z3_note, Z3};
 use rdra_ish_core::lifecycle::{Caps, QuotientCache, Scope, Symmetry, Target};
 use rdra_ish_core::memory::MemoryPool;
 use rdra_ish_core::{ResolvedProgram, SemanticModel};
@@ -307,11 +308,23 @@ pub fn run(
                 let (ts, selection, pool, deny) = (&ts, &selection, &pool, *deny_unproved);
                 Some(threads.spawn(move || {
                     let _cores = pool.hold_cores(rdra_ish_core::jobs());
-                    z3.and_then(|z3| {
+                    let z3 = z3.map(|z3| {
+                        let version = Z3::version(&z3).unwrap_or_default();
+                        (z3, version)
+                    });
+                    // A z3 the limits were not measured on: the note prints even when the
+                    // proof then fails.
+                    let note = z3.as_ref().ok().and_then(|(_, v)| unverified_z3_note(v));
+                    let ran = z3.and_then(|(z3, version)| {
                         let marks = Marks::of(model, ts);
                         let twin = rdra_ish_core::lifecycle::prove::mining_twin(model, scope, ts);
-                        run_proof(ts, twin.as_ref(), selection, &marks, &refuted, &z3, deny)
-                    })
+                        let tool = Z3Tool {
+                            binary: &z3,
+                            version: &version,
+                        };
+                        run_proof(ts, twin.as_ref(), selection, &marks, &refuted, tool, deny)
+                    });
+                    (note, ran)
                 }))
             }
             _ => None,
@@ -347,10 +360,15 @@ pub fn run(
         pool.bfs_ended(memory.limit.bytes());
         rdra_ish_core::perf::pass("proof");
         let proof = match proof.map(|p| p.join()) {
-            Some(Ok(ran)) => ran.map(|run| {
-                print!("{}", run.text);
-                Some(run)
-            }),
+            Some(Ok((note, ran))) => {
+                if let Some(note) = note {
+                    eprintln!("{note}");
+                }
+                ran.map(|run| {
+                    print!("{}", run.text);
+                    Some(run)
+                })
+            }
             Some(Err(panic)) => std::panic::resume_unwind(panic),
             None => Ok(None),
         };
