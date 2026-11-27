@@ -11,24 +11,13 @@ is. It owns rows T1 to T16 of the [claims inventory](./claims.md#d-agreement-wit
 uses the notation of [semantics.md](./semantics.md) (D1 to D23) without redefining it.
 
 The code was read at commit `fb6928c74ccc5b479dea07d92cc1e39c34ddd218` (origin/main,
-2026-11-28), later than the index's pin `b83b9544`; the revision after review was checked
-against the same commit. `git diff --stat b83b9544 fb6928c7` over the whole tree, read
-against the paths this document cites, shows three cited files changed, none in a part this
-document relies on: `scripts/verify-relevant.sh` adds the Claude Code plugin and LSP files
-to the paths that skip the verification checks; `CHANGELOG.md` gains entries under
-"Unreleased" only (its v3.0.0 section is unchanged); and `docs/cli-reference.md` gains
-lines on the plugin and code generation, not in "Partial runs". Every other cited path is
-identical at both: `crates/rdra-ish-emit/src/tla/`, `crates/rdra-ish-cli/src/verify/`,
-`tlc_output.rs`, `tlc_replay.rs`, `property_cone.rs`, the corpus and equivalence
-tests, `crates/rdra-ish-core/src/`, `.github/workflows/`, `flake.nix`, the samples, the
-other cited scripts (`verify-samples.sh`, `reduction-diff.py`, `tlc-roots.txt`,
-`kani-relevant.sh`), and the notes in `docs/` and `docs/design/`. The rest of the diff
-(code generation, the LSP, the plugin, `cli.rs` and `lib.rs` of the CLI for those,
-`scripts/check-release-version.sh`, and this
-directory's own documents) is outside what this document cites. Paths follow the convention of the
+2026-11-28), later than the index's pin `b83b9544`; [Appendix: the pinned
+commit](#appendix-the-pinned-commit) says what is cited and that none of it changed in a part
+this document relies on. Paths follow the convention of the
 [claims inventory](./claims.md#how-to-read-a-row): `core` is
 `crates/rdra-ish-core/src/lifecycle`, `cli` is `crates/rdra-ish-cli`, `emit` is
-`crates/rdra-ish-emit/src`.
+`crates/rdra-ish-emit/src`. How the document changed after it was first written is in
+[Errata](#errata). `unread@pin` marks a statement whose cited code was not read at the pinned commit ([claims inventory](./claims.md#how-to-read-a-row)).
 
 **The central point [read].** Agreement with TLC is evidence, not a theorem. No part of the TLA+
 translation is proved. What exists is (1) an argument, written here for the first time,
@@ -57,7 +46,8 @@ at the start of a subsection or on the sentence that introduces a list or table 
 until the next tag. Tags combine with `;` (`[paper; test]` means both kinds of support),
 and a tag may carry a qualifier after a colon or `;` (`[assumed: TLC]`, `[read; not
 reproduced]`, `[paper; see Status]`, `[test; no paper argument; …]`); the class is always
-one of the five above. The Related work section cites literature and carries no tag.
+one of the five above. The Related work section cites literature and the Errata section
+records changes to this document; neither carries a tag.
 
 ---
 
@@ -266,7 +256,8 @@ left-to-right evaluation, not for the meaning of the conjunction.
   invariant: no action has an `Assign` after, or a `Choose` before, such a `Transition` on
   the same `(var, param)` (or, more weakly, the post-guards reconcile it). Open problem P24
   records where the builder excludes each shape and the one shape it was not found to
-  exclude.
+  exclude. Since #485 the build enforces the invariant: an action that writes one slot
+  twice fails with `ConflictingEffects`, the created-row shape included.
 - `Delete`: both reset `Exists` to `deleted` and every column of `decl.columns` to base,
   and keep owners (D8). Both drop a choice on the deleted slot (`moves.rs` retains only
   choices on other params; the printer overwrites the slot with the base value).
@@ -325,7 +316,8 @@ whose successor equals its pre-state. The native checker skips that check explic
 (`core/explore/bfs.rs::Bfs::take` continues before `check_after` on `Probe::Loop`, which
 `explore/probe.rs::Probes::read` sets for a successor equal to its source in every build,
 independent of `Probing`). The
-engines agree; D17 is incomplete (open problem P22).
+engines agree; D17 states the exemption since #475, and the language reference's promise of
+a check after every run stays open (P22).
 
 **Temporal properties [paper].** `checks` prints the binding quantifier `\A b …` in one of
 three places: outside the temporal operator for `always`, `eventually` and `leads_to`
@@ -379,7 +371,7 @@ code computed it. It checks the native exploration of that quotient, not the quo
 soundness (A8, theme (a)). This document gives no paper argument that the printed class
 move (the `is_class_move` branch of `action`), the `Rise` lookup, and the bits denote the
 native reduced step (`moves_of_into` with a reduction); `bits`, `rise_expr`, and the native
-reduced step were not read for it. Step 3 on reduced systems therefore rests on the graph
+reduced step were not read for it (unread@pin). Step 3 on reduced systems therefore rests on the graph
 comparison of reduced sample cones alone. The sample comparison does compare the reduced cone's violated
 checks with the unreduced cone's, through TLC on both
 ([Sample comparison](#the-sample-comparison)), but only on cones whose unreduced BFS fits
@@ -714,10 +706,35 @@ evidence would not catch, most consequential first. Each item is an assessment d
 the sections it cites, and carries the tag of the statements it rests on.
 
 1. **Common-mode faults outside the corpus traps [read].** A wrong `T` from the builder, a wrong
-   cone, a wrong ladder decision, or a wrong quotient table moves both engines. Only the 191
-   hand-written `expect` lines see these, and only on the 79 traps they name.
+   cone, a wrong ladder decision (the staging of a property cone's runs), a wrong quotient
+   table, or a wrong name in `TlaNames`, which the printer and the decoder both use, moves both
+   engines. P40 and P54 (a value the build wraps; [z3.md](./z3.md#uniformity-in-the-bound),
+   [native.md](./native.md#the-state-store-and-its-encoding)) and P32 (an entity cone that
+   leaves a raised mark out; [cones.md](./cones.md#safety-cones)) are faults of this kind.
+   The 191 hand-written `expect` lines see these on the 79 traps they name. For the builder,
+   the reference interpreter of P26 (`core/lifecycle/tests/reference/`) is a second check
+   [test]: it reads a subset of the language from the `SemanticModel` without
+   `TransitionSystem::build`, explores it by brute force on plain values (`i64` integers,
+   Enum values by name, no packing, cone, reduction or symmetry), and compares the initial
+   states, reachable states, edges labelled by use case, rule names and violated rules with
+   the native run of the whole model. The subset is entities with Enum, Bool, Int-typed and
+   nullable String columns (`@null`, `@default`, `@check`); `creates`, `updates` and
+   `deletes` of one entity per use case, so one transaction group; literal, `null` and
+   `present` `sets`, with `.when`; `transitions` with choices and `.when`; `applies_to`
+   guards on the written entity; and the four single-entity rule forms with `.when`. It runs
+   on the corpus cases and formal-verification samples in the subset at three bounds, on 300
+   random models of the subset in every pull request and 2,700 more on main, and checks each
+   rule z3 proves at `m` against the reference at `m + 1` and `m + 3`. It failed on P40 and
+   P54 before #470 and on P43 before its fix. What it leaves to the `expect` lines: every
+   construct outside the subset (owners and keys, split use cases, triggers, copies,
+   `chooses`, `drives`, `now`, multi-entity rules, quantifiers, `after` assertions, property
+   verdicts); and, since it compares whole-model runs, the cone choice, the ladder, the
+   quotient tables and `TlaNames`. It shares the parser, `build_model`, the rule names, and
+   D2's reading of which Int-typed columns are numbers with the builder.
+   The theory index's [conclusion](./README.md#conclusion) takes this item and the next as
+   the main residual risks of all four documents.
 2. **A wrong verdict on any input no test ran [read; runtime].** The run-time guard on
-   native counterexamples is partial. By P20 (reported, not re-read here) and D23, only a
+   native counterexamples is partial. By P20 (reported; unread@pin) and D23, only a
    liveness lasso on an unreduced cone is replayed through the step relation before it
    prints: a safety counterexample is re-evaluated by `property_failure`, not replayed; the
    lift of a reduced safety trace checks its steps with `debug_assert!` only; a reduced
@@ -747,7 +764,8 @@ the sections it cites, and carries the tag of the statements it rests on.
    `TlaNames` have no Kani harness, no shadow twin, and no mutant; P12 is a place where a
    disagreement in violated sets can go unreported, and P23 a place where the per-run
    comparison pairs runs on two different systems.
-7. **Effect orders the builder may not exclude [paper; read].** Step 3 of T1 for
+7. **Effect orders the builder may not exclude [paper; read].** Fixed in #485, which makes
+   the build reject an action that writes one slot twice. Step 3 of T1 for
    multi-target transitions rests on a builder invariant (P24). On the one shape not found
    to be excluded, the two effect readings differ, and the post-guards remove the
    difference only when the `transitions` arms carry `.when` guards; with unguarded arms,
@@ -818,3 +836,36 @@ document or by the code at the pinned commit. [read]
 | P22 | New (prose): D17 omits that a step with `s' = s` is checked by neither engine. Both halves read; `Probe::Loop` is set in every build. |
 | P23 | New (evidence): the per-run comparison pairs the native `WfNext` run on the reduced cone (`decide_liveness_reduced`) with TLC's `_WF` module printed from the unreduced cone, so Proposition 0 does not apply on that path. |
 | P24 | New (evidence): for a `Transition` with a multi-target source, the printer's and the native effect application agree only under a builder invariant on effect order that nothing enforces as such; one shape was not found to be excluded, and on it the post-guards reconcile the two only when the `transitions` arms carry `.when` guards. |
+| P26 | New (evidence), from the owner's review: agreement cannot see a common-mode fault (item 1 of [Residual risk](#residual-risk)). Partly closed by the reference interpreter of that item, for a subset of the language. |
+
+
+## Appendix: the pinned commit
+
+[read] The code was read at commit `fb6928c74ccc5b479dea07d92cc1e39c34ddd218` (origin/main,
+2026-11-28), later than the index's pin `b83b9544`. `git diff --stat b83b9544 fb6928c7` over the whole tree, read
+against the paths this document cites, shows three cited files changed, none in a part this
+document relies on: `scripts/verify-relevant.sh` adds the Claude Code plugin and LSP files
+to the paths that skip the verification checks; `CHANGELOG.md` gains entries under
+"Unreleased" only (its v3.0.0 section is unchanged); and `docs/cli-reference.md` gains
+lines on the plugin and code generation, not in "Partial runs". Every other cited path is
+identical at both: `crates/rdra-ish-emit/src/tla/`, `crates/rdra-ish-cli/src/verify/`,
+`tlc_output.rs`, `tlc_replay.rs`, `property_cone.rs`, the corpus and equivalence
+tests, `crates/rdra-ish-core/src/`, `.github/workflows/`, `flake.nix`, the samples, the
+other cited scripts (`verify-samples.sh`, `reduction-diff.py`, `tlc-roots.txt`,
+`kani-relevant.sh`), and the notes in `docs/` and `docs/design/`. The rest of the diff
+(code generation, the LSP, the plugin, `cli.rs` and `lib.rs` of the CLI for those,
+`scripts/check-release-version.sh`, and this
+directory's own documents) is outside what this document cites.
+
+## Errata
+
+Changes to statements of this document after it was first written, newest last.
+
+- **2026-11-28, after an adversarial review** (commits `b75044db`, `25185bd9`, and
+  `7227d440`). The revisions that followed the review were checked against the same commit as
+  the first version, `fb6928c7`.
+- **2026-11-28, after the owner's review.** The paragraph on what the document cites and what
+  changed between `b83b9544` and `fb6928c7` moved from the opening to
+  [Appendix: the pinned commit](#appendix-the-pinned-commit), unchanged. Item 1 of
+  [Residual risk](#residual-risk) now also names the staging of a property cone's runs and
+  `TlaNames`, and P40, P54, and P32 as faults of its kind.

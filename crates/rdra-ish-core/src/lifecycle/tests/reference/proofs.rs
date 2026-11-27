@@ -6,7 +6,7 @@
 //! reachable violation there.
 
 use std::collections::BTreeSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::interp::RefModel;
 use super::{bounds, gen, try_model, Scope, TransitionSystem};
@@ -25,7 +25,7 @@ fn z3() -> Option<PathBuf> {
 }
 
 /// The rules z3 proves of `model` at `int_max`, by name.
-fn proved(z3: &PathBuf, model: &SemanticModel, int_max: u8) -> BTreeSet<String> {
+fn proved(z3: &Path, model: &SemanticModel, int_max: u8) -> BTreeSet<String> {
     let ts = TransitionSystem::build(model, bounds(2, int_max), &Scope::ALL).ts;
     let rules: Vec<usize> = (0..ts.invariants().len()).collect();
     let mut solvers = [Z3::start(z3).expect("z3 starts")];

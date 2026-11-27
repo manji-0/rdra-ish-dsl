@@ -199,6 +199,146 @@ fn a_rule_bfs_refutes_is_not_tried_and_the_others_are() {
     assert!(!stderr.contains("unproved"), "{stderr}");
 }
 
+/// `model` written under the test's temporary directory as `<name>.rdra`.
+fn model_file(name: &str, model: &str) -> String {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("prove_cli_models");
+    std::fs::create_dir_all(&dir).expect("a directory");
+    let path = dir.join(format!("{name}.rdra"));
+    std::fs::write(&path, model).expect("the model is written");
+    path.to_string_lossy().into_owned()
+}
+
+/// P1: the rule's cone leaves out Review, the only raiser of the event that triggers
+/// Finalize, so it runs Finalize unordered and breaks the rule; Review never runs (no use case
+/// enters phase b), so no run of the model does. The counterexample is decided again on the
+/// rule's exact cone, which passes: the cone reads `ok`, the proof is not told the rule was
+/// refuted, and proves it. Properties on such a cone go to the whole model.
+#[test]
+fn a_counterexample_that_runs_a_handler_without_its_event_is_no_refutation() {
+    let model = model_file(
+        "handler_without_event",
+        r#"
+entity Doc "文書" { id: Int @pk  status: Enum(draft, final) @default(draft)  phase: Enum(a, b, c) @default(a) }
+usecase Write "作成"
+usecase Review "確認"
+usecase Finalize "確定"
+event EvReviewed "確認済"
+creates(Write, Doc)
+transitions(Review, Doc.phase, b -> c)
+raises(Review, EvReviewed)
+triggers(EvReviewed, Finalize)
+transitions(Finalize, Doc.status, draft -> final)
+forbidden(Doc, status == final)
+"#,
+    );
+    let out = verify(&[&model]);
+    let (stdout, stderr) = (
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
+    );
+    assert!(
+        stdout.contains("Cone_Forbidden_Doc_0 [Forbidden_Doc_0]: ok (3 states)\n  note: Forbidden_Doc_0's counterexample runs a use case without its event having been raised, which this cone does not rule out; on its exact cone: ok\n"),
+        "{stdout}"
+    );
+    assert!(!stderr.contains("error[Forbidden_Doc_0]"), "{stderr}");
+    // A property on such a cone is decided again on the whole model.
+    let text = std::fs::read_to_string(&model).expect("the model");
+    let properties = model_file(
+        "handler_without_event_properties",
+        &format!("{text}property NeverFinal \"never final\"\n  always(Doc.status == draft)\nproperty DraftStays \"draft stays\"\n  stable(Doc.status == draft)\n"),
+    );
+    let out = verify(&[&properties]);
+    let (stdout, stderr) = (
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
+    );
+    assert!(
+        stdout.contains("property DraftStays (BFS on its cone): ok\n"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("Cone_NeverFinal [NeverFinal]: not decided (7 states, its counterexample may run a use case without its event having been raised)\n"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("[NeverFinal]: ok ("), "{stdout}");
+    assert!(!stderr.contains("error[NeverFinal]"), "{stderr}");
+    assert!(!stderr.contains("error[DraftStays]"), "{stderr}");
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    let out = verify(&["--prove", &model]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("\nproved: Forbidden_Doc_0\n"), "{stdout}");
+    assert!(!stdout.contains("refuted"), "{stdout}");
+}
+
+/// P11: the rule's cone does not count Payment slots, and at two instances its counterexample
+/// takes four Payments (one per Place and per Retry), which two or three instances do not
+/// have. Escalation decides it again on the exact cone, which counts them: no counterexample
+/// at 2 instances.
+#[test]
+fn escalation_reports_no_counterexample_past_the_bound_it_prints() {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    let model = model_file(
+        "escalation_past_the_bound",
+        r#"
+entity Customer "顧客" { id: Int @pk }
+entity Order "注文" { id: Int @pk  status: Enum(pending, retried) @default(pending) }
+entity Payment "決済" { id: Int @pk }
+usecase Join "入会"
+usecase Place "注文"
+usecase Retry "再試行"
+creates(Join, Customer)
+creates(Place, Order)
+updates(Place, Customer)
+creates(Place, Payment)
+creates(Retry, Payment)
+updates(Retry, Order)
+transitions(Retry, Order.status, pending -> retried)
+relate(Order, Customer, N:1)
+relate(Payment, Order, N:1)
+invariant(Customer).at_most(1, Order.status == retried)
+"#,
+    );
+    let out = verify(&["--prove", "--instance-count", "1", &model]);
+    let (stdout, stderr) = (
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
+    );
+    assert!(
+        stdout.contains("escalated: Quantifier_Customer_0: ok at 2 instances"),
+        "{stdout}"
+    );
+    assert!(!stderr.contains("error[Quantifier_Customer_0]"), "{stderr}");
+    assert_eq!(out.status.code(), Some(0), "{stderr}");
+    // The rule's cone does not count Payment slots either, and its counterexample at one
+    // instance creates two Payments (Place, then Retry): the refutation names 2.
+    let model = model_file(
+        "refuted_past_the_bound",
+        r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, retried) @default(pending) }
+entity Payment "決済" { id: Int @pk }
+usecase Place "注文"
+usecase Retry "再試行"
+creates(Place, Order)
+creates(Place, Payment)
+creates(Retry, Payment)
+updates(Retry, Order)
+transitions(Retry, Order.status, pending -> retried)
+relate(Payment, Order, N:1)
+forbidden(Order, status == retried)
+"#,
+    );
+    let out = verify(&["--prove", "--instance-count", "1", &model]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("refuted: Forbidden_Order_0 (BFS counterexample at 2 instances)"),
+        "{stdout}"
+    );
+}
+
 #[test]
 fn an_unreachable_cti_is_ruled_out_by_a_mined_lemma() {
     if !tool("z3", "RDRA_REQUIRE_Z3") {

@@ -152,6 +152,22 @@ permuted among themselves) when any of these touches one of its entities:
 5. A start that pins a slot: `Start::Identity` on a pair of unequal slot counts (an error
    today; checked anyway), or any start the scan cannot classify.
 
+These are the first five of the ten rules the code has (`symmetry/mod.rs::Rule`, P31 of
+[the theory's open problems](../theory/README.md#open-problems)). The later phases added
+five more:
+
+6. `UnlinkedCreate`: a creation leaves an owner naming the class's rows at its base value,
+   which is slot 0.
+7. `MixedIds`: a row id is compared with, or written into, a value that is not a row id of
+   the same class.
+8. `JointTooLarge`: a block of classes that name each other's rows has more arrangements
+   than the canonicalizer enumerates.
+9. `Observed`: on a run of a sub-lifecycle up to `H` (phase 2), an entity that holds `obs`,
+   an input or a fold bit, a stub of a `T` parent, or whose rows a `T` key can name.
+10. `Reduced`: on a #74-reduced cone up to `G_T` (phase 3), an `S` entity, an entity that
+    holds an `S` var or an input or whose rows such a key names, an entity a bit is kept per
+    row of, and an entity an `S` action binds (`Reduction::fixed_why`).
+
 The scan never refuses a model. Leaving a class out keeps every run sound and only loses
 reduction. A run up to symmetry prints one note per cone that leaves a class out, naming the
 entity and the rule. Today the builder emits none of the five (its `Choose` and `Transition` effects write
@@ -257,8 +273,8 @@ otherwise. The property's name does not decide it.
 | The concrete (state, params, successor) triple inside `take` | `check_after`; `observe` (the entity views' patterns, `initial`, `changes`, `deletable`, `moves`) | sound as is |
 | Which actions label some edge, and state predicates of their targets | `runs` (`NeverRuns`), `unmet_of_assert` (`meets` on the targets of an action's edges) | sound as is: an action labels an edge of the reduced graph exactly when it labels one of the full graph, and `meets` reads all rows |
 | Action labels, graph structure, and state labels the group keeps, on a run of S up to `H` | `split_edges`, `quotient_blocks`, the class moves and rises, `Succ` and `shortest_path` in `lift`; `divergence` with the orbit self-edges | sound: `H` fixes `obs` and the inputs ([Composition with #74](#composition-with-74)); `divergence` needs the orbit self-edges, since it reads `to == from` as a stutter |
-| Two stored states compared slot by slot across an edge | `can_leave` and `deadlocks` (`Deadlock_*`), the `moves` closure of `guarded_arms`, `step_breaks` (`stable`, `unchanged`) | not sound: the edge's target is stored permuted |
-| One binding followed along a path | `reach_failure` (`can_reach`), `unlatched_state` (`precedes`), `fair_steps` and the fair components (`eventually`, `leads_to`, `.fair`), the per-slot deadlock pass | not sound: the binding's slot moves with each edge's permutation |
+| Two stored states compared slot by slot across an edge | `can_leave` and `deadlocks` (`Deadlock_*`), the `moves` closure of `guarded_arms`, `step_breaks` (`stable`, `unchanged`) | not sound as written: the edge's target is stored permuted. Since #370 an entity cone up to symmetry reads its findings with readers of its own (`OrbitRun::state_model_findings`: deadlocks and `can_leave` on (stored state, slot) pairs carried along each edge's permutation). `step_breaks` has none: `stable` and `unchanged` run plain |
+| One binding followed along a path | `reach_failure` (`can_reach`), `unlatched_state` (`precedes`), `fair_steps` and the fair components (`eventually`, `leads_to`, `.fair`), the per-slot deadlock pass | not sound as written: the binding's slot moves with each edge's permutation. Since #352 `eventually` and `leads_to` run up to symmetry on (stored state, binding) pairs (`OrbitRun::decide_liveness`), and since #370 the per-slot deadlock pass does (above). `reach_failure` and `unlatched_state` have none: `can_reach` and `precedes` run plain |
 
 **Phase 1 covers the first three rows**: the invariant and after-assert cones (the
 `Cone_` jobs of `cone_jobs`) and `always` properties, on cones #74 leaves unreduced. That is
@@ -458,10 +474,15 @@ self-owning entity) and every element of `G_s`, and checks that `canonical(g(s))
 canonical(s)`, that `canonical(s)` is some `g(s)`, and that `canonical` is idempotent. It
 runs in `cargo test` in seconds.
 
-**Kani.** One harness, following [Kani harnesses](../engine-agreement.md#kani-harnesses):
-`apply(g ∘ h) = apply(g) ∘ apply(h)` and `canonical(apply(g, s)) = canonical(s)` for symbolic
-`s` and `g`, at one class of 3 slots and one child class. It names the file it proves in
-`scripts/kani-relevant.sh`. A planted bug must fail it before it lands.
+**Kani.** One harness, following [Kani harnesses](../engine-agreement.md#kani-harnesses),
+`apply_of_a_composition_is_the_composition_of_applies` in `symmetry/mod.rs`: `apply(g ∘ h) =
+apply(g) ∘ apply(h)` for symbolic `s`, `g` and `h`, on a 2-slot parent and a 2-slot child
+with a key to it. It never calls `canonical`. The plan also named `canonical(apply(g, s)) =
+canonical(s)` at one class of 3 slots; that harness was not built (P8 of
+[the theory's open problems](../theory/README.md#open-problems)). The invariance is checked by
+the exhaustive unit test above, on every state of its layouts and every element of `G_s`,
+and on every call by the `canonical` twin while `G_s` has at most 6^4 elements; neither is a
+proof for symbolic states past those layouts.
 
 **Corpus cases (`sym_` family).**
 
@@ -631,7 +652,9 @@ orbits; at n=3 under 8 GiB `never` stops at 40.0M and the run up to `G_T` comple
   that finds no counterexample is a tool error.
 - **Twin.** `orbit_liveness` holds the pairs to a plain run under `SHADOW_CAP`: each edge's
   permutation takes its move to its target, and every plain (state, binding) fails the goal
-  and can avoid it exactly when its pair does.
+  and can avoid it exactly when its pair does. The plain side is `liveness.rs`'s own
+  `avoid`, so the twin checks the quotient, not the fair-component rule the two share
+  (claim N9 of the [theory](../theory/claims.md)).
 - **Result.** `GrantEnds` is decided at n=3 under 8 GiB: `ok`.
 - **A system a safety cone shares stays plain.** An `eventually` or `leads_to` whose
   reduced cone is a safety cone's system does not run up to symmetry (`Shared::new`), so one
@@ -1012,7 +1035,7 @@ build, and a per-thread hook in unit tests (`dropped`). It names a scan rule by 
 
 | Rule or reason | Witness |
 |---|---|
-| `OrderedId`, `IdAgainstLiteral`, `MixedIds`, `OwnerLiteral`, `OwnerChoice`, `UnlinkedCreate` | (b): `explore/symmetry/witnesses.rs`, one test each |
+| `OrderedId`, `IdAgainstLiteral`, `MixedIds`, `OwnerLiteral`, `OwnerChoice`, `UnlinkedCreate`, `AbsentOwner` | (b): `explore/symmetry/witnesses.rs`, one test each |
 | `PinnedStart` | (e), but it fires in no cone: see below |
 | `JointTooLarge` | (d): `joint_too_large_is_a_cost_cap`, `past_the_branch_cap_the_verdict_stands` |
 | `G_T` "S" | (c): implied by "S var", asserted in `Reduction::fixed_why` |
