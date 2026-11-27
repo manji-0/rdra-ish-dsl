@@ -1369,6 +1369,18 @@ pub trait PayUseCase {
     fn commit_pay(&mut self, write: PayOutcome) -> ::core::result::Result<(), PayError>;
 }
 
+/// Implement it for a service that does not implement `PayUseCase` yet: the service then has `PayUseCase`, each method of which panics as `unimplemented!` does. `conform` stops a trace at such a call and reports the calls by use case; `rdra-ish check --code=run` lists them, and `--deny-incomplete` fails on any. Remove the impl when the service implements `PayUseCase`.
+pub trait UnimplementedPayUseCase {}
+
+impl<T: UnimplementedPayUseCase> PayUseCase for T {
+    fn prepare_pay(&mut self, _: OrderId, _: DateTime) -> ::core::result::Result<PayOutcome, PayError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
+    fn commit_pay(&mut self, _: PayOutcome) -> ::core::result::Result<(), PayError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
+}
+
 /// The use case CancelOrder: Cancel.
 /// Each action with functions is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
 pub trait CancelOrderUseCase {
@@ -1378,6 +1390,18 @@ pub trait CancelOrderUseCase {
     fn commit_cancel_order(&mut self, write: CancelOrderOutcome) -> ::core::result::Result<(), CancelOrderError>;
 }
 
+/// Implement it for a service that does not implement `CancelOrderUseCase` yet: the service then has `CancelOrderUseCase`, each method of which panics as `unimplemented!` does. `conform` stops a trace at such a call and reports the calls by use case; `rdra-ish check --code=run` lists them, and `--deny-incomplete` fails on any. Remove the impl when the service implements `CancelOrderUseCase`.
+pub trait UnimplementedCancelOrderUseCase {}
+
+impl<T: UnimplementedCancelOrderUseCase> CancelOrderUseCase for T {
+    fn prepare_cancel_order(&mut self, _: OrderId) -> ::core::result::Result<CancelOrderOutcome, CancelOrderError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
+    fn commit_cancel_order(&mut self, _: CancelOrderOutcome) -> ::core::result::Result<(), CancelOrderError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
+}
+
 /// The use case Place: Place.
 /// Each action with functions is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
 pub trait PlaceUseCase {
@@ -1385,4 +1409,16 @@ pub trait PlaceUseCase {
     fn prepare_place(&mut self, parent_customer: CustomerId, order_id: OrderId, order_method: PaymentMethod) -> ::core::result::Result<PlaceResult, PlaceError>;
     /// Stores what `prepare_place` returned in one transaction.
     fn commit_place(&mut self, write: PlaceResult) -> ::core::result::Result<(), PlaceError>;
+}
+
+/// Implement it for a service that does not implement `PlaceUseCase` yet: the service then has `PlaceUseCase`, each method of which panics as `unimplemented!` does. `conform` stops a trace at such a call and reports the calls by use case; `rdra-ish check --code=run` lists them, and `--deny-incomplete` fails on any. Remove the impl when the service implements `PlaceUseCase`.
+pub trait UnimplementedPlaceUseCase {}
+
+impl<T: UnimplementedPlaceUseCase> PlaceUseCase for T {
+    fn prepare_place(&mut self, _: CustomerId, _: OrderId, _: PaymentMethod) -> ::core::result::Result<PlaceResult, PlaceError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
+    fn commit_place(&mut self, _: PlaceResult) -> ::core::result::Result<(), PlaceError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
 }

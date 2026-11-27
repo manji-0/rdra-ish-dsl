@@ -455,6 +455,8 @@ file it proves, so builds and tests never compile it.
 | `a_cell_across_a_word_reads_back` | `explore/packing.rs` | the same, with a cell starting, ending, or straddling bit 64 | seven 8-bit cells and four of every width up to 8 bits |
 | `a_patch_is_the_pack` | `explore/packing.rs` | patching a packed state with the cells where another differs gives the other's bytes | the same 11 cells, every pair of states that fit |
 | `apply_of_a_composition_is_the_composition_of_applies` | `explore/symmetry/mod.rs` | `apply(g ∘ h) = apply(g) ∘ apply(h)`, keys relabelled on present rows only | a 2-slot parent and a 2-slot child with a key to it |
+| `lanes_are_exactly_the_equal_bytes` | `explore/table.rs` | the 8-lane tag match of the shared table sets the top bit of exactly the bytes equal to the tag | every 64-bit word, every tag |
+| `growth_keeps_room_for_one_more` | `explore/table.rs` | the shared table's growth rule is hashbrown's as `Seen::bytes_with` reads it: an insert keeps the capacity while there is room, else moves to a capacity of at least one more item whose buckets are a power of two | every length up to the capacity, buckets from 2^2 to 2^40 |
 
 A result holds up to its bound, and for one thread. The symmetry harness stays at 2 slots per
 class, where its group commutes, so the exhaustive unit test and the `canonical` twin check the
