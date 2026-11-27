@@ -525,7 +525,9 @@ Staff` finds a state a staff member cannot leave by their own use cases, even th
 operator's deletion leaves it.
 
 A build error whose entities no selected cone reads is **deferred**: listed under `not
-checked:`, it does not fail the run. A build error that alters a use case (a dropped guard or
+checked:`, it does not fail the run. The cone here is the exact one: it keeps every use case
+that writes into it, the events those wait for and every use case that raises them, and the
+entities they create. A build error that alters a use case (a dropped guard or
 effect) also involves every entity that use case writes. A build error that names no entity
 always fails the run. Without `--entity`, every build error fails the run.
 

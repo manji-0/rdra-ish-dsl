@@ -280,7 +280,14 @@ impl TransitionSystem {
 
     /// The selection of `scope` over the built system. Each build diagnostic comes with the
     /// entities it involves: those it names, and those of the action it altered, if any. An
-    /// error is deferred when they are all outside every selected cone.
+    /// error is deferred when they are all outside every selected target's exact cone
+    /// (`exact_target_cone`, with slots). The plain cone of an invariant leaves out a mark
+    /// whose raisers write nothing else in it, and runs the handler without the mark: an error
+    /// that alters such a raiser (its guard built as `false`) changes which handler steps the
+    /// whole system takes, and `prove`, which encodes the whole system, proved a rule there
+    /// that the model breaks (P4). The exact cone keeps every writer, each mark it reads, and
+    /// every entity it creates, so an action outside it, altered or not, changes nothing the
+    /// cone reads.
     pub(crate) fn select(
         &self,
         scope: &Scope,
@@ -298,7 +305,7 @@ impl TransitionSystem {
         let mut read: Vec<EntityKey> = Vec::new();
         if !unchecked.is_empty() {
             for &t in &targets {
-                let cone = self.target_cone(t);
+                let cone = self.exact_target_cone(t, true);
                 for d in &self.entities {
                     if cone.vars.contains(&d.exists) && !read.contains(&d.key) {
                         read.push(d.key);
