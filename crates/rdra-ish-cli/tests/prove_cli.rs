@@ -688,6 +688,64 @@ fn a_cti_shows_the_run_mark_its_step_reads() {
     );
 }
 
+/// A false `.lemma()` never helps a proof. The engine-corpus case `z3_lemma` with its lemma
+/// swapped for a false one: no Door is ever ajar, which `Crack` breaks. A lemma gets no cone of
+/// its own, but this one reads only `Door.state`, which the rule's cone holds, so BFS checks it
+/// there and its counterexample fails the run, as `check` fails a false lemma. Where BFS does
+/// not reach it (a state cap of 2), Houdini drops it: it prints `unproved`, counts among
+/// the user's lemmas, not the rules, and the rule is proved without it.
+#[test]
+fn a_false_lemma_is_refuted_where_bfs_reaches_it_and_dropped_where_not() {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("prove_cli_false_lemma");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let case = std::fs::read_to_string(repo().join(corpus("z3_lemma"))).unwrap();
+    let true_lemma =
+        "forbidden(Light, Door, Light.state == off, Door.state == ajar).global().lemma()";
+    assert!(case.contains(true_lemma));
+    let file = dir.join("m.rdra");
+    std::fs::write(
+        &file,
+        case.replace(true_lemma, "forbidden(Door, Door.state == ajar).lemma()"),
+    )
+    .unwrap();
+    let file = file.to_str().unwrap();
+
+    let out = verify(&["--prove", file]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(out.status.code(), Some(1), "{stdout}");
+    assert!(
+        stdout.contains("refuted: lemma Forbidden_Door_0 (BFS counterexample at 2 instances)\n"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("proof: your lemmas: 0 proved, 0 unproved, 0 out of scope, 1 refuted\n"),
+        "{stdout}"
+    );
+
+    let out = verify(&["--prove", "--max-states", "2", file]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("unproved: lemma Forbidden_Door_0: not inductive; Crack(Door#1) breaks it"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("proved: MultiForbidden_Light_0 "),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("proof: your lemmas: 0 proved, 1 unproved, 0 out of scope\n"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("; 1 of 1 rules proved for any number of rows and any Int value\n"),
+        "{stdout}"
+    );
+}
+
 #[test]
 fn verify_runs_no_tlc_cone_for_a_lemma() {
     if !tool("tlc", "RDRA_REQUIRE_TLC") {

@@ -109,22 +109,57 @@ fn corpus_cases() -> Vec<String> {
     cases
 }
 
-/// No rule `verdicts` proves has a violation BFS reaches at `bounds`.
+/// No rule `verdicts` proves has a violation BFS reaches at `bounds`. Returns the proved rules
+/// it could not compare, those whose cone BFS did not finish under `STATE_CAP`, as
+/// `sample: rule at bounds`, for the caller to report: a skipped comparison is no evidence.
 fn assert_no_proved_rule_violated(
     sample: &str,
     verdicts: &BTreeMap<String, &Verdict>,
     bounds: Bounds,
-) {
+) -> Vec<String> {
     let (instances, int_max) = (bounds.instances, bounds.int_max);
     let Some(bounded) = system(sample, bounds) else {
-        return;
+        return Vec::new();
     };
-    for name in &bounded_verdicts(&bounded).0 {
+    let (violated, open) = bounded_verdicts(&bounded);
+    for name in &violated {
         assert!(
             !matches!(verdicts.get(name), Some(Verdict::Proved)),
             "{sample}: {name} is proved for any number of rows and any Int value, but BFS at {instances} instances and Int 0..{int_max} reaches a violation"
         );
     }
+    skipped(
+        sample,
+        verdicts,
+        &open,
+        &format!("{instances} instances, Int 0..{int_max}"),
+    )
+}
+
+/// The proved rules among `open`, whose cone BFS did not finish, as `sample: rule at what`.
+fn skipped(
+    sample: &str,
+    verdicts: &BTreeMap<String, &Verdict>,
+    open: &[String],
+    what: &str,
+) -> Vec<String> {
+    open.iter()
+        .filter(|name| matches!(verdicts.get(*name), Some(Verdict::Proved)))
+        .map(|name| format!("{sample}: {name} at {what}"))
+        .collect()
+}
+
+/// Prints the comparisons a test skipped (`assert_no_proved_rule_violated`), so a run says
+/// how much of its evidence it did not gather.
+fn report_skipped(what: &str, skipped: &[String]) {
+    println!(
+        "{what}: {} comparisons of a proved rule skipped, its cone stopped at {STATE_CAP} states{}",
+        skipped.len(),
+        skipped
+            .iter()
+            .map(|s| format!("\n  {s}"))
+            .collect::<String>()
+    );
 }
 
 /// One `check-sat`: the limit it ran under, its answer, the z3 resource units it spent, and
@@ -323,6 +358,7 @@ fn the_headroom_check_fails_when_a_check_runs_out() {
 fn no_proved_rule_has_a_bounded_counterexample() {
     let Some(z3) = find_z3() else { return };
     let mut proved_total = 0;
+    let mut not_compared = Vec::new();
     let mut domain_unproved = Vec::new();
     let log = Arc::new(Mutex::new(Vec::new()));
     for sample in samples() {
@@ -359,6 +395,12 @@ fn no_proved_rule_has_a_bounded_counterexample() {
                 continue;
             };
             let (violated, open) = bounded_verdicts(&bounded);
+            not_compared.extend(skipped(
+                &sample,
+                &verdicts,
+                &open,
+                &format!("{n} instances"),
+            ));
             for name in &violated {
                 assert!(
                     !matches!(verdicts.get(name), Some(Verdict::Proved)),
@@ -376,8 +418,13 @@ fn no_proved_rule_has_a_bounded_counterexample() {
                 }
             }
         }
-        assert_no_proved_rule_violated(&sample, &verdicts, wider_int());
+        not_compared.extend(assert_no_proved_rule_violated(
+            &sample,
+            &verdicts,
+            wider_int(),
+        ));
     }
+    report_skipped("the samples", &not_compared);
     assert!(proved_total > 0, "no sample rule was proved");
     assert_eq!(
         domain_unproved,
@@ -394,6 +441,7 @@ fn no_proved_rule_has_a_bounded_counterexample() {
 fn no_proved_rule_has_a_bounded_counterexample_in_the_corpus() {
     let Some(z3) = find_z3() else { return };
     let mut proved_total = 0;
+    let mut not_compared = Vec::new();
     for case in corpus_cases() {
         let Some((ts, twin)) = proving(&case) else {
             continue;
@@ -416,14 +464,16 @@ fn no_proved_rule_has_a_bounded_counterexample_in_the_corpus() {
             .collect();
         proved_total += proof.proved();
         for bounds in [instances(1), instances(2), instances(3), wider_int()] {
-            assert_no_proved_rule_violated(&case, &verdicts, bounds);
+            not_compared.extend(assert_no_proved_rule_violated(&case, &verdicts, bounds));
         }
     }
+    report_skipped("the corpus", &not_compared);
     assert!(proved_total > 0, "no corpus rule was proved");
 }
 
 /// The proof does not depend on how many solvers share its checks: the same verdicts, the
-/// same counterexamples to induction, and the same kept lemmas on one solver and on three.
+/// same counterexamples to induction, and the same kept lemmas on one solver, on three, and
+/// (the formal-verification samples) on two.
 /// A check's resource units depend on what its solver checked before, so this also holds
 /// each check that keeps a candidate under a tenth of its limit (`assert_headroom`) on one
 /// solver and on three. The
@@ -461,10 +511,16 @@ fn a_proof_is_the_same_on_any_number_of_solvers() {
         let one = proof(1);
         with_cti += usize::from(one.contains("NotInductive"));
         assert_eq!(proof(3), one, "{sample}");
+        // Two solvers deal the checks out another way again. The large samples take about
+        // 40 s more on two, so only the small ones run there; `examples/prove_rlimit.rs`
+        // compares every sample on 1, 2, and 3.
+        if sample.contains("formal-verification") {
+            assert_eq!(proof(2), one, "{sample} on 2 solvers");
+        }
     }
     assert!(with_cti >= 3, "{with_cti} samples with a CTI");
     assert_headroom(&logs[0], "these samples on 1 solver");
-    assert_headroom(&logs[1], "these samples on 3 solvers");
+    assert_headroom(&logs[1], "these samples on 2 and 3 solvers");
 }
 
 /// A rule BFS refutes is not tried (`verify --prove` passes the rules its safety pass
@@ -474,6 +530,14 @@ fn a_proof_is_the_same_on_any_number_of_solvers() {
 /// compared. The cases: the formal-verification samples, with the rules BFS violates at
 /// `verify`'s bounds, and the engine-corpus cases, with the rules their header says BFS
 /// refutes (`z3=refuted`), some of them only under the case's flags.
+///
+/// The argument for it assumes z3's answers are exact. An `unknown` from a check that ran out
+/// of its limit depends on what its solver checked before, which leaving a rule out changes,
+/// so the test also asserts that no check of either proof ran out (z3 says `canceled`): the
+/// verdicts it compares rest on no such answer. The checks z3 gives up on by itself (the
+/// Houdini rounds run without MBQI, where every `sat` is `unknown`) are counted, not asserted.
+/// It also assumes BFS's counterexample is real, which a cone that leaves a raised mark out
+/// does not guarantee (P1 in docs/theory/README.md).
 #[test]
 fn a_refuted_rule_left_out_changes_no_other_verdict() {
     let Some(z3) = find_z3() else { return };
@@ -490,6 +554,7 @@ fn a_refuted_rule_left_out_changes_no_other_verdict() {
         .into_iter()
         .filter(|s| s.contains("formal-verification"));
     let (mut refuted_total, mut beside) = (0, 0);
+    let log = Arc::new(Mutex::new(Vec::new()));
     for sample in samples.chain(cases) {
         let Some((ts, twin)) = proving(&sample) else {
             continue;
@@ -513,7 +578,7 @@ fn a_refuted_rule_left_out_changes_no_other_verdict() {
         }
         let rules: Vec<usize> = (0..ts.invariants().len()).collect();
         let proof = |refuted: &BTreeSet<usize>| {
-            let mut solvers = [(); 2].map(|()| Z3::start(&z3).expect("z3 starts"));
+            let mut solvers = [(); 2].map(|()| Meter::start(&z3, &log));
             prove::prove(
                 &ts,
                 twin.as_ref(),
@@ -545,6 +610,17 @@ fn a_refuted_rule_left_out_changes_no_other_verdict() {
     }
     assert!(refuted_total > 0, "no case has a refuted rule");
     assert!(beside > 0, "no case has a rule beside a refuted one");
+    let log = log.lock().unwrap();
+    let ran_out = log.iter().filter(|(.., r)| *r).count();
+    let gave_up = log.iter().filter(|(_, s, ..)| *s == Sat::Unknown).count();
+    println!(
+        "{} checks, {gave_up} gave up by themselves, {ran_out} ran out",
+        log.len()
+    );
+    assert_eq!(
+        ran_out, 0,
+        "a check ran out of its limit, so the verdicts compared may rest on an answer that depends on what its solver checked before"
+    );
 }
 
 /// A certificate (the set a proof kept) offered to the next proof is re-checked, and the
