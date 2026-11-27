@@ -219,6 +219,7 @@ fn owner_choice_has_a_witness() {
     ts.actions[place].effects[at] = Effect::Choose {
         var: key,
         param,
+        numbers: None,
         values: vec![Choice {
             value: Value(0),
             site: None,

@@ -270,6 +270,7 @@ impl TransitionSystem {
                     var: v,
                     param,
                     values,
+                    ..
                 } if *v == var && slot(param) == at => {
                     // The line of the value the step picked.
                     let value = post.get(self, var, at);

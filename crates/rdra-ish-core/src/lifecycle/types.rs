@@ -702,6 +702,10 @@ pub enum Effect {
         var: VarId,
         param: u8,
         values: Vec<Choice>,
+        /// The choice of every number of an Int column (`present`, a copy) in a form that
+        /// does not depend on the run's bounds; `values` is its expansion at them, which the
+        /// explorer, TLC and the generated code read. The prover reads this, never the list.
+        numbers: Option<Numbers>,
     },
     /// now := now + 1 while now < int_max.
     Tick,
@@ -716,6 +720,17 @@ pub struct Arm {
     pub site: Site,
     /// Its `.when` conditions, key and id: any of them enables it. Empty when unguarded.
     pub conds: Vec<(ConditionKey, String)>,
+}
+
+/// Every number an `Effect::Choose` of an Int column may pick, whatever the Int range: every
+/// value from index `from` up, so `from` 0 is every value, and 1 every non-null one (every
+/// number from 1 of a non-null column). `conds` are the `.when` conditions of the line that
+/// asks for them, as `Choice::conds`: empty when unguarded.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Numbers {
+    pub from: Value,
+    pub conds: Vec<(ConditionKey, String)>,
+    pub site: Site,
 }
 
 /// One value of an `Effect::Choose`.
