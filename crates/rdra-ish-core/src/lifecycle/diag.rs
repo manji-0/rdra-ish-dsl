@@ -276,6 +276,16 @@ pub enum StateDiag {
         site: Site,
         trace: Trace,
     },
+    /// A run of a reduced cone found a violation of the invariant or assertion `name`, but the
+    /// trace lifted to the cone does not certify itself: `fault` says why, as it does for a
+    /// liveness lasso (`LassoFault::Satisfies`: the lifted last state does not violate the
+    /// check). The reduction or its lift is at fault, never the model, and the check is not
+    /// decided on this cone (P52).
+    LiftFault {
+        name: String,
+        site: Site,
+        fault: crate::lifecycle::LassoFault,
+    },
     /// A temporal property fails on the infinite behavior of a lasso, `trace` then `lasso`,
     /// or on the finite `trace` of a form `LtlKind::is_explored` names. A replayed TLC
     /// counterexample builds it, and so does `ComponentRun::decide_property`.
@@ -670,6 +680,7 @@ impl StateDiag {
             StateDiag::StateCapReached { .. } => with("StateCapReached", &[]),
             StateDiag::MemoryCapReached { .. } => with("MemoryCapReached", &[]),
             StateDiag::TimeBudgetReached { .. } => with("TimeBudgetReached", &[]),
+            StateDiag::LiftFault { name, .. } => with("LiftFault", &[name]),
             StateDiag::AssertOnInertUseCase { anchor, .. } => {
                 with("AssertOnInertUseCase", &[anchor])
             }
@@ -782,6 +793,7 @@ impl StateDiag {
         match self {
             StateDiag::ConstraintViolated { site, .. }
             | StateDiag::AfterAssertViolated { site, .. }
+            | StateDiag::LiftFault { site, .. }
             | StateDiag::VacuousRule { site, .. }
             | StateDiag::PropertyViolated { site, .. }
             | StateDiag::GoalUnreachable { site, .. }
@@ -897,6 +909,7 @@ impl StateDiag {
             | StateDiag::TimeBudgetReached { .. }
             | StateDiag::ConstraintViolated { .. }
             | StateDiag::AfterAssertViolated { .. }
+            | StateDiag::LiftFault { .. }
             | StateDiag::PropertyViolated { .. }
             | StateDiag::GoalUnreachable { .. }
             | StateDiag::NoWitness { .. }
@@ -1113,6 +1126,10 @@ impl fmt::Display for StateDiag {
                 f,
                 "{}after({anchor}).assert({requireds}) fails: {actual}",
                 label_prefix(label)
+            ),
+            StateDiag::LiftFault { name, fault, .. } => write!(
+                f,
+                "tool error: the counterexample of {name} fails its own check ({fault:?}) once lifted from the reduced cone to the cone, so {name} is not decided there (a tool bug, not a finding about the model)"
             ),
             StateDiag::PropertyViolated {
                 name,

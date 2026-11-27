@@ -45,7 +45,7 @@ use std::time::Instant;
 use crate::fasthash::FastMap;
 use crate::memory::{Charge, MemoryPool};
 
-use super::diag::Diag;
+use super::diag::{Diag, StateDiag};
 use super::expr::{State, StateSlice};
 use super::types::{ActId, EntId};
 use super::TransitionSystem;
@@ -214,6 +214,15 @@ impl Caps {
     }
 
     /// These caps, with every run charged to `pool`.
+    /// These caps for a run that goes alone: charged to a pool with the whole room of this
+    /// one's (`MemoryPool::whole`), so the runs beside it do not change where it stops.
+    pub fn alone(self) -> Self {
+        match self.memory {
+            Some(pool) => self.charged_to(pool.whole()),
+            None => self,
+        }
+    }
+
     pub const fn charged_to(self, pool: &'static MemoryPool) -> Self {
         Caps {
             memory: Some(pool),
@@ -796,6 +805,28 @@ impl TransitionSystem {
     }
 }
 
+/// What a reduced run reports for `reduced`, a violation it found, given `rebuilt`, the check
+/// evaluated on the lifted last state: that violation, or a `LiftFault` with
+/// `LassoFault::Satisfies` when the lifted state does not violate the check, as a liveness
+/// lasso that satisfies its property is a fault; never the reduced message as if it did (P52).
+fn lifted(rebuilt: Option<StateDiag>, reduced: &StateDiag) -> StateDiag {
+    match (rebuilt, reduced) {
+        (Some(d), _) => d,
+        (
+            None,
+            StateDiag::ConstraintViolated { name, site, .. }
+            | StateDiag::AfterAssertViolated { name, site, .. },
+        ) => StateDiag::LiftFault {
+            name: name.clone(),
+            site: site.clone(),
+            fault: LassoFault::Satisfies,
+        },
+        (None, other) => {
+            unreachable!("a run's violation is a state rule's or an assert's: {other:?}")
+        }
+    }
+}
+
 impl ComponentRun {
     /// Fills in the trace of each violation the run reported, at its index in `diags`.
     fn trace_violations(&mut self, violations: &[(usize, Reach)]) {
@@ -810,9 +841,8 @@ impl ComponentRun {
                         after, act, params, ..
                     } => run.system.after_violation(*after, *act, params, &last),
                 };
-                if let Some(d) = rebuilt {
-                    run.diags[*at].diag = d.diag;
-                }
+                let reduced = &run.diags[*at].diag;
+                run.diags[*at].diag = lifted(rebuilt.map(|d| d.diag), reduced);
             }
             if let Some(t) = run.diags[*at].diag.trace_mut() {
                 *t = trace;

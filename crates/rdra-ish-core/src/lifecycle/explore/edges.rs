@@ -221,6 +221,16 @@ enum Kept {
 /// The parent of an initial state.
 const INITIAL: u32 = u32::MAX;
 
+/// The number of the edge at `at` in reading order, or the count of the edges before a state
+/// (`EdgeList::first`): a `u32` below `INITIAL`. Panics, in a release build too, past it,
+/// rather than wrapping and making every reader of the graph read the wrong rows (P55).
+fn edge_number(at: u64) -> u32 {
+    u32::try_from(at)
+        .ok()
+        .filter(|&n| n != INITIAL)
+        .expect("edges fit in u32")
+}
+
 /// What a run keeps of its moves. Under the `shadow` feature it keeps the 12-byte edge list
 /// and the parent edges as they were before #296 beside it, and holds every read to them.
 #[derive(Clone, Debug)]
@@ -266,7 +276,7 @@ impl Steps {
     pub(crate) fn read(&mut self, at: usize) {
         if let Kept::Graph { edges, .. } = &mut self.kept {
             debug_assert_eq!(edges.first.len(), at, "states are read in order");
-            edges.first.push(self.moves as u32);
+            edges.first.push(edge_number(self.moves));
         }
     }
 
@@ -274,6 +284,7 @@ impl Steps {
     pub(crate) fn push(&mut self, from: u32, to: u32, binding: u32) {
         if let Kept::Graph { edges, .. } = &mut self.kept {
             debug_assert_eq!(edges.source_of(edges.len()), from, "the state being read");
+            edge_number(self.moves);
             edges.to.push(to);
             edges.binding.push(binding);
         }
@@ -287,7 +298,7 @@ impl Steps {
     /// Notes the parent of the next state admitted: `None` for an initial state, else the
     /// source and binding of the move about to be pushed, which reaches it.
     pub(crate) fn admit(&mut self, parent: Option<(u32, u32)>) {
-        let edge = u32::try_from(self.moves).expect("edges fit in u32");
+        let edge = edge_number(self.moves);
         match &mut self.kept {
             Kept::Graph { parents, .. } => parents.push(parent.map_or(INITIAL, |_| edge)),
             Kept::Parents { from, binding } => {
@@ -655,6 +666,19 @@ impl StepEnds {
 
 #[cfg(test)]
 mod tests {
+    /// An edge's number is its place in reading order up to the last `u32` below `INITIAL`,
+    /// and past it the run panics rather than wrapping (P55).
+    #[test]
+    fn an_edge_number_past_u32_panics() {
+        use super::{edge_number, INITIAL};
+        assert_eq!(edge_number(0), 0);
+        assert_eq!(edge_number(u64::from(INITIAL) - 1), INITIAL - 1);
+        for past in [u64::from(INITIAL), u64::from(u32::MAX) + 1, 1 << 40] {
+            let caught = std::panic::catch_unwind(|| edge_number(past));
+            assert!(caught.is_err(), "{past} edges");
+        }
+    }
+
     use super::*;
 
     /// The binary search over a segmented buffer finds what `slice::partition_point` finds,

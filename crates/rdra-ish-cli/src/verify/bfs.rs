@@ -318,6 +318,9 @@ pub(super) enum BfsCone {
         /// The violated invariants and after-asserts of the cone's module, each with BFS's
         /// shortest trace: what TLC's run of the module is compared with.
         found: Vec<Diag>,
+        /// Violations of a reduced cone that do not lift to the cone (`StateDiag::LiftFault`):
+        /// a tool bug, which makes the verdict a tool error (P52).
+        faults: Vec<Diag>,
         /// Each violation of `found` the cone cannot vouch for (`Trace::vouched`), by name,
         /// decided again on its exact cone (`recheck_cones`); empty until then.
         rechecks: Vec<(String, Recheck)>,
@@ -436,9 +439,14 @@ impl BfsCone {
                 d
             })
             .collect();
+        let faults = (diags.iter())
+            .filter(|d| matches!(d.diag, StateDiag::LiftFault { .. }))
+            .cloned()
+            .collect();
         BfsCone::Ran {
             states: 0,
             found,
+            faults,
             rechecks: Vec::new(),
             end,
             memory: met_memory_limit(diags),
@@ -461,6 +469,7 @@ impl BfsCone {
         let BfsCone::Ran {
             states,
             found,
+            faults,
             end: RunEnd::Capped,
             memory: true,
             ..
@@ -468,6 +477,10 @@ impl BfsCone {
         else {
             return self;
         };
+        // A violation that did not lift (P52) stays a tool error, whatever the proof says.
+        if !faults.is_empty() {
+            return self;
+        }
         // A cone's invariant is the whole system's of the same name; should two share a name,
         // both must be proved.
         let is_proved = |name: &str| {
@@ -498,6 +511,7 @@ impl BfsCone {
     /// system's; `verdict` is what the run reports.
     pub(super) fn module_verdict(&self) -> Option<Outcome> {
         match self {
+            BfsCone::Ran { faults, .. } if !faults.is_empty() => Some(Outcome::ToolError),
             BfsCone::Ran { found, end, .. } => match (found.is_empty(), end) {
                 (false, _) => Some(Outcome::Counterexample),
                 (true, RunEnd::Complete) => Some(Outcome::Ok),
@@ -512,6 +526,12 @@ impl BfsCone {
     /// none or its exact cone showed each one it found spurious, and `None` when the run
     /// stopped first or a violation is neither vouched for nor rechecked to hold.
     pub(super) fn verdict(&self) -> Option<Outcome> {
+        // A violation that did not lift to the cone (P52) is a tool error first.
+        if let BfsCone::Ran { faults, .. } = self {
+            if !faults.is_empty() {
+                return Some(Outcome::ToolError);
+            }
+        }
         let BfsCone::Ran {
             found,
             rechecks,
@@ -804,7 +824,7 @@ pub(super) fn bfs_cones(
         _ => unreachable!("a property's job"),
     };
     // The cone at `at` up to instance symmetry, stopped once every check has failed.
-    let orbits = |at: usize| {
+    let orbits = |at: usize, caps: Caps| {
         let me = cone(at).expect("a safety cone");
         let run = me.system.clone().run_orbits(caps.until_all_violated());
         symmetry_stats(&jobs[at].module, &run);
@@ -819,9 +839,9 @@ pub(super) fn bfs_cones(
     };
     // A safety cone decides its checks alone, so it stops once every one has failed: a check
     // it holds is then violated, so neither vacuous nor covering another.
-    let alone = |at: usize| {
+    let alone = |at: usize, caps: Caps| {
         if up_to_symmetry(at) {
-            return orbits(at);
+            return orbits(at, caps);
         }
         let run = cone(at)
             .expect("a safety cone")
@@ -834,14 +854,19 @@ pub(super) fn bfs_cones(
     // The verdict of the cone at `at`, the vacuous checks of it and of the cones it covers,
     // and the plain answers of the properties on its system, read off its run; the run is
     // dropped here.
-    let decide = |at: usize| -> (BfsCone, Vec<Diag>, bool, Vec<(usize, Plain)>) {
+    // A run that met the memory limit says `crowded`, the first run of a cone with partners
+    // too: beside other runs it may stop where it completes alone, and the run after it
+    // would then decide the cone where one job decides it on the complete run (P53).
+    let decide = |at: usize, caps: Caps| -> (BfsCone, Vec<Diag>, bool, Vec<(usize, Plain)>) {
         if partners[at].is_empty() {
-            return alone(at);
+            return alone(at, caps);
         }
         let run = cone(at).expect("a safety cone").system.clone().run(caps);
         if !run.complete {
+            let memory = crowded(&run);
             drop(run);
-            return alone(at);
+            let (verdict, vacuous, crowded, plains) = alone(at, caps);
+            return (verdict, vacuous, crowded || memory, plains);
         }
         let plains = (partners[at].iter())
             .map(|&k| (k, Plain::of(ts, property(k), &run)))
@@ -863,12 +888,14 @@ pub(super) fn bfs_cones(
     let open: Vec<usize> = (first.iter().copied())
         .filter(|at| !ran.iter().any(|(a, _, _)| a == at))
         .collect();
-    let decided = in_parallel(open.clone(), rdra_ish_core::jobs(), decide);
+    let decided = in_parallel(open.clone(), rdra_ish_core::jobs(), |at| decide(at, caps));
+    // A run that met the memory limit runs again alone, with the whole room of the pool
+    // (`Caps::alone`): where it stops then depends on the run alone, as at one job (P53).
     for (&at, (verdict, vacuous, crowded, plains)) in open.iter().zip(decided) {
         let (verdict, vacuous, _, plains) = match crowded {
             true => {
                 drop((verdict, vacuous, plains));
-                decide(at)
+                decide(at, caps.alone())
             }
             false => (verdict, vacuous, crowded, plains),
         };
@@ -889,7 +916,7 @@ pub(super) fn bfs_cones(
                 true => BfsCone::Covered(by),
                 false => match shared.safety[at].take() {
                     Some((verdict, _)) => verdict,
-                    None => alone(at).0,
+                    None => alone(at, caps.alone()).0,
                 },
             });
         }
@@ -904,6 +931,8 @@ pub(super) struct Safety {
     pub(super) violated: usize,
     /// Cones the state cap or the memory limit stopped before a violation.
     pub(super) capped: usize,
+    /// Violations of reduced cones that do not lift to their cone (P52): tool errors.
+    pub(super) faults: usize,
 }
 
 /// Prints each safety cone's run line and renders each violation with its BFS trace.
@@ -920,6 +949,19 @@ pub(super) fn report_bfs_cones(
             continue;
         };
         println!("{}", cone.line(&job.module, &job.checks, jobs));
+        if let BfsCone::Ran { faults, .. } = cone {
+            // As a liveness lasso that fails its own check (`report.rs`): one `LassoFault`
+            // line, counted with those.
+            for d in faults {
+                eprintln!(
+                    "error[LassoFault]: {} [{}]: {}",
+                    job.module,
+                    job.checks.join(", "),
+                    d.diag
+                );
+            }
+            out.faults += faults.len();
+        }
         // A check several cones hold is reported once, from the first cone that breaks it, so
         // the count does not depend on how the cones overlap.
         for d in cone
@@ -943,6 +985,39 @@ mod tests {
     use rdra_ish_core::load_project;
     use rdra_ish_core::memory::{MemoryPool, MemorySize};
     use std::path::Path;
+
+    /// A cone whose reduced run found a violation that does not lift (`LiftFault`) is a tool
+    /// error, never `ok`, though `found` holds no violation and the run is complete (P52); it
+    /// covers no other cone.
+    #[test]
+    fn a_violation_that_does_not_lift_makes_the_cone_a_tool_error() {
+        use super::BfsCone;
+        use crate::tlc_output::Outcome;
+        use rdra_ish_core::lifecycle::{Diag, LassoFault, ModelRef, RunEnd, Site, StateDiag};
+
+        let fault = Diag {
+            entities: Vec::new(),
+            diag: StateDiag::LiftFault {
+                name: "Forbidden_Order_0".into(),
+                site: Site::bare(ModelRef::EntityInvariant(0)),
+                fault: LassoFault::Satisfies,
+            },
+        };
+        let cone = |faults: Vec<Diag>| BfsCone::Ran {
+            states: 7,
+            found: Vec::new(),
+            faults,
+            rechecks: Vec::new(),
+            end: RunEnd::Complete,
+            memory: false,
+            orbits: None,
+            peak: 0,
+        };
+        assert_eq!(cone(Vec::new()).verdict(), Some(Outcome::Ok));
+        let faulty = cone(vec![fault]);
+        assert_eq!(faulty.verdict(), Some(Outcome::ToolError));
+        assert!(!faulty.passed());
+    }
 
     /// Under a memory limit the entity pass releases each entity cone that stops, and the TLC
     /// side reads none of them: a reader of a released cone's graph panics (#284).

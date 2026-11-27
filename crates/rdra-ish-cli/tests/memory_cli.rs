@@ -211,6 +211,42 @@ fn cones_side_by_side_stop_where_they_stop_one_at_a_time() {
     assert_eq!(run_on("3"), one);
 }
 
+/// The safety and property passes give on any number of threads what they give on one (P53).
+/// A safety cone with a partner property runs to the end; beside the other cone's run it
+/// meets the memory limit where alone it completes. It then runs again alone, with the whole
+/// room of the pool, and prints the complete run's state count, as one thread does; before,
+/// it was decided on a run that stopped once its check failed (`counterexample (15150
+/// states)` against `(65793 states)`).
+#[test]
+fn safety_and_property_passes_stop_where_they_stop_one_at_a_time() {
+    let dir = scratch("memory_cli_partners");
+    let model = repo().join("crates/rdra-ish-cli/tests/fixtures/memory/partners.rdra");
+    for memory in ["7MiB", "8MiB", "10MiB"] {
+        let run_on = |jobs: &str| {
+            let spec = dir.join("spec");
+            let _ = std::fs::remove_dir_all(&spec);
+            let out = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+                .current_dir(&dir)
+                .env("RDRA_JOBS", jobs)
+                .args(["verify", "--instance-count", "2", "--memory", memory])
+                .arg(&model)
+                .arg("-o")
+                .arg(&spec)
+                .output()
+                .expect("rdra-ish runs");
+            String::from_utf8_lossy(&out.stdout).into_owned()
+                + &String::from_utf8_lossy(&out.stderr)
+        };
+        let one = run_on("1");
+        assert!(
+            one.contains("Cone_Forbidden_Task_0 [Forbidden_Task_0]: counterexample (65793 states)"),
+            "{memory}: one thread decides the cone on its complete run\n{one}"
+        );
+        assert_eq!(run_on("8"), one, "{memory}: eight threads");
+        assert_eq!(run_on("3"), one, "{memory}: three threads");
+    }
+}
+
 /// `verify` releases an entity cone that stops at the memory limit once its findings are
 /// read, and the cones after it run in the room it held (#284). The run is the same on one
 /// thread as on eight, and every pass after the entity pass reads past the released cones: a

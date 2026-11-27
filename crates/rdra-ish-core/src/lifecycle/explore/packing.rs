@@ -24,8 +24,10 @@ const WORDS: usize = FAST_CELLS * 8 / 64 + 1;
 pub(crate) struct Packing {
     /// Per cell: its bits, 0 to 8.
     bits: Box<[u8]>,
-    /// Per cell: the bit its value starts at, the bits of the cells before it summed.
-    offs: Box<[u16]>,
+    /// Per cell: the bit its value starts at, the bits of the cells before it summed. A `u32`:
+    /// a state of 255 rows of 34 Int columns already passes bit 65,535, and a `u16` that
+    /// saturated there wrote every later cell to one place (P50).
+    offs: Box<[u32]>,
     /// The bytes a packed state takes.
     bytes: usize,
 }
@@ -38,13 +40,16 @@ pub(crate) fn bits_for(size: usize) -> u8 {
     }
 }
 
-/// Per cell of `bits`: the bit it starts at.
-fn offsets(bits: &[u8]) -> Box<[u16]> {
+/// Per cell of `bits`: the bit it starts at. Panics, in a release build too, when a state
+/// has more bits than a `u32` counts, rather than placing two cells at one offset.
+fn offsets(bits: &[u8]) -> Box<[u32]> {
     let mut at = 0u32;
     bits.iter()
         .map(|&b| {
-            let o = u16::try_from(at).unwrap_or(u16::MAX);
-            at += u32::from(b);
+            let o = at;
+            at = at
+                .checked_add(u32::from(b))
+                .expect("a packed state has at most u32::MAX bits");
             o
         })
         .collect()
@@ -137,7 +142,7 @@ impl Packing {
             while diff != 0 {
                 let c = j * 8 + (diff.trailing_zeros() >> 3) as usize;
                 diff &= !(0xff << ((c & 7) * 8));
-                let (bits, o) = (u32::from(self.bits[c]), usize::from(self.offs[c]));
+                let (bits, o) = (u32::from(self.bits[c]), self.offs[c] as usize);
                 let v = u16::from(to[c]);
                 over |= v >> bits;
                 let (at, sh) = (o >> 3, o & 7);
@@ -157,7 +162,7 @@ impl Packing {
     /// Cell `c` of the state `packed` holds.
     #[inline]
     pub(crate) fn cell(&self, packed: &[u8], c: usize) -> u8 {
-        let o = usize::from(self.offs[c]);
+        let o = self.offs[c] as usize;
         let byte = |i: usize| u16::from(packed.get(i).copied().unwrap_or(0));
         let two = byte(o >> 3) | (byte((o >> 3) + 1) << 8);
         ((two >> (o & 7)) & ((1u16 << self.bits[c]) - 1)) as u8
@@ -325,6 +330,59 @@ mod tests {
         let mut back = vec![0u8; p.width()];
         p.unpack(&packed, &mut back);
         assert_eq!(back, state);
+    }
+
+    /// Past bit 65,535 (P50): a cell starts where the bits before it end, and patching and
+    /// reading one cell agree with packing and unpacking the whole state, on either side of
+    /// the first cell that starts past `u16::MAX`. 8,192 cells of 8 bits end at bit 65,536,
+    /// so the 8,193rd is the first past it; the cells of 3 bits after the 8-bit ones start at
+    /// offsets that are not byte-aligned.
+    #[test]
+    fn a_state_past_bit_65535_packs_patches_and_reads_back() {
+        for (eights, threes) in [(8_191, 0), (8_192, 0), (8_192, 1), (8_193, 0), (8_190, 9)] {
+            let sizes: Vec<usize> = (0..eights)
+                .map(|_| 256)
+                .chain((0..threes).map(|_| 8))
+                .collect();
+            let p = Packing::new(sizes.iter().copied());
+            let from: Vec<u8> = sizes
+                .iter()
+                .enumerate()
+                .map(|(c, &s)| (c % s) as u8)
+                .collect();
+            // Every cell changes, the last ones included.
+            let to: Vec<u8> = sizes
+                .iter()
+                .enumerate()
+                .map(|(c, &s)| ((c + 1) % s) as u8)
+                .collect();
+            let (mut a, mut b, mut got) = (
+                vec![0u8; p.bytes()],
+                vec![0u8; p.bytes()],
+                vec![0u8; p.bytes()],
+            );
+            p.pack(&from, &mut a);
+            p.pack(&to, &mut b);
+            p.patch(&from, &a, &to, &mut got);
+            assert!(got == b, "{eights} + {threes} cells: a patch is the pack");
+            let mut back = vec![0u8; p.width()];
+            p.unpack(&got, &mut back);
+            assert!(
+                back == to,
+                "{eights} + {threes} cells: the patched state reads back"
+            );
+            for (c, &v) in to.iter().enumerate() {
+                assert_eq!(p.cell(&b, c), v, "{eights} + {threes} cells: cell {c}");
+            }
+            let mut at = 0usize;
+            for (c, &b) in p.bits.iter().enumerate() {
+                assert_eq!(
+                    p.offs[c] as usize, at,
+                    "cell {c} starts where the cells before end"
+                );
+                at += usize::from(b);
+            }
+        }
     }
 
     /// A value outside its domain's bits is caught at pack time.

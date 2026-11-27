@@ -2402,3 +2402,40 @@ fn a_plan_lists_the_tlc_launches_and_starts_no_tlc() {
     );
     let _ = std::fs::remove_dir_all(&tmp);
 }
+
+/// A state of more than 65,535 bits (P50): 255 rows of 34 Int columns at Int 0..255. The
+/// verdicts are the ones a narrow bound gives: a row with `c32 = 2` is a counterexample, and
+/// a rule no reachable row breaks is `ok`. When the packed store placed every cell past bit
+/// 65,535 at one offset, the first printed `ok` and the second a counterexample whose rows
+/// the model cannot reach.
+#[test]
+fn a_state_past_bit_65535_keeps_its_verdicts() {
+    let dir = scratch("verify_wide_state");
+    let fixtures = repo().join("crates/rdra-ish-cli/tests/fixtures/wide_state");
+    let flags = [
+        "--instance-count",
+        "255",
+        "--int-range-max",
+        "255",
+        "--memory",
+        "16MiB",
+    ];
+    for (model, line) in [
+        (
+            "two_creates",
+            "Cone_Forbidden_Row_0 [Forbidden_Row_0]: counterexample",
+        ),
+        ("one_create", "Cone_Forbidden_Row_0 [Forbidden_Row_0]: ok"),
+    ] {
+        let path = fixtures.join(format!("{model}.rdra"));
+        let mut args = vec![path.to_str().unwrap()];
+        args.extend(flags);
+        let out = verify(&dir, &dir, &args);
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            stdout.lines().any(|l| l.starts_with(line)),
+            "{model}: {line}\n{stdout}\n{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+}
