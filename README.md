@@ -20,6 +20,7 @@ installing. A `tlc` or `z3` already on `PATH` takes precedence over the ones Nix
 
 ### Claude Code plugin
 
+<!-- constrained-by ./docs/cli-reference.md#lsp -->
 The repository is also a Claude Code plugin marketplace. The `rdra-ish` plugin brings the
 [agent skills](./skills/README.md) and the language server for `.rdra` files:
 

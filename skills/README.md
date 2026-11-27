@@ -18,6 +18,7 @@ Replace `OWNER/REPO` with this repository (`manji-0/rdra-ish-dsl`) or a fork.
 
 ### Claude Code plugin
 
+<!-- constrained-by ../docs/cli-reference.md#lsp -->
 The repository is a Claude Code plugin marketplace. Its `rdra-ish` plugin installs all eight
 skills, under the `rdra-ish:` namespace (`rdra-ish:rdra-ish-write`), and the `.rdra`
 language server:
