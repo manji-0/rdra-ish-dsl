@@ -6,7 +6,9 @@
 This document states how rdra-ish's native verifier decides a check on a graph that its
 breadth-first search (BFS) explored, and on what evidence each step rests. It owns rows N1
 to N18 of the [claims inventory](./claims.md#c-the-native-verifier) and uses the notation
-of [semantics.md](./semantics.md) (D1 to D23) without redefining it.
+of [semantics.md](./semantics.md) (D1 to D24) without redefining it. `T` is the system the
+build returns; that it is `T_β(M)` (D13) is claim [I1](./claims.md#0-the-build), not a step
+of any proof here.
 
 It describes the code at commit `fb6928c74ccc5b479dea07d92cc1e39c34ddd218` (origin/main,
 2026-11-28). The other theory documents pin `b83b9544`; `git diff --stat b83b9544 fb6928c7`
@@ -86,8 +88,8 @@ D13 (every admissible binding of D7, every fork of D8); that is evidenced differ
 (TLC on the same cone, `cli/tests/engine_equivalence.rs::a_bfs_and_tlc_reach_the_same_states_and_verdicts`)
 and by the twin `Twin::EachEnabled` (`explore/moves/reference.rs`), which compares the
 planned enumeration with a filter over all bindings. Two further premises are not part of
-this sketch: that `T` itself is `T_β(M)` (open problem P54 is a case where the build
-encodes a literal as another value), and that the edge list reads back the edges it
+this sketch: that the built `T` is `T_β(M)` of D13 (claim I1; open problem P54 was a
+case where the build departed from it by encoding a literal as another value), and that the edge list reads back the edges it
 recorded (open problem P55 is a case where it does not).
 
 ## The state store and its encoding
@@ -163,7 +165,8 @@ sample comes near it, but D1 admits it and nothing rejects it. P54 below needs f
 
 **Finding P54 (guarantee, reproduced by the review; fixed in #470, where the build rejects a
 column domain past 256 values as `DomainTooLarge`).** A value outside a byte is
-truncated when the build encodes it, so `T` is not `T_β(M)`. `types.rs::Domain::of_number`
+truncated when the build encodes it, so the built `T` departs from `T_β(M)` of D13 (D2,
+D8): claim I1 fails. `types.rs::Domain::of_number`
 returns `Value(n as u8 + 1)` for a `NullableInt` column; `Domain::size` gives that domain
 `m + 2` values, 257 at `m = 255`, and for `n = 255` the sum wraps to 0, which is
 `Value::NULL`. The workspace `Cargo.toml` sets no `overflow-checks` for the release
@@ -761,9 +764,11 @@ each of its variants a fair action whose enabledness reads its mark (event-order
 ## Threats to validity
 
 - **The step relation is trusted.** Every proof above assumes `moves_into` enumerates the
-  steps of D13 (N1) and that `T` is `T_β(M)`. The evidence is differential (TLC, which reads
+  steps of the built `T` (N1) and that the built `T` is `T_β(M)` of D13 (claim I1). The evidence is differential (TLC, which reads
   the same `TransitionSystem`, so a fault in the build of `T` would pass both) and one twin.
-  P54 is such a fault in the build: a literal wraps to another value of its domain.
+  P54 was such a fault in the build, fixed in #470: a literal wrapped to another value of its
+  domain. The planned reference interpreter (P26) is the first check of I1 that does not read
+  the build's output.
 - **Bounded mechanical evidence.** The Kani harnesses cover widths far below where P50
   begins and no domain of more than 256 values (P54); `Twin::Packed` and `Twin::Seen` would
   detect P50 but no `shadow` input is that wide; other shadow twins skip runs above 200,000
@@ -885,3 +890,8 @@ Changes to statements of this document after it was first written, newest last.
   (`6e1451a1`) from a reading of `explore/orbit.rs::lift_path` and `orbit/liveness.rs` up to
   their certification steps; the revisions after the review did not re-check it against their
   bodies.
+- **2026-11-28, after the owner's review of semantics.md (P60).** This document said that
+  under P54 "`T` is not `T_β(M)`". semantics.md defined `T_β(M)` as the build's output, so
+  under its own definitions that sentence was false. semantics.md now defines `T_β(M)` from
+  the model's text. P54 and the threats to validity now say that the built `T` departs from
+  D13, a failure of claim I1. No proof here changes: every proof is about the built `T`.

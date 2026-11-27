@@ -8,7 +8,7 @@
 This document states what assurance exists that the native verifier and TLC, reading the
 TLA+ module rdra-ish prints, give the same verdicts, and what kind of assurance each piece
 is. It owns rows T1 to T16 of the [claims inventory](./claims.md#d-agreement-with-tlc) and
-uses the notation of [semantics.md](./semantics.md) (D1 to D23) without redefining it.
+uses the notation of [semantics.md](./semantics.md) (D1 to D24) without redefining it.
 
 The code was read at commit `fb6928c74ccc5b479dea07d92cc1e39c34ddd218` (origin/main,
 2026-11-28), later than the index's pin `b83b9544`; [Appendix: the pinned
@@ -21,7 +21,8 @@ this document relies on. Paths follow the convention of the
 
 **The central point [read].** Agreement with TLC is evidence, not a theorem. No part of the TLA+
 translation is proved. What exists is (1) an argument, written here for the first time,
-that each construct of the printed module denotes what `T_β(M)` (D13) says it should, (2)
+that each construct of the printed module denotes the system the build returned, which is
+`T_β(M)` (D13) when claim [I1](./claims.md#0-the-build) holds, (2)
 runtime agreement rules that turn a detected difference into a tool error, (3) differential
 tests that run both engines on fixed inputs, (4) a few mechanised checks of leaf functions,
 none of which touches the printer, and (5) CI jobs, none of which is a required check. Each
@@ -88,7 +89,8 @@ A check one engine leaves undecided, or on which TLC failed as a tool, is no dis
 ([agreement rules](../engine-agreement.md#agreement-rules), rule 1).
 
 **Common-mode code [read].** Code both engines read, so that a fault in it moves both verdicts at
-once: `TransitionSystem::build` (model to `T`), the cone selection (`core/cone.rs`), the
+once: `TransitionSystem::build` (model to `T`, whose agreement with D13 is claim
+[I1](./claims.md#0-the-build)), the cone selection (`core/cone.rs`), the
 property-cone ladder (`cli/src/property_cone.rs`, `after_plain`, `after_wf`), the reduction's
 quotient tables, and `TlaNames`.
 
@@ -705,7 +707,8 @@ Classes of divergence between `T_β(M)` and what the engines decide that the cur
 evidence would not catch, most consequential first. Each item is an assessment drawn from
 the sections it cites, and carries the tag of the statements it rests on.
 
-1. **Common-mode faults outside the corpus traps [read].** A wrong `T` from the builder, a wrong
+1. **Common-mode faults outside the corpus traps [read].** A `T` from the builder that is not
+   `T_β(M)` of D13 (a failure of claim I1), a wrong
    cone, a wrong ladder decision (the staging of a property cone's runs), a wrong quotient
    table, or a wrong name in `TlaNames`, which the printer and the decoder both use, moves both
    engines. P40 and P54 (a value the build wraps; [z3.md](./z3.md#uniformity-in-the-bound),
@@ -727,7 +730,7 @@ the sections it cites, and carries the tag of the statements it rests on.
    (CI requires it) it also checks the rules z3 proves at `m`, with lemmas mined without a
    twin, against the reference at `m + 1` and `m + 3`: one fixed model per pull request and
    200 random models on main. It failed on P40 and
-   P54 before #470 and on P43 before its fix. What it leaves to the `expect` lines: every
+   P54 before #470 and on P43 before #481. What it leaves to the `expect` lines: every
    construct outside the subset (owners and keys, split use cases, triggers, copies,
    `chooses`, `drives`, `now`, multi-entity rules, quantifiers, `after` assertions, property
    verdicts); and, since it compares whole-model runs, the cone choice, the ladder, the
@@ -871,3 +874,8 @@ Changes to statements of this document after it was first written, newest last.
   [Appendix: the pinned commit](#appendix-the-pinned-commit), unchanged. Item 1 of
   [Residual risk](#residual-risk) now also names the staging of a property cone's runs and
   `TlaNames`, and P40, P54, and P32 as faults of its kind.
+- **2026-11-28, after the owner's review of semantics.md (P60).** semantics.md now defines
+  `T_β(M)` from the model's text, and the build implementing it is claim I1. Proposition 0
+  is unchanged: its `v*` is the verdict on the system `T'` both engines read, which is built.
+  The common-mode code paragraph and Residual risk item 1 now name I1 as the claim a builder
+  fault breaks.

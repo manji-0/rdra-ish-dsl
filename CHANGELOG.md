@@ -487,6 +487,13 @@
   clippy.
 - A time budget (`Caps::until`) on the entity cones `check` explores leaves their findings
   undecided (`UndecidedWhy::TimeBudget`) instead of panicking.
+- `verify --prove` no longer proves a rule a guarded `present` write to an Int column breaks
+  past the run's Int range. `sets(UC, E.n == present).when(C)` built its guard from one arm
+  per value up to `--int-range-max`, which z3 read as a cap on the write, so `forbidden(E, n >
+  5)` was `proved` at a range of 5 though the write reaches 6 at 7. The values that stand for
+  every number are now kept in a form free of the bounds (`Effect::Choose::numbers`), which the
+  prover reads in the effect and the guard states as one arm, `n != null` for a nullable
+  column: the same within the range, and nothing of its top. BFS and TLC explore as before.
 - A column with more than the 256 values a state cell holds is an error, `DomainTooLarge`: a
   nullable Int at `--int-range-max 255`, a nullable Enum of 256 values, or an Enum of 257. Its
   top values wrapped onto its first ones (null, for a nullable column) in writes, defaults and
