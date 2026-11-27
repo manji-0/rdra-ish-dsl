@@ -8,8 +8,9 @@
   (`.claude-plugin/marketplace.json`), and its `rdra-ish` plugin in `plugins/rdra-ish/` brings
   the agent skills and the language server for `.rdra` files: `/plugin marketplace add
   manji-0/rdra-ish-dsl`, then `/plugin install rdra-ish@rdra-ish`; `--sparse .claude-plugin
-  plugins skills` on the `marketplace add` clones about 1.3 MB instead of the whole
-  repository. The plugin's `skills` links to `skills/`, and an install copies only the plugin
+  plugins` on the `marketplace add` clones about 1.3 MB instead of the whole repository. The
+  plugin holds a copy of `skills/` that `scripts/sync-plugin-skills.sh` writes (the pre-commit
+  hook runs it, and a test fails while they differ), and an install copies only the plugin
   (the skills, `.lsp.json` and the manifest, about 370 KB) into the plugin cache. The server
   runs `rdra-ish lsp` from `PATH`, which the plugin does not install.
   `plugins/rdra-ish/.claude-plugin/plugin.json` carries the workspace version, and

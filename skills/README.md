@@ -31,9 +31,8 @@ language server:
 The language server runs `rdra-ish lsp`, and the skills run `rdra-ish`; the plugin installs
 neither. Put `rdra-ish` on `PATH` with `uv tool install rdra-ish` or
 `nix profile install github:manji-0/rdra-ish-dsl` ([Install](../README.md#install)).
-`--sparse .claude-plugin plugins skills` after the `marketplace add` clones only what the
-plugin needs. The plugin lives in `plugins/rdra-ish/`; its `skills` is a link to this
-directory, so these files stay the one copy.
+`--sparse .claude-plugin plugins` after the `marketplace add` clones only what the plugin
+needs. The plugin lives in `plugins/rdra-ish/`, with a copy of these skills.
 
 ### npx skills (skills.sh)
 
@@ -88,6 +87,10 @@ need `rdra-ish-write`, and the others link `rdra-ish-buc-analyze`, `rdra-ish-rev
 against the binary: each `rdra` code block loads with `check`, each `$ rdra-ish ...`
 transcript still prints what the skill quotes, and each command, flag, and flag value
 exists. CI runs it in the `check` job. Its header describes the markers it reads.
+
+Edit a skill here, in `skills/`, never in `plugins/rdra-ish/skills/`. That directory is the
+Claude Code plugin's copy, written by `scripts/sync-plugin-skills.sh`; the pre-commit hook
+runs the script, and the `plugin_manifest` test of rdra-ish-cli fails while the two differ.
 
 ## Formal-verification samples
 

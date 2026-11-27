@@ -36,7 +36,7 @@ PyPI or Nix install above. The skills work without it, but they run `rdra-ish` t
 
 Claude Code clones the whole repository for the marketplace, about 27 MB. To clone only what
 the plugin needs, about 1.3 MB, add it with a sparse checkout instead:
-`/plugin marketplace add manji-0/rdra-ish-dsl --sparse .claude-plugin plugins skills`.
+`/plugin marketplace add manji-0/rdra-ish-dsl --sparse .claude-plugin plugins`.
 The install itself copies only the plugin (`plugins/rdra-ish/`: the skills, `.lsp.json` and
 the manifest) into Claude Code's plugin cache.
 

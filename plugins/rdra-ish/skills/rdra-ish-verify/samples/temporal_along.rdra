@@ -1,0 +1,39 @@
+// A temporal property over two entities, with and without `.along` (#165). Pay captures a
+// payment and pays the order it belongs to in one step, so a captured payment's own order is
+// paid. CapturedPaid says so along the key from Payment to Order and holds. CapturedPaidAnyOrder
+// reads the same formula with no `.along`: it ranges over every pair of a payment and an
+// order, related or not, and fails at two instances on a captured payment beside another
+// order that is never paid.
+// expect check: ok
+// expect verify: fail CapturedPaidAnyOrder
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(draft, paid, cancelled) @default(draft)
+}
+
+entity Payment "支払" {
+  id: Int @pk
+  status: Enum(pending, captured, voided) @default(pending)
+}
+
+relate(Payment, Order, N:1)
+
+usecase Pay "支払確定"
+usecase CancelOrder "注文取消"
+usecase VoidPayment "支払取消"
+
+buc BucPayment "Payment"
+contains(BucPayment, Pay)
+contains(BucPayment, CancelOrder)
+contains(BucPayment, VoidPayment)
+
+transitions(Pay, Order.status, draft -> paid)
+transitions(Pay, Payment.status, pending -> captured)
+transitions(CancelOrder, Order.status, draft -> cancelled)
+transitions(VoidPayment, Payment.status, pending -> voided)
+
+property CapturedPaid "a captured payment's order is paid"
+  always((not (Payment.status == captured)) or (Order.status == paid)).along(Payment, Order)
+
+property CapturedPaidAnyOrder "every order is paid once any payment is captured"
+  always((not (Payment.status == captured)) or (Order.status == paid))

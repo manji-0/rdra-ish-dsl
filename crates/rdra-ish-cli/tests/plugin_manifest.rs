@@ -1,9 +1,10 @@
 //! The Claude Code plugin: the marketplace at `.claude-plugin/marketplace.json` lists the
 //! plugin in `plugins/rdra-ish/`, whose `.claude-plugin/plugin.json` and `.lsp.json` parse,
 //! keep the workspace version, and use only the keys Claude Code documents (an unknown key
-//! in `.lsp.json` makes Claude Code skip the whole file). Its `skills` is a link to the
-//! repository's `skills/`, which an install copies into the plugin's cache.
+//! in `.lsp.json` makes Claude Code skip the whole file). Its `skills/` is a copy of the
+//! repository's `skills/` that `scripts/sync-plugin-skills.sh` writes.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
@@ -93,15 +94,44 @@ fn the_language_server_runs_rdra_ish_lsp_for_rdra_files() {
     assert_eq!(server["extensionToLanguage"][".rdra"], language["id"]);
 }
 
+/// Every file under `dir`, by its path relative to `dir`, with its bytes.
+fn tree(dir: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
+    fn walk(root: &Path, dir: &Path, files: &mut BTreeMap<PathBuf, Vec<u8>>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                walk(root, &path, files);
+            } else {
+                let relative = path.strip_prefix(root).unwrap().to_path_buf();
+                files.insert(relative, std::fs::read(&path).unwrap());
+            }
+        }
+    }
+    let mut files = BTreeMap::new();
+    walk(dir, dir, &mut files);
+    files
+}
+
 #[test]
-fn the_plugin_skills_are_a_link_to_the_repository_skills() {
-    let link = repo().join("plugins/rdra-ish/skills");
-    let meta = std::fs::symlink_metadata(&link).unwrap();
-    // A checkout without symlinks (Windows, core.symlinks=false) writes the target as text.
-    let target = if meta.file_type().is_symlink() {
-        std::fs::read_link(&link).unwrap()
-    } else {
-        PathBuf::from(std::fs::read_to_string(&link).unwrap().trim())
-    };
-    assert_eq!(target, Path::new("../../skills"));
+fn the_plugin_skills_are_a_copy_of_the_repository_skills() {
+    let skills = repo().join("skills");
+    let mut want = BTreeMap::new();
+    for entry in std::fs::read_dir(&skills).unwrap() {
+        let dir = entry.unwrap().path();
+        if !dir.join("SKILL.md").is_file() {
+            continue;
+        }
+        let name = PathBuf::from(dir.file_name().unwrap());
+        for (path, bytes) in tree(&dir) {
+            want.insert(name.join(path), bytes);
+        }
+    }
+    let have = tree(&repo().join("plugins/rdra-ish/skills"));
+    let differ: BTreeSet<_> = (want.keys().chain(have.keys()))
+        .filter(|path| want.get(*path) != have.get(*path))
+        .collect();
+    assert!(
+        differ.is_empty(),
+        "plugins/rdra-ish/skills differs from skills/ at {differ:?}: run scripts/sync-plugin-skills.sh"
+    );
 }
