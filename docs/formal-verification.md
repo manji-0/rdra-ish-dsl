@@ -494,7 +494,11 @@ with no top on `now`. It never finds a counterexample; the bounded engines do th
 Each entity's rows become an uninterpreted sort, each column a function, and each use case a
 step relation built from the transition system BFS explores. A rule is proved when it belongs
 to an **inductive** set of formulas: every formula holds initially, and no step from a state
-where all hold breaks one. The step relation is widened in two ways, which only add steps: a
+where all hold breaks one. Before that, z3 checks that some state satisfies the encoding's
+declarations and initial states: over an empty premise every check would pass and every rule
+would read `proved`. The encoding over-approximates BFS, so BFS's initial state is one, and
+an empty premise is a bug in rdra-ish; then, or when z3 gives up on the check, no rule is
+proved and each reads `unproved: <rule>: <why>`. The step relation is widened in two ways, which only add steps: a
 creation may take any absent row, and numbers have no top. A guard or write the encoding cannot
 state is widened the same way and printed as a `note:`. A rule the encoding cannot state is
 `out of scope`. A count (`.at_most`, `.at_least`, `.exactly`, `MaxCard_*`) is exact up to 8;

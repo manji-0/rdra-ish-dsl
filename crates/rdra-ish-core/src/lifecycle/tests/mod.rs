@@ -26,6 +26,7 @@ mod membership;
 mod names;
 mod never_runs;
 mod owners;
+mod prove;
 mod reach;
 mod reduce;
 mod select;
