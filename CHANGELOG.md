@@ -4,11 +4,39 @@
 
 ### Added
 
+- `codegen` (default output changes): the domain code has an unimplemented port, a stand-in
+  for the contracts that a service takes while it is unfinished, so it builds before every
+  method exists (dogfood G6; docs/design/algebraic-codegen.md, "The unimplemented port"). Go:
+  `UnimplementedConformancePort` to embed, whose methods return `ErrUnimplemented`.
+  TypeScript: `UnimplementedConformancePort` to extend, whose members reject with
+  `Unimplemented`. Rust: a marker trait `Unimplemented<Contract>` per contract (`impl
+  UnimplementedPayUseCase for Service {}`), whose blanket impl panics with
+  `unimplemented!`. It stands in for `prepare` and `commit`, with `--conformance` in Go and
+  TypeScript also for `Seed`/`seed` and `Snapshot`/`snapshot`, and for no entry point (Rust:
+  a contract with one gets no marker). The harness counts each call that reached it; one the
+  model runs stops its trace, a refused one is no refusal. The probe's test always prints
+  what it counted, and `check --code=run` adds `unimplemented: <n> use cases (...)` to the
+  coverage statement and warns `CodeUnimplemented`, an error with `--deny-incomplete`; a run
+  whose `run` command hides that line gets `unimplemented: not reported` and the same
+  finding. A self-check mutant whose changed row the stand-in left unchecked is counted as
+  such, not as a survivor. `check --code=build` reports nothing of it. Every Go, Rust and
+  TypeScript output with contracts grows by the stand-in (samples: +3 to +10 %, Rust the
+  most), the names `UnimplementedConformancePort`, `ErrUnimplemented`, `Unimplemented` and
+  `Unimplemented<Contract>` are claimed, the harness reports gain `unimplemented` and
+  `stopped` (Rust's `ConformanceReport` is no longer `Copy`), and the default `run` command
+  of a domain table shows the test's output (Go `-v`, Rust `--nocapture`), as an adapter
+  table's did.
+
 - A Claude Code plugin. The repository is a plugin marketplace
-  (`.claude-plugin/marketplace.json`), and its `rdra-ish` plugin brings the agent skills and
-  the language server for `.rdra` files: `/plugin marketplace add manji-0/rdra-ish-dsl`, then
-  `/plugin install rdra-ish@rdra-ish`. The server runs `rdra-ish lsp` from `PATH`, which the
-  plugin does not install. `.claude-plugin/plugin.json` carries the workspace version, and
+  (`.claude-plugin/marketplace.json`), and its `rdra-ish` plugin in `plugins/rdra-ish/` brings
+  the agent skills and the language server for `.rdra` files: `/plugin marketplace add
+  manji-0/rdra-ish-dsl`, then `/plugin install rdra-ish@rdra-ish`; `--sparse .claude-plugin
+  plugins` on the `marketplace add` clones about 1.3 MB instead of the whole repository. The
+  plugin holds a copy of `skills/` that `scripts/sync-plugin-skills.sh` writes (the pre-commit
+  hook runs it, and a test fails while they differ), and an install copies only the plugin
+  (the skills, `.lsp.json` and the manifest, about 370 KB) into the plugin cache. The server
+  runs `rdra-ish lsp` from `PATH`, which the plugin does not install.
+  `plugins/rdra-ish/.claude-plugin/plugin.json` carries the workspace version, and
   `scripts/check-release-version.sh` checks it with the others.
 - `rdra-ish lsp` runs the language server over stdin and stdout, the same server as
   `rdra-ish-lsp`, so the PyPI install has it. The release binary grows by about a fifth.
@@ -372,6 +400,11 @@
 
 ### Fixed
 
+- Instance symmetry leaves out the class of a parent whose key a guard reads on the row the
+  step creates, before the step (docs/theory P30, rule `AbsentOwner`). That row is absent, its
+  key holds the base value, the parent in slot 0, and the group does not relabel a key on an
+  absent row, so a run up to symmetry could merge states the guard tells apart. No cone of the
+  samples or the engine corpus fires the rule, so no run changes.
 - `check --code=fresh` counts one error per stale file: a domain file and traces both stale
   printed two error blocks over `FAIL: code: 1 error(s)`.
 - The obligation ledger reads no marker inside a string literal, nor one whose name is not

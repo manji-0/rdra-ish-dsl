@@ -1,0 +1,34 @@
+// Int axes driven by sets + arithmetic invariant / temporal property.
+// Init stock/selling must satisfy forbidden/property (TLC-pass).
+// `forbidden(Item, stock < selling)` is evaluated over Int 0..5 by both
+// `check`/`states` and TLC; all three pass.
+entity Item "商品" {
+  id: Int @pk
+  status: Enum(active, archived) @default(active)
+  stock: Int @default("1")
+  selling: Int @default("1")
+}
+
+usecase CreateItem "商品登録"
+usecase Restock "補充"
+usecase ArchiveItem "廃番"
+
+buc BucItemStock "Item stock"
+contains(BucItemStock, CreateItem)
+contains(BucItemStock, Restock)
+contains(BucItemStock, ArchiveItem)
+
+creates(CreateItem, Item)
+updates(Restock, Item)
+updates(ArchiveItem, Item)
+
+transitions(Restock, Item.status, active -> active)
+transitions(ArchiveItem, Item.status, active -> archived)
+
+sets(Restock, Item.stock == 3)
+sets(Restock, Item.selling == 1)
+
+forbidden(Item, stock < selling)
+
+property StockCoversSelling "stock never below selling"
+  always(Item.stock >= Item.selling)

@@ -50,13 +50,14 @@ const KEPT: [&str; 11] = [
     "Observed:named by T",
 ];
 
-const SCAN: [Rule; 8] = [
+const SCAN: [Rule; 9] = [
     Rule::OrderedId,
     Rule::IdAgainstLiteral,
     Rule::OwnerLiteral,
     Rule::OwnerChoice,
     Rule::PinnedStart,
     Rule::UnlinkedCreate,
+    Rule::AbsentOwner,
     Rule::MixedIds,
     Rule::JointTooLarge,
 ];

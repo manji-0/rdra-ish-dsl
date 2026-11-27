@@ -943,7 +943,7 @@ impl TransitionSystem {
         );
         let entities = self.target_entities(target);
         if let Target::Reach(i) = target {
-            debug_assert!(run.complete, "a stopped can_reach cone is undecided");
+            assert!(run.complete, "a stopped can_reach cone is undecided");
             let name = &self.reach[i].name;
             let local = run
                 .system

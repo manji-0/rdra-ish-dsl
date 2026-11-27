@@ -545,6 +545,18 @@ case.
 Phase 3 changes scheduling, so there is no `reference.rs` twin for it (CLAUDE.md, "A
 speed-up change"). The parts that compute something new do get one.
 
+**What was built** (P18 of [the theory's open problems](../theory/README.md#open-problems)):
+items 2 (without the jitter and the 4-bucket table), 3, and the two Kani harnesses of item 5
+for the tag match and the growth rule (`explore/table.rs`). The jitter, the loom model of
+item 4, the "probe finds every key" harness of item 5, and a Miri job (item 6) were not
+built; the table's and the store's unit tests run under Miri when run by hand
+(`cfg(miri)`), and no CI job runs them. A release build does not probe (`Probing::Off`), so
+the `Hit` and `Recent` paths, and their twins, run only in the unit tests that ask for
+probing and under the test-only `RDRA_ISH_FORCE_PROBES`. The rest of the twins of item 3
+(`seen`, `seen_growth`, `same_as`, `dense_binding`) hold the path a release build takes,
+workers that do not probe, on every `shadow` run; CI's shadow job checks that they compare
+calls in a run without the variable and that the probe twins compare none there.
+
 1. **Output diff at 1, 3, 8 and 18 jobs.** `scripts/verify-samples.sh` with `RDRA_JOBS` at
    each count, against main's output at 1 job, at the `// expect` flags and without
    `--with-tlc`. Add the same with `--symmetry always` on the roots #212 covers. This study
