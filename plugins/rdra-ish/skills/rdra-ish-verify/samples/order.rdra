@@ -1,0 +1,44 @@
+// Minimal lifecycle + invariants + temporal property for TLA+ export / TLC.
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid, shipped, delivered, cancelled) @default(pending)
+  delivered_at: DateTime @null
+}
+
+usecase PlaceOrder "注文確定"
+usecase CapturePay "決済確定"
+usecase ShipOrder "発送"
+usecase DeliverOrder "配達確認"
+usecase CancelOrder "注文キャンセル"
+
+buc BucOrderLifecycle "Order lifecycle"
+contains(BucOrderLifecycle, PlaceOrder)
+contains(BucOrderLifecycle, CapturePay)
+contains(BucOrderLifecycle, ShipOrder)
+contains(BucOrderLifecycle, DeliverOrder)
+contains(BucOrderLifecycle, CancelOrder)
+
+creates(PlaceOrder, Order)
+updates(CapturePay, Order)
+updates(ShipOrder, Order)
+updates(DeliverOrder, Order)
+updates(CancelOrder, Order)
+
+transitions(CapturePay, Order.status, pending -> paid)
+transitions(ShipOrder, Order.status, paid -> shipped)
+transitions(DeliverOrder, Order.status, shipped -> delivered)
+transitions(CancelOrder, Order.status, pending -> cancelled)
+
+sets(usecase::DeliverOrder, Order.delivered_at == present)
+
+after(DeliverOrder).assert(Order.status == delivered, Order.delivered_at == present)
+
+forbidden(Order, status == cancelled, delivered_at == present)
+
+invariant(Order).when(status == delivered).then(delivered_at == present)
+
+property PaidLeadsToShipped "paid eventually reaches shipped"
+  leads_to(Order.status == paid, Order.status == shipped)
+
+property EventuallyTerminal "order reaches a terminal state"
+  eventually((Order.status == delivered) or (Order.status == cancelled))

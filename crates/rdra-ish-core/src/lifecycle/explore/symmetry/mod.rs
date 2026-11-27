@@ -82,9 +82,9 @@ pub(crate) fn check(ts: &TransitionSystem, g: &Group, s: &[u8], out: &[u8], foun
     #[cfg(feature = "shadow")]
     {
         use crate::lifecycle::expr::StateSlice;
-        use crate::shadow::{compared, skipped, Twin};
+        use crate::shadow::{compared, skipped, Skip, Twin};
         match reference::canonical(ts, g, StateSlice::new(s)) {
-            None => skipped(Twin::Canonical),
+            None => skipped(Twin::Canonical, Skip::OverCap),
             Some(want) => {
                 assert!(
                     want.canonical == out && (found.cut || found.orbit == want.size / want.aut),

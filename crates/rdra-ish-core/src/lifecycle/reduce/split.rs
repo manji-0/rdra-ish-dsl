@@ -23,10 +23,11 @@ pub(in crate::lifecycle) struct Split {
 impl TransitionSystem {
     /// Per var, whether no action lowers it (#112): the writes of the system, as edges
     /// between the var's values, form no cycle. A create takes an existence from absent to
-    /// present and a delete from present to deleted; a delete resets the entity's columns
-    /// and owners, which makes them cyclic; an assignment or a choice in the action that
-    /// creates the row starts from base, elsewhere from any value; a transition is its arms;
-    /// the clock ticks up. Such a var changes at most as often as its domain has values, so
+    /// present and a delete from present to deleted; a delete resets the entity's columns,
+    /// which makes them cyclic, and keeps its owners (`explore/moves.rs`), which are counted
+    /// cyclic too, a conservative choice that only gives up a reduction; an assignment or a
+    /// choice in the action that creates the row starts from base, elsewhere from any value;
+    /// a transition is its arms; the clock ticks up. Such a var changes at most as often as its domain has values, so
     /// a sub-lifecycle that reads it as a free input sees finitely many input histories. A
     /// counted mark is never monotone, whatever arms this system holds: its handler takes it
     /// down, also where this system holds the raiser alone (docs/design/counted-events.md).

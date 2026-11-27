@@ -25,6 +25,8 @@
 //! | `Canon::canonical`, the canonical form under instance symmetry (`explore/symmetry/canon.rs`, #212) | `explore/symmetry/reference.rs`: the least layout over every element of `G_s`, when it has at most 6^4 |
 //! | `OrbitRun`, a run up to instance symmetry (`explore/orbit.rs`, #212) | `explore/orbit/reference.rs`: the plain run of the same cone, up to `SHADOW_CAP` states |
 //! | `OrbitRun` on a #74-reduced cone, up to `G_T` (#212 phase 3) | the same twin, counted as `reduced_orbit_run` |
+//! | `OrbitRun::decide_liveness`, liveness on pairs of a stored state and a binding (#212 phase 4) | `explore/orbit/reference.rs`: the plain run's `avoid` per binding, up to `SHADOW_CAP` states, counted as `orbit_liveness` |
+//! | `OrbitRun::state_model_findings`, an entity cone's findings up to symmetry (#370) | `explore/orbit/reference.rs`: `state_model_findings` on the plain run, up to `SHADOW_CAP` states, counted as `orbit_state_models` |
 //! | a fold's input bit without allocations (`Fold::holds`, `reduce/fold.rs`, #296) | `reduce/fold/reference.rs`: the bit with its `Vec`s |
 //! | edges without their source, binding ids in 1 to 4 bytes, parents (`explore/edges.rs`, #296 2.1) | `explore/edges/reference.rs`: the 12-byte `Edge` list and the parent edges, as a run kept them before |
 //! | an after-assert step's ends recorded on a run without an edge list (`StepEnds`, #296 2.1) | `ComponentRun::step_ends`'s scan of that 12-byte list |
@@ -42,8 +44,14 @@
 //! reader of a run's check results reads only checks the run evaluated (#251), and a steady
 //! action's step leaves the inputs of a reduced cone as they were (`moves_of_into`).
 //!
-//! With `RDRA_ISH_SHADOW_STATS` set, the process prints how many calls each twin compared
-//! and how many it skipped when it exits, so a run that compared nothing shows as such.
+//! A twin lets a call pass unchecked in two cases (`Skip`): the input is past the twin's own
+//! cap (a group of more than 6^4 elements, a plain run past `SHADOW_CAP` states), counted as
+//! `skipped`; or the fast path's run, or the twin's under the same limits, stopped, which
+//! leaves nothing to compare, counted as `stopped`. When the process exits it prints how many
+//! calls each twin compared, skipped and stopped on, with `RDRA_ISH_SHADOW_STATS` set or
+//! whenever a call passed unchecked, so a run that compared nothing, or let a call through,
+//! shows as such. The corpus harness fails a case on any `skipped` call, since every corpus
+//! case is within every cap, and the CI's shadow job fails on a skip its runs do not expect.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -109,23 +117,46 @@ const TWINS: [(Twin, &str); 25] = [
 
 static COMPARED: [AtomicU64; TWINS.len()] = [const { AtomicU64::new(0) }; TWINS.len()];
 static SKIPPED: [AtomicU64; TWINS.len()] = [const { AtomicU64::new(0) }; TWINS.len()];
+static STOPPED: [AtomicU64; TWINS.len()] = [const { AtomicU64::new(0) }; TWINS.len()];
+
+/// Why a twin let a call pass unchecked.
+#[derive(Clone, Copy)]
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) enum Skip {
+    /// The input is past the twin's own cap: a group of more than 6^4 elements, a plain run
+    /// or a quotient past `SHADOW_CAP` states. The fast path's result stands unchecked.
+    OverCap,
+    /// The fast path's run, or the twin's run under the same caps and memory pool, stopped at
+    /// a limit the run sets, so there is no complete result to compare.
+    Stopped,
+}
 
 /// Notes that `twin` compared one call.
 pub(crate) fn compared(twin: Twin) {
     COMPARED[twin as usize].fetch_add(1, Ordering::Relaxed);
 }
 
-/// Notes that `twin` let one call pass unchecked.
+/// Notes that `twin` let one call pass unchecked, and why.
 #[cfg_attr(test, allow(dead_code))]
-pub(crate) fn skipped(twin: Twin) {
-    SKIPPED[twin as usize].fetch_add(1, Ordering::Relaxed);
+pub(crate) fn skipped(twin: Twin, why: Skip) {
+    let counts = match why {
+        Skip::OverCap => &SKIPPED,
+        Skip::Stopped => &STOPPED,
+    };
+    counts[twin as usize].fetch_add(1, Ordering::Relaxed);
 }
 
-/// Prints the counts to stderr when `RDRA_ISH_SHADOW_STATS` is set and a twin saw a call; a
-/// command that explores nothing, such as `files`, prints nothing.
+/// Prints the counts to stderr, as `name=compared/skipped/stopped` per twin (`skipped` over
+/// the twin's cap, `stopped` at a limit of the run), when a twin let a call pass unchecked,
+/// and when `RDRA_ISH_SHADOW_STATS` is set and a twin saw a call; a command that explores
+/// nothing, such as `files`, prints nothing. So a skip is never silent: the corpus harness
+/// fails a case on a call skipped over a cap, and the CI's shadow job on a skip its runs do
+/// not expect.
 pub fn report() {
     let seen = |counts: &[AtomicU64]| counts.iter().any(|c| c.load(Ordering::Relaxed) > 0);
-    if std::env::var_os("RDRA_ISH_SHADOW_STATS").is_none() || !(seen(&COMPARED) || seen(&SKIPPED)) {
+    let asked = std::env::var_os("RDRA_ISH_SHADOW_STATS").is_some();
+    let unchecked = seen(&SKIPPED) || seen(&STOPPED);
+    if !unchecked && !(asked && seen(&COMPARED)) {
         return;
     }
     let counts: Vec<String> = TWINS
@@ -133,11 +164,12 @@ pub fn report() {
         .map(|(twin, name)| {
             let at = *twin as usize;
             format!(
-                "{name}={}/{}",
+                "{name}={}/{}/{}",
                 COMPARED[at].load(Ordering::Relaxed),
-                SKIPPED[at].load(Ordering::Relaxed)
+                SKIPPED[at].load(Ordering::Relaxed),
+                STOPPED[at].load(Ordering::Relaxed)
             )
         })
         .collect();
-    eprintln!("shadow: compared/skipped {}", counts.join(" "));
+    eprintln!("shadow: compared/skipped/stopped {}", counts.join(" "));
 }
