@@ -331,8 +331,8 @@ Hence `Σ_j` agrees for all `j`, and with it everything the readers below comput
 | `Twin::DenseBinding` | `Bindings::id_numbered` | yes | every `shadow` run |
 | `Twin::Seen` | `Seen` lookups | yes | every `shadow` run |
 | `Twin::Hit` | `Probe::Hit` | no (`Probing::Off`) | `shadow` runs under `RDRA_ISH_FORCE_PROBES` (one CI run, clinic-ops) |
-| `Twin::Recent` | the reader's `Recent` lookup | no | same |
-| `Twin::SeenGrowth` | the shared table's growth (`table::Writer`) | no | same |
+| `Twin::Recent` | the reader's `Recent` lookup | no | `shadow` runs under `RDRA_ISH_FORCE_PROBES` |
+| `Twin::SeenGrowth` | the growth of `Seen`'s index, after every insert: the shared table's (`table::Writer`) under probing, the plain one's otherwise | yes | every `shadow` run (P18, fixed in #473) |
 
 The unit test `explore/tests.rs::a_run_is_the_same_on_any_number_of_threads` compares 1, 2,
 3, 4, 7 and 17 workers with `R_0`, on a complete and a capped run, with probing on at 4
@@ -432,9 +432,11 @@ in BFS order over all bindings, ends the reported trace, which is therefore shor
 A stopped graph must not be read: an unexpanded state has no out-edges and would look
 stuck. The guard is the match arm `Target::Reach(i) if !cones[at].run.complete` in
 `targets.rs::TransitionSystem::answer_targets`, which records the property as
-undecided; `reach_failure` and `TransitionSystem::verdict` only `debug_assert!` completeness.
-This confirms open problem P19. TLC cannot state `can_reach`, so the evidence is unit tests
-alone (row N8).
+undecided; `reach_failure` and `TransitionSystem::verdict` also `assert!` completeness in
+every build (they only `debug_assert!`ed it before P19 was fixed in #478). TLC cannot state
+`can_reach`; besides the unit tests, a naive oracle (`core/tests/oracle.rs`) with its own
+exploration and a forward search from every state agrees with the checker on the corpus
+and the samples (row N8).
 
 ## Deadlocks
 
@@ -452,7 +454,8 @@ through present predecessors; this is `E[present U leave]` per slot, as in N8. A
 marked has no such path, which is the definition. The reported state is the minimum over
 `(idx, k)`. ∎ On a stopped graph every candidate value is `Progress::NotDecided`. Both
 `can_leave` and the trace read packed cells through `Packing::cell`, so P50 applies.
-TLC's deadlock check is one-sided (row T6); this check has no external oracle (P19).
+TLC's deadlock check is one-sided (row T6); the naive oracle of `core/tests/oracle.rs`
+checks this one against a forward search on its own exploration (P19, fixed in #478).
 
 ## Vacuity
 
@@ -505,7 +508,7 @@ enabledness but not for *taken*: it says a fair instance is taken "by a step who
 `a` and whose binding extends `κ`", and D13 allows such a step with `s' = s`. The code and the
 TLA+ output read *taken* as requiring a change of state: `fair_steps` keeps only edges with
 `from ≠ to`, and the printer's `WF_vars` takes `⟨A⟩_vars` steps only. This document adopts
-that reading as assumption τ; D20 does not state it (open problem P56). A second reading
+that reading as assumption τ, which D20 states since #475 (open problem P56). A second reading
 goes with it: D14's behaviors are sequences of states without action labels, so the code
 counts a step `s → s'` as taking every fair instance that labels some edge from `s` to `s'`
 (`En`, `Tk` above; `lasso.rs::unfair_loop` likewise), not only the instance of the action a
@@ -610,7 +613,8 @@ a counterexample under `WfNext` is one under `Plain`) and the cone's own fairnes
 `fails_at` and `avoid` evaluate the goal on a slot whatever its existence, so a behavior
 that deletes the row meets `eventually(E.c == v)` when `v` is `c`'s base value, while
 `can_reach` keeps the slot present along the path. Read on the code here, this confirms
-open problem P6; TLC reads the printed formula the same way.
+open problem P6; TLC reads the printed formula the same way. #475 decided P6 as documented:
+language-reference.md and D21 now state the reading.
 
 ## Counterexamples: what is checked before printing
 
@@ -761,7 +765,8 @@ each of its variants a fair action whose enabledness reads its mark (event-order
 - **Bounded mechanical evidence.** The Kani harnesses cover widths far below where P50
   begins and no domain of more than 256 values (P54); `Twin::Packed` and `Twin::Seen` would
   detect P50 but no `shadow` input is that wide; other shadow twins skip runs above 200,000
-  or 2,500,000 states (P17) and the probe twins run in one CI job (P18).
+  or 2,500,000 states, and since #473 say so (P17), and the probe twins run in one CI job,
+  on code release builds do not run (P18).
 - **Readers share code with the checks they certify.** `unfair_loop` and `avoid` both use
   `moves` and `Property::fair_instance`; `explain_property` and `liveness_search` both use
   `holds_bound` and `triggers`. Self-certification catches a fault in the search, not in
@@ -773,7 +778,7 @@ each of its variants a fair action whose enabledness reads its mark (event-order
   edge index (P55, read only, past 2^32 edges). P50 and P54 are not the only conceivable
   ones: this document did not audit every `as` cast in `explore/` and `build/`.
 - **Fairness wording.** N9's (⇒) direction, hence every liveness `ok`, rests on assumption
-  τ, which D20 does not state (P56).
+  τ, which D20 states since #475 (P56).
 - **Determinism of memory stops beside other runs** rests on the reruns of N4; one step is
   not shown for the CLI's passes (P53).
 - **Reproductions** used binaries built in other worktrees, and those of P54 were run by
