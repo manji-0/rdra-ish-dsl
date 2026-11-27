@@ -945,14 +945,16 @@ matches nothing:
 
 Each operation can fail with the store's own error. The helper is `commit_writes(store,
 result)` in Rust (trait `CommitStore` with an associated `Error`, result
-`Result<(), CommitFailed<E>>`, where `CommitFailed` is `NotEnabled` or `Store(E)`),
-`CommitWrites(store, result) error` in Go (`*NotEnabled`, or the store's error as it is),
-and `commitWrites(store, writes)` in TypeScript (async, generic in the store's error,
-`Result<void, NotEnabled | E>`). The helper does not begin or end the transaction. The
-caller runs it inside the transaction of the call and rolls back on an error, as
-[one transaction per function](#one-transaction-per-function) requires. The caller turns
-`NotEnabled` into its `<UseCase>Error` with `From` / `errors.As` / the union, and decides
-what a store error becomes.
+`Result<(), CommitFailed>`, where `CommitFailed` is `NotEnabled` or `StoreFailed`),
+`CommitWrites(store, result) error` in Go (`*NotEnabled`, or `*StoreFailed` wrapping the
+store's error), and `commitWrites(store, writes)` in TypeScript (async, generic in the
+store's error, `Result<void, NotEnabled | StoreFailed>`). The helper does not begin or end
+the transaction. The caller runs it inside the transaction of the call and rolls back on an
+error, as [one transaction per function](#one-transaction-per-function) requires. Both
+cases are cases of every `<UseCase>Error` ([Not found and store
+failures](#not-found-and-store-failures)): Rust converts `CommitFailed` with `From`, Go
+wraps the detail, and TypeScript returns it as it is. (Before that change the helper
+returned the store's error itself: `CommitFailed::Store(E)` in Rust.)
 
 **Names.** Each new type and helper name is claimed after the model's names. A model type
 with the same name gets the trailing `_`, as the other derived names do. In Go a result field
@@ -967,46 +969,69 @@ TypeScript; ec-site gains 566, 336, and 300 lines. `tests/codegen_commit.rs` sho
 in each language that commits every result through the helper and passes the conformance
 harness, and fails it when its store keeps a mark the last step ends.
 
-### Not found and store failures (proposed, not built)
+### Not found and store failures
 
 <!-- constrained-by #committing-a-result -->
 
-A `<UseCase>Error` has three cases: `NotEnabled`, `Rejected`, and `InvalidArgument`. A
-service that loads a row by id and finds none has no case for it, nor does a store that
-fails (a lost connection, a constraint the model does not know). Both services answered
-`NotEnabled`. The HTTP layer then could not tell 404 from 409, and a store failure became a
-409 or a panic. Two cases would close the gap:
+A `<UseCase>Error` had three cases: `NotEnabled`, `Rejected`, and `InvalidArgument`. A
+service that loaded a row by id and found none had no case for it, nor did a store that
+failed (a lost connection, a constraint the model does not know). Both services built on the
+output in November 2026 answered `NotEnabled`. The HTTP layer then could not tell 404 from
+409, and a store failure became a 409 or a panic.
+
+The owner decided (2026-11-28) to add two cases to every `<UseCase>Error` in all three
+languages, by default and with no opt-in flag:
 
 - `NotFound { usecase, entity, id }`: a row the call names by id does not exist when it is
-  loaded. This answer comes at load time. A commit whose conditional write matches no row
-  stays `NotEnabled`, because the row may have been deleted or moved, and the model answers
-  both the same way. A run mark or an event that is missing is `NotEnabled`: the row exists
-  and is not in that run, or the trigger has not happened. Only a use case that loads a row by
-  id gets the case.
-- `StoreFailed { usecase, reason }`: the store failed. Every use case gets the case. In Go,
-  `Err` wraps the store's error so that `errors.Is` reaches it.
+  loaded. `id` is the id as text, so one type serves every entity. The answer comes at load
+  time. A commit whose conditional write matches no row stays `NotEnabled`, because the row
+  may have been deleted or moved, and the model answers both the same way. A run mark or an
+  event that is missing is `NotEnabled`: the row exists and is not in that run, or the
+  trigger has not happened.
+- `StoreFailed { usecase, cause }`: the store failed. `cause` is the store's error. In Rust
+  it is an `Arc<dyn Error + Send + Sync>` that `source()` returns, so `<UseCase>Error` keeps
+  `Clone`, `PartialEq` and `Eq` (two `StoreFailed` are equal when they carry the same cause),
+  and `StoreFailed::new(usecase, e)` takes any error that converts into `Box<dyn Error + Send
+  + Sync>`. In Go `*StoreFailed` has `Unwrap() error` returning `Cause`, so `errors.Is` and
+  `errors.As` reach the store's error. In TypeScript `cause` is `unknown`.
 
-The generated functions never return either case. Only a service's `prepare` and `commit`
-do. The conformance harness would count `NotFound` as `NotEnabled`, the kind the model
-refuses with (#452 checks refusal kinds), and would fail the run on `StoreFailed`, which no
-trace expects.
+Every use case gets both cases, even one that loads no row by id (a create with no parent),
+so a `match` or `switch` and an HTTP mapping read the same for every use case: `NotFound`
+404, `NotEnabled` 409, `Rejected` 422, `InvalidArgument` 400, `StoreFailed` 500.
 
-Adding a case is additive in Go. In Rust and TypeScript it breaks every exhaustive match on
-the error: a `match` with no wildcard, or a `switch` that ends in `assertNever`. The model
-adapter of the conformance fixture has such matches. The options are these:
+The generated functions take rows already loaded, so they cannot tell a missing row from a
+row in the wrong state, and never return `NotFound` or `StoreFailed`. A service's `prepare`
+returns `NotFound` from its load and `StoreFailed` from its store; `commit` returns
+`StoreFailed` from its store. The commit helper is the one generated code that meets the
+store, and it returns `StoreFailed` (see below).
 
-1. **Opt-in.** `--store-errors` and `[code.<lang>] store_errors = true` add both cases. The
-   default output does not change. This needs a new CLI flag, an `rdra.toml` key, a
-   generator option, and the harness mapping above in the files #452 changes.
-2. **Default, breaking.** Add both cases to every `<UseCase>Error` in the next release, with a
-   CHANGELOG migration note: add an arm for each case to every exhaustive match.
-3. **Outside the error.** Leave `<UseCase>Error` as it is, and let the port's methods return
-   a wrapper such as `ServiceError<E> { UseCase(E), NotFound, StoreFailed }`. This breaks
-   every implementation of the port, which is worse than option 2.
+**The commit helper.** `CommitFailed::Store(E)` duplicated what `StoreFailed` now says, so it
+is gone. In Rust `CommitFailed` is `NotEnabled(NotEnabled)` or `StoreFailed(StoreFailed)`,
+with no type parameter, and converts into every `<UseCase>Error` by `From`, so
+`commit_writes(store, result)?` returns the use case's own error. The store's `Error` must
+convert into `Box<dyn Error + Send + Sync>`, which every `Error + Send + Sync + 'static` type
+and `String` do; a service that needs the typed error back reads it with
+`cause.downcast_ref`. In Go `CommitWrites` returns `*NotEnabled` or `*StoreFailed` wrapping
+the store's error. In TypeScript `commitWrites` returns `Result<void, NotEnabled |
+StoreFailed>`, which every `<UseCase>Error` union holds.
 
-Recommendation: option 1 now, and option 2 at the next release that breaks the codegen
-output anyway. The owner decides. Until then the commit helper keeps the store's error apart
-(`CommitFailed::Store`), so a service can map it to its own 500 without a new case.
+**The conformance harness.** The first trace calls, once, each use case whose call names one
+existing row and no run mark or event, with an id no row has: `X NotFound <call>`. The
+service must refuse it with `NotFound`. The kind check of #452 stays strict both ways:
+`NotEnabled` does not pass a `NotFound` row, and `NotFound` does not pass a `NotEnabled` row,
+so a service that answers every missing row with `NotEnabled` fails, as do the two services
+above. These rows do not depend on the BFS, so a capped run tries them too, and they do not
+count for `never refused`. A call that names a run mark or an event is left out, because
+the service may refuse it for the missing mark or raise first. A `StoreFailed` on any row
+(`C`, `X` of any kind, the prepare or the late commit of an `I` row) fails the run as a
+failure of the service, not as a refusal. The traces format is 5.
+
+**What breaks.** Adding a case breaks every exhaustive match on the error in Rust and
+TypeScript: a `match` with no wildcard, or a `switch` that ends in `assertNever`. Go code
+that switches on `Kind` keeps compiling. The CHANGELOG says what to add. `<UseCase>Error` and
+the Rust and Go output are outside the compatibility contract, so this needs no major
+release. The Verus output (`--verus`) keeps its three cases: it is a separate experimental
+crate, and a cause of `dyn Error` inside `verus!` needs its own design.
 
 ## Architecture
 

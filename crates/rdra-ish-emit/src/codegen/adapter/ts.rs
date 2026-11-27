@@ -285,9 +285,11 @@ fn print_adapter(out: &mut String) {
     out.push_str(&format!(
         r#"/** Why a use case did not run. The store is unchanged. */
 export type Refusal =
-  | "notEnabled" // the call does not run from its rows' states, names a row that does not exist, or a commit's rows changed since its prepare
+  | "notEnabled" // the call does not run from its rows' states, or a commit's rows changed since its prepare
+  | "notFound" // a row the call names does not exist
   | "rejected" // a condition the model applies to the use case rejects the call
-  | "invalidArgument"; // an argument breaks what the verified model keeps
+  | "invalidArgument" // an argument breaks what the verified model keeps
+  | "storeFailed"; // the store failed: no refusal of the model but a failure of the service, which fails the run
 
 /** What a call did: it ran, or it was refused, with the store unchanged. */
 export type Outcome = Readonly<{{ kind: "ran" }}> | Readonly<{{ kind: "refused"; refusal: Refusal }}>;
@@ -296,7 +298,7 @@ export type Outcome = Readonly<{{ kind: "ran" }}> | Readonly<{{ kind: "refused";
 export const ran: Outcome = {{ kind: "ran" }};
 
 /** Each refusal as the traces spell its kind. */
-const adKinds: Readonly<Record<Refusal, string>> = {{ notEnabled: "NotEnabled", rejected: "Rejected", invalidArgument: "InvalidArgument" }};
+const adKinds: Readonly<Record<Refusal, string>> = {{ notEnabled: "NotEnabled", notFound: "NotFound", rejected: "Rejected", invalidArgument: "InvalidArgument", storeFailed: "StoreFailed" }};
 
 /** The outcome of a call refused for `refusal`. */
 export function refused(refusal: Refusal): Outcome {{
@@ -386,6 +388,13 @@ async function adRun(adapter: ModelAdapter, call: Call, split: boolean): Promise
   return o.kind === "ran" ? commit.call(adapter) : o;
 }}
 
+/** What is wrong when the service did not run `call`, which the model runs: a refusal, or, for `storeFailed`, a failure of the service. */
+function adRefused(call: readonly string[], refusal: Refusal, how: string): string {{
+  return refusal === "storeFailed"
+    ? `the service failed on \`${{call.join(" ")}}\`${{how}}: the store failed`
+    : `the model runs \`${{call.join(" ")}}\` here, and the service refused it${{how}}: ${{refusal}}`;
+}}
+
 /** One run of `traces`, with each call made by `adRun`. */
 async function adPass(adapter: ModelAdapter, traces: string | (() => AsyncIterable<string>), viaSplit: boolean): Promise<AdResult<AdapterReport>> {{
   const how = viaSplit ? " through prepare and commit" : "";
@@ -473,7 +482,7 @@ async function adPass(adapter: ModelAdapter, traces: string | (() => AsyncIterab
         }}
         const o = await adRun(adapter, call.value, viaSplit);
         if (o.kind === "refused") {{
-          return at(`the model runs \`${{text.join(" ")}}\` here, and the service refused it${{how}}: ${{o.refusal}}`);
+          return at(adRefused(text, o.refusal, how));
         }}
         const diff = adCompare(await observe(), next, `after \`${{text.join(" ")}}\``);
         if (diff !== null) {{
@@ -492,6 +501,9 @@ async function adPass(adapter: ModelAdapter, traces: string | (() => AsyncIterab
         const o = await adRun(adapter, call.value, viaSplit);
         if (o.kind === "ran") {{
           return at(`the model refuses \`${{words.join(" ")}}\` here, and the service ran it${{how}}`);
+        }}
+        if (o.refusal === "storeFailed") {{
+          return at(adRefused(words, o.refusal, how));
         }}
         if (kind !== "-" && adKinds[o.refusal] !== kind) {{
           return at(`the model refuses \`${{words.join(" ")}}\` here with ${{kind}}, and the service refused it with ${{o.refusal}}`);
@@ -527,20 +539,24 @@ async function adPass(adapter: ModelAdapter, traces: string | (() => AsyncIterab
         if (split) {{
           const o = await prepare.call(adapter, early.value);
           if (o.kind === "refused") {{
-            return at(`the model runs \`${{first.join(" ")}}\` here, and the service refused it: ${{o.refusal}}`);
+            return at(adRefused(first, o.refusal, ""));
           }}
         }}
         const o = await adapter.invoke(late.value);
         if (o.kind === "refused") {{
-          return at(`the model runs \`${{second.join(" ")}}\` here, and the service refused it: ${{o.refusal}}`);
+          return at(adRefused(second, o.refusal, ""));
         }}
         const between = adCompare(await observe(), next, `after \`${{second.join(" ")}}\``);
         if (between !== null) {{
           return at(between);
         }}
         if (split) {{
-          if ((await commit.call(adapter)).kind === "ran") {{
+          const committed = await commit.call(adapter);
+          if (committed.kind === "ran") {{
             return at(`the service committed \`${{first.join(" ")}}\`, prepared before \`${{second.join(" ")}}\` changed a row it writes: the write must be conditional on what the row was`);
+          }}
+          if (committed.refusal === "storeFailed") {{
+            return at(adRefused(first, committed.refusal, ""));
           }}
           const diff = adCompare(await observe(), next, `after the refused commit of \`${{first.join(" ")}}\``);
           if (diff !== null) {{

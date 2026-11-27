@@ -827,9 +827,16 @@ pub struct Skipped {
 pub const INVALID_ROW: &str = "InvalidRow";
 
 /// The cases of every `<UseCase>Error`, each a type of its own every use case shares: a call
-/// from states the use case does not run from (or a commit that found a row changed), a
-/// condition that does not hold, and arguments that break what the verified model keeps.
-pub const ERROR_CASES: [&str; 3] = ["NotEnabled", "Rejected", "InvalidArgument"];
+/// from states the use case does not run from (or a commit that found a row changed), a row
+/// the call names that does not exist, a condition that does not hold, arguments that break
+/// what the verified model keeps, and a store that failed.
+pub const ERROR_CASES: [&str; 5] = [
+    "NotEnabled",
+    "NotFound",
+    "Rejected",
+    "InvalidArgument",
+    "StoreFailed",
+];
 
 /// A use case of the model.
 #[derive(Clone, Debug)]

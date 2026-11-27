@@ -380,13 +380,14 @@ pub(super) fn derived(
 /// The cases of a use case's error in Go, in order.
 fn error_case_names(domain: &DomainModel, usecase: &str) -> Vec<&'static str> {
     let (rejects, invalid) = error_cases(domain, usecase);
-    let mut cases = vec!["NotEnabled"];
+    let mut cases = vec!["NotEnabled", "NotFound"];
     if rejects {
         cases.push("Rejected");
     }
     if invalid {
         cases.push("InvalidArgument");
     }
+    cases.push("StoreFailed");
     cases
 }
 
@@ -890,6 +891,14 @@ fn print_error_details(out: &mut String) {
     );
     detail(
         out,
+        "NotFound",
+        "no row has the id the call names",
+        "reports a row the call names by id that does not exist: the service's load returns it, and the generated functions, which take rows already loaded, never do. Id is the id as text.",
+        &[("UseCase", "string"), ("Entity", "string"), ("Id", "string")],
+        "\"the use case \" + e.UseCase + \" found no \" + e.Entity + \" row with the id \" + e.Id",
+    );
+    detail(
+        out,
         "Rejected",
         "rejected by a condition",
         "reports a condition of a use case that did not hold: the use case does not run.",
@@ -908,6 +917,18 @@ fn print_error_details(out: &mut String) {
         &[("Reason", "string")],
         "\"invalid argument: \" + e.Reason",
     );
+    out.push_str("// ErrStoreFailed is what errors.Is matches a *StoreFailed with.\nvar ErrStoreFailed = errors.New(\"the store failed\")\n\n");
+    out.push_str("// StoreFailed reports a failure of the store (a lost connection, a constraint the model does not\n// know), not an answer of the use case: the service's load or commit returns it, and the\n// generated functions never do. Unwrap returns Cause, so errors.Is and errors.As reach the\n// store's error.\n");
+    out.push_str(&struct_decl(
+        "StoreFailed",
+        &[
+            Line::Cells(vec!["UseCase".into(), "string".into()]),
+            Line::Cells(vec!["Cause".into(), "error".into()]),
+        ],
+    ));
+    out.push_str("// Error says what happened.\nfunc (e *StoreFailed) Error() string {\n\tif e.Cause == nil {\n\t\treturn \"the use case \" + e.UseCase + \": the store failed\"\n\t}\n\treturn \"the use case \" + e.UseCase + \": the store failed: \" + e.Cause.Error()\n}\n\n");
+    out.push_str("// Is reports whether target is ErrStoreFailed.\nfunc (e *StoreFailed) Is(target error) bool {\n\treturn target == ErrStoreFailed\n}\n\n");
+    out.push_str("// Unwrap returns the store's error.\nfunc (e *StoreFailed) Unwrap() error {\n\treturn e.Cause\n}\n\n");
 }
 
 fn print_errors(domain: &DomainModel, out: &mut String) {
@@ -937,7 +958,9 @@ fn print_errors(domain: &DomainModel, out: &mut String) {
                         "the rows are in states {} does not run from (only its dispatcher says so), or a store's commit found a row changed.",
                         f.usecase
                     ),
+                    "NotFound" => "a row the call names does not exist (only the service's load says so).".to_string(),
                     "Rejected" => "a condition applied to the use case does not hold.".to_string(),
+                    "StoreFailed" => "the store failed (only the service's load or commit says so).".to_string(),
                     _ => "the arguments break what the verified model keeps.".to_string(),
                 };
                 (case, why)

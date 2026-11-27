@@ -7,10 +7,13 @@
 //	drop-row         Ship stores the order but not the shipment the core returns
 //	accept-disabled  Cancel cancels an order the core refuses, as if it were paid, unconditionally
 //	unconditional    every commit writes without checking what the row still is
+//	missing-not-enabled a call on an order that does not exist is NotEnabled, not NotFound
+//	store-fails      Place's commit fails in the store where its row changed
 package domain_test
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"sort"
 	"testing"
@@ -37,6 +40,11 @@ func newService(fault string) *service {
 
 func notEnabled(usecase string) error { return &domain.NotEnabled{UseCase: usecase} }
 
+// notFound is the error of a call that names a row no row has: an HTTP service's 404.
+func notFound(usecase, entity string, id any) error {
+	return &domain.NotFound{UseCase: usecase, Entity: entity, Id: fmt.Sprint(id)}
+}
+
 // holds tells whether a row, by its tag ("" and absent when there is none), is still what a
 // result expects.
 func holds(tag string, present bool, e domain.ExpectedSource) bool {
@@ -62,8 +70,11 @@ func (s *service) shipmentHolds(id domain.ShipmentId, e domain.ExpectedSource) b
 
 func (s *service) order(id domain.OrderId, usecase string) (domain.Order, error) {
 	row, ok := s.orders[id]
-	if !ok {
+	if !ok && s.fault == "missing-not-enabled" {
 		return nil, notEnabled(usecase)
+	}
+	if !ok {
+		return nil, notFound(usecase, "Order", id)
 	}
 	state, err := domain.OrderFromRow(row)
 	if err != nil {
@@ -106,7 +117,7 @@ func (s *service) Snapshot() (domain.StoreSnapshot, error) {
 func (s *service) PreparePlace(parent domain.CustomerId, id domain.OrderId, method domain.Method, note string) (domain.PlaceResult, error) {
 	customer, ok := s.customers[parent]
 	if !ok {
-		return domain.PlaceResult{}, notEnabled("Place")
+		return domain.PlaceResult{}, notFound("Place", "Customer", parent)
 	}
 	return domain.Place(customer, id, method, note)
 }
@@ -114,6 +125,9 @@ func (s *service) PreparePlace(parent domain.CustomerId, id domain.OrderId, meth
 func (s *service) CommitPlace(r domain.PlaceResult) error {
 	id := r.Order.Id()
 	if !s.orderHolds(id, r.OrderExpected) {
+		if s.fault == "store-fails" {
+			return &domain.StoreFailed{UseCase: "Place", Cause: errors.New("the connection was lost")}
+		}
 		return notEnabled("Place")
 	}
 	s.orders[id] = domain.OrderToRow(r.Order)
@@ -171,8 +185,11 @@ func (s *service) PrepareSend(id domain.ShipmentId, ev domain.EvShipped) (domain
 		raised = raised || e == ev
 	}
 	row, ok := s.shipments[id]
-	if !raised || !ok {
+	if !raised {
 		return domain.SendOutcome{}, notEnabled("Send")
+	}
+	if !ok {
+		return domain.SendOutcome{}, notFound("Send", "Shipment", id)
 	}
 	state, err := domain.ShipmentFromRow(row)
 	if err != nil {
