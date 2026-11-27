@@ -29,6 +29,7 @@ pub(super) fn owning_stage(model: &SemanticModel, diag: &StateDiag) -> StageId {
         | StateDiag::PreExistingChildOfCreatedParent { .. }
         | StateDiag::IdentityStartSlots { .. }
         | StateDiag::DomainTooLarge { .. }
+        | StateDiag::StateTooWide { .. }
         | StateDiag::CountAboveBound { .. }
         | StateDiag::MinCardOfPreExistingParent { .. }
         | StateDiag::MinCardNeedsCreate { .. }

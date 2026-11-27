@@ -40,6 +40,30 @@ pub(crate) fn bits_for(size: usize) -> u8 {
     }
 }
 
+/// Per cell of `ts`'s states: its domain's size.
+fn cell_sizes(ts: &TransitionSystem) -> Vec<usize> {
+    let mut sizes = vec![256; ts.width];
+    for v in ts.var_ids() {
+        let decl = ts.var(v);
+        let at = ts.offset(v);
+        let size = decl.domain.size(ts);
+        sizes[at..at + ts.slots_of(&decl.kind)].fill(size);
+    }
+    sizes
+}
+
+/// The bits a packed state of `ts` takes, summed in a `u64`: what the build holds to
+/// `MOST_PACKED_BITS` (`StateTooWide`) before any `Packing::of` would.
+pub(crate) fn packed_bits(ts: &TransitionSystem) -> u64 {
+    cell_sizes(ts)
+        .into_iter()
+        .map(|s| u64::from(bits_for(s)))
+        .sum()
+}
+
+/// The most bits a packed state addresses: each cell's bit offset is a `u32` (P50).
+pub(crate) const MOST_PACKED_BITS: u64 = u32::MAX as u64;
+
 /// Per cell of `bits`: the bit it starts at. Panics, in a release build too, when a state
 /// has more bits than a `u32` counts, rather than placing two cells at one offset.
 fn offsets(bits: &[u8]) -> Box<[u32]> {
@@ -69,14 +93,7 @@ impl Packing {
 
     /// The packing of `ts`'s states: each var's slots in the bits of its domain's size.
     pub(crate) fn of(ts: &TransitionSystem) -> Self {
-        let mut sizes = vec![256; ts.width];
-        for v in ts.var_ids() {
-            let decl = ts.var(v);
-            let at = ts.offset(v);
-            let size = decl.domain.size(ts);
-            sizes[at..at + ts.slots_of(&decl.kind)].fill(size);
-        }
-        Packing::new(sizes)
+        Packing::new(cell_sizes(ts))
     }
 
     /// The bytes of an unpacked state.

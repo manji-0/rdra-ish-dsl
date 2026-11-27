@@ -474,6 +474,11 @@
 
 ### Fixed
 
+- A system whose packed state would pass `u32::MAX` bits, the width of a cell's bit offset
+  in the native explorer, is the build error `StateTooWide`, beside `DomainTooLarge`, before
+  any engine runs (docs/theory P50); before, the explorer panicked when it laid out the
+  packing. No reachable bound comes near it: 255 slots of an entity take 2,040 bits per
+  8-bit column.
 - A counterexample that runs a use case without its event having been raised is a candidate
   only (docs/theory P1). The check's cone takes in that event's raisers and runs again, and
   repeats until a counterexample runs no use case without its event, or the cone is the

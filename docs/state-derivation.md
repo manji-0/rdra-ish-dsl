@@ -675,6 +675,7 @@ headers of the samples list these names
 | `DrivenComparisonColumnWritten { usecase, column, proposition, drivers }` | `DrivenComparisonColumnWritten_<E>_<usecase>_<column>` | warning | A use case `sets` a column a driven comparison reads without driving the comparison. |
 | `IntLiteralOutOfBounds { value, max }` | `IntLiteralOutOfBounds_<E>_<value>` | error | An Int literal or integer `@default` lies outside `0..max`. |
 | `DomainTooLarge { column, values }` | `DomainTooLarge_<E>_<column>` | error | A column has more than the 256 values a state holds: a nullable Int at `--int-range-max 255`, a nullable Enum of 256 values, or an Enum of 257. |
+| `StateTooWide { bits, most }` | `StateTooWide` | error | A state of the system packs into more bits than a packed state addresses (`u32::MAX`, the width of a cell's bit offset): fewer instances or a smaller Int range. |
 | `UnsupportedComparison { comparison }` | `UnsupportedComparison_<E>_<comparison>` | error | An order comparison has a non-numeric operand, or `==` / `!=` compares columns of different domains. |
 | `UnbindableScope { constraint }` | `UnbindableScope_<E>_<constraint>` | error | An `.along` names a hop no `relate` binds, or misses an entity the rule names. |
 | `UnbindableCondition { condition, usecase }` | `UnbindableCondition_<E>_<condition>_<usecase>` | error | A condition body is applied to a use case that writes nothing, or its `.along` cannot be bound. |
