@@ -459,7 +459,7 @@ impl OrbitRun {
     /// What the edges `act` labels reach, orbit self-edges included: those of the stored
     /// graph (`ComponentRun::step_ends`).
     pub fn step_ends(&self, act: ActId, binders: &[EntId]) -> Ends {
-        self.run.step_ends(act, binders)
+        self.run.step_ends_with(act, binders, &self.orbit_self)
     }
 
     pub fn labelled_edges(&self) -> impl Iterator<Item = LabelledEdge<'_>> {

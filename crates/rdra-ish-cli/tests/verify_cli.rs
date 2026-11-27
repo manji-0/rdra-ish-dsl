@@ -1696,6 +1696,99 @@ invariant(Order).when(status == placed).none(Shipment).label("no shipment yet").
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+/// A TLC counterexample that does not replay through BFS's step relation is a disagreement
+/// between the engines: the run prints `error[EngineDisagreement]` and ends `tool_error`. A
+/// `tlc` on PATH that runs the real one and turns every `"cancelled"` in its output into a
+/// value no Order has makes every trace that reaches a cancelled Order leave the cone
+/// (`--entity Order` keeps the run short). Such a
+/// trace was once only printed as an `error:` line, the first of each check, and the run
+/// ended `counterexample` (P12 of docs/theory/README.md).
+#[cfg(unix)]
+#[test]
+fn a_tlc_counterexample_that_does_not_replay_fails_the_run_as_a_tool_bug() {
+    use std::os::unix::fs::PermissionsExt;
+    if !have_tlc() {
+        return;
+    }
+    let tmp = scratch("verify_cli_unreplayed_tlc_trace");
+    let real = Command::new("which").arg("tlc").output().unwrap();
+    let real = String::from_utf8_lossy(&real.stdout).trim().to_string();
+    let bin = tmp.join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    let fake = bin.join("tlc");
+    std::fs::write(
+        &fake,
+        format!("#!/bin/sh\n'{real}' \"$@\" | sed 's/\"cancelled\"/\"lost\"/g'\n"),
+    )
+    .unwrap();
+    std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let path = std::env::join_paths(
+        std::iter::once(bin).chain(std::env::split_paths(&std::env::var_os("PATH").unwrap())),
+    )
+    .unwrap();
+    let sample = repo().join("samples/formal-verification/cross_order_payment_split.rdra");
+    let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .current_dir(repo())
+        .env("TMPDIR", &tmp)
+        .env("PATH", path)
+        .args([
+            "verify",
+            "--with-tlc",
+            "--entity",
+            "Order",
+            sample.to_str().unwrap(),
+        ])
+        .output()
+        .expect("rdra-ish runs");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "error[EngineDisagreement]: Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: "
+        ) && stderr.contains("do not replay through BFS's step relation"),
+        "{stdout}{stderr}"
+    );
+    assert!(
+        stderr.contains("\nresult: tool_error\n"),
+        "{stdout}{stderr}"
+    );
+    assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// A native property run stopped at `--max-states` decides nothing, so TLC's counterexample on
+/// the same run is no disagreement (agreement rule 1). The stopped run was once recorded as
+/// `ok` for the run-by-run comparison, which read as `native ok, TLC counterexample` and
+/// failed the run as a tool error (P21 of docs/theory/README.md).
+#[test]
+fn a_property_run_stopped_at_the_cap_is_no_disagreement_with_tlc() {
+    if !have_tlc() {
+        return;
+    }
+    let tmp = scratch("verify_cli_capped_property_vs_tlc");
+    let sample = repo().join("samples/formal-verification/temporal_unmet.rdra");
+    let output = verify_with_tlc(
+        &repo(),
+        &tmp,
+        &[sample.to_str().unwrap(), "--max-states", "3"],
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("EngineDisagreement"),
+        "a stopped run disagrees with TLC:\n{stdout}{stderr}"
+    );
+    assert!(
+        stderr.contains("\nresult: not decided\n"),
+        "{stdout}{stderr}"
+    );
+    assert!(
+        stderr.contains("\ntlc_result: counterexample\n"),
+        "{stdout}{stderr}"
+    );
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 /// `eventually` and `leads_to` are decided natively, with no TLC on PATH: on the cone with
 /// `Fair_P` alone, again with `WF_vars(Next)`, and on the whole model when the cone leaves
 /// them open. `--with-tlc` runs TLC's ladder beside it, and the two agree run by run.

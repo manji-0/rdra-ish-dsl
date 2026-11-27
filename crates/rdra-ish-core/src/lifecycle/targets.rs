@@ -6,7 +6,7 @@ use std::fmt;
 
 use super::cone::{Cone, Target};
 use super::diag::{Diag, StateDiag, UnmetPremise};
-use super::explore::{Caps, Checks, ComponentRun, OrbitRun, StoredRun};
+use super::explore::{Caps, Checks, ComponentRun, Ends, OrbitRun, StoredRun};
 use super::findings::{Progress, Runs, StateModelFindings, Taken, Witness};
 use super::types::{
     ActionOrigin, AfterAssert, AfterStep, EntId, GuardWhy, Invariant, Ltl, Pred, Premise, Site,
@@ -1082,8 +1082,9 @@ impl TransitionSystem {
 
     /// The premises of the after-assert `a` no step of `run` meets; `None` when the assert
     /// is violated there or the cone does not hold it. The assert says something once its use
-    /// case takes its last step, into a state that has rows of the entities the step does not
-    /// bind, when it reads any.
+    /// case takes its last step and the step changes the state (a stuttering step is not
+    /// checked, D17), into a state that has rows of the entities the step does not bind, when
+    /// it reads any.
     fn unmet_of_assert(a: &AfterAssert, run: &impl StoredRun) -> Option<Vec<UnmetPremise>> {
         crate::shadow_assert!(
             run.evaluated().reads(&a.name),
@@ -1097,17 +1098,25 @@ impl TransitionSystem {
         }
         let sys = run.system();
         let local = sys.after.iter().find(|x| x.name == a.name)?;
-        // Per step whose action some move takes: whether the target of one has its rows.
-        let ran: Vec<(&AfterStep, bool)> = local
+        // Per step whose action some move takes: what those moves reached.
+        let ran: Vec<(&AfterStep, Ends)> = local
             .steps
             .iter()
             .map(|step| (step, run.step_ends(step.act, &step.binders)))
             .filter(|(_, ends)| ends.ran)
-            .map(|(step, ends)| (step, ends.with_rows))
             .collect();
         let usecase = a.anchor.clone();
         if ran.is_empty() {
             return Some(vec![UnmetPremise::NeverRuns { usecase }]);
+        }
+        // A stuttering step is not checked (D17), so an assert whose step never changes the
+        // state is never evaluated, though the use case runs (P51).
+        let ran: Vec<(&AfterStep, bool)> = (ran.into_iter())
+            .filter(|(_, ends)| ends.moved)
+            .map(|(step, ends)| (step, ends.with_rows))
+            .collect();
+        if ran.is_empty() {
+            return Some(vec![UnmetPremise::OnlyStutters { usecase }]);
         }
         let with_rows = ran.iter().any(|(_, with_rows)| *with_rows);
         Some(match with_rows {

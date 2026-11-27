@@ -37,7 +37,10 @@ case, whatever the case's header says.
      states it as `tlc=none`.
 2. The rule holds per run as well as for the final verdict. Each property line names its runs
    (`Cone_P`, `Cone_P_Full`, `Cone_P_WF`, `RdraSpec_P`), and the two engines must agree on
-   each run both decided. Two runs can disagree in ways that cancel.
+   each run both decided. Two runs can disagree in ways that cancel. A native `Cone_` line
+   whose checks the header gives a TLC verdict needs TLC's line for the same module; a
+   native `RdraSpec_` line may stand alone, since TLC's cone may decide what the native cone
+   left to the whole model.
 3. The run prints no `error[EngineDisagreement]` and no `error[LassoFault]`. A native
    counterexample replays through the step relation, fails its formula, and passes its
    fairness check before it prints.
@@ -64,8 +67,8 @@ case, whatever the case's header says.
 
 8. With the test-only `RDRA_ISH_FORCE_ORBITS=1`, which runs up to symmetry every cone a plain
    run would otherwise decide, once with reduction off (`RDRA_ISH_NO_REDUCE=1`) and once with
-   it on, each check both runs decide gets the plain run's verdict, at 2 instances and at every
-   bound the case runs BFS at. A lifted counterexample that does not replay, or whose steps do
+   it on, each check the plain run decides gets the plain run's verdict, not `not decided`, at
+   2 instances and at every bound the case runs BFS at. A lifted counterexample that does not replay, or whose steps do
    not bind the rows they name, panics.
 
 **The native checker past the run's bounds**, on `verify --prove`:
@@ -104,7 +107,9 @@ and `z3_now_past_the_top` pin both sides.
 
 Each case is one `.rdra` file under `crates/rdra-ish-cli/tests/engine_corpus/`. The file name
 starts with the trap's family: `fair_`, `presence_`, `cone_`, `safety_`, `sym_`, `cap_`, or
-`z3_`. The harness reads every `*.rdra` file in the directory, so no list needs an update.
+`z3_`. The harness reads every `*.rdra` file in the directory. `CASES` in the same directory
+lists every case's file stem, and `every_corpus_header_is_well_formed` fails when the two
+differ, so a deleted or renamed case does not go unnoticed.
 
 ### Header grammar
 
@@ -129,7 +134,9 @@ free text that explains the trap.
   `z3=`, and `z3=proved` also needs `bfs=`.
 - `bfs=` lists the native verdicts at 1, 2, and 3 instances per entity, and at 4 with a fourth
   entry. The second entry equals `native=`. The harness runs 1 and 3 instances only for a case
-  with a `bfs=`, and 4 only for a four-entry one.
+  with a `bfs=`, and 4 only for a four-entry one, with TLC beside BFS at each: rules 1 to 3
+  hold there too, so TLC's verdict at that bound equals the `bfs=` entry wherever both
+  engines decide.
 - `<Check>` is the name the run prints: `error[<Check>]`, a `Cone_` line's bracket list, a
   `property <Check> (BFS on its cone)` line, a `proved:` line, or a `Deadlock_*` or `Witness_*`
   finding. Every check the run names needs an `expect` line, and every `expect` line needs a
@@ -182,6 +189,7 @@ steps.
    verdict, and add a `known` line that links it.
 5. Check that the case discriminates: break the engine the way the trap describes, confirm the
    case fails, and revert.
+6. Add the file stem to `CASES`, in sorted order.
 
 ## Cases by trap
 
@@ -227,6 +235,7 @@ skips TLC, since `verify` refuses `--with-tlc` under `64MiB`.
 | `safety_count_guard_order` | Two count guards that point opposite ways on one row |  | `Forbidden_Shelf_0` ok, z3 proved, BFS ok/ok/ok; `Deadlock_Shelf_status_open` cex |
 | `safety_count_per_entity` | A count over an entity with its own slot count, in both directions | `--instances Loan=4 --instances Shelf=3` | `Quantifier_Member_0`, `Quantifier_Shelf_1` cex, z3 unproved |
 | `safety_counted_once_per_raise` | A counted handler runs once per raise, where the latch lets one raise drive two runs |  | `Forbidden_Box_0`, `EventOverflow_Box_EvShipped_Receive` ok, z3 proved, BFS ok/ok/ok; `Forbidden_Crate_1` cex, z3 unproved; `BoxBothIn` ok |
+| `safety_created_set_beside_transitions` | A guarded `sets` and `transitions` write one created row's lifecycle column in one use case, which the engines read differently (P24); the build rejects it |  | `ConflictingEffects_Order_Place_status` cex, TLC none; `Forbidden_Order_0` none |
 | `safety_delete_cascade` | `.on_delete(cascade)` keeps its one-row delete, with no guard and no `DanglingKey_*` |  | `Forbidden_OrderLine_0` cex, z3 unproved |
 | `safety_delete_restrict` | A delete the key's children reject waits until no present child names the row |  | `DanglingKey_OrderLine_Order`, `DanglingKey_Payment_Order` ok, z3 proved, BFS ok/ok/ok |
 | `safety_delete_set_null` | `.on_delete(set_null)` keeps its one-row delete, with no guard and no `DanglingKey_*` |  | `Forbidden_OrderLine_0` cex, z3 unproved |
@@ -338,7 +347,14 @@ A cone whose BFS, reduced as `verify` explores it, passes 300,000 states at 2 in
 compared at 1 instance only. `VERIFY_FALLBACK` lists these cones and the test fails when the
 list changes; [Known verification gaps](./formal-verification.md#known-verification-gaps) gives
 each one's size. `scripts/tlc-roots.txt` names the sample roots with such a cone, and CI's
-`formal-verify` job runs TLC on them at their header bounds instead (#305).
+`formal-verify` job runs TLC on them at their header bounds instead (#305). oidc-auth's header
+runs 1 instance, so its 13 cones on that list meet TLC at 2 instances nowhere: its browser-flow
+cone passes 2,000,000 states there, a TLC run of over an hour.
+
+A cone whose unreduced BFS passes 300,000 states at 2 instances while its reduced one fits is
+compared reduced only: TLC reads the quotient tables BFS computed, so on that cone the
+comparison checks the reduced system, not the reduction. `VERIFY_REDUCED_ONLY` lists these
+cones, and the test fails when the list changes.
 `a_property_cone_decides_what_the_whole_model_decides` compares each property's cone verdict
 with the whole model's, and the native verdict of each run with TLC's. CI runs the test in
 release with `RDRA_REQUIRE_TLC=1`.
@@ -398,7 +414,9 @@ test thread. `verify --with-tlc` does not use it.
   timings, process ids, temp paths, timer output, and the heap size. `RDRA_TLC_BATCH=twice`
   compares two process runs the same way, and `RDRA_TLC_BATCH=0` runs every job as a process.
 - **In CI.** `RDRA_REQUIRE_TLC_BATCH=1` fails the test when no job ran in a batch JVM or one
-  fell back for any reason but the time limit.
+  fell back for any reason but the time limit. On `main` (scheduled or started by hand), the
+  `tlc-batch-both` job runs `engine_equivalence` once more under `RDRA_TLC_BATCH=both`; a pull
+  request does not run it.
 
 ## Mutation run
 
@@ -426,6 +444,20 @@ or record why it is equivalent. A timeout is a mutant whose corpus ran past 60 s
 which needs no new case. Each test process runs under a 2 GiB address-space cap, so a mutant
 that allocates without end fails at the cap. A shard that uploads no results is named at the top
 of the summary.
+
+**Kill rate.** The kill rate is the caught and timed-out mutants over the viable ones (all
+but `unviable`). Record each full run here, and the run before a release in its changelog
+entry, so that a fall shows:
+
+| Run | Commit | Date | Mutants | Caught | Timeout | Missed | Unviable | Kill rate |
+|---|---|---|---|---|---|---|---|---|
+| [45212589802](https://github.com/manji-0/rdra-ish-dsl/actions/runs/45212589802) | `b0f593ba` | 2026-11-23 | 251 | 137 | 2 | 70 | 42 | 139 of 209, 66.5% |
+
+The missed mutants of that run: 27 in `cone.rs`, 26 in `explore/liveness.rs`, 12 in
+`verify/native.rs`, 5 in `property_cone.rs`. The run mutates only those four files. The TLA+
+printer, `compare.rs`, `tlc_output.rs`, and `tlc_replay.rs` are not on the list: the run keeps
+`tlc` off `PATH`, so the corpus could not catch a mutant there. Mutating them needs a run with
+TLC on `PATH`, at many times the cost.
 
 ## Kani harnesses
 
@@ -477,7 +509,8 @@ under a minute.
 
 ### In CI
 
-The `kani` job runs every harness on each push to `main`. On a pull request it runs when a
+The `kani` job runs every harness on each run on `main` (scheduled every three hours, or
+started by hand). On a pull request it runs when a
 changed file is on the list in `scripts/kani-relevant.sh`: the files that hold a harness, the
 files whose code the harnesses run, the manifests and the lockfile, and the workflow that pins
 Kani. A harness in a new file adds that file to the list.

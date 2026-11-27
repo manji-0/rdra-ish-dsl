@@ -119,8 +119,9 @@ jobs:
   check:
     needs: changes
     # Runs whatever `changes` concluded: if it failed, `code` is empty and every step runs.
-    # Skipping the job would report the required check as passed. A scheduled run of a
-    # commit already checked skips it.
+    # A skipped job reports success, so skipping this one would read as passed. No check
+    # is required by branch protection (the repository has none); the PR's checks are the
+    # merge gate by convention. A scheduled run of a commit already checked skips it.
     if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
     runs-on: ubuntu-latest
     steps:
@@ -290,6 +291,23 @@ jobs:
         # docs/engine-agreement.md: each case under crates/rdra-ish-cli/tests/engine_corpus/
         # states every engine's verdict; about 45 s locally.
         run: RDRA_REQUIRE_TLC=1 RDRA_REQUIRE_Z3=1 cargo test --release -p rdra-ish-cli --test engine_corpus
+
+  tlc-batch-both:
+    # On main only (scheduled or by hand): engine_equivalence once more with every TLC job
+    # run in a batch JVM and again as a process with the same fingerprint and seed, failing on
+    # any difference (docs/engine-agreement.md, "Batch JVMs"). It doubles the TLC work of the
+    # sample comparison, so it is a job of its own beside engine-equivalence, not a step of it.
+    needs: changes
+    if: ${{ needs.changes.outputs.verify == 'true' && github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v6
+      - uses: cachix/install-nix-action@v31
+      - uses: Swatinem/rust-cache@v2
+      - name: A batch JVM gives what a TLC process of its own gives (RDRA_TLC_BATCH=both)
+        run: RDRA_REQUIRE_TLC=1 RDRA_REQUIRE_TLC_BATCH=1 RDRA_TLC_BATCH=both cargo test --release -p rdra-ish-cli --test engine_equivalence
+        timeout-minutes: 65
 
   shadow:
     # Every fast function that has a reference twin checked against the twin on every call

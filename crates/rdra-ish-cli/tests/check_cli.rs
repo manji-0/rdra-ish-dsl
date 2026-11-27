@@ -1455,3 +1455,28 @@ fn a_mark_the_lifecycle_lacks_is_an_error() {
         assert!(stderr.contains(&format!("{mark}: ")), "{name}: {stderr}");
     }
 }
+
+/// `check` prints the lint warning `negated-order-admits-null` at the `@check` it flags, with
+/// its rule id and hint, and it does not fail the run (P62).
+#[test]
+fn check_warns_on_a_negated_order_over_a_nullable_column() {
+    let dir = std::env::temp_dir().join(format!("rdra-negated-null-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("negated.rdra");
+    std::fs::write(
+        &file,
+        "entity Item \"品\" { id: Int @pk  qty: Int @null @check(not (qty < 1)) }\nusecase Make \"作成\"\ncreates(Make, Item)\nsets(Make, Item.qty == 2)\n",
+    )
+    .unwrap();
+    let check = run(&["check", file.to_str().unwrap()]);
+    let stderr = String::from_utf8_lossy(&check.stderr);
+    assert_eq!(check.status.code(), Some(0), "{stderr}");
+    let line = stderr
+        .lines()
+        .find(|l| l.contains("[negated-order-admits-null]"))
+        .unwrap_or_else(|| panic!("no warning: {stderr}"));
+    assert!(line.starts_with("warning: "), "{line}");
+    assert!(line.contains("negated.rdra:1:"), "{line}");
+    assert!(stderr.contains("hint: write `qty >= 1`"), "{stderr}");
+    std::fs::remove_dir_all(&dir).ok();
+}

@@ -740,7 +740,7 @@ impl<'t> Bfs<'t> {
                 if let Some(perms) = &mut self.perms {
                     perms.push_identity();
                 }
-                self.push(from, from, act, binding, s2);
+                self.push(from, from, act, binding, s2, false);
                 continue;
             }
             self.check_after(from, act, params, s2);
@@ -854,16 +854,24 @@ impl<'t> Bfs<'t> {
     /// `Caps::stop_when_all_violated`. The check comes after the edge, so the trace of a
     /// violation at `to` reaches it.
     fn step(&mut self, from: u32, to: u32, act: ActId, binding: u32, stored: &StateSlice) -> bool {
-        self.push(from, to, act, binding, stored);
+        self.push(from, to, act, binding, stored, true);
         !self.stop_if_all_failed()
     }
 
     /// Records the move from `states[from]` to `states[to]`, which is `stored`, under `act`
-    /// and its `binding`.
-    fn push(&mut self, from: u32, to: u32, act: ActId, binding: u32, stored: &StateSlice) {
+    /// and its `binding`; `moved` unless the move is a concrete self-loop (`Probe::Loop`).
+    fn push(
+        &mut self,
+        from: u32,
+        to: u32,
+        act: ActId,
+        binding: u32,
+        stored: &StateSlice,
+        moved: bool,
+    ) {
         self.steps.push(from, to, binding);
         if let Some(ends) = &mut self.ends {
-            ends.read(self.ts, act, stored);
+            ends.read(self.ts, act, stored, moved);
         }
     }
 

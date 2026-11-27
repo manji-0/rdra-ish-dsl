@@ -83,6 +83,22 @@ pub(super) struct Ran {
     pub(super) cost: Cost,
 }
 
+#[cfg(test)]
+impl Ran {
+    /// A run that found `run`'s violations, for the comparison's tests.
+    pub(super) fn counterexample(run: TlcRun) -> Ran {
+        Ran {
+            decision: Decision::Decided(Outcome::Counterexample),
+            run,
+            log: String::new(),
+            notes: Vec::new(),
+            runs: Vec::new(),
+            unrun: None,
+            cost: Cost::default(),
+        }
+    }
+}
+
 /// What the TLC launches of one job cost (#384): their wall time added up, the heap of the
 /// last, and the workers of the first. A job with no launch costs nothing and prints nothing.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
