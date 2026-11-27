@@ -355,13 +355,14 @@ fn serde_is_for_rust_domain_code_only() {
     );
 }
 
-/// A manifest whose `build` and `run` are rdra-ish's own `--version`: the conformance run
-/// passes with no toolchain, so what is tested is the statement of what it covered (with
+/// A manifest whose `build` is rdra-ish's own `--version` and whose `run` prints the line a
+/// harness prints when no call reached the unimplemented port: the conformance run passes
+/// with no toolchain, so what is tested is the statement of what it covered (with
 /// `--mutants 0`: such a run fails the self-check) or the self-check itself.
 fn noop_run(states: usize) -> String {
     let bin = env!("CARGO_BIN_EXE_rdra-ish");
     format!(
-        "{}root = \"../svc\"\nbuild = ['{bin}', '--version']\nrun = ['{bin}', '--version']\n",
+        "{}root = \"../svc\"\nbuild = ['{bin}', '--version']\nrun = ['sh', '-c', 'echo \"rdra-ish conformance: unimplemented: none\"']\n",
         MANIFEST.replace(
             "conformance_states = 4096",
             &format!("conformance_states = {states}")

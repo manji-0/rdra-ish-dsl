@@ -5,8 +5,8 @@
 #
 # The tag without its `v`, `version` under `[workspace.package]` in Cargo.toml (the version
 # of every crate and of the `rdra-ish` binary), `version` under `[project]` in
-# pyproject.toml (the PyPI package's), and `version` in .claude-plugin/plugin.json (the
-# Claude Code plugin's) must be the same string. release.yml and
+# pyproject.toml (the PyPI package's), and `version` in plugins/rdra-ish/.claude-plugin/plugin.json
+# (the Claude Code plugin's) must be the same string. release.yml and
 # publish-pypi.yml run it before they build anything.
 set -euo pipefail
 
@@ -23,7 +23,7 @@ with open("Cargo.toml", "rb") as f:
     cargo = tomllib.load(f)["workspace"]["package"]["version"]
 with open("pyproject.toml", "rb") as f:
     pyproject = tomllib.load(f)["project"]["version"]
-with open(".claude-plugin/plugin.json", "rb") as f:
+with open("plugins/rdra-ish/.claude-plugin/plugin.json", "rb") as f:
     plugin = json.load(f)["version"]
 want = tag[1:] if tag.startswith("v") else None
 print(f"tag {tag}, Cargo.toml {cargo}, pyproject.toml {pyproject}, plugin.json {plugin}")

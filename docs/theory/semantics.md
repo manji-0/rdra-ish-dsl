@@ -265,10 +265,14 @@ binder ranging over present slots (`language-reference.md`, "Entity state constr
 speaks only of linked rows; a `.when(Cond)` adds the comparisons of `Cond`'s `holds` body.
 
 **D17 (After assertion).** `after(UC).assert(ψ)` (`AfterAssert`) holds iff for every
-`s ∈ Reach(T)` and every step `s →_a s'` of the *last* step `a` of `UC` (of every variant
-`UC_by_Ev`), `ψ` holds in `s'` with the action's parameters bound to their slots and the
-scope entities the action does not bind universally quantified over present slots of
-`s'` (`AfterStep::post`). States between two steps of a run are not checked.
+`s ∈ Reach(T)` and every step `s →_a s'` with `s' ≠ s` of the *last* step `a` of `UC` (of
+every variant `UC_by_Ev`), `ψ` holds in `s'` with the action's parameters bound to their
+slots and the scope entities the action does not bind universally quantified over present
+slots of `s'` (`AfterStep::post`). States between two steps of a run are not checked,
+and neither is a last step that changes nothing: the native run skips the check on a
+self-loop (`explore/bfs.rs`, `Probe::Loop`, in every build), and TLC checks the `PROPERTY`
+`[][(\A p : UC(p) => post')]_vars`, which every stuttering step satisfies. The language
+reference promises a check after every run (S6, open problem P22).
 
 **D18 (Vacuity).** A rule *holds vacuously* when no reachable state meets one of its
 premises (`Invariant::premises`, `state-derivation.md`, "Rules that hold vacuously").
@@ -308,8 +312,11 @@ TLA+ form is a latch `P_seen` per binding.
 `(a, κ)` of an action `a` of some `UC_i` (every step of a split use case) and the slots
 `κ` its non-`New` parameters bind (`Property::fair_instance`,
 `ParamRole::keys_fair_instance`). `(a, κ)` is *enabled* at `s` when some binding of `a` that
-extends `κ` has a successor `s' ≠ s`, and *taken* by a step whose action is `a` and whose
-binding extends `κ`. Two fairness conditions on a behavior `σ` are used:
+extends `κ` has a successor `s' ≠ s`, and *taken* by a step `s → s'` with `s' ≠ s` whose
+action is `a` and whose binding extends `κ`: a move that changes no variable neither
+enables nor takes an instance, as `⟨A⟩_vars` reads it in TLA+ and
+`lasso.rs::TransitionSystem::unfair_loop` reads the moves (open problem P56). So a behavior
+that stays at one state forever through a self-loop of a fair instance does not take it. Two fairness conditions on a behavior `σ` are used:
 
 - `Fair_P`: for every fair instance, if it is enabled at every state of `σ` from some
   point on, it is taken infinitely often. This is weak fairness per instance,
@@ -326,7 +333,11 @@ There is no strong fairness: no `SF` form exists in the language, the TLA+ print
 property holds on `T` iff every behavior `σ` of `T` that satisfies `F`, every binding `b`,
 and every `i` with `trig_b(σ_i) ∧ cause_b(σ_i)` have some `j ≥ i` with `goal_b(σ_j)`. So
 `eventually(x)` is `□(trig ⇒ ◇x)` per binding, not `◇x`, and `goal` is read at `j = i`
-too.
+too. `goal_b(σ_j)` does not require `pres_b(σ_j)`: on a slot deleted between `i` and `j`
+it reads the base values D8 leaves, so a delete meets a goal those values satisfy and no
+other goal. This is the defined semantics (open problem P6, decided as documented):
+language-reference.md, "Temporal path properties", states it, and the TLA+ formulas
+`[](present => <>x)` and `(present /\ x) ~> y` read it the same way.
 
 The verdict a property is meant to have is the one under `WfNext`, because the exported
 `Spec` conjoins `WF_vars(Next)` whenever the model has an `eventually` or `leads_to`, and
@@ -387,8 +398,9 @@ soundness questions are in the index's [Open problems](./README.md#open-problems
 
 | # | Prose | Code | Note |
 |---|---|---|---|
-| S1 | `language-reference.md`, "Temporal path properties": `eventually(expr)` is `<>expr`. | `lasso.rs::fails_at` and `explore/liveness.rs::liveness_search`: `□(present ∧ link ⇒ ◇x)` per binding. | `formal-verification.md`, "Mapping", states the code's form. |
-| S2 | `language-reference.md`, "Temporal path properties" and "Recoverability": `can_reach` is `AG (present => EF expr)`. | `reach.rs::reach_failure`: `AG (trig ⇒ E[pres U (pres ∧ goal)])`; the path must keep the instance present. | `formal-verification.md`, "Recoverability on a cone", and `types.rs::Reach` state the code's form. The two differ when the goal holds on a deleted slot's base values. |
+| S1 | `language-reference.md`, "Temporal path properties": `eventually(expr)` is `<>expr`. | `lasso.rs::fails_at` and `explore/liveness.rs::liveness_search`: `□(present ∧ link ⇒ ◇x)` per binding. | `formal-verification.md`, "Mapping", states the code's form. Resolved with P6: the language reference now gives `[](present => <>expr)` and `(present /\ p) ~> q`. |
+| S2 | `language-reference.md`, "Temporal path properties" and "Recoverability": `can_reach` is `AG (present => EF expr)`. | `reach.rs::reach_failure`: `AG (trig ⇒ E[pres U (pres ∧ goal)])`; the path must keep the instance present. | `formal-verification.md`, "Recoverability on a cone", and `types.rs::Reach` state the code's form. The two differ when the goal holds on a deleted slot's base values. Resolved with P6: the language reference now gives the code's form. The doc comments of `model/constraints.rs::Ltl` and `syntax/ast.rs`, and the comment the TLA+ module prints, still say `AG (present => EF …)`. |
+| S6 | `language-reference.md`, "Entity state constraints": `after(UC).assert(…)` "checks the state each run of the use case leaves" and "must hold after every arm". | D17: a step with `s' = s` is not checked. The native run skips the `after` check on a self-loop (`explore/bfs.rs`, `Probe::Loop`, in every build), and the TLA+ `PROPERTY` `[][(\A p : UC(p) => post')]_vars` admits a stuttering step. | Open problem P22: the two engines agree, so no verdict differs between them; a run whose last step changes nothing goes unchecked although the reference promises a check. |
 | S3 | `formal-verification.md`, "Mapping": `always` is `[](present => x)`. | The trigger is `present ∧ link`; without `.along` the link is `true`. | Consistent once `.along` is read into `present`, as the "Scope" table of `language-reference.md` does. |
 | S4 | `state-derivation.md`, "Bounds", and `language-reference.md`: Int columns range over `0..5`. | `Domain::Int` is `[m+1]` with `m = int_max`; `--int-range-max` sets `m` and 5 is only the default. | The language reference mentions `--int-range-max`; listed so that theme writers quote `m`, not 5. |
 | S5 | `prove/mod.rs::Verdict::Proved` doc comment: "Holds for any number of rows, at the stated value bounds"; `cli/src/prove.rs::ProofTally::clause`: "any Int value". | `prove/encode.rs` (module doc, `Enc::in_domain`): Int terms and `now` range over every non-negative integer with no top, and a rule names only literals up to `m`. | formal-verification.md ("any non-negative Int value") matches the code. Open problem P2. |
@@ -398,8 +410,9 @@ soundness questions are in the index's [Open problems](./README.md#open-problems
 - **Operands on absent rows.** D21 and D22 read `goal` on a slot whatever its existence, and
   D8 resets a deleted slot's columns to base. So `eventually(Order.status == draft)` with
   `draft` the base value is met by deleting the order. TLC reads the TLA+ formula the same
-  way (`[](present => <>x)`), so the engines agree; the question is whether modelers expect
-  it. Recorded as open problem P6.
+  way (`[](present => <>x)`), so the engines agree. Open problem P6 decided it as
+  documented: language-reference.md, "Temporal path properties", now says so, with an
+  example each way and how to state a goal a delete does not meet.
 - **Initial states are not assumed to satisfy anything.** D4 makes the initial set a product,
   including N:1 owners of pre-existing children under a created parent that is still
   absent (`PreExistingChildOfCreatedParent`).

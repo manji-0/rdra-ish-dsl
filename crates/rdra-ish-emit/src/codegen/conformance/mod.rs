@@ -428,6 +428,44 @@ pub(super) fn add_entries(
     Ok(())
 }
 
+/// The unimplemented port's names (docs/design/algebraic-codegen.md, "The unimplemented
+/// port"): Go's `UnimplementedConformancePort` and `ErrUnimplemented`, TypeScript's
+/// `UnimplementedConformancePort` and `Unimplemented`, and Rust's `Unimplemented<Contract>`
+/// per contract. Claimed for every language, so a model type takes none of them in any.
+pub(super) fn claim_unimplemented(
+    domain: &DomainModel,
+    names: &mut Names,
+) -> Result<(), CodegenError> {
+    let Some(port) = &domain.port else {
+        return Ok(());
+    };
+    if port.contracts.is_empty() {
+        return Ok(());
+    }
+    for name in [UNIMPLEMENTED_PORT, "ErrUnimplemented", "Unimplemented"] {
+        names.claim(name.to_string(), "the unimplemented port".to_string())?;
+    }
+    for c in &port.contracts {
+        names.claim(
+            unimplemented_contract(&c.name),
+            format!("the unimplemented {}", c.name),
+        )?;
+    }
+    Ok(())
+}
+
+/// The type a service embeds or extends to build before it implements every contract.
+pub(crate) const UNIMPLEMENTED_PORT: &str = "UnimplementedConformancePort";
+
+/// What the harness prints, then the calls it stopped at, when a service returned the
+/// unimplemented port's error (`check --code=run` reads the line).
+pub const UNIMPLEMENTED_REPORT: &str = "rdra-ish conformance: unimplemented:";
+
+/// Rust's marker trait of a contract a service has not implemented yet.
+pub(crate) fn unimplemented_contract(contract: &str) -> String {
+    format!("Unimplemented{contract}")
+}
+
 fn field_id_type(field: &Field) -> String {
     match &field.ty {
         FieldType::Id(name) => name.clone(),

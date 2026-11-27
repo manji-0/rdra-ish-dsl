@@ -124,6 +124,15 @@ checks what is stored, not how. It checks the kind too: a call on a row that doe
 must be `NotFound`, and a call from the wrong states `NotEnabled`, not the other way round.
 A `StoreFailed` anywhere fails the run as a failure of the service.
 
+To build before every use case is written, take the unimplemented port: embed
+`domain.UnimplementedConformancePort` in the Go service struct, extend
+`UnimplementedConformancePort` in TypeScript, or write `impl UnimplementedPayUseCase for
+Service {}` in Rust for each contract not written yet. An entry point (`Run<Action>`) has no
+stand-in: write it. Write the store (`seed`, `snapshot`) first: the run fails while those
+reach the stand-in. `check --code=run` then passes with a
+`CodeUnimplemented` warning listing the use cases still unwritten; `--deny-incomplete` fails on
+it, so run with it before calling the service done.
+
 ```rust
 impl PayUseCase for Service {
     fn prepare_pay(&mut self, order: OrderId, order_paid_at: DateTime) -> Result<PayOutcome, PayError> {

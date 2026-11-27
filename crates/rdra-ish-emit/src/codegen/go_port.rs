@@ -144,6 +144,62 @@ fn print_contracts(domain: &DomainModel, port: &super::ir::PortDecl, out: &mut S
     }
 }
 
+/// `ErrUnimplemented` and `UnimplementedConformancePort` (docs/design/algebraic-codegen.md,
+/// "The unimplemented port"): every contract's method, and `Seed` and `Snapshot` with the
+/// harness, returning the sentinel, for a service to embed while it is unfinished.
+fn print_unimplemented(port: &PortDecl, out: &mut String) {
+    if port.contracts.is_empty() {
+        return;
+    }
+    let ty = super::conformance::UNIMPLEMENTED_PORT;
+    out.push_str(
+        "// ── The unimplemented port: embed it to build before every method exists ──\n\n",
+    );
+    out.push_str(&format!(
+        "// ErrUnimplemented is what the methods of {ty} return: the service has not\n// implemented the call yet. Conform stops a trace at such a call and reports the calls by use\n// case; `rdra-ish check --code=run` lists them, and --deny-incomplete fails on any.\nvar ErrUnimplemented = errors.New(\"rdra-ish: not implemented\")\n\n"
+    ));
+    let lines = [
+        format!(
+            "has every Prepare and Commit method of the contracts{}, each returning ErrUnimplemented.",
+            if port.harness { ", Seed, and Snapshot" } else { "" }
+        ),
+        "Embed it in a service to build before every method exists: a method the service declares takes the place of the embedded one, and `check --code=run` reports each call that still reaches it. A Run method of an entry point is not here: the harness drives none, so the service writes each.".to_string(),
+    ];
+    out.push_str(&doc(ty, &lines, ""));
+    out.push_str(&format!("type {ty} struct{{}}\n\n"));
+    let types = |ps: Vec<String>| -> String {
+        ps.iter()
+            .map(|p| p.split_once(' ').map_or(p.as_str(), |(_, t)| t))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    for c in &port.contracts {
+        let by: Vec<String> = c
+            .caller
+            .iter()
+            .map(|caller| format!("by {}", caller.name))
+            .collect();
+        for &i in &c.methods {
+            let m = &port.methods[i];
+            let [prepare, commit] = method_names(m);
+            out.push_str(&format!(
+                "// {prepare} returns ErrUnimplemented.\nfunc ({ty}) {prepare}({}) (w {}, err error) {{\n\treturn w, ErrUnimplemented\n}}\n\n",
+                types(by.iter().cloned().chain(params(m)).collect()),
+                m.write
+            ));
+            out.push_str(&format!(
+                "// {commit} returns ErrUnimplemented.\nfunc ({ty}) {commit}({}) error {{\n\treturn ErrUnimplemented\n}}\n\n",
+                m.write
+            ));
+        }
+    }
+    if port.harness {
+        out.push_str(&format!(
+            "// Seed returns ErrUnimplemented.\nfunc ({ty}) Seed(StoreSnapshot) error {{\n\treturn ErrUnimplemented\n}}\n\n// Snapshot returns ErrUnimplemented.\nfunc ({ty}) Snapshot() (s StoreSnapshot, err error) {{\n\treturn s, ErrUnimplemented\n}}\n\n"
+        ));
+    }
+}
+
 /// The method of an entry point (#335): `Run<Action>`.
 pub(super) fn entry_name(name: &str) -> String {
     format!("Run{name}")
@@ -248,7 +304,7 @@ pub(super) fn probe(
     }
     if let Some((new, traces)) = conformance {
         w.line(&format!(
-            "// {CONFORMANCE_TEST} drives a fresh service per trace along the model's traces\n// ({traces}): `rdra-ish check --code=run` runs it.\nfunc {CONFORMANCE_TEST}(t *testing.T) {{\n\tpath := {}\n\tif substitute := os.Getenv(\"{TRACES_ENV}\"); substitute != \"\" {{\n\t\tpath = substitute\n\t}}\n\ttraces, err := os.ReadFile(path)\n\tif err != nil {{\n\t\tt.Fatal(err)\n\t}}\n\treport, err := {dom}.Conform(func() {dom}.ConformancePort {{ return {new} }}, string(traces))\n\tif err != nil {{\n\t\tt.Fatal(\"rdra-ish conformance: \" + err.Error())\n\t}}\n\tt.Logf(\"ok %d traces, %d calls, %d refusals, %d interleavings\", report.Traces, report.Calls, report.Refusals, report.Interleavings)\n}}",
+            "// {CONFORMANCE_TEST} drives a fresh service per trace along the model's traces\n// ({traces}): `rdra-ish check --code=run` runs it.\nfunc {CONFORMANCE_TEST}(t *testing.T) {{\n\tpath := {}\n\tif substitute := os.Getenv(\"{TRACES_ENV}\"); substitute != \"\" {{\n\t\tpath = substitute\n\t}}\n\ttraces, err := os.ReadFile(path)\n\tif err != nil {{\n\t\tt.Fatal(err)\n\t}}\n\treport, err := {dom}.Conform(func() {dom}.ConformancePort {{ return {new} }}, string(traces))\n\tif err != nil {{\n\t\tt.Fatal(\"rdra-ish conformance: \" + err.Error())\n\t}}\n\tt.Logf(\"ok %d traces, %d calls, %d refusals, %d interleavings\", report.Traces, report.Calls, report.Refusals, report.Interleavings)\n\tt.Log(report.UnimplementedLine())\n}}",
             string_literal(traces)
         ));
     }
@@ -265,6 +321,7 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
         return;
     };
     print_contracts(domain, port, out);
+    print_unimplemented(port, out);
     if !port.harness {
         return;
     }
@@ -399,7 +456,11 @@ fn print_port_trait(port: &PortDecl, out: &mut String) {
     out.push_str("\tSnapshot() (StoreSnapshot, error)\n");
     out.push_str("}\n\n");
 
-    out.push_str("// ConformanceReport is what Conform checked.\ntype ConformanceReport struct {\n\tTraces        int\n\tCalls         int\n\tRefusals      int\n\tInterleavings int\n}\n\n");
+    out.push_str("// ConformanceReport is what Conform checked, and the calls that returned ErrUnimplemented, by\n// action, with the number of traces stopped at one (a refused call does not stop its trace).\ntype ConformanceReport struct {\n\tTraces        int\n\tCalls         int\n\tRefusals      int\n\tInterleavings int\n\tUnimplemented map[string]int\n\tStopped       int\n}\n\n");
+    out.push_str(&format!(
+        "// UnimplementedLine is the line `rdra-ish check --code=run` reads for the calls that returned\n// ErrUnimplemented: \"none\" when none did.\nfunc (r ConformanceReport) UnimplementedLine() string {{\n\tif len(r.Unimplemented) == 0 {{\n\t\treturn {} + \" none\"\n\t}}\n\tactions := make([]string, 0, len(r.Unimplemented))\n\tfor a := range r.Unimplemented {{\n\t\tactions = append(actions, a)\n\t}}\n\tsort.Strings(actions)\n\tfor i, a := range actions {{\n\t\tactions[i] = a + \" \" + strconv.Itoa(r.Unimplemented[a])\n\t}}\n\treturn {0} + \" \" + strconv.Itoa(r.Stopped) + \" traces stopped; \" + strings.Join(actions, \", \")\n}}\n\n",
+        string_literal(super::conformance::UNIMPLEMENTED_REPORT)
+    ));
 }
 
 /// `Conform`, which drives a fresh port per trace, and the helpers it shares with every model.
@@ -409,9 +470,22 @@ fn print_conform(out: &mut String) {
 // it seeds each trace's initial state, makes each call, and after each compares what the store
 // holds with the state the model reaches. A call the model refuses must return an error and
 // change nothing, and so must a commit whose rows another call changed after its prepare. It
-// returns the first difference.
+// returns the first difference. A call that returns ErrUnimplemented is counted; one the model
+// runs stops its trace, and the next trace starts.
 func Conform(newPort func() ConformancePort, traces string) (ConformanceReport, error) {{
-	var report ConformanceReport
+	report := ConformanceReport{{Unimplemented: map[string]int{{}}}}
+	stopped := false
+	unimplemented := func(call []string, err error, stop bool) bool {{
+		if !errors.Is(err, ErrUnimplemented) || len(call) == 0 {{
+			return false
+		}}
+		report.Unimplemented[call[0]]++
+		if stop {{
+			report.Stopped++
+			stopped = true
+		}}
+		return true
+	}}
 	lines := strings.Split(traces, "\n")
 	if len(lines) == 0 || strings.TrimRight(lines[0], "\r ") != {format} {{
 		return report, errors.New("not a traces file of this version: generate the code and the traces again")
@@ -436,6 +510,9 @@ func Conform(newPort func() ConformancePort, traces string) (ConformanceReport, 
 			}}
 			return nil, at(errors.New("names no state defined above"))
 		}}
+		if stopped && strings.Contains("RGCXI", toks[0]) {{
+			continue
+		}}
 		switch toks[0] {{
 		case "#":
 		case "S":
@@ -454,6 +531,7 @@ func Conform(newPort func() ConformancePort, traces string) (ConformanceReport, 
 			want = s
 			port = newPort()
 			seed = StoreSnapshot{{}}
+			stopped = false
 			report.Traces++
 		case "R":
 			if err := confSeedRow(&seed, rest); err != nil {{
@@ -483,6 +561,9 @@ func Conform(newPort func() ConformancePort, traces string) (ConformanceReport, 
 			if err != nil {{
 				return report, at(err)
 			}}
+			if unimplemented(call, refused, true) {{
+				continue
+			}}
 			if refused != nil {{
 				return report, at(confRefused(call, refused))
 			}}
@@ -499,6 +580,9 @@ func Conform(newPort func() ConformancePort, traces string) (ConformanceReport, 
 			refused, err := confRun(port, rest)
 			if err != nil {{
 				return report, at(err)
+			}}
+			if unimplemented(rest, refused, false) {{
+				continue
 			}}
 			if refused == nil {{
 				return report, at(fmt.Errorf("the model refuses `%s` here, and the service ran it", strings.Join(rest, " ")))
@@ -533,6 +617,9 @@ func Conform(newPort func() ConformancePort, traces string) (ConformanceReport, 
 			if err != nil {{
 				return report, at(err)
 			}}
+			if unimplemented(first, refused, true) {{
+				continue
+			}}
 			if refused != nil {{
 				return report, at(confRefused(first, refused))
 			}}
@@ -540,16 +627,23 @@ func Conform(newPort func() ConformancePort, traces string) (ConformanceReport, 
 			if err != nil {{
 				return report, at(err)
 			}}
+			if unimplemented(second, refused, true) {{
+				continue
+			}}
 			if refused != nil {{
 				return report, at(confRefused(second, refused))
 			}}
 			if err := confObserve(port, next, "after `"+strings.Join(second, " ")+"`"); err != nil {{
 				return report, at(err)
 			}}
-			if err := commit(); err == nil {{
+			late := commit()
+			if unimplemented(first, late, true) {{
+				continue
+			}}
+			if late == nil {{
 				return report, at(fmt.Errorf("the service committed `%s`, prepared before `%s` changed a row it writes: the write must be conditional on what the row was", strings.Join(first, " "), strings.Join(second, " ")))
-			}} else if errors.Is(err, ErrStoreFailed) {{
-				return report, at(confRefused(first, err))
+			}} else if errors.Is(late, ErrStoreFailed) {{
+				return report, at(confRefused(first, late))
 			}}
 			if err := confObserve(port, next, "after the refused commit of `"+strings.Join(first, " ")+"`"); err != nil {{
 				return report, at(err)

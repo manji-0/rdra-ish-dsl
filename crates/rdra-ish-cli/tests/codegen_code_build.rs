@@ -422,6 +422,44 @@ fn a_model_adapter_conforms_whatever_the_domain_code_became() {
     );
 }
 
+/// The unimplemented port (docs/design/algebraic-codegen.md): a service that marks Cancel
+/// `UnimplementedCancelUseCase` in place of implementing it builds, and its run passes with
+/// the calls of Cancel listed by use case and a warning, which `--deny-incomplete` makes an
+/// error.
+#[test]
+fn a_contract_marked_unimplemented_builds_and_its_calls_are_reported() {
+    if !tool("cargo", CODEGEN) {
+        return;
+    }
+    let dir = project("unimplemented");
+    let service = dir.join("svc/src/service.rs");
+    cut(&service, "impl CancelUseCase for Service {", "\n}\n");
+    let text = std::fs::read_to_string(&service).unwrap();
+    std::fs::write(
+        &service,
+        format!("{text}\nimpl UnimplementedCancelUseCase for Service {{}}\n"),
+    )
+    .unwrap();
+    let out = rdra(&dir, &["check", "model", "--code=run"], "");
+    let all = text_slashed(&out);
+    assert!(out.status.success(), "{all}");
+    assert!(
+        all.contains("  unimplemented: 1 use case (Cancel): "),
+        "{all}"
+    );
+    assert!(all.contains("warning[CodeUnimplemented]"), "{all}");
+    // The panic of the unimplemented method is the harness's, not printed as the test's.
+    assert!(!all.contains("panicked"), "{all}");
+    let out = rdra(
+        &dir,
+        &["check", "model", "--code=run", "--deny-incomplete"],
+        "",
+    );
+    let all = text_slashed(&out);
+    assert_eq!(out.status.code(), Some(1), "{all}");
+    assert!(all.contains("error[CodeUnimplemented]"), "{all}");
+}
+
 /// `[code.rust] serde = true`: the domain code builds against serde with no clippy warning,
 /// and fixtures/codegen/serde_roundtrip.rs takes a row, its state, and an event through
 /// serde_json and back in the model's wire spelling. The crate resolves its dependencies

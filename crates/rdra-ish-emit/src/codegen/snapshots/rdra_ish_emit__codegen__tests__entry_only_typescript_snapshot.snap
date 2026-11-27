@@ -302,3 +302,27 @@ export type PlaceUseCase = {
   /** Runs the action Place of Place whole, by the ids of its rows: the generator printed no function for it (#335), so the service writes it and keeps the obligations. */
   readonly runPlace: (order: OrderId) => Promise<Result<void, PlaceError>>;
 };
+
+// ── The unimplemented port: extend it to build before every member exists ──
+
+/**
+ * What the members of `UnimplementedConformancePort` reject with: the service has not implemented the call
+ * yet. `conform` stops a trace at such a call and reports the calls by use case;
+ * `rdra-ish check --code=run` lists them, and `--deny-incomplete` fails on any.
+ */
+export class Unimplemented extends globalThis.Error {
+  constructor(member: string) {
+    super(`rdra-ish: not implemented: ${member}`);
+    this.name = "Unimplemented";
+  }
+}
+
+/**
+ * The `prepare*` and `commit*` members of every contract, each rejecting with `Unimplemented`.
+ * Extend it to build before every member exists: a member the service declares takes
+ * the place of this one, and `check --code=run` reports each call that still reaches it.
+ * An entry point's `run*` member is not here: the harness drives none, so the service
+ * writes each.
+ */
+export class UnimplementedConformancePort {
+}

@@ -228,6 +228,7 @@ pub(super) fn probe(domain: &DomainModel, binding: &super::ProbeBinding) -> Opti
         w.line("    if (r.ok) {");
         w.line("      const { traces: t, calls, refusals, interleavings } = r.value;");
         w.line("      console.log(`rdra-ish conformance: ok ${t} traces, ${calls} calls, ${refusals} refusals, ${interleavings} interleavings`);");
+        w.line("      console.log(domain.unimplementedLine(r.value));");
         w.line("    } else {");
         w.line("      console.error(`rdra-ish conformance: ${r.error}`);");
         w.line("      process.exitCode = 1;");
@@ -240,6 +241,90 @@ pub(super) fn probe(domain: &DomainModel, binding: &super::ProbeBinding) -> Opti
         w.line(");");
     }
     Some(w.finish())
+}
+
+/// `Unimplemented` and `UnimplementedConformancePort` (docs/design/algebraic-codegen.md, "The
+/// unimplemented port"): a class with every contract's member, and `seed` and `snapshot` with
+/// the harness, each rejecting with `Unimplemented`, for a service class to extend while it is
+/// unfinished. Members are properties, as a service's are, so a subclass overrides one with
+/// its own arrow function.
+fn print_unimplemented(port: &PortDecl, out: &mut String) {
+    if port.contracts.is_empty() {
+        return;
+    }
+    let ty = super::conformance::UNIMPLEMENTED_PORT;
+    out.push_str(
+        "// ── The unimplemented port: extend it to build before every member exists ──\n\n",
+    );
+    out.push_str(&doc(
+        &[
+            format!(
+                "What the members of `{ty}` reject with: the service has not implemented the call"
+            ),
+            "yet. `conform` stops a trace at such a call and reports the calls by use case;"
+                .to_string(),
+            "`rdra-ish check --code=run` lists them, and `--deny-incomplete` fails on any."
+                .to_string(),
+        ],
+        "",
+    ));
+    out.push_str("export class Unimplemented extends globalThis.Error {\n  constructor(member: string) {\n    super(`rdra-ish: not implemented: ${member}`);\n    this.name = \"Unimplemented\";\n  }\n}\n\n");
+    out.push_str(&doc(
+        &[
+            format!(
+                "The `prepare*` and `commit*` members of every contract{}, each rejecting with `Unimplemented`.",
+                if port.harness { ", `seed`, and `snapshot`" } else { "" }
+            ),
+            "Extend it to build before every member exists: a member the service declares takes".to_string(),
+            "the place of this one, and `check --code=run` reports each call that still reaches it.".to_string(),
+            "An entry point's `run*` member is not here: the harness drives none, so the service".to_string(),
+            "writes each.".to_string(),
+        ],
+        "",
+    ));
+    out.push_str(&format!("export class {ty} {{\n"));
+    let member = |name: &str, ps: &[String], ret: &str| -> String {
+        let ps: Vec<String> = ps.iter().map(|p| format!("_{p}")).collect();
+        format!(
+            "  {name} = ({}): Promise<{ret}> => Promise.reject(new Unimplemented({}));\n",
+            ps.join(", "),
+            string_literal(name)
+        )
+    };
+    for c in &port.contracts {
+        let by: Vec<String> = c
+            .caller
+            .iter()
+            .map(|caller| format!("by: {}", caller.name))
+            .collect();
+        for m in c.methods.iter().map(|&i| &port.methods[i]) {
+            let [prepare, commit] = method_names(m);
+            let ps: Vec<String> = by
+                .iter()
+                .cloned()
+                .chain(params(m).iter().map(|(n, ty)| format!("{n}: {ty}")))
+                .collect();
+            out.push_str(&member(
+                &prepare,
+                &ps,
+                &format!("Result<{}, {}>", m.write, c.error),
+            ));
+            out.push_str(&member(
+                &commit,
+                &[format!("write: {}", m.write)],
+                &format!("Result<void, {}>", c.error),
+            ));
+        }
+    }
+    if port.harness {
+        out.push_str(&member(
+            "seed",
+            &["rows: StoreSnapshot".to_string()],
+            "void",
+        ));
+        out.push_str(&member("snapshot", &[], "StoreSnapshot"));
+    }
+    out.push_str("}\n\n");
 }
 
 /// The probe's declarations of what it needs of Node, and `traces`, which reads the traces
@@ -273,6 +358,7 @@ pub(super) fn print_port(domain: &DomainModel, out: &mut String) {
         return;
     };
     print_contracts(domain, port, out);
+    print_unimplemented(port, out);
     if !port.harness {
         return;
     }
@@ -350,8 +436,23 @@ fn print_port_trait(port: &PortDecl, p: &mut String) {
     }
     p.push_str(";\n\n");
 
-    p.push_str(&doc1("What `conform` checked."));
-    p.push_str("export type ConformanceReport = Readonly<{ traces: number; calls: number; refusals: number; interleavings: number }>;\n\n");
+    p.push_str(&doc(
+        &[
+            "What `conform` checked, and the calls that reached the unimplemented port, by action,"
+                .to_string(),
+            "with the number of traces stopped at one (a refused call does not stop its trace)."
+                .to_string(),
+        ],
+        "",
+    ));
+    p.push_str("export type ConformanceReport = Readonly<{\n  traces: number;\n  calls: number;\n  refusals: number;\n  interleavings: number;\n  unimplemented: Readonly<Record<string, number>>;\n  stopped: number;\n}>;\n\n");
+    p.push_str(&doc1(
+        "The line `rdra-ish check --code=run` reads for the calls that reached the unimplemented port: `none` when none did.",
+    ));
+    p.push_str(&format!(
+        "export function unimplementedLine(report: ConformanceReport): string {{\n  if (Object.keys(report.unimplemented).length === 0) {{\n    return `${{{0}}} none`;\n  }}\n  const calls = Object.keys(report.unimplemented).sort().map((a) => `${{a}} ${{report.unimplemented[a] ?? 0}}`);\n  return `${{{0}}} ${{report.stopped}} traces stopped; ${{calls.join(\", \")}}`;\n}}\n\n",
+        string_literal(super::conformance::UNIMPLEMENTED_REPORT)
+    ));
 }
 
 /// `conform`, which drives a fresh port per trace, and the helpers it shares with every model.
@@ -393,7 +494,17 @@ export async function conform(newPort: () => ConformancePort, traces: string | (
   const stale: Result<never, string> = {{ ok: false, error: "not a traces file of this version: generate the code and the traces again" }};
   const states = new Map<string, string[]>();
   let defining: string[] | null = null;
-  let report = {{ traces: 0, calls: 0, refusals: 0, interleavings: 0 }};
+  let report: ConformanceReport = {{ traces: 0, calls: 0, refusals: 0, interleavings: 0, unimplemented: {{}}, stopped: 0 }};
+  let stopped = false;
+  const count = (call: readonly string[]): void => {{
+    const action = call[0] ?? "";
+    report = {{ ...report, unimplemented: {{ ...report.unimplemented, [action]: (report.unimplemented[action] ?? 0) + 1 }} }};
+  }};
+  const stop = (call: readonly string[]): void => {{
+    count(call);
+    report = {{ ...report, stopped: report.stopped + 1 }};
+    stopped = true;
+  }};
   let port: ConformancePort | null = null;
   let seed = $confEmpty();
   let want: readonly string[] = [];
@@ -413,6 +524,9 @@ export async function conform(newPort: () => ConformancePort, traces: string | (
       continue;
     }}
     const state = (id: string | undefined): readonly string[] | undefined => (id === undefined ? undefined : states.get(id));
+    if (stopped && "RGCXI".includes(kind)) {{
+      continue;
+    }}
     switch (kind) {{
       case "S": {{
         const id = rest[0];
@@ -438,6 +552,7 @@ export async function conform(newPort: () => ConformancePort, traces: string | (
         want = s;
         port = newPort();
         seed = $confEmpty();
+        stopped = false;
         report = {{ ...report, traces: report.traces + 1 }};
         break;
       }}
@@ -472,6 +587,10 @@ export async function conform(newPort: () => ConformancePort, traces: string | (
         if (!ran.ok) {{
           return at(ran.error);
         }}
+        if (!ran.value.ok && ran.value.error === $confUnimplemented) {{
+          stop(call);
+          continue;
+        }}
         if (!ran.value.ok) {{
           return at($confRefused(call, ran.value.error));
         }}
@@ -491,6 +610,10 @@ export async function conform(newPort: () => ConformancePort, traces: string | (
         const ran = await $confRun(port, call);
         if (!ran.ok) {{
           return at(ran.error);
+        }}
+        if (!ran.value.ok && ran.value.error === $confUnimplemented) {{
+          count(call);
+          continue;
         }}
         if (ran.value.ok) {{
           return at(`the model refuses \`${{call.join(" ")}}\` here, and the service ran it`);
@@ -527,12 +650,20 @@ export async function conform(newPort: () => ConformancePort, traces: string | (
         if (!early.ok) {{
           return at(early.error);
         }}
+        if (!early.value.ok && early.value.error === $confUnimplemented) {{
+          stop(first);
+          continue;
+        }}
         if (!early.value.ok) {{
           return at($confRefused(first, early.value.error));
         }}
         const ran = await $confRun(port, second);
         if (!ran.ok) {{
           return at(ran.error);
+        }}
+        if (!ran.value.ok && ran.value.error === $confUnimplemented) {{
+          stop(second);
+          continue;
         }}
         if (!ran.value.ok) {{
           return at($confRefused(second, ran.value.error));
@@ -542,6 +673,10 @@ export async function conform(newPort: () => ConformancePort, traces: string | (
           return at(between);
         }}
         const late = await $confCommit(port, early.value.value);
+        if (!late.ok && late.error === $confUnimplemented) {{
+          stop(first);
+          continue;
+        }}
         if (late.ok) {{
           return at(`the service committed \`${{first.join(" ")}}\`, prepared before \`${{second.join(" ")}}\` changed a row it writes: the write must be conditional on what the row was`);
         }}
@@ -562,6 +697,9 @@ export async function conform(newPort: () => ConformancePort, traces: string | (
   }}
   return n === 0 ? stale : {{ ok: true, value: report }};
 }}
+
+/** The refusal `$confTry` turns a rejection with `Unimplemented` into. */
+const $confUnimplemented: unique symbol = Symbol("rdra-ish unimplemented port");
 
 function $confEmpty(): $ConfStore {{
   return {{ {empty} }};
@@ -638,6 +776,14 @@ fn print_calls(domain: &DomainModel, port: &PortDecl, p: &mut String) {
         return;
     }
     // The calls.
+    p.push_str(
+        r##"/** What the service returned, or `$confUnimplemented` when it rejected with `Unimplemented`. */
+function $confTry<T>(f: () => Promise<Result<T, unknown>>): Promise<Result<T, unknown>> {
+  return f().then(undefined, (e: unknown): Result<T, unknown> | Promise<never> => (e instanceof Unimplemented ? { ok: false, error: $confUnimplemented } : Promise.reject(e)));
+}
+
+"##,
+    );
     p.push_str("async function $confPrepare(port: ConformancePort, call: readonly string[]): Promise<Result<Result<$ConfWrite, unknown>, string>> {\n");
     p.push_str("  const [action, ...values] = call;\n  switch (action) {\n");
     for (k, m) in port.methods.iter().enumerate() {
@@ -688,7 +834,7 @@ fn print_calls(domain: &DomainModel, port: &PortDecl, p: &mut String) {
             args.push(value);
         }
         p.push_str(&format!(
-            "      const r = await port.{}({});\n      return {{ ok: true, value: r.ok ? {{ ok: true, value: {{ action: {}, write: r.value }} }} : r }};\n    }}\n",
+            "      const r = await $confTry(() => port.{}({}));\n      return {{ ok: true, value: r.ok ? {{ ok: true, value: {{ action: {}, write: r.value }} }} : r }};\n    }}\n",
             method_names(m)[0],
             args.join(", "),
             string_literal(&m.action)
@@ -699,7 +845,7 @@ fn print_calls(domain: &DomainModel, port: &PortDecl, p: &mut String) {
     p.push_str("function $confCommit(port: ConformancePort, w: $ConfWrite): Promise<Result<void, unknown>> {\n  const action = w.action;\n  switch (action) {\n");
     for m in &port.methods {
         p.push_str(&format!(
-            "    case {}:\n      return port.{}(w.write);\n",
+            "    case {}:\n      return $confTry(() => port.{}(w.write));\n",
             string_literal(&m.action),
             method_names(m)[1]
         ));
