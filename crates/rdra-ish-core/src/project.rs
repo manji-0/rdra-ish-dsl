@@ -105,6 +105,8 @@ pub struct CodeTarget {
     pub run: Option<Vec<String>>,
     /// TypeScript: generate the state types sealed (`codegen --seal`).
     pub seal: Option<bool>,
+    /// Rust: derive serde's `Serialize` and `Deserialize` on the data types of `domain`.
+    pub serde: Option<bool>,
     /// TypeScript: the project's tsconfig that the generated `tsconfig.rdra.json` extends.
     /// Default: `tsconfig.json` in `root`, when it exists.
     pub tsconfig: Option<PathBuf>,

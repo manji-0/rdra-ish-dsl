@@ -63,6 +63,10 @@ pub struct Options {
     /// TypeScript: brand the state types with a symbol only the module can name, so only its
     /// functions make a state (decision 9 of docs/design/code-check.md: opt-in).
     pub seal: bool,
+    /// Rust: derive serde's `Serialize` and `Deserialize` on the data types (`[code.rust]
+    /// serde`): the scalars and value sets in their wire spelling, the ids, the rows, the
+    /// entities with states through their rows, the records, events, and run marks.
+    pub serde: bool,
 }
 
 /// The result of the `check` the generator ran before printing.

@@ -1408,6 +1408,7 @@ fn printed(model: &SemanticModel, lang: Lang, package: &str) -> String {
         version: "test".to_string(),
         conformance: None,
         seal: false,
+        serde: false,
         check: CheckStatus::Passed {
             bounds: "test".to_string(),
             caps: caps(),

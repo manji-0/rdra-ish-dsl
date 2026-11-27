@@ -4,6 +4,15 @@
 
 ### Added
 
+- `serde = true` in `[code.rust]` derives `::serde::Serialize` and `::serde::Deserialize` on
+  the data types of the generated Rust code: ids as their value, scalars and value sets in the
+  model's spelling and back through their parsers, rows, records, DTOs, events and run marks
+  as plain structs, and each entity with states as its row, back through `from_row`. The
+  state structs, errors, results and conformance types get no derive. Off by default, and the
+  output without it does not change; `serde` under `[code.go]` or `[code.ts]`, or `serde = true`
+  with `adapter`, makes `--code` exit 1. docs/cli-reference.md, "The code tables", also says how a
+  service on an async database crate keeps the synchronous contracts: the I/O goes around
+  the pure domain functions, and the conformance test `block_on`s the same async methods.
 - The conformance traces try every refusal of the model and check its kind (#439, PR 4). The
   format line is now `# rdra-ish conformance traces 4`, so traces and harnesses of an earlier
   version must be generated again (`check --code=fresh` says they are stale).

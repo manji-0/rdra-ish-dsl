@@ -757,10 +757,27 @@ Unique_Payment_Order = "../service/migrations/003_payment.sql"
 | `build`, `run` | The command `--code=build` / `--code=run` runs in place of the default, as a list of arguments. Runs only when that level is given on the command line. |
 | `seal` | TypeScript: `true` writes `domain` as `codegen --seal` does. Default `false`; set it in a table with `domain` (an `adapter` has no state types, and ignores it). Without it, a service can build a state as an object literal and skip the transition function and its rule checks, and `run`, which compares only what is stored, passes it wherever the traces store the same rows. With it, the literal fails `build` (TS2741). A service that makes states only through `fromRow` and the transition functions builds the same either way. |
 | `tsconfig` | TypeScript: the tsconfig `tsconfig.rdra.json` extends. Default: `tsconfig.json` in `root` when it exists; else `tsconfig.rdra.json` sets `strict` itself. |
+| `serde` | Rust: `true` adds `::serde::Serialize` and `::serde::Deserialize` to the derives of the data types in `domain`, so the crate needs `serde` with its `derive` feature. Ids go over the wire as their value, and scalars and value sets in the model's spelling (`"paid"`, `"12.50"`); a scalar or value set comes back through its parser, so text the parser refuses fails to deserialize. Rows, records, DTOs, events and run marks are plain structs with each column under its model name. An entity with states goes over the wire as its `<Entity>Row` and comes back through `from_row`, so a row that fits no state fails; a state struct gets no derive, and stays made only by a transition function and `from_row`. The errors, results and dispatcher outcomes, and the conformance types, get none. Default `false`, which leaves the output as it was before the key. |
 
 An unknown key fails every loading command, as under `[check]`. `seal` or `tsconfig` under
-`[code.rust]` or `[code.go]` makes `--code` exit 1, and so does a table with neither `domain`
-nor `adapter`, with both, or with `adapter` and no `traces`.
+`[code.rust]` or `[code.go]` makes `--code` exit 1, and so does `serde` under `[code.go]` or
+`[code.ts]`, `serde = true` in a table with `adapter`, a table with neither `domain` nor `adapter`, one with
+both, or one with `adapter` and no `traces`.
+
+#### An async Rust service
+
+The Rust contracts and `ConformancePort` are synchronous (`&mut self`). A service on an async
+database crate (sqlx, tokio-postgres) keeps them that way and does its I/O around the domain
+functions, which are pure: an async handler opens a transaction, loads the rows, converts each
+with `from_row`, calls the dispatcher (`run_<use case>`), writes the result's rows where they
+still are what `<row>_expected` names, and commits. Write that prepare and commit once, as
+async methods of the service. For the conformance test, implement the contracts on a small
+adapter that owns a runtime and the async service and calls `block_on` on those same methods,
+so the check runs the code production runs. The test calls `new` once per trace, so share the
+runtime and the connection pool across calls (a `static` `OnceLock`) instead of making them in
+`new`. Do not put the async service behind a mutex to call it through the synchronous
+contracts from a handler: that serialises every request. A service on a synchronous driver
+(rusqlite) can implement the contracts directly and run them on `spawn_blocking`.
 
 #### The model adapter
 <!-- derived-from ./design/code-check.md#the-black-box-model-adapter -->
