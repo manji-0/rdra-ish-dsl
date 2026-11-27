@@ -4,7 +4,7 @@
 //! use case. A language prints the lines; [`ProbeWriter`] numbers them. [`ContractIndex`]
 //! takes an error in the user's code back to a use case by the generated method it names.
 
-use super::ir::{ContractDecl, EntryDecl, PortDecl, PortMethod};
+use super::ir::{ContractDecl, DomainModel, EntryDecl, PortDecl, PortMethod};
 
 /// The line of a generated file the fingerprint takes: the second, after the first line.
 pub const FINGERPRINT_LINE: usize = 2;
@@ -123,6 +123,28 @@ impl ContractIndex {
             }
         }
         self
+    }
+
+    /// The index of the transition functions and dispatchers of `domain` whose use case has a
+    /// contract in `port`, each spelled by `spell` (Go `RunPay`, `PayFromOpen`).
+    pub fn of_functions(
+        domain: &DomainModel,
+        port: &PortDecl,
+        spell: impl Fn(&str) -> String,
+    ) -> Self {
+        let contract = |uc: &str| port.contracts.iter().position(|c| c.usecase == uc);
+        let mut entries = Vec::new();
+        for f in &domain.fns {
+            if let Some(c) = contract(&f.usecase) {
+                entries.push((spell(&f.name), c, f.action.clone()));
+            }
+        }
+        for d in &domain.dispatchers {
+            if let Some(c) = contract(&d.usecase) {
+                entries.push((spell(&d.name), c, d.usecase.clone()));
+            }
+        }
+        ContractIndex { entries }
     }
 
     /// The first generated method `text` names as a whole word: its name, the index of its

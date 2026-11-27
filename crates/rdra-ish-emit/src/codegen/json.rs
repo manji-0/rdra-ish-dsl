@@ -1,7 +1,8 @@
 //! `codegen --format json`: the contract the printers print, as data (P0 of
 //! docs/design/code-check.md). Types, states, use cases, functions, and obligations, each
 //! with its model location and the names every language derives its own from. It is a view
-//! of the [`DomainModel`], not the IR itself, so the IR can change without moving it.
+//! of the [`DomainModel`], not the IR itself, so the IR can change without moving it. Keys
+//! are only ever added to it under one `format`.
 
 use rdra_ish_core::location::LocatedSpan;
 use rdra_ish_core::SemanticModel;
@@ -43,11 +44,21 @@ pub fn print(
             "tag": field(&s.tag),
             "variants": s.variants.iter().map(variant).collect::<Vec<_>>(),
         })).collect::<Vec<_>>(),
+        "events": domain.events.iter().map(|e| json!({
+            "name": e.name,
+            "doc": e.doc,
+            "fields": e.fields.iter().map(|f| json!({
+                "name": f.name,
+                "entity": f.entity,
+                "type": f.id_ty,
+            })).collect::<Vec<_>>(),
+        })).collect::<Vec<_>>(),
         "usecases": domain.usecases.iter().map(|uc| json!({
             "id": uc.id,
             "label": uc.label,
             "site": uc.site,
             "error": uc.error,
+            "actors": actors(model, &uc.id),
             "kind": match domain.usecase_kind(uc) {
                 UseCaseKind::Functions => "functions",
                 UseCaseKind::Unprinted => "unprinted",
@@ -69,9 +80,25 @@ pub fn print(
             "checked": o.checked,
             "text": o.text,
             "site": o.site,
+            "kind": o.subject.kind,
+            "entity": o.subject.entity,
+            "columns": o.subject.columns,
+            "parent": o.subject.parent,
         })).collect::<Vec<_>>(),
     });
     serde_json::to_string_pretty(&value).expect("a JSON value prints")
+}
+
+/// The ids of the actors that perform use case `id`, as the `Caller` of its contract takes
+/// their capabilities: none for one an event or a timer starts.
+fn actors(model: &SemanticModel, id: &str) -> Vec<String> {
+    let Some((key, _)) = model.use_cases.iter().find(|(_, u)| u.id == id) else {
+        return Vec::new();
+    };
+    rdra_ish_core::actors_for_usecase(model, key)
+        .into_iter()
+        .map(|a| model.actors[a].id.clone())
+        .collect()
 }
 
 fn types(
@@ -99,12 +126,30 @@ fn types(
         }));
     }
     for r in &domain.records {
+        // An entity's columns say whether they are its key and whether `@unique` holds them.
+        let entity = (r.kind == RecordKind::Entity)
+            .then(|| model.entities.values().find(|e| e.id == r.id))
+            .flatten();
+        let fields = r
+            .fields
+            .iter()
+            .map(|f| {
+                let mut v = field(f);
+                if let Some(column) =
+                    entity.and_then(|e| e.columns.iter().find(|c| c.name == f.wire))
+                {
+                    v["primary_key"] = json!(column.is_pk);
+                    v["unique"] = json!(column.is_unique);
+                }
+                v
+            })
+            .collect::<Vec<_>>();
         out.push(json!({
             "kind": match r.kind { RecordKind::Entity => "entity", RecordKind::Dto => "dto" },
             "name": r.name,
             "id": r.id,
             "site": at(match r.kind { RecordKind::Entity => Kind::Entity, RecordKind::Dto => Kind::Dto }, &r.id),
-            "fields": r.fields.iter().map(field).collect::<Vec<_>>(),
+            "fields": fields,
         }));
     }
     Value::Array(out)

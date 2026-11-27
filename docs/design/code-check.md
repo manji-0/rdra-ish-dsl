@@ -296,13 +296,32 @@ that drops a returned row with "no shipment row").
 ### Diagnostics
 
 Each diagnostic has a model location (`model:`), a code location (`code:`, the compiler's
-message cut to one line), and a fix (`fix:`). The extraction relies on two things: `file:line:col`
-and the generated method names. An error on a probe line goes back to its use case by the line
+whole message, its further lines indented, with the path relative to the working directory),
+and a fix (`fix:`). The compiler's own output is printed first (for Rust, the `rendered` text
+of each error in cargo's JSON). The extraction relies on two things: `file:line:col`
+and the generated names. An error on a probe line goes back to its use case by the line
 map; an error in the user's code goes back to an action by the method name in its message
-(`prepare_cancel`, `PrepareDeliverOrder`), which is unique per action. E0053 and E0046 name the
-method, not the trait, so nothing relies on trait names. Rust's `--message-format=json` gives
-the spans directly. Errors that map to nothing are counted, with a pointer to the compiler's
-output.
+(`prepare_cancel`, `PrepareDeliverOrder`), which is unique per action, or to a use case by
+the dispatcher or transition function it names (`RunPay`, `PayFromOpen`). E0053 and E0046
+name the method, not the trait, so nothing relies on trait names. Rust's
+`--message-format=json` gives the spans directly. Errors that map to nothing are listed, the
+first line of each, under one `CodeUnmapped`.
+
+Two cases read more than the message (dogfooding, 2026-11-27):
+
+- An error about the number of a call's arguments names no function in tsc (TS2554) or rustc
+  (E0061). For such a message only, the check reads the one source line the compiler points
+  at and maps it by the generated function the line calls. This is the one place the check
+  reads the user's code, and it reads it as text: a line, never parsed.
+- A probe that cannot resolve the service (`service` renamed in the code, not in
+  `rdra.toml`) fails every line of the probe. The messages on the probe that cannot resolve a
+  name and name a part of `service` become one `CodeServiceNotFound` pointing at `service`
+  and `codegen --probe`, in place of one `CodeError` per use case.
+
+A stale file counts one error per file. The fingerprint records the model and the file, not
+the settings, so `generator changed` names the table's settings in `rdra.toml` first, then
+another version; recording a settings hash would change the fingerprint line of every
+generated file, and is not done.
 
 ### CI and the LSP
 
@@ -349,8 +368,11 @@ is fresh, but the service does not use it, or implements only part of it.
 7. **What a ledger owner does.** Only that an owner is declared.
 8. **A wrong model.** That is `verify`'s job; this check says only that the code has not left the
    verified model.
+9. **The store's history.** Every trace starts from `seed` on an emptied store, so migrations,
+   and rows an earlier version of the service wrote, are never run. `build` compiles the probe
+   and what it imports, not the rest of the application.
 
-1, 3 and 4 narrow as the harness grows. 2, 5, 6 and 7 stay.
+1, 3 and 4 narrow as the harness grows. 2, 5, 6, 7 and 9 stay.
 
 ### What a passing run claims
 

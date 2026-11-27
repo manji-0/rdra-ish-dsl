@@ -152,6 +152,36 @@ pub struct Obligation {
     pub checked: bool,
     pub text: String,
     pub site: Option<String>,
+    /// What it is about, as data for a consumer that keeps it (a database mapper reading
+    /// `codegen --format json`).
+    pub subject: ObligationSubject,
+}
+
+/// The kind of an [`Obligation`] and the entity and columns it is about.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ObligationSubject {
+    /// `reference`, `unique`, `min-children`, `max-children`, `on-delete`, `on-update`,
+    /// `check`, `derived`, `invariant`, `rule-checks`, `transaction`, `run-marks`,
+    /// `complete-rows`, or `not-met`.
+    pub kind: &'static str,
+    /// The entity whose rows it constrains, where it is one entity's.
+    pub entity: Option<String>,
+    /// Its columns of `entity`: the key columns of a reference, the columns a unique key
+    /// spans, the column a check or a derivation is on.
+    pub columns: Vec<String>,
+    /// The entity a reference names: of `reference`, a `unique` through a key,
+    /// `min-children`, `max-children`, `on-delete`, `on-update`.
+    pub parent: Option<String>,
+}
+
+impl ObligationSubject {
+    /// A subject of `kind` about no entity.
+    pub fn of(kind: &'static str) -> Self {
+        Self {
+            kind,
+            ..Self::default()
+        }
+    }
 }
 
 /// An entity with a lifecycle column: one variant per value of its tag column.
