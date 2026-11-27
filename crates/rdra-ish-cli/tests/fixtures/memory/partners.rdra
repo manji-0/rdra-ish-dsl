@@ -1,0 +1,179 @@
+// P53: two entities, each with a safety cone whose system is also its `eventually`'s reduced
+// cone (a partner), so the safety pass runs it to the end to give the property its plain
+// answer. Each entity cone also flips g8 and g9, which no check reads: the entity cones are
+// four times the safety cones and stop at a memory limit (7 to 10 MiB) at which one safety
+// cone completes alone but two side by side do not.
+entity Task "Task" {
+  g8: Enum(off, on) @default(off)
+  g9: Enum(off, on) @default(off)
+  id: Int @pk
+  status: Enum(open, done) @default(open)
+  f1: Enum(off, on) @default(off)
+  f2: Enum(off, on) @default(off)
+  f3: Enum(off, on) @default(off)
+  f4: Enum(off, on) @default(off)
+  f5: Enum(off, on) @default(off)
+  f6: Enum(off, on) @default(off)
+  f7: Enum(off, on) @default(off)
+}
+usecase TOpen "TOpen"
+usecase TClose "TClose"
+usecase TFlip1 "TFlip1"
+usecase TFlip2 "TFlip2"
+usecase TFlip3 "TFlip3"
+usecase TFlip4 "TFlip4"
+usecase TFlip5 "TFlip5"
+usecase TFlip6 "TFlip6"
+usecase TFlip7 "TFlip7"
+usecase TUnflip1 "TUnflip1"
+usecase TUnflip2 "TUnflip2"
+usecase TUnflip3 "TUnflip3"
+usecase TUnflip4 "TUnflip4"
+usecase TUnflip5 "TUnflip5"
+usecase TUnflip6 "TUnflip6"
+usecase TUnflip7 "TUnflip7"
+buc TB "TB"
+contains(TB, TOpen)
+contains(TB, TClose)
+contains(TB, TFlip1)
+contains(TB, TFlip2)
+contains(TB, TFlip3)
+contains(TB, TFlip4)
+contains(TB, TFlip5)
+contains(TB, TFlip6)
+contains(TB, TFlip7)
+contains(TB, TUnflip1)
+contains(TB, TUnflip2)
+contains(TB, TUnflip3)
+contains(TB, TUnflip4)
+contains(TB, TUnflip5)
+contains(TB, TUnflip6)
+contains(TB, TUnflip7)
+creates(TOpen, Task)
+updates(TClose, Task)
+updates(TFlip1, Task)
+updates(TFlip2, Task)
+updates(TFlip3, Task)
+updates(TFlip4, Task)
+updates(TFlip5, Task)
+updates(TFlip6, Task)
+updates(TFlip7, Task)
+updates(TUnflip1, Task)
+updates(TUnflip2, Task)
+updates(TUnflip3, Task)
+updates(TUnflip4, Task)
+updates(TUnflip5, Task)
+updates(TUnflip6, Task)
+updates(TUnflip7, Task)
+transitions(TClose, Task.status, open -> done)
+transitions(TFlip1, Task.f1, off -> on)
+transitions(TUnflip1, Task.f1, on -> off)
+transitions(TFlip2, Task.f2, off -> on)
+transitions(TUnflip2, Task.f2, on -> off)
+transitions(TFlip3, Task.f3, off -> on)
+transitions(TUnflip3, Task.f3, on -> off)
+transitions(TFlip4, Task.f4, off -> on)
+transitions(TUnflip4, Task.f4, on -> off)
+transitions(TFlip5, Task.f5, off -> on)
+transitions(TUnflip5, Task.f5, on -> off)
+transitions(TFlip6, Task.f6, off -> on)
+transitions(TUnflip6, Task.f6, on -> off)
+transitions(TFlip7, Task.f7, off -> on)
+transitions(TUnflip7, Task.f7, on -> off)
+forbidden(Task, f1 == on, f2 == on, f3 == on, f4 == on, f5 == on, f6 == on, f7 == on, status == done)
+property TEventuallyDone eventually((Task.status == done) or (Task.f1 == on) or (Task.f2 == on) or (Task.f3 == on) or (Task.f4 == on) or (Task.f5 == on) or (Task.f6 == on) or (Task.f7 == on)).fair(TClose)
+entity Job "Job" {
+  g8: Enum(off, on) @default(off)
+  g9: Enum(off, on) @default(off)
+  id: Int @pk
+  status: Enum(open, done) @default(open)
+  f1: Enum(off, on) @default(off)
+  f2: Enum(off, on) @default(off)
+  f3: Enum(off, on) @default(off)
+  f4: Enum(off, on) @default(off)
+  f5: Enum(off, on) @default(off)
+  f6: Enum(off, on) @default(off)
+  f7: Enum(off, on) @default(off)
+}
+usecase JOpen "JOpen"
+usecase JClose "JClose"
+usecase JFlip1 "JFlip1"
+usecase JFlip2 "JFlip2"
+usecase JFlip3 "JFlip3"
+usecase JFlip4 "JFlip4"
+usecase JFlip5 "JFlip5"
+usecase JFlip6 "JFlip6"
+usecase JFlip7 "JFlip7"
+usecase JUnflip1 "JUnflip1"
+usecase JUnflip2 "JUnflip2"
+usecase JUnflip3 "JUnflip3"
+usecase JUnflip4 "JUnflip4"
+usecase JUnflip5 "JUnflip5"
+usecase JUnflip6 "JUnflip6"
+usecase JUnflip7 "JUnflip7"
+buc JB "JB"
+contains(JB, JOpen)
+contains(JB, JClose)
+contains(JB, JFlip1)
+contains(JB, JFlip2)
+contains(JB, JFlip3)
+contains(JB, JFlip4)
+contains(JB, JFlip5)
+contains(JB, JFlip6)
+contains(JB, JFlip7)
+contains(JB, JUnflip1)
+contains(JB, JUnflip2)
+contains(JB, JUnflip3)
+contains(JB, JUnflip4)
+contains(JB, JUnflip5)
+contains(JB, JUnflip6)
+contains(JB, JUnflip7)
+creates(JOpen, Job)
+updates(JClose, Job)
+updates(JFlip1, Job)
+updates(JFlip2, Job)
+updates(JFlip3, Job)
+updates(JFlip4, Job)
+updates(JFlip5, Job)
+updates(JFlip6, Job)
+updates(JFlip7, Job)
+updates(JUnflip1, Job)
+updates(JUnflip2, Job)
+updates(JUnflip3, Job)
+updates(JUnflip4, Job)
+updates(JUnflip5, Job)
+updates(JUnflip6, Job)
+updates(JUnflip7, Job)
+transitions(JClose, Job.status, open -> done)
+transitions(JFlip1, Job.f1, off -> on)
+transitions(JUnflip1, Job.f1, on -> off)
+transitions(JFlip2, Job.f2, off -> on)
+transitions(JUnflip2, Job.f2, on -> off)
+transitions(JFlip3, Job.f3, off -> on)
+transitions(JUnflip3, Job.f3, on -> off)
+transitions(JFlip4, Job.f4, off -> on)
+transitions(JUnflip4, Job.f4, on -> off)
+transitions(JFlip5, Job.f5, off -> on)
+transitions(JUnflip5, Job.f5, on -> off)
+transitions(JFlip6, Job.f6, off -> on)
+transitions(JUnflip6, Job.f6, on -> off)
+transitions(JFlip7, Job.f7, off -> on)
+transitions(JUnflip7, Job.f7, on -> off)
+forbidden(Job, f1 == on, f2 == on, f3 == on, f4 == on, f5 == on, f6 == on, f7 == on, status == done)
+property JEventuallyDone eventually((Job.status == done) or (Job.f1 == on) or (Job.f2 == on) or (Job.f3 == on) or (Job.f4 == on) or (Job.f5 == on) or (Job.f6 == on) or (Job.f7 == on)).fair(JClose)
+usecase TFlip8 "TFlip8"
+usecase TFlip9 "TFlip9"
+contains(TB, TFlip8)
+contains(TB, TFlip9)
+updates(TFlip8, Task)
+updates(TFlip9, Task)
+transitions(TFlip8, Task.g8, off -> on)
+transitions(TFlip9, Task.g9, off -> on)
+usecase JFlip8 "JFlip8"
+usecase JFlip9 "JFlip9"
+contains(JB, JFlip8)
+contains(JB, JFlip9)
+updates(JFlip8, Job)
+updates(JFlip9, Job)
+transitions(JFlip8, Job.g8, off -> on)
+transitions(JFlip9, Job.g9, off -> on)

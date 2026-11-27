@@ -687,7 +687,7 @@ pub(super) fn bfs_cones(
         _ => unreachable!("a property's job"),
     };
     // The cone at `at` up to instance symmetry, stopped once every check has failed.
-    let orbits = |at: usize| {
+    let orbits = |at: usize, caps: Caps| {
         let me = cone(at).expect("a safety cone");
         let run = me.system.clone().run_orbits(caps.until_all_violated());
         symmetry_stats(&jobs[at].module, &run);
@@ -702,9 +702,9 @@ pub(super) fn bfs_cones(
     };
     // A safety cone decides its checks alone, so it stops once every one has failed: a check
     // it holds is then violated, so neither vacuous nor covering another.
-    let alone = |at: usize| {
+    let alone = |at: usize, caps: Caps| {
         if up_to_symmetry(at) {
-            return orbits(at);
+            return orbits(at, caps);
         }
         let run = cone(at)
             .expect("a safety cone")
@@ -717,14 +717,19 @@ pub(super) fn bfs_cones(
     // The verdict of the cone at `at`, the vacuous checks of it and of the cones it covers,
     // and the plain answers of the properties on its system, read off its run; the run is
     // dropped here.
-    let decide = |at: usize| -> (BfsCone, Vec<Diag>, bool, Vec<(usize, Plain)>) {
+    // A run that met the memory limit says `crowded`, the first run of a cone with partners
+    // too: beside other runs it may stop where it completes alone, and the run after it
+    // would then decide the cone where one job decides it on the complete run (P53).
+    let decide = |at: usize, caps: Caps| -> (BfsCone, Vec<Diag>, bool, Vec<(usize, Plain)>) {
         if partners[at].is_empty() {
-            return alone(at);
+            return alone(at, caps);
         }
         let run = cone(at).expect("a safety cone").system.clone().run(caps);
         if !run.complete {
+            let memory = crowded(&run);
             drop(run);
-            return alone(at);
+            let (verdict, vacuous, crowded, plains) = alone(at, caps);
+            return (verdict, vacuous, crowded || memory, plains);
         }
         let plains = (partners[at].iter())
             .map(|&k| (k, Plain::of(ts, property(k), &run)))
@@ -746,12 +751,14 @@ pub(super) fn bfs_cones(
     let open: Vec<usize> = (first.iter().copied())
         .filter(|at| !ran.iter().any(|(a, _, _)| a == at))
         .collect();
-    let decided = in_parallel(open.clone(), rdra_ish_core::jobs(), decide);
+    let decided = in_parallel(open.clone(), rdra_ish_core::jobs(), |at| decide(at, caps));
+    // A run that met the memory limit runs again alone, with the whole room of the pool
+    // (`Caps::alone`): where it stops then depends on the run alone, as at one job (P53).
     for (&at, (verdict, vacuous, crowded, plains)) in open.iter().zip(decided) {
         let (verdict, vacuous, _, plains) = match crowded {
             true => {
                 drop((verdict, vacuous, plains));
-                decide(at)
+                decide(at, caps.alone())
             }
             false => (verdict, vacuous, crowded, plains),
         };
@@ -772,7 +779,7 @@ pub(super) fn bfs_cones(
                 true => BfsCone::Covered(by),
                 false => match shared.safety[at].take() {
                     Some((verdict, _)) => verdict,
-                    None => alone(at).0,
+                    None => alone(at, caps.alone()).0,
                 },
             });
         }

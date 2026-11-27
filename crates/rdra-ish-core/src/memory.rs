@@ -161,6 +161,12 @@ impl MemoryPool {
         }))
     }
 
+    /// A pool with this one's whole room, for a run that goes alone: what the other runs of
+    /// this pool hold does not stop it, so where it stops is a function of the run alone.
+    pub fn whole(&'static self) -> &'static MemoryPool {
+        self.with_room(self.room)
+    }
+
     pub fn limit(&self) -> MemorySize {
         self.limit
     }
