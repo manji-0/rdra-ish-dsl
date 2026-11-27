@@ -215,6 +215,32 @@ fn an_unreachable_cti_is_ruled_out_by_a_mined_lemma() {
     );
 }
 
+/// The ∀∃ lemmas join only when a rule stays unproved with the fine ones in: a gate needs one
+/// (no key links it to a guard), an order does not (a count of its shipments proves it).
+#[test]
+fn a_forall_exists_lemma_joins_only_past_the_fine_ones() {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    let out = verify(&["--prove", &corpus("z3_needs_exists_global")]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("\nproved: Quantifier_Gate_0"), "{stdout}");
+    assert!(
+        stdout.contains(
+            "\nlemma: while a present Gate row has state == ajar, some present Guard row has state == on\n"
+        ),
+        "{stdout}"
+    );
+    let out = verify(&["--prove", &corpus("z3_needs_exists")]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("\nproved: Quantifier_Order_0"), "{stdout}");
+    assert!(
+        stdout.contains("\nlemma: a present Order row with status == ready has at least 1"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("\nlemma: while "), "{stdout}");
+}
+
 #[test]
 fn a_missing_z3_is_a_tool_error() {
     let out = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))

@@ -596,7 +596,7 @@ every sample on 2 solvers, and on the formal-verification samples, insurance-cla
 oidc-auth on 1 and 3, a check that keeps its candidate spends at most 161,000 units for a
 rule (1/124 of its limit) and 116,000 for a lemma (1/17); on 4 solvers, which the test does
 not run, a lemma check has spent 144,000 (1/14). No check runs out. The checks z3 gives up on
-by itself (on 2 solvers, 301 lemma checks and 13 rule checks) stop on a quantifier it cannot
+by itself (on 2 solvers, 303 lemma checks and 14 rule checks) stop on a quantifier it cannot
 decide, not on the budget: the test prints what they spend and does not assert it, since that
 depends on what the solver checked before. On 2 solvers it is at most 1,887,000 units for a
 lemma, in food-permit-ops, and 10,000 for a rule; food-permit-ops has such lemma checks from
