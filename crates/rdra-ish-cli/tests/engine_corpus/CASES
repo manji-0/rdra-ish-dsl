@@ -4,6 +4,7 @@ cap_memory_limit
 cap_temporal_budget_zero
 cone_always_frees_slots
 cone_copy_from_parent
+cone_entity_mark_left_out
 cone_handler_mark_left_out
 cone_independent_loop
 cone_outside_monotone
