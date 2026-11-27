@@ -772,6 +772,9 @@ export type Switch = Readonly<{
 /** The rows are in states the use case does not run from. Only a dispatcher returns it. */
 export type NotEnabled = Readonly<{ kind: "NotEnabled"; usecase: string }>;
 
+/** A row the call names does not exist. Only the service's load returns it; the functions take rows already loaded. */
+export type NotFound = Readonly<{ kind: "NotFound"; usecase: string; entity: string; id: string }>;
+
 /** A condition of the use case did not hold: the use case does not run. */
 export type Rejected = Readonly<{ kind: "Rejected"; condition: string; label: string; site: string | null }>;
 
@@ -782,6 +785,9 @@ export type Rejected = Readonly<{ kind: "Rejected"; condition: string; label: st
  */
 export type InvalidArgument = Readonly<{ kind: "InvalidArgument"; message: string }>;
 
+/** The store failed: no answer of the use case. Only the service's load or commit returns it; `cause` is the store's error. */
+export type StoreFailed = Readonly<{ kind: "StoreFailed"; usecase: string; cause: unknown }>;
+
 /**
  * What a row a result writes must still be when the write commits, so the store can write it
  * conditionally and take a write that matches no row as NotEnabled (see the obligations).
@@ -791,32 +797,32 @@ export type ExpectedSource =
   | Readonly<{ kind: "present" }>
   | Readonly<{ kind: "in"; column: string; value: string }>;
 
-/** What Return can fail with: NotEnabled from a dispatcher. */
-export type ReturnError = NotEnabled;
+/** What Return can fail with: NotEnabled from a dispatcher, NotFound from the service's load, StoreFailed from the service's store. */
+export type ReturnError = NotEnabled | NotFound | StoreFailed;
 
-/** What Delete can fail with: NotEnabled from a dispatcher, InvalidArgument for rows the model never reaches. */
-export type DeleteError = NotEnabled | InvalidArgument;
+/** What Delete can fail with: NotEnabled from a dispatcher, NotFound from the service's load, InvalidArgument for rows the model never reaches, StoreFailed from the service's store. */
+export type DeleteError = NotEnabled | NotFound | InvalidArgument | StoreFailed;
 
-/** What Super can fail with: NotEnabled from a dispatcher, Rejected by a condition. */
-export type SuperError = NotEnabled | Rejected;
+/** What Super can fail with: NotEnabled from a dispatcher, NotFound from the service's load, Rejected by a condition, StoreFailed from the service's store. */
+export type SuperError = NotEnabled | NotFound | Rejected | StoreFailed;
 
-/** What Crate can fail with: NotEnabled from a dispatcher. */
-export type CrateError = NotEnabled;
+/** What Crate can fail with: NotEnabled from a dispatcher, NotFound from the service's load, StoreFailed from the service's store. */
+export type CrateError = NotEnabled | NotFound | StoreFailed;
 
-/** What Default can fail with: NotEnabled from a dispatcher. */
-export type DefaultError = NotEnabled;
+/** What Default can fail with: NotEnabled from a dispatcher, NotFound from the service's load, StoreFailed from the service's store. */
+export type DefaultError = NotEnabled | NotFound | StoreFailed;
 
-/** What Type can fail with: NotEnabled from a dispatcher. */
-export type TypeError = NotEnabled;
+/** What Type can fail with: NotEnabled from a dispatcher, NotFound from the service's load, StoreFailed from the service's store. */
+export type TypeError = NotEnabled | NotFound | StoreFailed;
 
-/** What Class can fail with: NotEnabled from a dispatcher. */
-export type ClassError = NotEnabled;
+/** What Class can fail with: NotEnabled from a dispatcher, NotFound from the service's load, StoreFailed from the service's store. */
+export type ClassError = NotEnabled | NotFound | StoreFailed;
 
-/** What New can fail with: NotEnabled from a dispatcher. */
-export type NewError = NotEnabled;
+/** What New can fail with: NotEnabled from a dispatcher, NotFound from the service's load, StoreFailed from the service's store. */
+export type NewError = NotEnabled | NotFound | StoreFailed;
 
-/** What Static can fail with: NotEnabled from a dispatcher. */
-export type StaticError = NotEnabled;
+/** What Static can fail with: NotEnabled from a dispatcher, NotFound from the service's load, StoreFailed from the service's store. */
+export type StaticError = NotEnabled | NotFound | StoreFailed;
 
 /** What return_ returns. */
 export type ReturnResult = Readonly<{
@@ -1595,13 +1601,14 @@ export type CommitStore<E> = Readonly<{
   recordEvent: (event: RaisedEvent) => Promise<Result<void, E>>;
 }>;
 
-/** Commits `writes` through `store`: every row, then every run mark, then every event, and stops at the first row or mark that is no longer what it names. It begins and ends no transaction: call it inside the transaction of the call, and roll back on an error. NotEnabled when a row or a run mark is no longer what the result expects; the store's error when the store fails. */
-export async function commitWrites<E>(store: CommitStore<E>, writes: Writes): Promise<Result<void, NotEnabled | E>> {
+/** Commits `writes` through `store`: every row, then every run mark, then every event, and stops at the first row or mark that is no longer what it names. It begins and ends no transaction: call it inside the transaction of the call, and roll back on an error. NotEnabled when a row or a run mark is no longer what the result expects; StoreFailed, with the store's error as its cause, when the store fails. */
+export async function commitWrites<E>(store: CommitStore<E>, writes: Writes): Promise<Result<void, NotEnabled | StoreFailed>> {
   const notEnabled: NotEnabled = { kind: "NotEnabled", usecase: writes.usecase };
+  const failed = (cause: E): Result<never, StoreFailed> => ({ ok: false, error: { kind: "StoreFailed", usecase: writes.usecase, cause } });
   for (const write of writes.rows) {
     const written = await store.writeRow(write);
     if (!written.ok) {
-      return written;
+      return failed(written.error);
     }
     if (!written.value) {
       return { ok: false, error: notEnabled };
@@ -1610,7 +1617,7 @@ export async function commitWrites<E>(store: CommitStore<E>, writes: Writes): Pr
   for (const write of writes.marks) {
     const written = await store.writeMark(write);
     if (!written.ok) {
-      return written;
+      return failed(written.error);
     }
     if (!written.value) {
       return { ok: false, error: notEnabled };
@@ -1619,7 +1626,7 @@ export async function commitWrites<E>(store: CommitStore<E>, writes: Writes): Pr
   for (const event of writes.events) {
     const recorded = await store.recordEvent(event);
     if (!recorded.ok) {
-      return recorded;
+      return failed(recorded.error);
     }
   }
   return { ok: true, value: undefined };
@@ -1734,3 +1741,45 @@ export type StaticUseCase = {
   readonly prepareStatic: (function_: FunctionId, functionDefault: string) => Promise<Result<StaticResult, StaticError>>;
   readonly commitStatic: (write: StaticResult) => Promise<Result<void, StaticError>>;
 };
+
+// ── The unimplemented port: extend it to build before every member exists ──
+
+/**
+ * What the members of `UnimplementedConformancePort` reject with: the service has not implemented the call
+ * yet. `conform` stops a trace at such a call and reports the calls by use case;
+ * `rdra-ish check --code=run` lists them, and `--deny-incomplete` fails on any.
+ */
+export class Unimplemented extends globalThis.Error {
+  constructor(member: string) {
+    super(`rdra-ish: not implemented: ${member}`);
+    this.name = "Unimplemented";
+  }
+}
+
+/**
+ * The `prepare*` and `commit*` members of every contract, each rejecting with `Unimplemented`.
+ * Extend it to build before every member exists: a member the service declares takes
+ * the place of this one, and `check --code=run` reports each call that still reaches it.
+ * An entry point's `run*` member is not here: the harness drives none, so the service
+ * writes each.
+ */
+export class UnimplementedConformancePort {
+  prepareReturn = (_match: MatchId): Promise<Result<ReturnOutcome, ReturnError>> => Promise.reject(new Unimplemented("prepareReturn"));
+  commitReturn = (_write: ReturnOutcome): Promise<Result<void, ReturnError>> => Promise.reject(new Unimplemented("commitReturn"));
+  prepareDelete = (_match: MatchId, _switch_: Switch): Promise<Result<DeleteOutcome, DeleteError>> => Promise.reject(new Unimplemented("prepareDelete"));
+  commitDelete = (_write: DeleteOutcome): Promise<Result<void, DeleteError>> => Promise.reject(new Unimplemented("commitDelete"));
+  prepareSuper = (_match: MatchId): Promise<Result<SuperOutcome, SuperError>> => Promise.reject(new Unimplemented("prepareSuper"));
+  commitSuper = (_write: SuperOutcome): Promise<Result<void, SuperError>> => Promise.reject(new Unimplemented("commitSuper"));
+  prepareCrate = (_match: MatchId): Promise<Result<CrateOutcome, CrateError>> => Promise.reject(new Unimplemented("prepareCrate"));
+  commitCrate = (_write: CrateOutcome): Promise<Result<void, CrateError>> => Promise.reject(new Unimplemented("commitCrate"));
+  prepareDefault = (_match: MatchId): Promise<Result<DefaultOutcome, DefaultError>> => Promise.reject(new Unimplemented("prepareDefault"));
+  commitDefault = (_write: DefaultOutcome): Promise<Result<void, DefaultError>> => Promise.reject(new Unimplemented("commitDefault"));
+  prepareType = (_func: FuncId): Promise<Result<TypeOutcome, TypeError>> => Promise.reject(new Unimplemented("prepareType"));
+  commitType = (_write: TypeOutcome): Promise<Result<void, TypeError>> => Promise.reject(new Unimplemented("commitType"));
+  prepareClass = (_func: FuncId): Promise<Result<ClassOutcome, ClassError>> => Promise.reject(new Unimplemented("prepareClass"));
+  commitClass = (_write: ClassOutcome): Promise<Result<void, ClassError>> => Promise.reject(new Unimplemented("commitClass"));
+  prepareNew = (_parentFunction: FunctionId, _parentFunc: FuncId, _parentMod: ModId, _matchId: MatchId, _matchType: string, _matchNew: string, _matchFunc: string, _matchSelf: string, _matchCrate: string, _matchSuper: string, _matchKind: Kind): Promise<Result<NewOutcome, NewError>> => Promise.reject(new Unimplemented("prepareNew"));
+  commitNew = (_write: NewOutcome): Promise<Result<void, NewError>> => Promise.reject(new Unimplemented("commitNew"));
+  prepareStatic = (_function_: FunctionId, _functionDefault: string): Promise<Result<StaticResult, StaticError>> => Promise.reject(new Unimplemented("prepareStatic"));
+  commitStatic = (_write: StaticResult): Promise<Result<void, StaticError>> => Promise.reject(new Unimplemented("commitStatic"));
+}

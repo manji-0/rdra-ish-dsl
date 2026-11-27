@@ -158,7 +158,7 @@ fn each_omission_is_a_named_diagnostic() {
             "Pay takes a bare integer for OrderId",
             |p| {
                 edit(p, "fn prepare_pay(&mut self, order: OrderId,", "fn prepare_pay(&mut self, order: i64,");
-                edit(p, "self.order(order, \"Pay\")", "self.order(OrderId::from(order), \"Pay\")");
+                edit(p, "self.order::<PayError>(order, \"Pay\")", "self.order::<PayError>(OrderId::from(order), \"Pay\")");
             },
             &[
                 "error[CodeSignature_Pay]: use case Pay takes other inputs than the model's",
@@ -371,7 +371,7 @@ fn a_model_adapter_conforms_whatever_the_domain_code_became() {
     let all = text_slashed(&out);
     assert!(out.status.success(), "{all}");
     assert!(
-        all.contains("  ran: 11 traces, 21 calls, 11 refused calls, 7 interleaved commits; 32 calls made again by prepare and commit\n"),
+        all.contains("  ran: 11 traces, 21 calls, 13 refused calls, 7 interleaved commits; 34 calls made again by prepare and commit\n"),
         "{all}"
     );
     assert!(
@@ -417,9 +417,47 @@ fn a_model_adapter_conforms_whatever_the_domain_code_became() {
     let all = text_slashed(&out);
     assert!(out.status.success(), "{all}");
     assert!(
-        all.contains("  ran: 11 traces, 21 calls, 11 refused calls, 0 interleaved commits; 7 interleavings run as plain calls: the adapter has no prepare and commit, so conditional writes are not checked"),
+        all.contains("  ran: 11 traces, 21 calls, 13 refused calls, 0 interleaved commits; 7 interleavings run as plain calls: the adapter has no prepare and commit, so conditional writes are not checked"),
         "{all}"
     );
+}
+
+/// The unimplemented port (docs/design/algebraic-codegen.md): a service that marks Cancel
+/// `UnimplementedCancelUseCase` in place of implementing it builds, and its run passes with
+/// the calls of Cancel listed by use case and a warning, which `--deny-incomplete` makes an
+/// error.
+#[test]
+fn a_contract_marked_unimplemented_builds_and_its_calls_are_reported() {
+    if !tool("cargo", CODEGEN) {
+        return;
+    }
+    let dir = project("unimplemented");
+    let service = dir.join("svc/src/service.rs");
+    cut(&service, "impl CancelUseCase for Service {", "\n}\n");
+    let text = std::fs::read_to_string(&service).unwrap();
+    std::fs::write(
+        &service,
+        format!("{text}\nimpl UnimplementedCancelUseCase for Service {{}}\n"),
+    )
+    .unwrap();
+    let out = rdra(&dir, &["check", "model", "--code=run"], "");
+    let all = text_slashed(&out);
+    assert!(out.status.success(), "{all}");
+    assert!(
+        all.contains("  unimplemented: 1 use case (Cancel): "),
+        "{all}"
+    );
+    assert!(all.contains("warning[CodeUnimplemented]"), "{all}");
+    // The panic of the unimplemented method is the harness's, not printed as the test's.
+    assert!(!all.contains("panicked"), "{all}");
+    let out = rdra(
+        &dir,
+        &["check", "model", "--code=run", "--deny-incomplete"],
+        "",
+    );
+    let all = text_slashed(&out);
+    assert_eq!(out.status.code(), Some(1), "{all}");
+    assert!(all.contains("error[CodeUnimplemented]"), "{all}");
 }
 
 /// `[code.rust] serde = true`: the domain code builds against serde with no clippy warning,

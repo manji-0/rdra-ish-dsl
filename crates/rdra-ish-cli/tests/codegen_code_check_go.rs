@@ -502,7 +502,7 @@ fn a_model_adapter_conforms_whatever_the_domain_code_became() {
     let (code, stdout, stderr) = outcome(&rdra(&dir, &["check", "model", "--code=run"], None));
     assert_eq!(code, Some(0), "{stderr}");
     assert!(
-        stdout.contains("  ran: 11 traces, 21 calls, 11 refused calls, 7 interleaved commits; 32 calls made again by prepare and commit\n"),
+        stdout.contains("  ran: 11 traces, 21 calls, 13 refused calls, 7 interleaved commits; 34 calls made again by prepare and commit\n"),
         "{stdout}"
     );
     assert!(
@@ -539,4 +539,99 @@ fn a_model_adapter_conforms_whatever_the_domain_code_became() {
     assert_eq!(code, Some(1), "{stderr}");
     assert_eq!(errors(&stderr), ["CodeMutantSurvived"], "{stderr}");
     assert!(stderr.contains("the absent-row mutant"), "{stderr}");
+}
+
+/// The unimplemented port (docs/design/algebraic-codegen.md): a service that embeds
+/// `domain.UnimplementedConformancePort` and declares no Cancel methods builds, and its run
+/// passes with the calls of Cancel listed by use case and a warning, which
+/// `--deny-incomplete` makes an error. Without its own Seed, the run fails at the first seed.
+#[test]
+fn a_service_embedding_the_unimplemented_port_builds_and_its_calls_are_reported() {
+    if !tool("go", CODEGEN) {
+        return;
+    }
+    let embed = (
+        "type Service struct {\n",
+        "type Service struct {\n\tdomain.UnimplementedConformancePort\n",
+    );
+    let dir = shop(
+        "unimplemented",
+        &[
+            embed,
+            (
+                "func (s *Service) PrepareCancel(",
+                "func (s *Service) prepareCancelLater(",
+            ),
+            (
+                "func (s *Service) CommitCancel(",
+                "func (s *Service) commitCancelLater(",
+            ),
+        ],
+    );
+    let (code, stdout, stderr) = outcome(&rdra(&dir, &["check", "model", "--code=run"], None));
+    assert_eq!(code, Some(0), "{stdout}{stderr}");
+    assert!(
+        stdout.contains("  unimplemented: 1 use case (Cancel): "),
+        "{stdout}"
+    );
+    assert!(stderr.contains("warning[CodeUnimplemented]"), "{stderr}");
+    let (code, stdout, stderr) = outcome(&rdra(
+        &dir,
+        &["check", "model", "--code=run", "--deny-incomplete"],
+        None,
+    ));
+    assert_eq!(code, Some(1), "{stdout}{stderr}");
+    assert!(stderr.contains("error[CodeUnimplemented]"), "{stderr}");
+
+    let dir = shop(
+        "unimplemented-seed",
+        &[
+            embed,
+            ("func (s *Service) Seed(", "func (s *Service) seedLater("),
+        ],
+    );
+    let (code, _, stderr) = outcome(&rdra(&dir, &["check", "model", "--code=run"], None));
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(
+        stderr.contains("the service's Seed failed: rdra-ish: not implemented"),
+        "{stderr}"
+    );
+
+    // A `run` in the table that hides the test's output on a pass hides the harness's line:
+    // the run says it cannot tell, and --deny-incomplete fails on that.
+    let service = std::fs::read_to_string(fixtures().join("go_service/service.go")).unwrap();
+    let dir = project(
+        "unimplemented-hidden",
+        &conformance(),
+        &format!(
+            "{MANIFEST}run = [\"go\", \"test\", \"-count=1\", \"-run\", \"^TestRdraConformance$\", \"./svc\"]\n"
+        ),
+        &service
+            .replacen(embed.0, embed.1, 1)
+            .replacen(
+                "func (s *Service) PrepareCancel(",
+                "func (s *Service) prepareCancelLater(",
+                1,
+            )
+            .replacen(
+                "func (s *Service) CommitCancel(",
+                "func (s *Service) commitCancelLater(",
+                1,
+            ),
+    );
+    let run = ["check", "model", "--code=run", "--mutants", "0"];
+    let (code, stdout, stderr) = outcome(&rdra(&dir, &run, None));
+    assert_eq!(code, Some(0), "{stdout}{stderr}");
+    assert!(
+        stdout.contains("  unimplemented: not reported: "),
+        "{stdout}"
+    );
+    assert!(stderr.contains("warning[CodeUnimplemented]"), "{stderr}");
+    let (code, _, stderr) = outcome(&rdra(
+        &dir,
+        &[&run[..], &["--deny-incomplete"]].concat(),
+        None,
+    ));
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(stderr.contains("error[CodeUnimplemented]"), "{stderr}");
 }

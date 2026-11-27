@@ -684,6 +684,70 @@ impl ::core::fmt::Display for NotEnabled {
 
 impl ::std::error::Error for NotEnabled {}
 
+/// A row the call names does not exist: the service's load found no row of that id. The
+/// generated functions take rows already loaded and never return it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotFound {
+    /// The use case.
+    pub usecase: &'static str,
+    /// The entity of the row, as the model names it.
+    pub entity: &'static str,
+    /// The id the call names, as text.
+    pub id: ::std::string::String,
+}
+
+impl ::core::fmt::Display for NotFound {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        write!(f, "{}: no {} row has the id {}", self.usecase, self.entity, self.id)
+    }
+}
+
+impl ::std::error::Error for NotFound {}
+
+/// The store failed: a lost connection, a constraint the model does not know. It is no answer
+/// of the use case, and the generated functions never return it. Two are equal when they
+/// carry the same cause.
+#[derive(Debug, Clone)]
+pub struct StoreFailed {
+    /// The use case.
+    pub usecase: &'static str,
+    /// The store's error, which `source` returns.
+    pub cause: ::std::sync::Arc<dyn ::std::error::Error + ::core::marker::Send + ::core::marker::Sync + 'static>,
+}
+
+impl StoreFailed {
+    /// The failure of `usecase`'s store with `cause`.
+    pub fn new(
+        usecase: &'static str,
+        cause: impl ::core::convert::Into<::std::boxed::Box<dyn ::std::error::Error + ::core::marker::Send + ::core::marker::Sync + 'static>>,
+    ) -> Self {
+        Self {
+            usecase,
+            cause: ::std::sync::Arc::from(cause.into()),
+        }
+    }
+}
+
+impl ::core::cmp::PartialEq for StoreFailed {
+    fn eq(&self, other: &Self) -> bool {
+        self.usecase == other.usecase && ::std::sync::Arc::ptr_eq(&self.cause, &other.cause)
+    }
+}
+
+impl ::core::cmp::Eq for StoreFailed {}
+
+impl ::core::fmt::Display for StoreFailed {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        write!(f, "{}: the store failed: {}", self.usecase, self.cause)
+    }
+}
+
+impl ::std::error::Error for StoreFailed {
+    fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
+        ::core::option::Option::Some(&*self.cause)
+    }
+}
+
 /// A condition applied to the use case does not hold: the use case does not run.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Rejected {
@@ -727,12 +791,18 @@ impl ::std::error::Error for InvalidArgument {}
 pub enum PayError {
     /// The rows are in states Pay does not run from, or a commit found a row it writes changed.
     NotEnabled(NotEnabled),
+    /// A row the call names does not exist: the service's load returns it.
+    NotFound(NotFound),
+    /// The store failed: the service's load or commit returns it.
+    StoreFailed(StoreFailed),
 }
 
 impl ::core::fmt::Display for PayError {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         match self {
             Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
+            Self::NotFound(e) => ::core::fmt::Display::fmt(e, f),
+            Self::StoreFailed(e) => ::core::fmt::Display::fmt(e, f),
         }
     }
 }
@@ -741,6 +811,8 @@ impl ::std::error::Error for PayError {
     fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
         match self {
             Self::NotEnabled(e) => ::core::option::Option::Some(e),
+            Self::NotFound(e) => ::core::option::Option::Some(e),
+            Self::StoreFailed(e) => ::core::option::Option::Some(e),
         }
     }
 }
@@ -751,17 +823,35 @@ impl ::core::convert::From<NotEnabled> for PayError {
     }
 }
 
+impl ::core::convert::From<NotFound> for PayError {
+    fn from(e: NotFound) -> Self {
+        Self::NotFound(e)
+    }
+}
+
+impl ::core::convert::From<StoreFailed> for PayError {
+    fn from(e: StoreFailed) -> Self {
+        Self::StoreFailed(e)
+    }
+}
+
 /// Why CancelOrder did not run: what its functions, its dispatcher, and the commit of its result return.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CancelOrderError {
     /// The rows are in states CancelOrder does not run from, or a commit found a row it writes changed.
     NotEnabled(NotEnabled),
+    /// A row the call names does not exist: the service's load returns it.
+    NotFound(NotFound),
+    /// The store failed: the service's load or commit returns it.
+    StoreFailed(StoreFailed),
 }
 
 impl ::core::fmt::Display for CancelOrderError {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         match self {
             Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
+            Self::NotFound(e) => ::core::fmt::Display::fmt(e, f),
+            Self::StoreFailed(e) => ::core::fmt::Display::fmt(e, f),
         }
     }
 }
@@ -770,6 +860,8 @@ impl ::std::error::Error for CancelOrderError {
     fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
         match self {
             Self::NotEnabled(e) => ::core::option::Option::Some(e),
+            Self::NotFound(e) => ::core::option::Option::Some(e),
+            Self::StoreFailed(e) => ::core::option::Option::Some(e),
         }
     }
 }
@@ -780,17 +872,35 @@ impl ::core::convert::From<NotEnabled> for CancelOrderError {
     }
 }
 
+impl ::core::convert::From<NotFound> for CancelOrderError {
+    fn from(e: NotFound) -> Self {
+        Self::NotFound(e)
+    }
+}
+
+impl ::core::convert::From<StoreFailed> for CancelOrderError {
+    fn from(e: StoreFailed) -> Self {
+        Self::StoreFailed(e)
+    }
+}
+
 /// Why Place did not run: what its functions, its dispatcher, and the commit of its result return.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PlaceError {
     /// The rows are in states Place does not run from, or a commit found a row it writes changed.
     NotEnabled(NotEnabled),
+    /// A row the call names does not exist: the service's load returns it.
+    NotFound(NotFound),
+    /// The store failed: the service's load or commit returns it.
+    StoreFailed(StoreFailed),
 }
 
 impl ::core::fmt::Display for PlaceError {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         match self {
             Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
+            Self::NotFound(e) => ::core::fmt::Display::fmt(e, f),
+            Self::StoreFailed(e) => ::core::fmt::Display::fmt(e, f),
         }
     }
 }
@@ -799,6 +909,8 @@ impl ::std::error::Error for PlaceError {
     fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
         match self {
             Self::NotEnabled(e) => ::core::option::Option::Some(e),
+            Self::NotFound(e) => ::core::option::Option::Some(e),
+            Self::StoreFailed(e) => ::core::option::Option::Some(e),
         }
     }
 }
@@ -806,6 +918,18 @@ impl ::std::error::Error for PlaceError {
 impl ::core::convert::From<NotEnabled> for PlaceError {
     fn from(e: NotEnabled) -> Self {
         Self::NotEnabled(e)
+    }
+}
+
+impl ::core::convert::From<NotFound> for PlaceError {
+    fn from(e: NotFound) -> Self {
+        Self::NotFound(e)
+    }
+}
+
+impl ::core::convert::From<StoreFailed> for PlaceError {
+    fn from(e: StoreFailed) -> Self {
+        Self::StoreFailed(e)
     }
 }
 
@@ -1303,30 +1427,58 @@ pub trait CommitStore {
     fn record_event(&mut self, event: RaisedEvent) -> ::core::result::Result<(), Self::Error>;
 }
 
-/// Why [`commit_writes`] stopped. Either way the caller rolls the transaction back.
+/// Why [`commit_writes`] stopped: the same cases every `<UseCase>Error` has, which it converts
+/// into. Either way the caller rolls the transaction back.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CommitFailed<E> {
+pub enum CommitFailed {
     /// A row or a run mark is no longer what the result expects: another call changed it,
     /// and the use case does not run from the state it left.
     NotEnabled(NotEnabled),
     /// The store failed.
-    Store(E),
+    StoreFailed(StoreFailed),
 }
 
-impl<E: ::core::fmt::Display> ::core::fmt::Display for CommitFailed<E> {
+impl ::core::fmt::Display for CommitFailed {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         match self {
             Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
-            Self::Store(e) => write!(f, "the store failed: {e}"),
+            Self::StoreFailed(e) => ::core::fmt::Display::fmt(e, f),
         }
     }
 }
 
-impl<E: ::std::error::Error + 'static> ::std::error::Error for CommitFailed<E> {
+impl ::std::error::Error for CommitFailed {
     fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
         match self {
             Self::NotEnabled(e) => ::core::option::Option::Some(e),
-            Self::Store(e) => ::core::option::Option::Some(e),
+            Self::StoreFailed(e) => ::core::option::Option::Some(e),
+        }
+    }
+}
+
+impl ::core::convert::From<CommitFailed> for PayError {
+    fn from(e: CommitFailed) -> Self {
+        match e {
+            CommitFailed::NotEnabled(e) => Self::NotEnabled(e),
+            CommitFailed::StoreFailed(e) => Self::StoreFailed(e),
+        }
+    }
+}
+
+impl ::core::convert::From<CommitFailed> for CancelOrderError {
+    fn from(e: CommitFailed) -> Self {
+        match e {
+            CommitFailed::NotEnabled(e) => Self::NotEnabled(e),
+            CommitFailed::StoreFailed(e) => Self::StoreFailed(e),
+        }
+    }
+}
+
+impl ::core::convert::From<CommitFailed> for PlaceError {
+    fn from(e: CommitFailed) -> Self {
+        match e {
+            CommitFailed::NotEnabled(e) => Self::NotEnabled(e),
+            CommitFailed::StoreFailed(e) => Self::StoreFailed(e),
         }
     }
 }
@@ -1337,23 +1489,28 @@ impl<E: ::std::error::Error + 'static> ::std::error::Error for CommitFailed<E> {
 ///
 /// # Errors
 ///
-/// `NotEnabled` when a row or a run mark is no longer what the result expects, and the store's
-/// error when the store fails.
-pub fn commit_writes<S: CommitStore + ?Sized>(store: &mut S, writes: impl IntoWrites) -> ::core::result::Result<(), CommitFailed<S::Error>> {
+/// `NotEnabled` when a row or a run mark is no longer what the result expects, and
+/// `StoreFailed`, with the store's error as its cause, when the store fails.
+pub fn commit_writes<S: CommitStore + ?Sized>(store: &mut S, writes: impl IntoWrites) -> ::core::result::Result<(), CommitFailed>
+where
+    S::Error: ::core::convert::Into<::std::boxed::Box<dyn ::std::error::Error + ::core::marker::Send + ::core::marker::Sync + 'static>>,
+{
     let writes = writes.into_writes();
-    let not_enabled = NotEnabled { usecase: writes.usecase };
+    let usecase = writes.usecase;
+    let store_failed = |e: S::Error| CommitFailed::StoreFailed(StoreFailed::new(usecase, e));
+    let not_enabled = NotEnabled { usecase };
     for write in writes.rows {
-        if !store.write_row(write).map_err(CommitFailed::Store)? {
+        if !store.write_row(write).map_err(store_failed)? {
             return ::core::result::Result::Err(CommitFailed::NotEnabled(not_enabled));
         }
     }
     for write in writes.marks {
-        if !store.write_mark(write).map_err(CommitFailed::Store)? {
+        if !store.write_mark(write).map_err(store_failed)? {
             return ::core::result::Result::Err(CommitFailed::NotEnabled(not_enabled));
         }
     }
     for event in writes.events {
-        store.record_event(event).map_err(CommitFailed::Store)?;
+        store.record_event(event).map_err(store_failed)?;
     }
     ::core::result::Result::Ok(())
 }
@@ -1369,6 +1526,18 @@ pub trait PayUseCase {
     fn commit_pay(&mut self, write: PayOutcome) -> ::core::result::Result<(), PayError>;
 }
 
+/// Implement it for a service that does not implement `PayUseCase` yet: the service then has `PayUseCase`, each method of which panics as `unimplemented!` does. `conform` stops a trace at such a call and reports the calls by use case; `rdra-ish check --code=run` lists them, and `--deny-incomplete` fails on any. Remove the impl when the service implements `PayUseCase`.
+pub trait UnimplementedPayUseCase {}
+
+impl<T: UnimplementedPayUseCase> PayUseCase for T {
+    fn prepare_pay(&mut self, _: OrderId, _: DateTime) -> ::core::result::Result<PayOutcome, PayError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
+    fn commit_pay(&mut self, _: PayOutcome) -> ::core::result::Result<(), PayError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
+}
+
 /// The use case CancelOrder: Cancel.
 /// Each action with functions is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
 pub trait CancelOrderUseCase {
@@ -1378,6 +1547,18 @@ pub trait CancelOrderUseCase {
     fn commit_cancel_order(&mut self, write: CancelOrderOutcome) -> ::core::result::Result<(), CancelOrderError>;
 }
 
+/// Implement it for a service that does not implement `CancelOrderUseCase` yet: the service then has `CancelOrderUseCase`, each method of which panics as `unimplemented!` does. `conform` stops a trace at such a call and reports the calls by use case; `rdra-ish check --code=run` lists them, and `--deny-incomplete` fails on any. Remove the impl when the service implements `CancelOrderUseCase`.
+pub trait UnimplementedCancelOrderUseCase {}
+
+impl<T: UnimplementedCancelOrderUseCase> CancelOrderUseCase for T {
+    fn prepare_cancel_order(&mut self, _: OrderId) -> ::core::result::Result<CancelOrderOutcome, CancelOrderError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
+    fn commit_cancel_order(&mut self, _: CancelOrderOutcome) -> ::core::result::Result<(), CancelOrderError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
+}
+
 /// The use case Place: Place.
 /// Each action with functions is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
 pub trait PlaceUseCase {
@@ -1385,4 +1566,16 @@ pub trait PlaceUseCase {
     fn prepare_place(&mut self, parent_customer: CustomerId, order_id: OrderId, order_method: PaymentMethod) -> ::core::result::Result<PlaceResult, PlaceError>;
     /// Stores what `prepare_place` returned in one transaction.
     fn commit_place(&mut self, write: PlaceResult) -> ::core::result::Result<(), PlaceError>;
+}
+
+/// Implement it for a service that does not implement `PlaceUseCase` yet: the service then has `PlaceUseCase`, each method of which panics as `unimplemented!` does. `conform` stops a trace at such a call and reports the calls by use case; `rdra-ish check --code=run` lists them, and `--deny-incomplete` fails on any. Remove the impl when the service implements `PlaceUseCase`.
+pub trait UnimplementedPlaceUseCase {}
+
+impl<T: UnimplementedPlaceUseCase> PlaceUseCase for T {
+    fn prepare_place(&mut self, _: CustomerId, _: OrderId, _: PaymentMethod) -> ::core::result::Result<PlaceResult, PlaceError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
+    fn commit_place(&mut self, _: PlaceResult) -> ::core::result::Result<(), PlaceError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
 }

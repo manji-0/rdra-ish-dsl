@@ -22,9 +22,18 @@ function core<T>(r: d.Result<T, d.InvalidValue>): T {
 
 /** The refusal of a use case's error. */
 function refusal(e: Readonly<{ kind: string }>): m.Outcome {
-  return m.refused(
-    e.kind === "Rejected" ? "rejected" : e.kind === "InvalidArgument" ? "invalidArgument" : "notEnabled",
-  );
+  switch (e.kind) {
+    case "NotFound":
+      return m.refused("notFound");
+    case "Rejected":
+      return m.refused("rejected");
+    case "InvalidArgument":
+      return m.refused("invalidArgument");
+    case "StoreFailed":
+      return m.refused("storeFailed");
+    default:
+      return m.refused("notEnabled");
+  }
 }
 
 /** A prepared call: its commit, or its refusal. */
@@ -37,7 +46,13 @@ async function prepareOn(svc: OrderService, call: m.Call): Promise<Prepared> {
     commit: (w: W) => Promise<d.Result<void, Readonly<{ kind: string }>>>,
   ): Prepared =>
     r.ok
-      ? { ok: true, commit: async () => ((await commit(r.value)).ok ? m.ran : m.refused("notEnabled")) }
+      ? {
+          ok: true,
+          commit: async () => {
+            const committed = await commit(r.value);
+            return committed.ok ? m.ran : refusal(committed.error);
+          },
+        }
       : { ok: false, outcome: refusal(r.error) };
   switch (call.kind) {
     case "Place":

@@ -1,0 +1,17 @@
+// trap: a `.when`-guarded `present` write past the run's Int top (P43).
+// `Fill` writes any non-null number to `n` while the row is open. At `--int-range-max 5` no
+// state has `n > 5`, so BFS and TLC say `ok`; but the write reaches 6 at a range of 7, so the
+// rule holds at no range above 5 and z3 must not prove it "for any Int value". Before #481 the
+// arm guard of the `.when` named each value up to the run's top, z3 read the write as capped
+// there, and the rule was `proved`; the same write without `.when` was unproved.
+// flags: --int-range-max 5 --instance-count 1
+// expect Forbidden_Item_0: native=ok tlc=ok z3=unproved
+entity Item "商品" { id: Int @pk  open: Bool @default(true)  n: Int @null }
+usecase Add "追加"
+usecase Fill "記入"
+creates(Add, Item)
+updates(Fill, Item)
+condition IsOpen "開いている"
+holds(IsOpen, Item.open == true)
+sets(Fill, Item.n == present).when(IsOpen)
+forbidden(Item, n > 5)

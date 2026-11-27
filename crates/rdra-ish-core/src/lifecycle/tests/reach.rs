@@ -117,6 +117,18 @@ fn a_cone_stopped_at_the_state_cap_leaves_the_property_undecided() {
     );
 }
 
+/// A stopped graph decides no `can_reach`: asked anyway, `reach_failure` stops the process in
+/// every build, not only in a debug one (open problem P19), rather than read a state it did
+/// not expand as one with no way to the goal.
+#[test]
+#[should_panic(expected = "a capped graph decides no can_reach")]
+fn a_stopped_graph_decides_no_can_reach() {
+    let ts = TransitionSystem::build(&load(UNMET), Bounds::STATES, &Scope::ALL).ts;
+    let run = ts.run(Caps::new(usize::MAX, 10));
+    assert!(!run.complete);
+    let _ = run.system.reach_failure(0, &run.graph());
+}
+
 /// The only way to `done` is a use case an event starts, and the event's raiser can never
 /// run. A cone that left the event's mark out would let `Finish` run freely and pass; the
 /// cone keeps it, and fails as the whole system does.

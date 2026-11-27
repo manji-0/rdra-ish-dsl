@@ -62,7 +62,7 @@ fn the_files_codegen_writes_are_fresh_wherever_check_runs() {
     let dir = generated("same");
     let traces = std::fs::read_to_string(dir.join("svc/tests/traces.txt")).unwrap();
     let mut lines = traces.lines();
-    assert_eq!(lines.next(), Some("# rdra-ish conformance traces 4"));
+    assert_eq!(lines.next(), Some("# rdra-ish conformance traces 5"));
     assert!(
         lines
             .next()
@@ -355,13 +355,14 @@ fn serde_is_for_rust_domain_code_only() {
     );
 }
 
-/// A manifest whose `build` and `run` are rdra-ish's own `--version`: the conformance run
-/// passes with no toolchain, so what is tested is the statement of what it covered (with
+/// A manifest whose `build` is rdra-ish's own `--version` and whose `run` prints the line a
+/// harness prints when no call reached the unimplemented port: the conformance run passes
+/// with no toolchain, so what is tested is the statement of what it covered (with
 /// `--mutants 0`: such a run fails the self-check) or the self-check itself.
 fn noop_run(states: usize) -> String {
     let bin = env!("CARGO_BIN_EXE_rdra-ish");
     format!(
-        "{}root = \"../svc\"\nbuild = ['{bin}', '--version']\nrun = ['{bin}', '--version']\n",
+        "{}root = \"../svc\"\nbuild = ['{bin}', '--version']\nrun = ['sh', '-c', 'echo \"rdra-ish conformance: unimplemented: none\"']\n",
         MANIFEST.replace(
             "conformance_states = 4096",
             &format!("conformance_states = {states}")
@@ -408,7 +409,7 @@ fn a_conformance_run_states_its_coverage() {
             "  bound: 1 row created per entity, Int 0..5",
             "  BFS: complete, 6 states; 6 reached by the traces' calls",
             "  moves: 5 of 5 run",
-            "  refused calls: 11 tried (NotEnabled 10, Rejected 1); interleaved commits: 7",
+            "  refused calls: 13 tried (NotEnabled 10, NotFound 2, Rejected 1); interleaved commits: 7",
             "  seeded at a reached state: 2 traces, each then one call (H1: seed and path agree)",
             "  never refused: 1 (Place)",
         ],
@@ -453,7 +454,7 @@ fn a_capped_suite_warns_and_deny_incomplete_fails_it() {
     );
     assert!(
         lines.contains(
-            &"  refused calls: none tried (the BFS stopped at its cap); interleaved commits: 2"
+            &"  refused calls: 2 tried, each on a row that does not exist (the BFS stopped at its cap); interleaved commits: 2"
         ),
         "{stdout}"
     );
@@ -642,19 +643,16 @@ fn a_run_that_ignores_the_traces_fails_the_self_check() {
     assert!(stderr.contains("--mutants needs --code=run"), "{stderr}");
 }
 
-/// A capped suite has no refused call to flip: the self-check says so, and never counts a
-/// mutant it could not make.
+/// A capped suite tries no refusal of the model's states, only the calls on a row that does
+/// not exist: the self-check flips those, and never counts a mutant it could not make.
 #[test]
-fn a_capped_suite_has_no_refused_call_to_flip() {
+fn a_capped_suite_flips_only_its_calls_on_absent_rows() {
     let dir = run_project("self-check-capped", 3);
     let (_, stdout, _) = outcome(&rdra(&dir, &["check", "model", "--code=run"]));
     let line = stdout
         .lines()
         .find(|l| l.starts_with("  self-check:"))
         .unwrap_or_default();
-    assert!(
-        line.contains("; no refused-call-runs: the traces try no refused call"),
-        "{stdout}"
-    );
-    assert!(line.contains(" of 3 mutant traces"), "{stdout}");
+    assert!(!line.contains("no refused-call-runs"), "{stdout}");
+    assert!(line.contains(" of 4 mutant traces"), "{stdout}");
 }
