@@ -14,6 +14,7 @@
   language reference (§ Null) gains a truth table of every comparison operator over null, on
   either side and both, and under `not`, which a test computes through the builder and the
   evaluator and compares with the page.
+
 - The warning `DeleteLeavesChildKeys` (P63): a use case deletes the parent of a key with
   `.on_delete(set_null)` or `.on_delete(set_default)`, which verification does not execute,
   while the SQL export writes `ON DELETE SET NULL` / `SET DEFAULT`; the children keep naming
