@@ -327,7 +327,8 @@ invariant(Customer).at_most(1, Order.status == retried)
     assert!(!stderr.contains("error[Quantifier_Customer_0]"), "{stderr}");
     assert_eq!(out.status.code(), Some(0), "{stderr}");
     // The rule's cone does not count Payment slots either, and its counterexample at one
-    // instance creates two Payments (Place, then Retry): the refutation names 2.
+    // instance creates two Payments (Place, then Retry): the refutation names Payment=2, and
+    // Order=1 beside it.
     let model = model_file(
         "refuted_past_the_bound",
         r#"
@@ -347,7 +348,9 @@ forbidden(Order, status == retried)
     let out = verify(&["--prove", "--instance-count", "1", &model]);
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
-        stdout.contains("refuted: Forbidden_Order_0 (BFS counterexample at 2 instances)"),
+        stdout.contains(
+            "refuted: Forbidden_Order_0 (BFS counterexample at Order=1 Payment=2 instances)"
+        ),
         "{stdout}"
     );
 }
@@ -1253,6 +1256,52 @@ fn an_unproved_rule_that_passes_at_3_is_checked_at_4() {
     assert!(
         !stderr.contains("more instances than the run's"),
         "{stderr}"
+    );
+}
+
+/// P11: under `--instances E=k` the cone's entities have different counts, and the escalation
+/// names each one's rather than the largest: at two instances with one Member, the rule needs
+/// four Loans of one member, which the second step up has with three Members, not four. A
+/// refutation at the run's bounds names each count too.
+#[test]
+fn escalation_names_each_entitys_instances_under_per_entity_bounds() {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    let out = verify(&[
+        "--prove",
+        "--instance-count",
+        "2",
+        "--instances",
+        "Member=1",
+        &corpus("safety_at_most_bound"),
+    ]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        escalated_line(&stdout, "Quantifier_Member_0"),
+        "escalated: Quantifier_Member_0: ok at Loan=3 Member=2 instances, counterexample at Loan=4 Member=3 instances (BFS on its cone; ok at Loan=2 Member=1)",
+        "{stdout}"
+    );
+    assert!(
+        stderr.contains("counterexample (5 steps, at Loan=4 Member=3 instances):"),
+        "{stderr}"
+    );
+    // The rule BFS refutes at the run's bounds names each count the same way.
+    let out = verify(&[
+        "--prove",
+        "--instance-count",
+        "4",
+        "--instances",
+        "Member=3",
+        &corpus("safety_at_most_bound"),
+    ]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains(
+            "refuted: Quantifier_Member_0 [not enforced by the SQL schema: related rows] (BFS counterexample at Loan=4 Member=3 instances)"
+        ),
+        "{stdout}"
     );
 }
 

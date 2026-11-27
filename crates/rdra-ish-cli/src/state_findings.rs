@@ -464,14 +464,64 @@ pub(crate) fn location(program: &ResolvedProgram, site: &Site) -> Option<String>
     format_location(program, site.span.as_ref()?)
 }
 
+/// The instances per entity a counterexample was found at, as `verify` prints them (P11):
+/// `n` when every entity has `n` slots, else each entity's own count, `Loan=4 Member=3`, in
+/// the system's entity order. `--instances E=k` keeps the counts apart, and one maximum would
+/// name slots some entity does not have.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Instances(Vec<(String, usize)>);
+
+impl Instances {
+    /// The slots of each entity of `ts`.
+    pub(crate) fn of(ts: &TransitionSystem) -> Self {
+        Instances(
+            (ts.entity_ids())
+                .map(|e| (ts.entity(e).id.clone(), ts.slots(e)))
+                .collect(),
+        )
+    }
+
+    /// `entity` at `n` instances or more: a counterexample that creates `n` of its rows.
+    pub(crate) fn at_least(&mut self, entity: &str, n: usize) {
+        match self.0.iter_mut().find(|(e, _)| e == entity) {
+            Some((_, k)) => *k = (*k).max(n),
+            None => self.0.push((entity.to_string(), n)),
+        }
+    }
+
+    /// The largest count, 1 without entities.
+    pub(crate) fn most(&self) -> usize {
+        self.0.iter().map(|(_, n)| *n).max().unwrap_or(1)
+    }
+
+    /// `"<counts> instance"`, or `"instances"` unless every count is 1.
+    pub(crate) fn noun(&self) -> String {
+        match self.most() {
+            1 => format!("{self} instance"),
+            _ => format!("{self} instances"),
+        }
+    }
+}
+
+impl fmt::Display for Instances {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut counts = self.0.iter().map(|(_, n)| *n);
+        let first = counts.next().unwrap_or(1);
+        if counts.all(|n| n == first) {
+            return write!(f, "{first}");
+        }
+        let each: Vec<String> = (self.0.iter()).map(|(e, n)| format!("{e}={n}")).collect();
+        write!(f, "{}", each.join(" "))
+    }
+}
+
 /// The engine that found a counterexample; only the trace header names it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum TraceSource {
+pub(crate) enum TraceSource<'a> {
     Bfs,
     Tlc,
-    /// BFS at this many instances per entity, more than the run's (`verify --prove`'s
-    /// escalation).
-    BfsAt(usize),
+    /// BFS at these instances, more than the run's (`verify --prove`'s escalation).
+    BfsAt(&'a Instances),
 }
 
 /// A violation, the rule's site, and its counterexample: one step per line with its use case
@@ -482,7 +532,7 @@ pub(crate) fn render_violation(
     program: &ResolvedProgram,
     model: &SemanticModel,
     diag: &StateDiag,
-    source: TraceSource,
+    source: TraceSource<'_>,
 ) -> Option<String> {
     if let Some(text) = render_never_runs(program, model, diag) {
         return Some(text);
@@ -559,7 +609,7 @@ pub(crate) fn render_violation(
     let from = match source {
         TraceSource::Bfs => String::new(),
         TraceSource::Tlc => ", from TLC".to_string(),
-        TraceSource::BfsAt(n) => format!(", at {n} instances"),
+        TraceSource::BfsAt(n) => format!(", at {}", n.noun()),
     };
     out.push_str(&trace_block(
         program,
