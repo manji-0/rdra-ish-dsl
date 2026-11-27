@@ -261,14 +261,18 @@ fn print_calls(a: &Adapter, out: &mut String) {
     out.push_str("}\n\n");
     out.push_str("/// Why a use case did not run. The store is unchanged.\n");
     out.push_str("#[derive(Debug, Clone, Copy, PartialEq, Eq)]\npub enum Refusal {\n");
-    out.push_str("    /// The call does not run from its rows' states, a row it names does not exist, or the rows\n    /// a commit writes changed since its prepare.\n    NotEnabled,\n");
+    out.push_str("    /// The call does not run from its rows' states, or the rows a commit writes changed since\n    /// its prepare.\n    NotEnabled,\n");
+    out.push_str("    /// A row the call names does not exist.\n    NotFound,\n");
     out.push_str(
         "    /// A condition the model applies to the use case rejects the call.\n    Rejected,\n",
     );
     out.push_str(
-        "    /// An argument breaks what the verified model keeps.\n    InvalidArgument,\n}\n\n",
+        "    /// An argument breaks what the verified model keeps.\n    InvalidArgument,\n",
     );
-    out.push_str("impl Refusal {\n    /// The kind, in words.\n    pub fn as_str(self) -> &'static str {\n        match self {\n            Self::NotEnabled => \"not enabled\",\n            Self::Rejected => \"rejected\",\n            Self::InvalidArgument => \"invalid argument\",\n        }\n    }\n}\n\n");
+    out.push_str(
+        "    /// The store failed. No refusal of the model: the harness reports it as a failure of the\n    /// service.\n    StoreFailed,\n}\n\n",
+    );
+    out.push_str("impl Refusal {\n    /// The kind, in words.\n    pub fn as_str(self) -> &'static str {\n        match self {\n            Self::NotEnabled => \"not enabled\",\n            Self::NotFound => \"not found\",\n            Self::StoreFailed => \"store failed\",\n            Self::Rejected => \"rejected\",\n            Self::InvalidArgument => \"invalid argument\",\n        }\n    }\n}\n\n");
 }
 
 /// `ModelAdapter` and `AdapterReport`.
@@ -444,7 +448,7 @@ fn ad_pass<A: ModelAdapter>(adapter: &mut A, traces: &str, split: bool) -> {RESU
                 let next = state(rest.first())?;
                 let call = rest.get(1..).unwrap_or_default();
                 if let {RESULT}::Err(why) = ad_run(adapter, &ad_call(call).map_err(at)?, split) {{
-                    return {RESULT}::Err(at(format!("the model runs `{{}}` here, and the service refused it{{how}}: {{}}", call.join(" "), why.as_str())));
+                    return {RESULT}::Err(at(ad_refused(call, why, how)));
                 }}
                 ad_compare(&ad_abstract(&adapter.observe()), &next, &format!("after `{{}}`", call.join(" "))).map_err(at)?;
                 want = next;
@@ -456,6 +460,7 @@ fn ad_pass<A: ModelAdapter>(adapter: &mut A, traces: &str, split: bool) -> {RESU
                 }};
                 match ad_run(adapter, &ad_call(rest).map_err(at)?, split) {{
                     {RESULT}::Ok(()) => return {RESULT}::Err(at(format!("the model refuses `{{}}` here, and the service ran it{{how}}", rest.join(" ")))),
+                    {RESULT}::Err(Refusal::StoreFailed) => return {RESULT}::Err(at(ad_refused(rest, Refusal::StoreFailed, how))),
                     {RESULT}::Err(why) if kind != "-" && ad_kind(why) != kind => {{
                         return {RESULT}::Err(at(format!("the model refuses `{{}}` here with {{kind}}, and the service refused it with {{}}", rest.join(" "), why.as_str())));
                     }}
@@ -472,14 +477,15 @@ fn ad_pass<A: ModelAdapter>(adapter: &mut A, traces: &str, split: bool) -> {RESU
                 let held = match adapter.split().map(|s| s.prepare(&early)) {{
                     {OPTION}::None => false,
                     {OPTION}::Some({RESULT}::Ok(())) => true,
-                    {OPTION}::Some({RESULT}::Err(why)) => return {RESULT}::Err(at(format!("the model runs `{{}}` here, and the service refused it: {{}}", first.join(" "), why.as_str()))),
+                    {OPTION}::Some({RESULT}::Err(why)) => return {RESULT}::Err(at(ad_refused(first, why, ""))),
                 }};
                 if let {RESULT}::Err(why) = adapter.invoke(&late) {{
-                    return {RESULT}::Err(at(format!("the model runs `{{}}` here, and the service refused it: {{}}", second.join(" "), why.as_str())));
+                    return {RESULT}::Err(at(ad_refused(second, why, "")));
                 }}
                 ad_compare(&ad_abstract(&adapter.observe()), &next, &format!("after `{{}}`", second.join(" "))).map_err(at)?;
                 if held {{
                     match adapter.split().map(|s| s.commit()) {{
+                        {OPTION}::Some({RESULT}::Err(Refusal::StoreFailed)) => return {RESULT}::Err(at(ad_refused(first, Refusal::StoreFailed, ""))),
                         {OPTION}::Some({RESULT}::Err(_)) => {{}}
                         {OPTION}::Some({RESULT}::Ok(())) => return {RESULT}::Err(at(format!("the service committed `{{}}`, prepared before `{{}}` changed a row it writes: the write must be conditional on what the row was", first.join(" "), second.join(" ")))),
                         {OPTION}::None => return {RESULT}::Err(at("the adapter split the prepare and then not the commit".to_string())),
@@ -501,8 +507,20 @@ fn ad_pass<A: ModelAdapter>(adapter: &mut A, traces: &str, split: bool) -> {RESU
 fn ad_kind(why: Refusal) -> &'static str {{
     match why {{
         Refusal::NotEnabled => "NotEnabled",
+        Refusal::NotFound => "NotFound",
+        Refusal::StoreFailed => "StoreFailed",
         Refusal::Rejected => "Rejected",
         Refusal::InvalidArgument => "InvalidArgument",
+    }}
+}}
+
+/// What is wrong when the service did not run `call`, which the model runs: a refusal, or, for
+/// `StoreFailed`, a failure of the service.
+fn ad_refused(call: &[&str], why: Refusal, how: &str) -> {STRING} {{
+    if why == Refusal::StoreFailed {{
+        format!("the service failed on `{{}}`{{how}}: the store failed", call.join(" "))
+    }} else {{
+        format!("the model runs `{{}}` here, and the service refused it{{how}}: {{}}", call.join(" "), why.as_str())
     }}
 }}
 

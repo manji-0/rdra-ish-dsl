@@ -67,7 +67,7 @@ impl TransitionSystem {
                 .flat_map(|s| {
                     (0..size).map(move |v| {
                         let mut s = s.clone();
-                        s.set(self, var, slot, Value(v as u8));
+                        s.set(self, var, slot, Value::at(v));
                         s
                     })
                 })

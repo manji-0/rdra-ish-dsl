@@ -565,7 +565,7 @@ func Conform(newPort func() ConformancePort, traces string) (ConformanceReport, 
 				continue
 			}}
 			if refused != nil {{
-				return report, at(fmt.Errorf("the model runs `%s` here, and the service refused it: %v", strings.Join(call, " "), refused))
+				return report, at(confRefused(call, refused))
 			}}
 			if err := confObserve(port, next, "after `"+strings.Join(call, " ")+"`"); err != nil {{
 				return report, at(err)
@@ -586,6 +586,9 @@ func Conform(newPort func() ConformancePort, traces string) (ConformanceReport, 
 			}}
 			if refused == nil {{
 				return report, at(fmt.Errorf("the model refuses `%s` here, and the service ran it", strings.Join(rest, " ")))
+			}}
+			if errors.Is(refused, ErrStoreFailed) {{
+				return report, at(confRefused(rest, refused))
 			}}
 			if got := confKind(refused); kind != "-" && got != kind {{
 				return report, at(fmt.Errorf("the model refuses `%s` here with %s, and the service refused it with %s: %v", strings.Join(rest, " "), kind, got, refused))
@@ -618,7 +621,7 @@ func Conform(newPort func() ConformancePort, traces string) (ConformanceReport, 
 				continue
 			}}
 			if refused != nil {{
-				return report, at(fmt.Errorf("the model runs `%s` here, and the service refused it: %v", strings.Join(first, " "), refused))
+				return report, at(confRefused(first, refused))
 			}}
 			refused, err = confRun(port, second)
 			if err != nil {{
@@ -628,7 +631,7 @@ func Conform(newPort func() ConformancePort, traces string) (ConformanceReport, 
 				continue
 			}}
 			if refused != nil {{
-				return report, at(fmt.Errorf("the model runs `%s` here, and the service refused it: %v", strings.Join(second, " "), refused))
+				return report, at(confRefused(second, refused))
 			}}
 			if err := confObserve(port, next, "after `"+strings.Join(second, " ")+"`"); err != nil {{
 				return report, at(err)
@@ -639,6 +642,8 @@ func Conform(newPort func() ConformancePort, traces string) (ConformanceReport, 
 			}}
 			if late == nil {{
 				return report, at(fmt.Errorf("the service committed `%s`, prepared before `%s` changed a row it writes: the write must be conditional on what the row was", strings.Join(first, " "), strings.Join(second, " ")))
+			}} else if errors.Is(late, ErrStoreFailed) {{
+				return report, at(confRefused(first, late))
 			}}
 			if err := confObserve(port, next, "after the refused commit of `"+strings.Join(first, " ")+"`"); err != nil {{
 				return report, at(err)
@@ -652,11 +657,25 @@ func Conform(newPort func() ConformancePort, traces string) (ConformanceReport, 
 	return report, nil
 }}
 
-// confKind is the kind of a refusal: the detail its error wraps.
+// confRefused is what is wrong when the service did not run call, which the model runs: a
+// refusal, or, for a StoreFailed, a failure of the service.
+func confRefused(call []string, refused error) error {{
+	if errors.Is(refused, ErrStoreFailed) {{
+		return fmt.Errorf("the service failed on `%s`: %v", strings.Join(call, " "), refused)
+	}}
+	return fmt.Errorf("the model runs `%s` here, and the service refused it: %v", strings.Join(call, " "), refused)
+}}
+
+// confKind is the kind of a refusal: the detail its error wraps. A StoreFailed is checked first,
+// since its cause may wrap anything.
 func confKind(refused error) string {{
 	switch {{
+	case errors.Is(refused, ErrStoreFailed):
+		return "StoreFailed"
 	case errors.Is(refused, ErrNotEnabled):
 		return "NotEnabled"
+	case errors.Is(refused, ErrNotFound):
+		return "NotFound"
 	case errors.Is(refused, ErrRejected):
 		return "Rejected"
 	case errors.Is(refused, ErrInvalidArgument):

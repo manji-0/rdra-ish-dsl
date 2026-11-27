@@ -257,6 +257,26 @@ func (e *NotEnabled) Is(target error) bool {
 	return target == ErrNotEnabled
 }
 
+// ErrNotFound is what errors.Is matches a *NotFound with.
+var ErrNotFound = errors.New("no row has the id the call names")
+
+// NotFound reports a row the call names by id that does not exist: the service's load returns it, and the generated functions, which take rows already loaded, never do. Id is the id as text.
+type NotFound struct {
+	UseCase string
+	Entity  string
+	Id      string
+}
+
+// Error says what happened.
+func (e *NotFound) Error() string {
+	return "the use case " + e.UseCase + " found no " + e.Entity + " row with the id " + e.Id
+}
+
+// Is reports whether target is ErrNotFound.
+func (e *NotFound) Is(target error) bool {
+	return target == ErrNotFound
+}
+
 // ErrRejected is what errors.Is matches a *Rejected with.
 var ErrRejected = errors.New("rejected by a condition")
 
@@ -293,6 +313,36 @@ func (e *InvalidArgument) Error() string {
 // Is reports whether target is ErrInvalidArgument.
 func (e *InvalidArgument) Is(target error) bool {
 	return target == ErrInvalidArgument
+}
+
+// ErrStoreFailed is what errors.Is matches a *StoreFailed with.
+var ErrStoreFailed = errors.New("the store failed")
+
+// StoreFailed reports a failure of the store (a lost connection, a constraint the model does not
+// know), not an answer of the use case: the service's load or commit returns it, and the
+// generated functions never do. Unwrap returns Cause, so errors.Is and errors.As reach the
+// store's error.
+type StoreFailed struct {
+	UseCase string
+	Cause   error
+}
+
+// Error says what happened.
+func (e *StoreFailed) Error() string {
+	if e.Cause == nil {
+		return "the use case " + e.UseCase + ": the store failed"
+	}
+	return "the use case " + e.UseCase + ": the store failed: " + e.Cause.Error()
+}
+
+// Is reports whether target is ErrStoreFailed.
+func (e *StoreFailed) Is(target error) bool {
+	return target == ErrStoreFailed
+}
+
+// Unwrap returns the store's error.
+func (e *StoreFailed) Unwrap() error {
+	return e.Cause
 }
 
 // ── Entities with states ──
@@ -566,11 +616,15 @@ type PayErrorKind string
 const (
 	// PayErrorNotEnabled: the rows are in states Pay does not run from (only its dispatcher says so), or a store's commit found a row changed.
 	PayErrorNotEnabled PayErrorKind = "NotEnabled"
+	// PayErrorNotFound: a row the call names does not exist (only the service's load says so).
+	PayErrorNotFound PayErrorKind = "NotFound"
 	// PayErrorInvalidArgument: the arguments break what the verified model keeps.
 	PayErrorInvalidArgument PayErrorKind = "InvalidArgument"
+	// PayErrorStoreFailed: the store failed (only the service's load or commit says so).
+	PayErrorStoreFailed PayErrorKind = "StoreFailed"
 )
 
-// PayError is why Pay did not run. Kind is its case, and Err the case's detail (*NotEnabled, *InvalidArgument), which errors.As reaches and errors.Is matches with ErrNotEnabled, ErrInvalidArgument.
+// PayError is why Pay did not run. Kind is its case, and Err the case's detail (*NotEnabled, *NotFound, *InvalidArgument, *StoreFailed), which errors.As reaches and errors.Is matches with ErrNotEnabled, ErrNotFound, ErrInvalidArgument, ErrStoreFailed.
 type PayError struct {
 	Kind PayErrorKind
 	Err  error
@@ -596,11 +650,15 @@ type CancelOrderErrorKind string
 const (
 	// CancelOrderErrorNotEnabled: the rows are in states CancelOrder does not run from (only its dispatcher says so), or a store's commit found a row changed.
 	CancelOrderErrorNotEnabled CancelOrderErrorKind = "NotEnabled"
+	// CancelOrderErrorNotFound: a row the call names does not exist (only the service's load says so).
+	CancelOrderErrorNotFound CancelOrderErrorKind = "NotFound"
 	// CancelOrderErrorInvalidArgument: the arguments break what the verified model keeps.
 	CancelOrderErrorInvalidArgument CancelOrderErrorKind = "InvalidArgument"
+	// CancelOrderErrorStoreFailed: the store failed (only the service's load or commit says so).
+	CancelOrderErrorStoreFailed CancelOrderErrorKind = "StoreFailed"
 )
 
-// CancelOrderError is why CancelOrder did not run. Kind is its case, and Err the case's detail (*NotEnabled, *InvalidArgument), which errors.As reaches and errors.Is matches with ErrNotEnabled, ErrInvalidArgument.
+// CancelOrderError is why CancelOrder did not run. Kind is its case, and Err the case's detail (*NotEnabled, *NotFound, *InvalidArgument, *StoreFailed), which errors.As reaches and errors.Is matches with ErrNotEnabled, ErrNotFound, ErrInvalidArgument, ErrStoreFailed.
 type CancelOrderError struct {
 	Kind CancelOrderErrorKind
 	Err  error
@@ -626,11 +684,15 @@ type PlaceErrorKind string
 const (
 	// PlaceErrorNotEnabled: the rows are in states Place does not run from (only its dispatcher says so), or a store's commit found a row changed.
 	PlaceErrorNotEnabled PlaceErrorKind = "NotEnabled"
+	// PlaceErrorNotFound: a row the call names does not exist (only the service's load says so).
+	PlaceErrorNotFound PlaceErrorKind = "NotFound"
 	// PlaceErrorInvalidArgument: the arguments break what the verified model keeps.
 	PlaceErrorInvalidArgument PlaceErrorKind = "InvalidArgument"
+	// PlaceErrorStoreFailed: the store failed (only the service's load or commit says so).
+	PlaceErrorStoreFailed PlaceErrorKind = "StoreFailed"
 )
 
-// PlaceError is why Place did not run. Kind is its case, and Err the case's detail (*NotEnabled, *InvalidArgument), which errors.As reaches and errors.Is matches with ErrNotEnabled, ErrInvalidArgument.
+// PlaceError is why Place did not run. Kind is its case, and Err the case's detail (*NotEnabled, *NotFound, *InvalidArgument, *StoreFailed), which errors.As reaches and errors.Is matches with ErrNotEnabled, ErrNotFound, ErrInvalidArgument, ErrStoreFailed.
 type PlaceError struct {
 	Kind PlaceErrorKind
 	Err  error
@@ -1010,13 +1072,13 @@ type CommitStore interface {
 // event, and stops at the first row or mark that is no longer what it names. It begins and
 // ends no transaction: call it inside the transaction of the call, and roll back on an error.
 // Its error is a *NotEnabled when a row or a run mark is no longer what the result expects,
-// or the store's error as the store returned it.
+// or a *StoreFailed whose Cause is the store's error when the store fails.
 func CommitWrites(store CommitStore, w Committable) error {
 	writes := w.Writes()
 	for _, row := range writes.Rows {
 		ok, err := store.WriteRow(row)
 		if err != nil {
-			return err
+			return &StoreFailed{UseCase: writes.UseCase, Cause: err}
 		}
 		if !ok {
 			return &NotEnabled{UseCase: writes.UseCase}
@@ -1025,7 +1087,7 @@ func CommitWrites(store CommitStore, w Committable) error {
 	for _, mark := range writes.Marks {
 		ok, err := store.WriteMark(mark)
 		if err != nil {
-			return err
+			return &StoreFailed{UseCase: writes.UseCase, Cause: err}
 		}
 		if !ok {
 			return &NotEnabled{UseCase: writes.UseCase}
@@ -1033,7 +1095,7 @@ func CommitWrites(store CommitStore, w Committable) error {
 	}
 	for _, event := range writes.Events {
 		if err := store.RecordEvent(event); err != nil {
-			return err
+			return &StoreFailed{UseCase: writes.UseCase, Cause: err}
 		}
 	}
 	return nil

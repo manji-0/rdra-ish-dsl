@@ -197,7 +197,8 @@ The contract does not cover the following:
 - the header and its obligation and candidate lists;
 - `assertNever`;
 - the transition functions, results, events, run marks, rule checks, `NotEnabled`,
-  `Rejected`, `InvalidArgument`, `<UseCase>Error`, `ExpectedSource`, and dispatchers;
+  `NotFound`, `Rejected`, `InvalidArgument`, `StoreFailed`, `<UseCase>Error`,
+  `ExpectedSource`, and dispatchers;
 - the types of entities that are not state types, and of DTOs, and their parsers;
 - which models fail with a `NameCollision`: the experimental declarations share the
   namespace, so a new one can collide with a model's name. A model type named `Result`,
