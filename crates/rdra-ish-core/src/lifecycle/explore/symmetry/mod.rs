@@ -15,6 +15,7 @@
 //! `canon` computes the canonical form, the least layout of the state over `G_s`;
 //! `reference` is its twin, which enumerates `G_s`.
 
+use crate::lifecycle::narrow::id8;
 mod breaks;
 mod canon;
 #[cfg(any(test, feature = "shadow"))]
@@ -585,7 +586,7 @@ impl Group {
     pub(crate) fn identity(&self) -> Vec<u8> {
         self.classes
             .iter()
-            .flat_map(|c| (0..c.slots).map(|s| s as u8))
+            .flat_map(|c| (0..c.slots).map(|s| id8(s)))
             .collect()
     }
 
@@ -606,7 +607,7 @@ impl Group {
         let mut out = vec![0u8; self.slots];
         for class in &self.classes {
             for s in 0..class.slots {
-                out[class.first + usize::from(g[class.first + s])] = s as u8;
+                out[class.first + usize::from(g[class.first + s])] = id8(s);
             }
         }
         out

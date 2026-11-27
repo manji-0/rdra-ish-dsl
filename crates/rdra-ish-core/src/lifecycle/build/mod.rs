@@ -1,6 +1,7 @@
 //! `SemanticModel` -> `TransitionSystem`. The only reader of the model's lifecycle facts:
 //! columns, `transitions`, `sets`, CRUD edges, relates, constraints, asserts, and properties.
 
+use crate::lifecycle::narrow::id8;
 mod actions;
 mod events;
 mod links;
@@ -87,6 +88,10 @@ impl<'m> Builder<'m> {
         self.ts.layout();
         self.one_write_per_slot();
         self.goals_met_by_delete();
+        let bits = super::explore::packed_bits(&self.ts);
+        if let Some(d) = too_wide(bits, super::explore::MOST_PACKED_BITS) {
+            self.diag(Vec::new(), d);
+        }
         let model = self.model;
         let mut inactive: Vec<UseCaseKey> = self
             .active_ucs
@@ -114,7 +119,16 @@ impl<'m> Builder<'m> {
             selection,
         }
     }
+}
 
+/// `StateTooWide` when a packed state of `bits` bits passes `most`, the bits a packed state
+/// addresses: the build stops there, as `DomainTooLarge` stops a column past a byte, rather
+/// than any engine packing two cells into one place (P50).
+fn too_wide(bits: u64, most: u64) -> Option<StateDiag> {
+    (bits > most).then_some(StateDiag::StateTooWide { bits, most })
+}
+
+impl<'m> Builder<'m> {
     /// An action that writes one slot twice fails the build with `ConflictingEffects`
     /// (`Action::slots_written_twice`): the engines would not agree on its step. No builder
     /// path makes one today; this keeps a future one from reaching the engines.
@@ -203,7 +217,7 @@ impl ActionDraft {
             role,
             via_api: None,
         });
-        (self.params.len() - 1) as u8
+        id8(self.params.len() - 1)
     }
 
     /// The param of a row of `entity` the action writes.
@@ -211,7 +225,7 @@ impl ActionDraft {
         self.params
             .iter()
             .position(|p| p.entity == entity && p.role.is_written())
-            .map(|i| i as u8)
+            .map(|i| id8(i))
     }
 
     /// The param of the action's row of `entity`: one it writes, or one an earlier step of
@@ -220,7 +234,7 @@ impl ActionDraft {
         self.params
             .iter()
             .position(|p| p.entity == entity && p.role.is_row())
-            .map(|i| i as u8)
+            .map(|i| id8(i))
     }
 
     fn writes(&self, var: VarId, param: u8) -> bool {
@@ -308,4 +322,45 @@ fn slots_eq((lt, ld): (Term, &Domain), (rt, rd): (Term, &Domain)) -> Pred {
             })
             .collect(),
     )
+}
+
+#[cfg(test)]
+mod width_tests {
+    use super::too_wide;
+    use crate::lifecycle::explore::{packed_bits, MOST_PACKED_BITS};
+    use crate::lifecycle::{Bounds, Scope, Severity, StateDiag, TransitionSystem};
+    use std::num::NonZeroU8;
+
+    /// The build counts a state's packed bits and stops a system one bit past the bits a
+    /// packed state addresses with `StateTooWide`, an error (P50). The P50 reproduction's
+    /// state, 255 rows of 34 Int columns at Int 0..255, passes bit 65,535 and stays far inside.
+    #[test]
+    fn a_state_past_the_packed_width_is_a_build_error() {
+        let cols: String = (0..34)
+            .map(|i| format!("  c{i}: Int @default(0)\n"))
+            .collect();
+        let sets: String = (0..34)
+            .map(|i| format!("sets(Create, Row.c{i} == 1)\n"))
+            .collect();
+        let src = format!(
+            "entity Row \"行\" {{\n  id: Int @pk\n{cols}}}\nusecase Create \"作成\"\ncreates(Create, Row)\n{sets}"
+        );
+        let bounds = Bounds::uniform(NonZeroU8::MAX, 255);
+        let model = crate::lifecycle::tests::model_from(&src);
+        let built = TransitionSystem::build(&model, bounds, &Scope::ALL);
+        let bits = packed_bits(&built.ts);
+        assert!(bits > u64::from(u16::MAX), "{bits}");
+        assert!(
+            !(built.diags.iter()).any(|d| matches!(d.diag, StateDiag::StateTooWide { .. })),
+            "{:?}",
+            built.diags
+        );
+        assert_eq!(too_wide(bits, bits), None);
+        let past = too_wide(bits, bits - 1).expect("one bit past is too wide");
+        assert_eq!(past.severity(), Severity::Error);
+        assert_eq!(past.name(&[]), "StateTooWide");
+        assert!(past.to_string().contains(&format!("{bits} bits")), "{past}");
+        assert_eq!(too_wide(MOST_PACKED_BITS, MOST_PACKED_BITS), None);
+        assert!(too_wide(MOST_PACKED_BITS + 1, MOST_PACKED_BITS).is_some());
+    }
 }

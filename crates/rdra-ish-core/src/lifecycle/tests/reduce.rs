@@ -10,8 +10,8 @@ use crate::memory::{MemoryPool, MemorySize};
 use super::cone::{load, SAMPLES};
 use super::*;
 use crate::lifecycle::{
-    Action, ActionOrigin, ComponentRun, EntId, Fold, FoldKey, QuotientCache, State, Step, Target,
-    TargetExploration, VarSet,
+    Action, ActionOrigin, ComponentRun, EntId, Fold, FoldKey, QuotientCache, Reduction, State,
+    Step, Target, TargetExploration, VarSet,
 };
 
 const DOMAIN_SAMPLES: &[&str] = &[
@@ -1359,6 +1359,52 @@ fn a_counted_mark_keeps_its_raiser_and_handler_out_of_the_sub_lifecycle() {
     }
 }
 
+/// A gate whose Int level goes up and down, and a job that starts while it is up.
+const SWINGING_LEVEL: &str = r#"
+entity Gate "門" { id: Int @pk  level: Int @default(0) }
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+relate(Job, Gate, N:1)
+usecase Build "設置"
+usecase Raise "上げる"
+usecase Lower "下げる"
+usecase Submit "投入"
+usecase Start "開始"
+creates(Build, Gate)
+updates(Raise, Gate)
+sets(Raise, Gate.level == 1)
+updates(Lower, Gate)
+sets(Lower, Gate.level == 0)
+creates(Submit, Job)
+transitions(Start, Job.status, waiting -> running)
+condition GateUp "門が上がっている"
+holds(GateUp, Gate.level == 1)
+applies_to(GateUp, Start)
+forbidden(Job, status == running).label("作業は始まらない")
+"#;
+
+/// P65: a column whose domain holds 256 values (a non-null Int at `--int-range-max 255`) that
+/// a use case sets both up and down is not monotone. `monotone_vars` listed the values such a
+/// write starts from as `0..size as u8`, empty at 256, so the column had no edge and read as
+/// monotone at 255 while it was not at 254.
+#[test]
+fn a_256_value_column_set_both_ways_is_not_monotone() {
+    let model = model_from(SWINGING_LEVEL);
+    for int_max in [254, 255] {
+        let bounds = Bounds::uniform(std::num::NonZeroU8::MIN, int_max);
+        let ts = TransitionSystem::build(&model, bounds.clone(), &Scope::ALL).ts;
+        let level = ts
+            .var_ids()
+            .find(|v| ts.var_name(*v).contains("level"))
+            .expect("the gate's level");
+        assert!(
+            !ts.monotone_vars()[level.index()],
+            "int_max {int_max}: {} read as monotone",
+            ts.var_name(level)
+        );
+        assert_reduction_exact("swinging level", &model, bounds);
+    }
+}
+
 /// A counted mark is not monotone even in a system that holds its raiser and not its
 /// handler, where its arms alone (`0 -> 1 -> over`) form no cycle; the latch there is.
 #[test]
@@ -1460,4 +1506,214 @@ fn an_entity_cone_up_to_symmetry_decides_what_its_plain_run_left_open() {
         up.undecided().len(),
         plain.undecided().len()
     );
+}
+
+/// The complete reduced cones of `models` under each of `bounds` whose reduction folds, each
+/// with its plain cone, that cone's complete run, and the reduction; `f` sees each one.
+fn each_folded_cone(
+    models: &[(&str, SemanticModel)],
+    bounds: &[Bounds],
+    mut f: impl FnMut(&str, Target, &TransitionSystem, &ComponentRun, &Reduction),
+) {
+    let caps = Caps::new(usize::MAX, 200_000);
+    for (name, model) in models {
+        for bounds in bounds {
+            let ts = TransitionSystem::build(model, bounds.clone(), &Scope::ALL).ts;
+            let targets = ts.targets();
+            let reduced = ts.explore_targets_reduced(&targets, caps);
+            for target in &targets {
+                let r = reduced.cone_of(*target);
+                let Some(red) = r.run.system.reduction() else {
+                    continue;
+                };
+                if red.bits().iter().all(Vec::is_empty) {
+                    continue;
+                }
+                let cone = ts.restrict_to(&r.cone.vars, &r.cone.keep);
+                let run = cone.clone().run(caps);
+                if run.complete {
+                    f(name, *target, &cone, &run, red);
+                }
+            }
+        }
+    }
+}
+
+/// What a fold check saw: the folds, the moves or steps it checked, and those of them that
+/// bind the bit's key past slot 0.
+#[derive(Debug, Default)]
+struct FoldsChecked {
+    folds: usize,
+    checked: usize,
+    past_0: usize,
+}
+
+/// The fold half of Lemma 6 of docs/theory/cones.md (open problem P31), checked against the
+/// cone's own step relation rather than against a second evaluation of the folded guards:
+/// for every reachable state of every reduced cone of `models` whose reduction folds an S
+/// action's reads of T into a bit, and every move of that action, the bit holds at the slot
+/// the move binds its key to (or, for a node fold, at the row the folded quantifier is
+/// satisfied by, which the link names). A bit that is false where the action runs would drop
+/// that step from the extended sub-lifecycle.
+fn fold_bits_hold_where_their_actions_run(
+    models: &[(&str, SemanticModel)],
+    bounds: &[Bounds],
+) -> FoldsChecked {
+    let mut seen = FoldsChecked::default();
+    each_folded_cone(models, bounds, |name, target, cone, run, red| {
+        let bits: Vec<&Fold> = red.bits().iter().flatten().collect();
+        seen.folds += bits.len();
+        for s in run.states.iter() {
+            for m in cone.moves(&s) {
+                for fold in bits.iter().filter(|f| f.act() == m.act) {
+                    let slot = match fold.key() {
+                        FoldKey::Param(p) => m.params[usize::from(*p)],
+                        FoldKey::Linked {
+                            link_var, s_param, ..
+                        } => {
+                            // The link names the row through its domain: an optional link
+                            // holds slot + 1, and 0 for no row; a required one the slot.
+                            let row = usize::from(m.params[usize::from(*s_param)]);
+                            let link = s.get(cone, *link_var, row);
+                            match cone.var(*link_var).domain.slot(link) {
+                                Some(slot) => slot,
+                                None => continue,
+                            }
+                        }
+                    };
+                    assert!(
+                        fold.holds(cone, &s, slot),
+                        "{name} {target:?}: the bit of {} is false at slot {slot} where the \
+                         action runs, in {:?}",
+                        cone.actions[m.act.index()].name,
+                        &s.0
+                    );
+                    seen.checked += 1;
+                    seen.past_0 += usize::from(slot > 0);
+                }
+            }
+        }
+    });
+    seen
+}
+
+/// The converse, the other half of the fold half of Lemma 6 (P31): a bit adds no step the
+/// cone lacks. For every reachable state of every reduced cone of `models` whose reduction
+/// folds, every silent step the extended sub-lifecycle takes from the state's projection (its
+/// S part, raw inputs, and bits, as `Reduction::key` computes them) is a move of the cone: an
+/// action the step stands for, with the params the step binds outside the folded T params,
+/// leads the cone to the same state. A bit true where no binding of the folded guards holds
+/// would add such a step. The steps of unfolded S actions are checked too, but not counted.
+fn folded_steps_are_steps_of_the_cone(
+    models: &[(&str, SemanticModel)],
+    bounds: &[Bounds],
+) -> FoldsChecked {
+    let mut seen = FoldsChecked::default();
+    each_folded_cone(models, bounds, |name, target, cone, run, red| {
+        seen.folds += red.bits().iter().flatten().count();
+        let silent = red.silent_steps(cone);
+        for s in run.states.iter() {
+            let moves: Vec<_> = cone.moves(&s).collect();
+            for step in silent.from(red, cone, &s) {
+                let realized = moves.iter().any(|m| {
+                    m.next == step.next
+                        && step.acts.iter().any(|(a, kept)| {
+                            *a == m.act
+                                && (kept.iter().zip(m.params.iter()))
+                                    .all(|(k, p)| k.is_none_or(|k| k == *p))
+                        })
+                });
+                assert!(
+                    realized,
+                    "{name} {target:?}: the extended sub-lifecycle steps by {} (bits at slots \
+                     {:?}) where the cone has no such step, in {:?}",
+                    cone.actions[step.acts[0].0.index()].name,
+                    step.bit_slots,
+                    &s.0
+                );
+                if step.folded {
+                    seen.checked += 1;
+                    seen.past_0 += usize::from(step.bit_slots.iter().any(|c| *c > 0));
+                }
+            }
+        }
+    });
+    seen
+}
+
+fn domain_samples() -> Vec<(&'static str, SemanticModel)> {
+    DOMAIN_SAMPLES.iter().map(|s| (*s, load(s))).collect()
+}
+
+/// The bundled samples fold nothing; the domain samples' reduced cones hold 71 folds (about
+/// 3,100 moves of folded actions, none past slot 0). CI runs this in release beside
+/// `reduced_domain_cones_decide_what_the_cones_decide` (about 9 s).
+#[test]
+fn reduced_domain_cones_hold_each_fold_bit_where_its_action_runs() {
+    let seen = fold_bits_hold_where_their_actions_run(
+        &domain_samples(),
+        &[Bounds::STATES, Bounds::VERIFY],
+    );
+    assert!(seen.folds >= 71, "{seen:?}");
+    assert!(seen.checked >= 3_000, "{seen:?}");
+}
+
+/// The converse on the domain samples: on their 71 folds, every step a true bit lets the
+/// extended sub-lifecycle take (about 3,100) is a step of the cone. CI runs this in release
+/// beside the test above (about 9 s).
+#[test]
+fn reduced_domain_cones_step_by_a_true_fold_bit_only_where_the_cone_steps() {
+    let seen =
+        folded_steps_are_steps_of_the_cone(&domain_samples(), &[Bounds::STATES, Bounds::VERIFY]);
+    assert!(seen.folds >= 71, "{seen:?}");
+    assert!(seen.checked >= 3_000, "{seen:?}");
+}
+
+/// Both halves past slot 0. No checked move of the domain samples binds a fold's key past
+/// slot 0, so a bit planted false at slot 1 alone passes the two tests above. The case fold's
+/// folds (File's, and Pay's node fold keyed by the linked case) at two and three instances
+/// bind keys at every slot, about 1,700 of their 2,800 moves past slot 0. A bit
+/// planted false at slot 1 in `Fold::holds` fails the first half, on File; one planted true
+/// at a present row 1 fails the second, on Pay (and the domain samples' converse too).
+#[test]
+fn case_fold_bits_hold_exactly_where_their_actions_run_past_slot_0() {
+    let models = [("case fold", model_from(CASE_FOLD))];
+    let bounds = [
+        Bounds::VERIFY,
+        Bounds::VERIFY.at(std::num::NonZeroU8::new(3).unwrap()),
+    ];
+    let held = fold_bits_hold_where_their_actions_run(&models, &bounds);
+    assert!(held.past_0 > 0, "{held:?}");
+    let stepped = folded_steps_are_steps_of_the_cone(&models, &bounds);
+    assert!(stepped.past_0 > 0, "{stepped:?}");
+}
+
+/// The reduction is a divergence-blind stuttering bisimulation, and `Deadlock` reads "no
+/// path changes the column or deletes the row" (`can_leave`), a reachability the quotient
+/// keeps, not "no step at all", which it does not: a state looping forever in its block's
+/// silent cycle and a state with no step left are both stuck, on the cone and on the reduced
+/// cone alike (P34). The gate's x3/x4 toggle is such a silent cycle; the job seen at x2 is
+/// stuck with no move of the gate left.
+#[test]
+fn a_silent_cycle_and_a_stuck_state_give_the_same_deadlocks_reduced() {
+    let src = include_str!(
+        "../../../../rdra-ish-cli/tests/engine_corpus/cone_reduced_loop_unreached.rdra"
+    );
+    let model = model_from(src);
+    for bounds in [Bounds::STATES, Bounds::VERIFY] {
+        let ts = TransitionSystem::build(&model, bounds.clone(), &Scope::ALL).ts;
+        let targets = ts.targets();
+        let plain = ts.explore_targets(&targets, Caps::VERIFY);
+        let reduced = ts.explore_targets_reduced(&targets, Caps::VERIFY);
+        let job = entity_target(&ts, "Job");
+        assert!(
+            reduced.cone_of(job).run.system.reduction().is_some(),
+            "{bounds:?}: the job's cone reduces the gate"
+        );
+        let (a, b) = (diag_names(&plain), diag_names(&reduced));
+        assert_eq!(a, b, "{bounds:?}: verdicts");
+        for e in ["Deadlock_Gate_phase_pa", "Deadlock_Job_status_waiting"] {
+            assert!(a.contains(e), "{bounds:?}: {e} in {a:?}");
+        }
+    }
 }

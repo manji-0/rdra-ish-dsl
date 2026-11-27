@@ -640,6 +640,19 @@ this table says only as far as the build returns `T_β(M, σ)` (claim
 `stopped at the memory limit` and `stopped at the state cap` describe why a run is
 `not decided`; they are not separate verdicts.
 
+<a id="d25"></a>**D25 (Deadlock finding).** For an entity `E`, a lifecycle column `v` of `E`,
+and a slot `k`, a reachable state `s` of the explored system with row `k` present is
+*stuck at `v`* when no path from `s` takes an edge that changes `v` at `k` or deletes row
+`k` (`core/src/lifecycle/findings.rs::can_leave`). `Deadlock_<E>_<v>_<value>` reports a
+reachable state stuck at `v` whose value of `v` is not an end state. The definition reads
+paths, not single steps: a state whose only paths run forever through steps that leave `v`
+and row `k` alone, a silent cycle, is stuck exactly as a state with no step left is. This is
+on purpose. It is the reading the cone reduction keeps, since a divergence-blind stuttering
+bisimulation keeps whether a path reaches an edge that changes `T_v` ([cones.md, A8,
+consequence 3](./cones.md)) and does not keep whether a state has a successor (P34). TLC's
+deadlock is the other reading: a state with no successor at all. The two differ on a silent
+cycle, and the engine corpus records the cases (`cone_reduced_loop_unreached`).
+
 ---
 
 ## Prose that the code contradicts

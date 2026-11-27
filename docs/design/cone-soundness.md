@@ -192,7 +192,12 @@ Points 2, 3 and 5 also use a step they do not state: every reachable state of C 
 part, inputs and bits that form a reachable state of the extended system, and a silent edge
 of the extended system from there is a step of C. The theory notes call it Lemma 6 of the
 cones theme; it is argued there, not proved, and folds rest on `Fold::holds` matching the
-folded guard, which only the `fold_holds` twin compares with a second implementation (P31 of
+folded guard, which the `fold_holds` twin compares with a second implementation, and which
+`reduced_domain_cones_hold_each_fold_bit_where_its_action_runs` and
+`reduced_domain_cones_step_by_a_true_fold_bit_only_where_the_cone_steps` check against the cone's
+step relation in both directions: the bit holds wherever the action runs, and a step the bit
+lets the extended system take is a step of C; `case_fold_bits_hold_exactly_where_their_actions_run_past_slot_0`
+checks both past slot 0 (P31 of
 [the theory's open problems](../theory/README.md#open-problems)).
 
 A divergence-blind stuttering bisimulation preserves every formula of CTL\* without the next

@@ -1,5 +1,6 @@
 //! `after` asserts and temporal properties as predicates, and the warning for a constrained var nothing writes.
 
+use crate::lifecycle::narrow::id8;
 use std::collections::HashSet;
 
 use super::display::cross_display;
@@ -64,7 +65,7 @@ impl Builder<'_> {
                     match self.read_param(&params, e, &[]) {
                         Some(p) => binding.push((ek, At::Param(p))),
                         None => {
-                            binding.push((ek, At::Bound(binders.len() as u8)));
+                            binding.push((ek, At::Bound(id8(binders.len()))));
                             binders.push(e);
                             if !params.iter().any(|p| p.entity == e) {
                                 self.diag(
@@ -240,7 +241,7 @@ impl Builder<'_> {
 
     fn bind(binding: &mut Binding, ek: EntityKey) -> At {
         at_of(binding, ek).unwrap_or_else(|| {
-            let at = At::Bound(binding.len() as u8);
+            let at = At::Bound(id8(binding.len()));
             binding.push((ek, at));
             at
         })

@@ -5,6 +5,7 @@
 //! in place of the latch: a raise adds one, a run of the handler takes one, and a raise at
 //! `k` breaks `EventOverflow_<E>_<Ev>_<UC>` (docs/design/counted-events.md).
 
+use crate::lifecycle::narrow::id8;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use super::Builder;
@@ -304,7 +305,7 @@ impl<'m> Builder<'m> {
         };
         a.effects.push(Effect::Transition {
             var,
-            param: p as u8,
+            param: id8(p),
             arms: (0..=k).map(|i| arm(i, i + 1, site)).collect(),
         });
     }
@@ -552,7 +553,7 @@ impl<'m> Builder<'m> {
             .expect("a raiser has an action")
             .index();
         let a = &mut self.ts.actions[last];
-        for p in 0..a.params.len() as u8 {
+        for p in 0..id8(a.params.len()) {
             if a.params[usize::from(p)].entity != entity {
                 continue;
             }
@@ -597,7 +598,7 @@ impl<'m> Builder<'m> {
                     role: ParamRole::Triggered,
                     via_api: None,
                 });
-                let p = (a.params.len() - 1) as u8;
+                let p = id8(a.params.len() - 1);
                 if let Some(link) = link {
                     let (child, parent) = if link.triggered_is_child {
                         (p, link.other)
@@ -661,7 +662,7 @@ fn arm(from: u8, to: u8, site: &Site) -> Arm {
 
 /// The params of `handler` on `e` that have a row before the step: all but a `New` one.
 fn present(handler: &Action, e: EntId) -> Vec<u8> {
-    (0..handler.params.len() as u8)
+    (0..id8(handler.params.len()))
         .filter(|p| {
             let q = handler.params[usize::from(*p)];
             q.entity == e && q.role != ParamRole::New

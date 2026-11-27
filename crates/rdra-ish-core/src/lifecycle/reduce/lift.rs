@@ -1,4 +1,5 @@
 //! Lifting a reduced path back to a path of the unreduced cone.
+use crate::lifecycle::narrow::id32;
 use std::collections::{HashMap, VecDeque};
 
 use super::extended::Extended;
@@ -69,7 +70,7 @@ impl TransitionSystem {
         }
         let mut level: Vec<Lifted> = Vec::new();
         let mut s_steps: Vec<Step> = Vec::new();
-        let mut s_at = s0_at as u32;
+        let mut s_at = id32(s0_at);
         // The stored edges the S path takes, for its lift up to `H`.
         let s_first = s_at;
         let mut s_edges = Vec::new();
@@ -271,7 +272,7 @@ impl TransitionSystem {
             let s = order[k].clone();
             let moves: Vec<_> = cone.moves(&s).filter(|m| m.next != s).collect();
             if moves.is_empty() {
-                for (act, s) in walk_to(&order, &parent, k as u32) {
+                for (act, s) in walk_to(&order, &parent, id32(k)) {
                     actions.push(act);
                     states.push(s);
                 }
@@ -281,13 +282,13 @@ impl TransitionSystem {
                 if !r.skips(m.act) || cone.project(&m.next, r.obs()) != obs {
                     continue;
                 }
-                let next = order.len() as u32;
+                let next = id32(order.len());
                 let to = *at.entry(m.next.clone()).or_insert_with(|| {
                     order.push(m.next.clone());
-                    parent.push(Some((k as u32, m.act)));
+                    parent.push(Some((id32(k), m.act)));
                     next
                 });
-                edges.push((k as u32, to, m.act));
+                edges.push((id32(k), to, m.act));
                 if order.len() > MAX_WALK {
                     return Err(Spurious::NoLoop);
                 }
@@ -303,7 +304,7 @@ impl TransitionSystem {
         let Some(entry) = (0..n).find(|&i| size[comp[i] as usize] >= 2) else {
             return Err(Spurious::NoLoop);
         };
-        for (act, s) in walk_to(&order, &parent, entry as u32) {
+        for (act, s) in walk_to(&order, &parent, id32(entry)) {
             actions.push(act);
             states.push(s);
         }
@@ -311,7 +312,7 @@ impl TransitionSystem {
         // A shortest walk inside the component from the entry back to it.
         let c = comp[entry];
         let mut via: Vec<Option<(u32, ActId)>> = vec![None; n];
-        let mut queue = VecDeque::from([entry as u32]);
+        let mut queue = VecDeque::from([id32(entry)]);
         let mut back = None;
         'search: while let Some(u) = queue.pop_front() {
             for &(a, b, act) in edges.iter().filter(|e| e.0 == u) {

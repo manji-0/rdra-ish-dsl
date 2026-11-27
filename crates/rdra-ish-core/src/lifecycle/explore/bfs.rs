@@ -1,5 +1,6 @@
 //! The BFS itself: interning bindings, admitting states, and checking each move.
 
+use crate::lifecycle::narrow::id32;
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::ops::Range;
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
@@ -348,7 +349,7 @@ impl Violated {
         let name_of: Vec<u32> = all
             .chain(ts.after.iter().map(|a| a.name.as_str()))
             .map(|name| {
-                let next = names.len() as u32;
+                let next = id32(names.len());
                 *names.entry(name).or_insert(next)
             })
             .collect();
@@ -718,7 +719,7 @@ impl<'t> Bfs<'t> {
         let (moves, probes) = (&chunk.moves, &chunk.probes);
         self.layers.read(at);
         self.steps.read(at);
-        let from = at as u32;
+        let from = id32(at);
         let views = self.caps.views;
         if views {
             self.states.read_into(at, &mut s.0);
@@ -821,8 +822,8 @@ impl<'t> Bfs<'t> {
             _ => match self.find_missed(packed, hash, key, recent.then_some(&reading.recent)) {
                 Some(to) => Some(to),
                 None => {
-                    let to = self.states.len() as u32;
-                    let parent = Some((at as u32, binding));
+                    let to = id32(self.states.len());
+                    let parent = Some((id32(at), binding));
                     if !self.admit_packed(key, packed, hash, parent, found) {
                         return None;
                     }
@@ -972,11 +973,11 @@ impl<'t> Bfs<'t> {
                 return false;
             }
         }
-        self.check_invariants(s, self.states.len() as u32);
+        self.check_invariants(s, id32(self.states.len()));
         self.orbits.admit(found);
         self.states.push_packed(packed, s);
         self.seen
-            .insert_hashed(&self.states, self.states.len() as u32 - 1, hash);
+            .insert_hashed(&self.states, id32(self.states.len()) - 1, hash);
         self.steps.admit(parent);
         self.layers.admit(parent.is_none());
         true
@@ -1019,7 +1020,7 @@ impl<'t> Bfs<'t> {
             .collect();
         vars.sort_by(|a, b| b.reached.cmp(&a.reached).then(a.name.cmp(&b.name)));
         let mut counts: HashMap<&str, usize> = HashMap::new();
-        let parents = (0..self.states.len() as u32).filter_map(|at| self.steps.parent(at));
+        let parents = (0..id32(self.states.len())).filter_map(|at| self.steps.parent(at));
         for edge in parents {
             let (act, _) = self.bindings.list[edge.binding as usize];
             *counts

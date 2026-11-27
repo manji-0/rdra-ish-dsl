@@ -49,7 +49,7 @@ The agent skill `skills/rdra-ish-verify/` walks the same loop. Install it as
 | `check`, `states` | Invariants, `after` assertions, witnesses, deadlocks, and use cases that never run, at one instance per entity. No `property`: `check` prints a `note:` that says to use `verify`. | native BFS |
 | `verify` | Every invariant, `after` assertion, and `property`, each on its own cone, and the state models of each entity cone, at two instances | native BFS |
 | `verify --with-tlc` | The same, with TLC on each cone and run beside it | native BFS and TLC |
-| `verify --prove` | Each state rule, for any number of rows and any Int value | z3, beside the above |
+| `verify --prove` | Each state rule, for any number of rows and every Int range the model builds at | z3, beside the above |
 | `export --kind tla` | Nothing. Writes `RdraSpec.tla` and `RdraSpec.cfg` for the whole model, and the `StateModel_<E>` specs, for a TLC run by hand | none |
 
 `--instance-count` (default 2 in `verify` and `export`, 1 in `check`) and `--int-range-max`
@@ -270,7 +270,12 @@ error[PendingLeadsToDelivered]: property PendingLeadsToDelivered is violated: it
 ```
 
 Every native counterexample replays through the step relation and fails its property before
-it prints. One that does not is a tool bug, `error[LassoFault]`.
+it prints. One that does not is a tool bug, `error[LassoFault]`. A state rule's or an `after`
+assertion's trace replays from an initial state through the run's own steps, on a plain, a
+reduced, or a symmetric run; up to symmetry an `always` trace does too. One that does not
+replay is `error[LiftFault_<check>]` with no trace, counted as a tool error. The traces of
+state-model findings (deadlocks) up to symmetry and the reduction's own lift still stop the
+run with a panic when they do not replay.
 
 **Under `--with-tlc`.** TLC runs each cone and property run beside BFS, as many at once as
 their heaps fit TLC's share of the [memory limit](./cli-reference.md#memory-limit), each
@@ -502,8 +507,25 @@ The rules for each flag are in [Partial runs](./cli-reference.md#partial-runs).
 
 `verify --prove` is experimental. BFS and TLC check a fixed number of instances and an Int
 range with a top, so a rule that holds at two instances can break at three. `--prove` asks z3
-whether each state rule holds for **any** number of rows and **any** non-negative Int value,
-with no top on `now`. It never finds a counterexample; the bounded engines do that.
+whether each state rule holds for **any** number of rows and **every** Int range the model
+builds at. It never finds a counterexample; the bounded engines do that.
+
+Every line that says a rule or lemma is proved, the `proof (...)` header, and the clause the
+`OK:` line ends with state the same claim, for example `for any number of rows and every
+--int-range-max from 4 to 254, in the whole model`:
+
+- **Rows**: any number; the encoding has no bound on them.
+- **Int**: every `--int-range-max` at which the model builds. The least is the first one every
+  Int literal of the model fits (a literal past the range is `IntLiteralOutOfBounds`); the
+  greatest is 255, or 254 with a nullable Int column, which past that holds more values than
+  a state does (`DomainTooLarge`). Inside the encoding an Int column has no top, and `now`
+  none either, so the proof holds at each of them. A model with no Int column names no range.
+- **Scope**: `in the whole model`, or `in the selected scope: <flags>` under `--buc`,
+  `--entity`, `--without-usecase`, `--without-buc`, or `--actor`. The prover then encodes the
+  system the scope leaves, which lacks the use cases it drops, so a rule proved there may
+  still break in the whole model.
+
+This is the scope `Sc(M, β)` of Theorem 1 in [the z3 notes](theory/z3.md#the-soundness-theorem).
 
 Each entity's rows become an uninterpreted sort, each column a function, and each use case a
 step relation built from the transition system BFS explores. A rule is proved when it belongs
@@ -548,16 +570,16 @@ one that only the one-instance run offered ends in `(mined at 1 instance per ent
 ```
 $ rdra-ish verify samples/formal-verification/order.rdra --prove
 ...
-proof (Z3 version 5.1.0 - 64 bit): 2 state rules, for any number of rows and any Int value
-proved: Forbidden_Order_0
-proved: Inv_Order_0
-lemma: an absent Order row holds base values
-lemma: no Order row is ever deleted
-lemma: every present Order row is one of 5 reached patterns of (status, delivered_at)
-lemma: a present Order row's (status, delivered_at) is one of {(pending, null), (paid, null), (shipped, null), (delivered, present), (cancelled, null)}
+proof (Z3 version 5.1.0 - 64 bit): 2 state rules, for any number of rows, in the whole model
+proved: Forbidden_Order_0 (for any number of rows, in the whole model)
+proved: Inv_Order_0 (for any number of rows, in the whole model)
+lemma: an absent Order row holds base values (for any number of rows, in the whole model)
+lemma: no Order row is ever deleted (for any number of rows, in the whole model)
+lemma: every present Order row is one of 5 reached patterns of (status, delivered_at) (for any number of rows, in the whole model)
+lemma: a present Order row's (status, delivered_at) is one of {(pending, null), (paid, null), (shipped, null), (delivered, present), (cancelled, null)} (for any number of rows, in the whole model)
 proof: 2 proved, 0 unproved, 0 out of scope
 ...
-OK: no errors within 2 instances per entity, Int 0..5; 2 of 2 rules proved for any number of rows and any Int value
+OK: no errors within 2 instances per entity, Int 0..5; 2 of 2 rules proved for any number of rows, in the whole model
 ```
 
 A rule that is not proved prints a **counterexample to induction** (CTI): a step, the rows it

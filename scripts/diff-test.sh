@@ -31,6 +31,9 @@ release_only=(
   tlc_alone_
   a_property_cone_decides_what_the_whole_model_decides
   reduced_domain_cones_decide_what_the_cones_decide
+  reduced_domain_cones_hold_each_fold_bit_where_its_action_runs
+  reduced_domain_cones_step_by_a_true_fold_bit_only_where_the_cone_steps
+  case_fold_bits_hold_exactly_where_their_actions_run_past_slot_0
   the_group_rules_of_every_cone_are_the_snapshot
   no_proved_rule_has_a_bounded_counterexample
   a_proof_is_the_same_on_any_number_of_solvers

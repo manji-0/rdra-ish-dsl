@@ -5,7 +5,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Result};
 use rdra_ish_core::lifecycle::prove::{self, ProveOptions, RuleProof, Unproved, Verdict, Z3};
-use rdra_ish_core::lifecycle::{label_prefix, Selection, Target, TransitionSystem};
+use rdra_ish_core::lifecycle::{
+    has_errors, label_prefix, Bounds, Scope, Selection, StateDiag, Target, TransitionSystem,
+};
 use rdra_ish_core::SemanticModel;
 use rdra_ish_emit::sql::{unenforced_rules, Dialect};
 
@@ -21,37 +23,125 @@ macro_rules! out {
 pub(crate) const Z3_ENV: &str = "RDRA_Z3";
 
 /// What the closing lines say about the proof.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct ProofTally {
     pub proved: usize,
     pub rules: usize,
     pub unproved: usize,
     pub deny_unproved: bool,
-    /// The run had a scope flag, so the proof is of the system the scope leaves (`SCOPED`).
-    pub scoped: bool,
+    pub claim: Claim,
 }
-
-/// What every line that says a rule or lemma is proved ends with under a scope flag
-/// (`--buc`, `--entity`, `--without-usecase`, `--without-buc`, `--actor`). The prover encodes
-/// the system the scope leaves, which lacks the use cases it drops, so a proof there says
-/// nothing of the whole model. A counterexample or a CTI there is one of the whole model too,
-/// so those lines say nothing of the scope.
-const SCOPED: &str = " (in the selected scope)";
 
 impl ProofTally {
     /// The clause the OK line ends with.
     pub(crate) fn clause(&self) -> String {
         format!(
-            "{} of {} rules proved for any number of rows and any Int value{}",
-            self.proved,
-            self.rules,
-            if self.scoped {
-                " in the selected scope"
-            } else {
-                ""
-            }
+            "{} of {} rules proved {}",
+            self.proved, self.rules, self.claim.0
         )
     }
+}
+
+/// What a proof claims, the one statement every line that says a rule or lemma is proved
+/// prints (`for any number of rows and every --int-range-max from 4 to 254, in the whole
+/// model`): the bounds `Sc(M, β)` of docs/theory/z3.md, Definition 3, over which Theorem 1
+/// says each proved rule holds, and the scope `σ` the system was built under.
+///
+/// - Rows: the encoding has no bound on them.
+/// - Int: every `--int-range-max` at which the build reports no error. The build errors that
+///   depend on it each hold on one side of the run's own: below the least one an Int literal
+///   of the model is past the range (`IntLiteralOutOfBounds`), above the greatest a column
+///   holds more values than a state does (`DomainTooLarge`, past 254 with a nullable Int).
+///   A model with no Int column has no range to name.
+/// - Scope: a scope flag drops use cases from the system the prover encodes, so a proof there
+///   holds in that system, not in the whole model. A counterexample or a CTI under a scope is
+///   one of the whole model too, so those lines name no scope.
+#[derive(Clone, Debug)]
+pub(crate) struct Claim(String);
+
+impl Claim {
+    pub(crate) fn of(model: &SemanticModel, scope: &Scope, ts: &TransitionSystem) -> Claim {
+        let ints = match int_range(model, scope, ts) {
+            Some((least, most)) => {
+                format!(" and every --int-range-max from {least} to {most}")
+            }
+            None => String::new(),
+        };
+        let sigma = match scope.flags(model) {
+            Some(flags) => format!("in the selected scope: {flags}"),
+            None => "in the whole model".to_string(),
+        };
+        Claim(format!("for any number of rows{ints}, {sigma}"))
+    }
+
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// The statement in parentheses, as a `proved:` or `lemma:` line ends with it.
+    fn suffix(&self) -> String {
+        format!(" ({})", self.0)
+    }
+}
+
+/// The least and the greatest `--int-range-max` at which the model builds under `scope`, on
+/// each side of the run's own, at which it built. `None` when the system has no Int-valued
+/// var. Each is first guessed, the least from the literals a build at 0 reports past its
+/// range and the greatest as 255 or 254, and the guess is confirmed by a build on each side
+/// of it; bisection decides only when a guess fails. So a proof costs about five builds more.
+fn int_range(model: &SemanticModel, scope: &Scope, ts: &TransitionSystem) -> Option<(u8, u8)> {
+    if !ts.vars().iter().any(|v| v.domain.is_numeric()) {
+        return None;
+    }
+    let build = |int_max: u8| {
+        let bounds = Bounds {
+            int_max,
+            ..ts.bounds.clone()
+        };
+        TransitionSystem::build(model, bounds, scope).diags
+    };
+    let builds = |int_max: u8| !has_errors(&build(int_max));
+    let m = ts.bounds.int_max;
+    let past = build(0)
+        .iter()
+        .filter_map(|d| match d.diag {
+            StateDiag::IntLiteralOutOfBounds { value, .. } => u8::try_from(value).ok(),
+            _ => None,
+        })
+        .max();
+    let guess = past.unwrap_or(1).clamp(1, m);
+    if builds(guess) && (guess == 1 || !builds(guess - 1)) {
+        let most = match (builds(u8::MAX), builds(u8::MAX - 1)) {
+            (true, _) => Some(u8::MAX),
+            (false, true) => Some(u8::MAX - 1),
+            (false, false) => None,
+        };
+        if let Some(most) = most {
+            return Some((guess, most));
+        }
+    }
+    // The least: `builds` is false below it and true from it up to `m`.
+    let (mut lo, mut hi) = (1u8, m);
+    while lo < hi {
+        let mid = lo + (hi - lo) / 2;
+        if builds(mid) {
+            hi = mid;
+        } else {
+            lo = mid + 1;
+        }
+    }
+    let least = lo;
+    // The greatest: `builds` is true from `m` up to it and false above.
+    let (mut lo, mut hi) = (m, u8::MAX);
+    while lo < hi {
+        let mid = lo + (hi - lo).div_ceil(2);
+        if builds(mid) {
+            lo = mid;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    Some((least, lo))
 }
 
 /// `--z3` first, then `RDRA_Z3`, then `z3` on PATH.
@@ -127,9 +217,10 @@ pub(crate) fn run_proof(
     refuted: &BTreeMap<usize, usize>,
     z3: Z3Tool<'_>,
     deny_unproved: bool,
-    scoped: bool,
+    claim: Claim,
 ) -> Result<ProofRun> {
-    let within = if scoped { SCOPED } else { "" };
+    let within = claim.suffix();
+    let scoped = claim.0.contains("in the selected scope");
     let lemmas = &marks.lemmas;
     let mut text = String::new();
     let (binary, version) = (z3.binary, z3.version.to_string());
@@ -196,16 +287,12 @@ pub(crate) fn run_proof(
     };
     out!(
         text,
-        "proof{solver}: {} state rules{with_lemmas}, for any number of rows and any Int value{}",
+        "proof{solver}: {} state rules{with_lemmas}, {}",
         rules.len(),
-        if scoped {
-            ", in the selected scope"
-        } else {
-            ""
-        }
+        claim.0
     );
     for r in yours.iter().chain(&rules) {
-        print_verdict(&mut text, ts, r, marks, refuted, within);
+        print_verdict(&mut text, ts, r, marks, refuted, &within);
     }
     for lemma in &proof.lemmas {
         out!(text, "lemma: {lemma}{within}");
@@ -238,7 +325,7 @@ pub(crate) fn run_proof(
         rules: rules.len(),
         unproved: count(&rules, unproved),
         deny_unproved,
-        scoped,
+        claim,
     };
     let with = |f: fn(&Verdict) -> bool| -> BTreeSet<usize> {
         proof

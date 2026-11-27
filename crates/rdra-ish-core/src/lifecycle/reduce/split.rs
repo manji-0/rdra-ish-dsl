@@ -1,4 +1,5 @@
 //! The split of a cone into the target side T and the independent sub-lifecycle S.
+use crate::lifecycle::narrow::id8;
 use std::collections::{BTreeSet, HashMap};
 
 use super::fold::Fold;
@@ -50,7 +51,7 @@ impl TransitionSystem {
                 if creates.contains(param) {
                     vec![decl.base.0]
                 } else {
-                    (0..decl.domain.size(self) as u8).collect()
+                    (0..decl.domain.size(self)).map(id8).collect()
                 }
             };
             for eff in &a.effects {
@@ -71,8 +72,7 @@ impl TransitionSystem {
                     } => {
                         let tos: Vec<u8> = match rhs {
                             Rhs::Lit(v) => vec![v.0],
-                            Rhs::Param(q) => (0..self.slots(a.params[usize::from(*q)].entity)
-                                as u8)
+                            Rhs::Param(q) => (0..id8(self.slots(a.params[usize::from(*q)].entity)))
                                 .map(|c| self.var(*var).domain.of_slot(c).0)
                                 .collect(),
                         };

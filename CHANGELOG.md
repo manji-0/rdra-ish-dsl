@@ -213,6 +213,16 @@
 
 ### Changed
 
+- `verify --prove` (output change): every line that says a rule or lemma is proved, the
+  `proof (...)` header, the count of the `OK:` line, and the `--deny-unproved` error state one
+  claim, the bounds the proof covers and the scope it holds in: `proved: R (for any number of
+  rows and every --int-range-max from 4 to 254, in the whole model)`, or `in the selected
+  scope: --without-usecase Open` under a scope flag (P2, P4). The Int range runs from the least
+  `--int-range-max` every Int literal fits to the greatest the model builds at (255, or 254
+  with a nullable Int column), found from the build; a model with no Int column names none.
+  It replaces "any Int value", which the docs, the clause, and `Verdict::Proved` stated three
+  ways. A proof costs a few builds more. No verdict changes.
+
 - `DeleteLeavesChildren` (a use case deletes the parent of an `.on_delete(cascade)` key and
   not the child) is a warning, no longer an info (P63): the SQL export's `ON DELETE CASCADE`
   removes the children, and the verified model keeps them. It is no longer drawn for a
@@ -474,6 +484,11 @@
 
 ### Fixed
 
+- A system whose packed state would pass `u32::MAX` bits, the width of a cell's bit offset
+  in the native explorer, is the build error `StateTooWide`, beside `DomainTooLarge`, before
+  any engine runs (docs/theory P50); before, the explorer panicked when it laid out the
+  packing. No reachable bound comes near it: 255 slots of an entity take 2,040 bits per
+  8-bit column.
 - A counterexample that runs a use case without its event having been raised is a candidate
   only (docs/theory P1). The check's cone takes in that event's raisers and runs again, and
   repeats until a counterexample runs no use case without its event, or the cone is the
@@ -483,6 +498,11 @@
   the bound. The `note:` reads `the cone's counterexample is a candidate only ... on the cone
   refined with the event's raisers: ...`; a property that cannot use its cone's counterexample
   says `its counterexample is a candidate: ...`.
+- Every state-rule and `after` counterexample now replays from an initial state through the
+  run's own step relation before it prints, on plain runs too (docs/theory P20). A trace that
+  does not replay is `error[LiftFault_<check>]` (a tool error, no trace), the fault type of
+  P52, never a counterexample. Up to symmetry, a lifted violation or `always` trace that fails
+  to replay, or whose last state no longer violates, is that fault instead of a panic.
 - The reduction by an independent sub-lifecycle certifies its partition on every run, in
   every build (docs/theory P7): the blocks refine the labels, one sweep of the reference
   refinement with every block a splitter splits nothing, and the states of a block rise into

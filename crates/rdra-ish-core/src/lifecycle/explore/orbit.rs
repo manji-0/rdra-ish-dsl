@@ -21,9 +21,10 @@ use super::{
 };
 use crate::lifecycle::diag::{Diag, StateDiag};
 use crate::lifecycle::expr::{State, StateSlice};
+use crate::lifecycle::narrow::id32;
 use crate::lifecycle::reduce::Step;
 use crate::lifecycle::types::{ActId, EntId, Ltl};
-use crate::lifecycle::TransitionSystem;
+use crate::lifecycle::{LassoFault, ReplayError, TransitionSystem};
 
 mod findings;
 mod liveness;
@@ -220,7 +221,11 @@ impl TransitionSystem {
                 ),
             };
             let ts = &run.system;
-            replays(ts, &start, &steps);
+            if let Err(e) = replays(ts, &start, &steps) {
+                let reduced = &run.diags[*at].diag;
+                run.diags[*at].diag = super::faulted(reduced, LassoFault::Replay(e));
+                continue;
+            }
             // On a reduced cone the lifted path still holds class representatives on the S
             // side: #74's lift comes after the symmetry's, which was applied last.
             let (start, steps) = ts.lifted(&start, &steps);
@@ -233,11 +238,12 @@ impl TransitionSystem {
                     ts.after_violation(*after, *act, params, last)
                 }
             };
-            let mut d = rebuilt.expect("symmetry: the lifted state violates what its class does");
-            if let Some(t) = d.diag.trace_mut() {
+            // A lifted state that does not violate what its class does is a fault (P52).
+            let mut d = super::lifted(rebuilt.map(|d| d.diag), &run.diags[*at].diag);
+            if let Some(t) = d.trace_mut() {
                 *t = ts.trace_from(&start, &steps);
             }
-            run.diags[*at].diag = d.diag;
+            run.diags[*at].diag = d;
         }
         let out = OrbitRun {
             run,
@@ -341,27 +347,40 @@ fn concrete(
 }
 
 /// A lifted trace replays through the step relation (agreement rule 3): one that does not
-/// is a tool bug, never a finding about the model.
-fn replays(ts: &TransitionSystem, start: &State, steps: &[Step]) {
+/// is a tool bug, never a finding about the model, and is reported as a fault (P20). A step
+/// that replays but binds other rows than it names fails at that step.
+pub(super) fn replays(
+    ts: &TransitionSystem,
+    start: &State,
+    steps: &[Step],
+) -> Result<(), ReplayError> {
     let states: Vec<State> = std::iter::once(start.clone())
         .chain(steps.iter().map(|s| s.2.clone()))
         .collect();
     let actions: Vec<ActId> = steps.iter().map(|s| s.0).collect();
-    if let Err(e) = ts.replay(states, &actions) {
-        panic!("symmetry: a lifted counterexample does not replay ({e:?}); a tool bug");
-    }
+    ts.replay(states, &actions)?;
     // `replay` reads the actions only; the printed trace also names each step's rows.
     let mut at = start;
     for (i, (act, params, next)) in steps.iter().enumerate() {
         let found = ts
             .moves(at)
             .any(|m| m.act == *act && *m.params == **params && m.next.0 == next.0);
-        assert!(
-            found,
-            "symmetry: step {} of a lifted counterexample does not bind the rows it names; a tool bug",
-            i + 1
-        );
+        if !found {
+            return Err(ReplayError::NoMove {
+                state: i + 2,
+                action: *act,
+            });
+        }
         at = next;
+    }
+    Ok(())
+}
+
+/// `replays`, for a path that only feeds a finding's trace: one that does not replay stops
+/// the run as a tool bug.
+fn replays_or_panic(ts: &TransitionSystem, start: &State, steps: &[Step]) {
+    if let Err(e) = replays(ts, start, steps) {
+        panic!("symmetry: a lifted path does not replay ({e:?}); a tool bug");
     }
 }
 
@@ -389,7 +408,7 @@ impl OrbitRun {
     pub(crate) fn lift_path(&self, first: u32, path: &[Edge]) -> (State, Vec<Step>) {
         let (start, steps, _) =
             lift_path(&self.run, &self.group, &mut Canon::default(), first, path);
-        replays(&self.run.system, &start, &steps);
+        replays_or_panic(&self.run.system, &start, &steps);
         (start, steps)
     }
 
@@ -481,7 +500,7 @@ impl OrbitRun {
     /// found them, where the trigger holds and the body fails for some binding, with the
     /// lifted path to it. `None` for any other form, which a run up to symmetry does not
     /// decide in this phase.
-    pub fn decide_always(&self, i: usize) -> Option<PropertyVerdict> {
+    pub fn decide_always(&self, i: usize) -> Option<Result<PropertyVerdict, LassoFault>> {
         let ts = self.system();
         let p = &ts.properties()[i];
         let Ltl::Always(x) = &p.formula else {
@@ -494,27 +513,30 @@ impl OrbitRun {
                 .any(|bd| ts.triggers(p, bd, &s) && !ts.holds_bound(x, &s, bd))
         });
         let Some(at) = found else {
-            return Some(match self.run.complete {
+            return Some(Ok(match self.run.complete {
                 true => PropertyVerdict::Holds,
                 false => PropertyVerdict::Undecided,
-            });
+            }));
         };
         let (start, steps) = lift(
             &self.run,
             &self.group,
             &mut Canon::default(),
-            at as u32,
+            id32(at),
             None,
         );
-        replays(ts, &start, &steps);
+        if let Err(e) = replays(ts, &start, &steps) {
+            return Some(Err(LassoFault::Replay(e)));
+        }
         let states: Vec<State> = std::iter::once(start.clone())
             .chain(steps.iter().map(|s| s.2.clone()))
             .collect();
-        let (instance, _) = ts
-            .property_failure(p, &states, states.len() - 1)
-            .expect("symmetry: the lifted path breaks the property its class breaks");
+        // A lifted path that does not break the property its class breaks is a fault.
+        let Some((instance, _)) = ts.property_failure(p, &states, states.len() - 1) else {
+            return Some(Err(LassoFault::Satisfies));
+        };
         let trace = ts.trace_from(&start, &steps);
-        Some(PropertyVerdict::Violated(Box::new(
+        Some(Ok(PropertyVerdict::Violated(Box::new(
             StateDiag::PropertyViolated {
                 name: p.name.clone(),
                 kind: p.formula.kind(),
@@ -529,6 +551,6 @@ impl OrbitRun {
                 site: p.site.clone(),
                 trace,
             },
-        )))
+        ))))
     }
 }

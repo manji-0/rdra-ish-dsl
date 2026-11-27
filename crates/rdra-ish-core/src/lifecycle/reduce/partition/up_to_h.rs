@@ -7,6 +7,7 @@
 //! 2. it keeps which classes can loop, the initial states' classes, the rises, and the class
 //!    moves by action (their params are read in other representatives, so they are left out).
 
+use crate::lifecycle::narrow::id32;
 use std::collections::{BTreeSet, HashMap};
 
 use super::super::extended::Extended;
@@ -106,7 +107,7 @@ pub(super) fn check(
     for (c, &l) in p.loops.iter().enumerate() {
         assert_eq!(
             l,
-            h.loops[map(c as u32) as usize],
+            h.loops[map(id32(c)) as usize],
             "{}",
             name("a class loops in one run only")
         );
@@ -131,7 +132,7 @@ pub(super) fn check(
                 .enumerate()
                 .flat_map(|(x, ms)| {
                     ms.iter()
-                        .map(move |(act, _, y)| (f(x as u32), act.index(), f(*y)))
+                        .map(move |(act, _, y)| (f(id32(x)), act.index(), f(*y)))
                 })
                 .collect()
         };

@@ -11,6 +11,7 @@ use super::expr::{Env, StateSlice};
 use super::trace::Trace;
 use super::types::{EntId, Pred, VarKind};
 use super::TransitionSystem;
+use crate::lifecycle::narrow::id32;
 
 impl TransitionSystem {
     /// The violation of `reach_properties()[i]` on `graph`, a complete graph of this system:
@@ -41,7 +42,7 @@ impl TransitionSystem {
             for (at, s) in graph.states.iter().enumerate() {
                 if present[at] && self.holds_for(&r.goal, &binding, &s) {
                     can[at] = true;
-                    goals.push(at as u32);
+                    goals.push(id32(at));
                 }
             }
             adjacency.mark_backward(&mut can, goals, |from| present[from as usize]);
@@ -49,7 +50,7 @@ impl TransitionSystem {
                 continue;
             };
             if worst.as_ref().is_none_or(|(at, ..)| stuck < *at as usize) {
-                worst = Some((stuck as u32, binding, present));
+                worst = Some((id32(stuck), binding, present));
             }
         }
         let (at, binding, present) = worst?;

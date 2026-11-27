@@ -4,6 +4,7 @@
 //! a state whose group has at most `REFERENCE_CAP` elements to it.
 
 use crate::lifecycle::expr::StateSlice;
+use crate::lifecycle::narrow::id8;
 use crate::lifecycle::types::{Domain, Value, VarKind};
 use crate::lifecycle::TransitionSystem;
 
@@ -52,7 +53,7 @@ pub(crate) fn elements(ts: &TransitionSystem, g: &Group, s: &StateSlice) -> Opti
                     move |arr| {
                         let mut g = g.clone();
                         for (i, &old) in movable.iter().enumerate() {
-                            g[class.first + old] = movable[usize::from(arr[i])] as u8;
+                            g[class.first + old] = id8(movable[usize::from(arr[i])]);
                         }
                         g
                     }

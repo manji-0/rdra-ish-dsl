@@ -1,4 +1,5 @@
 //! The quotient of the extended sub-lifecycle: stuttering partition refinement.
+use crate::lifecycle::narrow::id32;
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::sync::Arc;
 
@@ -138,7 +139,7 @@ pub(super) fn quotient_blocks(
     loop {
         signatures.clear();
         ends.clear();
-        for x in 0..n as u32 {
+        for x in 0..id32(n) {
             let start = signatures.len();
             signatures.extend(by_source.of(x).iter().map(|y| block[*y as usize]));
             signatures[start..].sort_unstable();
@@ -156,7 +157,7 @@ pub(super) fn quotient_blocks(
         let refined: Vec<u32> = (0..n)
             .map(|i| {
                 let from = i.checked_sub(1).map_or(0, |i| ends[i]);
-                let len = index.len() as u32;
+                let len = id32(index.len());
                 *index
                     .entry((block[i], &signatures[from..ends[i]]))
                     .or_insert(len)
@@ -219,7 +220,7 @@ impl Quotient {
                             // The BFS of the cone reads a class move's params by the cone
                             // action's params.
                             let params = ext.cone_params(cone, act, params);
-                            seen.insert((x as u32, act, params.clone(), *y))
+                            seen.insert((id32(x), act, params.clone(), *y))
                                 .then_some((act, params, *y))
                         })
                         .collect()
@@ -429,7 +430,7 @@ impl Classes {
         for (i, st) in run.states.iter().enumerate() {
             let c = &mut class_of_block[blocks[i] as usize];
             if *c == u32::MAX {
-                *c = reps.len() as u32;
+                *c = id32(reps.len());
                 reps.push(st.0.into());
                 class_of.insert(st.0.into(), *c);
             }
@@ -591,7 +592,7 @@ fn divergence(
     // White 0, on the stack 1, done 2: an edge to a state on the stack closes a cycle.
     let mut colour = vec![0u8; n];
     let mut stack: Vec<(u32, u32)> = Vec::new();
-    for root in 0..n as u32 {
+    for root in 0..id32(n) {
         if colour[root as usize] != 0 {
             continue;
         }
@@ -667,7 +668,7 @@ fn mixed_classes(
     let classes = class.iter().max().map_or(0, |c| *c as usize + 1);
     let (mut can, adjacency) = on_loop(n, silent, class, inner_loops);
     let mut loops = vec![false; classes];
-    let mut queue: VecDeque<u32> = (0..n as u32).filter(|&i| can[i as usize]).collect();
+    let mut queue: VecDeque<u32> = (0..id32(n)).filter(|&i| can[i as usize]).collect();
     while let Some(at) = queue.pop_front() {
         loops[class[at as usize] as usize] = true;
         for &p in adjacency.preds(at) {
@@ -695,9 +696,9 @@ fn sensitive_classes(
     inner_loops: &dyn Fn(usize) -> bool,
 ) -> usize {
     let (on, _) = on_loop(n, silent, initial, inner_loops);
-    let sink = n as u32;
+    let sink = id32(n);
     let mut edges: Vec<(u32, u32)> = silent.to_vec();
-    edges.extend((0..n as u32).filter(|&i| on[i as usize]).map(|i| (i, sink)));
+    edges.extend((0..id32(n)).filter(|&i| on[i as usize]).map(|i| (i, sink)));
     let mut first: Vec<u32> = initial.to_vec();
     first.push(initial.iter().max().map_or(0, |b| b + 1));
     let blocks = quotient_blocks(n + 1, &edges, rises, &first);
@@ -722,7 +723,7 @@ impl<'a> Succ<'a> {
             .edges()
             .iter()
             .enumerate()
-            .map(|(k, e)| (e.from, k as u32))
+            .map(|(k, e)| (e.from, id32(k)))
             .collect();
         let Adj { start, list: order } = Adj::new(run.states.len(), &by_source);
         Succ {
@@ -834,10 +835,10 @@ impl Stutter {
         let nblocks = block.iter().max().map_or(0, |b| *b as usize + 1);
         let mut members: Vec<Vec<u32>> = vec![Vec::new(); nblocks];
         for (i, &b) in block.iter().enumerate() {
-            members[b as usize].push(i as u32);
+            members[b as usize].push(id32(i));
         }
         let mut queued = vec![true; nblocks];
-        let mut work: VecDeque<u32> = (0..nblocks as u32).collect();
+        let mut work: VecDeque<u32> = (0..id32(nblocks)).collect();
         let mut marked = vec![false; self.n];
         let mut stack: Vec<u32> = Vec::new();
         let mut touched: Vec<u32> = Vec::new();
@@ -874,7 +875,7 @@ impl Stutter {
                     .take_while(|x| block[**x as usize] == b)
                     .count();
                 if end - k < members[b as usize].len() {
-                    let nb = members.len() as u32;
+                    let nb = id32(members.len());
                     for &x in &touched[k..end] {
                         block[x as usize] = nb;
                     }
@@ -947,7 +948,7 @@ pub(super) fn partition(
         .iter()
         .map(|st| {
             let key = system.project(&st, &key_vars);
-            let len = index.len() as u32;
+            let len = id32(index.len());
             *index.entry(key).or_insert(len)
         })
         .collect();

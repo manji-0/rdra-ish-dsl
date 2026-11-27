@@ -11,6 +11,7 @@ mod liveness;
 mod moves;
 mod orbit;
 mod packing;
+pub(crate) use packing::{packed_bits, MOST_PACKED_BITS};
 #[cfg(feature = "perf")]
 mod perf;
 #[cfg(feature = "perf")]
@@ -128,6 +129,8 @@ impl Caps {
     /// a run that outgrows the machine. A shift past `usize` saturates, and `0` counts as `1`.
     pub const fn for_instances(instances: u32) -> Self {
         let shift = 10 + 8 * (instances.saturating_sub(1) as u64);
+        // `shift` is at most `u32::MAX` in the arm that casts it.
+        #[allow(clippy::cast_possible_truncation)]
         let patterns = match 1usize.checked_shl(if shift > u32::MAX as u64 {
             u32::MAX
         } else {
@@ -394,7 +397,7 @@ impl ComponentRun {
     #[cfg(any(test, feature = "shadow"))]
     pub(crate) fn same_graph(&self, other: &ComponentRun) -> bool {
         let parents = |run: &ComponentRun| -> Vec<Option<Edge>> {
-            (0..run.states.len() as u32)
+            (0..crate::lifecycle::narrow::id32(run.states.len()))
                 .map(|k| run.parent(k))
                 .collect()
         };
@@ -753,7 +756,8 @@ impl TransitionSystem {
             charge.shrink_to(kept);
         }
         if let Some(perms) = &mut bfs.perms {
-            perms.truncate(bfs.steps.moves() as usize);
+            perms
+                .truncate(usize::try_from(bfs.steps.moves()).expect("the moves of a run it holds"));
         }
         let Bfs {
             states,
@@ -810,20 +814,24 @@ impl TransitionSystem {
 /// `LassoFault::Satisfies` when the lifted state does not violate the check, as a liveness
 /// lasso that satisfies its property is a fault; never the reduced message as if it did (P52).
 fn lifted(rebuilt: Option<StateDiag>, reduced: &StateDiag) -> StateDiag {
-    match (rebuilt, reduced) {
-        (Some(d), _) => d,
-        (
-            None,
-            StateDiag::ConstraintViolated { name, site, .. }
-            | StateDiag::AfterAssertViolated { name, site, .. },
-        ) => StateDiag::LiftFault {
+    match rebuilt {
+        Some(d) => d,
+        None => faulted(reduced, LassoFault::Satisfies),
+    }
+}
+
+/// The `LiftFault` of `found`, a run's violation, whose trace failed its own check by
+/// `fault`: a tool bug, never a finding about the model (P20, P52).
+fn faulted(found: &StateDiag, fault: LassoFault) -> StateDiag {
+    match found {
+        StateDiag::ConstraintViolated { name, site, .. }
+        | StateDiag::AfterAssertViolated { name, site, .. }
+        | StateDiag::LiftFault { name, site, .. } => StateDiag::LiftFault {
             name: name.clone(),
             site: site.clone(),
-            fault: LassoFault::Satisfies,
+            fault,
         },
-        (None, other) => {
-            unreachable!("a run's violation is a state rule's or an assert's: {other:?}")
-        }
+        other => unreachable!("a run's violation is a state rule's or an assert's: {other:?}"),
     }
 }
 
@@ -832,6 +840,12 @@ impl ComponentRun {
     fn trace_violations(&mut self, violations: &[(usize, Reach)]) {
         let run = self;
         for (at, reach) in violations {
+            // Every stored path replays through the run's own step relation before it prints
+            // (P20): one that does not is a fault of the tool, with no trace.
+            if let Err(e) = run.replay_reach(reach) {
+                run.diags[*at].diag = faulted(&run.diags[*at].diag, LassoFault::Replay(e));
+                continue;
+            }
             let (trace, last) = run.trace_of(reach);
             // A reduced run holds representatives: the message describes the lifted state.
             if run.system.reduction().is_some() {

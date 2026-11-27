@@ -168,6 +168,33 @@ impl Scope {
         self.bucs.is_empty() && self.entities.is_empty() && self.without_flags.is_empty()
     }
 
+    /// The scope flags as given, `--buc A, --entity E, --without-usecase U`: what a proof's
+    /// lines name as the scope they hold in. `None` for a whole run.
+    pub fn flags(&self, model: &SemanticModel) -> Option<String> {
+        if self.is_whole() {
+            return None;
+        }
+        let mut parts = Vec::new();
+        if !self.bucs.is_empty() {
+            parts.push(format!("--buc {}", self.bucs.join(" --buc ")));
+        }
+        if !self.entities.is_empty() {
+            parts.push(self.entity_flags(model));
+        }
+        parts.extend(self.without_flags.iter().cloned());
+        Some(parts.join(", "))
+    }
+
+    /// `--entity A --entity B`, as both `flags` and `line` print it.
+    fn entity_flags(&self, model: &SemanticModel) -> String {
+        let ids: Vec<&str> = self
+            .entities
+            .iter()
+            .map(|k| model.entities[*k].id.as_str())
+            .collect();
+        format!("--entity {}", ids.join(" --entity "))
+    }
+
     /// The `scope:` line: each flag with what it leaves out. `None` for a whole run.
     pub fn line(&self, model: &SemanticModel, selection: &Selection) -> Option<String> {
         if self.is_whole() {
@@ -187,12 +214,7 @@ impl Scope {
             ));
         }
         if !self.entities.is_empty() {
-            let ids: Vec<&str> = self
-                .entities
-                .iter()
-                .map(|k| model.entities[*k].id.as_str())
-                .collect();
-            parts.push(format!("--entity {}", ids.join(" --entity ")));
+            parts.push(self.entity_flags(model));
         }
         if !self.without_flags.is_empty() {
             let ids: Vec<&str> = self
@@ -258,7 +280,14 @@ impl TransitionSystem {
 
     /// The selection of `scope` over the built system. Each build diagnostic comes with the
     /// entities it involves: those it names, and those of the action it altered, if any. An
-    /// error is deferred when they are all outside every selected cone.
+    /// error is deferred when they are all outside every selected target's exact cone
+    /// (`exact_target_cone`, with slots). The plain cone of an invariant leaves out a mark
+    /// whose raisers write nothing else in it, and runs the handler without the mark: an error
+    /// that alters such a raiser (its guard built as `false`) changes which handler steps the
+    /// whole system takes, and `prove`, which encodes the whole system, proved a rule there
+    /// that the model breaks (P4). The exact cone keeps every writer, each mark it reads, and
+    /// every entity it creates, so an action outside it, altered or not, changes nothing the
+    /// cone reads.
     pub(crate) fn select(
         &self,
         scope: &Scope,
@@ -276,7 +305,7 @@ impl TransitionSystem {
         let mut read: Vec<EntityKey> = Vec::new();
         if !unchecked.is_empty() {
             for &t in &targets {
-                let cone = self.target_cone(t);
+                let cone = self.exact_target_cone(t, true);
                 for d in &self.entities {
                     if cone.vars.contains(&d.exists) && !read.contains(&d.key) {
                         read.push(d.key);

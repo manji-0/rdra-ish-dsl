@@ -291,6 +291,10 @@ fn one_of_each() -> Vec<StateDiag> {
             site: site(),
             fault: crate::lifecycle::LassoFault::Satisfies,
         },
+        StateDiag::StateTooWide {
+            bits: 1 << 33,
+            most: u64::from(u32::MAX),
+        },
     ];
     // Fails to compile when a variant is added without a value above.
     for d in &all {
@@ -302,6 +306,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::PreExistingChildOfCreatedParent { .. }
             | StateDiag::IdentityStartSlots { .. }
             | StateDiag::DomainTooLarge { .. }
+            | StateDiag::StateTooWide { .. }
             | StateDiag::CountAboveBound { .. }
             | StateDiag::MinCardOfPreExistingParent { .. }
             | StateDiag::MinCardNeedsCreate { .. }

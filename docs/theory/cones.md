@@ -264,7 +264,7 @@ projects to a stutter, which D17 does not check. ∎
 Theorem A2 covers *universal* checks only: a violation in `T` gives a violation in `C`. The
 findings of an entity cone are existential or branching. `StateDiag::NoWitness`,
 `::NeverRuns`, `::ArmNeverTaken`, and `::ValueNeverChosen` say that no reachable state or edge
-has a property. `::Deadlock` says that no path leaves a state. An over-approximating `C`
+has a property. `::Deadlock` says that a reachable state is stuck: no path from it changes the lifecycle column or deletes the row ([semantics.md, D25](./semantics.md#d25)). An over-approximating `C`
 reaches more states and edges than `π_W(T)` does, so it can satisfy such a check that `T`
 fails, and it can also fail one that `T` satisfies. Those checks need exactness (Theorem A1),
 or A8's bisimulation on a reduced cone. Their soundness on a cone with a left-out mark is open
@@ -603,8 +603,20 @@ are named and not derived here: that `Fold::holds` computes the folded guard exa
 definition), and that a fold's key binding (`Extended::cone_params` binds a dropped `T` parameter to
 slot 0) loses no successor. ∎
 
-cone-soundness.md, "Proof obligation", uses Lemma 6 in points 2, 3, and 5 without stating it.
-Open problem P31 records the gap.
+*Evidence (P31, fixed in #521).* The fold equivalence is checked against the cone's own step
+relation, in both directions, on every reachable state of every complete reduced cone that folds
+(`core/tests/reduce.rs`). `::reduced_domain_cones_hold_each_fold_bit_where_its_action_runs`: the
+bit holds at the slot every move of a folded action binds its key to (for a node fold, the row its
+link names), so the bit drops no step. `::reduced_domain_cones_step_by_a_true_fold_bit_only_where_the_cone_steps`:
+from the state's projection `x(t, s)` (`Reduction::key`), every silent step of `X` is a move of `C`
+to the same state, by an action the step stands for, with the params it binds outside the folded
+`T` params, so a true bit adds no step. Both run on the domain samples' 71 folds at 1 and 2
+instances, about 3,100 moves each, none of which binds a key past slot 0;
+`::case_fold_bits_hold_exactly_where_their_actions_run_past_slot_0` runs both on the case fold at 2
+and 3 instances, where about 1,700 of 2,800 moves bind slot 1 or 2. A bit planted false at slot 1
+fails the first, and one planted true at a present row 1 fails the second. This is evidence on
+these models and bounds, not a proof of Lemma 6; cone-soundness.md, "Proof obligation", states
+the lemma in points 2, 3, and 5 (#475).
 
 **Theorem A8 (the reduced cone is stuttering equivalent to the cone).** Assume (B1) to (B3) for
 `B` and Lemma 6. Let `(t, s) ~ (t, ρ)` when `ρ` is the representative of the block of `x(t, s)`.
@@ -615,7 +627,8 @@ Then `~` is a divergence-blind stuttering bisimulation between `C` and `R` that 
 2. which `T_a` action labels an edge from a state with given `T_v ∪ obs` values (`NeverRuns`, arms
    taken, `after` assertions on `T_a` actions);
 3. whether from every reached state some path takes an edge that changes given `T_v` values
-   (deadlocks);
+   (deadlocks, as [semantics.md, D25](./semantics.md#d25) defines them: a silent cycle counts
+   as stuck, which this divergence-blind bisimulation keeps);
 4. every property `P` whose reads are in `T_v ∪ obs` and whose fair actions are in `T_a`, under
    `Plain`.
 
@@ -855,11 +868,11 @@ verdict. `symmetry/mod.rs::Rule` has ten variants, and the witnesses are as foll
 | `JointTooLarge` | none needed. `witnesses.rs::joint_too_large_is_a_cost_cap` (release builds only) drops it and shows that the quotient is still a bisimulation with the plain run's verdicts |
 | `Observed` | 2 of its 6 reasons, `obs` and `input`: `cli/tests/engine_corpus.rs::each_h_reason_a_case_shows_has_a_witness`, in `shadow` builds only. The other 4 have none |
 | `Reduced` | none for any of its 7 reasons |
-| `PinnedStart` | none |
+| `PinnedStart` | `witnesses.rs::pinned_start_has_a_witness` (P33, #512): with it dropped the quotient stays a bisimulation with the same verdicts, but a canonical initial form need not be an initial state, and the lifted counterexample fails the always-on replay (`NotInitial`). So the rule guards the traces, not the verdicts |
 
 `explore/symmetry/snapshot.rs::KEPT` lists 11 rules and reasons that the owner kept on
-2026-11-25 without a witness of their own: `PinnedStart`, six `Reduced` reasons, and four
-`Observed` reasons. `Reduced:S` is not in that list, and no witness for it was found. The
+2026-11-25 without a witness of their own: `PinnedStart` (which has one since #512), six
+`Reduced` reasons, and four `Observed` reasons. `Reduced:S` is not in that list, and no witness for it was found. The
 snapshot reports that `PinnedStart` and every scan rule except the `Observed` and `Reduced`
 reasons fire in no cone of the samples. A missing witness does not affect soundness, which
 the subgroup argument gives. It leaves open whether the rule is needed.
@@ -1103,7 +1116,8 @@ Evidence: none beyond the reading of `escalate` and the guide.
   `writes` twin, on the samples and the corpus) check `Wr` against the steps they take. A release build does
   not check it, and a step no run takes is not checked.
 - **Assumed partition correctness.** A8, A15, and every reduced cone's verdict rest on (B1)–(B3), which the
-  release build does not check (P7), and on Lemma 6, which no note states (P31). Among those verdicts are the
+  release build does not check (P7), and on Lemma 6, argued and not proved, whose fold half is
+  checked against the cone's step relation on the domain samples and the case fold only (P31). Among those verdicts are the
   printed `ok` of a property's `Plain` run (A5.1) and of a property on a cone that frees slots (A6).
 - **Differential evidence compares implementations, not specifications.** The shadow twins compare two
   implementations of one definition and skip large inputs without failing (P17). The corpus and sample

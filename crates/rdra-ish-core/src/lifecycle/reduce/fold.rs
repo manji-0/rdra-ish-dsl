@@ -1,4 +1,5 @@
 //! Folds: an S action's reads of T as one input bit, and the node folds of a guard.
+use crate::lifecycle::narrow::id8;
 use std::collections::BTreeSet;
 
 use crate::lifecycle::cone::{named_params, VarSet};
@@ -100,7 +101,7 @@ impl Fold {
     /// Whether the bit holds for slot `c` of the key in `s`. A build with debug assertions or
     /// the `shadow` feature checks the answer against the reference twin
     /// (`fold/reference.rs`), which computes it with the allocations this one does without.
-    pub(super) fn holds(&self, ts: &TransitionSystem, s: &StateSlice, c: u8) -> bool {
+    pub(crate) fn holds(&self, ts: &TransitionSystem, s: &StateSlice, c: u8) -> bool {
         let held = self.holds_fast(ts, s, c);
         #[cfg(any(debug_assertions, feature = "shadow"))]
         reference::check_holds(self, ts, s, c, held);
@@ -141,7 +142,7 @@ impl Fold {
             let mut rest = binding;
             for p in free() {
                 let n = radix(p);
-                params[usize::from(p)] = (rest % n) as u8;
+                params[usize::from(p)] = id8(rest % n);
                 rest /= n;
             }
             let present = self.t_params.iter().all(|(p, must)| {
@@ -216,7 +217,7 @@ impl TransitionSystem {
                     p.role,
                     ParamRole::Existing | ParamRole::Parent { .. } | ParamRole::Triggered
                 );
-                (i as u8, present)
+                (id8(i), present)
             })
             .collect();
         if t_params.is_empty() {
@@ -292,11 +293,11 @@ impl TransitionSystem {
         let key = match (linked.first(), s_keys.first()) {
             (Some(p), _) => *p,
             (None, Some(k)) => *k,
-            (None, None) => a
+            (None, None) => id8(a
                 .params
                 .iter()
                 .position(|p| p.role.is_written())
-                .expect("an S action writes a row") as u8,
+                .expect("an S action writes a row")),
         };
         // A row the step creates has no slot before the step, so no bit can be keyed by it.
         if a.params[usize::from(key)].role == ParamRole::New {
@@ -315,7 +316,7 @@ impl TransitionSystem {
     pub(super) fn fold_initial(&self, fold: &Fold) -> Option<bool> {
         let initial = self.initial_states();
         let mut vals = initial.iter().flat_map(|st| {
-            (0..self.slots(fold.key_entity(self)) as u8).map(move |c| fold.holds(self, st, c))
+            (0..id8(self.slots(fold.key_entity(self)))).map(move |c| fold.holds(self, st, c))
         });
         let first = vals.next()?;
         vals.all(|v| v == first).then_some(first)
@@ -573,7 +574,7 @@ impl TransitionSystem {
         let mut out = VarSet::new();
         for (i, p) in a.params.iter().enumerate() {
             if matches!(p.role, ParamRole::Existing | ParamRole::Parent { .. })
-                && !folded_param(i as u8)
+                && !folded_param(id8(i))
             {
                 out.insert(self.entity(p.entity).exists);
             }

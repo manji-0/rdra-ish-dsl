@@ -1,5 +1,6 @@
 //! Initial states, bindings, successors, and the moves from a state.
 
+use crate::lifecycle::narrow::id8;
 use std::collections::HashSet;
 
 use crate::lifecycle::expr::{Env, State, StateSlice};
@@ -53,7 +54,7 @@ impl TransitionSystem {
                             Start::Base => {}
                             Start::Any => free.push((var, slot, d.domain.size(self))),
                             Start::Identity => {
-                                base.set(self, var, slot, d.domain.of_slot(slot as u8));
+                                base.set(self, var, slot, d.domain.of_slot(id8(slot)));
                             }
                         }
                     }
@@ -106,7 +107,7 @@ impl TransitionSystem {
         (0..n)
             .filter(move |&s| wanted.is_none_or(|w| state.get(self, exists, s) == w))
             .take(most)
-            .map(|s| s as u8)
+            .map(|s| id8(s))
     }
 
     /// The bindings of `action` in `state` before any guard reads them: each param on one of
@@ -128,7 +129,7 @@ impl TransitionSystem {
         for p in &action.params {
             let mut slots: Vec<u8> = self.candidate_slots(p, state).collect();
             if slots.is_empty() && crowd && p.role == ParamRole::New {
-                slots = (0..self.slots(p.entity) as u8).collect();
+                slots = (0..id8(self.slots(p.entity))).collect();
             }
             out = out
                 .into_iter()

@@ -17,6 +17,7 @@
 //! buckets written before the caller learned of them, which a worker never relies on
 //! (`Published`).
 
+use crate::lifecycle::narrow::id32;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -73,6 +74,8 @@ impl Table {
     /// The groups a probe for `hash` visits, in order: each group once, since the groups are
     /// a power of two and the stride grows by one each step.
     #[inline]
+    // The low bits of `hash` pick the first group: `mask` keeps fewer bits than a `usize` has.
+    #[allow(clippy::cast_possible_truncation)]
     fn groups(&self, hash: u64) -> impl Iterator<Item = usize> + '_ {
         let mut g = (hash as usize) & self.mask;
         let mut stride = 0;
@@ -213,7 +216,7 @@ impl Writer {
         let cap = grown(self.len, self.cap);
         if cap != self.cap {
             let next = Table::new(buckets_for(cap));
-            for i in 0..self.len as u32 {
+            for i in 0..id32(self.len) {
                 next.insert(hash_of(i), i);
             }
             self.table = Arc::new(next);
