@@ -1417,3 +1417,35 @@ fn go_probe_imports_are_sorted_by_path() {
         }
     }
 }
+
+/// The unimplemented port stands in only for what the harness drives: an entry point's
+/// `Run<Action>` / `run_<action>` / `run<Action>` is the service's to write, so the build still
+/// demands it. Rust gives a contract with an entry point no marker.
+#[test]
+fn the_unimplemented_port_stands_in_for_no_entry_point() {
+    let go = generated_from(ENTRY_ONLY_SRC, "entry_only.rdra", Lang::Go);
+    assert!(
+        go.contains("type UnimplementedConformancePort struct{}"),
+        "{go}"
+    );
+    assert!(
+        !go.contains("func (UnimplementedConformancePort) Run"),
+        "{go}"
+    );
+    let ts = generated_from(ENTRY_ONLY_SRC, "entry_only.rdra", Lang::TypeScript);
+    let class = ts
+        .split_once("export class UnimplementedConformancePort {")
+        .and_then(|(_, rest)| rest.split_once("\n}\n"))
+        .expect("the class")
+        .0;
+    assert!(!class.contains("  run"), "{class}");
+    let rust = generated_from(ENTRY_ONLY_SRC, "entry_only.rdra", Lang::Rust);
+    let model = model_from(ENTRY_ONLY_SRC);
+    let domain = build_with(&model, Some(CAPS), false, &|_| None).unwrap();
+    let port = domain.port.as_ref().expect("a port");
+    for c in &port.contracts {
+        let marker = format!("pub trait Unimplemented{} {{}}", c.name);
+        assert_eq!(rust.contains(&marker), c.entries.is_empty(), "{}", c.name);
+    }
+    assert!(port.contracts.iter().any(|c| !c.entries.is_empty()));
+}

@@ -238,10 +238,7 @@ pub(super) fn probe(domain: &DomainModel, binding: &super::ProbeBinding) -> Opti
         w.line("    if (r.ok) {");
         w.line("      const { traces: t, calls, refusals, interleavings } = r.value;");
         w.line("      console.log(`rdra-ish conformance: ok ${t} traces, ${calls} calls, ${refusals} refusals, ${interleavings} interleavings`);");
-        w.line("      const line = domain.unimplementedLine(r.value);");
-        w.line("      if (line !== null) {");
-        w.line("        console.log(line);");
-        w.line("      }");
+        w.line("      console.log(domain.unimplementedLine(r.value));");
         w.line("    } else {");
         w.line("      console.error(`rdra-ish conformance: ${r.error}`);");
         w.line("      process.exitCode = 1;");
@@ -285,11 +282,13 @@ fn print_unimplemented(port: &PortDecl, out: &mut String) {
     out.push_str(&doc(
         &[
             format!(
-                "Every use case's contract{}, each member rejecting with `Unimplemented`.",
+                "The `prepare*` and `commit*` members of every contract{}, each rejecting with `Unimplemented`.",
                 if port.harness { ", `seed`, and `snapshot`" } else { "" }
             ),
             "Extend it to build before every member exists: a member the service declares takes".to_string(),
             "the place of this one, and `check --code=run` reports each call that still reaches it.".to_string(),
+            "An entry point's `run*` member is not here: the harness drives none, so the service".to_string(),
+            "writes each.".to_string(),
         ],
         "",
     ));
@@ -323,18 +322,6 @@ fn print_unimplemented(port: &PortDecl, out: &mut String) {
             out.push_str(&member(
                 &commit,
                 &[format!("write: {}", m.write)],
-                &format!("Result<void, {}>", c.error),
-            ));
-        }
-        for e in &c.entries {
-            let ps: Vec<String> = by
-                .iter()
-                .cloned()
-                .chain(e.rows.iter().map(|(n, ty)| format!("{}: {ty}", local(n))))
-                .collect();
-            out.push_str(&member(
-                &entry_name(&e.name),
-                &ps,
                 &format!("Result<void, {}>", c.error),
             ));
         }
@@ -438,21 +425,21 @@ fn print_port_trait(port: &PortDecl, p: &mut String) {
     }
     p.push_str(";\n\n");
 
-    p.push_str(&doc1("What `conform` checked."));
     p.push_str(&doc(
         &[
-            "What `conform` checked, and the calls it stopped a trace at because they reached the"
+            "What `conform` checked, and the calls that reached the unimplemented port, by action,"
                 .to_string(),
-            "unimplemented port, by action, with the number of traces stopped so.".to_string(),
+            "with the number of traces stopped at one (a refused call does not stop its trace)."
+                .to_string(),
         ],
         "",
     ));
     p.push_str("export type ConformanceReport = Readonly<{\n  traces: number;\n  calls: number;\n  refusals: number;\n  interleavings: number;\n  unimplemented: Readonly<Record<string, number>>;\n  stopped: number;\n}>;\n\n");
     p.push_str(&doc1(
-        "The line `rdra-ish check --code=run` reads for the calls that reached the unimplemented port, or null when none did.",
+        "The line `rdra-ish check --code=run` reads for the calls that reached the unimplemented port: `none` when none did.",
     ));
     p.push_str(&format!(
-        "export function unimplementedLine(report: ConformanceReport): string | null {{\n  if (report.stopped === 0) {{\n    return null;\n  }}\n  const calls = Object.keys(report.unimplemented).sort().map((a) => `${{a}} ${{report.unimplemented[a] ?? 0}}`);\n  return `${{{}}} ${{report.stopped}} traces stopped at ${{calls.join(\", \")}}`;\n}}\n\n",
+        "export function unimplementedLine(report: ConformanceReport): string {{\n  if (Object.keys(report.unimplemented).length === 0) {{\n    return `${{{0}}} none`;\n  }}\n  const calls = Object.keys(report.unimplemented).sort().map((a) => `${{a}} ${{report.unimplemented[a] ?? 0}}`);\n  return `${{{0}}} ${{report.stopped}} traces stopped; ${{calls.join(\", \")}}`;\n}}\n\n",
         string_literal(super::conformance::UNIMPLEMENTED_REPORT)
     ));
 }
@@ -500,9 +487,13 @@ export async function conform(newPort: () => ConformancePort, traces: string): P
   let defining: string[] | null = null;
   let report: ConformanceReport = {{ traces: 0, calls: 0, refusals: 0, interleavings: 0, unimplemented: {{}}, stopped: 0 }};
   let stopped = false;
-  const stop = (call: readonly string[]): void => {{
+  const count = (call: readonly string[]): void => {{
     const action = call[0] ?? "";
-    report = {{ ...report, unimplemented: {{ ...report.unimplemented, [action]: (report.unimplemented[action] ?? 0) + 1 }}, stopped: report.stopped + 1 }};
+    report = {{ ...report, unimplemented: {{ ...report.unimplemented, [action]: (report.unimplemented[action] ?? 0) + 1 }} }};
+  }};
+  const stop = (call: readonly string[]): void => {{
+    count(call);
+    report = {{ ...report, stopped: report.stopped + 1 }};
     stopped = true;
   }};
   let port: ConformancePort | null = null;
@@ -604,7 +595,7 @@ export async function conform(newPort: () => ConformancePort, traces: string): P
           return at(ran.error);
         }}
         if (!ran.value.ok && ran.value.error === $confUnimplemented) {{
-          stop(call);
+          count(call);
           continue;
         }}
         if (ran.value.ok) {{

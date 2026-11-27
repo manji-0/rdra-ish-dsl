@@ -5,22 +5,27 @@
 ### Added
 
 - `codegen` (default output changes): the domain code has an unimplemented port, a stand-in
-  for every contract that a service takes while it is unfinished, so it builds before every
+  for the contracts that a service takes while it is unfinished, so it builds before every
   method exists (dogfood G6; docs/design/algebraic-codegen.md, "The unimplemented port"). Go:
   `UnimplementedConformancePort` to embed, whose methods return `ErrUnimplemented`.
   TypeScript: `UnimplementedConformancePort` to extend, whose members reject with
   `Unimplemented`. Rust: a marker trait `Unimplemented<Contract>` per contract (`impl
   UnimplementedPayUseCase for Service {}`), whose blanket impl panics with
-  `unimplemented!`. With `--conformance`, Go's and TypeScript's also stand in for
-  `Seed`/`seed` and `Snapshot`/`snapshot`. The harness stops a trace at a call that reached
-  the stand-in and counts it; `check --code=run` adds `unimplemented: <n> use cases (...)` to
-  the coverage statement and warns `CodeUnimplemented`, an error with `--deny-incomplete`; a
-  self-check mutant stopped so is counted as stopped, not survived. `check --code=build`
-  reports nothing of it. Every Go, Rust and TypeScript output with contracts grows by the
-  stand-in (samples: +3 to +10 %, Rust the most), the names `UnimplementedConformancePort`,
-  `ErrUnimplemented`, `Unimplemented` and `Unimplemented<Contract>` are claimed, Rust's
-  `ConformanceReport` is no longer `Copy`, and the default `run` command of a domain table
-  shows the test's output (Go `-v`, Rust `--nocapture`), as an adapter table's did.
+  `unimplemented!`. It stands in for `prepare` and `commit`, with `--conformance` in Go and
+  TypeScript also for `Seed`/`seed` and `Snapshot`/`snapshot`, and for no entry point (Rust:
+  a contract with one gets no marker). The harness counts each call that reached it; one the
+  model runs stops its trace, a refused one is no refusal. The probe's test always prints
+  what it counted, and `check --code=run` adds `unimplemented: <n> use cases (...)` to the
+  coverage statement and warns `CodeUnimplemented`, an error with `--deny-incomplete`; a run
+  whose `run` command hides that line gets `unimplemented: not reported` and the same
+  finding. A self-check mutant whose changed row the stand-in left unchecked is counted as
+  such, not as a survivor. `check --code=build` reports nothing of it. Every Go, Rust and
+  TypeScript output with contracts grows by the stand-in (samples: +3 to +10 %, Rust the
+  most), the names `UnimplementedConformancePort`, `ErrUnimplemented`, `Unimplemented` and
+  `Unimplemented<Contract>` are claimed, the harness reports gain `unimplemented` and
+  `stopped` (Rust's `ConformanceReport` is no longer `Copy`), and the default `run` command
+  of a domain table shows the test's output (Go `-v`, Rust `--nocapture`), as an adapter
+  table's did.
 
 - The conformance traces try every refusal of the model and check its kind (#439, PR 4). The
   format line is now `# rdra-ish conformance traces 4`, so traces and harnesses of an earlier

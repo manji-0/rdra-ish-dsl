@@ -722,9 +722,11 @@ export class Unimplemented extends globalThis.Error {
 }
 
 /**
- * Every use case's contract, each member rejecting with `Unimplemented`.
+ * The `prepare*` and `commit*` members of every contract, each rejecting with `Unimplemented`.
  * Extend it to build before every member exists: a member the service declares takes
  * the place of this one, and `check --code=run` reports each call that still reaches it.
+ * An entry point's `run*` member is not here: the harness drives none, so the service
+ * writes each.
  */
 export class UnimplementedConformancePort {
   preparePay = (_order: OrderId, _orderPaidAt: DateTime): Promise<Result<PayOutcome, PayError>> => Promise.reject(new Unimplemented("preparePay"));

@@ -724,9 +724,12 @@ results are where the generated code meets it.
 
 <!-- derived-from #the-agent-contract -->
 
-The domain code has a stand-in for every contract, which a service takes while it is
-unfinished, so it builds before it has every method. Each method of the stand-in fails as the
-language says "not implemented", and the harness tells that failure from a refusal:
+The domain code has a stand-in for the contracts, which a service takes while it is
+unfinished, so it builds before it has every method. It stands in for each `prepare` and
+`commit` method, not for an entry point's `Run<Action>`: the harness drives no entry point,
+so a stand-in for one would never be reported, and the build still demands it (Rust gives a
+contract with an entry point no marker). Each method of the stand-in fails as the language
+says "not implemented", and the harness tells that failure from a refusal:
 
 | | Go | Rust | TypeScript |
 |---|---|---|---|
@@ -743,17 +746,21 @@ fail by panicking or rejecting rather than with a value of the use case's error:
 unimplemented method is no refusal the model knows, and a new case in every error type
 would change every `match` a service writes.
 
-**How a run reports it.** `conform` stops a trace at a call that reached the stand-in (a
-call the model runs, a refused call, or a call of an interleaving), counts the call by
-action, and goes on with the next trace; a seed or snapshot that reached it fails the run as
-a store error does. The probe's test prints `rdra-ish conformance: unimplemented: <n> traces
-stopped at <action> <calls>, ...` (so the default `run` command of Go and Rust now shows the
-test's output: `-v`, `--nocapture`). `check --code=run` maps the actions to use cases, adds
-`unimplemented: <n> use cases (<names>): <n> traces stopped ...` to the coverage statement,
-and warns `CodeUnimplemented`, which `--deny-incomplete` makes an error, as it does the
-`never run` of the traces. A mutant of the self-check whose trace stopped before its changed
-row is counted as stopped, not as a survivor, so a partial service passes the self-check for
-what it implements.
+**How a run reports it.** `conform` counts each call that reached the stand-in, by action.
+One the model runs (or a call of an interleaving) stops its trace, and the next trace starts;
+a refused one is counted and is no refusal, and its trace goes on, since the stand-in changed
+nothing and the model's state did not move. A seed or snapshot that reached it fails the run
+as a store error does. The probe's test always prints `rdra-ish conformance: unimplemented:
+none` or `... <n> traces stopped; <action> <calls>, ...`, so the default `run` command of Go
+and Rust now shows the test's output (`-v`, `--nocapture`). `check --code=run` maps the
+actions to use cases, adds `unimplemented: <n> use cases (<names>): <n> calls reached the
+unimplemented port; <n> traces stopped there` to the coverage statement, and warns
+`CodeUnimplemented`, which `--deny-incomplete` makes an error, as it does the `never run` of
+the traces. A run that printed no such line (a `run` in the table that hides the output)
+cannot say: `unimplemented: not reported`, with the same finding. A mutant of the self-check
+whose changed row the stand-in left unchecked (its trace stopped earlier, or the row's own
+call reached it) is counted as such, not as a survivor, so a partial service passes the
+self-check for what it implements.
 
 **`check --code=build` says nothing of it.** The build checks that the service has the
 contracts with the model's signatures, and the stand-in has them, so an empty service that

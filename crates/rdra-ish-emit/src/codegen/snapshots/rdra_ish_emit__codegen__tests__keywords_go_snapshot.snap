@@ -2185,8 +2185,8 @@ type StaticUseCase interface {
 // case; `rdra-ish check --code=run` lists them, and --deny-incomplete fails on any.
 var ErrUnimplemented = errors.New("rdra-ish: not implemented")
 
-// UnimplementedConformancePort implements every use case's contract by returning ErrUnimplemented.
-// Embed it in a service to build before every method exists: a method the service declares takes the place of the embedded one, and `check --code=run` reports each call that still reaches it.
+// UnimplementedConformancePort has every Prepare and Commit method of the contracts, each returning ErrUnimplemented.
+// Embed it in a service to build before every method exists: a method the service declares takes the place of the embedded one, and `check --code=run` reports each call that still reaches it. A Run method of an entry point is not here: the harness drives none, so the service writes each.
 type UnimplementedConformancePort struct{}
 
 // PrepareReturn returns ErrUnimplemented.

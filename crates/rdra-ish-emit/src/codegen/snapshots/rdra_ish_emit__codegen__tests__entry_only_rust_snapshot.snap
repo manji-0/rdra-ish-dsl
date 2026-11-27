@@ -620,27 +620,9 @@ pub trait ShipUseCase {
     fn run_ship(&mut self, order: OrderId) -> ::core::result::Result<(), ShipError>;
 }
 
-/// Implement it for a service that does not implement `ShipUseCase` yet: the service then has `ShipUseCase`, each method of which panics as `unimplemented!` does. `conform` stops a trace at such a call and reports the calls by use case; `rdra-ish check --code=run` lists them, and `--deny-incomplete` fails on any. Remove the impl when the service implements `ShipUseCase`.
-pub trait UnimplementedShipUseCase {}
-
-impl<T: UnimplementedShipUseCase> ShipUseCase for T {
-    fn run_ship(&mut self, _: OrderId) -> ::core::result::Result<(), ShipError> {
-        unimplemented!("rdra-ish unimplemented port")
-    }
-}
-
 /// The use case Place: Place.
 /// Each action with functions is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
 pub trait PlaceUseCase {
     /// Runs the action Place of Place whole, by the ids of its rows: the generator printed no function for it (#335), so the service writes it and keeps the obligations.
     fn run_place(&mut self, order: OrderId) -> ::core::result::Result<(), PlaceError>;
-}
-
-/// Implement it for a service that does not implement `PlaceUseCase` yet: the service then has `PlaceUseCase`, each method of which panics as `unimplemented!` does. `conform` stops a trace at such a call and reports the calls by use case; `rdra-ish check --code=run` lists them, and `--deny-incomplete` fails on any. Remove the impl when the service implements `PlaceUseCase`.
-pub trait UnimplementedPlaceUseCase {}
-
-impl<T: UnimplementedPlaceUseCase> PlaceUseCase for T {
-    fn run_place(&mut self, _: OrderId) -> ::core::result::Result<(), PlaceError> {
-        unimplemented!("rdra-ish unimplemented port")
-    }
 }

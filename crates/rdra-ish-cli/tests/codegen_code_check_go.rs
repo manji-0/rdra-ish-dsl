@@ -586,4 +586,42 @@ fn a_service_embedding_the_unimplemented_port_builds_and_its_calls_are_reported(
         stderr.contains("the service's Seed failed: rdra-ish: not implemented"),
         "{stderr}"
     );
+
+    // A `run` in the table that hides the test's output on a pass hides the harness's line:
+    // the run says it cannot tell, and --deny-incomplete fails on that.
+    let service = std::fs::read_to_string(fixtures().join("go_service/service.go")).unwrap();
+    let dir = project(
+        "unimplemented-hidden",
+        &conformance(),
+        &format!(
+            "{MANIFEST}run = [\"go\", \"test\", \"-count=1\", \"-run\", \"^TestRdraConformance$\", \"./svc\"]\n"
+        ),
+        &service
+            .replacen(embed.0, embed.1, 1)
+            .replacen(
+                "func (s *Service) PrepareCancel(",
+                "func (s *Service) prepareCancelLater(",
+                1,
+            )
+            .replacen(
+                "func (s *Service) CommitCancel(",
+                "func (s *Service) commitCancelLater(",
+                1,
+            ),
+    );
+    let run = ["check", "model", "--code=run", "--mutants", "0"];
+    let (code, stdout, stderr) = outcome(&rdra(&dir, &run, None));
+    assert_eq!(code, Some(0), "{stdout}{stderr}");
+    assert!(
+        stdout.contains("  unimplemented: not reported: "),
+        "{stdout}"
+    );
+    assert!(stderr.contains("warning[CodeUnimplemented]"), "{stderr}");
+    let (code, _, stderr) = outcome(&rdra(
+        &dir,
+        &[&run[..], &["--deny-incomplete"]].concat(),
+        None,
+    ));
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(stderr.contains("error[CodeUnimplemented]"), "{stderr}");
 }

@@ -131,7 +131,7 @@ The consistency checks cover:
 | `--code[=<LEVEL>]` | off; `fresh` when given bare | After a clean run, check the service code the [`[code]` tables](#the-code-tables) name: `fresh`, `build`, or `run`. Write the level with `=`. See [`check --code`](#check---code). |
 | `--mutants <N>` | `1` | With `--code=run` only (else exit 1): after a passing `--code=run`, run the run command again on `N` mutant traces of each kind and fail when one passes. `0` runs none. See [The self-check](#the-self-check). |
 | `--mutant-seed <SEED>` | `0` | With `--code=run` only (else exit 1): the seed that picks the mutant traces. The same model and seed pick the same ones. |
-| `--deny-incomplete` | off | With `--code=run` only (else exit 1; without `--code`, exit 2): fail when a table's traces are not complete: their BFS stopped at `conformance_states`, they leave refusals of the model untried, or they never run a use case of the port; and when the run stopped traces at calls the service has not implemented (`CodeUnimplemented`). See [What a run covers](#what-a-run-covers). |
+| `--deny-incomplete` | off | With `--code=run` only (else exit 1; without `--code`, exit 2): fail when a table's traces are not complete: their BFS stopped at `conformance_states`, they leave refusals of the model untried, or they never run a use case of the port; and when calls reached the unimplemented port or the run did not say (`CodeUnimplemented`). See [What a run covers](#what-a-run-covers). |
 | `--max-patterns <N>` | 2^(10 + 8·(n − 1)) for n = `--instance-count` (`1024`, `262144`, ...) | Cap on each entity's distinct patterns in its view's cone. Past it: the `PatternCapReached` error. A cone of a rule gathers no pattern, so the cap does not stop it. |
 | `--max-states <N>` | none | Cap on the joint states of one cone. Past it: the `StateCapReached` error, which names what the states vary in. |
 | `--memory <SIZE>` | `memory` under `[check]`, else `4GiB` | What the run may hold. A cone past it stops with the `MemoryCapReached` error. See [Memory limit](#memory-limit). |
@@ -294,7 +294,7 @@ error[CodeObligationUnowned_Unique_Order_note]: no code owns the obligation Uniq
 | `CodeBuildFailed` | error | The build failed with no error rdra-ish reads. |
 | `CodeConformance` | error | `run`: the conformance test failed; the message is the harness's first difference. |
 | `CodeMutantSurvived` | error | `run`: a mutant trace of the self-check passed. The `code:` line says whether the run passed or failed at another row. |
-| `CodeUnimplemented` | warning; error with `--deny-incomplete` | `run`: the run passed, but traces stopped at calls that reached the [unimplemented port](#the-unimplemented-port); the message names their use cases and calls. |
+| `CodeUnimplemented` | warning; error with `--deny-incomplete` | `run`: the run passed, but calls reached the [unimplemented port](#the-unimplemented-port) (the message names their use cases and calls), or the run printed no line saying whether any did. |
 | `CodeCoverageIncomplete` | warning; error with `--deny-incomplete` | `run`: the BFS behind the traces stopped at `conformance_states`, so the moves past it are not run and no call is tried as refused; or the traces leave refusals of the model untried, or never run a use case of the port. |
 | `CodeObligationUnowned_<name>` | error | The obligation has no owner. |
 | `CodeObligationOwnerMissing_<name>` | error | Its owner names a file that does not exist. |
@@ -355,33 +355,37 @@ replaces the default command.
 
 #### The unimplemented port
 
-The domain code has a stand-in for every contract, which a service takes while it is
+The domain code has a stand-in for the contracts, which a service takes while it is
 unfinished, so it builds before every method exists: Go's `UnimplementedConformancePort` to
 embed, TypeScript's `UnimplementedConformancePort` class to extend, and Rust's
 `Unimplemented<Contract>` marker trait per contract (`impl UnimplementedPayUseCase for
-Service {}`), which gives the service the contract. With `--conformance`, Go's and
-TypeScript's also have `Seed` / `seed` and `Snapshot` / `snapshot`. Each method fails as the
-language says "not implemented": Go returns `ErrUnimplemented`, TypeScript rejects with
-`Unimplemented`, Rust panics with `unimplemented!`. A method the service declares takes the
-place of the stand-in's.
+Service {}`), which gives the service the contract. It stands in for each `prepare` and
+`commit` method, and with `--conformance` Go's and TypeScript's also for `Seed` / `seed` and
+`Snapshot` / `snapshot`. It stands in for no entry point (`Run<Action>`): the harness drives
+none, so the service writes each, and Rust gives a contract with one no marker. Each method
+fails as the language says "not implemented": Go returns `ErrUnimplemented`, TypeScript
+rejects with `Unimplemented`, Rust panics with `unimplemented!`. A method the service
+declares takes the place of the stand-in's.
 
 `check --code=build` passes such a service: the build checks signatures, and cannot tell a
-stand-in from a method the service wrote. The run tells them apart. The harness stops a trace
-at a call that reached the stand-in (a call the model runs, a refused call, or either call
-of an interleaving), counts it, and goes on with the next trace; a `Seed` or `Snapshot`
-that reached it fails the run, as any store error does. A run that passes adds a line after
-the statement and a `CodeUnimplemented` warning, which `--deny-incomplete` makes an error:
+stand-in from a method the service wrote. The run tells them apart. The harness counts every
+call that reached the stand-in. One the model runs (or either call of an interleaving) stops
+its trace, and the next trace starts; a refused one is no refusal, and its trace goes on. A
+`Seed` or `Snapshot` that reached it fails the run, as any store error does. The probe's
+test prints `rdra-ish conformance: unimplemented: none`, or `... unimplemented: <n> traces
+stopped; <action> <calls>, ...`. When calls reached the stand-in, the statement gains a line
+and stderr a `CodeUnimplemented` warning, which `--deny-incomplete` makes an error:
 
 ```
-  unimplemented: 1 use case (Cancel): 5 traces stopped at a call the service has not implemented
-warning[CodeUnimplemented]: [code.go]: the service has not implemented Cancel (5 calls): the traces stopped at those calls, so nothing after them is checked
+  unimplemented: 1 use case (Cancel): 7 calls reached the unimplemented port; 4 traces stopped there
+warning[CodeUnimplemented]: [code.go]: the service has not implemented Cancel (7 calls): a trace stops at such a call the model runs, so nothing after it is checked, and such a refused call is no refusal
 ```
 
-The probe's test prints the line it is read from, `rdra-ish conformance: unimplemented: <n>
-traces stopped at <action> <calls>, ...`; a `run` command in the table that hides the test's
-output on a pass hides it too. A mutant of the self-check whose trace stopped at such a call
-before its changed row is counted as `stopped at an unimplemented call` on the `self-check`
-line, not as a survivor.
+A `run` command in the table that hides the test's output on a pass hides the line too: the
+statement then says `unimplemented: not reported`, with the same warning. A mutant of the
+self-check whose changed row the stand-in left unchecked (its trace stopped earlier, or the
+row's own call reached it) is counted on the `self-check` line as `left unchecked by a call
+that reached the unimplemented port`, not as a survivor.
 
 A table with a [model adapter](#the-model-adapter) adds one line after the statement, read
 from the line the adapter's conformance test prints on a pass:
