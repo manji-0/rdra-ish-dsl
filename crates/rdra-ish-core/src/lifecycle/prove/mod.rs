@@ -89,8 +89,9 @@ pub enum Unproved {
     NotInductive(Cti),
     /// The solver gave up on the step that `action` names.
     Unknown { action: String },
-    /// The premise every check assumes, the declarations and the initial states, has no
-    /// state z3 could find (`premise`), so no rule is proved; the text says why.
+    /// The premise every check assumes, the declarations and the initial states, is
+    /// inconsistent: the canary candidate `false` survived initiation (`premise`), so no rule
+    /// is proved; the text says why.
     Premise(String),
 }
 
@@ -355,18 +356,23 @@ pub fn prove_offered<S: Solver + Send>(
     unreachable!("the rounds are bounded")
 }
 
-/// Why no rule can be proved over the premise every check assumes, the declarations and the
-/// initial states; `None` when z3 finds a state in it. Without one every check would be
-/// `unsat` and every candidate kept, a false rule too. The encoding over-approximates the
-/// explorer, so the explorer's initial state is one, and a premise without one is a bug of the
-/// builder or the encoder. The kept set needs nothing more: every candidate in it holds in
-/// every initial state, so a state of the premise is one of the set too. A `.lemma()` rule is
-/// a candidate like any other, not an assumption. Initial states the encoding cannot state
-/// are no premise: they fail every candidate on their own (`initiation`).
+/// The canary of every proof: the candidate `false`, which must fall at initiation. It holds
+/// in no state, so it survives initiation only when no initial state exists, when the
+/// premise every check assumes, the declarations and the initial states, is inconsistent.
+/// Then every check would be `unsat` and every candidate kept, a false rule too, so no rule is
+/// proved, and the text says why. The encoding over-approximates the explorer, so the
+/// explorer's initial state is one, and an inconsistent premise is a bug of the builder or the
+/// encoder. The kept set needs nothing more: every candidate in it holds in every initial
+/// state, so a state of the premise is one of the set too. A `.lemma()` rule is a candidate
+/// like any other, not an assumption. Initial states the encoding cannot state are no
+/// premise: they fail every candidate on their own (`initiation`).
 ///
-/// The check runs with MBQI on, without which z3 answers no `sat` (`prove_round`), under the
-/// rule limit, and ends in a reset: a round starts with one too, so the rounds' checks run as
-/// they would without this one.
+/// The canary's initiation check is `check-sat` of the premise itself. It runs as the
+/// Houdini rounds run, without MBQI, where z3 answers `unknown` for a premise with a state,
+/// and `unknown` drops a candidate as `sat` does: only an `unsat` keeps the canary, so the
+/// check cannot raise a false alarm. It runs on its own, under the rule limit, before the
+/// rounds, and ends in a reset: a round starts with one too, so the rounds send and spend
+/// what they would without it.
 fn premise<S: Solver>(
     solver: &mut S,
     enc: &Enc,
@@ -375,26 +381,22 @@ fn premise<S: Solver>(
     let Ok(initial) = enc.initial() else {
         return Ok(None);
     };
-    let mut s = Script::from([Command::Reset, Command::SetOption(Opt::Mbqi(true))]);
+    let mut s = Script::from([Command::Reset, Command::SetOption(Opt::Mbqi(false))]);
     s.append(&enc.declarations());
     s.append(&initial);
     solver.exec(s.text())?;
     let sat = solver.check_sat(rlimit)?;
     solver.exec(&Command::Reset.to_string())?;
     Ok(match sat {
-        Sat::Sat => None,
+        Sat::Sat | Sat::Unknown => None,
         Sat::Unsat => Some(
-            "the encoding's initial states have no model (z3 answered unsat), so every check would hold vacuously and no rule is proved; this is a bug in rdra-ish"
-                .to_string(),
-        ),
-        Sat::Unknown => Some(
-            "z3 gave up on whether the encoding's initial states have a model, so no rule is proved"
+            "the canary `false` survived initiation: the encoding's declarations and initial states are inconsistent (they have no model), so every check would hold vacuously and no rule is proved; this is a bug in rdra-ish"
                 .to_string(),
         ),
     })
 }
 
-/// The proof when the premise has no state (`premise`): no rule proved. A rule BFS refuted
+/// The proof when the premise is inconsistent (`premise`): no rule proved. A rule BFS refuted
 /// stays `Refuted` and one the encoding cannot state `OutOfScope`, as in a proof that runs.
 fn unfounded(
     ts: &TransitionSystem,
