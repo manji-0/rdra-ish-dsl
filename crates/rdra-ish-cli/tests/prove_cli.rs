@@ -526,6 +526,43 @@ fn corpus(name: &str) -> String {
     format!("crates/rdra-ish-cli/tests/engine_corpus/{name}.rdra")
 }
 
+/// insurance-claim-ops without its `.lemma()` (#428, case 1): the fact its lemma states reads
+/// one Claim column and two ClaimCase columns (a liability case before negotiation has no
+/// completed claim), which a mined lemma over one child column and two parent columns states,
+/// so every rule is proved with no lemma of the user's.
+#[test]
+fn insurance_claim_ops_is_proved_without_its_lemma() {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("prove_cli_insurance_no_lemma");
+    let _ = std::fs::remove_dir_all(&dir);
+    let sample = repo().join("samples/insurance-claim-ops");
+    for sub in ["buc", "shared"] {
+        std::fs::create_dir_all(dir.join(sub)).unwrap();
+        for entry in std::fs::read_dir(sample.join(sub)).unwrap() {
+            let path = entry.unwrap().path();
+            let name = path.file_name().unwrap();
+            if path.extension().is_some_and(|e| e == "rdra") && name != "lemmas.rdra" {
+                std::fs::copy(&path, dir.join(sub).join(name)).unwrap();
+            }
+        }
+    }
+    let out = verify(&["--prove", dir.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(!stdout.contains("your lemmas"), "{stdout}");
+    assert!(
+        stdout.contains("\nproof: 22 proved, 0 unproved, 0 out of scope\n"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains(
+            "\nlemma: a present Claim row and the present ClaimCase its Claim._owner_ClaimCase names are one of "
+        ) && stdout.contains(" reached pairs of (completed_on) and (coverage, status)"),
+        "{stdout}"
+    );
+}
+
 /// The run line of the safety cone `module`.
 fn cone_line<'a>(stdout: &'a str, module: &str) -> &'a str {
     stdout

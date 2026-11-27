@@ -2,8 +2,8 @@
 //! is explored at the system's bounds, and again at one instance per entity, where a cone
 //! the run's bounds cap often finishes; what every reached state shows becomes a candidate:
 //! the patterns a row takes, the values and value pairs of its columns, the patterns a child
-//! row takes together with its parent (whole, per parent column, and one column of each), and
-//! the patterns of two children of one parent. A guess is never trusted: the prover keeps it only
+//! row takes together with its parent (whole, per parent column, one column of each, and one
+//! child column with two parent columns), and the patterns of two children of one parent. A guess is never trusted: the prover keeps it only
 //! when it is inductive with the others, so a capped or over-approximate exploration costs
 //! proofs, not soundness.
 
@@ -264,8 +264,12 @@ fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<Mined> {
             continue;
         };
         // The whole patterns, then each parent column with the whole child, then one column
-        // of each: a row with many columns reaches too many whole pairs to list, and one
-        // column of each keeps the fact a step preserves when the rest of the row does not.
+        // of each, then one child column with two parent columns: a row with many columns
+        // reaches too many whole pairs to list, and one column of each keeps the fact a step
+        // preserves when the rest of the row does not. Two parent columns state what a child
+        // column does under a combination of its parent's (insurance-claim-ops: a liability
+        // case before negotiation has no completed claim, #428); one is offered only when the
+        // pairs it is made of do not already imply it, which keeps their count down.
         let mut views: Vec<(Vec<VarId>, Vec<VarId>, Pairs, bool)> =
             vec![(cvars.clone(), pvars.clone(), pairs.clone(), false)];
         for (j, pv) in pvars.iter().enumerate() {
@@ -280,6 +284,15 @@ fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<Mined> {
                     .map(|(cp, pp)| (vec![cp[i]], vec![pp[j]]))
                     .collect();
                 views.push((vec![*cv], vec![*pv], projected, true));
+                for (k, pv2) in pvars.iter().enumerate().skip(j + 1) {
+                    let projected: Pairs = pairs
+                        .iter()
+                        .map(|(cp, pp)| (vec![cp[i]], vec![pp[j], pp[k]]))
+                        .collect();
+                    if !implied_by_pairs(&projected) {
+                        views.push((vec![*cv], vec![*pv, *pv2], projected, true));
+                    }
+                }
             }
         }
         for (cvars, pvars, pairs, is_fine) in views {
@@ -388,6 +401,21 @@ fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<Mined> {
     out
 }
 
+/// Whether the triples of one child column and two parent columns say nothing their pairs do
+/// not: every triple whose child value goes with each parent value, and whose two parent
+/// values go together, was reached.
+fn implied_by_pairs(triples: &Pairs) -> bool {
+    let first: BTreeSet<(u8, u8)> = triples.iter().map(|(c, p)| (c[0], p[0])).collect();
+    let second: BTreeSet<(u8, u8)> = triples.iter().map(|(c, p)| (c[0], p[1])).collect();
+    let parents: BTreeSet<(u8, u8)> = triples.iter().map(|(_, p)| (p[0], p[1])).collect();
+    first.iter().all(|&(c, a)| {
+        second
+            .iter()
+            .filter(|&&(c2, b)| c2 == c && parents.contains(&(a, b)))
+            .all(|&(_, b)| triples.contains(&(vec![c], vec![a, b])))
+    })
+}
+
 /// The row bound at `at` holds one of `patterns` over `vars`.
 fn one_of(vars: &[VarId], patterns: &BTreeSet<Pattern>, at: u8) -> Pred {
     Pred::Or(
@@ -431,4 +459,32 @@ fn show(ts: &TransitionSystem, vars: &[VarId], patterns: &BTreeSet<Pattern>) -> 
         })
         .collect();
     format!("{{{}}}", items.join(", "))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn triples(xs: &[(u8, u8, u8)]) -> Pairs {
+        xs.iter().map(|&(c, a, b)| (vec![c], vec![a, b])).collect()
+    }
+
+    /// A triple set is implied when each child value goes with every parent pair whose
+    /// values each go with it; a missing triple of that join is a fact of its own.
+    #[test]
+    fn two_parent_columns_are_offered_only_past_their_pairs() {
+        // Child 1 goes with parent values (0, x) and (y, 0) only: the join is all there.
+        assert!(implied_by_pairs(&triples(&[
+            (0, 0, 0),
+            (0, 1, 1),
+            (1, 0, 0)
+        ])));
+        // (1, 0, 1) is in the join of (1, 0), (1, 1) and the parent pair (0, 1), but no
+        // state reached it: the liability case that is investigating has no completed claim.
+        assert!(!implied_by_pairs(&triples(&[
+            (0, 0, 1),
+            (1, 0, 0),
+            (1, 1, 1)
+        ])));
+    }
 }

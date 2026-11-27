@@ -28,6 +28,16 @@
 
 ### Changed
 
+- `verify --prove` (experimental) also mines a lemma over one child column and two parent
+  columns: the values a present child row's column took together with two columns of the
+  parent its key names (#428). It is offered only when the pairs it is made of do not already
+  imply it, and like the other one-column pairs it joins the proof only when a rule stays
+  unproved without it. insurance-claim-ops now proves all 22 rules without its `.lemma()`
+  (a liability case before negotiation has no completed claim). The output of every sample
+  is byte for byte the same; proof time on the domain samples is within 2% (`RDRA_JOBS=4`,
+  cache off, medians of 3: clinic-ops 6.56 s to 6.70 s, food-permit-ops 4.75 s to 4.74 s,
+  insurance-claim-ops 8.64 s to 8.64 s, patent-ops 1.44 s to 1.45 s). Unpruned, the view
+  cost food-permit-ops 16%.
 - `verify --prove` (experimental) asserts each rule and lemma once per solver, behind an
   activation literal, and each step's scope asserts only the literals of the set, instead
   of every candidate again (#421). The proof is the same on every sample, its rules, CTIs
