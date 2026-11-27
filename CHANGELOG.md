@@ -39,6 +39,13 @@
 
 ### Changed
 
+- `verify --prove` (experimental) declares the mined lemmas that wait for an unproved rule
+  (one child column with one or two parent columns) to z3, and checks them in the initial
+  states, only when they join the proof (#428). A proof that needs none of them sends z3 the
+  same checks whatever such lemmas a model offers, so a new kind of them changes no other
+  proof's resource units. Every proof on the samples and the engine corpus is the same on 1,
+  2, and 3 solvers, and nothing `verify` prints changes. A proof certificate cached by an
+  earlier version misses once, and the proof runs in full.
 - `verify --prove` (experimental) also mines a lemma over one child column and two parent
   columns: the values a present child row's column took together with two columns of the
   parent its key names (#428). It is offered only when the pairs it is made of do not already

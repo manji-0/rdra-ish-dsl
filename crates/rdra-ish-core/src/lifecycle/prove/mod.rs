@@ -406,9 +406,20 @@ pub fn prove_offered<S: Solver + Send>(
         s.append(&declarations);
         s
     };
+    // The fine lemmas' literals are declared and asserted only when they join: a proof that
+    // never needs them sends z3 the same commands whatever fine lemmas the model offers, so a
+    // new kind of them changes no other proof's checks (#428).
+    let (fine_cands, plain): (Vec<_>, Vec<_>) = cands
+        .iter()
+        .enumerate()
+        .partition(|(k, _)| fine.contains(k));
     let mut houdini = restart(false);
-    for c in &cands {
+    for (_, c) in &plain {
         houdini.append(&c.activation);
+    }
+    let mut joining = Script::default();
+    for (_, c) in &fine_cands {
+        joining.append(&c.activation);
     }
     for solver in solvers.iter_mut() {
         solver.exec(houdini.text())?;
@@ -426,6 +437,12 @@ pub fn prove_offered<S: Solver + Send>(
     );
     let offered = match (offer, &initial) {
         (Some(offer), Ok(init)) if offer.digest == digest => {
+            // A certificate that keeps a fine lemma needs its literal.
+            if offer.kept.iter().any(|k| fine.contains(k)) {
+                for solver in solvers.iter_mut() {
+                    solver.exec(joining.text())?;
+                }
+            }
             reusable(solvers, &enc, &cands, offer, init, &steps, &breaks)?
         }
         _ => None,
@@ -444,11 +461,12 @@ pub fn prove_offered<S: Solver + Send>(
     };
     if !reused {
         // Houdini's special cases, each kept for a reason:
-        // - Initiation is checked once, before any round: no round adds a candidate the initial
-        //   states have not been checked against.
+        // - Initiation is checked once per candidate, before the rounds it joins: no round adds
+        //   a candidate the initial states have not been checked against.
         // - The fine mined lemmas wait outside the set, and join (`Set::fine_joined`) only when a
         //   rule fell after initiation: most models prove every rule without them, and they are
-        //   many, so most proofs never check them.
+        //   many, so most proofs never check them. Until then z3 sees nothing of them, neither
+        //   their literals nor their initiation checks.
         // - When they join, the rules that fell after initiation come back: the set that broke
         //   them lacked the fine lemmas, so its counterexamples may no longer stand.
         // - A step is checked only against the candidates that read what it writes (`breaks`):
@@ -467,26 +485,9 @@ pub fn prove_offered<S: Solver + Send>(
         // - Rules and lemmas have their own rlimits (`ProveOptions`): a lemma that gives up only
         //   costs proofs, so its limit is lower.
         //
-        // Initiation: every candidate holds in every initial state.
-        match &initial {
-            Ok(init) => {
-                let all: Vec<usize> = (0..cands.len()).collect();
-                let answers = violated_each(solvers, &enc, &cands, &all, init, Frame::Pre)?;
-                for (k, sat) in all.into_iter().zip(answers) {
-                    let fall = match sat {
-                        Sat::Unsat => continue,
-                        Sat::Sat => Fall::Initial,
-                        Sat::Unknown => Fall::GaveUp(None),
-                    };
-                    set.fell[k] = Some(fall);
-                }
-            }
-            Err(Unsupported(why)) => {
-                for fall in &mut set.fell {
-                    *fall = Some(Fall::Unknown(format!("the initial states ({why})")));
-                }
-            }
-        }
+        // Initiation: every candidate but the fine lemmas holds in every initial state.
+        let plain: Vec<usize> = plain.iter().map(|(k, _)| *k).collect();
+        initiation(solvers, &enc, &cands, &plain, &initial, &mut set.fell)?;
 
         // The fine lemmas wait: most models prove every rule without them, and they are many.
         let at_start: BTreeSet<usize> = (0..cands.len())
@@ -528,11 +529,18 @@ pub fn prove_offered<S: Solver + Send>(
                     && set.fell[k].is_some()
                     && !at_start.contains(&k)
             });
-            let waiting = !set.fine_joined && fine.iter().any(|k| !at_start.contains(k));
-            if !open || !waiting {
+            if !open || set.fine_joined || fine.is_empty() {
                 break;
             }
             set.fine_joined = true;
+            for solver in solvers.iter_mut() {
+                solver.exec(joining.text())?;
+            }
+            let fine: Vec<usize> = fine.iter().copied().collect();
+            initiation(solvers, &enc, &cands, &fine, &initial, &mut set.fell)?;
+            if fine.iter().all(|k| set.fell[*k].is_some()) {
+                break;
+            }
             for (k, c) in cands.iter().enumerate() {
                 if matches!(c.origin, Origin::Rule(_)) && !at_start.contains(&k) {
                     set.fell[k] = None;
@@ -645,7 +653,7 @@ fn digest(
     // Bump the tag with any change to which set the rounds keep that the text hashed here
     // does not show (the order of the checks, how a fall is decided): a certificate of the
     // older rounds then misses instead of standing for a set they no longer keep.
-    add("rdra-ish proof certificate 1");
+    add("rdra-ish proof certificate 2");
     add(env!("CARGO_PKG_VERSION"));
     add(&format!("{options:?}"));
     add(declarations.text());
@@ -668,6 +676,37 @@ fn digest(
         add(violation(enc, c, Frame::Post).text());
     }
     h.hex()
+}
+
+/// Initiation for the candidates `which`: each that some initial state breaks, or that z3
+/// gives up on there, falls.
+fn initiation<S: Solver + Send>(
+    solvers: &mut [S],
+    enc: &Enc,
+    cands: &[Candidate],
+    which: &[usize],
+    initial: &Result<Script, Unsupported>,
+    fell: &mut [Option<Fall>],
+) -> Result<(), SolverError> {
+    match initial {
+        Ok(init) => {
+            let answers = violated_each(solvers, enc, cands, which, init, Frame::Pre)?;
+            for (k, sat) in which.iter().zip(answers) {
+                let fall = match sat {
+                    Sat::Unsat => continue,
+                    Sat::Sat => Fall::Initial,
+                    Sat::Unknown => Fall::GaveUp(None),
+                };
+                fell[*k] = Some(fall);
+            }
+        }
+        Err(Unsupported(why)) => {
+            for k in which {
+                fell[*k] = Some(Fall::Unknown(format!("the initial states ({why})")));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// The candidates' falls with `offer`'s set kept, when it is one that holds every rule and one

@@ -506,8 +506,10 @@ lemmas come from facts about absent and deleted rows and keys, and from what BFS
 cone at the run's bounds and at one instance: the patterns a row takes, the values of each
 column and pair of columns, and the patterns of a child with its parent (whole, per parent
 column, one column of each, and one child column with two parent columns when its pairs do
-not already imply it). Each mining run stops
-at 50,000 states. A lemma is only a guess until it survives the same checks, so a capped
+not already imply it). The lemmas of one column of each and of one child column with two
+parent columns wait: they join only when a rule stays unproved without them, and until then
+z3 sees nothing of them, so a proof that needs none of them sends z3 the same checks whatever
+of them a model offers. Each mining run stops at 50,000 states. A lemma is only a guess until it survives the same checks, so a capped
 exploration costs proofs, not soundness. The lemmas a proof kept print as `lemma:` lines, and
 one that only the one-instance run offered ends in `(mined at 1 instance per entity)`:
 
