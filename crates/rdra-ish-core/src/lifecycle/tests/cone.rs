@@ -541,3 +541,27 @@ after(Decide).assert(Doc.status != drop)
     let (exact, _) = assert_cones_exact("inline", &model, Bounds::STATES);
     assert!(exact > 0);
 }
+
+/// A step that changes a var its action's `action_writes` leaves out stops a debug or
+/// `shadow` build at the step (open problem P35): the cones read `action_writes` as every
+/// var a step can change (Lemma 2 of docs/theory/cones.md), so such a step would let a cone
+/// drop a writer it needs. Every other test that explores holds every step it takes to it.
+#[test]
+#[should_panic(expected = "which action_writes leaves out")]
+fn a_step_that_changes_a_var_its_action_does_not_write_is_caught() {
+    let ts = TransitionSystem::build(
+        &load("samples/formal-verification/order.rdra"),
+        Bounds::STATES,
+        &Scope::ALL,
+    )
+    .ts;
+    let s = ts.initial_states().remove(0);
+    let step = ts.moves(&s).next().expect("a move from the initial state");
+    let writes = &ts.plans()[step.act.index()].writes;
+    let cell = (0..writes.len())
+        .find(|&c| !writes[c])
+        .expect("a byte the first step does not write");
+    let mut next = step.next;
+    next.0[cell] ^= 1;
+    ts.check_writes(step.act, &s, &next);
+}
