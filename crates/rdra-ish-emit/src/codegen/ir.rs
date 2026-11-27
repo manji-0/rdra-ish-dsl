@@ -317,6 +317,17 @@ impl FnDecl {
         }
         Expected::Absent
     }
+
+    /// The run marks the step takes and does not advance, so the run ends on their rows: each
+    /// is returned in the result field `ended_<mark>`, for the commit to delete
+    /// (docs/design/algebraic-codegen.md, "Committing a result").
+    pub fn marks_ended(&self) -> Vec<(&MarkIn, String)> {
+        self.marks_in
+            .iter()
+            .filter(|m| !self.marks_out.iter().any(|o| o.param == m.param))
+            .map(|m| (m, format!("ended_{}", m.name)))
+            .collect()
+    }
 }
 
 /// The source a written row must still have when the write commits, so a store can write it

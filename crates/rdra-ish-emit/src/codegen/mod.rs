@@ -25,6 +25,7 @@ mod ts;
 mod ts_port;
 mod validators;
 pub mod verus;
+mod writes;
 
 use rdra_ish_syntax::ast::Kind;
 use std::collections::BTreeMap;
@@ -468,6 +469,13 @@ pub struct DerivedName {
 /// The names `lang`'s printer derives from the IR's names, beyond the IR's own fields.
 /// Each language's pull request fills in its arm.
 pub fn derived_names(lang: Lang, domain: &DomainModel) -> Vec<DerivedName> {
+    let mut names = lang_derived_names(lang, domain);
+    // The commit part's types and helper, in every language.
+    names.extend(writes::derived_names());
+    names
+}
+
+fn lang_derived_names(lang: Lang, domain: &DomainModel) -> Vec<DerivedName> {
     match lang {
         // Every name the Rust output declares in the module scope is a field of the IR:
         // the Rust printer derives none.

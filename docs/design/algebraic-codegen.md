@@ -824,6 +824,129 @@ is the race the model's tag guards. It does not cover another column a condition
 reads `qty`), a row read and not written (a parent, a `.has` list), or a consumed run mark or
 event; the held reads keep those, and the obligation says so.
 
+### Committing a result
+
+<!-- constrained-by #one-transaction-per-function -->
+<!-- constrained-by #use-cases-split-into-transactions -->
+
+Three services were built on the output in November 2026: a Rust one on SQLite, a Go one on
+SQLite, and a TypeScript one on `node:sqlite`. Each wrote the same glue by hand: one entry
+per result type that lists the rows the result writes, the run marks it stores, and the
+events it raises. The Rust service wrote about 160 lines of macro tables, the Go service
+used a regular-expression script and reflection, and the TypeScript service wrote about 550
+lines. The last step of a split use case did not return the marks it ends, so the
+obligation "delete the marks it took" could not be met from the result alone. Since this
+change the output gives this list as data. The data has the same shape in all three languages, and
+each language prints it in its own idiom.
+
+**The values.** A result is committed as four parts. The model has one type of each, and
+each type has one case per entity, per run mark, or per event:
+
+| Concept | Rust | Go | TypeScript |
+|---|---|---|---|
+| A row of any entity, as the store holds it | `enum StoredRow { Order(OrderRow), Account(Account), .. }` | `StoredRow` interface, which every `<Entity>Row` and entity record implements | in `RowWrite` |
+| The id of a row of any entity | `enum StoredId { Order(OrderId), .. }` | `StoredId` interface, which every id type implements | in `RowWrite` |
+| A row write | `enum RowWrite { Put { id, row, expected }, Delete { id, expected } }` | `struct RowWrite { Entity, Id, Row, Delete, Expected }` | union on `kind` and `entity`: `{ kind: "put"; entity: "Order"; id: OrderId; row: OrderRow; expected } \| ..` |
+| A run mark: use case, entity, id, step | `enum RunMark { OpenSettlementClaim { id, step }, .. }` | `struct RunMark { UseCase, Entity, Id, Step }` | union `{ usecase; entity; id; step }` |
+| A mark write | `enum MarkWrite { Put(RunMark), Delete(RunMark) }` | `struct MarkWrite { Mark, Delete }` | `{ kind: "put" \| "delete"; mark: RunMark }` |
+| An event of any type | `enum RaisedEvent { EvShipped(EvShipped), .. }` | `RaisedEvent` interface, which every event struct implements | union of the event types |
+| What one commit stores | `struct Writes { usecase, rows, marks, events }` | `struct Writes { UseCase, Rows, Marks, Events }` | `Writes = { usecase, rows, marks, events }` |
+
+A put stores the row: it inserts the row when `expected` is `Absent`, and otherwise updates
+it where the row is still `expected`. A delete removes the row where it is still `expected`.
+An entity with no one-column key has no id. Its `StoredId` case holds nothing (Go: `Id` is
+nil, TypeScript: `id: null`), because the result cannot name the row. A mark put with step 1 inserts the mark, and the row must have
+no mark of that use case (rule 3). A mark put with a later step advances the row's mark from
+the step before. A mark delete removes the mark at the step named. The run ends on that row.
+
+**The accessor.** Every result type and every outcome type of a dispatcher returns its
+`Writes`. Rust has the trait `IntoWrites` (`fn into_writes(self) -> Writes`). Go has the
+method `Writes() Writes` and the interface `Committable`. TypeScript has a companion object
+per type: `PayResult.writes(r)` and `CancelOutcome.writes(o)`. The list is complete. It holds
+every row the result writes or deletes, every mark it stores, advances, or ends, and every
+event it raises, in this order: rows in the order of the result's fields, then marks, then
+events. An outcome returns the list of the case that ran. A TypeScript outcome is a union with
+no tag. The cases of one action write the same rows, marks, and events, and differ only in
+the states, so its accessor reads the fields of the union and needs no tag.
+
+**The last step ends its marks (G4).** A step of a split use case returns each mark it
+takes and does not advance: `ended_<row>_mark`, with the type of the mark it took.
+`into_writes` lists the mark as a delete. Its `step` is the step of the mark that was taken.
+A step before the last advances its marks and lists each one as a put.
+
+**The commit helper.** The service supplies a store with three operations. The generated
+function then writes a `Writes` in order and stops at the first conditional write that
+matches nothing:
+
+- `write_row(RowWrite) -> bool`: false when the row is not `expected`.
+- `write_mark(MarkWrite) -> bool`: false when the mark is not what the step needs.
+- `record_event(RaisedEvent)`.
+
+Each operation can fail with the store's own error. The helper is `commit_writes(store,
+result)` in Rust (trait `CommitStore` with an associated `Error`, result
+`Result<(), CommitFailed<E>>`, where `CommitFailed` is `NotEnabled` or `Store(E)`),
+`CommitWrites(store, result) error` in Go (`*NotEnabled`, or the store's error as it is),
+and `commitWrites(store, writes)` in TypeScript (async, generic in the store's error,
+`Result<void, NotEnabled | E>`). The helper does not begin or end the transaction. The
+caller runs it inside the transaction of the call and rolls back on an error, as
+[one transaction per function](#one-transaction-per-function) requires. The caller turns
+`NotEnabled` into its `<UseCase>Error` with `From` / `errors.As` / the union, and decides
+what a store error becomes.
+
+**Names.** Each new type and helper name is claimed after the model's names. A model type
+with the same name gets the trailing `_`, as the other derived names do. In Go a result field
+named `Writes` would clash with the method, so the method becomes `Writes_` on every result
+of that model.
+
+**What changes.** The change adds items only. The new types and the accessors are added
+after the dispatchers, and the result of a step that ends marks gains its `ended_*` fields.
+No existing name, field, or function changes. The part adds about 15% to the output:
+clinic-ops gains 3,898 of 25,212 lines in Rust, 2,344 of 21,770 in Go, and 2,592 of 17,364 in
+TypeScript; ec-site gains 566, 336, and 300 lines. `tests/codegen_commit.rs` shows a service
+in each language that commits every result through the helper and passes the conformance
+harness, and fails it when its store keeps a mark the last step ends.
+
+### Not found and store failures (proposed, not built)
+
+<!-- constrained-by #committing-a-result -->
+
+A `<UseCase>Error` has three cases: `NotEnabled`, `Rejected`, and `InvalidArgument`. A
+service that loads a row by id and finds none has no case for it, nor does a store that
+fails (a lost connection, a constraint the model does not know). Both services answered
+`NotEnabled`. The HTTP layer then could not tell 404 from 409, and a store failure became a
+409 or a panic. Two cases would close the gap:
+
+- `NotFound { usecase, entity, id }`: a row the call names by id does not exist when it is
+  loaded. This answer comes at load time. A commit whose conditional write matches no row
+  stays `NotEnabled`, because the row may have been deleted or moved, and the model answers
+  both the same way. A run mark or an event that is missing is `NotEnabled`: the row exists
+  and is not in that run, or the trigger has not happened. Only a use case that loads a row by
+  id gets the case.
+- `StoreFailed { usecase, reason }`: the store failed. Every use case gets the case. In Go,
+  `Err` wraps the store's error so that `errors.Is` reaches it.
+
+The generated functions never return either case. Only a service's `prepare` and `commit`
+do. The conformance harness would count `NotFound` as `NotEnabled`, the kind the model
+refuses with (#452 checks refusal kinds), and would fail the run on `StoreFailed`, which no
+trace expects.
+
+Adding a case is additive in Go. In Rust and TypeScript it breaks every exhaustive match on
+the error: a `match` with no wildcard, or a `switch` that ends in `assertNever`. The model
+adapter of the conformance fixture has such matches. The options are these:
+
+1. **Opt-in.** `--store-errors` and `[code.<lang>] store_errors = true` add both cases. The
+   default output does not change. This needs a new CLI flag, an `rdra.toml` key, a
+   generator option, and the harness mapping above in the files #452 changes.
+2. **Default, breaking.** Add both cases to every `<UseCase>Error` in the next release, with a
+   CHANGELOG migration note: add an arm for each case to every exhaustive match.
+3. **Outside the error.** Leave `<UseCase>Error` as it is, and let the port's methods return
+   a wrapper such as `ServiceError<E> { UseCase(E), NotFound, StoreFailed }`. This breaks
+   every implementation of the port, which is worse than option 2.
+
+Recommendation: option 1 now, and option 2 at the next release that breaks the codegen
+output anyway. The owner decides. Until then the commit helper keeps the store's error apart
+(`CommitFailed::Store`), so a service can map it to its own 500 without a new case.
+
 ## Architecture
 
 ```

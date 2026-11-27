@@ -32,6 +32,25 @@
   - **Size.** On insurance-claim-ops the traces take 16 s and 109 MB, against 4 s and 15 MB
     before this change and the fix of the second-column choices. The traces of every model
     that has them change.
+- The codegen output (experimental) lists what each result commits, as data, in Rust, Go and
+  TypeScript (docs/design/algebraic-codegen.md, "Committing a result"). Three services built on
+  the output each wrote this glue by hand (about 160 lines in Rust, 550 in TypeScript, and a
+  script that generated 2,326 lines in Go).
+  - **Types.** `RowWrite` (a put or a delete of any entity's row, with its id and `expected`),
+    `RunMark` and `MarkWrite` (a run mark stored, advanced, or deleted), `RaisedEvent`, and
+    `Writes`. Rust and Go also have `StoredRow` and `StoredId`.
+  - **Accessor.** Every result and outcome type lists its rows, marks, and events: the trait
+    `IntoWrites` in Rust, the method `Writes()` and the interface `Committable` in Go, and a
+    companion `<Type>.writes(r)` in TypeScript.
+  - **Helper.** `commit_writes` / `CommitWrites` / `commitWrites` writes a `Writes` through a
+    `CommitStore` the service implements once (write a row, write a mark, record an event). It
+    stops with `NotEnabled` at the first row or mark that is no longer what it names.
+  - **Marks to end.** The result of a step of a split use case now carries each run mark it
+    takes and ends (`ended_<row>_mark`), so the commit can delete the mark.
+
+  The change adds items only. It adds about 15% to the output (clinic-ops in Rust: 3,898 of
+  25,212 lines). A model type named like one of the new types keeps its name, and the new
+  type takes a trailing `_`.
 - `codegen --adapter` (experimental, with `--conformance`) prints a black-box model adapter in
   place of the domain code, for Rust, Go and TypeScript (#439): plain data of the model's
   state (`ModelState`: rows by id with their tracked columns, run marks, raises) and calls

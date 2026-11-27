@@ -76,6 +76,7 @@ pub(super) fn print(
     print_functions(&cx, &mut body);
     print_validators(&cx, &mut body);
     print_dispatchers(&cx, &mut body);
+    super::writes::ts::print(domain, &mut body);
     super::ts_port::print_port(domain, &mut body);
     out.push_str(&helpers(&body));
     out.push_str(&body);
@@ -983,6 +984,13 @@ fn print_result(f: &FnDecl, out: &mut String) {
             event.ty
         ));
     }
+    for (m, field) in f.marks_ended() {
+        out.push_str(&format!(
+            "  /** The run mark the step took and ends: delete it in the same transaction. */\n  {}: {};\n",
+            property(&field),
+            m.ty
+        ));
+    }
     out.push_str("}>;\n\n");
 }
 
@@ -1272,6 +1280,13 @@ fn print_function(cx: &Cx<'_>, f: &FnDecl, out: &mut String) {
             "      {}: {{ {} }},\n",
             property(&super::snake(&event.ty)),
             parts.join(", ")
+        ));
+    }
+    for (m, field) in f.marks_ended() {
+        out.push_str(&format!(
+            "      {}: {},\n",
+            property(&field),
+            local(&m.name)
         ));
     }
     out.push_str("    },\n  };\n}\n\n");
