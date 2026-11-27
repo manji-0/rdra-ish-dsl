@@ -563,8 +563,31 @@ proof: 0 proved, 0 unproved, 0 out of scope, 1 refuted
 ...
 ```
 
-**Adding a lemma.** When no mined lemma rules a CTI's state out, write the missing fact as a
-rule with `.lemma()`. `check` checks it like any rule, so a wrong lemma fails there with a
+**Lemmas from a CTI.** When a rule stays unproved, the prover tries to rule its CTI's state
+out itself, in the manner of IC3. The CTI's state before the step, over the step's rows and
+the rule's, is a set of facts: each row's columns and marks, the keys between those rows, and
+that two rows of one entity differ. The clause "no rows with all of these" is weakened, one
+fact dropped at a time in a fixed order, while it still holds in every initial state and no
+step breaks it from a state where it, the rule, and the kept lemmas hold. A state of more
+than 40 facts, or a clause that is not inductive even with every fact, gives none. A clause
+that survives joins the proof as a candidate, which runs again (at most twice more), so it is
+kept only when it is inductive with the rest, and `proved` means what it did. It prints as
+`lemma: from the CTI of <rule>: <text>`, where the text is `.lemma()` source to copy into the
+model when the language states it (rows of distinct entities, columns, marks, and keys):
+
+```
+$ rdra-ish verify crates/rdra-ish-cli/tests/engine_corpus/z3_cti_true_rule.rdra --prove
+...
+proved: MultiForbidden_Light_0 [not enforced by the SQL schema: several entities]
+...
+lemma: from the CTI of MultiForbidden_Light_0: forbidden(Door, Light, Door.state == ajar, Light.state == off).global().lemma()
+```
+
+The proof certificate does not carry such a lemma, so a model whose proof needed one runs the
+proof in full each time instead of reusing the cached certificate.
+
+**Adding a lemma.** When no lemma the prover finds rules a CTI's state out, write the missing
+fact as a rule with `.lemma()`. `check` checks it like any rule, so a wrong lemma fails there with a
 trace. `verify` runs no cone for it, and the proof keeps it only when it proves it. It prints as
 `proved: lemma <name>` or `unproved: lemma <name>`, the `proof: your lemmas: ...` line counts
 it, and it never counts toward the `n of m rules` of the `OK:` line. A lemma, and no other

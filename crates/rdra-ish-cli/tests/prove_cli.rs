@@ -215,6 +215,48 @@ fn an_unreachable_cti_is_ruled_out_by_a_mined_lemma() {
     );
 }
 
+/// A rule no mined lemma proves is proved with a lemma generalized from its CTI (#428): the
+/// light off and the door ajar, which no reachable state has. The lemma prints as `.lemma()`
+/// text, and that text added to the model is a lemma z3 proves, which proves the rule.
+#[test]
+fn a_lemma_from_the_cti_proves_the_rule_and_reads_as_model_text() {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    let out = verify(&["--prove", &corpus("z3_cti_true_rule")]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("\nproved: MultiForbidden_Light_0 "),
+        "{stdout}"
+    );
+    let prefix = "lemma: from the CTI of MultiForbidden_Light_0: ";
+    let text = stdout
+        .lines()
+        .find_map(|l| l.strip_prefix(prefix))
+        .unwrap_or_else(|| panic!("no lemma from the CTI\n{stdout}"));
+    assert_eq!(
+        text,
+        "forbidden(Door, Light, Door.state == ajar, Light.state == off).global().lemma()"
+    );
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("prove_cli_cti_lemma");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("m.rdra");
+    let src = include_str!("engine_corpus/z3_cti_true_rule.rdra");
+    std::fs::write(&file, format!("{src}\n{text}\n")).unwrap();
+    let out = verify(&["--prove", file.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("\nproved: lemma MultiForbidden_Door_1 "),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("\nproved: MultiForbidden_Light_0 "),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("from the CTI"), "{stdout}");
+}
+
 /// The ∀∃ lemmas join only when a rule stays unproved with the fine ones in: a gate needs one
 /// (no key links it to a guard), an order does not (a count of its shipments proves it).
 #[test]
@@ -638,10 +680,11 @@ fn a_cone_at_the_memory_limit_is_decided_only_when_every_rule_in_it_is_proved() 
     if !tool("z3", "RDRA_REQUIRE_Z3") {
         return;
     }
-    // One true rule. Alone it is not inductive and stays unproved, so its cone, stopped at
-    // the memory limit, stays not decided. With the `.lemma()` that z3_lemma adds, z3 proves
-    // both checks of the cone, which decides it.
-    let out = verify(&["--memory", "1KiB", "--prove", &corpus("z3_cti_true_rule")]);
+    // One true rule. Alone it is not inductive and stays unproved (its proof needs a run
+    // mark no mined lemma reads), so its cone, stopped at the memory limit, stays not
+    // decided. In z3_lemma a `.lemma()` makes the rule there inductive, z3 proves both checks
+    // of the cone, and that decides it.
+    let out = verify(&["--memory", "1KiB", "--prove", &corpus("z3_needs_run_mark")]);
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
         stdout.contains("\nunproved: MultiForbidden_Light_0 "),
@@ -748,12 +791,12 @@ fn an_unproved_rule_that_passes_at_3_is_checked_at_4() {
         "escalated: Quantifier_Member_0: ok at 3 instances, counterexample at 4 instances (BFS on its cone; ok at 2)",
         "{stdout}"
     );
-    let out = verify(&["--prove", &corpus("z3_cti_true_rule")]);
+    let out = verify(&["--prove", &corpus("z3_int_listing_guard")]);
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert_eq!(
-        escalated_line(&stdout, "MultiForbidden_Light_0"),
-        "escalated: MultiForbidden_Light_0: ok at 3 instances, ok at 4 instances (BFS on its cone; ok at 2)",
+        escalated_line(&stdout, "Forbidden_Item_0"),
+        "escalated: Forbidden_Item_0: ok at 3 instances, ok at 4 instances (BFS on its cone; ok at 2)",
         "{stdout}"
     );
     assert!(

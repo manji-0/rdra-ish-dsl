@@ -68,7 +68,9 @@ The state before the step need not be reachable. Decide which case it is:
    uses. Above, Ship and Reship each link a Shipment to one Order; the escalation finds it at
    two instances and reports it with a trace. Fix the model, not the proof.
 2. **Not reachable.** A fact that rules the state out is missing from the proof. Write it
-   as a lemma.
+   as a lemma. When the prover found one itself, it prints a
+   `lemma: from the CTI of <rule>: forbidden(...).lemma()` line; copying that text into the
+   model keeps the fact in the model and lets `check` test it at bounds.
 
 A `verify` counterexample for the same rule settles case 1.
 

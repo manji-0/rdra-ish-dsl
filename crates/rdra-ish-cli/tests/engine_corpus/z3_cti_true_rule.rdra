@@ -1,12 +1,12 @@
-// trap: a true rule that is not inductive: z3 leaves it unproved with a counterexample to
-// induction, which is no disagreement with BFS.
+// trap: a true rule that is not inductive alone, and that no mined lemma helps.
 // The light turns off only while no door is ajar or open; a door cracks open only while no
 // light is off; Swing opens an ajar door with no guard. So no state has a light off and a
 // door open, at any bound. The rule is not inductive alone: from the unreachable state
 // (light off, door ajar), Swing breaks it, and no mined lemma rules that state out, since
-// the light and the door are not related by a key. z3 reports the CTI; BFS finds nothing.
-// z3_lemma.rdra adds the missing fact as a `.lemma()`.
-// expect MultiForbidden_Light_0: native=ok tlc=ok z3=unproved bfs=ok,ok,ok
+// the light and the door are not related by a key. The prover generalizes that CTI into
+// "no light is off while a door is ajar", which is inductive, and proves the rule with it
+// (#428); BFS finds nothing. z3_lemma.rdra writes the same fact as a `.lemma()`.
+// expect MultiForbidden_Light_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 // TLC's StateModel_ runs (#201) report both deadlocks: no step repeats, so no cycle hides
 // them (every light off with every door closed, and the other way round).
 // expect Deadlock_Door_state_closed: native=counterexample tlc=counterexample

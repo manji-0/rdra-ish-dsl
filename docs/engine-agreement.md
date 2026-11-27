@@ -255,7 +255,7 @@ skips TLC, since `verify` refuses `--with-tlc` under `64MiB`.
 | `sym_per_entity_bounds` | Per-entity bounds give two classes different slot counts | `--instances Room=3 --instances Booking=2` | `MultiForbidden_Booking_0` ok, z3 proved, BFS ok/ok/ok |
 | `sym_relink_loop` | A move into the class of its own source, a loop the stored graph keeps as a loop | `--instances Ticket=1` | `TicketCloses`, `TicketClosesFair` cex |
 | `sym_self_owned` | An entity whose key names its own rows |  | `Forbidden_Task_0` ok, z3 proved, BFS ok/ok/ok; `Deadlock_Task_status_open` cex |
-| `z3_cti_true_rule` | A true rule that is not inductive: z3 leaves it unproved with a CTI, which is no disagreement |  | `MultiForbidden_Light_0` ok, z3 unproved, BFS ok/ok/ok; `Deadlock_Door_state_closed`, `Deadlock_Light_state_on` cex |
+| `z3_cti_true_rule` | A true rule that is not inductive alone; no mined lemma relates its rows, and z3 proves it with a lemma generalized from its CTI (#428) |  | `MultiForbidden_Light_0` ok, z3 proved, BFS ok/ok/ok; `Deadlock_Door_state_closed`, `Deadlock_Light_state_on` cex |
 | `z3_enum_bool_default_outside_values` | An Enum or Bool default outside its values; the model does not load |  | `Forbidden_Item_0` none |
 | `z3_inductive` | An invariant z3 proves by induction, beside a real violation |  | `Forbidden_Order_0` ok, z3 proved, BFS ok/ok/ok; `Forbidden_Order_1` cex, z3 unproved, BFS cex/cex/cex |
 | `z3_int_and_now_boundary` | Int columns and `now` at the top of the range |  | `Forbidden_Item_0`, `Forbidden_Coupon_3` ok, z3 proved, BFS ok/ok/ok; `Forbidden_Item_1` cex, z3 unproved, BFS cex/cex/cex; `Forbidden_Coupon_2` ok, z3 unproved, BFS ok/ok/ok |

@@ -13,6 +13,7 @@ mod encode;
 mod mine;
 mod smt;
 mod solver;
+mod strengthen;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -327,6 +328,43 @@ pub fn prove_offered<S: Solver + Send>(
     offer: Option<&Certificate>,
 ) -> Result<Certified, SolverError> {
     assert!(!solvers.is_empty(), "a proof needs a solver");
+    let mined: Vec<(Origin, Formula, u8)> = mine::mine(ts, twin, rules)
+        .into_iter()
+        .map(|m| (Origin::Lemma(m.text), m.formula, m.wait))
+        .collect();
+    let mut extra: Vec<(String, Formula)> = Vec::new();
+    for round in 0.. {
+        let offer = if round == 0 { offer } else { None };
+        let (certified, found) =
+            prove_round(ts, rules, refuted, solvers, options, offer, &mined, &extra)?;
+        let new: Vec<(String, Formula)> = found
+            .into_iter()
+            .filter(|(t, _)| !extra.iter().any(|(u, _)| u == t))
+            .collect();
+        if new.is_empty() || round == STRENGTHEN_ROUNDS {
+            return Ok(certified);
+        }
+        extra.extend(new);
+    }
+    unreachable!("the rounds are bounded")
+}
+
+/// How many times a proof is run again with the lemmas its CTIs gave (`strengthen`).
+const STRENGTHEN_ROUNDS: usize = 2;
+
+/// One proof over the rules, the helper and mined lemmas, and `extra`, the lemmas earlier
+/// rounds took from CTIs; with the lemmas this round's CTIs give.
+#[allow(clippy::too_many_arguments)]
+fn prove_round<S: Solver + Send>(
+    ts: &TransitionSystem,
+    rules: &[usize],
+    refuted: &BTreeSet<usize>,
+    solvers: &mut [S],
+    options: ProveOptions,
+    offer: Option<&Certificate>,
+    mined: &[(Origin, Formula, u8)],
+    extra: &[(String, Formula)],
+) -> Result<(Certified, Vec<(String, Formula)>), SolverError> {
     let enc = Enc { ts };
     let mut verdicts: BTreeMap<usize, Verdict> = BTreeMap::new();
     let mut cands = Vec::new();
@@ -346,10 +384,11 @@ pub fn prove_offered<S: Solver + Send>(
             (Origin::Rule(i), f, 0)
         })
         .chain(lemmas(ts).into_iter().map(|(o, f)| (o, f, 0)))
+        .chain(mined.iter().cloned())
         .chain(
-            mine::mine(ts, twin, rules)
-                .into_iter()
-                .map(|m| (Origin::Lemma(m.text), m.formula, m.wait)),
+            extra
+                .iter()
+                .map(|(t, f)| (Origin::Lemma(t.clone()), f.clone(), 0)),
         );
     let mut wait: Vec<u8> = Vec::new();
     for (origin, formula, waits) in formulas {
@@ -565,6 +604,12 @@ pub fn prove_offered<S: Solver + Send>(
     // on. A rule z3 gave up on in the initial states is asked about them again.
     let solver = &mut solvers[0];
     solver.exec(restart(true).text())?;
+    let mut found: Vec<(String, Formula)> = Vec::new();
+    let with_writes: Vec<(Script, VarSet)> = steps
+        .iter()
+        .zip(&writes)
+        .map(|(s, w)| (s.commands.clone(), w.clone()))
+        .collect();
     for (k, c) in cands.iter().enumerate() {
         let Origin::Rule(i) = c.origin else { continue };
         let verdict = match &set.fell[k] {
@@ -600,10 +645,36 @@ pub fn prove_offered<S: Solver + Send>(
                     s.push(Command::Push);
                     s.append(&violation(&enc, c, Frame::Post));
                     solver.exec(s.text())?;
+                    let mut seen = None;
                     if solver.check_sat(c.rlimit)? == Sat::Sat {
                         cti = Some(read_cti(solver, ts, ActId::at_index(a), &c.formula)?);
+                        seen = strengthen::diagram(
+                            &mut *solver,
+                            ts,
+                            &cti_rows(ts, ActId::at_index(a), &c.formula),
+                        )?;
                     }
                     solver.exec(Script::from([Command::Pop, Command::Pop]).line())?;
+                    if let (Some((binders, lits)), Ok(init)) = (seen, &initial) {
+                        let mut hyps = assume(&cands, &set);
+                        hyps.append(&c.pre);
+                        let frame = strengthen::Frame0 {
+                            hyps: &hyps,
+                            steps: &with_writes,
+                            initial: init,
+                            rlimit: options.lemma_rlimit,
+                        };
+                        if let Some(f) =
+                            strengthen::generalize(&mut *solver, ts, &frame, &binders, lits)?
+                        {
+                            let text = format!(
+                                "from the CTI of {}: {}",
+                                ts.invariants()[i].name,
+                                strengthen::text(ts, &f)
+                            );
+                            found.push((text, f));
+                        }
+                    }
                     if cti.is_some() {
                         break;
                     }
@@ -638,11 +709,33 @@ pub fn prove_offered<S: Solver + Send>(
         lemmas: kept_lemmas,
         loose,
     };
-    Ok(Certified {
-        proof,
-        certificate: Certificate { digest, kept },
-        reused,
-    })
+    Ok((
+        Certified {
+            proof,
+            certificate: Certificate { digest, kept },
+            reused,
+        },
+        found,
+    ))
+}
+
+/// The rows a CTI shows: the action's params, then the rule's binders.
+fn cti_rows(ts: &TransitionSystem, act: ActId, formula: &Formula) -> Vec<(Expr, EntId)> {
+    let action = &ts.actions()[act.index()];
+    let mut rows: Vec<(Expr, EntId)> = action
+        .params
+        .iter()
+        .enumerate()
+        .map(|(i, p)| (encode::param(i, p.entity), p.entity))
+        .collect();
+    rows.extend(
+        formula
+            .binders
+            .iter()
+            .enumerate()
+            .map(|(i, e)| (encode::bound(i, *e), *e)),
+    );
+    rows
 }
 
 /// The digest of a proof's rounds (`Certificate::digest`): every command a round may send.
