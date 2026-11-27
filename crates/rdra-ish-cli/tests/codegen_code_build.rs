@@ -196,19 +196,19 @@ fn each_fault_fails_the_run() {
     for (fault, says) in [
         (
             "skip-core",
-            "after `Pay 1 2026-01-01T00:00:00Z`, the store differs from the model:",
+            "after `Pay 101 2026-01-01T00:00:00Z`, the store differs from the model:",
         ),
         (
             "drop-row",
-            "model only: Shipment 1 status=packed order_id=1",
+            "model only: Shipment 201 status=packed order_id=101",
         ),
         (
             "accept-disabled",
-            "the model refuses `Cancel 1` here, and the service ran it",
+            "the model refuses `Cancel 101` here, and the service ran it",
         ),
         (
             "unconditional",
-            "prepared before `Place 1 1 card s` changed a row it writes",
+            "prepared before `Place 1 101 card s` changed a row it writes",
         ),
     ] {
         let out = rdra(&dir, &["check", "model", "--code=run"], fault);
@@ -234,7 +234,7 @@ fn the_self_check_catches_a_service_that_ignores_the_id() {
     let all = text_slashed(&out);
     assert!(out.status.success(), "{all}");
     assert!(
-        all.contains("  self-check: 4 of 4 mutant traces failed at their changed row (seed 0)"),
+        all.contains("  self-check: 5 of 5 mutant traces failed at their changed row (seed 0); guard-removed mutants: Big"),
         "{all}"
     );
 
@@ -273,7 +273,7 @@ fn the_self_check_catches_a_service_that_ignores_the_id() {
         "{all}"
     );
     assert!(
-        all.contains("  self-check: 3 of 4 mutant traces failed at their changed row (seed 0)"),
+        all.contains("  self-check: 4 of 5 mutant traces failed at their changed row (seed 0); guard-removed mutants: Big"),
         "{all}"
     );
 }
@@ -371,22 +371,22 @@ fn a_model_adapter_conforms_whatever_the_domain_code_became() {
     let all = text_slashed(&out);
     assert!(out.status.success(), "{all}");
     assert!(
-        all.contains("  ran: 9 traces, 19 calls, 9 refused calls, 7 interleaved commits\n"),
+        all.contains("  ran: 11 traces, 21 calls, 11 refused calls, 7 interleaved commits; 32 calls made again by prepare and commit\n"),
         "{all}"
     );
     assert!(
-        all.contains("  self-check: 4 of 4 mutant traces failed at their changed row (seed 0)"),
+        all.contains("  self-check: 5 of 5 mutant traces failed at their changed row (seed 0); guard-removed mutants: Big"),
         "{all}"
     );
 
     for (fault, says) in [
         (
             "drop-row",
-            "model only: Shipment 1 status=packed order_id=1",
+            "model only: Shipment 201 status=packed order_id=101",
         ),
         (
             "unconditional",
-            "prepared before `Place 1 1 card s` changed a row it writes",
+            "prepared before `Place 1 101 card s` changed a row it writes",
         ),
     ] {
         let out = rdra(&dir, &["check", "model", "--code=run"], fault);
@@ -417,7 +417,7 @@ fn a_model_adapter_conforms_whatever_the_domain_code_became() {
     let all = text_slashed(&out);
     assert!(out.status.success(), "{all}");
     assert!(
-        all.contains("  ran: 9 traces, 19 calls, 9 refused calls, 0 interleaved commits; 7 interleavings run as plain calls: the adapter has no prepare and commit, so conditional writes are not checked"),
+        all.contains("  ran: 11 traces, 21 calls, 11 refused calls, 0 interleaved commits; 7 interleavings run as plain calls: the adapter has no prepare and commit, so conditional writes are not checked"),
         "{all}"
     );
 }

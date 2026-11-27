@@ -62,7 +62,7 @@ fn the_files_codegen_writes_are_fresh_wherever_check_runs() {
     let dir = generated("same");
     let traces = std::fs::read_to_string(dir.join("svc/tests/traces.txt")).unwrap();
     let mut lines = traces.lines();
-    assert_eq!(lines.next(), Some("# rdra-ish conformance traces 3"));
+    assert_eq!(lines.next(), Some("# rdra-ish conformance traces 4"));
     assert!(
         lines
             .next()
@@ -390,22 +390,24 @@ fn a_conformance_run_states_its_coverage() {
     );
     let lines = statement(&stdout);
     assert_eq!(
-        lines[..5],
+        lines[..7],
         [
             "coverage of [code.rust]: bounded conformance to the model, not equivalence",
             "  bound: 1 row created per entity, Int 0..5",
             "  BFS: complete, 6 states; 6 reached by the traces' calls",
             "  moves: 5 of 5 run",
-            "  refused calls: 9 tried (calls on one existing row); interleaved commits: 7",
+            "  refused calls: 11 tried (NotEnabled 10, Rejected 1); interleaved commits: 7",
+            "  seeded at a reached state: 2 traces, each then one call (H1: seed and path agree)",
+            "  never refused: 1 (Place)",
         ],
         "{stdout}"
     );
-    assert!(lines[5].starts_with("  assumes: H1 "), "{stdout}");
+    assert!(lines[7].starts_with("  assumes: H1 "), "{stdout}");
     assert!(
-        lines[6].starts_with("  cannot show: writes outside the port"),
+        lines[8].starts_with("  cannot show: writes outside the port"),
         "{stdout}"
     );
-    assert_eq!(lines.len(), 7, "{stdout}");
+    assert_eq!(lines.len(), 9, "{stdout}");
     assert!(!stderr.contains("CodeCoverageIncomplete"), "{stderr}");
     // The same statement whenever it runs, and none below --code=run.
     let again = outcome(&rdra(
@@ -492,6 +494,54 @@ fn a_capped_suite_warns_and_deny_incomplete_fails_it() {
     assert_eq!(code, Some(2), "{stderr}");
 }
 
+/// #439: a complete suite that never runs an action of the port names it, warns, and fails
+/// under `--deny-incomplete`. In min_card_met.rdra no reached state has room for AddLine.
+#[test]
+fn an_action_never_run_warns_and_deny_incomplete_fails_on_it() {
+    let dir = project("untried", &noop_run(4096));
+    std::fs::copy(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../samples/formal-verification/min_card_met.rdra"),
+        dir.join("model/order.rdra"),
+    )
+    .unwrap();
+    let (code, _, stderr) = outcome(&rdra(&dir, &["codegen", "model", "--code"]));
+    assert_eq!(code, Some(0), "{stderr}");
+    let (code, stdout, stderr) = outcome(&rdra(
+        &dir,
+        &["check", "model", "--code=run", "--mutants", "0"],
+    ));
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(
+        statement(&stdout).contains(&"  never run: 1 (AddLine)"),
+        "{stdout}"
+    );
+    assert!(
+        stderr.contains("warning[CodeCoverageIncomplete]: [code.rust]: the traces never run AddLine: a service that does nothing on them passes"),
+        "{stderr}"
+    );
+    let (code, stdout, stderr) = outcome(&rdra(
+        &dir,
+        &[
+            "check",
+            "model",
+            "--code=run",
+            "--deny-incomplete",
+            "--mutants",
+            "0",
+        ],
+    ));
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(
+        stderr.contains("error[CodeCoverageIncomplete]: [code.rust]: the traces never run AddLine"),
+        "{stderr}"
+    );
+    assert!(
+        stdout.ends_with("FAIL: code: 1 error(s) at --code=run\n"),
+        "{stdout}"
+    );
+}
+
 /// `codegen` states the coverage of the traces it writes, on stderr, and warns of a cap.
 #[test]
 fn codegen_states_the_coverage_of_the_traces_it_writes() {
@@ -528,12 +578,13 @@ fn a_run_that_ignores_the_traces_fails_the_self_check() {
         .lines()
         .filter(|l| l.starts_with("error[CodeMutantSurvived]"))
         .collect();
-    assert_eq!(survived.len(), 4, "{stderr}");
+    assert_eq!(survived.len(), 5, "{stderr}");
     for kind in [
         "refused-call-runs",
         "call-refused",
         "wrong-state",
         "absent-row",
+        "guard-removed (Big)",
     ] {
         assert!(
             survived
@@ -547,16 +598,16 @@ fn a_run_that_ignores_the_traces_fails_the_self_check() {
         stderr
             .matches("must run the probe's conformance test on the traces RDRA_ISH_TRACES names")
             .count(),
-        4,
+        5,
         "{stderr}"
     );
     assert!(
         stdout
-            .contains("  self-check: 0 of 4 mutant traces failed at their changed row (seed 0)\n"),
+            .contains("  self-check: 0 of 5 mutant traces failed at their changed row (seed 0); guard-removed mutants: Big\n"),
         "{stdout}"
     );
     assert!(
-        stdout.ends_with("FAIL: code: 4 error(s) at --code=run\n"),
+        stdout.ends_with("FAIL: code: 5 error(s) at --code=run\n"),
         "{stdout}"
     );
     let again = outcome(&rdra(&dir, &["check", "model", "--code=run"])).2;

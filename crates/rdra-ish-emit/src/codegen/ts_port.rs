@@ -467,17 +467,22 @@ export async function conform(newPort: () => ConformancePort, traces: string): P
         break;
       }}
       case "X": {{
-        if (port === null) {{
+        const [kind, ...call] = rest;
+        if (port === null || kind === undefined) {{
           return at("a call outside a trace");
         }}
-        const ran = await $confRun(port, rest);
+        const ran = await $confRun(port, call);
         if (!ran.ok) {{
           return at(ran.error);
         }}
         if (ran.value.ok) {{
-          return at(`the model refuses \`${{rest.join(" ")}}\` here, and the service ran it`);
+          return at(`the model refuses \`${{call.join(" ")}}\` here, and the service ran it`);
         }}
-        const diff = $confCompare($confAbstract(await port.snapshot()), want, `after the refused \`${{rest.join(" ")}}\``);
+        const got = $confKind(ran.value.error);
+        if (kind !== "-" && got !== kind) {{
+          return at(`the model refuses \`${{call.join(" ")}}\` here with ${{kind}}, and the service refused it with ${{got}}`);
+        }}
+        const diff = $confCompare($confAbstract(await port.snapshot()), want, `after the refused \`${{call.join(" ")}}\``);
         if (diff !== null) {{
           return at(diff);
         }}
@@ -559,6 +564,11 @@ function $confCompare(got: readonly string[], want: readonly string[], when: str
     out += `\n  store only: ${{line}}`;
   }}
   return out;
+}}
+
+/** The kind of a refusal: the `kind` of the error the service returned. */
+function $confKind(error: unknown): string {{
+  return typeof error === "object" && error !== null && "kind" in error && typeof error.kind === "string" ? error.kind : "an error of no kind";
 }}
 
 /** Prepares and commits a call: an error when the call cannot be read, else what the service returned. */

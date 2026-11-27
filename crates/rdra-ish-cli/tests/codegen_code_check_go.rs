@@ -237,15 +237,15 @@ fn each_fault_fails_the_conformance_run() {
     for (fault, reason) in [
         (
             "skip-core",
-            "after `Pay 1 2026-01-01T00:00:00Z`, the store differs from the model",
+            "after `Pay 101 2026-01-01T00:00:00Z`, the store differs from the model",
         ),
         (
             "drop-row",
-            "after `Ship 1 1`, the store differs from the model",
+            "after `Ship 101 201`, the store differs from the model",
         ),
         (
             "accept-disabled",
-            "the model refuses `Cancel 1` here, and the service ran it",
+            "the model refuses `Cancel 101` here, and the service ran it",
         ),
         (
             "unconditional",
@@ -382,7 +382,7 @@ fn the_self_check_catches_a_service_that_ignores_the_id() {
     assert_eq!(code, Some(0), "{stderr}");
     assert!(
         stdout
-            .contains("  self-check: 4 of 4 mutant traces failed at their changed row (seed 0)\n"),
+            .contains("  self-check: 5 of 5 mutant traces failed at their changed row (seed 0); guard-removed mutants: Big\n"),
         "{stdout}"
     );
 
@@ -405,7 +405,7 @@ fn the_self_check_catches_a_service_that_ignores_the_id() {
     assert!(stderr.contains("the absent-row mutant"), "{stderr}");
     assert!(
         stdout
-            .contains("  self-check: 3 of 4 mutant traces failed at their changed row (seed 0)\n"),
+            .contains("  self-check: 4 of 5 mutant traces failed at their changed row (seed 0); guard-removed mutants: Big\n"),
         "{stdout}"
     );
 }
@@ -480,12 +480,12 @@ fn a_model_adapter_conforms_whatever_the_domain_code_became() {
     let (code, stdout, stderr) = outcome(&rdra(&dir, &["check", "model", "--code=run"], None));
     assert_eq!(code, Some(0), "{stderr}");
     assert!(
-        stdout.contains("  ran: 9 traces, 19 calls, 9 refused calls, 7 interleaved commits\n"),
+        stdout.contains("  ran: 11 traces, 21 calls, 11 refused calls, 7 interleaved commits; 32 calls made again by prepare and commit\n"),
         "{stdout}"
     );
     assert!(
         stdout
-            .contains("  self-check: 4 of 4 mutant traces failed at their changed row (seed 0)\n"),
+            .contains("  self-check: 5 of 5 mutant traces failed at their changed row (seed 0); guard-removed mutants: Big\n"),
         "{stdout}"
     );
     for file in ["svc/rdra_adapter_test.go", "modeladapter/modeladapter.go"] {
@@ -505,7 +505,7 @@ fn a_model_adapter_conforms_whatever_the_domain_code_became() {
     assert_eq!(code, Some(1), "{stderr}");
     assert_eq!(errors(&stderr), ["CodeConformance"], "{stderr}");
     assert!(
-        stderr.contains("the model refuses `Cancel 1` here, and the service ran it"),
+        stderr.contains("the model refuses `Cancel 101` here, and the service ran it"),
         "{stderr}"
     );
 

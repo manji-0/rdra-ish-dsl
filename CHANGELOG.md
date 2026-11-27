@@ -13,6 +13,34 @@
   with `adapter`, makes `--code` exit 1. docs/cli-reference.md, "The code tables", also says how a
   service on an async database crate keeps the synchronous contracts: the I/O goes around
   the pure domain functions, and the conformance test `block_on`s the same async methods.
+- The conformance traces try every refusal of the model and check its kind (#439, PR 4). The
+  format line is now `# rdra-ish conformance traces 4`, so traces and harnesses of an earlier
+  version must be generated again (`check --code=fresh` says they are stale).
+  - **Refusals.** In each reached state the traces now try every call the model refuses,
+    where before they tried only use cases over one existing row: use cases over several
+    rows, creates while a slot is free (never a full one), later steps of a split use case,
+    and triggered use cases.
+  - **Kinds.** An `X` row names the kind the functions refuse with (`X NotEnabled ...`,
+    `Rejected`, `InvalidArgument`), and the harnesses of the port and of the model adapter
+    fail a service that refuses with another kind. A call the functions would run, which the
+    model refuses for a run mark, a raise, or a rule kept outside them, expects any kind
+    (`X - ...`).
+  - **Choices.** A refused call names a target the use case has.
+  - **H1.** Up to 16 reached states are seeded directly and followed by one call. Each trace
+    after the first seeds other values in the columns the model does not track.
+  - **Id bands.** Each entity's ids have a band of their own: `Order 101`, `Shipment 201`.
+  - **Coverage statement.** It counts refused calls by kind and adds `untried refusals:`,
+    `seeded at a reached state:`, `never run:` and `never refused:` lines.
+    `CodeCoverageIncomplete` and `--deny-incomplete` now also cover untried refusals and use
+    cases never run.
+  - **Self-check.** It adds one `guard-removed` mutant per condition that rejects a call of
+    the traces, and names the conditions.
+  - **Split adapters.** A model adapter with `prepare` and `commit` runs the traces again with
+    every call made by them, so a `commit` that never stores fails. Its report line adds
+    `split calls`, and `ran:` adds `calls made again by prepare and commit`.
+  - **Size.** On insurance-claim-ops the traces take 16 s and 109 MB, against 4 s and 15 MB
+    before this change and the fix of the second-column choices. The traces of every model
+    that has them change.
 - `codegen --adapter` (experimental, with `--conformance`) prints a black-box model adapter in
   place of the domain code, for Rust, Go and TypeScript (#439): plain data of the model's
   state (`ModelState`: rows by id with their tracked columns, run marks, raises) and calls

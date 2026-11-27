@@ -70,16 +70,16 @@ fn generate_both(lang: &str, dir: &Path, domain: &str, adapter: &str, extra: &[&
 const FAULTS: [(&str, &str); 4] = [
     (
         "skip-core",
-        "after `Pay 1 2026-01-01T00:00:00Z`, the store differs from the model:\n  model only: Order 1 status=paid paid_at=+ qty=2 customer_id=1",
+        "after `Pay 101 2026-01-01T00:00:00Z`, the store differs from the model:\n  model only: Order 101 status=paid paid_at=+ qty=2 customer_id=1",
     ),
-    ("drop-row", "model only: Shipment 1 status=packed order_id=1"),
+    ("drop-row", "model only: Shipment 201 status=packed order_id=101"),
     (
         "accept-disabled",
-        "the model refuses `Cancel 1` here, and the service ran it",
+        "the model refuses `Cancel 101` here, and the service ran it",
     ),
     (
         "unconditional",
-        "the service committed `Place 1 1 card s`, prepared before `Place 1 1 card s` changed a row it writes",
+        "the service committed `Place 1 101 card s`, prepared before `Place 1 101 card s` changed a row it writes",
     ),
 ];
 
@@ -94,8 +94,20 @@ fn check(lang: &str, run: impl Fn(&str, bool) -> Output) {
         "{lang}: the reference adapter fails:\n{out}"
     );
     assert!(
-        out.contains("rdra-ish conformance: ok 9 traces, 19 calls, 9 refusals, 7 interleavings, 0 interleavings skipped"),
+        out.contains("rdra-ish conformance: ok 11 traces, 21 calls, 11 refusals, 7 interleavings, 0 interleavings skipped, 32 split calls"),
         "{lang}: the reference adapter checked less than expected:\n{out}"
+    );
+    // A commit that never stores refuses every interleaved commit as it should; the calls
+    // made again by prepare and commit catch it.
+    let stub = run("stub-commit", true);
+    let out = text(&stub);
+    assert!(
+        !stub.status.success(),
+        "{lang}: a stub commit passes:\n{out}"
+    );
+    assert!(
+        out.contains("and the service refused it through prepare and commit: "),
+        "{lang}: a stub commit fails for another reason:\n{out}"
     );
     for (fault, report) in FAULTS {
         let failed = run(fault, true);
@@ -112,7 +124,7 @@ fn check(lang: &str, run: impl Fn(&str, bool) -> Output) {
         let out = text(&unsplit);
         assert!(unsplit.status.success(), "{lang} unsplit {fault}:\n{out}");
         assert!(
-            out.contains("rdra-ish conformance: ok 9 traces, 19 calls, 9 refusals, 0 interleavings, 7 interleavings skipped"),
+            out.contains("rdra-ish conformance: ok 11 traces, 21 calls, 11 refusals, 0 interleavings, 7 interleavings skipped, 0 split calls"),
             "{lang} unsplit {fault}:\n{out}"
         );
     }

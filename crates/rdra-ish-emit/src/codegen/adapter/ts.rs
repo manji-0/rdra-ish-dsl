@@ -295,6 +295,9 @@ export type Outcome = Readonly<{{ kind: "ran" }}> | Readonly<{{ kind: "refused";
 /** The outcome of a call that ran. */
 export const ran: Outcome = {{ kind: "ran" }};
 
+/** Each refusal as the traces spell its kind. */
+const adKinds: Readonly<Record<Refusal, string>> = {{ notEnabled: "NotEnabled", rejected: "Rejected", invalidArgument: "InvalidArgument" }};
+
 /** The outcome of a call refused for `refusal`. */
 export function refused(refusal: Refusal): Outcome {{
   return {{ kind: "refused", refusal }};
@@ -332,11 +335,13 @@ export type AdapterReport = Readonly<{{
   refusals: number;
   interleavings: number;
   skipped: number;
+  /** The calls and refused calls made again by `prepare` and then `commit`. */
+  split: number;
 }}>;
 
 /** The line a conformance test prints on a pass, which `check --code=run` reads. */
 export function reportLine(r: AdapterReport): string {{
-  return {report} + `${{r.traces}} traces, ${{r.calls}} calls, ${{r.refusals}} refusals, ${{r.interleavings}} interleavings, ${{r.skipped}} interleavings skipped`;
+  return {report} + `${{r.traces}} traces, ${{r.calls}} calls, ${{r.refusals}} refusals, ${{r.interleavings}} interleavings, ${{r.skipped}} interleavings skipped, ${{r.split}} split calls`;
 }}
 
 /** A value, or what is wrong. */
@@ -352,18 +357,43 @@ fn print_conform(out: &mut String) {
         r##"/**
  * Drives `adapter` along `traces` (the file `codegen --conformance` writes): resets and seeds
  * each trace's initial state, makes each call, and after each compares what the store holds
- * with the state the model reaches. A call the model refuses must be refused and change
- * nothing, and so must a commit whose rows another call changed after its prepare. Returns the
- * first difference.
+ * with the state the model reaches. A call the model refuses must be refused, with the kind the
+ * traces name, and change nothing, and so must a commit whose rows another call changed after
+ * its prepare. An adapter with `prepare` and `commit` runs the traces again with each call made
+ * by them. Returns the first difference.
  */
 export async function conform(adapter: ModelAdapter, traces: string): Promise<AdResult<AdapterReport>> {{
+  const report = await adPass(adapter, traces, false);
+  if (!report.ok || adapter.prepare === undefined || adapter.commit === undefined) {{
+    return report;
+  }}
+  const again = await adPass(adapter, traces, true);
+  if (!again.ok) {{
+    return again;
+  }}
+  return {{ ok: true, value: {{ ...report.value, split: again.value.calls + again.value.refusals }} }};
+}}
+
+/** Makes `call`: by `invoke`, or, with `split`, by the adapter's `prepare` and then its `commit`. */
+async function adRun(adapter: ModelAdapter, call: Call, split: boolean): Promise<Outcome> {{
+  const {{ prepare, commit }} = adapter;
+  if (!split || prepare === undefined || commit === undefined) {{
+    return adapter.invoke(call);
+  }}
+  const o = await prepare.call(adapter, call);
+  return o.kind === "ran" ? commit.call(adapter) : o;
+}}
+
+/** One run of `traces`, with each call made by `adRun`. */
+async function adPass(adapter: ModelAdapter, traces: string, viaSplit: boolean): Promise<AdResult<AdapterReport>> {{
+  const how = viaSplit ? " through prepare and commit" : "";
   const lines = traces.split("\n");
   if (lines[0]?.trimEnd() !== {format}) {{
     return {{ ok: false, error: "not a traces file of this version: generate the adapter and the traces again" }};
   }}
   const states = new Map<string, string[]>();
   let defining: string[] | null = null;
-  let report: AdapterReport = {{ traces: 0, calls: 0, refusals: 0, interleavings: 0, skipped: 0 }};
+  let report: AdapterReport = {{ traces: 0, calls: 0, refusals: 0, interleavings: 0, skipped: 0, split: 0 }};
   let inTrace = false;
   let seed = adEmpty();
   let want: readonly string[] = [];
@@ -434,9 +464,9 @@ export async function conform(adapter: ModelAdapter, traces: string): Promise<Ad
         if (!call.ok) {{
           return at(call.error);
         }}
-        const o = await adapter.invoke(call.value);
+        const o = await adRun(adapter, call.value, viaSplit);
         if (o.kind === "refused") {{
-          return at(`the model runs \`${{text.join(" ")}}\` here, and the service refused it: ${{o.refusal}}`);
+          return at(`the model runs \`${{text.join(" ")}}\` here, and the service refused it${{how}}: ${{o.refusal}}`);
         }}
         const diff = adCompare(await observe(), next, `after \`${{text.join(" ")}}\``);
         if (diff !== null) {{
@@ -447,15 +477,19 @@ export async function conform(adapter: ModelAdapter, traces: string): Promise<Ad
         break;
       }}
       case "X": {{
-        const call = adCall(rest);
-        if (!call.ok) {{
-          return at(call.error);
+        const [kind, ...words] = rest;
+        const call = adCall(words);
+        if (!call.ok || kind === undefined) {{
+          return at(call.ok ? "a refused call without its kind" : call.error);
         }}
-        const o = await adapter.invoke(call.value);
+        const o = await adRun(adapter, call.value, viaSplit);
         if (o.kind === "ran") {{
-          return at(`the model refuses \`${{rest.join(" ")}}\` here, and the service ran it`);
+          return at(`the model refuses \`${{words.join(" ")}}\` here, and the service ran it${{how}}`);
         }}
-        const diff = adCompare(await observe(), want, `after the refused \`${{rest.join(" ")}}\``);
+        if (kind !== "-" && adKinds[o.refusal] !== kind) {{
+          return at(`the model refuses \`${{words.join(" ")}}\` here with ${{kind}}, and the service refused it with ${{o.refusal}}`);
+        }}
+        const diff = adCompare(await observe(), want, `after the refused \`${{words.join(" ")}}\``);
         if (diff !== null) {{
           return at(diff);
         }}

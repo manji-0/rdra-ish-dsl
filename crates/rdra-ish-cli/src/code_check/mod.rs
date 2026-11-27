@@ -224,6 +224,12 @@ fn ran_line(t: &Target<'_>, stdout: &str, stderr: &str) -> Vec<String> {
         "  ran: {} traces, {} calls, {} refused calls, {} interleaved commits",
         ran.traces, ran.calls, ran.refusals, ran.interleavings
     );
+    if ran.split > 0 {
+        line.push_str(&format!(
+            "; {} calls made again by prepare and commit",
+            ran.split
+        ));
+    }
     if ran.skipped > 0 {
         line.push_str(&format!(
             "; {} interleavings run as plain calls: the adapter has no prepare and commit, so conditional writes are not checked",
@@ -431,8 +437,15 @@ fn coverage(t: &Target<'_>, deny_incomplete: bool) -> (Vec<String>, Option<CodeD
         model: None,
         code: None,
         fix: Some(format!(
-            "raise `conformance_states` in [code.{}] of rdra.toml and run `codegen --code` again{}",
-            t.name,
+            "{}{}",
+            if traces.complete {
+                "the statement's `untried refusals` and `never run` lines name what no trace checks: check it by other means".to_string()
+            } else {
+                format!(
+                    "raise `conformance_states` in [code.{}] of rdra.toml and run `codegen --code` again",
+                    t.name
+                )
+            },
             if deny_incomplete {
                 ""
             } else {
@@ -470,6 +483,7 @@ fn self_check(
         text,
         &traces.one_row,
         &traces.absent_id,
+        &traces.guards,
         how.per_kind,
         how.seed,
     );
@@ -526,6 +540,14 @@ fn self_check(
         total - survivors.len(),
         how.seed
     );
+    let guards: Vec<&str> = set
+        .mutants
+        .iter()
+        .filter_map(|m| m.guard.as_deref())
+        .collect();
+    if !guards.is_empty() {
+        line.push_str(&format!("; guard-removed mutants: {}", guards.join(", ")));
+    }
     for (kind, why) in &set.none {
         line.push_str(&format!("; no {}: {why}", kind.name()));
     }
@@ -545,7 +567,10 @@ fn survived(m: &Mutant, command: &[String], what: String, harness_runs: bool) ->
         name: "CodeMutantSurvived".to_string(),
         message: format!(
             "the run did not fail the {} mutant of traces line {} at its changed row: `{}` became `{}`, which the model never does",
-            m.kind.name(),
+            m.guard.as_ref().map_or_else(
+                || m.kind.name().to_string(),
+                |g| format!("{} ({g})", m.kind.name())
+            ),
             m.was.0,
             m.was.1,
             m.now

@@ -13,23 +13,27 @@ use std::collections::BTreeMap;
 /// How a mutant's last row differs from the row of the real traces.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MutantKind {
-    /// `X call` became `C <state> call`: a call the model refuses, expected to run.
+    /// `X <kind> call` became `C <state> call`: a call the model refuses, expected to run.
     RunRefused,
-    /// `C <state> call` became `X call`: a call the model runs, expected to be refused.
+    /// `C <state> call` became `X - call` (any kind): a call the model runs, expected to be refused.
     RefuseRun,
     /// `C <state> call` expects another state, one whose rows differ.
     WrongState,
     /// `C <state> call` names a row that does not exist and still expects the state: a
     /// service that looks the row up refuses it; one that ignores the id runs it.
     AbsentRow,
+    /// `X Rejected call` that one condition rejects became `C <state> call`: the model with
+    /// that guard removed runs it. One per condition.
+    GuardRemoved,
 }
 
 impl MutantKind {
-    pub const ALL: [MutantKind; 4] = [
+    pub const ALL: [MutantKind; 5] = [
         MutantKind::RunRefused,
         MutantKind::RefuseRun,
         MutantKind::WrongState,
         MutantKind::AbsentRow,
+        MutantKind::GuardRemoved,
     ];
 
     /// The kind's name in the output.
@@ -39,6 +43,7 @@ impl MutantKind {
             MutantKind::RefuseRun => "call-refused",
             MutantKind::WrongState => "wrong-state",
             MutantKind::AbsentRow => "absent-row",
+            MutantKind::GuardRemoved => "guard-removed",
         }
     }
 
@@ -48,6 +53,7 @@ impl MutantKind {
             MutantKind::RunRefused => "the traces try no refused call",
             MutantKind::RefuseRun | MutantKind::AbsentRow => "the traces make no such call",
             MutantKind::WrongState => "no two states of the traces differ",
+            MutantKind::GuardRemoved => "the traces try no call a condition rejects",
         }
     }
 }
@@ -61,6 +67,8 @@ pub struct Mutant {
     /// The row of the real traces, with its line, and what it became.
     pub was: (usize, String),
     pub now: String,
+    /// For [`MutantKind::GuardRemoved`]: the condition removed.
+    pub guard: Option<String>,
 }
 
 /// The mutants a self-check runs, and the kinds the traces give none of, with why.
@@ -80,11 +88,14 @@ struct Row<'a> {
 
 /// Up to `per_kind` mutants of each kind from `traces`, picked by `seed`: the same traces
 /// and seed give the same mutants. `one_row` names the actions whose call takes one existing
-/// row, first; `absent` is an id no row has.
+/// row, first; `absent` is an id no row has. `guards` are the refused calls a condition
+/// rejects ([`super::Traces::guards`]): with `per_kind` above 0, one guard-removed mutant per
+/// condition.
 pub fn mutants(
     traces: &str,
     one_row: &[String],
     absent: &str,
+    guards: &[super::Guarded],
     per_kind: usize,
     seed: u64,
 ) -> Mutants {
@@ -133,14 +144,28 @@ pub fn mutants(
         }
     }
     let mut rng = SplitMix(seed);
+    // Per condition, the rows it rejects: the row of the traces, in the state it names.
+    let mut guarded: BTreeMap<&str, Vec<(usize, usize, String)>> = BTreeMap::new();
     for (start, row) in &rows {
-        let toks: Vec<&str> = row.text.split_whitespace().collect();
-        match toks.as_slice() {
-            ["X", call @ ..] => candidates.entry(MutantKind::RunRefused).or_default().push((
+        for g in guards
+            .iter()
+            .filter(|g| g.state == row.at && g.row == row.text)
+        {
+            let call: Vec<&str> = row.text.split_whitespace().skip(2).collect();
+            guarded.entry(&g.condition).or_default().push((
                 *start,
                 row.line,
                 format!("C {} {}", row.at, call.join(" ")),
-            )),
+            ));
+        }
+    }
+    for (start, row) in &rows {
+        let toks: Vec<&str> = row.text.split_whitespace().collect();
+        match toks.as_slice() {
+            ["X", _kind, call @ ..] => candidates
+                .entry(MutantKind::RunRefused)
+                .or_default()
+                .push((*start, row.line, format!("C {} {}", row.at, call.join(" ")))),
             ["C", to, call @ ..] => {
                 let push = |c: &mut BTreeMap<MutantKind, Vec<_>>, k, text| {
                     c.entry(k).or_default().push((*start, row.line, text));
@@ -148,7 +173,7 @@ pub fn mutants(
                 push(
                     &mut candidates,
                     MutantKind::RefuseRun,
-                    format!("X {}", call.join(" ")),
+                    format!("X - {}", call.join(" ")),
                 );
                 let rows_of = states.get(to);
                 let other: Vec<&str> = states
@@ -180,7 +205,36 @@ pub fn mutants(
     }
 
     let mut out = Mutants::default();
+    let cut = |start: usize, line: usize, now: String, kind, guard: Option<String>| {
+        let mut text = String::new();
+        for l in header.iter().chain(&lines[start..line]) {
+            text.push_str(l);
+            text.push('\n');
+        }
+        text.push_str(&now);
+        text.push('\n');
+        Mutant {
+            kind,
+            line: header.len() + (line - start) + 1,
+            text,
+            was: (line + 1, lines[line].to_string()),
+            now,
+            guard,
+        }
+    };
     for kind in MutantKind::ALL {
+        if kind == MutantKind::GuardRemoved {
+            if guarded.is_empty() {
+                out.none.push((kind, kind.none_because()));
+            } else if per_kind > 0 {
+                for (condition, pool) in &guarded {
+                    let (start, line, now) = pool[rng.below(pool.len())].clone();
+                    out.mutants
+                        .push(cut(start, line, now, kind, Some(condition.to_string())));
+                }
+            }
+            continue;
+        }
         let mut pool = candidates.remove(&kind).unwrap_or_default();
         if pool.is_empty() {
             out.none.push((kind, kind.none_because()));
@@ -188,20 +242,7 @@ pub fn mutants(
         }
         for _ in 0..per_kind.min(pool.len()) {
             let (start, line, now) = pool.swap_remove(rng.below(pool.len()));
-            let mut text = String::new();
-            for l in header.iter().chain(&lines[start..line]) {
-                text.push_str(l);
-                text.push('\n');
-            }
-            text.push_str(&now);
-            text.push('\n');
-            out.mutants.push(Mutant {
-                kind,
-                line: header.len() + (line - start) + 1,
-                text,
-                was: (line + 1, lines[line].to_string()),
-                now,
-            });
+            out.mutants.push(cut(start, line, now, kind, None));
         }
     }
     out
@@ -228,7 +269,7 @@ impl SplitMix {
 mod tests {
     use super::*;
 
-    const TRACES: &str = "# rdra-ish conformance traces 3
+    const TRACES: &str = "# rdra-ish conformance traces 4
 # rdra-ish codegen fingerprint: model=0 code=0
 S 0
 A Customer 1
@@ -245,7 +286,7 @@ T 0
 R Customer 1
 G
 C 1 Place 1 1
-X Cancel 1
+X Rejected Cancel 1
 C 2 Pay 1 x
 T 0
 R Customer 1
@@ -257,15 +298,23 @@ C 1 Place 1 1
         vec!["Pay".to_string(), "Cancel".to_string()]
     }
 
+    fn guards() -> Vec<super::super::Guarded> {
+        vec![super::super::Guarded {
+            condition: "Big".to_string(),
+            state: "1".to_string(),
+            row: "X Rejected Cancel 1".to_string(),
+        }]
+    }
+
     #[test]
     fn each_kind_changes_one_row_and_cuts_the_trace_after_it() {
-        let m = mutants(TRACES, &one_row(), "2", 9, 0);
+        let m = mutants(TRACES, &one_row(), "2", &guards(), 9, 0);
         assert!(m.none.is_empty(), "{:?}", m.none);
         for mutant in &m.mutants {
             let lines: Vec<&str> = mutant.text.lines().collect();
             assert_eq!(lines[mutant.line - 1], mutant.now, "{mutant:?}");
             assert_eq!(lines.len(), mutant.line, "the changed row is the last");
-            assert_eq!(lines[0], "# rdra-ish conformance traces 3");
+            assert_eq!(lines[0], "# rdra-ish conformance traces 4");
             assert_eq!(TRACES.lines().nth(mutant.was.0 - 1), Some(&*mutant.was.1));
         }
         let of = |k| -> Vec<&str> {
@@ -277,9 +326,15 @@ C 1 Place 1 1
         };
         // The X row runs from the state it is tried in.
         assert_eq!(of(MutantKind::RunRefused), ["C 1 Cancel 1"]);
+        // One per condition, naming it.
+        assert_eq!(of(MutantKind::GuardRemoved), ["C 1 Cancel 1"]);
+        assert!(m
+            .mutants
+            .iter()
+            .all(|x| (x.kind == MutantKind::GuardRemoved) == (x.guard.as_deref() == Some("Big"))));
         let mut refused = of(MutantKind::RefuseRun);
         refused.sort();
-        assert_eq!(refused, ["X Pay 1 x", "X Place 1 1", "X Place 1 1"]);
+        assert_eq!(refused, ["X - Pay 1 x", "X - Place 1 1", "X - Place 1 1"]);
         // Only a call of a one-row action names an absent row; Place creates its row.
         assert_eq!(of(MutantKind::AbsentRow), ["C 2 Pay 2 x"]);
         // Never a state with the same rows: 2 and 3 hold the same.
@@ -304,17 +359,17 @@ C 1 Place 1 1
             "{}",
             x.text
         );
-        assert_eq!(x.was, (18, "X Cancel 1".to_string()));
+        assert_eq!(x.was, (18, "X Rejected Cancel 1".to_string()));
     }
 
     #[test]
     fn the_seed_picks_the_mutants() {
-        let a = mutants(TRACES, &one_row(), "2", 1, 7);
-        let b = mutants(TRACES, &one_row(), "2", 1, 7);
+        let a = mutants(TRACES, &one_row(), "2", &[], 1, 7);
+        let b = mutants(TRACES, &one_row(), "2", &[], 1, 7);
         assert_eq!(a.mutants, b.mutants);
         assert_eq!(a.mutants.len(), 4);
         let picks = |seed| {
-            mutants(TRACES, &one_row(), "2", 1, seed)
+            mutants(TRACES, &one_row(), "2", &[], 1, seed)
                 .mutants
                 .into_iter()
                 .map(|m| m.now)
@@ -334,12 +389,16 @@ C 1 Place 1 1
             .filter(|l| !l.starts_with("X "))
             .map(|l| format!("{l}\n"))
             .collect();
-        let m = mutants(&capped, &[], "2", 1, 0);
+        let m = mutants(&capped, &[], "2", &[], 1, 0);
         assert_eq!(
             m.none,
             [
                 (MutantKind::RunRefused, "the traces try no refused call"),
                 (MutantKind::AbsentRow, "the traces make no such call"),
+                (
+                    MutantKind::GuardRemoved,
+                    "the traces try no call a condition rejects"
+                ),
             ]
         );
     }

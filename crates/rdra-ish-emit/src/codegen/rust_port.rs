@@ -172,9 +172,16 @@ pub fn conform<P: ConformancePort>(mut new_port: impl FnMut() -> P, traces: &str
                 report.calls += 1;
             }}
             "X" => {{
+                let ::core::option::Option::Some((&kind, rest)) = rest.split_first() else {{
+                    return {RESULT}::Err(at("a refused call without its kind".to_string()));
+                }};
                 let p = conf_port.as_mut().ok_or_else(|| at("a call outside a trace".to_string()))?;
-                if conf_run(p, rest).map_err(at)?.is_ok() {{
-                    return {RESULT}::Err(at(format!("the model refuses `{{}}` here, and the service ran it", rest.join(" "))));
+                match conf_run(p, rest).map_err(at)? {{
+                    {RESULT}::Ok(()) => return {RESULT}::Err(at(format!("the model refuses `{{}}` here, and the service ran it", rest.join(" ")))),
+                    {RESULT}::Err(why) if kind != "-" && !why.starts_with(&format!("{{kind}}: ")) => {{
+                        return {RESULT}::Err(at(format!("the model refuses `{{}}` here with {{kind}}, and the service refused it with {{why}}", rest.join(" "))));
+                    }}
+                    {RESULT}::Err(_) => {{}}
                 }}
                 conf_compare(&conf_abstract(&p.snapshot()), &want, &format!("after the refused `{{}}`", rest.join(" "))).map_err(at)?;
                 report.refusals += 1;
@@ -310,7 +317,7 @@ fn print_calls(domain: &DomainModel, port: &PortDecl, out: &mut String) {
             args.push(v);
         }
         out.push_str(&format!(
-            "            {RESULT}::Ok(conf_port.{}({}).map(ConfWrite::{}).map_err(|e| e.to_string()))\n        }}\n",
+            "            {RESULT}::Ok(conf_port.{}({}).map(ConfWrite::{}).map_err(|e| conf_why(&e)))\n        }}\n",
             method_names(m)[0],
             args.join(", "),
             m.name
@@ -324,12 +331,15 @@ fn print_calls(domain: &DomainModel, port: &PortDecl, out: &mut String) {
     ));
     for m in &port.methods {
         out.push_str(&format!(
-            "        ConfWrite::{}(w) => conf_port.{}(w).map_err(|e| e.to_string()),\n",
+            "        ConfWrite::{}(w) => conf_port.{}(w).map_err(|e| conf_why(&e)),\n",
             m.name,
             method_names(m)[1]
         ));
     }
     out.push_str("    }\n}\n\n");
+    out.push_str(&format!(
+        "/// Why the service refused a call: the kind of its error, `: `, and its text.\nfn conf_why(e: &(dyn ::std::error::Error + 'static)) -> {STRING} {{\n    let kind = match e.source() {{\n        {OPTION}::Some(d) if d.is::<NotEnabled>() => \"NotEnabled\",\n        {OPTION}::Some(d) if d.is::<Rejected>() => \"Rejected\",\n        {OPTION}::Some(d) if d.is::<InvalidArgument>() => \"InvalidArgument\",\n        _ => \"an error of no kind\",\n    }};\n    format!(\"{{kind}}: {{e}}\")\n}}\n\n"
+    ));
 }
 
 /// `conf_seed_row`: the rows of an initial state.
