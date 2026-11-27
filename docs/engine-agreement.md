@@ -37,7 +37,10 @@ case, whatever the case's header says.
      states it as `tlc=none`.
 2. The rule holds per run as well as for the final verdict. Each property line names its runs
    (`Cone_P`, `Cone_P_Full`, `Cone_P_WF`, `RdraSpec_P`), and the two engines must agree on
-   each run both decided. Two runs can disagree in ways that cancel.
+   each run both decided. Two runs can disagree in ways that cancel. A native `Cone_` line
+   whose checks the header gives a TLC verdict needs TLC's line for the same module; a
+   native `RdraSpec_` line may stand alone, since TLC's cone may decide what the native cone
+   left to the whole model.
 3. The run prints no `error[EngineDisagreement]` and no `error[LassoFault]`. A native
    counterexample replays through the step relation, fails its formula, and passes its
    fairness check before it prints.
@@ -64,8 +67,8 @@ case, whatever the case's header says.
 
 8. With the test-only `RDRA_ISH_FORCE_ORBITS=1`, which runs up to symmetry every cone a plain
    run would otherwise decide, once with reduction off (`RDRA_ISH_NO_REDUCE=1`) and once with
-   it on, each check both runs decide gets the plain run's verdict, at 2 instances and at every
-   bound the case runs BFS at. A lifted counterexample that does not replay, or whose steps do
+   it on, each check the plain run decides gets the plain run's verdict, not `not decided`, at
+   2 instances and at every bound the case runs BFS at. A lifted counterexample that does not replay, or whose steps do
    not bind the rows they name, panics.
 
 **The native checker past the run's bounds**, on `verify --prove`:
@@ -104,7 +107,9 @@ and `z3_now_past_the_top` pin both sides.
 
 Each case is one `.rdra` file under `crates/rdra-ish-cli/tests/engine_corpus/`. The file name
 starts with the trap's family: `fair_`, `presence_`, `cone_`, `safety_`, `sym_`, `cap_`, or
-`z3_`. The harness reads every `*.rdra` file in the directory, so no list needs an update.
+`z3_`. The harness reads every `*.rdra` file in the directory. `CASES` in the same directory
+lists every case's file stem, and `every_corpus_header_is_well_formed` fails when the two
+differ, so a deleted or renamed case does not go unnoticed.
 
 ### Header grammar
 
@@ -182,6 +187,7 @@ steps.
    verdict, and add a `known` line that links it.
 5. Check that the case discriminates: break the engine the way the trap describes, confirm the
    case fails, and revert.
+6. Add the file stem to `CASES`, in sorted order.
 
 ## Cases by trap
 
