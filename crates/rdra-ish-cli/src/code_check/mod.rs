@@ -25,7 +25,7 @@ use rdra_ish_emit::codegen::probe::{ContractIndex, Probe};
 
 use crate::cli::CodeLevel;
 use crate::codegen_cmd::{configured_request, generate, Generated, Loaded, Request};
-use crate::generated_file::{check_code, check_traces, stamp};
+use crate::generated_file::{check_code, check_traces, stamp, table_settings};
 use crate::paths::shown;
 use map::{map_messages, CompilerMessage, Finding, Mapping};
 
@@ -55,6 +55,8 @@ impl fmt::Display for CodeDiagnostic {
             ("fix:  ", &self.fix),
         ] {
             if let Some(v) = value {
+                // A value of several lines keeps them under its first.
+                let v = v.replace('\n', "\n         ");
                 write!(f, "\n  {key} {v}")?;
             }
         }
@@ -137,14 +139,16 @@ pub(crate) trait Backend {
         Vec::new()
     }
 
+    /// The build's output as a person reads it, printed before the findings that map it: by
+    /// default all of stdout and stderr (tsc writes its errors to stdout, `go` to stderr).
+    fn compiler_output(&self, stdout: &str, stderr: &str) -> String {
+        format!("{stdout}{stderr}")
+    }
+
     /// The `code:` line of a failed run: by default the output's last non-empty line; a
     /// language gives the harness's report of the first difference instead.
     fn run_failure(&self, stdout: &str, stderr: &str) -> Option<String> {
-        format!("{stdout}\n{stderr}")
-            .lines()
-            .rev()
-            .find(|l| !l.trim().is_empty())
-            .map(|l| l.trim().to_string())
+        last_line(&format!("{stdout}\n{stderr}"))
     }
 
     /// The members a message says are missing from a contract, and how many more it only
@@ -327,8 +331,9 @@ fn compile(
     if ok && messages.is_empty() {
         return Ok(Vec::new());
     }
+    // The whole output first: the findings quote it.
+    eprint!("{}", backend.compiler_output(&stdout, &stderr));
     if !ok && messages.is_empty() {
-        eprint!("{stderr}");
         return Ok(vec![CodeDiagnostic {
             name: "CodeBuildFailed".to_string(),
             message: format!(
@@ -352,6 +357,23 @@ fn compile(
         ContractIndex::new(p, |m| backend.method_names(m))
             .with_entries(p, |e| backend.entry_names(&e.name))
     });
+    let functions = match (t.generated.domain.as_ref(), port, lang_of(t.name)) {
+        (Some(domain), Some(p), Some(lang)) => ContractIndex::of_functions(domain, p, |name| {
+            rdra_ish_emit::codegen::function_name(lang, name)
+        }),
+        _ => ContractIndex::default(),
+    };
+    // The compiler's paths are relative to the root it ran in; the check shows paths relative
+    // to the working directory.
+    let root = t.root();
+    let shown_file = |file: &str| shown(&root.join(file));
+    let source_line = |msg: &CompilerMessage| {
+        let text = std::fs::read_to_string(root.join(&msg.file)).ok()?;
+        text.lines()
+            .nth(msg.line.checked_sub(1)?)
+            .map(str::to_string)
+    };
+    let table = format!("[code.{}]", t.name);
     // The sites are relative to rdra.toml, as the generated text has them; the diagnostics
     // show them as the other paths of the check are shown.
     let contracts: Vec<ContractDecl> = port
@@ -369,9 +391,101 @@ fn compile(
         index: &index,
         contracts: &contracts,
         service: t.target.service.as_deref().unwrap_or("the service"),
+        shown: &shown_file,
+        functions: &functions,
+        table: &table,
+        source_line: &source_line,
     };
-    eprint!("{stderr}");
     Ok(map_messages(&messages, &mapping, backend))
+}
+
+/// The language of the `[code.<name>]` table.
+fn lang_of(name: &str) -> Option<rdra_ish_emit::codegen::Lang> {
+    use rdra_ish_emit::codegen::Lang;
+    match name {
+        "rust" => Some(Lang::Rust),
+        "go" => Some(Lang::Go),
+        "ts" => Some(Lang::TypeScript),
+        _ => None,
+    }
+}
+
+/// The last non-empty line of `out`, trimmed.
+fn last_line(out: &str) -> Option<String> {
+    out.lines()
+        .rev()
+        .find(|l| !l.trim().is_empty())
+        .map(|l| l.trim().to_string())
+}
+
+/// The harness's report in the output of a failed run: the text after
+/// `rdra-ish conformance: ` (the last one, when a run prints several), with the `model only:`
+/// and `store only:` lines under it, one per row that differs.
+pub(crate) fn harness_report(out: &str) -> Option<String> {
+    let (_, rest) = out.rsplit_once("rdra-ish conformance: ")?;
+    let mut lines = rest.lines();
+    let mut report = lines.next()?.trim_end().to_string();
+    for line in lines {
+        let line = line.trim();
+        if line.starts_with("model only: ") || line.starts_with("store only: ") {
+            report.push_str("\n  ");
+            report.push_str(line);
+        } else {
+            break;
+        }
+    }
+    Some(report)
+}
+
+/// A panic in the output of a failed run, when the harness reported none: Rust's
+/// `panicked at <file>:<line>:<col>:` with the message under it, Go's `panic: <message>` with
+/// the function that panicked and its line, or a JavaScript error Node threw. `None` when
+/// nothing panicked.
+pub(crate) fn panic_report(out: &str) -> Option<String> {
+    let lines: Vec<&str> = out.lines().collect();
+    // Rust: "thread '..' panicked at src/x.rs:3:5:" then the message.
+    if let Some(i) = lines.iter().position(|l| l.contains(" panicked at ")) {
+        let (_, at) = lines[i].split_once(" panicked at ")?;
+        let message = lines.get(i + 1).map_or("", |l| l.trim());
+        return Some(format!(
+            "the service panicked at {}: {message}",
+            at.trim_end_matches(':')
+        ));
+    }
+    // Go: "panic: <message>", and under "panic(" the frame that panicked: its function, then
+    // its file and line.
+    if let Some(i) = lines.iter().position(|l| l.starts_with("panic: ")) {
+        let message = lines[i].trim_start_matches("panic: ").trim();
+        let frame = lines
+            .iter()
+            .skip(i)
+            .position(|l| l.starts_with("panic("))
+            .and_then(|p| {
+                let func = lines.get(i + p + 2)?.trim();
+                // Its arguments are addresses.
+                let func = func.rsplit_once('(').map_or(func, |(f, _)| f);
+                let file = lines.get(i + p + 3)?.trim();
+                let file = file.split(" +0x").next().unwrap_or(file);
+                Some(format!(" in {func} at {file}"))
+            })
+            .unwrap_or_default();
+        return Some(format!("the service panicked{frame}: {message}"));
+    }
+    // Node: an uncaught error is a line "<Name>Error: <message>" (or "Error [CODE]: ..")
+    // followed by its stack, whose first frame is the place it was thrown.
+    let i = lines.iter().position(|l| {
+        let head = l.split([':', ' ']).next().unwrap_or("");
+        head.ends_with("Error")
+            && head.chars().all(|c| c.is_ascii_alphanumeric())
+            && l.contains(": ")
+    })?;
+    let at = lines
+        .get(i + 1)
+        .map(|l| l.trim())
+        .filter(|l| l.starts_with("at "))
+        .map(|l| format!(" {l}"))
+        .unwrap_or_default();
+    Some(format!("the service threw{at}: {}", lines[i].trim()))
 }
 
 /// Whether two paths name one file, compared as written and as resolved.
@@ -638,8 +752,9 @@ pub(crate) fn run(
         generated_files.push(t.path(target.code_file()));
         generated_files.extend(target.traces.as_ref().map(|p| t.path(p)));
         generated_files.extend(extra.iter().map(|(p, _)| t.path(p)));
-        if !fresh(&t, &extra)? {
-            failed += 1;
+        let stale = fresh(&t, &extra)?;
+        if stale > 0 {
+            failed += stale;
             eprintln!(
                 "  generate them again: rdra-ish codegen {} --code",
                 inputs
@@ -743,20 +858,25 @@ pub(crate) fn run(
     Ok(true)
 }
 
-/// `fresh`: whether the domain code, the traces and the `extra` files of `t` are what the
-/// model generates; prints each difference on stderr.
-fn fresh(t: &Target<'_>, extra: &[(PathBuf, String)]) -> Result<bool> {
+/// `fresh`: how many of the domain code, the traces and the `extra` files of `t` are not
+/// what the model generates (one error each); prints each difference on stderr.
+fn fresh(t: &Target<'_>, extra: &[(PathBuf, String)]) -> Result<usize> {
     let hash = &t.generated.model_hash;
-    let mut fresh = compare(&t.path(t.target.code_file()), |p| {
-        check_code(p, &t.generated.code, hash)
-    })?;
+    let settings = table_settings(t.name);
+    let mut fresh = vec![compare(&t.path(t.target.code_file()), |p| {
+        check_code(p, &t.generated.code, hash, &settings)
+    })?];
     if let (Some(path), Some((text, _))) = (&t.target.traces, &t.generated.traces) {
-        fresh &= compare(&t.path(path), |p| check_traces(p, text, hash))?;
+        fresh.push(compare(&t.path(path), |p| {
+            check_traces(p, text, hash, &settings)
+        })?);
     }
     for (path, text) in extra {
-        fresh &= compare(&t.path(path), |p| check_code(p, text, hash))?;
+        fresh.push(compare(&t.path(path), |p| {
+            check_code(p, text, hash, &settings)
+        })?);
     }
-    Ok(fresh)
+    Ok(fresh.iter().filter(|f| !**f).count())
 }
 
 /// Runs `check` on `path`, or reports that the file is missing.
@@ -796,5 +916,41 @@ mod tests {
         // The default: the output's last non-empty line.
         let d = run_diagnostic(&FreshOnly, &command, "a\n", "b\nFAIL\n\n");
         assert_eq!(d.code.as_deref(), Some("FAIL"));
+    }
+
+    #[test]
+    fn a_report_keeps_the_rows_that_differ() {
+        // go/logs/fault_dropped_row.txt of a dogfooding run.
+        let out = "--- FAIL: TestRdraConformance (1.30s)\n    rdra_contract_test.go:473: rdra-ish conformance: traces line 28086: after `SendIntakeForms 1 1 1 1 1 2026-01-01T00:00:00Z 1 email 2026-01-01T00:00:00Z`, the store differs from the model:\n          model only: PatientMessage 1 status=sent sent_at=+ patientaccount_id=1\n          store only: PatientMessage 1 status=queued sent_at=- patientaccount_id=1\nFAIL\nFAIL\texample.com/clinic/clinic\t1.548s\nFAIL\n";
+        let d = run_diagnostic(&go::GoBackend::default(), &["go".to_string()], out, "");
+        assert_eq!(
+            d.to_string(),
+            "error[CodeConformance]: the service does not conform to the model's traces (`go`)\n  \
+             code:  traces line 28086: after `SendIntakeForms 1 1 1 1 1 2026-01-01T00:00:00Z 1 email 2026-01-01T00:00:00Z`, the store differs from the model:\n           \
+             model only: PatientMessage 1 status=sent sent_at=+ patientaccount_id=1\n           \
+             store only: PatientMessage 1 status=queued sent_at=- patientaccount_id=1"
+        );
+    }
+
+    #[test]
+    fn a_panic_of_the_service_is_the_code_line() {
+        // go/logs/run2.txt of a dogfooding run, the paths cut.
+        let go_out = "--- FAIL: TestRdraConformance (1.23s)\npanic: runtime error: invalid memory address or nil pointer dereference [recovered, repanicked]\n[signal SIGSEGV: segmentation violation code=0x2 addr=0x10 pc=0x104c60e1c]\n\ngoroutine 8 [running]:\ntesting.tRunner.func1.2({0x10504f0c0, 0x1050ff560})\n\t/go/src/testing/testing.go:1974 +0x1a0\ntesting.tRunner.func1()\n\t/go/src/testing/testing.go:1977 +0x318\npanic({0x10504f0c0?, 0x1050ff560?})\n\t/go/src/runtime/panic.go:860 +0x12c\nexample.com/clinic/clinic.(*Service).commit(0x182280d1e0b8, {0x104c8ce96, 0xf}, {0x105086400?, 0x182280fc0ca8?})\n\t/svc/clinic/service.go:172 +0x43c\nexample.com/clinic/clinic.(*Service).CommitCheckInPatient1(0x182280d1e0b8, {0x182280fbb780, 0x0, 0x0})\n\t/svc/clinic/usecases_glue.go:1138 +0x54\nFAIL\texample.com/clinic/clinic\t1.513s\nFAIL\n";
+        assert_eq!(
+            go::GoBackend::default().run_failure(go_out, "").as_deref(),
+            Some("the service panicked in example.com/clinic/clinic.(*Service).commit at /svc/clinic/service.go:172: runtime error: invalid memory address or nil pointer dereference [recovered, repanicked]")
+        );
+        // rustc 1.99's panic, as libtest prints it.
+        let rust_out = "running 1 test\n\nthread 'rdra_conformance' (398749682) panicked at src/service.rs:1:47:\nindex out of bounds: the len is 0 but the index is 3\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\ntest rdra_conformance ... FAILED\n";
+        assert_eq!(
+            rust::Rust.run_failure(rust_out, "").as_deref(),
+            Some("the service panicked at src/service.rs:1:47: index out of bounds: the len is 0 but the index is 3")
+        );
+        // Node 24's uncaught error.
+        let node_out = "file:///svc/p.ts:1\nclass Svc { prepare() { return m.get(1) .a; } }\n                                         ^\n\nTypeError: Cannot read properties of undefined (reading 'a')\n    at Svc.prepare (file:///svc/p.ts:1:91)\n    at Object.<anonymous> (file:///svc/p.ts:2:11)\n\nNode.js v24.21.0\n";
+        assert_eq!(
+            ts::TypeScript.run_failure("", node_out).as_deref(),
+            Some("the service threw at Svc.prepare (file:///svc/p.ts:1:91): TypeError: Cannot read properties of undefined (reading 'a')")
+        );
     }
 }

@@ -36,8 +36,8 @@ use rdra_ish_core::model::{ColumnType, Entity, EntityKey, Max, Min, ModelColumn,
 use rdra_ish_core::SemanticModel;
 
 use ir::{
-    DomainModel, EnumDecl, EnumValue, Field, FieldType, IdDecl, Obligation, RecordDecl, RecordKind,
-    Scalar, SumDecl, UseCaseDecl, VariantDecl,
+    DomainModel, EnumDecl, EnumValue, Field, FieldType, IdDecl, Obligation, ObligationSubject,
+    RecordDecl, RecordKind, Scalar, SumDecl, UseCaseDecl, VariantDecl,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -194,6 +194,16 @@ pub fn entry_name(lang: Lang, name: &str) -> String {
     }
 }
 
+/// The name of a transition function or a dispatcher in `lang`, by its PascalCase name in the
+/// IR: Rust `run_pay`, Go `RunPay`, TypeScript `runPay`.
+pub fn function_name(lang: Lang, pascal: &str) -> String {
+    match lang {
+        Lang::Rust => rust::fn_ident(pascal),
+        Lang::Go => pascal.to_string(),
+        Lang::TypeScript => ts::fn_name(pascal),
+    }
+}
+
 /// What the probe binds (`[code.<lang>]` in rdra.toml): the service type, the path of the
 /// generated module, and for the conformance test, the expression that makes a fresh service
 /// and the traces' path from the build directory.
@@ -247,6 +257,7 @@ fn domain_of(
             let name = error.split_once(':').map_or(error.as_str(), |(n, _)| n);
             domain.obligations.push(Obligation {
                 name: format!("NotMet_{}", name.trim()),
+                subject: ObligationSubject::of("not-met"),
                 checked: false,
                 text: format!("NOT MET by the model, which `check` rejects: {error}"),
                 site: None,
@@ -991,17 +1002,28 @@ fn obligations(
     site: &dyn Fn(&LocatedSpan) -> Option<String>,
 ) -> Vec<Obligation> {
     let mut out: Vec<Obligation> = Vec::new();
-    let mut push = |name: String, checked: bool, text: String, at: Option<&LocatedSpan>| {
+    let mut push = |name: String,
+                    checked: bool,
+                    text: String,
+                    at: Option<&LocatedSpan>,
+                    subject: ObligationSubject| {
         out.push(Obligation {
             name,
             checked,
             text,
+            subject,
             site: at.and_then(site),
         });
     };
     for (key, entity) in &model.entities {
         // An obligation with no declaration of its own is at its entity's.
         let entity_at = model.decl_sites.located(Kind::Entity, &entity.id);
+        let on = |kind: &'static str, columns: &[&str]| ObligationSubject {
+            kind,
+            entity: Some(entity.id.clone()),
+            columns: columns.iter().map(|c| c.to_string()).collect(),
+            parent: None,
+        };
         for (_, fk) in model.foreign_keys().filter(|(_, fk)| fk.child == key) {
             if fk.columns.is_empty() {
                 continue;
@@ -1021,11 +1043,18 @@ fn obligations(
                 .collect::<Vec<_>>()
                 .join("_");
             let nullable = if fk.optional() { " when set" } else { "" };
+            let keyed = |kind: &'static str| ObligationSubject {
+                kind,
+                entity: Some(entity.id.clone()),
+                columns: fk.columns.iter().map(|(c, _)| c.clone()).collect(),
+                parent: Some(parent.id.clone()),
+            };
             push(
                 format!("Ref_{}_{col_names}", entity.id),
                 false,
                 format!("{cols} names a present {}{nullable}.", parent.id),
                 fk.site.as_ref(),
+                keyed("reference"),
             );
             if fk.children.max == Max::One {
                 push(
@@ -1036,6 +1065,7 @@ fn obligations(
                         entity.id, parent.id
                     ),
                     fk.site.as_ref(),
+                    keyed("unique"),
                 );
             }
             if fk.children.min == Min::One {
@@ -1047,6 +1077,7 @@ fn obligations(
                         parent.id, entity.id
                     ),
                     fk.site.as_ref(),
+                    keyed("min-children"),
                 );
             }
             if let Some(most) = fk.children.most {
@@ -1058,11 +1089,12 @@ fn obligations(
                         parent.id, entity.id
                     ),
                     fk.site.as_ref(),
+                    keyed("max-children"),
                 );
             }
-            for (what, prefix, action) in [
-                ("delete", "OnDelete", fk.on_delete),
-                ("update", "OnUpdate", fk.on_update),
+            for (what, prefix, kind, action) in [
+                ("delete", "OnDelete", "on-delete", fk.on_delete),
+                ("update", "OnUpdate", "on-update", fk.on_update),
             ] {
                 if let Some(action) = action {
                     push(
@@ -1075,6 +1107,7 @@ fn obligations(
                             entity.id
                         ),
                         fk.site.as_ref(),
+                        keyed(kind),
                     );
                 }
             }
@@ -1092,6 +1125,7 @@ fn obligations(
                     false,
                     format!("no two {} rows share {}.", entity.id, column.name),
                     entity_at.as_ref(),
+                    on("unique", &[column.name.as_str()]),
                 );
             }
             for (i, check) in column.check_constraints.iter().enumerate() {
@@ -1105,6 +1139,7 @@ fn obligations(
                         column.name
                     ),
                     check.site.as_ref(),
+                    on("check", &[column.name.as_str()]),
                 );
             }
             if let Some(expr) = &column.derived_expr {
@@ -1118,6 +1153,7 @@ fn obligations(
                         expr.display()
                     ),
                     entity_at.as_ref(),
+                    on("derived", &[column.name.as_str()]),
                 );
             }
         }
@@ -1136,6 +1172,14 @@ fn obligations(
                     unique.columns.join(", ")
                 ),
                 entity_at.as_ref(),
+                on(
+                    "unique",
+                    &unique
+                        .columns
+                        .iter()
+                        .map(String::as_str)
+                        .collect::<Vec<_>>(),
+                ),
             );
         }
     }
