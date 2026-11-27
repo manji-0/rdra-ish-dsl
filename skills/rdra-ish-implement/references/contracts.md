@@ -118,6 +118,20 @@ impl PayUseCase for Service {
 `self.order` loads a row and converts it with `Order::from_row`; `self.check` is the
 conditional write of step 2.
 
+The output also lists what each result commits, so `commit` need not name a result's fields.
+Implement `CommitStore` once, over every entity, run mark, and event: `write_row` writes a
+`RowWrite` (a put or a delete, with its `expected`), `write_mark` stores, advances, or deletes a
+run mark, and `record_event` keeps a raised event. Then each `commit_*` is one call, made
+inside the call's transaction, which rolls back on an error:
+
+| Rust | TypeScript | Go |
+|---|---|---|
+| `commit_writes(&mut store, write)` | `commitWrites(store, PayOutcome.writes(write))` | `CommitWrites(store, write)` |
+
+The helper stops with `NotEnabled` at the first row or mark that is no longer what the result
+names. The last step of a split use case returns the marks it ends (`ended_<row>_mark`), and
+the helper deletes them.
+
 In TypeScript:
 
 - A result holds states (`kind: "Paid"`), the store rows (`status: "paid"`). Answer an
