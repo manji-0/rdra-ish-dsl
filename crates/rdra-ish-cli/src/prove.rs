@@ -9,6 +9,8 @@ use rdra_ish_core::lifecycle::{
     has_errors, label_prefix, Bounds, Scope, Selection, StateDiag, Target, TransitionSystem,
 };
 use rdra_ish_core::SemanticModel;
+
+use crate::state_findings::Instances;
 use rdra_ish_emit::sql::{unenforced_rules, Dialect};
 
 /// `println!` onto the `String` `$text`.
@@ -214,7 +216,7 @@ pub(crate) fn run_proof(
     twin: Option<&TransitionSystem>,
     selection: &Selection,
     marks: &Marks,
-    refuted: &BTreeMap<usize, usize>,
+    refuted: &BTreeMap<usize, Instances>,
     z3: Z3Tool<'_>,
     deny_unproved: bool,
     claim: Claim,
@@ -365,7 +367,7 @@ fn print_verdict(
     ts: &TransitionSystem,
     r: &RuleProof,
     marks: &Marks,
-    refuted: &BTreeMap<usize, usize>,
+    refuted: &BTreeMap<usize, Instances>,
     within: &str,
 ) {
     let inv = &ts.invariants()[r.inv];
@@ -387,12 +389,8 @@ fn print_verdict(
         Verdict::Proved => out!(text, "proved: {name}{within}"),
         Verdict::OutOfScope(why) => out!(text, "out of scope: {name}: {why}"),
         Verdict::Refuted => {
-            let n = refuted[&r.inv];
-            let s = if n == 1 { "" } else { "s" };
-            out!(
-                text,
-                "refuted: {name} (BFS counterexample at {n} instance{s})"
-            )
+            let n = refuted[&r.inv].noun();
+            out!(text, "refuted: {name} (BFS counterexample at {n})")
         }
         Verdict::Unproved(Unproved::Initial) => {
             out!(text, "unproved: {name}: an initial state violates it")

@@ -18,7 +18,7 @@ use std::num::NonZeroU8;
 
 use super::bfs::BfsCone;
 use super::jobs::{Job, JobKind};
-use crate::state_findings::{render_violation, Finding, TraceSource};
+use crate::state_findings::{render_violation, Finding, Instances, TraceSource};
 use rdra_ish_core::lifecycle::{
     has_errors, label_prefix, Bounds, Caps, Cone, Diag, Recheck, RunEnd, Scope, StateDiag, Target,
     TransitionSystem,
@@ -48,7 +48,7 @@ pub(super) fn escalate(
     unproved: &BTreeSet<usize>,
     caps: Caps,
 ) -> usize {
-    let passed: Vec<(usize, (usize, u64))> = unproved
+    let passed: Vec<(usize, (Instances, u64))> = unproved
         .iter()
         .filter_map(|&i| Some((i, passed_at(ts, jobs, cones, i)?)))
         .collect();
@@ -72,7 +72,7 @@ pub(super) fn escalate(
             // plain, since the sub-lifecycle a reduction runs keeps its whole graph.
             let run = system.explore_targets_reduced(&[Target::Invariant(i)], caps);
             let cone = &run.cone_of(Target::Invariant(i)).cone;
-            let mut n = cone_slots(system, cone);
+            let mut n = cone_instances(system, cone);
             let found = run.verdicts().iter().find(|d| {
                 matches!(&d.diag, StateDiag::ConstraintViolated { name, site, .. }
                     if *name == inv.name && *site == inv.site)
@@ -85,7 +85,7 @@ pub(super) fn escalate(
             let decided = match found {
                 Some(d) if !d.diag.trace().is_none_or(|t| t.vouched(true)) => {
                     let (verdict, refined) = system.recheck_on(Target::Invariant(i), true, caps);
-                    n = cone_slots(system, &refined);
+                    n = cone_instances(system, &refined);
                     verdict
                 }
                 Some(d) => Recheck::Violated(Box::new(d.clone())),
@@ -95,7 +95,7 @@ pub(super) fn escalate(
             match decided {
                 Recheck::Violated(d) => {
                     said.push(format!("counterexample at {n} instances"));
-                    let text = render_violation(program, model, &d.diag, TraceSource::BfsAt(n))
+                    let text = render_violation(program, model, &d.diag, TraceSource::BfsAt(&n))
                         .expect("a violation renders");
                     eprintln!("{}", Finding::new(&d.diag, &[], text));
                     broken += 1;
@@ -121,12 +121,12 @@ pub(super) fn escalate(
     broken
 }
 
-/// The most instances of an entity in `cone` of `ts`.
-fn cone_slots(ts: &TransitionSystem, cone: &Cone) -> usize {
-    ts.restrict_to(&cone.vars, &cone.keep).most_slots()
+/// The instances of each entity of `cone` of `ts`.
+fn cone_instances(ts: &TransitionSystem, cone: &Cone) -> Instances {
+    Instances::of(&ts.restrict_to(&cone.vars, &cone.keep))
 }
 
-/// The instances of rule `i`'s safety cone of `ts` (`cone_slots`) and the store its run held
+/// The instances of rule `i`'s safety cone of `ts` (`cone_instances`) and the store its run held
 /// (`BfsCone::Ran::peak`), when BFS passed it: a run to the end that did not violate it, or a
 /// cone covered by one that passed. `None` when no cone decided it, or when the run that did
 /// was up to symmetry, which measures no store to grow from.
@@ -135,7 +135,7 @@ fn passed_at(
     jobs: &[Job],
     cones: &[Option<BfsCone>],
     i: usize,
-) -> Option<(usize, u64)> {
+) -> Option<(Instances, u64)> {
     let inv = &ts.invariants()[i];
     let at = jobs.iter().position(|job| {
         matches!(&job.kind, JobKind::Cone(system) if system.targets.contains(&Target::Invariant(i)))
@@ -143,7 +143,7 @@ fn passed_at(
     let JobKind::Cone(system) = &jobs[at].kind else {
         unreachable!("a safety cone's job");
     };
-    let slots = cone_slots(ts, &system.cone);
+    let slots = cone_instances(ts, &system.cone);
     let peak = match cones[at].as_ref()? {
         BfsCone::Ran {
             found,

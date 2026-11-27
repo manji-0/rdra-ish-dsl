@@ -29,6 +29,8 @@ Each rule prints one line after the `proof (...)` header:
 - `out of scope: <rule>: <why>`: the encoding cannot state the rule.
 - `refuted: <rule> (BFS counterexample at <n> instances)`: BFS violated the rule in the same
   run, with the trace it prints, so the proof did not try it. Fix the model, not the proof.
+  Where the entities the counterexample needs have different counts (`--instances E=k`, or
+  more rows of an entity than the cone counted), `<n>` lists each, as `Loan=4 Member=3`.
 - `[not enforced by the SQL schema: <why>]` after a name: `export --kind sql` writes no
   `CHECK` for it, so the application keeps it.
 - `lemma: <text>`: a helper fact the proof kept.
@@ -37,7 +39,8 @@ Each rule prints one line after the `proof (...)` header:
   instances more. A counterexample there is an error with its trace (`counterexample (<k>
   steps, at <n> instances):`) and fails the run. `not decided at <n> instances` means the
   run outgrew ten times the store of the cone at the run's bounds, or met the memory limit or
-  `--max-states`; it decides nothing.
+  `--max-states`; it decides nothing. Under `--instances E=k` the counts there list each
+  entity of the cone, as `ok at Loan=3 Member=2 instances`.
 
 The `OK:` line ends with `; <n> of <m> rules proved for any number of rows and any Int
 value`. An unproved rule fails the run with `--deny-unproved`, or when its escalation finds a
