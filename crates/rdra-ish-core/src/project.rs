@@ -60,8 +60,12 @@ impl CodeSection {
 #[serde(deny_unknown_fields)]
 pub struct CodeTarget {
     /// The `codegen` output: the domain types, functions, contracts and, with `traces`, the
-    /// conformance harness.
-    pub domain: PathBuf,
+    /// conformance harness. A table names it or `adapter`, not both.
+    pub domain: Option<PathBuf>,
+    /// The black-box model adapter (`codegen --adapter`) in place of the domain code: the
+    /// service implements `ModelAdapter` over code of its own, and `check --code=fresh`
+    /// compares only this file, the traces and the probe. Needs `traces`.
+    pub adapter: Option<PathBuf>,
     /// The conformance traces; with it the domain code holds the harness.
     pub traces: Option<PathBuf>,
     /// `--conformance-states` of the traces.
@@ -92,6 +96,31 @@ pub struct CodeTarget {
     /// TypeScript: the project's tsconfig that the generated `tsconfig.rdra.json` extends.
     /// Default: `tsconfig.json` in `root`, when it exists.
     pub tsconfig: Option<PathBuf>,
+}
+
+impl CodeTarget {
+    /// The generated code file: `adapter`, else `domain`. A table with neither is refused
+    /// before any command reads it ([`CodeTarget::problem`]).
+    pub fn code_file(&self) -> &Path {
+        self.adapter
+            .as_deref()
+            .or(self.domain.as_deref())
+            .unwrap_or(Path::new(""))
+    }
+
+    /// What is wrong with the table's choice of code file, when something is.
+    pub fn problem(&self) -> Option<&'static str> {
+        match (&self.domain, &self.adapter) {
+            (None, None) => Some("names neither `domain` nor `adapter`"),
+            (Some(_), Some(_)) => {
+                Some("names both `domain` and `adapter`: the adapter stands in for the domain code")
+            }
+            (None, Some(_)) if self.traces.is_none() => {
+                Some("names `adapter` without `traces`: the adapter drives the traces")
+            }
+            _ => None,
+        }
+    }
 }
 
 impl Manifest {

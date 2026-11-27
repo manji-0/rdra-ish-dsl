@@ -40,6 +40,8 @@ pub(crate) struct Request {
     pub conformance: Option<usize>,
     /// TypeScript: seal the state types (`--seal`, `[code.ts] seal`).
     pub seal: bool,
+    /// The code is the model adapter (`--adapter`, `[code.<lang>] adapter`), not the domain.
+    pub adapter: bool,
     /// The inputs as the header names them.
     pub model_path: String,
     /// Sites print relative to this directory; the working directory when `None`.
@@ -92,6 +94,8 @@ pub(crate) struct CodegenArgs<'a> {
     pub probe: bool,
     /// Also write the Verus crate to this directory (`--verus`).
     pub verus: Option<&'a Path>,
+    /// Print the model adapter in place of the domain code (`--adapter`).
+    pub adapter: bool,
 }
 
 pub(crate) fn lang_of(lang: CodegenLang) -> Lang {
@@ -109,6 +113,9 @@ pub fn run_codegen(args: CodegenArgs<'_>) -> Result<()> {
     }
     if args.json && (args.conformance.is_some() || args.check_file.is_some()) {
         bail!("--format json takes neither --conformance nor --check");
+    }
+    if args.json && args.adapter {
+        bail!("--format json does not take --adapter");
     }
     let lang = match (args.lang, args.json) {
         (Some(lang), _) => lang_of(lang),
@@ -128,6 +135,7 @@ pub fn run_codegen(args: CodegenArgs<'_>) -> Result<()> {
         allow_failing: args.allow_failing,
         conformance: args.conformance.map(|(_, states)| states),
         seal: args.seal,
+        adapter: args.adapter,
         model_path: args
             .inputs
             .iter()
@@ -253,8 +261,13 @@ pub(crate) fn generate(loaded: &Loaded, request: &Request) -> Result<Generated> 
         });
     }
     let generated = generate_all(model, &options, &site)?;
+    let code = if request.adapter {
+        rdra_ish_emit::codegen::adapter::generate(&generated.domain, &options)?
+    } else {
+        generated.code
+    };
     Ok(Generated {
-        code: stamp(&generated.code, &model_hash),
+        code: stamp(&code, &model_hash),
         traces: generated
             .traces
             .map(|t| (stamp_traces(&t.text, &model_hash), t)),
@@ -321,6 +334,7 @@ pub(crate) fn configured_request(
             .as_ref()
             .map(|_| target.conformance_states.unwrap_or(DEFAULT_STATES)),
         seal: lang == Lang::TypeScript && target.seal.unwrap_or(false),
+        adapter: target.adapter.is_some(),
         model_path: inputs
             .iter()
             .map(|p| label(p, manifest.dir()))
@@ -340,7 +354,7 @@ fn write_configured(loaded: &Loaded, inputs: &[PathBuf], probe_only: bool) -> Re
         let generated = generate(loaded, &request)?;
         let dir = manifest.dir();
         if !probe_only {
-            write_file(&dir.join(&target.domain), &generated.code)?;
+            write_file(&dir.join(target.code_file()), &generated.code)?;
             if let (Some(path), Some((text, stats))) = (&target.traces, &generated.traces) {
                 write_traces(&dir.join(path), text, stats, unchecked(&generated))?;
             }
@@ -362,6 +376,9 @@ pub(crate) fn code_manifest(manifest: Option<&Manifest>) -> Result<&Manifest> {
     match &manifest.code {
         Some(code) if !code.targets().is_empty() => {
             for (name, target) in code.targets() {
+                if let Some(problem) = target.problem() {
+                    bail!("[code.{name}] in {} {problem}", shown(&manifest.path));
+                }
                 if name != "ts" && (target.seal.is_some() || target.tsconfig.is_some()) {
                     bail!(
                         "[code.{name}] in {}: `seal` and `tsconfig` are for [code.ts] only",

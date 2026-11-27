@@ -346,6 +346,12 @@ pub(crate) enum Commands {
         /// quantifiers and counts, creates and deletes; refuses other models with the reasons
         #[arg(long, value_name = "DIR", conflicts_with_all = ["code", "probe", "check", "conformance"])]
         verus: Option<PathBuf>,
+        /// [experimental] With --conformance: print the black-box model adapter in place of
+        /// the domain code: plain data of the model's state and calls, the `ModelAdapter`
+        /// interface a service implements over its own code, and the harness that drives it
+        /// along the traces. It uses no type of the domain code
+        #[arg(long, requires = "conformance", conflicts_with_all = ["code", "probe", "verus", "seal"])]
+        adapter: bool,
     },
     /// Derive reachable state patterns per entity (aggregated across BUCs)
     States {

@@ -13,9 +13,7 @@ use std::path::{Component, Path, PathBuf};
 
 use rdra_ish_emit::codegen::ir::{ContractDecl, PortMethod};
 use rdra_ish_emit::codegen::probe::Probe;
-use rdra_ish_emit::codegen::{
-    probe_for, Lang, ProbeBinding, GO_CONFORMANCE_TEST as CONFORMANCE_TEST,
-};
+use rdra_ish_emit::codegen::{Lang, ProbeBinding, GO_CONFORMANCE_TEST as CONFORMANCE_TEST};
 
 use super::map::{CompilerMessage, Finding};
 use super::{Backend, Target};
@@ -82,7 +80,7 @@ fn domain_import(target: &Target<'_>, svc: &Service, probe: &Path) -> String {
     }
     let probe_dir = target.path(probe).parent().map(Path::to_path_buf);
     let domain_dir = target
-        .path(&target.target.domain)
+        .path(target.target.code_file())
         .parent()
         .map(Path::to_path_buf);
     let (Some(probe_dir), Some(domain_dir)) = (probe_dir, domain_dir) else {
@@ -177,7 +175,7 @@ impl Backend for GoBackend {
                 })
                 .collect();
         }
-        Some((path, probe_for(Lang::Go, domain, &binding)?))
+        Some((path, super::probe_of(target, Lang::Go, domain, &binding)?))
     }
 
     fn build_command(&self, target: &Target<'_>) -> Option<Vec<String>> {
@@ -193,11 +191,14 @@ impl Backend for GoBackend {
         target.target.traces.as_ref()?;
         let dir = package_dir(target)?;
         let run = format!("^{CONFORMANCE_TEST}$");
-        Some(
-            ["go", "test", "-count=1", "-run", &run, &dir]
-                .map(String::from)
-                .to_vec(),
-        )
+        let mut command: Vec<String> = ["go", "test", "-count=1", "-run", &run, &dir]
+            .map(String::from)
+            .to_vec();
+        // The adapter's test logs what it ran, which `go test` shows only so.
+        if target.target.adapter.is_some() {
+            command.insert(3, "-v".to_string());
+        }
+        Some(command)
     }
 
     /// `file:line:col: text` lines (`go vet` prefixes `vet: `, or `vet.exe: ` on Windows),

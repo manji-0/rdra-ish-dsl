@@ -277,3 +277,147 @@ fn the_self_check_catches_a_service_that_ignores_the_id() {
         "{all}"
     );
 }
+
+const ADAPTER_MANIFEST: &str = r#"[model]
+name = "shop"
+
+[code.rust]
+adapter = "../svc/src/model.rs"
+traces = "../svc/tests/traces.txt"
+conformance_states = 4096
+probe = "../svc/tests/rdra_adapter.rs"
+service = "svc::adapter::Adapter"
+module = "svc::model"
+new = "svc::adapter::Adapter::new()"
+"#;
+
+/// The black-box model adapter (#439) through `check --code`: the project took the domain code
+/// once, renamed its file and edited it, and binds the reference adapter over it. `fresh`
+/// compares only the adapter file, the traces and the probe, so the edit is no difference; the
+/// run passes and states what it ran; the self-check works through the adapter; and an adapter
+/// without prepare and commit passes with its interleavings stated as plain calls.
+#[test]
+fn a_model_adapter_conforms_whatever_the_domain_code_became() {
+    if !tool("cargo", CODEGEN) {
+        return;
+    }
+    let dir = std::env::temp_dir()
+        .join(format!("rdra-ish-code-build-{}", std::process::id()))
+        .join("adapter");
+    let _ = std::fs::remove_dir_all(&dir);
+    for d in ["model", "svc/src", "svc/tests", ".git"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    std::fs::copy(
+        fixtures().join("conformance.rdra"),
+        dir.join("model/order.rdra"),
+    )
+    .unwrap();
+    std::fs::write(dir.join("model/rdra.toml"), ADAPTER_MANIFEST).unwrap();
+    std::fs::write(
+        dir.join("svc/Cargo.toml"),
+        "[package]\nname = \"svc\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n",
+    )
+    .unwrap();
+    // The domain code, generated once and then the project's own: renamed and edited.
+    let out = rdra(
+        &dir,
+        &[
+            "codegen",
+            "--lang",
+            "rust",
+            "--conformance",
+            "svc/our-traces.txt",
+            "-o",
+            "svc/src/our_core.rs",
+            "model",
+        ],
+        "",
+    );
+    assert!(out.status.success(), "{}", text_slashed(&out));
+    let core = std::fs::read_to_string(dir.join("svc/src/our_core.rs")).unwrap();
+    std::fs::write(
+        dir.join("svc/src/our_core.rs"),
+        format!("{core}\n/// The project's own addition.\npub fn project_owned() {{}}\n"),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("svc/src/lib.rs"),
+        "#[allow(dead_code)]\n#[path = \"our_core.rs\"]\npub mod domain;\npub mod service;\npub mod model;\npub mod adapter;\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("svc/src/service.rs"), service_module()).unwrap();
+    std::fs::copy(
+        fixtures().join("conformance_adapter.rs"),
+        dir.join("svc/src/adapter.rs"),
+    )
+    .unwrap();
+    let out = rdra(&dir, &["codegen", "model", "--code"], "");
+    let all = text_slashed(&out);
+    assert!(out.status.success(), "{all}");
+    for file in [
+        "svc/src/model.rs",
+        "svc/tests/traces.txt",
+        "svc/tests/rdra_adapter.rs",
+    ] {
+        assert!(all.contains(&format!("wrote {file}")), "{all}");
+    }
+    assert!(!all.contains("our_core"), "{all}");
+
+    let out = rdra(&dir, &["check", "model", "--code=fresh"], "");
+    assert!(out.status.success(), "{}", text_slashed(&out));
+
+    let out = rdra(&dir, &["check", "model", "--code=run"], "");
+    let all = text_slashed(&out);
+    assert!(out.status.success(), "{all}");
+    assert!(
+        all.contains("  ran: 9 traces, 19 calls, 9 refused calls, 7 interleaved commits\n"),
+        "{all}"
+    );
+    assert!(
+        all.contains("  self-check: 4 of 4 mutant traces failed at their changed row (seed 0)"),
+        "{all}"
+    );
+
+    for (fault, says) in [
+        (
+            "drop-row",
+            "model only: Shipment 1 status=packed order_id=1",
+        ),
+        (
+            "unconditional",
+            "prepared before `Place 1 1 card s` changed a row it writes",
+        ),
+    ] {
+        let out = rdra(&dir, &["check", "model", "--code=run"], fault);
+        let all = text_slashed(&out);
+        assert_eq!(out.status.code(), Some(1), "{fault}: {all}");
+        assert!(all.contains("error[CodeConformance]"), "{fault}: {all}");
+        assert!(all.contains(says), "{fault}: {all}");
+    }
+
+    let out = rdra(&dir, &["check", "model", "--code=run"], "ignore-id");
+    let all = text_slashed(&out);
+    assert_eq!(out.status.code(), Some(1), "{all}");
+    let survived: Vec<&str> = all
+        .lines()
+        .filter(|l| l.starts_with("error[CodeMutantSurvived]"))
+        .collect();
+    assert_eq!(survived.len(), 1, "{all}");
+    assert!(survived[0].contains("the absent-row mutant"), "{all}");
+
+    let out = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .current_dir(&dir)
+        .args(["check", "model", "--code=run"])
+        .env("FAULT", "unconditional")
+        .env("SPLIT", "0")
+        .env("CARGO_TARGET_DIR", dir.join("target"))
+        .output()
+        .expect("runs rdra-ish");
+    let all = text_slashed(&out);
+    assert!(out.status.success(), "{all}");
+    assert!(
+        all.contains("  ran: 9 traces, 19 calls, 9 refused calls, 0 interleaved commits; 7 interleavings run as plain calls: the adapter has no prepare and commit, so conditional writes are not checked"),
+        "{all}"
+    );
+}

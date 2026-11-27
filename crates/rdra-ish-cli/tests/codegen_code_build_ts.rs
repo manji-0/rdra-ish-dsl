@@ -338,3 +338,108 @@ fn the_self_check_catches_a_service_that_ignores_the_id() {
         "{all}"
     );
 }
+
+const ADAPTER_MANIFEST: &str = r#"[model]
+name = "shop"
+
+[code.ts]
+adapter = "../svc/src/model.ts"
+traces = "../svc/src/traces.txt"
+conformance_states = 4096
+probe = "../svc/src/rdra_adapter.ts"
+service = "../svc/src/adapter.ts#Adapter"
+new = "service.adapter()"
+"#;
+
+/// The black-box model adapter (#439) through `check --code`: the domain code is the
+/// project's own (generated once, then edited), and the reference adapter binds the service to
+/// the model. `fresh` reads no domain file, `build` type-checks the probe, the run states what
+/// it ran, and the self-check works through the adapter.
+#[test]
+fn a_model_adapter_conforms_whatever_the_domain_code_became() {
+    if !tools(&["tsc", "node"], CODEGEN) {
+        return;
+    }
+    let dir = std::env::temp_dir()
+        .join(format!("rdra-ish-code-build-ts-{}", std::process::id()))
+        .join("adapter");
+    let _ = std::fs::remove_dir_all(&dir);
+    for d in ["model", "svc/src", ".git"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    std::fs::copy(
+        fixtures().join("conformance.rdra"),
+        dir.join("model/order.rdra"),
+    )
+    .unwrap();
+    std::fs::write(dir.join("model/rdra.toml"), ADAPTER_MANIFEST).unwrap();
+    std::fs::write(dir.join("svc/tsconfig.json"), TSCONFIG).unwrap();
+    for file in ["order_service.ts", "adapter.ts"] {
+        std::fs::copy(
+            fixtures().join("ts_service").join(file),
+            dir.join("svc/src").join(file),
+        )
+        .unwrap();
+    }
+    let out = rdra(
+        &dir,
+        &[
+            "codegen",
+            "--lang",
+            "ts",
+            "--conformance",
+            "svc/our-traces.txt",
+            "-o",
+            "svc/src/domain.ts",
+            "model",
+        ],
+        "",
+    );
+    assert!(out.status.success(), "{}", text_slashed(&out));
+    let domain = std::fs::read_to_string(dir.join("svc/src/domain.ts")).unwrap();
+    std::fs::write(
+        dir.join("svc/src/domain.ts"),
+        format!(
+            "{domain}\n\n/** The project's own addition. */\nexport const projectOwned = true;\n"
+        ),
+    )
+    .unwrap();
+    let out = rdra(&dir, &["codegen", "model", "--code"], "");
+    let all = text_slashed(&out);
+    assert!(out.status.success(), "{all}");
+    assert!(!all.contains("domain.ts"), "{all}");
+
+    let out = rdra(&dir, &["check", "model", "--code=build"], "");
+    assert!(out.status.success(), "{}", text_slashed(&out));
+
+    let out = rdra(&dir, &["check", "model", "--code=run"], "");
+    let all = text_slashed(&out);
+    assert!(out.status.success(), "{all}");
+    assert!(
+        all.contains("  ran: 9 traces, 19 calls, 9 refused calls, 7 interleaved commits\n"),
+        "{all}"
+    );
+    assert!(
+        all.contains("  self-check: 4 of 4 mutant traces failed at their changed row (seed 0)"),
+        "{all}"
+    );
+
+    let out = rdra(&dir, &["check", "model", "--code=run"], "skip-core");
+    let all = text_slashed(&out);
+    assert_eq!(out.status.code(), Some(1), "{all}");
+    assert!(all.contains("error[CodeConformance]"), "{all}");
+    assert!(
+        all.contains("after `Pay 1 2026-01-01T00:00:00Z`, the store differs from the model:"),
+        "{all}"
+    );
+
+    let out = rdra(&dir, &["check", "model", "--code=run"], "ignore-id");
+    let all = text_slashed(&out);
+    assert_eq!(out.status.code(), Some(1), "{all}");
+    let survived: Vec<&str> = all
+        .lines()
+        .filter(|l| l.starts_with("error[CodeMutantSurvived]"))
+        .collect();
+    assert_eq!(survived.len(), 1, "{all}");
+    assert!(survived[0].contains("the absent-row mutant"), "{all}");
+}

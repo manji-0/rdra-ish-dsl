@@ -9,6 +9,7 @@
 //! layer's invariants put on the code.
 
 mod actions;
+pub mod adapter;
 pub mod conformance;
 mod go;
 mod go_port;

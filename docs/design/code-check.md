@@ -12,6 +12,8 @@ the owner the same day with the [decisions](#decisions) below. Tracking issue: #
   (#369). `check --code=fresh|build|run` works for all three languages. P6's static plan, a
   capability type per actor in the contract arguments, is in all three.
 - **Open.** P6's refused trace for a call by another actor, in every language (#337).
+- **Added (#439).** The black-box [model adapter](#the-black-box-model-adapter), beside the
+  port.
 - **Superseded.** Nothing. [What exists today](#what-exists-today) describes main before P0.
 
 ## Summary
@@ -428,6 +430,46 @@ removed. Such a trace dies at its first row the model refuses:
 So guard removal belongs with the wider refusal tests of PR 4. The owner decided so on
 2026-11-27, and also that a surviving mutant is an error by default, and that
 `--deny-incomplete` fails on the cap only until PR 4 tries the other refusals.
+
+### The black-box model adapter
+
+<!-- constrained-by #decisions -->
+<!-- constrained-by #what-a-passing-run-claims -->
+
+Gap 8 of #439: the port is written in the generated core's types, and `fresh` requires the
+domain file unedited, so a project that renamed or restructured the core it took cannot use
+the harness at all. The owner decided on 2026-11-27 that a black-box adapter sits beside the
+port. `codegen --adapter` (with `--conformance`) prints it in place of the domain code, and
+`adapter` in a `[code.<lang>]` table names it in place of `domain`.
+
+- **Plain data.** `ModelState` holds per entity the rows with their id and the tracked
+  columns (a column tracked only by presence is a bool), the pending run marks, and the
+  raises a triggered use case reads. `Call` holds one case per action with functions: row
+  and mark ids, the event, inputs and choices. Ids are integers or text, scalars other than
+  Int and Bool are their text, and value sets are the adapter file's own enums. Nothing names
+  a type of the core, so a project maps its own code to the model in a small adapter.
+- **The interface.** `reset`, `seed(ModelState)`, `observe() -> ModelState`, and
+  `invoke(Call)`, which returns that the call ran or a refusal kind (`NotEnabled`,
+  `Rejected`, `InvalidArgument`, the variants of the core's use-case errors). The harness does
+  not check the kind yet: PR 4 does, and the kind is in the interface now so that PR 4 breaks
+  no adapter. `prepare(Call)` and `commit()` are optional. Without them the harness runs an
+  interleaved row (`I`) as its second call alone, which reaches the same state, and counts it
+  as skipped: conditional writes go unchecked, and `--code=run` says so.
+- **The same traces, the same words.** The harness reads the traces the port's harness
+  reads, abstracts `ModelState` to the same lines as the port's snapshot, and reports a
+  difference in the same text (`traces line <n>:`). So the self-check runs through it
+  unchanged, and the faults of the reference service fail the same way.
+- **Its own namespace.** The file declares only its own names, so it lives beside the core
+  in its own module (Rust, TypeScript) or package (Go). Its fixed names are claimed before the
+  model's, and a model name that meets one gets a suffix.
+- **`fresh` is black-box.** It compares the adapter file, the traces, and the probe; the
+  domain code is the project's. The probe holds only the conformance test, which prints the
+  counts it ran (`rdra-ish conformance: ok …`); `--code=run` reads them into a `ran:` line,
+  because a pass of an adapter without `prepare` must not claim the interleavings.
+- **What it does not change.** Decision 1 (rdra-ish reads no user code) and the claim:
+  H3 is now about the adapter, which picks the untracked columns' values when it seeds and
+  must reach the real store. The port, its harness, and every generated file of a table with
+  `domain` are as before.
 
 ## Phases
 

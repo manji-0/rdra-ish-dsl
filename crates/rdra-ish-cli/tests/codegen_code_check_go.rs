@@ -409,3 +409,112 @@ fn the_self_check_catches_a_service_that_ignores_the_id() {
         "{stdout}"
     );
 }
+
+const ADAPTER_MANIFEST: &str = r#"[model]
+name = "shop"
+
+[code.go]
+adapter = "../modeladapter/modeladapter.go"
+package = "modeladapter"
+traces = "../svc/traces.txt"
+conformance_states = 4096
+probe = "../svc/rdra_adapter_test.go"
+service = "example.com/shop/svc.Adapter"
+module = "example.com/shop/modeladapter"
+new = "svc.NewAdapter()"
+"#;
+
+/// The black-box model adapter (#439) through `check --code`: the domain code is the
+/// project's own (generated once, then edited), and the reference adapter binds the service to
+/// the model in a package of its own. `fresh` reads no domain file, the run states what it
+/// ran, and the self-check works through the adapter.
+#[test]
+fn a_model_adapter_conforms_whatever_the_domain_code_became() {
+    if !tool("go", CODEGEN) {
+        return;
+    }
+    let dir = std::env::temp_dir()
+        .join(format!("rdra-ish-code-check-go-{}", std::process::id()))
+        .join("adapter");
+    let _ = std::fs::remove_dir_all(&dir);
+    for d in ["model", "svc", "domain", ".git"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    std::fs::write(dir.join("model/model.rdra"), conformance()).unwrap();
+    std::fs::write(dir.join("model/rdra.toml"), ADAPTER_MANIFEST).unwrap();
+    std::fs::write(dir.join("go.mod"), "module example.com/shop\n\ngo 1.21\n").unwrap();
+    for file in ["service.go", "adapter.go"] {
+        std::fs::copy(
+            fixtures().join("go_service").join(file),
+            dir.join("svc").join(file),
+        )
+        .unwrap();
+    }
+    let (code, _, stderr) = outcome(&rdra(
+        &dir,
+        &[
+            "codegen",
+            "--lang",
+            "go",
+            "--conformance",
+            "domain/traces.txt",
+            "-o",
+            "domain/domain.go",
+            "model",
+        ],
+        None,
+    ));
+    assert_eq!(code, Some(0), "{stderr}");
+    let domain = std::fs::read_to_string(dir.join("domain/domain.go")).unwrap();
+    std::fs::write(
+        dir.join("domain/domain.go"),
+        format!("{domain}\n\n// ProjectOwned is the project's own addition.\nfunc ProjectOwned() {{}}\n"),
+    )
+    .unwrap();
+    let (code, _, stderr) = outcome(&rdra(&dir, &["codegen", "model", "--code"], None));
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(!stderr.contains("domain.go"), "{stderr}");
+    let (code, _, stderr) = outcome(&rdra(&dir, &["check", "model", "--code=fresh"], None));
+    assert_eq!(code, Some(0), "{stderr}");
+
+    let (code, stdout, stderr) = outcome(&rdra(&dir, &["check", "model", "--code=run"], None));
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(
+        stdout.contains("  ran: 9 traces, 19 calls, 9 refused calls, 7 interleaved commits\n"),
+        "{stdout}"
+    );
+    assert!(
+        stdout
+            .contains("  self-check: 4 of 4 mutant traces failed at their changed row (seed 0)\n"),
+        "{stdout}"
+    );
+    for file in ["svc/rdra_adapter_test.go", "modeladapter/modeladapter.go"] {
+        let gofmt = Command::new("gofmt")
+            .arg("-l")
+            .arg(dir.join(file))
+            .output()
+            .expect("runs gofmt");
+        assert!(gofmt.stdout.is_empty(), "gofmt names {file}");
+    }
+
+    let (code, _, stderr) = outcome(&rdra(
+        &dir,
+        &["check", "model", "--code=run"],
+        Some("accept-disabled"),
+    ));
+    assert_eq!(code, Some(1), "{stderr}");
+    assert_eq!(errors(&stderr), ["CodeConformance"], "{stderr}");
+    assert!(
+        stderr.contains("the model refuses `Cancel 1` here, and the service ran it"),
+        "{stderr}"
+    );
+
+    let (code, _, stderr) = outcome(&rdra(
+        &dir,
+        &["check", "model", "--code=run"],
+        Some("ignore-id"),
+    ));
+    assert_eq!(code, Some(1), "{stderr}");
+    assert_eq!(errors(&stderr), ["CodeMutantSurvived"], "{stderr}");
+    assert!(stderr.contains("the absent-row mutant"), "{stderr}");
+}
