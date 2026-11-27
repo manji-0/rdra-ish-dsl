@@ -469,6 +469,9 @@ pub(crate) fn location(program: &ResolvedProgram, site: &Site) -> Option<String>
 pub(crate) enum TraceSource {
     Bfs,
     Tlc,
+    /// BFS at this many instances per entity, more than the run's (`verify --prove`'s
+    /// escalation).
+    BfsAt(usize),
 }
 
 /// A violation, the rule's site, and its counterexample: one step per line with its use case
@@ -554,15 +557,16 @@ pub(crate) fn render_violation(
         out.push_str(&format!("\n  rule: {at}"));
     }
     let from = match source {
-        TraceSource::Bfs => "",
-        TraceSource::Tlc => ", from TLC",
+        TraceSource::Bfs => String::new(),
+        TraceSource::Tlc => ", from TLC".to_string(),
+        TraceSource::BfsAt(n) => format!(", at {n} instances"),
     };
     out.push_str(&trace_block(
         program,
         model,
         ("counterexample", "counterexample"),
         trace,
-        from,
+        &from,
     ));
     match diag {
         StateDiag::PropertyViolated {

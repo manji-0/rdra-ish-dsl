@@ -254,21 +254,24 @@ fn the_ok_line_says_how_many_rules_were_proved() {
 }
 
 #[test]
-fn deny_unproved_fails_a_run_that_tlc_passes() {
-    if !tool("z3", "RDRA_REQUIRE_Z3") || !tool("tlc", "RDRA_REQUIRE_TLC") {
+fn deny_unproved_fails_a_run_that_bfs_passes() {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
         return;
     }
-    // `check` and TLC pass at one instance; at two TLC fails, and the proof leaves the rule
-    // unproved either way. `--instance-count 1` makes TLC pass, so only the proof fails.
+    // BFS passes the rule at 2 instances and again at 3 and 4, and the proof leaves it
+    // unproved (it fails only past the Int range), so only the proof fails the run.
     let out = verify(&[
         "--prove",
         "--deny-unproved",
-        "--instance-count",
-        "1",
-        &sample("one_to_one_shared"),
+        &corpus("z3_int_listing_whole_range"),
     ]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert_eq!(out.status.code(), Some(1), "{stderr}");
+    assert!(
+        stdout.contains("escalated: Forbidden_Item_0: ok at 3 instances, ok at 4 instances"),
+        "{stdout}"
+    );
     assert!(
         stderr.contains(
             "1 of 1 rules unproved for any number of rows and any Int value (--deny-unproved)"
@@ -573,4 +576,97 @@ fn a_proof_leaves_an_after_assert_and_a_state_cap_undecided() {
         not_decided(cone_line(&stdout, "Cone_Forbidden_CartLine_0")),
         "{stdout}"
     );
+}
+
+/// The `escalated:` line of `rule`.
+fn escalated_line<'a>(stdout: &'a str, rule: &str) -> &'a str {
+    stdout
+        .lines()
+        .find(|l| l.starts_with(&format!("escalated: {rule}: ")))
+        .unwrap_or_else(|| panic!("no escalated line for {rule}\n{stdout}"))
+}
+
+/// A rule z3 leaves unproved and BFS passes at the run's 2 instances is checked again on its
+/// own cone at 3: the counterexample found there is an error, printed with its trace and the
+/// instances it needed, and fails the run.
+#[test]
+fn a_counterexample_past_the_bound_of_an_unproved_rule_is_an_error() {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    let out = verify(&["--prove", &corpus("z3_two_ok_three_fails")]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(1), "{stdout}{stderr}");
+    assert_eq!(
+        escalated_line(&stdout, "Forbidden_Order_0"),
+        "escalated: Forbidden_Order_0: counterexample at 3 instances (BFS on its cone; ok at 2)"
+    );
+    let block = stderr
+        .split("error[")
+        .find(|b| b.starts_with("Forbidden_Order_0]"))
+        .unwrap_or_else(|| panic!("no error for Forbidden_Order_0\n{stderr}"));
+    assert!(block.contains(", at 3 instances):"), "{block}");
+    assert!(
+        stderr.contains("invariant or after-assert violation(s) at more instances than the run's"),
+        "{stderr}"
+    );
+    // The cone line still says what BFS found at the run's bounds.
+    assert!(
+        stdout.contains("Cone_Forbidden_Order_0 [Forbidden_Order_0]: ok ("),
+        "{stdout}"
+    );
+    // Without --prove nothing is escalated.
+    let out = verify(&[&corpus("z3_two_ok_three_fails")]);
+    assert!(!String::from_utf8_lossy(&out.stdout).contains("escalated:"));
+}
+
+/// The escalation goes on to 4 instances when 3 passes, and stops there.
+#[test]
+fn an_unproved_rule_that_passes_at_3_is_checked_at_4() {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    let out = verify(&["--prove", &corpus("safety_at_most_bound")]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(
+        escalated_line(&stdout, "Quantifier_Member_0"),
+        "escalated: Quantifier_Member_0: ok at 3 instances, counterexample at 4 instances (BFS on its cone; ok at 2)",
+        "{stdout}"
+    );
+    let out = verify(&["--prove", &corpus("z3_cti_true_rule")]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(
+        escalated_line(&stdout, "MultiForbidden_Light_0"),
+        "escalated: MultiForbidden_Light_0: ok at 3 instances, ok at 4 instances (BFS on its cone; ok at 2)",
+        "{stdout}"
+    );
+    assert!(
+        !stderr.contains("more instances than the run's"),
+        "{stderr}"
+    );
+}
+
+/// An escalation the state cap stops decides nothing: it says so and leaves the run's exit
+/// to what the run decided at its own bounds.
+#[test]
+fn an_escalation_the_cap_stops_decides_nothing() {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    let case = corpus("z3_two_ok_three_fails");
+    let capped = verify(&["--prove", "--max-states", "20", &case]);
+    let stdout = String::from_utf8_lossy(&capped.stdout);
+    let stderr = String::from_utf8_lossy(&capped.stderr);
+    assert_eq!(
+        escalated_line(&stdout, "Forbidden_Order_0"),
+        "escalated: Forbidden_Order_0: not decided at 3 instances (BFS on its cone; ok at 2)"
+    );
+    assert!(
+        !stderr.contains("more instances than the run's"),
+        "{stderr}"
+    );
+    let plain = verify(&["--max-states", "20", &case]);
+    assert_eq!(capped.status.code(), plain.status.code(), "{stderr}");
 }

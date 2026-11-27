@@ -1571,7 +1571,10 @@ one, the run stops with an error.
 ### Proofs
 
 `--prove` prints one `proved:`, `unproved:`, `out of scope:`, or `refuted:` line per selected
-rule. The set of rules and lemmas a proof keeps is stored as a certificate under the user's cache
+rule. A rule left `unproved` that BFS passes is checked again at one and two instances more,
+on its own cone: an `escalated: <rule>: ok at 3 instances, counterexample at 4 instances (BFS
+on its cone; ok at 2)` line follows the proof's, and a counterexample there is an error that
+fails the run, with its trace. The set of rules and lemmas a proof keeps is stored as a certificate under the user's cache
 directory (`XDG_CACHE_HOME`), never in the project, and offered to the next run on the same
 encoding, which re-checks it in one round and reuses it only when every rule is in it and the
 round passes. A missing, stale, or damaged certificate costs only that round; the output is the

@@ -54,6 +54,9 @@ pub(super) struct End {
     pub(super) deny_undecided: bool,
     /// What `--prove` proved, when it ran.
     pub(super) proof: Option<ProofTally>,
+    /// Rules BFS violated at more instances than the run's, checked there because the proof
+    /// left them unproved (`escalate`).
+    pub(super) escalated: usize,
 }
 
 impl End {
@@ -79,7 +82,7 @@ impl End {
     }
 
     /// Each count that fails the run, in the order the failure message lists them.
-    fn failures(&self) -> [Failure; 7] {
+    fn failures(&self) -> [Failure; 8] {
         let failure = |count, tool, what| Failure { count, tool, what };
         [
             failure(
@@ -96,6 +99,11 @@ impl End {
                 self.safety.violated,
                 false,
                 "invariant or after-assert violation(s)",
+            ),
+            failure(
+                self.escalated,
+                false,
+                "invariant or after-assert violation(s) at more instances than the run's",
             ),
             failure(
                 self.explored.violated + self.temporal.violated,
