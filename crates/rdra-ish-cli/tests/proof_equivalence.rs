@@ -705,10 +705,13 @@ fn a_certificate_is_reused_only_when_it_rechecks_and_changes_no_proof() {
     );
 }
 
-/// A z3 that answers `unknown` to its first `check-sat`.
+/// A z3 that answers `unknown` to the first `check-sat` of the proof's rounds. The one
+/// before it is the premise check (#482), the canary `false` at initiation, which an
+/// `unknown` drops as `sat` does, so giving up there would leave every round exact.
 struct GivesUpOnce {
     z3: Z3,
     gave_up: bool,
+    checks: usize,
 }
 
 impl Solver for GivesUpOnce {
@@ -718,6 +721,10 @@ impl Solver for GivesUpOnce {
 
     fn check_sat(&mut self, rlimit: u32) -> Result<Sat, SolverError> {
         let sat = self.z3.check_sat(rlimit)?;
+        self.checks += 1;
+        if self.checks < 2 {
+            return Ok(sat);
+        }
         match std::mem::replace(&mut self.gave_up, true) {
             false => Ok(Sat::Unknown),
             true => Ok(sat),
@@ -736,7 +743,11 @@ fn a_certificate_whose_round_fails_changes_no_proof() {
     let rules: Vec<usize> = (0..ts.invariants().len()).collect();
     let run = |offer: Option<&prove::Certificate>, gave_up: bool| {
         let z3 = Z3::start(&z3).expect("z3 starts");
-        let mut solvers = [GivesUpOnce { z3, gave_up }];
+        let mut solvers = [GivesUpOnce {
+            z3,
+            gave_up,
+            checks: 0,
+        }];
         prove::prove_offered(
             &ts,
             twin.as_ref(),
