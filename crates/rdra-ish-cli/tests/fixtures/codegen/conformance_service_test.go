@@ -72,7 +72,7 @@ func (s *service) order(id domain.OrderId, usecase string) (domain.Order, error)
 	return state, nil
 }
 
-func (s *service) Seed(rows domain.StoreSnapshot) {
+func (s *service) Seed(rows domain.StoreSnapshot) error {
 	*s = *newService(s.fault)
 	for _, c := range rows.Customer {
 		s.customers[c.Id] = c
@@ -84,9 +84,10 @@ func (s *service) Seed(rows domain.StoreSnapshot) {
 		s.shipments[sh.Id] = sh
 	}
 	s.evShipped = append(s.evShipped, rows.EvShipped...)
+	return nil
 }
 
-func (s *service) Snapshot() domain.StoreSnapshot {
+func (s *service) Snapshot() (domain.StoreSnapshot, error) {
 	var snap domain.StoreSnapshot
 	for _, c := range s.customers {
 		snap.Customer = append(snap.Customer, c)
@@ -99,7 +100,7 @@ func (s *service) Snapshot() domain.StoreSnapshot {
 	}
 	sort.Slice(snap.Order, func(i, j int) bool { return snap.Order[i].Id < snap.Order[j].Id })
 	snap.EvShipped = append(snap.EvShipped, s.evShipped...)
-	return snap
+	return snap, nil
 }
 
 func (s *service) PreparePlace(parent domain.CustomerId, id domain.OrderId, method domain.Method, note string) (domain.PlaceResult, error) {

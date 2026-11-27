@@ -2040,7 +2040,20 @@ string>`). Per trace, the harness starts a fresh port, seeds it, makes each call
 the store, cut down to what the model tracks (an enum's value, null or not, an integer, a key's
 parent), with the state BFS reached. A refused call must fail and change nothing, and so must
 a commit after another call changed a row it writes. It returns the first difference, with
-the traces line and the rows only one side holds. It checks what is stored, not how.
+the traces line and the rows only one side holds. It checks what is stored, not how. In Go,
+`Seed` returns an `error` and `Snapshot` a `(StoreSnapshot, error)`: a store that fails ends
+the run with `the service's Seed failed: <error>` (or `Snapshot`) on the traces line, instead
+of a panic.
+
+A seeded state is the model's state as `check` reached it, row by row, and it can hold a child
+whose parent row does not exist: an entity no use case creates starts present while its parent
+starts absent (`check` warns `PreExistingChildOfCreatedParent_<Child>_<Parent>`, and clinic-ops
+seeds an `AccountBalance` naming `PatientAccount` 1 before any `PatientAccount` exists). The
+harness seeds such a row as it is, and `Snapshot` must return it. A store that enforces the
+`Ref_<Child>_<key>` obligation as a foreign key at once refuses that seed; turn the check off
+while `Seed` runs (SQLite: `PRAGMA foreign_keys = OFF` around the inserts; a deferred check
+still fails at the commit), or give the model a use case that creates the child after its parent so the warning goes away.
+The harness does not invent the missing parent, because the model's state has no such row.
 
 **Traces.** A text file from a BFS of the whole system at `check`'s bounds, taking every move
 of a use case with a function in as few traces as a greedy walk finds, and in each state
