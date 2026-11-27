@@ -247,8 +247,15 @@ runs TypeScript another way sets `run` (`["npx", "tsx", "src/rdra_contract.ts"]`
 one missing method per error, so the Go probe names each method of a contract on a line of
 its own.
 
-A compiler error maps to a use case by the probe line it is on (one line per use case), or by
-the generated method or contract it names. One block per use case and kind:
+The compiler's whole output comes first on stderr (for Rust, the text rustc prints for each
+error of cargo's JSON). A compiler error then maps to a use case by the probe line it is on
+(one line per use case), by the generated method, contract, dispatcher, or transition
+function it names (Go `RunPay`, `PayFromOpen`), or, for an error about a call's number of
+arguments that names no function (tsc TS2554, rustc E0061), by the generated function the
+call on its line names. The `code:` line quotes the whole message, its further lines
+indented under it (which member a TS2322 says differs, Go's `have` and `want`), with the
+path relative to the working directory, as the other paths of the check are. One block per
+use case and kind:
 
 ```
 error[CodeMissingUseCase_Ship]: use case Ship has no implementation in svc::service::Service
@@ -257,7 +264,11 @@ error[CodeMissingUseCase_Ship]: use case Ship has no implementation in svc::serv
   fix:   impl ShipUseCase for svc::service::Service (prepare_ship, commit_ship)
 ```
 
-A stale file prints under the cause lines of `codegen --check`:
+A stale file prints under the cause lines of `codegen --check`, and each stale file counts
+as one error in the summary line. A `generator changed` names the settings of the table in
+`rdra.toml` first (`the settings of [code.rust] in rdra.toml (paths, service, ...) changed`):
+the fingerprint records the model and the file, not the settings, so a changed `service` or
+path looks the same as another rdra-ish version.
 
 ```
 error: ../svc/src/domain.rs is not what `codegen` generates from the model
@@ -270,7 +281,10 @@ error: ../svc/src/domain.rs is not what `codegen` generates from the model
 **The obligation ledger.** At every level, each obligation the generated code lists
 (`Unique_Payment_Order`, `Ref_Order_customer_id`, ...) needs an owner: a marker line
 `rdra: obligation <name> [file]` after any comment token (`//`, `#`, `--`) in the service
-code, or `<name> = "<file>"` under `[code.obligations]`. A marker's file is relative to the
+code, or `<name> = "<file>"` under `[code.obligations]`. A name is letters, digits, and `_`,
+as the generator builds them, and a marker after an odd number of `"` or `` ` `` on its line
+is inside a string literal: neither owns anything, so code that prints markers
+(`` `-- rdra: obligation ${name}` ``) is not read as one. A marker's file is relative to the
 root it was found under; without one, the owner is the marker's own file. The check says an
 obligation **has an owner**, never that it holds, and confirms the owning file exists.
 Markers are searched under each table's `root`, skipping hidden directories, `target`,
@@ -290,14 +304,40 @@ error[CodeObligationUnowned_Unique_Order_note]: no code owns the obligation Uniq
 | `CodeIncomplete_<UseCase>` | error | It implements the contract without some methods (E0046; TS2739 / TS2740 / TS2741; Go `missing method`, `has no field or method`). |
 | `CodeSignature_<UseCase>` | error | A method takes or returns other types than the contract's (E0053, E0050; TS2322; Go `wrong type for method`). |
 | `CodeError_<UseCase>` | error | Another error on the use case's probe line or naming its methods. |
-| `CodeUnmapped` | error | The count of errors that belong to no use case, the first one quoted. |
+| `CodeServiceNotFound` | error | Errors on the probe that cannot resolve the service `service` names (Go `undefined:`, rustc E0433, tsc TS2305 / TS2307): one finding for them all, whose `fix:` points at `service` in the table and `codegen --probe`. A renamed service type or path gives this, not one `CodeError` per use case. |
+| `CodeUnmapped` | error | The errors that belong to no use case: the count, and the first line of each (at most 20; the rest are in the compiler's output above). |
 | `CodeBuildFailed` | error | The build failed with no error rdra-ish reads. |
-| `CodeConformance` | error | `run`: the conformance test failed; the message is the harness's first difference. |
+| `CodeConformance` | error | `run`: the conformance test failed. The `code:` line is the harness's first difference with its `model only:` and `store only:` rows; when the harness reported nothing, where the service panicked (Rust, Go) or what it threw (Node); else the output's last line. |
 | `CodeMutantSurvived` | error | `run`: a mutant trace of the self-check passed. The `code:` line says whether the run passed or failed at another row. |
 | `CodeCoverageIncomplete` | warning; error with `--deny-incomplete` | `run`: the BFS behind the traces stopped at `conformance_states`, so the moves past it are not run and no call is tried as refused; or the traces leave refusals of the model untried, or never run a use case of the port. |
 | `CodeObligationUnowned_<name>` | error | The obligation has no owner. |
 | `CodeObligationOwnerMissing_<name>` | error | Its owner names a file that does not exist. |
 | `CodeObligationUnknown_<name>` | warning | An owner names an obligation the model does not have. |
+
+#### What a pass does not show
+
+- `build` compiles the probe and what it imports: Rust `cargo check --test <probe>` (the
+  library and that test), TypeScript the files `tsconfig.rdra.json` reaches from the probe,
+  Go the probe's package. An `OK` at `build` says nothing of a binary, a handler, or a file
+  the probe does not reach.
+- Each trace runs on a fresh store: the harness calls `new` once per trace (181,095
+  times on the clinic-ops sample at the default `conformance_states`) and `seed` empties the store before it stores the
+  trace's rows. Make `new` cheap: share one database and let `seed` clear it, rather than
+  open or migrate one per call. Migrations, and data an earlier version of the service
+  stored, are outside what the check runs.
+- The `OneTransaction` obligation's owner is a declaration, as every owner is. What the run
+  shows of it is the interleaved commits: a commit prepared before another call changed its
+  row must be refused. That is the optimistic write (`UPDATE .. WHERE id = ? AND <tag> = ?`,
+  a write that matches no row rolls back as `NotEnabled`). The harness is one thread, so
+  held reads (`SELECT .. FOR UPDATE`, serializable isolation) and races between real
+  connections are not shown.
+- A raised event is never consumed. Once a raiser ran on a row, the raise stays recorded on
+  it (rule 3 of the [event order](./design/event-order.md#the-rules)): a delete does not
+  clear it, and the use case it triggers may run on that row as often as its states and
+  guards allow. `snapshot` lists each raise a triggered use case reads, and the harness
+  compares them, so the store keeps them as long as the row's history matters, with no
+  queue to drain. A `.counted(k)` trigger is the exception, and `codegen` prints no
+  function for its use cases.
 
 #### What a run covers
 
@@ -709,7 +749,8 @@ Error: /work/shop/rdra.toml:3: unknown field `verfiy`, expected one of `model`, 
 ### The code tables
 
 `[code.rust]`, `[code.go]`, and `[code.ts]` name the files `codegen --code` writes for a
-service in that language, which [`check --code`](#check---code) holds against the model. Each
+service in that language, which [`check --code`](#check---code) holds against the model. The
+TypeScript table is `[code.ts]`, whichever spelling `--lang` takes. Each
 path is relative to the directory of `rdra.toml`. A table names `domain` or `adapter`, not
 both.
 
@@ -2065,7 +2106,7 @@ and prints the causes, the count of differing lines, and the first difference:
 |---|---|
 | `file edited` | The file no longer matches its own code hash. |
 | `model changed` | The model's source text differs from the text the fingerprint records. |
-| `generator changed` | Neither changed, so `codegen`'s output did: another version, `--lang`, `--package`, `--allow-failing`, or other input paths. |
+| `generator changed` | Neither changed, so `codegen`'s output did: other settings (`--lang`, `--package`, `--allow-failing`, `--conformance-states`, or other input paths; under `check --code`, the table's settings in `rdra.toml`), or another version. |
 | no fingerprint line | The file was not generated by `codegen`, or the line was removed. |
 
 Restore or regenerate the file; code that finishes the output belongs in other files. With
@@ -2082,11 +2123,14 @@ not change it.
 |---|---|
 | `format` | `"rdra-ish codegen json 1"`; a reader refuses another. |
 | `generator`, `model`, `check` | The rdra-ish version, the inputs, and whether `check` passed (`passed`, and `bounds` or `errors`). |
-| `types` | Value sets (`kind: "enum"`, with `variation` and `site` for a variation), id types (`"id"`, with `entity` and `repr`), records (`"entity"` or `"dto"`, with `id`, `site`, `fields`). A field has `name`, `ident` (PascalCase), `type` (`{"kind": "scalar" \| "enum" \| "id" \| "rows", "name"}`), and `nullable`. |
+| `types` | Value sets (`kind: "enum"`, with `variation` and `site` for a variation), id types (`"id"`, with `entity` and `repr`), records (`"entity"` or `"dto"`, with `id`, `site`, `fields`). A field has `name` (the column as the model and the row spell it), `domain_name` (the field's name in the generated state and record types, from which each language derives its own spelling; today the same as `name`), `ident` (PascalCase), `type` (`{"kind": "scalar" \| "enum" \| "id" \| "rows", "name"}`), and `nullable`. A field of an entity record also has `primary_key` and `unique` (`@unique` on the column; a key spanning several columns is a `unique` obligation). |
 | `states` | Each state type: `name`, `entity`, `site`, `row`, `tag`, and `variants` with their `fields` and `always_null` columns. |
-| `usecases` | Every use case in model order: `id`, `label`, `site`, `kind` (`functions`, `unprinted`, or `read-only`), and `actions`, each with its `functions`, `dispatcher`, and why it is `unprinted`. |
+| `events` | Each event type a use case raises: `name`, `doc`, and `fields`, the id of each row the raise marks (`name`, `entity`, `type`). |
+| `usecases` | Every use case in model order: `id`, `label`, `site`, `kind` (`functions`, `unprinted`, or `read-only`), `actors` (the ids of the actors that perform it, whose capabilities its `Caller` takes; empty for one an event or a timer starts), and `actions`, each with its `functions`, `dispatcher`, and why it is `unprinted`. |
 | `functions` | Each function: `name`, `usecase`, `action`, `step`, `rows`, `marks`, `event`, `inputs`, `conditions`, `result`, `writes`, `raises`. |
-| `obligations` | Each obligation: `name`, `checked`, `text`, `site`. |
+| `obligations` | Each obligation: `name`, `checked`, `text`, `site`, and what it is about: `kind` (`reference`, `unique`, `min-children`, `max-children`, `on-delete`, `on-update`, `check`, `derived`, `invariant`, `rule-checks`, `transaction`, `run-marks`, `complete-rows`, or `not-met`), `entity` (or `null`), `columns` (the key, the unique set, or the column a check or a derivation is on; `[]` when none), and `parent` (the entity a key names, or `null`). |
+
+Keys are only added under one `format`: a reader of format 1 ignores a key it does not know.
 
 Sites are `path:line:col` relative to the working directory, or to `rdra.toml`'s directory under
 `--code`.

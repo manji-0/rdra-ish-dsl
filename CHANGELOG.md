@@ -105,9 +105,28 @@
   spends more than a tenth of its limit, or any check nine tenths of it. On every sample on 2
   solvers, and on the costliest samples on 1 and 3, the most is 161,000 units for a rule (1/124
   of 20,000,000) and 114,000 for a lemma (1/17 of 2,000,000).
+- `codegen --format json` (experimental) holds what a database mapper needs, as keys added
+  under format 1 (every key it had keeps its value): `events` (each event type a use case
+  raises, with the ids of the rows it marks), `actors` per use case (who performs it, as its
+  `Caller` takes them), `primary_key` and `unique` (`@unique`) on each field of an entity, and
+  each obligation's `kind`, `entity`, `columns` and `parent`. `domain_name` is documented.
+  The generated code does not change.
 
 ### Changed
 
+- `check --code` (experimental) says more of what failed, from three services built on the
+  generated code: the compiler's whole output prints before the findings (rustc's errors
+  were never shown); `CodeUnmapped` lists each unmapped error, and a `code:` line keeps the
+  message's further lines (which member a TS2322 says differs) and shows its path relative
+  to the working directory, as the other paths are; a call of a dispatcher or transition
+  function (Go `RunPay`, `PayFromOpen`) maps to its use case, and so does an argument-count
+  error (TS2554, E0061) by the call on its line; a probe that cannot resolve the service is
+  one `CodeServiceNotFound` pointing at `service` in rdra.toml and `codegen --probe`, not
+  one `CodeError` per use case; a failed run keeps the harness's `model only:` and
+  `store only:` rows, and says where the service panicked or threw when the harness
+  reported nothing; a `generator changed` names the table's settings in rdra.toml first.
+  The CLI reference and the implement skill say what a pass does not show: the rest of the
+  application, migrations, held locks, and that a raised event is never consumed.
 - `verify --prove` (experimental) finds lemmas from a rule's counterexample to induction
   (#428), in the manner of IC3: the CTI's state over its rows becomes a set of facts, and
   the clause that forbids them is weakened, one fact at a time, while it holds initially and
@@ -290,6 +309,11 @@
 
 ### Fixed
 
+- `check --code=fresh` counts one error per stale file: a domain file and traces both stale
+  printed two error blocks over `FAIL: code: 1 error(s)`.
+- The obligation ledger reads no marker inside a string literal, nor one whose name is not
+  letters, digits and `_`: a script printing `` `-- rdra: obligation ${ob}` `` was a
+  `` CodeObligationUnknown_${ob}`); `` warning.
 - The conformance traces (`codegen --conformance`, `codegen --code`) no longer leave out the
   moves of a use case that chooses the target of a lifecycle column other than the state
   column, such as `transitions(Decide, Case.liability, undetermined -> at_fault)` beside
