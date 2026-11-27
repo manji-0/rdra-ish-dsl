@@ -260,6 +260,7 @@ fn lower_expr(model: &SemanticModel, expr: &Expr) -> Result<TemporalExpr, LowerE
         Expr::Not(inner) => Ok(TemporalExpr::Not(go(inner)?)),
         Expr::And(a, b) => Ok(TemporalExpr::And(go(a)?, go(b)?)),
         Expr::Or(a, b) => Ok(TemporalExpr::Or(go(a)?, go(b)?)),
+        Expr::Mark(_) => unreachable!("the parser reads a mark only as a rule's argument"),
     }
 }
 

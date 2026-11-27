@@ -292,6 +292,7 @@ fn arg_span(arg: &PredicateArg) -> Span {
 fn expr_span(expr: &Expr) -> Span {
     match expr {
         Expr::Cmp(cmp) => cmp.span.clone(),
+        Expr::Mark(mark) => mark.span.clone(),
         Expr::Not(inner) => expr_span(inner),
         Expr::And(a, b) | Expr::Or(a, b) => expr_span(a).start..expr_span(b).end,
     }
@@ -305,6 +306,7 @@ fn first_entity(arg: &PredicateArg) -> Option<Span> {
                 Operand::QualifiedColumn(qcol) => Some(qcol.entity.span.clone()),
                 _ => None,
             }),
+            Expr::Mark(mark) => Some(mark.entity.span.clone()),
             Expr::Not(inner) => in_expr(inner),
             Expr::And(a, b) | Expr::Or(a, b) => in_expr(a).or_else(|| in_expr(b)),
         }
@@ -360,6 +362,7 @@ fn qualify_lhs(expr: &Expr, entity: &QRef) -> Expr {
             }
             Expr::Cmp(cmp)
         }
+        Expr::Mark(_) => expr.clone(),
         Expr::Not(inner) => Expr::Not(Box::new(qualify_lhs(inner, entity))),
         Expr::And(a, b) => Expr::And(
             Box::new(qualify_lhs(a, entity)),
@@ -501,6 +504,7 @@ fn entities_of(expr: &Expr) -> Vec<&QRef> {
                 _ => None,
             })
             .collect(),
+        Expr::Mark(mark) => vec![&mark.entity],
         Expr::Not(inner) => entities_of(inner),
         Expr::And(a, b) | Expr::Or(a, b) => {
             let mut entities = entities_of(a);

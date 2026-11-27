@@ -555,8 +555,12 @@ proof: 0 proved, 0 unproved, 0 out of scope, 1 refuted
 rule with `.lemma()`. `check` checks it like any rule, so a wrong lemma fails there with a
 trace. `verify` runs no cone for it, and the proof keeps it only when it proves it. It prints as
 `proved: lemma <name>` or `unproved: lemma <name>`, the `proof: your lemmas: ...` line counts
-it, and it never counts toward the `n of m rules` of the `OK:` line. A lemma cannot name a run mark or an event mark; a CTI that turns on a mark
-usually has a fact about columns one step earlier, so follow the CTIs back.
+it, and it never counts toward the `n of m rules` of the `OK:` line. A lemma, and no other
+rule, can read a row's marks ([Marks in a lemma](./language-reference.md#marks-in-a-lemma)):
+`Door.in_run(Open)` when a CTI holds a row between the steps of a split use case, and
+`Sign.raised(EvShut)` when it turns on an event latch. A CTI that turns on a mark often has a
+fact about columns one step earlier; read the mark only when a reachable state has the same
+columns, as in the engine corpus's `z3_lemma_run_mark`.
 insurance-claim-ops proves 「賠償の請求は示談書がそろってから完了する」 with this lemma, which
 generalizes over every case status before negotiation:
 

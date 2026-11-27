@@ -113,6 +113,7 @@ fn resolve_logical(
             let (a, b) = (go(a), go(b));
             CheckExpr::Or(Box::new(a?), Box::new(b?))
         }
+        Expr::Mark(_) => unreachable!("the parser reads a mark only as a rule's argument"),
     })
 }
 

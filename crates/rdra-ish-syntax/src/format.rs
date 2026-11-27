@@ -740,6 +740,19 @@ fn format_expr(expr: &Expr) -> String {
         Expr::Not(inner) => format!("not ({})", format_expr(inner)),
         Expr::And(a, b) => format!("({}) and ({})", format_expr(a), format_expr(b)),
         Expr::Or(a, b) => format!("({}) or ({})", format_expr(a), format_expr(b)),
+        Expr::Mark(mark) => format_mark(mark),
+    }
+}
+
+/// `Door.in_run(Open)`, `Door.in_run(Open, 1)`, `Claim.raised(EvPaid)`.
+pub fn format_mark(mark: &MarkCall) -> String {
+    let entity = mark.entity.parts.join(".");
+    match &mark.mark {
+        MarkKind::InRun { usecase, step } => match step {
+            Some(k) => format!("{entity}.in_run({}, {k})", usecase.parts.join(".")),
+            None => format!("{entity}.in_run({})", usecase.parts.join(".")),
+        },
+        MarkKind::Raised { event } => format!("{entity}.raised({})", event.parts.join(".")),
     }
 }
 

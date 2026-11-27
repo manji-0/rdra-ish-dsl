@@ -101,8 +101,17 @@ invariant(Order).when(status == placed).none(Shipment).label("a placed order has
 
 - `check` checks a lemma as a rule, so a wrong one fails there with a trace. The proof uses
   a lemma only once it proves it (`proved: lemma <name>`).
-- A lemma reads only what a rule reads: no run mark or event mark. When a CTI turns on one,
-  state the columns that keep that state unreachable instead.
+- When a CTI turns on a mark, a lemma can read it; an ordinary rule cannot. Write it among a
+  `forbidden`'s conditions or in an `invariant`'s `.when(...)` and `.then(...)`:
+  - `Door.in_run(Open)`: a step of the split use case Open is in progress on the row (its
+    `_run_Open` is not `none`).
+  - `Door.in_run(Open, 1)`: the row's run has done step 1 and not the next.
+  - `Sign.raised(EvShut)`: the row's `_raised_EvShut` latch is set.
+
+  For example, `forbidden(Light, Door, Light.state == off, Door.in_run(Open)).global().lemma()`
+  says no light is off while a door is between Open's steps. Prefer columns when columns
+  can state the fact: a mark is the only difference only when a reachable state has the
+  same columns.
 - When a lemma's own CTI steps back one state, widen it to every status that leads there
   rather than adding a second lemma.
 

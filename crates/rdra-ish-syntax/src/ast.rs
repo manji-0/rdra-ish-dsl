@@ -431,6 +431,42 @@ pub enum Expr {
     Or(Box<Expr>, Box<Expr>),
     /// Logical NOT: `not a` or `~ a` (TLA alias).
     Not(Box<Expr>),
+    /// A row's run or raised mark: `Door.in_run(Open)`, `Door.in_run(Open, 1)`,
+    /// `Claim.raised(EvPaid)`. The parser reads it only as a rule's argument; the analysis
+    /// accepts it only in a `.lemma()` rule.
+    Mark(MarkCall),
+}
+
+/// `Entity.in_run(UseCase)`, `Entity.in_run(UseCase, k)`, or `Entity.raised(Event)`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MarkCall {
+    pub entity: QRef,
+    pub mark: MarkKind,
+    pub span: Span,
+}
+
+/// Which mark a `MarkCall` reads.
+#[derive(Debug, Clone, PartialEq)]
+pub enum MarkKind {
+    /// `in_run(UseCase)`: some step of the split use case is in progress on the row;
+    /// `in_run(UseCase, k)`: the row's run has done step `k` and not the next. `step` is the
+    /// `k` as written.
+    InRun {
+        usecase: QRef,
+        step: Option<std::string::String>,
+    },
+    /// `raised(Event)`: the row raised the event.
+    Raised { event: QRef },
+}
+
+impl MarkCall {
+    /// The method name as written: `in_run` or `raised`.
+    pub fn method(&self) -> &'static str {
+        match self.mark {
+            MarkKind::InRun { .. } => "in_run",
+            MarkKind::Raised { .. } => "raised",
+        }
+    }
 }
 
 /// The expression of a `@check(...)` or `@derived(...)` column annotation.

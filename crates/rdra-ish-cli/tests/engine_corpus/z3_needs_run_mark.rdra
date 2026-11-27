@@ -6,8 +6,8 @@
 // has, Open_2 breaks it. Prop also sets a door ajar, with no guard, so a light off with an
 // ajar door is reachable, and the two states differ only in the door's run mark
 // (`Door._run_Open`): the fact that rules the CTI out reads the mark, and it relates a light
-// and a door that no key links, so no mined lemma states it and no `.lemma()` can name it.
-// z3 leaves the rule unproved, and BFS finds nothing.
+// and a door that no key links, so no mined lemma states it. z3 leaves the rule unproved,
+// and BFS finds nothing; z3_lemma_run_mark.rdra adds the fact as a `.lemma()`.
 // expect MultiForbidden_Light_0: native=ok tlc=ok z3=unproved bfs=ok,ok,ok
 // expect Deadlock_Light_state_on: native=counterexample tlc=counterexample
 // expect Deadlock_Sign_state_dark: native=counterexample tlc=counterexample

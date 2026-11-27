@@ -347,6 +347,7 @@ fn condition_entity(cond: &CrossEntityCondition) -> Option<EntityKey> {
     match cond {
         CrossEntityCondition::Equals { column, .. } => Some(column.entity),
         CrossEntityCondition::Comparison(c) => Some(c.lhs.entity),
+        CrossEntityCondition::Mark { .. } => None,
     }
 }
 

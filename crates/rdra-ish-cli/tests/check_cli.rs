@@ -1158,3 +1158,141 @@ fn check_defaults_to_a_pattern_cap_that_follows_the_instance_count_and_no_state_
     );
     assert!(stderr.contains("error[StateCapReached_Gadget]"), "{stderr}");
 }
+
+/// `check` on `body` appended to the run-mark model of the corpus (Open split in two steps),
+/// with Shut raising EvShut on a sign, which Seal handles; its exit code and stderr.
+fn check_marks(name: &str, body: &str) -> (Option<i32>, String) {
+    let base = std::fs::read_to_string(
+        repo().join("crates/rdra-ish-cli/tests/engine_corpus/z3_needs_run_mark.rdra"),
+    )
+    .unwrap();
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("m.rdra");
+    std::fs::write(
+        &file,
+        format!(
+            r#"{base}
+event EvShut "閉鎖済"
+usecase Shut "閉鎖"
+usecase Seal "封印"
+transitions(Shut, Sign.state, lit -> dark)
+raises(Shut, EvShut)
+triggers(EvShut, Seal)
+updates(Seal, Sign)
+{body}
+"#
+        ),
+    )
+    .unwrap();
+    let out = run(&["check", file.to_str().unwrap()]);
+    (
+        out.status.code(),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    )
+}
+
+/// A mark is read only by a `.lemma()` rule: a rule without `.lemma()`, a quantifier of a
+/// lemma, and a condition body that read one each fail to load, naming the mark.
+#[test]
+fn a_mark_outside_a_lemma_fails_to_load() {
+    for (name, body) in [
+        (
+            "mark_in_plain_rule",
+            "forbidden(Light, Door, Light.state == off, Door.in_run(Open)).global()",
+        ),
+        (
+            "mark_in_quantifier",
+            "invariant(Sign).has(Sign.raised(EvShut)).lemma()",
+        ),
+        (
+            "mark_in_condition",
+            "condition Busy \"開放中\"\nholds(Busy, Door.in_run(Open))",
+        ),
+    ] {
+        let (code, stderr) = check_marks(name, body);
+        assert_eq!(code, Some(1), "{name}: {stderr}");
+        assert!(
+            stderr.contains("only a `.lemma()` rule"),
+            "{name}: {stderr}"
+        );
+    }
+}
+
+/// `check` reads a lemma's marks in every reached state: a lemma that a door in Open's run,
+/// one past its first step, or a sign that raised EvShut breaks fails, and one that holds
+/// passes.
+#[test]
+fn check_reads_the_marks_of_a_lemma() {
+    for (name, body, broken) in [
+        (
+            "mark_in_run",
+            "forbidden(Door, Door.in_run(Open)).lemma()",
+            true,
+        ),
+        (
+            "mark_in_run_step",
+            "forbidden(Door, Door.in_run(Open, 1)).lemma()",
+            true,
+        ),
+        (
+            "mark_raised",
+            "forbidden(Sign, Sign.raised(EvShut)).lemma()",
+            true,
+        ),
+        (
+            "mark_holds",
+            "forbidden(Light, Door, Light.state == off, Door.in_run(Open)).global().lemma()",
+            false,
+        ),
+        (
+            "mark_raised_holds",
+            "forbidden(Sign, Sign.raised(EvShut), Sign.state == lit).lemma()",
+            false,
+        ),
+    ] {
+        let (_, stderr) = check_marks(name, body);
+        assert!(!stderr.contains("NoSuchMark"), "{name}: {stderr}");
+        assert!(!stderr.contains("MarkOutsideLemma"), "{name}: {stderr}");
+        assert_eq!(
+            stderr.contains("error[Forbidden_") || stderr.contains("error[MultiForbidden_"),
+            broken,
+            "{name}: {stderr}"
+        );
+    }
+}
+
+/// A mark the lifecycle has no var for is an error naming it: a use case in one
+/// transaction, an entity no step before the last writes, a step past the last, and an
+/// event the row keeps no latch for.
+#[test]
+fn a_mark_the_lifecycle_lacks_is_an_error() {
+    for (name, body, mark) in [
+        (
+            "mark_unsplit",
+            "forbidden(Door, Door.in_run(Prop)).lemma()",
+            "Door.in_run(Prop)",
+        ),
+        (
+            "mark_last_step",
+            "forbidden(Sign, Sign.in_run(Open)).lemma()",
+            "Sign.in_run(Open)",
+        ),
+        (
+            "mark_step_past",
+            "forbidden(Door, Door.in_run(Open, 2)).lemma()",
+            "Door.in_run(Open, 2)",
+        ),
+        (
+            "mark_no_latch",
+            "forbidden(Door, Door.raised(EvShut)).lemma()",
+            "Door.raised(EvShut)",
+        ),
+    ] {
+        let (code, stderr) = check_marks(name, body);
+        assert_eq!(code, Some(1), "{name}: {stderr}");
+        assert!(stderr.contains("NoSuchMark"), "{name}: {stderr}");
+        assert!(stderr.contains(&format!("{mark}: ")), "{name}: {stderr}");
+    }
+}

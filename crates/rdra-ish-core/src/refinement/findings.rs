@@ -15,6 +15,7 @@ pub(super) fn owning_stage(model: &SemanticModel, diag: &StateDiag) -> StageId {
         }
         StateDiag::UnbindableScope { site, .. }
         | StateDiag::UnsupportedComparison { site, .. }
+        | StateDiag::NoSuchMark { site, .. }
         | StateDiag::UnwrittenConstrainedVar { site, .. } => {
             rule_stage(model, &site.fact).unwrap_or(StageId::AdvancedRules)
         }

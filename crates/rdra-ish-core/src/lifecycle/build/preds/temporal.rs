@@ -39,6 +39,7 @@ impl Builder<'_> {
                 let ek = match cond {
                     CrossEntityCondition::Equals { column, .. } => column.entity,
                     CrossEntityCondition::Comparison(p) => p.lhs.entity,
+                    CrossEntityCondition::Mark { entity, .. } => *entity,
                 };
                 if !entities.contains(&ek) {
                     entities.push(ek);

@@ -205,6 +205,7 @@ impl Named {
             CrossEntityCondition::Equals { column, value } => {
                 self.value(column.entity, &column.column, value)
             }
+            CrossEntityCondition::Mark { .. } => {}
             CrossEntityCondition::Comparison(prop) => {
                 let ordered = prop.op.is_ordered();
                 match &prop.rhs {

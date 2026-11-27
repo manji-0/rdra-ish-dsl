@@ -159,6 +159,7 @@ fn first_entity(cond: &CrossEntityCondition) -> EntityKey {
     match cond {
         CrossEntityCondition::Equals { column, .. } => column.entity,
         CrossEntityCondition::Comparison(prop) => prop.lhs.entity,
+        CrossEntityCondition::Mark { entity, .. } => *entity,
     }
 }
 

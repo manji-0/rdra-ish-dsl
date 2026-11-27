@@ -108,6 +108,7 @@ fn condition_entities(model: &SemanticModel, conds: &[&CrossEntityCondition]) ->
         match cond {
             CrossEntityCondition::Equals { column, .. } => keys.push(column.entity),
             CrossEntityCondition::Comparison(prop) => keys.push(prop.lhs.entity),
+            CrossEntityCondition::Mark { entity, .. } => keys.push(*entity),
         }
     }
     entity_ids(model, &keys)

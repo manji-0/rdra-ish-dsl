@@ -57,6 +57,7 @@ pub(super) fn cross_displays(
                 p.op.as_str(),
                 cross_rhs_display(model, &p.rhs)
             ),
+            CrossEntityCondition::Mark { entity, mark } => mark.display(model, *entity),
         })
         .collect()
 }

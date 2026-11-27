@@ -55,6 +55,7 @@ pub(crate) fn arg_span(arg: &PredicateArg) -> Span {
     match arg {
         PredicateArg::Ref(qref) => qref.span.clone(),
         PredicateArg::Expr(Expr::Cmp(cmp)) => cmp.span.clone(),
+        PredicateArg::Expr(Expr::Mark(mark)) => mark.span.clone(),
         PredicateArg::Expr(Expr::Not(inner)) => expr_span(inner),
         PredicateArg::Expr(Expr::And(a, b)) | PredicateArg::Expr(Expr::Or(a, b)) => {
             let left = expr_span(a);
@@ -71,6 +72,7 @@ pub(crate) fn arg_span(arg: &PredicateArg) -> Span {
 fn expr_span(expr: &Expr) -> Span {
     match expr {
         Expr::Cmp(cmp) => cmp.span.clone(),
+        Expr::Mark(mark) => mark.span.clone(),
         Expr::Not(inner) => expr_span(inner),
         Expr::And(a, b) | Expr::Or(a, b) => {
             let left = expr_span(a);

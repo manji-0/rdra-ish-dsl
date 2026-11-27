@@ -129,6 +129,12 @@ pub enum RdraError {
     #[error("invariant(...).then(...) has no `.when(...)` to say which rows it holds on\n  hint: add `.when(column == value)`; for a rule on every row write `required(Entity, column == value)`")]
     InvariantWithoutWhen,
 
+    #[error("`{mark}` reads a run or raised mark, which only a `.lemma()` rule's conditions, `.when(...)` and `.then(...)` may read\n  hint: add `.lemma()` to a `forbidden` or `invariant` that states a fact for `verify --prove`, or compare the row's columns instead")]
+    MarkOutsideLemma { mark: String },
+
+    #[error("`{mark}` names step {step}; a run is past step 1 or later\n  hint: write `in_run(UseCase, k)` with k from 1 to the use case's steps minus one, or `in_run(UseCase)` for any step")]
+    MarkStepOutOfRange { mark: String, step: String },
+
     #[error(".{method}(...) names no condition on a related entity\n  hint: write `.{method}(Related.column == value)`")]
     QuantifierWithoutCondition { method: String },
 

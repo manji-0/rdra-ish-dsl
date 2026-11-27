@@ -1,0 +1,46 @@
+// trap: a `.lemma()` reads a run mark (#428), and the rule is proved. The model is
+// z3_needs_run_mark.rdra: Open_1 sets a door ajar only while no light is off, Open_2 lights a
+// sign with no guard, and TurnOff waits while a door is ajar or a sign is lit. The CTI there
+// is a door between Open's two steps beside a light off, which differs from the reachable
+// state Prop leaves (a door ajar, a light off) only in the door's run mark. The lemma states
+// that no light is off while a door is in Open's run (`Door.in_run(Open)`); it holds at every
+// bound and makes the rule inductive, so z3 proves both. A lemma z3 kept must not have a BFS
+// counterexample either. `verify` runs no cone for the lemma, and the rule's cone does not
+// hold it, so only `check` at one instance checks it.
+// expect MultiForbidden_Light_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+// expect MultiForbidden_Light_1: native=none tlc=none z3=proved bfs=ok,none,none
+// expect Deadlock_Light_state_on: native=counterexample tlc=counterexample
+// expect Deadlock_Sign_state_dark: native=counterexample tlc=counterexample
+entity Light "照明" { id: Int @pk  state: Enum(on, off) @default(on) }
+entity Door "扉" { id: Int @pk  state: Enum(closed, ajar) @default(closed) }
+entity Sign "標識" { id: Int @pk  state: Enum(dark, lit) @default(dark) }
+usecase Install "照明設置"
+usecase Fit "扉設置"
+usecase Hang "標識設置"
+usecase TurnOff "消灯"
+usecase Prop "扉を押さえる"
+usecase Open "開放"
+api DoorApi "扉 API"
+api SignApi "標識 API"
+creates(Install, Light)
+creates(Fit, Door)
+creates(Hang, Sign)
+transitions(TurnOff, Light.state, on -> off)
+transitions(Prop, Door.state, closed -> ajar)
+invokes(Open, DoorApi)
+updates(DoorApi, Door)
+transitions(Open, Door.state, closed -> ajar)
+invokes(Open, SignApi)
+updates(SignApi, Sign)
+transitions(Open, Sign.state, dark -> lit)
+condition LightsOn "消えた照明がない"
+holds(LightsOn, Door.state == closed).none(Light.state == off)
+applies_to(LightsOn, Open)
+condition DoorsShut "押さえた扉がない"
+holds(DoorsShut, Light.state == on).none(Door.state == ajar)
+applies_to(DoorsShut, TurnOff)
+condition SignsDark "点いた標識がない"
+holds(SignsDark, Light.state == on).none(Sign.state == lit)
+applies_to(SignsDark, TurnOff)
+forbidden(Light, Sign, Light.state == off, Sign.state == lit).global()
+forbidden(Light, Door, Light.state == off, Door.in_run(Open)).global().lemma()
