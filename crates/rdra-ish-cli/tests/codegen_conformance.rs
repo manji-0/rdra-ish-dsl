@@ -81,7 +81,7 @@ fn check(lang: &str, run: impl Fn(&str) -> Output) {
         "{lang}: the reference service fails:\n{out}"
     );
     assert!(
-        out.contains("ok 11 traces, 21 calls, 11 refusals, 7 interleavings"),
+        out.contains("ok 11 traces, 21 calls, 13 refusals, 7 interleavings"),
         "{lang}: the reference service checked less than expected:\n{out}"
     );
     for (fault, report) in FAULTS {

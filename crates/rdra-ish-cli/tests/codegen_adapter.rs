@@ -94,7 +94,7 @@ fn check(lang: &str, run: impl Fn(&str, bool) -> Output) {
         "{lang}: the reference adapter fails:\n{out}"
     );
     assert!(
-        out.contains("rdra-ish conformance: ok 11 traces, 21 calls, 11 refusals, 7 interleavings, 0 interleavings skipped, 32 split calls"),
+        out.contains("rdra-ish conformance: ok 11 traces, 21 calls, 13 refusals, 7 interleavings, 0 interleavings skipped, 34 split calls"),
         "{lang}: the reference adapter checked less than expected:\n{out}"
     );
     // A commit that never stores refuses every interleaved commit as it should; the calls
@@ -124,7 +124,7 @@ fn check(lang: &str, run: impl Fn(&str, bool) -> Output) {
         let out = text(&unsplit);
         assert!(unsplit.status.success(), "{lang} unsplit {fault}:\n{out}");
         assert!(
-            out.contains("rdra-ish conformance: ok 11 traces, 21 calls, 11 refusals, 0 interleavings, 7 interleavings skipped, 0 split calls"),
+            out.contains("rdra-ish conformance: ok 11 traces, 21 calls, 13 refusals, 0 interleavings, 7 interleavings skipped, 0 split calls"),
             "{lang} unsplit {fault}:\n{out}"
         );
     }

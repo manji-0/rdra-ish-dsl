@@ -14,11 +14,14 @@ import * as d from "./domain.ts";
 // What the service needs of Node, declared here: the repository installs no @types/node.
 declare const process: { env: Record<string, string | undefined> };
 
-type Refusal = Readonly<{ kind: "NotEnabled"; usecase: string }>;
-
-const notEnabled = (usecase: string): d.Result<never, Refusal> => ({
+const notEnabled = (usecase: string): d.Result<never, d.NotEnabled> => ({
   ok: false,
   error: { kind: "NotEnabled", usecase },
+});
+/** A call that names a row no row has: an HTTP service's 404. */
+const notFound = (usecase: string, entity: string, id: number): d.Result<never, d.NotFound> => ({
+  ok: false,
+  error: { kind: "NotFound", usecase, entity, id: String(id) },
 });
 const done: d.Result<void, never> = { ok: true, value: undefined };
 
@@ -93,7 +96,7 @@ export class OrderService {
   ): Promise<d.Result<d.PlaceResult, d.PlaceError>> => {
     const customer = this.customers.get(parentCustomer);
     return customer === undefined
-      ? notEnabled("Place")
+      ? notFound("Place", "Customer", parentCustomer)
       : d.place(customer, orderId, orderMethod, orderNote);
   };
   commitPlace = async (r: d.PlaceResult): Promise<d.Result<void, d.PlaceError>> => {
@@ -107,7 +110,7 @@ export class OrderService {
     paidAt: d.DateTime,
   ): Promise<d.Result<d.PayOutcome, d.PayError>> => {
     const state = this.order(id);
-    return state === undefined ? notEnabled("Pay") : d.runPay(state, paidAt);
+    return state === undefined ? notFound("Pay", "Order", id) : d.runPay(state, paidAt);
   };
   commitPay = async (r: d.PayOutcome): Promise<d.Result<void, d.PayError>> => {
     if (!this.check([[r.order.id, r.order_expected]], [])) return notEnabled("Pay");
@@ -125,7 +128,7 @@ export class OrderService {
     shipmentId: d.ShipmentId,
   ): Promise<d.Result<d.ShipOutcome, d.ShipError>> => {
     const state = this.order(id);
-    return state === undefined ? notEnabled("Ship") : d.runShip(state, shipmentId);
+    return state === undefined ? notFound("Ship", "Order", id) : d.runShip(state, shipmentId);
   };
   commitShip = async (r: d.ShipOutcome): Promise<d.Result<void, d.ShipError>> => {
     if (!this.check([[r.order.id, r.order_expected]], [[r.shipment.id, r.shipment_expected]])) {
@@ -146,7 +149,7 @@ export class OrderService {
     if (!this.evShipped.some((e) => e.shipment_id === ev.shipment_id)) return notEnabled("Send");
     const row = this.fault === "ignore-id" ? [...this.shipments.values()][0] : this.shipments.get(id);
     return row === undefined
-      ? notEnabled("Send")
+      ? notFound("Send", "Shipment", id)
       : d.runSend(stored(d.Shipment.fromRow(row)), ev);
   };
   commitSend = async (r: d.SendOutcome): Promise<d.Result<void, d.SendError>> => {
@@ -157,7 +160,7 @@ export class OrderService {
 
   prepareCancel = async (id: d.OrderId): Promise<d.Result<d.CancelOutcome, d.CancelError>> => {
     const state = this.order(id);
-    if (state === undefined) return notEnabled("Cancel");
+    if (state === undefined) return notFound("Cancel", "Order", id);
     const ran = d.runCancel(state);
     if (!ran.ok && ran.error.kind === "NotEnabled" && this.fault === "accept-disabled") {
       const row = { ...d.Order.toRow(state), status: "paid" as const };

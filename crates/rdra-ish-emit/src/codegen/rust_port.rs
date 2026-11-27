@@ -165,7 +165,7 @@ pub fn conform<P: ConformancePort>(mut new_port: impl FnMut() -> P, traces: &str
                 let call = rest.get(1..).unwrap_or_default();
                 let p = conf_port.as_mut().ok_or_else(|| at("a call outside a trace".to_string()))?;
                 if let {RESULT}::Err(why) = conf_run(p, call).map_err(at)? {{
-                    return {RESULT}::Err(at(format!("the model runs `{{}}` here, and the service refused it: {{why}}", call.join(" "))));
+                    return {RESULT}::Err(at(conf_refused(call, &why)));
                 }}
                 conf_compare(&conf_abstract(&p.snapshot()), &next, &format!("after `{{}}`", call.join(" "))).map_err(at)?;
                 want = next;
@@ -178,6 +178,7 @@ pub fn conform<P: ConformancePort>(mut new_port: impl FnMut() -> P, traces: &str
                 let p = conf_port.as_mut().ok_or_else(|| at("a call outside a trace".to_string()))?;
                 match conf_run(p, rest).map_err(at)? {{
                     {RESULT}::Ok(()) => return {RESULT}::Err(at(format!("the model refuses `{{}}` here, and the service ran it", rest.join(" ")))),
+                    {RESULT}::Err(why) if why.starts_with(CONF_STORE_FAILED) => return {RESULT}::Err(at(conf_refused(rest, &why))),
                     {RESULT}::Err(why) if kind != "-" && !why.starts_with(&format!("{{kind}}: ")) => {{
                         return {RESULT}::Err(at(format!("the model refuses `{{}}` here with {{kind}}, and the service refused it with {{why}}", rest.join(" "))));
                     }}
@@ -193,14 +194,16 @@ pub fn conform<P: ConformancePort>(mut new_port: impl FnMut() -> P, traces: &str
                 let p = conf_port.as_mut().ok_or_else(|| at("a call outside a trace".to_string()))?;
                 let early = match conf_prepare(p, first).map_err(at)? {{
                     {RESULT}::Ok(w) => w,
-                    {RESULT}::Err(why) => return {RESULT}::Err(at(format!("the model runs `{{}}` here, and the service refused it: {{why}}", first.join(" ")))),
+                    {RESULT}::Err(why) => return {RESULT}::Err(at(conf_refused(first, &why))),
                 }};
                 if let {RESULT}::Err(why) = conf_run(p, second).map_err(at)? {{
-                    return {RESULT}::Err(at(format!("the model runs `{{}}` here, and the service refused it: {{why}}", second.join(" "))));
+                    return {RESULT}::Err(at(conf_refused(second, &why)));
                 }}
                 conf_compare(&conf_abstract(&p.snapshot()), &next, &format!("after `{{}}`", second.join(" "))).map_err(at)?;
-                if conf_commit(p, early).is_ok() {{
-                    return {RESULT}::Err(at(format!("the service committed `{{}}`, prepared before `{{}}` changed a row it writes: the write must be conditional on what the row was", first.join(" "), second.join(" "))));
+                match conf_commit(p, early) {{
+                    {RESULT}::Ok(()) => return {RESULT}::Err(at(format!("the service committed `{{}}`, prepared before `{{}}` changed a row it writes: the write must be conditional on what the row was", first.join(" "), second.join(" ")))),
+                    {RESULT}::Err(why) if why.starts_with(CONF_STORE_FAILED) => return {RESULT}::Err(at(conf_refused(first, &why))),
+                    {RESULT}::Err(_) => {{}}
                 }}
                 conf_compare(&conf_abstract(&p.snapshot()), &next, &format!("after the refused commit of `{{}}`", first.join(" "))).map_err(at)?;
                 want = next;
@@ -210,6 +213,19 @@ pub fn conform<P: ConformancePort>(mut new_port: impl FnMut() -> P, traces: &str
         }}
     }}
     {RESULT}::Ok(report)
+}}
+
+/// How the text of a `StoreFailed` starts: a failure of the service, never a refusal.
+const CONF_STORE_FAILED: &str = "StoreFailed: ";
+
+/// What is wrong when the service did not run `call`, which the model runs, or refused it with
+/// `why`: a refusal, or, for `StoreFailed`, a failure of the service.
+fn conf_refused(call: &[&str], why: &str) -> {STRING} {{
+    if why.starts_with(CONF_STORE_FAILED) {{
+        format!("the service failed on `{{}}`: {{why}}", call.join(" "))
+    }} else {{
+        format!("the model runs `{{}}` here, and the service refused it: {{why}}", call.join(" "))
+    }}
 }}
 
 /// The store against the model's state: every line one holds and the other does not.
@@ -338,7 +354,7 @@ fn print_calls(domain: &DomainModel, port: &PortDecl, out: &mut String) {
     }
     out.push_str("    }\n}\n\n");
     out.push_str(&format!(
-        "/// Why the service refused a call: the kind of its error, `: `, and its text.\nfn conf_why(e: &(dyn ::std::error::Error + 'static)) -> {STRING} {{\n    let kind = match e.source() {{\n        {OPTION}::Some(d) if d.is::<NotEnabled>() => \"NotEnabled\",\n        {OPTION}::Some(d) if d.is::<Rejected>() => \"Rejected\",\n        {OPTION}::Some(d) if d.is::<InvalidArgument>() => \"InvalidArgument\",\n        _ => \"an error of no kind\",\n    }};\n    format!(\"{{kind}}: {{e}}\")\n}}\n\n"
+        "/// Why the service refused a call: the kind of its error, `: `, and its text.\nfn conf_why(e: &(dyn ::std::error::Error + 'static)) -> {STRING} {{\n    let kind = match e.source() {{\n        {OPTION}::Some(d) if d.is::<NotEnabled>() => \"NotEnabled\",\n        {OPTION}::Some(d) if d.is::<NotFound>() => \"NotFound\",\n        {OPTION}::Some(d) if d.is::<StoreFailed>() => \"StoreFailed\",\n        {OPTION}::Some(d) if d.is::<Rejected>() => \"Rejected\",\n        {OPTION}::Some(d) if d.is::<InvalidArgument>() => \"InvalidArgument\",\n        _ => \"an error of no kind\",\n    }};\n    format!(\"{{kind}}: {{e}}\")\n}}\n\n"
     ));
 }
 

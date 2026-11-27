@@ -167,6 +167,39 @@
   table's settings in rdra.toml first.
   The CLI reference and the implement skill say what a pass does not show: the rest of the
   application, migrations, held locks, and that a raised event is never consumed.
+- **Breaking for the experimental codegen output:** every `<UseCase>Error`, in Rust, Go and
+  TypeScript, has two more cases, `NotFound` (a row the call names by id does not exist:
+  `usecase`, `entity`, `id`) and `StoreFailed` (the store failed: `usecase` and the store's
+  error as `cause`), so an HTTP service can answer 404 (`NotFound`), 409 (`NotEnabled`),
+  422 (`Rejected`), 400 (`InvalidArgument`) and 500 (`StoreFailed`). The generated
+  functions take rows already loaded and never return them; the service's load and commit
+  do. Go adds `ErrNotFound`, `ErrStoreFailed` and the `Kind`s `<UseCase>ErrorNotFound` and
+  `<UseCase>ErrorStoreFailed`, and `*StoreFailed` unwraps to the store's error. The commit
+  helper returns `StoreFailed` for a store error: Rust's `CommitFailed` loses its type
+  parameter and `Store(E)` for `StoreFailed(StoreFailed)` and converts into every
+  `<UseCase>Error`, and the store's `Error` must convert into `Box<dyn Error + Send + Sync>`;
+  Go's `CommitWrites` returns `*StoreFailed` instead of the bare store error; TypeScript's
+  `commitWrites` returns `NotEnabled | StoreFailed` instead of `NotEnabled | E`. The
+  conformance traces (format 5, so generate them and the harness again) call each use case
+  over one existing row once with an id no row has (`X NotFound ...`), and the harnesses of
+  the port and of the model adapter require `NotFound` there; `NotEnabled` no longer passes.
+  A `StoreFailed` fails a conformance run as a failure of the service. The model adapter's
+  refusal kinds gain `NotFound` and `StoreFailed` (Go: `Outcome` constants; TypeScript:
+  `"notFound"`, `"storeFailed"`). The Verus output keeps its three cases. These items are
+  outside the compatibility contract (docs/compatibility.md), so a minor release may change
+  them. On the samples the Rust output grows 7% to 12% in lines (each use case's error gains
+  two variants with their `Display`, `source` and `From` arms, and `From<CommitFailed>`), Go
+  2% to 9%, and TypeScript 20 lines; the traces gain one row per use case over one row.
+
+  **Upgrading.** Add an arm for `NotFound` and one for `StoreFailed` to every exhaustive
+  `match` on a `<UseCase>Error` in Rust, every `switch` on its `kind` that ends in
+  `assertNever` in TypeScript, and, in Go, every `switch` on `Kind` that should not fall to
+  its default; map them to 404 and 500. Return `NotFound` where `prepare` finds no row for an
+  id it was given (it returned `NotEnabled` before), and `StoreFailed` where the store fails.
+  In Rust, replace `CommitFailed::Store(e)` with `CommitFailed::StoreFailed(e)`, or drop the
+  mapping and write `commit_writes(store, result)?`. In Go, a caller of `CommitWrites` that
+  compared the store's error directly uses `errors.Is` or `errors.As`, which reach it through
+  `Unwrap`. Model adapters map their errors to the new refusal kinds.
 - The self-check of `check --code=run` picks its mutants in linear time (#439): it built
   the text of every candidate row and listed the states that differ for every call. On the
   traces of clinic-ops and patent-ops at the default cap (4.3 and 3.7 million lines),

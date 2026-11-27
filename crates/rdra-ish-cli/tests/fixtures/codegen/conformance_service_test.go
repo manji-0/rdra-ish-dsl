@@ -11,6 +11,7 @@ package domain_test
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"sort"
 	"testing"
@@ -36,6 +37,11 @@ func newService(fault string) *service {
 }
 
 func notEnabled(usecase string) error { return &domain.NotEnabled{UseCase: usecase} }
+
+// notFound is the error of a call that names a row no row has: an HTTP service's 404.
+func notFound(usecase, entity string, id any) error {
+	return &domain.NotFound{UseCase: usecase, Entity: entity, ID: fmt.Sprint(id)}
+}
 
 // holds tells whether a row, by its tag ("" and absent when there is none), is still what a
 // result expects.
@@ -63,7 +69,7 @@ func (s *service) shipmentHolds(id domain.ShipmentId, e domain.ExpectedSource) b
 func (s *service) order(id domain.OrderId, usecase string) (domain.Order, error) {
 	row, ok := s.orders[id]
 	if !ok {
-		return nil, notEnabled(usecase)
+		return nil, notFound(usecase, "Order", id)
 	}
 	state, err := domain.OrderFromRow(row)
 	if err != nil {
@@ -106,7 +112,7 @@ func (s *service) Snapshot() (domain.StoreSnapshot, error) {
 func (s *service) PreparePlace(parent domain.CustomerId, id domain.OrderId, method domain.Method, note string) (domain.PlaceResult, error) {
 	customer, ok := s.customers[parent]
 	if !ok {
-		return domain.PlaceResult{}, notEnabled("Place")
+		return domain.PlaceResult{}, notFound("Place", "Customer", parent)
 	}
 	return domain.Place(customer, id, method, note)
 }
@@ -171,8 +177,11 @@ func (s *service) PrepareSend(id domain.ShipmentId, ev domain.EvShipped) (domain
 		raised = raised || e == ev
 	}
 	row, ok := s.shipments[id]
-	if !raised || !ok {
+	if !raised {
 		return domain.SendOutcome{}, notEnabled("Send")
+	}
+	if !ok {
+		return domain.SendOutcome{}, notFound("Send", "Shipment", id)
 	}
 	state, err := domain.ShipmentFromRow(row)
 	if err != nil {

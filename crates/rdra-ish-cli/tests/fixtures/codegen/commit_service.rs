@@ -23,6 +23,15 @@ struct Store {
     used: BTreeSet<(&'static str, i64)>,
 }
 
+/// `NotFound` for the row `id` of `entity`.
+fn not_found(usecase: &'static str, entity: &'static str, id: i64) -> NotFound {
+    NotFound {
+        usecase,
+        entity,
+        id: id.to_string(),
+    }
+}
+
 /// The entity and the number of an id.
 fn key(id: &StoredId) -> (&'static str, i64) {
     let n = match id {
@@ -128,21 +137,20 @@ struct Service {
 }
 
 impl Service {
-    /// Commits any result in one transaction: the store as it was comes back on an error.
-    fn commit<E: From<NotEnabled>>(&mut self, writes: impl IntoWrites) -> Result<(), E> {
+    /// Commits any result in one transaction: the store as it was comes back on an error,
+    /// which is the use case's own (`NotEnabled` or `StoreFailed`).
+    fn commit<E: From<CommitFailed>>(&mut self, writes: impl IntoWrites) -> Result<(), E> {
         let saved = self.store.clone();
         commit_writes(&mut self.store, writes).map_err(|e| {
             self.store = saved;
-            match e {
-                CommitFailed::NotEnabled(e) => e.into(),
-                CommitFailed::Store(never) => match never {},
-            }
+            e.into()
         })
     }
 
-    fn order(&self, id: OrderId, usecase: &'static str) -> Result<Order, NotEnabled> {
+    /// The order of `id`: `NotFound` when no order has it.
+    fn order(&self, id: OrderId, usecase: &'static str) -> Result<Order, NotFound> {
         let row = self.store.orders.get(&id.get()).cloned();
-        let row = row.ok_or(NotEnabled { usecase })?;
+        let row = row.ok_or_else(|| not_found(usecase, "Order", id.get()))?;
         Ok(Order::from_row(row).expect("the store holds valid rows"))
     }
 }
@@ -194,7 +202,10 @@ impl ConformancePort for Service {
 impl PlaceUseCase for Service {
     fn prepare_place(&mut self, parent_account: AccountId, order_id: OrderId) -> Result<PlaceResult, PlaceError> {
         let account = self.store.accounts.get(&parent_account.get()).cloned();
-        place(account.ok_or(NotEnabled { usecase: "Place" })?, order_id)
+        place(
+            account.ok_or_else(|| not_found("Place", "Account", parent_account.get()))?,
+            order_id,
+        )
     }
 
     fn commit_place(&mut self, write: PlaceResult) -> Result<(), PlaceError> {
@@ -242,7 +253,7 @@ impl SendUseCase for Service {
             return Err(NotEnabled { usecase: "Send" }.into());
         }
         let row = self.store.shipments.get(&shipment.get()).cloned();
-        let row = row.ok_or(NotEnabled { usecase: "Send" })?;
+        let row = row.ok_or_else(|| not_found("Send", "Shipment", shipment.get()))?;
         run_send(Shipment::from_row(row).expect("the store holds valid rows"), ev_shipped)
     }
 

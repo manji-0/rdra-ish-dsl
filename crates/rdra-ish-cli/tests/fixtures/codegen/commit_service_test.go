@@ -7,6 +7,7 @@
 package domain_test
 
 import (
+	"fmt"
 	"os"
 	"sort"
 	"testing"
@@ -156,10 +157,14 @@ func (sv *service) commit(w domain.Committable) error {
 
 func notEnabled(usecase string) error { return &domain.NotEnabled{UseCase: usecase} }
 
+func notFound(usecase, entity string, id any) error {
+	return &domain.NotFound{UseCase: usecase, Entity: entity, ID: fmt.Sprint(id)}
+}
+
 func (sv *service) order(id domain.OrderId, usecase string) (domain.Order, error) {
 	row, ok := sv.s.orders[id]
 	if !ok {
-		return nil, notEnabled(usecase)
+		return nil, notFound(usecase, "Order", id)
 	}
 	return domain.OrderFromRow(row)
 }
@@ -208,7 +213,7 @@ func (sv *service) Snapshot() (domain.StoreSnapshot, error) {
 func (sv *service) PreparePlace(parent domain.AccountId, orderId domain.OrderId) (domain.PlaceResult, error) {
 	account, ok := sv.s.accounts[parent]
 	if !ok {
-		return domain.PlaceResult{}, notEnabled("Place")
+		return domain.PlaceResult{}, notFound("Place", "Account", parent)
 	}
 	return domain.Place(account, orderId)
 }
@@ -253,8 +258,11 @@ func (sv *service) PrepareSend(id domain.ShipmentId, ev domain.EvShipped) (domai
 		raised = raised || e == ev
 	}
 	row, ok := sv.s.shipments[id]
-	if !raised || !ok {
+	if !raised {
 		return domain.SendOutcome{}, notEnabled("Send")
+	}
+	if !ok {
+		return domain.SendOutcome{}, notFound("Send", "Shipment", id)
 	}
 	state, err := domain.ShipmentFromRow(row)
 	if err != nil {

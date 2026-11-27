@@ -29,6 +29,15 @@ fn not_enabled<E: From<NotEnabled>>(usecase: &'static str) -> E {
     NotEnabled { usecase }.into()
 }
 
+/// `NotFound` for the row `id` of `entity`.
+fn not_found(usecase: &'static str, entity: &'static str, id: i64) -> NotFound {
+    NotFound {
+        usecase,
+        entity,
+        id: id.to_string(),
+    }
+}
+
 /// Whether a row, by its tag (`None` when absent), is still what a result expects.
 fn holds(tag: Option<&str>, expected: ExpectedSource) -> bool {
     match expected {
@@ -39,14 +48,15 @@ fn holds(tag: Option<&str>, expected: ExpectedSource) -> bool {
 }
 
 impl Service {
-    fn order(&self, id: OrderId, usecase: &'static str) -> Result<Order, NotEnabled> {
+    /// The order of `id`: `NotFound`, the 404 of an HTTP service, when no order has it.
+    fn order(&self, id: OrderId, usecase: &'static str) -> Result<Order, NotFound> {
         let row = if self.fault == "ignore-id" {
             self.orders.values().next()
         } else {
             self.orders.get(&id.get())
         }
         .cloned()
-        .ok_or(NotEnabled { usecase })?;
+        .ok_or_else(|| not_found(usecase, "Order", id.get()))?;
         Ok(Order::from_row(row).expect("the store holds valid rows"))
     }
 
@@ -119,7 +129,7 @@ impl PlaceUseCase for Service {
             .customers
             .get(&parent_customer.get())
             .cloned()
-            .ok_or(NotEnabled { usecase: "Place" })?;
+            .ok_or_else(|| not_found("Place", "Customer", parent_customer.get()))?;
         place(customer, order_id, order_method, order_note)
     }
 
@@ -185,7 +195,7 @@ impl SendUseCase for Service {
             self.shipments.get(&shipment.get())
         }
         .cloned()
-        .ok_or(NotEnabled { usecase: "Send" })?;
+        .ok_or_else(|| not_found("Send", "Shipment", shipment.get()))?;
         run_send(
             Shipment::from_row(row).expect("the store holds valid rows"),
             ev_shipped,

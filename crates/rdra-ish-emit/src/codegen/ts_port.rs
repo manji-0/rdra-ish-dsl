@@ -473,7 +473,7 @@ export async function conform(newPort: () => ConformancePort, traces: string | (
           return at(ran.error);
         }}
         if (!ran.value.ok) {{
-          return at(`the model runs \`${{call.join(" ")}}\` here, and the service refused it: ${{$confShow(ran.value.error)}}`);
+          return at($confRefused(call, ran.value.error));
         }}
         const diff = $confCompare($confAbstract(await port.snapshot()), next, `after \`${{call.join(" ")}}\``);
         if (diff !== null) {{
@@ -496,6 +496,9 @@ export async function conform(newPort: () => ConformancePort, traces: string | (
           return at(`the model refuses \`${{call.join(" ")}}\` here, and the service ran it`);
         }}
         const got = $confKind(ran.value.error);
+        if (got === "StoreFailed") {{
+          return at($confRefused(call, ran.value.error));
+        }}
         if (kind !== "-" && got !== kind) {{
           return at(`the model refuses \`${{call.join(" ")}}\` here with ${{kind}}, and the service refused it with ${{got}}`);
         }}
@@ -525,14 +528,14 @@ export async function conform(newPort: () => ConformancePort, traces: string | (
           return at(early.error);
         }}
         if (!early.value.ok) {{
-          return at(`the model runs \`${{first.join(" ")}}\` here, and the service refused it: ${{$confShow(early.value.error)}}`);
+          return at($confRefused(first, early.value.error));
         }}
         const ran = await $confRun(port, second);
         if (!ran.ok) {{
           return at(ran.error);
         }}
         if (!ran.value.ok) {{
-          return at(`the model runs \`${{second.join(" ")}}\` here, and the service refused it: ${{$confShow(ran.value.error)}}`);
+          return at($confRefused(second, ran.value.error));
         }}
         const between = $confCompare($confAbstract(await port.snapshot()), next, `after \`${{second.join(" ")}}\``);
         if (between !== null) {{
@@ -541,6 +544,9 @@ export async function conform(newPort: () => ConformancePort, traces: string | (
         const late = await $confCommit(port, early.value.value);
         if (late.ok) {{
           return at(`the service committed \`${{first.join(" ")}}\`, prepared before \`${{second.join(" ")}}\` changed a row it writes: the write must be conditional on what the row was`);
+        }}
+        if ($confKind(late.error) === "StoreFailed") {{
+          return at($confRefused(first, late.error));
         }}
         const diff = $confCompare($confAbstract(await port.snapshot()), next, `after the refused commit of \`${{first.join(" ")}}\``);
         if (diff !== null) {{
@@ -581,6 +587,13 @@ function $confCompare(got: readonly string[], want: readonly string[], when: str
     out += `\n  store only: ${{line}}`;
   }}
   return out;
+}}
+
+/** What is wrong when the service did not run `call`, which the model runs: a refusal, or, for a StoreFailed, a failure of the service. */
+function $confRefused(call: readonly string[], error: unknown): string {{
+  return $confKind(error) === "StoreFailed"
+    ? `the service failed on \`${{call.join(" ")}}\`: ${{$confShow(error)}}`
+    : `the model runs \`${{call.join(" ")}}\` here, and the service refused it: ${{$confShow(error)}}`;
 }}
 
 /** The kind of a refusal: the `kind` of the error the service returned. */

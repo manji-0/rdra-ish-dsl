@@ -472,8 +472,9 @@ port. `codegen --adapter` (with `--conformance`) prints it in place of the domai
   a type of the core, so a project maps its own code to the model in a small adapter.
 - **The interface.** `reset`, `seed(ModelState)`, `observe() -> ModelState`, and
   `invoke(Call)`, which returns that the call ran or a refusal kind (`NotEnabled`,
-  `Rejected`, `InvalidArgument`, the variants of the core's use-case errors), which the
-  harness checks against the kind an `X` row names. `prepare(Call)` and `commit()` are
+  `NotFound`, `Rejected`, `InvalidArgument`, `StoreFailed`, the variants of the core's
+  use-case errors), which the harness checks against the kind an `X` row names. A
+  `StoreFailed` fails the run as a failure of the service. `prepare(Call)` and `commit()` are
   optional, and only as a pair (in Rust a
   `SplitAdapter` that `split()` returns, so a forgotten `commit` does not compile). Without
   them the harness runs an interleaved row (`I`) as its second call alone, which reaches the

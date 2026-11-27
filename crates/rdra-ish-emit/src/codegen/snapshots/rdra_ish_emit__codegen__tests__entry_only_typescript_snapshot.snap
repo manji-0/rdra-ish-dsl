@@ -232,6 +232,9 @@ export function parseOrderRow(value: unknown): Result<OrderRow, InvalidRow> {
 /** The rows are in states the use case does not run from. Only a dispatcher returns it. */
 export type NotEnabled = Readonly<{ kind: "NotEnabled"; usecase: string }>;
 
+/** A row the call names does not exist. Only the service's load returns it; the functions take rows already loaded. */
+export type NotFound = Readonly<{ kind: "NotFound"; usecase: string; entity: string; id: string }>;
+
 /** A condition of the use case did not hold: the use case does not run. */
 export type Rejected = Readonly<{ kind: "Rejected"; condition: string; label: string; site: string | null }>;
 
@@ -242,11 +245,14 @@ export type Rejected = Readonly<{ kind: "Rejected"; condition: string; label: st
  */
 export type InvalidArgument = Readonly<{ kind: "InvalidArgument"; message: string }>;
 
-/** What Ship can fail with: NotEnabled from a dispatcher. */
-export type ShipError = NotEnabled;
+/** The store failed: no answer of the use case. Only the service's load or commit returns it; `cause` is the store's error. */
+export type StoreFailed = Readonly<{ kind: "StoreFailed"; usecase: string; cause: unknown }>;
 
-/** What Place can fail with: NotEnabled from a dispatcher. */
-export type PlaceError = NotEnabled;
+/** What Ship can fail with: NotEnabled from a dispatcher, NotFound from the service's load, StoreFailed from the service's store. */
+export type ShipError = NotEnabled | NotFound | StoreFailed;
+
+/** What Place can fail with: NotEnabled from a dispatcher, NotFound from the service's load, StoreFailed from the service's store. */
+export type PlaceError = NotEnabled | NotFound | StoreFailed;
 
 // ── Rule checks ──
 

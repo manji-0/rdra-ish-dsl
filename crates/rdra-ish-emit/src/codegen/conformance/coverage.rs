@@ -67,10 +67,16 @@ impl Traces {
                 "  refused calls: {} tried{kinds}; interleaved commits: {}",
                 self.refusals, self.interleavings
             )
-        } else {
+        } else if self.refusals == 0 {
             format!(
                 "  refused calls: none tried (the BFS stopped at its cap); interleaved commits: {}",
                 self.interleavings
+            )
+        } else {
+            // A call on a row that does not exist is tried whatever the BFS reached.
+            format!(
+                "  refused calls: {} tried, each on a row that does not exist (the BFS stopped at its cap); interleaved commits: {}",
+                self.refusals, self.interleavings
             )
         });
         if self.complete && self.untried.total() > 0 {

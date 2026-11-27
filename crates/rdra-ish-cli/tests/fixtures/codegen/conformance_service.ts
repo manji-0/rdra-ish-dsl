@@ -13,11 +13,14 @@ declare const require: (module: "node:fs") => { readFileSync: (path: string, enc
 declare const process: { argv: string[]; env: Record<string, string | undefined>; exitCode: number | undefined };
 const fs = require("node:fs");
 
-type Refusal = Readonly<{ kind: "NotEnabled"; usecase: string }>;
-
-const notEnabled = (usecase: string): d.Result<never, Refusal> => ({
+const notEnabled = (usecase: string): d.Result<never, d.NotEnabled> => ({
   ok: false,
   error: { kind: "NotEnabled", usecase },
+});
+/** A call that names a row no row has: an HTTP service's 404. */
+const notFound = (usecase: string, entity: string, id: number): d.Result<never, d.NotFound> => ({
+  ok: false,
+  error: { kind: "NotFound", usecase, entity, id: String(id) },
 });
 const done: d.Result<void, never> = { ok: true, value: undefined };
 
@@ -78,7 +81,7 @@ function service(fault: string): d.ConformancePort {
     preparePlace: async (parentCustomer, orderId, orderMethod, orderNote) => {
       const customer = customers.get(parentCustomer);
       return customer === undefined
-        ? notEnabled("Place")
+        ? notFound("Place", "Customer", parentCustomer)
         : d.place(customer, orderId, orderMethod, orderNote);
     },
     commitPlace: async (r) => {
@@ -89,7 +92,7 @@ function service(fault: string): d.ConformancePort {
 
     preparePay: async (id, paidAt) => {
       const state = order(id);
-      return state === undefined ? notEnabled("Pay") : d.runPay(state, paidAt);
+      return state === undefined ? notFound("Pay", "Order", id) : d.runPay(state, paidAt);
     },
     commitPay: async (r) => {
       if (!check([[r.order.id, r.order_expected]], [])) return notEnabled("Pay");
@@ -104,7 +107,7 @@ function service(fault: string): d.ConformancePort {
 
     prepareShip: async (id, shipmentId) => {
       const state = order(id);
-      return state === undefined ? notEnabled("Ship") : d.runShip(state, shipmentId);
+      return state === undefined ? notFound("Ship", "Order", id) : d.runShip(state, shipmentId);
     },
     commitShip: async (r) => {
       if (!check([[r.order.id, r.order_expected]], [[r.shipment.id, r.shipment_expected]])) {
@@ -121,7 +124,7 @@ function service(fault: string): d.ConformancePort {
     prepareSend: async (id, ev) => {
       if (!evShipped.some((e) => e.shipment_id === ev.shipment_id)) return notEnabled("Send");
       const row = shipments.get(id);
-      return row === undefined ? notEnabled("Send") : d.runSend(stored(d.Shipment.fromRow(row)), ev);
+      return row === undefined ? notFound("Send", "Shipment", id) : d.runSend(stored(d.Shipment.fromRow(row)), ev);
     },
     commitSend: async (r) => {
       if (!check([], [[r.shipment.id, r.shipment_expected]])) return notEnabled("Send");
@@ -131,7 +134,7 @@ function service(fault: string): d.ConformancePort {
 
     prepareCancel: async (id) => {
       const state = order(id);
-      if (state === undefined) return notEnabled("Cancel");
+      if (state === undefined) return notFound("Cancel", "Order", id);
       const ran = d.runCancel(state);
       if (!ran.ok && ran.error.kind === "NotEnabled" && fault === "accept-disabled") {
         const row = { ...d.Order.toRow(state), status: "paid" as const };
