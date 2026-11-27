@@ -7,7 +7,8 @@ This document gives the meaning of an rdra-ish model as a finite transition syst
 gives the meaning of the model's rules and properties on that system, and of every verdict
 the tools print. The theme documents listed in the [index](./README.md) state their guarantees
 in this notation. The [claims inventory](./claims.md) refers to the definitions by number
-(D1, D2, …), and each definition has an anchor of its own (`semantics.md#d1` … `#d24`).
+(D1, D2, …), and each definition has an anchor of its own (`semantics.md#d1` … `#d25`).
+The code it cites was read at commit `c97c88ef` (origin/main, 2026-11-28).
 
 **What the definitions rest on.** D1 to D13 and D24 define `T_β(M)` from the model's text.
 Each clause names the surface construct it gives meaning to (an entity, a column and its
@@ -32,14 +33,15 @@ there it still relies on the code's list (`lifecycle::diag::StateDiag`). For a p
 with an error, `T_β(M)` is undefined. The tools print the error and give no verdict.
 
 D14 to D23 define the meaning of rules, properties, and verdicts on a transition system
-`T`. They apply to `T_β(M)` and to every system derived from it (a cone, a reduced cone, a
+`T`, and D25 that of the deadlock finding. They apply to `T_β(M)` and to every system derived from it (a cone, a reduced cone, a
 quotient), and they cite code where a verdict is printed.
 
-This document was checked against commit `670eec79` (origin/main, 2026-11-28). Code is cited by Rust path (`lifecycle::types::Bounds`) or as
+This document was checked against commit `c97c88ef` (origin/main, 2026-11-28; first
+`b83b9544`, then `670eec79`, see [Errata](#errata)). Code is cited by Rust path (`lifecycle::types::Bounds`) or as
 `file.rs::symbol`, with file paths relative to `crates/rdra-ish-core/src/lifecycle/` unless
 they start with `cli/` (`crates/rdra-ish-cli/`), as in the [claims inventory](./claims.md).
 **Implemented by** notes are pointers, not statements, and carry no read status. A code
-citation in a statement was read at `670eec79` unless it carries `unread@pin`
+citation in a statement was read at `c97c88ef` unless it carries `unread@pin`
 ([claims inventory](./claims.md#how-to-read-a-row)). Revisions are listed in
 [Errata](#errata).
 
@@ -541,7 +543,7 @@ and the slots `κ` its non-`New` parameters bind. `(a, κ)` is *enabled* at `s` 
 binding of `a` that extends `κ` has a successor `s' ≠ s`. It is *taken* by a step `s → s'`
 with `s' ≠ s` whose action is `a` and whose binding extends `κ`. A move that changes no
 variable neither enables nor takes an instance. This is how `⟨A⟩_vars` reads it in TLA+ and
-how `lasso.rs::TransitionSystem::unfair_loop` reads the moves (open problem P56). So a
+how `lasso.rs::TransitionSystem::unfair_loop` reads the moves (P56, fixed in #475). So a
 behavior that stays at one state forever through a self-loop of a fair instance does not take
 it. Two fairness conditions on a behavior `σ` are used:
 
@@ -621,20 +623,20 @@ this table says only as far as the build returns `T_β(M, σ)` (claim
 
 | Printed | Where | Meaning |
 |---|---|---|
-| `ok` | a cone or property line of `verify` (`cli/src/tlc_output.rs::Outcome::Ok`) | The checks of the line hold on `T_β(M)` (D16, D17, D19, D21 under the fairness of D21, D22). For a line of a cone the verdict is derived from the cone, and theme (a) owns the step from cone to model. |
+| `ok` | a cone or property line of `verify` (`cli/src/tlc_output.rs::Outcome::Ok`) | The checks of the line hold on `T_β(M)` (D16, D17, D19, D21 under the fairness of D20, D22). For a line of a cone the verdict is derived from the cone, and theme (a) owns the step from cone to model. |
 | `ok (checked in Cone_X)` | a covered safety cone (`cli/src/verify/bfs.rs`) | `ok`, decided by the run of a cone `Cone_X` that holds every variable, action, guard, and parameter of this one. |
-| `counterexample` | a line, or `result:` (`RunResult::Counterexample`) | A finite trace (safety) or a lasso (liveness) of the explored system that breaks a check. It is a behavior of `T_β(M)` except where theme (a) says otherwise. A cone that frees slots may need more instances of an entity it does not read; such a counterexample is re-decided on the whole model for properties, or printed with the instances it needs. Since #477, a trace that runs a handler without its event is decided again on the check's exact cone (P1, fixed; unread@pin). Every printed trace, safety or liveness, replays through the step relation of the system it is about before it prints; one that does not is a `tool_error` (P20, fixed in #518 and #522). |
+| `counterexample` | a line, or `result:` (`RunResult::Counterexample`) | A finite trace (safety) or a lasso (liveness) of the explored system that breaks a check. It is a behavior of `T_β(M)` except where theme (a) says otherwise. A cone that frees slots may need more instances of an entity it does not read; such a counterexample is re-decided on the whole model for properties, or printed with the instances it needs. A cone that leaves a raised mark out may reach states the event order forbids; since #477 such a counterexample of a state rule or `after` is decided again, and since #509 by a refinement loop (`targets.rs::TransitionSystem::recheck_on`): the cone grows by the raisers of the events the trace runs without (`free_triggers`) and by the entities it creates past the bound (`over_bound`) until its run vouches for the trace or finds none, with the exact cone (`exact_target_cone`) as the last step (P1, fixed). Every printed trace, safety or liveness, replays through the step relation of the system it is about before it prints; one that does not is a `tool_error` (P20, fixed in #518 and #522). Some steps of the lift still rest on internal `expect`s, which would panic rather than print a fault (`explore/orbit.rs::lift_path`, `reduce/lift.rs::lift`). |
 | `violated` | `property P (BFS on its cone): violated`; `can_reach (BFS on N cones): k checked, m violated` (`cli/src/verify/bfs.rs`) | `counterexample`, in the lines of the forms only BFS decides (`stable`, `unchanged`, `precedes`, `can_reach`). |
 | `not decided` | a line (`cli/src/verify/native.rs::Answer::Stopped`, `RunResult::NotDecided`) | The run stopped before it found a counterexample. No claim is made either way. The line's note names the stop: `stopped at the state cap (--max-states) or the memory limit`, `stopped at the state cap of N states`, `stopped at the memory limit of L`, `stopped at the time budget of S s`, or, for a property its cone cannot decide, `needs the whole model's WF_vars(Next)` and `its counterexample may create instances past the bound`. |
 | `tool_error` | a line or `result:` | A tool fault, not a fact about the model: a counterexample or trace that does not certify itself (`LassoFault` for a property, `LiftFault` for a state rule or `after`, `TraceFault` for a deadlock, a `can_reach` failure, or a witness; P20), a disagreement between the native checker and TLC, or a TLC failure without a violation. |
-| `result: ok` | last lines | Every check of the run is `ok`, with no tool error, nothing undecided, and, under `--deny-unproved`, nothing unproved (`cli/src/verify/end.rs::End::result`, unread@pin). |
+| `result: ok` | last lines | Every check of the run is `ok`, with no tool error, nothing undecided, and, under `--deny-unproved`, nothing unproved (`cli/src/verify/end.rs::End::result`). A trace that fails to replay counts as a tool error there since #522 and #524. |
 | `result: not decided` | last lines | No failure and no tool error, but some finding a cap or budget left open, or an unproved rule under `--deny-unproved`. The exit status is 0 unless `--deny-undecided` (or `--deny-unproved`) is given. The `OK:` line then holds only for what was decided. |
 | `MemoryCapReached_*`, `StateCapReached_*`, `PatternCapReached_*` | `check`, `states` | An error: the cone stopped, so its rules are not checked. `check` does not report it as a pass. |
-| `proved: R` | `verify --prove` (`prove/mod.rs::Verdict::Proved`) | `R` belongs to a set of formulas that is inductive for the z3 encoding of the built system. That encoding widens D13: any absent row for `New`, and Int terms and `now` over all non-negative integers. Hence, if z3 is sound and the hypotheses of [z3.md, Theorem 1](./z3.md#the-soundness-theorem) hold, `T_{β'}(M, σ) ⊨ R` for every `β'` in the proof's scope `Sc(M, β)` ([z3.md, Definition 3](./z3.md#the-soundness-theorem)). That scope contains `β` whenever the run builds. It is not every bound at which the model builds: Definition 3 restricts `m'` for some models (P43), and its conditions are owned by z3.md (claim B2). Under a scope `σ` (D24), the encoded system is the scoped one (open problem P4). |
-| `unproved: R: not inductive; …` / `unproved: R: z3 gave up on A` / `unproved: R: an initial state violates it` | `verify --prove` (`Verdict::Unproved`, printed by `cli/src/prove.rs`) | Not proved. `NotInductive`: a counterexample to induction exists from a state where `R` and every kept candidate hold, not necessarily reachable. `Unknown`: z3 answered `unknown` or ran out of its resource limit on the step of action `A` (this is the verdict the task list calls "unknown"). `Initial`: an initial state of the encoding, possibly with more rows or larger Int values than `β`, breaks `R`. None of these says anything about the bounded verdict. |
+| `proved: R` | `verify --prove` (`prove/mod.rs::Verdict::Proved`) | `R` belongs to a set of formulas that is inductive for the z3 encoding of the built system. That encoding widens D13: any absent row for `New`, and Int terms and `now` over all non-negative integers. Hence, if z3 is sound and the hypotheses of [z3.md, Theorem 1](./z3.md#the-soundness-theorem) hold, `T_{β'}(M, σ) ⊨ R` for every `β'` in the proof's scope `Sc(M, β)` ([z3.md, Definition 3](./z3.md#the-soundness-theorem)). That scope contains `β` whenever the run builds. Since #481 it is every bound at which the model builds (P43, fixed); its conditions are owned by z3.md (claim B2). Since #514 the `proved:` line, like every line that claims a proof, prints that scope: `for any number of rows and every --int-range-max from L to M`, where `L` and `M` are the least and the greatest `m'` at which the build reports no error (`cli/src/prove.rs::Claim::of`). Under a scope `σ` (D24) the encoded system is the scoped one, and since #483 and #514 the same claim ends `in the selected scope: <flags>` (P4); otherwise it ends `in the whole model`. |
+| `unproved: R: not inductive; …` / `unproved: R: z3 gave up on A` / `unproved: R: an initial state violates it` | `verify --prove` (`Verdict::Unproved`, printed by `cli/src/prove.rs`) | Not proved. `NotInductive`: a counterexample to induction exists from a state where `R` and every kept candidate hold, not necessarily reachable (since #525 the printed line says so: "it, every proved rule, and every kept lemma hold", P5). `Unknown`: z3 answered `unknown` or ran out of its resource limit on the step of action `A` (this is the verdict the task list calls "unknown"). `Initial`: an initial state of the encoding, possibly with more rows or larger Int values than `β`, breaks `R`. None of these says anything about the bounded verdict. |
 | `out of scope: R: why` | `verify --prove` (`Verdict::OutOfScope`) | The encoding cannot state `R`. No claim. |
-| `refuted: R (BFS counterexample at k instances)` | `verify --prove` (`Verdict::Refuted`) | A safety cone of the same run reached a state that breaks `R`, so the prover did not try it (`cli/src/verify/refuted.rs`). The violation is BFS's error, not an unproved rule. Since #477 only a violation the cone vouches for, or one its exact cone found, refutes a rule (P1, fixed; unread@pin). |
-| `escalated: R: ok at k instances` / `counterexample at k instances` / `not decided at k instances` | `verify --prove` (`cli/src/verify/escalate.rs`) | For a rule BFS passed and the prover left unproved, BFS on its cone at one and two more instances per entity. `counterexample` there fails the run. It is a violation of `T_{β'}(M)` for some larger `β'` under the conditions of `counterexample` above. Since #477 a counterexample past the bound is decided again on the exact cone that counts every slot, and its instances are printed (P11, fixed; unread@pin). |
+| `refuted: R (BFS counterexample at k instances)` | `verify --prove` (`Verdict::Refuted`) | A safety cone of the same run reached a state that breaks `R`, so the prover did not try it (`cli/src/verify/refuted.rs`). The violation is BFS's error, not an unproved rule. Since #477 only a violation the cone vouches for, or one a rerun found again (`recheck_cones`, the refinement loop of the `counterexample` row, #509), refutes a rule (P1, fixed). |
+| `escalated: R: ok at k instances` / `counterexample at k instances` / `not decided at k instances` | `verify --prove` (`cli/src/verify/escalate.rs`) | For a rule BFS passed and the prover left unproved, BFS on its cone at one and two more instances per entity. `counterexample` there fails the run. It is a violation of `T_{β'}(M)` for some larger `β'` under the conditions of `counterexample` above. Since #477 a counterexample the cone cannot vouch for, one that runs a use case without its event or creates more instances than the cone counts, is decided again (`recheck_on`, refined since #509) and its instances are printed (P11, fixed). |
 | `decided` | prose, design notes | Not printed as a verdict. A check is decided when its verdict is `ok` or `counterexample`. |
 
 `stopped at the memory limit` and `stopped at the state cap` describe why a run is
@@ -664,7 +666,7 @@ cycle, and the engine corpus records the cases (`cone_reduced_loop_unreached`).
 
 ## Prose that the code contradicts
 
-Each row is a place where the modeler-facing prose says something that D1 to D24 and the
+Each row is a place where the modeler-facing prose says something that D1 to D25 and the
 code do not. In each case the definition chose the code's behaviour. A departure of the code
 from the definitions is a different matter: claim [I1](./claims.md#0-the-build) and the open
 problems it names cover those. None of these rows is a soundness problem by itself. The
@@ -677,7 +679,7 @@ soundness questions are in the index's [Open problems](./README.md#open-problems
 | S6 | `language-reference.md`, "Entity state constraints": `after(UC).assert(…)` "checks the state each run of the use case leaves" and "must hold after every arm". | D17: a step with `s' = s` is not checked. The native run skips the `after` check on a self-loop (`explore/bfs.rs`, `Probe::Loop`, in every build), and the TLA+ `PROPERTY` `[][(\A p : UC(p) => post')]_vars` admits a stuttering step. | Resolved (P22, #494): the reference now says a last step that changes nothing is not checked, as in TLA+, and `Vacuous_AfterAssert_*` warns when the last step only ever runs that way. |
 | S3 | `formal-verification.md`, "Mapping": `always` is `[](present => x)`. | D19: the trigger is `present ∧ link`; without `.along` the link is `true`. | Consistent once `.along` is read into `present`, as the "Scope" table of `language-reference.md` does. |
 | S4 | `state-derivation.md`, "Variables": Int columns range over `0..5`. | D2: `[m+1]`, with `m` from `--int-range-max`; 5 is only the default. | The language reference and state-derivation.md, "Bounds", mention `--int-range-max`. Listed so that theme writers quote `m`, not 5. |
-| S5 | `prove/mod.rs::Verdict::Proved` doc comment: "Holds for any number of rows, at the stated value bounds"; `cli/src/prove.rs::ProofTally::clause`: "any Int value". | D23 and z3.md, Definition 3: the bounds `Sc(M, β)`. Inside the encoding (`prove/encode.rs`, `Enc::in_domain`), Int terms and `now` range over every non-negative integer with no top. | formal-verification.md ("any non-negative Int value") describes the encoding. Open problems P2 and P43. |
+| S5 | `prove/mod.rs::Verdict::Proved` doc comment, until #514: "Holds for any number of rows, at the stated value bounds"; `cli/src/prove.rs::ProofTally::clause`, until #514: "any Int value". | D23 and z3.md, Definition 3: the bounds `Sc(M, β)`. Inside the encoding (`prove/encode.rs`, `Enc::in_domain`), Int terms and `now` range over every non-negative integer with no top. | Resolved (P2, #514; P43, #481): `Verdict::Proved`'s doc now cites Theorem 1 over `Sc(M, β)`, and `clause` ends with the `Claim::of` text, `for any number of rows and every --int-range-max from L to M` and the scope. The `--prove` help text (`cli/src/cli.rs`) said "any Int value" until #525. |
 
 ## Remarks on the definitions
 
@@ -704,6 +706,31 @@ soundness questions are in the index's [Open problems](./README.md#open-problems
 
 ## Errata
 
+- **2026-11-28, final audit.** **Pin** moved from `670eec79` to `c97c88ef`. Every
+  `file.rs::symbol` a statement cites was checked against `git diff 670eec79 c97c88ef`, and
+  each cited item a hunk touches was read again: `cli/src/verify/end.rs::End::result` (the
+  `unread@pin` mark on the `result: ok` row is gone), `targets.rs::TransitionSystem::recheck_on`
+  and `unmet_of_assert`, `cli/src/verify/refuted.rs`, `cli/src/verify/escalate.rs` (the #477
+  parts of D23, no longer `unread@pin`), `reduce/lift.rs::lift`, `cli/src/prove.rs::Claim`
+  and `ProofTally::clause`, `prove/mod.rs::Verdict`,
+  `build/preds/entity_rules.rs::cascade_deletes` (D9, as #501 left it), and
+  `build/preds/temporal.rs::Builder::goal` (D21); `explore/liveness.rs`, `explore/moves.rs`
+  and `reach.rs` changed only in integer casts. No other cited item changed, so its earlier
+  read carries over. D25's citations are those of #520 and #525. Changes:
+  - **D23**, `counterexample`, `refuted`, `escalated`: a counterexample the cone cannot
+    vouch for is decided by a refinement loop since #509, not on the exact cone at once
+    (P1). The `counterexample` row names the `expect`s the lift still rests on.
+  - **D23**, `proved`: Definition 3 no longer restricts `m'` (P43, #481), and the line
+    prints its scope (P2, P4; #514).
+  - **D23**, `ok`: "the fairness of D21" was a slip for D20.
+  - **D20** called P56 open; it was fixed in #475.
+  - **S5** is resolved (#514, #481, #525).
+- **2026-11-28, D25 (P34).** D25, the deadlock finding, was added in #520 without an
+  erratum, and the lists of definitions still said "D1 to D24". They now say D1 to D25.
+  #525 gave D25 the condition `findings.rs::deadlocks` reads: only an *open* value (one no
+  `@end` names, with an arm to another value, `has_way_on`) can deadlock. As first written,
+  D25 reported any reachable stuck state whose value was not an end state, which named as
+  deadlocks the values whose only exit is a delete or a self-loop; the code never did.
 - **2026-11-28, `.present()` (P64).** D21 gained the goal `pres_b ∧ goal` of
   `eventually(x).present()` and `leads_to(x, y).present()`, the owner's decision on P6: the
   reading that a delete meets a goal its base values satisfy stays the default, and the
