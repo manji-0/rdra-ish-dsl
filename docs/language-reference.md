@@ -200,7 +200,7 @@ Predicates connect declared instances by id (kind-qualified when ambiguous).
 | `.on_delete` | The lifecycle |
 |---|---|
 | none, `restrict`, `no_action` | The delete is enabled only when no present child names the row, as the database rejects it otherwise (none is the SQL default, which the export keeps). A child the same step deletes, unlinks, or relinks does not count. Each such key whose parent a use case deletes gets the invariant `DanglingKey_<Child>_<role>`: every present child names a present parent (or none, under `.optional()`). |
-| `cascade`, `set_null`, `set_default` | The action does not run yet. The delete is enabled, and the children stay present and still name the deleted row, where every rule sees them. No `DanglingKey_*`. The info `DeleteLeavesChildren` names each use case that deletes a `cascade` parent and not the child; add `deletes(UC, Child)` to remove one child row per run. |
+| `cascade`, `set_null`, `set_default` | Verification does not execute the action. The delete is enabled, and the children stay present and still name the deleted row, where every rule sees them. No `DanglingKey_*`. The warning `DeleteLeavesChildren` names each use case that deletes a `cascade` parent and not the child; add `deletes(UC, Child)` to remove one child row per run. The warning `DeleteLeavesChildKeys` names each use case that deletes a `set_null` or `set_default` parent and neither deletes the child nor moves its key; add `unlinks(UC, Child, Parent)` to clear one child's key per run (the model has no write of a key's default, so `set_default` has no exact counterpart). |
 
 - A step removes one child row per run, so at two instances an Order with two lines still
   blocks the delete, where one SQL statement could remove both.
@@ -208,6 +208,14 @@ Predicates connect declared instances by id (kind-qualified when ambiguous).
 - A pre-existing child of a created parent starts naming a parent that does not exist
   (`PreExistingChildOfCreatedParent`), so its key gets no `DanglingKey_*`.
 - `.on_update` is not read.
+- The SQL export writes the action (`ON DELETE CASCADE`, `SET NULL`, `SET DEFAULT`), so a
+  database built from it runs what verification does not: there the children go, or their
+  key is cleared or reset. The two warnings above mark each use case where the verified model
+  and that database part. Generated Go, Rust, and TypeScript code implements no referential
+  action either: it does what the model's delete does (one row) and lists the action as an
+  unchecked `OnDelete_<Child>_<columns>` obligation for the implementation to meet.
+- A parent with a `@soft_delete` column draws neither warning: it is marked, so no SQL action
+  fires.
 - **A deleted row keeps its keys.** Its columns reset to their base values and each key still
   names its parent. Only a later step that binds the deleted row reads the key: a step of a
   split use case whose earlier step deleted it (see [Runs of a split use case](./state-derivation.md#runs)).
@@ -1779,7 +1787,9 @@ entity's (`Forbidden_Order_0`); a rule of several, or with `.along`, is cross-en
   shortest key path. `.global()` says the rule is meant for every combination; with `.along` it
   is `GlobalWithAlong`.
 - `.lemma()` on a `forbidden` or `invariant` marks a fact that helps `verify --prove`. `check`
-  checks it; `--prove` lists it apart and uses it once proved; `verify` runs no cone for it
+  checks it; `--prove` lists it apart and uses it once proved; `verify` runs no cone of its own
+  for it, but a cone of another rule that reads what it reads checks it there, and a
+  violation fails the run
   ([Proofs for any number of rows](./formal-verification.md#proofs-for-any-number-of-rows)).
 
 <a id="marks-in-a-lemma"></a>**Marks in a lemma.** A `.lemma()` rule can also read a row's
@@ -1867,8 +1877,9 @@ property; a rule `check` must enforce is a `forbidden`, `invariant`, or `after` 
   where every paid order is eventually deleted. A goal the base values do not satisfy is
   never met by a deleted row: deleting a pending order breaks
   `leads_to(Order.status == pending, Order.status == paid)`. `can_reach` reads presence along
-  the whole path, so a delete never finishes it. To keep a delete from meeting a goal, state
-  the goal on a value other than the column's base value.
+  the whole path, so a delete never finishes it. To keep a delete from meeting a goal, add
+  [`.present()`](#goals-on-present-rows-present), or state the goal on a value other than the
+  column's base value.
 - With any `eventually` / `leads_to`, the exported Spec includes `WF_vars(Next)`: some step is
   taken while one can be, but none in particular, so another instance's loop meets it. Name the
   use cases a property relies on with [`.fair`](#fairness-fairusecase-).
@@ -1916,7 +1927,8 @@ has one spelling:
 - `.at_least(n)` and `.exactly(n)` with fewer than `n` slots fail wherever they apply, an
   artifact of the bound: the warning `CountAboveBound` names the same flag.
 - TLC counts with `Cardinality` (the module extends `FiniteSets`). `--prove` unrolls up to 8
-  rows: `.at_most(7, ..)` is the largest it proves. See
+  rows: `.at_least(8, ..)`, and `.at_most(7, ..)` and `.exactly(7, ..)`, are the largest it
+  proves. See
   [design/counting-rules.md](./design/counting-rules.md).
 
 **Along a path.** `.along(Anchor, .., Related)` after the quantifier counts the related rows,
@@ -1997,6 +2009,42 @@ violated`); a module declares the latch only where its `.cfg` checks the propert
 only, so a step that moves a key and breaks `p` still breaks the property. `.fair(...)` on them
 is `FairOnSafetyProperty`.
 
+#### Goals on present rows: `.present()`
+
+```rdra
+// Without .present(), dropping a held order meets the goal: its deleted row reads false.
+property HeldReleased "a held order is released"
+  leads_to(Order.held == true, Order.held == false).fair(Release).present()
+```
+
+`.present()` after an `eventually` or `leads_to` asks the goal for a present row: the goal is
+met only where every row the property binds is present and the goal holds on it. Per binding:
+
+| Form | TLA+ with `.present()` |
+|---|---|
+| `eventually(x).present()` | `[](present /\ link => <>(present /\ x))` |
+| `leads_to(p, q).present()` | `(present /\ link /\ p) ~> (present /\ q)` |
+
+`present` is the trigger's: `E_exists[b] = "present"` for each bound row `b`. The `.along`
+link stays in the trigger only, as without `.present()`. A deleted slot is never reused, so
+once a bound row is deleted before its goal, the goal stays unmet and the property fails.
+Without `.present()` the goal reads a deleted row's base values ([Deleting a
+parent](#deleting-a-parent)), and a goal those values satisfy is met by the delete; that stays
+the default.
+
+- `.present()` takes no arguments, is written once, and may come before or after `.fair`,
+  `.along`, `.role`, and `.global()`.
+- On `always`, `stable`, `unchanged`, `precedes`, or `can_reach` it is
+  `PresentOnNonGoalProperty`: those speak only of present rows, and `can_reach` already asks
+  for the row present along its path. With arguments, or written twice, it is
+  `PresentRequiresNoArguments`.
+- Where some use case deletes a row the property binds and the goal holds on that row's base
+  values, the build prints the hint `GoalMetByDelete` (`info`, not a warning): the delete meets
+  the goal. Add `.present()` if it should not; a `.present()` goal never gets the hint.
+- The goal reads the presence the trigger reads, so the property's cone, its reduction, and
+  instance symmetry are the same as without `.present()`. TLC checks the printed formula, so
+  `verify --with-tlc` decides it on both engines.
+
 #### Fairness: `.fair(UseCase, ...)`
 
 ```rdra
@@ -2069,11 +2117,13 @@ samples `can_reach_unmet.rdra` and `can_reach_met.rdra`.
 |---|---|
 | `FairOnSafetyProperty` | `.fair` on `always`, `stable`, `unchanged`, or `precedes`. |
 | `FairOnReachProperty` | `.fair` on `can_reach`. |
+| `PresentOnNonGoalProperty` | `.present()` on `always`, `stable`, `unchanged`, `precedes`, or `can_reach`. |
+| `PresentRequiresNoArguments` | `.present(...)` with arguments, or a second `.present()`. |
 | `FairRequiresUseCases` | `.fair` with no argument, a non-use-case, a use case twice, or a second `.fair`. |
 | `FairOnInertUseCase` | A listed use case changes nothing. |
 | `UndefinedSymbol` | An undefined name. |
 | `UnresolvedPropertyColumn` | An atom whose column no single entity owns (`Order.missing`, or a bare `status` two entities declare). |
-| `UnknownChainMethod` | A method other than `.fair`, `.along`, `.role`, `.global`, or a `.when` not directly after `unchanged(...)`. |
+| `UnknownChainMethod` | A method other than `.fair`, `.present`, `.along`, `.role`, `.global`, or a `.when` not directly after `unchanged(...)`. |
 | `InvalidTemporalProperty` | A column of `unchanged(...)` that is not a column. |
 | `DuplicateProperty` | Two properties with one id. |
 
@@ -2166,6 +2216,47 @@ A comparison is true or false, never unknown:
 - A unique set reads null the same way: two null rows do not agree, so neither breaks
   `Unique_<Entity>_<columns>` ([Unique column sets](./state-derivation.md#unique-column-sets)).
 - `sets(UC, E.col == null)` writes null. `@default(null)` is no value of an `Enum` or `Bool`.
+
+The truth table below is computed by a test (`lifecycle/tests/null_table.rs`) through the
+builder and the evaluator, so it is what `check`, `verify`, and the codegen conditions read.
+`x` and `y` are `Int @null` and both null, `k` is an `Int` holding 3. An `Enum`, `Bool`, or
+`Date` column reads null the same way, and so does `now` in place of a literal. A row names
+the operands `l`, `r` of `l op r`; a cell is whether `l op r` holds / whether `not (l op r)`
+holds.
+
+<!-- null-truth-table:begin -->
+| Operands | `==` | `!=` | `<` | `<=` | `>` | `>=` |
+|---|---|---|---|---|---|---|
+| `x`, `3` | false / true | true / false | false / true | false / true | false / true | false / true |
+| `x`, `k` | false / true | true / false | false / true | false / true | false / true | false / true |
+| `k`, `x` | false / true | true / false | false / true | false / true | false / true | false / true |
+| `x`, `y` | false / true | true / false | false / true | false / true | false / true | false / true |
+
+| Comparison | Holds / `not` holds |
+|---|---|
+| `x == null` | true / false |
+| `x != null` | false / true |
+| `x in (1, 3)` | false / true |
+| `x not in (1, 3)` | true / false |
+<!-- null-truth-table:end -->
+
+Read the table this way:
+
+- A null meets no `==`, `<`, `<=`, `>`, `>=`, with a value or with a column, and meets every
+  `!=`. Two null columns are not equal, and so they differ.
+- `not` flips the two-valued result, so `not (x < 3)` holds while `x` is null, and `x >= 3`
+  does not. An ordering and its negation's rewrite differ exactly on null. `not (x == 3)` is
+  `x != 3`, null included.
+- A logical `@derived` column is the one exception: it reads the comparison as SQL does, so
+  it is null while an operand is null, under `not` too.
+
+The lint warning `negated-order-admits-null` (shown by `check`, `lint`, and the editor) flags
+a `not` over `<`, `<=`, `>`, or `>=` with a nullable column, in a `@check` or a `property`
+(the forms that take `not`), unless the same expression names the column's null (`qty ==
+null or ...`, `qty == present and ...`). Write the ordering itself (`qty >= 1`) to leave null
+out, or `qty == null or qty >= 1` to admit it. A `!=` or `not in` on a nullable column is not
+flagged: it holds on null in every rule, and the models that use it mean that (a `forbidden`
+that fires while the column is unset).
 
 #### Semantics and interaction with `sets`
 

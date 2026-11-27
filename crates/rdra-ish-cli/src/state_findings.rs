@@ -904,6 +904,7 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
             ..
         } => memory_cap_message(diag, raise, *states, held),
         StateDiag::TimeBudgetReached { .. } => format!("{diag}; raise --temporal-budget"),
+        StateDiag::LiftFault { .. } => diag.to_string(),
         StateDiag::ConstraintViolated {
             text,
             label,
@@ -957,9 +958,11 @@ violation_message(text, pattern_desc)
         | StateDiag::TriggerNeverRuns { .. }
         | StateDiag::UncountedTrigger { .. }
         | StateDiag::DeleteLeavesChildren { .. }
+        | StateDiag::DeleteLeavesChildKeys { .. }
         | StateDiag::GuardReadsLaterStep { .. }
         | StateDiag::DrivenComparisonColumnWritten { .. }
         | StateDiag::DefaultOnVariationIgnored { .. }
+        | StateDiag::GoalMetByDelete { .. }
         | StateDiag::GoalUnreachable { .. } => diag.to_string(),
     }
 }

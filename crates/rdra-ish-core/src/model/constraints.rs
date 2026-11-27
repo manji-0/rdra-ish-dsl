@@ -379,7 +379,8 @@ pub enum TemporalFormula {
         antecedent: TemporalExpr,
         consequent: TemporalExpr,
     },
-    /// `can_reach(expr)`: CTL `AG (present => EF expr)`, which no LTL formula states, so
+    /// `can_reach(expr)`: CTL `AG (present => E[present U (present /\ expr)])`, the path
+    /// to `expr` keeping the instance present (D22), which no LTL formula states, so
     /// BFS decides it on the explored graph and the TLA+ export only names it.
     CanReach(TemporalExpr),
     /// `stable(p)` → `[][(present /\ p) => (present' => p')]_vars`
@@ -432,6 +433,9 @@ pub struct TemporalProperty {
     pub global: bool,
     /// `.fair(UC, ...)`: the use cases assumed weakly fair per instance they act on.
     pub fair: Vec<UseCaseKey>,
+    /// `.present()` on `eventually` / `leads_to`: the goal holds only where every bound row
+    /// is present, so deleting a row never meets it, whatever its base values.
+    pub present_goal: bool,
 
     /// Source site of the predicate/declaration that produced this fact.
     pub site: Option<crate::location::LocatedSpan>,

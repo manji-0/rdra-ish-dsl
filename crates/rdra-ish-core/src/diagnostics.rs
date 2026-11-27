@@ -685,6 +685,12 @@ pub enum RdraError {
     #[error("property '{id}' is `can_reach(...)`, which asks whether some path reaches its goal, and `.fair(...)` cannot change its verdict\n  hint: drop `.fair(...)`; reachability needs no fairness, which only rules out runs, and `can_reach` asks whether one exists")]
     FairOnReachProperty { id: String },
 
+    #[error("property '{id}' is `{form}(...)`, which has no goal a deleted row can meet, so `.present()` cannot change its verdict\n  hint: drop `.present()`; it applies to `eventually` and `leads_to`. `always`, `stable`, `unchanged` and `precedes` speak only of present rows, and `can_reach` already asks for the row present along the path")]
+    PresentOnNonGoalProperty { id: String, form: String },
+
+    #[error("`.present()` on property '{id}' takes no arguments and is written once\n  hint: write `.present()`; it asks the goal for a present row")]
+    PresentRequiresNoArguments { id: String },
+
     #[error("duplicate temporal property id '{id}'\n  hint: each `property` declaration must have a unique id")]
     DuplicateProperty { id: String },
 

@@ -13,10 +13,13 @@ the same run do.
 
 Each rule prints one line after the `proof (...)` header:
 
-- `proved: <rule>`: the rule holds for any number of rows and any Int value.
+- `proved: <rule>`: the rule holds for any number of rows and any Int value. Under a scope
+  flag (`--buc`, `--entity`, `--without-usecase`, `--without-buc`, `--actor`) the line ends
+  `(in the selected scope)`: the rule holds in the system without the use cases the scope
+  drops, and may still break in the whole model.
 - `unproved: <rule>: not inductive; ...`: a counterexample to induction (CTI) follows.
-- `unproved: <rule>: an initial state violates it`: a real violation; `check` reports it
-  with a trace.
+- `unproved: <rule>: an initial state violates it`: some start of any number of rows and
+  any Int value violates it; `check` reports it with a trace when it lies within the bounds.
 - `unproved: <rule>: z3 gave up on <action>`: the check ran out of z3 resource units. The
   budget counts solver work, so the answer is the same on every machine.
 - `unproved: <rule>: the canary `false` survived initiation ...`: the proof found no state to

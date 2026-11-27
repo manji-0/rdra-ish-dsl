@@ -1,5 +1,5 @@
 use super::bfs::{about, crowded, BfsCone};
-use super::jobs::{Job, JobKind, PropertyJob};
+use super::jobs::{Job, JobKind, PropertyJob, RunOn};
 use super::report::run_line;
 use super::shared::Shared;
 use super::tlc::{undecided_hint, Decision, Stop};
@@ -20,9 +20,10 @@ pub(super) struct Native {
     /// The states of the run the line reports: the plain cone's, or the whole model's.
     pub(super) states: Option<u64>,
     pub(super) notes: Vec<String>,
-    /// Each cone run and what it said, for `--with-tlc` to compare: `None` for a run that
-    /// stopped at a cap or the budget before it decided, which no TLC verdict contradicts.
-    pub(super) runs: Vec<(ConeRun, Option<Outcome>)>,
+    /// Each cone run, by the system it decides, and what it said, for `--with-tlc` to
+    /// compare: `None` for a run that stopped at a cap or the budget before it decided, which
+    /// no TLC verdict contradicts.
+    pub(super) runs: Vec<(RunOn, Option<Outcome>)>,
     /// The counterexample of a `counterexample` verdict.
     pub(super) found: Option<Box<StateDiag>>,
     /// A counterexample that failed its own check, or a reduced cone that disagrees with its
@@ -213,7 +214,7 @@ fn native_property_after(p: &PropertyJob, caps: Caps, plain: Plain) -> (Native, 
     let mut crowded_run = plain.crowded;
     let vacuous = plain.vacuous;
     let mut last = plain.answer;
-    out.runs.push((ConeRun::Plain, last.outcome()));
+    out.runs.push((p.run_on(ConeRun::Plain), last.outcome()));
     let reduced_wf = plain.reduced_wf;
     let reduced_wf = match reduced_wf {
         Some(ReducedVerdict::Holds) => Some((Outcome::Ok, None)),
@@ -221,12 +222,10 @@ fn native_property_after(p: &PropertyJob, caps: Caps, plain: Plain) -> (Native, 
         Some(ReducedVerdict::Undecided | ReducedVerdict::Spurious(_)) | None => None,
     };
     if let Some((second, found)) = reduced_wf {
-        let wf = p.wf.as_ref().expect("checked above");
         out.crowded = crowded_run;
-        out.runs.push((ConeRun::WfNext, Some(second)));
+        out.runs.push((p.reduced_wf(), Some(second)));
         out.notes.push(format!(
-            "{}: {} on the reduced cone",
-            wf.module,
+            "WF_vars(Next) on the reduced cone (native only): {}",
             second.as_str()
         ));
         out.found = found;
@@ -242,7 +241,7 @@ fn native_property_after(p: &PropertyJob, caps: Caps, plain: Plain) -> (Native, 
         let run = explore(&cone.system, caps, &mut crowded_run);
         let again = Answer::of(&run, cone.index, Fairness::Plain);
         unreduced = Some(run);
-        out.runs.push((ConeRun::Full, again.outcome()));
+        out.runs.push((p.run_on(ConeRun::Full), again.outcome()));
         out.notes
             .push(format!("{}: {}", full.module, again.as_str()));
         last = match again {
@@ -273,7 +272,7 @@ fn native_property_after(p: &PropertyJob, caps: Caps, plain: Plain) -> (Native, 
             };
             out.crowded = crowded_run;
             let second = Answer::of(&run, cone.index, Fairness::WfNext);
-            out.runs.push((ConeRun::WfNext, second.outcome()));
+            out.runs.push((p.run_on(ConeRun::WfNext), second.outcome()));
             out.notes
                 .push(format!("{}: {}", wf.module, second.as_str()));
             match second {
@@ -323,7 +322,7 @@ fn always_up_to_symmetry(
         Some(PropertyVerdict::Undecided) => Answer::Stopped,
         None => unreachable!("an always"),
     };
-    out.runs.push((ConeRun::Plain, answer.outcome()));
+    out.runs.push((p.run_on(ConeRun::Plain), answer.outcome()));
     match answer {
         Answer::Verdict(outcome, found) => {
             out.found = found;
@@ -372,7 +371,7 @@ fn liveness_up_to_symmetry(
     out.notes
         .push(format!("about {} states", about(run.estimate())));
     let first = Answer::of_orbits(&run, cone.reduced_index, Fairness::Plain);
-    out.runs.push((ConeRun::Plain, first.outcome()));
+    out.runs.push((p.run_on(ConeRun::Plain), first.outcome()));
     let found = match first {
         Answer::Verdict(Outcome::Counterexample, found) => found,
         Answer::Verdict(outcome, _) => {
@@ -402,7 +401,7 @@ fn liveness_up_to_symmetry(
         p.wf.as_ref()
             .expect("an eventually or leads_to has a WF module");
     let second = Answer::of_orbits(&run, cone.reduced_index, Fairness::WfNext);
-    out.runs.push((ConeRun::WfNext, second.outcome()));
+    out.runs.push((p.run_on(ConeRun::WfNext), second.outcome()));
     out.notes
         .push(format!("{}: {}", wf.module, second.as_str()));
     match second {
@@ -515,19 +514,21 @@ pub(super) fn native_properties(
             unreachable!("a property's job")
         }
     };
-    let decide = |(k, plain): (usize, Option<Plain>)| match plain {
+    let decide = |(k, plain): (usize, Option<Plain>), caps: Caps| match plain {
         Some(plain) => native_property_after(job(k), caps, plain),
         None => native_property(ts, job(k), caps, orbits[k]),
     };
     let ks: Vec<usize> = at.iter().map(|(k, _)| *k).collect();
-    let ran = in_parallel(at, rdra_ish_core::jobs(), decide);
+    let ran = in_parallel(at, rdra_ish_core::jobs(), |job| decide(job, caps));
     let mut out: Vec<Option<Native>> = jobs.iter().map(|_| None).collect();
     let mut vacuous = Vec::new();
     for (k, (native, vacuity)) in ks.into_iter().zip(ran) {
         let (native, vacuity) = match native.crowded {
+            // Alone, with the whole room of the pool (`Caps::alone`): where its runs stop
+            // then depends on them alone, as at one job (P53).
             true => {
                 drop((native, vacuity));
-                decide((k, None))
+                decide((k, None), caps.alone())
             }
             false => (native, vacuity),
         };

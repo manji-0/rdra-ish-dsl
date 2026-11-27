@@ -539,6 +539,77 @@ fn deny_unproved_fails_a_run_that_bfs_passes() {
     );
 }
 
+/// A scope flag drops use cases from the system the prover encodes, so a proof under one is
+/// a proof about the smaller system: here `Open` breaks the rule, and without it the rule
+/// holds. Every line that says something is proved says the scope too, as the `OK:` line
+/// does; a whole run prints none of it.
+#[test]
+fn a_proof_under_a_scope_says_so_on_every_proved_line() {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("prove_cli_scope");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("m.rdra");
+    std::fs::write(
+        &file,
+        r#"entity Door "扉" { id: Int @pk  state: Enum(closed, open) @default(closed) }
+usecase Fit "扉設置"
+usecase Open "開ける"
+creates(Fit, Door)
+transitions(Open, Door.state, closed -> open)
+forbidden(Door, state == open)
+"#,
+    )
+    .unwrap();
+    let file = file.to_str().unwrap();
+    let scope = " (in the selected scope)";
+    for flags in [
+        &["--without-usecase", "Open"][..],
+        &["--entity", "Door"][..],
+    ] {
+        let mut args = vec!["--prove"];
+        args.extend_from_slice(flags);
+        args.push(file);
+        let out = verify(&args);
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let claims: Vec<&str> = stdout
+            .lines()
+            .filter(|l| {
+                l.starts_with("proved: ") || l.starts_with("lemma: ") || l.starts_with("proof")
+            })
+            .collect();
+        assert!(!claims.is_empty(), "{flags:?}: {stdout}");
+        for line in &claims {
+            let scoped = line.ends_with(scope)
+                || line.contains(" proved in the selected scope,")
+                || line.contains(", in the selected scope");
+            assert!(scoped, "{flags:?}: {line}\n{stdout}");
+        }
+        if let Some(ok) = stdout.lines().find(|l| l.starts_with("OK:")) {
+            assert!(
+                ok.ends_with(
+                    " rules proved for any number of rows and any Int value in the selected scope"
+                ),
+                "{flags:?}: {ok}"
+            );
+        }
+    }
+    let out = verify(&["--prove", "--without-usecase", "Open", file]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(out.status.code(), Some(0), "{stdout}");
+    assert!(
+        stdout.contains(&format!("proved: Forbidden_Door_0{scope}\n")),
+        "{stdout}"
+    );
+
+    let out = verify(&["--prove", file]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(!stdout.contains("selected scope"), "{stdout}");
+    assert!(stdout.contains("refuted: Forbidden_Door_0"), "{stdout}");
+}
+
 /// A proof holds for any Int value, so no guard of a step may read the run's Int range. A
 /// `present` write guarded by `.when(C)` lists the values it may write, `1..=max` at the run's
 /// range, and the guard that pins the write to `C` named each of them: z3 then read the write
@@ -731,6 +802,64 @@ fn a_cti_shows_the_run_mark_its_step_reads() {
         stdout
             .lines()
             .any(|l| l.starts_with("  Payment#") && l.contains("_run_Pay=none -> ")),
+        "{stdout}"
+    );
+}
+
+/// A false `.lemma()` never helps a proof. The engine-corpus case `z3_lemma` with its lemma
+/// swapped for a false one: no Door is ever ajar, which `Crack` breaks. A lemma gets no cone of
+/// its own, but this one reads only `Door.state`, which the rule's cone holds, so BFS checks it
+/// there and its counterexample fails the run, as `check` fails a false lemma. Where BFS does
+/// not reach it (a state cap of 2), Houdini drops it: it prints `unproved`, counts among
+/// the user's lemmas, not the rules, and the rule is proved without it.
+#[test]
+fn a_false_lemma_is_refuted_where_bfs_reaches_it_and_dropped_where_not() {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("prove_cli_false_lemma");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let case = std::fs::read_to_string(repo().join(corpus("z3_lemma"))).unwrap();
+    let true_lemma =
+        "forbidden(Light, Door, Light.state == off, Door.state == ajar).global().lemma()";
+    assert!(case.contains(true_lemma));
+    let file = dir.join("m.rdra");
+    std::fs::write(
+        &file,
+        case.replace(true_lemma, "forbidden(Door, Door.state == ajar).lemma()"),
+    )
+    .unwrap();
+    let file = file.to_str().unwrap();
+
+    let out = verify(&["--prove", file]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(out.status.code(), Some(1), "{stdout}");
+    assert!(
+        stdout.contains("refuted: lemma Forbidden_Door_0 (BFS counterexample at 2 instances)\n"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("proof: your lemmas: 0 proved, 0 unproved, 0 out of scope, 1 refuted\n"),
+        "{stdout}"
+    );
+
+    let out = verify(&["--prove", "--max-states", "2", file]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("unproved: lemma Forbidden_Door_0: not inductive; Crack(Door#1) breaks it"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("proved: MultiForbidden_Light_0 "),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("proof: your lemmas: 0 proved, 1 unproved, 0 out of scope\n"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("; 1 of 1 rules proved for any number of rows and any Int value\n"),
         "{stdout}"
     );
 }

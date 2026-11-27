@@ -1129,6 +1129,17 @@ Entity lines that name each rule or reason:
   [property IssueEventuallyPlain] unreduced
     Application[2] moves
     Permit[2] moves
+== engine_corpus/cone_entity_mark_left_out.rdra
+  [entity Notice] unreduced
+    Notice[2] moves
+    Payment[2] moves
+  [entity Order] unreduced
+    Notice[2] moves
+    Order[2] moves
+    Payment[2] moves
+  [entity Payment] unreduced
+    Notice[2] moves
+    Payment[2] moves
 == engine_corpus/cone_handler_mark_left_out.rdra
   [entity Order, property ShipsFair] unreduced
     Order[2] moves
@@ -1397,6 +1408,12 @@ Entity lines that name each rule or reason:
     Box[3] moves
   [entity Crate, Forbidden_Crate_1] unreduced
     Crate[3] moves
+== engine_corpus/safety_created_set_beside_transitions.rdra
+  [entity Flag] unreduced
+    Flag[2] moves
+  [entity Order, Forbidden_Order_0] unreduced
+    Flag[2] moves
+    Order[2] moves
 == engine_corpus/safety_delete_cascade.rdra
   [entity Order] unreduced
     Order[2] moves

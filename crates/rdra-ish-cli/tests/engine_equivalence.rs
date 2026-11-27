@@ -1,6 +1,7 @@
 //! The explorer and TLC agree on every sample: for each cone a target reads, the state graph
 //! TLC dumps for the printed cone (`tlc -dump dot,actionlabels`) has the BFS's states, initial
-//! states, and `(from, to, action)` edges; the state-model findings (witnesses, use cases that
+//! states, and `(from, to, action, params)` edges, the cone printed with one `Next` disjunct
+//! per binding (`tla::print_bound`) so that TLC's labels name the params; the state-model findings (witnesses, use cases that
 //! never run, deadlocks) of every entity are the same on both graphs; and the invariants and
 //! after-asserts TLC finds violated are the ones the BFS found violated.
 //!
@@ -955,8 +956,8 @@ fn recorded_tlc_runs_are_the_same_in_a_batch_jvm() {
     );
 }
 
-/// TLC's state graph of the cone in BFS terms: its edges as BFS state indices and actions,
-/// sorted and without repeats. Panics where TLC's states or initial states differ from the
+/// TLC's state graph of the cone in BFS terms: its edges as BFS state indices, actions, and
+/// params, sorted and without repeats. Panics where TLC's states or initial states differ from the
 /// BFS's.
 fn tlc_edges(dir: &Path, label: &str, run: &ComponentRun, names: &TlaNames) -> Vec<Move> {
     let ts = &run.system;
@@ -1000,16 +1001,16 @@ fn tlc_edges(dir: &Path, label: &str, run: &ComponentRun, names: &TlaNames) -> V
     assert_eq!(tlc_initial, bfs_initial, "{label}: initial states differ");
     // A cone with no action prints `Next == UNCHANGED vars`, a step BFS does not take.
     let stutter = |l: &str| ts.actions().is_empty() && l == "Next";
-    let acts: Vec<Option<ActId>> = dot
+    let acts: Vec<Option<(ActId, Box<[u8]>)>> = dot
         .labels
         .iter()
         .map(|l| {
-            let act = names.action_index(ts, l);
+            let act = names.bound_action_index(ts, l);
             assert!(
                 act.is_some() || stutter(l),
                 "{label}: TLC edge label {l} names no use case"
             );
-            act
+            act.map(|(a, params)| (a, params.unwrap_or_default().into()))
         })
         .collect();
     let mut edges: Vec<Move> = dot
@@ -1017,12 +1018,13 @@ fn tlc_edges(dir: &Path, label: &str, run: &ComponentRun, names: &TlaNames) -> V
         .iter()
         .filter_map(|&(from, to, l)| {
             let (from, to) = (at[from as usize], at[to as usize]);
-            let act = acts[l as usize];
+            let act = acts[l as usize].clone();
             assert!(
                 act.is_some() || from == to,
                 "{label}: `Next` changes a state"
             );
-            Some((from, to, act?))
+            let (act, params) = act?;
+            Some((from, to, act, params))
         })
         .collect();
     edges.sort_unstable();
@@ -1030,8 +1032,8 @@ fn tlc_edges(dir: &Path, label: &str, run: &ComponentRun, names: &TlaNames) -> V
     edges
 }
 
-/// `(from, to, action)` over BFS state indices.
-type Move = (u32, u32, ActId);
+/// `(from, to, action, params)` over BFS state indices, each param's slot from 0.
+type Move = (u32, u32, ActId, Box<[u8]>);
 
 /// A few edges only one engine has, in model terms: the action, the source state, and the
 /// slots the step changes.
@@ -1040,7 +1042,7 @@ fn describe_moves(run: &ComponentRun, names: &TlaNames, moves: &[&Move]) -> Stri
     moves
         .iter()
         .take(3)
-        .map(|&&(from, to, act)| {
+        .map(|&&(from, to, act, ref params)| {
             let pre = names.canon(ts, &run.states.at(from as usize));
             let post = names.canon(ts, &run.states.at(to as usize));
             let changed: Vec<String> = post
@@ -1049,7 +1051,7 @@ fn describe_moves(run: &ComponentRun, names: &TlaNames, moves: &[&Move]) -> Stri
                 .map(|(k, v)| format!("{k} := {v}"))
                 .collect();
             format!(
-                "  {} from state {from} to state {to}, changing [{}]\n  from {pre:?}",
+                "  {} at {params:?} from state {from} to state {to}, changing [{}]\n  from {pre:?}",
                 ts.actions()[act.index()].name,
                 changed.join(", ")
             )
@@ -1095,7 +1097,7 @@ fn check_cone(
     unreduced: &TransitionSystem,
 ) -> ConeReport {
     let ts = &run.system;
-    let check = tla::print(ts, PrintMode::Safety, "Cone");
+    let check = tla::print_bound(ts, PrintMode::Safety, "Cone");
     let names = &check.names;
     let route = if run.states.len() > BATCH_STATES {
         Route::Process
@@ -1129,7 +1131,14 @@ fn check_cone(
     );
 
     let of_tlc = tlc_edges(dir, label, run, names);
-    let mut of_bfs: Vec<Move> = run.graph().edges().collect();
+    // A class move of a reduced cone prints as one action over the class var, with no params.
+    let class_move = |a: ActId| ts.reduction().is_some_and(|r| r.s_actions().contains(&a));
+    let mut of_bfs: Vec<Move> = (run.graph().bound_edges())
+        .map(|(from, to, act, params)| match class_move(act) {
+            true => (from, to, act, Box::from([])),
+            false => (from, to, act, params.into()),
+        })
+        .collect();
     of_bfs.sort_unstable();
     of_bfs.dedup();
     if of_tlc != of_bfs {
@@ -1151,7 +1160,7 @@ fn check_cone(
             describe_moves(run, names, &only_bfs),
         );
     }
-    let tlc_moves = LabelledEdges::new(ts, of_tlc);
+    let tlc_moves = LabelledEdges::new(ts, of_tlc.into_iter().map(|(f, t, a, _)| (f, t, a)));
     let tlc_graph = tlc_moves.graph(&run.states, true);
     for e in ts.entity_ids() {
         assert_eq!(
@@ -2130,6 +2139,27 @@ updates(SplitWard, Bed)
 #[test]
 fn bfs_and_tlc_agree_on_relinks() {
     check_fixture("relink", RELINK);
+}
+
+/// Every `Touch` is a self-loop once each item's flag is set, so at two items a state has
+/// two `Touch` edges to itself that differ only in the item they bind. The graph comparison
+/// reads TLC's edges from a module with one `Next` disjunct per binding (`tla::print_bound`),
+/// so the two engines must agree on each edge's params, not only on its action (P25 of
+/// docs/theory/README.md).
+const TOUCH: &str = r#"
+entity Item "品目" { id: Int @pk  flag: Bool @default(true)  status: Enum(open, closed) @default(open) }
+usecase Add "追加"
+usecase Touch "触る"
+usecase Close "閉じる"
+creates(Add, Item)
+sets(Touch, Item.flag == true)
+transitions(Close, Item.status, open -> closed)
+forbidden(Item, flag == false)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_the_binding_of_each_edge() {
+    check_fixture("touch", TOUCH);
 }
 
 /// `in` / `not in` on an Enum, a Bool, an Int, and a nullable column, in a guard, a guard's

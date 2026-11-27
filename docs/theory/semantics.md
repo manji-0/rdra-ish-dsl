@@ -218,11 +218,19 @@ false in every state, and `not`, `and`, and `or` are Boolean.
 - **Sets.** `t in (v₁, …)` is the disjunction of `t == vᵢ`, and `not in` is its negation.
 
 A consequence the reader must keep in mind: `not (x < 3)` is true when `x = ⊥`, so `not`
-does not commute with the SQL reading of a comparison.
+does not commute with the SQL reading of a comparison. The language reference
+([Null](../language-reference.md#null)) gives the full table: every comparison operator with
+`⊥` on the left, the right, or both, and under `not`. The lint warning
+`negated-order-admits-null` flags `not` over an ordering with a nullable operand in a
+`@check` or a `property`, the only forms that take `not` (P62). A logical `@derived` column
+is not a predicate under this definition: it reads its comparison as SQL does and is `⊥`
+while an operand is `⊥`, under `not` too.
 
 *Implemented by* `lifecycle::types::Pred`, `TransitionSystem::eval` (`expr.rs`),
 `expr.rs::compare`, `build/preds/mod.rs::columns_cmp` (the two-column rule), and
-`build/preds/atoms.rs::lists_whole_domain`. The last folds a set that lists every value of a
+`build/preds/atoms.rs::lists_whole_domain`; `lifecycle/tests/null_table.rs` computes the
+reference's table through them and compares it with the page; `build/preds/checks.rs::passes`
+is the `@derived` reading. `lists_whole_domain` folds a set that lists every value of a
 finite domain to `true` (#71, #73) and never folds an Int set (#425). The fold does not
 change a predicate's value under this definition.
 
@@ -332,10 +340,17 @@ same column in one step. Since #485 such a step is an error, so the question doe
 unset, `restrict`, or `no_action`, a `deletes(UC, E)` is guarded by: no present child names
 the slot, apart from a child the same step deletes, unlinks, or relinks. The lifecycle does
 not execute `cascade`, `set_null`, or `set_default`. The children of such a key stay present
-and name a deleted parent, and the info `DeleteLeavesChildren` reports it. An `E` with a
-`@soft_delete` column gets no guard.
+and name a deleted parent, and the key gets no `DanglingKey_*`. The SQL export does write
+`ON DELETE CASCADE`, `SET NULL`, or `SET DEFAULT`, so a database built from it removes the
+children or clears their key where `T_β(M)` keeps them. Generated Go, Rust, and TypeScript
+code executes no action either: it lists an unchecked `OnDelete_*` obligation. The warning
+`DeleteLeavesChildren` (`cascade`) and the warning `DeleteLeavesChildKeys` (`set_null`,
+`set_default`) name each use case that deletes such a parent and neither deletes the child
+nor, for the latter two, moves its key (P63). An `E` with a `@soft_delete` column gets no
+guard and neither warning.
 
-*Implemented by* `GuardWhy::Restrict`.
+*Implemented by* `GuardWhy::Restrict`; the warnings by
+`build/preds/entity_rules.rs::cascade_deletes`.
 
 <a id="d10"></a>**D10 (Split use cases and runs).** A use case whose writes form `k ≥ 2`
 transaction groups (D6) is the actions `UC_1 … UC_k`. Each entity that a step before the
@@ -492,6 +507,7 @@ that never runs (`targets.rs::unmet_of_assert`).
 
 <!-- derived-from ../language-reference.md#temporal-path-properties -->
 <!-- derived-from ../language-reference.md#order-and-stability-stable-unchanged-precedes -->
+<!-- derived-from ../language-reference.md#goals-on-present-rows-present -->
 
 A property has binders `E₁ … E_k`, a link predicate `ℓ` (the owner equalities of `.along`,
 or `true` without it), a formula, and a set of fair use cases. For a binding `b`, define the
@@ -552,6 +568,25 @@ leaves, so a delete meets a goal those values satisfy and no other goal. This is
 semantics (open problem P6, decided as documented):
 language-reference.md, "Temporal path properties", states it, and the TLA+ formulas
 `[](present => <>x)` and `(present /\ x) ~> y` read it the same way.
+
+With `.present()` (open problem P64), the goal asks for a present binding:
+
+| Form | `cause` | `goal` |
+|---|---|---|
+| `eventually(x).present()` | `true` | `pres_b ∧ x` |
+| `leads_to(x, y).present()` | `x` | `pres_b ∧ y` |
+
+The definition above applies unchanged with this `goal`. `trig_b` is the same, so the link
+`ℓ` stays in the trigger only. A deleted slot is never reused (D7), so once a bound slot is
+deleted at some `k ≥ i` before any `j` with `goal_b(σ_j)`, no later `j` has `pres_b(σ_j)`,
+and the behavior fails the property if it satisfies `F`. The TLA+ forms are
+`[](present /\ link => <>(present /\ x))` and `(present /\ link /\ x) ~> (present /\ y)`.
+`.present()` on any other form is the error `PresentOnNonGoalProperty`. *Implemented by*
+`build/preds/temporal.rs::Builder::goal`, which conjoins `pres_b` into the goal predicate,
+so the native search, the lasso check, and the TLA+ printer all read one predicate. `pres_b`
+reads only the binders' `Exists` variables, which every property's cone already holds
+(`cone.rs::check_reads`). So `.present()` changes neither the cone nor the reduction, and
+the symmetry scan reads no row id in it.
 
 The verdict a property is meant to have is the one under `WfNext`. The exported `Spec`
 conjoins `WF_vars(Next)` whenever the model has an `eventually` or `leads_to`, and `P` is
@@ -618,7 +653,7 @@ soundness questions are in the index's [Open problems](./README.md#open-problems
 | # | Prose | Definition and code | Note |
 |---|---|---|---|
 | S1 | `language-reference.md`, "Temporal path properties": `eventually(expr)` is `<>expr`. | D21: `□(present ∧ link ⇒ ◇x)` per binding (`lasso.rs::fails_at`, `explore/liveness.rs::liveness_search`). | `formal-verification.md`, "Mapping", states the code's form. Resolved with P6: the language reference now gives `[](present => <>expr)` and `(present /\ p) ~> q`. |
-| S2 | `language-reference.md`, "Temporal path properties" and "Recoverability": `can_reach` is `AG (present => EF expr)`. | D22: `AG (trig ⇒ E[pres U (pres ∧ goal)])`; the path must keep the instance present (`reach.rs::reach_failure`). | `formal-verification.md`, "Recoverability on a cone", and `types.rs::Reach` state the code's form. The two differ when the goal holds on a deleted slot's base values. Resolved with P6: the language reference now gives the code's form. The doc comments of `model/constraints.rs::Ltl` and `syntax/ast.rs`, and the comment the TLA+ module prints, still say `AG (present => EF …)` (unread@pin). |
+| S2 | `language-reference.md`, "Temporal path properties" and "Recoverability": `can_reach` is `AG (present => EF expr)`. | D22: `AG (trig ⇒ E[pres U (pres ∧ goal)])`; the path must keep the instance present (`reach.rs::reach_failure`). | `formal-verification.md`, "Recoverability on a cone", and `types.rs::Reach` state the code's form. The two differ when the goal holds on a deleted slot's base values. Resolved with P6: the language reference now gives the code's form. The doc comments of `model/constraints.rs::Ltl` and `syntax/ast.rs`, and the comment the TLA+ module prints (`emit/tla/module.rs`), give the code's form too since #498. |
 | S6 | `language-reference.md`, "Entity state constraints": `after(UC).assert(…)` "checks the state each run of the use case leaves" and "must hold after every arm". | D17: a step with `s' = s` is not checked. The native run skips the `after` check on a self-loop (`explore/bfs.rs`, `Probe::Loop`, in every build), and the TLA+ `PROPERTY` `[][(\A p : UC(p) => post')]_vars` admits a stuttering step. | Resolved (P22, #494): the reference now says a last step that changes nothing is not checked, as in TLA+, and `Vacuous_AfterAssert_*` warns when the last step only ever runs that way. |
 | S3 | `formal-verification.md`, "Mapping": `always` is `[](present => x)`. | D19: the trigger is `present ∧ link`; without `.along` the link is `true`. | Consistent once `.along` is read into `present`, as the "Scope" table of `language-reference.md` does. |
 | S4 | `state-derivation.md`, "Variables": Int columns range over `0..5`. | D2: `[m+1]`, with `m` from `--int-range-max`; 5 is only the default. | The language reference and state-derivation.md, "Bounds", mention `--int-range-max`. Listed so that theme writers quote `m`, not 5. |
@@ -631,7 +666,8 @@ soundness questions are in the index's [Open problems](./README.md#open-problems
   `draft` the base value, is met by deleting the order. TLC reads the TLA+ formula the same
   way (`[](present => <>x)`), so the engines agree. Open problem P6 decided this as
   documented: language-reference.md, "Temporal path properties", now says so, with an
-  example each way and how to state a goal a delete does not meet.
+  example each way and how to state a goal a delete does not meet. `.present()` (D21, P64)
+  states such a goal per property.
 - **Initial states are not assumed to satisfy anything.** D4 makes the initial set a product.
   That includes N:1 owners of pre-existing children under a created parent that is still
   absent (`PreExistingChildOfCreatedParent`).
@@ -648,6 +684,20 @@ soundness questions are in the index's [Open problems](./README.md#open-problems
 
 ## Errata
 
+- **2026-11-28, `.present()` (P64).** D21 gained the goal `pres_b ∧ goal` of
+  `eventually(x).present()` and `leads_to(x, y).present()`, the owner's decision on P6: the
+  reading that a delete meets a goal its base values satisfy stays the default, and the
+  modifier opts out of it per property. No other definition changed.
+
+- **2026-11-28, after the owner's review (P62, P63).** **D5** stated the two readings of
+  null but gave no table, and said nothing of `@derived`; it now points to the reference's
+  table, which a test checks against the evaluator, to the lint warning
+  `negated-order-admits-null`, and to the three-valued `@derived` reading. **D9** said the
+  info `DeleteLeavesChildren` reports a key the lifecycle does not execute; that was only
+  `cascade`, and `set_null` and `set_default` had no diagnostic. D9 now says that the SQL
+  export does execute the three actions, that `DeleteLeavesChildren` is a warning and
+  `DeleteLeavesChildKeys` covers the other two, and that neither fires for a `@soft_delete`
+  parent.
 - **2026-11-28, after the owner's review (P60).** The first version said "the source of
   truth is the code". It defined `I_β(M)` as what `TransitionSystem::initial_states`
   computes (D4), `T_β(M)` as what `TransitionSystem::build` constructs (D13), and the

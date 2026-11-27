@@ -382,9 +382,55 @@ impl TlaNames {
     }
 
     /// The action a TLC trace label names.
+    /// The action a step label names: its own name, or a `bound_action` of a `print_bound`
+    /// module.
     pub fn action_index(&self, ts: &TransitionSystem, label: &str) -> Option<ActId> {
+        Some(self.bound_action_index(ts, label)?.0)
+    }
+
+    fn named_action(&self, ts: &TransitionSystem, label: &str) -> Option<ActId> {
         let i = self.actions.iter().position(|n| n == label)?;
         ts.action_ids().nth(i)
+    }
+
+    /// The operator `print_bound` defines for action `a` at `slots`, each param's slot from
+    /// 0: `<action>_at_<id>_<id>..`, with TLA ids from 1.
+    pub fn bound_action(&self, a: ActId, slots: &[u8]) -> String {
+        let mut out = format!("{}_at", self.action(a));
+        for s in slots {
+            out.push_str(&format!("_{}", s + 1));
+        }
+        out
+    }
+
+    /// The action and binding a step label of a `print_bound` module names: an action with
+    /// no params, or a class move, by its own name and no binding; any other by
+    /// `bound_action`.
+    pub fn bound_action_index(
+        &self,
+        ts: &TransitionSystem,
+        label: &str,
+    ) -> Option<(ActId, Option<Vec<u8>>)> {
+        if let Some(a) = self.named_action(ts, label) {
+            return Some((a, None));
+        }
+        let mut found = None;
+        for a in ts.action_ids() {
+            let Some(rest) = label.strip_prefix(&format!("{}_at_", self.action(a))) else {
+                continue;
+            };
+            let slots: Option<Vec<u8>> = (rest.split('_'))
+                .map(|id| id.parse::<u8>().ok()?.checked_sub(1))
+                .collect();
+            match slots {
+                Some(s) if s.len() == ts.actions()[a.index()].params.len() => {
+                    assert!(found.is_none(), "{label} names two bound actions");
+                    found = Some((a, Some(s)));
+                }
+                _ => {}
+            }
+        }
+        found
     }
 
     /// The key of each slot: `name[k]` (TLA index, from 1) per instance, bare `now`, and the

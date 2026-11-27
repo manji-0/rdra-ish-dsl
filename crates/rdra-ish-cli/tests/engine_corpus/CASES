@@ -4,6 +4,7 @@ cap_memory_limit
 cap_temporal_budget_zero
 cone_always_frees_slots
 cone_copy_from_parent
+cone_entity_mark_left_out
 cone_handler_mark_left_out
 cone_independent_loop
 cone_outside_monotone
@@ -27,6 +28,8 @@ presence_created_later
 presence_deleted_row_owes_goal
 presence_first_absent_asymmetry
 presence_goal_on_base_values
+presence_goal_present_both_ok
+presence_goal_present_modifier
 presence_no_slot_reuse
 presence_per_entity_slots
 safety_at_least_guard
@@ -35,6 +38,7 @@ safety_can_reach_frees_slots
 safety_count_guard_order
 safety_count_per_entity
 safety_counted_once_per_raise
+safety_created_set_beside_transitions
 safety_delete_cascade
 safety_delete_restrict
 safety_delete_set_null
@@ -63,8 +67,11 @@ sym_owner_coupled
 sym_per_entity_bounds
 sym_relink_loop
 sym_self_owned
+width_nullable_enum_256
+width_nullable_int_top
 z3_cti_true_rule
 z3_enum_bool_default_outside_values
+z3_guarded_present_past_the_top
 z3_inductive
 z3_int_and_now_boundary
 z3_int_default_out_of_range

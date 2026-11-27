@@ -1789,6 +1789,31 @@ fn a_property_run_stopped_at_the_cap_is_no_disagreement_with_tlc() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+/// The native `WF_vars(Next)` run on a reduced cone decides a system TLC runs no module of,
+/// so its line names it apart, not as TLC's `Cone_P_WF` on the unreduced cone. The note once
+/// read `Cone_P_WF: ok on the reduced cone`, and both the run-by-run comparison and the corpus
+/// harness paired it with TLC's `Cone_P_WF` by that label (P23 of docs/theory/README.md).
+#[test]
+fn a_wf_run_on_the_reduced_cone_is_named_native_only() {
+    let tmp = scratch("verify_cli_reduced_wf_native_only");
+    let case =
+        repo().join("crates/rdra-ish-cli/tests/engine_corpus/cone_reduced_loop_fair_enabled.rdra");
+    let args = [case.to_str().unwrap(), "--instance-count", "1"];
+    let expected = "Cone_JobStarts [JobStarts]: ok (8 states, WF_vars(Next) on the reduced cone (native only): ok)";
+    let output = verify(&repo(), &tmp, &args);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.lines().any(|l| l == expected), "{stdout}");
+    if have_tlc() {
+        let output = verify_with_tlc(&repo(), &tmp, &args);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stdout}{stderr}");
+        assert!(!stderr.contains("EngineDisagreement"), "{stdout}{stderr}");
+        assert!(stdout.lines().any(|l| l == expected), "{stdout}");
+    }
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 /// `eventually` and `leads_to` are decided natively, with no TLC on PATH: on the cone with
 /// `Fair_P` alone, again with `WF_vars(Next)`, and on the whole model when the cone leaves
 /// them open. `--with-tlc` runs TLC's ladder beside it, and the two agree run by run.
@@ -2401,4 +2426,41 @@ fn a_plan_lists_the_tlc_launches_and_starts_no_tlc() {
         "{stderr}"
     );
     let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// A state of more than 65,535 bits (P50): 255 rows of 34 Int columns at Int 0..255. The
+/// verdicts are the ones a narrow bound gives: a row with `c32 = 2` is a counterexample, and
+/// a rule no reachable row breaks is `ok`. When the packed store placed every cell past bit
+/// 65,535 at one offset, the first printed `ok` and the second a counterexample whose rows
+/// the model cannot reach.
+#[test]
+fn a_state_past_bit_65535_keeps_its_verdicts() {
+    let dir = scratch("verify_wide_state");
+    let fixtures = repo().join("crates/rdra-ish-cli/tests/fixtures/wide_state");
+    let flags = [
+        "--instance-count",
+        "255",
+        "--int-range-max",
+        "255",
+        "--memory",
+        "16MiB",
+    ];
+    for (model, line) in [
+        (
+            "two_creates",
+            "Cone_Forbidden_Row_0 [Forbidden_Row_0]: counterexample",
+        ),
+        ("one_create", "Cone_Forbidden_Row_0 [Forbidden_Row_0]: ok"),
+    ] {
+        let path = fixtures.join(format!("{model}.rdra"));
+        let mut args = vec![path.to_str().unwrap()];
+        args.extend(flags);
+        let out = verify(&dir, &dir, &args);
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            stdout.lines().any(|l| l.starts_with(line)),
+            "{model}: {line}\n{stdout}\n{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
 }

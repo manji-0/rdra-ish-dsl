@@ -263,7 +263,8 @@ impl TransitionSystem {
 
     /// The first state where `p` fails for `binding`, mirroring the printed formula:
     /// `always(x)` is `[](present => x)`, `eventually(x)` is `[](present => <>x)`, and
-    /// `leads_to(x, y)` is `(present /\ x) ~> y`. Only the trigger reads `present`, and the
+    /// `leads_to(x, y)` is `(present /\ x) ~> y`. Only the trigger reads `present` (a
+    /// `.present()` goal carries it in its own predicate, from the build), and the
     /// `.along` link joins it. `stable` and `unchanged` fail at the state a step enters, the
     /// step back to `entry` included; `precedes` fails where `q` holds before `p` has, as its
     /// latch reads it.
