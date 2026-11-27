@@ -1,0 +1,35 @@
+# cargo mutants over the code that stands between the native checker and TLC: the TLA+
+# printer, the reading of TLC's output, the replay of its traces, and the comparison.
+# `.github/workflows/mutants.yml` runs it with `-f config=tlc`, with tlc and z3 on PATH;
+# docs/engine-agreement.md#mutation-run says how to read it. `.cargo/mutants.toml` is the
+# liveness-ladder run, with tlc and z3 off PATH.
+examine_globs = [
+    "crates/rdra-ish-emit/src/tla/mod.rs",
+    "crates/rdra-ish-emit/src/tla/module.rs",
+    "crates/rdra-ish-emit/src/tla/names.rs",
+    "crates/rdra-ish-emit/src/tla/pred.rs",
+    "crates/rdra-ish-cli/src/verify/compare.rs",
+    "crates/rdra-ish-cli/src/tlc_output.rs",
+    "crates/rdra-ish-cli/src/tlc_replay.rs",
+]
+# The tests that see these files through TLC: the corpus with TLC and z3, the unit tests of
+# the TLC output reader, the comparison and the TLC driver, and the verify_cli tests that run
+# TLC beside the native checker. Not rdra-ish-emit's own tests: their snapshots catch any
+# change to the printed text, which says nothing about whether agreement catches it.
+test_package = ["rdra-ish-cli"]
+additional_cargo_args = ["--lib", "--test", "engine_corpus", "--test", "verify_cli"]
+additional_cargo_test_args = [
+    "--",
+    "tlc_output::",
+    "verify::compare::",
+    "verify::tlc::",
+    "bfs_and_tlc_and_z3_agree",
+    "every_corpus_header",
+    "a_tlc_counterexample_that_does_not_replay",
+    "a_property_run_stopped_at_the_cap",
+    "an_engine_disagreement_fails_the_run",
+    "a_wf_run_on_the_reduced_cone",
+    "backend_tlc_warns_and_runs_tlc_beside",
+]
+profile = "mutants"
+cap_lints = true
