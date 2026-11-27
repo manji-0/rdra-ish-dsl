@@ -679,6 +679,7 @@ fn cross_columns(columns: &mut BTreeSet<(EntityKey, String)>, conditions: &[Cros
             CrossEntityCondition::Equals { column, .. } => {
                 columns.insert((column.entity, column.column.clone()));
             }
+            CrossEntityCondition::Mark { .. } => {}
             CrossEntityCondition::Comparison(cmp) => {
                 columns.insert((cmp.lhs.entity, cmp.lhs.column.clone()));
                 if let CrossCmpRhs::Column(rhs) = &cmp.rhs {

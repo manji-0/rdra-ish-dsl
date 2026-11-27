@@ -21,6 +21,7 @@ use super::qref_util::qref_display;
 fn body_columns(condition: &CrossEntityCondition) -> Vec<&QualifiedModelColumnRef> {
     match condition {
         CrossEntityCondition::Equals { column, .. } => vec![column],
+        CrossEntityCondition::Mark { .. } => Vec::new(),
         CrossEntityCondition::Comparison(prop) => {
             let mut columns = vec![&prop.lhs];
             if let CrossCmpRhs::Column(rhs) = &prop.rhs {
@@ -133,6 +134,7 @@ pub(crate) fn body_condition_display(
     condition: &CrossEntityCondition,
 ) -> std::string::String {
     match condition {
+        CrossEntityCondition::Mark { entity, mark } => mark.display(model, *entity),
         CrossEntityCondition::Equals { column, value } => {
             format!(
                 "{} == {}",

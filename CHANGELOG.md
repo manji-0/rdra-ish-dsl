@@ -4,6 +4,18 @@
 
 ### Added
 
+- A `.lemma()` rule can read a row's marks (#428): `E.in_run(UC)` (a step of the split use
+  case is in progress on the row), `E.in_run(UC, k)` (the row's run has done step `k` and not
+  the next), and `E.raised(Ev)` (the row's event latch is set), among a `forbidden`'s
+  conditions or in an `invariant`'s `.when(...)` and `.then(...)`. `check` reads them in every
+  reached state, TLA+ export writes them, and `verify --prove` uses a proved one like any
+  lemma. Any other rule, a quantifier, or a condition body that reads a mark fails to load
+  (`MarkOutsideLemma`), so no other rule changes meaning; a mark the lifecycle has no var
+  for is the error `NoSuchMark`. `fmt` writes marks as written, and the language server
+  finds and renames the entity, use case, and event a mark names. The engine corpus case
+  `z3_lemma_run_mark` proves `z3_needs_run_mark`'s rule with such a lemma. Mined candidates
+  already read marks; nothing changes there.
+
 - `verify --prove` (experimental) prints `note: z3 <version> is not a version the proof's
   resource limits were measured on (5.1.0); ...` on stderr when the z3 it runs is not one the
   rule and lemma limits were measured on (exactly 5.1.0, the version the flake pins), or its

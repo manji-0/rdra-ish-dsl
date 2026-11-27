@@ -9,21 +9,21 @@ Entity lines that name each rule or reason:
   IdAgainstLiteral: 0: fires in no cone
   JointTooLarge: 0: fires in no cone
   MixedIds: 0: fires in no cone
-  Observed:input: 28
+  Observed:input: 30
   Observed:named by T: 32 (kept without a witness of its own)
   Observed:named by an input: 2 (kept without a witness of its own)
   Observed:named by obs: 20 (kept without a witness of its own)
-  Observed:obs: 84
+  Observed:obs: 88
   Observed:stub: 7 (kept without a witness of its own)
   OrderedId: 0: fires in no cone
   OwnerChoice: 0: fires in no cone
   OwnerLiteral: 0: fires in no cone
   PinnedStart: 0: fires in no cone (kept without a witness of its own)
-  Reduced:S: 262
-  Reduced:S action param: 267 (kept without a witness of its own)
-  Reduced:S var: 262 (kept without a witness of its own)
+  Reduced:S: 266
+  Reduced:S action param: 271 (kept without a witness of its own)
+  Reduced:S var: 266 (kept without a witness of its own)
   Reduced:bit key: 20 (kept without a witness of its own)
-  Reduced:input: 8 (kept without a witness of its own)
+  Reduced:input: 10 (kept without a witness of its own)
   Reduced:named by S: 83 (kept without a witness of its own)
   Reduced:named by an input: 2 (kept without a witness of its own)
   UnlinkedCreate: 0: fires in no cone
@@ -1855,6 +1855,24 @@ Entity lines that name each rule or reason:
   [entity Door, entity Light, MultiForbidden_Light_0, MultiForbidden_Light_1] unreduced
     Door[3] moves
     Light[3] moves
+== engine_corpus/z3_lemma_run_mark.rdra
+  [entity Door, entity Sign, MultiForbidden_Light_0, MultiForbidden_Light_1] unreduced
+    Door[2] moves
+    Light[2] moves
+    Sign[2] moves
+  [entity Light] reduced, H at depth 1
+    Door[2] stays G_T=S,S var,S action param | H stays H=obs
+    Light[2] stays G_T=input | H stays H=input
+    Sign[2] stays G_T=S,S var,S action param | H stays H=obs
+== engine_corpus/z3_lemma_run_mark.rdra --instance-count 3
+  [entity Door, entity Sign, MultiForbidden_Light_0, MultiForbidden_Light_1] unreduced
+    Door[3] moves
+    Light[3] moves
+    Sign[3] moves
+  [entity Light] reduced, H at depth 1
+    Door[3] stays G_T=S,S var,S action param | H stays H=obs
+    Light[3] stays G_T=input | H stays H=input
+    Sign[3] stays G_T=S,S var,S action param | H stays H=obs
 == engine_corpus/z3_needs_count.rdra
   [entity Copy] unreduced
     Copy[2] moves

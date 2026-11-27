@@ -1782,6 +1782,30 @@ entity's (`Forbidden_Order_0`); a rule of several, or with `.along`, is cross-en
   checks it; `--prove` lists it apart and uses it once proved; `verify` runs no cone for it
   ([Proofs for any number of rows](./formal-verification.md#proofs-for-any-number-of-rows)).
 
+<a id="marks-in-a-lemma"></a>**Marks in a lemma.** A `.lemma()` rule can also read a row's
+marks, which no other rule reads, so a fact the proof needs about a run in flight or a raised
+event can be stated:
+
+| Condition | Holds when |
+|---|---|
+| `E.in_run(UC)` | A step of the split use case `UC` is in progress on the row: its run mark ([Runs](./state-derivation.md#runs)) is not `none`. |
+| `E.in_run(UC, k)` | The row's run of `UC` has done step `k` and not the next (`k` from 1 to the steps minus one). |
+| `E.raised(Ev)` | The row's latch for `Ev` is set ([Triggers](./state-derivation.md#triggers)). |
+
+```rdra
+// Open sets a door ajar, then lights a sign; no light is off while a door is between the two.
+forbidden(Light, Door, Light.state == off, Door.in_run(Open)).global().lemma()
+invariant(Sign).when(Sign.raised(EvShut)).then(Sign.state == dark).lemma()
+```
+
+- A mark goes among a `forbidden`'s conditions or in an `invariant`'s `.when(...)` and
+  `.then(...)`, and names its entity. Anywhere else, or in a rule without `.lemma()`, it is
+  `MarkOutsideLemma`, so the meaning of every other rule stays as it was.
+- A mark the lifecycle has no var for is the error `NoSuchMark`: a use case in one
+  transaction, an entity no step before the last writes, a `k` past the last step but one, or
+  an event the row keeps no latch for (only an uncounted `triggers` reads a latch). A `k` of 0
+  is `MarkStepOutOfRange`.
+
 **`after(UseCase).assert(...)`** checks the state each run of the use case leaves, instead of
 every reachable state:
 

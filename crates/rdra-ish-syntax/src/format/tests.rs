@@ -11,6 +11,23 @@ fn assert_formats_to(src: &str, expected: &str) {
     );
 }
 
+/// A lemma's marks format as written, and a column named like a mark method stays a column.
+#[test]
+fn formats_the_marks_of_a_lemma() {
+    assert_formats_to(
+        "forbidden(Light,Door,Light.state==off,Door.in_run( Open ,1)).global().lemma()\n",
+        "forbidden(Light, Door, Light.state == off, Door.in_run(Open, 1)).global().lemma()\n",
+    );
+    assert_formats_to(
+        "invariant(Sign).when(Sign.raised(EvShut)).then(Sign.state==dark).lemma()\n",
+        "invariant(Sign).when(Sign.raised(EvShut)).then(Sign.state == dark).lemma()\n",
+    );
+    assert_formats_to(
+        "forbidden(Door, Door.in_run == true)\n",
+        "forbidden(Door, Door.in_run == true)\n",
+    );
+}
+
 #[test]
 fn formats_the_order_and_stability_forms() {
     assert_formats_to(

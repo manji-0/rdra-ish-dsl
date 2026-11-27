@@ -945,6 +945,7 @@ violation_message(text, pattern_desc)
         | StateDiag::MinCardOfPreExistingParent { .. }
         | StateDiag::MinCardNeedsCreate { .. }
         | StateDiag::UnsupportedComparison { .. }
+        | StateDiag::NoSuchMark { .. }
         | StateDiag::DerivedColumnRead { .. }
         | StateDiag::PropertyViolated { .. }
         | StateDiag::UnjoinedGuardRead { .. }

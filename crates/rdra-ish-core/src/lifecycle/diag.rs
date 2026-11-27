@@ -423,6 +423,14 @@ pub enum StateDiag {
         reason: String,
         site: Site,
     },
+    /// A `.lemma()` rule reads a mark the lifecycle has no var for: `in_run` of a use case
+    /// that is not split or of an entity no step before the last writes, a step past the
+    /// last, or `raised` of an event the row has no latch for.
+    NoSuchMark {
+        mark: String,
+        reason: String,
+        site: Site,
+    },
     /// A lifecycle construct reads an arithmetic `@derived` column, which has no state var.
     DerivedColumnRead { column: String, site: Site },
     /// A `holds` body applied to a use case compares an entity that no key joins to a row the
@@ -662,6 +670,7 @@ impl StateDiag {
             StateDiag::UnsupportedComparison { comparison, .. } => {
                 with("UnsupportedComparison", &[comparison])
             }
+            StateDiag::NoSuchMark { mark, .. } => with("NoSuchMark", &[mark]),
             StateDiag::UnjoinedGuardRead {
                 condition, usecase, ..
             } => with("UnjoinedGuardRead", &[condition, usecase]),
@@ -763,6 +772,7 @@ impl StateDiag {
             | StateDiag::UnbindableCondition { site, .. }
             | StateDiag::UnwrittenConstrainedVar { site, .. }
             | StateDiag::UnsupportedComparison { site, .. }
+            | StateDiag::NoSuchMark { site, .. }
             | StateDiag::DerivedColumnRead { site, .. }
             | StateDiag::UnjoinedGuardRead { site, .. }
             | StateDiag::UnjoinedWrite { site, .. }
@@ -865,6 +875,7 @@ impl StateDiag {
             | StateDiag::UnboundCopySource { .. }
             | StateDiag::AmbiguousOwnerLink { .. }
             | StateDiag::UnsupportedComparison { .. }
+            | StateDiag::NoSuchMark { .. }
             | StateDiag::UncountedTrigger { .. }
             | StateDiag::DerivedColumnRead { .. } => Severity::Error,
         }
@@ -1270,6 +1281,7 @@ impl fmt::Display for StateDiag {
             StateDiag::UnsupportedComparison {
                 comparison, reason, ..
             } => write!(f, "{comparison}: {reason}"),
+            StateDiag::NoSuchMark { mark, reason, .. } => write!(f, "{mark}: {reason}"),
             StateDiag::DerivedColumnRead { column, .. } => write!(
                 f,
                 "{column} is derived by arithmetic, which the lifecycle cannot evaluate; compare the columns it reads instead"

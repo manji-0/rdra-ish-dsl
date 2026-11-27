@@ -224,6 +224,7 @@ pub(crate) fn resolve_cross_condition(
     diags: &mut Vec<Diagnostic>,
 ) -> Option<CrossEntityCondition> {
     match arg {
+        PredicateArg::Expr(Expr::Mark(call)) => resolve_mark(model, pred, call, ctx, diags),
         PredicateArg::Expr(Expr::Cmp(cmp)) => {
             match temporal_equals_from_comparison(model, scope, pred, cmp, ctx, diags) {
                 Ok(Some(cond)) => Some(cond),
@@ -234,6 +235,83 @@ pub(crate) fn resolve_cross_condition(
         }
         _ => None,
     }
+}
+
+/// `E.in_run(UC)`, `E.in_run(UC, k)`, or `E.raised(Ev)`, its names resolved. Whether the rule
+/// is a `.lemma()` is checked before (`marks_outside_lemma`), and whether the lifecycle has
+/// the mark when it is built (`NoSuchMark`).
+fn resolve_mark(
+    model: &SemanticModel,
+    pred: &str,
+    call: &MarkCall,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<CrossEntityCondition> {
+    let entity = resolve_entity_qref(model, pred, &call.entity, ctx, diags);
+    let mark = match &call.mark {
+        MarkKind::InRun { usecase, step } => {
+            let usecase = match resolve_kind_qref(model, pred, usecase, Kind::UseCase, ctx, diags)?
+            {
+                NodeRef::UseCase(k) => k,
+                _ => return None,
+            };
+            let step = match step {
+                None => None,
+                Some(text) => match text.parse::<u8>() {
+                    Ok(k) if k >= 1 => Some(k),
+                    _ => {
+                        let err = RdraError::MarkStepOutOfRange {
+                            mark: rdra_ish_syntax::format::format_mark(call),
+                            step: text.clone(),
+                        };
+                        push_error(ctx, diags, call.span.clone(), err);
+                        return None;
+                    }
+                },
+            };
+            RowMark::InRun { usecase, step }
+        }
+        MarkKind::Raised { event } => {
+            match resolve_kind_qref(model, pred, event, Kind::Event, ctx, diags)? {
+                NodeRef::Event(event) => RowMark::Raised { event },
+                _ => return None,
+            }
+        }
+    };
+    Some(CrossEntityCondition::Mark {
+        entity: entity?,
+        mark,
+    })
+}
+
+/// The node `qref` names, which must be of `kind`.
+fn resolve_kind_qref(
+    model: &SemanticModel,
+    pred: &str,
+    qref: &QRef,
+    kind: Kind,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<NodeRef> {
+    let id = qref.parts.last()?.clone();
+    if let Some(node) = model.symbols.lookup_qualified(&kind, &id).cloned() {
+        return Some(node);
+    }
+    let err = match model.symbols.lookup(&id) {
+        LookupResult::Found(node) => RdraError::TypeMismatch {
+            pred: pred.to_string(),
+            id,
+            actual: node.kind_tag().to_string(),
+            expected: kind.name().to_string(),
+        },
+        LookupResult::NotFound => RdraError::UndefinedSymbol { id, import: None },
+        LookupResult::Ambiguous(kinds) => RdraError::AmbiguousReference {
+            id,
+            kinds: kinds.join(", "),
+        },
+    };
+    push_error_qref(ctx, diags, qref, err);
+    None
 }
 
 pub(super) fn collect_cross_scope_prefix(

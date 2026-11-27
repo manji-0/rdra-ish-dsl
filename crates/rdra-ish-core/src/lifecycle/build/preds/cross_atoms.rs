@@ -5,10 +5,76 @@ use super::{ambiguous_owner_link, at_of, cmp_op, columns_cmp, Binding};
 use crate::lifecycle::build::Builder;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::types::{At, CmpOp, Pred, Site, Term, VarId, VarKind};
+use crate::lifecycle::types::{Domain, Value};
 use crate::lifecycle::EntId;
-use crate::model::{CrossCmpRhs, CrossEntityCondition, EntityKey, FkId, Join};
+use crate::model::{CrossCmpRhs, CrossEntityCondition, EntityKey, FkId, Join, RowMark};
 
 impl Builder<'_> {
+    /// `E.in_run(UC)`, `E.in_run(UC, k)`, or `E.raised(Ev)` on the row at `at`: its run mark
+    /// is not `none` or is `k`, or its latch is set. A mark the lifecycle has no var for is
+    /// `NoSuchMark`, except `in_run` of a use case the scope leaves out, whose mark stays
+    /// `none`.
+    fn mark_atom(&mut self, ek: EntityKey, mark: RowMark, at: At, site: &Site) -> Pred {
+        let model = self.model;
+        let e = self.ent_of[&ek];
+        let entity = &model.entities[ek].id;
+        let reason = match mark {
+            RowMark::InRun { usecase, step } => {
+                let uc = &model.use_cases[usecase].id;
+                if let Some(&var) = self.run_marks.get(&(usecase, e)) {
+                    let slot = Term::Slot { var, at };
+                    let Some(k) = step else {
+                        return Pred::Cmp(slot, CmpOp::Ne, Term::Lit(Value(0)));
+                    };
+                    let Domain::Enum(names) = &self.ts.vars[var.index()].domain else {
+                        unreachable!("a run mark is an Enum");
+                    };
+                    if let Some(v) = self.ts.vars[var.index()].domain.of_name(&k.to_string()) {
+                        return Pred::Cmp(slot, CmpOp::Eq, Term::Lit(v));
+                    }
+                    let last = names.len() - 1;
+                    let range = match last {
+                        1 => "1".to_string(),
+                        n => format!("1 to {n}"),
+                    };
+                    format!("{uc} has {} steps, so k can only be {range}", names.len())
+                } else if !self.uc_actions.contains_key(&usecase)
+                    && self.active_ucs.contains(&usecase)
+                {
+                    // The scope leaves the use case out: no run starts, and the mark stays
+                    // `none`.
+                    return Pred::False;
+                } else if self.run_marks.keys().any(|(u, _)| *u == usecase) {
+                    format!(
+                        "no step of {uc} before the last writes {entity}, so {entity} has no run mark for it"
+                    )
+                } else {
+                    format!(
+                        "{uc} is not split into transaction groups, so no row has a run mark for it"
+                    )
+                }
+            }
+            RowMark::Raised { event } => {
+                let ev = &model.events[event].id;
+                let latch = self.ts.vars.iter().position(|v| {
+                    matches!(&v.kind, VarKind::Raised { entity: x, event: y, handler: None }
+                        if *x == e && y == ev)
+                });
+                if let Some(i) = latch {
+                    let var = VarId::at(i);
+                    return Pred::Cmp(Term::Slot { var, at }, CmpOp::Eq, Term::Lit(Value::TRUE));
+                }
+                format!(
+                    "{entity} keeps no latch for {ev}: no use case raises it on {entity} for an uncounted `triggers({ev}, ..)` to read"
+                )
+            }
+        };
+        let mark = mark.display(model, ek);
+        let site = site.clone();
+        self.diag(vec![ek], StateDiag::NoSuchMark { mark, reason, site });
+        Pred::False
+    }
+
     pub(super) fn cross_atom(
         &mut self,
         cond: &CrossEntityCondition,
@@ -21,6 +87,12 @@ impl Builder<'_> {
                     return Pred::False;
                 };
                 self.eq_atom(column.entity, at, &column.column, value, site)
+            }
+            CrossEntityCondition::Mark { entity, mark } => {
+                let Some(at) = at_of(binding, *entity) else {
+                    return Pred::False;
+                };
+                self.mark_atom(*entity, *mark, at, site)
             }
             CrossEntityCondition::Comparison(prop) => {
                 let what = format!(

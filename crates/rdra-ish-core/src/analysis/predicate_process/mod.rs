@@ -109,13 +109,29 @@ pub(crate) fn process_predicate(
     // Cross-entity: `.along(...)`, two or more leading entity refs
     // (e.g. `forbidden(Order, Payment, Order.status == x, ...)`), or an invariant whose
     // `.has/.none(...)` ranges over related rows. Single-entity: `forbidden(Order, status == x)`.
+    // A mark (`E.in_run(UC)`, `E.raised(Ev)`) is read only by a `.lemma()` rule, among a
+    // `forbidden`'s conditions or in an `invariant`'s `.when(...)` and `.then(...)`, which
+    // the cross-entity form reads.
+    let marks = marks_outside_lemma(p, pred);
+    if !marks.is_empty() {
+        for (mark, span) in marks {
+            push_error(ctx, diags, span, RdraError::MarkOutsideLemma { mark });
+        }
+        return;
+    }
+    let reads_marks = pred
+        .args
+        .iter()
+        .chain(pred.chain.iter().flat_map(|cc| cc.args.iter()))
+        .any(|a| matches!(a, PredicateArg::Expr(Expr::Mark(_))));
     if matches!(p, Predicate::Forbidden | Predicate::Invariant) {
         let leading_entities = pred
             .args
             .iter()
             .take_while(|a| matches!(a, PredicateArg::Ref(_)))
             .count();
-        let is_cross = pred.chain.iter().any(|cc| cc.name == "along")
+        let is_cross = reads_marks
+            || pred.chain.iter().any(|cc| cc.name == "along")
             || leading_entities >= 2
             || (p == Predicate::Invariant
                 && pred
@@ -192,6 +208,34 @@ pub(crate) fn process_predicate(
     if p == Triggers {
         process_counted(model, pred, &resolved, ctx, diags);
     }
+}
+
+/// Each mark `pred` reads where no rule may read one, as written, with its span: anywhere
+/// but a `.lemma()` `forbidden`'s conditions or a `.lemma()` `invariant`'s `.when(...)` and
+/// `.then(...)`.
+fn marks_outside_lemma(p: Predicate, pred: &PredicateCall) -> Vec<(String, Span)> {
+    let lemma = matches!(p, Predicate::Forbidden | Predicate::Invariant)
+        && pred.chain.iter().any(|cc| cc.name == "lemma");
+    let mut places: Vec<(&PredicateArg, bool)> = pred
+        .args
+        .iter()
+        .map(|a| (a, lemma && p == Predicate::Forbidden))
+        .collect();
+    for cc in &pred.chain {
+        let allowed =
+            lemma && p == Predicate::Invariant && matches!(cc.name.as_str(), "when" | "then");
+        places.extend(cc.args.iter().map(|a| (a, allowed)));
+    }
+    let mut out = Vec::new();
+    for (arg, allowed) in places {
+        if let PredicateArg::Expr(Expr::Mark(call)) = arg {
+            if !allowed {
+                let shown = rdra_ish_syntax::format::format_mark(call);
+                out.push((shown, call.span.clone()));
+            }
+        }
+    }
+    out
 }
 
 /// The largest `k` of `.counted(k)`: each row holds one of `k + 2` values per counted edge.

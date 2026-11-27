@@ -224,6 +224,13 @@ fn collect_expr_references<'a>(expr: &'a Expr, refs: &mut Vec<&'a QRef>) {
                 }
             }
         }
+        Expr::Mark(mark) => {
+            refs.push(&mark.entity);
+            refs.push(match &mark.mark {
+                rdra_ish_syntax::ast::MarkKind::InRun { usecase, .. } => usecase,
+                rdra_ish_syntax::ast::MarkKind::Raised { event } => event,
+            });
+        }
         Expr::Not(inner) => collect_expr_references(inner, refs),
         Expr::And(a, b) | Expr::Or(a, b) => {
             collect_expr_references(a, refs);
@@ -335,6 +342,37 @@ invokes(Book, BookingApi)
         };
         let spans = find_symbol_references(&ast, &target);
         assert_eq!(spans.len(), 2);
+    }
+
+    /// A lemma's marks name an entity and a use case or event, which go to definition and
+    /// rename with the rest.
+    #[test]
+    fn finds_references_in_a_lemma_mark() {
+        let src = r#"usecase Open "Open"
+event EvShut "Shut"
+forbidden(Light, Door, Light.state == off, Door.in_run(Open, 1)).global().lemma()
+invariant(Sign).when(Sign.raised(EvShut)).then(Sign.state == dark).lemma()
+"#;
+        let (ast, errs) = parse(src);
+        assert!(errs.is_empty(), "{errs:?}");
+        let at = src.find("in_run(Open").unwrap() + "in_run(".len();
+        let reference = reference_at_offset(&ast, at).expect("reference in in_run");
+        assert!(matches!(reference, ReferenceAt::Symbol(q) if q.parts == ["Open"]));
+        let uc = SymbolTarget {
+            kind: "usecase".to_string(),
+            id: "Open".to_string(),
+        };
+        assert_eq!(find_symbol_references(&ast, &uc), vec![at..at + 4]);
+        let event = SymbolTarget {
+            kind: "event".to_string(),
+            id: "EvShut".to_string(),
+        };
+        assert_eq!(find_symbol_references(&ast, &event).len(), 1);
+        let door = SymbolTarget {
+            kind: "entity".to_string(),
+            id: "Door".to_string(),
+        };
+        assert_eq!(find_symbol_references(&ast, &door).len(), 2);
     }
 
     #[test]

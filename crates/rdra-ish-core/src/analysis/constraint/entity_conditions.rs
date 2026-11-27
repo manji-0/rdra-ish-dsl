@@ -173,6 +173,7 @@ pub(crate) fn push_unique_entity(scope: &mut Vec<EntityKey>, entity: EntityKey) 
 pub(super) fn condition_entities(cond: &CrossEntityCondition, out: &mut Vec<EntityKey>) {
     match cond {
         CrossEntityCondition::Equals { column, .. } => push_unique_entity(out, column.entity),
+        CrossEntityCondition::Mark { entity, .. } => push_unique_entity(out, *entity),
         CrossEntityCondition::Comparison(prop) => {
             push_unique_entity(out, prop.lhs.entity);
             if let CrossCmpRhs::Column(col) = &prop.rhs {

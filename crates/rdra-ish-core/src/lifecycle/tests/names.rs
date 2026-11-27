@@ -182,6 +182,11 @@ fn one_of_each() -> Vec<StateDiag> {
             reason: "not Int".into(),
             site: site(),
         },
+        StateDiag::NoSuchMark {
+            mark: "Door.in_run(Open)".into(),
+            reason: "Open is not split".into(),
+            site: site(),
+        },
         StateDiag::DerivedColumnRead {
             column: "Audit.score".into(),
             site: site(),
@@ -300,6 +305,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::ContradictoryDrivenComparison { .. }
             | StateDiag::UnwrittenConstrainedVar { .. }
             | StateDiag::UnsupportedComparison { .. }
+            | StateDiag::NoSuchMark { .. }
             | StateDiag::DerivedColumnRead { .. }
             | StateDiag::UnjoinedGuardRead { .. }
             | StateDiag::UnjoinedWrite { .. }

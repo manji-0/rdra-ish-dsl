@@ -119,6 +119,27 @@ fn tokenize_expr(source: &str, raw: &mut Vec<RawToken>, expr: &Expr) {
             visit_operand(source, raw, &cmp.lhs);
             visit_operand(source, raw, &cmp.rhs);
         }
+        Expr::Mark(mark) => {
+            tokenize_qref(source, raw, &mark.entity);
+            let name = match &mark.mark {
+                rdra_ish_syntax::ast::MarkKind::InRun { usecase, .. } => usecase,
+                rdra_ish_syntax::ast::MarkKind::Raised { event } => event,
+            };
+            let method = source
+                .get(mark.entity.span.end..name.span.start)
+                .and_then(|between| between.find(mark.method()))
+                .map(|at| mark.entity.span.end + at);
+            if let Some(start) = method {
+                push_token(
+                    source,
+                    raw,
+                    start..start + mark.method().len(),
+                    TOKEN_FUNCTION,
+                    0,
+                );
+            }
+            tokenize_qref(source, raw, name);
+        }
         Expr::Not(inner) => tokenize_expr(source, raw, inner),
         Expr::And(a, b) | Expr::Or(a, b) => {
             tokenize_expr(source, raw, a);

@@ -711,6 +711,7 @@ fn empty_sets(items: &[Item]) -> Vec<Span> {
                 expr(a, out);
                 expr(b, out);
             }
+            Expr::Mark(_) => {}
         }
     }
     let mut out = Vec::new();
@@ -777,6 +778,37 @@ fn comparison() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
     operand()
         .then(cmp_op().then(operand()).or(membership()))
         .map_with_span(|(lhs, (op, rhs)), span| Expr::Cmp(Comparison { lhs, op, rhs, span }))
+}
+
+/// A row's mark: `Entity.in_run(UseCase)`, `Entity.in_run(UseCase, k)`, or
+/// `Entity.raised(Event)`. The `(` after the method tells it from a column named so.
+fn mark_call() -> impl Parser<Token, MarkCall, Error = Simple<Token>> + Clone {
+    let entity = ident().map_with_span(|name, span| QRef {
+        kind_qualifier: None,
+        parts: vec![name],
+        span,
+    });
+    let name = ident().map_with_span(|name, span| QRef {
+        kind_qualifier: None,
+        parts: vec![name],
+        span,
+    });
+    let step = select! { Token::IntLit(s) => s };
+    let in_run = just(Token::Ident("in_run".to_string()))
+        .ignore_then(just(Token::LParen))
+        .ignore_then(name.clone())
+        .then(just(Token::Comma).ignore_then(step).or_not())
+        .then_ignore(just(Token::RParen))
+        .map(|(usecase, step)| MarkKind::InRun { usecase, step });
+    let raised = just(Token::Ident("raised".to_string()))
+        .ignore_then(just(Token::LParen))
+        .ignore_then(name)
+        .then_ignore(just(Token::RParen))
+        .map(|event| MarkKind::Raised { event });
+    entity
+        .then_ignore(just(Token::Dot))
+        .then(in_run.or(raised))
+        .map_with_span(|(entity, mark), span| MarkCall { entity, mark, span })
 }
 
 /// Logical expression for temporal properties: `and`/`or`/`not` (TLA `/\` `\/` `~` are aliases).
@@ -896,7 +928,10 @@ fn property_decl() -> impl Parser<Token, PropertyDecl, Error = Simple<Token>> + 
 /// - `relate(A, B, N:1)` の第3引数 → `PredicateArg::Card`
 /// - `performs(A, B)` → `PredicateArg::Ref`
 fn predicate_arg() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> + Clone {
-    let expr = comparison().map(PredicateArg::Expr);
+    let expr = mark_call()
+        .map(Expr::Mark)
+        .or(comparison())
+        .map(PredicateArg::Expr);
     let int = select! { Token::IntLit(s) => PredicateArg::Int(s) };
     expr.or(transition_arg())
         .or(card_arg())

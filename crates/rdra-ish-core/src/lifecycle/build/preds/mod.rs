@@ -24,6 +24,7 @@ fn at_of(binding: &Binding, ek: EntityKey) -> Option<At> {
 pub(super) fn cond_entities(cond: &CrossEntityCondition) -> Vec<EntityKey> {
     match cond {
         CrossEntityCondition::Equals { column, .. } => vec![column.entity],
+        CrossEntityCondition::Mark { entity, .. } => vec![*entity],
         CrossEntityCondition::Comparison(p) => match &p.rhs {
             CrossCmpRhs::Column(rc) => vec![p.lhs.entity, rc.entity],
             _ => vec![p.lhs.entity],

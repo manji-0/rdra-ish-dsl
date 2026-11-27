@@ -1,7 +1,7 @@
 use super::comparison::{CmpOpModel, ComparisonProp};
 use super::effects::EffectValue;
 use super::foreign_key::FkId;
-use super::keys::{EntityKey, UseCaseKey};
+use super::keys::{EntityKey, EventKey, UseCaseKey};
 
 /// One condition of a single-entity rule, on a column of the rule's entity.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -117,6 +117,41 @@ pub enum CrossEntityCondition {
     },
     /// A typed comparison expression such as `Order.total > Payment.amount`.
     Comparison(CrossComparisonProp),
+    /// A row's run or raised mark (`Door.in_run(Open)`, `Claim.raised(EvPaid)`), which only a
+    /// `.lemma()` rule reads.
+    Mark { entity: EntityKey, mark: RowMark },
+}
+
+/// The mark a `CrossEntityCondition::Mark` reads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RowMark {
+    /// `in_run(UseCase)`: some step of the split use case is in progress on the row, its run
+    /// mark not `none`; `in_run(UseCase, k)`: the mark is `k`, the row's run has done step
+    /// `k` and not the next.
+    InRun {
+        usecase: UseCaseKey,
+        step: Option<u8>,
+    },
+    /// `raised(Event)`: the row's latch for the event is set.
+    Raised { event: EventKey },
+}
+
+impl RowMark {
+    /// The mark as written on `entity`: `Door.in_run(Open)`, `Door.in_run(Open, 1)`,
+    /// `Claim.raised(EvPaid)`.
+    pub fn display(&self, model: &super::SemanticModel, entity: EntityKey) -> String {
+        let e = &model.entities[entity].id;
+        match self {
+            RowMark::InRun { usecase, step } => {
+                let uc = &model.use_cases[*usecase].id;
+                match step {
+                    Some(k) => format!("{e}.in_run({uc}, {k})"),
+                    None => format!("{e}.in_run({uc})"),
+                }
+            }
+            RowMark::Raised { event } => format!("{e}.raised({})", model.events[*event].id),
+        }
+    }
 }
 
 /// How a cross-entity constraint should choose entity combinations to evaluate.
