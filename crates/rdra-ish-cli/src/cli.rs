@@ -417,8 +417,9 @@ pub(crate) enum Commands {
         /// memory limit, a temporal property past `--temporal-budget`) as an error (exit 1)
         #[arg(long)]
         deny_undecided: bool,
-        /// [experimental] Also try to prove each state rule for any number of rows and any Int value with z3
-        /// (SMT inductive invariants); prints proved, unproved with a counterexample to
+        /// [experimental] Also try to prove each state rule with z3 (SMT inductive invariants)
+        /// for any number of rows and every --int-range-max from L to M, the range the model
+        /// builds at; prints proved with that claim, unproved with a counterexample to
         /// induction, or out of scope per rule
         #[arg(long)]
         prove: bool,
