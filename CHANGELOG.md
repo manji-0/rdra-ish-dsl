@@ -139,6 +139,15 @@
 
 ### Fixed
 
+- `verify --prove` no longer panics (`a run that stops once every check fails keeps no edge
+  list`) when it checks an unproved rule at more instances and the rule's cone splits off a
+  sub-lifecycle (#421). The escalation now explores the cone with the caps BFS uses at the
+  run's bounds, so the sub-lifecycle keeps the graph its quotient reads; the rule's own run
+  still stops once the rule fails. The engine corpus gains four true rules the proof leaves
+  unproved, each needing a lemma no candidate has the shape of: a ∀∃ fact over a key
+  (`z3_needs_exists`) and over rows no key links (`z3_needs_exists_global`), counts of
+  children (`z3_needs_count`), and a run mark between rows no key links
+  (`z3_needs_run_mark`, the case that panicked) (#428).
 - `verify --prove` no longer proves a rule that lists every Int value up to the range's top
   (#425). The build read `n not in (null, 0, 1, 2, 3, 4, 5)` on an Int column as `false` at
   the default range 0..5, which is exact for BFS and TLC but not for the proof, whose Int has

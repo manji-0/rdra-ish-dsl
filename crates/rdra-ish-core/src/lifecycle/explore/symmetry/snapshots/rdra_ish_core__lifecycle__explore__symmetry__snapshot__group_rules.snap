@@ -9,21 +9,21 @@ Entity lines that name each rule or reason:
   IdAgainstLiteral: 0: fires in no cone
   JointTooLarge: 0: fires in no cone
   MixedIds: 0: fires in no cone
-  Observed:input: 26
+  Observed:input: 28
   Observed:named by T: 32 (kept without a witness of its own)
   Observed:named by an input: 2 (kept without a witness of its own)
   Observed:named by obs: 20 (kept without a witness of its own)
-  Observed:obs: 80
+  Observed:obs: 84
   Observed:stub: 7 (kept without a witness of its own)
   OrderedId: 0: fires in no cone
   OwnerChoice: 0: fires in no cone
   OwnerLiteral: 0: fires in no cone
   PinnedStart: 0: fires in no cone (kept without a witness of its own)
-  Reduced:S: 258
-  Reduced:S action param: 263 (kept without a witness of its own)
-  Reduced:S var: 258 (kept without a witness of its own)
+  Reduced:S: 262
+  Reduced:S action param: 267 (kept without a witness of its own)
+  Reduced:S var: 262 (kept without a witness of its own)
   Reduced:bit key: 20 (kept without a witness of its own)
-  Reduced:input: 6 (kept without a witness of its own)
+  Reduced:input: 8 (kept without a witness of its own)
   Reduced:named by S: 83 (kept without a witness of its own)
   Reduced:named by an input: 2 (kept without a witness of its own)
   UnlinkedCreate: 0: fires in no cone
@@ -1855,6 +1855,60 @@ Entity lines that name each rule or reason:
   [entity Door, entity Light, MultiForbidden_Light_0, MultiForbidden_Light_1] unreduced
     Door[3] moves
     Light[3] moves
+== engine_corpus/z3_needs_count.rdra
+  [entity Copy] unreduced
+    Copy[2] moves
+    Shelf[2] moves
+  [entity Shelf, Forbidden_Shelf_0] unreduced
+    Copy[2] moves
+    Shelf[2] moves
+== engine_corpus/z3_needs_count.rdra --instance-count 3
+  [entity Copy] unreduced
+    Copy[3] moves
+    Shelf[3] moves
+  [entity Shelf, Forbidden_Shelf_0] unreduced
+    Copy[3] moves
+    Shelf[3] moves
+== engine_corpus/z3_needs_exists.rdra
+  [entity Order, Quantifier_Order_0] unreduced
+    Order[2] moves
+    Shipment[2] moves
+  [entity Shipment] unreduced
+    Order[2] moves
+    Shipment[2] moves
+== engine_corpus/z3_needs_exists.rdra --instance-count 3
+  [entity Order, Quantifier_Order_0] unreduced
+    Order[3] moves
+    Shipment[3] moves
+  [entity Shipment] unreduced
+    Order[3] moves
+    Shipment[3] moves
+== engine_corpus/z3_needs_exists_global.rdra
+  [entity Gate, entity Guard, Quantifier_Gate_0] unreduced
+    Gate[2] moves
+    Guard[2] moves
+== engine_corpus/z3_needs_exists_global.rdra --instance-count 3
+  [entity Gate, entity Guard, Quantifier_Gate_0] unreduced
+    Gate[3] moves
+    Guard[3] moves
+== engine_corpus/z3_needs_run_mark.rdra
+  [entity Door, entity Sign] unreduced
+    Door[2] moves
+    Light[2] moves
+    Sign[2] moves
+  [entity Light, MultiForbidden_Light_0] reduced, H at depth 1
+    Door[2] stays G_T=S,S var,S action param | H stays H=obs
+    Light[2] stays G_T=input | H stays H=input
+    Sign[2] stays G_T=S,S var,S action param | H stays H=obs
+== engine_corpus/z3_needs_run_mark.rdra --instance-count 3
+  [entity Door, entity Sign] unreduced
+    Door[3] moves
+    Light[3] moves
+    Sign[3] moves
+  [entity Light, MultiForbidden_Light_0] reduced, H at depth 1
+    Door[3] stays G_T=S,S var,S action param | H stays H=obs
+    Light[3] stays G_T=input | H stays H=input
+    Sign[3] stays G_T=S,S var,S action param | H stays H=obs
 == engine_corpus/z3_now_past_the_top.rdra --int-range-max 6
   [entity Coupon] unreduced
     Coupon[2] moves

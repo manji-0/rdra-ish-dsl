@@ -64,8 +64,9 @@ pub(super) fn escalate(
                 Some(pool) => caps.charged_to(pool.with_room(pool.left().min(GROWTH * peak))),
                 None => caps,
             };
-            let run =
-                system.explore_targets_reduced(&[Target::Invariant(i)], caps.until_all_violated());
+            // The cone of one rule stops once the rule fails (`explore_cone`); the caps stay
+            // plain, since the sub-lifecycle a reduction runs keeps its whole graph.
+            let run = system.explore_targets_reduced(&[Target::Invariant(i)], caps);
             let n = cone_slots(system, &run.cone_of(Target::Invariant(i)).cone);
             let found = run.verdicts().iter().find(|d| {
                 matches!(&d.diag, StateDiag::ConstraintViolated { name, site, .. }

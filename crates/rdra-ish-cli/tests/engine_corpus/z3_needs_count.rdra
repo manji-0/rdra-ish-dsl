@@ -1,0 +1,37 @@
+// trap: a true rule whose proof needs two count lemmas past one row (#428). The rule reads
+// only Shelf. Close needs at most two copies on the shelf and Crowd at least three; Stock
+// adds a copy only to an open shelf and nothing removes one. So a closed shelf keeps at
+// most two copies and a crowded one at least three: no shelf is closed and crowded, at any
+// count. The rule is not inductive alone: from a closed shelf with three copies, which no
+// reachable state has, Crowd breaks it. The facts that rule that state out count a shelf's
+// copies; no mined lemma counts rows, so z3 leaves the rule unproved, and BFS finds
+// nothing. safety_count_guard_order.rdra is the same trap at one and two copies, which BFS
+// reaches at the run's 2 instances; here no state at 2 instances has a third copy or a
+// crowded shelf, so a count lemma has to come from the guards' bounds, not from the states.
+// expect Forbidden_Shelf_0: native=ok tlc=ok z3=unproved bfs=ok,ok,ok
+entity Shelf "棚" {
+  id: Int @pk
+  status: Enum(open, closed) @default(open)
+  crowded: Bool @default(false)
+}
+entity Copy "蔵書" { id: Int @pk }
+usecase Build "棚設置"
+usecase Stock "入架"
+usecase Close "閉架"
+usecase Crowd "混雑"
+creates(Build, Shelf)
+creates(Stock, Copy)
+updates(Stock, Shelf)
+transitions(Close, Shelf.status, open -> closed)
+sets(Crowd, Shelf.crowded == true)
+relate(Copy, Shelf, N:1)
+condition ShelfOpen "開いている棚にだけ入架できる"
+holds(ShelfOpen, Shelf.status == open)
+applies_to(ShelfOpen, Stock)
+condition FewCopies "蔵書が2冊以下の棚だけ閉架できる"
+holds(FewCopies, Shelf.status == open).at_most(2, Copy)
+applies_to(FewCopies, Close)
+condition ManyCopies "蔵書が3冊以上の棚だけ混雑とする"
+holds(ManyCopies, Shelf.crowded == false).at_least(3, Copy)
+applies_to(ManyCopies, Crowd)
+forbidden(Shelf, status == closed, crowded == true)
