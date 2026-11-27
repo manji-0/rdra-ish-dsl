@@ -396,7 +396,9 @@
   changes.
 - Escalation no longer prints `counterexample at k instances` for a trace that needs more
   rows than `k` of an entity its cone does not count (P11): it decides the rule again on the
-  exact cone that counts every slot, and prints that cone's instances.
+  exact cone that counts every slot, and prints that cone's instances. `refuted: ... (BFS
+  counterexample at k instances)` names the rows of an uncounted entity the trace creates when
+  they are more than `k`.
 - Go: the contract probe and the adapter probe sort their import group by path, so `gofmt -l`
   no longer names a probe whose service package's import path sorts before the domain's
   (`example.com/clinic/clinic` before `example.com/clinic/domain`). The Go domain code passes

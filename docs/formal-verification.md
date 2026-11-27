@@ -758,7 +758,10 @@ says how to see it in a run and what to do. The
   ([`triggers` and event-driven BUC chaining](./language-reference.md#triggers-and-event-driven-buc-chaining)).
 - **A cone can stop at the memory limit or `--max-states`.** A stopped cone decides none of
   its witnesses, deadlocks, use cases that never run, arms never taken, or values never
-  chosen, and leaves its invariants `not decided`. See it: `not checked:` on stdout and the
+  chosen. A counterexample it found before the stop is reported: BFS reaches only reachable
+  states, so it is real (after the exact-cone check above when it runs a use case without its
+  event). The cone's other invariants and `after` assertions stay `not decided`, and its line
+  reads `not decided` when it found none. See it: `not checked:` on stdout and the
   `warning:` on stderr; `--deny-undecided` fails the run instead. In `check` the stop is the
   error `MemoryCapReached_<E>` or `StateCapReached_<E>`, whose message names the variables the
   states vary in. What to do: raise `--memory`, narrow the cone by moving a guard that reads

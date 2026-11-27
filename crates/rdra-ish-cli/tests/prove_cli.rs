@@ -313,6 +313,30 @@ invariant(Customer).at_most(1, Order.status == retried)
     );
     assert!(!stderr.contains("error[Quantifier_Customer_0]"), "{stderr}");
     assert_eq!(out.status.code(), Some(0), "{stderr}");
+    // The rule's cone does not count Payment slots either, and its counterexample at one
+    // instance creates two Payments (Place, then Retry): the refutation names 2.
+    let model = model_file(
+        "refuted_past_the_bound",
+        r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, retried) @default(pending) }
+entity Payment "決済" { id: Int @pk }
+usecase Place "注文"
+usecase Retry "再試行"
+creates(Place, Order)
+creates(Place, Payment)
+creates(Retry, Payment)
+updates(Retry, Order)
+transitions(Retry, Order.status, pending -> retried)
+relate(Payment, Order, N:1)
+forbidden(Order, status == retried)
+"#,
+    );
+    let out = verify(&["--prove", "--instance-count", "1", &model]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("refuted: Forbidden_Order_0 (BFS counterexample at 2 instances)"),
+        "{stdout}"
+    );
 }
 
 #[test]
