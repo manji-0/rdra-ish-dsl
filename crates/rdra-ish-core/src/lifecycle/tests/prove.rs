@@ -79,7 +79,11 @@ fn a_contradictory_premise_proves_no_rule() {
     for r in &proof.rules {
         match &r.verdict {
             Verdict::Unproved(Unproved::Premise(why)) => {
-                assert!(why.contains("no model"), "{why}")
+                assert!(
+                    why.contains("the canary `false` survived initiation")
+                        && why.contains("inconsistent"),
+                    "{why}"
+                )
             }
             other => panic!("{}: {other:?}", ts.invariants()[r.inv].name),
         }

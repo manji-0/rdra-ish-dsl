@@ -85,6 +85,7 @@ impl<'m> Builder<'m> {
 
     fn finish(mut self, scope: &Scope) -> Built {
         self.ts.layout();
+        self.one_write_per_slot();
         let model = self.model;
         let mut inactive: Vec<UseCaseKey> = self
             .active_ucs
@@ -110,6 +111,32 @@ impl<'m> Builder<'m> {
             ts: self.ts,
             diags,
             selection,
+        }
+    }
+
+    /// An action that writes one slot twice fails the build with `ConflictingEffects`
+    /// (`Action::slots_written_twice`): the engines would not agree on its step. No builder
+    /// path makes one today; this keeps a future one from reaching the engines.
+    fn one_write_per_slot(&mut self) {
+        let found: Vec<(String, VarId, Site, Vec<EntityKey>)> = (self.ts.actions.iter())
+            .flat_map(|a| {
+                let entities: Vec<EntityKey> = (a.params.iter())
+                    .map(|p| self.ts.entity(p.entity).key)
+                    .collect();
+                (a.slots_written_twice().into_iter())
+                    .map(move |(var, _)| (a.name.clone(), var, a.site.clone(), entities.clone()))
+            })
+            .collect();
+        for (usecase, var, site, entities) in found {
+            let column = self.ts.var_name(var);
+            self.diag(
+                entities,
+                StateDiag::ConflictingEffects {
+                    usecase,
+                    column,
+                    sites: vec![site],
+                },
+            );
         }
     }
 
@@ -257,7 +284,7 @@ fn variant_index(values: &[String], name: &str) -> Option<u8> {
         .iter()
         .position(|v| v == name)
         .or_else(|| values.iter().position(|v| v.eq_ignore_ascii_case(name)))
-        .map(|i| i as u8)
+        .and_then(|i| u8::try_from(i).ok())
 }
 
 /// Term equality of two slots whose domains `compares_with` each other, under which null

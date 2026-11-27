@@ -18,7 +18,7 @@ impl TransitionSystem {
     /// instance is present and no path reaches the goal, with the index of that state. The
     /// trace is left empty for the caller, which holds the run.
     pub(crate) fn reach_failure(&self, i: usize, graph: &Graph) -> Option<(u32, StateDiag)> {
-        debug_assert!(graph.complete, "a capped graph decides no can_reach");
+        assert!(graph.complete, "a capped graph decides no can_reach");
         let r = &self.reach[i];
         let n = graph.states.len();
         let adjacency = graph.adjacency();

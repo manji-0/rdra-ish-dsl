@@ -13,7 +13,6 @@ use crate::lifecycle::types::{ActId, Domain, EntId, VarId};
 use crate::lifecycle::{StateDiag, TransitionSystem};
 use crate::memory::Watched;
 
-#[cfg(any(test, feature = "shadow"))]
 mod reference;
 #[cfg(any(test, feature = "shadow"))]
 mod up_to_h;
@@ -399,6 +398,18 @@ impl Classes {
         } = partition(ext, sub, run);
         #[cfg(any(test, feature = "shadow"))]
         reference::check(n, &silent, &rise_edges, &initial, &blocks);
+        // The worklist's partition is certified before the reduction uses it (P7): a
+        // partition that is not stable could merge states the cone tells apart. One that
+        // fails is a tool bug; the sweeps' partition, stable when they stop, takes its place.
+        let blocks = match reference::stable(n, &silent, &rise_edges, &initial, &blocks) {
+            true => blocks,
+            false => {
+                eprintln!(
+                    "warning: the quotient of a sub-lifecycle ({n} states) failed its stability check; using the partition of repeated sweeps (a tool bug)"
+                );
+                reference::quotient_blocks(n, &silent, &rise_edges, &initial)
+            }
+        };
         // The identity on an S no inner reduction shrank reduces nothing (#101). Up to `H` a
         // class is a union of orbits: it is the identity only when every orbit is one state.
         let trivial = orbits.is_none_or(|o| o.estimate() == n as u128);
@@ -1100,6 +1111,40 @@ property JobStarts eventually(Job.status == running).fair(Start)
                 reference::same_partition(&new, &old),
                 "seed {seed0}: {new:?} vs {old:?}"
             );
+            assert!(
+                reference::stable(n, &silent, &rises, &initial, &new),
+                "seed {seed0}: the worklist's partition is certified"
+            );
         }
+    }
+
+    /// P7: the certificate the reduction checks every partition against rejects one that
+    /// mixes labels, one where a state of a block reaches a block another cannot, and one
+    /// where a state of a block rises into a block another does not.
+    #[test]
+    fn the_stability_certificate_rejects_a_partition_that_is_not_stable() {
+        // 0 -> 1 silently; 0 and 2 share a label, 1 has its own.
+        let labels = [0, 1, 0];
+        assert!(reference::stable(3, &[(0, 1)], &[], &labels, &[0, 1, 2]));
+        assert!(!reference::stable(3, &[(0, 1)], &[], &labels, &[0, 1, 0]));
+        assert!(!reference::stable(3, &[], &[], &labels, &[0, 0, 0]));
+        // A rise from 0 into 1 that 2 does not take.
+        assert!(!reference::stable(3, &[], &[(0, 1)], &labels, &[0, 1, 0]));
+        assert!(reference::stable(
+            3,
+            &[],
+            &[(0, 1), (2, 1)],
+            &labels,
+            &[0, 1, 0]
+        ));
+        // A silent cycle with no exit in a block whose other state leaves it.
+        let labels = [0, 0, 0, 1];
+        assert!(!reference::stable(
+            4,
+            &[(0, 1), (1, 0), (2, 3)],
+            &[],
+            &labels,
+            &[0, 0, 0, 1]
+        ));
     }
 }

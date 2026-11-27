@@ -41,8 +41,8 @@ mod tlc;
 mod tlc_tool;
 
 use self::bfs::{
-    bfs_cones, decide_by_proof, explored_properties, report_bfs_cones, state_models, BfsCone,
-    Explored, Safety, STATE_MODEL_TLC_STATES,
+    bfs_cones, decide_by_proof, explored_properties, recheck_cones, report_bfs_cones, state_models,
+    BfsCone, Explored, Safety, STATE_MODEL_TLC_STATES,
 };
 use self::compare::disagreements;
 use self::end::{End, TlcEnd};
@@ -296,7 +296,10 @@ pub fn run(
             .collect();
         pool.learn(counted(&shared_safety, &shared, &[]));
         rdra_ish_core::perf::pass("safety_pass");
-        let (safety, mut vacuous) = bfs_cones(&ts, &jobs, caps, &covers, &mut shared);
+        let (mut safety, mut vacuous) = bfs_cones(&ts, &jobs, caps, &covers, &mut shared);
+        // A violation a cone cannot vouch for is decided on its exact cone before the proof
+        // reads what BFS refuted.
+        recheck_cones(&ts, &jobs, &mut safety, caps);
         let safety_ran: Vec<Option<&BfsCone>> = safety.iter().map(Option::as_ref).collect();
         pool.learn(counted(&safety_ran, &shared, &[]));
         // The proof needs only the rules the safety pass refuted, so it starts here, beside

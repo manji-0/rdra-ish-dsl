@@ -11,7 +11,8 @@
 use std::collections::BTreeSet;
 
 use crate::lifecycle::types::{
-    At, Birth, CmpOp, Domain, Effect, EntId, Param, Pred, Rhs, Start, Term, Value, VarKind,
+    At, Birth, CmpOp, Domain, Effect, EntId, Param, ParamRole, Pred, Rhs, Start, Term, Value,
+    VarKind,
 };
 use crate::lifecycle::TransitionSystem;
 
@@ -42,6 +43,7 @@ pub(super) fn scan(ts: &TransitionSystem, class_of: &[usize]) -> BTreeSet<(EntId
     for action in ts.actions() {
         for guard in &action.guards {
             scan.pred(&guard.pred, &action.params, &mut Vec::new());
+            scan.absent_owners(&guard.pred, &action.params);
         }
         scan.effects(&action.params, &action.effects);
     }
@@ -145,6 +147,30 @@ impl Scan<'_> {
         }
     }
 
+    /// An owner read on the row a step creates, in the state before the step: the row is
+    /// absent there and its owner holds the base value, which `Group::apply` does not relabel,
+    /// so the guard would read a different parent in a permuted state (P30). Leaving the
+    /// parent's class out keeps its slots where they are.
+    fn absent_owners(&mut self, pred: &Pred, params: &[Param]) {
+        for term in pred.terms() {
+            let Term::Slot {
+                var,
+                at: At::Param(p),
+            } = term
+            else {
+                continue;
+            };
+            let new = params
+                .get(usize::from(*p))
+                .is_some_and(|q| q.role == ParamRole::New);
+            if let (true, VarKind::Owner { .. }, Domain::Instance { parent, .. }) =
+                (new, &self.ts.var(*var).kind, &self.ts.var(*var).domain)
+            {
+                self.leave_out(*parent, Rule::AbsentOwner);
+            }
+        }
+    }
+
     fn cmp(&mut self, a: &Term, op: CmpOp, b: &Term, params: &[Param], bound: &[EntId]) {
         let (ia, ib) = (self.id(a, params, bound), self.id(b, params, bound));
         if !matches!(op, CmpOp::Eq | CmpOp::Ne) {
@@ -215,7 +241,7 @@ impl Scan<'_> {
                     if let Some((parent, _)) = owner_parent(*var) {
                         let size = ts.var(*var).domain.size(ts);
                         let chosen: BTreeSet<Value> = values.iter().map(|c| c.value).collect();
-                        if (0..size).any(|v| !chosen.contains(&Value(v as u8))) {
+                        if (0..size).any(|v| !chosen.contains(&Value::at(v))) {
                             self.leave_out(parent, Rule::OwnerChoice);
                         }
                     }

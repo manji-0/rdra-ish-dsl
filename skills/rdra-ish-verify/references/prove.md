@@ -22,9 +22,8 @@ Each rule prints one line after the `proof (...)` header:
   any Int value violates it; `check` reports it with a trace when it lies within the bounds.
 - `unproved: <rule>: z3 gave up on <action>`: the check ran out of z3 resource units. The
   budget counts solver work, so the answer is the same on every machine.
-- `unproved: <rule>: the encoding's initial states have no model ...` or `z3 gave up on whether
-  the encoding's initial states have a model ...`: z3 found no state to start from, so no rule
-  is proved. The first is a bug in rdra-ish; report it.
+- `unproved: <rule>: the canary `false` survived initiation ...`: the proof found no state to
+  start from, so no rule is proved. This is a bug in rdra-ish; report it.
 - `out of scope: <rule>: <why>`: the encoding cannot state the rule.
 - `refuted: <rule> (BFS counterexample at <n> instances)`: BFS violated the rule in the same
   run, with the trace it prints, so the proof did not try it. Fix the model, not the proof.

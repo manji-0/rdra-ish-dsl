@@ -1,0 +1,44 @@
+// cross_order_payment.rdra with Pay split across two APIs in invokes order (two actions, Pay_1
+// captures the payment, then Pay_2 pays its order; docs/vision.md, rule 6), and a Cancel that
+// does not delete the Payment. TLC intent: expected FAIL. Pay_1 captures the payment while the
+// linked Order is still pending, Cancel then cancels that Order, and the forbidden pair is reached.
+// expect check: fail MultiForbidden_Order_0
+// expect verify: fail MultiForbidden_Order_0
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid, cancelled) @default(pending)
+}
+
+entity Payment "決済" {
+  id: Int @pk
+  status: Enum(pending, captured) @default(pending)
+}
+
+usecase Place "注文確定"
+usecase Pay "決済確定"
+usecase Cancel "キャンセル"
+
+api PayOrderApi "Order payment API"
+api CapturePaymentApi "Payment capture API"
+
+buc BucOrderPayment "Order and payment"
+contains(BucOrderPayment, Place)
+contains(BucOrderPayment, Pay)
+contains(BucOrderPayment, Cancel)
+
+creates(Place, Order)
+creates(Place, Payment)
+invokes(Pay, CapturePaymentApi)
+updates(CapturePaymentApi, Payment)
+invokes(Pay, PayOrderApi)
+updates(PayOrderApi, Order)
+updates(Cancel, Order)
+
+transitions(Pay, Order.status, pending -> paid)
+transitions(Cancel, Order.status, pending -> cancelled)
+transitions(Pay, Payment.status, pending -> captured)
+
+relate(Payment, Order, N:1)
+
+// Cancelled order must not coexist with a captured payment on the same link.
+forbidden(Order, Payment, Order.status == cancelled, Payment.status == captured).along(Order, Payment)

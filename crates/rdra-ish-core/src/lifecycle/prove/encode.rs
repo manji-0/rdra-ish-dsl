@@ -528,7 +528,7 @@ impl Enc<'_> {
         let domain = &self.ts.var(var).domain;
         let size = domain.size(self.ts);
         let has = |v: Value| values.iter().any(|c| c.value == v);
-        let listed = |from: usize| (from..size).all(|i| has(Value(i as u8)));
+        let listed = |from: usize| (from..size).all(|i| has(Value::at(i)));
         // The non-null numbers start at index 1 of a nullable domain; `present` on an Int
         // column lists 1.. as well.
         if domain.is_numeric() && listed(1) {
