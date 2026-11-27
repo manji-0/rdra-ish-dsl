@@ -634,7 +634,9 @@ fn verify(case: &Case, extra: &[&str]) -> Observed {
 }
 
 fn verify_with(case: &Case, extra: &[&str], env: &[(&str, &str)]) -> Observed {
+    // Every proof runs its Houdini rounds: no certificate from an earlier run, or build.
     let out = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .env("RDRA_ISH_NO_PROOF_CACHE", "1")
         .envs(env.iter().copied())
         .arg("verify")
         .arg(&case.path)

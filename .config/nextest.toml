@@ -80,6 +80,7 @@ not (
   | (binary_id(rdra-ish-cli) & test(=verify::bfs::tests::tlc_reads_no_stopped_entity_cone))
   | (binary_id(rdra-ish-emit) & test(=codegen::tests::every_choice_a_function_is_named_for_is_chosen))
   | (binary_id(rdra-ish-cli::proof_equivalence) & test(=a_refuted_rule_left_out_changes_no_other_verdict))
+  | (binary_id(rdra-ish-cli::proof_equivalence) & test(=a_certificate_is_reused_only_when_it_rechecks_and_changes_no_proof))
 )
 """
 # Every failure, not only the first, and the slow tests again at the end of the log.

@@ -1571,7 +1571,11 @@ one, the run stops with an error.
 ### Proofs
 
 `--prove` prints one `proved:`, `unproved:`, `out of scope:`, or `refuted:` line per selected
-rule. A rule BFS violated in the same run is not tried: it reads `refuted: <rule> (BFS
+rule. The set of rules and lemmas a proof keeps is stored as a certificate under the user's cache
+directory (`XDG_CACHE_HOME`), never in the project, and offered to the next run on the same
+encoding, which re-checks it in one round and reuses it only when every rule is in it and the
+round passes. A missing, stale, or damaged certificate costs only that round; the output is the
+same with or without one. `RDRA_ISH_NO_PROOF_CACHE=1` turns it off. A rule BFS violated in the same run is not tried: it reads `refuted: <rule> (BFS
 counterexample at <n> instances)`, with no CTI, and `--deny-unproved` does not count it. The
 `OK:` line gains `; <n> of <m> rules proved for any number of rows and any Int value`. A rule
 the SQL schema does not enforce is marked `[not enforced by the SQL schema: <why>]`, and a
@@ -1941,6 +1945,8 @@ Sites are `path:line:col` relative to the working directory, or to `rdra.toml`'s
 | `JAVA_TOOL_OPTIONS` | `verify --with-tlc` | Appended after the options `verify` sets (`-Xmx`, `-Djava.io.tmpdir`, and `-XX:TieredStopAtLevel=1` on a state-model run of at most 10,000 BFS states, added only after TLC started once with it), so a value here wins. |
 | `RDRA_TLC_BATCH` | `verify --with-tlc` | `0` runs each TLC job as its own process instead of in the `tlc-batch` JVM the flake provides. |
 | `RDRA_Z3` | `verify --prove` | The z3 binary, used as `--z3` when the flag is absent. |
+| `XDG_CACHE_HOME` | `verify --prove` | Where the proof keeps the set it kept, for the next run to re-check first: `$XDG_CACHE_HOME/rdra-ish/proofs`, else `~/Library/Caches/rdra-ish/proofs` on macOS and `~/.cache/rdra-ish/proofs` elsewhere. See [Proofs](#proofs). |
+| `RDRA_ISH_NO_PROOF_CACHE` | `verify --prove` | Set: read and write no certificate; every proof runs from the start. The output does not change. |
 | `RDRA_BIN` | `scripts/data-diff.sh` | The binary to run (default `target/release/rdra-ish`). |
 
 For developers. These change only diagnostics or turn an optimisation off; the verdicts stay:

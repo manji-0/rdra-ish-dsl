@@ -12,7 +12,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU8;
 use std::path::PathBuf;
 
-use rdra_ish_core::lifecycle::prove::{self, ProveOptions, Unproved, Verdict, Z3};
+use rdra_ish_core::lifecycle::prove::{
+    self, ProveOptions, Sat, Solver, SolverError, Unproved, Verdict, Z3,
+};
 use rdra_ish_core::lifecycle::{Bounds, Caps, Scope, StateDiag, Target, TransitionSystem};
 use rdra_ish_core::load_project;
 
@@ -348,4 +350,128 @@ fn a_refuted_rule_left_out_changes_no_other_verdict() {
     }
     assert!(refuted_total > 0, "no case has a refuted rule");
     assert!(beside > 0, "no case has a rule beside a refuted one");
+}
+
+/// A certificate (the set a proof kept) offered to the next proof is re-checked, and the
+/// proof is the same whether the certificate is reused, refused, or not offered: it is reused
+/// only when the encoding is the one it came from, it holds every rule, and one round finds it
+/// inductive again; a stale one costs only that round. The formal-verification samples have
+/// models whose rules are all proved, where it is reused, and models with an unproved rule,
+/// where it never is.
+#[test]
+fn a_certificate_is_reused_only_when_it_rechecks_and_changes_no_proof() {
+    let Some(z3) = find_z3() else { return };
+    let (mut reused, mut refused) = (0, 0);
+    let mut other: Option<prove::Certificate> = None;
+    for sample in samples()
+        .into_iter()
+        .filter(|s| s.contains("formal-verification"))
+    {
+        let Some((ts, twin)) = proving(&sample) else {
+            continue;
+        };
+        let rules: Vec<usize> = (0..ts.invariants().len()).collect();
+        let run = |offer: Option<&prove::Certificate>| {
+            let mut solvers = [(); 2].map(|()| Z3::start(&z3).expect("z3 starts"));
+            prove::prove_offered(
+                &ts,
+                twin.as_ref(),
+                &rules,
+                &BTreeSet::new(),
+                &mut solvers,
+                ProveOptions::default(),
+                offer,
+            )
+            .unwrap_or_else(|e| panic!("{sample}: {e}"))
+        };
+        let fresh = run(None);
+        assert!(!fresh.reused, "{sample}");
+        let expected = format!("{:?}", fresh.proof);
+        // A model with no rule to prove reuses any certificate of its encoding; it counts
+        // neither way.
+        let unproved = fresh.proof.unproved() > 0;
+        let again = run(Some(&fresh.certificate));
+        assert_eq!(format!("{:?}", again.proof), expected, "{sample}");
+        assert_eq!(again.reused, !unproved, "{sample}");
+        assert_eq!(again.certificate, fresh.certificate, "{sample}");
+        match (unproved, fresh.proof.proved()) {
+            (true, _) => refused += 1,
+            (false, 0) => {}
+            (false, _) => reused += 1,
+        }
+        let mut stale = fresh.certificate.clone();
+        stale.digest.push('0');
+        // With no rule kept: refused, unless there is no rule to hold.
+        let no_rule = (fresh.proof.proved() > 0).then(|| prove::Certificate {
+            kept: Vec::new(),
+            ..fresh.certificate.clone()
+        });
+        let mut past_end = fresh.certificate.clone();
+        past_end.kept.push(usize::MAX);
+        for damaged in [Some(stale), no_rule, Some(past_end), other.take()]
+            .into_iter()
+            .flatten()
+        {
+            let run = run(Some(&damaged));
+            assert!(!run.reused, "{sample}: {damaged:?}");
+            assert_eq!(format!("{:?}", run.proof), expected, "{sample}");
+        }
+        other = Some(fresh.certificate);
+    }
+    assert!(
+        reused >= 3 && refused >= 3,
+        "{reused} reused, {refused} refused"
+    );
+}
+
+/// A z3 that answers `unknown` to its first `check-sat`.
+struct GivesUpOnce {
+    z3: Z3,
+    gave_up: bool,
+}
+
+impl Solver for GivesUpOnce {
+    fn exec(&mut self, commands: &str) -> Result<Vec<String>, SolverError> {
+        self.z3.exec(commands)
+    }
+
+    fn check_sat(&mut self, rlimit: u32) -> Result<Sat, SolverError> {
+        let sat = self.z3.check_sat(rlimit)?;
+        match std::mem::replace(&mut self.gave_up, true) {
+            false => Ok(Sat::Unknown),
+            true => Ok(sat),
+        }
+    }
+}
+
+/// A certificate whose round fails is refused, and the proof that follows on the same solvers
+/// is the one Houdini gives without it: the round's first check gives up, so the certificate
+/// falls after z3 has run part of the round.
+#[test]
+fn a_certificate_whose_round_fails_changes_no_proof() {
+    let Some(z3) = find_z3() else { return };
+    let sample = "samples/formal-verification/check_met.rdra";
+    let (ts, twin) = proving(sample).expect("check_met builds");
+    let rules: Vec<usize> = (0..ts.invariants().len()).collect();
+    let run = |offer: Option<&prove::Certificate>, gave_up: bool| {
+        let z3 = Z3::start(&z3).expect("z3 starts");
+        let mut solvers = [GivesUpOnce { z3, gave_up }];
+        prove::prove_offered(
+            &ts,
+            twin.as_ref(),
+            &rules,
+            &BTreeSet::new(),
+            &mut solvers,
+            ProveOptions::default(),
+            offer,
+        )
+        .expect("the proof runs")
+    };
+    let fresh = run(None, true);
+    assert!(fresh.proof.proved() > 0, "{:?}", fresh.proof);
+    assert!(run(Some(&fresh.certificate), true).reused);
+    let refused = run(Some(&fresh.certificate), false);
+    assert!(!refused.reused);
+    assert_eq!(format!("{:?}", refused.proof), format!("{:?}", fresh.proof));
+    assert_eq!(refused.certificate, fresh.certificate);
 }

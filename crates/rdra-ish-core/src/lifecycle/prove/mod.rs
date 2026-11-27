@@ -90,6 +90,26 @@ pub enum Unproved {
     Unknown { action: String },
 }
 
+/// The set a proof kept, for the next proof to offer first (`prove_offered`): which
+/// candidates, by index, and the digest of the encoding they are indices into. It is a hint,
+/// never a verdict: the next proof re-checks it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Certificate {
+    /// The hash of what the proof sent z3 before its rounds: the options, the declarations,
+    /// the initial states, the steps, and each candidate. Equal digests mean equal rounds.
+    pub digest: String,
+    /// The candidates the proof kept, in order.
+    pub kept: Vec<usize>,
+}
+
+/// A proof, the certificate it leaves, and whether the one offered was reused.
+#[derive(Clone, Debug)]
+pub struct Certified {
+    pub proof: Proof,
+    pub certificate: Certificate,
+    pub reused: bool,
+}
+
 /// A counterexample to induction: one step, the rows it reads and writes, and the rule's rows.
 #[derive(Clone, Debug)]
 pub struct Cti {
@@ -249,6 +269,25 @@ pub fn prove<S: Solver + Send>(
     solvers: &mut [S],
     options: ProveOptions,
 ) -> Result<Proof, SolverError> {
+    prove_offered(ts, twin, rules, refuted, solvers, options, None).map(|c| c.proof)
+}
+
+/// `prove`, offered the certificate an earlier proof left (#421). It is reused when its
+/// digest is this proof's, it holds every rule that is a candidate, and one round finds it
+/// inductive: every candidate in it holds in the initial states, and no step from a state
+/// where all of them hold breaks one. Its rules are then proved by that round, not by the
+/// earlier proof. Equal digests mean the earlier proof ran the same rounds, so it kept the
+/// same set and the `Proof` is the one Houdini gives; a certificate that fails the round
+/// costs only the round, and the proof then runs as without one.
+pub fn prove_offered<S: Solver + Send>(
+    ts: &TransitionSystem,
+    twin: Option<&TransitionSystem>,
+    rules: &[usize],
+    refuted: &BTreeSet<usize>,
+    solvers: &mut [S],
+    options: ProveOptions,
+    offer: Option<&Certificate>,
+) -> Result<Certified, SolverError> {
     assert!(!solvers.is_empty(), "a proof needs a solver");
     let enc = Enc { ts };
     let mut verdicts: BTreeMap<usize, Verdict> = BTreeMap::new();
@@ -328,99 +367,125 @@ pub fn prove<S: Solver + Send>(
         solver.exec(houdini.text())?;
     }
 
-    let mut set = Set {
-        fell: vec![None; cands.len()],
-        fine: &fine,
-        fine_joined: false,
-    };
-    // Houdini's special cases, each kept for a reason:
-    // - Initiation is checked once, before any round: no round adds a candidate the initial
-    //   states have not been checked against.
-    // - The fine mined lemmas wait outside the set, and join (`Set::fine_joined`) only when a
-    //   rule fell after initiation: most models prove every rule without them, and they are
-    //   many, so most proofs never check them.
-    // - When they join, the rules that fell after initiation come back: the set that broke
-    //   them lacked the fine lemmas, so its counterexamples may no longer stand.
-    // - A step is checked only against the candidates that read what it writes (`breaks`):
-    //   a step that writes none of a candidate's vars cannot break it.
-    // - The set is asserted once per step, and every candidate the step may break is checked
-    //   under it; one that falls still stands for that step's other checks, so the answers
-    //   do not depend on the order of the checks or on how many solvers share them.
-    // - `unknown` counts as a fall: the kept set stays inductive, and a rule z3 gave up on is
-    //   never proved. Without MBQI every `sat` is `unknown` (see above).
-    // - The CTIs come from a solver that starts over, with MBQI on: the model z3 gives
-    //   depends on what the solver checked before.
-    // - Rules and lemmas have their own rlimits (`ProveOptions`): a lemma that gives up only
-    //   costs proofs, so its limit is lower.
-    //
-    // Initiation: every candidate holds in every initial state.
     let initial = enc.initial();
-    match &initial {
-        Ok(init) => {
-            let all: Vec<usize> = (0..cands.len()).collect();
-            let answers = violated_each(solvers, &enc, &cands, &all, init, Frame::Pre)?;
-            for (k, sat) in all.into_iter().zip(answers) {
-                let fall = match sat {
-                    Sat::Unsat => continue,
-                    Sat::Sat => Fall::Initial,
-                    Sat::Unknown => Fall::GaveUp(None),
-                };
-                set.fell[k] = Some(fall);
-            }
+    let digest = digest(
+        &enc,
+        &cands,
+        &fine,
+        &declarations,
+        &initial,
+        &steps,
+        options,
+    );
+    let offered = match (offer, &initial) {
+        (Some(offer), Ok(init)) if offer.digest == digest => {
+            reusable(solvers, &enc, &cands, offer, init, &steps, &breaks)?
         }
-        Err(Unsupported(why)) => {
-            for fall in &mut set.fell {
-                *fall = Some(Fall::Unknown(format!("the initial states ({why})")));
-            }
+        _ => None,
+    };
+    let reused = offered.is_some();
+    if offer.is_some() && !reused {
+        // The proof runs as without a certificate, on solvers as they were.
+        for solver in solvers.iter_mut() {
+            solver.exec(houdini.text())?;
         }
     }
-
-    // The fine lemmas wait: most models prove every rule without them, and they are many.
-    let at_start: BTreeSet<usize> = (0..cands.len())
-        .filter(|k| set.fell[*k].is_some())
-        .collect();
-    // Consecution, until a round removes nothing: the kept set is then inductive. When a rule
-    // fell after initiation, the fine lemmas join, the rules that fell come back (the set that
-    // broke one lacked them), and it runs once more.
-    loop {
-        loop {
-            let before = set.fallen();
-            for (a, step) in steps.iter().enumerate() {
-                let hit: Vec<usize> = (0..cands.len())
-                    .filter(|k| set.contains(*k) && breaks(a, &cands[*k]))
-                    .collect();
-                if hit.is_empty() {
-                    continue;
-                }
-                // The set is asserted once for the step, so a candidate that falls here
-                // still stands for the step's other checks, on one solver or on several.
-                let mut scope = step.commands.clone();
-                scope.append(&assume(&cands, &set));
-                let answers = violated_each(solvers, &enc, &cands, &hit, &scope, Frame::Post)?;
-                for (k, sat) in hit.into_iter().zip(answers) {
+    let mut set = Set {
+        fell: offered.unwrap_or_else(|| vec![None; cands.len()]),
+        fine: &fine,
+        fine_joined: reused,
+    };
+    if !reused {
+        // Houdini's special cases, each kept for a reason:
+        // - Initiation is checked once, before any round: no round adds a candidate the initial
+        //   states have not been checked against.
+        // - The fine mined lemmas wait outside the set, and join (`Set::fine_joined`) only when a
+        //   rule fell after initiation: most models prove every rule without them, and they are
+        //   many, so most proofs never check them.
+        // - When they join, the rules that fell after initiation come back: the set that broke
+        //   them lacked the fine lemmas, so its counterexamples may no longer stand.
+        // - A step is checked only against the candidates that read what it writes (`breaks`):
+        //   a step that writes none of a candidate's vars cannot break it.
+        // - The set is asserted once per step, and every candidate the step may break is checked
+        //   under it; one that falls still stands for that step's other checks, so the answers
+        //   do not depend on the order of the checks or on how many solvers share them.
+        // - `unknown` counts as a fall: the kept set stays inductive, and a rule z3 gave up on is
+        //   never proved. Without MBQI every `sat` is `unknown` (see above).
+        // - The CTIs come from a solver that starts over, with MBQI on: the model z3 gives
+        //   depends on what the solver checked before.
+        // - Rules and lemmas have their own rlimits (`ProveOptions`): a lemma that gives up only
+        //   costs proofs, so its limit is lower.
+        //
+        // Initiation: every candidate holds in every initial state.
+        match &initial {
+            Ok(init) => {
+                let all: Vec<usize> = (0..cands.len()).collect();
+                let answers = violated_each(solvers, &enc, &cands, &all, init, Frame::Pre)?;
+                for (k, sat) in all.into_iter().zip(answers) {
                     let fall = match sat {
                         Sat::Unsat => continue,
-                        Sat::Sat => Fall::Step(ActId::at_index(a)),
-                        Sat::Unknown => Fall::GaveUp(Some(ActId::at_index(a))),
+                        Sat::Sat => Fall::Initial,
+                        Sat::Unknown => Fall::GaveUp(None),
                     };
                     set.fell[k] = Some(fall);
                 }
             }
-            if set.fallen() == before {
-                break;
+            Err(Unsupported(why)) => {
+                for fall in &mut set.fell {
+                    *fall = Some(Fall::Unknown(format!("the initial states ({why})")));
+                }
             }
         }
-        let open = cands.iter().enumerate().any(|(k, c)| {
-            matches!(c.origin, Origin::Rule(_)) && set.fell[k].is_some() && !at_start.contains(&k)
-        });
-        let waiting = !set.fine_joined && fine.iter().any(|k| !at_start.contains(k));
-        if !open || !waiting {
-            break;
-        }
-        set.fine_joined = true;
-        for (k, c) in cands.iter().enumerate() {
-            if matches!(c.origin, Origin::Rule(_)) && !at_start.contains(&k) {
-                set.fell[k] = None;
+
+        // The fine lemmas wait: most models prove every rule without them, and they are many.
+        let at_start: BTreeSet<usize> = (0..cands.len())
+            .filter(|k| set.fell[*k].is_some())
+            .collect();
+        // Consecution, until a round removes nothing: the kept set is then inductive. When a rule
+        // fell after initiation, the fine lemmas join, the rules that fell come back (the set that
+        // broke one lacked them), and it runs once more.
+        loop {
+            loop {
+                let before = set.fallen();
+                for (a, step) in steps.iter().enumerate() {
+                    let hit: Vec<usize> = (0..cands.len())
+                        .filter(|k| set.contains(*k) && breaks(a, &cands[*k]))
+                        .collect();
+                    if hit.is_empty() {
+                        continue;
+                    }
+                    // The set is asserted once for the step, so a candidate that falls here
+                    // still stands for the step's other checks, on one solver or on several.
+                    let mut scope = step.commands.clone();
+                    scope.append(&assume(&cands, &set));
+                    let answers = violated_each(solvers, &enc, &cands, &hit, &scope, Frame::Post)?;
+                    for (k, sat) in hit.into_iter().zip(answers) {
+                        let fall = match sat {
+                            Sat::Unsat => continue,
+                            Sat::Sat => Fall::Step(ActId::at_index(a)),
+                            Sat::Unknown => Fall::GaveUp(Some(ActId::at_index(a))),
+                        };
+                        set.fell[k] = Some(fall);
+                    }
+                }
+                if set.fallen() == before {
+                    break;
+                }
+            }
+            let open = cands.iter().enumerate().any(|(k, c)| {
+                matches!(c.origin, Origin::Rule(_))
+                    && set.fell[k].is_some()
+                    && !at_start.contains(&k)
+            });
+            let waiting = !set.fine_joined && fine.iter().any(|k| !at_start.contains(k));
+            if !open || !waiting {
+                break;
+            }
+            set.fine_joined = true;
+            for (k, c) in cands.iter().enumerate() {
+                if matches!(c.origin, Origin::Rule(_)) && !at_start.contains(&k) {
+                    set.fell[k] = None;
+                }
             }
         }
     }
@@ -485,16 +550,15 @@ pub fn prove<S: Solver + Send>(
         verdicts.insert(i, verdict);
     }
 
-    let kept_lemmas = cands
+    let kept: Vec<usize> = (0..cands.len()).filter(|k| set.contains(*k)).collect();
+    let kept_lemmas = kept
         .iter()
-        .enumerate()
-        .filter(|(k, _)| set.contains(*k))
-        .filter_map(|(_, c)| match &c.origin {
+        .filter_map(|k| match &cands[*k].origin {
             Origin::Lemma(text) => Some(text.clone()),
             Origin::Rule(_) => None,
         })
         .collect();
-    Ok(Proof {
+    let proof = Proof {
         rules: rules
             .iter()
             .map(|i| RuleProof {
@@ -504,7 +568,108 @@ pub fn prove<S: Solver + Send>(
             .collect(),
         lemmas: kept_lemmas,
         loose,
+    };
+    Ok(Certified {
+        proof,
+        certificate: Certificate { digest, kept },
+        reused,
     })
+}
+
+/// The digest of a proof's rounds (`Certificate::digest`): every command a round may send.
+fn digest(
+    enc: &Enc,
+    cands: &[Candidate],
+    fine: &BTreeSet<usize>,
+    declarations: &Script,
+    initial: &Result<Script, Unsupported>,
+    steps: &[encode::Step],
+    options: ProveOptions,
+) -> String {
+    let mut h = crate::fingerprint::Fnv::default();
+    let mut add = |text: &str| {
+        h.add(text.as_bytes());
+        h.add(&[0]);
+    };
+    // Bump the tag with any change to which set the rounds keep that the text hashed here
+    // does not show (the order of the checks, how a fall is decided): a certificate of the
+    // older rounds then misses instead of standing for a set they no longer keep.
+    add("rdra-ish proof certificate 1");
+    add(env!("CARGO_PKG_VERSION"));
+    add(&format!("{options:?}"));
+    add(declarations.text());
+    match initial {
+        Ok(init) => add(init.text()),
+        Err(Unsupported(why)) => add(&format!("unsupported: {why}")),
+    }
+    for step in steps {
+        add(step.commands.text());
+    }
+    for (k, c) in cands.iter().enumerate() {
+        add(&format!(
+            "{:?} {} {}",
+            c.origin,
+            c.rlimit,
+            fine.contains(&k)
+        ));
+        add(c.pre.text());
+        add(violation(enc, c, Frame::Pre).text());
+        add(violation(enc, c, Frame::Post).text());
+    }
+    h.hex()
+}
+
+/// The candidates' falls with `offer`'s set kept, when it is one that holds every rule and one
+/// round finds it inductive: initiation over it, then each step against the candidates in it
+/// the step may break, under the set. `None` when it fails, which only costs the round.
+fn reusable<S: Solver + Send>(
+    solvers: &mut [S],
+    enc: &Enc,
+    cands: &[Candidate],
+    offer: &Certificate,
+    initial: &Script,
+    steps: &[encode::Step],
+    breaks: &dyn Fn(usize, &Candidate) -> bool,
+) -> Result<Option<Vec<Option<Fall>>>, SolverError> {
+    let kept: BTreeSet<usize> = offer.kept.iter().copied().collect();
+    let holds_every_rule = (cands.iter().enumerate())
+        .all(|(k, c)| !matches!(c.origin, Origin::Rule(_)) || kept.contains(&k));
+    if kept.iter().any(|k| *k >= cands.len()) || !holds_every_rule {
+        return Ok(None);
+    }
+    // A candidate outside the certificate is out of the set. None of them is a rule, so the
+    // CTI stage, the only reader of why a candidate fell, never reads this `Fall`.
+    let fell: Vec<Option<Fall>> = (0..cands.len())
+        .map(|k| (!kept.contains(&k)).then_some(Fall::Initial))
+        .collect();
+    let empty = BTreeSet::new();
+    let set = Set {
+        fell,
+        fine: &empty,
+        fine_joined: true,
+    };
+    let all: Vec<usize> = kept.iter().copied().collect();
+    let answers = violated_each(solvers, enc, cands, &all, initial, Frame::Pre)?;
+    if answers.iter().any(|sat| *sat != Sat::Unsat) {
+        return Ok(None);
+    }
+    for (a, step) in steps.iter().enumerate() {
+        let hit: Vec<usize> = all
+            .iter()
+            .copied()
+            .filter(|k| breaks(a, &cands[*k]))
+            .collect();
+        if hit.is_empty() {
+            continue;
+        }
+        let mut scope = step.commands.clone();
+        scope.append(&assume(cands, &set));
+        let answers = violated_each(solvers, enc, cands, &hit, &scope, Frame::Post)?;
+        if answers.iter().any(|sat| *sat != Sat::Unsat) {
+            return Ok(None);
+        }
+    }
+    Ok(Some(set.fell))
 }
 
 /// Asserts every candidate still in the set over the pre-state.
