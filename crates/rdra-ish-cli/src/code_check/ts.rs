@@ -203,7 +203,7 @@ impl Backend for TypeScript {
                 messages.len()
             ),
             model: None,
-            code: Some(first.shown()),
+            code: Some(first.shown(&|f: &str| f.to_string())),
             fix: Some(
                 "set \"type\": \"module\" in the package.json above them (npm 11's `npm init -y` writes \"commonjs\")"
                     .to_string(),
@@ -253,13 +253,14 @@ impl Backend for TypeScript {
         }
     }
 
-    /// The harness's report: the line after `rdra-ish conformance: `; a Node that runs no
-    /// TypeScript as it is, or a package that makes the probe CommonJS, said as such; else the
-    /// output's last line.
+    /// The harness's report (`rdra-ish conformance: ` and the rows that differ), with a file
+    /// the probe could not open named as such; a Node that runs no TypeScript as it is, or a
+    /// package that makes the probe CommonJS, said as such; else an error the service threw;
+    /// else the output's last line.
     fn run_failure(&self, stdout: &str, stderr: &str) -> Option<String> {
         let all = format!("{stdout}\n{stderr}");
-        if let Some((_, rest)) = all.rsplit_once("rdra-ish conformance: ") {
-            return rest.lines().next().map(str::to_string);
+        if let Some(report) = super::harness_report(&all) {
+            return Some(missing_file(&report).unwrap_or(report));
         }
         if all.contains("ERR_UNKNOWN_FILE_EXTENSION")
             || all.contains("getBuiltinModule is not a function")
@@ -269,10 +270,9 @@ impl Backend for TypeScript {
         if all.contains("Cannot use import statement outside a module") {
             return Some("node ran the probe as CommonJS: the probe and the domain code are ES modules, so the package.json above them needs \"type\": \"module\" (npm 11's `npm init -y` writes \"commonjs\")".to_string());
         }
-        all.lines()
-            .rev()
-            .find(|l| !l.trim().is_empty())
-            .map(|l| l.trim().to_string())
+        super::panic_report(&all)
+            .map(|thrown| missing_file(&thrown).unwrap_or(thrown))
+            .or_else(|| super::last_line(&all))
     }
 
     fn method_names(&self, m: &PortMethod) -> Vec<String> {
@@ -291,6 +291,17 @@ impl Backend for TypeScript {
             methods.join(", ")
         )
     }
+}
+
+/// A report of an error Node threw opening a file that does not exist (`ENOENT: no such
+/// file or directory, open '<path>'`), as what it is: most often the traces, at a path the
+/// probe reads relative to the root `run` runs in.
+fn missing_file(report: &str) -> Option<String> {
+    let (_, rest) = report.split_once("ENOENT: no such file or directory, open '")?;
+    let (path, _) = rest.split_once('\'')?;
+    Some(format!(
+        "the probe could not open {path}: no such file. It reads the traces at the path `traces` in [code.ts] gives, relative to the directory `run` runs in; `rdra-ish codegen --code` writes them"
+    ))
 }
 
 /// One `file(line,col): error TSxxxx: text` line of tsc's plain output.
@@ -380,6 +391,16 @@ mod tests {
         assert_eq!(
             TypeScript.run_failure("", report).as_deref(),
             Some("traces line 7: after `Pay 1`, the store differs")
+        );
+    }
+
+    #[test]
+    fn a_file_the_probe_cannot_open_is_named() {
+        let out = "rdra-ish conformance: the service threw: Error: ENOENT: no such file or directory, open 'src/gen/traces.txt'\n";
+        let said = TypeScript.run_failure("", out).unwrap();
+        assert!(
+            said.starts_with("the probe could not open src/gen/traces.txt: no such file."),
+            "{said}"
         );
     }
 

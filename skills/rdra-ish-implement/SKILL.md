@@ -48,7 +48,9 @@ equivalence). `codegen` and
    `wrote <path>` for each. Never edit a generated file; regenerate it.
 4. Read the generated header: the **obligations** (what `check` assumes and no type
    enforces), the **candidate rules**, and the use cases it printed no function for.
-   `rdra-ish codegen model --format json` gives the same contract as data.
+   `rdra-ish codegen model --format json` gives the same contract as data, with the
+   events, each use case's actors, `@unique` columns, and each obligation's kind, entity
+   and columns for a database mapper.
 5. Write the service against the contracts (`references/contracts.md`): implement each
    `<UseCase>UseCase` and the `ConformancePort`, load rows through `fromRow`, call the
    dispatcher, and store each row in one transaction only where it still is what the
