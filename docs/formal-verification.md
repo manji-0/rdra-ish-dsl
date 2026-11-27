@@ -511,11 +511,16 @@ survives is a bug in rdra-ish; then no rule is proved and each reads `unproved: 
 canary `false` survived initiation: ...`. The step relation is widened in two ways, which only add steps: a
 creation may take any absent row, and numbers have no top. A guard or write the encoding cannot
 state is widened the same way and printed as a `note:`. A rule the encoding cannot state is
-`out of scope`. A count (`.at_most`, `.at_least`, `.exactly`, `MaxCard_*`) is exact up to 8;
-`.at_most(7, ..)` is the largest `at_most` stated.
+`out of scope`. A count is stated exactly when it needs at most 8 witness rows:
+`.at_least(k, ..)` up to `k = 8`, and `.at_most(k, ..)`, `.exactly(k, ..)` and `MaxCard_*` up to
+`k = 7`, since they also state that `k + 1` rows do not exist. A larger count is `out of scope`.
 
-Most true rules are not inductive alone, so the prover adds candidate **lemmas** and keeps the
-largest set of rules and lemmas that is inductive together (the Houdini algorithm). The
+Most true rules are not inductive alone, so the prover adds candidate **lemmas** and keeps a
+set of rules and lemmas that is inductive together (the Houdini algorithm): it drops each
+candidate a check breaks, or z3 gives up on, until none falls. Over one fixed set of
+candidates with exact answers, that is the largest inductive subset; the kept set here may be
+smaller, since a dropped candidate never returns, some lemmas join only once a rule falls, and
+each round of CTI lemmas starts over. That costs proofs, never soundness. The
 lemmas come from facts about absent and deleted rows and keys, and from what BFS shows on each
 cone at the run's bounds and at one instance: the patterns a row takes, the values of each
 column and pair of columns, and the patterns of a child with its parent (whole, per parent
@@ -602,8 +607,10 @@ proof in full each time instead of reusing the cached certificate.
 
 **Adding a lemma.** When no lemma the prover finds rules a CTI's state out, write the missing
 fact as a rule with `.lemma()`. `check` checks it like any rule, so a wrong lemma fails there with a
-trace. `verify` runs no cone for it, and the proof keeps it only when it proves it. It prints as
-`proved: lemma <name>` or `unproved: lemma <name>`, the `proof: your lemmas: ...` line counts
+trace. `verify` runs no cone of its own for it, and the proof keeps it only when it proves it.
+A lemma whose reads lie in another selected rule's cone is checked by that cone, so there a
+false lemma is `refuted: lemma <name>` with a counterexample and fails the run, as in `check`.
+It prints as `proved: lemma <name>`, `unproved: lemma <name>` or `refuted: lemma <name>`, the `proof: your lemmas: ...` line counts
 it, and it never counts toward the `n of m rules` of the `OK:` line. A lemma, and no other
 rule, can read a row's marks ([Marks in a lemma](./language-reference.md#marks-in-a-lemma)):
 `Door.in_run(Open)` when a CTI holds a row between the steps of a split use case, and
@@ -618,7 +625,8 @@ forbidden(Claim, ClaimCase, Claim.completed_on == present, ClaimCase.status in (
 ```
 
 **Budgets.** Each z3 check has a budget of resource units (`rlimit`), a count of solver steps,
-not of time: 20,000,000 for a rule and 2,000,000 for a lemma. So the proof is the same on a
+not of time: 20,000,000 for a rule, a `.lemma()` rule included, and 2,000,000 for a lemma the
+prover adds (helper, mined, or from a CTI). So the proof is the same on a
 busy machine and an idle one. A unit is z3's own count, so the limits hold for the z3 versions
 they were measured on: 5.1.0 today, the one `flake.nix` and `flake.lock` pin. Under any other
 version, or one whose `z3 --version` line it cannot read, `verify --prove` prints `note: z3

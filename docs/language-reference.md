@@ -1787,7 +1787,9 @@ entity's (`Forbidden_Order_0`); a rule of several, or with `.along`, is cross-en
   shortest key path. `.global()` says the rule is meant for every combination; with `.along` it
   is `GlobalWithAlong`.
 - `.lemma()` on a `forbidden` or `invariant` marks a fact that helps `verify --prove`. `check`
-  checks it; `--prove` lists it apart and uses it once proved; `verify` runs no cone for it
+  checks it; `--prove` lists it apart and uses it once proved; `verify` runs no cone of its own
+  for it, but a cone of another rule that reads what it reads checks it there, and a
+  violation fails the run
   ([Proofs for any number of rows](./formal-verification.md#proofs-for-any-number-of-rows)).
 
 <a id="marks-in-a-lemma"></a>**Marks in a lemma.** A `.lemma()` rule can also read a row's
@@ -1924,7 +1926,8 @@ has one spelling:
 - `.at_least(n)` and `.exactly(n)` with fewer than `n` slots fail wherever they apply, an
   artifact of the bound: the warning `CountAboveBound` names the same flag.
 - TLC counts with `Cardinality` (the module extends `FiniteSets`). `--prove` unrolls up to 8
-  rows: `.at_most(7, ..)` is the largest it proves. See
+  rows: `.at_least(8, ..)`, and `.at_most(7, ..)` and `.exactly(7, ..)`, are the largest it
+  proves. See
   [design/counting-rules.md](./design/counting-rules.md).
 
 **Along a path.** `.along(Anchor, .., Related)` after the quantifier counts the related rows,

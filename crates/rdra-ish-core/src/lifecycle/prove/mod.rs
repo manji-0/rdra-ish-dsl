@@ -1,11 +1,15 @@
 //! Unbounded proofs: which state rules hold for any number of rows (docs/formal-verification.md,
 //! "Proofs for any number of rows").
 //!
-//! Each rule is a candidate invariant over the encoding in `encode`. The prover keeps the
-//! largest set of candidates that is inductive together (Houdini): every candidate holds in
-//! every initial state, and no step from a state where all of them hold breaks one. A rule in
-//! that set is proved for every slot count. Helper lemmas join the candidates and are kept
-//! only when they survive too. A rule outside the set is unproved, with the step that breaks it
+//! Each rule is a candidate invariant over the encoding in `encode`. The prover keeps a set of
+//! candidates that is inductive together (Houdini): every candidate holds in every initial
+//! state, and no step from a state where all of them hold breaks one. A rule in that set is
+//! proved for every slot count. Helper lemmas join the candidates and are kept only when they
+//! survive too. Houdini over one fixed set of candidates, with every answer exact, keeps the
+//! largest inductive subset of it; this one keeps an inductive set that may be smaller: an
+//! `unknown` drops a candidate as a break does, a dropped candidate never returns, the lemmas
+//! that wait join only once a rule falls, and each strengthening round starts Houdini over.
+//! Only inductiveness matters for soundness; a smaller set costs proofs. A rule outside the set is unproved, with the step that breaks it
 //! from a state where the set holds: a counterexample to induction, which need not be
 //! reachable. The bounded engines, not this one, find counterexamples.
 
@@ -133,8 +137,10 @@ pub struct ProveOptions {
     /// A unit counts solver work, not time, so the answer does not depend on the machine or
     /// its load; it does depend on the z3 version.
     pub rlimit: u32,
-    /// The same for a lemma. A lemma that gives up leaves the set, which only costs proofs;
-    /// a check that breaks a candidate is the slow kind, so a low limit saves the most.
+    /// The same for a lemma the prover adds (a helper, mined, or CTI lemma). A `.lemma()` rule
+    /// of the model is a rule here and gets `rlimit`. A lemma that gives up leaves the set,
+    /// which only costs proofs; a check that breaks a candidate is the slow kind, so a low
+    /// limit saves the most.
     pub lemma_rlimit: u32,
 }
 
