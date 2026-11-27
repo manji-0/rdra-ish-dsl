@@ -1,0 +1,16 @@
+// Fixture of tests/codegen_conformance.rs: Decide chooses the target of liability, a lifecycle
+// column beside the state column status. Each target is a function of its own, and the traces
+// run every move of each.
+entity Case "C" {
+  id: Int @pk
+  status: Enum(open, closed) @default(open)
+  liability: Enum(undetermined, at_fault, no_fault) @default(undetermined)
+}
+
+usecase Open "O"
+usecase Decide "D"
+usecase Close "X"
+creates(Open, Case)
+transitions(Decide, Case.liability, undetermined -> at_fault)
+transitions(Decide, Case.liability, undetermined -> no_fault)
+transitions(Close, Case.status, open -> closed)

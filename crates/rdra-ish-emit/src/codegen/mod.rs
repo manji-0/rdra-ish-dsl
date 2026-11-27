@@ -122,13 +122,16 @@ pub fn generate_all(
         ));
     }
     let domain = domain_of(model, options, options.conformance.is_some(), site)?;
-    let traces = options.conformance.map(|cap| {
-        let mut header = vec![format!("model: {}", options.model_path)];
-        if let CheckStatus::Passed { bounds, .. } = &options.check {
-            header.push(format!("bounds: {bounds}"));
-        }
-        conformance::traces(model, &domain, cap, &header)
-    });
+    let traces = options
+        .conformance
+        .map(|cap| {
+            let mut header = vec![format!("model: {}", options.model_path)];
+            if let CheckStatus::Passed { bounds, .. } = &options.check {
+                header.push(format!("bounds: {bounds}"));
+            }
+            conformance::traces(model, &domain, cap, &header)
+        })
+        .transpose()?;
     let code = match options.lang {
         Lang::TypeScript => ts::print(&domain, options, traces.as_ref()),
         Lang::Rust => rust::print(&domain, options, traces.as_ref()),

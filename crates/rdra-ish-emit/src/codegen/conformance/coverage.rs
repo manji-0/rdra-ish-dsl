@@ -37,9 +37,15 @@ impl Traces {
         });
         let mut moves = format!("  moves: {} of {} run", self.covered, self.moves);
         if self.left_out > 0 {
+            let by: Vec<String> = self
+                .left_out_by
+                .iter()
+                .map(|(what, n)| format!("{what} {n}"))
+                .collect();
             moves.push_str(&format!(
-                "; {} left out (a tick, or a use case with no function)",
-                self.left_out
+                "; {} left out (a tick, or a use case with no function: {})",
+                self.left_out,
+                by.join(", ")
             ));
         }
         lines.push(moves);
@@ -84,6 +90,9 @@ mod tests {
             moves: 12,
             covered: 12,
             left_out: 3,
+            left_out_by: [("a tick".to_string(), 2), ("Audit".to_string(), 1)]
+                .into_iter()
+                .collect(),
             complete,
             traces: 5,
             calls: 30,
@@ -105,7 +114,7 @@ mod tests {
                 "coverage of [code.rust]: bounded conformance to the model, not equivalence",
                 "  bound: 1 row created per entity, Int 0..5",
                 "  BFS: complete, 40 states; 37 reached by the traces' calls",
-                "  moves: 12 of 12 run; 3 left out (a tick, or a use case with no function)",
+                "  moves: 12 of 12 run; 3 left out (a tick, or a use case with no function: Audit 1, a tick 2)",
                 "  refused calls: 8 tried (calls on one existing row); interleaved commits: 2",
                 "  not compared: the clock",
                 &format!("  {ASSUMES}"),

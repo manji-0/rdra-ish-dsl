@@ -470,6 +470,8 @@ pub struct Traces {
     pub covered: usize,
     /// Moves of use cases with no function, or of no use case (a tick), which the traces leave out.
     pub left_out: usize,
+    /// The left-out moves by what makes them: a use case, or a tick.
+    pub left_out_by: std::collections::BTreeMap<String, usize>,
     /// Whether BFS reached every state below the cap.
     pub complete: bool,
     pub traces: usize,
@@ -509,7 +511,7 @@ pub fn traces(
     domain: &DomainModel,
     cap: usize,
     header: &[String],
-) -> Traces {
+) -> Result<Traces, CodegenError> {
     let port = domain
         .port
         .as_ref()
@@ -527,6 +529,7 @@ pub fn traces(
     let mut seen: HashSet<(u32, u32, usize, Vec<u8>)> = HashSet::new();
     let mut moved: HashSet<(u32, usize, Vec<u8>)> = HashSet::new();
     let mut calls: Vec<Call> = Vec::new();
+    let mut dropped: BTreeSet<String> = BTreeSet::new();
     let mut out = Traces {
         complete: run.complete,
         explored: run.states.len(),
@@ -557,16 +560,20 @@ pub fn traces(
         let action = &ts.actions()[act.index()];
         let ActionOrigin::UseCase { .. } = action.origin else {
             out.left_out += 1;
+            *out.left_out_by.entry("a tick".to_string()).or_default() += 1;
             continue;
         };
         let Some(method) = port.methods.iter().find(|m| m.action == action.name) else {
             out.left_out += 1;
+            *out.left_out_by.entry(action.name.clone()).or_default() += 1;
             continue;
         };
         let pre = &run.states.at(edge.from as usize);
         let post = &run.states.at(edge.to as usize);
         let Some(f) = cx.function(&action.name, params, pre, post) else {
-            out.left_out += 1;
+            // The port runs the action, so one of its functions makes the move: a move the
+            // traces cannot give a function would leave a use case the code has untested.
+            dropped.insert(action.name.clone());
             continue;
         };
         calls.push(Call {
@@ -578,6 +585,13 @@ pub fn traces(
             params: params.to_vec(),
             args: cx.args(method, f, params, post),
         });
+    }
+
+    if !dropped.is_empty() {
+        return Err(CodegenError::Conformance(format!(
+            "no one function makes some moves of {}: the traces would leave them out (a bug in rdra-ish)",
+            dropped.into_iter().collect::<Vec<_>>().join(", ")
+        )));
     }
 
     // The states the calls reach from the initial states, and a shortest call path to each.
@@ -799,7 +813,7 @@ pub fn traces(
     }
     text.push_str(&body);
     out.text = text;
-    out
+    Ok(out)
 }
 
 fn joined(args: &[String]) -> String {
@@ -847,6 +861,23 @@ impl Cx<'_> {
         };
         let before = Rows::new(ts, self.model, pre, slots(first), Vec::new());
         let mut fns = matching(&self.domain.fns, action, &before);
+        // Arms of a second lifecycle column: the one whose target the move left there.
+        if fns.len() > 1 {
+            fns.retain(|f| {
+                f.chosen.iter().all(|c| {
+                    let Some(column) = &c.column else {
+                        return true;
+                    };
+                    let Some(p) = f.rows[c.row].param else {
+                        return true;
+                    };
+                    let e = act.params[p].entity;
+                    column_var(ts, &ts.entity(e).id, column)
+                        .and_then(|v| enum_name(ts, v, post.get(ts, v, usize::from(params[p]))))
+                        .is_some_and(|n| n == c.value.wire)
+                })
+            });
+        }
         if fns.len() > 1 {
             fns.retain(|f| {
                 f.outputs.iter().all(|o| match &o.kind {
