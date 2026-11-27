@@ -14,11 +14,15 @@ use rdra_ish_core::{in_parallel, ResolvedProgram, SemanticModel};
 use std::collections::BTreeSet;
 
 /// What BFS found at the verify bounds.
+#[derive(Default)]
 pub(super) struct Bfs {
-    /// Errors of the entity cones.
+    /// Errors of the entity cones, a `TraceFault` aside.
     pub(super) errors: usize,
-    /// Errors of the `can_reach` cones: their violations.
+    /// Errors of the `can_reach` cones: their violations, a `TraceFault` aside.
     pub(super) reach_errors: usize,
+    /// Findings of either whose trace fails to replay (`StateDiag::TraceFault`): a fault of the
+    /// tool, counted with the other tool errors (P20).
+    pub(super) trace_faults: usize,
     /// Findings an entity cone, and `can_reach` properties their cone, left undecided at the
     /// state cap or the memory limit.
     pub(super) capped: usize,
@@ -115,22 +119,25 @@ pub(super) fn state_models(
         println!("{not_checked}");
     }
     let report = |verdicts: &[Diag]| {
-        let mut errors = 0;
+        let (mut errors, mut faults) = (0, 0);
         for d in verdicts {
             if let Some(text) = render_violation(program, model, &d.diag, TraceSource::Bfs) {
                 let finding = Finding::new(&d.diag, &[], text);
                 eprintln!("{finding}");
-                errors += usize::from(finding.severity == Severity::Error);
+                match &d.diag {
+                    StateDiag::TraceFault { .. } => faults += 1,
+                    _ => errors += usize::from(finding.severity == Severity::Error),
+                }
             }
         }
-        errors
+        (errors, faults)
     };
     let models = match with_tlc && scope.is_whole() {
         true => state_model_cones(ts, &run),
         false => StateModels::default(),
     };
-    let errors = report(run.verdicts());
-    let reach_errors = reach_run.as_ref().map_or(0, |r| report(r.verdicts()));
+    let (errors, faults) = report(run.verdicts());
+    let (reach_errors, reach_faults) = reach_run.as_ref().map_or((0, 0), |r| report(r.verdicts()));
     let t = run.tally();
     let plural =
         |n: usize, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
@@ -165,6 +172,7 @@ pub(super) fn state_models(
     Bfs {
         errors,
         reach_errors,
+        trace_faults: faults + reach_faults,
         capped,
         models,
     }

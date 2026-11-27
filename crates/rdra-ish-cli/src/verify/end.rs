@@ -111,9 +111,12 @@ impl End {
                 "property violation(s)",
             ),
             failure(
-                self.temporal.faults + self.safety.faults + self.explored.faults,
+                self.temporal.faults
+                    + self.safety.faults
+                    + self.explored.faults
+                    + self.bfs.trace_faults,
                 true,
-                "counterexample(s) that fail their own check (a tool bug)",
+                "counterexample(s) or trace(s) that fail their own check (a tool bug)",
             ),
             failure(
                 self.tlc.disagreements,
@@ -200,5 +203,43 @@ impl End {
             None => println!("{}", line.ok()),
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn end() -> End {
+        End {
+            bfs: Bfs::default(),
+            explored: Explored::default(),
+            safety: Safety::default(),
+            temporal: Temporal::default(),
+            tlc: TlcEnd::default(),
+            deny_undecided: false,
+            proof: None,
+            escalated: 0,
+        }
+    }
+
+    /// A deadlock's, a `can_reach` failure's, or a witness's trace that fails to replay is a
+    /// fault of the tool (P20): the run's result is `tool_error`, as for a `LiftFault`, and
+    /// never a finding about the model.
+    #[test]
+    fn a_trace_fault_is_a_tool_error() {
+        assert_eq!(end().result(0), RunResult::Ok);
+        let mut faulty = end();
+        faulty.bfs.trace_faults = 1;
+        assert_eq!(faulty.result(0), RunResult::ToolError);
+        faulty.bfs.errors = 1;
+        assert_eq!(
+            faulty.result(0),
+            RunResult::ToolError,
+            "a tool error comes first"
+        );
+        let mut failed = end();
+        failed.bfs.errors = 1;
+        assert_eq!(failed.result(0), RunResult::Counterexample);
     }
 }
