@@ -57,6 +57,7 @@ pub(super) fn owning_stage(model: &SemanticModel, diag: &StateDiag) -> StageId {
         | StateDiag::TriggerNeverRuns { .. }
         | StateDiag::UncountedTrigger { .. }
         | StateDiag::DeleteLeavesChildren { .. }
+        | StateDiag::DeleteLeavesChildKeys { .. }
         | StateDiag::GuardReadsLaterStep { .. }
         | StateDiag::DrivenComparisonColumnWritten { .. }
         | StateDiag::GoalMetByDelete { .. }

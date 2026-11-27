@@ -17,6 +17,25 @@
   `check` and `verify` print the hint `info[GoalMetByDelete_*]` for a plain goal a deleted
   row's base values satisfy on an entity some use case deletes (none on the samples). New
   engine-corpus cases `presence_goal_present_modifier` and `presence_goal_present_both_ok`.
+- The lint warning `negated-order-admits-null` (P62): a `not` over `<`, `<=`, `>`, or `>=`
+  with a `@null` column, in a `@check` or a `property`, holds while the column is null, so
+  `not (qty < 1)` is not `qty >= 1`. An expression that names the column's null (`qty == null
+  or ...`) is not flagged; neither is a logical `@derived` (three-valued), nor `!=` / `not in`
+  on a nullable column, which samples use on purpose. `check` prints it with its rule id (it
+  does not fail the run), and `lint` and the editor show it; the editor's diagnostic carries
+  the rule id of every lint finding as its code. No sample or corpus model draws it. The
+  language reference (§ Null) gains a truth table of every comparison operator over null, on
+  either side and both, and under `not`, which a test computes through the builder and the
+  evaluator and compares with the page.
+
+- The warning `DeleteLeavesChildKeys` (P63): a use case deletes the parent of a key with
+  `.on_delete(set_null)` or `.on_delete(set_default)`, which verification does not execute,
+  while the SQL export writes `ON DELETE SET NULL` / `SET DEFAULT`; the children keep naming
+  the deleted row. Not drawn when the same use case deletes the child or moves its key
+  (`unlinks`, `relinks`), or for a `@soft_delete` parent. The language reference states that
+  verification executes no referential action and that generated Go, Rust, and TypeScript
+  code implements none either (it lists an unchecked `OnDelete_*` obligation). The corpus case
+  `safety_delete_set_null` draws it.
 
 - `codegen` (default output changes): the domain code has an unimplemented port, a stand-in
   for the contracts that a service takes while it is unfinished, so it builds before every
@@ -193,6 +212,12 @@
   typescript` spells `--lang ts`. Naming both is an error (one table named twice).
 
 ### Changed
+
+- `DeleteLeavesChildren` (a use case deletes the parent of an `.on_delete(cascade)` key and
+  not the child) is a warning, no longer an info (P63): the SQL export's `ON DELETE CASCADE`
+  removes the children, and the verified model keeps them. It is no longer drawn for a
+  parent with a `@soft_delete` column, which no SQL delete removes. `check` counts it among
+  its warnings; the exit code does not change.
 
 - `check --code` (experimental) says more of what failed, from three services built on the
   generated code: the compiler's whole output prints before the findings (rustc's errors
@@ -571,6 +596,15 @@ and 5 are moved out of this release, and items 3 and 7 are waived. The other ite
   24.0 s / 1.61 GB, insurance-claim-ops 5.9 s / 867 MB against 127.0 s / 2.10 GB, and the
   five small samples under 0.01 s / 10 MB against 3.7-7.1 s / 122-152 MB.
 - 8: the docs, compatibility page and skills were rewritten for this release (#375-#379).
+
+*Erratum (2026-11-28).* Item 2 as written asks for `verify --with-tlc` on every root of
+`samples.txt`. The run recorded above ran TLC beside the native checker on the five roots of
+`scripts/tlc-roots.txt` and on the header lines with flags, not on every root. The other roots
+were compared with TLC through `engine_equivalence`, by state graph at 1 and 2 instances, except
+the 24 cones `VERIFY_FALLBACK` lists, which it compares at 1 instance only; oidc-auth's 13 of
+those meet TLC at 2 instances nowhere. So item 2 held on that narrower check, not as written.
+Item 5 held on the same runs. docs/design/native-temporal-verification.md, "What the gate
+checked for v3.0.0", records the gate as it ran.
 
 ### Upgrading from v2.3.0
 

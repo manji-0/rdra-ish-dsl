@@ -54,9 +54,10 @@ fn a_can_reach_is_a_comment_and_no_check() {
     let bundle = print(&ts, PrintMode::Check, "M");
     assert!(
         bundle.tla.contains(
-            "\\* can_reach properties are CTL, AG (present => EF goal), which no TLA+ formula\n\
-             \\* states and TLC does not check; rdra-ish check and verify decide them by BFS.\n\
-             \\*   OrderCanFinish: \\A b0 \\in Order_Ids : AG((Order_exists[b0] = \"present\") => EF(Order_status[b0] \\in {\"delivered\", \"cancelled\"}))\n"
+            "\\* can_reach properties are CTL, AG (present => E[present U (present /\\ goal)]),\n\
+             \\* which no TLA+ formula states and TLC does not check; rdra-ish check and verify\n\
+             \\* decide them by BFS.\n\
+             \\*   OrderCanFinish: \\A b0 \\in Order_Ids : AG((Order_exists[b0] = \"present\") => E[(Order_exists[b0] = \"present\") U ((Order_exists[b0] = \"present\") /\\ (Order_status[b0] \\in {\"delivered\", \"cancelled\"}))])\n"
         ),
         "{}",
         bundle.tla

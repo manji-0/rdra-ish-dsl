@@ -318,8 +318,8 @@ whose successor equals its pre-state. The native checker skips that check explic
 (`core/explore/bfs.rs::Bfs::take` continues before `check_after` on `Probe::Loop`, which
 `explore/probe.rs::Probes::read` sets for a successor equal to its source in every build,
 independent of `Probing`). The
-engines agree; D17 states the exemption since #475, and the language reference's promise of
-a check after every run stays open (P22).
+engines agree; D17 states the exemption since #475, and since #494 the language reference
+does too and a last step that only stutters is reported as vacuous (P22).
 
 **Temporal properties [paper].** `checks` prints the binding quantifier `\A b …` in one of
 three places: outside the temporal operator for `always`, `eventually` and `leads_to`
@@ -446,7 +446,7 @@ run can stop where TLC's run of the same module decides.
 either engine is no disagreement. The code keeps it for final verdicts, where `Decision`
 maps `Undecided` to `None`. It does not keep it per run:
 
-- **P21, confirmed and extended [read; not reproduced].** `verify/native.rs::Answer::outcome`
+- **P21, confirmed and extended [read; not reproduced].** *Fixed in #469.* `verify/native.rs::Answer::outcome`
   maps `Answer::Stopped` to `Outcome::Ok`, and every push into `Native::runs` but one uses
   it: the `Plain` and `Full` runs of `native_property_after` and its `WfNext` run on the
   unreduced cone, the `Plain` run of `always_up_to_symmetry`, and the `Plain` and `WfNext`
@@ -465,7 +465,7 @@ maps `Undecided` to `None`. It does not keep it per run:
   a wrong verdict. No corpus case reaches the path: the two cases with `native=not_decided`
   are `cap_memory_limit`, which skips TLC, and `cap_temporal_budget_zero`, whose budget
   stops only whole-model runs.
-- **P12, confirmed and restated [read].** When both engines report a counterexample on a
+- **P12, confirmed and restated [read].** *Fixed in #471.* When both engines report a counterexample on a
   safety cone, `compare.rs` builds TLC's violated set with `collect::<Result<_, _>>().ok()`;
   if any TLC trace fails to replay, the sets are not compared. Separately,
   `tlc.rs::model_traces` replays the first TLC trace of each violated check for display and
@@ -835,12 +835,12 @@ document or by the code at the pinned commit. [read]
 
 | # | What this document found |
 |---|---|
-| P12 | Confirmed; restated: the display path prints an unnamed `error:` line for the first non-replaying trace only, which does not change `result:` or the exit status. |
-| P13 | Confirmed as stated. |
-| P14 | Confirmed; extended: unreduced cones over 300,000 states are silently compared reduced only; oidc-auth's 13 `VERIFY_FALLBACK` cones meet TLC at 1 instance only, in `engine_equivalence` and in `verify --with-tlc` alike (issue #202 proposes a fix). |
-| P15 | Confirmed as stated (at least 30 asserted, 79 present). |
-| P16 | Confirmed; extended: release-gate item 2 recorded as held on a narrower check; the `--with-tlc` step did not move to `release.yml`; native-temporal-verification.md, "How we know it is right", still says CI runs every root with `--with-tlc`. |
-| P21 | Confirmed; extended to the unreduced `WfNext` runs and to a false `tool_error` under `--symmetry always` without TLC. The reduced `WfNext` run is not affected: it records no entry when undecided. |
+| P12 | **Fixed in #471.** Confirmed; restated: the display path prints an unnamed `error:` line for the first non-replaying trace only, which does not change `result:` or the exit status. |
+| P13 | **Fixed in #472.** Confirmed as stated. |
+| P14 | **Narrowed in #476.** Confirmed; extended: unreduced cones over 300,000 states are silently compared reduced only; oidc-auth's 13 `VERIFY_FALLBACK` cones meet TLC at 1 instance only, in `engine_equivalence` and in `verify --with-tlc` alike (issue #202 proposes a fix). |
+| P15 | **Fixed in #472.** Confirmed as stated (at least 30 asserted, 79 present). |
+| P16 | **Narrowed in #486.** Confirmed; extended: release-gate item 2 recorded as held on a narrower check; the `--with-tlc` step did not move to `release.yml`; native-temporal-verification.md, "How we know it is right", still says CI runs every root with `--with-tlc`. |
+| P21 | **Fixed in #469.** Confirmed; extended to the unreduced `WfNext` runs and to a false `tool_error` under `--symmetry always` without TLC. The reduced `WfNext` run is not affected: it records no entry when undecided. |
 | P22 | New (prose): D17 omits that a step with `s' = s` is checked by neither engine. Both halves read; `Probe::Loop` is set in every build. |
 | P23 | New (evidence): the per-run comparison pairs the native `WfNext` run on the reduced cone (`decide_liveness_reduced`) with TLC's `_WF` module printed from the unreduced cone, so Proposition 0 does not apply on that path. |
 | P24 | New (evidence): for a `Transition` with a multi-target source, the printer's and the native effect application agree only under a builder invariant on effect order that nothing enforces as such; one shape was not found to be excluded, and on it the post-guards reconcile the two only when the `transitions` arms carry `.when` guards. |

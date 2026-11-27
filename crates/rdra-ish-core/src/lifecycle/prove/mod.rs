@@ -82,13 +82,19 @@ pub enum Verdict {
 
 #[derive(Clone, Debug)]
 pub enum Unproved {
-    /// Some initial state violates the rule: a real violation, which the bounded engines
-    /// report with its trace.
+    /// Some initial state of the encoding violates the rule. Those states hold any number of
+    /// rows, and a column that starts at any value holds any Int value, so the violation may
+    /// lie past the run's bounds, where the bounded engines do not see it; within them they
+    /// report it with its trace.
     Initial,
     /// A step breaks the rule from a state where it and every kept candidate hold.
     NotInductive(Cti),
     /// The solver gave up on the step that `action` names.
     Unknown { action: String },
+    /// The premise every check assumes, the declarations and the initial states, is
+    /// inconsistent: the canary candidate `false` survived initiation (`premise`), so no rule
+    /// is proved; the text says why.
+    Premise(String),
 }
 
 /// The set a proof kept, for the next proof to offer first (`prove_offered`): which
@@ -328,6 +334,9 @@ pub fn prove_offered<S: Solver + Send>(
     offer: Option<&Certificate>,
 ) -> Result<Certified, SolverError> {
     assert!(!solvers.is_empty(), "a proof needs a solver");
+    if let Some(why) = premise(&mut solvers[0], &Enc { ts }, options.rlimit)? {
+        return Ok(unfounded(ts, rules, refuted, why));
+    }
     let mined: Vec<(Origin, Formula, u8)> = mine::mine(ts, twin, rules)
         .into_iter()
         .map(|m| (Origin::Lemma(m.text), m.formula, m.wait))
@@ -347,6 +356,92 @@ pub fn prove_offered<S: Solver + Send>(
         extra.extend(new);
     }
     unreachable!("the rounds are bounded")
+}
+
+/// The canary of every proof: the candidate `false`, which must fall at initiation. It holds
+/// in no state, so it survives initiation only when no initial state exists, when the
+/// premise every check assumes, the declarations and the initial states, is inconsistent.
+/// Then every check would be `unsat` and every candidate kept, a false rule too, so no rule is
+/// proved, and the text says why. The encoding over-approximates the explorer, so the
+/// explorer's initial state is one, and an inconsistent premise is a bug of the builder or the
+/// encoder. The kept set needs nothing more: every candidate in it holds in every initial
+/// state, so a state of the premise is one of the set too. A `.lemma()` rule is a candidate
+/// like any other, not an assumption. Initial states the encoding cannot state are no
+/// premise: they fail every candidate on their own (`initiation`).
+///
+/// The canary's initiation check is `check-sat` of the premise itself. It runs as the
+/// Houdini rounds run, without MBQI, where z3 answers `unknown` for a premise with a state,
+/// and `unknown` drops a candidate as `sat` does: only an `unsat` keeps the canary, so the
+/// check cannot raise a false alarm. It runs on its own, under the rule limit, before the
+/// rounds, and ends in a reset: a round starts with one too, so the rounds send and spend
+/// what they would without it.
+fn premise<S: Solver>(
+    solver: &mut S,
+    enc: &Enc,
+    rlimit: u32,
+) -> Result<Option<String>, SolverError> {
+    let Ok(initial) = enc.initial() else {
+        return Ok(None);
+    };
+    let mut s = Script::from([Command::Reset, Command::SetOption(Opt::Mbqi(false))]);
+    s.append(&enc.declarations());
+    s.append(&initial);
+    solver.exec(s.text())?;
+    let sat = solver.check_sat(rlimit)?;
+    solver.exec(&Command::Reset.to_string())?;
+    Ok(match sat {
+        Sat::Sat | Sat::Unknown => None,
+        Sat::Unsat => Some(
+            "the canary `false` survived initiation: the encoding's declarations and initial states are inconsistent (they have no model), so every check would hold vacuously and no rule is proved; this is a bug in rdra-ish"
+                .to_string(),
+        ),
+    })
+}
+
+/// The proof when the premise is inconsistent (`premise`): no rule proved. A rule BFS refuted
+/// stays `Refuted` and one the encoding cannot state `OutOfScope`, as in a proof that runs.
+fn unfounded(
+    ts: &TransitionSystem,
+    rules: &[usize],
+    refuted: &BTreeSet<usize>,
+    why: String,
+) -> Certified {
+    let enc = Enc { ts };
+    let rules = rules
+        .iter()
+        .map(|&i| {
+            let inv = &ts.invariants()[i];
+            let formula = Formula {
+                binders: inv.binders.clone(),
+                body: inv.body.clone(),
+                all_rows: false,
+            };
+            let verdict = match enc.holds(&formula, Frame::Pre) {
+                _ if refuted.contains(&i) => Verdict::Refuted,
+                Ok(_) => Verdict::Unproved(Unproved::Premise(why.clone())),
+                Err(Unsupported(why)) => Verdict::OutOfScope(why),
+            };
+            RuleProof { inv: i, verdict }
+        })
+        .collect();
+    let mut loose: Vec<String> = ts
+        .actions()
+        .iter()
+        .flat_map(|a| enc.step(a).loose)
+        .collect();
+    loose.dedup();
+    Certified {
+        proof: Proof {
+            rules,
+            lemmas: Vec::new(),
+            loose,
+        },
+        certificate: Certificate {
+            digest: String::new(),
+            kept: Vec::new(),
+        },
+        reused: false,
+    }
 }
 
 /// How many times a proof is run again with the lemmas its CTIs gave (`strengthen`).

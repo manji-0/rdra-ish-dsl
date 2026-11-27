@@ -95,7 +95,16 @@ impl TlcRun {
                 continue;
             };
             let name = violation_name(line);
-            let (trace, mut lasso, next) = parse_trace(&lines, i);
+            // `... is violated by the initial state:` prints the state with no `State 1:`
+            // header: a trace of that one initial state.
+            let (trace, mut lasso, next) = match initial_violation(line) {
+                true => {
+                    let (state, next) = parse_block(&lines, i);
+                    let label = "Initial predicate".to_string();
+                    (vec![TraceStep { label, state }], None, next)
+                }
+                false => parse_trace(&lines, i),
+            };
             i = next;
             // TLC 1.8.0's `[]S` checked as an invariant ends at the state that breaks `S`:
             // every run through that state violates the property, the one that stutters
@@ -162,7 +171,9 @@ fn violation_kind(line: &str) -> Option<ViolationKind> {
         None
     } else if located_invariant(rest) {
         Some(ViolationKind::Temporal)
-    } else if rest.starts_with("Invariant ") && rest.ends_with("is violated.") {
+    } else if rest.starts_with("Invariant ")
+        && (rest.ends_with("is violated.") || initial_violation(line))
+    {
         Some(ViolationKind::Invariant)
     } else if rest.starts_with("Action property ") && rest.ends_with("is violated.") {
         Some(ViolationKind::ActionProperty)
@@ -195,8 +206,18 @@ fn violation_name(line: &str) -> Option<String> {
     let rest = rest
         .strip_prefix("Invariant ")
         .or_else(|| rest.strip_prefix("Action property "))?;
-    let name = rest.strip_suffix("is violated.")?.trim();
+    let name = (rest.strip_suffix("is violated."))
+        .or_else(|| rest.strip_suffix("is violated by the initial state:"))?
+        .trim();
     (!name.is_empty()).then(|| name.to_string())
+}
+
+/// `Error: Invariant X is violated by the initial state:`, which TLC prints for an initial
+/// state that breaks `X`, followed by that state alone.
+fn initial_violation(line: &str) -> bool {
+    line.strip_prefix("Error:").map(str::trim).is_some_and(|r| {
+        r.starts_with("Invariant ") && r.ends_with(" is violated by the initial state:")
+    })
 }
 
 /// What a run of a `StateModel_` cfg says, read line by line without its traces: with
@@ -726,6 +747,28 @@ State 1: <Initial predicate>
 Model checking completed. No error has been found.
 114 states generated, 39 distinct states found, 0 states left on queue.
 "#;
+
+    /// An invariant an initial state breaks: TLC names it and prints that state with no
+    /// `State 1:` header. It is the invariant's violation, with a one-state trace; read as an
+    /// unnamed `Other` violation, it never replayed and never named its check.
+    #[test]
+    fn an_initial_state_violation_names_its_invariant_and_state() {
+        let run = TlcRun::parse(concat!(
+            "Error: Invariant Unique_Room_tag is violated by the initial state:\n",
+            "/\\ Room_exists = <<\"present\", \"present\">>\n",
+            "/\\ Room_tag = <<\"a\", \"a\">>\n",
+            "\n",
+            "Finished computing initial states: 1 distinct state generated.\n",
+        ));
+        let [v] = run.violations.as_slice() else {
+            panic!("{:?}", run.violations);
+        };
+        assert_eq!(v.kind, ViolationKind::Invariant);
+        assert_eq!(v.name.as_deref(), Some("Unique_Room_tag"));
+        assert_eq!(v.trace.len(), 1);
+        assert_eq!(v.trace[0].label, "Initial predicate");
+        assert_eq!(v.trace[0].state["Room_tag[2]"], "\"a\"");
+    }
 
     #[test]
     fn run_lists_each_violation_with_its_trace() {

@@ -166,7 +166,7 @@ apply together to the pre-state:
 | Source | Effect and guard |
 |---|---|
 | `creates(UC, E)` | The slot becomes `present`, with the columns at their base values; the use case's `sets` and transitions then apply. A `creates(Api, E)` reached through `invokes(UC, Api)` counts as a creation by `UC`. |
-| `deletes(UC, E)` | The slot becomes `deleted` and its columns return to the base value; its keys keep the rows they name. A deleted slot is never reused. Per key to `E` whose `.on_delete` is unset, `restrict`, or `no_action`, a guard: no present child names the slot, apart from a child the same step deletes, unlinks, or relinks. A child of a `cascade`, `set_null`, or `set_default` key stays present and names the deleted slot, since the lifecycle does not run those actions; such a key gets no `DanglingKey_*`, and the info `DeleteLeavesChildren` names each use case that deletes a `cascade` parent and not the child. An `E` with a `@soft_delete` column gets no guard. |
+| `deletes(UC, E)` | The slot becomes `deleted` and its columns return to the base value; its keys keep the rows they name. A deleted slot is never reused. Per key to `E` whose `.on_delete` is unset, `restrict`, or `no_action`, a guard: no present child names the slot, apart from a child the same step deletes, unlinks, or relinks. A child of a `cascade`, `set_null`, or `set_default` key stays present and names the deleted slot, since the lifecycle does not run those actions; such a key gets no `DanglingKey_*`, the warning `DeleteLeavesChildren` names each use case that deletes a `cascade` parent and not the child, and the warning `DeleteLeavesChildKeys` each that deletes a `set_null` or `set_default` parent and neither deletes the child nor moves its key. An `E` with a `@soft_delete` column gets no guard. |
 | `sets(UC, E.col == val)` | `col := val`. A `sets` counts as a write even without a CRUD edge. |
 | `sets(UC, E.col == F.src)` | `col` takes the value of `F.src` in the row of `F` the step binds (see Copies below). |
 | `drives(UC, E.col op rhs, bool)` | The comparison variable becomes `bool`. |
@@ -330,7 +330,7 @@ for a reachable state that meets each *premise*, and warn `Vacuous_<name>` when 
 | Every state rule | Rows of the entities it ranges over exist, linked as its `.along` says. `Unique_*` needs two rows of the child, so it has no premise at one instance per entity. |
 | `invariant(...).when(G)`, a quantifier rule with guards | The guards `G` hold for some rows. |
 | `invariant(E).none(R...)` | A row of `R` exists beside a row of `E`. |
-| `after(UC).assert(...)` | `UC` runs to its last step. When the assertion reads an entity the step does not bind, some such step ends with a row of it. |
+| `after(UC).assert(...)` | `UC` runs to its last step, and some such step changes the state: a step that changes nothing is not checked, so a last step that only ever stutters leaves the assertion unchecked (`… runs its last step only as a step that changes nothing`). When the assertion reads an entity the step does not bind, some step that changes the state ends with a row of it. |
 | `property` | Rows of its entities exist together, and some meet the condition the form speaks from: the trigger of a `leads_to`, what a `stable` keeps, the `.when` of an `unchanged`, the second condition of a `precedes`. |
 | `forbidden` of several conditions | Each condition holds for some row, on its own. |
 
@@ -662,7 +662,8 @@ headers of the samples list these names
 | `UnwrittenConstrainedVar { column }` | `UnwrittenConstrainedVar_<E>_<column>` | warning | A rule or guard reads a column no use case writes, so it checks only the start value. |
 | `NoCreationPath` | `NoCreationPath_<E>` | info | No use case creates the entity. It starts present. |
 | `MinCardNeedsCreate { usecase, child }` | `MinCardNeedsCreate_<E>_<usecase>_<child>` | info | A use case creates the parent of a `1..*` key and no child in the same group. |
-| `DeleteLeavesChildren { usecase, parent, child }` | `DeleteLeavesChildren_<E>_<usecase>_<child>` | info | A use case deletes the parent of a `.on_delete(cascade)` key and not the child. Add `deletes(UC, Child)`. |
+| `DeleteLeavesChildren { usecase, parent, child }` | `DeleteLeavesChildren_<E>_<usecase>_<child>` | warning | A use case deletes the parent of a `.on_delete(cascade)` key and not the child, where the database the SQL export describes removes the children. Add `deletes(UC, Child)`. Not drawn for a `@soft_delete` parent. |
+| `DeleteLeavesChildKeys { usecase, parent, child, action }` | `DeleteLeavesChildKeys_<E>_<usecase>_<child>` | warning | A use case deletes the parent of a `.on_delete(set_null)` or `.on_delete(set_default)` key, and neither deletes the child nor moves its key, where the database nulls or resets the key. Add `unlinks(UC, Child, Parent)`. Not drawn for a `@soft_delete` parent. |
 | `DefaultOnVariationIgnored { column, value, created }` | `DefaultOnVariationIgnored_<E>_<column>` | info | A variation column has a `@default`, and some row starts at any value. |
 | `MinCardOfPreExistingParent { child }` | `MinCardOfPreExistingParent_<E>_<child>` | warning | The parent of a `1..*` key starts present and every child absent, so `MinCard_*` fails at the start. |
 | `CountAboveBound { rule, entity, n, slots }` | `CountAboveBound_<E>_<rule>` | warning | An `.at_least(n, ..)` or `.exactly(n, ..)` counts more rows than the entity has slots. The message names the `--instances` that gives it `n`. |
