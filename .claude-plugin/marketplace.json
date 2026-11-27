@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "rdra-ish",
-      "source": "./",
+      "source": "./plugins/rdra-ish",
       "description": "Agent skills for writing, reviewing, diagramming, verifying and implementing RDRA-ish models, and the .rdra language server (needs rdra-ish on PATH)."
     }
   ]
